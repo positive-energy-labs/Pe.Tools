@@ -422,9 +422,11 @@ public sealed partial class Palette : RevitHostedUserControl, ICloseRequestable 
             e.Handled = await this.HandleNavigationAction(NavigationAction.MoveUp);
         else if (e.Key == Key.Down && modifiers == ModifierKeys.None && this._isSearchBoxHidden)
             e.Handled = await this.HandleNavigationAction(NavigationAction.MoveDown);
-        else if (e.Key == Key.Tab && modifiers == ModifierKeys.None && this._filterBox != null && this.DataContext is IPaletteViewModel vm && vm.CurrentTabHasFiltering)
-            e.Handled = this.ShowPopover(_ => this._filterBox?.Show());
-        else if (e.Key == Key.Left && selectedItem is IPaletteListItem item) {
+        else if (e.Key == Key.Tab && modifiers == ModifierKeys.None) {
+            if (this._filterBox != null && this.DataContext is IPaletteViewModel vm && vm.CurrentTabHasFiltering)
+                e.Handled = this.ShowPopover(_ => this._filterBox?.Show());
+            e.Handled = true;
+        } else if (e.Key == Key.Left && selectedItem is IPaletteListItem item) {
             // If sidebar is configured, expand it instead of showing tooltip popup
             if (this._currentSidebar != null) {
                 this.ExpandSidebar(this._currentSidebar.Width);
@@ -441,9 +443,6 @@ public sealed partial class Palette : RevitHostedUserControl, ICloseRequestable 
                 this._actionMenu?.SetActionsUntyped(this._actionBinding?.GetAllActionsUntyped());
                 this._actionMenu?.ShowUntyped(placementTarget, selectedItem);
             });
-        } else {
-            // only allow our explicit key handling.
-            e.Handled = true;
         }
     }
 
