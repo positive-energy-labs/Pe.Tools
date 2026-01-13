@@ -58,8 +58,9 @@
 
     <!-- Only run auto-approve script when launching from IDE, not during regular builds -->
     <!-- This will only run when building from Rider/Visual Studio, not from command line -->
+    <!-- The wrapper script launches AutoApproveAddin.ps1 in a separate process to prevent build hangs -->
     <Target Name="PostBuildAutoApprove" AfterTargets="Build" Condition="'$(BuildingByReSharper)' == 'true'">
-        <Exec Command="powershell.exe -ExecutionPolicy Bypass -NoProfile -File &quot;$(MSBuildProjectDirectory)\AutoApproveAddin.ps1&quot; -ScriptDirectory &quot;$(MSBuildProjectDirectory)&quot;" />
+        <Exec Command="powershell.exe -ExecutionPolicy Bypass -NoProfile -File &quot;$(MSBuildProjectDirectory)\PostBuildActions.ps1&quot; -ScriptDirectory &quot;$(MSBuildProjectDirectory)&quot;" />
     </Target>
 
 </Project>

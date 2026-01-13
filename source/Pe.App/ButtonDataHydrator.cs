@@ -51,32 +51,11 @@ public static class ButtonDataHydrator {
                 ToolTip = "Search and open views in the current document."
             }
         }, {
-            nameof(CmdPltAllViews),
-            new ButtonDataRecord {
-                SmallImage = "Red_16.png",
-                LargeImage = "Red_32.png",
-                ToolTip = "Search and open all views in the current document (no filtering)."
-            }
-        }, {
             nameof(CmdPltMruViews),
             new ButtonDataRecord {
                 SmallImage = "Red_16.png",
                 LargeImage = "Red_32.png",
                 ToolTip = "Open recently visited views in MRU (Most Recently Used) order."
-            }
-        }, {
-            nameof(CmdPltSchedules),
-            new ButtonDataRecord {
-                SmallImage = "Red_16.png",
-                LargeImage = "Red_32.png",
-                ToolTip = "Search and open schedules in the current document."
-            }
-        }, {
-            nameof(CmdPltSheets),
-            new ButtonDataRecord {
-                SmallImage = "Red_16.png",
-                LargeImage = "Red_32.png",
-                ToolTip = "Search and open sheets in the current document."
             }
         }, {
             nameof(CmdPltFamilies),

@@ -65,10 +65,10 @@ public class Application : ExternalApplication {
     private void CreateRibbon() {
         const string tabName = "PE TOOLS";
 
-        var panelManage = this.Application.CreatePanel(tabName, "Manage");
-        var panelTools = this.Application.CreatePanel(tabName, "Tools");
-        var panelMigration = this.Application.CreatePanel(tabName, "Migration");
-        // var panelDev = this.Application.CreatePanel(tabName, "Dev");
+        var panelManage = this.Application.CreatePanel("Manage", tabName);
+        var panelTools = this.Application.CreatePanel("Tools", tabName);
+        var panelMigration = this.Application.CreatePanel("Migration", tabName);
+        // var panelDev = this.Application.CreatePanel( "Dev", tabName);
 
         var manageStackButton = panelManage.AddPullDownButton("General");
         // var ffManagerStackButton = panelMigration.AddSplitButton("Manager");
@@ -89,13 +89,9 @@ public class Application : ExternalApplication {
             manageStackButton.AddPushButton<CmdCacheParametersService>("Cache Params Svc"),
             // manageStackButton.AddPushButton<CmdTestSettingsEditor>("Test Settings Editor"),
 
-            panelTools.AddPushButton<CmdMep2040>("MEP 2040"),
             panelTools.AddPushButton<CmdPltCommands>("Command Palette"),
             panelTools.AddPushButton<CmdPltViews>("View Palette"),
-            panelTools.AddPushButton<CmdPltAllViews>("All Views Palette"),
             panelTools.AddPushButton<CmdPltMruViews>("MRU Views"),
-            panelTools.AddPushButton<CmdPltSchedules>("Schedule Palette"),
-            panelTools.AddPushButton<CmdPltSheets>("Sheet Palette"),
             panelTools.AddPushButton<CmdPltFamilies>("Family Palette"),
             panelTools.AddPushButton<CmdPltFamilyElements>("Family Palette"),
             panelTools.AddPushButton<CmdTapMaker>("Tap Maker")
