@@ -18,7 +18,7 @@ public class PropertyGroupNamesProvider : IOptionsProvider {
             if (value == null) continue;
 
             var label = value.ToLabel();
-            labelMap.TryAdd(label, value);
+            _ = labelMap.TryAdd(label, value);
         }
 
         return labelMap;

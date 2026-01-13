@@ -11,7 +11,7 @@ public class SpecNamesProvider : IOptionsProvider {
 
         foreach (var spec in SpecUtils.GetAllSpecs()) {
             var label = FormatSpecWithDiscipline(spec);
-            labelMap.TryAdd(label, spec);
+            _ = labelMap.TryAdd(label, spec);
         }
 
         return labelMap;

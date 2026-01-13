@@ -28,21 +28,19 @@ public class DocumentManager {
     }
 
     /// <summary>Gets the active document from the UIApplication. </summary>
-    public static Autodesk.Revit.DB.Document GetActiveDocument(UIApplication uiApp) =>
-        uiApp?.ActiveUIDocument?.Document;
+    public static Autodesk.Revit.DB.Document GetActiveDocument() => uiapp?.ActiveUIDocument?.Document;
 
     /// <summary>Gets the active view from the UIApplication. </summary>
-    public static View GetActiveView(UIApplication uiApp) =>
-        uiApp?.ActiveUIDocument?.ActiveView;
+    public static View GetActiveView() => uiapp?.ActiveUIDocument?.ActiveView;
 
 
     /// <summary>Gets all open documents from the UIApplication. </summary>
-    public static IEnumerable<Autodesk.Revit.DB.Document> GetOpenDocuments(UIApplication uiApp) =>
-        uiApp?.Application.Documents.Cast<Autodesk.Revit.DB.Document>() ?? [];
+    public static IEnumerable<Autodesk.Revit.DB.Document> GetOpenDocuments() =>
+        uiapp?.Application.Documents.Cast<Autodesk.Revit.DB.Document>() ?? [];
 
     /// <summary>Gets all open UIViews across all documents. </summary>
-    public static IEnumerable<UIView> GetOpenUiViews(UIApplication uiApp) =>
-        GetOpenDocuments(uiApp).SelectMany(d => {
+    public static IEnumerable<UIView> GetOpenUiViews() =>
+        GetOpenDocuments().SelectMany(d => {
             try {
                 var uiDoc = new UIDocument(d);
                 return uiDoc.GetOpenUIViews();
@@ -52,31 +50,31 @@ public class DocumentManager {
         });
 
     /// <summary>Gets all open view ElementIds across all documents. </summary>
-    public static IEnumerable<ElementId> GetOpenViewIds(UIApplication uiApp) =>
-        GetOpenUiViews(uiApp).Select(v => v.ViewId);
+    public static IEnumerable<ElementId> GetOpenViewIds() =>
+        GetOpenUiViews().Select(v => v.ViewId);
 
     /// <summary>Checks if a document is open. </summary>
-    public static bool IsDocumentOpen(UIApplication uiApp, Autodesk.Revit.DB.Document doc) =>
-        GetOpenDocuments(uiApp).Any(d => d.Title == doc.Title);
+    public static bool IsDocumentOpen(Autodesk.Revit.DB.Document doc) =>
+        GetOpenDocuments().Any(d => d.Title == doc.Title);
 
     /// <summary>Checks if a document is the active document. </summary>
-    public static bool IsDocumentActive(UIApplication uiApp, Autodesk.Revit.DB.Document doc) =>
-        GetActiveDocument(uiApp)?.Title == doc.Title;
+    public static bool IsDocumentActive(Autodesk.Revit.DB.Document doc) =>
+        GetActiveDocument()?.Title == doc.Title;
 
     /// <summary>Checks if a view (by ElementId) is currently open as a tab. </summary>
-    public static bool IsViewOpen(UIApplication uiApp, ElementId viewId) =>
-        GetOpenViewIds(uiApp).Contains(viewId);
+    public static bool IsViewOpen(ElementId viewId) =>
+        GetOpenViewIds().Contains(viewId);
 
     /// <summary>Finds an open document by title or path name. </summary>
-    public static Autodesk.Revit.DB.Document FindDocumentByName(UIApplication uiApp, string name) =>
-        GetOpenDocuments(uiApp).FirstOrDefault(d => d.Title == name || d.Title.Contains(name));
+    public static Autodesk.Revit.DB.Document FindDocumentByName(string name) =>
+        GetOpenDocuments().FirstOrDefault(d => d.Title == name || d.Title.Contains(name));
 
     /// <summary>
     ///     Finds an open family document matching the given Family.
     ///     (partial match on Title because title is the file name, e.g., "Building.rvt" or "Family.rfa").
     /// </summary>
-    public static Autodesk.Revit.DB.Document FindOpenFamilyDocument(UIApplication uiApp, Family family) =>
-        GetOpenDocuments(uiApp).FirstOrDefault(d => d.IsFamilyDocument && d.Title.Contains(family.Name));
+    public static Autodesk.Revit.DB.Document FindOpenFamilyDocument(Family family) =>
+        GetOpenDocuments().FirstOrDefault(d => d.IsFamilyDocument && d.Title.Contains(family.Name));
 
     /// <summary>Gets the ModelPath for a document (cloud or file-based).</summary>
     public static ModelPath GetDocumentModelPath(Autodesk.Revit.DB.Document doc) =>
@@ -86,16 +84,16 @@ public class DocumentManager {
             _ => null // Return null for unsaved documents (like newly opened family docs)
         };
 
-    public static string LogDocumentState(UIApplication uiApp, View view = null, string context = null) {
+    public static string LogDocumentState(View view = null, string context = null) {
         var sb = new StringBuilder();
         if (!string.IsNullOrEmpty(context)) _ = sb.AppendLine($"=== {context} ===");
         _ = sb.AppendLine("=== Document State ===");
 
-        var activeDoc = GetActiveDocument(uiApp);
-        var activeView = GetActiveView(uiApp);
+        var activeDoc = GetActiveDocument();
+        var activeView = GetActiveView();
         var activeViewId = activeView?.Id;
-        var openDocs = GetOpenDocuments(uiApp).ToList();
-        var openUiViews = GetOpenUiViews(uiApp).ToList();
+        var openDocs = GetOpenDocuments().ToList();
+        var openUiViews = GetOpenUiViews().ToList();
 
         if (view != null) {
             _ = sb.AppendLine($"Target Document: {view.Document.Title} (Path: {view.Document.PathName})")
@@ -180,6 +178,4 @@ public class DocumentManager {
 
         Debug.Debug.WriteLine("[DocumentManager] OnDocumentClosed complete");
     }
-
-    internal static Autodesk.Revit.DB.Document GetActiveDocument() => GetActiveDocument(uiapp);
 }

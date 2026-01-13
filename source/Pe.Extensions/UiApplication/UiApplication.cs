@@ -19,7 +19,7 @@ public static class OpenDocumentExtensions {
     ///     - OpenAndActivateDocument(ModelPath) for cloud docs: SLOW/FAILS without network - has timeout warning
     /// </summary>
     public static void OpenAndActivateView(this UIApplication uiApp, View targetView) {
-        Debug.WriteLine(DocumentManager.LogDocumentState(uiApp, targetView, "OpenAndActivateView START"));
+        Debug.WriteLine(DocumentManager.LogDocumentState(targetView, "OpenAndActivateView START"));
 
         try {
             var targetDoc = targetView.Document;
@@ -28,7 +28,7 @@ public static class OpenDocumentExtensions {
             // CASE 1: Target document is already the active document. Use RequestViewChange for reliability.
             // (ActiveView setter doesn't stick when called from palette callbacks sometimes. Particularly for 
             // Sheets/Schedules which are already open.)
-            if (DocumentManager.IsDocumentActive(uiApp, targetDoc)) {
+            if (DocumentManager.IsDocumentActive(targetDoc)) {
                 Debug.WriteLine(
                     $"[OpenAndActivateView] Document '{targetDoc.Title}' is active, using RequestViewChange");
                 targetUiDoc.RequestViewChange(targetView);
@@ -36,7 +36,7 @@ public static class OpenDocumentExtensions {
             }
 
             // CASE 2: Target document is open but not active
-            if (DocumentManager.IsDocumentOpen(uiApp, targetDoc)) {
+            if (DocumentManager.IsDocumentOpen(targetDoc)) {
                 Debug.WriteLine($"[OpenAndActivateView] Document '{targetDoc.Title}' is open but not active");
 
                 // For family documents, use the special family activation (saves to temp)
@@ -45,7 +45,7 @@ public static class OpenDocumentExtensions {
                 // NO PathName, so OpenAndActivateDocument cannot be used at all. Temp file is required.
                 if (targetDoc.IsFamilyDocument) {
                     Debug.WriteLine("[OpenAndActivateView] Target is family document, using family activation...");
-                    ActivateOpenFamilyDocumentAndView(uiApp, targetDoc, targetView);
+                    ActivateOpenFamilyDocumentAndView(targetDoc, targetView);
                     return;
                 }
 
@@ -58,7 +58,7 @@ public static class OpenDocumentExtensions {
 
                     // For cloud documents, use a timeout warning mechanism
                     if (isCloud) {
-                        if (!TryOpenCloudDocumentWithTimeout(uiApp, existingDocPath, targetView, 3)) {
+                        if (!TryOpenCloudDocumentWithTimeout(existingDocPath, targetView, 3)) {
                         }
                     } else {
                         // Local documents - just open directly (fast)
@@ -87,7 +87,7 @@ public static class OpenDocumentExtensions {
             var openedUiDoc = uiApp.OpenAndActivateDocument(newDocPath, newDocOptions, false);
             openedUiDoc.RequestViewChange(targetView);
         } catch (Exception ex) {
-            Debug.WriteLine(DocumentManager.LogDocumentState(uiApp, targetView, "OpenAndActivateView ERROR"));
+            Debug.WriteLine(DocumentManager.LogDocumentState(targetView, "OpenAndActivateView ERROR"));
             Debug.WriteLine(ex.ToStringDemystified());
         }
     }
@@ -104,17 +104,17 @@ public static class OpenDocumentExtensions {
     ///     skip SaveAs and use OpenAndActivateDocument directly with the existing path.
     /// </summary>
     public static void OpenAndActivateFamily(this UIApplication uiApp, Family family) {
-        Debug.WriteLine(DocumentManager.LogDocumentState(uiApp, context: "OpenAndActivateFamily START"));
+        Debug.WriteLine(DocumentManager.LogDocumentState(context: "OpenAndActivateFamily START"));
 
         try {
             // Check if family document is already open
-            var existingFamDoc = DocumentManager.FindOpenFamilyDocument(uiApp, family);
+            var existingFamDoc = DocumentManager.FindOpenFamilyDocument(family);
 
             if (existingFamDoc != null) {
                 Debug.WriteLine($"[OpenAndActivateFamily] Family '{family.Name}' is already open");
 
                 // If it's already the active document, nothing to do
-                if (DocumentManager.IsDocumentActive(uiApp, existingFamDoc)) {
+                if (DocumentManager.IsDocumentActive(existingFamDoc)) {
                     Debug.WriteLine("[OpenAndActivateFamily] Family doc is active, nothing to do");
                     return;
                 }
@@ -127,7 +127,7 @@ public static class OpenDocumentExtensions {
 
             // Family document is not open - open it via EditFamily
             Debug.WriteLine($"[OpenAndActivateFamily] Family '{family.Name}' is NOT open, calling EditFamily...");
-            var activeDoc = DocumentManager.GetActiveDocument(uiApp);
+            var activeDoc = DocumentManager.GetActiveDocument();
             var famDoc = activeDoc?.EditFamily(family);
 
             if (famDoc == null) {
@@ -136,14 +136,14 @@ public static class OpenDocumentExtensions {
             }
 
             Debug.WriteLine($"[OpenAndActivateFamily] EditFamily returned document '{famDoc.Title}'");
-            Debug.WriteLine(DocumentManager.LogDocumentState(uiApp, context: "After EditFamily"));
+            Debug.WriteLine(DocumentManager.LogDocumentState(context: "After EditFamily"));
 
             // EditFamily opens the document but does NOT activate it in the UI.
             // ShowElements is unreliable for activation.
             // The reliable approach: save to temp file and use OpenAndActivateDocument
             ActivateOpenFamilyDocument(uiApp, famDoc, family.Name);
         } catch (Exception ex) {
-            Debug.WriteLine(DocumentManager.LogDocumentState(uiApp, context: "OpenAndActivateFamily ERROR"));
+            Debug.WriteLine(DocumentManager.LogDocumentState(context: "OpenAndActivateFamily ERROR"));
             Debug.WriteLine(ex.ToStringDemystified());
         }
     }
@@ -179,8 +179,9 @@ public static class OpenDocumentExtensions {
     ///     Activates an already-open family document and switches to a specific view.
     ///     OPTIMIZATION: If the family already has a PathName, skips SaveAs.
     /// </summary>
-    private static void ActivateOpenFamilyDocumentAndView(UIApplication uiApp, Document famDoc, View targetView) {
+    private static void ActivateOpenFamilyDocumentAndView(Document famDoc, View targetView) {
         UIDocument activatedUiDoc;
+        var uiApp = DocumentManager.uiapp;
 
         // OPTIMIZATION: If family already has a PathName, try direct activation first
         if (!string.IsNullOrEmpty(famDoc.PathName)) {
@@ -256,13 +257,14 @@ public static class OpenDocumentExtensions {
     ///     Returns true if successful, false if failed (error shown to user).
     /// </summary>
     private static bool TryOpenCloudDocumentWithTimeout(
-        UIApplication uiApp,
         ModelPath modelPath,
         View targetView,
-        int timeoutSeconds) {
+        int timeoutSeconds
+        ) {
         var sw = Stopwatch.StartNew();
         var timerFired = false;
         Timer timeoutTimer = null;
+        var uiApp = DocumentManager.uiapp;
 
         try {
             Debug.WriteLine(

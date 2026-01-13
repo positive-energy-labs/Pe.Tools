@@ -48,10 +48,10 @@ public class MruViewBuffer {
         var views = new List<View>();
         // Track seen views by DocumentKey + ViewId to prevent duplicates (same ViewId can exist in different docs)
         var seenViews = new HashSet<string>();
-        var currentView = DocumentManager.GetActiveView(uiApp);
+        var currentView = DocumentManager.GetActiveView();
 
         // Add current view first if it exists and is open
-        if (currentView != null && DocumentManager.IsViewOpen(uiApp, currentView.Id)) {
+        if (currentView != null && DocumentManager.IsViewOpen(currentView.Id)) {
             var currentViewKey = $"{GetDocumentKey(currentView.Document)}|{currentView.Id.Value()}";
             views.Add(currentView);
             _ = seenViews.Add(currentViewKey);
@@ -63,9 +63,9 @@ public class MruViewBuffer {
             var viewKey = $"{viewRef.DocumentKey}|{viewRef.ViewId.Value()}";
             if (seenViews.Contains(viewKey)) continue;
 
-            var targetDoc = DocumentManager.FindDocumentByName(uiApp, viewRef.DocumentTitle);
+            var targetDoc = DocumentManager.FindDocumentByName(viewRef.DocumentTitle);
             if (targetDoc == null) continue;
-            if (!DocumentManager.IsViewOpen(uiApp, viewRef.ViewId)) continue;
+            if (!DocumentManager.IsViewOpen(viewRef.ViewId)) continue;
             if (targetDoc.GetElement(viewRef.ViewId) is not View view) continue;
 
             views.Add(view);
