@@ -124,19 +124,10 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
                 FilterKeySelector = item => string.IsNullOrEmpty(item.ExtendsValue) ? "Base" : "Extended",
                 OnSelectionChangedDebounced = item => {
                     this.BuildPreviewData(item, context);
-                    if (context.PreviewData != null) {
+                    if (context.PreviewData != null)
                         previewPanel.UpdatePreview(context.PreviewData);
-                        // Auto-expand sidebar when preview data is available
-                        if (window?.ContentControl is Palette palette)
-                            palette.ExpandSidebar(new GridLength(450));
-                    }
                 },
-                Sidebar = new PaletteSidebar {
-                    Content = previewPanel,
-                    InitialState = SidebarState.Collapsed,
-                    Width = new GridLength(450),
-                    ExitKeys = [Key.Escape]
-                }
+                Sidebar = new PaletteSidebar { Content = previewPanel }
             });
 
         return window;

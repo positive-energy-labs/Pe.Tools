@@ -3,8 +3,10 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
-using Wpf.Ui.Markup;
 using WpfUiRichTextBox = Wpf.Ui.Controls.RichTextBox;
+
+// Note: This panel has complex domain-specific rendering that benefits from manual FlowDocument building.
+// FlowDocumentBuilder helpers are used where applicable (Create, AddSectionHeader, AddJsonBlock).
 
 namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 
@@ -16,22 +18,17 @@ public class ProfilePreviewPanel : UserControl {
     private readonly WpfUiRichTextBox _richTextBox;
 
     public ProfilePreviewPanel() {
-        // Create scrollable rich text box for content display
+        // Palette handles sidebar padding and scrolling - just provide the content
         this._richTextBox = new WpfUiRichTextBox {
             IsReadOnly = true,
             Focusable = false,
             IsTextSelectionEnabled = true,
             AutoWordSelection = false,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
         };
 
-        var border = new BorderSpec()
-            .Background(ThemeResource.ApplicationBackgroundBrush)
-            .Padding(UiSz.m)
-            .CreateAround(this._richTextBox);
-
-        this.Content = border;
+        this.Content = this._richTextBox;
     }
 
     /// <summary>
@@ -41,24 +38,12 @@ public class ProfilePreviewPanel : UserControl {
 
     private void UpdateContent(PreviewData data) {
         if (data == null) {
-            this._richTextBox.Document = new FlowDocument();
+            this._richTextBox.Document = FlowDocumentBuilder.Create();
             return;
         }
 
-        var doc = new FlowDocument {
-            PagePadding = new Thickness(0),
-            TextAlignment = TextAlignment.Left,
-            FontFamily = ThemeManager.FontFamily(),
-            FontSize = 11,
-            LineHeight = 15.0
-        };
-        doc.SetResourceReference(FlowDocument.ForegroundProperty, "TextFillColorSecondaryBrush");
-
-        // Profile name header
-        var headerPara = new Paragraph(new Run(data.ProfileName) { FontWeight = FontWeights.Bold, FontSize = 14 }) {
-            Margin = new Thickness(0, 0, 0, 8)
-        };
-        doc.Blocks.Add(headerPara);
+        var doc = FlowDocumentBuilder.Create()
+            .AddHeader(data.ProfileName);
 
         // Validation Status Section (if there are fixes or errors)
         if (!data.IsValid || data.AppliedFixes.Any() || data.RemainingErrors.Any()) AddValidationSection(doc, data);
@@ -80,7 +65,7 @@ public class ProfilePreviewPanel : UserControl {
 
             // Operations list with enabled status
             if (data.Operations.Count > 0) {
-                AddSectionHeader(doc, "Operations");
+                doc.AddSectionHeader("Operations");
                 var opList = new List { MarkerStyle = TextMarkerStyle.Decimal, Margin = new Thickness(16, 0, 0, 12) };
                 foreach (var op in data.Operations) {
                     var enabledText = op.Enabled ? "✓" : "✗";
@@ -103,7 +88,7 @@ public class ProfilePreviewPanel : UserControl {
 
             // APS Parameters list with details
             if (data.ApsParameters.Count > 0) {
-                AddSectionHeader(doc, "APS Parameters (from Parameters Service)");
+                doc.AddSectionHeader("APS Parameters (from Parameters Service)");
                 var paramList = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
                 foreach (var param in data.ApsParameters) {
                     var para = new Paragraph();
@@ -120,7 +105,7 @@ public class ProfilePreviewPanel : UserControl {
 
             // AddAndSet Parameters list with details
             if (data.AddAndSetParameters.Count > 0) {
-                AddSectionHeader(doc, "AddAndSet Parameters (set by profile)");
+                doc.AddSectionHeader("AddAndSet Parameters (set by profile)");
                 var paramList = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
                 foreach (var param in data.AddAndSetParameters) {
                     var para = new Paragraph();
@@ -137,7 +122,7 @@ public class ProfilePreviewPanel : UserControl {
 
             // Families list with categories
             if (data.Families.Count > 0) {
-                AddSectionHeader(doc, "Families to Process");
+                doc.AddSectionHeader("Families to Process");
                 var famList = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
                 foreach (var fam in data.Families) {
                     var para = new Paragraph();
@@ -153,27 +138,12 @@ public class ProfilePreviewPanel : UserControl {
 
             // Profile JSON section
             if (!string.IsNullOrEmpty(data.ProfileJson)) {
-                AddSectionHeader(doc, "Profile Settings (JSON)");
-                var jsonPara = new Paragraph(new Run(data.ProfileJson)) {
-                    FontFamily = new FontFamily("Consolas"),
-                    FontSize = 9,
-                    Margin = new Thickness(8, 0, 0, 12),
-                    Background = Brushes.Black,
-                    Foreground = Brushes.LightGray,
-                    Padding = new Thickness(8)
-                };
-                doc.Blocks.Add(jsonPara);
+                doc.AddSectionHeader("Profile Settings (JSON)");
+                doc.AddJsonBlock(data.ProfileJson);
             }
         }
 
         this._richTextBox.Document = doc;
-    }
-
-    private static void AddSectionHeader(FlowDocument doc, string title) {
-        var header = new Paragraph(new Run(title) { FontWeight = FontWeights.SemiBold }) {
-            Margin = new Thickness(0, 8, 0, 4)
-        };
-        doc.Blocks.Add(header);
     }
 
     private static void AddValidationSection(FlowDocument doc, PreviewData data) {

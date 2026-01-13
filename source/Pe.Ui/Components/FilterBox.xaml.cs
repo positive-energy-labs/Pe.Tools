@@ -17,14 +17,14 @@ public partial class FilterBox : RevitHostedUserControl, IPopoverExit {
     private Storyboard? _expandStoryboard;
     private bool _isExpanded;
 
-    protected FilterBox(IEnumerable<Key> closeKeys) {
-        this.CloseKeys = closeKeys;
+    protected FilterBox(List<Key> closeKeys) {
+        this.CloseKeys = closeKeys.Count == 0 ?  [Key.Escape]:  closeKeys;
         this.InitializeComponent();
         this.Loaded += this.FilterBox_Loaded;
     }
 
     public event EventHandler? ExitRequested;
-    public IEnumerable<Key> CloseKeys { get; set; } = Array.Empty<Key>();
+    public IEnumerable<Key> CloseKeys { get; set; }
 
     public void RequestExit() => this.ExitRequested?.Invoke(this, EventArgs.Empty);
 
@@ -93,7 +93,11 @@ public partial class FilterBox : RevitHostedUserControl, IPopoverExit {
     }
 
     protected void FilterAutoSuggestBox_GotFocus(object sender, RoutedEventArgs e) {
-        if (!this._isExpanded) this.Expand();
+        if (this._isExpanded) return;
+        
+        this.Expand();
+        this.FilterAutoSuggestBox.Text = string.Empty;
+        e.Handled = true;
     }
 
     protected void FilterAutoSuggestBox_LostFocus(object sender, RoutedEventArgs e) {
@@ -103,7 +107,9 @@ public partial class FilterBox : RevitHostedUserControl, IPopoverExit {
 
         if (isListView || isListViewItem) return;
 
-        // Always collapse when unfocused (but not when navigating to suggestions)
+        // Clear text and collapse when unfocused (but not when navigating to suggestions)
+        this.FilterAutoSuggestBox.Text = string.Empty;
+        e.Handled = true;
         this.Collapse();
     }
 
@@ -118,7 +124,7 @@ public partial class FilterBox : RevitHostedUserControl, IPopoverExit {
             DispatcherPriority.Input);
     }
 
-    protected void Collapse() {
+    public void Collapse() {
         if (!this._isExpanded) return;
         this._isExpanded = false;
 
@@ -135,7 +141,7 @@ public class FilterBox<TViewModel> : FilterBox where TViewModel : class {
     private readonly TViewModel _viewModel;
 
     public FilterBox(TViewModel viewModel,
-        IEnumerable<Key> closeKeys,
+        List<Key> closeKeys,
         ObservableCollection<string>? availableFilterValues = null) : base(closeKeys) {
         this._viewModel = viewModel;
         this._availableFilterValues = availableFilterValues;
@@ -161,12 +167,13 @@ public class FilterBox<TViewModel> : FilterBox where TViewModel : class {
     private void FilterAutoSuggestBox_PreviewKeyDown(object sender, KeyEventArgs e) {
         // Check if this key should close the popover
         if (this.ShouldCloseOnKey(e.Key)) {
-            e.Handled = true;
             this.UpdateSelectedFilterValue(null);
+            this.FilterAutoSuggestBox.Text = string.Empty;
+            e.Handled = true;
             this.RequestExit();
         } else if (e.Key is Key.Enter) {
-            // Enter also closes but updates the value first
             this.UpdateSelectedFilterValue(this.FilterAutoSuggestBox.Text);
+            this.FilterAutoSuggestBox.Text = string.Empty;
             e.Handled = true;
             this.RequestExit();
         }

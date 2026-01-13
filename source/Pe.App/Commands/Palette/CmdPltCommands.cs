@@ -1,6 +1,6 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
-using Pe.App.Commands.Palette.Helpers;
+using Pe.App.Commands.Palette.CommandPalette;
 using Pe.Global.Services.Storage;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;

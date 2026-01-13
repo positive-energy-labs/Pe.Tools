@@ -1,11 +1,14 @@
 using Pe.Ui.Core;
 using Pe.Ui.ViewModels;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Wpf.Ui.Controls;
 using Visibility = System.Windows.Visibility;
 using Grid = System.Windows.Controls.Grid;
+using Button = Wpf.Ui.Controls.Button;
 
 
 namespace Pe.Ui.Components;
@@ -40,6 +43,7 @@ public sealed partial class Palette : RevitHostedUserControl, ICloseRequestable 
     private const double DefaultSidebarWidth = 400;
 
     private readonly bool _isSearchBoxHidden;
+    private readonly List<Button> _tabButtons = [];
     private ActionBinding _actionBinding;
     private ActionMenu _actionMenu;
     private PaletteSidebar _currentSidebar;
@@ -51,6 +55,7 @@ public sealed partial class Palette : RevitHostedUserControl, ICloseRequestable 
     private bool _keepOpenAfterAction;
     private Action _onCtrlReleased;
     private EphemeralWindow _parentWindow;
+    private bool _sidebarAutoExpanded;
     private SelectableTextBox _tooltipPanel;
 
     public Palette(bool isSearchBoxHidden = false) {
@@ -75,7 +80,8 @@ public sealed partial class Palette : RevitHostedUserControl, ICloseRequestable 
         CustomKeyBindings customKeyBindings = null,
         Action onCtrlReleased = null,
         PaletteSidebar paletteSidebar = null,
-        bool keepOpenAfterAction = false
+        bool keepOpenAfterAction = false,
+        List<string> tabNames = null
     ) where TItem : class, IPaletteListItem {
         this.DataContext = viewModel;
         this._customKeyBindings = customKeyBindings;
@@ -84,19 +90,27 @@ public sealed partial class Palette : RevitHostedUserControl, ICloseRequestable 
         // Load resources for SearchTextBox
         ThemeManager.LoadWpfUiResources(this.SearchTextBox);
 
+        // Initialize tabs if provided
+        if (tabNames is { Count: > 0 })
+            this.InitializeTabs(viewModel, tabNames); 
+
         // Create FilterBox if filtering is enabled
         var hasFiltering = viewModel.AvailableFilterValues != null;
         if (hasFiltering) {
-            var filterBox = new FilterBox<PaletteViewModel<TItem>>(
+            this._filterBox = new FilterBox<PaletteViewModel<TItem>>(
                 viewModel,
                 [Key.Tab, Key.Escape],
                 viewModel.AvailableFilterValues
-            );
-            filterBox.ExitRequested += (_, _) => _ = this.SearchTextBox.Focus();
-            this._filterBox = filterBox;
+            ) {
+                // Set initial visibility based on current tab
+                Visibility = viewModel.CurrentTabHasFiltering
+                    ? Visibility.Visible
+                    : Visibility.Collapsed
+            };
+            this._filterBox.ExitRequested += (_, _) => _ = this.SearchTextBox.Focus();
 
-            Grid.SetColumn(filterBox, 1);
-            _ = this.SearchBoxGrid.Children.Add(filterBox);
+            Grid.SetColumn(this._filterBox, 1);
+            _ = this.SearchBoxGrid.Children.Add(this._filterBox);
         }
 
         new BorderSpec()
@@ -148,13 +162,13 @@ public sealed partial class Palette : RevitHostedUserControl, ICloseRequestable 
         this.PreviewKeyDown += this.UserControl_PreviewKeyDown;
         this.PreviewKeyUp += this.UserControl_PreviewKeyUp;
 
-        // Initialize sidebar if provided
+        // Initialize sidebar if provided (always starts collapsed, auto-expands on first selection)
         if (paletteSidebar != null) {
             this._currentSidebar = paletteSidebar;
             this.SidebarContent.Content = paletteSidebar.Content;
 
-            if (paletteSidebar.InitialState == SidebarState.Expanded)
-                this.ExpandSidebar(paletteSidebar.Width);
+            // Update help text to reflect sidebar instead of tooltip
+            this.HelpText.Text = "↑↓ Navigate • ← Details • → Actions • Click/Enter Execute • Esc Close";
         }
     }
 
@@ -218,6 +232,7 @@ public sealed partial class Palette : RevitHostedUserControl, ICloseRequestable 
     /// <summary>
     ///     Expands the sidebar to the specified width.
     ///     Only expands the parent window when transitioning from collapsed to expanded.
+    ///     Public for future "expand panel" button feature.
     /// </summary>
     public void ExpandSidebar(GridLength width) {
         var wasCollapsed = this.SidebarColumn.Width.Value == 0;
@@ -229,8 +244,18 @@ public sealed partial class Palette : RevitHostedUserControl, ICloseRequestable 
     }
 
     /// <summary>
+    ///     Expands the sidebar once (on first call only). Used for auto-expand on first selection.
+    /// </summary>
+    public void ExpandSidebarOnce(GridLength width) {
+        if (this._sidebarAutoExpanded) return;
+        this._sidebarAutoExpanded = true;
+        this.ExpandSidebar(width);
+    }
+
+    /// <summary>
     ///     Collapses the sidebar to width 0.
     ///     Only collapses the parent window when transitioning from expanded to collapsed.
+    ///     Public for future "expand panel" button feature.
     /// </summary>
     public void CollapseSidebar() {
         var currentWidth = this.SidebarColumn.Width.Value;
@@ -242,6 +267,7 @@ public sealed partial class Palette : RevitHostedUserControl, ICloseRequestable 
 
     /// <summary>
     ///     Toggles the sidebar between expanded and collapsed states.
+    ///     Public for future "expand panel" button feature.
     /// </summary>
     public void ToggleSidebar() {
         if (this._currentSidebar == null) return;
@@ -370,13 +396,14 @@ public sealed partial class Palette : RevitHostedUserControl, ICloseRequestable 
         if ((modifiers & ModifierKeys.Control) != 0)
             this._isCtrlPressed = true;
 
-        // Check if sidebar should handle this key
-        if (this._currentSidebar != null &&
-            this.SidebarColumn.Width.Value > 0 &&
-            this._currentSidebar.ExitKeys.Contains(e.Key)) {
-            this.CollapseSidebar();
-            _ = this.Focus();
-            e.Handled = true;
+        // Handle Ctrl+Left/Right for tab switching
+        if ((modifiers & ModifierKeys.Control) != 0 && e.Key == Key.Left) {
+            e.Handled = this.SwitchTab(-1);
+            return;
+        }
+
+        if ((modifiers & ModifierKeys.Control) != 0 && e.Key == Key.Right) {
+            e.Handled = this.SwitchTab(1);
             return;
         }
 
@@ -395,19 +422,28 @@ public sealed partial class Palette : RevitHostedUserControl, ICloseRequestable 
             e.Handled = await this.HandleNavigationAction(NavigationAction.MoveUp);
         else if (e.Key == Key.Down && modifiers == ModifierKeys.None && this._isSearchBoxHidden)
             e.Handled = await this.HandleNavigationAction(NavigationAction.MoveDown);
-        else if (e.Key == Key.Tab && modifiers == ModifierKeys.None && this._filterBox != null)
+        else if (e.Key == Key.Tab && modifiers == ModifierKeys.None && this._filterBox != null && this.DataContext is IPaletteViewModel vm && vm.CurrentTabHasFiltering)
             e.Handled = this.ShowPopover(_ => this._filterBox?.Show());
         else if (e.Key == Key.Left && selectedItem is IPaletteListItem item) {
-            e.Handled = this.ShowPopover(placementTarget => {
-                // Lazy evaluate tooltip text only when showing
-                var tooltipText = item.GetTextInfo?.Invoke();
-                this._tooltipPanel.Show(placementTarget, tooltipText);
-            });
+            // If sidebar is configured, expand it instead of showing tooltip popup
+            if (this._currentSidebar != null) {
+                this.ExpandSidebar(this._currentSidebar.Width);
+                e.Handled = true;
+            } else {
+                // Fallback to tooltip for palettes without sidebar
+                e.Handled = this.ShowPopover(placementTarget => {
+                    var tooltipText = item.GetTextInfo?.Invoke();
+                    this._tooltipPanel.Show(placementTarget, tooltipText);
+                });
+            }
         } else if (e.Key == Key.Right && selectedItem != null) {
             e.Handled = this.ShowPopover(placementTarget => {
                 this._actionMenu?.SetActionsUntyped(this._actionBinding?.GetAllActionsUntyped());
                 this._actionMenu?.ShowUntyped(placementTarget, selectedItem);
             });
+        } else {
+            // only allow our explicit key handling.
+            e.Handled = true;
         }
     }
 
@@ -465,5 +501,98 @@ public sealed partial class Palette : RevitHostedUserControl, ICloseRequestable 
         default:
             return false;
         }
+    }
+
+    /// <summary>
+    ///     Initializes tab bar buttons and wires up selection.
+    /// </summary>
+    private void InitializeTabs<TItem>(PaletteViewModel<TItem> viewModel, List<string> tabNames)
+        where TItem : class, IPaletteListItem {
+        if (tabNames == null || tabNames.Count == 0) return;
+
+        this.TabBarBorder.Visibility = Visibility.Visible;
+        this._tabButtons.Clear();
+
+        for (var i = 0; i < tabNames.Count; i++) {
+            var tabIndex = i; // Capture for closure
+            var button = new Button {
+                Content = tabNames[i],
+                Margin = new Thickness(0, 0, 4, 0),
+                Padding = new Thickness(8, 4, 8, 4),
+                Tag = tabIndex,
+                Focusable = false, // Keep focus in search box
+                FocusVisualStyle = null, // Remove focus rectangle
+                BorderThickness = new Thickness(0) // Remove border
+            };
+
+            button.Click += (_, _) => {
+                viewModel.SelectedTabIndex = tabIndex;
+                this.UpdateTabButtonStates(viewModel.SelectedTabIndex);
+            };
+
+            this._tabButtons.Add(button);
+            _ = this.TabBarItemsControl.Items.Add(button);
+        }
+
+        // Subscribe to tab changes from ViewModel (e.g., from keyboard navigation)
+        viewModel.SelectedTabChanged += (_, _) => {
+            this.UpdateTabButtonStates(viewModel.SelectedTabIndex);
+            this.UpdateFilterBoxVisibility(viewModel);
+        };
+
+        // Set initial state
+        this.UpdateTabButtonStates(viewModel.SelectedTabIndex);
+        this.UpdateFilterBoxVisibility(viewModel);
+    }
+
+    /// <summary>
+    ///     Updates FilterBox visibility based on whether current tab has filtering.
+    ///     Also collapses the FilterBox when hiding it to reset its state.
+    /// </summary>
+    private void UpdateFilterBoxVisibility(IPaletteViewModel viewModel) {
+        if (this._filterBox == null) return;
+
+        var shouldBeVisible = viewModel.CurrentTabHasFiltering;
+        this._filterBox.Visibility = shouldBeVisible ? Visibility.Visible : Visibility.Collapsed;
+
+        // Collapse the FilterBox when hiding it to reset its expanded state
+        if (!shouldBeVisible)
+            (this._filterBox as FilterBox)?.Collapse();
+    }
+
+    /// <summary>
+    ///     Updates the visual state of tab buttons based on selected index.
+    /// </summary>
+    private void UpdateTabButtonStates(int selectedIndex) {
+        for (var i = 0; i < this._tabButtons.Count; i++) {
+            var button = this._tabButtons[i];
+            if (i == selectedIndex) {
+                // Selected: subtle accent background with primary text
+                button.SetResourceReference(Button.BackgroundProperty, "ControlFillColorDefaultBrush");
+                button.SetResourceReference(Button.ForegroundProperty, "TextFillColorPrimaryBrush");
+            } else {
+                // Unselected: transparent background with secondary text
+                button.Background = Brushes.Transparent;
+                button.SetResourceReference(Button.ForegroundProperty, "TextFillColorSecondaryBrush");
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Switches to the next or previous tab.
+    /// </summary>
+    private bool SwitchTab(int direction) {
+        if (this.DataContext is not IPaletteViewModel viewModel || !viewModel.HasTabs)
+            return false;
+
+        var newIndex = viewModel.SelectedTabIndex + direction;
+        if (newIndex < 0)
+            newIndex = viewModel.TabCount - 1; // Wrap to last
+        else if (newIndex >= viewModel.TabCount)
+            newIndex = 0; // Wrap to first
+
+        viewModel.SelectedTabIndex = newIndex;
+        this.UpdateTabButtonStates(newIndex);
+        return true;
     }
 }

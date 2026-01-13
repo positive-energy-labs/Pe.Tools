@@ -8,6 +8,29 @@ using System.Windows.Input;
 namespace Pe.Ui.Core;
 
 /// <summary>
+///     Defines a single tab in a tabbed palette.
+///     Filter predicate is null for "All" tabs that show everything.
+/// </summary>
+/// <typeparam name="TItem">The palette item type</typeparam>
+public class TabDefinition<TItem> where TItem : class, IPaletteListItem {
+    /// <summary>
+    ///     Display name for the tab.
+    /// </summary>
+    public string Name { get; init; }
+
+    /// <summary>
+    ///     Filter predicate for items in this tab. Null means show all items (no filtering).
+    /// </summary>
+    public Func<TItem, bool> Filter { get; init; }
+
+    /// <summary>
+    ///     Filter key selector for this tab's dropdown filter.
+    ///     Null means no filtering dropdown is shown for this tab.
+    /// </summary>
+    public Func<TItem, string> FilterKeySelector { get; init; }
+}
+
+/// <summary>
 ///     Factory for creating palette windows using composition instead of inheritance.
 ///     Handles the boilerplate of wiring up SearchFilterService, PaletteViewModel, Palette, and EphemeralWindow.
 /// </summary>
@@ -54,12 +77,23 @@ public static class PaletteFactory {
             ? new SearchFilterService<TItem>(options.Storage, options.PersistenceKey, options.SearchConfig)
             : new SearchFilterService<TItem>(options.SearchConfig);
 
-        // Create view model with optional debounce delay
+        // Extract tab filters and per-tab filter key selectors for ViewModel
+        List<Func<TItem, bool>> tabFilters = null;
+        List<Func<TItem, string>> tabFilterKeySelectors = null;
+        if (options.Tabs is { Count: > 0 }) {
+            tabFilters = options.Tabs.Select(t => t.Filter).ToList();
+            tabFilterKeySelectors = options.Tabs.Select(t => t.FilterKeySelector).ToList();
+        }
+
+        // Create view model with optional debounce delay and tabs
         var viewModel = new PaletteViewModel<TItem>(
             items,
             searchService,
             options.FilterKeySelector,
-            options.SelectionDebounceMs
+            options.SelectionDebounceMs,
+            tabFilters,
+            tabFilterKeySelectors,
+            options.DefaultTabIndex
         );
         options.ViewModelMutator?.Invoke(viewModel);
 
@@ -85,12 +119,22 @@ public static class PaletteFactory {
 
         // Wire up debounced selection changed callback if provided (delayed, for expensive operations)
         if (options.OnSelectionChangedDebounced != null) {
-            viewModel.SelectionChangedDebounced += (_, _) =>
+            viewModel.SelectionChangedDebounced += (_, _) => {
+                // Auto-expand sidebar on first valid selection
+                if (options.Sidebar != null && viewModel.SelectedItem != null)
+                    palette.ExpandSidebarOnce(options.Sidebar.Width);
+                
                 options.OnSelectionChangedDebounced(viewModel.SelectedItem);
+            };
         }
 
+        // Extract tab names for UI
+        List<string> tabNames = null;
+        if (options.Tabs is { Count: > 0 })
+            tabNames = options.Tabs.Select(t => t.Name).ToList();
+
         palette.Initialize(viewModel, actions, options.CustomKeyBindings, onCtrlReleased, options.Sidebar,
-            options.KeepOpenAfterAction);
+            options.KeepOpenAfterAction, tabNames);
 
         var window = new EphemeralWindow(palette, title);
 
@@ -103,6 +147,7 @@ public static class PaletteFactory {
 
 /// <summary>
 ///     Defines a sidebar for the palette.
+///     Sidebars always start collapsed and auto-expand on first selection.
 /// </summary>
 public class PaletteSidebar {
     /// <summary>
@@ -111,27 +156,9 @@ public class PaletteSidebar {
     public UIElement Content { get; init; }
 
     /// <summary>
-    ///     Initial state of the sidebar (collapsed or expanded).
+    ///     Width of the sidebar when expanded. Default: 450px.
     /// </summary>
-    public SidebarState InitialState { get; init; } = SidebarState.Collapsed;
-
-    /// <summary>
-    ///     Width of the sidebar when expanded.
-    /// </summary>
-    public GridLength Width { get; init; } = new(400);
-
-    /// <summary>
-    ///     Keys that will collapse the sidebar and return focus to the main palette.
-    /// </summary>
-    public List<Key> ExitKeys { get; init; } = [Key.Escape];
-}
-
-/// <summary>
-///     Sidebar state enumeration.
-/// </summary>
-public enum SidebarState {
-    Collapsed,
-    Expanded
+    public GridLength Width { get; init; } = new(450);
 }
 
 /// <summary>
@@ -273,16 +300,18 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
 
     /// <summary>
     ///     Sidebar definition for the palette.
-    ///     Sidebars appear to the right of the main list and can be expanded/collapsed.
+    ///     Sidebars appear to the right of the main list, start collapsed, and auto-expand on first selection.
     ///     Default: null (no sidebar)
     /// </summary>
     /// <example>
     ///     <code>
-    ///     Sidebar = new PaletteSidebar {
+    ///     // Minimal configuration (uses default 450px width):
+    ///     Sidebar = new PaletteSidebar { Content = previewPanel }
+    ///     
+    ///     // Custom width:
+    ///     Sidebar = new PaletteSidebar { 
     ///         Content = previewPanel,
-    ///         InitialState = SidebarState.Collapsed,
-    ///         Width = new GridLength(400),
-    ///         ExitKeys = [Key.Escape]
+    ///         Width = new GridLength(600)
     ///     }
     ///     </code>
     /// </example>
@@ -301,4 +330,25 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     ///     </code>
     /// </example>
     public bool KeepOpenAfterAction { get; init; } = false;
+
+    /// <summary>
+    ///     Tab definitions for tabbed palettes. If null or empty, no tab bar is shown.
+    ///     Each tab can have a filter predicate; null filter means show all items.
+    /// </summary>
+    /// <example>
+    ///     <code>
+    ///     Tabs = [
+    ///         new() { Name = "All", Filter = null },
+    ///         new() { Name = "Views", Filter = i => i.ItemType == ViewItemType.View },
+    ///         new() { Name = "Schedules", Filter = i => i.ItemType == ViewItemType.Schedule }
+    ///     ]
+    ///     </code>
+    /// </example>
+    public List<TabDefinition<TItem>> Tabs { get; init; }
+
+    /// <summary>
+    ///     Default selected tab index when palette opens.
+    ///     Default: 0 (first tab)
+    /// </summary>
+    public int DefaultTabIndex { get; init; } = 0;
 }

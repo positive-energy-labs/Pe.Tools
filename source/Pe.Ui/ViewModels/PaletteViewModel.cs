@@ -11,6 +11,21 @@ namespace Pe.Ui.ViewModels;
 public interface IPaletteViewModel {
     IRelayCommand MoveSelectionUpCommand { get; }
     IRelayCommand MoveSelectionDownCommand { get; }
+
+    /// <summary>Whether tabs are enabled for this palette</summary>
+    bool HasTabs { get; }
+
+    /// <summary>Number of tabs (0 if no tabs)</summary>
+    int TabCount { get; }
+
+    /// <summary>Currently selected tab index</summary>
+    int SelectedTabIndex { get; set; }
+
+    /// <summary>Whether the current tab has filtering enabled</summary>
+    bool CurrentTabHasFiltering { get; }
+
+    /// <summary>Event raised when selected tab changes</summary>
+    event EventHandler SelectedTabChanged;
 }
 
 /// <summary>
@@ -23,11 +38,14 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     private readonly Func<TItem, string> _filterKeySelector;
     private readonly SearchFilterService<TItem> _searchService;
     private readonly DispatcherTimer _selectionDebounceTimer;
+    private readonly List<Func<TItem, bool>> _tabFilters;
+    private readonly List<Func<TItem, string>> _tabFilterKeySelectors;
 
     /// <summary> Current search text </summary>
     [ObservableProperty] private string _searchText = string.Empty;
 
     private string _selectedFilterValue = string.Empty;
+    private int _selectedTabIndex;
 
     /// <summary> Currently selected index in the filtered list </summary>
     [ObservableProperty] private int _selectedIndex = -1;
@@ -36,11 +54,17 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
         IEnumerable<TItem> items,
         SearchFilterService<TItem> searchService,
         Func<TItem, string> filterKeySelector = null,
-        int selectionDebounceMs = 300
+        int selectionDebounceMs = 300,
+        List<Func<TItem, bool>> tabFilters = null,
+        List<Func<TItem, string>> tabFilterKeySelectors = null,
+        int defaultTabIndex = 0
     ) {
         this._allItems = items.ToList();
         this._searchService = searchService;
         this._filterKeySelector = filterKeySelector;
+        this._tabFilters = tabFilters;
+        this._tabFilterKeySelectors = tabFilterKeySelectors;
+        this._selectedTabIndex = tabFilters is { Count: > 0 } ? Math.Clamp(defaultTabIndex, 0, tabFilters.Count - 1) : 0;
 
         // Initialize debounce timer for search (100ms delay)
         this._debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
@@ -64,16 +88,14 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
 
         this.FilteredItems = new ObservableCollection<TItem>();
 
-        // Initialize filter values if filtering is enabled
-        if (this._filterKeySelector != null) {
-            this.AvailableFilterValues = new ObservableCollection<string>(
-                this._allItems
-                    .Select(this._filterKeySelector)
-                    .Where(key => !string.IsNullOrEmpty(key))
-                    .Distinct()
-                    .OrderBy(key => key)
-            );
-        }
+        // Initialize AvailableFilterValues collection (will be populated per-tab or globally)
+        var hasGlobalFilter = this._filterKeySelector != null;
+        var hasPerTabFilters = this._tabFilterKeySelectors?.Any(f => f != null) == true;
+        if (hasGlobalFilter || hasPerTabFilters)
+            this.AvailableFilterValues = new ObservableCollection<string>();
+
+        // Populate initial filter values
+        this.UpdateAvailableFilterValuesForCurrentTab();
 
         this.FilterItems();
 
@@ -90,6 +112,35 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     /// <summary> Whether filtering is enabled for this palette </summary>
     public bool IsFilteringEnabled => this._filterKeySelector != null;
 
+    /// <summary> Whether tabs are enabled for this palette </summary>
+    public bool HasTabs => this._tabFilters is { Count: > 0 };
+
+    /// <summary> Number of tabs (0 if no tabs) </summary>
+    public int TabCount => this._tabFilters?.Count ?? 0;
+
+    /// <summary> Whether the current tab has filtering enabled </summary>
+    public bool CurrentTabHasFiltering =>
+        (this.HasTabs && this._tabFilterKeySelectors?[this._selectedTabIndex] != null) ||
+        (!this.HasTabs && this._filterKeySelector != null);
+
+    /// <summary> Currently selected tab index </summary>
+    public int SelectedTabIndex {
+        get => this._selectedTabIndex;
+        set {
+            if (!this.HasTabs) return;
+            var clampedValue = Math.Clamp(value, 0, this.TabCount - 1);
+            if (this.SetProperty(ref this._selectedTabIndex, clampedValue)) {
+                // Clear filter when switching tabs
+                this._selectedFilterValue = string.Empty;
+                this.OnPropertyChanged(nameof(this.SelectedFilterValue));
+                // Recompute available filter values for new tab
+                this.UpdateAvailableFilterValuesForCurrentTab();
+                this.FilterItems();
+                this.SelectedTabChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
     /// <summary> Currently selected filter value </summary>
     public string SelectedFilterValue {
         get => this._selectedFilterValue;
@@ -98,6 +149,9 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
                 this.FilterItems();
         }
     }
+
+    /// <summary> Event raised when selected tab changes </summary>
+    public event EventHandler SelectedTabChanged;
 
     /// <summary> Event raised when filtered items collection changes </summary>
     public event EventHandler FilteredItemsChanged;
@@ -133,19 +187,66 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     private void ClearSearch() => this.SearchText = string.Empty;
 
     /// <summary>
-    ///     Filters items based on current search text and optional filter value
+    ///     Updates the available filter values based on the current tab's filter key selector.
     /// </summary>
-    private void FilterItems() {
-        // First filter by filter value if one is selected and filtering is enabled
-        var preFiltered = this._allItems;
-        if (this._filterKeySelector != null && !string.IsNullOrEmpty(this.SelectedFilterValue)) {
-            preFiltered = this._allItems
-                .Where(item => this._filterKeySelector(item) == this.SelectedFilterValue)
-                .ToList();
+    private void UpdateAvailableFilterValuesForCurrentTab() {
+        if (this.AvailableFilterValues == null) return;
+
+        this.AvailableFilterValues.Clear();
+
+        // Determine which filter key selector to use
+        Func<TItem, string> filterKeySelector = null;
+        if (this.HasTabs && this._tabFilterKeySelectors != null)
+            filterKeySelector = this._tabFilterKeySelectors[this._selectedTabIndex];
+        else if (!this.HasTabs)
+            filterKeySelector = this._filterKeySelector;
+
+        if (filterKeySelector == null) return;
+
+        // Get items that pass current tab filter
+        IEnumerable<TItem> tabItems = this._allItems;
+        if (this.HasTabs) {
+            var tabFilter = this._tabFilters?[this._selectedTabIndex];
+            if (tabFilter != null)
+                tabItems = tabItems.Where(tabFilter);
         }
 
-        // Then apply search filter
-        var filtered = this._searchService.Filter(this.SearchText, preFiltered);
+        // Extract unique filter values
+        var values = tabItems
+            .Select(filterKeySelector)
+            .Where(key => !string.IsNullOrEmpty(key))
+            .Distinct()
+            .OrderBy(key => key);
+
+        foreach (var value in values)
+            this.AvailableFilterValues.Add(value);
+    }
+
+    /// <summary>
+    ///     Filters items using 3-stage filtering: Tab -> Category Filter -> Search
+    /// </summary>
+    private void FilterItems() {
+        IEnumerable<TItem> items = this._allItems;
+
+        // Stage 1: Tab filter (if tabs are enabled and current tab has a filter)
+        if (this.HasTabs) {
+            var tabFilter = this._tabFilters[this._selectedTabIndex];
+            if (tabFilter != null)
+                items = items.Where(tabFilter);
+        }
+
+        // Stage 2: Category filter (use current tab's filter key selector or global fallback)
+        Func<TItem, string> currentFilterKeySelector = null;
+        if (this.HasTabs && this._tabFilterKeySelectors != null)
+            currentFilterKeySelector = this._tabFilterKeySelectors[this._selectedTabIndex];
+        else if (!this.HasTabs)
+            currentFilterKeySelector = this._filterKeySelector;
+
+        if (currentFilterKeySelector != null && !string.IsNullOrEmpty(this.SelectedFilterValue))
+            items = items.Where(item => currentFilterKeySelector(item) == this.SelectedFilterValue);
+
+        // Stage 3: Search filter
+        var filtered = this._searchService.Filter(this.SearchText, items.ToList());
 
         // Use efficient differential update instead of Clear/Add
         this.UpdateCollectionEfficiently(this.FilteredItems, filtered);

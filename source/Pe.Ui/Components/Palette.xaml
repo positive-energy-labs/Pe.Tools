@@ -25,12 +25,29 @@
                       VerticalAlignment="Stretch">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
+                    <!-- Tab Bar (hidden when no tabs) -->
+                    <Border x:Name="TabBarBorder"
+                            Grid.Row="0"
+                            Visibility="Collapsed"
+                            Padding="9,6,9,0"
+                            Background="{ui:ThemeResource ApplicationBackgroundBrush}">
+                        <ItemsControl x:Name="TabBarItemsControl">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </Border>
+
                     <!-- Search Box with Filter -->
                     <Border x:Name="SearchBoxBorder"
+                            Grid.Row="1"
                             ClipToBounds="True"
                             Background="{ui:ThemeResource ApplicationBackgroundBrush}">
                         <Grid x:Name="SearchBoxGrid"
@@ -56,7 +73,7 @@
                     </Border>
 
                     <!-- Item List -->
-                    <Border Grid.Row="1" Padding="4,0,4,0">
+                    <Border Grid.Row="2" Padding="4,0,4,0">
                         <local:ListView x:Name="ItemListView"
                                         ItemsSource="{Binding FilteredItems}"
                                         SelectedItem="{Binding SelectedItem}"
@@ -65,7 +82,7 @@
 
                     <!-- Status Bar -->
                     <Border x:Name="StatusBarBorder"
-                            Grid.Row="2"
+                            Grid.Row="3"
                             Background="{ui:ThemeResource CardBackgroundFillColorSecondaryBrush}">
                         <Grid x:Name="StatusBarGrid">
                             <Grid.ColumnDefinitions>
@@ -97,8 +114,12 @@
                         Grid.Column="1"
                         Background="{ui:ThemeResource ApplicationBackgroundBrush}"
                         BorderThickness="1,0,0,0"
-                        BorderBrush="{ui:ThemeResource ControlStrokeColorDefaultBrush}">
-                    <ContentControl x:Name="SidebarContent" />
+                        BorderBrush="{ui:ThemeResource ControlStrokeColorDefaultBrush}"
+                        Padding="12">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <ContentControl x:Name="SidebarContent" />
+                    </ScrollViewer>
                 </Border>
             </Grid>
         </Border>

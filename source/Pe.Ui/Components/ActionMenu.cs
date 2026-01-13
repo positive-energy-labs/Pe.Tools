@@ -18,7 +18,7 @@ public abstract class ActionMenu : RevitHostedUserControl, IPopoverExit {
     protected IEnumerable? _actions;
 
     protected ContextMenu? Menu { get; set; }
-    public event EventHandler? ExitRequested;
+    public event EventHandler? ExitRequested; 
     public IEnumerable<Key> CloseKeys { get; set; } = Array.Empty<Key>();
 
     public virtual void RequestExit() {
@@ -48,11 +48,11 @@ public abstract class ActionMenu : RevitHostedUserControl, IPopoverExit {
 public class ActionMenu<TItem> : ActionMenu where TItem : class, IPaletteListItem {
     private TItem? _currentItem;
 
-    public ActionMenu(IEnumerable<Key> closeKeys) {
+    public ActionMenu(List<Key> closeKeys) {
         // Call base constructor to load XAML resources
         this.Menu = new ContextMenu { StaysOpen = false, Placement = PlacementMode.Right };
 
-        this.CloseKeys = closeKeys;
+        this.CloseKeys = closeKeys.Count == 0 ? [Key.Escape] : closeKeys;
 
         this.Menu.Closed += (_, _) => this.OnExitRequested();
         this.Menu.PreviewKeyDown += this.ContextMenu_PreviewKeyDown;
@@ -122,7 +122,10 @@ public class ActionMenu<TItem> : ActionMenu where TItem : class, IPaletteListIte
             var shortcutText = this.FormatShortcut(paletteAction);
 
             var menuItem = new MenuItem {
-                Header = paletteAction.Name, InputGestureText = shortcutText, IsEnabled = canExecute
+                Header = paletteAction.Name,
+                InputGestureText = shortcutText,
+                IsEnabled = canExecute,
+                FocusVisualStyle = null // Remove focus rectangle for clean animation
             };
 
             menuItem.Click += (_, _) => {

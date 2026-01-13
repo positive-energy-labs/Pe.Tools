@@ -4,7 +4,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
-using Wpf.Ui.Markup;
 using WpfUiRichTextBox = Wpf.Ui.Controls.RichTextBox;
 
 namespace Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
@@ -17,22 +16,17 @@ public class SchedulePreviewPanel : UserControl {
     private readonly WpfUiRichTextBox _richTextBox;
 
     public SchedulePreviewPanel() {
-        // Create scrollable rich text box for content display
+        // Palette handles sidebar padding and scrolling - just provide the content
         this._richTextBox = new WpfUiRichTextBox {
             IsReadOnly = true,
             Focusable = false,
             IsTextSelectionEnabled = true,
             AutoWordSelection = false,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
         };
 
-        var border = new BorderSpec()
-            .Background(ThemeResource.ApplicationBackgroundBrush)
-            .Padding(UiSz.m)
-            .CreateAround(this._richTextBox);
-
-        this.Content = border;
+        this.Content = this._richTextBox;
     }
 
     /// <summary>
@@ -42,24 +36,12 @@ public class SchedulePreviewPanel : UserControl {
 
     private void UpdateContent(SchedulePreviewData data) {
         if (data == null) {
-            this._richTextBox.Document = new FlowDocument();
+            this._richTextBox.Document = FlowDocumentBuilder.Create();
             return;
         }
 
-        var doc = new FlowDocument {
-            PagePadding = new Thickness(0),
-            TextAlignment = TextAlignment.Left,
-            FontFamily = ThemeManager.FontFamily(),
-            FontSize = 11,
-            LineHeight = 15.0
-        };
-        doc.SetResourceReference(FlowDocument.ForegroundProperty, "TextFillColorSecondaryBrush");
-
-        // Profile name header
-        var headerPara = new Paragraph(new Run(data.ProfileName) { FontWeight = FontWeights.Bold, FontSize = 14 }) {
-            Margin = new Thickness(0, 0, 0, 8)
-        };
-        doc.Blocks.Add(headerPara);
+        var doc = FlowDocumentBuilder.Create()
+            .AddHeader(data.ProfileName);
 
         // Validation Status Section (if there are errors)
         if (!data.IsValid || data.RemainingErrors.Any()) AddValidationSection(doc, data);
@@ -81,7 +63,7 @@ public class SchedulePreviewPanel : UserControl {
 
             // Fields list with details
             if (data.Fields.Count > 0) {
-                AddSectionHeader(doc, "Fields");
+                doc.AddSectionHeader("Fields");
                 var fieldList = new List {
                     MarkerStyle = TextMarkerStyle.Decimal, Margin = new Thickness(16, 0, 0, 12)
                 };
@@ -114,7 +96,7 @@ public class SchedulePreviewPanel : UserControl {
 
             // Sort/Group list with details
             if (data.SortGroup.Count > 0) {
-                AddSectionHeader(doc, "Sort/Group Configuration");
+                doc.AddSectionHeader("Sort/Group Configuration");
                 var sortList = new List { MarkerStyle = TextMarkerStyle.Decimal, Margin = new Thickness(16, 0, 0, 12) };
                 foreach (var sort in data.SortGroup) {
                     var para = new Paragraph();
@@ -140,21 +122,13 @@ public class SchedulePreviewPanel : UserControl {
 
             // Profile JSON section
             if (!string.IsNullOrEmpty(data.ProfileJson)) {
-                AddSectionHeader(doc, "Profile Settings (JSON)");
-                var jsonPara = new Paragraph(new Run(data.ProfileJson)) {
-                    FontFamily = new FontFamily("Consolas"),
-                    FontSize = 9,
-                    Margin = new Thickness(8, 0, 0, 12),
-                    Background = Brushes.Black,
-                    Foreground = Brushes.LightGray,
-                    Padding = new Thickness(8)
-                };
-                doc.Blocks.Add(jsonPara);
+                doc.AddSectionHeader("Profile Settings (JSON)");
+                doc.AddJsonBlock(data.ProfileJson);
             }
 
             // File metadata section
             if (data.CreatedDate.HasValue || data.ModifiedDate.HasValue) {
-                AddSectionHeader(doc, "File Metadata");
+                doc.AddSectionHeader("File Metadata");
                 var metaPara = new Paragraph();
                 if (data.CreatedDate.HasValue) {
                     metaPara.Inlines.Add(new Run($"Created: {data.CreatedDate:yyyy-MM-dd HH:mm:ss}"));
@@ -170,13 +144,6 @@ public class SchedulePreviewPanel : UserControl {
         }
 
         this._richTextBox.Document = doc;
-    }
-
-    private static void AddSectionHeader(FlowDocument doc, string title) {
-        var header = new Paragraph(new Run(title) { FontWeight = FontWeights.SemiBold }) {
-            Margin = new Thickness(0, 8, 0, 4)
-        };
-        doc.Blocks.Add(header);
     }
 
     private static void AddValidationSection(FlowDocument doc, SchedulePreviewData data) {

@@ -24,7 +24,7 @@ public interface IPaletteListItem {
     Func<string> GetTextInfo { get; }
 
     /// <summary> Item icon (optional, can be null) </summary>
-    BitmapImage Icon { get; }
+    BitmapImage? Icon { get; }
 
     /// <summary> Optional color indicator for the item (e.g., document color) </summary>
     WpfColor? ItemColor { get; }
