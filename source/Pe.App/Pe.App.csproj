@@ -11,7 +11,7 @@
 
         <!-- Default to 2025 for "Debug"/"Release" configs, and also for broader LSP support (e.g. Cursor) -->
         <!-- NOTE: update as Positive Energy migrated to newer Revit Versions -->
-        <RevitVersion>2025</RevitVersion>
+        <RevitVersion Condition="'$(RevitVersion)' == ''">2025</RevitVersion>
         <TargetFramework>net8.0-windows</TargetFramework>
     </PropertyGroup>
 
