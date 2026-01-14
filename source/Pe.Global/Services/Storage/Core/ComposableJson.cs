@@ -91,7 +91,7 @@ public class ComposableJson<T> : JsonReader<T>, JsonWriter<T>, JsonReadWriter<T>
     /// <summary>
     ///     Checks if the cached data is valid based on age and content.
     /// </summary>
-    public bool IsCacheValid(int maxAgeMinutes, Func<T, bool> contentValidator = null) {
+    public bool IsCacheValid(int maxAgeMinutes, Func<T, bool>? contentValidator = null) {
         if (!this.FileExists) return false;
 
         var fileLastWrite = File.GetLastWriteTime(this.FilePath);
@@ -204,7 +204,7 @@ public class ComposableJson<T> : JsonReader<T>, JsonWriter<T>, JsonReadWriter<T>
     private T ReadWithComposition(JObject jObj, bool hasExtends, bool hasIncludes) {
         // Resolve inheritance if present
         JObject resolved;
-        string extendsName = null;
+        var extendsName = string.Empty;
 
         if (hasExtends) {
             if (!jObj.TryGetValue(ExtendsProperty, out var extendsToken))
@@ -392,10 +392,9 @@ public class ComposableJson<T> : JsonReader<T>, JsonWriter<T>, JsonReadWriter<T>
                 var baseErrors = this._fullSchema.Validate(baseJObject).ToList();
                 if (baseErrors.Any()) {
                     // For Settings behavior, sanitize the base profile
-                    if (this._behavior == JsonBehavior.Settings)
-                        baseJObject = this.SanitizeBaseProfile(basePath, baseJObject);
-                    else
-                        throw new JsonValidationException(basePath, baseErrors);
+                    baseJObject = this._behavior == JsonBehavior.Settings
+                        ? this.SanitizeBaseProfile(basePath, baseJObject)
+                        : throw new JsonValidationException(basePath, baseErrors);
                 } else {
                     // Write schema for base file
                     var baseWithSchema = JsonSchemaFactory.WriteAndInjectSchema(
@@ -600,7 +599,7 @@ file static class JsonTypeMigrations {
         var innerMsg = exception.InnerException?.Message ?? "";
 
         var pathMatch = Regex.Match(exceptionMsg, @"Path '([^']+)'");
-        if (!pathMatch.Success) return null;
+        if (!pathMatch.Success) return new JObject();
 
         var propertyPath = pathMatch.Groups[1].Value;
         var migratedJson = (JObject)json.DeepClone();
@@ -614,7 +613,7 @@ file static class JsonTypeMigrations {
         else if (innerMsg.Contains("could not convert from") && innerMsg.Contains("to System.String"))
             migrationApplied = ApplyNumberToStringMigration(migratedJson, propertyPath, appliedMigrations);
 
-        return migrationApplied ? migratedJson : null;
+        return migrationApplied ? migratedJson : new JObject();
     }
 
     private static bool ApplyStringToListMigration(JObject json, string path, List<string> appliedMigrations) {
@@ -623,7 +622,7 @@ file static class JsonTypeMigrations {
             if (token == null || token.Type != JTokenType.String) return false;
 
             var stringValue = token.Value<string>();
-            var arrayValue = new JArray(stringValue);
+            var arrayValue = new JArray { stringValue };
 
             if (token.Parent is JProperty property) {
                 property.Value = arrayValue;

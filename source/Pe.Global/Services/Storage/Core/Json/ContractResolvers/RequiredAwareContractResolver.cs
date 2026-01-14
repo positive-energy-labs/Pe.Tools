@@ -81,7 +81,7 @@ public class RequiredAwareContractResolver : RevitTypeContractResolver {
     ///     Attempts to create a default instance of the type for comparison.
     ///     Handles types with parameterless constructors and types with required properties.
     /// </summary>
-    private object TryCreateDefaultInstance(Type type) {
+    private object? TryCreateDefaultInstance(Type type) {
         try {
             // Try regular parameterless construction first
             return Activator.CreateInstance(type);
@@ -99,7 +99,7 @@ public class RequiredAwareContractResolver : RevitTypeContractResolver {
                     for (var i = 0; i < parameters.Length; i++) {
                         var paramType = parameters[i].ParameterType;
                         // Try to create a default value for each parameter
-                        paramValues[i] = paramType.IsValueType ? Activator.CreateInstance(paramType) : null;
+                        paramValues[i] = paramType.IsValueType ? Activator.CreateInstance(paramType) : default;
                     }
 
                     return constructor.Invoke(paramValues);
@@ -130,7 +130,7 @@ public class RequiredAwareContractResolver : RevitTypeContractResolver {
     /// <summary>
     ///     Compares two values for equality, handling null and collection types properly.
     /// </summary>
-    private bool AreValuesEqual(object value1, object value2, Type propertyType) {
+    private bool AreValuesEqual(object? value1, object? value2, Type propertyType) {
         // Handle null cases
         if (value1 == null && value2 == null) return true;
 

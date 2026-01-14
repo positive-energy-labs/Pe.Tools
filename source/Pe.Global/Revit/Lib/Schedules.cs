@@ -1,6 +1,7 @@
 using Autodesk.Revit.DB.Structure;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using Pe.Global.PolyFill;
 using Pe.Global.Services.Storage.Core.Json;
 using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
 using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
@@ -10,11 +11,11 @@ namespace Pe.Global.Revit.Lib;
 
 public class ScheduleSpec {
     [Description("The name of the schedule as it will appear in the project browser.")]
-    public string Name { get; set; }
+    public required string Name { get; set; }
 
     [Description("The Revit category to schedule (e.g., 'Mechanical Equipment', 'Plumbing Fixtures', 'Doors').")]
     [SchemaExamples(typeof(CategoryNamesProvider))]
-    public string CategoryName { get; set; }
+    public required string CategoryName { get; set; }
 
     [Description(
         "Whether the schedule displays each element on a separate row (true) or combines multiple grouped elements onto the same row (false).")]
@@ -38,11 +39,11 @@ public class ScheduleFieldSpec {
     public required string ParameterName { get; set; }
 
     [Description("Custom header text to display instead of the parameter name. Leave empty to use parameter name.")]
-    public string ColumnHeaderOverride { get; set; }
+    public string ColumnHeaderOverride { get; set; } = string.Empty;
 
     [Description(
         "Header group name for visually grouping multiple column headers together (e.g., 'Performance', 'Electrical'). Consecutive fields with the same HeaderGroup value will be grouped.")]
-    public string HeaderGroup { get; set; }
+    public string HeaderGroup { get; set; } = string.Empty;
 
     [Description("Whether to hide this column in the schedule while still using it for filtering or sorting.")]
     public bool IsHidden { get; set; }
@@ -52,7 +53,7 @@ public class ScheduleFieldSpec {
     public ScheduleFieldDisplayType DisplayType { get; set; } = ScheduleFieldDisplayType.Standard;
 
     [Description("Column width on sheet in feet. Leave empty to use default width.")]
-    public double? ColumnWidth { get; set; }
+    public double ColumnWidth { get; set; } = 1;
 
     [Description(
         "For calculated fields only. Indicates this is a formula or percentage field. Note: Formula strings cannot be read/written via Revit API - calculated fields must be created manually in Revit.")]
@@ -60,7 +61,7 @@ public class ScheduleFieldSpec {
     public CalculatedFieldType? CalculatedType { get; set; }
 
     [Description("For Percentage calculated fields only. The name of the field to calculate percentages of.")]
-    public string PercentageOfField { get; set; }
+    public string PercentageOfField { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -105,13 +106,13 @@ public class ScheduleFilterSpec {
 
     [Description(
         "The filter value as a string. Leave empty for HasParameter, HasValue, and HasNoValue filter types. The value will be automatically coerced to the correct type based on the field's parameter type (string, integer, double, or ElementId).")]
-    public string Value { get; set; }
+    public required string Value { get; set; }
 }
 
 public class ScheduleCreationResult {
-    public ViewSchedule Schedule { get; set; }
-    public string ScheduleName { get; set; }
-    public string CategoryName { get; set; }
+    public required ViewSchedule Schedule { get; set; }
+    public required string ScheduleName { get; set; }
+    public required string CategoryName { get; set; }
     public bool IsItemized { get; set; }
 
     public List<AppliedFieldInfo> AppliedFields { get; set; } = [];
@@ -131,15 +132,15 @@ public class ScheduleCreationResult {
 }
 
 public class AppliedFieldInfo {
-    public string ParameterName { get; set; }
-    public string ColumnHeaderOverride { get; set; }
+    public required string ParameterName { get; set; }
+    public required string ColumnHeaderOverride { get; set; }
     public bool IsHidden { get; set; }
     public double? ColumnWidth { get; set; }
     public ScheduleFieldDisplayType DisplayType { get; set; }
 }
 
 public class AppliedSortGroupInfo {
-    public string FieldName { get; set; }
+    public required string FieldName { get; set; }
     public ScheduleSortOrder SortOrder { get; set; }
     public bool ShowHeader { get; set; }
     public bool ShowFooter { get; set; }
@@ -147,17 +148,17 @@ public class AppliedSortGroupInfo {
 }
 
 public class AppliedFilterInfo {
-    public string FieldName { get; set; }
+    public required string FieldName { get; set; }
     public ScheduleFilterType FilterType { get; set; }
-    public string Value { get; set; }
-    public string StorageType { get; set; }
+    public required string Value { get; set; }
+    public required string StorageType { get; set; }
 }
 
 public class CalculatedFieldGuidance {
-    public string FieldName { get; set; }
-    public string CalculatedType { get; set; } // "Formula" or "Percentage"
-    public string Guidance { get; set; }
-    public string PercentageOfField { get; set; } // Only for percentage fields
+    public required string FieldName { get; set; }
+    public required string CalculatedType { get; set; } // "Formula" or "Percentage"
+    public string? Guidance { get; set; }
+    public string? PercentageOfField { get; set; } // Only for percentage fields - can be null for non-percentage fields
 }
 
 public static class ScheduleHelper {
@@ -189,7 +190,7 @@ public static class ScheduleHelper {
 
             var fieldSpec = new ScheduleFieldSpec {
                 ParameterName = fieldName,
-                ColumnHeaderOverride = field.ColumnHeading != originalParamName ? field.ColumnHeading : null,
+                ColumnHeaderOverride = field.ColumnHeading != originalParamName ? field.ColumnHeading : string.Empty,
                 IsHidden = field.IsHidden,
                 DisplayType = (ScheduleFieldDisplayType)(int)field.DisplayType,
                 ColumnWidth = field.SheetColumnWidth
@@ -239,16 +240,18 @@ public static class ScheduleHelper {
             var field = def.GetField(filter.FieldId);
             var fieldName = field.GetName();
 
-            var filterSpec = new ScheduleFilterSpec { FieldName = fieldName, FilterType = filter.FilterType };
-
             // Extract value as string based on type
+            var value = string.Empty;
             if (filter.IsStringValue)
-                filterSpec.Value = filter.GetStringValue();
+                value = filter.GetStringValue();
             else if (filter.IsIntegerValue)
-                filterSpec.Value = filter.GetIntegerValue().ToString();
+                value = filter.GetIntegerValue().ToString();
             else if (filter.IsDoubleValue)
-                filterSpec.Value = filter.GetDoubleValue().ToString();
-            else if (filter.IsElementIdValue) filterSpec.Value = filter.GetElementIdValue().Value.ToString();
+                value = filter.GetDoubleValue().ToString();
+            else if (filter.IsElementIdValue) value = filter.GetElementIdValue().Value().ToString();
+
+            var filterSpec = new ScheduleFilterSpec { FieldName = fieldName, FilterType = filter.FilterType, Value = value };
+
             // Leave Value null for HasParameter, HasValue, HasNoValue filters
 
             spec.Filters.Add(filterSpec);
@@ -309,7 +312,6 @@ public static class ScheduleHelper {
     }
 
     public static ScheduleCreationResult CreateSchedule(Document doc, ScheduleSpec spec) {
-        var result = new ScheduleCreationResult { CategoryName = spec.CategoryName, IsItemized = spec.IsItemized };
 
         // Find category by name
         var categoryId = FindCategoryByName(doc, spec.CategoryName);
@@ -319,8 +321,7 @@ public static class ScheduleHelper {
         // Create schedule
         var schedule = ViewSchedule.CreateSchedule(doc, categoryId);
         schedule.Name = GetUniqueScheduleName(doc, spec.Name);
-        result.Schedule = schedule;
-        result.ScheduleName = schedule.Name;
+        var result = new ScheduleCreationResult { Schedule = schedule, ScheduleName = schedule.Name, CategoryName = spec.CategoryName, IsItemized = spec.IsItemized };
 
         // Apply schedule-level settings
         schedule.Definition.IsItemized = spec.IsItemized;
@@ -388,7 +389,8 @@ public static class ScheduleHelper {
 
         foreach (var fieldSpec in calculatedFields) {
             var guidance = new CalculatedFieldGuidance {
-                FieldName = fieldSpec.ParameterName, CalculatedType = fieldSpec.CalculatedType.ToString()
+                FieldName = fieldSpec.ParameterName,
+                CalculatedType = fieldSpec.CalculatedType.ToString() ?? string.Empty
             };
 
             if (fieldSpec.CalculatedType == CalculatedFieldType.Formula) {
@@ -412,8 +414,8 @@ public static class ScheduleHelper {
         field.IsHidden = fieldSpec.IsHidden;
 
         // Apply column width if specified
-        if (fieldSpec.ColumnWidth.HasValue && fieldSpec.ColumnWidth.Value > 0)
-            field.SheetColumnWidth = fieldSpec.ColumnWidth.Value;
+        if (fieldSpec.ColumnWidth > 0)
+            field.SheetColumnWidth = fieldSpec.ColumnWidth;
 
         // Apply display type if field supports it (cast to int for comparison since enum member names vary)
         var targetDisplayType = (ScheduleFieldDisplayType)(int)fieldSpec.DisplayType;
@@ -529,7 +531,7 @@ public static class ScheduleHelper {
                         storageTypeStr = "Double";
                     } else if (storageType == StorageType.ElementId &&
                                long.TryParse(filterSpec.Value, out var longValue)) {
-                        var elementId = new ElementId(longValue);
+                        var elementId = new ElementId((int)longValue);
                         filter = new ScheduleFilter(field.FieldId, filterSpec.FilterType, elementId);
                         storageTypeStr = "ElementId";
                     } else {

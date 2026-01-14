@@ -90,7 +90,7 @@ public static class RevitTabColorReader {
     /// <summary>
     ///     Gets the main Revit window by enumerating all HWNDs and finding the one with DockingManager
     /// </summary>
-    private static Visual GetMainRevitWindow() {
+    private static Visual? GetMainRevitWindow() {
         try {
             var currentProcessId = Process.GetCurrentProcess().Id;
             var windowsWithDockingManager = new List<IntPtr>();
@@ -127,7 +127,10 @@ public static class RevitTabColorReader {
             if (windowsWithDockingManager.Count > 0) {
                 var hwnd = windowsWithDockingManager[0];
                 var source = HwndSource.FromHwnd(hwnd);
-                return source?.RootVisual;
+                // FromHwnd can return null if the window is invalid or destroyed
+                if (source?.RootVisual is Visual rootVisual) {
+                    return rootVisual;
+                }
             }
 
             return null;

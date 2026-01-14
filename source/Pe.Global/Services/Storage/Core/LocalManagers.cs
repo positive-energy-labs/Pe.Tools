@@ -16,7 +16,7 @@ public abstract class BaseLocalManager {
     ///     Get the path to the JSON file. Uses the <see cref="Name" /> of the manager by default.
     ///     Automatically adds .json extension if not present.
     /// </summary>
-    public string GetJsonPath(string filename = null) {
+    public string GetJsonPath(string? filename = null) {
         var name = filename ?? this.Name;
         var nameWithExt = FileUtils.EnsureExtension(name, ".json");
         return Path.Combine(this.DirectoryPath, nameWithExt);
@@ -26,11 +26,11 @@ public abstract class BaseLocalManager {
     ///     Get the path to the JSON file with a timestamp in the filename. Uses the <see cref="Name" /> of the manager by
     ///     default. Automatically adds .json extension if not present.
     /// </summary>
-    public string GetDatedJsonPath(string filename = null) {
+    public string GetDatedJsonPath(string? filename = null) {
         var name = filename ?? this.Name;
         // Remove .json extension if present, since we'll add it after the timestamp
         if (name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-            name = name.Substring(0, name.Length - 5);
+            name = name[..^5];
 
         var nameWithTimestamp = $"{name}_{DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss")}";
         var nameWithExt = FileUtils.EnsureExtension(nameWithTimestamp, ".json");
@@ -40,14 +40,14 @@ public abstract class BaseLocalManager {
     /// <summary>
     ///     Get the path to the CSV file. Uses the <see cref="Name" /> of the manager by default.
     /// </summary>
-    public string GetCsvPath(string filename = null) =>
+    public string GetCsvPath(string? filename = null) =>
         Path.Combine(this.DirectoryPath, filename ?? $"{this.Name}.csv");
 
     /// <summary>
     ///     Get the path to the CSV file with a timestamp in the filename. Uses the <see cref="Name" /> of the manager by
     ///     default.
     /// </summary>
-    public string GetDatedCsvPath(string filename = null) =>
+    public string GetDatedCsvPath(string? filename = null) =>
         Path.Combine(this.DirectoryPath, $"{filename ?? this.Name}_{DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss")}.csv");
 }
 
@@ -96,7 +96,7 @@ public class SettingsSubDir : SettingsManager {
     public SettingsSubDir(string parentPath,
         string subDirName,
         bool recursiveDiscovery,
-        List<string> excludePatterns = null)
+        List<string>? excludePatterns = null)
         : base(parentPath, subDirName) {
         this.RecursiveDiscovery = recursiveDiscovery;
         this._excludePatterns = excludePatterns ?? ["_*"]; // Default: exclude _fragments, etc.
@@ -204,7 +204,7 @@ public class OutputManager : BaseLocalManager {
     /// </summary>
     /// <param name="prefix">Optional prefix for the timestamped directory (e.g., "run", "batch")</param>
     /// <returns>OutputManager scoped to the timestamped subdirectory</returns>
-    public OutputManager TimestampedSubDir(string prefix = null) {
+    public OutputManager TimestampedSubDir(string? prefix = null) {
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
         var dirName = string.IsNullOrWhiteSpace(prefix) ? timestamp : $"{prefix}_{timestamp}";
         return this.SubDir(dirName);
