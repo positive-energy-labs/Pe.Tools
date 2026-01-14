@@ -10,9 +10,9 @@ public class Filters {
     /// </summary>
     /// <typeparam name="T">The type of Element to retrieve. Must inherit from Autodesk.Revit.DB.Element.</typeparam>
     /// <returns>The first element of the specified type that matches the predicate, or null if none is found.</returns>
-    public static T FirstElementOfType<T>(
+    public static T? FirstElementOfType<T>(
         Document doc,
-        Func<T, bool> filter = null)
+        Func<T, bool>? filter = null)
         where T : Element {
         var elements = new FilteredElementCollector(doc).OfClass(typeof(T)).OfType<T>();
 
@@ -29,7 +29,7 @@ public class Filters {
     /// <param name="familyName">The name of the Family.</param>
     /// <param name="familySymbolName">The name of the Family Symbol (Type).</param>
     /// <returns>The matching FamilySymbol, or null if not found.</returns>
-    public static FamilySymbol FamilySymbolByName(
+    public static FamilySymbol? FamilySymbolByName(
         Document doc,
         string familyName,
         string familySymbolName
@@ -47,7 +47,7 @@ public class Filters {
     ///     Performs case-insensitive comparison.
     /// </summary>
     /// <returns>The matching MEPSystemType, or null if not found.</returns>
-    public static MEPSystemType MepSystemTypeByName(
+    public static MEPSystemType? MepSystemTypeByName(
         Document doc,
         string name
     ) =>
@@ -70,7 +70,7 @@ public class Filters {
     ///     Taps / Short Radius <br></br> - Radius Elbows /
     ///     Taps <br></br> - Mitered Elbows w Vanes / Tees <br></br>
     /// </example>
-    public static DuctType DuctType(
+    public static DuctType? DuctType(
         Document doc,
         ConnectorProfileType ductShape,
         JunctionType junctionType,

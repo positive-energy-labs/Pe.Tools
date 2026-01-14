@@ -27,13 +27,14 @@ public class RevitTypeContractResolver : OrderedContractResolver {
 
         // Check if property type is registered in RevitTypeRegistry
         if (RevitTypeRegistry.TryGet(targetType, out var registration) && registration != null) {
-            Type converterType = null;
+            Type? converterType = null;
 
             // If type has discriminator, check for attribute and select converter
-            if (registration.DiscriminatorType != null && registration.ConverterSelector != null) {
-                var discriminatorAttr = propInfo.GetCustomAttribute(registration.DiscriminatorType);
+            if (registration.DiscriminatorType is { } discriminatorType &&
+                registration.ConverterSelector is { } converterSelector) {
+                var discriminatorAttr = propInfo.GetCustomAttribute(discriminatorType);
                 if (discriminatorAttr != null)
-                    converterType = registration.ConverterSelector(discriminatorAttr);
+                    converterType = converterSelector(discriminatorAttr);
             }
 
             // Fall back to default converter if no discriminator or no match
@@ -41,7 +42,9 @@ public class RevitTypeContractResolver : OrderedContractResolver {
 
             // Apply converter to property - use ItemConverter for collections
             if (converterType == null) return property;
-            var converter = (JsonConverter)Activator.CreateInstance(converterType);
+            var converterInstance = Activator.CreateInstance(converterType);
+            if (converterInstance is not JsonConverter converter)
+                throw new InvalidOperationException($"Converter {converterType.FullName} could not be created.");
             if (propInfo.PropertyType != targetType)
                 property.ItemConverter = converter;
             else

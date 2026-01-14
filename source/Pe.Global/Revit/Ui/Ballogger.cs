@@ -21,7 +21,7 @@ public class Ballogger {
     public void Clear() => this._messages.Clear();
 
     /// <summary>Add a normal message (with the method's name)</summary>
-    public Ballogger Add(LogEventLevel log, StackFrame sf, string message) {
+    public Ballogger Add(LogEventLevel log, StackFrame? sf, string message) {
         if (string.IsNullOrWhiteSpace(message)) return this;
         if (sf is null)
             this._messages.Add(string.Format(FmtNormal, log, message.Trim()));
@@ -67,7 +67,7 @@ public class Ballogger {
     /// <summary>Show multi-message balloon with a click-to-copy handler</summary>
     /// <param name="title">Optional title for the balloon</param>
     public void Show(
-        string title = null
+        string? title = null
     ) {
         var combinedMessage = new StringBuilder();
         if (this._messages.Count == 0) _ = this.Add(LogEventLevel.Warning, null, "No messages to display");
@@ -92,7 +92,7 @@ public class Ballogger {
     public void Show(
         Action clickHandler,
         string clickDescription,
-        string title = null
+        string? title = null
     ) {
         var combinedMessage = new StringBuilder();
         _ = combinedMessage.AppendLine(new string('-', 35));
@@ -119,7 +119,7 @@ public class Ballogger {
         Action clickHandler,
         string clickDescription,
         string text,
-        string title = null
+        string? title = null
     ) {
         if (text == null)
             return;
@@ -127,7 +127,8 @@ public class Ballogger {
             title = Assembly.GetExecutingAssembly().GetName().Name;
 #pragma warning disable CA1416 // Validate platform compatibility
         var ri = new ResultItem {
-            Title = text.Trim(), Category = title + (clickDescription != "" ? " (" + clickDescription + ")" : null)
+            Title = text.Trim(),
+            Category = title + (clickDescription != "" ? " (" + clickDescription + ")" : null)
         };
         ri.ResultClicked += (_, _) => clickHandler();
 

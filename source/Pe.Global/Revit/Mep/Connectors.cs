@@ -4,13 +4,16 @@ public class Connectors {
     /// <summary>Get all connectors on an element, ordered from closest to farthest from the specified location</summary>
     public static Result<Connector[]> GetClosestToPoint(Element element, XYZ location) {
         try {
-            ConnectorManager cm = null;
+            ConnectorManager? cm = null;
 
             if (element is MEPCurve mepCurve)
                 cm = mepCurve.ConnectorManager;
             else if (element is FamilyInstance fi && fi.MEPModel != null)
                 cm = fi.MEPModel.ConnectorManager;
             else return new InvalidOperationException($"Error retrieving ConnectorManager for {element.Id}");
+
+            if (cm == null)
+                return new InvalidOperationException($"ConnectorManager is null for {element.Id}");
 
             // Create a list of connectors with their distances for sorting
             var connectorsWithDistances = cm.Connectors

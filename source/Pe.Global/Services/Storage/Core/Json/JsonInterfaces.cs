@@ -15,7 +15,7 @@ public interface JsonWriter<in T> {
 }
 
 public interface JsonReadWriter<T> : JsonReader<T>, JsonWriter<T> where T : class, new() {
-    bool IsCacheValid(int maxAgeMinutes, Func<T, bool> contentValidator = null);
+    bool IsCacheValid(int maxAgeMinutes, Func<T, bool>? contentValidator = null);
 }
 
 public interface CsvReader<T> {

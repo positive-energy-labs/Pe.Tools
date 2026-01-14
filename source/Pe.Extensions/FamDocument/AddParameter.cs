@@ -13,8 +13,8 @@ public static class FamilyDocumentAddParameter {
     public static FamilyParameter AddFamilyParameter(
         this FamilyDocument famDoc,
         string name,
-        ForgeTypeId propertiesGroup = null,
-        ForgeTypeId dataType = null,
+        ForgeTypeId? propertiesGroup = null,
+        ForgeTypeId? dataType = null,
         bool isInstance = true
     ) {
         if (dataType == null) dataType = SpecTypeId.String.Text;
@@ -50,7 +50,7 @@ public static class FamilyDocumentAddParameter {
             case { } msg when msg.Contains("Parameter with a matching name"):
                 try {
                     var fm = famDoc.FamilyManager;
-                    var currentParam = fm.FindParameter(apsParamModel.Name);
+                    var currentParam = fm.FindParameter(apsParamModel.Name ?? string.Empty);
                     fm.RemoveParameter(currentParam);
                     return ParameterUtils.DownloadParameter(famDoc, dlOpts, parameterTypeId);
                 } catch (Exception ex) {

@@ -12,7 +12,7 @@ public class UiHelpers {
         return curPanel;
     }
 
-    public static RibbonPanel GetRibbonPanelByName(
+    public static RibbonPanel? GetRibbonPanelByName(
         UIControlledApplication app,
         string tabName,
         string panelName

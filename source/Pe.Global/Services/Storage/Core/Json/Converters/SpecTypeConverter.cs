@@ -12,7 +12,7 @@ public class SpecTypeConverter : JsonConverter<ForgeTypeId> {
     private static readonly Lazy<Dictionary<string, ForgeTypeId>> _labelMap =
         new(SpecNamesProvider.GetLabelToForgeMap());
 
-    public override void WriteJson(JsonWriter writer, ForgeTypeId value, JsonSerializer serializer) {
+    public override void WriteJson(JsonWriter writer, ForgeTypeId? value, JsonSerializer serializer) {
         if (value == null) {
             writer.WriteNull();
             return;
@@ -23,7 +23,7 @@ public class SpecTypeConverter : JsonConverter<ForgeTypeId> {
             var label = value.ToLabel();
             var discipline = GetParentheticDiscipline(value);
             writer.WriteValue($"{label}{discipline}");
-        } catch (Exception ex) {
+        } catch {
             writer.WriteValue(value.TypeId);
         }
     }
@@ -35,9 +35,9 @@ public class SpecTypeConverter : JsonConverter<ForgeTypeId> {
         return !string.IsNullOrEmpty(disciplineLabel) ? $" ({disciplineLabel})" : string.Empty;
     }
 
-    public override ForgeTypeId ReadJson(JsonReader reader,
+    public override ForgeTypeId? ReadJson(JsonReader reader,
         Type objectType,
-        ForgeTypeId existingValue,
+        ForgeTypeId? existingValue,
         bool hasExistingValue,
         JsonSerializer serializer) {
         if (reader.TokenType == JsonToken.Null) return null;

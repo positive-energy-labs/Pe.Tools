@@ -7,7 +7,7 @@ namespace Pe.Global.Services.Aps.Core;
 public class Parameters(HttpClient httpClient, TokenProviders.IParameters tokenProvider) {
     private const string Suffix = "parameters/v1/accounts/";
 
-    private static async Task<T> DeserializeToType<T>(HttpResponseMessage res) {
+    private static async Task<T?> DeserializeToType<T>(HttpResponseMessage res) {
         var asString = await res.Content.ReadAsStringAsync();
         return JsonConvert.DeserializeObject<T>(asString);
     }
@@ -50,9 +50,7 @@ public class Parameters(HttpClient httpClient, TokenProviders.IParameters tokenP
 
         return new ParametersApi.Groups {
             Results = allResults,
-            Pagination = allResults.Count > 0
-                ? new ParametersApi.Pagination { Offset = 0, Limit = allResults.Count, TotalResults = allResults.Count }
-                : null
+            Pagination = new ParametersApi.Pagination { Offset = 0, Limit = allResults.Count, TotalResults = allResults.Count }
         };
     }
 
@@ -93,14 +91,12 @@ public class Parameters(HttpClient httpClient, TokenProviders.IParameters tokenP
 
         return new ParametersApi.Collections {
             Results = allResults,
-            Pagination = allResults.Count > 0
-                ? new ParametersApi.Pagination { Offset = 0, Limit = allResults.Count, TotalResults = allResults.Count }
-                : null
+            Pagination = new ParametersApi.Pagination { Offset = 0, Limit = allResults.Count, TotalResults = allResults.Count }
         };
     }
 
     public async Task<ParametersApi.Parameters> GetParameters(
-        JsonReadWriter<ParametersApi.Parameters> cache = null,
+        JsonReadWriter<ParametersApi.Parameters> cache,
         bool useCache = true,
         int invalidateCacheAfterMinutes = 100
     ) {
@@ -149,12 +145,13 @@ public class Parameters(HttpClient httpClient, TokenProviders.IParameters tokenP
 
         var deserializedResponse = new ParametersApi.Parameters {
             Results = allResults.OrderBy(p => p.Name).ToList(),
-            Pagination = allResults.Count > 0
-                ? new ParametersApi.Pagination { Offset = 0, Limit = allResults.Count, TotalResults = allResults.Count }
-                : null
+            Pagination = new ParametersApi.Pagination { Offset = 0, Limit = allResults.Count, TotalResults = allResults.Count }
         };
 
-        _ = cache?.Write(deserializedResponse);
+        // Write to cache if it implements JsonWriter
+        if (cache is JsonWriter<ParametersApi.Parameters> cacheWriter) {
+            _ = cacheWriter.Write(deserializedResponse);
+        }
         return deserializedResponse;
     }
 }

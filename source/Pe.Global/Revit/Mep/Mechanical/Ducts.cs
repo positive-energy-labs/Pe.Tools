@@ -17,7 +17,7 @@ public class Ducts {
         XYZ direction,
         double tapSizeFeet,
         DuctType ductType,
-        Ballogger balloon = null
+        Ballogger? balloon = null
     ) {
         try {
             var (level, _) = MepCurve.GetReferenceLevel(trunkDuct);
@@ -63,7 +63,11 @@ public class Ducts {
                 $"Created branch duct on {level.Name} with DuctType: {ductType.Name}, SystemType: {systemType.Name}");
 
             // Set the duct diameter to the correct tap size
-            var setDiamSuccess = branchDuct.FindParameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM).Set(tapSizeFeet);
+            var diamParam = branchDuct.FindParameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM);
+            if (diamParam == null)
+                return new InvalidOperationException("Branch duct diameter parameter not found");
+
+            var setDiamSuccess = diamParam.Set(tapSizeFeet);
             if (!setDiamSuccess)
                 _ = balloon?.Add(LogEventLevel.Warning, new StackFrame(), "Branch duct's diameter could not be set");
 

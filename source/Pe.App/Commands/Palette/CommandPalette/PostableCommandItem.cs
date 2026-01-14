@@ -49,11 +49,6 @@ public class PostableCommandItem : IPaletteListItem {
     public ImageSource ImageSource { get; set; }
 
     /// <summary>
-    ///     For addin commands, stores the custom CommandId (e.g., CustomCtrl_%CustomCtrl_%...)
-    /// </summary>
-    public bool isExternalCommand => this.Command.Value is not PostableCommand;
-
-    /// <summary>
     ///     Gets the primary shortcut as a display string
     /// </summary>
     public string PrimaryShortcut => this.Shortcuts.Count > 0 ? this.Shortcuts[0] : string.Empty;

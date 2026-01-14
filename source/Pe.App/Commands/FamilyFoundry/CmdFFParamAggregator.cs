@@ -2,6 +2,7 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.FamilyFoundry.Aggregators;
 using Pe.FamilyFoundry.Snapshots;
+using Pe.Global.PolyFill;
 using Pe.Global.Services.Storage;
 using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
 using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
@@ -43,7 +44,7 @@ public class CmdFFParamAggregator : IExternalCommand {
             var families = settings.CategoryFilter.Any()
                 ? familiesQuery.Where(f =>
                         f.FamilyCategory != null &&
-                        settings.CategoryFilter.Any(cat => cat.BuiltInCategory == f.FamilyCategory.BuiltInCategory))
+                        settings.CategoryFilter.Any(cat => cat.ToBuiltInCategory() == f.FamilyCategory.ToBuiltInCategory()))
                     .ToList()
                 : familiesQuery.ToList();
 

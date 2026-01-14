@@ -11,17 +11,21 @@ public class ElementIntersectException : Exception {
     /// </summary>
     /// <param name="reference">The ID of the reference element</param>
     /// <param name="intersections">The IDs of intersecting elements</param>
-    public ElementIntersectException(ElementId reference, ElementId[] intersections)
+    public ElementIntersectException(ElementId? reference, ElementId[] intersections)
         : base(FormatDefaultMessage(reference, intersections)) {
         this.ReferenceElement = reference;
         this.IntersectionElements = intersections;
     }
 
-    public ElementId ReferenceElement { get; }
+    public ElementId? ReferenceElement { get; }
     public ElementId[] IntersectionElements { get; }
 
-    private static string FormatDefaultMessage(ElementId reference, ElementId[] intersections) =>
-        $"Element {reference} has {intersections.Length} intersection{(intersections.Length != 1 ? "s" : "")}";
+    private static string FormatDefaultMessage(ElementId? reference, ElementId[] intersections) {
+        if (reference == null)
+            return $"{intersections.Length} elements intersect";
+        else
+            return $"Element {reference} has {intersections.Length} intersection{(intersections.Length != 1 ? "s" : "")}";
+    }
 }
 
 public class JsonValidationException : Exception {

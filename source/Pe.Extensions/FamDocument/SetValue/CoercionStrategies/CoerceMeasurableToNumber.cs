@@ -123,7 +123,6 @@ public class CoerceMeasurableToNumber : ICoercionStrategy {
         { SpecTypeId.ElectricalFrequency, UnitTypeId.Hertz },
         { SpecTypeId.ElectricalPowerDensity, UnitTypeId.WattsPerSquareFoot },
         { SpecTypeId.PowerPerLength, UnitTypeId.WattsPerFoot },
-        { SpecTypeId.ApparentPowerDensity, UnitTypeId.VoltAmperesPerSquareFoot },
         { SpecTypeId.ElectricalResistivity, UnitTypeId.OhmMeters },
         { SpecTypeId.ElectricalTemperature, UnitTypeId.Fahrenheit },
         { SpecTypeId.ElectricalTemperatureDifference, UnitTypeId.FahrenheitInterval },

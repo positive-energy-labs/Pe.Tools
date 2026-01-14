@@ -1,3 +1,8 @@
+using System;
+
+using Autodesk.Revit.DB;
+using Pe.Global.PolyFill;
+
 namespace Pe.Extensions.FamParameter;
 
 public static class FamilyParameterParameterInfo {
@@ -6,8 +11,23 @@ public static class FamilyParameterParameterInfo {
     /// </summary>
     /// <param name="param">The family parameter</param>
     /// <returns>True if the parameter is a built-in parameter</returns>
-    public static bool IsBuiltInParameter(this FamilyParameter param) =>
-        ParameterUtils.IsBuiltInParameter(param.Id);
+    public static bool IsBuiltInParameter(this FamilyParameter param) {
+        var builtInParam = (BuiltInParameter)param.Id.Value();
+        return builtInParam != BuiltInParameter.INVALID && Enum.IsDefined(typeof(BuiltInParameter), builtInParam);
+    }
+
+
+    // /// <summary>
+    // ///     Checks if the parameter is a built-in Revit parameter
+    // /// </summary>
+    // /// <param name="param">The parameter</param>
+    // /// <returns>True if the parameter is a built-in parameter</returns>
+    // public static bool IsBuiltInParameter(this Parameter param) {
+    //     if (param.Definition is not InternalDefinition internalDef)
+    //         return false;
+    //     var builtInParam = internalDef.BuiltInParameter;
+    //     return builtInParam != BuiltInParameter.INVALID;
+    // }
 
     /// <summary>
     ///     Gets the type/instance designation as a string ("Type" or "Instance")

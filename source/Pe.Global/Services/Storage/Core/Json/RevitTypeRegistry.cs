@@ -14,19 +14,19 @@ public class TypeRegistration {
     public required JsonObjectType SchemaType { get; init; }
 
     /// <summary> Optional: Type of discriminator attribute (e.g., ForgeKindAttribute for ForgeTypeId) </summary>
-    public Type DiscriminatorType { get; init; }
+    public Type? DiscriminatorType { get; init; }
 
     /// <summary> Optional: Function to select provider based on discriminator attribute </summary>
-    public Func<Attribute, Type> ProviderSelector { get; init; }
+    public Func<Attribute, Type?>? ProviderSelector { get; init; }
 
     /// <summary> Optional: Function to select converter type based on discriminator attribute </summary>
-    public Func<Attribute, Type> ConverterSelector { get; init; }
+    public Func<Attribute, Type?>? ConverterSelector { get; init; }
 
     /// <summary> Optional: Default provider when no discriminator is present </summary>
-    public Type DefaultProvider { get; init; }
+    public Type? DefaultProvider { get; init; }
 
     /// <summary> Optional: Default converter when no discriminator is present </summary>
-    public Type DefaultConverter { get; init; }
+    public Type? DefaultConverter { get; init; }
 }
 
 /// <summary>
@@ -79,12 +79,16 @@ public static class RevitTypeRegistry {
     /// <summary>
     ///     Try to get registration for a type.
     /// </summary>
-    public static bool TryGet(Type type, out TypeRegistration registration) =>
+    public static bool TryGet(Type type, out TypeRegistration? registration) {
         // Direct match
-        _registrations.TryGetValue(type, out registration) ||
+        if (_registrations.TryGetValue(type, out registration))
+            return true;
+
         // Fallback: match by type name (for cross-assembly scenarios)
-        (registration = _registrations.Values.FirstOrDefault(r =>
-            _registrations.Keys.Any(k => k.Name == type.Name))) != null;
+        registration = _registrations.Values.FirstOrDefault(r =>
+            _registrations.Keys.Any(k => k.Name == type.Name));
+        return registration != null;
+    }
 
     /// <summary>
     ///     Clear all registrations (useful for testing).

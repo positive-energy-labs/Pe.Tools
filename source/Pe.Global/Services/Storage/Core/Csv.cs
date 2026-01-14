@@ -96,7 +96,7 @@ public class Csv<T> : CsvReadWriter<T> where T : class, new() {
     /// <summary>
     ///     Gets a specific row from the CSV state file with type safety
     /// </summary>
-    public T ReadRow(string key) => this.Read().GetValueOrDefault(key);
+    public T? ReadRow(string key) => this.Read().GetValueOrDefault(key);
 
     /// <summary>
     ///     Updates a specific row in the CSV state file with type safety
@@ -107,7 +107,7 @@ public class Csv<T> : CsvReadWriter<T> where T : class, new() {
         return this.Write(state);
     }
 
-    private string EnsureDirectoryExists() {
+    private string? EnsureDirectoryExists() {
         var directory = Path.GetDirectoryName(this.FilePath);
         if (directory != null && !Directory.Exists(directory)) _ = Directory.CreateDirectory(directory);
         return directory;
@@ -116,7 +116,7 @@ public class Csv<T> : CsvReadWriter<T> where T : class, new() {
     /// <summary>
     ///     Converts a string value to the target type for CSV parsing
     /// </summary>
-    private static object ConvertValue(string value, Type targetType) {
+    private static object? ConvertValue(string value, Type targetType) {
         if (string.IsNullOrEmpty(value)) return null;
 
         try {

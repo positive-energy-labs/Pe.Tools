@@ -263,28 +263,25 @@ public static class OpenDocumentExtensions {
         ) {
         var sw = Stopwatch.StartNew();
         var timerFired = false;
-        Timer timeoutTimer = null;
         var uiApp = DocumentManager.uiapp;
+        var timeoutTimer = new Timer(_ => {
+            timerFired = true;
+            Debug.WriteLine($"[TryOpenCloudDocument] Timeout reached after {timeoutSeconds}s, showing warning...");
+
+            // Show warning on UI thread via WPF Dispatcher
+            _ = Application.Current?.Dispatcher?.BeginInvoke(() =>
+                MessageBox.Show(
+                    "The cloud model is taking a long time to respond.\n\n" +
+                    "This usually means there's a network connectivity issue.\n" +
+                    "The operation will continue, but you may need to wait or check your connection.",
+                    "Cloud Model - Slow Response",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning));
+        }, null, timeoutSeconds * 1000, Timeout.Infinite);
 
         try {
             Debug.WriteLine(
                 $"[TryOpenCloudDocument] Starting cloud document activation (timeout={timeoutSeconds}s)...");
-
-            // Start a timer that will show a warning if the operation takes too long
-            timeoutTimer = new Timer(_ => {
-                timerFired = true;
-                Debug.WriteLine($"[TryOpenCloudDocument] Timeout reached after {timeoutSeconds}s, showing warning...");
-
-                // Show warning on UI thread via WPF Dispatcher
-                _ = Application.Current?.Dispatcher?.BeginInvoke(() =>
-                    MessageBox.Show(
-                        "The cloud model is taking a long time to respond.\n\n" +
-                        "This usually means there's a network connectivity issue.\n" +
-                        "The operation will continue, but you may need to wait or check your connection.",
-                        "Cloud Model - Slow Response",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning));
-            }, null, timeoutSeconds * 1000, Timeout.Infinite);
 
             // Make the blocking API call
             var openOptions = new OpenOptions { DetachFromCentralOption = DetachFromCentralOption.DoNotDetach };

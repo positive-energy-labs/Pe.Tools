@@ -8,7 +8,7 @@ namespace Pe.Global.Revit.Lib;
 ///     stored/retrieved based on their data type specification.
 /// </summary>
 public static class SpecStorageTypeResolver {
-    private static Dictionary<ForgeTypeId, StorageType> _nonMeasurableCache;
+    private static Dictionary<ForgeTypeId, StorageType>? _nonMeasurableCache;
     private static readonly object _lock = new();
 
     /// <summary>
@@ -37,7 +37,8 @@ public static class SpecStorageTypeResolver {
 
         // Slow path: non-measurable specs - use lazy-initialized cache
         EnsureCacheBuilt();
-        return _nonMeasurableCache.TryGetValue(specTypeId, out var storageType)
+        // _nonMeasurableCache is guaranteed non-null after EnsureCacheBuilt()
+        return _nonMeasurableCache!.TryGetValue(specTypeId, out var storageType)
             ? storageType
             : StorageType.None;
     }

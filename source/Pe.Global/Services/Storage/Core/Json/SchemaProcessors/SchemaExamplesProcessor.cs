@@ -56,12 +56,13 @@ public class SchemaExamplesProcessor : ISchemaProcessor {
             if (attr == null) continue;
 
             var propertyName = GetJsonPropertyName(property);
-            if (!context.Schema.Properties.TryGetValue(propertyName, out var propSchema)) continue;
+            var schemaProperties = context.Schema.Properties;
+            if (schemaProperties == null || !schemaProperties.TryGetValue(propertyName, out var propSchema)) continue;
 
             try {
                 // Get or create examples for this provider type (cached to avoid duplicate instantiation)
                 if (!this._providerCache.TryGetValue(attr.ProviderType, out var examples)) {
-                    var provider = (IOptionsProvider)Activator.CreateInstance(attr.ProviderType);
+                    if (Activator.CreateInstance(attr.ProviderType) is not IOptionsProvider provider) continue;
                     examples = provider.GetExamples().ToList();
                     this._providerCache[attr.ProviderType] = examples;
                 }
@@ -74,7 +75,7 @@ public class SchemaExamplesProcessor : ISchemaProcessor {
                     this._trackedSchemas.Add((targetSchema, attr.ProviderType));
                 } else {
                     // Inline mode: just add examples directly
-                    targetSchema.ExtensionData ??= new Dictionary<string, object>();
+                    targetSchema.ExtensionData ??= new Dictionary<string, object?>();
                     targetSchema.ExtensionData["examples"] = examples;
                 }
             } catch {
@@ -90,6 +91,8 @@ public class SchemaExamplesProcessor : ISchemaProcessor {
     public void Finalize(JsonSchema rootSchema) {
         if (!this.ConsolidateDuplicates || !this._trackedSchemas.Any()) return;
 
+        var definitions = rootSchema.Definitions;
+        if (definitions == null) return;
         // Create a Definitions entry for each unique provider type
         var defCounter = 0;
         foreach (var (providerType, examples) in this._providerCache) {
@@ -98,9 +101,9 @@ public class SchemaExamplesProcessor : ISchemaProcessor {
 
             // Add examples-only schema to Definitions
             var examplesSchema = new JsonSchema {
-                ExtensionData = new Dictionary<string, object> { ["examples"] = examples }
+                ExtensionData = new Dictionary<string, object?> { ["examples"] = examples }
             };
-            rootSchema.Definitions[defName] = examplesSchema;
+            definitions[defName] = examplesSchema;
         }
 
         // Now update all tracked schemas to reference their provider's definition

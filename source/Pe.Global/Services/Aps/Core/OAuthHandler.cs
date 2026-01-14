@@ -45,7 +45,7 @@ internal static class OAuthHandler {
 
     /// <summary>Delegate invoked when 3-legged OAuth completes</summary>
     /// <param name="token">The token if successful, null if failed/denied</param>
-    public delegate void CallbackDelegate(OAuthToken token);
+    public delegate void CallbackDelegate(OAuthToken? token);
 
     /// <summary>
     ///     Initiates the 3-legged OAuth flow, opening the browser for user authorization.
@@ -85,7 +85,9 @@ internal static class OAuthHandler {
             new Dictionary<string, string> { ["refresh_token"] = refreshToken }
         );
 
-        return await PostTokenRequestAsync(formData, cancellationToken).ConfigureAwait(false);
+        // PostTokenRequestAsync can return null on deserialization failure - throw in that case
+        return await PostTokenRequestAsync(formData, cancellationToken).ConfigureAwait(false)
+               ?? throw new HttpRequestException("Token response could not be parsed");
     }
 
     #endregion
@@ -112,7 +114,7 @@ internal static class OAuthHandler {
 
             // Handle callback asynchronously
             _ = Task.Run(async () => await HandleCallbackAsync(flowData, callback).ConfigureAwait(false));
-        } catch (Exception ex) {
+        } catch {
             // TODO: update this to give feedback
             callback?.Invoke(null);
         }
@@ -131,7 +133,7 @@ internal static class OAuthHandler {
                 callback?.Invoke(token);
             } else
                 callback?.Invoke(null);
-        } catch (Exception ex) {
+        } catch {
             // TODO: update this to give feedback
             callback?.Invoke(null);
         } finally {
@@ -146,12 +148,14 @@ internal static class OAuthHandler {
     /// <summary>Exchanges an authorization code for an access token</summary>
     private static Task<OAuthToken> ExchangeCodeForTokenAsync(OAuthFlowData flow, string code) {
         var additionalParams = new Dictionary<string, string> {
-            ["code"] = code, ["redirect_uri"] = OAuthConfig.CallbackUri
+            ["code"] = code,
+            ["redirect_uri"] = OAuthConfig.CallbackUri
         };
 
         // PKCE flow sends code_verifier, confidential flow sends client_secret
+        // CodeVerifier is guaranteed to be set for PKCE flows
         if (flow.IsPkce)
-            additionalParams["code_verifier"] = flow.CodeVerifier;
+            additionalParams["code_verifier"] = flow.CodeVerifier!;
 
         var formData = BuildTokenRequestForm(
             "authorization_code",
@@ -167,7 +171,7 @@ internal static class OAuthHandler {
     private static Dictionary<string, string> BuildTokenRequestForm(
         string grantType,
         string clientId,
-        string clientSecret,
+        string? clientSecret,
         Dictionary<string, string> additionalParams) {
         var form = new Dictionary<string, string> { ["grant_type"] = grantType, ["client_id"] = clientId };
 
@@ -183,7 +187,7 @@ internal static class OAuthHandler {
     }
 
     /// <summary>Posts a token request and deserializes the response</summary>
-    private static async Task<OAuthToken> PostTokenRequestAsync(
+    private static async Task<OAuthToken?> PostTokenRequestAsync(
         Dictionary<string, string> formData,
         CancellationToken cancellationToken) {
         using var content = new FormUrlEncodedContent(formData);
@@ -195,7 +199,8 @@ internal static class OAuthHandler {
         if (!response.IsSuccessStatusCode)
             throw new HttpRequestException($"Token request failed: {response.StatusCode} - {responseBody}");
 
-        return JsonConvert.DeserializeObject<OAuthToken>(responseBody);
+        var token = JsonConvert.DeserializeObject<OAuthToken>(responseBody);
+        return token ?? throw new JsonSerializationException("Token response could not be parsed");
     }
 
     #endregion
@@ -216,6 +221,9 @@ internal static class OAuthHandler {
             : OAuthCallbackPages.SuccessPage;
         await WriteHttpResponseAsync(client, responsePage).ConfigureAwait(false);
         client.Dispose();
+
+        if (authorizationCode is null)
+            throw new InvalidOperationException("Authorization code not found");
 
         return authorizationCode;
     }
@@ -249,7 +257,7 @@ internal static class OAuthHandler {
         });
 
     /// <summary>Extracts the authorization code from an HTTP GET request</summary>
-    private static string ExtractAuthorizationCode(string httpRequest) {
+    private static string? ExtractAuthorizationCode(string httpRequest) {
         var lines = httpRequest.Split('\n');
         if (lines.Length == 0) return null;
 

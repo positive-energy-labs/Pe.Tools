@@ -85,7 +85,7 @@ public static class CommandPaletteService {
             persistence,
             item => {
                 if (item is PostableCommandItem cmdItem)
-                    return cmdItem.Command.Value.ToString() ?? string.Empty;
+                    return cmdItem.Command.Value;
                 return item.TextPrimary;
             },
             searchConfig);

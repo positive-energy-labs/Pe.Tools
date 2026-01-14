@@ -27,11 +27,11 @@ public class IncludableAttribute : Attribute {
     ///     Optional name for the fragment schema file.
     ///     Defaults to the property name in lowercase if not specified.
     /// </param>
-    public IncludableAttribute(string fragmentSchemaName = null) => this.FragmentSchemaName = fragmentSchemaName;
+    public IncludableAttribute(string? fragmentSchemaName = null) => this.FragmentSchemaName = fragmentSchemaName;
 
     /// <summary>
     ///     Name used for fragment schema file (e.g., "fields" → "schema-fragment-fields.json").
     ///     If not specified, uses the property name in lowercase.
     /// </summary>
-    public string FragmentSchemaName { get; }
+    public string? FragmentSchemaName { get; }
 }

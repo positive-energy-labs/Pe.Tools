@@ -66,7 +66,8 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
             try {
                 var newCached = CreateCachedToken(token);
                 UpdateCache(clientId, newCached);
-                tcs.SetResult(token.AccessToken);
+                // AccessToken is required in OAuthToken, guaranteed non-null
+                tcs.SetResult(token.AccessToken!);
             } catch (Exception ex) {
                 tcs.SetResult(new Exception($"Failed to cache token: {ex.Message}"));
             }
@@ -124,7 +125,7 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
     ///     Lock scope is minimal - just the dictionary read.
     /// </summary>
     /// <returns>Tuple of (cached token or null, whether refresh is needed)</returns>
-    private static (CachedToken Token, bool NeedsRefresh) ReadCacheState(string clientId) {
+    private static (CachedToken? Token, bool NeedsRefresh) ReadCacheState(string clientId) {
         lock (CacheLock) {
             if (!TokenCache.TryGetValue(clientId, out var cached))
                 return (null, false);
@@ -146,10 +147,11 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
     /// </summary>
     /// <param name="token">The OAuth token response</param>
     /// <param name="fallbackRefreshToken">Refresh token to use if response doesn't include one</param>
-    private static CachedToken CreateCachedToken(OAuthToken token, string fallbackRefreshToken = null) =>
+    private static CachedToken CreateCachedToken(OAuthToken token, string? fallbackRefreshToken = null) =>
         new(
-            token.AccessToken,
-            token.RefreshToken ?? fallbackRefreshToken,
+            // AccessToken and RefreshToken are required in OAuthToken, guaranteed non-null
+            token.AccessToken!,
+            token.RefreshToken ?? fallbackRefreshToken ?? "",
             DateTime.UtcNow.AddSeconds(token.ExpiresIn ?? DefaultExpirationSeconds)
         );
 
@@ -162,9 +164,9 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
     ///     If another thread is already refreshing this client's token, waits for that to complete.
     /// </summary>
     /// <returns>The new access token, or null if refresh failed</returns>
-    private static string TryRefreshTokenWithRaceProtection(
+    private static string? TryRefreshTokenWithRaceProtection(
         string clientId,
-        string clientSecret,
+        string? clientSecret,
         string refreshToken,
         CachedToken originalCached) {
         // Check if another thread is already refreshing this token
@@ -196,7 +198,7 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
     /// <summary>
     ///     Waits briefly for another thread's refresh to complete, then checks the cache.
     /// </summary>
-    private static string WaitForOtherRefreshAndCheckCache(string clientId) {
+    private static string? WaitForOtherRefreshAndCheckCache(string clientId) {
         // Simple spin-wait with backoff - in practice, refresh takes ~100-500ms
         for (var i = 0; i < 50; i++) {
             Thread.Sleep(100); // 100ms * 50 = 5 second max wait
@@ -222,7 +224,11 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
     ///     Uses <c>ConfigureAwait(false).GetAwaiter().GetResult()</c> pattern to avoid
     ///     deadlocks when called from UI synchronization contexts (common in Revit add-ins).
     /// </remarks>
-    private static OAuthToken ExecuteTokenRefresh(string clientId, string clientSecret, string refreshToken) {
+    private static OAuthToken? ExecuteTokenRefresh(string clientId, string? clientSecret, string refreshToken) {
+        // Client secret is required for token refresh
+        if (string.IsNullOrEmpty(clientSecret))
+            return null;
+
         try {
             using var cts = new CancellationTokenSource(RefreshTimeout);
             var task = OAuthHandler.RefreshTokenAsync(clientId, clientSecret, refreshToken, cts.Token);
@@ -232,7 +238,7 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
         } catch (OperationCanceledException) {
             // TODO: update this to give feedback
             return null;
-        } catch (Exception ex) {
+        } catch (Exception) {
             // TODO: update this to give feedback
             return null;
         }

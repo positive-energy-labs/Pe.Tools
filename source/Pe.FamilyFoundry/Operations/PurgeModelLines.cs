@@ -1,4 +1,9 @@
+using System.Collections.Generic;
+using System.Linq;
+
+using Autodesk.Revit.DB;
 using Pe.Extensions.FamDocument;
+using Pe.Global.PolyFill;
 
 namespace Pe.FamilyFoundry.Operations;
 
@@ -18,24 +23,31 @@ public class PurgeModelLines(DefaultOperationSettings settings) : DocOperation<D
             .OfClass(typeof(CurveElement))
             .OfType<CurveElement>()
             .Distinct()
-            .ToDictionary(e =>
-                e, e => (
-                groupId: famDoc.Document.GetElement(e.Id).GroupId.Value,
-                alignments: e.GetDependentElements(new ElementClassFilter(typeof(Dimension)))
+            .Select(e => {
+                var element = famDoc.Document.GetElement(e.Id);
+                var groupId = element?.GroupId.Value() ?? -1;
+                var alignments = e.GetDependentElements(new ElementClassFilter(typeof(Dimension)))
                     .Select(d => famDoc.Document.GetElement(d))
                     .OfType<Dimension>()
-                    .Where(d => d is not LinearDimension)
                     .Where(d => d is not AngularDimension)
+                    .Where(d => d is not SpotDimension)
+#if REVIT2025 || REVIT2026
+                    .Where(d => d is not LinearDimension)
                     .Where(d => d is not RadialDimension)
                     .Where(d => d is not ArcLengthDimension)
-                    .Where(d => d is not SpotDimension)
-                    .ToList()
-            ))
+#endif
+                    .ToList();
+
+                return (Line: e, GroupId: groupId, Alignments: alignments);
+            })
             .ToList();
 
         var (grouped, aligned, other) = (0, 0, 0);
 
-        foreach (var (line, (groupId, alignments)) in lines) {
+        foreach (var entry in lines) {
+            var line = entry.Line;
+            var groupId = entry.GroupId;
+            var alignments = entry.Alignments;
             if (deleteAlignedLines && alignments.Any()) {
                 var deleted = famDoc.Document.Delete(line.Id);
                 if (deleted.Count != 0) aligned++;

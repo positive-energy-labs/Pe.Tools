@@ -7,8 +7,11 @@ public class MepCurve {
     public static Result<Level> GetReferenceLevel(MEPCurve mepCurve) {
         try {
             var levelId = mepCurve.ReferenceLevel?.Id;
-            if (levelId != null && levelId != ElementId.InvalidElementId)
-                return mepCurve.Document.GetElement(levelId) as Level;
+            if (levelId != null && levelId != ElementId.InvalidElementId) {
+                var level = mepCurve.Document.GetElement(levelId) as Level;
+                if (level != null)
+                    return level;
+            }
 
             return new InvalidOperationException($"No level could be found for the MEPCurve {mepCurve.Id}");
         } catch (Exception e) {

@@ -30,7 +30,7 @@ public class PostableCommandHelper(Storage storage) {
     public void UpdateCommandUsage(CommandRef commandRef) {
         var commandItem = this.GetAllCommands().FirstOrDefault(c => c.Command == commandRef);
         if (commandItem is not null) {
-            var key = commandRef.Value.ToString() ?? string.Empty;
+            var key = commandRef.Value;
             var existing = this._state.ReadRow(key);
             var usageCount = (existing?.UsageCount ?? 0) + 1;
 

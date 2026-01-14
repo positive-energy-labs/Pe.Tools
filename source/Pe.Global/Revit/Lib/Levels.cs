@@ -6,7 +6,7 @@ public class Levels {
     /// </summary>
     /// <param name="view">The View object for which to find the associated Level.</param>
     /// <returns>The Level object associated with the view, or null if no level is associated or found.</returns>
-    public static Level LevelOfActiveView(View view) {
+    public static Level? LevelOfActiveView(View view) {
         var doc = view.Document;
         var levelId = view.GenLevel.Id;
 

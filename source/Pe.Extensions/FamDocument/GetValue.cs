@@ -15,7 +15,7 @@ public static class FamilyManagerGetValue {
     /// <exception cref="T:Autodesk.Revit.Exceptions.ArgumentException">
     ///     Thrown if the input argument-"familyParameter"-is invalid,
     /// </exception>
-    public static object GetValue(this FamilyDocument famDoc, FamilyParameter familyParameter) {
+    public static object? GetValue(this FamilyDocument famDoc, FamilyParameter familyParameter) {
         var famType = famDoc.FamilyManager.CurrentType;
         if (!famType.HasValue(familyParameter)) return null;
 
@@ -38,7 +38,7 @@ public static class FamilyManagerGetValue {
     /// <exception cref="T:Autodesk.Revit.Exceptions.ArgumentException">
     ///     Thrown if the input argument-"familyParameter"-is invalid,
     /// </exception>
-    public static object GetValue(this FamilyDocument famDoc, string familyParameterName) {
+    public static object? GetValue(this FamilyDocument famDoc, string familyParameterName) {
         var fm = famDoc.FamilyManager;
         var familyParameter = fm.FindParameter(familyParameterName);
         if (familyParameter == null) return null;
@@ -71,7 +71,7 @@ public static class FamilyManagerGetValue {
     /// <param name="famDoc">The family document</param>
     /// <param name="param">The parameter to get the value from</param>
     /// <returns>The string value of the parameter, or null if the parameter is null or has no value</returns>
-    public static string GetValueString(this FamilyDocument famDoc, FamilyParameter param) {
+    public static string? GetValueString(this FamilyDocument famDoc, FamilyParameter param) {
         var famType = famDoc.FamilyManager.CurrentType;
         if (!famType.HasValue(param)) return null;
 
@@ -84,7 +84,7 @@ public static class FamilyManagerGetValue {
         };
     }
 
-    private static string GetIntegerValueString(FamilyType famType, FamilyParameter param) {
+    private static string? GetIntegerValueString(FamilyType famType, FamilyParameter param) {
         var intValue = famType.AsInteger(param);
         var dataType = param.Definition.GetDataType();
 
@@ -95,7 +95,7 @@ public static class FamilyManagerGetValue {
         return intValue.ToString();
     }
 
-    private static string GetElementIdValueString(FamilyDocument famDoc, FamilyType famType, FamilyParameter param) {
+    private static string? GetElementIdValueString(FamilyDocument famDoc, FamilyType famType, FamilyParameter param) {
         var elementId = famType.AsElementId(param);
         if (elementId == null || elementId == ElementId.InvalidElementId)
             return null;

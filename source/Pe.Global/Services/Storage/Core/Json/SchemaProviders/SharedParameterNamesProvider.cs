@@ -15,7 +15,10 @@ public class SharedParameterNamesProvider : IOptionsProvider {
             var cache = Storage.GlobalDir().StateJson<ParametersApi.Parameters>(CacheFilename)
                 as JsonReader<ParametersApi.Parameters>;
             if (!File.Exists(cache.FilePath)) return [];
-            return cache.Read().Results?.Where(p => !p.IsArchived).Select(p => p.Name) ?? [];
+            return cache.Read().Results
+                   ?.Where(p => !p.IsArchived)
+                   .Select(p => p.Name ?? string.Empty)
+                   ?? [];
         } catch {
             // Cache missing or invalid - no examples, no crash
             return [];

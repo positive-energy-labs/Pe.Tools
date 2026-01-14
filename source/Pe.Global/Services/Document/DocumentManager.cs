@@ -11,7 +11,7 @@ namespace Pe.Global.Services.Document;
 ///     Note: No locking needed as Revit API is single-threaded.
 /// </summary>
 public class DocumentManager {
-    private static DocumentManager _instance;
+    private static DocumentManager? _instance;
     private readonly DocumentColorService _colorService = new();
     private readonly MruViewBuffer _mruBuffer = new();
 
@@ -28,10 +28,10 @@ public class DocumentManager {
     }
 
     /// <summary>Gets the active document from the UIApplication. </summary>
-    public static Autodesk.Revit.DB.Document GetActiveDocument() => uiapp?.ActiveUIDocument?.Document;
+    public static Autodesk.Revit.DB.Document? GetActiveDocument() => uiapp?.ActiveUIDocument?.Document;
 
     /// <summary>Gets the active view from the UIApplication. </summary>
-    public static View GetActiveView() => uiapp?.ActiveUIDocument?.ActiveView;
+    public static View? GetActiveView() => uiapp?.ActiveUIDocument?.ActiveView;
 
 
     /// <summary>Gets all open documents from the UIApplication. </summary>
@@ -66,25 +66,25 @@ public class DocumentManager {
         GetOpenViewIds().Contains(viewId);
 
     /// <summary>Finds an open document by title or path name. </summary>
-    public static Autodesk.Revit.DB.Document FindDocumentByName(string name) =>
+    public static Autodesk.Revit.DB.Document? FindDocumentByName(string name) =>
         GetOpenDocuments().FirstOrDefault(d => d.Title == name || d.Title.Contains(name));
 
     /// <summary>
     ///     Finds an open family document matching the given Family.
     ///     (partial match on Title because title is the file name, e.g., "Building.rvt" or "Family.rfa").
     /// </summary>
-    public static Autodesk.Revit.DB.Document FindOpenFamilyDocument(Family family) =>
+    public static Autodesk.Revit.DB.Document? FindOpenFamilyDocument(Family family) =>
         GetOpenDocuments().FirstOrDefault(d => d.IsFamilyDocument && d.Title.Contains(family.Name));
 
     /// <summary>Gets the ModelPath for a document (cloud or file-based).</summary>
-    public static ModelPath GetDocumentModelPath(Autodesk.Revit.DB.Document doc) =>
+    public static ModelPath? GetDocumentModelPath(Autodesk.Revit.DB.Document doc) =>
         doc switch {
             { IsModelInCloud: true } => doc.GetCloudModelPath(),
             { PathName.Length: > 0 } => new FilePath(doc.PathName),
             _ => null // Return null for unsaved documents (like newly opened family docs)
         };
 
-    public static string LogDocumentState(View view = null, string context = null) {
+    public static string LogDocumentState(View? view = null, string? context = null) {
         var sb = new StringBuilder();
         if (!string.IsNullOrEmpty(context)) _ = sb.AppendLine($"=== {context} ===");
         _ = sb.AppendLine("=== Document State ===");
@@ -110,7 +110,7 @@ public class DocumentManager {
         return sb.ToString();
     }
 
-    public static string LogDocumentDetails(Autodesk.Revit.DB.Document doc, string context = null) {
+    public static string LogDocumentDetails(Autodesk.Revit.DB.Document doc, string? context = null) {
         var sb = new StringBuilder();
         if (!string.IsNullOrEmpty(context)) _ = sb.AppendLine($"=== {context} ===");
         _ = sb.AppendLine("=== Document Details ===");

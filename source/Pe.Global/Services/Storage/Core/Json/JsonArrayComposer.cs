@@ -32,7 +32,7 @@ public static class JsonArrayComposer {
     /// <param name="obj">The JObject to process (modified in place)</param>
     /// <param name="baseDirectory">Base directory for resolving relative fragment paths</param>
     /// <param name="fragmentSchemaDirectory">Optional directory where fragment schemas are stored (for schema injection)</param>
-    public static void ExpandIncludes(JObject obj, string baseDirectory, string fragmentSchemaDirectory = null) =>
+    public static void ExpandIncludes(JObject obj, string baseDirectory, string? fragmentSchemaDirectory = null) =>
         ExpandIncludes(obj, baseDirectory, [], fragmentSchemaDirectory);
 
     /// <summary>
@@ -43,7 +43,7 @@ public static class JsonArrayComposer {
         JObject obj,
         string baseDirectory,
         HashSet<string> visitedFragments,
-        string fragmentSchemaDirectory
+        string? fragmentSchemaDirectory
     ) {
         foreach (var prop in obj.Properties().ToList()) {
             switch (prop.Value) {
@@ -64,7 +64,7 @@ public static class JsonArrayComposer {
         JArray array,
         string baseDirectory,
         HashSet<string> visitedFragments,
-        string fragmentSchemaDirectory
+        string? fragmentSchemaDirectory
     ) {
         var result = new JArray();
 
@@ -141,7 +141,7 @@ public static class JsonArrayComposer {
     ///     Fragment files are expected to be JSON objects with an "Items" property containing the array.
     ///     Optionally injects $schema reference if schema directory is provided.
     /// </summary>
-    private static JArray LoadFragment(string fragmentPath, string fragmentSchemaDirectory) {
+    private static JArray LoadFragment(string fragmentPath, string? fragmentSchemaDirectory) {
         if (!File.Exists(fragmentPath)) throw JsonExtendsException.FragmentNotFound(fragmentPath);
 
         try {
@@ -166,7 +166,7 @@ public static class JsonArrayComposer {
 
             // Inject schema reference if schema directory provided and not already present
             if (fragmentSchemaDirectory != null && !fragmentObj.ContainsKey("$schema"))
-                InjectFragmentSchema(fragmentPath, fragmentObj, fragmentSchemaDirectory);
+                InjectFragmentSchema(fragmentPath, fragmentObj, fragmentSchemaDirectory!);
 
             return array;
         } catch (JsonExtendsException) {
@@ -182,9 +182,11 @@ public static class JsonArrayComposer {
     /// </summary>
     private static void InjectFragmentSchema(string fragmentPath, JObject fragmentObj, string schemaDirectory) {
         // Calculate relative path to fragment schema
-        var fragmentDir = Path.GetDirectoryName(fragmentPath);
+        var fragmentDir = Path.GetDirectoryName(fragmentPath)
+                          ?? Path.GetDirectoryName(Path.GetFullPath(fragmentPath))
+                          ?? throw JsonExtendsException.InvalidFragmentFormat(fragmentPath, "Invalid fragment path");
         var schemaPath = Path.Combine(schemaDirectory, "schema-fragment.json");
-        var relativeSchemaPath = Path.GetRelativePath(fragmentDir!, schemaPath).Replace("\\", "/");
+        var relativeSchemaPath = Path.GetRelativePath(fragmentDir, schemaPath).Replace("\\", "/");
 
         // Add $schema property
         fragmentObj["$schema"] = relativeSchemaPath;

@@ -20,27 +20,27 @@ public static class Automations {
     private static extern bool SetCursorPos(int x, int y);
 
 
-    public static AutomationElement FindElementByName(string name, AutomationElement parent = null) {
+    public static AutomationElement? FindElementByName(string name, AutomationElement? parent = null) {
         var scope = parent == null ? TreeScope.Descendants : TreeScope.Children;
         var root = parent ?? AutomationElement.RootElement;
         var condition = new PropertyCondition(AutomationElement.NameProperty, name);
         return root.FindFirst(scope, condition);
     }
 
-    public static AutomationElement FindElementByAutomationId(string id, AutomationElement parent = null) {
+    public static AutomationElement? FindElementByAutomationId(string id, AutomationElement? parent = null) {
         var scope = parent == null ? TreeScope.Descendants : TreeScope.Children;
         var root = parent ?? AutomationElement.RootElement;
         var condition = new PropertyCondition(AutomationElement.AutomationIdProperty, id);
         return root.FindFirst(scope, condition);
     }
 
-    public static AutomationElement FindElement(string automationId = null,
-        string name = null,
-        string localizedControlType = null,
-        AutomationElement parent = null) {
+    public static AutomationElement? FindElement(string? automationId = null,
+        string? name = null,
+        string? localizedControlType = null,
+        AutomationElement? parent = null) {
         var root = parent ?? AutomationElement.RootElement;
         var scope = parent == null ? TreeScope.Descendants : TreeScope.Children;
-        Condition condition = null;
+        Condition? condition = null;
 
         if (!string.IsNullOrEmpty(automationId))
             condition = new PropertyCondition(AutomationElement.AutomationIdProperty, automationId);
@@ -61,22 +61,22 @@ public static class Automations {
     }
 
     public static async Task<bool> ClickButtonAsync(string buttonName,
-        string automationId = null,
-        AutomationElement parent = null) => await Task.Run(() => {
-        var element = FindElement(automationId, buttonName, "button", parent);
-        if (element == null) {
-            Debug.WriteLine($"Button '{buttonName}' (AutomationId: '{automationId}') not found.");
+        string? automationId = null,
+        AutomationElement? parent = null) => await Task.Run(() => {
+            var element = FindElement(automationId, buttonName, "button", parent);
+            if (element == null) {
+                Debug.WriteLine($"Button '{buttonName}' (AutomationId: '{automationId}') not found.");
+                return false;
+            }
+
+            if (element.TryGetCurrentPattern(InvokePattern.Pattern, out var pattern)) {
+                (pattern as InvokePattern)?.Invoke();
+                return true;
+            }
+
+            Debug.WriteLine($"Button '{buttonName}' (AutomationId: '{automationId}') does not support InvokePattern.");
             return false;
-        }
-
-        if (element.TryGetCurrentPattern(InvokePattern.Pattern, out var pattern)) {
-            (pattern as InvokePattern)?.Invoke();
-            return true;
-        }
-
-        Debug.WriteLine($"Button '{buttonName}' (AutomationId: '{automationId}') does not support InvokePattern.");
-        return false;
-    });
+        });
 
     public static async Task<bool> ClickListItemByNameAsync(string itemName) => await Task.Run(() => {
         var element = FindElement(name: itemName, localizedControlType: "list item");
@@ -101,7 +101,7 @@ public static class Automations {
         return false;
     });
 
-    public static async Task<bool> ClickListItemByAutomationIdAsync(string automationId) => await Task.Run(() => {
+    public static async Task<bool> ClickListItemByAutomationIdAsync(string? automationId) => await Task.Run(() => {
         var element = FindElement(automationId, localizedControlType: "list item");
         if (element == null) {
             Debug.WriteLine($"List item with AutomationId: '{automationId}' not found.");

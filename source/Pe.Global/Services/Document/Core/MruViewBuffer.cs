@@ -13,7 +13,7 @@ public class MruViewBuffer {
 
     private readonly List<ViewReference> _buffer = [];
 
-    private ViewReference _previousViewRef;
+    private ViewReference? _previousViewRef;
 
     /// <summary>
     ///     Records a view activation. The previous view is only added to the MRU buffer if

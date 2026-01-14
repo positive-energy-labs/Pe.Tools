@@ -59,7 +59,7 @@ public class Ribbon {
     /// <summary>
     ///     Processes individual ribbon items based on their type with specialized handling.
     /// </summary>
-    private static DiscoveredCommand ProcessRibbonItem(dynamic item,
+    private static DiscoveredCommand? ProcessRibbonItem(dynamic item,
         DiscoveredPanel panel,
         List<DiscoveredCommand> commandList
     ) {
@@ -73,7 +73,7 @@ public class Ribbon {
 
         if (!hasItems) {
             // Extract image from ribbon item
-            ImageSource imageSource = null;
+            ImageSource? imageSource = null;
             try {
                 // TODO: the problem doesn't seem to be here, however the Command Palette is not showing images
                 // for commands that are nested in a stack button or sommething (ie. has a name like "<StackButtonName>: <CommandName>" in the palette)
@@ -122,33 +122,33 @@ public class Ribbon {
 
 public class DiscoveredTab {
     /// <summary> Name, what you see in UI. RibbonTab.Title, DefaultTitle, AutomationName are always same</summary>
-    public string Name { get; set; }
+    public required string Name { get; set; }
 
     /// <summary> Internal ID, not sure what it's used for</summary>
-    public string Id { get; set; }
+    public required string Id { get; set; }
 
     /// <summary> Panels contained within the tab</summary>
-    public RibbonPanelCollection Panels { get; set; }
+    public required RibbonPanelCollection Panels { get; set; }
 
     /// <summary> TBD: Not sure what this is, but possibly useful</summary>
-    public ICollectionView DockedPanels { get; set; }
+    public required ICollectionView DockedPanels { get; set; }
 
     /// <summary> TBD: Not sure what this is, but possibly useful</summary>
-    public RibbonControl RibbonControl { get; set; }
+    public required RibbonControl RibbonControl { get; set; }
 }
 
 public class DiscoveredPanel {
     /// <summary> The parent tab of this panel</summary>
-    public RibbonTab Tab { get; set; }
+    public required RibbonTab Tab { get; set; }
 
     /// <summary> Internal ID, not sure what it's used for and has a strange format</summary>
-    public string Cookie { get; set; }
+    public required string Cookie { get; set; }
 
     /// <summary> Can access Panel items via RibbonPanelSource.Items</summary>
-    public RibbonPanelSource Source { get; set; }
+    public required RibbonPanelSource Source { get; set; }
 
     /// <summary> TBD: Not sure what this is, but possibly useful</summary>
-    public RibbonControl RibbonControl { get; set; }
+    public required RibbonControl RibbonControl { get; set; }
 }
 
 public class DiscoveredCommand {
@@ -159,33 +159,33 @@ public class DiscoveredCommand {
     ///     There are often near duplicates, like ID_OBJECTS_FAMSYM and ID_OBJECTS_FAMSYM_RibbonListButton
     ///     It is also often empty or not a commandId at all.
     /// </summary>
-    public string Id { get; set; }
+    public required string Id { get; set; }
 
     /// <summary>
     ///     Human-readable name of the command, often empty.
     ///     If empty, this.Text may be non-empty. Both may also be empty.
     /// </summary>
-    public string Name { get; set; }
+    public required string Name { get; set; }
 
     /// <summary>
     ///     Another type of name, always similar to Name, often empty.
     ///     RibbonItem.Text, AutomationName, and TextBinding always seem to be same.
     /// </summary>
-    public string Text { get; set; }
+    public required string Text { get; set; }
 
     /// <summary> Often empty, look into ToolTipResolver for more information. </summary>
-    public object ToolTip { get; set; }
+    public object? ToolTip { get; set; }
 
     /// <summary> The image/icon of the command from the ribbon </summary>
-    public ImageSource Image { get; set; }
+    public ImageSource? Image { get; set; }
 
     /// <summary> A standin for tooltip? seems to be non-empty more often than Tooltip is.</summary>
-    public string Description { get; set; }
+    public required string Description { get; set; }
 
-    public object ToolTipResolver { get; set; }
-    public string Tab { get; set; }
-    public string Panel { get; set; }
+    public object? ToolTipResolver { get; set; }
+    public required string Tab { get; set; }
+    public required string Panel { get; set; }
 
     /// <summary> Type of the item, e.g. RibbonButton, RibbonToggleButton, etc. </summary>
-    public string ItemType { get; set; }
+    public required string ItemType { get; set; }
 }

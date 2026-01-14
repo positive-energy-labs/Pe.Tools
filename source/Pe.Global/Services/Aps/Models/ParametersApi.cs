@@ -48,22 +48,22 @@ public class ParametersApi {
     }
 
     public class Parameters {
-        [UsedImplicitly] public required Pagination Pagination { get; init; }
-        [UsedImplicitly] public required List<ParametersResult> Results { get; set; }
+        [UsedImplicitly] public Pagination? Pagination { get; init; }
+        [UsedImplicitly] public List<ParametersResult>? Results { get; set; }
 
         public class ParametersResult {
             private ParameterDownloadOpts? _downloadOptions;
-            [UsedImplicitly] public required string Id { get; set; }
-            [UsedImplicitly] public required string Name { get; init; }
-            [UsedImplicitly] public required string Description { get; init; }
-            [UsedImplicitly] public required string SpecId { get; init; }
-            [UsedImplicitly] public required string ValueTypeId { get; init; }
+            [UsedImplicitly] public string? Id { get; set; }
+            [UsedImplicitly] public string? Name { get; init; }
+            [UsedImplicitly] public string? Description { get; init; }
+            [UsedImplicitly] public string? SpecId { get; init; }
+            [UsedImplicitly] public string? ValueTypeId { get; init; }
             [UsedImplicitly] public bool ReadOnly { get; init; }
 
-            [UsedImplicitly] public required List<RawMetadataValue> Metadata { get; init; }
+            [UsedImplicitly] public List<RawMetadataValue>? Metadata { get; init; }
 
-            [UsedImplicitly] public required string CreatedBy { get; init; }
-            [UsedImplicitly] public required string CreatedAt { get; init; }
+            [UsedImplicitly] public string? CreatedBy { get; init; }
+            [UsedImplicitly] public string? CreatedAt { get; init; }
 
             [JsonIgnore]
             public bool IsArchived =>
@@ -78,34 +78,36 @@ public class ParametersApi {
             }
 
             public class ParameterDownloadOpts {
-                private readonly List<MetadataBinding> _categories;
-                private readonly string _groupId;
-                private readonly string _guidText;
+                private readonly List<MetadataBinding>? _categories;
+                private readonly string? _groupId;
+                private readonly string? _guidText;
                 private readonly ParametersResult _parent;
                 public readonly bool IsInstance;
                 public readonly bool Visible;
-                private DefinitionGroup _cachedDefinitionGroup;
+                private DefinitionGroup? _cachedDefinitionGroup;
 
                 // Lazy-cached values
-                private ExternalDefinition _externalDefinition;
-                private ForgeTypeId _groupTypeId;
+                private ExternalDefinition? _externalDefinition;
+                private ForgeTypeId? _groupTypeId;
                 private Guid? _guid;
-                private ForgeTypeId _parameterTypeId;
-                private ForgeTypeId _specTypeId;
+                private ForgeTypeId? _parameterTypeId;
+                private ForgeTypeId? _specTypeId;
 
                 public ParameterDownloadOpts(ParametersResult parent) {
                     this._parent = parent;
 
                     // Parse metadata once and cache all values
-                    foreach (var item in parent.Metadata) {
-                        _ = item.Id switch {
-                            "isHidden" => this.Visible = !(item.Value is bool v && v),
-                            "instanceTypeAssociation" => this.IsInstance =
-                                item.Value is not string s || s.Equals("INSTANCE", StringComparison.OrdinalIgnoreCase),
-                            "categories" => this._categories = item.Value as List<MetadataBinding>,
-                            "group" => this._groupId = (item.Value as MetadataBinding)?.Id,
-                            _ => default(object)
-                        };
+                    if (parent.Metadata != null) {
+                        foreach (var item in parent.Metadata) {
+                            _ = item.Id switch {
+                                "isHidden" => this.Visible = !(item.Value is bool v && v),
+                                "instanceTypeAssociation" => this.IsInstance =
+                                    item.Value is not string s || s.Equals("INSTANCE", StringComparison.OrdinalIgnoreCase),
+                                "categories" => this._categories = item.Value as List<MetadataBinding>,
+                                "group" => this._groupId = (item.Value as MetadataBinding)?.Id,
+                                _ => default(object)
+                            };
+                        }
                     }
 
                     // Pre-extract GUID text from Parameters Service ID
@@ -117,9 +119,9 @@ public class ParametersApi {
                     }
                 }
 
-                public ForgeTypeId GetParameterTypeId() => this._parameterTypeId ??= new ForgeTypeId(this._parent.Id);
+                public ForgeTypeId GetParameterTypeId() => this._parameterTypeId ??= new ForgeTypeId(this._parent.Id ?? "");
                 public ForgeTypeId GetGroupTypeId() => this._groupTypeId ??= new ForgeTypeId(this._groupId ?? "");
-                public ForgeTypeId GetSpecTypeId() => this._specTypeId ??= new ForgeTypeId(this._parent.SpecId);
+                public ForgeTypeId GetSpecTypeId() => this._specTypeId ??= new ForgeTypeId(this._parent.SpecId ?? "");
 
                 public Guid GetGuid() {
                     if (this._guid.HasValue) return this._guid.Value;
@@ -133,21 +135,21 @@ public class ParametersApi {
                     return guid;
                 }
 
-                public ExternalDefinition GetExternalDefinition(DefinitionGroup group) {
+                public ExternalDefinition? GetExternalDefinition(DefinitionGroup group) {
                     // Return cached definition only if it's from the same group
                     if (this._externalDefinition != null && this._cachedDefinitionGroup == group)
                         return this._externalDefinition;
 
                     try {
                         this._externalDefinition = group.Definitions.Create(
-                            new ExternalDefinitionCreationOptions(this._parent.Name, this.GetSpecTypeId()) {
+                            new ExternalDefinitionCreationOptions(this._parent.Name ?? "", this.GetSpecTypeId()) {
                                 GUID = this.GetGuid(),
                                 Visible = this.Visible,
                                 UserModifiable = !this._parent.ReadOnly,
                                 Description = this._parent.Description ?? ""
                             }) as ExternalDefinition;
                     } catch (Exception ex) {
-                        this._externalDefinition = group.Definitions.get_Item(this._parent.Name) as ExternalDefinition
+                        this._externalDefinition = group.Definitions.get_Item(this._parent.Name ?? "") as ExternalDefinition
                                                    ?? throw new Exception(
                                                        $"Failed to create external definition for parameter {this._parent.Name}: {ex.Message}");
                     }
@@ -156,7 +158,7 @@ public class ParametersApi {
                     return this._externalDefinition;
                 }
 
-                public ISet<ElementId> CategorySet(Autodesk.Revit.DB.Document doc) => // check this logic in testing
+                public ISet<ElementId>? CategorySet(Autodesk.Revit.DB.Document doc) => // check this logic in testing
                     this._categories?.Any() == true
                         ? MapCategoriesToElementIds(doc, this._categories)
                         : null;
@@ -186,7 +188,7 @@ public class ParametersApi {
                 ///     Extracts category name from APS category ID.
                 ///     Example: "autodesk.revit.category.family:ductTerminal-1.0.0" -> "ductTerminal"
                 /// </summary>
-                private static string ExtractCategoryNameFromApsId(string categoryId) {
+                private static string? ExtractCategoryNameFromApsId(string categoryId) {
                     if (string.IsNullOrEmpty(categoryId)) return null;
 
                     // Extract the part between the last ':' and '-'
@@ -203,7 +205,7 @@ public class ParametersApi {
                 ///     Maps common APS category names to Revit BuiltInCategory values.
                 ///     TODO: fix this, it does not do anything
                 /// </summary>
-                private static ElementId
+                private static ElementId?
                     GetRevitCategoryElementId(Autodesk.Revit.DB.Document doc, string categoryName) {
                     try {
                         // If not found in mapping, try to find by name in all categories

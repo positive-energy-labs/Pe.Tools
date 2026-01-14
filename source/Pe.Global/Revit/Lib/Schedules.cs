@@ -11,11 +11,11 @@ namespace Pe.Global.Revit.Lib;
 
 public class ScheduleSpec {
     [Description("The name of the schedule as it will appear in the project browser.")]
-    public required string Name { get; set; }
+    public string Name { get; set; } = string.Empty;
 
     [Description("The Revit category to schedule (e.g., 'Mechanical Equipment', 'Plumbing Fixtures', 'Doors').")]
     [SchemaExamples(typeof(CategoryNamesProvider))]
-    public required string CategoryName { get; set; }
+    public string CategoryName { get; set; } = string.Empty;
 
     [Description(
         "Whether the schedule displays each element on a separate row (true) or combines multiple grouped elements onto the same row (false).")]
@@ -36,7 +36,7 @@ public class ScheduleFieldSpec {
     [Description(
         "The parameter name to display in this column (e.g., 'Family and Type', 'Mark', 'PE_M_Fan_FlowRate').")]
     // [SchemaExamples(typeof(SchedulableParameterNamesProvider))]
-    public required string ParameterName { get; set; }
+    public string ParameterName { get; set; } = string.Empty;
 
     [Description("Custom header text to display instead of the parameter name. Leave empty to use parameter name.")]
     public string ColumnHeaderOverride { get; set; } = string.Empty;
@@ -53,7 +53,7 @@ public class ScheduleFieldSpec {
     public ScheduleFieldDisplayType DisplayType { get; set; } = ScheduleFieldDisplayType.Standard;
 
     [Description("Column width on sheet in feet. Leave empty to use default width.")]
-    public double ColumnWidth { get; set; } = 1;
+    public double? ColumnWidth { get; set; }
 
     [Description(
         "For calculated fields only. Indicates this is a formula or percentage field. Note: Formula strings cannot be read/written via Revit API - calculated fields must be created manually in Revit.")]
@@ -79,7 +79,7 @@ public enum CalculatedFieldType {
 public class ScheduleSortGroupSpec {
     [Description("The field name to sort/group by.")]
     // [SchemaExamples(typeof(SchedulableParameterNamesProvider))]
-    public required string FieldName { get; init; }
+    public string FieldName { get; init; } = string.Empty;
 
     [Description("Sort direction (Ascending or Descending).")]
     [JsonConverter(typeof(StringEnumConverter))]
@@ -98,7 +98,7 @@ public class ScheduleSortGroupSpec {
 public class ScheduleFilterSpec {
     [Description("The field name to filter on.")]
     // [SchemaExamples(typeof(SchedulableParameterNamesProvider))]
-    public required string FieldName { get; init; }
+    public string FieldName { get; init; } = string.Empty;
 
     [Description("The type of comparison to perform (Equal, Contains, GreaterThan, etc.).")]
     [JsonConverter(typeof(StringEnumConverter))]
@@ -106,7 +106,7 @@ public class ScheduleFilterSpec {
 
     [Description(
         "The filter value as a string. Leave empty for HasParameter, HasValue, and HasNoValue filter types. The value will be automatically coerced to the correct type based on the field's parameter type (string, integer, double, or ElementId).")]
-    public required string Value { get; set; }
+    public string Value { get; set; } = string.Empty;
 }
 
 public class ScheduleCreationResult {
@@ -415,7 +415,7 @@ public static class ScheduleHelper {
 
         // Apply column width if specified
         if (fieldSpec.ColumnWidth > 0)
-            field.SheetColumnWidth = fieldSpec.ColumnWidth;
+            field.SheetColumnWidth = fieldSpec.ColumnWidth ?? 1;
 
         // Apply display type if field supports it (cast to int for comparison since enum member names vary)
         var targetDisplayType = (ScheduleFieldDisplayType)(int)fieldSpec.DisplayType;
@@ -446,7 +446,7 @@ public static class ScheduleHelper {
 
         foreach (var sortGroupSpec in spec.SortGroup) {
             // Find the field by name
-            ScheduleFieldId fieldId = null;
+            ScheduleFieldId? fieldId = null;
             for (var i = 0; i < def.GetFieldCount(); i++) {
                 var field = def.GetField(i);
                 if (field.GetName() == sortGroupSpec.FieldName) {
@@ -495,7 +495,7 @@ public static class ScheduleHelper {
 
         foreach (var filterSpec in filtersToApply) {
             // Find the field by name
-            ScheduleField field = null;
+            ScheduleField? field = null;
             for (var i = 0; i < def.GetFieldCount(); i++) {
                 var f = def.GetField(i);
                 if (f.GetName() == filterSpec.FieldName) {
@@ -530,8 +530,8 @@ public static class ScheduleHelper {
                         filter = new ScheduleFilter(field.FieldId, filterSpec.FilterType, doubleValue);
                         storageTypeStr = "Double";
                     } else if (storageType == StorageType.ElementId &&
-                               long.TryParse(filterSpec.Value, out var longValue)) {
-                        var elementId = new ElementId((int)longValue);
+                               int.TryParse(filterSpec.Value, out var elementIdValue)) {
+                        var elementId = new ElementId(elementIdValue);
                         filter = new ScheduleFilter(field.FieldId, filterSpec.FilterType, elementId);
                         storageTypeStr = "ElementId";
                     } else {
@@ -565,7 +565,7 @@ public static class ScheduleHelper {
         return ElementId.InvalidElementId;
     }
 
-    private static SchedulableField FindSchedulableField(ScheduleDefinition def, Document doc, string parameterName) {
+    private static SchedulableField? FindSchedulableField(ScheduleDefinition def, Document doc, string parameterName) {
         var schedulableFields = def.GetSchedulableFields();
         foreach (var sf in schedulableFields) {
             var name = sf.GetName(doc);
@@ -587,7 +587,7 @@ public static class ScheduleHelper {
 
         // Group consecutive fields by HeaderGroup
         var groupRanges = new List<(string GroupName, int StartIdx, int EndIdx)>();
-        string currentGroup = null;
+        string? currentGroup = null;
         int? groupStart = null;
 
         for (var i = 0; i < spec.Fields.Count; i++) {
@@ -722,7 +722,7 @@ public static class ScheduleHelper {
     /// <returns>List of family names that pass all schedule filters</returns>
     public static List<string> GetFamiliesMatchingFilters(Document doc,
         ScheduleSpec spec,
-        IEnumerable<Family> families = null) {
+        IEnumerable<Family>? families = null) {
         // Get category
         var categoryId = FindCategoryByName(doc, spec.CategoryName);
         if (categoryId == ElementId.InvalidElementId)

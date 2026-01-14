@@ -22,6 +22,7 @@ public class RevitTypeSchemaProcessor : ISchemaProcessor {
 
         var properties = context.ContextualType.Type.GetProperties();
         var actualSchema = context.Schema.HasReference ? context.Schema.Reference : context.Schema;
+        if (actualSchema == null) return;
 
         foreach (var property in properties) {
             // Check if property type is registered
@@ -35,10 +36,11 @@ public class RevitTypeSchemaProcessor : ISchemaProcessor {
             // Determine which provider to use
             var providerType = registration.DefaultProvider;
 
-            if (registration.DiscriminatorType != null && registration.ProviderSelector != null) {
-                var discriminatorAttr = property.GetCustomAttribute(registration.DiscriminatorType);
+            if (registration.DiscriminatorType is { } discriminatorType &&
+                registration.ProviderSelector is { } providerSelector) {
+                var discriminatorAttr = property.GetCustomAttribute(discriminatorType);
                 if (discriminatorAttr != null) {
-                    var selectedProvider = registration.ProviderSelector(discriminatorAttr);
+                    var selectedProvider = providerSelector(discriminatorAttr);
                     if (selectedProvider != null)
                         providerType = selectedProvider;
                 }

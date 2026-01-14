@@ -22,7 +22,7 @@ public record ViewReference {
     public string DocumentKey { get; }
     public DateTime ActivatedAt { get; }
 
-    public virtual bool Equals(ViewReference other) {
+    public virtual bool Equals(ViewReference? other) {
         if (other == null) return false;
         return this.DocumentKey == other.DocumentKey && this.ViewId.Equals(other.ViewId);
     }

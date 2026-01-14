@@ -7,12 +7,12 @@ namespace Pe.Global.Revit.Lib;
 ///     Immutable reference to either an internal PostableCommand or an external command id.
 /// </summary>
 public readonly record struct CommandRef {
-    private readonly string _external;
+    private readonly string? _external;
     private readonly PostableCommand? _internal;
     private CommandRef(PostableCommand i) => this._internal = i;
     private CommandRef(string e) => this._external = e;
 
-    public object Value => this._internal.HasValue ? this._internal.Value : this._external;
+    public string Value => this._internal?.ToString() ?? this._external ?? string.Empty;
 
     public static implicit operator CommandRef(PostableCommand i) => new(i);
     public static implicit operator CommandRef(string e) => new(e);
@@ -39,11 +39,13 @@ public readonly record struct CommandRef {
     /// </summary>
     public Result<RevitCommandId> GetPostableCommandId(UIApplication uiApp) {
         var (id, idErr) = this.GetCommandId();
-        return idErr is not null
-            ? idErr
-            : uiApp.CanPostCommand(id)
-                ? id
-                : null;
+        if (idErr is not null)
+            return idErr;
+
+        if (id == null)
+            return new InvalidOperationException("Command ID is null");
+
+        return uiApp.CanPostCommand(id) ? id : new InvalidOperationException("Command is not postable");
     }
 }
 

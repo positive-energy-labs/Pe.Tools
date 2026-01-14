@@ -16,7 +16,7 @@ namespace Pe.Global.Services.Storage.Core.Json.Converters;
 /// </code>
 /// </summary>
 public class CategoryConverter : JsonConverter<Category> {
-    public override void WriteJson(JsonWriter writer, Category value, JsonSerializer serializer) {
+    public override void WriteJson(JsonWriter writer, Category? value, JsonSerializer serializer) {
         if (value == null) {
             writer.WriteNull();
             return;
@@ -26,9 +26,9 @@ public class CategoryConverter : JsonConverter<Category> {
         writer.WriteValue(value.Name);
     }
 
-    public override Category ReadJson(JsonReader reader,
+    public override Category? ReadJson(JsonReader reader,
         Type objectType,
-        Category existingValue,
+        Category? existingValue,
         bool hasExistingValue,
         JsonSerializer serializer) {
         if (reader.TokenType == JsonToken.Null) return null;

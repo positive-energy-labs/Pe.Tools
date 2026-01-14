@@ -3,7 +3,12 @@ using UIFrameworkServices;
 namespace Pe.Extensions.FamDocument;
 
 public static class FamilyDocumentProcessFamily {
-    public static FamilyDocument GetFamilyDocument(this Document doc, Family family = null) {
+    public static FamilyDocument GetFamilyDocument(this Document doc) {
+        if (doc.IsFamilyDocument) return new FamilyDocument(doc);
+        throw new InvalidOperationException("Document is not a family document");
+    }
+
+    public static FamilyDocument GetFamilyDocument(this Document doc, Family family) {
         if (doc.IsFamilyDocument) return new FamilyDocument(doc);
         if (family == null) throw new ArgumentNullException(nameof(family));
         var famDoc = doc.EditFamily(family);
@@ -120,7 +125,7 @@ public static class FamilyDocumentProcessFamily {
         return famDoc;
     }
 
-    public static Family LoadAndClose(this FamilyDocument famDoc, Document doc, IFamilyLoadOptions options = null) {
+    public static Family LoadAndClose(this FamilyDocument famDoc, Document doc, IFamilyLoadOptions? options = null) {
         if (options == null) options = new DefaultFamilyLoadOptions();
         var family = famDoc.LoadFamily(doc, options);
         var closed = famDoc.Close(false);

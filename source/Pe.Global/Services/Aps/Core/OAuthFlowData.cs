@@ -9,8 +9,8 @@ namespace Pe.Global.Services.Aps.Core;
 /// </summary>
 internal sealed record OAuthFlowData {
     public required string ClientId { get; init; }
-    public string ClientSecret { get; init; }
-    public string CodeVerifier { get; init; }
+    public string? ClientSecret { get; init; }
+    public string? CodeVerifier { get; init; }
 
     /// <summary>True if this is a PKCE (public client) flow</summary>
     public bool IsPkce => this.CodeVerifier != null;
@@ -36,6 +36,9 @@ internal sealed record OAuthFlowData {
     public string GenerateCodeChallenge() {
         if (!this.IsPkce)
             throw new InvalidOperationException("Code challenge only available for PKCE flows");
+
+        if (string.IsNullOrEmpty(this.CodeVerifier))
+            throw new InvalidOperationException("CodeVerifier is null or empty");
 
         using var sha256 = SHA256.Create();
         var hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(this.CodeVerifier));

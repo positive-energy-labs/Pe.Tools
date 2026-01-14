@@ -5,17 +5,15 @@ using System.Diagnostics;
 namespace Pe.Extensions.FamDocument;
 
 public static class Formula {
-    private static HashSet<ForgeTypeId> _forbiddenDataTypes;
-
     /// <summary>
     ///     Datatypes for which formulas cannot be assigned
     /// </summary>
     /// <remarks> Must be a getter, when it is a simple statically initialized property it errors with NullReferences</remarks>
-    public static HashSet<ForgeTypeId> ForbiddenDataTypes =>
-        _forbiddenDataTypes ??= [
+    private static readonly HashSet<ForgeTypeId> _forbiddenDataTypes = [
             SpecTypeId.String.Url,
             SpecTypeId.Reference.LoadClassification
         ];
+
 
     /// <summary>
     ///     Unset a formula on a family parameter. The same as calling
@@ -49,7 +47,7 @@ public static class Formula {
         this FamilyDocument famDoc,
         FamilyParameter targetParam,
         string formula,
-        out string errorMessage
+        out string? errorMessage
     ) {
         errorMessage = null;
 
@@ -99,7 +97,7 @@ public static class Formula {
     public static bool TrySetFormula(this FamilyDocument famDoc,
         FamilyParameter targetParam,
         FamilyParameter sourceParam,
-        out string errorMessage) {
+        out string? errorMessage) {
         if (string.IsNullOrWhiteSpace(sourceParam.Formula)) {
             errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. " +
                            $"Source parameter '{sourceParam.Name()}' has no formula.";
@@ -137,15 +135,15 @@ public static class Formula {
     public static bool TrySetFormulaFast(
         this FamilyDocument famDoc,
         FamilyParameter targetParam,
-        string formula,
-        out string errorMessage
+        string? formula,
+        out string? errorMessage
     ) {
         errorMessage = null;
 
         try {
-            if (ForbiddenDataTypes.Contains(targetParam.Definition.GetDataType())) {
+            if (_forbiddenDataTypes.Contains(targetParam.Definition.GetDataType())) {
                 errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. " +
-                               $"This datatype formula-forbidden, among these others: {string.Join(", ", ForbiddenDataTypes.Select(d => d.ToLabel()))}.";
+                               $"This datatype formula-forbidden, among these others: {string.Join(", ", _forbiddenDataTypes.Select(d => d.ToLabel()))}.";
                 return false;
             }
 

@@ -69,11 +69,13 @@ public class RequiredAwareContractResolver : RevitTypeContractResolver {
     /// <summary>
     ///     Gets or creates a cached default instance for the given type.
     /// </summary>
-    private object GetOrCreateDefaultInstance(Type type) {
+    private object? GetOrCreateDefaultInstance(Type type) {
         if (this._defaultInstanceCache.TryGetValue(type, out var cached)) return cached;
 
         var instance = this.TryCreateDefaultInstance(type);
-        this._defaultInstanceCache[type] = instance;
+        if (instance != null) {
+            this._defaultInstanceCache[type] = instance;
+        }
         return instance;
     }
 
@@ -94,12 +96,12 @@ public class RequiredAwareContractResolver : RevitTypeContractResolver {
                 var constructor = constructors.OrderBy(c => c.GetParameters().Length).FirstOrDefault();
                 if (constructor != null) {
                     var parameters = constructor.GetParameters();
-                    var paramValues = new object[parameters.Length];
+                    var paramValues = new object?[parameters.Length];
 
                     for (var i = 0; i < parameters.Length; i++) {
                         var paramType = parameters[i].ParameterType;
                         // Try to create a default value for each parameter
-                        paramValues[i] = paramType.IsValueType ? Activator.CreateInstance(paramType) : default;
+                        paramValues[i] = paramType.IsValueType ? Activator.CreateInstance(paramType) : null;
                     }
 
                     return constructor.Invoke(paramValues);
@@ -116,7 +118,7 @@ public class RequiredAwareContractResolver : RevitTypeContractResolver {
     /// <summary>
     ///     Gets the default value for a property from the default instance.
     /// </summary>
-    private object GetDefaultValue(PropertyInfo propertyInfo, object defaultInstance) {
+    private object? GetDefaultValue(PropertyInfo propertyInfo, object? defaultInstance) {
         try {
             // if (defaultInstance == null) Debug.WriteLine($"property {propertyInfo.Name} is null");
             if (defaultInstance == null) return null;

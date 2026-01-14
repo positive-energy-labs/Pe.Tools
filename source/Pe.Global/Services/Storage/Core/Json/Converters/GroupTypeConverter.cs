@@ -13,7 +13,7 @@ public class GroupTypeConverter : JsonConverter<ForgeTypeId> {
     private static readonly Lazy<Dictionary<string, ForgeTypeId>> _labelMap =
         new(PropertyGroupNamesProvider.GetLabelForgeMap());
 
-    public override void WriteJson(JsonWriter writer, ForgeTypeId value, JsonSerializer serializer) {
+    public override void WriteJson(JsonWriter writer, ForgeTypeId? value, JsonSerializer serializer) {
         if (value == null) {
             writer.WriteNull();
             return;
@@ -29,14 +29,14 @@ public class GroupTypeConverter : JsonConverter<ForgeTypeId> {
         try {
             var label = value.ToLabel();
             writer.WriteValue(label);
-        } catch (Exception ex) {
+        } catch {
             writer.WriteValue(value.TypeId);
         }
     }
 
-    public override ForgeTypeId ReadJson(JsonReader reader,
+    public override ForgeTypeId? ReadJson(JsonReader reader,
         Type objectType,
-        ForgeTypeId existingValue,
+        ForgeTypeId? existingValue,
         bool hasExistingValue,
         JsonSerializer serializer) {
         if (reader.TokenType == JsonToken.Null) return null;

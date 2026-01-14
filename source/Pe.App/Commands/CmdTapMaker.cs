@@ -2,6 +2,7 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB.Mechanical;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Selection;
+using Pe.Global.PolyFill;
 using Pe.Global.Revit.Lib;
 using Pe.Global.Revit.Mep.Mechanical;
 using Pe.Global.Revit.Ui;
@@ -185,7 +186,7 @@ public class DuctFaceSelectionFilter : ISelectionFilter {
         return elem.Category?.Id.IntegerValue == (int)BuiltInCategory.OST_DuctCurves;
 #else
 #pragma warning disable IDE0022 // Use expression body for method
-        return elem.Category?.Id.Value == (int)BuiltInCategory.OST_DuctCurves;
+        return elem.Category?.Id.Value() == (int)BuiltInCategory.OST_DuctCurves;
 #pragma warning restore IDE0022 // Use expression body for method
 #endif
     }

@@ -1,5 +1,6 @@
 using Pe.Extensions.FamDocument;
 using Pe.Extensions.FamParameter.Formula;
+using Pe.Global.PolyFill;
 
 namespace Pe.Extensions.FamParameter;
 
@@ -76,7 +77,7 @@ public static class FamilyParameterGetAssociated {
     /// <returns>True if the parameter has any direct physical associations</returns>
     public static bool HasDirectAssociation(this FamilyParameter param, FamilyDocument doc) =>
         param.AssociatedParameters
-            .Cast<Parameter>().Any(p => p.Id.Value >= 0 && doc.Document.GetElement(p.Id) != null) ||
+            .Cast<Parameter>().Any(p => p.Id.Value() >= 0 && doc.Document.GetElement(p.Id) != null) ||
         param.AssociatedArrays(doc).Any() ||
         param.AssociatedDimensions(doc).Any() ||
         param.AssociatedConnectors(doc).Any();
