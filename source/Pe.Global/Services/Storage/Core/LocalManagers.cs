@@ -14,17 +14,28 @@ public abstract class BaseLocalManager {
 
     /// <summary>
     ///     Get the path to the JSON file. Uses the <see cref="Name" /> of the manager by default.
+    ///     Automatically adds .json extension if not present.
     /// </summary>
-    public string GetJsonPath(string filename = null) =>
-        Path.Combine(this.DirectoryPath, filename ?? $"{this.Name}.json");
+    public string GetJsonPath(string filename = null) {
+        var name = filename ?? this.Name;
+        var nameWithExt = FileUtils.EnsureExtension(name, ".json");
+        return Path.Combine(this.DirectoryPath, nameWithExt);
+    }
 
     /// <summary>
     ///     Get the path to the JSON file with a timestamp in the filename. Uses the <see cref="Name" /> of the manager by
-    ///     default.
+    ///     default. Automatically adds .json extension if not present.
     /// </summary>
-    public string GetDatedJsonPath(string filename = null) =>
-        Path.Combine(this.DirectoryPath,
-            $"{filename ?? this.Name}_{DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss")}.json");
+    public string GetDatedJsonPath(string filename = null) {
+        var name = filename ?? this.Name;
+        // Remove .json extension if present, since we'll add it after the timestamp
+        if (name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            name = name.Substring(0, name.Length - 5);
+
+        var nameWithTimestamp = $"{name}_{DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss")}";
+        var nameWithExt = FileUtils.EnsureExtension(nameWithTimestamp, ".json");
+        return Path.Combine(this.DirectoryPath, nameWithExt);
+    }
 
     /// <summary>
     ///     Get the path to the CSV file. Uses the <see cref="Name" /> of the manager by default.
@@ -156,7 +167,7 @@ public class OutputManager : BaseLocalManager {
     public override string Name { get; init; } = "output";
 
     /// <summary>
-    ///     Creates a JSON writer for an output file of a provided name. YOU MUST provide a file extension yourself.
+    ///     Creates a JSON writer for an output file. Automatically adds .json extension if not present.
     ///     Write-only, no schema injection.
     /// </summary>
     public JsonWriter<object> Json(string filename) =>

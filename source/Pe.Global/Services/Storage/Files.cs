@@ -20,6 +20,45 @@ public static class FileUtils {
         return Convert.ToBase64String(hashBytes);
     }
 
+    /// <summary>
+    ///     Ensures a filename has the expected extension, adding it if missing.
+    ///     Validates that the filename doesn't contain invalid characters.
+    /// </summary>
+    /// <param name="filename">The filename (with or without extension)</param>
+    /// <param name="expectedExt">The expected extension (with or without leading dot)</param>
+    /// <returns>The filename with the correct extension</returns>
+    /// <exception cref="ArgumentException">If the filename is invalid or contains invalid characters</exception>
+    public static string EnsureExtension(string filename, string expectedExt) {
+        if (string.IsNullOrWhiteSpace(filename))
+            throw new ArgumentException("Filename cannot be null, empty, or whitespace.", nameof(filename));
+        if (string.IsNullOrWhiteSpace(expectedExt))
+            throw new ArgumentException("Expected extension cannot be null, empty, or whitespace.", nameof(expectedExt));
+
+        var normalizedExpectedExt = expectedExt.StartsWith(".")
+            ? expectedExt.ToLowerInvariant()
+            : $".{expectedExt.ToLowerInvariant()}";
+
+        // Check for invalid characters in the base filename
+        var invalidChars = Path.GetInvalidFileNameChars();
+        if (filename.IndexOfAny(invalidChars) >= 0)
+            throw new ArgumentException($"Filename contains invalid characters: {filename}", nameof(filename));
+
+        // If filename already has the correct extension, return as-is
+        var currentExt = Path.GetExtension(filename);
+        if (string.Equals(currentExt, normalizedExpectedExt, StringComparison.OrdinalIgnoreCase))
+            return filename;
+
+        // If filename has a different extension, throw an error
+        if (!string.IsNullOrEmpty(currentExt))
+            throw new ArgumentException(
+                $"Filename has extension '{currentExt}' but expected '{normalizedExpectedExt}'. " +
+                $"Either remove the extension or use the correct one.",
+                nameof(filename));
+
+        // Add the expected extension
+        return filename + normalizedExpectedExt;
+    }
+
     public static void ValidateFileNameAndExtension(string filePath, string expectedExt) {
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException(@"File path cannot be null, empty, or whitespace.", nameof(filePath));

@@ -44,8 +44,10 @@ var all = csv.Read();
 
 ```csharp
 var outputManager = storage.Output();
-outputManager.Json<object>("results.json").Write(results);
-outputManager.Csv<LogEntry>("log.csv").Write(logData);
+// Extension is automatically added if not present
+outputManager.Json("results").Write(results);           // Creates results.json
+outputManager.Json("results.json").Write(results);      // Also creates results.json
+outputManager.Csv("log.csv").Write(logData);
 var path = outputManager.DirectoryPath; // Get folder path to pass to other methods
 ```
 
