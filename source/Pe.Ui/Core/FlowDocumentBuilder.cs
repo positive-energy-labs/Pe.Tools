@@ -204,4 +204,123 @@ public static class FlowDocumentBuilder {
         doc.Blocks.Add(para);
         return doc;
     }
+
+    /// <summary>
+    ///     Adds a compact table with column headers and rows of data.
+    ///     Simple API: pass column names and rows as dictionaries.
+    /// </summary>
+    /// <param name="doc">The FlowDocument to add the table to</param>
+    /// <param name="columns">Column names in display order</param>
+    /// <param name="rows">List of row data as dictionaries (key = column name, value = cell content)</param>
+    /// <param name="fontSize">Font size for table content (default 10)</param>
+    /// <param name="margin">Margin around the table</param>
+    /// <returns>The FlowDocument for chaining</returns>
+    public static FlowDocument AddTable(
+        this FlowDocument doc,
+        IEnumerable<string> columns,
+        IEnumerable<Dictionary<string, string>> rows,
+        double fontSize = 10,
+        Thickness? margin = null
+    ) {
+        var columnList = columns?.ToList();
+        var rowList = rows?.ToList();
+
+        if (columnList is not { Count: > 0 } || rowList is not { Count: > 0 })
+            return doc;
+
+        var table = new Table {
+            CellSpacing = 0,
+            FontSize = fontSize,
+            Margin = margin ?? new Thickness(0, 0, 0, 12)
+        };
+
+        // Define columns
+        foreach (var _ in columnList)
+            table.Columns.Add(new TableColumn());
+
+        // Add header row
+        var headerGroup = new TableRowGroup();
+        var headerRow = new TableRow();
+        headerRow.SetResourceReference(TableRow.BackgroundProperty, "ControlFillColorDefaultBrush");
+
+        foreach (var column in columnList) {
+            var cell = new TableCell(new Paragraph(new Run(column) {
+                FontWeight = FontWeights.SemiBold,
+                FontSize = fontSize
+            }) {
+                Margin = new Thickness(4, 2, 4, 2)
+            }) {
+                Padding = new Thickness(0)
+            };
+            headerRow.Cells.Add(cell);
+        }
+
+        headerGroup.Rows.Add(headerRow);
+        table.RowGroups.Add(headerGroup);
+
+        // Add data rows
+        var dataGroup = new TableRowGroup();
+        var isAlternate = false;
+
+        foreach (var rowData in rowList) {
+            var dataRow = new TableRow();
+
+            // Alternate row background for readability
+            if (isAlternate)
+                dataRow.SetResourceReference(TableRow.BackgroundProperty, "ControlFillColorDefaultBrush");
+
+            foreach (var column in columnList) {
+                var value = rowData.TryGetValue(column, out var v) ? v : string.Empty;
+                var cell = new TableCell(new Paragraph(new Run(value) { FontSize = fontSize }) {
+                    Margin = new Thickness(4, 2, 4, 2)
+                }) {
+                    Padding = new Thickness(0)
+                };
+                dataRow.Cells.Add(cell);
+            }
+
+            dataGroup.Rows.Add(dataRow);
+            isAlternate = !isAlternate;
+        }
+
+        table.RowGroups.Add(dataGroup);
+        doc.Blocks.Add(table);
+        return doc;
+    }
+
+    /// <summary>
+    ///     Adds a compact table from objects using property selectors.
+    ///     More type-safe API for when you have strongly-typed data.
+    /// </summary>
+    /// <typeparam name="T">Type of the data objects</typeparam>
+    /// <param name="doc">The FlowDocument to add the table to</param>
+    /// <param name="items">Data items to display</param>
+    /// <param name="columns">Column definitions (name, selector function)</param>
+    /// <param name="fontSize">Font size for table content (default 10)</param>
+    /// <param name="margin">Margin around the table</param>
+    /// <returns>The FlowDocument for chaining</returns>
+    public static FlowDocument AddTable<T>(
+        this FlowDocument doc,
+        IEnumerable<T> items,
+        IEnumerable<(string columnName, Func<T, string> selector)> columns,
+        double fontSize = 10,
+        Thickness? margin = null
+    ) {
+        var itemList = items?.ToList();
+        var columnList = columns?.ToList();
+
+        if (columnList is not { Count: > 0 } || itemList is not { Count: > 0 })
+            return doc;
+
+        // Convert to dictionary format and use main AddTable method
+        var columnNames = columnList.Select(c => c.columnName);
+        var rows = itemList.Select(item => {
+            var row = new Dictionary<string, string>();
+            foreach (var (columnName, selector) in columnList)
+                row[columnName] = selector(item) ?? string.Empty;
+            return row;
+        });
+
+        return doc.AddTable(columnNames, rows, fontSize, margin);
+    }
 }

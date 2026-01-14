@@ -88,8 +88,7 @@ public class Application : ExternalApplication {
         ]);
 
         ButtonDataHydrator.AddButtonData([
-            panelMigration.AddPushButton<CmdCreateSchedule>("Create Schedule"),
-            panelMigration.AddPushButton<CmdSerializeSchedule>("Serialize Schedule"),
+            panelMigration.AddPushButton<CmdSchedulePalette>("Schedule Manager"),
             panelMigration.AddPushButton<CmdFFManager>("FF Manager"),
             panelMigration.AddPushButton<CmdFFManagerSnapshot>("FF Manager Snapshot"),
             panelMigration.AddPushButton<CmdFFMigrator>("FF Migrator"),

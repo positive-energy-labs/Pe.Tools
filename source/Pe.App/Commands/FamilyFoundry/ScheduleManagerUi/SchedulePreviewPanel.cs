@@ -63,61 +63,38 @@ public class SchedulePreviewPanel : UserControl {
 
             // Fields list with details
             if (data.Fields.Count > 0) {
-                doc.AddSectionHeader("Fields");
-                var fieldList = new List {
-                    MarkerStyle = TextMarkerStyle.Decimal, Margin = new Thickness(16, 0, 0, 12)
-                };
-                foreach (var field in data.Fields) {
-                    var para = new Paragraph();
-                    para.Inlines.Add(new Run(field.ParameterName) { FontWeight = FontWeights.SemiBold });
-                    para.Inlines.Add(new LineBreak());
-
-                    var details = new List<string>();
-                    if (!string.IsNullOrEmpty(field.ColumnHeaderOverride))
-                        details.Add($"Header: {field.ColumnHeaderOverride}");
-                    if (field.IsHidden)
-                        details.Add("Hidden");
-                    if (field.DisplayType != ScheduleFieldDisplayType.Standard)
-                        details.Add($"Display: {field.DisplayType}");
-                    if (field.ColumnWidth.HasValue)
-                        details.Add($"Width: {field.ColumnWidth:F2}");
-                    if (field.CalculatedType.HasValue)
-                        details.Add($"Calculated: {field.CalculatedType}");
-
-                    if (details.Any())
-                        para.Inlines.Add(new Run($"  {string.Join(", ", details)}") { FontSize = 10 });
-
-                    var listItem = new ListItem(para);
-                    fieldList.ListItems.Add(listItem);
-                }
-
-                doc.Blocks.Add(fieldList);
+                doc.AddSectionHeader($"Fields ({data.FieldCount})");
+                
+                // Build table data
+                doc.AddTable(
+                    data.Fields,
+                    [
+                        ("Name", f => f.ParameterName),
+                        ("Header", f => f.ColumnHeaderOverride ?? string.Empty),
+                        ("Display", f => f.DisplayType != ScheduleFieldDisplayType.Standard ? f.DisplayType.ToString() : string.Empty),
+                        ("Width", f => f.ColumnWidth.HasValue ? f.ColumnWidth.Value.ToString("F2") : string.Empty),
+                        ("Type", f => f.CalculatedType.HasValue ? f.CalculatedType.Value.ToString() : string.Empty),
+                        ("Hidden", f => f.IsHidden ? "Yes" : string.Empty)
+                    ],
+                    fontSize: 9
+                );
             }
 
             // Sort/Group list with details
             if (data.SortGroup.Count > 0) {
-                doc.AddSectionHeader("Sort/Group Configuration");
-                var sortList = new List { MarkerStyle = TextMarkerStyle.Decimal, Margin = new Thickness(16, 0, 0, 12) };
-                foreach (var sort in data.SortGroup) {
-                    var para = new Paragraph();
-                    para.Inlines.Add(new Run(sort.FieldName) { FontWeight = FontWeights.SemiBold });
-                    para.Inlines.Add(new LineBreak());
-
-                    var details = new List<string> { $"Order: {sort.SortOrder}" };
-                    if (sort.ShowHeader)
-                        details.Add("Show Header");
-                    if (sort.ShowFooter)
-                        details.Add("Show Footer");
-                    if (sort.ShowBlankLine)
-                        details.Add("Blank Line");
-
-                    para.Inlines.Add(new Run($"  {string.Join(", ", details)}") { FontSize = 10 });
-
-                    var listItem = new ListItem(para);
-                    sortList.ListItems.Add(listItem);
-                }
-
-                doc.Blocks.Add(sortList);
+                doc.AddSectionHeader($"Sort/Group ({data.SortGroupCount})");
+                
+                doc.AddTable(
+                    data.SortGroup,
+                    [
+                        ("Field", sg => sg.FieldName),
+                        ("Order", sg => sg.SortOrder.ToString()),
+                        ("Header", sg => sg.ShowHeader ? "Yes" : string.Empty),
+                        ("Footer", sg => sg.ShowFooter ? "Yes" : string.Empty),
+                        ("Blank Line", sg => sg.ShowBlankLine ? "Yes" : string.Empty)
+                    ],
+                    fontSize: 9
+                );
             }
 
             // Profile JSON section

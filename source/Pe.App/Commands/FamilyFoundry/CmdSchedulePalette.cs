@@ -18,11 +18,13 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media.Imaging;
+using Color = System.Windows.Media.Color;
 
 namespace Pe.Tools.Commands.FamilyFoundry;
 
 [Transaction(TransactionMode.Manual)]
-public class CmdCreateSchedule : IExternalCommand {
+public class CmdSchedulePalette : IExternalCommand {
     public Result Execute(
         ExternalCommandData commandData,
         ref string message,
@@ -36,14 +38,7 @@ public class CmdCreateSchedule : IExternalCommand {
             var settingsManager = storage.SettingsDir();
             var schedulesSubDir = settingsManager.SubDir("schedules", true);
 
-            // Discover all schedule profile JSON files
-            var profiles = ScheduleListItem.DiscoverProfiles(schedulesSubDir);
-            if (profiles.Count == 0) {
-                throw new InvalidOperationException(
-                    $"No schedule profiles found in {schedulesSubDir.DirectoryPath}. Create a profile JSON file to continue.");
-            }
-
-            // State for tracking current selection
+            // Context for Create Schedule tab
             var context = new ScheduleManagerContext {
                 Doc = doc,
                 UiDoc = uiDoc,
@@ -51,44 +46,83 @@ public class CmdCreateSchedule : IExternalCommand {
                 SettingsManager = settingsManager
             };
 
+            // Collect items for both tabs
+            var createItems = ScheduleListItem.DiscoverProfiles(schedulesSubDir);
+            var serializeItems = new FilteredElementCollector(doc)
+                .OfClass(typeof(ViewSchedule))
+                .Cast<ViewSchedule>()
+                .Where(s => !s.Name.Contains("<Revision Schedule>"))
+                .OrderBy(s => s.Name)
+                .Select(s => new ScheduleSerializePaletteItem(s))
+                .ToList();
+
+            // Combine all items
+            var allItems = new List<ISchedulePaletteItem>();
+            allItems.AddRange(createItems.Select(i => new SchedulePaletteItemWrapper(i, ScheduleTabType.Create)));
+            allItems.AddRange(serializeItems.Select(i => new SchedulePaletteItemWrapper(i, ScheduleTabType.Serialize)));
+
             // Create preview panel
             var previewPanel = new SchedulePreviewPanel();
 
-            // Store window reference to be captured in actions
-            EphemeralWindow window = null;
-
             // Define actions for the palette
-            var actions = new List<PaletteAction<ScheduleListItem>> {
+            var actions = new List<PaletteAction<ISchedulePaletteItem>> {
                 new() {
                     Name = "Create Schedule",
-                    Execute = async _ => this.HandleCreateSchedule(context),
-                    CanExecute = _ => context.PreviewData?.IsValid == true
+                    Execute = async item => this.HandleCreateSchedule(context, item),
+                    CanExecute = item => item.TabType == ScheduleTabType.Create && context.PreviewData?.IsValid == true
                 },
                 new() {
                     Name = "Place Sample Families",
-                    Execute = async _ => this.HandlePlaceSampleFamilies(context),
-                    CanExecute = _ => context.SelectedProfile != null
+                    Execute = async item => this.HandlePlaceSampleFamilies(context, item),
+                    CanExecute = item => item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
                 },
                 new() {
                     Name = "Open File",
-                    Execute = async _ => this.HandleOpenFile(context),
-                    CanExecute = _ => context.SelectedProfile != null
+                    Execute = async item => this.HandleOpenFile(item),
+                    CanExecute = item => item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
+                },
+                new() {
+                    Name = "Serialize",
+                    Execute = item => this.HandleSerialize(item),
+                    CanExecute = item => item.TabType == ScheduleTabType.Serialize
                 }
             };
 
-            // Create the palette with sidebar
-            window = PaletteFactory.Create("Schedule Manager - Select Profile", profiles, actions,
-                new PaletteOptions<ScheduleListItem> {
+            // Create the palette with tabs
+            var window = PaletteFactory.Create("Schedule Manager", allItems, actions,
+                new PaletteOptions<ISchedulePaletteItem> {
                     Storage = storage,
                     PersistenceKey = item => item.TextPrimary,
-                    SearchConfig = SearchConfig.PrimaryAndSecondary(),
-                    FilterKeySelector = item => item.CategoryName,
+                    Tabs = [
+                        new() {
+                            Name = "Create",
+                            Filter = i => i.TabType == ScheduleTabType.Create,
+                            FilterKeySelector = i => i.CategoryName
+                        },
+                        new() {
+                            Name = "Serialize",
+                            Filter = i => i.TabType == ScheduleTabType.Serialize,
+                            FilterKeySelector = i => i.TextPill
+                        }
+                    ],
+                    DefaultTabIndex = 0,
+                    Sidebar = new PaletteSidebar { Content = previewPanel },
                     OnSelectionChangedDebounced = item => {
-                        this.BuildPreviewData(item, context);
-                        if (context.PreviewData != null)
-                            previewPanel.UpdatePreview(context.PreviewData);
-                    },
-                    Sidebar = new PaletteSidebar { Content = previewPanel }
+                        if (item.TabType == ScheduleTabType.Create) {
+                            this.BuildPreviewData(item.GetCreateItem(), context);
+                            if (context.PreviewData != null)
+                                previewPanel.UpdatePreview(context.PreviewData);
+                        } else {
+                            // Show serialization preview for serialize tab
+                            var serializeItem = item.GetSerializeItem();
+                            if (serializeItem != null) {
+                                var previewData = this.BuildSerializationPreview(serializeItem);
+                                previewPanel.UpdatePreview(previewData);
+                            } else {
+                                previewPanel.UpdatePreview(null);
+                            }
+                        }
+                    }
                 });
 
             window.Show();
@@ -186,8 +220,47 @@ public class CmdCreateSchedule : IExternalCommand {
             RemainingErrors = [$"{ex.GetType().Name}: {ex.Message}"]
         };
 
-    private void HandleCreateSchedule(ScheduleManagerContext ctx) {
-        if (ctx.SelectedProfile == null) return;
+    private SchedulePreviewData BuildSerializationPreview(ScheduleSerializePaletteItem serializeItem) {
+        try {
+            // Serialize the schedule to get the spec
+            var spec = ScheduleHelper.SerializeSchedule(serializeItem.Schedule);
+
+            // Serialize to JSON exactly as it would be saved
+            var profileJson = JsonSerializer.Serialize(
+                spec,
+                new JsonSerializerOptions {
+                    WriteIndented = true,
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                });
+
+            return new SchedulePreviewData {
+                ProfileName = spec.Name,
+                CategoryName = spec.CategoryName,
+                IsItemized = spec.IsItemized,
+                Fields = spec.Fields,
+                SortGroup = spec.SortGroup,
+                ProfileJson = profileJson,
+                FilePath = string.Empty,
+                CreatedDate = null,
+                ModifiedDate = null,
+                IsValid = true
+            };
+        } catch (Exception ex) {
+            return new SchedulePreviewData {
+                ProfileName = serializeItem.TextPrimary,
+                IsValid = false,
+                RemainingErrors = [$"Serialization error: {ex.Message}"]
+            };
+        }
+    }
+
+    private void HandleCreateSchedule(ScheduleManagerContext ctx, ISchedulePaletteItem item) {
+        var profileItem = item.GetCreateItem();
+        if (profileItem == null) return;
+
+        // Update context with selected profile
+        this.BuildPreviewData(profileItem, ctx);
+
         if (!ctx.PreviewData.IsValid) {
             new Ballogger()
                 .Add(LogEventLevel.Error, new StackFrame(), "Cannot create schedule - profile has validation errors")
@@ -282,7 +355,13 @@ public class CmdCreateSchedule : IExternalCommand {
             balloon.Show();
     }
 
-    private void HandlePlaceSampleFamilies(ScheduleManagerContext context) {
+    private void HandlePlaceSampleFamilies(ScheduleManagerContext context, ISchedulePaletteItem item) {
+        var profileItem = item.GetCreateItem();
+        if (profileItem == null) return;
+
+        // Update context with selected profile
+        this.BuildPreviewData(profileItem, context);
+
         var profile = context.SettingsManager.SubDir("schedules", true)
             .Json<ScheduleSpec>($"{context.SelectedProfile.TextPrimary}.json")
             .Read();
@@ -330,10 +409,11 @@ public class CmdCreateSchedule : IExternalCommand {
             "Schedule Manager");
     }
 
-    private void HandleOpenFile(ScheduleManagerContext context) {
-        if (context.SelectedProfile == null) return;
+    private void HandleOpenFile(ISchedulePaletteItem item) {
+        var profileItem = item.GetCreateItem();
+        if (profileItem == null) return;
 
-        var filePath = context.SelectedProfile.FilePath;
+        var filePath = profileItem.FilePath;
         if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) {
             new Ballogger()
                 .Add(LogEventLevel.Warning, new StackFrame(), $"Profile file not found: {filePath}")
@@ -342,6 +422,53 @@ public class CmdCreateSchedule : IExternalCommand {
         }
 
         FileUtils.OpenInDefaultApp(filePath);
+    }
+
+    private Task HandleSerialize(ISchedulePaletteItem item) {
+        var serializeItem = item.GetSerializeItem();
+        if (serializeItem == null) return Task.CompletedTask;
+
+        try {
+            var storage = new Storage("Schedule Manager");
+            var outputDir = storage.OutputDir();
+            var spec = ScheduleHelper.SerializeSchedule(serializeItem.Schedule);
+            var filename = outputDir.Json($"{spec.Name}.json").Write(spec);
+
+            var balloon = new Ballogger();
+            _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
+                $"Serialized schedule '{serializeItem.Schedule.Name}' to {filename}");
+
+            // Report what was serialized
+            _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
+                $"Fields: {spec.Fields.Count} ({spec.Fields.Count(f => f.CalculatedType != null)} calculated)");
+
+            if (spec.SortGroup.Count > 0) {
+                _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
+                    $"Sort/Group: {spec.SortGroup.Count}");
+            }
+
+            if (spec.Filters.Count > 0) {
+                _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
+                    $"Filters: {spec.Filters.Count}");
+            }
+
+            var headerGroupCount = spec.Fields.Count(f => !string.IsNullOrEmpty(f.HeaderGroup));
+            if (headerGroupCount > 0) {
+                var uniqueGroups = spec.Fields
+                    .Where(f => !string.IsNullOrEmpty(f.HeaderGroup))
+                    .Select(f => f.HeaderGroup)
+                    .Distinct()
+                    .Count();
+                _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
+                    $"Header Groups: {uniqueGroups} group(s) across {headerGroupCount} field(s)");
+            }
+
+            balloon.Show();
+        } catch (Exception ex) {
+            new Ballogger().Add(LogEventLevel.Error, new StackFrame(), ex, true).Show();
+        }
+
+        return Task.CompletedTask;
     }
 
     private string WriteCreationOutput(ScheduleManagerContext ctx, ScheduleCreationResult result) {
@@ -424,4 +551,76 @@ public class ScheduleSettings {
         "Current profile to use for the command. This determines which schedule profile is used when creating a schedule.")]
     [Required]
     public string CurrentProfile { get; set; } = "Default";
+}
+
+public enum ScheduleTabType {
+    Create,
+    Serialize
+}
+
+/// <summary>
+/// Interface for items in the unified schedule palette
+/// </summary>
+public interface ISchedulePaletteItem : IPaletteListItem {
+    ScheduleTabType TabType { get; }
+    string CategoryName { get; }
+    ScheduleListItem GetCreateItem();
+    ScheduleSerializePaletteItem GetSerializeItem();
+}
+
+/// <summary>
+/// Wrapper that adapts both item types to work in the unified palette
+/// </summary>
+public class SchedulePaletteItemWrapper : ISchedulePaletteItem {
+    private readonly IPaletteListItem _inner;
+
+    public SchedulePaletteItemWrapper(IPaletteListItem inner, ScheduleTabType tabType) {
+        this._inner = inner;
+        this.TabType = tabType;
+    }
+
+    public ScheduleTabType TabType { get; }
+
+    public string CategoryName => this._inner switch {
+        ScheduleListItem create => create.CategoryName,
+        ScheduleSerializePaletteItem serialize => serialize.TextSecondary,
+        _ => string.Empty
+    };
+
+    public ScheduleListItem GetCreateItem() => this._inner as ScheduleListItem;
+    public ScheduleSerializePaletteItem GetSerializeItem() => this._inner as ScheduleSerializePaletteItem;
+
+    // Delegate all IPaletteListItem members to inner
+    public string TextPrimary => this._inner.TextPrimary;
+    public string TextSecondary => this._inner.TextSecondary;
+    public string TextPill => this._inner.TextPill;
+    public Func<string> GetTextInfo => this._inner.GetTextInfo;
+    public BitmapImage Icon => this._inner.Icon;
+    public Color? ItemColor => this._inner.ItemColor;
+}
+
+public class ScheduleSerializePaletteItem(ViewSchedule schedule) : IPaletteListItem {
+    public ViewSchedule Schedule { get; } = schedule;
+    public string TextPrimary => this.Schedule.Name;
+
+    public string TextSecondary {
+        get {
+            var category = Category.GetCategory(this.Schedule.Document, this.Schedule.Definition.CategoryId);
+            return category?.Name ?? string.Empty;
+        }
+    }
+
+    public string TextPill { get; } = schedule.FindParameter("Discipline")?.AsValueString();
+
+    public Func<string> GetTextInfo => () => {
+        var category = Category.GetCategory(this.Schedule.Document, this.Schedule.Definition.CategoryId);
+        var fieldCount = this.Schedule.Definition.GetFieldCount();
+        return $"Id: {this.Schedule.Id}" +
+               $"\nCategory: {category?.Name ?? "Unknown"}" +
+               $"\nFields: {fieldCount}" +
+               $"\nDiscipline: {this.TextPill}";
+    };
+
+    public BitmapImage Icon => null;
+    public Color? ItemColor => null;
 }

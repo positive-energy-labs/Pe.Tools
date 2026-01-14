@@ -4,8 +4,7 @@ namespace Pe.Global.Services.Storage;
 
 public class Storage(string addinName) {
     private static readonly string BasePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-        Assembly.GetExecutingAssembly().GetName().Name ?? "Pe.App");
+        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Pe.App");
 
     private readonly string _addinPath = Path.Combine(BasePath, addinName);
 

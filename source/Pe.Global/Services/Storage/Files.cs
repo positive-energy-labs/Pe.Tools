@@ -23,10 +23,11 @@ public static class FileUtils {
     /// <summary>
     ///     Ensures a filename has the expected extension, adding it if missing.
     ///     Validates that the filename doesn't contain invalid characters.
+    ///     Supports subdirectory paths (e.g., "subdir/file" or "subdir\file").
     /// </summary>
-    /// <param name="filename">The filename (with or without extension)</param>
+    /// <param name="filename">The filename or relative path (with or without extension)</param>
     /// <param name="expectedExt">The expected extension (with or without leading dot)</param>
-    /// <returns>The filename with the correct extension</returns>
+    /// <returns>The filename/path with the correct extension</returns>
     /// <exception cref="ArgumentException">If the filename is invalid or contains invalid characters</exception>
     public static string EnsureExtension(string filename, string expectedExt) {
         if (string.IsNullOrWhiteSpace(filename))
@@ -38,15 +39,25 @@ public static class FileUtils {
             ? expectedExt.ToLowerInvariant()
             : $".{expectedExt.ToLowerInvariant()}";
 
-        // Check for invalid characters in the base filename
+        // Normalize path separators to handle both / and \
+        var normalizedPath = filename.Replace('/', Path.DirectorySeparatorChar);
+
+        // Split into directory and filename components
+        var directoryPart = Path.GetDirectoryName(normalizedPath) ?? string.Empty;
+        var filenamePart = Path.GetFileName(normalizedPath);
+
+        if (string.IsNullOrWhiteSpace(filenamePart))
+            throw new ArgumentException("Path must contain a valid filename component.", nameof(filename));
+
+        // Check for invalid characters in the filename part only (not directory separators)
         var invalidChars = Path.GetInvalidFileNameChars();
-        if (filename.IndexOfAny(invalidChars) >= 0)
-            throw new ArgumentException($"Filename contains invalid characters: {filename}", nameof(filename));
+        if (filenamePart.IndexOfAny(invalidChars) >= 0)
+            throw new ArgumentException($"Filename contains invalid characters: {filenamePart}", nameof(filename));
 
         // If filename already has the correct extension, return as-is
-        var currentExt = Path.GetExtension(filename);
+        var currentExt = Path.GetExtension(filenamePart);
         if (string.Equals(currentExt, normalizedExpectedExt, StringComparison.OrdinalIgnoreCase))
-            return filename;
+            return normalizedPath;
 
         // If filename has a different extension, throw an error
         if (!string.IsNullOrEmpty(currentExt))
@@ -55,8 +66,11 @@ public static class FileUtils {
                 $"Either remove the extension or use the correct one.",
                 nameof(filename));
 
-        // Add the expected extension
-        return filename + normalizedExpectedExt;
+        // Add the expected extension to the filename part and recombine
+        var filenameWithExt = filenamePart + normalizedExpectedExt;
+        return string.IsNullOrEmpty(directoryPart)
+            ? filenameWithExt
+            : Path.Combine(directoryPart, filenameWithExt);
     }
 
     public static void ValidateFileNameAndExtension(string filePath, string expectedExt) {

@@ -87,14 +87,9 @@ public static class ButtonDataHydrator {
                     """
             }
         }, {
-            nameof(CmdCreateSchedule),
+            nameof(CmdSchedulePalette),
             new ButtonDataRecord {
-                SmallImage = "Red_16.png", LargeImage = "Red_32.png", ToolTip = "Create a new schedule from a profile."
-            }
-        }, {
-            nameof(CmdSerializeSchedule),
-            new ButtonDataRecord {
-                SmallImage = "Red_16.png", LargeImage = "Red_32.png", ToolTip = "Serialize a schedule to a JSON file."
+                SmallImage = "Red_16.png", LargeImage = "Red_32.png", ToolTip = "Create or serialize schedules."
             }
         }, {
             nameof(CmdFFMigrator),
