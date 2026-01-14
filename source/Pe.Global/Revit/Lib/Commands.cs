@@ -1,9 +1,7 @@
-using Autodesk.Revit.UI;
-using Pe.Library.Revit.Ui;
+using Pe.Global.Revit.Ui;
 using Serilog.Events;
-using System.Diagnostics;
 
-namespace Pe.Library.Revit.Lib;
+namespace Pe.Global.Revit.Lib;
 
 /// <summary>
 ///     Immutable reference to either an internal PostableCommand or an external command id.

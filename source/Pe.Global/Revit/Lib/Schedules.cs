@@ -6,7 +6,7 @@ using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
 using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
 using System.ComponentModel;
 
-namespace Pe.Library.Revit.Lib;
+namespace Pe.Global.Revit.Lib;
 
 public class ScheduleSpec {
     [Description("The name of the schedule as it will appear in the project browser.")]

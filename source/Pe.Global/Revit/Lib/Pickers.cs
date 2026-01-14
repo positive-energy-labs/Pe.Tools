@@ -1,7 +1,7 @@
 ﻿using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Selection;
 
-namespace Pe.Library.Revit.Lib;
+namespace Pe.Global.Revit.Lib;
 
 public class Pickers {
     /// <summary>

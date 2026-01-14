@@ -108,7 +108,7 @@ public class MruViewBuffer {
         var duration = DateTime.Now - previousViewRef.ActivatedAt;
         var wasOpenLongEnough = duration >= MinViewDuration;
 
-        Debug.Debug.WriteLine(
+        Debug.WriteLine(
             $"[MruViewBuffer] ShouldCommit '{previousViewRef.DocumentTitle}' viewId={previousViewRef.ViewId.Value()}: " +
             $"duration={duration.TotalSeconds:F1}s, minRequired={MinViewDuration.TotalSeconds}s, commit={wasOpenLongEnough}");
 

@@ -24,8 +24,6 @@ public class SpecTypeConverter : JsonConverter<ForgeTypeId> {
             var discipline = GetParentheticDiscipline(value);
             writer.WriteValue($"{label}{discipline}");
         } catch (Exception ex) {
-            Debug.Debug.WriteLine(
-                $"Failed to get label for SpecType ForgeTypeId: {value.TypeId}\n\t error message: {ex.Message}");
             writer.WriteValue(value.TypeId);
         }
     }

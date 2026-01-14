@@ -21,7 +21,6 @@
     <ItemGroup>
         <ProjectReference Include="..\Pe.Extensions\Pe.Extensions.csproj"/>
         <ProjectReference Include="..\Pe.Global\Pe.Global.csproj"/>
-        <ProjectReference Include="..\Pe.Library\Pe.Library.csproj"/>
         <ProjectReference Include="..\Pe.Ui\Pe.Ui.csproj"/>
     </ItemGroup>
 

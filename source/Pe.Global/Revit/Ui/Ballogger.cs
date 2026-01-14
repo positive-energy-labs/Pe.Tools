@@ -7,7 +7,7 @@ using System.Reflection;
 using System.Text;
 using System.Windows;
 
-namespace Pe.Library.Revit.Ui;
+namespace Pe.Global.Revit.Ui;
 
 /// <summary>Message collector for accumulating messages, then showing all at once</summary>
 public class Ballogger {

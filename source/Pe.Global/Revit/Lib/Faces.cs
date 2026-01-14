@@ -1,4 +1,4 @@
-namespace Pe.Library.Revit.Lib;
+namespace Pe.Global.Revit.Lib;
 
 public class Faces {
     public static UV GetCenter(Face face) {

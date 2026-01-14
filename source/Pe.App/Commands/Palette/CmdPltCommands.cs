@@ -96,14 +96,14 @@ public static class CommandPaletteService {
                 Name = "Execute",
                 Execute = async item => {
                     if (item is PostableCommandItem cmdItem) {
-                        var (success, error) = Library.Revit.Lib.Commands.Execute(uiApp, cmdItem.Command);
+                        var (success, error) = Global.Revit.Lib.Commands.Execute(uiApp, cmdItem.Command);
                         if (error is not null) Debug.WriteLine("Error: " + error.Message + error.StackTrace);
                         if (success) commandHelper.UpdateCommandUsage(cmdItem.Command);
                     }
                 },
                 CanExecute = item => {
                     if (item is PostableCommandItem cmdItem)
-                        return Library.Revit.Lib.Commands.IsAvailable(uiApp, cmdItem.Command);
+                        return Global.Revit.Lib.Commands.IsAvailable(uiApp, cmdItem.Command);
                     return false;
                 }
             }

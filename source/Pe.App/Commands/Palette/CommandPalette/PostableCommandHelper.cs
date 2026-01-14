@@ -1,7 +1,7 @@
 using Pe.Global.Services.Storage;
 using Pe.Global.Services.Storage.Core.Json;
-using Pe.Library.Revit.Lib;
-using Pe.Library.Revit.Ui;
+using Pe.Global.Revit.Lib;
+using Pe.Global.Revit.Ui;
 using Pe.Ui.Core;
 
 namespace Pe.App.Commands.Palette.CommandPalette;

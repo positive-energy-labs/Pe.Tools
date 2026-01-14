@@ -10,7 +10,6 @@ global using System.Text;
 global using System.Threading.Tasks;
 global using Autodesk.Revit.Attributes;
 global using Autodesk.Revit.DB;
-global using Debug = System.Diagnostics;
 global using System.IO;
 global using Autodesk.Revit.UI;
 global using View = Autodesk.Revit.DB.View;

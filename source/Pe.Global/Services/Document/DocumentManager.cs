@@ -166,16 +166,16 @@ public class DocumentManager {
     public void OnDocumentClosed(Autodesk.Revit.DB.Document doc) {
         if (doc == null) return;
 
-        Debug.Debug.WriteLine($"[DocumentManager] OnDocumentClosed: '{doc.Title}'");
+        Debug.WriteLine($"[DocumentManager] OnDocumentClosed: '{doc.Title}'");
 
         // Clean up MRU buffer
-        Debug.Debug.WriteLine("[DocumentManager] Removing from MRU buffer...");
+        Debug.WriteLine("[DocumentManager] Removing from MRU buffer...");
         this._mruBuffer.RemoveDocumentViews(doc);
 
         // Clean up color cache
-        Debug.Debug.WriteLine("[DocumentManager] Removing from color cache...");
+        Debug.WriteLine("[DocumentManager] Removing from color cache...");
         this._colorService.RemoveDocument(doc);
 
-        Debug.Debug.WriteLine("[DocumentManager] OnDocumentClosed complete");
+        Debug.WriteLine("[DocumentManager] OnDocumentClosed complete");
     }
 }

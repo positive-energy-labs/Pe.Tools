@@ -30,8 +30,6 @@ public class GroupTypeConverter : JsonConverter<ForgeTypeId> {
             var label = value.ToLabel();
             writer.WriteValue(label);
         } catch (Exception ex) {
-            Debug.Debug.WriteLine(
-                $"Failed to get label for GroupType ForgeTypeId: {value.TypeId}\n\t error message: {ex.Message}");
             writer.WriteValue(value.TypeId);
         }
     }

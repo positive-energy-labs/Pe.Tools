@@ -30,7 +30,6 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Pe.Global\Pe.Global.csproj"/>
-        <ProjectReference Include="..\Pe.Library\Pe.Library.csproj"/>
     </ItemGroup>
 
 </Project>

@@ -1,11 +1,10 @@
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
 using Condition = System.Windows.Automation.Condition;
 using Point = System.Windows.Point;
 
-namespace Pe.Library.Utils;
+namespace Pe.Global.Utils;
 
 // saving for later automations sequences
 public static class Automations {

@@ -1,4 +1,4 @@
-namespace Pe.Library.Revit.Mep.Mechanical;
+namespace Pe.Global.Revit.Mep.Mechanical;
 
 public enum ElbowType {
     Mitered,

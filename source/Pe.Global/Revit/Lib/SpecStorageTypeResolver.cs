@@ -1,6 +1,6 @@
 using System.Reflection;
 
-namespace Pe.Library.Revit.Lib;
+namespace Pe.Global.Revit.Lib;
 
 /// <summary>
 ///     Resolves a SpecTypeId (ForgeTypeId) to its corresponding StorageType.

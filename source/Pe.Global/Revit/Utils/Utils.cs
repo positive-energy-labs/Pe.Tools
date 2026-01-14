@@ -1,6 +1,6 @@
 ﻿// Fixes CS0138 by using 'using static' for the Filters type
 
-namespace Pe.Library.Revit.Utils;
+namespace Pe.Global.Revit.Utils;
 
 public class Utils {
     // Helper method to get current Revit version

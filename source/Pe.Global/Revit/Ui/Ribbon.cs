@@ -2,7 +2,7 @@ using Autodesk.Windows;
 using System.ComponentModel;
 using System.Windows.Media;
 
-namespace Pe.Library.Revit.Ui;
+namespace Pe.Global.Revit.Ui;
 
 public class Ribbon {
     public static IEnumerable<DiscoveredTab> GetAllTabs() {
