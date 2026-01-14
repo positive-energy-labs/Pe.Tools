@@ -45,7 +45,10 @@ public class CmdCreateSchedule : IExternalCommand {
 
             // State for tracking current selection
             var context = new ScheduleManagerContext {
-                Doc = doc, UiDoc = uiDoc, Storage = storage, SettingsManager = settingsManager
+                Doc = doc,
+                UiDoc = uiDoc,
+                Storage = storage,
+                SettingsManager = settingsManager
             };
 
             // Create preview panel
@@ -137,7 +140,8 @@ public class CmdCreateSchedule : IExternalCommand {
         var profileJson = JsonSerializer.Serialize(
             profile,
             new JsonSerializerOptions {
-                WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                WriteIndented = true,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             });
 
         return new SchedulePreviewData {
@@ -161,7 +165,9 @@ public class CmdCreateSchedule : IExternalCommand {
     private static SchedulePreviewData
         CreateSanitizationErrorPreview(ScheduleListItem profileItem, JsonSanitizationException ex) {
         var preview = new SchedulePreviewData {
-            ProfileName = profileItem.TextPrimary, IsValid = false, RemainingErrors = []
+            ProfileName = profileItem.TextPrimary,
+            IsValid = false,
+            RemainingErrors = []
         };
 
         if (ex.AddedProperties.Any())
@@ -259,7 +265,6 @@ public class CmdCreateSchedule : IExternalCommand {
                 _ = balloon.Add(LogEventLevel.Warning, new StackFrame(), warning);
         }
 
-        balloon.Show();
 
         // Open the schedule view
         ctx.UiDoc.ActiveView = result.Schedule;
@@ -271,9 +276,10 @@ public class CmdCreateSchedule : IExternalCommand {
                         result.SkippedFilters.Count > 0 ||
                         result.SkippedHeaderGroups.Count > 0 ||
                         result.Warnings.Count > 0;
-
         if (hasIssues && !string.IsNullOrEmpty(outputPath))
-            FileUtils.OpenInDefaultApp(outputPath);
+            balloon.Show(clickHandler: () => FileUtils.OpenInDefaultApp(outputPath), clickDescription: "Open Output File");
+        else
+            balloon.Show();
     }
 
     private void HandlePlaceSampleFamilies(ScheduleManagerContext context) {
@@ -384,12 +390,15 @@ public class CmdCreateSchedule : IExternalCommand {
                 result.AppliedHeaderGroups,
                 SkippedHeaderGroups = result.SkippedHeaderGroups.Select(s => new { Reason = s }).ToList(),
                 CalculatedFields = result.SkippedCalculatedFields.Select(f => new {
-                    f.FieldName, f.CalculatedType, f.Guidance, f.PercentageOfField
+                    f.FieldName,
+                    f.CalculatedType,
+                    f.Guidance,
+                    f.PercentageOfField
                 }).ToList(),
                 result.Warnings
             };
 
-            var outputPath = ctx.Storage.OutputDir().Json("schedule-creation").Write(outputData);
+            var outputPath = ctx.Storage.OutputDir().Json(result.ScheduleName).Write(outputData);
             return outputPath;
         } catch (Exception ex) {
             Debug.WriteLine($"Failed to write output: {ex.Message}");

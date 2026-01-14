@@ -59,6 +59,25 @@ public class CoerceByStorageType : ICoercionStrategy {
                 $"Unsupported storage type conversion from {context.SourceStorageType} to {context.TargetStorageType}")
         };
 
-        return context.FamilyDocument.SetValue(context.TargetParam, convertedValue);
+        // Inline the Strict strategy to avoid recursive SetValue call
+        var fm = context.FamilyManager;
+        var target = context.TargetParam;
+
+        switch (convertedValue) {
+        case double doubleValue:
+            fm.Set(target, doubleValue);
+            return target;
+        case int intValue:
+            fm.Set(target, intValue);
+            return target;
+        case string stringValue:
+            fm.Set(target, stringValue);
+            return target;
+        case ElementId elementIdValue:
+            fm.Set(target, elementIdValue);
+            return target;
+        default:
+            return new ArgumentException($"Invalid type of value to set ({convertedValue?.GetType().Name ?? "null"})");
+        }
     }
 }

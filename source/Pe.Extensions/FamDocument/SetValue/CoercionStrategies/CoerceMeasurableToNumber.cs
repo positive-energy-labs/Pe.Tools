@@ -236,8 +236,8 @@ public class CoerceMeasurableToNumber : ICoercionStrategy {
         if (context.SourceDataType == null) return false;
         if (!UnitUtils.IsMeasurableSpec(context.SourceDataType)) return false;
 
-        // Check if we have a default target unit for this source type
-        return DefaultTargetUnits.ContainsKey(context.SourceDataType);
+        // Check if we have a default target unit for this source type (single lookup)
+        return DefaultTargetUnits.TryGetValue(context.SourceDataType, out _);
     }
 
     public Result<FamilyParameter> Map(CoercionContext context) {

@@ -6,6 +6,10 @@ namespace Pe.Extensions.FamDocument.SetValue.CoercionStrategies;
 ///     Electrical coercion strategy - converts numeric/string values to electrical parameters with unit conversion.
 /// </summary>
 public class CoerceElectrical : ICoercionStrategy {
+    // Pre-computed voltage ranges for performance
+    private static readonly HashSet<double> VoltRange240 = [.. Enumerable.Range(225, 21).Select(x => (double)x)];
+    private static readonly HashSet<double> VoltRange120 = [.. Enumerable.Range(107, 15).Select(x => (double)x)];
+
     public bool CanMap(CoercionContext context) {
         var isTargetElectrical = context.TargetDataType?.TypeId.Contains(".electrical:") == true;
         var canExtractDouble = Regexes.TryExtractDouble(context.SourceValue.ToString(), out _);
@@ -22,12 +26,14 @@ public class CoerceElectrical : ICoercionStrategy {
                 context.SourceValueString ?? context.SourceValue.ToString() ?? string.Empty,
                 context.TargetParam),
             _ => throw new ArgumentException(
-                $"Unsupported source type {context.SourceDataType.ToLabel()} for electrical coercion")
+                $"Unsupported source type {context.SourceDataType?.ToLabel() ?? "null"} for electrical coercion")
         };
 
         var convertedVal = UnitUtils.ConvertToInternalUnits(currVal, context.TargetUnitType);
 
-        return context.FamilyDocument.SetValue(context.TargetParam, convertedVal);
+        // Inline the Strict strategy to avoid recursive SetValue call
+        context.FamilyManager.Set(context.TargetParam, convertedVal);
+        return context.TargetParam;
     }
 
     private double ExtractDouble(string sourceValue, FamilyParameter targetParam) {
@@ -35,11 +41,9 @@ public class CoerceElectrical : ICoercionStrategy {
             return Regexes.ExtractDouble(sourceValue);
 
         // somewhat arbitrary ranges. 240 must account for 230. 120 must account for 110 or 115.
-        var voltRange240 = Enumerable.Range(225, 21).Select(x => (double)x).ToList();
-        var voltRange120 = Enumerable.Range(107, 15).Select(x => (double)x).ToList();
         if (sourceValue.Contains(208.ToString())) return 208;
-        if (voltRange240.Any(x => sourceValue.Contains(x.ToString()))) return 240;
-        if (voltRange120.Any(x => sourceValue.Contains(x.ToString()))) return 120;
+        if (VoltRange240.Any(x => sourceValue.Contains(x.ToString()))) return 240;
+        if (VoltRange120.Any(x => sourceValue.Contains(x.ToString()))) return 120;
 
         return Regexes.ExtractDouble(sourceValue);
     }

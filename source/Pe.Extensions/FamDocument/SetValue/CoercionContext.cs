@@ -42,33 +42,25 @@ public record CoercionContext {
     /// <summary>
     ///     The unit type id of the target parameter.
     ///     Use this to convert the source value to the target parameter's internal storage type.
+    ///     Cached for performance - computed once at context creation.
     ///     <code>
     /// var convertedVal = UnitUtils.ConvertToInternalUnits(sourceValue, context.TargetUnitType);
     /// context.FamilyDocument.SetValueStrict(context.TargetParam, convertedVal);
     /// </code>
     /// </summary>
-    public ForgeTypeId? TargetUnitType {
-        get {
-            try {
-                return this.FamilyDocument.GetUnits()
-                    .GetFormatOptions(this.TargetDataType)
-                    .GetUnitTypeId();
-            } catch {
-                return null; // not a measurable spec identifier
-            }
-        }
-    }
+    public ForgeTypeId? TargetUnitType { get; init; }
 
     /// <summary>
     ///     Factory method for creating a context from a direct value to target parameter mapping.
     /// </summary>
     public static CoercionContext FromValue(FamilyDocument doc, object sourceValue, FamilyParameter targetParam) =>
         new() {
-            FamilyDocument = new FamilyDocument(doc),
+            FamilyDocument = doc,
             FamilyManager = doc.FamilyManager,
             SourceValue = sourceValue,
             SourceStorageType = DeriveStorageTypeFromValue(sourceValue),
-            TargetParam = targetParam
+            TargetParam = targetParam,
+            TargetUnitType = ComputeTargetUnitType(doc, targetParam)
         };
 
     private static StorageType DeriveStorageTypeFromValue(object value) =>
@@ -87,12 +79,26 @@ public record CoercionContext {
         FamilyParameter sourceParam,
         FamilyParameter targetParam) =>
         new() {
-            FamilyDocument = new FamilyDocument(doc),
+            FamilyDocument = doc,
             FamilyManager = doc.FamilyManager,
             SourceValue = doc.GetValue(sourceParam),
             SourceValueString = doc.FamilyManager.CurrentType.AsValueString(sourceParam),
             SourceDataType = sourceParam.Definition.GetDataType(),
             SourceStorageType = sourceParam.StorageType,
-            TargetParam = targetParam
+            TargetParam = targetParam,
+            TargetUnitType = ComputeTargetUnitType(doc, targetParam)
         };
+
+    /// <summary>
+    ///     Computes the target unit type for a parameter, handling exceptions gracefully.
+    /// </summary>
+    private static ForgeTypeId? ComputeTargetUnitType(FamilyDocument doc, FamilyParameter targetParam) {
+        try {
+            return doc.GetUnits()
+                .GetFormatOptions(targetParam.Definition.GetDataType())
+                .GetUnitTypeId();
+        } catch {
+            return null; // not a measurable spec identifier
+        }
+    }
 }

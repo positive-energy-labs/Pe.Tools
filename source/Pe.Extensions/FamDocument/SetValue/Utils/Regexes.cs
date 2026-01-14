@@ -4,12 +4,16 @@ using System.Text.RegularExpressions;
 namespace Pe.Extensions.FamDocument.SetValue.Utils;
 
 public static class Regexes {
+    // Compiled regexes for performance - created once and reused
+    private static readonly Regex IntegerRegex = new(@"^-?\d+", RegexOptions.Compiled);
+    private static readonly Regex DoubleRegex = new(@"^-?\d*\.?\d+", RegexOptions.Compiled);
+
     public static bool TryExtractInteger(string? input, out int result) {
         result = 0;
         if (string.IsNullOrWhiteSpace(input)) return false;
 
         var trimmed = input!.Trim();
-        var match = Regex.Match(trimmed, @"^-?\d+");
+        var match = IntegerRegex.Match(trimmed);
 
         return match.Success
                && int.TryParse(match.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out result);
@@ -20,7 +24,7 @@ public static class Regexes {
         if (string.IsNullOrWhiteSpace(input)) return false;
 
         var trimmed = input!.Trim();
-        var match = Regex.Match(trimmed, @"^-?\d*\.?\d+");
+        var match = DoubleRegex.Match(trimmed);
 
         return match.Success
                && double.TryParse(match.Value, NumberStyles.Float | NumberStyles.AllowLeadingSign,
