@@ -52,33 +52,38 @@ public static class Formula {
         out string errorMessage
     ) {
         errorMessage = null;
-        if (string.IsNullOrWhiteSpace(formula)) return famDoc.TrySetFormulaFast(targetParam, null, out errorMessage);
 
-        var parameters = famDoc.FamilyManager.Parameters;
+        try {
+            if (string.IsNullOrWhiteSpace(formula)) return famDoc.TrySetFormulaFast(targetParam, null, out errorMessage);
 
-        // Validate all parameter-like tokens in the formula reference existing parameters
-        var invalidParams = parameters.GetInvalidReferences(formula).ToList();
-        if (invalidParams.Any()) {
-            throw new InvalidOperationException(
-                $"Cannot set formula on parameter '{targetParam.Name()}'. " +
-                $"Formula references non-existent parameters: {string.Join(", ", invalidParams.Select(p => $"'{p}'"))}");
-        }
+            var parameters = famDoc.FamilyManager.Parameters;
 
-        // Type parameters can only reference other type parameters
-        if (!targetParam.IsInstance) {
-            var referencedParams = parameters.GetReferencedIn(formula);
-            var instanceParams = referencedParams.Where(p => p.IsInstance).ToList();
-
-            if (instanceParams.Count > 0) {
-                var instanceNames = instanceParams.Select(p => $"'{p.Name()}'");
-                throw new InvalidOperationException(
-                    $"Cannot set formula on type parameter '{targetParam.Name()}'. " +
-                    $"Type parameter formulas cannot reference instance parameters: {string.Join(", ", instanceNames)}");
+            // Validate all parameter-like tokens in the formula reference existing parameters
+            var invalidParams = parameters.GetInvalidReferences(formula).ToList();
+            if (invalidParams.Count != 0) {
+                errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. " +
+                    $"Formula references non-existent parameters: {string.Join(", ", invalidParams.Select(p => $"'{p}'"))}";
+                return false;
             }
-        }
 
-        var success = famDoc.TrySetFormulaFast(targetParam, formula, out errorMessage);
-        if (!success) throw new InvalidOperationException(errorMessage);
+            // Type parameters can only reference other type parameters
+            if (!targetParam.IsInstance) {
+                var referencedParams = parameters.GetReferencedIn(formula);
+                var instanceParams = referencedParams.Where(p => p.IsInstance).ToList();
+
+                if (instanceParams.Count > 0) {
+                    var instanceNames = instanceParams.Select(p => $"'{p.Name()}'");
+                    errorMessage = $"Cannot set formula on type parameter '{targetParam.Name()}'. " +
+                        $"Type parameter formulas cannot reference instance parameters: {string.Join(", ", instanceNames)}";
+                    return false;
+                }
+            }
+
+            var success = famDoc.TrySetFormulaFast(targetParam, formula, out errorMessage);
+        } catch (Exception ex) {
+            errorMessage = ex.ToStringDemystified();
+            return false;
+        }
         return true;
     }
 
@@ -136,13 +141,14 @@ public static class Formula {
         out string errorMessage
     ) {
         errorMessage = null;
-        if (ForbiddenDataTypes.Contains(targetParam.Definition.GetDataType())) {
-            errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. " +
-                           $"This datatype formula-forbidden, among these others: {string.Join(", ", ForbiddenDataTypes.Select(d => d.ToLabel()))}.";
-            return false;
-        }
 
         try {
+            if (ForbiddenDataTypes.Contains(targetParam.Definition.GetDataType())) {
+                errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. " +
+                               $"This datatype formula-forbidden, among these others: {string.Join(", ", ForbiddenDataTypes.Select(d => d.ToLabel()))}.";
+                return false;
+            }
+
             famDoc.FamilyManager.SetFormula(targetParam, string.IsNullOrWhiteSpace(formula) ? null : formula);
             return true;
         } catch (Exception ex) {

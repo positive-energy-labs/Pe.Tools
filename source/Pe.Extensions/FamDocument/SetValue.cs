@@ -1,6 +1,6 @@
 using Pe.Extensions.FamDocument.SetValue;
 using System.Globalization;
-
+using BCS = Pe.Extensions.FamDocument.SetValue.BuiltInCoercionStrategy;
 namespace Pe.Extensions.FamDocument;
 
 public static class FamilyDocumentSetValue {
@@ -100,7 +100,7 @@ public static class FamilyDocumentSetValue {
         this FamilyDocument famDoc,
         FamilyParameter targetParam,
         FamilyParameter sourceParam,
-        string strategyName = "Strict"
+        string strategyName = nameof(BCS.Strict)
     ) {
         var context = CoercionContext.FromParam(famDoc, sourceParam, targetParam);
         if (context.SourceValue == null) return null;
@@ -135,7 +135,7 @@ public static class FamilyDocumentSetValue {
         this FamilyDocument famDoc,
         FamilyParameter targetParam,
         object sourceValue,
-        string strategyName = "Strict"
+        string strategyName = nameof(BCS.Strict)
     ) {
         var context = CoercionContext.FromValue(famDoc, sourceValue, targetParam);
         if (context.SourceValue == null) return null;

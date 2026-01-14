@@ -46,38 +46,20 @@ public class SetParamValues(AddAndSetParamsSettings settings)
                 continue;
             }
 
-            var result = SetValueOrFormula(doc, parameter, p, out var errMsg);
-            _ = result.NeedsFallback
-                ? log.Defer($"Needs per-type fallback: {errMsg}")
-                : log.Success("Set global value");
+            if (p.SetAsFormula) {
+                var success = doc.TrySetFormula(parameter, p.ValueOrFormula, out var errMsg);
+                _ = success
+                    ? log.Success("Set formula")
+                    : log.Defer($"Error setting formula: {errMsg}");
+
+            } else {
+                var success = doc.SetUnsetFormula(parameter, p.ValueOrFormula);
+                _ = success
+                    ? log.Success("Set global value")
+                    : log.Defer($"Needs per-type fallback");
+            }
         }
 
         return new OperationLog(this.Name, groupContext.TakeSnapshot());
-    }
-
-    private static SetResult SetValueOrFormula(FamilyDocument doc,
-        FamilyParameter param,
-        ParamSettingModel paramModel,
-        out string errorMessage
-    ) {
-        errorMessage = null;
-        try {
-            if (paramModel.SetAsFormula) {
-                var success = doc.TrySetFormula(param, paramModel.ValueOrFormula, out errorMessage);
-                return success ? SetResult.Success : SetResult.NeedsFallbackResult;
-            } else {
-                var success = doc.SetUnsetFormula(param, paramModel.ValueOrFormula);
-                return success ? SetResult.Success : SetResult.NeedsFallbackResult;
-            }
-        } catch {
-            // SetGlobalValue failed (e.g., Force datatype issues) - needs per-type fallback
-            return SetResult.NeedsFallbackResult;
-        }
-    }
-
-    private readonly struct SetResult(bool needsFallback) {
-        public bool NeedsFallback { get; } = needsFallback;
-        public static SetResult Success => new(false);
-        public static SetResult NeedsFallbackResult => new(true);
     }
 }

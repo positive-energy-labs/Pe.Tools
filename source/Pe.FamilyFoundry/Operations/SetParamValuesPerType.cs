@@ -1,5 +1,6 @@
 using Pe.Extensions.FamDocument;
 using Pe.Extensions.FamDocument.GetValue;
+using Pe.Extensions.FamDocument.SetValue;
 using Pe.Extensions.FamManager;
 using Pe.Extensions.FamParameter.Formula;
 using Pe.FamilyFoundry.OperationSettings;
@@ -96,7 +97,7 @@ public class SetParamValuesPerType(AddAndSetParamsSettings settings)
                 $"Per-type value '{actualValue}' contains parameter references. Use ValueOrFormula with SetAsFormula=true for formulas, not ValuesPerType.");
         }
 
-        _ = famDoc.SetValue(parameter, actualValue, "CoerceSimple");
+        _ = famDoc.SetValue(parameter, actualValue, nameof(BuiltInCoercionStrategy.CoerceByStorageType));
     }
 
     /// <summary>

@@ -6,7 +6,7 @@ namespace Pe.Extensions.FamParameter.Formula;
 ///     Low-level formula tokenization utilities.
 ///     Internal implementation - consumers should use higher-level methods in <see cref="FormulaReferences" />.
 /// </summary>
-internal static class Tokenizer {
+internal static class FormulaUtils {
     /// <summary>
     ///     Revit formula functions (case-insensitive).
     ///     These are excluded from parameter name extraction.
@@ -45,16 +45,76 @@ internal static class Tokenizer {
     ];
 
     /// <summary>
-    ///     Extract potential parameter name tokens from a formula string.
-    ///     Returns unvalidated string tokens - prefer <see cref="FormulaReferences.GetReferencedIn" /> for validated parameter
-    ///     references.
+    ///     Extracts tokens from a formula after masking out known valid parameter names.
+    ///     This allows detection of invalid parameter references, including those with spaces.
+    ///     Returns only tokens that are NOT numbers, functions, or known parameters.
     /// </summary>
-    internal static IEnumerable<string> ExtractTokens(string formula) {
-        // Strip string literals (content between quotes) before tokenizing
-        // This prevents "2025_12_10 18:19:51" from being parsed as parameter names
+    internal static IEnumerable<string> ExtractInvalidTokens(string formula, IEnumerable<string> validParameterNames) {
+        if (string.IsNullOrWhiteSpace(formula))
+            return [];
+
+        // Strip string literals first
         var withoutStrings = Regex.Replace(formula, "\"[^\"]*\"", " ");
-        var tokens = withoutStrings.Split(BoundaryChars, StringSplitOptions.RemoveEmptyEntries);
+
+        // Sort parameters by length descending to handle overlapping names correctly
+        // e.g., "Width Offset" should be checked before "Width"
+        var sortedParams = validParameterNames
+            .Where(p => !string.IsNullOrEmpty(p))
+            .OrderByDescending(p => p.Length)
+            .ToList();
+
+        // Use span for efficient character-by-character processing
+        var chars = withoutStrings.ToCharArray();
+
+        // Mask out valid parameters by replacing them with spaces
+        foreach (var paramName in sortedParams) {
+            MaskParameter(chars, paramName);
+        }
+
+        // Now tokenize the masked string - anything left is invalid
+        var maskedFormula = new string(chars);
+        var tokens = maskedFormula.Split(BoundaryChars, StringSplitOptions.RemoveEmptyEntries);
         return tokens.Where(t => !IsNumericOrFunction(t)).Distinct();
+    }
+
+    /// <summary>
+    ///     Masks all boundary-valid occurrences of a parameter name in a character array.
+    ///     Modifies the array in-place for efficiency.
+    /// </summary>
+    private static void MaskParameter(char[] chars, string paramName) {
+        var paramLen = paramName.Length;
+        var maxStart = chars.Length - paramLen;
+
+        for (var i = 0; i <= maxStart; i++) {
+            // Quick check: first character must match
+            if (chars[i] != paramName[0])
+                continue;
+
+            // Check if full parameter name matches at this position
+            var matches = true;
+            for (var j = 1; j < paramLen; j++) {
+                if (chars[i + j] != paramName[j]) {
+                    matches = false;
+                    break;
+                }
+            }
+
+            if (!matches)
+                continue;
+
+            // Validate boundaries
+            var leftValid = i == 0 || BoundaryChars.Contains(chars[i - 1]);
+            var rightValid = (i + paramLen >= chars.Length) || BoundaryChars.Contains(chars[i + paramLen]);
+
+            if (leftValid && rightValid) {
+                // Mask this occurrence with spaces
+                for (var j = 0; j < paramLen; j++) {
+                    chars[i + j] = ' ';
+                }
+                // Skip past this occurrence
+                i += paramLen - 1;
+            }
+        }
     }
 
     /// <summary>
