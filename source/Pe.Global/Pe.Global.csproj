@@ -4,6 +4,8 @@
         <UseWPF>true</UseWPF>
         <Configurations>Debug.R23;Debug.R24;Debug.R25;Debug.R26</Configurations>
         <Configurations>$(Configurations);Release.R23;Release.R24;Release.R25;Release.R26</Configurations>
+        <IsRepackable Condition="$(Configuration.Contains('Release'))">true</IsRepackable>
+
 
         <!-- Default to 2025 for "Debug"/"Release" configs, and also for broader LSP support (e.g. Cursor) -->
         <!-- NOTE: update as Positive Energy migrated to newer Revit Versions -->
