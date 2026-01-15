@@ -21,7 +21,7 @@ public static class Formula {
     /// </summary>
     /// <returns>
     ///     True if the formula was set successfully. On error, no message is returned nor any exception thrown, only
-    ///     false is returned.
+    ///     false is returned. 
     /// </returns>
     /// <exception cref="Autodesk.Revit.Exceptions.InvalidOperationException">
     ///     Thrown when a type parameter formula references
@@ -56,7 +56,8 @@ public static class Formula {
 
             var parameters = famDoc.FamilyManager.Parameters;
 
-            // Validate all parameter-like tokens in the formula reference existing parameters
+            // Check for tokens that look like invalid parameter references
+            // (tokens that don't start with a digit and aren't known parameters or functions)
             var invalidParams = parameters.GetInvalidReferences(formula).ToList();
             if (invalidParams.Count != 0) {
                 errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. " +
@@ -77,12 +78,30 @@ public static class Formula {
                 }
             }
 
-            var success = famDoc.TrySetFormulaFast(targetParam, formula, out errorMessage);
+            // Collect suspicious tokens before attempting to set the formula.
+            // These are tokens starting with digits that aren't pure numbers or known parameters.
+            // They're likely numeric literals with unit suffixes (e.g., "0'", "12 in"), but could
+            // theoretically be unconventional parameter names. We use these for diagnostics if Revit fails.
+            var suspiciousTokens = parameters.GetSuspiciousTokens(formula).ToList();
+
+            var success = famDoc.TrySetFormulaFast(targetParam, formula, out var fastErrorMessage);
+            if (!success) {
+                // Provide enhanced error message based on whether suspicious tokens were detected
+                errorMessage = suspiciousTokens.Count > 0
+                    ? $"Cannot set formula on parameter '{targetParam.Name()}'. " +
+                        $"Revit rejected the formula. Found tokens that may be numeric literals with unrecognized unit formats " +
+                        $"(or unconventional parameter names starting with digits): {string.Join(", ", suspiciousTokens.Select(t => $"'{t}'"))}. " +
+                        $"Revit error: {fastErrorMessage}"
+                    : $"Cannot set formula on parameter '{targetParam.Name()}'. " +
+                        $"Revit error: {fastErrorMessage}";
+                return false;
+            }
+
+            return true;
         } catch (Exception ex) {
             errorMessage = ex.ToStringDemystified();
             return false;
         }
-        return true;
     }
 
     /// <summary>

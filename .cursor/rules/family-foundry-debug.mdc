@@ -1,0 +1,326 @@
+---
+alwaysApply: false
+description: Guide for debugging Family Foundry operations and interpreting output files
+---
+
+# Family Foundry Debugging Guide
+
+## Output Directory Structure
+
+When `ProcessQueue` runs, it generates a timestamped run directory:
+
+```txt
+output/
+└── 2024-01-15_14-30-45/                    # Run timestamp
+    ├── run-summary.json                    # Multi-family summary
+    └── {FamilyName}/                       # One folder per processed family
+        ├── snapshot-profile-{name}.json    
+        ├── logs-abridged.json              
+        ├── logs-detailed.json              # <-- START HERE!!!
+        ├── snapshot-parameters-diff.json   
+        ├── snapshot-parameters-pre.json    
+        ├── snapshot-parameters-post.json   
+        ├── snapshot-refplanesanddims-pre.json
+        └── snapshot-refplanesanddims-post.json
+```
+
+| File                                  | When to Use                                              |
+| ------------------------------------- | -------------------------------------------------------- |
+| `run-summary.json`                    | Multi-family overview - which families had issues?       |
+| `logs-abridged.json`                  | First look - what failed in this family?                 |
+| `logs-detailed.json`                  | Deep dive - logs, timing, operation metadata             |
+| `snapshot-parameters-diff.json`       | Quick summary of parameter changes                       |
+| `snapshot-profile-{name}.json`        | Deserialized AND merged profile object used by processor |
+| `snapshot-parameters-pre.json`        | PRE-processing parameters state                          |
+| `snapshot-parameters-post.json`       | POST-processing parameters state                         |
+| `snapshot-refplanesanddims-pre.json`  | PRE-processing reference planes/dimensions state         |
+| `snapshot-refplanesanddims-post.json` | POST-processing reference planes/dimensions state        |
+
+## Reading Output Files
+
+### Use `logs-detailed.json` for Full Context
+
+```json
+{
+  "Family": "M_Receptacle Duplex",
+  "Timestamp": "2024-01-15 14:30:45",
+  "FamilyTotalSecondsElapsed": 2.145,
+  "FamilyPreCollectionSecondsElapsed": 0.123,
+  "FamilyOperationsSecondsElapsed": 1.890,
+  "FamilyPostCollectionSecondsElapsed": 0.132,
+  "Error": null,
+  "Profile": "electrical-migration",
+  "Operations": [
+    {
+      "Name": "AddAndSetParams: SetParamValues",
+      "Description": "Sets parameter values at document level",
+      "Type": "Doc",
+      "IsMerged": "Single",
+      "SecondsElapsed": 0.234,
+      "Successes": [
+        "PE_E___Voltage : Set global value",
+        ...
+      ],
+      "Skipped": [
+        "PE_E___Power : Already has value", 
+        ...
+      ],
+      "Deferred": [],
+      "Errors": [
+        "PE_Voltage : Parameter 'PE_Voltage' not found", 
+        ...
+      ]
+    }
+  ]
+}
+```
+
+**Key fields:**
+
+- `FamilyTotalSecondsElapsed`: Total time for entire family
+- `FamilyPreCollectionSecondsElapsed`: Pre-snapshot collection time
+- `FamilyOperationsSecondsElapsed`: All operations execution time
+- `FamilyPostCollectionSecondsElapsed`: Post-snapshot collection time
+- `Error`: If not null, this operation failed entirely
+- `Operations`: Array with full metadata for each operation
+  - `Name`: Operation identifier
+  - `Description`: Human-readable description
+  - `Type`: "Doc" or "Type" operation
+  - `IsMerged`: "Merged" = batched TypeOperations, "Single" = standalone
+  - `SecondsElapsed`: Time for this specific operation
+  - `Successes/Skipped/Deferred/Errors`: Full breakdown of logs by status
+
+### Log Entry Format
+
+Log messages follow this pattern:
+
+```txt
+[TypeName, TypeName2] ItemName : JoinedMessageList
+```
+
+- **Context** (optional): Family type names when from TypeOperation
+- **ItemName**: The parameter/element being processed
+- **JoinedMessageList**: All LogEntry messages joined with a newline (and number if there are multiple)
+
+### Log Statuses Explained
+
+| Status       | Meaning                              | When Used                                     |
+| ------------ | ------------------------------------ | --------------------------------------------- |
+| **Success**  | Completed as intended                | Value set, param added, etc.                  |
+| **Skipped**  | "Completed" but not processed        | Already exists, empty value, disabled         |
+| **Deferred** | Deferred to later operation          | DocOp deferred to Doc/TypeOp via GroupContext |
+| **Error**    | "Completed" not as intended bc error | Exception, not found, validation failed       |
+
+**Note:** Deferred entries appear in the `Deferred` array in detailed logs. If you see them, check that the follow-up operation/s completed the work (should appear in that operation's Successes/Errors).
+
+## Snapshot Files
+
+### Use `snapshot-parameters-diff.json` for Quick Comparison
+
+Instead of manually comparing pre/post snapshots, use the diff file:
+
+```json
+{
+  "Family": "M_Receptacle Duplex",
+  "Summary": {
+    "ParametersRemoved": 2,
+    "ParametersAdded": 3,
+    "ParametersModified": 5
+  },
+  "Removed": [
+    "INST: PE_Old_Param (Text)"
+  ],
+  "Added": [
+    {
+      "Description": "INST: PE_E___Voltage (Electrical Potential)",
+      "Formula": null,
+      "HasValueForAllTypes": true
+    }
+  ],
+  "Modified": [
+    {
+      "Description": "INST: PE_E___Power (Electrical Power)",
+      "Changes": [
+        "Formula: (none) → PE_E___Voltage * PE_E___Current",
+        "Values changed for 3 type(s)"
+      ]
+    }
+  ]
+}
+```
+
+**Key fields:**
+
+- `Summary`: Quick counts of what changed
+- `Removed`: Parameters that existed in pre but not in post
+- `Added`: New parameters with formula status and value coverage
+  - `HasValueForAllTypes`: true if formula set OR all types have values
+- `Modified`: Parameters that changed, with detailed change list
+  - Formula changes shown as `(none)` for empty/null
+  - Value changes show count of affected types
+  - Metadata changes (IsInstance, Group, DataType) listed if changed
+
+### Parameter Snapshots (`snapshot-parameters-*.json`)
+
+Files are 300-2000 lines. **Always filter first, then diff.** Each file contains an array of ParamSnapshot objects with fields: `Name`, `IsInstance`, `DataType`, `Formula`, `ValuesPerType`, `IsBuiltIn`, `SharedGuid`.
+
+```powershell
+# Filter by parameter name, then compare pre vs post
+$param = "PE_E___Voltage"
+Get-Content snapshot-parameters-pre.json | Select-String "`"Name`": `"$param`"" -Context 20,20 | Out-File temp-pre.txt
+Get-Content snapshot-parameters-post.json | Select-String "`"Name`": `"$param`"" -Context 20,20 | Out-File temp-post.txt
+Compare-Object (Get-Content temp-pre.txt) (Get-Content temp-post.txt)
+
+# Filter by prefix, then compare
+$prefix = "PE_E___"
+Get-Content snapshot-parameters-pre.json | Select-String "`"Name`": `"$prefix" -Context 15,0 | Out-File temp-pre.txt
+Get-Content snapshot-parameters-post.json | Select-String "`"Name`": `"$prefix" -Context 15,0 | Out-File temp-post.txt
+Compare-Object (Get-Content temp-pre.txt) (Get-Content temp-post.txt)
+
+# List all parameter names
+Get-Content snapshot-parameters-pre.json | Select-String '"Name": "([^"]+)"' | ForEach-Object {
+    if ($_ -match '"Name": "([^"]+)"') { $matches[1] }
+} | Sort-Object -Unique
+
+# Find parameters with formulas
+Get-Content snapshot-parameters-pre.json | Select-String '"Formula": "[^n]' -Context 10,0
+
+# Find instance vs type parameters
+Get-Content snapshot-parameters-pre.json | Select-String '"IsInstance": true' -Context 5,5
+```
+
+## Practical PowerShell Examples
+
+```powershell
+# Investigate why a parameter wasn't set correctly
+$param = "PE_E___Voltage"
+Get-Content snapshot-parameters-pre.json | Select-String "`"Name`": `"$param`"" -Context 20,20 | Out-File temp-pre.txt
+Get-Content snapshot-parameters-post.json | Select-String "`"Name`": `"$param`"" -Context 20,20 | Out-File temp-post.txt
+Compare-Object (Get-Content temp-pre.txt) (Get-Content temp-post.txt)
+Get-Content logs-detailed.json | Select-String $param -Context 3,3
+
+# Check which operations had errors
+Get-Content logs-detailed.json | Select-String '"Errors":' -Context 0,10
+
+# Find errors for specific parameter
+Get-Content logs-detailed.json | Select-String "PE_E___Power" | Select-String "Error"
+
+# Verify formula changes
+Get-Content snapshot-parameters-pre.json | Select-String "`"Name`": `"PE_E___Power`"" -Context 0,5 | Select-String "Formula"
+Get-Content snapshot-parameters-post.json | Select-String "`"Name`": `"PE_E___Power`"" -Context 0,5 | Select-String "Formula"
+
+# Quick check for added/removed parameters
+Get-Content snapshot-parameters-diff.json | Select-String '"Added":' -Context 0,20
+Get-Content snapshot-parameters-diff.json | Select-String '"Removed":' -Context 0,20
+```
+
+## Common Error Patterns
+
+### Empty Operations array
+
+**Cause:** All operations disabled or settings filtered everything out  
+**Check:** `snapshot-profile-{name}.json` → verify `Enabled: true` on operations  
+**Check:** Profile settings → verify parameter lists aren't empty
+
+### Family-level Error field populated
+
+**Cause:** Unhandled exception crashed family processing before operations could complete  
+**Check:** `logs-detailed.json` → `Error` field contains exception message  
+**Common:** Snapshot collection failed, family not editable, document state invalid  
+**Fix:** Check pre-conditions (family editable, document open, etc.)
+
+## Debugging Workflow
+
+### 1. Operation Not Doing Anything
+
+```txt
+1. Open logs-abridged.json → Check if operation appears
+2. If missing → Check snapshot-profile-{name}.json → Is Enabled: true?
+3. If present with 0/0 → Check snapshot-parameters-pre.json → Does target data exist?
+4. If Skipped → Check logs-detailed.json → Why skipped?
+```
+
+### 2. Wrong Value Set
+
+```txt
+1. Open snapshot-parameters-diff.json → Check Modified section
+2. Open snapshot-parameters-pre.json → What was the original value?
+3. Open snapshot-parameters-post.json → What's the new value?
+4. Open logs-detailed.json → Find the operation → Check message
+5. Check snapshot-profile-{name}.json → Is the formula/value correct in profile?
+```
+
+### 3. Parameter Missing After Processing
+
+```txt
+1. Open snapshot-parameters-diff.json → Check Removed section
+2. Was it in pre-snapshot? → If no, it was never there
+3. Was it in post-snapshot? → If no, something removed it
+4. Check logs-detailed.json for PurgeParams → Was it purged?
+5. Check purge exclusion list in snapshot-profile-{name}.json
+```
+
+### 4. Family Processing Failed Completely
+
+```txt
+1. Open logs-abridged.json → Check for Error field
+2. Open logs-detailed.json → Check Error field for full message
+3. Common causes:
+   - Family not editable
+   - Snapshot collection failed
+   - Document in invalid state
+4. Check if pre-snapshot files exist → If not, failure was during pre-collection
+5. Check if post-snapshot files exist → If not, failure was during operations or post-collection
+```
+
+## Multi-Family Summary (`run-summary.json`)
+
+After all families are processed, a summary file is generated at the run directory root:
+
+**Use for:**
+
+- Quick overview of batch processing results
+- Identifying which families need attention
+- Performance analysis across families
+- Status breakdown: Success vs Errors vs Failed
+
+**Status meanings:**
+
+- `Success`: All operations completed without errors
+- `Completed with errors`: Operations ran but some items failed
+- `Failed`: Family processing crashed (check individual family's Error field)
+
+## Profile Organization
+
+Profiles can be organized in nested subdirectories:
+
+```txt
+settings/
+└── profiles/
+    ├── MechEquip.json              # Base profile
+    ├── ASHP.json                   # Child profile (extends MechEquip)
+    └── WIP/
+        └── Experimental.json       # Nested profile
+```
+
+**Profile inheritance:**
+
+- Child profiles use `"$extends": "MechEquip"` to inherit from base
+- Relative paths supported: `"$extends": "../MechEquip"` from WIP/
+- Fragments in `_fragments/` directory are excluded from profile discovery
+
+**Output uses profile path:**
+
+- Profile `WIP/Experimental.json` → output in `{timestamp}/WIP-Experimental/`
+
+## Key Files for Debugging Code
+
+| Issue               | Check These Files                                        |
+| ------------------- | -------------------------------------------------------- |
+| Operation logic     | `Core/Operations/{OperationName}.cs`                     |
+| Group coordination  | `Core/OperationGroups/{GroupName}.cs`                    |
+| Snapshot collection | `Core/Snapshots/{Collector}.cs`                          |
+| Queue building      | Command file (e.g., `CmdFFMigrator.cs`) → `BuildQueue()` |
+| Output formatting   | `Core/ProcessingResultBuilder.cs`                        |
+| Log entry creation  | `Core/BaseOperation.cs` → `LogEntry` class               |
+| Profile loading     | `Library/PeServices/Storage/Core/ComposableJson.cs`      |

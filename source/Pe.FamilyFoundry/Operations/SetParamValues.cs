@@ -50,7 +50,7 @@ public class SetParamValues(AddAndSetParamsSettings settings)
                 var success = doc.TrySetFormula(parameter, p.ValueOrFormula, out var errMsg);
                 _ = success
                     ? log.Success("Set formula")
-                    : log.Defer($"Error setting formula: {errMsg}");
+                    : log.Error($"Error setting formula: {errMsg}");
 
             } else {
                 var success = doc.SetUnsetFormula(parameter, p.ValueOrFormula);

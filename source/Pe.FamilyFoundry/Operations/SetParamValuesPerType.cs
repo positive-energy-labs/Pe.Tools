@@ -49,7 +49,7 @@ public class SetParamValuesPerType(AddAndSetParamsSettings settings)
                 continue;
             }
 
-            // Handle fallback for failed global values from SetParamValues
+            // Handle fallback for failed global values from SetParamValues and proiritize ValueOrFormula over ValuesPerType 
             if (!string.IsNullOrWhiteSpace(paramModel.ValueOrFormula)) {
                 try {
                     var success = famDoc.TrySetFormula(parameter, paramModel.ValueOrFormula, out _);
@@ -60,20 +60,19 @@ public class SetParamValuesPerType(AddAndSetParamsSettings settings)
                 }
             }
 
-            // 1. Handle explicit per-type parameters (ValuesPerType is set)
-            if (paramModel.ValuesPerType?.Count > 0
-                && currentTypeName is not null
-                && paramModel.ValuesPerType.TryGetValue(currentTypeName, out var value)
-                && !string.IsNullOrWhiteSpace(value)) {
-                if (!this.Settings.OverrideExistingValues && famDoc.HasValue(parameter))
-                    continue;
+            if (!(paramModel.ValuesPerType?.Count > 0)
+                || currentTypeName is null
+                || !paramModel.ValuesPerType.TryGetValue(currentTypeName, out var value)
+                || string.IsNullOrWhiteSpace(value)) continue;
+            if (!this.Settings.OverrideExistingValues && famDoc.HasValue(parameter))
+                continue;
 
-                try {
-                    SetValueForCurrentFamType(famDoc, parameter, value);
-                    _ = log.Success("Set per-type value");
-                } catch (Exception ex) {
-                    _ = log.Error(ex);
-                }
+            // Handle explicit per-type parameters (ValuesPerType is set, probably Family Manager path)
+            try {
+                SetValueForCurrentFamType(famDoc, parameter, value);
+                _ = log.Defer("Set per-type value");
+            } catch (Exception ex) {
+                _ = log.Error(ex);
             }
         }
 
@@ -92,7 +91,7 @@ public class SetParamValuesPerType(AddAndSetParamsSettings settings)
 
         // Reject values that contain parameter references (check AFTER stripping quotes)
         var referencedParams = fm.Parameters.GetReferencedIn(actualValue).ToList();
-        if (referencedParams.Any()) {
+        if (referencedParams.Count != 0) {
             throw new InvalidOperationException(
                 $"Per-type value '{actualValue}' contains parameter references. Use ValueOrFormula with SetAsFormula=true for formulas, not ValuesPerType.");
         }

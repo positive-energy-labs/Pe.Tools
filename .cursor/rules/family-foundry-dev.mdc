@@ -1,0 +1,323 @@
+---
+alwaysApply: false
+description: Development guide for Family Foundry operations, architecture, and patterns
+---
+
+# Family Foundry Developer Guide
+
+## Quick Reference: What Goes Where
+
+| Need                       | Location                                |
+| -------------------------- | --------------------------------------- |
+| New operation              | `Core/Operations/`                      |
+| New operation group        | `Core/OperationGroups/`                 |
+| New settings class         | `Core/OperationSettings/` (shared) or inline in operation file (bespoke) |
+| New snapshot collector     | `Core/Snapshots/`                       |
+| New snapshot data model    | `Core/Aggregators/Snapshots/`           |
+| FamilyDocument extensions  | `Library/PeExtensions/FamilyDocument/`  |
+| FamilyManager extensions   | `Library/PeExtensions/FamilyManager/`   |
+
+## Architecture Overview
+
+```mermaid
+graph LR
+    subgraph "Entry"
+        CMD[Command]
+    end
+    
+    subgraph "Orchestration"
+        OP[OperationProcessor]
+        FPP[Pipeline]
+    end
+    
+    subgraph "Operations"
+        OQ[OperationQueue]
+        DOC[DocOperation]
+        TYPE[TypeOperation]
+        GRP[OperationGroup]
+    end
+    
+    subgraph "Data"
+        FPC[ProcessingContext]
+        SNAP[FamilySnapshot]
+    end
+    
+    CMD --> OP --> FPP
+    FPP --> |"per family"| OQ
+    OQ --> DOC & TYPE
+    GRP -.-> |unwraps into| DOC & TYPE
+    FPP --> SNAP --> FPC
+    FPC -.-> |read-only| DOC & TYPE
+```
+
+**Key flow:** Command → OperationProcessor → (per family) Pipeline collects snapshot → Operations execute → Load/Save
+
+## Type Hierarchy
+
+```mermaid
+classDiagram
+    direction TB
+    
+    class IExecutable {
+        <<interface>>
+        ToFunc() → Func
+    }
+    
+    class IOperation {
+        <<interface>>
+        Name
+        Description
+        Settings
+    }
+    
+    class DocOperation~TSettings~ {
+        <<extend this>>
+        +Execute(doc, ctx, groupCtx)*
+        #Settings
+        #GroupContext
+    }
+    
+    class TypeOperation~TSettings~ {
+        <<extend this>>
+        +Execute(doc, ctx, groupCtx)*
+        #Settings
+        #GroupContext
+    }
+    
+    class OperationGroup~TSettings~ {
+        <<extend this>>
+        +Operations : List
+        +GroupContext
+    }
+    
+    class MergedTypeOperation {
+        <<internal>>
+        batches TypeOps
+    }
+    
+    IExecutable <|-- IOperation
+    IOperation <|.. DocOperation : implements
+    IOperation <|.. TypeOperation : implements
+    IExecutable <|.. MergedTypeOperation : implements
+    OperationGroup o-- IOperation : contains
+```
+
+**You extend:** `DocOperation<T>`, `TypeOperation<T>`, or `OperationGroup<T>`  
+**Framework uses internally:** `MergedTypeOperation` (batches consecutive TypeOps)  
+**Note:** `OperationGroup` is NOT an `IOperation` — it's a container that gets unwrapped into its child operations
+
+## Decision Tree: Which Operation Type?
+
+```
+Is this work done once per family, or once per family TYPE?
+├─ Once per family → DocOperation
+│   Examples: add/remove params, set formulas, purge params
+│
+└─ Once per type → TypeOperation  
+    Examples: set per-type values, read per-type data
+    Note: Framework sets fm.CurrentType before each Execute()
+    
+Do multiple operations need to share the same settings or coordinate (e.g., try global, fall back to per-type)?
+├─ Yes → OperationGroup (bundles Doc + Type ops with shared GroupContext)
+│
+└─ No → Standalone operation
+```
+
+## Gotchas & Critical Behaviors
+
+### 1. GroupContext Resets Per-Family
+`OperationContext` (GroupContext) is cleared before processing each family. Don't expect state to persist across families.
+
+### 2. LogEntry is Terminal
+Once you call `.Success()`, `.Skip()`, or `.Error()`, calling them again **throws**. Check `log.IsComplete` before modifying.
+
+```csharp
+// WRONG - will throw if already handled
+log.Success("Done");
+
+// RIGHT - check first
+if (!log.IsComplete) log.Success("Done");
+```
+
+### 3. Snapshots Are Read-Only During Operations
+`PreProcessSnapshot` is collected BEFORE `Process()` runs. You cannot update it from inside an operation.
+
+### 4. TypeOperations Get Batched
+Consecutive `TypeOperation`s in the queue merge into a `MergedTypeOperation` for performance (one type-switch loop for all ops, not one per op). You can disable this via the ExecutionOptions.OptimizeTypeOperations flag
+
+### 5. Groups Are Unwrapped
+When you `.Add(group)` to a queue, the group's operations are extracted and added individually. The group itself doesn't "execute."
+
+### 6. Collectors Are First-Wins
+If a collector implements both `IProjectCollector` and `IFamilyDocCollector`, project runs first. If it populates the section, family-doc is skipped.
+
+### 7. Always Call EnsureDefaultType()
+Before processing, call `famDoc.EnsureDefaultType()` to guarantee `FamilyManager.CurrentType` is set. Do to a strange discrepancy between Revit's UI and API, there are rare cases where a family may not have a *valid* type.
+
+## Creating Operations
+
+### DocOperation (once per family)
+
+```csharp
+public class MyDocOp : DocOperation<MySettings> {
+    public MyDocOp(MySettings s) : base(s) { }
+    public override string Description => "Brief description";
+    
+    public override OperationLog Execute(
+        FamilyDocument doc,
+        FamilyProcessingContext ctx,    // Read-only snapshot data
+        OperationContext groupCtx       // Shared state (null if standalone)
+    ) {
+        var fm = doc.FamilyManager;
+        var logs = new List<LogEntry>();
+        
+        // Your logic here
+        logs.Add(new LogEntry("ItemName").Success("Did it"));
+        
+        return new OperationLog(this.Name, logs);
+    }
+}
+```
+
+### TypeOperation (once per type)
+
+```csharp
+public class MyTypeOp : TypeOperation<MySettings> {
+    public MyTypeOp(MySettings s) : base(s) { }
+    public override string Description => "Brief description";
+    
+    public override OperationLog Execute(
+        FamilyDocument doc,
+        FamilyProcessingContext ctx,
+        OperationContext groupCtx
+    ) {
+        var fm = doc.FamilyManager;
+        var typeName = fm.CurrentType?.Name;  // Already set by framework
+        
+        // Your per-type logic here
+        
+        // IMPORTANT: Use groupCtx.TakeSnapshot() for logs when in a group.
+        // This allows you to log only the current state of context
+        return new OperationLog(this.Name, groupCtx?.TakeSnapshot() ?? []);
+    }
+}
+```
+
+### OperationGroup (coordinated operations)
+
+```csharp
+public class MyGroup : OperationGroup<MySettings> {
+    // Operations can be composed however you like, similar to building an OperationQueue
+    public MyGroup(MySettings s) : base(
+        "Description of group purpose",
+        [ 
+            new FirstDocOp(s),  
+            new SecondTypeOp(s),
+            new ThirdDocOp()
+        ]
+    ) { }
+}
+```
+
+## GroupContext Coordination Pattern
+
+When an operation needs to defer work, use groupContext. Deferal can be used between any and all operations in a group
+
+```csharp
+// In DocOperation
+var log = groupContext.GetOrCreate("ParamName");
+if (/* success */) {
+    log.Success("Done globally");
+} else {
+    log.Defer("Needs per-type");  // Stays Pending
+}
+return new OperationLog(this.Name, groupContext.TakeSnapshot());
+
+// In TypeOperation (runs after)
+var log = groupContext.Get("ParamName");
+if (log?.IsComplete == true) return new OperationLog(this.Name, []);
+// Handle deferred work...
+log.Success("Set per-type");
+return new OperationLog(this.Name, groupContext.TakeSnapshot());
+```
+
+## Settings Pattern
+
+```csharp
+public class MySettings : IOperationSettings {
+    public bool Enabled { get; init; } = true;  // Required by interface
+    
+    [Description("What this controls")]  // For JSON schema
+    public string SomeOption { get; init; }
+
+    // use these providers to enable autocomplete LSP in VS Code
+    [SchemaExamples(typeof(SharedParameterNamesProvider))]
+    public List<string> SharedParameters { get; set; } = [];
+
+}
+```
+
+## Using ProcessingContext
+
+Read-only snapshot queries during Execute():
+
+```csharp
+var param = ctx.FindParam("ParamName");           // ParamSnapshot or null
+var hasValue = ctx.HasValueForAllTypes("Name");   // bool
+var count = ctx.CountTypesWithValue(param);       // int  
+var types = ctx.GetTypesWithValue("Name");        // List<string>
+```
+
+## Creating a Collector
+
+```csharp
+public class MyCollector : IFamilyDocCollector {
+    public bool ShouldCollect(FamilySnapshot snap) =>
+        snap.MySection == null;  // Only if not already collected
+    
+    public void Collect(FamilySnapshot snap, FamilyDocument famDoc) {
+        snap.MySection = new SnapshotSection<MyData> {
+            Source = SnapshotSource.FamilyDoc,
+            Data = /* collect your data */
+        };
+    }
+}
+```
+
+Implement `IProjectCollector` for faster collection from project doc (when possible).
+
+## Building & Running the Queue
+
+```csharp
+var queue = new OperationQueue()
+    .Add(new PurgeParams(settings))           // Single operation
+    .Add(new AddAndSetParams(settings));      // Group (unwraps into ops)
+
+var collectorQueue = new CollectorQueue()
+    .Add(new ParamSectionCollector());
+
+using var processor = new OperationProcessor(doc, new ExecutionOptions {
+    SingleTransaction = true,       // Faster, atomic
+    OptimizeTypeOperations = true   // Batch consecutive TypeOps
+});
+
+var (contexts, totalMs) = processor
+    .SelectFamilies(() => GetFamilies())
+    .ProcessQueue(queue, collectorQueue, outputPath);
+```
+
+## Common Extension Methods
+
+```csharp
+// FamilyManager extensions (PeExtensions.FamManager)
+var param = fm.FindParameter("Name");
+
+// FamilyDocument extensions (PeExtensions.FamDocument)
+doc.SetValue(param, value, CoercionStrategy);
+doc.SetFormula(param, formula);
+doc.TrySetFormula(param, formula, out var error);
+doc.UnsetFormula(param);
+doc.GetValue(param);
+doc.HasValue(param);
+doc.SetGlobalValue(param, value);  // All types at once
+```

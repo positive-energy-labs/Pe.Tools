@@ -66,6 +66,11 @@ public static class FormulaReferences {
     ///     Returns empty list if valid, otherwise returns the invalid parameter names.
     ///     Handles parameter names with spaces correctly by masking known parameters before tokenizing.
     /// </summary>
+    /// <remarks>
+    ///     Tokens that start with a digit are excluded from this check, as they are almost certainly
+    ///     numeric literals (possibly with unit suffixes like "0'" or "12 in"), not parameter references.
+    ///     Use <see cref="GetSuspiciousTokens"/> if you need to see those tokens for diagnostics.
+    /// </remarks>
     /// <returns>Collection of invalid parameter names, empty if all tokens are valid</returns>
     public static IEnumerable<string> GetInvalidReferences(
         this FamilyParameterSet parameters,
@@ -79,5 +84,32 @@ public static class FormulaReferences {
             .Select(p => p.Definition.Name);
 
         return FormulaUtils.ExtractInvalidTokens(formula, validParamNames);
+    }
+
+    /// <summary>
+    ///     Extracts "suspicious" tokens from a formula - tokens that start with a digit
+    ///     and are not recognized as known parameters or pure numbers.
+    ///     These are typically numeric literals with unit suffixes (e.g., "0'", "12 in").
+    /// </summary>
+    /// <remarks>
+    ///     By convention, Revit parameter names start with letters or underscores, not digits.
+    ///     However, Revit technically allows parameter names that start with digits.
+    ///     This method helps identify tokens that are likely numeric literals but could
+    ///     theoretically be unconventional parameter names - useful for diagnostics when
+    ///     Revit rejects a formula.
+    /// </remarks>
+    /// <returns>Collection of suspicious tokens (start with digit, not pure numbers, not known parameters)</returns>
+    public static IEnumerable<string> GetSuspiciousTokens(
+        this FamilyParameterSet parameters,
+        string formula
+    ) {
+        if (string.IsNullOrWhiteSpace(formula))
+            return [];
+
+        var validParamNames = parameters
+            .OfType<FamilyParameter>()
+            .Select(p => p.Definition.Name);
+
+        return FormulaUtils.ExtractSuspiciousTokens(formula, validParamNames);
     }
 }

@@ -13,7 +13,7 @@ internal static class FormulaUtils {
     /// </summary>
     public static readonly HashSet<string> RevitFunctions = new(StringComparer.OrdinalIgnoreCase) {
         "sin",
-        "cos",
+        "cos", 
         "tan",
         "asin",
         "acos",
@@ -53,6 +53,42 @@ internal static class FormulaUtils {
         if (string.IsNullOrWhiteSpace(formula))
             return [];
 
+        var tokens = ExtractUnknownTokens(formula, validParameterNames);
+
+        // Filter to only tokens that could be parameter references
+        // (don't start with digit, aren't functions)
+        return tokens.Where(CouldBeParameterReference).Distinct();
+    }
+
+    /// <summary>
+    ///     Extracts "suspicious" tokens from a formula - tokens that start with a digit
+    ///     and are not recognized as known parameters. These are typically numeric literals
+    ///     with unit suffixes (e.g., "0'", "12 in", "45 deg"), but could theoretically be
+    ///     parameter names that start with digits (rare but allowed in Revit).
+    /// </summary>
+    /// <remarks>
+    ///     Use this for diagnostic purposes when Revit rejects a formula - the suspicious
+    ///     tokens may help identify what Revit interpreted incorrectly.
+    /// </remarks>
+    internal static IEnumerable<string> ExtractSuspiciousTokens(string formula, IEnumerable<string> validParameterNames) {
+        if (string.IsNullOrWhiteSpace(formula))
+            return [];
+
+        var tokens = ExtractUnknownTokens(formula, validParameterNames);
+
+        // Suspicious = starts with digit (likely numeric literal with unit suffix)
+        // but not a pure number or known function
+        return tokens
+            .Where(t => !string.IsNullOrEmpty(t) && char.IsDigit(t[0]))
+            .Where(t => !double.TryParse(t, out _))  // Not a pure number
+            .Distinct();
+    }
+
+    /// <summary>
+    ///     Core tokenization: extracts all tokens that remain after masking known parameters,
+    ///     stripping string literals, and splitting on boundary chars.
+    /// </summary>
+    private static IEnumerable<string> ExtractUnknownTokens(string formula, IEnumerable<string> validParameterNames) {
         // Strip string literals first
         var withoutStrings = Regex.Replace(formula, "\"[^\"]*\"", " ");
 
@@ -71,10 +107,27 @@ internal static class FormulaUtils {
             MaskParameter(chars, paramName);
         }
 
-        // Now tokenize the masked string - anything left is invalid
+        // Now tokenize the masked string
         var maskedFormula = new string(chars);
-        var tokens = maskedFormula.Split(BoundaryChars, StringSplitOptions.RemoveEmptyEntries);
-        return tokens.Where(t => !IsNumericOrFunction(t)).Distinct();
+        return maskedFormula.Split(BoundaryChars, StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    /// <summary>
+    ///     Determines if a token could plausibly be a parameter reference.
+    ///     By convention, parameter names start with a letter or underscore, not a digit.
+    ///     Tokens starting with digits are almost always numeric literals (possibly with unit suffixes).
+    /// </summary>
+    private static bool CouldBeParameterReference(string token) {
+        if (string.IsNullOrEmpty(token)) return false;
+
+        // Tokens starting with a digit are almost certainly numeric literals, not parameters
+        // (e.g., "0'", "12", "45.5 in" -> after split: "0'", "12", "45", "5", "in")
+        if (char.IsDigit(token[0])) return false;
+
+        // Known Revit functions
+        if (RevitFunctions.Contains(token)) return false;
+
+        return true;
     }
 
     /// <summary>
@@ -115,14 +168,5 @@ internal static class FormulaUtils {
                 i += paramLen - 1;
             }
         }
-    }
-
-    /// <summary>
-    ///     Check if a token is a number or a known Revit function.
-    /// </summary>
-    internal static bool IsNumericOrFunction(string token) {
-        if (double.TryParse(token, out _)) return true;
-        if (RevitFunctions.Contains(token)) return true;
-        return false;
     }
 }
