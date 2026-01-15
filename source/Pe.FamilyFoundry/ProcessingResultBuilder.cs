@@ -277,7 +277,9 @@ public class ProcessingResultBuilder(Storage storage) {
         return new {
             Family = ctx.FamilyName,
             Summary = new {
-                ParametersRemoved = removed.Count, ParametersAdded = added.Count, ParametersModified = modified.Count
+                ParametersRemoved = removed.Count,
+                ParametersAdded = added.Count,
+                ParametersModified = modified.Count
             },
             Removed = removed.Any() ? removed : null,
             Added = added.Any() ? added : null,
@@ -289,15 +291,26 @@ public class ProcessingResultBuilder(Storage storage) {
     private static void SerializeSnapshotSections(FamilySnapshot snapshot, OutputManager output, string prefix) {
         if (snapshot.Parameters?.Data != null && snapshot.Parameters.Data.Count > 0) {
             var paramsData = snapshot.Parameters.Data;
-            _ = output.Json($"snapshot-parameters-{prefix}.json").Write(paramsData.SortAndOrder());
+            _ = output.Json($"snapshot-parameters-{prefix}.json").Write(SortAndOrder(paramsData));
         }
 
-        if (snapshot.RefPlanesAndDims?.Data != null && snapshot.RefPlanesAndDims.Data.Count > 0) {
-            var refPlanesData = snapshot.RefPlanesAndDims.Data;
-            _ = output.Json($"snapshot-refplanesanddims-{prefix}.json").Write(refPlanesData);
+        if (snapshot.RefPlanesAndDims != null) {
+            var hasSpecs = snapshot.RefPlanesAndDims.MirrorSpecs.Count > 0 ||
+                           snapshot.RefPlanesAndDims.OffsetSpecs.Count > 0;
+            if (hasSpecs)
+                _ = output.Json($"snapshot-refplanesanddims-{prefix}.json").Write(snapshot.RefPlanesAndDims);
         }
     }
 
+    public static List<ParamSnapshot> SortAndOrder( List<ParamSnapshot> snapshots) {
+        snapshots ??= [];
+        return snapshots.Select(s => s with {
+            ValuesPerType = new Dictionary<string, string>(
+                s.ValuesPerType.OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase),
+                StringComparer.Ordinal
+            )
+        }).ToList();
+    }
     private static string SanitizeDirName(string name) {
         if (string.IsNullOrWhiteSpace(name))
             return "Unnamed";

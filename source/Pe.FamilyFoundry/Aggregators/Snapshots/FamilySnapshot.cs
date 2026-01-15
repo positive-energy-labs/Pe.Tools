@@ -13,7 +13,7 @@ public class FamilySnapshot {
     public SnapshotSection<ParamSnapshot> Parameters { get; set; }
 
     /// <summary>Reference plane and dimension specs with source tracking</summary>
-    public SnapshotSection<RefPlaneSpec> RefPlanesAndDims { get; set; }
+    public RefPlaneSnapshot RefPlanesAndDims { get; set; }
 
     // Future sections: Connectors, etc.
 }

@@ -116,7 +116,7 @@ public class CmdSchedulePalette : IExternalCommand {
                         }
                     }
                 });
-
+            window.EphemeralEnabled = false;
             window.Show();
 
             return Result.Succeeded;
@@ -418,9 +418,12 @@ public class CmdSchedulePalette : IExternalCommand {
 
         try {
             var storage = new Storage("Schedule Manager");
-            var outputDir = storage.OutputDir();
+            var serializeOutputDir = storage.OutputDir().SubDir("serialize");
             var spec = ScheduleHelper.SerializeSchedule(serializeItem.Schedule);
-            var filename = outputDir.Json($"{spec.Name}.json").Write(spec);
+            
+            // Prepend timestamp to filename
+            var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+            var filename = serializeOutputDir.Json($"{timestamp}_{spec.Name}.json").Write(spec);
 
             var balloon = new Ballogger();
             _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
@@ -461,6 +464,8 @@ public class CmdSchedulePalette : IExternalCommand {
 
     private string WriteCreationOutput(ScheduleManagerContext ctx, ScheduleCreationResult result) {
         try {
+            var createOutputDir = ctx.Storage.OutputDir().SubDir("create");
+            
             var outputData = new {
                 result.ScheduleName,
                 result.CategoryName,
@@ -510,7 +515,9 @@ public class CmdSchedulePalette : IExternalCommand {
                 result.Warnings
             };
 
-            var outputPath = ctx.Storage.OutputDir().Json(result.ScheduleName).Write(outputData);
+            // Prepend timestamp to filename
+            var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+            var outputPath = createOutputDir.Json($"{timestamp}_{result.ScheduleName}.json").Write(outputData);
             return outputPath;
         } catch (Exception ex) {
             Debug.WriteLine($"Failed to write output: {ex.Message}");

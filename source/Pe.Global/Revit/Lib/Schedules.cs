@@ -6,6 +6,7 @@ using Pe.Global.Services.Storage.Core.Json;
 using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
 using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
 using System.ComponentModel;
+using System.Globalization;
 
 namespace Pe.Global.Revit.Lib;
 
@@ -53,7 +54,11 @@ public class ScheduleFieldSpec {
     public ScheduleFieldDisplayType DisplayType { get; set; } = ScheduleFieldDisplayType.Standard;
 
     [Description("Column width on sheet in feet. Leave empty to use default width.")]
-    public double? ColumnWidth { get; set; }
+    public double? ColumnWidth { get; set; } = 0.084;
+
+    [Description("Horizontal alignment of the column data (Left, Center, Right).")]
+    [JsonConverter(typeof(StringEnumConverter))]
+    public ScheduleHorizontalAlignment HorizontalAlignment { get; set; } = ScheduleHorizontalAlignment.Center;
 
     [Description(
         "For calculated fields only. Indicates this is a formula or percentage field. Note: Formula strings cannot be read/written via Revit API - calculated fields must be created manually in Revit.")]
@@ -137,6 +142,7 @@ public class AppliedFieldInfo {
     public bool IsHidden { get; set; }
     public double? ColumnWidth { get; set; }
     public ScheduleFieldDisplayType DisplayType { get; set; }
+    public ScheduleHorizontalAlignment HorizontalAlignment { get; set; }
 }
 
 public class AppliedSortGroupInfo {
@@ -193,7 +199,8 @@ public static class ScheduleHelper {
                 ColumnHeaderOverride = field.ColumnHeading != originalParamName ? field.ColumnHeading : string.Empty,
                 IsHidden = field.IsHidden,
                 DisplayType = (ScheduleFieldDisplayType)(int)field.DisplayType,
-                ColumnWidth = field.SheetColumnWidth
+                ColumnWidth = field.SheetColumnWidth,
+                HorizontalAlignment = field.HorizontalAlignment
             };
 
             // Handle calculated fields
@@ -247,7 +254,7 @@ public static class ScheduleHelper {
             else if (filter.IsIntegerValue)
                 value = filter.GetIntegerValue().ToString();
             else if (filter.IsDoubleValue)
-                value = filter.GetDoubleValue().ToString();
+                value = filter.GetDoubleValue().ToString(CultureInfo.InvariantCulture);
             else if (filter.IsElementIdValue) value = filter.GetElementIdValue().Value().ToString();
 
             var filterSpec =
@@ -266,15 +273,13 @@ public static class ScheduleHelper {
 
     private static void SerializeHeaderGroups(ViewSchedule schedule, ScheduleSpec spec) {
         var tableData = schedule.GetTableData();
-        var headerSection = tableData.GetSectionData(SectionType.Header);
+        var bodySection = tableData.GetSectionData(SectionType.Body);
 
-        if (headerSection == null) return;
+        if (bodySection == null) return;
 
-        // Check if there are multiple rows (grouped headers would be in row 0)
-        if (headerSection.NumberOfRows < 2) return;
+        var def = schedule.Definition;
 
         // Build mapping from visible column index to field index (accounting for hidden fields)
-        var def = schedule.Definition;
         var visibleColToFieldIdx = new Dictionary<int, int>();
         var visibleColIndex = 0;
 
@@ -286,29 +291,31 @@ public static class ScheduleHelper {
             }
         }
 
-        // Examine the header row (row 0) for merged cells, which indicate header groups
-        var groupRow = headerSection.FirstRowNumber;
+        // Header groups are stored as merged cells in the first row of the Body section
+        if (bodySection.NumberOfRows == 0) return;
+
+        var firstRow = bodySection.FirstRowNumber;
         var processedColumns = new HashSet<int>();
 
-        for (var col = headerSection.FirstColumnNumber; col <= headerSection.LastColumnNumber; col++) {
+        for (var col = bodySection.FirstColumnNumber; col <= bodySection.LastColumnNumber; col++) {
             if (processedColumns.Contains(col)) continue;
 
-            // Check if this cell is part of a merged group
-            var mergedCell = headerSection.GetMergedCell(groupRow, col);
+            var mergedCell = bodySection.GetMergedCell(firstRow, col);
 
-            // If the merged cell spans multiple columns, it's a header group
+            // If the merged cell spans multiple columns (horizontally), it's a header group
             if (mergedCell.Right > mergedCell.Left) {
-                var groupName = headerSection.GetCellText(groupRow, col);
+                var groupName = bodySection.GetCellText(firstRow, col);
 
                 // Mark all fields in this range with the header group
-                // Use the mapping to convert visible column indices to field indices
-                for (var visibleCol = mergedCell.Left; visibleCol <= mergedCell.Right; visibleCol++) {
+                for (var tableCol = mergedCell.Left; tableCol <= mergedCell.Right; tableCol++) {
+                    var visibleCol = tableCol - bodySection.FirstColumnNumber;
                     if (visibleColToFieldIdx.TryGetValue(visibleCol, out var fieldIdx) && fieldIdx < spec.Fields.Count)
                         spec.Fields[fieldIdx].HeaderGroup = groupName;
-                    _ = processedColumns.Add(visibleCol);
+                    _ = processedColumns.Add(tableCol);
                 }
-            } else
+            } else {
                 _ = processedColumns.Add(col);
+            }
         }
     }
 
@@ -385,7 +392,8 @@ public static class ScheduleHelper {
                 ColumnHeaderOverride = fieldSpec.ColumnHeaderOverride,
                 IsHidden = fieldSpec.IsHidden,
                 ColumnWidth = fieldSpec.ColumnWidth,
-                DisplayType = fieldSpec.DisplayType
+                DisplayType = fieldSpec.DisplayType,
+                HorizontalAlignment = fieldSpec.HorizontalAlignment
             });
         }
 
@@ -422,6 +430,9 @@ public static class ScheduleHelper {
         if (fieldSpec.ColumnWidth > 0)
             field.SheetColumnWidth = fieldSpec.ColumnWidth ?? 1;
 
+        // Apply horizontal alignment
+        field.HorizontalAlignment = fieldSpec.HorizontalAlignment;
+
         // Apply display type if field supports it (cast to int for comparison since enum member names vary)
         var targetDisplayType = (ScheduleFieldDisplayType)(int)fieldSpec.DisplayType;
         if (fieldSpec.DisplayType != ScheduleFieldDisplayType.Standard) {
@@ -447,7 +458,7 @@ public static class ScheduleHelper {
         var def = schedule.Definition;
         def.ClearSortGroupFields();
 
-        if (spec.SortGroup == null || spec.SortGroup.Count == 0) return;
+        if (spec.SortGroup.Count == 0) return;
 
         foreach (var sortGroupSpec in spec.SortGroup) {
             // Find the field by name
@@ -488,12 +499,14 @@ public static class ScheduleHelper {
         var def = schedule.Definition;
         def.ClearFilters();
 
-        if (spec.Filters == null || spec.Filters.Count == 0) return;
-
+        switch (spec.Filters.Count) {
+        case 0:
+            return;
         // Maximum of 8 filters per schedule
-        if (spec.Filters.Count > 8) {
+        case > 8:
             result.Warnings.Add(
                 $"Schedule supports maximum 8 filters, found {spec.Filters.Count}. Only first 8 will be applied.");
+            break;
         }
 
         var filtersToApply = spec.Filters.Take(8);
@@ -744,7 +757,7 @@ public static class ScheduleHelper {
             return [];
 
         // If no filters, return all family names
-        if (spec.Filters == null || spec.Filters.Count == 0)
+        if (spec.Filters.Count == 0)
             return familiesToTest.Select(f => f.Name).ToList();
 
         using var tx = new Transaction(doc, "Temp Filter Evaluation");

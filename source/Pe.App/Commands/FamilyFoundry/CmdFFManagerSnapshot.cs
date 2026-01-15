@@ -94,7 +94,9 @@ public class CmdFFManagerSnapshot : IExternalCommand {
     /// </summary>
     private static ProfileFamilyManager ConvertSnapshotToProfile(FamilySnapshot snapshot) {
         var paramSettings = ConvertParamsToSettings(snapshot.Parameters?.Data ?? []);
-        var refPlaneSpecs = snapshot.RefPlanesAndDims?.Data ?? [];
+        var mirrorSpecs = snapshot.RefPlanesAndDims?.MirrorSpecs ?? [];
+        var offsetSpecs = snapshot.RefPlanesAndDims?.OffsetSpecs ?? [];
+        var hasRefPlaneSpecs = mirrorSpecs.Count > 0 || offsetSpecs.Count > 0;
 
         return new ProfileFamilyManager {
             ExecutionOptions = new ExecutionOptions { SingleTransaction = false, OptimizeTypeOperations = true },
@@ -108,8 +110,11 @@ public class CmdFFManagerSnapshot : IExternalCommand {
                 // Empty - snapshot captures exact parameters, no APS filtering needed
                 IncludeNames = new IncludeSharedParameter(), ExcludeNames = new ExcludeSharedParameter()
             },
-            MakeRefPlaneAndDims =
-                new MakeRefPlaneAndDimsSettings { Enabled = refPlaneSpecs.Count > 0, Specs = refPlaneSpecs },
+            MakeRefPlaneAndDims = new MakeRefPlaneAndDimsSettings {
+                Enabled = hasRefPlaneSpecs,
+                MirrorSpecs = mirrorSpecs,
+                OffsetSpecs = offsetSpecs
+            },
             AddAndSetParams = new AddAndSetParamsSettings {
                 Enabled = paramSettings.Count > 0,
                 CreateFamParamIfMissing = true,
