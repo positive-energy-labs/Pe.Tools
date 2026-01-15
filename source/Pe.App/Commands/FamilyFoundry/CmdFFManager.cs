@@ -70,7 +70,8 @@ public class CmdFFManager : IExternalCommand {
 
         // Force this to never be single transaction
         var executionOptions = new ExecutionOptions {
-            SingleTransaction = false, OptimizeTypeOperations = profile.ExecutionOptions.OptimizeTypeOperations
+            SingleTransaction = false,
+            OptimizeTypeOperations = profile.ExecutionOptions.OptimizeTypeOperations
         };
 
         // Request both parameter and refplane snapshots
@@ -134,7 +135,7 @@ public class CmdFFManager : IExternalCommand {
 
         return new OperationQueue()
             .Add(new AddSharedParams(apsParamData))
-            .Add(new AddAndSetParams(moddedSettings, true)) // must come after AddAllFamilyParams and RP/dims
+            .Add(new AddAndSetParams(moddedSettings, true)) // must come before MakeRefPlaneAndDims
             .Add(new MakeRefPlaneAndDims(profile.MakeRefPlaneAndDims))
             .Add(new MakeRefPlaneSubcategories(specs))
             .Add(new SortParams(new SortParamsSettings()));
