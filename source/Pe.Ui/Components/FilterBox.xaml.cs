@@ -12,14 +12,16 @@ namespace Pe.Ui.Components;
 ///     Non-generic base class for FilterBox.xaml
 ///     This matches the XAML x:Class declaration and provides access to XAML-defined controls
 /// </summary>
-public partial class FilterBox : RevitHostedUserControl, IPopoverExit {
+public partial class FilterBox : IPopoverExit {
     private Storyboard? _collapseStoryboard;
     private Storyboard? _expandStoryboard;
     private bool _isExpanded;
 
     protected FilterBox(List<Key> closeKeys) {
         this.CloseKeys = closeKeys.Count == 0 ?  [Key.Escape]:  closeKeys;
+        // Note: Base class RevitHostedUserControl loads WpfUiResources before this runs
         this.InitializeComponent();
+        
         this.Loaded += this.FilterBox_Loaded;
     }
 

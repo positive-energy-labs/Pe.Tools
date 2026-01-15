@@ -108,9 +108,9 @@ public class SelectableTextBox : RevitHostedUserControl, IPopoverExit {
         this._richTextBox.Document = new FlowDocument {
             PagePadding = new Thickness(0),
             TextAlignment = TextAlignment.Left,
-            FontFamily = ThemeManager.FontFamily(),
-            FontSize = 11,
-            LineHeight = 15.0 // Matching Body style line height
+            FontFamily = Theme.FontFamily,
+            FontSize = 13,
+            LineHeight = 20
         };
         // Set foreground from DynamicResource
         this._richTextBox.Document.SetResourceReference(FlowDocument.ForegroundProperty, "TextFillColorSecondaryBrush");

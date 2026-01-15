@@ -39,7 +39,7 @@ public static class PaletteAttachedProperties {
 ///     with the Palette.xaml file. Generic behavior is handled via composition,
 ///     NOT inheritance (generic classes cannot inherit from XAML partial classes).
 /// </summary>
-public sealed partial class Palette : RevitHostedUserControl, ICloseRequestable {
+public sealed partial class Palette : ICloseRequestable {
     private const double DefaultSidebarWidth = 400;
 
     private readonly bool _isSearchBoxHidden;
@@ -86,9 +86,6 @@ public sealed partial class Palette : RevitHostedUserControl, ICloseRequestable 
         this.DataContext = viewModel;
         this._customKeyBindings = customKeyBindings;
         this._keepOpenAfterAction = keepOpenAfterAction;
-
-        // Load resources for SearchTextBox
-        ThemeManager.LoadWpfUiResources(this.SearchTextBox);
 
         // Initialize tabs if provided
         if (tabNames is { Count: > 0 })

@@ -90,11 +90,10 @@
                         <DataTemplate>
                             <StackPanel Orientation="Vertical" Margin="0">
                                 <ui:TextBlock Text="{Binding PrimaryText}"
-                                              Style="{DynamicResource BodyTextBlockStyle}"
                                               TextWrapping="NoWrap"
                                               TextTrimming="CharacterEllipsis" />
                                 <ui:TextBlock Text="{Binding SecondaryText}"
-                                              Style="{DynamicResource CaptionTextBlockStyle}"
+                                              FontSize="12"
                                               Visibility="{Binding SecondaryText, Converter={StaticResource StringToVisibilityConverter}}"
                                               TextWrapping="NoWrap"
                                               TextTrimming="CharacterEllipsis" />

@@ -19,11 +19,25 @@ namespace Pe.Ui.Core;
 ///     Alt+Tab hiding, window deactivation detection, focus restoration, and closing logic.
 /// </summary>
 public class EphemeralWindow : Window {
+    private const double ZoomStep = 0.025;
+    private const double ZoomMin = 0.5;
+    private const double ZoomMax = 1.5;
+
     private readonly Border _contentBorder;
+    private readonly Border? _underlayBorder;
+    private readonly ScaleTransform? _zoomTransform;
     private bool _isClosing;
+
+    /// <summary>
+    ///     Global UI zoom level. 1.0 = 100%, 0.85 = 85%, 1.25 = 125%, etc.
+    ///     Applied via LayoutTransform to scale all UI elements proportionally.
+    ///     Adjustable at runtime with Ctrl+Plus/Minus.
+    /// </summary>
+    public static double ZoomLevel { get; set; } = 0.85;
 
     public EphemeralWindow(Border contentBorder) {
         this._contentBorder = contentBorder;
+        this._underlayBorder = null;
         this.ContentControl = null;
     }
 
@@ -42,25 +56,35 @@ public class EphemeralWindow : Window {
         this.Background = Brushes.Transparent;
         this.ShowInTaskbar = false;
         this.Topmost = true;
-        ThemeManager.LoadWpfUiResources(this);
+
+        // Load WPF.UI theme resources for this window
+        Theme.LoadResources(this);
 
         // Create main container grid with centered alignment
+        // Apply zoom transform for global UI scaling
+        this._zoomTransform = new ScaleTransform(ZoomLevel, ZoomLevel);
         var containerGrid = new Grid {
-            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            LayoutTransform = this._zoomTransform
         };
 
-        // Add to grid (both at same location so pill floats over content)
+        // Enable Ctrl+/- zoom adjustment
+        this.PreviewKeyDown += this.OnPreviewKeyDown;
+
+        // Create underlay border (extends beyond content with gutters)
+        this._underlayBorder = this.CreateUnderlayBorder(title);
+        this._underlayBorder.MouseLeftButtonDown += (_, _) => this.DragMove();
+        _ = containerGrid.Children.Add(this._underlayBorder);
+
+        // Create content border (sits on top of underlay)
         this._contentBorder = new BorderSpec()
             .Border(UiSz.l, UiSz.ss)
             .Width(this.BaseWidth, this.BaseWidth, this.BaseWidth)
             .Height(350, 350, 350)
-            .DropShadow()
+            .Margin(0, 40, 0, 0) // Top margin to make room for title gutter
             .CreateAround(content);
         _ = containerGrid.Children.Add(this._contentBorder);
-
-        var titlePill = this.CreateTitlePill(title);
-        titlePill.MouseLeftButtonDown += (_, _) => this.DragMove();
-        _ = containerGrid.Children.Add(titlePill);
 
         this.Content = containerGrid;
 
@@ -71,7 +95,7 @@ public class EphemeralWindow : Window {
     /// <summary>
     ///     Gets the UserControl content hosted by this window (typically a Palette).
     /// </summary>
-    public UserControl ContentControl { get; }
+    public UserControl? ContentControl { get; }
 
     /// <summary>
     ///     Base width for the window (default 450). Used when collapsing sidebars.
@@ -84,30 +108,62 @@ public class EphemeralWindow : Window {
     /// </summary>
     public bool EphemeralEnabled { get; set; } = true;
 
-    private Border CreateTitlePill(string title) {
+    /// <summary>
+    ///     Creates the underlay border that extends beyond the content with gutters for title and future settings.
+    /// </summary>
+    private Border CreateUnderlayBorder(string title) {
+        // Create title text for the top gutter
+        var titleText = new TextBlock {
+            Text = title,
+            VerticalAlignment = VerticalAlignment.Top,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Foreground = new SolidColorBrush(Color.FromRgb(250, 250, 250)),
+            FontSize = Core.FontSize.Title,
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(12, 6, 12, 6) // Padding within the top gutter
+        };
+
         var border = new BorderSpec()
             .Background(ThemeResource.ApplicationBackgroundBrush)
             .Border(UiSz.l, UiSz.ss)
-            .HorizontalAlign(HorizontalAlignment.Left)
-            .VerticalAlign(VerticalAlignment.Top)
-            .Margin(0, -35, 0, 0) // More left and up positioning
-            .Padding(UiSz.m, UiSz.l, UiSz.m, UiSz.l)
-            .Width(200)
+            .Width(this.BaseWidth, this.BaseWidth, this.BaseWidth)
+            .Height(390, 390, 390) // 350 content + 40 top gutter
             .DropShadow()
-            .CreateAround(new TextBlock {
-                Text = title,
-                VerticalAlignment = VerticalAlignment.Center,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Foreground = new SolidColorBrush(Color.FromRgb(250, 250, 250)),
-                Style = ThemeManager.GetTypographyStyle(FontTypography.Subtitle),
-                Padding = new Thickness(0)
-            });
+            .CreateAround(titleText);
 
         return border;
     }
 
-    private void OnContentCloseRequested(object sender, CloseRequestedEventArgs e) =>
+    private void OnContentCloseRequested(object? sender, CloseRequestedEventArgs e) =>
         this.CloseWindow(e.RestoreFocus);
+
+    /// <summary>
+    ///     Handles Ctrl+Plus/Minus for zoom adjustment.
+    /// </summary>
+    private void OnPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e) {
+        if (this._zoomTransform == null) return;
+        if ((System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) == 0) return;
+
+        var zoomDelta = e.Key switch {
+            System.Windows.Input.Key.OemPlus => ZoomStep,    // +/= key
+            System.Windows.Input.Key.Add => ZoomStep,        // Numpad +
+            System.Windows.Input.Key.OemMinus => -ZoomStep,  // -/_ key
+            System.Windows.Input.Key.Subtract => -ZoomStep,  // Numpad -
+            System.Windows.Input.Key.D0 when (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) != 0 => 0, // Reset marker
+            _ => (double?)null
+        };
+
+        if (zoomDelta == null) return;
+
+        // Ctrl+0 resets to 100%, otherwise adjust by delta
+        ZoomLevel = e.Key == System.Windows.Input.Key.D0
+            ? 1.0
+            : Math.Clamp(ZoomLevel + zoomDelta.Value, ZoomMin, ZoomMax);
+
+        this._zoomTransform.ScaleX = ZoomLevel;
+        this._zoomTransform.ScaleY = ZoomLevel;
+        e.Handled = true;
+    }
 
     /// <summary>
     ///     Expands the window width by the specified amount (for sidebars).
@@ -119,6 +175,13 @@ public class EphemeralWindow : Window {
         this._contentBorder.Width = newWidth;
         this._contentBorder.MinWidth = newWidth;
         this._contentBorder.MaxWidth = newWidth;
+
+        // Also expand underlay if present
+        if (this._underlayBorder != null) {
+            this._underlayBorder.Width = newWidth;
+            this._underlayBorder.MinWidth = newWidth;
+            this._underlayBorder.MaxWidth = newWidth;
+        }
     }
 
     /// <summary>
@@ -131,6 +194,13 @@ public class EphemeralWindow : Window {
         this._contentBorder.Width = newWidth;
         this._contentBorder.MinWidth = newWidth;
         this._contentBorder.MaxWidth = newWidth;
+
+        // Also collapse underlay if present
+        if (this._underlayBorder != null) {
+            this._underlayBorder.Width = newWidth;
+            this._underlayBorder.MinWidth = newWidth;
+            this._underlayBorder.MaxWidth = newWidth;
+        }
     }
 
     public void CloseWindow(bool restoreFocus = true) {

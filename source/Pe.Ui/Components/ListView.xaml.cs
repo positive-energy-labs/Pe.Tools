@@ -8,7 +8,7 @@ using WpfUiListViewItem = Wpf.Ui.Controls.ListViewItem;
 
 namespace Pe.Ui.Components;
 
-public partial class ListView : RevitHostedUserControl {
+public partial class ListView {
     public static readonly DependencyProperty ItemsSourceProperty = DependencyProperty.Register(
         nameof(ItemsSource),
         typeof(IEnumerable),
@@ -37,7 +37,9 @@ public partial class ListView : RevitHostedUserControl {
         new PropertyMetadata(false));
 
     public ListView() {
+        // Note: Base class RevitHostedUserControl loads WpfUiResources before this runs
         this.InitializeComponent();
+        
         this.ItemListView.ItemTemplate = new DataTemplate {
             VisualTree = new FrameworkElementFactory(typeof(ListViewItem))
         };

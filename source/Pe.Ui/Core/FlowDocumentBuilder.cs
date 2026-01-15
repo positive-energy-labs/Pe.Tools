@@ -17,9 +17,9 @@ public static class FlowDocumentBuilder {
         var doc = new FlowDocument {
             PagePadding = new Thickness(0),
             TextAlignment = TextAlignment.Left,
-            FontFamily = ThemeManager.FontFamily(),
-            FontSize = 11,
-            LineHeight = 15.0
+            FontFamily = Theme.FontFamily,
+            FontSize = 13,
+            LineHeight = 20
         };
         doc.SetResourceReference(FlowDocument.ForegroundProperty, "TextFillColorSecondaryBrush");
         return doc;
@@ -28,8 +28,9 @@ public static class FlowDocumentBuilder {
     /// <summary>
     ///     Adds a bold header paragraph.
     /// </summary>
-    public static FlowDocument AddHeader(this FlowDocument doc, string title, int fontSize = 14) {
-        var para = new Paragraph(new Run(title) { FontWeight = FontWeights.Bold, FontSize = fontSize }) {
+    public static FlowDocument AddHeader(this FlowDocument doc, string title, double? fontSize = null) {
+        var size = fontSize ?? 14;
+        var para = new Paragraph(new Run(title) { FontWeight = FontWeights.Bold, FontSize = size }) {
             Margin = new Thickness(0, 0, 0, 8)
         };
         doc.Blocks.Add(para);
@@ -73,15 +74,15 @@ public static class FlowDocumentBuilder {
     /// <summary>
     ///     Adds validation status with colored indicator and optional error list.
     /// </summary>
-    public static FlowDocument AddValidationStatus(this FlowDocument doc, bool isValid, IEnumerable<string> errors = null) {
+    public static FlowDocument AddValidationStatus(this FlowDocument doc, bool isValid, IEnumerable<string>? errors = null) {
         var statusPara = new Paragraph { Margin = new Thickness(0, 0, 0, 8) };
 
         if (isValid) {
-            var validRun = new Run("✓ Valid") { FontWeight = FontWeights.Bold, FontSize = 12 };
+            var validRun = new Run("✓ Valid") { FontWeight = FontWeights.Bold, FontSize = 13 };
             validRun.SetResourceReference(Run.ForegroundProperty, "SystemFillColorSuccessBrush");
             statusPara.Inlines.Add(validRun);
         } else {
-            var invalidRun = new Run("✗ Invalid") { FontWeight = FontWeights.Bold, FontSize = 12 };
+            var invalidRun = new Run("✗ Invalid") { FontWeight = FontWeights.Bold, FontSize = 13 };
             invalidRun.SetResourceReference(Run.ForegroundProperty, "SystemFillColorCriticalBrush");
             statusPara.Inlines.Add(invalidRun);
         }
@@ -118,7 +119,7 @@ public static class FlowDocumentBuilder {
 
         var jsonPara = new Paragraph(new Run(json)) {
             FontFamily = new FontFamily("Consolas"),
-            FontSize = 9,
+            FontSize = 12,
             Margin = new Thickness(8, 0, 0, 12),
             Background = Brushes.Black,
             Foreground = Brushes.LightGray,
@@ -179,7 +180,7 @@ public static class FlowDocumentBuilder {
             para.Inlines.Add(new Run(primary) { FontWeight = FontWeights.SemiBold });
             if (!string.IsNullOrEmpty(secondary)) {
                 para.Inlines.Add(new LineBreak());
-                para.Inlines.Add(new Run($"  {secondary}") { FontSize = 10 });
+                para.Inlines.Add(new Run($"  {secondary}") { FontSize = 12 });
             }
 
             list.ListItems.Add(new ListItem(para));
@@ -212,16 +213,17 @@ public static class FlowDocumentBuilder {
     /// <param name="doc">The FlowDocument to add the table to</param>
     /// <param name="columns">Column names in display order</param>
     /// <param name="rows">List of row data as dictionaries (key = column name, value = cell content)</param>
-    /// <param name="fontSize">Font size for table content (default 10)</param>
+    /// <param name="fontSize">Font size for table content (null = use Caption size)</param>
     /// <param name="margin">Margin around the table</param>
     /// <returns>The FlowDocument for chaining</returns>
     public static FlowDocument AddTable(
         this FlowDocument doc,
         IEnumerable<string> columns,
         IEnumerable<Dictionary<string, string>> rows,
-        double fontSize = 10,
+        double? fontSize = null,
         Thickness? margin = null
     ) {
+        var size = fontSize ?? 12;
         var columnList = columns?.ToList();
         var rowList = rows?.ToList();
 
@@ -230,7 +232,7 @@ public static class FlowDocumentBuilder {
 
         var table = new Table {
             CellSpacing = 0,
-            FontSize = fontSize,
+            FontSize = size,
             Margin = margin ?? new Thickness(0, 0, 0, 12)
         };
 
@@ -246,7 +248,7 @@ public static class FlowDocumentBuilder {
         foreach (var column in columnList) {
             var cell = new TableCell(new Paragraph(new Run(column) {
                 FontWeight = FontWeights.SemiBold,
-                FontSize = fontSize
+                FontSize = size
             }) {
                 Margin = new Thickness(4, 2, 4, 2)
             }) {
@@ -271,7 +273,7 @@ public static class FlowDocumentBuilder {
 
             foreach (var column in columnList) {
                 var value = rowData.TryGetValue(column, out var v) ? v : string.Empty;
-                var cell = new TableCell(new Paragraph(new Run(value) { FontSize = fontSize }) {
+                var cell = new TableCell(new Paragraph(new Run(value) { FontSize = size }) {
                     Margin = new Thickness(4, 2, 4, 2)
                 }) {
                     Padding = new Thickness(0)
@@ -296,14 +298,14 @@ public static class FlowDocumentBuilder {
     /// <param name="doc">The FlowDocument to add the table to</param>
     /// <param name="items">Data items to display</param>
     /// <param name="columns">Column definitions (name, selector function)</param>
-    /// <param name="fontSize">Font size for table content (default 10)</param>
+    /// <param name="fontSize">Font size for table content (null = use Caption size)</param>
     /// <param name="margin">Margin around the table</param>
     /// <returns>The FlowDocument for chaining</returns>
     public static FlowDocument AddTable<T>(
         this FlowDocument doc,
         IEnumerable<T> items,
         IEnumerable<(string columnName, Func<T, string> selector)> columns,
-        double fontSize = 10,
+        double? fontSize = null,
         Thickness? margin = null
     ) {
         var itemList = items?.ToList();

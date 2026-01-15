@@ -13,7 +13,6 @@ namespace Pe.Ui.Components;
 
 /// <summary>
 ///     List item control for ListView with XAML structure.
-///     Implements shadcn-inspired styling using ThemeManager.
 /// </summary>
 public partial class ListViewItem : Border {
     public ListViewItem() {
@@ -26,18 +25,16 @@ public partial class ListViewItem : Border {
         // Border styling (layout only, colors from XAML DynamicResources)
         this.CornerRadius = new CornerRadius((double)UiSz.l);
         new BorderSpec()
-            .Padding(UiSz.ss, UiSz.s, UiSz.ll, UiSz.m)
+            .Padding(UiSz.ss, UiSz.ss, UiSz.ll, UiSz.ss)
             .ApplyToBorder(this);
+
+        this.SecondaryText.LineHeight = 12;
 
         // Icon styling
         this.IconImage.Width = (double)UiSz.ll;
         this.IconImage.Height = (double)UiSz.ll;
         this.IconImage.Margin = new Thickness(0, 0, (double)UiSz.l, 0);
         // Opacity is set per-item in UpdateFromDataContext based on whether icon exists
-
-        // Text styling - apply typography styles to override WPF.UI defaults
-        // this.PrimaryText.Style = ThemeManager.GetTypographyStyle(FontTypography.BodyStrong);
-        // this.SecondaryText.Style = ThemeManager.GetTypographyStyle(FontTypography.Caption);
 
         // Pill styling is now handled by the Pill component itself
     }
@@ -72,7 +69,7 @@ public partial class ListViewItem : Border {
         this.IconImage.Visibility = hasIcon || listHasIcons ? Visibility.Visible : Visibility.Collapsed;
 
         // Set opacity to 0 if no icon but space is reserved (invisible but takes up space)
-        this.IconImage.Opacity = hasIcon ? ThemeManager.IconOpacity : 0;
+        this.IconImage.Opacity = hasIcon ? Theme.IconOpacity : 0;
 
         // Update Color Indicator
         if (item.ItemColor.HasValue) {
@@ -83,7 +80,7 @@ public partial class ListViewItem : Border {
 
         // Update Opacity based on actions (compute executability from actions)
         var canExecute = this.ComputeCanExecute(item);
-        this.Opacity = canExecute ? 1 : ThemeManager.DisabledOpacity;
+        this.Opacity = canExecute ? 1 : Theme.DisabledOpacity;
     }
 
     /// <summary>
@@ -124,7 +121,7 @@ public partial class ListViewItem : Border {
             this.IconImage.Visibility = hasIcon || listHasIcons ? Visibility.Visible : Visibility.Collapsed;
 
             // Set opacity to 0 if no icon but space is reserved
-            this.IconImage.Opacity = hasIcon ? ThemeManager.IconOpacity : 0;
+            this.IconImage.Opacity = hasIcon ? Theme.IconOpacity : 0;
         }
 
         // Bind Color Indicator Background and Visibility
@@ -143,7 +140,7 @@ public partial class ListViewItem : Border {
         // Compute opacity from actions (no binding needed since CanExecute doesn't change after palette opens)
         if (currentItem != null) {
             var canExecute = this.ComputeCanExecute(currentItem);
-            this.Opacity = canExecute ? 1 : ThemeManager.DisabledOpacity;
+            this.Opacity = canExecute ? 1 : Theme.DisabledOpacity;
         }
     }
 

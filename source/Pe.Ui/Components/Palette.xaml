@@ -95,7 +95,7 @@
                                           Text="{Binding FilteredItems.Count, StringFormat=\{0\} items}"
                                           VerticalAlignment="Center"
                                           HorizontalAlignment="Left"
-                                          Style="{DynamicResource CaptionTextBlockStyle}"
+                                          FontSize="12"
                                           Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
 
                             <ui:TextBlock x:Name="HelpText"
@@ -103,7 +103,7 @@
                                           Text="↑↓ Navigate • ← Tooltip • → Actions • Click/Enter Execute • Esc Close"
                                           VerticalAlignment="Center"
                                           HorizontalAlignment="Right"
-                                          Style="{DynamicResource CaptionTextBlockStyle}"
+                                          FontSize="10"
                                           Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
                         </Grid>
                     </Border>

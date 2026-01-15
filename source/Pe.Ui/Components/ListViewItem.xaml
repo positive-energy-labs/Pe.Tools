@@ -34,13 +34,13 @@
 
             <ui:TextBlock x:Name="PrimaryText"
                           Grid.Row="0"
-                          Style="{DynamicResource BodyStrongTextBlockStyle}"
+                          FontWeight="SemiBold"
                           TextTrimming="CharacterEllipsis"
                           Foreground="{ui:ThemeResource TextFillColorPrimaryBrush}" />
 
             <ui:TextBlock x:Name="SecondaryText"
                           Grid.Row="1"
-                          Style="{DynamicResource CaptionTextBlockStyle}"
+                          FontSize="10"
                           TextTrimming="CharacterEllipsis"
                           Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
         </Grid>

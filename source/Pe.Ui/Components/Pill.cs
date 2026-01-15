@@ -24,9 +24,6 @@ public class Pill : Border {
     private readonly TextBlock _textBlock;
 
     public Pill() {
-        // Load WpfUiResources for access to typography styles and theme colors
-        ThemeManager.LoadWpfUiResources(this);
-
         this.VerticalAlignment = VerticalAlignment.Center;
         this.HorizontalAlignment = HorizontalAlignment.Right;
         this.BorderThickness = new Thickness((double)UiSz.ss);
@@ -34,14 +31,14 @@ public class Pill : Border {
         this.Padding = new Thickness((double)UiSz.m, 0, (double)UiSz.m, (double)UiSz.ss);
 
         // Create the TextBlock child
-        this._textBlock = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
+        this._textBlock = new TextBlock {
+            VerticalAlignment = VerticalAlignment.Center,
+            FontSize = 10,
+            FontFamily = Theme.FontFamily
+        };
 
         // Set up theme resource for foreground
         this._textBlock.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorSecondaryBrush");
-
-        // Apply Caption typography style - resources are now loaded
-        var captionStyle = ThemeManager.GetTypographyStyle(FontTypography.Caption);
-        this._textBlock.Style = captionStyle;
 
         // Set up binding for Text property
         _ = this._textBlock.SetBinding(TextBlock.TextProperty,

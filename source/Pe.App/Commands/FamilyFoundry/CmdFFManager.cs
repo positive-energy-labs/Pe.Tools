@@ -20,7 +20,7 @@ namespace Pe.Tools.Commands.FamilyFoundry;
 
 [Transaction(TransactionMode.Manual)]
 public class CmdFFManager : IExternalCommand {
-    public Result Execute( 
+    public Result Execute(
         ExternalCommandData commandData,
         ref string message,
         ElementSet elementSetf
@@ -107,7 +107,7 @@ public class CmdFFManager : IExternalCommand {
         List<SharedParameterDefinition> apsParamData
     ) {
         // Hardcoded reference plane subcategory specs
-        var specs = new List<RefPlaneSubcategorySpec> {
+        var specs = new List<RefPlaneSubcategorySpec> { 
             new() { Strength = RpStrength.NotARef, Name = "NotARef", Color = new Color(211, 211, 211) },
             new() { Strength = RpStrength.WeakRef, Name = "WeakRef", Color = new Color(217, 124, 0) },
             new() { Strength = RpStrength.StrongRef, Name = "StrongRef", Color = new Color(255, 0, 0) },
@@ -133,8 +133,8 @@ public class CmdFFManager : IExternalCommand {
 
         return new OperationQueue()
             .Add(new AddSharedParams(apsParamData))
-            .Add(new MakeRefPlaneAndDims(profile.MakeRefPlaneAndDims))
             .Add(new AddAndSetParams(moddedSettings, true)) // must come after AddAllFamilyParams and RP/dims
+            .Add(new MakeRefPlaneAndDims(profile.MakeRefPlaneAndDims))
             .Add(new MakeRefPlaneSubcategories(specs))
             .Add(new SortParams(new SortParamsSettings()));
     }

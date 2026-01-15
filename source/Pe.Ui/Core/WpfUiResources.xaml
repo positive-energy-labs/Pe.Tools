@@ -8,9 +8,6 @@
     <ResourceDictionary.MergedDictionaries>
         <ui:ThemesDictionary Theme="Dark" />
         <ui:ControlsDictionary />
-        <!-- Typography overrides MUST come after ControlsDictionary to override WPF.UI defaults -->
-        <ResourceDictionary
-            Source="pack://application:,,,/Pe.Ui;component/Core/TypographyOverrides.xaml" />
         <ResourceDictionary
             Source="pack://application:,,,/Pe.Ui;component/Core/WpfOverrides/TextBox.xaml" />
     </ResourceDictionary.MergedDictionaries>
