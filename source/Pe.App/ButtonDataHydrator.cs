@@ -126,6 +126,26 @@ public static class ButtonDataHydrator {
                 LargeImage = "Red_32.png",
                 ToolTip = "Aggregate parameter metadata across families in a category and output to CSV."
             }
+        }, {
+            nameof(CmdAutoTag),
+            new ButtonDataRecord {
+                SmallImage = "Red_16.png",
+                LargeImage = "Red_32.png",
+                ToolTip = "Manage AutoTag settings - automatically tag elements after placement based on configured rules.",
+                LongDescription =
+                    """
+                    AutoTag automatically tags elements when they are placed in the model.
+                    
+                    Configure which categories to tag, which tag families to use, tag placement offsets, and view type filters.
+                    Settings are stored in a JSON file that can be edited directly or through this command.
+                    
+                    Use this command to:
+                    - Reload settings from the JSON file
+                    - Clear the tag type cache
+                    - View current AutoTag status
+                    - Open the settings file for editing
+                    """
+            }
         }
 
         // {
