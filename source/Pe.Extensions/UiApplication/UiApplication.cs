@@ -260,7 +260,7 @@ public static class OpenDocumentExtensions {
         ModelPath modelPath,
         View targetView,
         int timeoutSeconds
-        ) {
+    ) {
         var sw = Stopwatch.StartNew();
         var timerFired = false;
         var uiApp = DocumentManager.uiapp;

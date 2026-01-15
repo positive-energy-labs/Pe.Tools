@@ -250,7 +250,8 @@ public static class ScheduleHelper {
                 value = filter.GetDoubleValue().ToString();
             else if (filter.IsElementIdValue) value = filter.GetElementIdValue().Value().ToString();
 
-            var filterSpec = new ScheduleFilterSpec { FieldName = fieldName, FilterType = filter.FilterType, Value = value };
+            var filterSpec =
+                new ScheduleFilterSpec { FieldName = fieldName, FilterType = filter.FilterType, Value = value };
 
             // Leave Value null for HasParameter, HasValue, HasNoValue filters
 
@@ -312,7 +313,6 @@ public static class ScheduleHelper {
     }
 
     public static ScheduleCreationResult CreateSchedule(Document doc, ScheduleSpec spec) {
-
         // Find category by name
         var categoryId = FindCategoryByName(doc, spec.CategoryName);
         if (categoryId == ElementId.InvalidElementId)
@@ -321,7 +321,12 @@ public static class ScheduleHelper {
         // Create schedule
         var schedule = ViewSchedule.CreateSchedule(doc, categoryId);
         schedule.Name = GetUniqueScheduleName(doc, spec.Name);
-        var result = new ScheduleCreationResult { Schedule = schedule, ScheduleName = schedule.Name, CategoryName = spec.CategoryName, IsItemized = spec.IsItemized };
+        var result = new ScheduleCreationResult {
+            Schedule = schedule,
+            ScheduleName = schedule.Name,
+            CategoryName = spec.CategoryName,
+            IsItemized = spec.IsItemized
+        };
 
         // Apply schedule-level settings
         schedule.Definition.IsItemized = spec.IsItemized;

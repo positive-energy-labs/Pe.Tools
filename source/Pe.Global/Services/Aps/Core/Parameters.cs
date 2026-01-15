@@ -50,7 +50,8 @@ public class Parameters(HttpClient httpClient, TokenProviders.IParameters tokenP
 
         return new ParametersApi.Groups {
             Results = allResults,
-            Pagination = new ParametersApi.Pagination { Offset = 0, Limit = allResults.Count, TotalResults = allResults.Count }
+            Pagination =
+                new ParametersApi.Pagination { Offset = 0, Limit = allResults.Count, TotalResults = allResults.Count }
         };
     }
 
@@ -91,7 +92,8 @@ public class Parameters(HttpClient httpClient, TokenProviders.IParameters tokenP
 
         return new ParametersApi.Collections {
             Results = allResults,
-            Pagination = new ParametersApi.Pagination { Offset = 0, Limit = allResults.Count, TotalResults = allResults.Count }
+            Pagination =
+                new ParametersApi.Pagination { Offset = 0, Limit = allResults.Count, TotalResults = allResults.Count }
         };
     }
 
@@ -145,13 +147,12 @@ public class Parameters(HttpClient httpClient, TokenProviders.IParameters tokenP
 
         var deserializedResponse = new ParametersApi.Parameters {
             Results = allResults.OrderBy(p => p.Name).ToList(),
-            Pagination = new ParametersApi.Pagination { Offset = 0, Limit = allResults.Count, TotalResults = allResults.Count }
+            Pagination =
+                new ParametersApi.Pagination { Offset = 0, Limit = allResults.Count, TotalResults = allResults.Count }
         };
 
         // Write to cache if it implements JsonWriter
-        if (cache is JsonWriter<ParametersApi.Parameters> cacheWriter) {
-            _ = cacheWriter.Write(deserializedResponse);
-        }
+        if (cache is JsonWriter<ParametersApi.Parameters> cacheWriter) _ = cacheWriter.Write(deserializedResponse);
         return deserializedResponse;
     }
 }

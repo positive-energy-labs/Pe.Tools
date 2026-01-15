@@ -94,9 +94,7 @@ public class LogEntry {
     /// </summary>
     public LogEntry Clone() {
         var clone = new LogEntry(this.Name) {
-            FamilyTypeName = this.FamilyTypeName,
-            Status = this.Status,
-            Exception = this.Exception
+            FamilyTypeName = this.FamilyTypeName, Status = this.Status, Exception = this.Exception
         };
         foreach (var msg in this.MessageList)
             clone.MessageList.Add(msg);

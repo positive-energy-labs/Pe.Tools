@@ -2,12 +2,11 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.ViewPalette;
 using Pe.Extensions.UiApplication;
-using Pe.Global.Services.Storage;
 using Pe.Global.Revit.Ui;
+using Pe.Global.Services.Storage;
 using Pe.Ui.Core;
 using Serilog.Events;
 using System.Diagnostics;
-using System.Windows;
 
 namespace Pe.App.Commands.Palette;
 
@@ -30,7 +29,7 @@ public class CmdPltViews : IExternalCommand {
             var actions = new List<PaletteAction<UnifiedViewItem>> {
                 new() {
                     Name = "Open",
-                    Execute = async item =>  uiapp.OpenAndActivateView(item.View),
+                    Execute = async item => uiapp.OpenAndActivateView(item.View),
                     CanExecute = item => true
                 }
             };
@@ -40,10 +39,22 @@ public class CmdPltViews : IExternalCommand {
                     Storage = new Storage(nameof(CmdPltViews)),
                     PersistenceKey = item => item.View.Id.ToString(),
                     Tabs = [
-                        new() { Name = "All", Filter = null, FilterKeySelector = null },
-                        new() { Name = "Views", Filter = i => i.ItemType == ViewItemType.View, FilterKeySelector = i => i.TextPill },
-                        new() { Name = "Schedules", Filter = i => i.ItemType == ViewItemType.Schedule, FilterKeySelector = i => i.TextPill },
-                        new() { Name = "Sheets", Filter = i => i.ItemType == ViewItemType.Sheet, FilterKeySelector = i => i.TextPill }
+                        new TabDefinition<UnifiedViewItem> { Name = "All", Filter = null, FilterKeySelector = null },
+                        new TabDefinition<UnifiedViewItem> {
+                            Name = "Views",
+                            Filter = i => i.ItemType == ViewItemType.View,
+                            FilterKeySelector = i => i.TextPill
+                        },
+                        new TabDefinition<UnifiedViewItem> {
+                            Name = "Schedules",
+                            Filter = i => i.ItemType == ViewItemType.Schedule,
+                            FilterKeySelector = i => i.TextPill
+                        },
+                        new TabDefinition<UnifiedViewItem> {
+                            Name = "Sheets",
+                            Filter = i => i.ItemType == ViewItemType.Sheet,
+                            FilterKeySelector = i => i.TextPill
+                        }
                     ],
                     DefaultTabIndex = 0,
                     Sidebar = new PaletteSidebar { Content = previewPanel },

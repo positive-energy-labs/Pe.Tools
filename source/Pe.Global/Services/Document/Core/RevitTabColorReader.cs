@@ -128,9 +128,7 @@ public static class RevitTabColorReader {
                 var hwnd = windowsWithDockingManager[0];
                 var source = HwndSource.FromHwnd(hwnd);
                 // FromHwnd can return null if the window is invalid or destroyed
-                if (source?.RootVisual is Visual rootVisual) {
-                    return rootVisual;
-                }
+                if (source?.RootVisual is Visual rootVisual) return rootVisual;
             }
 
             return null;

@@ -1,5 +1,6 @@
 using Pe.Ui.Core;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using WpfUiRichTextBox = Wpf.Ui.Controls.RichTextBox;
 
 namespace Pe.App.Commands.Palette.ViewPalette;
@@ -44,7 +45,7 @@ public class ViewPreviewPanel : UserControl {
         this._richTextBox.Document = doc;
     }
 
-    private System.Windows.Documents.FlowDocument BuildViewPreview(UnifiedViewItem item) {
+    private FlowDocument BuildViewPreview(UnifiedViewItem item) {
         var view = item.View;
         var doc = FlowDocumentBuilder.Create()
             .AddHeader(view.Name);
@@ -85,7 +86,7 @@ public class ViewPreviewPanel : UserControl {
         return doc;
     }
 
-    private System.Windows.Documents.FlowDocument BuildSchedulePreview(UnifiedViewItem item) {
+    private FlowDocument BuildSchedulePreview(UnifiedViewItem item) {
         var schedule = item.AsSchedule;
         if (schedule == null)
             return FlowDocumentBuilder.Create().AddHeader("Invalid Schedule");
@@ -106,9 +107,9 @@ public class ViewPreviewPanel : UserControl {
         // Sheet placements
         doc.AddSectionHeader("Sheet Placements");
         var instances = schedule.GetScheduleInstances(-1);
-        if (instances.Count == 0) {
+        if (instances.Count == 0)
             doc.AddParagraph("Not placed on any sheets");
-        } else {
+        else {
             var placements = new List<string>();
             var docRef = schedule.Document;
             foreach (var instId in instances) {
@@ -129,7 +130,7 @@ public class ViewPreviewPanel : UserControl {
         return doc;
     }
 
-    private System.Windows.Documents.FlowDocument BuildSheetPreview(UnifiedViewItem item) {
+    private FlowDocument BuildSheetPreview(UnifiedViewItem item) {
         var sheet = item.AsSheet;
         if (sheet == null)
             return FlowDocumentBuilder.Create().AddHeader("Invalid Sheet");
@@ -153,9 +154,9 @@ public class ViewPreviewPanel : UserControl {
         // Placed views
         doc.AddSectionHeader("Placed Views");
         var viewIds = sheet.GetAllPlacedViews();
-        if (viewIds.Count == 0) {
+        if (viewIds.Count == 0)
             doc.AddParagraph("No views placed");
-        } else {
+        else {
             var viewDetails = new List<(string primary, string secondary)>();
             var docRef = sheet.Document;
             foreach (var viewId in viewIds) {

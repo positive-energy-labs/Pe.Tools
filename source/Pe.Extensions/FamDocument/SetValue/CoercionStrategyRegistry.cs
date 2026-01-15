@@ -37,9 +37,7 @@ public static class ParamCoercionStrategyRegistry {
     /// <param name="name">Strategy name (should match enum value for C# usage)</param>
     /// <param name="instance">Strategy instance to register</param>
     public static void Register(string name, ICoercionStrategy instance) {
-        lock (_lock) {
-            _instances[name] = instance;
-        }
+        lock (_lock) _instances[name] = instance;
     }
 
     /// <summary>
@@ -91,9 +89,7 @@ public static class ValueCoercionStrategyRegistry {
     /// <param name="name">Strategy name (should match enum value for C# usage)</param>
     /// <param name="instance">Strategy instance to register</param>
     public static void Register(string name, ICoercionStrategy instance) {
-        lock (_lock) {
-            _instances[name] = instance;
-        }
+        lock (_lock) _instances[name] = instance;
     }
 
     /// <summary>

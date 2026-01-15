@@ -102,7 +102,8 @@ public class ParametersApi {
                             _ = item.Id switch {
                                 "isHidden" => this.Visible = !(item.Value is bool v && v),
                                 "instanceTypeAssociation" => this.IsInstance =
-                                    item.Value is not string s || s.Equals("INSTANCE", StringComparison.OrdinalIgnoreCase),
+                                    item.Value is not string s ||
+                                    s.Equals("INSTANCE", StringComparison.OrdinalIgnoreCase),
                                 "categories" => this._categories = item.Value as List<MetadataBinding>,
                                 "group" => this._groupId = (item.Value as MetadataBinding)?.Id,
                                 _ => default(object)
@@ -119,7 +120,9 @@ public class ParametersApi {
                     }
                 }
 
-                public ForgeTypeId GetParameterTypeId() => this._parameterTypeId ??= new ForgeTypeId(this._parent.Id ?? "");
+                public ForgeTypeId GetParameterTypeId() =>
+                    this._parameterTypeId ??= new ForgeTypeId(this._parent.Id ?? "");
+
                 public ForgeTypeId GetGroupTypeId() => this._groupTypeId ??= new ForgeTypeId(this._groupId ?? "");
                 public ForgeTypeId GetSpecTypeId() => this._specTypeId ??= new ForgeTypeId(this._parent.SpecId ?? "");
 
@@ -149,9 +152,10 @@ public class ParametersApi {
                                 Description = this._parent.Description ?? ""
                             }) as ExternalDefinition;
                     } catch (Exception ex) {
-                        this._externalDefinition = group.Definitions.get_Item(this._parent.Name ?? "") as ExternalDefinition
-                                                   ?? throw new Exception(
-                                                       $"Failed to create external definition for parameter {this._parent.Name}: {ex.Message}");
+                        this._externalDefinition =
+                            group.Definitions.get_Item(this._parent.Name ?? "") as ExternalDefinition
+                            ?? throw new Exception(
+                                $"Failed to create external definition for parameter {this._parent.Name}: {ex.Message}");
                     }
 
                     this._cachedDefinitionGroup = group;

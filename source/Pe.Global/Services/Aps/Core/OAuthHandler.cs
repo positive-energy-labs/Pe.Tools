@@ -148,8 +148,7 @@ internal static class OAuthHandler {
     /// <summary>Exchanges an authorization code for an access token</summary>
     private static Task<OAuthToken> ExchangeCodeForTokenAsync(OAuthFlowData flow, string code) {
         var additionalParams = new Dictionary<string, string> {
-            ["code"] = code,
-            ["redirect_uri"] = OAuthConfig.CallbackUri
+            ["code"] = code, ["redirect_uri"] = OAuthConfig.CallbackUri
         };
 
         // PKCE flow sends code_verifier, confidential flow sends client_secret

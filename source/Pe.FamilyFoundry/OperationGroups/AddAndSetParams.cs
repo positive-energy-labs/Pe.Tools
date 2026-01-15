@@ -47,7 +47,8 @@ public class AddAndSetParams(AddAndSetParamsSettings settings, bool createMissin
         if (settings.Parameters.Any(p => !string.IsNullOrEmpty(p.ValueOrFormula))) {
             ops.Add(new SetParamValues(settings));
             // 3. Set explicit per-type values AND handle fallbacks from SetParamValues failures
-            if (createMissingFamilyTypes || !settings.DisablePerTypeFallback) ops.Add(new SetParamValuesPerType(settings));
+            if (createMissingFamilyTypes || !settings.DisablePerTypeFallback)
+                ops.Add(new SetParamValuesPerType(settings));
         }
 
         return ops;

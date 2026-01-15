@@ -73,9 +73,7 @@ public class RequiredAwareContractResolver : RevitTypeContractResolver {
         if (this._defaultInstanceCache.TryGetValue(type, out var cached)) return cached;
 
         var instance = this.TryCreateDefaultInstance(type);
-        if (instance != null) {
-            this._defaultInstanceCache[type] = instance;
-        }
+        if (instance != null) this._defaultInstanceCache[type] = instance;
         return instance;
     }
 

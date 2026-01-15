@@ -3,7 +3,6 @@ using Pe.Ui.Components;
 using Pe.Ui.Core.Services;
 using Pe.Ui.ViewModels;
 using System.Windows;
-using System.Windows.Input;
 
 namespace Pe.Ui.Core;
 
@@ -123,7 +122,7 @@ public static class PaletteFactory {
                 // Auto-expand sidebar on first valid selection
                 if (options.Sidebar != null && viewModel.SelectedItem != null)
                     palette.ExpandSidebarOnce(options.Sidebar.Width);
-                
+
                 options.OnSelectionChangedDebounced(viewModel.SelectedItem);
             };
         }

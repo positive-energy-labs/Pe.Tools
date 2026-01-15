@@ -18,10 +18,10 @@ public partial class FilterBox : IPopoverExit {
     private bool _isExpanded;
 
     protected FilterBox(List<Key> closeKeys) {
-        this.CloseKeys = closeKeys.Count == 0 ?  [Key.Escape]:  closeKeys;
+        this.CloseKeys = closeKeys.Count == 0 ? [Key.Escape] : closeKeys;
         // Note: Base class RevitHostedUserControl loads WpfUiResources before this runs
         this.InitializeComponent();
-        
+
         this.Loaded += this.FilterBox_Loaded;
     }
 
@@ -96,7 +96,7 @@ public partial class FilterBox : IPopoverExit {
 
     protected void FilterAutoSuggestBox_GotFocus(object sender, RoutedEventArgs e) {
         if (this._isExpanded) return;
-        
+
         this.Expand();
         this.FilterAutoSuggestBox.Text = string.Empty;
         e.Handled = true;

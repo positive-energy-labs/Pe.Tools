@@ -2,9 +2,6 @@
 using Autodesk.Windows;
 using Pe.Global.Services.Storage;
 using Serilog.Events;
-using System.Diagnostics;
-using System.Reflection;
-using System.Text;
 using System.Windows;
 
 namespace Pe.Global.Revit.Ui;
@@ -127,8 +124,7 @@ public class Ballogger {
             title = Assembly.GetExecutingAssembly().GetName().Name;
 #pragma warning disable CA1416 // Validate platform compatibility
         var ri = new ResultItem {
-            Title = text.Trim(),
-            Category = title + (clickDescription != "" ? " (" + clickDescription + ")" : null)
+            Title = text.Trim(), Category = title + (clickDescription != "" ? " (" + clickDescription + ")" : null)
         };
         ri.ResultClicked += (_, _) => clickHandler();
 

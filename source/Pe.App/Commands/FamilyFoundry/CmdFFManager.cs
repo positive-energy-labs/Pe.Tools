@@ -70,8 +70,7 @@ public class CmdFFManager : IExternalCommand {
 
         // Force this to never be single transaction
         var executionOptions = new ExecutionOptions {
-            SingleTransaction = false,
-            OptimizeTypeOperations = profile.ExecutionOptions.OptimizeTypeOperations
+            SingleTransaction = false, OptimizeTypeOperations = profile.ExecutionOptions.OptimizeTypeOperations
         };
 
         // Request both parameter and refplane snapshots
@@ -90,9 +89,11 @@ public class CmdFFManager : IExternalCommand {
             .WriteSingleFamilyOutput(logs.contexts[0], ctx.OnFinishSettings.OpenOutputFilesOnCommandFinish);
 
         var balloon = new Ballogger();
-        foreach (var logCtx in logs.contexts)
+        foreach (var logCtx in logs.contexts) {
             _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
                 $"Processed {logCtx.FamilyName} in {logCtx.TotalMs}ms");
+        }
+
         balloon.Show();
 
         // No post-processing for Manager - it's for family documents only
@@ -107,7 +108,7 @@ public class CmdFFManager : IExternalCommand {
         List<SharedParameterDefinition> apsParamData
     ) {
         // Hardcoded reference plane subcategory specs
-        var specs = new List<RefPlaneSubcategorySpec> { 
+        var specs = new List<RefPlaneSubcategorySpec> {
             new() { Strength = RpStrength.NotARef, Name = "NotARef", Color = new Color(211, 211, 211) },
             new() { Strength = RpStrength.WeakRef, Name = "WeakRef", Color = new Color(217, 124, 0) },
             new() { Strength = RpStrength.StrongRef, Name = "StrongRef", Color = new Color(255, 0, 0) },

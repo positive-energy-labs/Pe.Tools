@@ -69,7 +69,7 @@ public static class FormulaReferences {
     /// <remarks>
     ///     Tokens that start with a digit are excluded from this check, as they are almost certainly
     ///     numeric literals (possibly with unit suffixes like "0'" or "12 in"), not parameter references.
-    ///     Use <see cref="GetSuspiciousTokens"/> if you need to see those tokens for diagnostics.
+    ///     Use <see cref="GetSuspiciousTokens" /> if you need to see those tokens for diagnostics.
     /// </remarks>
     /// <returns>Collection of invalid parameter names, empty if all tokens are valid</returns>
     public static IEnumerable<string> GetInvalidReferences(

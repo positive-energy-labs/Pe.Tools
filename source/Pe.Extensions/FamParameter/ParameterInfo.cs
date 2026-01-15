@@ -1,6 +1,3 @@
-using System;
-
-using Autodesk.Revit.DB;
 using Pe.Global.PolyFill;
 
 namespace Pe.Extensions.FamParameter;

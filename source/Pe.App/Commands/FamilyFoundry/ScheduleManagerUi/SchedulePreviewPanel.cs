@@ -3,7 +3,6 @@ using Pe.Ui.Core;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
-using System.Windows.Media;
 using WpfUiRichTextBox = Wpf.Ui.Controls.RichTextBox;
 
 namespace Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
@@ -64,26 +63,29 @@ public class SchedulePreviewPanel : UserControl {
             // Fields list with details
             if (data.Fields.Count > 0) {
                 doc.AddSectionHeader($"Fields ({data.FieldCount})");
-                
+
                 // Build table data
                 doc.AddTable(
                     data.Fields,
                     [
                         ("Name", f => f.ParameterName),
                         ("Header", f => f.ColumnHeaderOverride ?? string.Empty),
-                        ("Display", f => f.DisplayType != ScheduleFieldDisplayType.Standard ? f.DisplayType.ToString() : string.Empty),
+                        ("Display",
+                            f => f.DisplayType != ScheduleFieldDisplayType.Standard
+                                ? f.DisplayType.ToString()
+                                : string.Empty),
                         ("Width", f => f.ColumnWidth.HasValue ? f.ColumnWidth.Value.ToString("F2") : string.Empty),
                         ("Type", f => f.CalculatedType.HasValue ? f.CalculatedType.Value.ToString() : string.Empty),
                         ("Hidden", f => f.IsHidden ? "Yes" : string.Empty)
                     ],
-                    fontSize: 9
+                    9
                 );
             }
 
             // Sort/Group list with details
             if (data.SortGroup.Count > 0) {
                 doc.AddSectionHeader($"Sort/Group ({data.SortGroupCount})");
-                
+
                 doc.AddTable(
                     data.SortGroup,
                     [
@@ -93,7 +95,7 @@ public class SchedulePreviewPanel : UserControl {
                         ("Footer", sg => sg.ShowFooter ? "Yes" : string.Empty),
                         ("Blank Line", sg => sg.ShowBlankLine ? "Yes" : string.Empty)
                     ],
-                    fontSize: 9
+                    9
                 );
             }
 

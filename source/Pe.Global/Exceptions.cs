@@ -23,8 +23,7 @@ public class ElementIntersectException : Exception {
     private static string FormatDefaultMessage(ElementId? reference, ElementId[] intersections) {
         if (reference == null)
             return $"{intersections.Length} elements intersect";
-        else
-            return $"Element {reference} has {intersections.Length} intersection{(intersections.Length != 1 ? "s" : "")}";
+        return $"Element {reference} has {intersections.Length} intersection{(intersections.Length != 1 ? "s" : "")}";
     }
 }
 

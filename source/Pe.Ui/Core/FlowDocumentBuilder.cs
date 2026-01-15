@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 
@@ -52,9 +51,7 @@ public static class FlowDocumentBuilder {
     ///     Adds a simple text paragraph.
     /// </summary>
     public static FlowDocument AddParagraph(this FlowDocument doc, string text, Thickness? margin = null) {
-        var para = new Paragraph(new Run(text)) {
-            Margin = margin ?? new Thickness(0, 0, 0, 8)
-        };
+        var para = new Paragraph(new Run(text)) { Margin = margin ?? new Thickness(0, 0, 0, 8) };
         doc.Blocks.Add(para);
         return doc;
     }
@@ -74,7 +71,9 @@ public static class FlowDocumentBuilder {
     /// <summary>
     ///     Adds validation status with colored indicator and optional error list.
     /// </summary>
-    public static FlowDocument AddValidationStatus(this FlowDocument doc, bool isValid, IEnumerable<string>? errors = null) {
+    public static FlowDocument AddValidationStatus(this FlowDocument doc,
+        bool isValid,
+        IEnumerable<string>? errors = null) {
         var statusPara = new Paragraph { Margin = new Thickness(0, 0, 0, 8) };
 
         if (isValid) {
@@ -197,8 +196,7 @@ public static class FlowDocumentBuilder {
         var para = new Paragraph();
         var marker = enabled ? "✓ " : "✗ ";
         para.Inlines.Add(new Run(marker) {
-            FontWeight = FontWeights.Bold,
-            Foreground = enabled ? Brushes.Green : Brushes.Red
+            FontWeight = FontWeights.Bold, Foreground = enabled ? Brushes.Green : Brushes.Red
         });
         para.Inlines.Add(new Run(label));
         para.Margin = new Thickness(0, 0, 0, 2);
@@ -230,11 +228,7 @@ public static class FlowDocumentBuilder {
         if (columnList is not { Count: > 0 } || rowList is not { Count: > 0 })
             return doc;
 
-        var table = new Table {
-            CellSpacing = 0,
-            FontSize = size,
-            Margin = margin ?? new Thickness(0, 0, 0, 12)
-        };
+        var table = new Table { CellSpacing = 0, FontSize = size, Margin = margin ?? new Thickness(0, 0, 0, 12) };
 
         // Define columns
         foreach (var _ in columnList)
@@ -247,13 +241,8 @@ public static class FlowDocumentBuilder {
 
         foreach (var column in columnList) {
             var cell = new TableCell(new Paragraph(new Run(column) {
-                FontWeight = FontWeights.SemiBold,
-                FontSize = size
-            }) {
-                Margin = new Thickness(4, 2, 4, 2)
-            }) {
-                Padding = new Thickness(0)
-            };
+                FontWeight = FontWeights.SemiBold, FontSize = size
+            }) { Margin = new Thickness(4, 2, 4, 2) }) { Padding = new Thickness(0) };
             headerRow.Cells.Add(cell);
         }
 
@@ -275,9 +264,7 @@ public static class FlowDocumentBuilder {
                 var value = rowData.TryGetValue(column, out var v) ? v : string.Empty;
                 var cell = new TableCell(new Paragraph(new Run(value) { FontSize = size }) {
                     Margin = new Thickness(4, 2, 4, 2)
-                }) {
-                    Padding = new Thickness(0)
-                };
+                }) { Padding = new Thickness(0) };
                 dataRow.Cells.Add(cell);
             }
 

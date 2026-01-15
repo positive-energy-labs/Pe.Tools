@@ -39,7 +39,7 @@ public partial class ListView {
     public ListView() {
         // Note: Base class RevitHostedUserControl loads WpfUiResources before this runs
         this.InitializeComponent();
-        
+
         this.ItemListView.ItemTemplate = new DataTemplate {
             VisualTree = new FrameworkElementFactory(typeof(ListViewItem))
         };

@@ -63,20 +63,20 @@ public static class Automations {
     public static async Task<bool> ClickButtonAsync(string buttonName,
         string? automationId = null,
         AutomationElement? parent = null) => await Task.Run(() => {
-            var element = FindElement(automationId, buttonName, "button", parent);
-            if (element == null) {
-                Debug.WriteLine($"Button '{buttonName}' (AutomationId: '{automationId}') not found.");
-                return false;
-            }
-
-            if (element.TryGetCurrentPattern(InvokePattern.Pattern, out var pattern)) {
-                (pattern as InvokePattern)?.Invoke();
-                return true;
-            }
-
-            Debug.WriteLine($"Button '{buttonName}' (AutomationId: '{automationId}') does not support InvokePattern.");
+        var element = FindElement(automationId, buttonName, "button", parent);
+        if (element == null) {
+            Debug.WriteLine($"Button '{buttonName}' (AutomationId: '{automationId}') not found.");
             return false;
-        });
+        }
+
+        if (element.TryGetCurrentPattern(InvokePattern.Pattern, out var pattern)) {
+            (pattern as InvokePattern)?.Invoke();
+            return true;
+        }
+
+        Debug.WriteLine($"Button '{buttonName}' (AutomationId: '{automationId}') does not support InvokePattern.");
+        return false;
+    });
 
     public static async Task<bool> ClickListItemByNameAsync(string itemName) => await Task.Run(() => {
         var element = FindElement(name: itemName, localizedControlType: "list item");

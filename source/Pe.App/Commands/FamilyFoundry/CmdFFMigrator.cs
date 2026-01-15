@@ -6,9 +6,9 @@ using Pe.FamilyFoundry.Operations;
 using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Snapshots;
 using Pe.Global;
-using Pe.Global.Services.Storage;
 using Pe.Global.Revit.Lib;
 using Pe.Global.Revit.Ui;
+using Pe.Global.Services.Storage;
 using Pe.Global.Utils.Files;
 using Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 using Serilog.Events;
@@ -131,9 +131,11 @@ public class CmdFFMigrator : IExternalCommand {
         resultBuilder.WriteMultiFamilySummary(logs.totalMs, ctx.OnFinishSettings.OpenOutputFilesOnCommandFinish);
 
         var balloon = new Ballogger();
-        foreach (var logCtx in logs.contexts)
+        foreach (var logCtx in logs.contexts) {
             _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
                 $"Processed {logCtx.FamilyName} in {logCtx.TotalMs}ms");
+        }
+
         balloon.Show();
 
         // Prompt user to place families in a view for testing

@@ -2,7 +2,6 @@ using Pe.Ui.Core;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
-using Wpf.Ui.Controls;
 using Binding = System.Windows.Data.Binding;
 using TextBlock = System.Windows.Controls.TextBlock;
 using FontWeight = System.Windows.FontWeight;
@@ -32,9 +31,7 @@ public class Pill : Border {
 
         // Create the TextBlock child
         this._textBlock = new TextBlock {
-            VerticalAlignment = VerticalAlignment.Center,
-            FontSize = 10,
-            FontFamily = Theme.FontFamily
+            VerticalAlignment = VerticalAlignment.Center, FontSize = 10, FontFamily = Theme.FontFamily
         };
 
         // Set up theme resource for foreground

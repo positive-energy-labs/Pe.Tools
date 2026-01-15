@@ -4,9 +4,9 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
-using Wpf.Ui.Controls;
 using Wpf.Ui.Markup;
 using Color = System.Windows.Media.Color;
 using Grid = System.Windows.Controls.Grid;
@@ -27,13 +27,6 @@ public class EphemeralWindow : Window {
     private readonly Border? _underlayBorder;
     private readonly ScaleTransform? _zoomTransform;
     private bool _isClosing;
-
-    /// <summary>
-    ///     Global UI zoom level. 1.0 = 100%, 0.85 = 85%, 1.25 = 125%, etc.
-    ///     Applied via LayoutTransform to scale all UI elements proportionally.
-    ///     Adjustable at runtime with Ctrl+Plus/Minus.
-    /// </summary>
-    public static double ZoomLevel { get; set; } = 0.85;
 
     public EphemeralWindow(Border contentBorder) {
         this._contentBorder = contentBorder;
@@ -93,6 +86,13 @@ public class EphemeralWindow : Window {
     }
 
     /// <summary>
+    ///     Global UI zoom level. 1.0 = 100%, 0.85 = 85%, 1.25 = 125%, etc.
+    ///     Applied via LayoutTransform to scale all UI elements proportionally.
+    ///     Adjustable at runtime with Ctrl+Plus/Minus.
+    /// </summary>
+    public static double ZoomLevel { get; set; } = 0.85;
+
+    /// <summary>
     ///     Gets the UserControl content hosted by this window (typically a Palette).
     /// </summary>
     public UserControl? ContentControl { get; }
@@ -140,23 +140,23 @@ public class EphemeralWindow : Window {
     /// <summary>
     ///     Handles Ctrl+Plus/Minus for zoom adjustment.
     /// </summary>
-    private void OnPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e) {
+    private void OnPreviewKeyDown(object sender, KeyEventArgs e) {
         if (this._zoomTransform == null) return;
-        if ((System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) == 0) return;
+        if ((Keyboard.Modifiers & ModifierKeys.Control) == 0) return;
 
         var zoomDelta = e.Key switch {
-            System.Windows.Input.Key.OemPlus => ZoomStep,    // +/= key
-            System.Windows.Input.Key.Add => ZoomStep,        // Numpad +
-            System.Windows.Input.Key.OemMinus => -ZoomStep,  // -/_ key
-            System.Windows.Input.Key.Subtract => -ZoomStep,  // Numpad -
-            System.Windows.Input.Key.D0 when (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) != 0 => 0, // Reset marker
+            Key.OemPlus => ZoomStep, // +/= key
+            Key.Add => ZoomStep, // Numpad +
+            Key.OemMinus => -ZoomStep, // -/_ key
+            Key.Subtract => -ZoomStep, // Numpad -
+            Key.D0 when (Keyboard.Modifiers & ModifierKeys.Control) != 0 => 0, // Reset marker
             _ => (double?)null
         };
 
         if (zoomDelta == null) return;
 
         // Ctrl+0 resets to 100%, otherwise adjust by delta
-        ZoomLevel = e.Key == System.Windows.Input.Key.D0
+        ZoomLevel = e.Key == Key.D0
             ? 1.0
             : Math.Clamp(ZoomLevel + zoomDelta.Value, ZoomMin, ZoomMax);
 

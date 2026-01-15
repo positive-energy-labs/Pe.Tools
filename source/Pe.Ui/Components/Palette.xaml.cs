@@ -1,11 +1,9 @@
 using Pe.Ui.Core;
 using Pe.Ui.ViewModels;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
-using Wpf.Ui.Controls;
 using Visibility = System.Windows.Visibility;
 using Grid = System.Windows.Controls.Grid;
 using Button = Wpf.Ui.Controls.Button;
@@ -89,7 +87,7 @@ public sealed partial class Palette : ICloseRequestable {
 
         // Initialize tabs if provided
         if (tabNames is { Count: > 0 })
-            this.InitializeTabs(viewModel, tabNames); 
+            this.InitializeTabs(viewModel, tabNames);
 
         // Create FilterBox if filtering is enabled
         var hasFiltering = viewModel.AvailableFilterValues != null;
@@ -553,7 +551,7 @@ public sealed partial class Palette : ICloseRequestable {
 
         // Collapse the FilterBox when hiding it to reset its expanded state
         if (!shouldBeVisible)
-            (this._filterBox as FilterBox)?.Collapse();
+            this._filterBox?.Collapse();
     }
 
     /// <summary>
@@ -564,12 +562,12 @@ public sealed partial class Palette : ICloseRequestable {
             var button = this._tabButtons[i];
             if (i == selectedIndex) {
                 // Selected: subtle accent background with primary text
-                button.SetResourceReference(Button.BackgroundProperty, "ControlFillColorDefaultBrush");
-                button.SetResourceReference(Button.ForegroundProperty, "TextFillColorPrimaryBrush");
+                button.SetResourceReference(BackgroundProperty, "ControlFillColorDefaultBrush");
+                button.SetResourceReference(ForegroundProperty, "TextFillColorPrimaryBrush");
             } else {
                 // Unselected: transparent background with secondary text
                 button.Background = Brushes.Transparent;
-                button.SetResourceReference(Button.ForegroundProperty, "TextFillColorSecondaryBrush");
+                button.SetResourceReference(ForegroundProperty, "TextFillColorSecondaryBrush");
             }
         }
     }

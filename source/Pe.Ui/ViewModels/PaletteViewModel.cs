@@ -38,17 +38,24 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     private readonly Func<TItem, string> _filterKeySelector;
     private readonly SearchFilterService<TItem> _searchService;
     private readonly DispatcherTimer _selectionDebounceTimer;
-    private readonly List<Func<TItem, bool>> _tabFilters;
     private readonly List<Func<TItem, string>> _tabFilterKeySelectors;
+    private readonly List<Func<TItem, bool>> _tabFilters;
+
+    /// <summary> Previously selected item for efficient selection updates </summary>
+    private TItem? _previousSelectedItem;
 
     /// <summary> Current search text </summary>
     [ObservableProperty] private string _searchText = string.Empty;
 
     private string _selectedFilterValue = string.Empty;
-    private int _selectedTabIndex;
 
     /// <summary> Currently selected index in the filtered list </summary>
     [ObservableProperty] private int _selectedIndex = -1;
+
+    /// <summary> Currently selected item </summary>
+    [ObservableProperty] private TItem? _selectedItem;
+
+    private int _selectedTabIndex;
 
     public PaletteViewModel(
         IEnumerable<TItem> items,
@@ -64,7 +71,8 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
         this._filterKeySelector = filterKeySelector;
         this._tabFilters = tabFilters;
         this._tabFilterKeySelectors = tabFilterKeySelectors;
-        this._selectedTabIndex = tabFilters is { Count: > 0 } ? Math.Clamp(defaultTabIndex, 0, tabFilters.Count - 1) : 0;
+        this._selectedTabIndex =
+            tabFilters is { Count: > 0 } ? Math.Clamp(defaultTabIndex, 0, tabFilters.Count - 1) : 0;
 
         // Initialize debounce timer for search (100ms delay)
         this._debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
@@ -112,6 +120,15 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     /// <summary> Whether filtering is enabled for this palette </summary>
     public bool IsFilteringEnabled => this._filterKeySelector != null;
 
+    /// <summary> Currently selected filter value </summary>
+    public string SelectedFilterValue {
+        get => this._selectedFilterValue;
+        set {
+            if (this.SetProperty(ref this._selectedFilterValue, value))
+                this.FilterItems();
+        }
+    }
+
     /// <summary> Whether tabs are enabled for this palette </summary>
     public bool HasTabs => this._tabFilters is { Count: > 0 };
 
@@ -138,15 +155,6 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
                 this.FilterItems();
                 this.SelectedTabChanged?.Invoke(this, EventArgs.Empty);
             }
-        }
-    }
-
-    /// <summary> Currently selected filter value </summary>
-    public string SelectedFilterValue {
-        get => this._selectedFilterValue;
-        set {
-            if (this.SetProperty(ref this._selectedFilterValue, value))
-                this.FilterItems();
         }
     }
 
@@ -289,12 +297,6 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
         if (this.SelectedItem != null)
             this._searchService.RecordUsage(this.SelectedItem);
     }
-
-    /// <summary> Previously selected item for efficient selection updates </summary>
-    private TItem? _previousSelectedItem;
-
-    /// <summary> Currently selected item </summary>
-    [ObservableProperty] private TItem? _selectedItem;
 #nullable disable
 
     #region Property Change Handlers

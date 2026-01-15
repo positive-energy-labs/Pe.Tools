@@ -18,7 +18,7 @@ public abstract class ActionMenu : RevitHostedUserControl, IPopoverExit {
     protected IEnumerable? _actions;
 
     protected ContextMenu? Menu { get; set; }
-    public event EventHandler? ExitRequested; 
+    public event EventHandler? ExitRequested;
     public IEnumerable<Key> CloseKeys { get; set; } = Array.Empty<Key>();
 
     public virtual void RequestExit() {

@@ -33,7 +33,8 @@ public static class FileUtils {
         if (string.IsNullOrWhiteSpace(filename))
             throw new ArgumentException("Filename cannot be null, empty, or whitespace.", nameof(filename));
         if (string.IsNullOrWhiteSpace(expectedExt))
-            throw new ArgumentException("Expected extension cannot be null, empty, or whitespace.", nameof(expectedExt));
+            throw new ArgumentException("Expected extension cannot be null, empty, or whitespace.",
+                nameof(expectedExt));
 
         var normalizedExpectedExt = expectedExt.StartsWith(".")
             ? expectedExt.ToLowerInvariant()
@@ -60,11 +61,12 @@ public static class FileUtils {
             return normalizedPath;
 
         // If filename has a different extension, throw an error
-        if (!string.IsNullOrEmpty(currentExt))
+        if (!string.IsNullOrEmpty(currentExt)) {
             throw new ArgumentException(
                 $"Filename has extension '{currentExt}' but expected '{normalizedExpectedExt}'. " +
                 $"Either remove the extension or use the correct one.",
                 nameof(filename));
+        }
 
         // Add the expected extension to the filename part and recombine
         var filenameWithExt = filenamePart + normalizedExpectedExt;

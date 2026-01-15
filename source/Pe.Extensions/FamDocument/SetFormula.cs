@@ -10,9 +10,9 @@ public static class Formula {
     /// </summary>
     /// <remarks> Must be a getter, when it is a simple statically initialized property it errors with NullReferences</remarks>
     private static readonly HashSet<ForgeTypeId> _forbiddenDataTypes = [
-            SpecTypeId.String.Url,
-            SpecTypeId.Reference.LoadClassification
-        ];
+        SpecTypeId.String.Url,
+        SpecTypeId.Reference.LoadClassification
+    ];
 
 
     /// <summary>
@@ -21,7 +21,7 @@ public static class Formula {
     /// </summary>
     /// <returns>
     ///     True if the formula was set successfully. On error, no message is returned nor any exception thrown, only
-    ///     false is returned. 
+    ///     false is returned.
     /// </returns>
     /// <exception cref="Autodesk.Revit.Exceptions.InvalidOperationException">
     ///     Thrown when a type parameter formula references
@@ -52,7 +52,8 @@ public static class Formula {
         errorMessage = null;
 
         try {
-            if (string.IsNullOrWhiteSpace(formula)) return famDoc.TrySetFormulaFast(targetParam, null, out errorMessage);
+            if (string.IsNullOrWhiteSpace(formula))
+                return famDoc.TrySetFormulaFast(targetParam, null, out errorMessage);
 
             var parameters = famDoc.FamilyManager.Parameters;
 
@@ -61,7 +62,7 @@ public static class Formula {
             var invalidParams = parameters.GetInvalidReferences(formula).ToList();
             if (invalidParams.Count != 0) {
                 errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. " +
-                    $"Formula references non-existent parameters: {string.Join(", ", invalidParams.Select(p => $"'{p}'"))}";
+                               $"Formula references non-existent parameters: {string.Join(", ", invalidParams.Select(p => $"'{p}'"))}";
                 return false;
             }
 
@@ -73,7 +74,7 @@ public static class Formula {
                 if (instanceParams.Count > 0) {
                     var instanceNames = instanceParams.Select(p => $"'{p.Name()}'");
                     errorMessage = $"Cannot set formula on type parameter '{targetParam.Name()}'. " +
-                        $"Type parameter formulas cannot reference instance parameters: {string.Join(", ", instanceNames)}";
+                                   $"Type parameter formulas cannot reference instance parameters: {string.Join(", ", instanceNames)}";
                     return false;
                 }
             }
@@ -89,11 +90,11 @@ public static class Formula {
                 // Provide enhanced error message based on whether suspicious tokens were detected
                 errorMessage = suspiciousTokens.Count > 0
                     ? $"Cannot set formula on parameter '{targetParam.Name()}'. " +
-                        $"Revit rejected the formula. Found tokens that may be numeric literals with unrecognized unit formats " +
-                        $"(or unconventional parameter names starting with digits): {string.Join(", ", suspiciousTokens.Select(t => $"'{t}'"))}. " +
-                        $"Revit error: {fastErrorMessage}"
+                      $"Revit rejected the formula. Found tokens that may be numeric literals with unrecognized unit formats " +
+                      $"(or unconventional parameter names starting with digits): {string.Join(", ", suspiciousTokens.Select(t => $"'{t}'"))}. " +
+                      $"Revit error: {fastErrorMessage}"
                     : $"Cannot set formula on parameter '{targetParam.Name()}'. " +
-                        $"Revit error: {fastErrorMessage}";
+                      $"Revit error: {fastErrorMessage}";
                 return false;
             }
 

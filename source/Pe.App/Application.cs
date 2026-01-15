@@ -3,15 +3,14 @@ using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Events;
 using Nice3point.Revit.Toolkit.External;
 using Pe.App.Commands.Palette;
-// using Pe.Global.Services.AutoTag;
 using Pe.Global.Services.Document;
-using Pe.Global.Revit;
 using Pe.Tools.Commands;
 using Pe.Tools.Commands.FamilyFoundry;
 using Pe.Ui.Core;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
 using Serilog.Events;
+// using Pe.Global.Services.AutoTag;
 
 namespace Pe.Tools;
 
@@ -29,7 +28,6 @@ public class Application : ExternalApplication {
     ///     AutoTag updater instance for automatic element tagging.
     /// </summary>
     // public static AutoTagUpdater? AutoTagUpdater { get; private set; }
-
     public override void OnStartup() {
         // Subscribe to ViewActivated event for MRU tracking
         this.Application.ViewActivated += OnViewActivated;
@@ -102,7 +100,7 @@ public class Application : ExternalApplication {
             panelTools.AddPushButton<CmdPltMruViews>("MRU Views"),
             panelTools.AddPushButton<CmdPltFamilies>("Family Palette"),
             panelTools.AddPushButton<CmdPltFamilyElements>("Family Palette"),
-            panelTools.AddPushButton<CmdTapMaker>("Tap Maker"),
+            panelTools.AddPushButton<CmdTapMaker>("Tap Maker")
             // manageStackButton.AddPushButton<CmdAutoTag>("AutoTag Settings")
         ]);
     }

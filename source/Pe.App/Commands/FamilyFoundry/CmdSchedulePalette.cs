@@ -1,14 +1,12 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.FamilyFoundry;
-using Pe.Global.Services.Storage;
-using Pe.Global.Services.Storage.Core;
 using Pe.Global.Revit.Lib;
 using Pe.Global.Revit.Ui;
+using Pe.Global.Services.Storage;
+using Pe.Global.Services.Storage.Core;
 using Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
-using Pe.Ui.Components;
 using Pe.Ui.Core;
-using Pe.Ui.Core.Services;
 using Serilog.Events;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
@@ -16,8 +14,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Windows;
-using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
 
@@ -40,10 +36,7 @@ public class CmdSchedulePalette : IExternalCommand {
 
             // Context for Create Schedule tab
             var context = new ScheduleManagerContext {
-                Doc = doc,
-                UiDoc = uiDoc,
-                Storage = storage,
-                SettingsManager = settingsManager
+                Doc = doc, UiDoc = uiDoc, Storage = storage, SettingsManager = settingsManager
             };
 
             // Collect items for both tabs
@@ -94,12 +87,12 @@ public class CmdSchedulePalette : IExternalCommand {
                     Storage = storage,
                     PersistenceKey = item => item.TextPrimary,
                     Tabs = [
-                        new() {
+                        new TabDefinition<ISchedulePaletteItem> {
                             Name = "Create",
                             Filter = i => i.TabType == ScheduleTabType.Create,
                             FilterKeySelector = i => i.CategoryName
                         },
-                        new() {
+                        new TabDefinition<ISchedulePaletteItem> {
                             Name = "Serialize",
                             Filter = i => i.TabType == ScheduleTabType.Serialize,
                             FilterKeySelector = i => i.TextPill
@@ -118,9 +111,8 @@ public class CmdSchedulePalette : IExternalCommand {
                             if (serializeItem != null) {
                                 var previewData = this.BuildSerializationPreview(serializeItem);
                                 previewPanel.UpdatePreview(previewData);
-                            } else {
+                            } else
                                 previewPanel.UpdatePreview(null);
-                            }
                         }
                     }
                 });
@@ -174,8 +166,7 @@ public class CmdSchedulePalette : IExternalCommand {
         var profileJson = JsonSerializer.Serialize(
             profile,
             new JsonSerializerOptions {
-                WriteIndented = true,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             });
 
         return new SchedulePreviewData {
@@ -199,9 +190,7 @@ public class CmdSchedulePalette : IExternalCommand {
     private static SchedulePreviewData
         CreateSanitizationErrorPreview(ScheduleListItem profileItem, JsonSanitizationException ex) {
         var preview = new SchedulePreviewData {
-            ProfileName = profileItem.TextPrimary,
-            IsValid = false,
-            RemainingErrors = []
+            ProfileName = profileItem.TextPrimary, IsValid = false, RemainingErrors = []
         };
 
         if (ex.AddedProperties.Any())
@@ -229,8 +218,7 @@ public class CmdSchedulePalette : IExternalCommand {
             var profileJson = JsonSerializer.Serialize(
                 spec,
                 new JsonSerializerOptions {
-                    WriteIndented = true,
-                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                    WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
                 });
 
             return new SchedulePreviewData {
@@ -350,7 +338,7 @@ public class CmdSchedulePalette : IExternalCommand {
                         result.SkippedHeaderGroups.Count > 0 ||
                         result.Warnings.Count > 0;
         if (hasIssues && !string.IsNullOrEmpty(outputPath))
-            balloon.Show(clickHandler: () => FileUtils.OpenInDefaultApp(outputPath), clickDescription: "Open Output File");
+            balloon.Show(() => FileUtils.OpenInDefaultApp(outputPath), "Open Output File");
         else
             balloon.Show();
     }
@@ -517,10 +505,7 @@ public class CmdSchedulePalette : IExternalCommand {
                 result.AppliedHeaderGroups,
                 SkippedHeaderGroups = result.SkippedHeaderGroups.Select(s => new { Reason = s }).ToList(),
                 CalculatedFields = result.SkippedCalculatedFields.Select(f => new {
-                    f.FieldName,
-                    f.CalculatedType,
-                    f.Guidance,
-                    f.PercentageOfField
+                    f.FieldName, f.CalculatedType, f.Guidance, f.PercentageOfField
                 }).ToList(),
                 result.Warnings
             };
@@ -559,7 +544,7 @@ public enum ScheduleTabType {
 }
 
 /// <summary>
-/// Interface for items in the unified schedule palette
+///     Interface for items in the unified schedule palette
 /// </summary>
 public interface ISchedulePaletteItem : IPaletteListItem {
     ScheduleTabType TabType { get; }
@@ -569,7 +554,7 @@ public interface ISchedulePaletteItem : IPaletteListItem {
 }
 
 /// <summary>
-/// Wrapper that adapts both item types to work in the unified palette
+///     Wrapper that adapts both item types to work in the unified palette
 /// </summary>
 public class SchedulePaletteItemWrapper : ISchedulePaletteItem {
     private readonly IPaletteListItem _inner;

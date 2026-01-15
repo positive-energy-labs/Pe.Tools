@@ -117,5 +117,4 @@ public class UnifiedViewItem : IPaletteListItem {
         var firstDigitIndex = sheetNum.TakeWhile(c => !char.IsDigit(c)).Count();
         return firstDigitIndex == 0 ? string.Empty : sheetNum[..firstDigitIndex];
     }
-
 }

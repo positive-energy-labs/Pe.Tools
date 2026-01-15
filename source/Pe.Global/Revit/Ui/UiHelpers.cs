@@ -1,6 +1,4 @@
-﻿using Autodesk.Revit.UI;
-
-namespace Pe.Global.Revit.Ui;
+﻿namespace Pe.Global.Revit.Ui;
 
 public class UiHelpers {
     public static RibbonPanel CreateRibbonPanel(

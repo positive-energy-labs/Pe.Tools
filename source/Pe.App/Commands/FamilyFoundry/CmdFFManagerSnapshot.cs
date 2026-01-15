@@ -5,8 +5,8 @@ using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Snapshots;
-using Pe.Global.Services.Storage;
 using Pe.Global.Revit.Ui;
+using Pe.Global.Services.Storage;
 using Serilog.Events;
 using System.Diagnostics;
 using System.IO;
@@ -101,20 +101,15 @@ public class CmdFFManagerSnapshot : IExternalCommand {
             FilterFamilies = new BaseProfileSettings.FilterFamiliesSettings {
                 IncludeUnusedFamilies = true,
                 IncludeCategoriesEqualing = [],
-                IncludeNames = new IncludeFamilies {
-                    Equaling = [snapshot.FamilyName]
-                },
+                IncludeNames = new IncludeFamilies { Equaling = [snapshot.FamilyName] },
                 ExcludeNames = new ExcludeFamilies()
             },
             FilterApsParams = new BaseProfileSettings.FilterApsParamsSettings {
                 // Empty - snapshot captures exact parameters, no APS filtering needed
-                IncludeNames = new IncludeSharedParameter(),
-                ExcludeNames = new ExcludeSharedParameter()
+                IncludeNames = new IncludeSharedParameter(), ExcludeNames = new ExcludeSharedParameter()
             },
-            MakeRefPlaneAndDims = new MakeRefPlaneAndDimsSettings {
-                Enabled = refPlaneSpecs.Count > 0,
-                Specs = refPlaneSpecs
-            },
+            MakeRefPlaneAndDims =
+                new MakeRefPlaneAndDimsSettings { Enabled = refPlaneSpecs.Count > 0, Specs = refPlaneSpecs },
             AddAndSetParams = new AddAndSetParamsSettings {
                 Enabled = paramSettings.Count > 0,
                 CreateFamParamIfMissing = true,

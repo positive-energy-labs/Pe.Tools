@@ -1,5 +1,4 @@
-﻿using Autodesk.Revit.UI;
-using Autodesk.Revit.UI.Selection;
+﻿using Autodesk.Revit.UI.Selection;
 
 namespace Pe.Global.Revit.Lib;
 

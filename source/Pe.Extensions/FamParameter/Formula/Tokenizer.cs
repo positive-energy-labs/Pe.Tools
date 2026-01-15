@@ -13,7 +13,7 @@ internal static class FormulaUtils {
     /// </summary>
     public static readonly HashSet<string> RevitFunctions = new(StringComparer.OrdinalIgnoreCase) {
         "sin",
-        "cos", 
+        "cos",
         "tan",
         "asin",
         "acos",
@@ -70,7 +70,8 @@ internal static class FormulaUtils {
     ///     Use this for diagnostic purposes when Revit rejects a formula - the suspicious
     ///     tokens may help identify what Revit interpreted incorrectly.
     /// </remarks>
-    internal static IEnumerable<string> ExtractSuspiciousTokens(string formula, IEnumerable<string> validParameterNames) {
+    internal static IEnumerable<string>
+        ExtractSuspiciousTokens(string formula, IEnumerable<string> validParameterNames) {
         if (string.IsNullOrWhiteSpace(formula))
             return [];
 
@@ -80,7 +81,7 @@ internal static class FormulaUtils {
         // but not a pure number or known function
         return tokens
             .Where(t => !string.IsNullOrEmpty(t) && char.IsDigit(t[0]))
-            .Where(t => !double.TryParse(t, out _))  // Not a pure number
+            .Where(t => !double.TryParse(t, out _)) // Not a pure number
             .Distinct();
     }
 
@@ -103,9 +104,7 @@ internal static class FormulaUtils {
         var chars = withoutStrings.ToCharArray();
 
         // Mask out valid parameters by replacing them with spaces
-        foreach (var paramName in sortedParams) {
-            MaskParameter(chars, paramName);
-        }
+        foreach (var paramName in sortedParams) MaskParameter(chars, paramName);
 
         // Now tokenize the masked string
         var maskedFormula = new string(chars);
@@ -161,9 +160,7 @@ internal static class FormulaUtils {
 
             if (leftValid && rightValid) {
                 // Mask this occurrence with spaces
-                for (var j = 0; j < paramLen; j++) {
-                    chars[i + j] = ' ';
-                }
+                for (var j = 0; j < paramLen; j++) chars[i + j] = ' ';
                 // Skip past this occurrence
                 i += paramLen - 1;
             }
