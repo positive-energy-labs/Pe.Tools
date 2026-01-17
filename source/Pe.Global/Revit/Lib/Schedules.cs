@@ -10,162 +10,6 @@ using System.Globalization;
 
 namespace Pe.Global.Revit.Lib;
 
-public class ScheduleSpec {
-    [Description("The name of the schedule as it will appear in the project browser.")]
-    public string Name { get; set; } = string.Empty;
-
-    [Description("The Revit category to schedule (e.g., 'Mechanical Equipment', 'Plumbing Fixtures', 'Doors').")]
-    [SchemaExamples(typeof(CategoryNamesProvider))]
-    public string CategoryName { get; set; } = string.Empty;
-
-    [Description(
-        "Whether the schedule displays each element on a separate row (true) or combines multiple grouped elements onto the same row (false).")]
-    public bool IsItemized { get; set; } = true;
-
-    [Description("List of fields (columns) to include in the schedule.")]
-    [Includable("fields")]
-    public List<ScheduleFieldSpec> Fields { get; set; } = [];
-
-    [Description("List of sort and grouping criteria for organizing schedule rows.")]
-    public List<ScheduleSortGroupSpec> SortGroup { get; set; } = [];
-
-    [Description("List of filters to restrict which elements appear in the schedule. Maximum of 8 filters.")]
-    public List<ScheduleFilterSpec> Filters { get; set; } = [];
-}
-
-public class ScheduleFieldSpec {
-    [Description(
-        "The parameter name to display in this column (e.g., 'Family and Type', 'Mark', 'PE_M_Fan_FlowRate').")]
-    // [SchemaExamples(typeof(SchedulableParameterNamesProvider))]
-    public string ParameterName { get; set; } = string.Empty;
-
-    [Description("Custom header text to display instead of the parameter name. Leave empty to use parameter name.")]
-    public string ColumnHeaderOverride { get; set; } = string.Empty;
-
-    [Description(
-        "Header group name for visually grouping multiple column headers together (e.g., 'Performance', 'Electrical'). Consecutive fields with the same HeaderGroup value will be grouped.")]
-    public string HeaderGroup { get; set; } = string.Empty;
-
-    [Description("Whether to hide this column in the schedule while still using it for filtering or sorting.")]
-    public bool IsHidden { get; set; }
-
-    [Description("How to calculate aggregate values for this field (Standard, Totals, MinAndMax, Maximum, Minimum).")]
-    [JsonConverter(typeof(StringEnumConverter))]
-    public ScheduleFieldDisplayType DisplayType { get; set; } = ScheduleFieldDisplayType.Standard;
-
-    [Description("Column width on sheet in feet. Leave empty to use default width.")]
-    public double? ColumnWidth { get; set; } = 0.084;
-
-    [Description("Horizontal alignment of the column data (Left, Center, Right).")]
-    [JsonConverter(typeof(StringEnumConverter))]
-    public ScheduleHorizontalAlignment HorizontalAlignment { get; set; } = ScheduleHorizontalAlignment.Center;
-
-    [Description(
-        "For calculated fields only. Indicates this is a formula or percentage field. Note: Formula strings cannot be read/written via Revit API - calculated fields must be created manually in Revit.")]
-    [JsonConverter(typeof(StringEnumConverter))]
-    public CalculatedFieldType? CalculatedType { get; set; }
-
-    [Description("For Percentage calculated fields only. The name of the field to calculate percentages of.")]
-    public string PercentageOfField { get; set; } = string.Empty;
-}
-
-/// <summary>
-///     Type of calculated field
-/// </summary>
-[JsonConverter(typeof(StringEnumConverter))]
-public enum CalculatedFieldType {
-    [Description("A calculated field using a formula expression.")]
-    Formula,
-
-    [Description("A calculated field showing percentage of another field.")]
-    Percentage
-}
-
-public class ScheduleSortGroupSpec {
-    [Description("The field name to sort/group by.")]
-    // [SchemaExamples(typeof(SchedulableParameterNamesProvider))]
-    public string FieldName { get; init; } = string.Empty;
-
-    [Description("Sort direction (Ascending or Descending).")]
-    [JsonConverter(typeof(StringEnumConverter))]
-    public ScheduleSortOrder SortOrder { get; init; } = ScheduleSortOrder.Ascending;
-
-    [Description("Whether to display a header row when this grouping changes.")]
-    public bool ShowHeader { get; init; }
-
-    [Description("Whether to display a footer row with totals when this grouping changes.")]
-    public bool ShowFooter { get; init; }
-
-    [Description("Whether to insert a blank line when this grouping changes.")]
-    public bool ShowBlankLine { get; init; }
-}
-
-public class ScheduleFilterSpec {
-    [Description("The field name to filter on.")]
-    // [SchemaExamples(typeof(SchedulableParameterNamesProvider))]
-    public string FieldName { get; init; } = string.Empty;
-
-    [Description("The type of comparison to perform (Equal, Contains, GreaterThan, etc.).")]
-    [JsonConverter(typeof(StringEnumConverter))]
-    public ScheduleFilterType FilterType { get; init; } = ScheduleFilterType.Equal;
-
-    [Description(
-        "The filter value as a string. Leave empty for HasParameter, HasValue, and HasNoValue filter types. The value will be automatically coerced to the correct type based on the field's parameter type (string, integer, double, or ElementId).")]
-    public string Value { get; set; } = string.Empty;
-}
-
-public class ScheduleCreationResult {
-    public required ViewSchedule Schedule { get; set; }
-    public required string ScheduleName { get; set; }
-    public required string CategoryName { get; set; }
-    public bool IsItemized { get; set; }
-
-    public List<AppliedFieldInfo> AppliedFields { get; set; } = [];
-    public List<string> SkippedFields { get; set; } = [];
-
-    public List<AppliedSortGroupInfo> AppliedSortGroups { get; set; } = [];
-    public List<string> SkippedSortGroups { get; set; } = [];
-
-    public List<AppliedFilterInfo> AppliedFilters { get; set; } = [];
-    public List<string> SkippedFilters { get; set; } = [];
-
-    public List<string> AppliedHeaderGroups { get; set; } = [];
-    public List<string> SkippedHeaderGroups { get; set; } = [];
-
-    public List<CalculatedFieldGuidance> SkippedCalculatedFields { get; set; } = [];
-    public List<string> Warnings { get; set; } = [];
-}
-
-public class AppliedFieldInfo {
-    public required string ParameterName { get; set; }
-    public required string ColumnHeaderOverride { get; set; }
-    public bool IsHidden { get; set; }
-    public double? ColumnWidth { get; set; }
-    public ScheduleFieldDisplayType DisplayType { get; set; }
-    public ScheduleHorizontalAlignment HorizontalAlignment { get; set; }
-}
-
-public class AppliedSortGroupInfo {
-    public required string FieldName { get; set; }
-    public ScheduleSortOrder SortOrder { get; set; }
-    public bool ShowHeader { get; set; }
-    public bool ShowFooter { get; set; }
-    public bool ShowBlankLine { get; set; }
-}
-
-public class AppliedFilterInfo {
-    public required string FieldName { get; set; }
-    public ScheduleFilterType FilterType { get; set; }
-    public required string Value { get; set; }
-    public required string StorageType { get; set; }
-}
-
-public class CalculatedFieldGuidance {
-    public required string FieldName { get; set; }
-    public required string CalculatedType { get; set; } // "Formula" or "Percentage"
-    public string? Guidance { get; set; }
-    public string? PercentageOfField { get; set; } // Only for percentage fields - can be null for non-percentage fields
-}
 
 public static class ScheduleHelper {
     public static ScheduleSpec SerializeSchedule(ViewSchedule schedule) {
@@ -219,6 +63,9 @@ public static class ScheduleHelper {
                 }
             }
 
+            // Serialize format options
+            fieldSpec.FormatOptions = SerializeFieldFormatOptions(field);
+
             spec.Fields.Add(fieldSpec);
         }
 
@@ -268,7 +115,53 @@ public static class ScheduleHelper {
         // Serialize header groups using TableData
         SerializeHeaderGroups(schedule, spec);
 
+        // Serialize view template
+        SerializeViewTemplate(schedule, spec);
+
         return spec;
+    }
+
+    private static void SerializeViewTemplate(ViewSchedule schedule, ScheduleSpec spec) {
+        var templateId = schedule.ViewTemplateId;
+        if (templateId == ElementId.InvalidElementId) return;
+
+        var template = schedule.Document.GetElement(templateId) as View;
+        if (template != null)
+            spec.ViewTemplateName = template.Name;
+    }
+
+    private static ScheduleFieldFormatSpec? SerializeFieldFormatOptions(ScheduleField field) {
+        try {
+            var formatOptions = field.GetFormatOptions();
+            if (formatOptions == null) return null;
+
+            // If using defaults, just return a simple spec indicating that
+            if (formatOptions.UseDefault)
+                return new ScheduleFieldFormatSpec { UseDefault = true };
+
+            var spec = new ScheduleFieldFormatSpec {
+                UseDefault = false,
+                UnitTypeId = formatOptions.GetUnitTypeId()?.TypeId,
+                Accuracy = formatOptions.Accuracy,
+                SuppressTrailingZeros = formatOptions.SuppressTrailingZeros,
+                SuppressLeadingZeros = formatOptions.SuppressLeadingZeros,
+                UsePlusPrefix = formatOptions.UsePlusPrefix,
+                UseDigitGrouping = formatOptions.UseDigitGrouping,
+                SuppressSpaces = formatOptions.SuppressSpaces,
+            };
+
+            // Get symbol if available
+            if (formatOptions.CanHaveSymbol()) {
+                var symbolId = formatOptions.GetSymbolTypeId();
+                if (symbolId != null && !symbolId.Empty())
+                    spec.SymbolTypeId = symbolId.TypeId;
+            }
+
+            return spec;
+        } catch {
+            // Field may not support format options (e.g., text fields)
+            return null;
+        }
     }
 
     private static void SerializeHeaderGroups(ViewSchedule schedule, ScheduleSpec spec) {
@@ -350,8 +243,62 @@ public static class ScheduleHelper {
         // Apply header groups
         ApplyHeaderGroups(schedule, spec, result);
 
+        // Apply view template
+        ApplyViewTemplate(schedule, spec, result);
+
         return result;
     }
+
+    private static void ApplyViewTemplate(ViewSchedule schedule, ScheduleSpec spec, ScheduleCreationResult result) {
+        if (string.IsNullOrWhiteSpace(spec.ViewTemplateName)) return;
+
+        var templateId = FindScheduleViewTemplateByName(schedule.Document, spec.ViewTemplateName);
+        if (templateId == ElementId.InvalidElementId) {
+            result.SkippedViewTemplate = $"View template '{spec.ViewTemplateName}' not found";
+            result.Warnings.Add($"View template '{spec.ViewTemplateName}' not found in document");
+            return;
+        }
+
+        if (!schedule.IsValidViewTemplate(templateId)) {
+            result.SkippedViewTemplate = $"View template '{spec.ViewTemplateName}' is not valid for schedules";
+            result.Warnings.Add($"View template '{spec.ViewTemplateName}' is not compatible with this schedule");
+            return;
+        }
+
+        try {
+            schedule.ViewTemplateId = templateId;
+            result.AppliedViewTemplate = spec.ViewTemplateName;
+        } catch (Exception ex) {
+            result.SkippedViewTemplate = $"Failed to apply: {ex.Message}";
+            result.Warnings.Add($"Failed to apply view template '{spec.ViewTemplateName}': {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    ///     Finds a schedule view template by name.
+    /// </summary>
+    private static ElementId FindScheduleViewTemplateByName(Document doc, string templateName) {
+        var templates = new FilteredElementCollector(doc)
+            .OfClass(typeof(ViewSchedule))
+            .Cast<View>()
+            .Where(v => v.IsTemplate && v.Name.Equals(templateName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        return templates.Count > 0 ? templates[0].Id : ElementId.InvalidElementId;
+    }
+
+    /// <summary>
+    ///     Gets all schedule view template names from the document.
+    /// </summary>
+    public static List<string> GetScheduleViewTemplateNames(Document doc) =>
+        new FilteredElementCollector(doc)
+            .OfClass(typeof(ViewSchedule))
+            .Cast<View>()
+            .Where(v => v.IsTemplate)
+            .Select(v => v.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name)
+            .ToList();
 
     private static string GetUniqueScheduleName(Document doc, string baseName) {
         var existingNames = new FilteredElementCollector(doc)
@@ -450,6 +397,72 @@ public static class ScheduleHelper {
                     $"DisplayType '{fieldSpec.DisplayType}' not supported for field '{fieldSpec.ParameterName}'");
             }
         }
+
+        // Apply format options
+        ApplyFieldFormatOptions(field, fieldSpec, result);
+    }
+
+    private static void ApplyFieldFormatOptions(
+        ScheduleField field,
+        ScheduleFieldSpec fieldSpec,
+        ScheduleCreationResult result) {
+        if (fieldSpec.FormatOptions == null) return;
+
+        var formatSpec = fieldSpec.FormatOptions;
+
+        // If using defaults, just set UseDefault to true
+        if (formatSpec.UseDefault) {
+            try {
+                var formatOptions = new FormatOptions { UseDefault = true };
+                field.SetFormatOptions(formatOptions);
+            } catch {
+                // Field may not support format options
+            }
+
+            return;
+        }
+
+        try {
+            // Create custom format options
+            FormatOptions formatOptions;
+
+            if (!string.IsNullOrEmpty(formatSpec.UnitTypeId)) {
+                var unitTypeId = new ForgeTypeId(formatSpec.UnitTypeId);
+                formatOptions = new FormatOptions(unitTypeId);
+            } else {
+                formatOptions = new FormatOptions { UseDefault = false };
+            }
+
+            // Apply accuracy if specified
+            if (formatSpec.Accuracy.HasValue && formatOptions.IsValidAccuracy(formatSpec.Accuracy.Value))
+                formatOptions.Accuracy = formatSpec.Accuracy.Value;
+
+            // Apply symbol if specified
+            if (!string.IsNullOrEmpty(formatSpec.SymbolTypeId) && formatOptions.CanHaveSymbol()) {
+                var symbolTypeId = new ForgeTypeId(formatSpec.SymbolTypeId);
+                if (formatOptions.IsValidSymbol(symbolTypeId))
+                    formatOptions.SetSymbolTypeId(symbolTypeId);
+            }
+
+            // Apply boolean options where supported
+            if (formatOptions.CanSuppressTrailingZeros())
+                formatOptions.SuppressTrailingZeros = formatSpec.SuppressTrailingZeros;
+
+            if (formatOptions.CanSuppressLeadingZeros())
+                formatOptions.SuppressLeadingZeros = formatSpec.SuppressLeadingZeros;
+
+            if (formatOptions.CanUsePlusPrefix())
+                formatOptions.UsePlusPrefix = formatSpec.UsePlusPrefix;
+
+            formatOptions.UseDigitGrouping = formatSpec.UseDigitGrouping;
+
+            if (formatOptions.CanSuppressSpaces())
+                formatOptions.SuppressSpaces = formatSpec.SuppressSpaces;
+
+            field.SetFormatOptions(formatOptions);
+        } catch (Exception ex) {
+            result.Warnings.Add($"Failed to apply format options for field '{fieldSpec.ParameterName}': {ex.Message}");
+        }
     }
 
     private static void ApplySortGroupToSchedule(ViewSchedule schedule,
@@ -494,8 +507,11 @@ public static class ScheduleHelper {
         }
     }
 
-    private static void
-        ApplyFiltersToSchedule(ViewSchedule schedule, ScheduleSpec spec, ScheduleCreationResult result) {
+    private static void ApplyFiltersToSchedule(
+            ViewSchedule schedule,
+            ScheduleSpec spec,
+            ScheduleCreationResult result
+            ) {
         var def = schedule.Definition;
         def.ClearFilters();
 
@@ -670,63 +686,6 @@ public static class ScheduleHelper {
                 result.SkippedHeaderGroups.Add($"{groupName} (only 1 column)");
         }
     }
-
-    /// <summary>
-    ///     Executes an action with a temporary schedule in a rolled-back transaction.
-    ///     Creates a minimal temporary schedule for the given category, executes the action,
-    ///     then rolls back all changes. No permanent modifications to the document.
-    /// </summary>
-    /// <param name="doc">The Revit document</param>
-    /// <param name="categoryName">The category name for the schedule</param>
-    /// <param name="action">Action to execute with the temporary schedule</param>
-    /// <typeparam name="T">Return type of the action</typeparam>
-    /// <returns>Result from the action</returns>
-    public static T WithTemporarySchedule<T>(Document doc, string categoryName, Func<ViewSchedule, T> action) {
-        var categoryId = FindCategoryByName(doc, categoryName);
-        if (categoryId == ElementId.InvalidElementId)
-            throw new ArgumentException($"Category '{categoryName}' not found in document");
-
-        using var tx = new Transaction(doc, "Temp Schedule Query");
-        _ = tx.Start();
-
-        try {
-            var tempSpec = new ScheduleSpec {
-                Name = $"_TempSchedule_{Guid.NewGuid():N}",
-                CategoryName = categoryName,
-                IsItemized = true,
-                Fields = [],
-                Filters = [],
-                SortGroup = []
-            };
-
-            var scheduleResult = CreateSchedule(doc, tempSpec);
-            return action(scheduleResult.Schedule);
-        } finally {
-            if (tx.HasStarted())
-                _ = tx.RollBack();
-        }
-    }
-
-    /// <summary>
-    ///     Gets all schedulable parameter names for a given category.
-    ///     Creates a temporary schedule to query available fields.
-    ///     All changes are rolled back - no permanent modifications to the document.
-    /// </summary>
-    /// <param name="doc">The Revit document</param>
-    /// <param name="categoryName">The category name</param>
-    /// <returns>List of schedulable parameter names</returns>
-    public static List<string> GetSchedulableParameterNames(Document doc, string categoryName) =>
-        WithTemporarySchedule(doc, categoryName, schedule => {
-            var def = schedule.Definition;
-            var schedulableFields = def.GetSchedulableFields();
-
-            return schedulableFields
-                .Select(field => field.GetName(doc))
-                .Where(name => !string.IsNullOrEmpty(name))
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(name => name)
-                .ToList();
-        });
 
     /// <summary>
     ///     Gets family names that would appear in a schedule with the given filters.

@@ -69,4 +69,6 @@ public class AddAndSetParamsSettings : IOperationSettings {
     public List<ParamSettingModel> Parameters { get; init; } = [];
 
     public bool Enabled { get; init; } = true;
+
+    public void AddParameters(List<ParamSettingModel> parameters) => this.Parameters.AddRange(parameters);
 }

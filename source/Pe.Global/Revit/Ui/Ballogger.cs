@@ -30,6 +30,19 @@ public class Ballogger {
         return this;
     }
 
+    /// <summary>Add a normal message (with the method's name)</summary>
+    public Ballogger AddIf(bool condition, LogEventLevel log, StackFrame? sf, string message) {
+        if (!condition || string.IsNullOrWhiteSpace(message)) return this;
+        if (sf is null) {
+            this._messages.Add(string.Format(FmtNormal, log, message.Trim()));
+        } else {
+            var method = sf.GetMethod()?.Name ?? StrNoMethod;
+            this._messages.Add(string.Format(FmtMethod, log, method, message.Trim()));
+        }
+
+        return this;
+    }
+
 
     /// <summary>Add an error message (with an optional stack trace)</summary>
     public Ballogger Add(LogEventLevel log, StackFrame sf, Exception ex, bool trace = false) {

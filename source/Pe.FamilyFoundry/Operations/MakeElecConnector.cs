@@ -138,5 +138,9 @@ public class MakeElecConnectorSettings : IOperationSettings {
         [SchemaExamples(typeof(SharedParameterNamesProvider))]
         [Required]
         public string Voltage { get; init; } = "PE_E___Voltage";
+
+        [SchemaExamples(typeof(SharedParameterNamesProvider))]
+        [Required]
+        public string MinimumCircuitAmpacity { get; init; } = "PE_E___MCA";
     }
 }

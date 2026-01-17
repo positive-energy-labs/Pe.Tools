@@ -57,6 +57,11 @@ public class SchedulePreviewPanel : UserControl {
             summaryPara.Inlines.Add(new Run($"Fields: {data.FieldCount}"));
             summaryPara.Inlines.Add(new LineBreak());
             summaryPara.Inlines.Add(new Run($"Sort/Group: {data.SortGroupCount}"));
+            if (!string.IsNullOrEmpty(data.ViewTemplateName)) {
+                summaryPara.Inlines.Add(new LineBreak());
+                summaryPara.Inlines.Add(new Run($"View Template: {data.ViewTemplateName}"));
+            }
+
             summaryPara.Margin = new Thickness(0, 0, 0, 12);
             doc.Blocks.Add(summaryPara);
 
@@ -179,6 +184,9 @@ public class SchedulePreviewData {
     public string FilePath { get; init; } = string.Empty;
     public DateTime? CreatedDate { get; init; }
     public DateTime? ModifiedDate { get; init; }
+
+    // View template
+    public string ViewTemplateName { get; init; } = string.Empty;
 
     // Validation status
     public bool IsValid { get; init; } = true;

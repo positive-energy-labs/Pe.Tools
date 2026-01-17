@@ -112,7 +112,9 @@ public class BaseProfileSettings {
 
             // Use ScheduleHelper to evaluate the filter using Revit's native schedule filtering
             var scheduleSpec = new ScheduleSpec {
-                Name = "Family Filter", CategoryName = familyCategory?.Name ?? "", Filters = [this.IncludeByCondition]
+                Name = "Family Filter",
+                CategoryName = familyCategory?.Name ?? "",
+                Filters = [this.IncludeByCondition]
             };
 
             var matchingFamilies = ScheduleHelper.GetFamiliesMatchingFilters(doc, scheduleSpec, [f]);

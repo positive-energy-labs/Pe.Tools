@@ -148,15 +148,20 @@ public class CmdFFMigrator : IExternalCommand {
         // TempSharedParamFile is disposed here AFTER ProcessFamilies completes
     }
 
-    private static List<ParamSettingModel> BuildInternalParams() => [
-        new() {
-            Name = "PE_E___NumberOfPoles",
+    private static List<ParamSettingModel> BuildInternalParams(ProfileRemap profile) {
+        var voltageName = profile.MakeElectricalConnector.SourceParameterNames.Voltage;
+        var numberOfPolesName = profile.MakeElectricalConnector.SourceParameterNames.NumberOfPoles;
+        var apparentPowerName = profile.MakeElectricalConnector.SourceParameterNames.ApparentPower;
+        var mcaName = profile.MakeElectricalConnector.SourceParameterNames.MinimumCircuitAmpacity;
+
+        return [   new() {
+            Name = numberOfPolesName,
             ValueOrFormula =
-                "if(PE_E___Voltage = 120, 1, if(PE_E___Voltage = 208, 2, (if(PE_E___Voltage = 240, 2, 1))))"
+                $"if({voltageName} = 120, 1, if({voltageName} = 208, 2, (if({voltageName} = 240, 2, 1))))"
         },
         new() {
-            Name = "PE_E___ApparentPower",
-            ValueOrFormula = "PE_E___Voltage * PE_E___MCA * 0.8 * if(PE_E___NumberOfPoles = 3, sqrt(3), 1)"
+            Name = apparentPowerName,
+            ValueOrFormula = $"{voltageName} * {mcaName} * 0.8 * if({numberOfPolesName} = 3, sqrt(3), 1)"
         },
         new() {
             Name = "_FOUNDRY LAST PROCESSED AT",
@@ -165,7 +170,8 @@ public class CmdFFMigrator : IExternalCommand {
             IsInstance = false,
             ValueOrFormula = $"\"{DateTime.Now:yyyy_MM_dd HH:mm:ss}\""
         }
-    ];
+       ];
+    }
 
     /// <summary>
     ///     Builds the operation queue from profile settings and APS parameter data.
@@ -185,13 +191,8 @@ public class CmdFFMigrator : IExternalCommand {
             .Concat(profile.AddAndSetParams.Parameters.Select(p => p.Name))
             .ToList();
 
-        var internalParams = BuildInternalParams();
-        var addAndSet = new AddAndSetParamsSettings {
-            OverrideExistingValues = profile.AddAndSetParams.OverrideExistingValues,
-            CreateFamParamIfMissing = profile.AddAndSetParams.CreateFamParamIfMissing,
-            DisablePerTypeFallback = profile.AddAndSetParams.DisablePerTypeFallback,
-            Parameters = profile.AddAndSetParams.Parameters.Concat(internalParams).ToList()
-        };
+
+        profile.AddAndSetParams.AddParameters(BuildInternalParams(profile));
 
         return new OperationQueue()
             .Add(new PurgeNestedFamilies(profile.PurgeNestedFamilies))
@@ -199,7 +200,7 @@ public class CmdFFMigrator : IExternalCommand {
             .Add(new PurgeModelLines(profile.PurgeModelLines))
             .Add(new PurgeParams(profile.PurgeParams, mappingDataAllNames))
             .Add(new AddAndMapSharedParams(profile.AddAndMapSharedParams, apsParamData))
-            .Add(new AddAndSetParams(addAndSet))
+            .Add(new AddAndSetParams(profile.AddAndSetParams))
             .Add(new MakeElecConnector(profile.MakeElectricalConnector))
             .Add(new PurgeParams(profile.PurgeParams, apsAndAddedParamNames))
             .Add(new SortParams(profile.SortParams));

@@ -117,26 +117,32 @@ public class CmdFFManager : IExternalCommand {
             new() { Strength = RpStrength.CenterFB, Name = "Center", Color = new Color(115, 0, 253) }
         };
 
-        // Timestamp parameter
-        var moddedSettings = new AddAndSetParamsSettings {
-            Enabled = profile.AddAndSetParams.Enabled,
-            CreateFamParamIfMissing = profile.AddAndSetParams.CreateFamParamIfMissing,
-            OverrideExistingValues = profile.AddAndSetParams.OverrideExistingValues,
-            DisablePerTypeFallback = profile.AddAndSetParams.DisablePerTypeFallback,
-            Parameters = profile.AddAndSetParams.Parameters.Concat(
-            [
+        profile.AddAndSetParams.AddParameters([
                 new ParamSettingModel {
                     Name = "_FOUNDRY LAST PROCESSED AT",
                     DataType = SpecTypeId.String.Text,
                     ValueOrFormula = $"\"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\""
                 }
-            ]).ToList()
-        };
+            ]);
+
+        // Extract dimension-labeled params for per-type value restoration
+        var dimLabeledParams = profile.MakeRefPlaneAndDims.MirrorSpecs
+            .Where(s => !string.IsNullOrEmpty(s.Parameter))
+            .Select(s => s.Parameter)
+            .Concat(profile.MakeRefPlaneAndDims.OffsetSpecs
+                .Where(s => !string.IsNullOrEmpty(s.Parameter))
+                .Select(s => s.Parameter!))
+            .ToHashSet();
+
+        // Extract per-type values for dimension-labeled params
+        var perTypeValuesToRestore = profile.AddAndSetParams.Parameters
+            .Where(p => dimLabeledParams.Contains(p.Name) && p.ValuesPerType?.Count > 0)
+            .ToDictionary(p => p.Name, p => p.ValuesPerType!);
 
         return new OperationQueue()
             .Add(new AddSharedParams(apsParamData))
-            .Add(new MakeRefPlanesAndDims(profile.MakeRefPlaneAndDims))
-            .Add(new AddAndSetParams(moddedSettings, true)) // must come before MakeRefPlaneAndDims
+            .Add(new AddAndSetParams(profile.AddAndSetParams, true))
+            .Add(new MakeRefPlanesAndDims(profile.MakeRefPlaneAndDims, perTypeValuesToRestore))
             .Add(new MakeRefPlaneSubcategories(specs))
             .Add(new SortParams(new SortParamsSettings()));
     }

@@ -36,7 +36,10 @@ public class CmdSchedulePalette : IExternalCommand {
 
             // Context for Create Schedule tab
             var context = new ScheduleManagerContext {
-                Doc = doc, UiDoc = uiDoc, Storage = storage, SettingsManager = settingsManager
+                Doc = doc,
+                UiDoc = uiDoc,
+                Storage = storage,
+                SettingsManager = settingsManager
             };
 
             // Collect items for both tabs
@@ -116,7 +119,6 @@ public class CmdSchedulePalette : IExternalCommand {
                         }
                     }
                 });
-            window.EphemeralEnabled = false;
             window.Show();
 
             return Result.Succeeded;
@@ -166,7 +168,8 @@ public class CmdSchedulePalette : IExternalCommand {
         var profileJson = JsonSerializer.Serialize(
             profile,
             new JsonSerializerOptions {
-                WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                WriteIndented = true,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             });
 
         return new SchedulePreviewData {
@@ -179,6 +182,7 @@ public class CmdSchedulePalette : IExternalCommand {
             FilePath = profileItem.FilePath,
             CreatedDate = profileItem._fileInfo.CreationTime,
             ModifiedDate = profileItem._fileInfo.LastWriteTime,
+            ViewTemplateName = profile.ViewTemplateName ?? string.Empty,
             IsValid = true
         };
     }
@@ -190,7 +194,9 @@ public class CmdSchedulePalette : IExternalCommand {
     private static SchedulePreviewData
         CreateSanitizationErrorPreview(ScheduleListItem profileItem, JsonSanitizationException ex) {
         var preview = new SchedulePreviewData {
-            ProfileName = profileItem.TextPrimary, IsValid = false, RemainingErrors = []
+            ProfileName = profileItem.TextPrimary,
+            IsValid = false,
+            RemainingErrors = []
         };
 
         if (ex.AddedProperties.Any())
@@ -218,7 +224,8 @@ public class CmdSchedulePalette : IExternalCommand {
             var profileJson = JsonSerializer.Serialize(
                 spec,
                 new JsonSerializerOptions {
-                    WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                    WriteIndented = true,
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
                 });
 
             return new SchedulePreviewData {
@@ -231,6 +238,7 @@ public class CmdSchedulePalette : IExternalCommand {
                 FilePath = string.Empty,
                 CreatedDate = null,
                 ModifiedDate = null,
+                ViewTemplateName = spec.ViewTemplateName ?? string.Empty,
                 IsValid = true
             };
         } catch (Exception ex) {
@@ -257,90 +265,94 @@ public class CmdSchedulePalette : IExternalCommand {
         }
 
         // Load profile fresh for execution
-        var profile = ctx.SettingsManager.SubDir("schedules", true)
-            .Json<ScheduleSpec>($"{ctx.SelectedProfile.TextPrimary}.json")
-            .Read();
+        ScheduleSpec scheduleSpec;
+        try {
+            scheduleSpec = ctx.SettingsManager.SubDir("schedules", true)
+                .Json<ScheduleSpec>($"{ctx.SelectedProfile.TextPrimary}.json")
+                .Read();
+        } catch (Exception ex) {
+            new Ballogger()
+                .Add(LogEventLevel.Error, new StackFrame(), ex, true)
+                .Show();
+            return;
+        }
 
         ScheduleCreationResult result;
-        using (var trans = new Transaction(ctx.Doc, "Create Schedule")) {
+        try {
+            using var trans = new Transaction(ctx.Doc, "Create Schedule");
             _ = trans.Start();
-            result = ScheduleHelper.CreateSchedule(ctx.Doc, profile);
+            result = ScheduleHelper.CreateSchedule(ctx.Doc, scheduleSpec);
             _ = trans.Commit();
+        } catch (Exception ex) {
+            new Ballogger()
+                .Add(LogEventLevel.Error, new StackFrame(), ex, true)
+                .Show();
+            return;
         }
 
         // Write output to storage
         var outputPath = this.WriteCreationOutput(ctx, result);
+        if (string.IsNullOrEmpty(outputPath)) {
+            new Ballogger()
+                .Add(LogEventLevel.Error, new StackFrame(), "Failed to write creation output")
+                .Show();
+            return;
+        }
 
         // Build comprehensive balloon message
-        var balloon = new Ballogger();
-        _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
-            $"Created schedule '{result.ScheduleName}' from profile '{ctx.SelectedProfile.TextPrimary}'");
-
-        // Report applied fields
-        if (result.AppliedFields.Count > 0) {
-            _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
-                $"Applied {result.AppliedFields.Count} field(s)");
-        }
-
-        // Report skipped fields with reasons
-        if (result.SkippedFields.Count > 0) {
-            _ = balloon.Add(LogEventLevel.Warning, new StackFrame(),
-                $"{result.SkippedFields.Count} field(s) skipped:");
-            foreach (var skipped in result.SkippedFields)
-                _ = balloon.Add(LogEventLevel.Warning, new StackFrame(), $"  • {skipped}");
-        }
-
-        // Report calculated fields
-        if (result.SkippedCalculatedFields.Count > 0) {
-            _ = balloon.Add(LogEventLevel.Warning, new StackFrame(),
-                $"{result.SkippedCalculatedFields.Count} calculated field(s) require manual creation - see output file");
-        }
-
-        // Report sort/group issues
-        if (result.SkippedSortGroups.Count > 0) {
-            _ = balloon.Add(LogEventLevel.Warning, new StackFrame(),
-                $"{result.SkippedSortGroups.Count} sort/group(s) skipped:");
-            foreach (var skipped in result.SkippedSortGroups)
-                _ = balloon.Add(LogEventLevel.Warning, new StackFrame(), $"  • {skipped}");
-        }
-
-        // Report filter issues
-        if (result.SkippedFilters.Count > 0) {
-            _ = balloon.Add(LogEventLevel.Warning, new StackFrame(),
-                $"{result.SkippedFilters.Count} filter(s) skipped:");
-            foreach (var skipped in result.SkippedFilters)
-                _ = balloon.Add(LogEventLevel.Warning, new StackFrame(), $"  • {skipped}");
-        }
-
-        // Report header group issues
-        if (result.SkippedHeaderGroups.Count > 0) {
-            _ = balloon.Add(LogEventLevel.Warning, new StackFrame(),
-                $"{result.SkippedHeaderGroups.Count} header group(s) skipped:");
-            foreach (var skipped in result.SkippedHeaderGroups)
-                _ = balloon.Add(LogEventLevel.Warning, new StackFrame(), $"  • {skipped}");
-        }
-
-        // Report general warnings
-        if (result.Warnings.Count > 0) {
-            foreach (var warning in result.Warnings)
-                _ = balloon.Add(LogEventLevel.Warning, new StackFrame(), warning);
-        }
-
-
-        // Open the schedule view
-        ctx.UiDoc.ActiveView = result.Schedule;
-
-        // Open output file if there are issues or calculated fields
         var hasIssues = result.SkippedCalculatedFields.Count > 0 ||
                         result.SkippedFields.Count > 0 ||
                         result.SkippedSortGroups.Count > 0 ||
                         result.SkippedFilters.Count > 0 ||
                         result.SkippedHeaderGroups.Count > 0 ||
+                        !string.IsNullOrEmpty(result.SkippedViewTemplate) ||
                         result.Warnings.Count > 0;
-        if (hasIssues && !string.IsNullOrEmpty(outputPath))
-            balloon.Show(() => FileUtils.OpenInDefaultApp(outputPath), "Open Output File");
-        else
-            balloon.Show();
+
+        var hasHeaderGroups = result.AppliedHeaderGroups.Count > 0 || result.SkippedHeaderGroups.Count > 0;
+        var headerGroupCount = result.AppliedHeaderGroups.Count + result.SkippedHeaderGroups.Count;
+        var hasFields = result.AppliedFields.Count > 0 || result.SkippedFields.Count > 0;
+        var fieldCount = result.AppliedFields.Count + result.SkippedFields.Count;
+        var hasSortGroups = result.AppliedSortGroups.Count > 0 || result.SkippedSortGroups.Count > 0;
+        var sortGroupCount = result.AppliedSortGroups.Count + result.SkippedSortGroups.Count;
+        var hasFilters = result.AppliedFilters.Count > 0 || result.SkippedFilters.Count > 0;
+        var filterCount = result.AppliedFilters.Count + result.SkippedFilters.Count;
+        var hasAppliedViewTemplate =
+            !string.IsNullOrEmpty(scheduleSpec.ViewTemplateName) && result.AppliedViewTemplate != null;
+        var viewTemplateCount = result.AppliedViewTemplate != null ? 1 : 0;
+        var viewTemplateSkippedCount = result.SkippedViewTemplate != null ? 1 : 0;
+        var hasCalculatedFields = result.SkippedCalculatedFields.Count > 0;
+        var calculatedFieldCount = result.SkippedCalculatedFields.Count;
+        var hasWarnings = result.Warnings.Count > 0;
+
+        new Ballogger()
+            .Add(LogEventLevel.Information, null,
+                $"Created schedule '{result.ScheduleName}' from profile '{ctx.SelectedProfile.TextPrimary}'")
+            .AddIf(hasIssues, LogEventLevel.Warning, null,
+                "THERE WERE ISSUES WITH THE SCHEDULE CREATION. SEE THE OUTPUT FILE FOR DETAILS.")
+            .AddIf(hasCalculatedFields, LogEventLevel.Warning, null,
+                $"{calculatedFieldCount} calculated field(s) require manual creation - see output file")
+            .AddIf(hasHeaderGroups, LogEventLevel.Warning, null,
+                $"Field header(s) applied: {result.AppliedHeaderGroups.Count} / {headerGroupCount} ")
+            .AddIf(hasFields, LogEventLevel.Information, null,
+                $"Field(s) applied: {result.AppliedFields.Count} / {fieldCount} ")
+            .AddIf(hasSortGroups, LogEventLevel.Warning, null,
+                $"Sort/group(s) applied: {result.AppliedSortGroups.Count} / {sortGroupCount} ")
+            .AddIf(hasFilters, LogEventLevel.Warning, null,
+                $"Filter(s) applied: {result.AppliedFilters.Count} / {filterCount} ")
+            .AddIf(hasAppliedViewTemplate, LogEventLevel.Warning, null,
+                $"View template applied: {result.AppliedViewTemplate}")
+            .AddIf(!hasAppliedViewTemplate, LogEventLevel.Warning, null,
+                $"View template skipped: {result.SkippedViewTemplate}")
+            .AddIf(hasWarnings, LogEventLevel.Warning, null, "Warnings:")
+            .AddIf(hasWarnings, LogEventLevel.Warning, null,
+                string.Join("\n", result.Warnings.Select(w => $"  • {w}")))
+            .Show(() => FileUtils.OpenInDefaultApp(outputPath), "Open Output File");
+
+
+        // Open the schedule view
+        // if (scheduleSpec.OnFinish.OpenScheduleOnFinish) {
+        //     ctx.UiDoc.ActiveView = result.Schedule;
+        // }
     }
 
     private void HandlePlaceSampleFamilies(ScheduleManagerContext context, ISchedulePaletteItem item) {
@@ -420,7 +432,7 @@ public class CmdSchedulePalette : IExternalCommand {
             var storage = new Storage("Schedule Manager");
             var serializeOutputDir = storage.OutputDir().SubDir("serialize");
             var spec = ScheduleHelper.SerializeSchedule(serializeItem.Schedule);
-            
+
             // Prepend timestamp to filename
             var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
             var filename = serializeOutputDir.Json($"{timestamp}_{spec.Name}.json").Write(spec);
@@ -465,7 +477,7 @@ public class CmdSchedulePalette : IExternalCommand {
     private string WriteCreationOutput(ScheduleManagerContext ctx, ScheduleCreationResult result) {
         try {
             var createOutputDir = ctx.Storage.OutputDir().SubDir("create");
-            
+
             var outputData = new {
                 result.ScheduleName,
                 result.CategoryName,
@@ -509,9 +521,11 @@ public class CmdSchedulePalette : IExternalCommand {
                 SkippedFilters = result.SkippedFilters.Select(s => new { Reason = s }).ToList(),
                 result.AppliedHeaderGroups,
                 SkippedHeaderGroups = result.SkippedHeaderGroups.Select(s => new { Reason = s }).ToList(),
-                CalculatedFields = result.SkippedCalculatedFields.Select(f => new {
-                    f.FieldName, f.CalculatedType, f.Guidance, f.PercentageOfField
-                }).ToList(),
+                CalculatedFields =
+                    result.SkippedCalculatedFields
+                        .Select(f => new { f.FieldName, f.CalculatedType, f.Guidance, f.PercentageOfField }).ToList(),
+                result.AppliedViewTemplate,
+                result.SkippedViewTemplate,
                 result.Warnings
             };
 
