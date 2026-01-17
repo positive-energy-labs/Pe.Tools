@@ -1,0 +1,204 @@
+---
+alwaysApply: false
+description: Family Foundry architecture and debugging approach
+---
+
+# Family Foundry Architecture & Debugging
+
+## Critical Insight
+
+**Most bugs occur at transaction COMMIT, not during execution.** Logs may show
+"Success" but Revit shows an error dialog. This means the Revit constraint
+solver rejected the changes after all your code ran successfully.
+
+When this happens: **the issue is transaction boundaries or operation order**,
+not the logic itself.
+
+## Debugging Workflow
+
+### 1. Reproduce with TEST profile
+
+```
+Settings: C:\Users\{user}\OneDrive\Documents\Pe.App\FF {Manager|Migrator}\settings\profiles\TEST.json
+Output:   C:\Users\{user}\OneDrive\Documents\Pe.App\FF {Manager|Migrator}\output\{timestamp}\{FamilyName}\
+```
+
+Create TEST.json as a copy of a known-good profile. Modify incrementally.
+
+### 2. Read logs-detailed.json
+
+```json
+{
+    "Operations": [{
+        "Name": "OperationGroup: ChildOperation",
+        "Type": "Doc", // or "Type" for TypeOperations
+        "Successes": ["Item : message"],
+        "Deferred": ["Item : passed to next op in group"],
+        "Errors": ["Item : error"]
+    }]
+}
+```
+
+**If logs show Success but Revit shows error:** Transaction boundary issue. **If
+Deferred items never become Success:** Check the follow-up operation.
+
+### 3. Compare snapshots
+
+- `snapshot-*-pre.json` vs `snapshot-*-post.json` → What actually changed?
+- `snapshot-profile-*.json` → What was the input?
+- `snapshot-*-diff.json` → Quick summary of changes
+
+**WARNING: Snapshot files are 300-2000+ lines.** NEVER read entire files into
+context. Always filter first:
+
+```powershell
+# Filter by parameter name
+gc snapshot-parameters-post.json | sls '"Name": "PE_M_Grd_NeckLength"' -Context 20
+
+# Filter by prefix
+gc snapshot-parameters-post.json | sls '"Name": "PE_M_' -Context 10
+
+# Compare specific parameter pre/post
+gc snapshot-parameters-pre.json | sls '"Name": "PE_M_Grd_NeckLength"' -Context 20 > pre.txt
+gc snapshot-parameters-post.json | sls '"Name": "PE_M_Grd_NeckLength"' -Context 20 > post.txt
+Compare-Object (gc pre.txt) (gc post.txt)
+```
+
+### 4. Iterate
+
+Modify TEST.json → User runs → Read logs → Compare snapshots → Fix code → Repeat
+
+## Architecture
+
+### Operation Types
+
+| Type             | Runs                            | Example                 |
+| ---------------- | ------------------------------- | ----------------------- |
+| `DocOperation`   | Once per family, cheap          | `SetParamValues`        |
+| `TypeOperation`  | Once per family type, expensive | `SetParamValuesPerType` |
+| `OperationGroup` | Coordinates child ops           | `AddAndSetParams`       |
+
+**Each operation = 1 transaction** (toggle via
+`ExecutionOptions.SingleTransaction` in `OperationProcessor`).
+
+### OperationGroup Coordination
+
+Operations in a group share state via `OperationContext` (for log entries) and
+custom shared state classes (for data).
+
+```csharp
+// Pattern: Op1 tries global, defers failures. Op2 handles deferred.
+var incomplete = groupContext.GetAllInComplete();
+foreach (var (item, log) in incomplete) {
+    if (TryGlobal(item)) log.Success();
+    else log.Defer("Needs per-type");  // Op2 will see this
+}
+```
+
+### Log Entry States
+
+| Method      | Marks Complete? | Appears In  | Use When                                                        |
+| ----------- | --------------- | ----------- | --------------------------------------------------------------- |
+| `Success()` | Yes             | `Successes` | Item fully handled                                              |
+| `Error()`   | Yes             | `Errors`    | Item failed                                                     |
+| `Skip()`    | Yes             | `Skipped`   | Item intentionally not processed                                |
+| `Defer()`   | **No**          | `Deferred`  | Pass to next operation in group or type-switch in TypeOperation |
+
+**Key:** `groupContext.GetAllInComplete()` returns entries NOT marked complete.
+Operations in a group use this to pick up where the prior operation left off.
+Type operations should also use this to emit logs without marking the entry
+complete.
+
+### TypeOperation Logs
+
+TypeOperations run once per family type. Logs are **aggregated** into single
+entries with type names in brackets:
+
+```
+[Bar, Grille, Slot] PE_M_Grd_NeckLength : Set per-type value
+```
+
+**Caveat:** If you call `Defer()` in a TypeOperation, the entry stays incomplete
+through all types — which allows for subsequent family type iterations to
+access/use the same log. But the final log shows "Deferred" even if all types
+succeeded. There's currently no mechanism to convert to "Success" after the last
+type.
+
+### Queue Building
+
+Both `CmdFFManager` and `CmdFFMigrator` have `BuildQueue()` methods that:
+
+1. Read profile settings
+2. Extract data needed for coordination between operations
+3. Return an `OperationQueue` with ordered operations
+
+**Example:** If dimensions will be labeled with parameters that have formulas,
+extract those formulas in BuildQueue and pass to both the dimension operation
+(to unset) and a restore operation (to re-apply).
+
+**Key insight:** If operations need to share data (e.g., formulas to restore,
+names to skip), extract it in `BuildQueue()` and pass via constructor params.
+
+## Common Pitfalls
+
+### Revit Constraint Solver Failures
+
+**Symptom:** Logs show success, but Revit UI shows error at transaction commit.
+
+**Diagnosis:** The operation order or transaction boundaries are wrong. Revit
+evaluates all constraints at commit time, not during execution.
+
+**Fix:** Split operations into separate transactions, or reorder operations.
+
+### Formula + Dimension Labeling Conflict
+
+**Symptom:** "Parameter cannot be changed because it is defined by formula"
+
+**Cause:** Can't label a dimension with a formula-driven param in one
+transaction. The formula must be unset, dimension labeled, then formula restored
+in a **separate transaction**.
+
+**Pattern:** See `MakeRefPlanesAndDims` which uses 3 transactions:
+
+1. Create planes
+2. Create dims (unset formulas → label → track for restore)
+3. Restore formulas + per-type values
+
+### Per-Type Values Overwritten by Dimension Geometry
+
+**Symptom:** Per-type values (e.g., NeckLength = 4' for Slot) become 1' for all
+types after dimension labeling.
+
+**Cause:** When you label a dimension with a param, the current dimension
+geometry becomes the param value, overwriting per-type values.
+
+**Example:** You create "neck (Left)" and "neck (Right)" planes 1' apart, label
+a dimension with PE_M_Grd_NeckLength. All family types now have NeckLength = 1',
+even if Slot had 4' and Grille had 6'. You must restore per-type values in a
+follow-up operation.
+
+**Fix:** Re-apply per-type values after dimension labeling. See
+`CmdFFManager.BuildQueue()` which extracts `perTypeValuesToRestore` and passes
+to `MakeRefPlanesAndDims`.
+
+## Code Locations
+
+| What                    | Where                                           |
+| ----------------------- | ----------------------------------------------- |
+| Queue building          | `CmdFF{Manager,Migrator}.BuildQueue()`          |
+| Operation logic         | `Pe.FamilyFoundry/Operations/{Name}.cs`         |
+| Operation groups        | `Pe.FamilyFoundry/OperationGroups/{Name}.cs`    |
+| Settings models         | `Pe.FamilyFoundry/OperationSettings/{Name}.cs`  |
+| Snapshot collectors     | `Pe.FamilyFoundry/Snapshots/{Name}Collector.cs` |
+| Result/log writing      | `Pe.FamilyFoundry/ProcessingResultBuilder.cs`   |
+| Low-level Revit helpers | `Pe.FamilyFoundry/Helpers/*.cs`                 |
+
+## Idempotency
+
+Operations should be **idempotent**: running twice produces the same result.
+
+- Check if element exists before creating
+- Skip operations on already-processed items
+- Log "Skipped" with reason, not "Success"
+
+This enables safe re-runs and makes debugging easier.
