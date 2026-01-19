@@ -44,7 +44,6 @@ public class CmdFFManager : IExternalCommand {
     }
 
     private void HandleApplyProfile(FoundryContext<ProfileFamilyManager> ctx) {
-        if (ctx.SelectedProfile == null) return;
         if (!ctx.PreviewData.IsValid) {
             new Ballogger()
                 .Add(LogEventLevel.Error, new StackFrame(), "Cannot apply profile - profile has validation errors")
@@ -125,24 +124,10 @@ public class CmdFFManager : IExternalCommand {
                 }
             ]);
 
-        // Extract dimension-labeled params for per-type value restoration
-        var dimLabeledParams = profile.MakeRefPlaneAndDims.MirrorSpecs
-            .Where(s => !string.IsNullOrEmpty(s.Parameter))
-            .Select(s => s.Parameter)
-            .Concat(profile.MakeRefPlaneAndDims.OffsetSpecs
-                .Where(s => !string.IsNullOrEmpty(s.Parameter))
-                .Select(s => s.Parameter!))
-            .ToHashSet();
-
-        // Extract per-type values for dimension-labeled params
-        var perTypeValuesToRestore = profile.AddAndSetParams.Parameters
-            .Where(p => dimLabeledParams.Contains(p.Name) && p.ValuesPerType?.Count > 0)
-            .ToDictionary(p => p.Name, p => p.ValuesPerType!);
-
         return new OperationQueue()
             .Add(new AddSharedParams(apsParamData))
+            .Add(new MakeRefPlanesAndDims(profile.MakeRefPlaneAndDims))
             .Add(new AddAndSetParams(profile.AddAndSetParams, true))
-            .Add(new MakeRefPlanesAndDims(profile.MakeRefPlaneAndDims, perTypeValuesToRestore))
             .Add(new MakeRefPlaneSubcategories(specs))
             .Add(new SortParams(new SortParamsSettings()));
     }

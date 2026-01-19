@@ -6,24 +6,30 @@ using System.Diagnostics;
 
 namespace Pe.FamilyFoundry;
 
+/// <summary>
+///     Processor for executing operations on families.
+///     Handles document and family selection, execution, and result aggregation.
+/// </summary>
+/// <param name="executionOptions">The execution options for the processor. If null, default options will be used.</param>
+/// <param name="doc">The document to process.</param>
 public class OperationProcessor(
     Document doc,
-    ExecutionOptions executionOptions = null
+    ExecutionOptions? executionOptions = null
 ) : IDisposable {
     private readonly ExecutionOptions _exOpts = executionOptions ?? new ExecutionOptions();
 
     /// <summary>
     ///     A function to select families in the Document. If the document is a family document, this will not be called
     /// </summary>
-    private Func<List<Family>> _documentFamilySelector;
+    private Func<List<Family>?> _documentFamilySelector = () => null;
 
-    private Action<FamilyProcessingContext> _perFamilyCallback;
+    private Action<FamilyProcessingContext>? _perFamilyCallback;
 
     private Document OpenDoc { get; } = doc;
 
     public void Dispose() { }
 
-    public OperationProcessor SelectFamilies(params Func<List<Family>>[] familySelectors) {
+    public OperationProcessor SelectFamilies(params Func<List<Family>?>[] familySelectors) {
         var selectorList = familySelectors.ToList();
         if (selectorList == null || selectorList.Count == 0)
             throw new ArgumentException(@"At least one family selector must be provided", nameof(familySelectors));
@@ -51,13 +57,13 @@ public class OperationProcessor(
 
     /// <summary>
     ///     Execute a configured processor with full initialization and document handling.
-    ///     Returns FamilyProcessingContext with pre/post snapshots when a collector is provided.
+    ///     Returns FamilyProcessingContext with pre- / post-snapshots when a collector is provided.
     /// </summary>
     public (List<FamilyProcessingContext> contexts, double totalMs) ProcessQueue(
         OperationQueue queue,
-        CollectorQueue collectorQueue = null,
-        string outputFolderPath = null,
-        LoadAndSaveOptions loadAndSaveOptions = null) {
+        CollectorQueue? collectorQueue = null,
+        string? outputFolderPath = null,
+        LoadAndSaveOptions? loadAndSaveOptions = null) {
         var totalSw = Stopwatch.StartNew();
 
         // Disable collectors if requested in execution options
@@ -73,9 +79,9 @@ public class OperationProcessor(
 
     public (List<FamilyProcessingContext> contexts, double totalMs) ProcessQueueDangerously(
         OperationQueue queue,
-        CollectorQueue collectorQueue,
-        string outputFolderPath = null,
-        LoadAndSaveOptions loadAndSaveOptions = null
+        CollectorQueue? collectorQueue,
+        string? outputFolderPath = null,
+        LoadAndSaveOptions? loadAndSaveOptions = null
     ) {
         var totalSw = Stopwatch.StartNew();
 
@@ -94,7 +100,7 @@ public class OperationProcessor(
                 var (_, err) = ctx.OperationLogs;
                 return err;
             }).ToList();
-        if (errors.Any()) throw errors.First();
+        if (errors.First() != null) throw errors.First() ?? new Exception("Unknown error occured");
 
         totalSw.Stop();
         return (contexts, totalSw.Elapsed.TotalMilliseconds);
@@ -102,9 +108,9 @@ public class OperationProcessor(
 
     private List<FamilyProcessingContext> ProcessNormalDocument(
         OperationQueue queue,
-        CollectorQueue collectorQueue,
-        LoadAndSaveOptions loadAndSaveOptions,
-        string outputFolderPath
+        CollectorQueue? collectorQueue,
+        LoadAndSaveOptions? loadAndSaveOptions,
+        string? outputFolderPath
     ) {
         var contexts = new List<FamilyProcessingContext>();
         var families = this._documentFamilySelector();
@@ -133,7 +139,7 @@ public class OperationProcessor(
                             .CollectPreSnapshot(collectorQueue)
                             .Process(familyFuncs)
                             .SaveToLocations(d => GetSaveLocations(d, saveOpts, outputFolderPath))
-                            .Load(new DefaultFamilyLoadOptions())
+                            .Load()
                             .CollectPostSnapshot(collectorQueue),
                     out var context);
 
@@ -146,7 +152,7 @@ public class OperationProcessor(
         return contexts;
     }
 
-    private List<FamilyProcessingContext> ProcessFamilyDocument(OperationQueue queue, CollectorQueue collectorQueue) {
+    private List<FamilyProcessingContext> ProcessFamilyDocument(OperationQueue queue, CollectorQueue? collectorQueue) {
         queue.ResetAllGroupContexts();
         var familyFuncs = queue.ToFuncs(
             this._exOpts.OptimizeTypeOperations,
@@ -176,9 +182,11 @@ public class OperationProcessor(
         try {
             var familySw = Stopwatch.StartNew();
 
-            if (variants == null || variants.Count == 0) return [];
-            if (outputDirectory != null && !Directory.Exists(outputDirectory))
-                _ = Directory.CreateDirectory(outputDirectory);
+            if (variants.Count == 0) return [];
+            DirectoryInfo? directoryInfo = null;
+            if (!Directory.Exists(outputDirectory))
+                directoryInfo = Directory.CreateDirectory(outputDirectory);
+            if (directoryInfo == null) throw new InvalidOperationException($"Failed to create output directory {outputDirectory}");
 
             var allLogs = new List<OperationLog>();
 
@@ -188,7 +196,7 @@ public class OperationProcessor(
                 _ = this.OpenDoc
                     .GetFamilyDocument()
                     .EnsureDefaultType()
-                    .ProcessAndSaveVariant<OperationLog>(outputDirectory, variant,
+                    .ProcessAndSaveVariant(directoryInfo.FullName, variant,
                         famDoc => {
                             _ = famDoc.Process(context, variantFuncs, out var logs);
                             return logs;
@@ -211,10 +219,10 @@ public class OperationProcessor(
 
     private static List<string> GetSaveLocations(FamilyDocument famDoc,
         LoadAndSaveOptions options,
-        string outputFolderPath) {
+        string? outputFolderPath) {
         var saveLocations = new List<string>();
         if ((options?.SaveFamilyToInternalPath ?? false)
-            && string.IsNullOrEmpty(outputFolderPath))
+            && !string.IsNullOrEmpty(outputFolderPath))
             saveLocations.Add(outputFolderPath);
 
         if (!(options?.SaveFamilyToOutputDir ?? false)) return saveLocations;

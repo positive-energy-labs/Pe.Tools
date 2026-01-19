@@ -11,7 +11,8 @@ public static class Formula {
     /// <remarks> Must be a getter, when it is a simple statically initialized property it errors with NullReferences</remarks>
     private static readonly HashSet<ForgeTypeId> _forbiddenDataTypes = [
         SpecTypeId.String.Url,
-        SpecTypeId.Reference.LoadClassification
+        SpecTypeId.Reference.LoadClassification,
+        SpecTypeId.String.MultilineText,
     ];
 
 
@@ -61,8 +62,33 @@ public static class Formula {
             // (tokens that don't start with a digit and aren't known parameters or functions)
             var invalidParams = parameters.GetInvalidReferences(formula).ToList();
             if (invalidParams.Count != 0) {
-                errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. " +
-                               $"Formula references non-existent parameters: {string.Join(", ", invalidParams.Select(p => $"'{p}'"))}";
+                // Check if any invalid tokens look like unit suffixes (short, all letters)
+                var likelyUnitSuffixes = invalidParams.Where(FormulaUtils.LooksLikeUnitSuffix).ToList();
+
+                if (likelyUnitSuffixes.Count > 0) {
+                    // Try to parse as a value - if it works, this is a value masquerading as a formula
+                    var dataType = targetParam.Definition.GetDataType();
+                    var isParsableAsValue = UnitUtils.IsMeasurableSpec(dataType)
+                                            && UnitFormatUtils.TryParse(famDoc.GetUnits(), dataType, formula, out _);
+
+                    if (isParsableAsValue) {
+                        errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. " +
+                                       $"The value '{formula}' appears to be a literal with unit suffix, not a valid Revit formula. " +
+                                       $"Revit formulas don't support unit suffixes like {string.Join(", ", likelyUnitSuffixes.Select(s => $"'{s}'"))}. " +
+                                       $"Consider using SetAsFormula: false to set this as a value instead.";
+                    } else {
+                        // Looks like unit suffixes but doesn't parse - could be typos or unsupported units
+                        errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. " +
+                                       $"Found tokens that look like unit suffixes: {string.Join(", ", likelyUnitSuffixes.Select(s => $"'{s}'"))}. " +
+                                       $"If this is intended as a literal value, use SetAsFormula: false. " +
+                                       $"If it's a formula, these may be misspelled parameter names.";
+                    }
+                } else {
+                    // Tokens don't look like unit suffixes - likely missing parameters
+                    errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. " +
+                                   $"Formula references non-existent parameters: {string.Join(", ", invalidParams.Select(p => $"'{p}'"))}";
+                }
+
                 return false;
             }
 

@@ -52,10 +52,11 @@ public class SetParamValues(AddAndSetParamsSettings settings)
                     ? log.Success("Set formula")
                     : log.Error($"Error setting formula: {errMsg}");
             } else {
-                var success = doc.SetUnsetFormula(parameter, p.ValueOrFormula);
+                var success = doc.TrySetUnsetFormula(parameter, p.ValueOrFormula, out var errMsg);
                 _ = success
                     ? log.Success("Set global value")
-                    : log.Defer("Needs per-type fallback");
+                    : log.Defer($"Needs per-type fallback, error setting global value: {errMsg}");
+
             }
         }
 

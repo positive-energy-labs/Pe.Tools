@@ -13,20 +13,17 @@ namespace Pe.FamilyFoundry.Operations;
 ///     3. RestoreDeferredFormulas - restores formulas and re-applies per-type values
 /// </summary>
 public class MakeRefPlanesAndDims(
-    MakeRefPlaneAndDimsSettings settings,
-    Dictionary<string, Dictionary<string, string>>? perTypeValuesToRestore = null)
+    MakeRefPlaneAndDimsSettings settings)
     : OperationGroup<MakeRefPlaneAndDimsSettings>("Create reference planes and dimensions for the family",
-        InitializeOperations(settings, perTypeValuesToRestore ?? []),
+        InitializeOperations(settings),
         settings.MirrorSpecs.Select(s => s.ToString()).Concat(settings.OffsetSpecs.Select(s => s.ToString()))) {
     private static List<IOperation> InitializeOperations(
-        MakeRefPlaneAndDimsSettings settings,
-        Dictionary<string, Dictionary<string, string>> perTypeValuesToRestore
+        MakeRefPlaneAndDimsSettings settings
     ) {
-        var sharedState = new SharedCreatorState { PerTypeValuesToRestore = perTypeValuesToRestore };
+        var sharedState = new SharedCreatorState();
         return [
             new MakeRefPlanes(settings, sharedState),
             new MakeDimensions(settings, sharedState),
-            new RestoreDeferredFormulas(settings, sharedState)
         ];
     }
 }
@@ -66,13 +63,6 @@ public class PlaneQuery(Document doc) {
 public class SharedCreatorState {
     public PlaneQuery? Query { get; set; }
     public List<LogEntry>? Logs { get; set; }
-    public List<DeferredFormula> DeferredFormulas { get; } = [];
-
-    /// <summary>
-    ///     Per-type values for dimension-labeled params that need to be re-applied after labeling.
-    ///     Key: param name, Value: dictionary of type name → value string.
-    /// </summary>
-    public Dictionary<string, Dictionary<string, string>> PerTypeValuesToRestore { get; init; } = [];
 }
 
 /// <summary>
@@ -89,8 +79,8 @@ public class MakeRefPlanes(MakeRefPlaneAndDimsSettings settings, SharedCreatorSt
     ) {
         shared.Logs = new List<LogEntry>();
         shared.Query = new PlaneQuery(doc);
-        // Plane creation doesn't need deferred formulas - pass empty list
-        var creator = new RefPlaneDimCreator(doc, shared.Query, shared.Logs, []);
+
+        var creator = new RefPlaneDimCreator(doc, shared.Query, shared.Logs);
 
         // Create all planes first
         foreach (var spec in this.Settings.MirrorSpecs)
@@ -120,7 +110,7 @@ public class MakeDimensions(MakeRefPlaneAndDimsSettings settings, SharedCreatorS
         // Re-query planes from the committed document
         shared.Query = new PlaneQuery(doc);
         shared.Logs ??= new List<LogEntry>();
-        var creator = new RefPlaneDimCreator(doc, shared.Query, shared.Logs, shared.DeferredFormulas);
+        var creator = new RefPlaneDimCreator(doc, shared.Query, shared.Logs);
 
         var staggerIndex = 0;
 
@@ -136,79 +126,5 @@ public class MakeDimensions(MakeRefPlaneAndDimsSettings settings, SharedCreatorS
         }
 
         return new OperationLog(this.Name, shared.Logs);
-    }
-}
-
-/// <summary>
-///     Third operation: restores formulas that were unset during dimension labeling.
-///     This runs in a separate transaction after dimensions are committed.
-/// </summary>
-public class RestoreDeferredFormulas(MakeRefPlaneAndDimsSettings settings, SharedCreatorState shared)
-    : DocOperation<MakeRefPlaneAndDimsSettings>(settings) {
-    public override string Description => "Restore formulas and per-type values for dimension-labeled parameters";
-
-    public override OperationLog Execute(
-        FamilyDocument doc,
-        FamilyProcessingContext processingContext,
-        OperationContext groupContext
-    ) {
-        var logs = new List<LogEntry>();
-        var fm = doc.FamilyManager;
-
-        // 1. Restore formulas
-        foreach (var deferred in shared.DeferredFormulas) {
-            var param = fm.get_Parameter(deferred.ParamName);
-            if (param == null) {
-                logs.Add(new LogEntry($"Restore formula: {deferred.ParamName}").Error("Parameter not found"));
-                continue;
-            }
-
-            var success = doc.TrySetFormula(param, deferred.Formula, out var error);
-            logs.Add(success
-                ? new LogEntry($"Restore formula: {deferred.ParamName}").Success($"= {deferred.Formula}")
-                : new LogEntry($"Restore formula: {deferred.ParamName}").Error(error ?? "Unknown error"));
-        }
-
-        // 2. Restore per-type values (dimension labeling overwrites these)
-        if (shared.PerTypeValuesToRestore.Count > 0) {
-            var familyTypes = fm.Types.Cast<FamilyType>().ToList();
-
-            foreach (var (paramName, typeValues) in shared.PerTypeValuesToRestore) {
-                var param = fm.get_Parameter(paramName);
-                if (param == null) {
-                    logs.Add(new LogEntry($"Restore per-type: {paramName}").Error("Parameter not found"));
-                    continue;
-                }
-
-                // Skip if param now has a formula (formula takes precedence)
-                if (!string.IsNullOrEmpty(param.Formula)) {
-                    logs.Add(new LogEntry($"Restore per-type: {paramName}").Skip("Has formula"));
-                    continue;
-                }
-
-                var successCount = 0;
-                foreach (var familyType in familyTypes) {
-                    if (!typeValues.TryGetValue(familyType.Name, out var value)) continue;
-
-                    try {
-                        fm.CurrentType = familyType;
-                        fm.SetValueString(param, value);
-                        successCount++;
-                    } catch (Exception ex) {
-                        logs.Add(new LogEntry($"Restore per-type: {paramName} [{familyType.Name}]").Error(ex.Message));
-                    }
-                }
-
-                if (successCount > 0) {
-                    logs.Add(new LogEntry($"Restore per-type: {paramName}").Success($"Set {successCount} type values"));
-                }
-            }
-        }
-
-        if (logs.Count == 0) {
-            logs.Add(new LogEntry("Deferred values").Skip("Nothing to restore"));
-        }
-
-        return new OperationLog(this.Name, logs);
     }
 }

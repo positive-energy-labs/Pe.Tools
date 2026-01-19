@@ -22,16 +22,15 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
 
     // IFamilyDocCollector implementation (supplements project data with formulas, or collects everything)
     void IFamilyDocCollector.Collect(FamilySnapshot snapshot, FamilyDocument famDoc) {
-        // Check if we have project data to supplement
-        var hasProjectData = snapshot.Parameters?.Data?.Count > 0;
-
-        if (hasProjectData) {
+        // Check if we have project data to supplement - explicit null checks for flow analysis
+        if (snapshot.Parameters?.Data is { Count: > 0 } data) {
             // Filter out project parameters (which don't have a counterpart in the family, this is an unusual-ish case)
             snapshot.Parameters.Data =
-                [.. snapshot.Parameters.Data.Where(s => famDoc.FamilyManager.FindParameter(s.Name) != null)];
+                [.. data.Where(s => famDoc.FamilyManager.FindParameter(s.Name) != null)];
             this.SupplementWithFormulas(snapshot, famDoc);
-        } else
+        } else {
             snapshot.Parameters = this.CollectFromFamilyDoc(famDoc);
+        }
     }
 
     // IProjectCollector implementation (preferred - runs first)
@@ -163,7 +162,6 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
                 DataType = p.Definition.GetDataType(),
                 Formula = string.IsNullOrWhiteSpace(p.Formula) ? null : p.Formula,
                 // temp create dict so we can assign to it below
-                ValuesPerType = typeNames.ToDictionary(t => t, _ => (string)null, StringComparer.Ordinal),
                 IsBuiltIn = isBuiltIn,
                 SharedGuid = sharedGuid,
                 StorageType = p.StorageType
@@ -239,7 +237,7 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
     ///     - Integer (other): Returns the integer as string
     ///     - ElementId: Returns the element name if available, otherwise null
     /// </summary>
-    private static string GetParameterValueString(Parameter param, Document doc) {
+    private static string? GetParameterValueString(Parameter param, Document doc) {
         if (!param.HasValue) return null;
 
         return param.StorageType switch {
@@ -262,7 +260,7 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
         return intValue.ToString();
     }
 
-    private static string GetElementIdValueString(Parameter param, Document doc) {
+    private static string? GetElementIdValueString(Parameter param, Document doc) {
         var elementId = param.AsElementId();
         if (elementId == null || elementId == ElementId.InvalidElementId)
             return null;
@@ -299,7 +297,7 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
             }
         }
 
-        var values = allTypeNames.ToDictionary(t => t, _ => (string)null, StringComparer.Ordinal);
+        var values = allTypeNames.ToDictionary(t => t, _ => (string?)null, StringComparer.Ordinal);
 
         var created = new ParamSnapshot {
             Name = def.Name,

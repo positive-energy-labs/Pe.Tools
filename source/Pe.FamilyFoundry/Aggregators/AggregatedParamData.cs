@@ -14,7 +14,7 @@ public class AggregatedParamData(ParamSnapshot param) {
     public readonly bool IsInstance = param.IsInstance;
     public readonly bool IsProjectParameter = param.IsProjectParameter;
     public readonly string ParamName = param.Name;
-    public readonly string SharedGuid = param.SharedGuid.ToString();
+    public readonly string? SharedGuid = param.SharedGuid.ToString();
     public readonly string StorageType = param.StorageType.ToString();
     public int FamilyCount => this.FamilyNames.Count;
     public int ScheduleCount => this.ScheduleNames.Count;

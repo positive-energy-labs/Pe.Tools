@@ -20,10 +20,52 @@ public class CoerceByStorageType : ICoercionStrategy {
             (StorageType.Double, StorageType.Integer) => true,
             (StorageType.String, StorageType.Integer) => Regexes.TryExtractInteger(
                 context.SourceValue.ToString(), out _),
-            (StorageType.String, StorageType.Double) => Regexes.TryExtractDouble(
-                context.SourceValue.ToString(), out _),
+            (StorageType.String, StorageType.Double) => CanParseStringToDouble(context),
             _ => false
         };
+    }
+
+    /// <summary>
+    ///     Checks if a string value can be parsed to double for the target parameter.
+    ///     Uses Revit's UnitFormatUtils for measurable specs (handles imperial notation like "0' - 1/2\""),
+    ///     falls back to regex extraction for plain numbers.
+    /// </summary>
+    private static bool CanParseStringToDouble(CoercionContext context) {
+        var stringValue = context.SourceValue.ToString();
+        if (string.IsNullOrWhiteSpace(stringValue)) return false;
+ 
+        // For measurable specs, use Revit's parser which understands imperial notation
+        var dataType = context.TargetDataType;
+        if (UnitUtils.IsMeasurableSpec(dataType)) {
+            return UnitFormatUtils.TryParse(context.FamilyDocument.GetUnits(), dataType, stringValue, out _);
+        }
+
+        // For non-measurable doubles (e.g., Number), use simple regex extraction
+        return Regexes.TryExtractDouble(stringValue, out _);
+    }
+
+    /// <summary>
+    ///     Parses a string value to double for the target parameter.
+    ///     Uses Revit's UnitFormatUtils for measurable specs (handles imperial notation like "0' - 0 1/2\""),
+    ///     falls back to regex extraction for plain numbers.
+    /// </summary>
+    private static double ParseStringToDouble(CoercionContext context) { 
+        var stringValue = context.SourceValue.ToString() ?? string.Empty;
+
+        // For measurable specs, use Revit's parser which understands imperial notation
+        var dataType = context.TargetDataType;
+        if (UnitUtils.IsMeasurableSpec(dataType)) {
+            if (UnitFormatUtils.TryParse(context.FamilyDocument.GetUnits(), dataType, stringValue, out var parsed)) {
+                return parsed;
+            }
+
+            // Fall back to regex if Revit's parser fails (shouldn't happen if CanMap passed)
+            throw new ArgumentException(
+                $"Failed to parse '{stringValue}' as {dataType.ToLabel()} using Revit's UnitFormatUtils");
+        }
+
+        // For non-measurable doubles (e.g., Number), use simple regex extraction
+        return Regexes.ExtractDouble(stringValue);
     }
 
     public Result<FamilyParameter> Map(CoercionContext context) {
@@ -51,9 +93,9 @@ public class CoerceByStorageType : ICoercionStrategy {
             (StorageType.String, StorageType.Integer) =>
                 Regexes.ExtractInteger(context.SourceValue.ToString() ?? string.Empty),
 
-            // Set to double by extracting double from the stringParam's value
+            // Set to double by parsing string - uses Revit's parser for measurable specs (imperial notation)
             (StorageType.String, StorageType.Double) =>
-                Regexes.ExtractDouble(context.SourceValue.ToString() ?? string.Empty),
+                ParseStringToDouble(context),
 
             _ => throw new ArgumentException(
                 $"Unsupported storage type conversion from {context.SourceStorageType} to {context.TargetStorageType}")

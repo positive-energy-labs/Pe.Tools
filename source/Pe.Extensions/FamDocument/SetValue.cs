@@ -1,4 +1,5 @@
 using Pe.Extensions.FamDocument.SetValue;
+using System.Diagnostics;
 using System.Globalization;
 using BCS = Pe.Extensions.FamDocument.SetValue.BuiltInCoercionStrategy;
 
@@ -36,16 +37,22 @@ public static class FamilyDocumentSetValue {
     /// <param name="famDoc">The family document</param>
     /// <param name="param">The target parameter</param>
     /// <param name="value">Value to set - can be string (parsed based on parameter type), number, or typed value</param>
+    /// <param name="errorMessage">Error message if any, nulll by default</param>
     /// <returns>True if the value was set successfully</returns>
     /// <exception cref="InvalidOperationException">Thrown if the StorageType is not supported or formula setting fails</exception>
-    public static bool SetUnsetFormula(this FamilyDocument famDoc, FamilyParameter param, object value) {
-        // Parse string inputs into appropriate types
-        if (value is string stringValue) value = ParseStringValue(famDoc, param, stringValue);
+    public static bool TrySetUnsetFormula(this FamilyDocument famDoc, FamilyParameter param, object value, out string? errorMessage) {
+        try {
+            // Parse string inputs into appropriate types
+            if (value is string stringValue) value = ParseStringValue(famDoc, param, stringValue);
 
-        var formula = ValueToFormulaString(famDoc, param, value);
-        var success = famDoc.TrySetFormulaFast(param, formula, out var errorMessage);
-        if (!success) throw new InvalidOperationException(errorMessage);
-        return famDoc.UnsetFormula(param);
+            var formula = ValueToFormulaString(famDoc, param, value);
+            var success = famDoc.TrySetFormulaFast(param, formula, out errorMessage);
+            if (!success) return false;
+            return famDoc.UnsetFormula(param);
+        } catch (Exception ex) {
+            errorMessage = ex.ToStringDemystified();
+            return false;
+        }
     }
 
     /// <summary>

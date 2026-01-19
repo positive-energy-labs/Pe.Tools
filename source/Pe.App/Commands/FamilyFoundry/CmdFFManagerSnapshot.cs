@@ -151,7 +151,7 @@ public class CmdFFManagerSnapshot : IExternalCommand {
     ///     Converts a single ParamSnapshot to a ParamSettingModel.
     ///     Priority: Formula > Uniform Value > Per-Type Values
     /// </summary>
-    private static ParamSettingModel ConvertSingleParam(ParamSnapshot snap) {
+    private static ParamSettingModel? ConvertSingleParam(ParamSnapshot snap) {
         // Case 1: Has formula - use ValueOrFormula with SetAsFormula=true
         if (!string.IsNullOrWhiteSpace(snap.Formula)) {
             return new ParamSettingModel {
@@ -161,13 +161,12 @@ public class CmdFFManagerSnapshot : IExternalCommand {
                 DataType = snap.DataType,
                 ValueOrFormula = snap.Formula,
                 SetAsFormula = true,
-                ValuesPerType = null
             };
         }
 
         // Get non-null values
         var nonNullValues = snap.ValuesPerType
-            .Where(kv => kv.Value != null)
+            .Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
             .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
 
         // Skip if no values at all
@@ -176,8 +175,9 @@ public class CmdFFManagerSnapshot : IExternalCommand {
 
         // Case 2: All values are the same - use ValueOrFormula with SetAsFormula=false
         var distinctValues = nonNullValues.Values.Distinct().ToList();
-        if (distinctValues.Count == 1) {
-            return new ParamSettingModel {
+        return distinctValues.Count switch {
+            1 when string.IsNullOrWhiteSpace(distinctValues.First()) => null,
+            1 => new ParamSettingModel {
                 Name = snap.Name,
                 IsInstance = snap.IsInstance,
                 PropertiesGroup = snap.PropertiesGroup,
@@ -185,18 +185,17 @@ public class CmdFFManagerSnapshot : IExternalCommand {
                 ValueOrFormula = distinctValues[0],
                 SetAsFormula = false,
                 ValuesPerType = null
-            };
-        }
+            },
+            _ => new ParamSettingModel {
+                Name = snap.Name,
+                IsInstance = snap.IsInstance,
+                PropertiesGroup = snap.PropertiesGroup,
+                DataType = snap.DataType,
+                SetAsFormula = true, // default, ignored when ValueOrFormula is null
+                ValuesPerType = nonNullValues
+            }
+        };
 
         // Case 3: Different values per type - use ValuesPerType
-        return new ParamSettingModel {
-            Name = snap.Name,
-            IsInstance = snap.IsInstance,
-            PropertiesGroup = snap.PropertiesGroup,
-            DataType = snap.DataType,
-            ValueOrFormula = null,
-            SetAsFormula = true, // default, ignored when ValueOrFormula is null
-            ValuesPerType = nonNullValues
-        };
     }
 }

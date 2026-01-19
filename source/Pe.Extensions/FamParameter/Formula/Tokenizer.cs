@@ -36,6 +36,7 @@ internal static class FormulaUtils {
         "ln"
     };
 
+
     /// <summary>
     ///     Boundary chars: operators + structural formula characters.
     ///     Excludes quotes (") because they are used to delimit string literals.
@@ -71,7 +72,7 @@ internal static class FormulaUtils {
     ///     tokens may help identify what Revit interpreted incorrectly.
     /// </remarks>
     internal static IEnumerable<string>
-        ExtractSuspiciousTokens(string formula, IEnumerable<string> validParameterNames) {
+        ExtractSuspiciousTokens(string formula, IEnumerable<string> validParameterNames) { 
         if (string.IsNullOrWhiteSpace(formula))
             return [];
 
@@ -125,6 +126,34 @@ internal static class FormulaUtils {
 
         // Known Revit functions
         if (RevitFunctions.Contains(token)) return false;
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Heuristically determines if a token looks like a unit suffix rather than a parameter name.
+    ///     Unit suffixes are typically short (1-5 chars), contain letters and possibly Unicode 
+    ///     superscripts/subscripts (like ² ³ ₂), but not underscores or regular digits.
+    /// </summary>
+    /// <remarks>
+    ///     This is a heuristic, not definitive. Used to provide better error messages when
+    ///     a formula appears to contain unit-suffixed values like "-1 CFM", "0.5 in-wg", or "10 ft²".
+    /// </remarks>
+    internal static bool LooksLikeUnitSuffix(string token) {
+        if (string.IsNullOrEmpty(token)) return false;
+
+        // Unit suffixes are typically short
+        if (token.Length > 5) return false;
+
+        // Unit suffixes don't contain underscores (common in parameter names like "PE_M_Grd_Width")
+        if (token.Contains('_')) return false;
+
+        // Unit suffixes don't contain regular ASCII digits (0-9), but may contain 
+        // Unicode superscripts (², ³) or subscripts (₂, ₃) which are allowed
+        if (token.Any(char.IsAsciiDigit)) return false;
+
+        // Must contain at least one letter
+        if (!token.Any(char.IsLetter)) return false;
 
         return true;
     }

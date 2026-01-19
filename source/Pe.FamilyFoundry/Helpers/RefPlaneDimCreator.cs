@@ -12,8 +12,7 @@ namespace Pe.FamilyFoundry.Helpers;
 public class RefPlaneDimCreator(
     Document doc,
     PlaneQuery query,
-    List<LogEntry> logs,
-    List<DeferredFormula> deferredFormulas) {
+    List<LogEntry> logs) {
     private const double PlaneOffset = 0.5;
     private const double DimStaggerStep = 0.5;
     private const double PlaneExtent = 8.0;
@@ -159,7 +158,7 @@ public class RefPlaneDimCreator(
                 if (!string.IsNullOrEmpty(spec.Parameter)) {
                     var param = doc.FamilyManager.get_Parameter(spec.Parameter);
                     if (param != null) {
-                        this.LabelDimensionWithParam(paramDim, param, deferredFormulas);
+                        paramDim.FamilyLabel = param;
                         logs.Add(new LogEntry($"Mirror param dim: {spec.Name} @ {spec.CenterAnchor}").Success($"Label: {spec.Parameter}"));
                     } else {
                         logs.Add(new LogEntry($"Mirror param dim: {spec.Name} @ {spec.CenterAnchor}").Success($"(param '{spec.Parameter}' not found)"));
@@ -232,7 +231,7 @@ public class RefPlaneDimCreator(
             if (!string.IsNullOrEmpty(spec.Parameter)) {
                 var param = doc.FamilyManager.get_Parameter(spec.Parameter);
                 if (param != null) {
-                    this.LabelDimensionWithParam(dim, param, deferredFormulas);
+                    dim.FamilyLabel = param;
                     logs.Add(new LogEntry($"Offset dim: {spec.Name}").Success($"Label: {spec.Parameter}"));
                 } else {
                     logs.Add(new LogEntry($"Offset dim: {spec.Name}").Success($"(param '{spec.Parameter}' not found)"));
@@ -295,27 +294,6 @@ public class RefPlaneDimCreator(
         Debug.WriteLine($"[CreateDimensionLine] Distance: {distanceAlongNormal:F6}, Offset: {offset:F3}");
 
         return Line.CreateBound(p1, p2);
-    }
-
-    /// <summary>
-    ///     Labels a dimension with a parameter, handling formula-driven params.
-    ///     If the param has a formula, we unset it before labeling and track it for later restoration
-    ///     in a separate transaction (via DeferredFormulas).
-    /// </summary>
-    private void LabelDimensionWithParam(Dimension dim, FamilyParameter param, List<DeferredFormula> deferredFormulasList) {
-        var formula = param.Formula;
-        var hasFormula = !string.IsNullOrEmpty(formula);
-
-        if (hasFormula) {
-            Debug.WriteLine($"[LabelDimensionWithParam] Param {param.Definition.Name} has formula '{formula}', unsetting for labeling");
-            var famDoc = new FamilyDocument(doc);
-            _ = famDoc.UnsetFormula(param);
-
-            // Track for later restoration in separate transaction
-            deferredFormulasList.Add(new DeferredFormula(param.Definition.Name, formula));
-        }
-
-        dim.FamilyLabel = param;
     }
 }
 

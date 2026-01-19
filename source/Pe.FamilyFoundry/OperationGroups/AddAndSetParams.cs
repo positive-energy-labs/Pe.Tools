@@ -33,6 +33,11 @@ public class AddAndSetParams(AddAndSetParamsSettings settings, bool createMissin
         AddAndSetParamsSettings settings,
         bool createMissingFamilyTypes
     ) {
+        // Sort parameters by dependency order (modifies the Parameters list in place)
+        var sortedParams = SortByDependencies(settings.Parameters);
+        settings.Parameters.Clear();
+        settings.Parameters.AddRange(sortedParams);
+        
         var ops = new List<IOperation>();
 
         // 0. Optionally create missing family types first (before anything else)
@@ -52,5 +57,107 @@ public class AddAndSetParams(AddAndSetParamsSettings settings, bool createMissin
         }
 
         return ops;
+    }
+
+    /// <summary>
+    ///     Sorts parameters by dependency order using topological sort (Kahn's algorithm).
+    ///     Parameters with no dependencies come first, followed by parameters that depend on them.
+    /// </summary>
+    private static List<ParamSettingModel> SortByDependencies(List<ParamSettingModel> parameters) {
+        if (parameters.Count <= 1) return parameters;
+
+        // Build map of param name -> param for O(1) lookup
+        var paramByName = parameters.ToDictionary(p => p.Name, StringComparer.Ordinal);
+        var paramNames = new HashSet<string>(paramByName.Keys, StringComparer.Ordinal);
+
+        // Build dependency graph: paramName -> set of param names it depends on
+        var dependencies = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        var inDegree = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        foreach (var p in parameters) {
+            var deps = ExtractReferencedParamNames(p.ValueOrFormula, paramNames);
+            dependencies[p.Name] = deps;
+            inDegree[p.Name] = deps.Count;
+        }
+
+        // Kahn's algorithm: start with nodes that have no dependencies
+        var queue = new Queue<string>();
+        foreach (var p in parameters.Where(p => inDegree[p.Name] == 0))
+            queue.Enqueue(p.Name);
+
+        var sorted = new List<ParamSettingModel>();
+        var processed = new HashSet<string>(StringComparer.Ordinal);
+
+        while (queue.Count > 0) {
+            var paramName = queue.Dequeue();
+            sorted.Add(paramByName[paramName]);
+            _ = processed.Add(paramName);
+
+            // For each parameter that depends on this one, decrement its in-degree
+            foreach (var dependent in parameters.Where(p => dependencies[p.Name].Contains(paramName))) {
+                inDegree[dependent.Name]--;
+                if (inDegree[dependent.Name] == 0)
+                    queue.Enqueue(dependent.Name);
+            }
+        }
+
+        // Check for circular dependencies
+        if (sorted.Count < parameters.Count) {
+            var unprocessed = parameters.Where(p => !processed.Contains(p.Name)).Select(p => p.Name).ToList();
+            throw new InvalidOperationException(
+                $"Circular dependency detected among parameters: {string.Join(", ", unprocessed)}. " +
+                $"Revit cannot resolve circular formula references.");
+        }
+
+        return sorted;
+    }
+
+    /// <summary>
+    ///     Extracts parameter names referenced in a formula string.
+    ///     Only returns names that exist in the provided set of valid parameter names.
+    /// </summary>
+    private static HashSet<string> ExtractReferencedParamNames(string formula, HashSet<string> validParamNames) {
+        if (string.IsNullOrWhiteSpace(formula))
+            return new HashSet<string>(StringComparer.Ordinal);
+
+        var referenced = new HashSet<string>(StringComparer.Ordinal);
+
+        // Check each valid param name to see if it's referenced in the formula
+        foreach (var paramName in validParamNames) {
+            if (IsParamReferencedInFormula(paramName, formula))
+                _ = referenced.Add(paramName);
+        }
+
+        return referenced;
+    }
+
+    /// <summary>
+    ///     Checks if a parameter name is referenced in a formula with proper boundary validation.
+    ///     Adapted from FormulaReferences.IsReferencedIn but works with strings instead of FamilyParameter objects.
+    /// </summary>
+    private static bool IsParamReferencedInFormula(string paramName, string formula) {
+        if (string.IsNullOrEmpty(paramName) || string.IsNullOrEmpty(formula)) return false;
+
+        // Boundary chars - must match FormulaUtils.BoundaryChars
+        var boundaryChars = new[] {
+            '+', '-', '*', '/', '^', '=', '>', '<', ' ', '[', ']', '(', ')', ',', '\t', '\r', '\n'
+        };
+
+        var searchStart = 0;
+        while (searchStart < formula.Length) {
+            var leftIndex = formula.IndexOf(paramName, searchStart, StringComparison.Ordinal);
+            if (leftIndex == -1) return false;
+
+            var leftValid = leftIndex == 0 || boundaryChars.Contains(formula[leftIndex - 1]);
+            var rightIndex = leftIndex + paramName.Length;
+            var rightValid = rightIndex >= formula.Length || boundaryChars.Contains(formula[rightIndex]);
+
+            if (leftValid && rightValid) return true;
+
+            // Move past this false match
+            searchStart = leftIndex + 1;
+        }
+
+        return false;
     }
 }

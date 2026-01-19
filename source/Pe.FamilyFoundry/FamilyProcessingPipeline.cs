@@ -11,9 +11,9 @@ using System.Diagnostics;
 public readonly struct FamilyProcessingPipeline {
     internal FamilyProcessingPipeline(
         FamilyDocument famDoc,
-        Document projectDoc,
-        Family sourceFamily,
-        Family loadedFamily,
+        Document? projectDoc,
+        Family? sourceFamily,
+        Family? loadedFamily,
         FamilyProcessingContext context) {
         this.FamDoc = famDoc;
         this.ProjectDoc = projectDoc;
@@ -21,32 +21,23 @@ public readonly struct FamilyProcessingPipeline {
         this.LoadedFamily = loadedFamily;
         this.Context = context;
     }
-
-    internal FamilyProcessingPipeline FromPipeline(FamilyProcessingPipeline pipeline) =>
-        new(
-            pipeline.FamDoc,
-            pipeline.ProjectDoc,
-            pipeline.SourceFamily,
-            pipeline.LoadedFamily,
-            pipeline.Context);
-
     /// <summary>The open family document</summary>
     public FamilyDocument FamDoc { get; }
 
     /// <summary>The project document (null in family-doc-only mode)</summary>
-    public Document ProjectDoc { get; }
+    public Document? ProjectDoc { get; }
 
     /// <summary>Original family before processing (null in family-doc mode)</summary>
-    public Family SourceFamily { get; }
+    public Family? SourceFamily { get; }
 
     /// <summary>Family after Load() call (null before Load() or in family-doc mode)</summary>
-    public Family LoadedFamily { get; }
+    public Family? LoadedFamily { get; }
 
     /// <summary>Processing context for this pipeline (created by StartPipeline)</summary>
     public FamilyProcessingContext Context { get; }
 
-    /// <summary>Whether this pipeline is in family-doc-only mode (no project context)</summary>
-    public bool IsFamilyDocMode => this.ProjectDoc == null;
+    // /// <summary>Whether this pipeline is in family-doc-only mode (no project context)</summary>
+    // public bool IsFamilyDocMode => this.ProjectDoc == null;
 
     /// <summary>Whether Load() has been called</summary>
     public bool IsLoaded => this.LoadedFamily != null;
@@ -135,7 +126,7 @@ public static class FamilyProcessingPipelineExtensions {
         this FamilyProcessingPipeline pipeline,
         Action<Document, Family> action
     ) {
-        if (pipeline.IsFamilyDocMode) return pipeline;
+        if (pipeline.ProjectDoc == null) return pipeline;
 
         var family = pipeline.IsLoaded ? pipeline.LoadedFamily : pipeline.SourceFamily;
         if (family != null)
@@ -165,7 +156,7 @@ public static class FamilyProcessingPipelineExtensions {
             throw new InvalidOperationException("Context must be set before calling Process()");
 
         var sw = Stopwatch.StartNew();
-        _ = pipeline.FamDoc.Process<TContext, OperationLog>((TContext)(object)pipeline.Context, callbacks,
+        _ = pipeline.FamDoc.Process((TContext)(object)pipeline.Context, callbacks,
             out var results);
         sw.Stop();
 
@@ -190,17 +181,15 @@ public static class FamilyProcessingPipelineExtensions {
     /// </summary>
     public static FamilyProcessingPipeline Load(
         this FamilyProcessingPipeline pipeline,
-        IFamilyLoadOptions options
+        IFamilyLoadOptions? options = null
     ) {
-        if (pipeline.IsFamilyDocMode)
+        if ( pipeline.ProjectDoc == null)
             throw new InvalidOperationException("Cannot call Load() in family-doc-only mode.");
 
         if (pipeline.IsLoaded)
             throw new InvalidOperationException("Load() has already been called on this pipeline.");
 
-        if (options == null) options = new DefaultFamilyLoadOptions();
-
-        var loadedFamily = pipeline.FamDoc.LoadFamily(pipeline.ProjectDoc, options);
+        var loadedFamily = pipeline.FamDoc.LoadFamily(pipeline.ProjectDoc, options ?? new DefaultFamilyLoadOptions());
 
         return new FamilyProcessingPipeline(
             pipeline.FamDoc,
@@ -216,7 +205,7 @@ public static class FamilyProcessingPipelineExtensions {
     /// </summary>
     public static FamilyProcessingPipeline CollectPreSnapshot(
         this FamilyProcessingPipeline pipeline,
-        CollectorQueue collectorQueue
+        CollectorQueue? collectorQueue
     ) {
         if (pipeline.Context == null)
             throw new InvalidOperationException("Context must be set before calling CollectPreSnapshot()");
@@ -241,7 +230,7 @@ public static class FamilyProcessingPipelineExtensions {
     /// </summary>
     public static FamilyProcessingPipeline CollectPostSnapshot(
         this FamilyProcessingPipeline pipeline,
-        CollectorQueue collectorQueue
+        CollectorQueue? collectorQueue
     ) {
         if (pipeline.Context == null)
             throw new InvalidOperationException("Context must be set before calling CollectPostSnapshot()");

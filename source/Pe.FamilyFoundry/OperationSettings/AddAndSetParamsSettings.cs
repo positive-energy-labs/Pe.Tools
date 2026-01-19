@@ -51,6 +51,12 @@ public record ParamSettingModel : ParamDefinitionBase {
         "Values are always set as values (not formulas). " +
         "Mutually exclusive with ValueOrFormula.")]
     public Dictionary<string, string> ValuesPerType { get; init; } = null;
+
+    /// <summary>
+    ///     Tooltip/description shown in Revit UI. Only applies to family parameters (not shared/built-in).
+    /// </summary>
+    [Description("Tooltip/description shown in Revit UI and properties palette. Only applies to family parameters (not shared or built-in parameters).")]
+    public string? Tooltip { get; init; } = null;
 }
 
 public class AddAndSetParamsSettings : IOperationSettings {

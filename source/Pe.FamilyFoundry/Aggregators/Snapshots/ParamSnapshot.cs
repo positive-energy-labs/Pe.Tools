@@ -38,12 +38,12 @@ public record ParamDefinitionBase {
 /// </summary>
 public record ParamSnapshot : ParamDefinitionBase {
     // Assignment mode - if Formula != null, it is the authoritative assignment
-    public string Formula { get; init; } = null;
+    public string? Formula { get; init; } = null;
 
     // Per-type values: TypeName -> setter-acceptable string value
     // Null means no value for that type. Empty string "" is a valid value for String parameters.
     // Note: JSON serialization preserves null vs "" distinction when using proper serializer settings.
-    public Dictionary<string, string> ValuesPerType { get; init; } = new(StringComparer.Ordinal);
+    public Dictionary<string, string?> ValuesPerType { get; init; } = new(StringComparer.Ordinal);
 
     // Audit metadata (not required for replay, but useful)
     public bool IsBuiltIn { get; init; } = false;

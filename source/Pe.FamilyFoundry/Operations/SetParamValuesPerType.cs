@@ -49,28 +49,33 @@ public class SetParamValuesPerType(AddAndSetParamsSettings settings)
                 continue;
             }
 
-            // Handle fallback for failed global values from SetParamValues and proiritize ValueOrFormula over ValuesPerType 
+            // Determine the value to set: prioritize ValueOrFormula over ValuesPerType
+            string? valueToSet = null;
+            var isFallback = false;
+
             if (!string.IsNullOrWhiteSpace(paramModel.ValueOrFormula)) {
-                try {
-                    var success = famDoc.TrySetFormula(parameter, paramModel.ValueOrFormula, out _);
-                    _ = log.Success("Set per-type value (fallback)");
-                    continue; // break early, this is a proper success
-                } catch {
-                    // allow retries by below loop
-                }
+                valueToSet = paramModel.ValueOrFormula;
+                isFallback = true;
+            } else if (paramModel.ValuesPerType?.Count > 0
+                       && currentTypeName is not null
+                       && paramModel.ValuesPerType.TryGetValue(currentTypeName, out var perTypeValue)) {
+                valueToSet = perTypeValue;
             }
 
-            if (!(paramModel.ValuesPerType?.Count > 0)
-                || currentTypeName is null
-                || !paramModel.ValuesPerType.TryGetValue(currentTypeName, out var value)
-                || string.IsNullOrWhiteSpace(value)) continue;
-            if (!this.Settings.OverrideExistingValues && famDoc.HasValue(parameter))
-                continue;
+            // Skip if no value to set
+            if (string.IsNullOrWhiteSpace(valueToSet)) continue;
 
-            // Handle explicit per-type parameters (ValuesPerType is set, probably Family Manager path)
+            // Skip if not overriding existing values
+            if (!this.Settings.OverrideExistingValues && famDoc.HasValue(parameter)) {
+                _ = log.Skip("Already has value");
+                continue;
+            }
+
+            // Set the value
             try {
-                SetValueForCurrentFamType(famDoc, parameter, value);
-                _ = log.Defer("Set per-type value");
+                SetValueForCurrentFamType(famDoc, parameter, valueToSet);
+                // Always use Defer() in TypeOperations to keep entry incomplete for all types
+                _ = log.Defer(isFallback ? "Set per-type value (fallback)" : "Set per-type value");
             } catch (Exception ex) {
                 _ = log.Error(ex);
             }
