@@ -1,7 +1,8 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.FamilyFoundry;
-using Pe.Global.Revit.Lib;
+using Pe.Global.Revit.Lib.Schedules;
+using Pe.Global.Revit.Lib.Schedules.Fields;
 using Pe.Global.Revit.Ui;
 using Pe.Global.Services.Storage;
 using Pe.Global.Services.Storage.Core;

@@ -1,4 +1,6 @@
-using Pe.Global.Revit.Lib;
+using Pe.Global.Revit.Lib.Schedules;
+using Pe.Global.Revit.Lib.Schedules.Fields;
+using Pe.Global.Revit.Lib.Schedules.SortGroup;
 using Pe.Ui.Core;
 using System.Windows;
 using System.Windows.Controls;
@@ -67,10 +69,10 @@ public class SchedulePreviewPanel : UserControl {
 
             // Fields list with details
             if (data.Fields.Count > 0) {
-                doc.AddSectionHeader($"Fields ({data.FieldCount})");
+                _ = doc.AddSectionHeader($"Fields ({data.FieldCount})");
 
                 // Build table data
-                doc.AddTable(
+                doc.AddTable<ScheduleFieldSpec>(
                     data.Fields,
                     [
                         ("Name", f => f.ParameterName),
@@ -89,9 +91,9 @@ public class SchedulePreviewPanel : UserControl {
 
             // Sort/Group list with details
             if (data.SortGroup.Count > 0) {
-                doc.AddSectionHeader($"Sort/Group ({data.SortGroupCount})");
+                _ = doc.AddSectionHeader($"Sort/Group ({data.SortGroupCount})");
 
-                doc.AddTable(
+                _ = doc.AddTable<ScheduleSortGroupSpec>(
                     data.SortGroup,
                     [
                         ("Field", sg => sg.FieldName),
@@ -106,13 +108,13 @@ public class SchedulePreviewPanel : UserControl {
 
             // Profile JSON section
             if (!string.IsNullOrEmpty(data.ProfileJson)) {
-                doc.AddSectionHeader("Profile Settings (JSON)");
-                doc.AddJsonBlock(data.ProfileJson);
+                _ = doc.AddSectionHeader("Profile Settings (JSON)");
+                _ = doc.AddJsonBlock(data.ProfileJson);
             }
 
             // File metadata section
             if (data.CreatedDate.HasValue || data.ModifiedDate.HasValue) {
-                doc.AddSectionHeader("File Profile");
+                _ = doc.AddSectionHeader("File Profile");
                 var metaPara = new Paragraph();
                 if (data.CreatedDate.HasValue) {
                     metaPara.Inlines.Add(new Run($"Created: {data.CreatedDate:yyyy-MM-dd HH:mm:ss}"));
