@@ -112,7 +112,7 @@ public class SchedulePreviewPanel : UserControl {
 
             // File metadata section
             if (data.CreatedDate.HasValue || data.ModifiedDate.HasValue) {
-                doc.AddSectionHeader("File Metadata");
+                doc.AddSectionHeader("File Profile");
                 var metaPara = new Paragraph();
                 if (data.CreatedDate.HasValue) {
                     metaPara.Inlines.Add(new Run($"Created: {data.CreatedDate:yyyy-MM-dd HH:mm:ss}"));

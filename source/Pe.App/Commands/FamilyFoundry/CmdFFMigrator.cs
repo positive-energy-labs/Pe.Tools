@@ -190,12 +190,12 @@ public class CmdFFMigrator : IExternalCommand {
             .SelectMany(m => m.CurrNames)
             .Concat(apsParamNames);
 
+        profile.AddAndSetParams.AddParameters(BuildInternalParams(profile));
         var apsAndAddedParamNames = apsParamNames
             .Concat(profile.AddAndSetParams.Parameters.Select(p => p.Name))
             .ToList();
 
 
-        profile.AddAndSetParams.AddParameters(BuildInternalParams(profile));
 
         return new OperationQueue()
             .Add(new PurgeNestedFamilies(profile.PurgeNestedFamilies))

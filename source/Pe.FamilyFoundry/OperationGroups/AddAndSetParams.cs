@@ -37,7 +37,7 @@ public class AddAndSetParams(AddAndSetParamsSettings settings, bool createMissin
         var sortedParams = SortByDependencies(settings.Parameters);
         settings.Parameters.Clear();
         settings.Parameters.AddRange(sortedParams);
-        
+
         var ops = new List<IOperation>();
 
         // 0. Optionally create missing family types first (before anything else)
@@ -51,10 +51,10 @@ public class AddAndSetParams(AddAndSetParamsSettings settings, bool createMissin
         // 2. Set global/formula values (with per-type fallback tracking via OperationContext)
         if (settings.Parameters.Any(p => !string.IsNullOrEmpty(p.ValueOrFormula))) {
             ops.Add(new SetParamValues(settings));
-            // 3. Set explicit per-type values AND handle fallbacks from SetParamValues failures
-            if (createMissingFamilyTypes || !settings.DisablePerTypeFallback)
-                ops.Add(new SetParamValuesPerType(settings));
         }
+
+        // 3. Set explicit per-type values AND handle fallbacks from SetParamValues failures
+        ops.Add(new SetParamValuesPerType(settings));
 
         return ops;
     }
@@ -64,7 +64,9 @@ public class AddAndSetParams(AddAndSetParamsSettings settings, bool createMissin
     ///     Parameters with no dependencies come first, followed by parameters that depend on them.
     /// </summary>
     private static List<ParamSettingModel> SortByDependencies(List<ParamSettingModel> parameters) {
-        if (parameters.Count <= 1) return parameters;
+        // IMPORTANT: Always return a NEW list to avoid the caller clearing the original
+        // when they do Clear() + AddRange() with the returned list
+        if (parameters.Count <= 1) return new List<ParamSettingModel>(parameters);
 
         // Build map of param name -> param for O(1) lookup
         var paramByName = parameters.ToDictionary(p => p.Name, StringComparer.Ordinal);

@@ -85,6 +85,9 @@ public class FamilyProcessingContext {
     /// <summary>Time spent on operations (excluding collection) in milliseconds.</summary>
     public double OperationsMs { get; internal set; }
 
+    /// <summary>Optional tag for storing additional context data (e.g., VariantSpec).</summary>
+    public object? Tag { get; internal set; }
+
 
     /// <summary>Finds a parameter in the pre-process snapshot by name.</summary>
     public ParamSnapshot FindParam(string paramName) {

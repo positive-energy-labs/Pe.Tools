@@ -32,6 +32,16 @@ public class ProcessingResultBuilder(Storage storage) {
         return this;
     }
 
+    /// <summary>
+    ///     Sets profile settings and name without BaseProfileSettings constraint.
+    ///     Use for variant-specific or custom settings objects.
+    /// </summary>
+    public ProcessingResultBuilder WithCustomProfile(object settings, string profileName) {
+        this._profileSettings = settings;
+        this._profileName = profileName;
+        return this;
+    }
+
     public ProcessingResultBuilder WithOperationMetadata(OperationQueue queue) {
         this._operationMetadata = queue.GetExecutableMetadata();
         return this;
@@ -302,7 +312,7 @@ public class ProcessingResultBuilder(Storage storage) {
         }
     }
 
-    public static List<ParamSnapshot> SortAndOrder( List<ParamSnapshot> snapshots) {
+    public static List<ParamSnapshot> SortAndOrder(List<ParamSnapshot> snapshots) {
         snapshots ??= [];
         return snapshots.Select(s => s with {
             ValuesPerType = new Dictionary<string, string>(

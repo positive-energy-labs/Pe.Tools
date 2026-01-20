@@ -80,7 +80,7 @@ public class ViewPreviewPanel : UserControl {
         if (scale.HasValue && scale.Value > 0)
             doc.AddKeyValue("Scale", $"1:{scale.Value}");
 
-        doc.AddSectionHeader("Metadata");
+        doc.AddSectionHeader("Profile");
         doc.AddKeyValue("Id", view.Id.ToString());
 
         return doc;
@@ -124,7 +124,7 @@ public class ViewPreviewPanel : UserControl {
             doc.AddBulletList(placements);
         }
 
-        doc.AddSectionHeader("Metadata");
+        doc.AddSectionHeader("Profile");
         doc.AddKeyValue("Id", schedule.Id.ToString());
 
         return doc;
@@ -167,7 +167,7 @@ public class ViewPreviewPanel : UserControl {
             doc.AddDetailList(viewDetails);
         }
 
-        doc.AddSectionHeader("Metadata");
+        doc.AddSectionHeader("Profile");
         doc.AddKeyValue("Id", sheet.Id.ToString());
 
         return doc;

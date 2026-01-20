@@ -46,7 +46,7 @@ Deferred items never become Success:** Check the follow-up operation.
 
 - `snapshot-*-pre.json` vs `snapshot-*-post.json` → What actually changed?
 - `snapshot-profile-*.json` → What was the input?
-- `snapshot-*-diff.json` → Quick summary of changes
+- `snapshot-*-diff.json` → Quick human-readable summary of changes
 
 **WARNING: Snapshot files are 300-2000+ lines.** NEVER read entire files into
 context. Always filter first:

@@ -66,9 +66,6 @@ public class AddAndSetParamsSettings : IOperationSettings {
     [Description("Create a family parameter if it is missing.")]
     public bool CreateFamParamIfMissing { get; init; } = true;
 
-    [Description("Disable per-type fallback to speed up processing. Do not use outside of testing")]
-    public bool DisablePerTypeFallback { get; init; } = false;
-
     [Description(
         "List of parameters to set. Each parameter can use either ValueOrFormula (global value/formula for all types) " +
         "or ValuesPerType (different value per type), but not both.")]

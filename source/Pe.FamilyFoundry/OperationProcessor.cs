@@ -1,4 +1,5 @@
 using Pe.Extensions.FamDocument;
+using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.FamilyFoundry.Snapshots;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
@@ -176,45 +177,110 @@ public class OperationProcessor(
     public List<FamilyProcessingContext> ProcessFamilyDocumentIntoVariants(
         List<(string variant, OperationQueue queue)> variants,
         string outputDirectory
+    ) => this.ProcessFamilyDocumentIntoVariants(variants, null, outputDirectory);
+
+    public List<FamilyProcessingContext> ProcessFamilyDocumentIntoVariants(
+        List<(string variant, OperationQueue queue)> variants,
+        CollectorQueue? collectorQueue,
+        string outputDirectory
+    ) => this.ProcessFamilyDocumentIntoVariants(
+        variants.Select(v => new VariantSpec(v.variant, v.queue)).ToList(),
+        collectorQueue,
+        outputDirectory
+    );
+
+    public List<FamilyProcessingContext> ProcessFamilyDocumentIntoVariants(
+        List<VariantSpec> variants,
+        CollectorQueue? collectorQueue,
+        string outputDirectory
     ) {
-        var context = new FamilyProcessingContext { FamilyName = this.OpenDoc.Title };
+        var contexts = new List<FamilyProcessingContext>();
 
         try {
-            var familySw = Stopwatch.StartNew();
-
             if (variants.Count == 0) return [];
-            DirectoryInfo? directoryInfo = null;
-            if (!Directory.Exists(outputDirectory))
-                directoryInfo = Directory.CreateDirectory(outputDirectory);
-            if (directoryInfo == null) throw new InvalidOperationException($"Failed to create output directory {outputDirectory}");
+            var directoryInfo = !Directory.Exists(outputDirectory)
+                ? Directory.CreateDirectory(outputDirectory)
+                : new DirectoryInfo(outputDirectory);
 
-            var allLogs = new List<OperationLog>();
+            var baseFamilyName = this.OpenDoc.Title;
 
-            foreach (var (variant, queue) in variants) {
-                var variantFuncs = queue.ToFuncs(false, false);
+            foreach (var variant in variants) {
+                variant.Queue.ResetAllGroupContexts();
+                var variantFuncs = variant.Queue.ToFuncs(false, false);
+                var variantSw = Stopwatch.StartNew();
+
+                var context = new FamilyProcessingContext {
+                    FamilyName = $"{baseFamilyName} - {variant.Name.Trim()}",
+                    Tag = variant // Store variant spec for later retrieval
+                };
 
                 _ = this.OpenDoc
                     .GetFamilyDocument()
                     .EnsureDefaultType()
-                    .ProcessAndSaveVariant(directoryInfo.FullName, variant,
+                    .ProcessAndSaveVariant(directoryInfo.FullName, variant.Name,
                         famDoc => {
+                            // Collect pre-snapshot if collector is provided
+                            if (collectorQueue != null) {
+                                var preSw = Stopwatch.StartNew();
+                                var preSnapshot = new FamilySnapshot { FamilyName = context.FamilyName };
+                                context.PreProcessSnapshot = preSnapshot;
+
+                                var projectCollector = collectorQueue.ToProjectCollectorFunc();
+                                var famDocCollector = collectorQueue.ToFamilyDocCollectorFunc();
+
+                                // Collect from project document (if available via OwnerFamily)
+                                if (famDoc.OwnerFamily?.Document != null) {
+                                    projectCollector(preSnapshot, famDoc.OwnerFamily.Document, famDoc.OwnerFamily);
+                                }
+                                famDocCollector(preSnapshot, famDoc);
+
+                                preSw.Stop();
+                                context.PreCollectionMs = preSw.Elapsed.TotalMilliseconds;
+                            }
+
+                            // Process operations
+                            var opSw = Stopwatch.StartNew();
                             _ = famDoc.Process(context, variantFuncs, out var logs);
+                            opSw.Stop();
+                            context.OperationsMs = opSw.Elapsed.TotalMilliseconds;
+
+                            // Collect post-snapshot if collector is provided
+                            if (collectorQueue != null) {
+                                var postSw = Stopwatch.StartNew();
+                                var postSnapshot = new FamilySnapshot { FamilyName = context.FamilyName };
+                                context.PostProcessSnapshot = postSnapshot;
+
+                                var projectCollector = collectorQueue.ToProjectCollectorFunc();
+                                var famDocCollector = collectorQueue.ToFamilyDocCollectorFunc();
+
+                                // Collect from project document (if available via OwnerFamily)
+                                if (famDoc.OwnerFamily?.Document != null) {
+                                    projectCollector(postSnapshot, famDoc.OwnerFamily.Document, famDoc.OwnerFamily);
+                                }
+                                famDocCollector(postSnapshot, famDoc);
+
+                                postSw.Stop();
+                                context.PostCollectionMs = postSw.Elapsed.TotalMilliseconds;
+                            }
+
                             return logs;
                         },
                         out var variantLogs);
 
-                allLogs.AddRange(variantLogs);
+                variantSw.Stop();
+                context.OperationLogs = variantLogs;
+                context.TotalMs = variantSw.Elapsed.TotalMilliseconds;
+                contexts.Add(context);
             }
-
-            familySw.Stop();
-            context.OperationLogs = allLogs;
-            context.TotalMs = familySw.Elapsed.TotalMilliseconds;
         } catch (Exception ex) {
-            context.OperationLogs = new Exception($"Failed to process family {this.OpenDoc.Title}: {ex.Message}");
-            context.TotalMs = 0;
+            contexts.Add(new FamilyProcessingContext {
+                FamilyName = this.OpenDoc.Title,
+                OperationLogs = new Exception($"Failed to process family {this.OpenDoc.Title}: {ex.Message}"),
+                TotalMs = 0
+            });
         }
 
-        return [context];
+        return contexts;
     }
 
     private static List<string> GetSaveLocations(FamilyDocument famDoc,
@@ -262,4 +328,28 @@ public class LoadAndSaveOptions {
     [Description("Save processed family(ies) to the output directory of the command")]
     [Required]
     public bool SaveFamilyToOutputDir { get; set; } = false;
+}
+
+/// <summary>
+///     Specification for a family variant including its queue and optional metadata.
+/// </summary>
+public class VariantSpec {
+    public string Name { get; }
+    public OperationQueue Queue { get; }
+
+    /// <summary>
+    ///     Optional metadata dictionary for storing variant-specific information
+    ///     (e.g., synthetic settings, configuration data, etc.)
+    /// </summary>
+    public BaseProfileSettings Profile { get; set; }
+
+    public VariantSpec(string name, OperationQueue queue) {
+        this.Name = name;
+        this.Queue = queue;
+    }
+
+    public VariantSpec WithProfile(BaseProfileSettings profile) {
+        this.Profile = profile;
+        return this;
+    }
 }

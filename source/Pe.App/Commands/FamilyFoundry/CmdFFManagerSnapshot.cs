@@ -119,7 +119,6 @@ public class CmdFFManagerSnapshot : IExternalCommand {
                 Enabled = paramSettings.Count > 0,
                 CreateFamParamIfMissing = true,
                 OverrideExistingValues = true,
-                DisablePerTypeFallback = false,
                 Parameters = paramSettings
             }
         };
