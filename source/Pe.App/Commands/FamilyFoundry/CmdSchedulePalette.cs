@@ -341,7 +341,7 @@ public class CmdSchedulePalette : IExternalCommand {
                 $"Filter(s) applied: {result.AppliedFilters.Count} / {filterCount} ")
             .AddIf(hasAppliedViewTemplate, LogEventLevel.Warning, null,
                 $"View template applied: {result.AppliedViewTemplate}")
-            .AddIf(!hasAppliedViewTemplate, LogEventLevel.Warning, null,
+            .AddIf(!string.IsNullOrEmpty(scheduleSpec.ViewTemplateName) && result.AppliedViewTemplate == null, LogEventLevel.Warning, null,
                 $"View template skipped: {result.SkippedViewTemplate}")
             .AddIf(hasWarnings, LogEventLevel.Warning, null, "Warnings:")
             .AddIf(hasWarnings, LogEventLevel.Warning, null,

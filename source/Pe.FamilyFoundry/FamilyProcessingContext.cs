@@ -9,15 +9,7 @@ namespace Pe.FamilyFoundry;
 public class OperationContext {
     private readonly Dictionary<string, LogEntry> _entries = new();
     private readonly HashSet<string> _touchedThisOperation = [];
-
     public IEnumerable<LogEntry> All => this._entries.Values;
-    public IEnumerable<LogEntry> Pending => this.All.Where(e => !e.IsComplete);
-
-    /// <summary>
-    ///     Key selector that extracts a string key from a work item.
-    ///     Set by OperationGroup at construction time.
-    /// </summary>
-    public Func<object, string> KeySelector { get; init; }
 
     /// <summary>
     ///     Initializes a log entry with the given key. Called by OperationGroup during construction.

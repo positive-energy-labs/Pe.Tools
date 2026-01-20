@@ -39,7 +39,7 @@ public record ParamSettingModel : ParamDefinitionBase {
         "2) set a simple number/text value without locking the parameter. " +
         "Only applicable when ValueOrFormula is set.")]
     [Required]
-    public bool SetAsFormula { get; init; } = true;
+    public required bool SetAsFormula { get; init; } = true;
 
     /// <summary>
     ///     Dictionary of family type names to values. Allows setting different values per type.

@@ -38,7 +38,7 @@ public class DuctConnectorConfigurator {
         FlowConfiguration = DuctFlowConfigurationType.Preset,
         FlowDirection = FlowDirectionType.In,
         SystemClassification = MEPSystemClassification.SupplyAir,
-        LossMethod = DuctLossMethodType.NotDefined
+        LossMethod = DuctLossMethodType.NotDefined,
     };
 
     public static readonly DuctConnectorConfigurator PresetATReturn = new() {
@@ -92,7 +92,8 @@ public class DuctConnectorConfigurator {
     public override string ToString() =>
         JsonConvert.SerializeObject(this,
             new JsonSerializerSettings {
-                Formatting = Formatting.Indented, Converters = new List<JsonConverter> { new StringEnumConverter() }
+                Formatting = Formatting.Indented,
+                Converters = new List<JsonConverter> { new StringEnumConverter() }
             });
 
     public string ToStringUnConverted() =>

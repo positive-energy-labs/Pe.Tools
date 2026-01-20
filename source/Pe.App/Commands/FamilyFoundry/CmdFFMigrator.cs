@@ -154,21 +154,24 @@ public class CmdFFMigrator : IExternalCommand {
         var apparentPowerName = profile.MakeElectricalConnector.SourceParameterNames.ApparentPower;
         var mcaName = profile.MakeElectricalConnector.SourceParameterNames.MinimumCircuitAmpacity;
 
-        return [   new() {
+        return [   new ParamSettingModel {
             Name = numberOfPolesName,
             ValueOrFormula =
-                $"if({voltageName} = 120, 1, if({voltageName} = 208, 2, (if({voltageName} = 240, 2, 1))))"
+                $"if({voltageName} = 120, 1, if({voltageName} = 208, 2, (if({voltageName} = 240, 2, 1))))",
+            SetAsFormula = true
         },
-        new() {
+        new ParamSettingModel {
             Name = apparentPowerName,
-            ValueOrFormula = $"{voltageName} * {mcaName} * 0.8 * if({numberOfPolesName} = 3, sqrt(3), 1)"
+            ValueOrFormula = $"{voltageName} * {mcaName} * 0.8 * if({numberOfPolesName} = 3, sqrt(3), 1)",
+            SetAsFormula = true
         },
-        new() {
+        new ParamSettingModel {
             Name = "_FOUNDRY LAST PROCESSED AT",
             PropertiesGroup = new ForgeTypeId(""),
             DataType = SpecTypeId.String.Text,
             IsInstance = false,
-            ValueOrFormula = $"\"{DateTime.Now:yyyy_MM_dd HH:mm:ss}\""
+            ValueOrFormula = $"\"{DateTime.Now:yyyy_MM_dd HH:mm:ss}\"",
+            SetAsFormula = true
         }
        ];
     }
