@@ -68,6 +68,13 @@ Compare-Object (gc pre.txt) (gc post.txt)
 
 Modify TEST.json → User runs → Read logs → Compare snapshots → Fix code → Repeat
 
+### 5. Count vs display sanity check
+
+`logs-detailed.json` groups entries by `(Name, Message)` when displaying errors,
+so the visible list may be shorter than the raw entry count. If summary counts
+look like multiples of the number of family types, verify whether the counter is
+using raw entries vs grouped display.
+
 ## Architecture
 
 ### Operation Types
@@ -140,6 +147,25 @@ extract those formulas in BuildQueue and pass to both the dimension operation
 names to skip), extract it in `BuildQueue()` and pass via constructor params.
 
 ## Common Pitfalls
+
+### ForgeTypeId Comparison
+
+The `==` operator on `ForgeTypeId` doesn't work reliably. Compare `.TypeId`
+strings instead:
+
+```csharp
+// WRONG - may fail unexpectedly
+if (dataType == SpecTypeId.Number) { ... }
+
+// RIGHT
+if (dataType?.TypeId == SpecTypeId.Number.TypeId) { ... }
+```
+
+### IsMeasurableSpec Quirk
+
+`UnitUtils.IsMeasurableSpec(SpecTypeId.Number)` returns `true`, but Number has
+**no units** — so `UnitFormatUtils.TryParse()` will fail. Check for Number
+explicitly before calling measurable-only APIs.
 
 ### Revit Constraint Solver Failures
 

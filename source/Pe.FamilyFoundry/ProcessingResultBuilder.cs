@@ -92,6 +92,7 @@ public class ProcessingResultBuilder(Storage storage) {
 
         if (!this._familyContexts.Any()) return;
 
+        // Count unique errors by grouping on (Name, Message) to match how errors are displayed
         var totalErrors = this._familyContexts
             .SelectMany(ctx => {
                 var (logs, err) = ctx.OperationLogs;
@@ -99,13 +100,17 @@ public class ProcessingResultBuilder(Storage storage) {
                 return logs?.SelectMany(log => log.Entries.Where(e => e.Status == LogStatus.Error))
                        ?? [];
             })
+            .GroupBy(e => new { e.Name, e.Message })
             .Count();
 
         var familySummaries = this._familyContexts.Select(ctx => {
             var (logs, err) = ctx.OperationLogs;
+            // Count unique errors by grouping on (Name, Message) to match how errors are displayed
             var errorCount = err != null
                 ? 1
-                : logs?.SelectMany(log => log.Entries.Where(e => e.Status == LogStatus.Error)).Count() ?? 0;
+                : logs?.SelectMany(log => log.Entries.Where(e => e.Status == LogStatus.Error))
+                    .GroupBy(e => new { e.Name, e.Message })
+                    .Count() ?? 0;
 
             return new {
                 Family = ctx.FamilyName,

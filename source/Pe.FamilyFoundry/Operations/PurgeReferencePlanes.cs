@@ -44,7 +44,7 @@ public class PurgeReferencePlanes : DocOperation<PurgeReferencePlanesSettings> {
                 logs.Add(new LogEntry(planeName).Success("Deleted"));
                 deleteCount++;
             } catch (Exception ex) {
-                logs.Add(new LogEntry(planeName).Error(ex));
+                logs.Add(new LogEntry(planeName).Skip(ex.Message));
             }
         }
 

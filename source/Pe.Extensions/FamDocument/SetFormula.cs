@@ -12,7 +12,7 @@ public static class Formula {
     private static readonly HashSet<ForgeTypeId> _forbiddenDataTypes = [
         SpecTypeId.String.Url,
         SpecTypeId.Reference.LoadClassification,
-        SpecTypeId.String.MultilineText,
+        SpecTypeId.String.MultilineText
     ];
 
 

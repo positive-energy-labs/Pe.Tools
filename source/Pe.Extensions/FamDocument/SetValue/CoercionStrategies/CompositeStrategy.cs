@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace Pe.Extensions.FamDocument.SetValue.CoercionStrategies;
 
 /// <summary>
@@ -9,7 +11,17 @@ public class CompositeStrategy : ICoercionStrategy {
 
     public CompositeStrategy(params ICoercionStrategy[] strategies) => this._strategies = strategies;
 
-    public bool CanMap(CoercionContext context) => this._strategies.Any(s => s.CanMap(context));
+    public bool CanMap(CoercionContext context) {
+        // DEBUG: Log which strategies are being checked
+        foreach (var strategy in this._strategies) {
+            var canMap = strategy.CanMap(context);
+            Debug.WriteLine($"[CompositeStrategy] {strategy.GetType().Name}.CanMap = {canMap}");
+            if (canMap) return true;
+        }
+
+        Debug.WriteLine("[CompositeStrategy] No strategy could handle the conversion");
+        return false;
+    }
 
     public Result<FamilyParameter> Map(CoercionContext context) {
         // Try each strategy in order until one succeeds

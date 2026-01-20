@@ -13,7 +13,7 @@ public class MapParams(MapParamsSettings settings)
     public override string Description => "Map an old parameter's value to a new parameter for each family type";
 
     public override OperationLog Execute(FamilyDocument doc,
-        FamilyProcessingContext processingContext,
+        FamilyProcessingContext processingContext, 
         OperationContext groupContext) {
         if (groupContext is null) {
             throw new InvalidOperationException(
@@ -40,8 +40,14 @@ public class MapParams(MapParamsSettings settings)
                 fm,
                 processingContext
             );
+
+            var succeeded = false;
+            Exception? lastException = null;
+            var lastMappingDesc = string.Empty;
+
             foreach (var currParam in prioritizedCurrParams) {
                 var mappingDesc = $"{currParam.Definition.Name} → {mapping.NewName}";
+                lastMappingDesc = mappingDesc;
                 try {
                     if (tgtParam.Formula != null) _ = doc.UnsetFormula(tgtParam);
 
@@ -51,10 +57,17 @@ public class MapParams(MapParamsSettings settings)
                     _ = log.Defer(tgtParam != currParam
                         ? $"Coerced {mappingDesc} using {mapping.MappingStrategy}"
                         : $"Set {mappingDesc}");
+                    succeeded = true;
                     break; // Success - skip remaining CurrNames
                 } catch (Exception ex) {
-                    _ = log.Error(mappingDesc, ex);
+                    // Don't mark as error yet - try remaining CurrParams first
+                    lastException = ex;
                 }
+            }
+
+            // Only mark as error if ALL CurrParams failed and entry is still incomplete
+            if (!succeeded && lastException != null && !log.IsComplete) {
+                _ = log.Error(lastMappingDesc, lastException);
             }
         }
 

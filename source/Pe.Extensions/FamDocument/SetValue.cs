@@ -40,7 +40,10 @@ public static class FamilyDocumentSetValue {
     /// <param name="errorMessage">Error message if any, nulll by default</param>
     /// <returns>True if the value was set successfully</returns>
     /// <exception cref="InvalidOperationException">Thrown if the StorageType is not supported or formula setting fails</exception>
-    public static bool TrySetUnsetFormula(this FamilyDocument famDoc, FamilyParameter param, object value, out string? errorMessage) {
+    public static bool TrySetUnsetFormula(this FamilyDocument famDoc,
+        FamilyParameter param,
+        object value,
+        out string? errorMessage) {
         try {
             // Parse string inputs into appropriate types
             if (value is string stringValue) value = ParseStringValue(famDoc, param, stringValue);
@@ -115,11 +118,25 @@ public static class FamilyDocumentSetValue {
 
         var strategyInstance = ParamCoercionStrategyRegistry.Get(strategyName);
 
+        // DEBUG: Trace coercion context for troubleshooting
+        Debug.WriteLine($"[SetValue] Source='{sourceParam.Definition.Name}', " +
+                        $"SourceStorageType={context.SourceStorageType}, " +
+                        $"SourceDataType={context.SourceDataType?.TypeId ?? "null"}, " +
+                        $"SourceValue='{context.SourceValue}' (type={context.SourceValue?.GetType().Name}), " +
+                        $"Target='{targetParam.Definition.Name}', " +
+                        $"TargetStorageType={context.TargetStorageType}, " +
+                        $"TargetDataType={context.TargetDataType?.TypeId ?? "null"}, " +
+                        $"Strategy={strategyName}");
+
         if (!strategyInstance.CanMap(context)) {
             var targetDataType = targetParam.Definition.GetDataType();
             var dataTypeDisplay = targetDataType?.TypeId ?? "Unknown";
+            Debug.WriteLine($"[SetValue] CanMap returned FALSE for strategy '{strategyName}'");
+            // Include detailed context in error message for debugging
             throw new Exception(
-                $"Cannot map '{sourceParam.Definition.Name}' to '{targetParam.Definition.Name}' ({dataTypeDisplay}) using strategy '{strategyName}'");
+                $"Cannot map '{sourceParam.Definition.Name}' to '{targetParam.Definition.Name}' ({dataTypeDisplay}) using strategy '{strategyName}'. " +
+                $"SourceStorageType={context.SourceStorageType}, SourceDataType={context.SourceDataType?.TypeId ?? "null"}, " +
+                $"SourceValue='{context.SourceValue}' (type={context.SourceValue?.GetType().Name ?? "null"})");
         }
 
         var (param, err) = strategyInstance.Map(context);

@@ -7,15 +7,15 @@ description: Development guide for Family Foundry operations, architecture, and 
 
 ## Quick Reference: What Goes Where
 
-| Need                       | Location                                |
-| -------------------------- | --------------------------------------- |
-| New operation              | `Core/Operations/`                      |
-| New operation group        | `Core/OperationGroups/`                 |
-| New settings class         | `Core/OperationSettings/` (shared) or inline in operation file (bespoke) |
-| New snapshot collector     | `Core/Snapshots/`                       |
-| New snapshot data model    | `Core/Aggregators/Snapshots/`           |
-| FamilyDocument extensions  | `Library/PeExtensions/FamilyDocument/`  |
-| FamilyManager extensions   | `Library/PeExtensions/FamilyManager/`   |
+| Need                      | Location                                                                 |
+| ------------------------- | ------------------------------------------------------------------------ |
+| New operation             | `Core/Operations/`                                                       |
+| New operation group       | `Core/OperationGroups/`                                                  |
+| New settings class        | `Core/OperationSettings/` (shared) or inline in operation file (bespoke) |
+| New snapshot collector    | `Core/Snapshots/`                                                        |
+| New snapshot data model   | `Core/Aggregators/Snapshots/`                                            |
+| FamilyDocument extensions | `Library/PeExtensions/FamilyDocument/`                                   |
+| FamilyManager extensions  | `Library/PeExtensions/FamilyManager/`                                    |
 
 ## Architecture Overview
 
@@ -50,7 +50,8 @@ graph LR
     FPC -.-> |read-only| DOC & TYPE
 ```
 
-**Key flow:** Command → OperationProcessor → (per family) Pipeline collects snapshot → Operations execute → Load/Save
+**Key flow:** Command → OperationProcessor → (per family) Pipeline collects
+snapshot → Operations execute → Load/Save
 
 ## Type Hierarchy
 
@@ -102,9 +103,11 @@ classDiagram
     OperationGroup o-- IOperation : contains
 ```
 
-**You extend:** `DocOperation<T>`, `TypeOperation<T>`, or `OperationGroup<T>`  
-**Framework uses internally:** `MergedTypeOperation` (batches consecutive TypeOps)  
-**Note:** `OperationGroup` is NOT an `IOperation` — it's a container that gets unwrapped into its child operations
+**You extend:** `DocOperation<T>`, `TypeOperation<T>`, or `OperationGroup<T>`\
+**Framework uses internally:** `MergedTypeOperation` (batches consecutive
+TypeOps)\
+**Note:** `OperationGroup` is NOT an `IOperation` — it's a container that gets
+unwrapped into its child operations
 
 ## Decision Tree: Which Operation Type?
 
@@ -125,11 +128,22 @@ Do multiple operations need to share the same settings or coordinate (e.g., try 
 
 ## Gotchas & Critical Behaviors
 
+### 0. Debugging Approach (High Level)
+
+- Reproduce in a tight `TEST.json` profile (single or few families).
+- Treat `logs-detailed.json` as the source of truth; validate with snapshots.
+- Trace decision chains with temporary logging (then remove).
+- If counts look inflated, compare raw log entries vs grouped display.
+
 ### 1. GroupContext Resets Per-Family
-`OperationContext` (GroupContext) is cleared before processing each family. Don't expect state to persist across families.
+
+`OperationContext` (GroupContext) is cleared before processing each family.
+Don't expect state to persist across families.
 
 ### 2. LogEntry is Terminal
-Once you call `.Success()`, `.Skip()`, or `.Error()`, calling them again **throws**. Check `log.IsComplete` before modifying.
+
+Once you call `.Success()`, `.Skip()`, or `.Error()`, calling them again
+**throws**. Check `log.IsComplete` before modifying.
 
 ```csharp
 // WRONG - will throw if already handled
@@ -140,19 +154,31 @@ if (!log.IsComplete) log.Success("Done");
 ```
 
 ### 3. Snapshots Are Read-Only During Operations
-`PreProcessSnapshot` is collected BEFORE `Process()` runs. You cannot update it from inside an operation.
+
+`PreProcessSnapshot` is collected BEFORE `Process()` runs. You cannot update it
+from inside an operation.
 
 ### 4. TypeOperations Get Batched
-Consecutive `TypeOperation`s in the queue merge into a `MergedTypeOperation` for performance (one type-switch loop for all ops, not one per op). You can disable this via the ExecutionOptions.OptimizeTypeOperations flag
+
+Consecutive `TypeOperation`s in the queue merge into a `MergedTypeOperation` for
+performance (one type-switch loop for all ops, not one per op). You can disable
+this via the ExecutionOptions.OptimizeTypeOperations flag
 
 ### 5. Groups Are Unwrapped
-When you `.Add(group)` to a queue, the group's operations are extracted and added individually. The group itself doesn't "execute."
+
+When you `.Add(group)` to a queue, the group's operations are extracted and
+added individually. The group itself doesn't "execute."
 
 ### 6. Collectors Are First-Wins
-If a collector implements both `IProjectCollector` and `IFamilyDocCollector`, project runs first. If it populates the section, family-doc is skipped.
+
+If a collector implements both `IProjectCollector` and `IFamilyDocCollector`,
+project runs first. If it populates the section, family-doc is skipped.
 
 ### 7. Always Call EnsureDefaultType()
-Before processing, call `famDoc.EnsureDefaultType()` to guarantee `FamilyManager.CurrentType` is set. Do to a strange discrepancy between Revit's UI and API, there are rare cases where a family may not have a *valid* type.
+
+Before processing, call `famDoc.EnsureDefaultType()` to guarantee
+`FamilyManager.CurrentType` is set. Do to a strange discrepancy between Revit's
+UI and API, there are rare cases where a family may not have a _valid_ type.
 
 ## Creating Operations
 
@@ -221,7 +247,8 @@ public class MyGroup : OperationGroup<MySettings> {
 
 ## GroupContext Coordination Pattern
 
-When an operation needs to defer work, use groupContext. Deferal can be used between any and all operations in a group
+When an operation needs to defer work, use groupContext. Deferal can be used
+between any and all operations in a group
 
 ```csharp
 // In DocOperation
@@ -284,7 +311,8 @@ public class MyCollector : IFamilyDocCollector {
 }
 ```
 
-Implement `IProjectCollector` for faster collection from project doc (when possible).
+Implement `IProjectCollector` for faster collection from project doc (when
+possible).
 
 ## Building & Running the Queue
 
@@ -305,6 +333,35 @@ var (contexts, totalMs) = processor
     .SelectFamilies(() => GetFamilies())
     .ProcessQueue(queue, collectorQueue, outputPath);
 ```
+
+## Debugging Coercion & Strategy Chains
+
+When value mapping fails ("Cannot map X to Y using strategy Z"):
+
+### 1. Add Trace Logging at Decision Points
+
+Log actual values and each boolean condition at runtime:
+
+```csharp
+Debug.WriteLine($"[Strategy.CanMap] " +
+    $"SourceValue='{context.SourceValue}' (type={context.SourceValue?.GetType().Name}), " +
+    $"TargetDataType={context.TargetDataType?.TypeId}");
+```
+
+### 2. Trace Composite Strategy Chains
+
+Log which sub-strategy is tried and its result to see where the chain breaks.
+
+### 3. Compare Working vs Failing Cases
+
+Find a family where the operation succeeds and compare snapshots. Look for
+differences in `StorageType`, `DataType`, or value format.
+
+### 4. Trust Logs, Question Assumptions
+
+If logs show a condition should be `true` but execution takes the `false` path,
+the assumption is wrong. Common culprits: ForgeTypeId equality, null
+propagation, Revit API quirks (see architecture doc).
 
 ## Common Extension Methods
 

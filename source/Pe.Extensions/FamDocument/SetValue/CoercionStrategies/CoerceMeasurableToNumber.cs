@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace Pe.Extensions.FamDocument.SetValue.CoercionStrategies;
 
 /// <summary>
@@ -230,13 +232,26 @@ public class CoerceMeasurableToNumber : ICoercionStrategy {
 
     public bool CanMap(CoercionContext context) {
         // Only handle measurable → number conversions
-        if (context.TargetStorageType != StorageType.Double) return false;
-        if (context.TargetDataType != SpecTypeId.Number) return false;
-        if (context.SourceDataType == null) return false;
-        if (!UnitUtils.IsMeasurableSpec(context.SourceDataType)) return false;
+        var isTargetDouble = context.TargetStorageType == StorageType.Double;
+        var isTargetNumber = context.TargetDataType == SpecTypeId.Number;
+        var hasSourceDataType = context.SourceDataType != null;
+        var isSourceMeasurable = hasSourceDataType && UnitUtils.IsMeasurableSpec(context.SourceDataType);
+        var hasDefaultUnit = hasSourceDataType && DefaultTargetUnits.TryGetValue(context.SourceDataType!, out _);
+
+        // DEBUG: Log the decision chain
+        Debug.WriteLine($"[CoerceMeasurableToNumber.CanMap] " +
+                        $"TargetStorageType={context.TargetStorageType} (isDouble={isTargetDouble}), " +
+                        $"TargetDataType={context.TargetDataType?.TypeId} (isNumber={isTargetNumber}), " +
+                        $"SourceDataType={context.SourceDataType?.TypeId ?? "null"} (isMeasurable={isSourceMeasurable}), " +
+                        $"hasDefaultUnit={hasDefaultUnit}");
+
+        if (!isTargetDouble) return false;
+        if (!isTargetNumber) return false;
+        if (!hasSourceDataType) return false;
+        if (!isSourceMeasurable) return false;
 
         // Check if we have a default target unit for this source type (single lookup)
-        return DefaultTargetUnits.TryGetValue(context.SourceDataType, out _);
+        return hasDefaultUnit;
     }
 
     public Result<FamilyParameter> Map(CoercionContext context) {

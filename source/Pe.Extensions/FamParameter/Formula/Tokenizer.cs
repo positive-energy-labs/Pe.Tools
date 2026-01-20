@@ -72,7 +72,7 @@ internal static class FormulaUtils {
     ///     tokens may help identify what Revit interpreted incorrectly.
     /// </remarks>
     internal static IEnumerable<string>
-        ExtractSuspiciousTokens(string formula, IEnumerable<string> validParameterNames) { 
+        ExtractSuspiciousTokens(string formula, IEnumerable<string> validParameterNames) {
         if (string.IsNullOrWhiteSpace(formula))
             return [];
 
@@ -132,7 +132,7 @@ internal static class FormulaUtils {
 
     /// <summary>
     ///     Heuristically determines if a token looks like a unit suffix rather than a parameter name.
-    ///     Unit suffixes are typically short (1-5 chars), contain letters and possibly Unicode 
+    ///     Unit suffixes are typically short (1-5 chars), contain letters and possibly Unicode
     ///     superscripts/subscripts (like ² ³ ₂), but not underscores or regular digits.
     /// </summary>
     /// <remarks>
