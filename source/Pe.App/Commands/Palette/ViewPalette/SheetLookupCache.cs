@@ -25,7 +25,7 @@ public class SheetLookupCache {
             var viewportIds = sheet.GetAllViewports();
             foreach (var viewportId in viewportIds) {
                 if (doc.GetElement(viewportId) is Viewport viewport)
-                    this._viewToSheet.TryAdd(viewport.ViewId, sheetInfo);
+                    _ = this._viewToSheet.TryAdd(viewport.ViewId, sheetInfo);
             }
         }
     }

@@ -38,9 +38,9 @@ public static class PltFamilyTypes {
                     var symbol = item.FamilySymbol;
                     try {
                         var trans = new Transaction(doc, $"Place {symbol.Family.Name}");
-                        trans.Start();
+                        _ = trans.Start();
                         if (!symbol.IsActive) symbol.Activate();
-                        trans.Commit();
+                        _ = trans.Commit();
                         uiapp.ActiveUIDocument.PromptForFamilyInstancePlacement(symbol);
                     } catch (OperationCanceledException) {
                         // User canceled placement - this is expected behavior, not an error

@@ -65,7 +65,7 @@ public class ProfilePreviewPanel : UserControl {
 
             // Operations list with enabled status
             if (data.Operations.Count > 0) {
-                doc.AddSectionHeader("Operations");
+                _ = doc.AddSectionHeader("Operations");
                 var opList = new List { MarkerStyle = TextMarkerStyle.Decimal, Margin = new Thickness(16, 0, 0, 12) };
                 foreach (var op in data.Operations) {
                     var enabledText = op.Enabled ? "✓" : "✗";
@@ -88,7 +88,7 @@ public class ProfilePreviewPanel : UserControl {
 
             // APS Parameters list with details
             if (data.ApsParameters.Count > 0) {
-                doc.AddSectionHeader("APS Parameters (from Parameters Service)");
+                _ = doc.AddSectionHeader("APS Parameters (from Parameters Service)");
                 var paramList = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
                 foreach (var param in data.ApsParameters) {
                     var para = new Paragraph();
@@ -105,7 +105,7 @@ public class ProfilePreviewPanel : UserControl {
 
             // AddAndSet Parameters list with details
             if (data.AddAndSetParameters.Count > 0) {
-                doc.AddSectionHeader("AddAndSet Parameters (set by profile)");
+                _ = doc.AddSectionHeader("AddAndSet Parameters (set by profile)");
                 var paramList = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
                 foreach (var param in data.AddAndSetParameters) {
                     var para = new Paragraph();
@@ -122,7 +122,7 @@ public class ProfilePreviewPanel : UserControl {
 
             // Families list with categories
             if (data.Families.Count > 0) {
-                doc.AddSectionHeader("Families to Process");
+                _ = doc.AddSectionHeader("Families to Process");
                 var famList = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
                 foreach (var fam in data.Families) {
                     var para = new Paragraph();
@@ -138,8 +138,8 @@ public class ProfilePreviewPanel : UserControl {
 
             // Profile JSON section
             if (!string.IsNullOrEmpty(data.ProfileJson)) {
-                doc.AddSectionHeader("Profile Settings (JSON)");
-                doc.AddJsonBlock(data.ProfileJson);
+                _ = doc.AddSectionHeader("Profile Settings (JSON)");
+                _ = doc.AddJsonBlock(data.ProfileJson);
             }
         }
 

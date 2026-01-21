@@ -1,25 +1,25 @@
-public readonly struct Result<T> {
-    private readonly T? _value;
+public readonly struct Result<TValue> {
+    private readonly TValue? _value;
     private readonly Exception? _error;
 
-    private Result(T? value, Exception? error) {
+    private Result(TValue? value, Exception? error) {
         this._value = value;
         this._error = error;
     }
 
-    public static Result<T> Succeeded { get; set; }
+    public static Result<TValue> Succeeded { get; set; }
 
-    public void Deconstruct(out T? value, out Exception? error) {
+    public void Deconstruct(out TValue? value, out Exception? error) {
         value = this._value;
         error = this._error;
     }
 
-    public (T? value, Exception? error) AsTuple() => (this._value, this._error);
+    public (TValue? value, Exception? error) AsTuple() => (this._value, this._error);
 
-    public static implicit operator Result<T>(T value) =>
+    public static implicit operator Result<TValue>(TValue value) =>
         new(value, null);
 
-    public static implicit operator Result<T>(Exception error) =>
+    public static implicit operator Result<TValue>(Exception error) =>
         new(default, error);
 }
 

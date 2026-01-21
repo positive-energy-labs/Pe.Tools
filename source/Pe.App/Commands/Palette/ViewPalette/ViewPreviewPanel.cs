@@ -50,38 +50,38 @@ public class ViewPreviewPanel : UserControl {
         var doc = FlowDocumentBuilder.Create()
             .AddHeader(view.Name);
 
-        doc.AddKeyValue("Type", view.ViewType.ToString());
-        doc.AddKeyValue("Detail Level", view.DetailLevel.ToString());
+        _ = doc.AddKeyValue("Type", view.ViewType.ToString());
+        _ = doc.AddKeyValue("Detail Level", view.DetailLevel.ToString());
 
         // Level info
         var level = view.FindParameter(BuiltInParameter.PLAN_VIEW_LEVEL)?.AsValueString();
         if (!string.IsNullOrEmpty(level))
-            doc.AddKeyValue("Level", level);
+            _ = doc.AddKeyValue("Level", level);
 
         // Discipline
         if (view.HasViewDiscipline())
-            doc.AddKeyValue("Discipline", view.Discipline.ToString());
+            _ = doc.AddKeyValue("Discipline", view.Discipline.ToString());
 
         // View Use
         var viewUse = view.FindParameter("View Use")?.AsString();
         if (!string.IsNullOrEmpty(viewUse))
-            doc.AddKeyValue("View Use", viewUse);
+            _ = doc.AddKeyValue("View Use", viewUse);
 
         // View Template
         var templateId = view.ViewTemplateId;
         if (templateId != ElementId.InvalidElementId) {
             var template = view.Document.GetElement(templateId);
             if (template != null)
-                doc.AddKeyValue("Template", template.Name);
+                _ = doc.AddKeyValue("Template", template.Name);
         }
 
         // Scale
         var scale = view.FindParameter(BuiltInParameter.VIEW_SCALE)?.AsInteger();
         if (scale.HasValue && scale.Value > 0)
-            doc.AddKeyValue("Scale", $"1:{scale.Value}");
+            _ = doc.AddKeyValue("Scale", $"1:{scale.Value}");
 
-        doc.AddSectionHeader("Profile");
-        doc.AddKeyValue("Id", view.Id.ToString());
+        _ = doc.AddSectionHeader("Profile");
+        _ = doc.AddKeyValue("Id", view.Id.ToString());
 
         return doc;
     }
@@ -97,18 +97,18 @@ public class ViewPreviewPanel : UserControl {
         // Discipline
         var discipline = schedule.FindParameter("Discipline")?.AsValueString();
         if (!string.IsNullOrEmpty(discipline))
-            doc.AddKeyValue("Discipline", discipline);
+            _ = doc.AddKeyValue("Discipline", discipline);
 
         // Fields count
         var definition = schedule.Definition;
         if (definition != null)
-            doc.AddKeyValue("Fields", definition.GetFieldCount().ToString());
+            _ = doc.AddKeyValue("Fields", definition.GetFieldCount().ToString());
 
         // Sheet placements
-        doc.AddSectionHeader("Sheet Placements");
+        _ = doc.AddSectionHeader("Sheet Placements");
         var instances = schedule.GetScheduleInstances(-1);
         if (instances.Count == 0)
-            doc.AddParagraph("Not placed on any sheets");
+            _ = doc.AddParagraph("Not placed on any sheets");
         else {
             var placements = new List<string>();
             var docRef = schedule.Document;
@@ -121,11 +121,11 @@ public class ViewPreviewPanel : UserControl {
                 }
             }
 
-            doc.AddBulletList(placements);
+            _ = doc.AddBulletList(placements);
         }
 
-        doc.AddSectionHeader("Profile");
-        doc.AddKeyValue("Id", schedule.Id.ToString());
+        _ = doc.AddSectionHeader("Profile");
+        _ = doc.AddKeyValue("Id", schedule.Id.ToString());
 
         return doc;
     }
@@ -141,21 +141,21 @@ public class ViewPreviewPanel : UserControl {
         // Sheet info
         var issueDate = sheet.FindParameter(BuiltInParameter.SHEET_ISSUE_DATE)?.AsString();
         if (!string.IsNullOrEmpty(issueDate))
-            doc.AddKeyValue("Issue Date", issueDate);
+            _ = doc.AddKeyValue("Issue Date", issueDate);
 
         var drawnBy = sheet.FindParameter(BuiltInParameter.SHEET_DRAWN_BY)?.AsString();
         if (!string.IsNullOrEmpty(drawnBy))
-            doc.AddKeyValue("Drawn By", drawnBy);
+            _ = doc.AddKeyValue("Drawn By", drawnBy);
 
         var checkedBy = sheet.FindParameter(BuiltInParameter.SHEET_CHECKED_BY)?.AsString();
         if (!string.IsNullOrEmpty(checkedBy))
-            doc.AddKeyValue("Checked By", checkedBy);
+            _ = doc.AddKeyValue("Checked By", checkedBy);
 
         // Placed views
-        doc.AddSectionHeader("Placed Views");
+        _ = doc.AddSectionHeader("Placed Views");
         var viewIds = sheet.GetAllPlacedViews();
         if (viewIds.Count == 0)
-            doc.AddParagraph("No views placed");
+            _ = doc.AddParagraph("No views placed");
         else {
             var viewDetails = new List<(string primary, string secondary)>();
             var docRef = sheet.Document;
@@ -164,11 +164,11 @@ public class ViewPreviewPanel : UserControl {
                     viewDetails.Add((view.Name, view.ViewType.ToString()));
             }
 
-            doc.AddDetailList(viewDetails);
+            _ = doc.AddDetailList(viewDetails);
         }
 
-        doc.AddSectionHeader("Profile");
-        doc.AddKeyValue("Id", sheet.Id.ToString());
+        _ = doc.AddSectionHeader("Profile");
+        _ = doc.AddKeyValue("Id", sheet.Id.ToString());
 
         return doc;
     }

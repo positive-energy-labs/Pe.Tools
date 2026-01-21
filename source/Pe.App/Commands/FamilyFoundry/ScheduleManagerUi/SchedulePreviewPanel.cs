@@ -71,7 +71,7 @@ public class SchedulePreviewPanel : UserControl {
                 _ = doc.AddSectionHeader($"Fields ({data.FieldCount})");
 
                 // Build table data
-                doc.AddTable<ScheduleFieldSpec>(
+                _ = doc.AddTable<ScheduleFieldSpec>(
                     data.Fields,
                     [
                         ("Name", f => f.ParameterName),
