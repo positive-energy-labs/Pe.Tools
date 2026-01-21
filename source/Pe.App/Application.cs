@@ -6,6 +6,7 @@ using Nice3point.Revit.Toolkit.External;
 using Pe.App.Commands.Palette;
 using Pe.Global.Services.AutoTag;
 using Pe.Global.Services.Document;
+using Pe.Global.Services.SignalR;
 using Pe.Tools.Commands;
 using Pe.Tools.Commands.AutoTag;
 using Pe.Tools.Commands.FamilyFoundry;
@@ -26,6 +27,11 @@ public class Application : ExternalApplication {
     /// </summary>
     private static RevitTaskService _revitTaskService;
 
+    /// <summary>
+    ///     SignalR server for settings editor frontend.
+    /// </summary>
+    private static SettingsEditorServer? _settingsEditorServer;
+
     public override void OnStartup() {
         // Subscribe to ViewActivated event for MRU tracking
         this.Application.ViewActivated += OnViewActivated;
@@ -35,6 +41,9 @@ public class Application : ExternalApplication {
 
         // Subscribe to DocumentChanged for AutoTag settings change detection
         this.Application.ControlledApplication.DocumentChanged += OnDocumentChanged;
+
+        // Subscribe to DocumentOpened to start SignalR server on first document open
+        this.Application.ControlledApplication.DocumentOpened += OnDocumentOpened;
 
         // Initialize RevitTaskService for async/deferred execution in Revit API context
         _revitTaskService = new RevitTaskService(this.Application);
@@ -52,10 +61,14 @@ public class Application : ExternalApplication {
         app.ViewActivated -= OnViewActivated;
         app.ControlledApplication.DocumentClosing -= OnDocumentClosing;
         app.ControlledApplication.DocumentChanged -= OnDocumentChanged;
+        app.ControlledApplication.DocumentOpened -= OnDocumentOpened;
         _revitTaskService?.Dispose();
 
         // Shutdown AutoTag service
         AutoTagService.Instance.Shutdown();
+
+        // Stop SignalR server
+        _settingsEditorServer?.Dispose();
 
         return Result.Succeeded;
     }
@@ -100,6 +113,29 @@ public class Application : ExternalApplication {
     }
 
     public override void OnShutdown() => Log.CloseAndFlush();
+
+    private static void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e) {
+        // Start SignalR server on first document open (when we have access to UIApplication)
+        if (_settingsEditorServer != null) return;
+
+        if (sender is not Autodesk.Revit.ApplicationServices.Application app) return;
+
+        StartSignalRServer(new UIApplication(app));
+
+        // Unsubscribe after starting server once
+        app.DocumentOpened -= OnDocumentOpened;
+    }
+
+    private static void StartSignalRServer(UIApplication uiApp) {
+        try {
+            _settingsEditorServer = new SettingsEditorServer();
+            _ = _settingsEditorServer.StartAsync(uiApp);
+            Log.Information("SignalR settings editor server started successfully");
+        } catch (Exception ex) {
+            Log.Error(ex, "Failed to start SignalR settings editor server");
+            // Don't fail startup if SignalR fails - it's optional functionality
+        }
+    }
 
     private void CreateRibbon() {
         const string tabName = "PE TOOLS";

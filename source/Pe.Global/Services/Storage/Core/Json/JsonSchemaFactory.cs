@@ -16,8 +16,15 @@ public static class JsonSchemaFactory {
     ///     Creates both full and extends-relaxed schemas for a type.
     ///     The extends schema has no required properties except $extends itself.
     /// </summary>
-    public static (JsonSchema Full, JsonSchema Extends) CreateSchemas<T>() {
-        var full = CreateSchema<T>(out var examplesProcessor);
+    public static (JsonSchema Full, JsonSchema Extends) CreateSchemas<T>() =>
+        CreateSchemas(typeof(T), out _);
+
+    /// <summary>
+    ///     Creates both full and extends-relaxed schemas for a type (non-generic overload).
+    ///     The extends schema has no required properties except $extends itself.
+    /// </summary>
+    public static (JsonSchema Full, JsonSchema Extends) CreateSchemas(Type type, out SchemaExamplesProcessor examplesProcessor) {
+        var full = CreateSchema(type, out examplesProcessor);
         examplesProcessor.Finalize(full);
         SchemaMetadataProcessor.AllowSchemaProperty(full);
         SchemaMetadataProcessor.AllowExtendsProperty(full);
@@ -32,9 +39,16 @@ public static class JsonSchemaFactory {
     ///     Creates a fragment schema for array items of type T.
     ///     Fragment files are objects with an "Items" property containing an array of T.
     /// </summary>
-    public static JsonSchema CreateFragmentSchema<T>() {
+    public static JsonSchema CreateFragmentSchema<T>() =>
+        CreateFragmentSchema(typeof(T), out _);
+
+    /// <summary>
+    ///     Creates a fragment schema for array items (non-generic overload).
+    ///     Fragment files are objects with an "Items" property containing an array of the specified type.
+    /// </summary>
+    public static JsonSchema CreateFragmentSchema(Type itemType, out SchemaExamplesProcessor examplesProcessor) {
         // Create schema for the item type
-        var itemSchema = CreateSchema<T>(out var examplesProcessor);
+        var itemSchema = CreateSchema(itemType, out examplesProcessor);
         examplesProcessor.Finalize(itemSchema);
 
         // Create wrapper schema with Items property
@@ -59,7 +73,14 @@ public static class JsonSchemaFactory {
     ///     Creates a JSON schema for type T with all standard processors registered.
     ///     Includes RevitTypeSchemaProcessor, OneOfSchemaProcessor, and SchemaExamplesProcessor.
     /// </summary>
-    public static JsonSchema CreateSchema<T>(out SchemaExamplesProcessor examplesProcessor) {
+    public static JsonSchema CreateSchema<T>(out SchemaExamplesProcessor examplesProcessor) =>
+        CreateSchema(typeof(T), out examplesProcessor);
+
+    /// <summary>
+    ///     Creates a JSON schema for the specified type with all standard processors registered (non-generic overload).
+    ///     Includes RevitTypeSchemaProcessor, OneOfSchemaProcessor, and SchemaExamplesProcessor.
+    /// </summary>
+    public static JsonSchema CreateSchema(Type type, out SchemaExamplesProcessor examplesProcessor) {
         RevitTypeRegistry.Initialize();
 
         var settings = new NewtonsoftJsonSchemaGeneratorSettings {
@@ -76,7 +97,7 @@ public static class JsonSchemaFactory {
         settings.SchemaProcessors.Add(examplesProcessor);
         settings.SchemaProcessors.Add(new IncludableSchemaProcessor());
 
-        return new JsonSchemaGenerator(settings).Generate(typeof(T));
+        return new JsonSchemaGenerator(settings).Generate(type);
     }
 
     /// <summary>

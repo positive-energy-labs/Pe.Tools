@@ -159,8 +159,15 @@ public class AnnotationTagFamilyNamesProvider : IOptionsProvider {
 
 /// <summary>
 ///     Provides tag type names (FamilySymbol names) for all annotation tags in the document.
+///     Implements IDependentOptionsProvider to filter by TagFamilyName when provided.
 /// </summary>
-public class AnnotationTagTypeNamesProvider : IOptionsProvider {
+public class AnnotationTagTypeNamesProvider : IDependentOptionsProvider {
+    /// <inheritdoc />
+    public IReadOnlyList<string> DependsOn => ["TagFamilyName"];
+
+    /// <summary>
+    ///     Returns all tag type names (unfiltered).
+    /// </summary>
     public IEnumerable<string> GetExamples() {
         try {
             var doc = DocumentManager.GetActiveDocument();
@@ -174,6 +181,41 @@ public class AnnotationTagTypeNamesProvider : IOptionsProvider {
                         .OfClass(typeof(FamilySymbol))
                         .OfCategory(category)
                         .Cast<FamilySymbol>()
+                        .Select(fs => fs.Name);
+
+                    foreach (var name in types) _ = tagTypeNames.Add(name);
+                } catch {
+                    // Skip categories that don't exist or cause errors
+                }
+            }
+
+            return tagTypeNames.OrderBy(name => name);
+        } catch {
+            return [];
+        }
+    }
+
+    /// <summary>
+    ///     Returns tag type names filtered by the selected TagFamilyName.
+    /// </summary>
+    public IEnumerable<string> GetExamples(IReadOnlyDictionary<string, string> siblingValues) {
+        // If no TagFamilyName provided, return unfiltered list
+        if (!siblingValues.TryGetValue("TagFamilyName", out var familyName) || string.IsNullOrEmpty(familyName))
+            return this.GetExamples();
+
+        try {
+            var doc = DocumentManager.GetActiveDocument();
+            if (doc == null) return [];
+
+            var tagTypeNames = new HashSet<string>();
+
+            foreach (var category in AnnotationTagFamilyNamesProvider.TagCategories) {
+                try {
+                    var types = new FilteredElementCollector(doc)
+                        .OfClass(typeof(FamilySymbol))
+                        .OfCategory(category)
+                        .Cast<FamilySymbol>()
+                        .Where(fs => fs.FamilyName == familyName)
                         .Select(fs => fs.Name);
 
                     foreach (var name in types) _ = tagTypeNames.Add(name);
