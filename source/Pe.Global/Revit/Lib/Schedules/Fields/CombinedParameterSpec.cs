@@ -22,12 +22,13 @@ public class CombinedParameterSpec {
     /// <summary>
     ///     Serializes a TableCellCombinedParameterData into a CombinedParameterSpec.
     /// </summary>
-    public static CombinedParameterSpec SerializeFrom(TableCellCombinedParameterData combinedParam, Document doc) => new CombinedParameterSpec {
-        ParameterName = GetParameterNameFromId(doc, combinedParam.ParamId),
-        Prefix = combinedParam.Prefix ?? string.Empty,
-        Suffix = combinedParam.Suffix ?? string.Empty,
-        Separator = combinedParam.Separator ?? " / "
-    };
+    public static CombinedParameterSpec SerializeFrom(TableCellCombinedParameterData combinedParam, Document doc) =>
+        new() {
+            ParameterName = GetParameterNameFromId(doc, combinedParam.ParamId),
+            Prefix = combinedParam.Prefix ?? string.Empty,
+            Suffix = combinedParam.Suffix ?? string.Empty,
+            Separator = combinedParam.Separator ?? " / "
+        };
 
     private static string GetParameterNameFromId(Document doc, ElementId paramId) {
         if (paramId == null || paramId == ElementId.InvalidElementId)

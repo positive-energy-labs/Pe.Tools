@@ -2,7 +2,6 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.FamilyFoundry;
 using Pe.Global.Revit.Lib.Schedules;
-using Pe.Global.Revit.Lib.Schedules.Fields;
 using Pe.Global.Revit.Ui;
 using Pe.Global.Services.Storage;
 using Pe.Global.Services.Storage.Core;
@@ -37,10 +36,7 @@ public class CmdSchedulePalette : IExternalCommand {
 
             // Context for Create Schedule tab
             var context = new ScheduleManagerContext {
-                Doc = doc,
-                UiDoc = uiDoc,
-                Storage = storage,
-                SettingsManager = settingsManager
+                Doc = doc, UiDoc = uiDoc, Storage = storage, SettingsManager = settingsManager
             };
 
             // Collect items for both tabs
@@ -105,6 +101,7 @@ public class CmdSchedulePalette : IExternalCommand {
                     DefaultTabIndex = 0,
                     Sidebar = new PaletteSidebar { Content = previewPanel },
                     OnSelectionChangedDebounced = item => {
+                        if (item == null) return;
                         if (item.TabType == ScheduleTabType.Create) {
                             this.BuildPreviewData(item.GetCreateItem(), context);
                             if (context.PreviewData != null)
@@ -169,8 +166,7 @@ public class CmdSchedulePalette : IExternalCommand {
         var profileJson = JsonSerializer.Serialize(
             profile,
             new JsonSerializerOptions {
-                WriteIndented = true,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             });
 
         return new SchedulePreviewData {
@@ -195,9 +191,7 @@ public class CmdSchedulePalette : IExternalCommand {
     private static SchedulePreviewData
         CreateSanitizationErrorPreview(ScheduleListItem profileItem, JsonSanitizationException ex) {
         var preview = new SchedulePreviewData {
-            ProfileName = profileItem.TextPrimary,
-            IsValid = false,
-            RemainingErrors = []
+            ProfileName = profileItem.TextPrimary, IsValid = false, RemainingErrors = []
         };
 
         if (ex.AddedProperties.Any())
@@ -225,8 +219,7 @@ public class CmdSchedulePalette : IExternalCommand {
             var profileJson = JsonSerializer.Serialize(
                 spec,
                 new JsonSerializerOptions {
-                    WriteIndented = true,
-                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                    WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
                 });
 
             return new SchedulePreviewData {
@@ -332,17 +325,18 @@ public class CmdSchedulePalette : IExternalCommand {
                 "THERE WERE ISSUES WITH THE SCHEDULE CREATION. SEE THE OUTPUT FILE FOR DETAILS.")
             .AddIf(hasCalculatedFields, LogEventLevel.Warning, null,
                 $"{calculatedFieldCount} calculated field(s) require manual creation - see output file")
-            .AddIf(hasHeaderGroups, LogEventLevel.Warning, null,
+            .AddIf(hasHeaderGroups, LogEventLevel.Information, null,
                 $"Field header(s) applied: {result.AppliedHeaderGroups.Count} / {headerGroupCount} ")
             .AddIf(hasFields, LogEventLevel.Information, null,
                 $"Field(s) applied: {result.AppliedFields.Count} / {fieldCount} ")
-            .AddIf(hasSortGroups, LogEventLevel.Warning, null,
+            .AddIf(hasSortGroups, LogEventLevel.Information, null,
                 $"Sort/group(s) applied: {result.AppliedSortGroups.Count} / {sortGroupCount} ")
-            .AddIf(hasFilters, LogEventLevel.Warning, null,
+            .AddIf(hasFilters, LogEventLevel.Information, null,
                 $"Filter(s) applied: {result.AppliedFilters.Count} / {filterCount} ")
-            .AddIf(hasAppliedViewTemplate, LogEventLevel.Warning, null,
+            .AddIf(hasAppliedViewTemplate, LogEventLevel.Information, null,
                 $"View template applied: {result.AppliedViewTemplate}")
-            .AddIf(!string.IsNullOrEmpty(scheduleSpec.ViewTemplateName) && result.AppliedViewTemplate == null, LogEventLevel.Warning, null,
+            .AddIf(!string.IsNullOrEmpty(scheduleSpec.ViewTemplateName) && result.AppliedViewTemplate == null,
+                LogEventLevel.Warning, null,
                 $"View template skipped: {result.SkippedViewTemplate}")
             .AddIf(hasWarnings, LogEventLevel.Warning, null, "Warnings:")
             .AddIf(hasWarnings, LogEventLevel.Warning, null,

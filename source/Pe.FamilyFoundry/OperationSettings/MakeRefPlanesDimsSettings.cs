@@ -1,6 +1,5 @@
 using Pe.FamilyFoundry.Snapshots;
 using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
 
 namespace Pe.FamilyFoundry.OperationSettings;
 

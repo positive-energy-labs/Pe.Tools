@@ -149,31 +149,38 @@ public class CmdFFMigrator : IExternalCommand {
     }
 
     private static List<ParamSettingModel> BuildInternalParams(ProfileRemap profile) {
+        List<ParamSettingModel> paramList = [
+            new() {
+                Name = "_FOUNDRY LAST PROCESSED AT",
+                PropertiesGroup = new ForgeTypeId(""),
+                DataType = SpecTypeId.String.Text,
+                IsInstance = false,
+                ValueOrFormula = $"\"{DateTime.Now:yyyy_MM_dd HH:mm:ss}\"",
+                SetAsFormula = true
+            }
+        ];
+
+        if (!profile.MakeElectricalConnector.Enabled) return paramList;
+
         var voltageName = profile.MakeElectricalConnector.SourceParameterNames.Voltage;
         var numberOfPolesName = profile.MakeElectricalConnector.SourceParameterNames.NumberOfPoles;
         var apparentPowerName = profile.MakeElectricalConnector.SourceParameterNames.ApparentPower;
         var mcaName = profile.MakeElectricalConnector.SourceParameterNames.MinimumCircuitAmpacity;
 
-        return [   new ParamSettingModel {
-            Name = numberOfPolesName,
-            ValueOrFormula =
-                $"if({voltageName} = 120, 1, if({voltageName} = 208, 2, (if({voltageName} = 240, 2, 1))))",
-            SetAsFormula = true
-        },
-        new ParamSettingModel {
-            Name = apparentPowerName,
-            ValueOrFormula = $"{voltageName} * {mcaName} * 0.8 * if({numberOfPolesName} = 3, sqrt(3), 1)",
-            SetAsFormula = true
-        },
-        new ParamSettingModel {
-            Name = "_FOUNDRY LAST PROCESSED AT",
-            PropertiesGroup = new ForgeTypeId(""),
-            DataType = SpecTypeId.String.Text,
-            IsInstance = false,
-            ValueOrFormula = $"\"{DateTime.Now:yyyy_MM_dd HH:mm:ss}\"",
-            SetAsFormula = true
-        }
-       ];
+        return [
+            new ParamSettingModel {
+                Name = numberOfPolesName,
+                ValueOrFormula =
+                    $"if({voltageName} = 120, 1, if({voltageName} = 208, 2, (if({voltageName} = 240, 2, 1))))",
+                SetAsFormula = true
+            },
+            new ParamSettingModel {
+                Name = apparentPowerName,
+                ValueOrFormula = $"{voltageName} * {mcaName} * 0.8 * if({numberOfPolesName} = 3, sqrt(3), 1)",
+                SetAsFormula = true
+            },
+            .. paramList
+        ];
     }
 
     /// <summary>
@@ -194,7 +201,6 @@ public class CmdFFMigrator : IExternalCommand {
         var apsAndAddedParamNames = apsParamNames
             .Concat(profile.AddAndSetParams.Parameters.Select(p => p.Name))
             .ToList();
-
 
 
         return new OperationQueue()

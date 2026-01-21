@@ -53,9 +53,8 @@ public static class HeaderGroupHandler {
                         fieldSpecs[fieldIdx].HeaderGroup = groupName;
                     _ = processedColumns.Add(tableCol);
                 }
-            } else {
+            } else
                 _ = processedColumns.Add(col);
-            }
         }
     }
 
@@ -142,9 +141,8 @@ public static class HeaderGroupHandler {
                 } catch (Exception ex) {
                     warnings.Add($"Failed to apply header group '{groupName}': {ex.Message}");
                 }
-            } else {
+            } else
                 skipped.Add($"{groupName} (only 1 column)");
-            }
         }
 
         return (applied, skipped, warnings);

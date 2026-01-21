@@ -1,9 +1,9 @@
 using Autodesk.Revit.DB.Structure;
-using Pe.Global.PolyFill;
 using Pe.Global.Revit.Lib.Schedules.Fields;
 using Pe.Global.Revit.Lib.Schedules.Filters;
 using Pe.Global.Revit.Lib.Schedules.HeaderGroups;
 using Pe.Global.Revit.Lib.Schedules.SortGroup;
+using Pe.Global.Revit.Lib.Schedules.TitleStyle;
 using Pe.Global.Revit.Lib.Schedules.ViewTemplate;
 
 namespace Pe.Global.Revit.Lib.Schedules;
@@ -49,6 +49,9 @@ public static class ScheduleHelper {
 
         // Serialize header groups (updates field specs in place)
         HeaderGroupHandler.SerializeHeaderGroups(schedule, spec.Fields);
+
+        // Serialize title style (borders and alignment)
+        spec.TitleStyle = ScheduleTitleStyleSpec.SerializeFrom(schedule);
 
         // Serialize view template
         spec.ViewTemplateName = ViewTemplateHandler.SerializeViewTemplate(schedule);
@@ -125,6 +128,11 @@ public static class ScheduleHelper {
         result.AppliedHeaderGroups.AddRange(appliedGroups);
         result.SkippedHeaderGroups.AddRange(skippedGroups);
         result.Warnings.AddRange(headerWarnings);
+
+        // Apply title style (borders and alignment) - must happen before view templates
+        var (appliedTitleStyle, titleStyleWarning) = spec.TitleStyle.ApplyTo(schedule);
+        if (!appliedTitleStyle && titleStyleWarning != null)
+            result.Warnings.Add(titleStyleWarning);
 
         // Apply view template
         var (appliedTemplate, skippedTemplate, templateWarning) =
@@ -284,18 +292,14 @@ public static class ScheduleHelper {
         var schedulableFields = def.GetSchedulableFields();
         foreach (var sf in schedulableFields) {
             var name = sf.GetName(doc);
-            if (name.Equals(parameterName, StringComparison.OrdinalIgnoreCase)) {
-                return sf.ParameterId;
-            }
+            if (name.Equals(parameterName, StringComparison.OrdinalIgnoreCase)) return sf.ParameterId;
         }
 
         // Try to match built-in parameters by label
         foreach (BuiltInParameter bip in Enum.GetValues(typeof(BuiltInParameter))) {
             try {
                 var label = LabelUtils.GetLabelFor(bip);
-                if (label.Equals(parameterName, StringComparison.OrdinalIgnoreCase)) {
-                    return new ElementId(bip);
-                }
+                if (label.Equals(parameterName, StringComparison.OrdinalIgnoreCase)) return new ElementId(bip);
             } catch {
                 // Some built-in parameters may not have labels
             }

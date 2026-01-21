@@ -14,4 +14,3 @@ public enum CalculatedFieldType {
     [Description("A calculated field showing percentage of another field.")]
     Percentage
 }
-

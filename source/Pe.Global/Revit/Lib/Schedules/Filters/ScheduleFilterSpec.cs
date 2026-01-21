@@ -35,11 +35,7 @@ public class ScheduleFilterSpec {
         else if (filter.IsElementIdValue)
             value = filter.GetElementIdValue().Value().ToString();
 
-        return new ScheduleFilterSpec {
-            FieldName = fieldName,
-            FilterType = filter.FilterType,
-            Value = value
-        };
+        return new ScheduleFilterSpec { FieldName = fieldName, FilterType = filter.FilterType, Value = value };
     }
 
     /// <summary>
@@ -57,9 +53,7 @@ public class ScheduleFilterSpec {
             }
         }
 
-        if (field == null) {
-            return (null, $"Field '{this.FieldName}' not found", null);
-        }
+        if (field == null) return (null, $"Field '{this.FieldName}' not found", null);
 
         try {
             ScheduleFilter filter;
@@ -83,7 +77,7 @@ public class ScheduleFilterSpec {
                     storageTypeStr = "Double";
                 } else if (storageType == StorageType.ElementId &&
                            int.TryParse(this.Value, out var elementIdValue)) {
-                    var elementId = new ElementId((int)elementIdValue);
+                    var elementId = new ElementId(elementIdValue);
                     filter = new ScheduleFilter(field.FieldId, this.FilterType, elementId);
                     storageTypeStr = "ElementId";
                 } else {

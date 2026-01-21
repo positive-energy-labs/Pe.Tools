@@ -292,9 +292,7 @@ public class ProcessingResultBuilder(Storage storage) {
         return new {
             Family = ctx.FamilyName,
             Summary = new {
-                ParametersRemoved = removed.Count,
-                ParametersAdded = added.Count,
-                ParametersModified = modified.Count
+                ParametersRemoved = removed.Count, ParametersAdded = added.Count, ParametersModified = modified.Count
             },
             Removed = removed.Any() ? removed : null,
             Added = added.Any() ? added : null,
@@ -326,6 +324,7 @@ public class ProcessingResultBuilder(Storage storage) {
             )
         }).ToList();
     }
+
     private static string SanitizeDirName(string name) {
         if (string.IsNullOrWhiteSpace(name))
             return "Unnamed";

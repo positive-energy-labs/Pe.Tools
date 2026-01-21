@@ -31,7 +31,7 @@ public class AddFamilyParams(AddAndSetParamsSettings settings)
                 FamilyParameter param;
                 if (existingParam is null) {
                     param = doc.AddFamilyParameter(p.Name, p.PropertiesGroup, p.DataType, p.IsInstance);
-                    if (!string.IsNullOrWhiteSpace(p.Tooltip) && !param.IsShared && !param.IsBuiltInParameter()) {
+                    if (string.IsNullOrWhiteSpace(p.Tooltip) || param.IsShared || param.IsBuiltInParameter()) {
                         logs.Add(new LogEntry(p.Name).Success("Created as family parameter"));
                         continue;
                     }

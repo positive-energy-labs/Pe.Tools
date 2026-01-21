@@ -28,9 +28,8 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
             snapshot.Parameters.Data =
                 [.. data.Where(s => famDoc.FamilyManager.FindParameter(s.Name) != null)];
             this.SupplementWithFormulas(snapshot, famDoc);
-        } else {
+        } else
             snapshot.Parameters = this.CollectFromFamilyDoc(famDoc);
-        }
     }
 
     // IProjectCollector implementation (preferred - runs first)

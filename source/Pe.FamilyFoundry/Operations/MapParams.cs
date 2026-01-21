@@ -13,7 +13,7 @@ public class MapParams(MapParamsSettings settings)
     public override string Description => "Map an old parameter's value to a new parameter for each family type";
 
     public override OperationLog Execute(FamilyDocument doc,
-        FamilyProcessingContext processingContext, 
+        FamilyProcessingContext processingContext,
         OperationContext groupContext) {
         if (groupContext is null) {
             throw new InvalidOperationException(
@@ -66,9 +66,7 @@ public class MapParams(MapParamsSettings settings)
             }
 
             // Only mark as error if ALL CurrParams failed and entry is still incomplete
-            if (!succeeded && lastException != null && !log.IsComplete) {
-                _ = log.Error(lastMappingDesc, lastException);
-            }
+            if (!succeeded && lastException != null && !log.IsComplete) _ = log.Error(lastMappingDesc, lastException);
         }
 
         return new OperationLog(this.Name, groupContext.TakeSnapshot());

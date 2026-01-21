@@ -55,7 +55,8 @@ public record ParamSettingModel : ParamDefinitionBase {
     /// <summary>
     ///     Tooltip/description shown in Revit UI. Only applies to family parameters (not shared/built-in).
     /// </summary>
-    [Description("Tooltip/description shown in Revit UI and properties palette. Only applies to family parameters (not shared or built-in parameters).")]
+    [Description(
+        "Tooltip/description shown in Revit UI and properties palette. Only applies to family parameters (not shared or built-in parameters).")]
     public string? Tooltip { get; init; } = null;
 }
 

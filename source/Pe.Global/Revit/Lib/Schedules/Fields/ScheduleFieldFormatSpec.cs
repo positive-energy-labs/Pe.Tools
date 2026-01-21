@@ -81,9 +81,8 @@ public class ScheduleFieldFormatSpec {
             if (!string.IsNullOrEmpty(this.UnitTypeId)) {
                 var unitTypeId = new ForgeTypeId(this.UnitTypeId);
                 formatOptions = new FormatOptions(unitTypeId);
-            } else {
+            } else
                 formatOptions = new FormatOptions { UseDefault = false };
-            }
 
             // Apply accuracy if specified
             if (this.Accuracy.HasValue && formatOptions.IsValidAccuracy(this.Accuracy.Value))

@@ -1,0 +1,13 @@
+---
+alwaysApply: true
+---
+
+# Standards
+
+For Agents:
+
+Always ask before building the solution. The user will often be inside of a
+Rider debug session attached to Revit, rebuilding breaks this. If ok, then build
+to check your work if the breadth of a change is big, or if your expectations
+and LSP are at odds. Use commands that minimize output like
+`dotnet build -c "Debug.R25" -nologo -clp:NoSummary /p:WarningLevel=0`

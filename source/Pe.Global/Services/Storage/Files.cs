@@ -32,9 +32,10 @@ public static class FileUtils {
     public static string EnsureExtension(string filename, string expectedExt) {
         if (string.IsNullOrWhiteSpace(filename))
             throw new ArgumentException("Filename cannot be null, empty, or whitespace.", nameof(filename));
-        if (string.IsNullOrWhiteSpace(expectedExt))
+        if (string.IsNullOrWhiteSpace(expectedExt)) {
             throw new ArgumentException("Expected extension cannot be null, empty, or whitespace.",
                 nameof(expectedExt));
+        }
 
         var normalizedExpectedExt = expectedExt.StartsWith(".")
             ? expectedExt.ToLowerInvariant()

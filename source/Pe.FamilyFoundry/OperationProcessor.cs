@@ -229,9 +229,8 @@ public class OperationProcessor(
                                 var famDocCollector = collectorQueue.ToFamilyDocCollectorFunc();
 
                                 // Collect from project document (if available via OwnerFamily)
-                                if (famDoc.OwnerFamily?.Document != null) {
+                                if (famDoc.OwnerFamily?.Document != null)
                                     projectCollector(preSnapshot, famDoc.OwnerFamily.Document, famDoc.OwnerFamily);
-                                }
                                 famDocCollector(preSnapshot, famDoc);
 
                                 preSw.Stop();
@@ -254,9 +253,8 @@ public class OperationProcessor(
                                 var famDocCollector = collectorQueue.ToFamilyDocCollectorFunc();
 
                                 // Collect from project document (if available via OwnerFamily)
-                                if (famDoc.OwnerFamily?.Document != null) {
+                                if (famDoc.OwnerFamily?.Document != null)
                                     projectCollector(postSnapshot, famDoc.OwnerFamily.Document, famDoc.OwnerFamily);
-                                }
                                 famDocCollector(postSnapshot, famDoc);
 
                                 postSw.Stop();
@@ -334,6 +332,11 @@ public class LoadAndSaveOptions {
 ///     Specification for a family variant including its queue and optional metadata.
 /// </summary>
 public class VariantSpec {
+    public VariantSpec(string name, OperationQueue queue) {
+        this.Name = name;
+        this.Queue = queue;
+    }
+
     public string Name { get; }
     public OperationQueue Queue { get; }
 
@@ -342,11 +345,6 @@ public class VariantSpec {
     ///     (e.g., synthetic settings, configuration data, etc.)
     /// </summary>
     public BaseProfileSettings Profile { get; set; }
-
-    public VariantSpec(string name, OperationQueue queue) {
-        this.Name = name;
-        this.Queue = queue;
-    }
 
     public VariantSpec WithProfile(BaseProfileSettings profile) {
         this.Profile = profile;

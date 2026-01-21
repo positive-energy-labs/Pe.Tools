@@ -49,9 +49,7 @@ public class AddAndSetParams(AddAndSetParamsSettings settings, bool createMissin
             ops.Add(new AddFamilyParams(settings));
 
         // 2. Set global/formula values (with per-type fallback tracking via OperationContext)
-        if (settings.Parameters.Any(p => !string.IsNullOrEmpty(p.ValueOrFormula))) {
-            ops.Add(new SetParamValues(settings));
-        }
+        ops.Add(new SetParamValues(settings));
 
         // 3. Set explicit per-type values AND handle fallbacks from SetParamValues failures
         ops.Add(new SetParamValuesPerType(settings));

@@ -58,9 +58,8 @@ public class SetParamValuesPerType(AddAndSetParamsSettings settings)
                 isFallback = true;
             } else if (paramModel.ValuesPerType?.Count > 0
                        && currentTypeName is not null
-                       && paramModel.ValuesPerType.TryGetValue(currentTypeName, out var perTypeValue)) {
+                       && paramModel.ValuesPerType.TryGetValue(currentTypeName, out var perTypeValue))
                 valueToSet = perTypeValue;
-            }
 
             // Skip if no value to set
             if (string.IsNullOrWhiteSpace(valueToSet)) continue;

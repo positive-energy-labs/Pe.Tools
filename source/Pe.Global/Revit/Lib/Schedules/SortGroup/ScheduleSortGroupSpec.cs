@@ -51,14 +51,10 @@ public class ScheduleSortGroupSpec {
             }
         }
 
-        if (fieldId == null) {
-            return (null, $"Field '{this.FieldName}' not found");
-        }
+        if (fieldId == null) return (null, $"Field '{this.FieldName}' not found");
 
         var sortGroupField = new ScheduleSortGroupField(fieldId, this.SortOrder) {
-            ShowHeader = this.ShowHeader,
-            ShowFooter = this.ShowFooter,
-            ShowBlankLine = this.ShowBlankLine
+            ShowHeader = this.ShowHeader, ShowFooter = this.ShowFooter, ShowBlankLine = this.ShowBlankLine
         };
 
         def.AddSortGroupField(sortGroupField);

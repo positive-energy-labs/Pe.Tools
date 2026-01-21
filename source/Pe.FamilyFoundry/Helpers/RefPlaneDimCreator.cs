@@ -1,4 +1,3 @@
-using Pe.Extensions.FamDocument;
 using Pe.FamilyFoundry.Operations;
 using Pe.FamilyFoundry.Snapshots;
 using System.Diagnostics;
@@ -17,6 +16,55 @@ public class RefPlaneDimCreator(
     private const double DimStaggerStep = 0.5;
     private const double PlaneExtent = 8.0;
 
+    /// <summary>
+    ///     Checks if a dimension already exists between the specified reference planes.
+    /// </summary>
+    private bool DimensionExists(params ReferencePlane[] planes) {
+        if (planes.Length < 2) return false;
+
+        var planeIds = planes.Select(p => p.Id).ToHashSet();
+
+        var dimensions = new FilteredElementCollector(doc)
+            .OfClass(typeof(Dimension))
+            .Cast<Dimension>()
+            .Where(d => d is not SpotDimension);
+
+        foreach (var dim in dimensions) {
+            if (dim.References.Size != planes.Length) continue;
+
+            var dimPlaneIds = new HashSet<ElementId>();
+            for (var i = 0; i < dim.References.Size; i++) {
+                var reference = dim.References.get_Item(i);
+                var elem = doc.GetElement(reference);
+                if (elem is ReferencePlane rp)
+                    _ = dimPlaneIds.Add(rp.Id);
+            }
+
+            if (dimPlaneIds.SetEquals(planeIds)) {
+                Debug.WriteLine("[DimensionExists] Found existing dimension with matching planes");
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static Line CreateDimensionLine(ReferencePlane rp1, ReferencePlane rp2, double offset) {
+        var normal = rp1.Normal;
+        var direction = rp1.Direction;
+
+        var rp1Mid = (rp1.BubbleEnd + rp1.FreeEnd) * 0.5;
+        var rp2Mid = (rp2.BubbleEnd + rp2.FreeEnd) * 0.5;
+        var distanceAlongNormal = (rp2Mid - rp1Mid).DotProduct(normal);
+
+        var p1 = rp1.BubbleEnd + (direction * offset);
+        var p2 = p1 + (normal * distanceAlongNormal);
+
+        Debug.WriteLine($"[CreateDimensionLine] Distance: {distanceAlongNormal:F6}, Offset: {offset:F3}");
+
+        return Line.CreateBound(p1, p2);
+    }
+
     #region Plane Creation (First Operation)
 
     /// <summary>
@@ -28,7 +76,8 @@ public class RefPlaneDimCreator(
         var center = query.Get(spec.CenterAnchor);
         if (center == null) {
             Debug.WriteLine($"[CreateMirrorPlanes] Center anchor not found: {spec.CenterAnchor}");
-            logs.Add(new LogEntry($"Mirror planes: {spec.Name} @ {spec.CenterAnchor}").Error("Center anchor not found"));
+            logs.Add(new LogEntry($"Mirror planes: {spec.Name} @ {spec.CenterAnchor}")
+                .Error("Center anchor not found"));
             return;
         }
 
@@ -41,7 +90,7 @@ public class RefPlaneDimCreator(
 
         // Check if already exist
         if (query.Get(leftName) != null && query.Get(rightName) != null) {
-            Debug.WriteLine($"[CreateMirrorPlanes] Both planes already exist, skipping");
+            Debug.WriteLine("[CreateMirrorPlanes] Both planes already exist, skipping");
             logs.Add(new LogEntry($"Mirror planes: {spec.Name} @ {spec.CenterAnchor}").Skip("Already exist"));
             return;
         }
@@ -53,7 +102,9 @@ public class RefPlaneDimCreator(
         var leftCreated = this.CreatePlane(leftName, midpoint - (normal * PlaneOffset), t, cutVec, spec.Strength);
         var rightCreated = this.CreatePlane(rightName, midpoint + (normal * PlaneOffset), t, cutVec, spec.Strength);
 
-        if (leftCreated && rightCreated) logs.Add(new LogEntry($"Mirror planes: {spec.Name} @ {spec.CenterAnchor}").Success($"Created {leftName}, {rightName}"));
+        if (leftCreated && rightCreated)
+            logs.Add(new LogEntry($"Mirror planes: {spec.Name} @ {spec.CenterAnchor}").Success(
+                $"Created {leftName}, {rightName}"));
     }
 
     /// <summary>
@@ -85,7 +136,8 @@ public class RefPlaneDimCreator(
             ? normal * PlaneOffset
             : normal * -PlaneOffset;
 
-        if (this.CreatePlane(spec.Name, midpoint + offsetVector, t, cutVec, spec.Strength)) logs.Add(new LogEntry($"Offset plane: {spec.Name}").Success("Created"));
+        if (this.CreatePlane(spec.Name, midpoint + offsetVector, t, cutVec, spec.Strength))
+            logs.Add(new LogEntry($"Offset plane: {spec.Name}").Success("Created"));
     }
 
     private bool CreatePlane(string name, XYZ origin, XYZ t, XYZ cutVec, RpStrength strength) {
@@ -117,7 +169,8 @@ public class RefPlaneDimCreator(
     ///     Creates mirror dimensions: EQ constraint (3 planes) + parameter label (2 planes).
     /// </summary>
     public void CreateMirrorDimensions(MirrorSpec spec, int staggerIndex) {
-        Debug.WriteLine($"[CreateMirrorDimensions] Processing: {spec.Name}, Center: {spec.CenterAnchor}, Stagger: {staggerIndex}");
+        Debug.WriteLine(
+            $"[CreateMirrorDimensions] Processing: {spec.Name}, Center: {spec.CenterAnchor}, Stagger: {staggerIndex}");
 
         var center = query.Get(spec.CenterAnchor);
         if (center == null) {
@@ -133,7 +186,8 @@ public class RefPlaneDimCreator(
         var rightPlane = query.Get(rightName);
 
         if (leftPlane == null || rightPlane == null) {
-            Debug.WriteLine($"[CreateMirrorDimensions] Planes not found - Left: {leftPlane != null}, Right: {rightPlane != null}");
+            Debug.WriteLine(
+                $"[CreateMirrorDimensions] Planes not found - Left: {leftPlane != null}, Right: {rightPlane != null}");
             logs.Add(new LogEntry($"Mirror dims: {spec.Name} @ {spec.CenterAnchor}").Error("Planes not found"));
             return;
         }
@@ -159,13 +213,13 @@ public class RefPlaneDimCreator(
                     var param = doc.FamilyManager.get_Parameter(spec.Parameter);
                     if (param != null) {
                         paramDim.FamilyLabel = param;
-                        logs.Add(new LogEntry($"Mirror param dim: {spec.Name} @ {spec.CenterAnchor}").Success($"Label: {spec.Parameter}"));
-                    } else {
-                        logs.Add(new LogEntry($"Mirror param dim: {spec.Name} @ {spec.CenterAnchor}").Success($"(param '{spec.Parameter}' not found)"));
-                    }
-                } else {
+                        logs.Add(new LogEntry($"Mirror param dim: {spec.Name} @ {spec.CenterAnchor}").Success(
+                            $"Label: {spec.Parameter}"));
+                    } else
+                        logs.Add(new LogEntry($"Mirror param dim: {spec.Name} @ {spec.CenterAnchor}").Success(
+                            $"(param '{spec.Parameter}' not found)"));
+                } else
                     logs.Add(new LogEntry($"Mirror param dim: {spec.Name} @ {spec.CenterAnchor}").Success("Created"));
-                }
             } catch (Exception ex) {
                 Debug.WriteLine($"[CreateMirrorDimensions] Param dim ERROR: {ex.Message}");
                 logs.Add(new LogEntry($"Mirror param dim: {spec.Name} @ {spec.CenterAnchor}").Error(ex));
@@ -174,7 +228,8 @@ public class RefPlaneDimCreator(
 
         // Create EQ dimension (3 planes: left, center, right)
         if (this.DimensionExists(leftPlane, center, rightPlane)) {
-            Debug.WriteLine($"[CreateMirrorDimensions] EQ dim already exists between {leftName}, {spec.CenterAnchor}, {rightName}");
+            Debug.WriteLine(
+                $"[CreateMirrorDimensions] EQ dim already exists between {leftName}, {spec.CenterAnchor}, {rightName}");
             logs.Add(new LogEntry($"Mirror EQ dim: {spec.Name} @ {spec.CenterAnchor}").Skip("Already exists"));
         } else {
             try {
@@ -200,18 +255,21 @@ public class RefPlaneDimCreator(
     ///     Creates offset dimension: single dimension between anchor and target.
     /// </summary>
     public void CreateOffsetDimension(OffsetSpec spec, int staggerIndex) {
-        Debug.WriteLine($"[CreateOffsetDimension] Processing: {spec.Name}, Anchor: {spec.AnchorName}, Stagger: {staggerIndex}");
+        Debug.WriteLine(
+            $"[CreateOffsetDimension] Processing: {spec.Name}, Anchor: {spec.AnchorName}, Stagger: {staggerIndex}");
 
         var anchor = query.Get(spec.AnchorName);
         var target = query.Get(spec.Name);
 
         if (anchor == null || target == null) {
-            Debug.WriteLine($"[CreateOffsetDimension] Planes not found - Anchor: {anchor != null}, Target: {target != null}");
+            Debug.WriteLine(
+                $"[CreateOffsetDimension] Planes not found - Anchor: {anchor != null}, Target: {target != null}");
             return; // Plane creation would have logged the error
         }
 
         if (this.DimensionExists(anchor, target)) {
-            Debug.WriteLine($"[CreateOffsetDimension] Dimension already exists between {spec.AnchorName} and {spec.Name}");
+            Debug.WriteLine(
+                $"[CreateOffsetDimension] Dimension already exists between {spec.AnchorName} and {spec.Name}");
             logs.Add(new LogEntry($"Offset dim: {spec.Name}").Skip("Already exists"));
             return;
         }
@@ -233,12 +291,10 @@ public class RefPlaneDimCreator(
                 if (param != null) {
                     dim.FamilyLabel = param;
                     logs.Add(new LogEntry($"Offset dim: {spec.Name}").Success($"Label: {spec.Parameter}"));
-                } else {
+                } else
                     logs.Add(new LogEntry($"Offset dim: {spec.Name}").Success($"(param '{spec.Parameter}' not found)"));
-                }
-            } else {
+            } else
                 logs.Add(new LogEntry($"Offset dim: {spec.Name}").Success("Created"));
-            }
         } catch (Exception ex) {
             Debug.WriteLine($"[CreateOffsetDimension] ERROR: {ex.Message}");
             logs.Add(new LogEntry($"Offset dim: {spec.Name}").Error(ex));
@@ -246,55 +302,6 @@ public class RefPlaneDimCreator(
     }
 
     #endregion
-
-    /// <summary>
-    ///     Checks if a dimension already exists between the specified reference planes.
-    /// </summary>
-    private bool DimensionExists(params ReferencePlane[] planes) {
-        if (planes.Length < 2) return false;
-
-        var planeIds = planes.Select(p => p.Id).ToHashSet();
-
-        var dimensions = new FilteredElementCollector(doc)
-            .OfClass(typeof(Dimension))
-            .Cast<Dimension>()
-            .Where(d => d is not SpotDimension);
-
-        foreach (var dim in dimensions) {
-            if (dim.References.Size != planes.Length) continue;
-
-            var dimPlaneIds = new HashSet<ElementId>();
-            for (var i = 0; i < dim.References.Size; i++) {
-                var reference = dim.References.get_Item(i);
-                var elem = doc.GetElement(reference);
-                if (elem is ReferencePlane rp)
-                    _ = dimPlaneIds.Add(rp.Id);
-            }
-
-            if (dimPlaneIds.SetEquals(planeIds)) {
-                Debug.WriteLine($"[DimensionExists] Found existing dimension with matching planes");
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static Line CreateDimensionLine(ReferencePlane rp1, ReferencePlane rp2, double offset) {
-        var normal = rp1.Normal;
-        var direction = rp1.Direction;
-
-        var rp1Mid = (rp1.BubbleEnd + rp1.FreeEnd) * 0.5;
-        var rp2Mid = (rp2.BubbleEnd + rp2.FreeEnd) * 0.5;
-        var distanceAlongNormal = (rp2Mid - rp1Mid).DotProduct(normal);
-
-        var p1 = rp1.BubbleEnd + (direction * offset);
-        var p2 = p1 + (normal * distanceAlongNormal);
-
-        Debug.WriteLine($"[CreateDimensionLine] Distance: {distanceAlongNormal:F6}, Offset: {offset:F3}");
-
-        return Line.CreateBound(p1, p2);
-    }
 }
 
 /// <summary>

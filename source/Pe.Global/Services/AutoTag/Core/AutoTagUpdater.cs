@@ -1,7 +1,3 @@
-using Autodesk.Revit.DB;
-using Autodesk.Revit.DB.Events;
-using Autodesk.Revit.UI;
-
 namespace Pe.Global.Services.AutoTag.Core;
 
 /// <summary>
@@ -10,8 +6,8 @@ namespace Pe.Global.Services.AutoTag.Core;
 /// </summary>
 public class AutoTagUpdater : IUpdater {
     private readonly AddInId _addInId;
-    private readonly UpdaterId _updaterId;
     private readonly Dictionary<string, FamilySymbol> _tagTypeCache = new();
+    private readonly UpdaterId _updaterId;
     private AutoTagSettings? _settings;
 
     public AutoTagUpdater(AddInId addInId) {
@@ -27,13 +23,6 @@ public class AutoTagUpdater : IUpdater {
         "Automatically tags elements after placement based on configured settings.";
 
     public ChangePriority GetChangePriority() => ChangePriority.Annotations;
-
-    /// <summary>
-    ///     Updates the settings used by this updater. Called by AutoTagService.
-    /// </summary>
-    public void SetSettings(AutoTagSettings? settings) {
-        this._settings = settings;
-    }
 
     /// <summary>
     ///     Main updater execution - called when tracked elements are added.
@@ -57,14 +46,19 @@ public class AutoTagUpdater : IUpdater {
                     this.ProcessElement(doc, element, view);
                 } catch (Exception ex) {
                     // Log but don't fail entire batch
-                    System.Diagnostics.Debug.WriteLine($"AutoTag: Failed to tag element {addedId}: {ex.Message}");
+                    Debug.WriteLine($"AutoTag: Failed to tag element {addedId}: {ex.Message}");
                 }
             }
         } catch (Exception ex) {
             // Critical error - don't crash Revit
-            System.Diagnostics.Debug.WriteLine($"AutoTag: Execute failed: {ex.Message}");
+            Debug.WriteLine($"AutoTag: Execute failed: {ex.Message}");
         }
     }
+
+    /// <summary>
+    ///     Updates the settings used by this updater. Called by AutoTagService.
+    /// </summary>
+    public void SetSettings(AutoTagSettings? settings) => this._settings = settings;
 
     /// <summary>
     ///     Process a single element for auto-tagging.
@@ -96,7 +90,8 @@ public class AutoTagUpdater : IUpdater {
     /// <summary>
     ///     Gets or caches a tag type for performance.
     /// </summary>
-    private FamilySymbol? GetOrCacheTagType(Autodesk.Revit.DB.Document doc, BuiltInCategory elementCategory,
+    private FamilySymbol? GetOrCacheTagType(Autodesk.Revit.DB.Document doc,
+        BuiltInCategory elementCategory,
         AutoTagConfiguration config) {
         var cacheKey = $"{config.TagFamilyName}::{config.TagTypeName}";
 
@@ -122,9 +117,7 @@ public class AutoTagUpdater : IUpdater {
 
         if (tagType != null) {
             // Ensure symbol is activated
-            if (!tagType.IsActive) {
-                tagType.Activate();
-            }
+            if (!tagType.IsActive) tagType.Activate();
 
             this._tagTypeCache[cacheKey] = tagType;
         }
@@ -135,8 +128,11 @@ public class AutoTagUpdater : IUpdater {
     /// <summary>
     ///     Creates a tag for the element.
     /// </summary>
-    private void CreateTag(Autodesk.Revit.DB.Document doc, Element element, FamilySymbol tagType,
-        AutoTagConfiguration config, View view) {
+    private void CreateTag(Autodesk.Revit.DB.Document doc,
+        Element element,
+        FamilySymbol tagType,
+        AutoTagConfiguration config,
+        View view) {
         try {
             var location = this.GetTagLocation(element, config);
             if (location == null) return;
@@ -156,7 +152,7 @@ public class AutoTagUpdater : IUpdater {
                 location
             );
         } catch (Exception ex) {
-            System.Diagnostics.Debug.WriteLine($"AutoTag: Failed to create tag: {ex.Message}");
+            Debug.WriteLine($"AutoTag: Failed to create tag: {ex.Message}");
         }
     }
 
@@ -167,9 +163,9 @@ public class AutoTagUpdater : IUpdater {
         XYZ? baseLocation = null;
 
         // Try different location methods
-        if (element.Location is LocationPoint locationPoint) {
+        if (element.Location is LocationPoint locationPoint)
             baseLocation = locationPoint.Point;
-        } else if (element.Location is LocationCurve locationCurve) {
+        else if (element.Location is LocationCurve locationCurve) {
             // Use midpoint of curve
             var curve = locationCurve.Curve;
             baseLocation = curve.Evaluate(0.5, true);
@@ -180,9 +176,7 @@ public class AutoTagUpdater : IUpdater {
         } else {
             // Last resort - use bounding box center
             var bbox = element.get_BoundingBox(null);
-            if (bbox != null) {
-                baseLocation = (bbox.Min + bbox.Max) / 2.0;
-            }
+            if (bbox != null) baseLocation = (bbox.Min + bbox.Max) / 2.0;
         }
 
         if (baseLocation == null) return null;

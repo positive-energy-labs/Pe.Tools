@@ -21,6 +21,7 @@ public readonly struct FamilyProcessingPipeline {
         this.LoadedFamily = loadedFamily;
         this.Context = context;
     }
+
     /// <summary>The open family document</summary>
     public FamilyDocument FamDoc { get; }
 
@@ -183,7 +184,7 @@ public static class FamilyProcessingPipelineExtensions {
         this FamilyProcessingPipeline pipeline,
         IFamilyLoadOptions? options = null
     ) {
-        if ( pipeline.ProjectDoc == null)
+        if (pipeline.ProjectDoc == null)
             throw new InvalidOperationException("Cannot call Load() in family-doc-only mode.");
 
         if (pipeline.IsLoaded)

@@ -38,7 +38,7 @@ public static class PltFamilyTypes {
                     var symbol = item.FamilySymbol;
                     try {
                         var trans = new Transaction(doc, $"Place {symbol.Family.Name}");
-                        trans.Start(); 
+                        trans.Start();
                         if (!symbol.IsActive) symbol.Activate();
                         trans.Commit();
                         uiapp.ActiveUIDocument.PromptForFamilyInstancePlacement(symbol);

@@ -1,4 +1,3 @@
-using Pe.Global.Revit.Lib.Schedules;
 using Pe.Global.Revit.Lib.Schedules.Fields;
 using Pe.Global.Revit.Lib.Schedules.SortGroup;
 using Pe.Ui.Core;

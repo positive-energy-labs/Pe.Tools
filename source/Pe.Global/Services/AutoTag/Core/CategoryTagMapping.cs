@@ -1,5 +1,3 @@
-using Autodesk.Revit.DB;
-
 namespace Pe.Global.Services.AutoTag.Core;
 
 /// <summary>
@@ -68,7 +66,8 @@ public static class CategoryTagMapping {
     ///     Gets the tag category for a given element category.
     ///     Returns OST_MultiCategoryTags if no specific mapping exists.
     /// </summary>
-    public static BuiltInCategory GetTagCategory(BuiltInCategory elementCategory) => CategoryToTagMap.TryGetValue(elementCategory, out var tagCategory)
+    public static BuiltInCategory GetTagCategory(BuiltInCategory elementCategory) =>
+        CategoryToTagMap.TryGetValue(elementCategory, out var tagCategory)
             ? tagCategory
             : BuiltInCategory.OST_MultiCategoryTags;
 

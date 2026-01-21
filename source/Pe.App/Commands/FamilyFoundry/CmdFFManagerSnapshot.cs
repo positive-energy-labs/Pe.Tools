@@ -110,11 +110,10 @@ public class CmdFFManagerSnapshot : IExternalCommand {
                 // Empty - snapshot captures exact parameters, no APS filtering needed
                 IncludeNames = new IncludeSharedParameter(), ExcludeNames = new ExcludeSharedParameter()
             },
-            MakeRefPlaneAndDims = new MakeRefPlaneAndDimsSettings {
-                Enabled = hasRefPlaneSpecs,
-                MirrorSpecs = mirrorSpecs,
-                OffsetSpecs = offsetSpecs
-            },
+            MakeRefPlaneAndDims =
+                new MakeRefPlaneAndDimsSettings {
+                    Enabled = hasRefPlaneSpecs, MirrorSpecs = mirrorSpecs, OffsetSpecs = offsetSpecs
+                },
             AddAndSetParams = new AddAndSetParamsSettings {
                 Enabled = paramSettings.Count > 0,
                 CreateFamParamIfMissing = true,
@@ -159,7 +158,7 @@ public class CmdFFManagerSnapshot : IExternalCommand {
                 PropertiesGroup = snap.PropertiesGroup,
                 DataType = snap.DataType,
                 ValueOrFormula = snap.Formula,
-                SetAsFormula = true,
+                SetAsFormula = true
             };
         }
 

@@ -23,7 +23,7 @@ public class MakeRefPlanesAndDims(
         var sharedState = new SharedCreatorState();
         return [
             new MakeRefPlanes(settings, sharedState),
-            new MakeDimensions(settings, sharedState),
+            new MakeDimensions(settings, sharedState)
         ];
     }
 }
@@ -55,7 +55,6 @@ public class PlaneQuery(Document doc) {
                 .Cast<ReferencePlane>()
                 .FirstOrDefault(rp => rp.Name == name);
 }
-
 
 /// <summary>
 ///     Shared state between plane and dimension operations.

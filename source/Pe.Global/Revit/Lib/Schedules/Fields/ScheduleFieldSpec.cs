@@ -109,9 +109,7 @@ public class ScheduleFieldSpec {
         var warnings = new List<string>();
 
         // Skip calculated fields - they cannot be created via API
-        if (this.CalculatedType.HasValue) {
-            return (null, null, warnings); // Will be handled separately as guidance
-        }
+        if (this.CalculatedType.HasValue) return (null, null, warnings); // Will be handled separately as guidance
 
         ScheduleField? field = null;
 
@@ -121,15 +119,11 @@ public class ScheduleFieldSpec {
                 schedule, def, findParameterIdByName);
             field = combinedField;
             warnings.AddRange(combinedWarnings);
-            if (skipped != null) {
-                return (null, skipped, warnings);
-            }
+            if (skipped != null) return (null, skipped, warnings);
         } else {
             // Regular field
             var schedulableField = findSchedulableField(def, schedule.Document, this.ParameterName);
-            if (schedulableField is null) {
-                return (null, $"Parameter '{this.ParameterName}' not found", warnings);
-            }
+            if (schedulableField is null) return (null, $"Parameter '{this.ParameterName}' not found", warnings);
 
             field = def.AddField(schedulableField);
         }
@@ -190,17 +184,13 @@ public class ScheduleFieldSpec {
                         def.GetFieldCount());
 
                     // Dispose of the combined parameter data objects
-                    foreach (var data in combinedParamDataList) {
-                        data.Dispose();
-                    }
+                    foreach (var data in combinedParamDataList) data.Dispose();
 
                     return (field, null, warnings);
                 }
 
                 // Dispose if invalid
-                foreach (var data in combinedParamDataList) {
-                    data.Dispose();
-                }
+                foreach (var data in combinedParamDataList) data.Dispose();
 
                 return (null, $"Combined parameter field '{this.ParameterName}' has invalid parameters", warnings);
             }
@@ -238,9 +228,8 @@ public class ScheduleFieldSpec {
 
             if (canApply)
                 field.DisplayType = this.DisplayType;
-            else {
+            else
                 warnings.Add($"DisplayType '{this.DisplayType}' not supported for field '{this.ParameterName}'");
-            }
         }
 
         // Apply format options
@@ -260,8 +249,7 @@ public class ScheduleFieldSpec {
         if (!this.CalculatedType.HasValue) return null;
 
         var guidance = new CalculatedFieldGuidance {
-            FieldName = this.ParameterName,
-            CalculatedType = this.CalculatedType.ToString() ?? string.Empty
+            FieldName = this.ParameterName, CalculatedType = this.CalculatedType.ToString() ?? string.Empty
         };
 
         if (this.CalculatedType == CalculatedFieldType.Formula) {
@@ -272,7 +260,7 @@ public class ScheduleFieldSpec {
         } else if (this.CalculatedType == CalculatedFieldType.Percentage) {
             guidance = guidance with {
                 Guidance =
-                    $"Add a calculated field of type 'Percentage' based on field '{this.PercentageOfField ?? "(unknown)"}'.",
+                $"Add a calculated field of type 'Percentage' based on field '{this.PercentageOfField ?? "(unknown)"}'.",
                 PercentageOfField = this.PercentageOfField
             };
         }

@@ -68,10 +68,7 @@ public class CmdFFManager : IExternalCommand {
         var outputFolderPath = ctx.Storage.OutputDir().DirectoryPath;
 
         // Force this to never be single transaction
-        var executionOptions = new ExecutionOptions {
-            SingleTransaction = false,
-            OptimizeTypeOperations = false
-        };
+        var executionOptions = new ExecutionOptions { SingleTransaction = false, OptimizeTypeOperations = false };
 
         // Request both parameter and refplane snapshots
         var collectorQueue = new CollectorQueue()
@@ -117,13 +114,13 @@ public class CmdFFManager : IExternalCommand {
         };
 
         profile.AddAndSetParams.AddParameters([
-                new ParamSettingModel {
-                    Name = "_FOUNDRY LAST PROCESSED AT",
-                    DataType = SpecTypeId.String.Text,
-                    ValueOrFormula = $"\"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\"",
-                    SetAsFormula = false
-                }
-            ]);
+            new ParamSettingModel {
+                Name = "_FOUNDRY LAST PROCESSED AT",
+                DataType = SpecTypeId.String.Text,
+                ValueOrFormula = $"\"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\"",
+                SetAsFormula = false
+            }
+        ]);
 
         return new OperationQueue()
             .Add(new AddSharedParams(apsParamData))

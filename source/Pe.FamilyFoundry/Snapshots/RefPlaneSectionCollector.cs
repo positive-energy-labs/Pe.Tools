@@ -89,9 +89,7 @@ public class RefPlaneSectionCollector : IFamilyDocCollector {
         }
 
         return new RefPlaneSnapshot {
-            Source = SnapshotSource.FamilyDoc,
-            MirrorSpecs = mirrorSpecs,
-            OffsetSpecs = offsetSpecs
+            Source = SnapshotSource.FamilyDoc, MirrorSpecs = mirrorSpecs, OffsetSpecs = offsetSpecs
         };
     }
 

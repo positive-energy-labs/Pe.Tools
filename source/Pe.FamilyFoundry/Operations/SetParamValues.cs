@@ -56,7 +56,6 @@ public class SetParamValues(AddAndSetParamsSettings settings)
                 _ = success
                     ? log.Success("Set global value")
                     : log.Defer($"Needs per-type fallback, error setting global value: {errMsg}");
-
             }
         }
 
