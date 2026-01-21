@@ -102,9 +102,10 @@ public class RefPlaneDimCreator(
         var leftCreated = this.CreatePlane(leftName, midpoint - (normal * PlaneOffset), t, cutVec, spec.Strength);
         var rightCreated = this.CreatePlane(rightName, midpoint + (normal * PlaneOffset), t, cutVec, spec.Strength);
 
-        if (leftCreated && rightCreated)
+        if (leftCreated && rightCreated) {
             logs.Add(new LogEntry($"Mirror planes: {spec.Name} @ {spec.CenterAnchor}").Success(
                 $"Created {leftName}, {rightName}"));
+        }
     }
 
     /// <summary>
@@ -215,9 +216,10 @@ public class RefPlaneDimCreator(
                         paramDim.FamilyLabel = param;
                         logs.Add(new LogEntry($"Mirror param dim: {spec.Name} @ {spec.CenterAnchor}").Success(
                             $"Label: {spec.Parameter}"));
-                    } else
+                    } else {
                         logs.Add(new LogEntry($"Mirror param dim: {spec.Name} @ {spec.CenterAnchor}").Success(
                             $"(param '{spec.Parameter}' not found)"));
+                    }
                 } else
                     logs.Add(new LogEntry($"Mirror param dim: {spec.Name} @ {spec.CenterAnchor}").Success("Created"));
             } catch (Exception ex) {

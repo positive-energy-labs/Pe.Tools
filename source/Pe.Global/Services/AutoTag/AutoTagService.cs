@@ -1,10 +1,6 @@
-using Autodesk.Revit.ApplicationServices;
-using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Events;
-using Autodesk.Revit.UI;
 using Pe.Global.Services.AutoTag.Core;
 using Pe.Global.Services.Storage;
-using Pe.Global.Services.Storage.Core.Json;
 using Serilog;
 
 namespace Pe.Global.Services.AutoTag;
@@ -16,15 +12,11 @@ namespace Pe.Global.Services.AutoTag;
 /// </summary>
 public class AutoTagService {
     private static AutoTagService? _instance;
-    private readonly JsonReader<AutoTagSettings> _storage;
-    private AutoTagUpdater? _updater;
+    private readonly Dictionary<int, AutoTagSettings?> _documentSettings = new();
+    private DocumentSettingsStorage<AutoTagSettings>? _documentStorage;
+    private AddInId? _addInId;
     private UIControlledApplication? _app;
-
-    private AutoTagService() {
-        // Single source of storage - only created here
-        this._storage = new Pe.Global.Services.Storage.Storage("AutoTag").SettingsDir().Json<AutoTagSettings>();
-        this.LoadSettings();
-    }
+    private AutoTagUpdater? _updater;
 
     /// <summary>
     ///     Gets the singleton instance of the AutoTagService.
@@ -37,14 +29,36 @@ public class AutoTagService {
     }
 
     /// <summary>
-    ///     Gets the current settings (readonly). To refresh, call ReloadSettings().
+    ///     Gets settings for a specific document. Returns null if not configured.
     /// </summary>
-    public AutoTagSettings? Settings { get; private set; }
+    public AutoTagSettings? GetSettingsForDocument(Autodesk.Revit.DB.Document doc) {
+        var docHash = doc.GetHashCode();
+        return this._documentSettings.TryGetValue(docHash, out var settings) ? settings : null;
+    }
 
     /// <summary>
-    ///     Gets the file path to the settings JSON file.
+    ///     Writes settings for a specific document and reloads AutoTag for that document.
     /// </summary>
-    public string SettingsFilePath => this._storage.FilePath;
+    public void SaveSettingsForDocument(Autodesk.Revit.DB.Document doc, AutoTagSettings settings) {
+        if (this._documentStorage == null) throw new InvalidOperationException("AutoTag service not initialized");
+
+        this._documentStorage.Write(doc, settings);
+        var docHash = doc.GetHashCode();
+        this._documentSettings[docHash] = settings;
+
+        // Re-register triggers for this document
+        if (this._updater != null) this.RegisterTriggersForDocument(doc, settings);
+
+        Log.Information("AutoTag: Settings saved and reloaded for '{Title}'", doc.Title);
+    }
+
+    /// <summary>
+    ///     Checks if settings exist in the document.
+    /// </summary>
+    public bool HasSettingsInDocument(Autodesk.Revit.DB.Document doc) {
+        if (this._documentStorage == null) return false;
+        return this._documentStorage.Exists(doc);
+    }
 
     /// <summary>
     ///     Initializes the AutoTag service, registers the updater, and sets up event handlers.
@@ -52,13 +66,18 @@ public class AutoTagService {
     public void Initialize(AddInId addInId, UIControlledApplication app) {
         try {
             this._app = app;
+            this._addInId = addInId;
+
+            // Initialize document storage with vendor-based access control
+            // Schema GUID v3 - uses VendorId "Development" to match .addin manifest
+            this._documentStorage = new DocumentSettingsStorage<AutoTagSettings>(
+                schemaGuid: new Guid("B9F3E5A7-2C4D-6B8F-0E1A-3D5C7F9B1E2A"),
+                schemaName: "PeAutoTagSettings"
+            );
 
             // Create and register updater
             this._updater = new AutoTagUpdater(addInId);
-            UpdaterRegistry.RegisterUpdater(this._updater, isOptional: true);
-
-            // Push settings to updater
-            this._updater.SetSettings(this.Settings);
+            UpdaterRegistry.RegisterUpdater(this._updater, true);
 
             // Subscribe to DocumentOpened event for trigger registration
             app.ControlledApplication.DocumentOpened += this.OnDocumentOpened;
@@ -74,14 +93,14 @@ public class AutoTagService {
     /// </summary>
     public void Shutdown() {
         try {
-            if (this._app != null) {
-                this._app.ControlledApplication.DocumentOpened -= this.OnDocumentOpened;
-            }
+            if (this._app != null) this._app.ControlledApplication.DocumentOpened -= this.OnDocumentOpened;
 
             if (this._updater != null) {
                 UpdaterRegistry.UnregisterUpdater(this._updater.GetUpdaterId());
                 this._updater = null;
             }
+
+            this._documentSettings.Clear();
 
             Log.Information("AutoTag: Service shut down successfully");
         } catch (Exception ex) {
@@ -90,45 +109,18 @@ public class AutoTagService {
     }
 
     /// <summary>
-    ///     Reloads settings from storage and updates the updater.
+    ///     Gets the current status of the AutoTag service for a specific document.
     /// </summary>
-    public void ReloadSettings() {
-        this.LoadSettings();
-        this._updater?.SetSettings(this.Settings);
-        Log.Information("AutoTag: Settings reloaded");
-    }
-
-    /// <summary>
-    ///     Clears the tag type cache in the updater.
-    /// </summary>
-    public void ClearCache() {
-        this._updater?.ClearCache();
-        Log.Information("AutoTag: Cache cleared");
-    }
-
-    /// <summary>
-    ///     Gets the current status of the AutoTag service.
-    /// </summary>
-    public AutoTagStatus GetStatus() => new AutoTagStatus {
-        IsInitialized = this._updater != null,
-        IsEnabled = this.Settings?.Enabled ?? false,
-        SettingsFilePath = this.SettingsFilePath,
-        ConfigurationCount = this.Settings?.Configurations?.Count ?? 0,
-        EnabledConfigurationCount = this.Settings?.Configurations?.Count(c => c.Enabled) ?? 0,
-        Configurations = this.Settings?.Configurations ?? []
-    };
-
-    /// <summary>
-    ///     Loads settings from storage (private - only called internally).
-    /// </summary>
-    private void LoadSettings() {
-        try {
-            this.Settings = this._storage.Read();
-            Log.Debug("AutoTag: Settings loaded successfully");
-        } catch (Exception ex) {
-            Log.Error(ex, "AutoTag: Failed to load settings, using defaults");
-            this.Settings = new AutoTagSettings { Enabled = false };
-        }
+    public AutoTagStatus GetStatus(Autodesk.Revit.DB.Document doc) {
+        var settings = this.GetSettingsForDocument(doc);
+        return new AutoTagStatus {
+            IsInitialized = this._updater != null,
+            IsEnabled = settings?.Enabled ?? false,
+            HasDocumentSettings = settings != null,
+            ConfigurationCount = settings?.Configurations?.Count ?? 0,
+            EnabledConfigurationCount = settings?.Configurations?.Count(c => c.Enabled) ?? 0,
+            Configurations = settings?.Configurations ?? []
+        };
     }
 
     /// <summary>
@@ -137,56 +129,79 @@ public class AutoTagService {
     private void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e) {
         try {
             var doc = e.Document;
-            if (doc == null || this._updater == null) return;
+            if (doc == null || this._updater == null || this._documentStorage == null) return;
 
-            // Check if settings are enabled
-            if (this.Settings?.Enabled != true || this.Settings.Configurations.Count == 0) {
-                Log.Debug("AutoTag: Skipping trigger registration (disabled or no configurations)");
+            // Try to load settings from document
+            var settings = this._documentStorage.Read(doc);
+            var docHash = doc.GetHashCode();
+
+            if (settings == null) {
+                Log.Information("AutoTag: Disabled for '{Title}' - no document settings found", doc.Title);
+                this._documentSettings[docHash] = null;
                 return;
             }
 
-            var updaterId = this._updater.GetUpdaterId();
+            // Store settings for this document
+            this._documentSettings[docHash] = settings;
 
-            // Remove any existing triggers for this document before adding new ones
-            // This ensures we start fresh each time a document is opened
-            try {
-                UpdaterRegistry.RemoveDocumentTriggers(updaterId, doc);
-            } catch {
-                // Ignore if no triggers exist
-            }
-
-            // Register triggers for each enabled category
-            var registeredCount = 0;
-            foreach (var config in this.Settings.Configurations.Where(c => c.Enabled)) {
-                try {
-                    var builtInCategory = CategoryTagMapping.GetBuiltInCategoryFromName(doc, config.CategoryName);
-                    if (builtInCategory == BuiltInCategory.INVALID) {
-                        Log.Warning($"AutoTag: Invalid category '{config.CategoryName}', skipping trigger");
-                        continue;
-                    }
-
-                    // Create filter for this category
-                    var filter = new ElementCategoryFilter(builtInCategory);
-
-                    // Add trigger for element addition
-                    UpdaterRegistry.AddTrigger(
-                        updaterId,
-                        doc,
-                        filter,
-                        Element.GetChangeTypeElementAddition()
-                    );
-
-                    registeredCount++;
-                    Log.Debug($"AutoTag: Registered trigger for category '{config.CategoryName}'");
-                } catch (Exception ex) {
-                    Log.Warning(ex, $"AutoTag: Failed to register trigger for '{config.CategoryName}'");
-                }
-            }
-
-            Log.Information($"AutoTag: Registered triggers for {registeredCount} categories in '{doc.Title}'");
+            // Register triggers if enabled
+            if (settings.Enabled && settings.Configurations.Count > 0)
+                this.RegisterTriggersForDocument(doc, settings);
+            else
+                Log.Debug("AutoTag: Skipping trigger registration for '{Title}' (disabled or no configurations)",
+                    doc.Title);
         } catch (Exception ex) {
-            Log.Error(ex, "AutoTag: Failed to register triggers on document open");
+            Log.Error(ex, "AutoTag: Failed to process document open");
         }
+    }
+
+    /// <summary>
+    ///     Registers triggers for a specific document based on settings.
+    /// </summary>
+    private void RegisterTriggersForDocument(Autodesk.Revit.DB.Document doc, AutoTagSettings settings) {
+        if (this._updater == null) return;
+
+        var updaterId = this._updater.GetUpdaterId();
+
+        // Remove any existing triggers for this document before adding new ones
+        try {
+            UpdaterRegistry.RemoveDocumentTriggers(updaterId, doc);
+        } catch {
+            // Ignore if no triggers exist
+        }
+
+        // Push settings to updater
+        this._updater.SetSettings(settings);
+
+        // Register triggers for each enabled category
+        var registeredCount = 0;
+        foreach (var config in settings.Configurations.Where(c => c.Enabled)) {
+            try {
+                var builtInCategory = CategoryTagMapping.GetBuiltInCategoryFromName(doc, config.CategoryName);
+                if (builtInCategory == BuiltInCategory.INVALID) {
+                    Log.Warning("AutoTag: Invalid category '{CategoryName}', skipping trigger", config.CategoryName);
+                    continue;
+                }
+
+                // Create filter for this category
+                var filter = new ElementCategoryFilter(builtInCategory);
+
+                // Add trigger for element addition
+                UpdaterRegistry.AddTrigger(
+                    updaterId,
+                    doc,
+                    filter,
+                    Element.GetChangeTypeElementAddition()
+                );
+
+                registeredCount++;
+                Log.Debug("AutoTag: Registered trigger for category '{CategoryName}'", config.CategoryName);
+            } catch (Exception ex) {
+                Log.Warning(ex, "AutoTag: Failed to register trigger for '{CategoryName}'", config.CategoryName);
+            }
+        }
+
+        Log.Information("AutoTag: Registered triggers for {Count} categories in '{Title}'", registeredCount, doc.Title);
     }
 }
 
@@ -196,7 +211,7 @@ public class AutoTagService {
 public record AutoTagStatus {
     public bool IsInitialized { get; init; }
     public bool IsEnabled { get; init; }
-    public string SettingsFilePath { get; init; } = string.Empty;
+    public bool HasDocumentSettings { get; init; }
     public int ConfigurationCount { get; init; }
     public int EnabledConfigurationCount { get; init; }
     public List<AutoTagConfiguration> Configurations { get; init; } = [];

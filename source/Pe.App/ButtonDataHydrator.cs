@@ -1,6 +1,7 @@
 using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette;
 using Pe.Tools.Commands;
+using Pe.Tools.Commands.AutoTag;
 using Pe.Tools.Commands.FamilyFoundry;
 using System.Diagnostics;
 
@@ -127,23 +128,23 @@ public static class ButtonDataHydrator {
                 ToolTip = "Aggregate parameter metadata across families in a category and output to CSV."
             }
         }, {
-            nameof(CmdAutoTag),
-            new ButtonDataRecord {
+            nameof(CmdAutoTag), new ButtonDataRecord {
                 SmallImage = "Red_16.png",
                 LargeImage = "Red_32.png",
-                ToolTip = "Manage AutoTag settings - automatically tag elements after placement based on configured rules.",
+                ToolTip =
+                    "Manage AutoTag - automatically tag elements when placed based on configured rules.",
                 LongDescription =
                     """
                     AutoTag automatically tags elements when they are placed in the model.
-                    
-                    Configure which categories to tag, which tag families to use, tag placement offsets, and view type filters.
-                    Settings are stored in a JSON file that can be edited directly or through this command.
-                    
-                    Use this command to:
-                    - Reload settings from the JSON file
-                    - Clear the tag type cache
-                    - View current AutoTag status
-                    - Open the settings file for editing
+
+                    Features:
+                    - Initialize/configure AutoTag settings for the document
+                    - Enable/disable automatic tagging
+                    - Catch-up tag all untagged elements
+                    - Edit settings via JSON with schema autocomplete
+                    - View full configuration details
+
+                    Settings are stored in the document using Extensible Storage.
                     """
             }
         }

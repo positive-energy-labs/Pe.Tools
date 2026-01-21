@@ -33,14 +33,15 @@ public class AutoTagConfiguration {
 
     /// <summary>
     ///     The tag family name to use (e.g., "M_Mechanical Equipment Tag").
-    ///     LSP autocomplete will be filtered based on the category.
+    ///     LSP autocomplete will show all tag families in the document.
     /// </summary>
-    [SchemaExamples(typeof(MultiCategoryTagProvider))]
+    [SchemaExamples(typeof(AnnotationTagFamilyNamesProvider))]
     public string TagFamilyName { get; set; } = string.Empty;
 
     /// <summary>
     ///     The specific tag type/symbol name within the family (e.g., "Standard", "Large").
     /// </summary>
+    [SchemaExamples(typeof(AnnotationTagTypeNamesProvider))]
     public string TagTypeName { get; set; } = "Standard";
 
     /// <summary>
@@ -78,7 +79,6 @@ public class AutoTagConfiguration {
     /// <summary>
     ///     Only auto-tag in specific view types. Empty means all views.
     /// </summary>
-    [JsonConverter(typeof(StringEnumConverter))]
     public List<ViewTypeFilter> ViewTypeFilter { get; set; } = [];
 }
 
