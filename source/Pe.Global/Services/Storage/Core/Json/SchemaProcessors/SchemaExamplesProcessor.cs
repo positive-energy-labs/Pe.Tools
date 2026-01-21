@@ -1,6 +1,7 @@
 using Newtonsoft.Json;
 using NJsonSchema;
 using NJsonSchema.Generation;
+using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
 
 namespace Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
 
@@ -39,6 +40,7 @@ public class SchemaExamplesAttribute : Attribute {
 /// </summary>
 public class SchemaExamplesProcessor : ISchemaProcessor {
     private readonly Dictionary<Type, List<string>> _providerCache = new();
+    private readonly Dictionary<Type, IReadOnlyList<string>> _dependentProviders = new();
     private readonly Dictionary<Type, string> _providerToDefName = new();
     private readonly List<(JsonSchema schema, Type providerType)> _trackedSchemas = [];
 
@@ -65,10 +67,22 @@ public class SchemaExamplesProcessor : ISchemaProcessor {
                     if (Activator.CreateInstance(attr.ProviderType) is not IOptionsProvider provider) continue;
                     examples = provider.GetExamples().ToList();
                     this._providerCache[attr.ProviderType] = examples;
+
+                    // Track dependent provider metadata
+                    if (provider is IDependentOptionsProvider dependentProvider) {
+                        this._dependentProviders[attr.ProviderType] = dependentProvider.DependsOn;
+                    }
                 }
 
                 // Determine target schema (item schema for arrays, property schema for direct strings)
                 var targetSchema = propSchema.Item ?? propSchema;
+
+                // Add x-depends-on and x-provider metadata for dependent providers
+                if (this._dependentProviders.TryGetValue(attr.ProviderType, out var dependsOn)) {
+                    targetSchema.ExtensionData ??= new Dictionary<string, object?>();
+                    targetSchema.ExtensionData["x-depends-on"] = dependsOn;
+                    targetSchema.ExtensionData["x-provider"] = attr.ProviderType.Name;
+                }
 
                 if (this.ConsolidateDuplicates) {
                     // Track for later - we'll add $refs in Finalize()

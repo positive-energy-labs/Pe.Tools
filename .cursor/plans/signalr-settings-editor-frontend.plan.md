@@ -157,13 +157,14 @@ src/
 **File**: `src/api/signalr-client.ts`
 
 ```typescript
-import * as signalR from '@microsoft/signalr';
+import * as signalR from "@microsoft/signalr";
 
-const HUB_BASE_URL = 'http://localhost:5150/hubs';
+const HUB_BASE_URL = "http://localhost:5150/hubs";
 
 class SignalRConnection {
   private connections: Map<string, signalR.HubConnection> = new Map();
-  private connectionPromises: Map<string, Promise<signalR.HubConnection>> = new Map();
+  private connectionPromises: Map<string, Promise<signalR.HubConnection>> =
+    new Map();
 
   async getConnection(hubName: string): Promise<signalR.HubConnection> {
     // Return existing connection if available
@@ -179,7 +180,7 @@ class SignalRConnection {
     // Create new connection
     const promise = this.createConnection(hubName);
     this.connectionPromises.set(hubName, promise);
-    
+
     try {
       const connection = await promise;
       this.connections.set(hubName, connection);
@@ -189,14 +190,19 @@ class SignalRConnection {
     }
   }
 
-  private async createConnection(hubName: string): Promise<signalR.HubConnection> {
+  private async createConnection(
+    hubName: string,
+  ): Promise<signalR.HubConnection> {
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(`${HUB_BASE_URL}/${hubName}`)
       .withAutomaticReconnect({
         nextRetryDelayInMilliseconds: (retryContext) => {
           // Exponential backoff: 0, 2s, 4s, 8s, 16s, max 30s
-          return Math.min(1000 * Math.pow(2, retryContext.previousRetryCount), 30000);
-        }
+          return Math.min(
+            1000 * Math.pow(2, retryContext.previousRetryCount),
+            30000,
+          );
+        },
       })
       .configureLogging(signalR.LogLevel.Information)
       .build();
@@ -208,7 +214,7 @@ class SignalRConnection {
 
     await connection.start();
     console.log(`SignalR connected: ${hubName}`);
-    
+
     return connection;
   }
 }
@@ -221,64 +227,75 @@ export const signalRConnection = new SignalRConnection();
 **File**: `src/api/schema-client.ts`
 
 ```typescript
-import { signalRConnection } from './signalr-client';
-import type { 
-  SchemaRequest, 
-  SchemaResponse, 
-  ExamplesRequest, 
-  ExamplesResponse 
-} from '../generated';
+import { signalRConnection } from "./signalr-client";
+import type {
+  ExamplesRequest,
+  ExamplesResponse,
+  SchemaRequest,
+  SchemaResponse,
+} from "../generated";
 
 class SchemaClient {
   private connection: signalR.HubConnection | null = null;
-  private examplesCache = new Map<string, { data: string[]; timestamp: number }>();
+  private examplesCache = new Map<
+    string,
+    { data: string[]; timestamp: number }
+  >();
   private readonly CACHE_TTL = 30000; // 30 seconds
 
   async connect(): Promise<void> {
-    this.connection = await signalRConnection.getConnection('schema');
-    
+    this.connection = await signalRConnection.getConnection("schema");
+
     // Listen for cache invalidation
-    this.connection.on('ExamplesInvalidated', () => {
-      console.log('Examples cache invalidated by server');
+    this.connection.on("ExamplesInvalidated", () => {
+      console.log("Examples cache invalidated by server");
       this.examplesCache.clear();
     });
   }
 
-  async getSchema(typeName: string, isExtends = false): Promise<SchemaResponse> {
+  async getSchema(
+    typeName: string,
+    isExtends = false,
+  ): Promise<SchemaResponse> {
     if (!this.connection) await this.connect();
-    
+
     const request: SchemaRequest = { settingsTypeName: typeName, isExtends };
-    return this.connection!.invoke<SchemaResponse>('GetSchema', request);
+    return this.connection!.invoke<SchemaResponse>("GetSchema", request);
   }
 
   async getExamples(
-    typeName: string, 
-    propertyPath: string, 
-    siblingValues?: Record<string, string>
+    typeName: string,
+    propertyPath: string,
+    siblingValues?: Record<string, string>,
   ): Promise<string[]> {
     if (!this.connection) await this.connect();
 
     // Check cache (skip if dependent filtering)
-    const cacheKey = `${typeName}:${propertyPath}:${JSON.stringify(siblingValues ?? {})}`;
+    const cacheKey = `${typeName}:${propertyPath}:${
+      JSON.stringify(siblingValues ?? {})
+    }`;
     const cached = this.examplesCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
       return cached.data;
     }
 
-    const request: ExamplesRequest = { 
-      settingsTypeName: typeName, 
+    const request: ExamplesRequest = {
+      settingsTypeName: typeName,
       propertyPath,
-      siblingValues: siblingValues ?? null
+      siblingValues: siblingValues ?? null,
     };
-    
-    const response = await this.connection!.invoke<ExamplesResponse>('GetExamples', request);
-    
+
+    const response = await this.connection!.invoke<ExamplesResponse>(
+      "GetExamples",
+      request,
+    );
+
     // Cache the result
-    this.examplesCache.set(cacheKey, { 
-      data: response.examples, 
-      timestamp: Date.now() 
+    this.examplesCache.set(cacheKey, {
+      data: response.examples,
+      timestamp: Date.now(),
     });
-    
+
     return response.examples;
   }
 }
@@ -291,68 +308,84 @@ export const schemaClient = new SchemaClient();
 **File**: `src/api/settings-client.ts`
 
 ```typescript
-import { signalRConnection } from './signalr-client';
+import { signalRConnection } from "./signalr-client";
 import type {
-  SettingsFile,
   ListSettingsRequest,
   ReadSettingsRequest,
   ReadSettingsResponse,
+  SettingsFile,
   WriteSettingsRequest,
-  WriteSettingsResponse
-} from '../generated';
+  WriteSettingsResponse,
+} from "../generated";
 
 class SettingsClient {
   private connection: signalR.HubConnection | null = null;
 
   async connect(): Promise<void> {
-    this.connection = await signalRConnection.getConnection('settings');
+    this.connection = await signalRConnection.getConnection("settings");
   }
 
-  async listSettings(typeName: string, subDirectory?: string): Promise<SettingsFile[]> {
+  async listSettings(
+    typeName: string,
+    subDirectory?: string,
+  ): Promise<SettingsFile[]> {
     if (!this.connection) await this.connect();
-    
-    const request: ListSettingsRequest = { 
-      settingsTypeName: typeName, 
-      subDirectory: subDirectory ?? null 
+
+    const request: ListSettingsRequest = {
+      settingsTypeName: typeName,
+      subDirectory: subDirectory ?? null,
     };
-    return this.connection!.invoke<SettingsFile[]>('ListSettings', request);
+    return this.connection!.invoke<SettingsFile[]>("ListSettings", request);
   }
 
   async readSettings(
-    typeName: string, 
-    fileName: string, 
-    resolveComposition = false
+    typeName: string,
+    fileName: string,
+    resolveComposition = false,
   ): Promise<ReadSettingsResponse> {
     if (!this.connection) await this.connect();
-    
-    const request: ReadSettingsRequest = { 
-      settingsTypeName: typeName, 
+
+    const request: ReadSettingsRequest = {
+      settingsTypeName: typeName,
       fileName,
-      resolveComposition
+      resolveComposition,
     };
-    return this.connection!.invoke<ReadSettingsResponse>('ReadSettings', request);
+    return this.connection!.invoke<ReadSettingsResponse>(
+      "ReadSettings",
+      request,
+    );
   }
 
   async writeSettings(
     typeName: string,
     fileName: string,
     json: string,
-    validate = true
+    validate = true,
   ): Promise<WriteSettingsResponse> {
     if (!this.connection) await this.connect();
-    
+
     const request: WriteSettingsRequest = {
       settingsTypeName: typeName,
       fileName,
       json,
-      validate
+      validate,
     };
-    return this.connection!.invoke<WriteSettingsResponse>('WriteSettings', request);
+    return this.connection!.invoke<WriteSettingsResponse>(
+      "WriteSettings",
+      request,
+    );
   }
 
-  async resolveComposition(typeName: string, json: string): Promise<ReadSettingsResponse> {
+  async resolveComposition(
+    typeName: string,
+    json: string,
+  ): Promise<ReadSettingsResponse> {
     if (!this.connection) await this.connect();
-    return this.connection!.invoke<ReadSettingsResponse>('ResolveComposition', typeName, json);
+    return this.connection!.invoke<ReadSettingsResponse>(
+      "ResolveComposition",
+      typeName,
+      json,
+    );
   }
 }
 
@@ -364,18 +397,18 @@ export const settingsClient = new SettingsClient();
 **File**: `src/api/actions-client.ts`
 
 ```typescript
-import { signalRConnection } from './signalr-client';
+import { signalRConnection } from "./signalr-client";
 import type {
   ExecuteActionRequest,
   ExecuteActionResponse,
-  ProgressUpdate
-} from '../generated';
+  ProgressUpdate,
+} from "../generated";
 
 class ActionsClient {
   private connection: signalR.HubConnection | null = null;
 
   async connect(): Promise<void> {
-    this.connection = await signalRConnection.getConnection('actions');
+    this.connection = await signalRConnection.getConnection("actions");
   }
 
   /**
@@ -386,17 +419,17 @@ class ActionsClient {
     actionName: string,
     typeName: string,
     settingsJson: string,
-    persist = true
+    persist = true,
   ): Promise<ExecuteActionResponse> {
     if (!this.connection) await this.connect();
-    
+
     const request: ExecuteActionRequest = {
       actionName,
       settingsTypeName: typeName,
       settingsJson,
-      persistSettings: persist
+      persistSettings: persist,
     };
-    return this.connection!.invoke<ExecuteActionResponse>('Execute', request);
+    return this.connection!.invoke<ExecuteActionResponse>("Execute", request);
   }
 
   /**
@@ -406,19 +439,22 @@ class ActionsClient {
     actionName: string,
     typeName: string,
     settingsJson: string,
-    persist = true
+    persist = true,
   ): AsyncGenerator<ProgressUpdate> {
     if (!this.connection) await this.connect();
-    
+
     const request: ExecuteActionRequest = {
       actionName,
       settingsTypeName: typeName,
       settingsJson,
-      persistSettings: persist
+      persistSettings: persist,
     };
-    
-    const stream = this.connection!.stream<ProgressUpdate>('ExecuteWithProgress', request);
-    
+
+    const stream = this.connection!.stream<ProgressUpdate>(
+      "ExecuteWithProgress",
+      request,
+    );
+
     for await (const update of stream) {
       yield update;
     }
@@ -435,11 +471,11 @@ export const actionsClient = new ActionsClient();
 **File**: `src/components/editor/MonacoJsonEditor.tsx`
 
 ```tsx
-import { useEffect, useRef, useCallback } from 'react';
-import Editor, { Monaco, OnMount } from '@monaco-editor/react';
-import * as monaco from 'monaco-editor';
-import { schemaClient } from '../../api/schema-client';
-import { useSchemaStore } from '../../stores/schema-store';
+import { useCallback, useEffect, useRef } from "react";
+import Editor, { Monaco, OnMount } from "@monaco-editor/react";
+import * as monaco from "monaco-editor";
+import { schemaClient } from "../../api/schema-client";
+import { useSchemaStore } from "../../stores/schema-store";
 
 interface MonacoJsonEditorProps {
   value: string;
@@ -454,7 +490,7 @@ export function MonacoJsonEditor({
   onChange,
   settingsTypeName,
   fileName,
-  readOnly = false
+  readOnly = false,
 }: MonacoJsonEditorProps) {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const { schema, fetchSchema } = useSchemaStore();
@@ -474,10 +510,10 @@ export function MonacoJsonEditor({
       schemas: [
         {
           uri: `http://pe-tools/${settingsTypeName}/schema.json`,
-          fileMatch: [`*${fileName}.json`, '*.json'],
-          schema: JSON.parse(schema.schemaJson)
-        }
-      ]
+          fileMatch: [`*${fileName}.json`, "*.json"],
+          schema: JSON.parse(schema.schemaJson),
+        },
+      ],
     });
   }, [schema, settingsTypeName, fileName]);
 
@@ -486,12 +522,14 @@ export function MonacoJsonEditor({
 
     // Add custom actions
     editor.addAction({
-      id: 'format-document',
-      label: 'Format Document',
-      keybindings: [monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF],
+      id: "format-document",
+      label: "Format Document",
+      keybindings: [
+        monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF,
+      ],
       run: () => {
-        editor.getAction('editor.action.formatDocument')?.run();
-      }
+        editor.getAction("editor.action.formatDocument")?.run();
+      },
     });
 
     // Set up model change listener for onChange
@@ -518,7 +556,7 @@ export function MonacoJsonEditor({
         formatOnPaste: true,
         formatOnType: true,
         automaticLayout: true,
-        wordWrap: 'on'
+        wordWrap: "on",
       }}
       theme="vs-dark"
     />
@@ -533,13 +571,18 @@ export function MonacoJsonEditor({
 **File**: `src/components/form/SettingsForm.tsx`
 
 ```tsx
-import { useMemo, useCallback } from 'react';
-import Form from '@rjsf/fluent-ui';
-import { RJSFSchema, UiSchema, WidgetProps, RegistryWidgetsType } from '@rjsf/utils';
-import validator from '@rjsf/validator-ajv8';
-import { DependentSelectWidget } from './widgets/DependentSelectWidget';
-import { IncludePickerWidget } from './widgets/IncludePickerWidget';
-import { ExtendsPickerWidget } from './widgets/ExtendsPickerWidget';
+import { useCallback, useMemo } from "react";
+import Form from "@rjsf/fluent-ui";
+import {
+  RegistryWidgetsType,
+  RJSFSchema,
+  UiSchema,
+  WidgetProps,
+} from "@rjsf/utils";
+import validator from "@rjsf/validator-ajv8";
+import { DependentSelectWidget } from "./widgets/DependentSelectWidget";
+import { IncludePickerWidget } from "./widgets/IncludePickerWidget";
+import { ExtendsPickerWidget } from "./widgets/ExtendsPickerWidget";
 
 interface SettingsFormProps {
   schema: RJSFSchema;
@@ -556,26 +599,26 @@ export function SettingsForm({
   formData,
   onChange,
   settingsTypeName,
-  readOnly = false
+  readOnly = false,
 }: SettingsFormProps) {
   // Build dynamic uiSchema based on schema extensions
   const computedUiSchema = useMemo(() => {
     const ui: UiSchema = { ...uiSchema };
-    
+
     // Walk schema and add widgets for properties with x-depends-on or x-provider
     walkSchema(schema, (propertySchema, path) => {
-      if (propertySchema['x-depends-on']) {
+      if (propertySchema["x-depends-on"]) {
         setNestedUiSchema(ui, path, {
-          'ui:widget': 'dependentSelect',
-          'ui:options': {
-            dependsOn: propertySchema['x-depends-on'],
-            provider: propertySchema['x-provider'],
-            settingsTypeName
-          }
+          "ui:widget": "dependentSelect",
+          "ui:options": {
+            dependsOn: propertySchema["x-depends-on"],
+            provider: propertySchema["x-provider"],
+            settingsTypeName,
+          },
         });
       }
     });
-    
+
     return ui;
   }, [schema, uiSchema, settingsTypeName]);
 
@@ -583,7 +626,7 @@ export function SettingsForm({
   const widgets: RegistryWidgetsType = useMemo(() => ({
     dependentSelect: DependentSelectWidget,
     includePicker: IncludePickerWidget,
-    extendsPicker: ExtendsPickerWidget
+    extendsPicker: ExtendsPickerWidget,
   }), []);
 
   // Handle form changes
@@ -607,9 +650,9 @@ export function SettingsForm({
 
 // Helper to walk schema and find properties
 function walkSchema(
-  schema: RJSFSchema, 
+  schema: RJSFSchema,
   callback: (propertySchema: RJSFSchema, path: string[]) => void,
-  path: string[] = []
+  path: string[] = [],
 ) {
   if (schema.properties) {
     for (const [key, propSchema] of Object.entries(schema.properties)) {
@@ -619,7 +662,7 @@ function walkSchema(
     }
   }
   if (schema.items) {
-    walkSchema(schema.items as RJSFSchema, callback, [...path, 'items']);
+    walkSchema(schema.items as RJSFSchema, callback, [...path, "items"]);
   }
 }
 
@@ -629,7 +672,10 @@ function setNestedUiSchema(ui: UiSchema, path: string[], value: any) {
     current[path[i]] = current[path[i]] || {};
     current = current[path[i]];
   }
-  current[path[path.length - 1]] = { ...current[path[path.length - 1]], ...value };
+  current[path[path.length - 1]] = {
+    ...current[path[path.length - 1]],
+    ...value,
+  };
 }
 ```
 
@@ -640,11 +686,11 @@ function setNestedUiSchema(ui: UiSchema, path: string[], value: any) {
 **File**: `src/components/form/widgets/DependentSelectWidget.tsx`
 
 ```tsx
-import { useState, useEffect, useCallback } from 'react';
-import { WidgetProps } from '@rjsf/utils';
-import { Dropdown, Option, Spinner } from '@fluentui/react-components';
-import { schemaClient } from '../../../api/schema-client';
-import { get } from 'lodash-es';
+import { useCallback, useEffect, useState } from "react";
+import { WidgetProps } from "@rjsf/utils";
+import { Dropdown, Option, Spinner } from "@fluentui/react-components";
+import { schemaClient } from "../../../api/schema-client";
+import { get } from "lodash-es";
 
 interface DependentSelectOptions {
   dependsOn: string[];
@@ -653,36 +699,46 @@ interface DependentSelectOptions {
 }
 
 export function DependentSelectWidget(props: WidgetProps) {
-  const { value, onChange, options, formContext, id, label, disabled, required } = props;
-  const { dependsOn, provider, settingsTypeName } = options as unknown as DependentSelectOptions;
-  
+  const {
+    value,
+    onChange,
+    options,
+    formContext,
+    id,
+    label,
+    disabled,
+    required,
+  } = props;
+  const { dependsOn, provider, settingsTypeName } =
+    options as unknown as DependentSelectOptions;
+
   const [availableOptions, setAvailableOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Get current sibling values from formContext.formData
   const getSiblingValues = useCallback(() => {
     const siblingValues: Record<string, string> = {};
-    
+
     // Extract the parent path from the current property id
     // e.g., "root_Configurations_0_TagTypeName" -> get Configurations[0]
     const formData = formContext?.formData;
     if (!formData) return siblingValues;
 
     // Parse the ID to find the parent object
-    const pathParts = id.replace('root_', '').split('_');
+    const pathParts = id.replace("root_", "").split("_");
     pathParts.pop(); // Remove current property name
-    
+
     // Get the parent object
-    const parentPath = pathParts.join('.');
+    const parentPath = pathParts.join(".");
     const parent = parentPath ? get(formData, parentPath) : formData;
-    
+
     // Extract values for dependencies
     for (const dep of dependsOn) {
       if (parent && parent[dep] !== undefined) {
         siblingValues[dep] = String(parent[dep]);
       }
     }
-    
+
     return siblingValues;
   }, [id, dependsOn, formContext]);
 
@@ -692,27 +748,36 @@ export function DependentSelectWidget(props: WidgetProps) {
       setLoading(true);
       try {
         const siblingValues = getSiblingValues();
-        
+
         // Only fetch if we have values for all dependencies
-        const hasAllDeps = dependsOn.every(dep => siblingValues[dep]);
-        
+        const hasAllDeps = dependsOn.every((dep) => siblingValues[dep]);
+
         if (hasAllDeps) {
           // Extract property path from id
-          const propertyPath = id.replace('root_', '').replace(/_\d+_/g, '.items.');
+          const propertyPath = id.replace("root_", "").replace(
+            /_\d+_/g,
+            ".items.",
+          );
           const examples = await schemaClient.getExamples(
             settingsTypeName,
             propertyPath,
-            siblingValues
+            siblingValues,
           );
           setAvailableOptions(examples);
         } else {
           // Fetch unfiltered options
-          const propertyPath = id.replace('root_', '').replace(/_\d+_/g, '.items.');
-          const examples = await schemaClient.getExamples(settingsTypeName, propertyPath);
+          const propertyPath = id.replace("root_", "").replace(
+            /_\d+_/g,
+            ".items.",
+          );
+          const examples = await schemaClient.getExamples(
+            settingsTypeName,
+            propertyPath,
+          );
           setAvailableOptions(examples);
         }
       } catch (error) {
-        console.error('Failed to fetch dependent options:', error);
+        console.error("Failed to fetch dependent options:", error);
         setAvailableOptions([]);
       } finally {
         setLoading(false);
@@ -729,12 +794,12 @@ export function DependentSelectWidget(props: WidgetProps) {
   }, [siblingValuesJson]);
 
   const handleChange = useCallback((_: any, data: { optionValue?: string }) => {
-    onChange(data.optionValue ?? '');
+    onChange(data.optionValue ?? "");
   }, [onChange]);
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <Spinner size="tiny" />
         <span>Loading options...</span>
       </div>
@@ -744,10 +809,10 @@ export function DependentSelectWidget(props: WidgetProps) {
   return (
     <Dropdown
       id={id}
-      value={value ?? ''}
+      value={value ?? ""}
       onOptionSelect={handleChange}
       disabled={disabled}
-      placeholder={`Select ${label}${required ? ' *' : ''}`}
+      placeholder={`Select ${label}${required ? " *" : ""}`}
     >
       {availableOptions.map((option) => (
         <Option key={option} value={option}>
@@ -766,26 +831,26 @@ export function DependentSelectWidget(props: WidgetProps) {
 **File**: `src/components/form/widgets/ExtendsPickerWidget.tsx`
 
 ```tsx
-import { useState, useCallback } from 'react';
-import { WidgetProps } from '@rjsf/utils';
-import { 
-  Button, 
-  Dialog, 
-  DialogTrigger, 
-  DialogSurface,
-  DialogBody,
-  DialogTitle,
-  DialogContent,
+import { useCallback, useState } from "react";
+import { WidgetProps } from "@rjsf/utils";
+import {
+  Button,
+  Dialog,
   DialogActions,
-  Input
-} from '@fluentui/react-components';
-import { FolderOpenRegular } from '@fluentui/react-icons';
-import { FileBrowser } from '../../file-browser/FileBrowser';
+  DialogBody,
+  DialogContent,
+  DialogSurface,
+  DialogTitle,
+  DialogTrigger,
+  Input,
+} from "@fluentui/react-components";
+import { FolderOpenRegular } from "@fluentui/react-icons";
+import { FileBrowser } from "../../file-browser/FileBrowser";
 
 export function ExtendsPickerWidget(props: WidgetProps) {
   const { value, onChange, options, disabled } = props;
   const { settingsTypeName } = options as { settingsTypeName: string };
-  
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
 
@@ -797,22 +862,25 @@ export function ExtendsPickerWidget(props: WidgetProps) {
   }, [selectedFile, onChange]);
 
   return (
-    <div style={{ display: 'flex', gap: 8 }}>
+    <div style={{ display: "flex", gap: 8 }}>
       <Input
-        value={value ?? ''}
+        value={value ?? ""}
         onChange={(_, data) => onChange(data.value)}
         disabled={disabled}
         placeholder="Path to base profile (e.g., ../base.json)"
         style={{ flex: 1 }}
       />
-      
-      <Dialog open={dialogOpen} onOpenChange={(_, data) => setDialogOpen(data.open)}>
+
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(_, data) => setDialogOpen(data.open)}
+      >
         <DialogTrigger disableButtonEnhancement>
           <Button icon={<FolderOpenRegular />} disabled={disabled}>
             Browse
           </Button>
         </DialogTrigger>
-        
+
         <DialogSurface>
           <DialogBody>
             <DialogTitle>Select Base Profile</DialogTitle>
@@ -828,7 +896,11 @@ export function ExtendsPickerWidget(props: WidgetProps) {
               <DialogTrigger disableButtonEnhancement>
                 <Button appearance="secondary">Cancel</Button>
               </DialogTrigger>
-              <Button appearance="primary" onClick={handleSelect} disabled={!selectedFile}>
+              <Button
+                appearance="primary"
+                onClick={handleSelect}
+                disabled={!selectedFile}
+              >
                 Select
               </Button>
             </DialogActions>
@@ -843,30 +915,30 @@ export function ExtendsPickerWidget(props: WidgetProps) {
 **File**: `src/components/form/widgets/IncludePickerWidget.tsx`
 
 ```tsx
-import { useState, useCallback } from 'react';
-import { WidgetProps } from '@rjsf/utils';
-import { 
-  Button, 
-  Dialog, 
-  DialogTrigger, 
-  DialogSurface,
-  DialogBody,
-  DialogTitle,
-  DialogContent,
+import { useCallback, useState } from "react";
+import { WidgetProps } from "@rjsf/utils";
+import {
+  Button,
+  Dialog,
   DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogSurface,
+  DialogTitle,
+  DialogTrigger,
   Input,
-  Text
-} from '@fluentui/react-components';
-import { DocumentAddRegular } from '@fluentui/react-icons';
-import { FileBrowser } from '../../file-browser/FileBrowser';
+  Text,
+} from "@fluentui/react-components";
+import { DocumentAddRegular } from "@fluentui/react-icons";
+import { FileBrowser } from "../../file-browser/FileBrowser";
 
 export function IncludePickerWidget(props: WidgetProps) {
   const { value, onChange, options, disabled, label } = props;
-  const { settingsTypeName, fragmentType } = options as { 
+  const { settingsTypeName, fragmentType } = options as {
     settingsTypeName: string;
     fragmentType?: string;
   };
-  
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
 
@@ -879,13 +951,20 @@ export function IncludePickerWidget(props: WidgetProps) {
   }, [selectedFile, onChange]);
 
   // Check if current value is an $include directive
-  const isInclude = value && typeof value === 'object' && '$include' in value;
-  const displayValue = isInclude ? value.$include : '';
+  const isInclude = value && typeof value === "object" && "$include" in value;
+  const displayValue = isInclude ? value.$include : "";
 
   return (
     <div>
       {isInclude && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginBottom: 8,
+          }}
+        >
           <Text weight="semibold">$include:</Text>
           <Input
             value={displayValue}
@@ -893,8 +972,8 @@ export function IncludePickerWidget(props: WidgetProps) {
             disabled={disabled}
             style={{ flex: 1 }}
           />
-          <Button 
-            size="small" 
+          <Button
+            size="small"
             onClick={() => onChange(undefined)}
             disabled={disabled}
           >
@@ -902,18 +981,21 @@ export function IncludePickerWidget(props: WidgetProps) {
           </Button>
         </div>
       )}
-      
-      <Dialog open={dialogOpen} onOpenChange={(_, data) => setDialogOpen(data.open)}>
+
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(_, data) => setDialogOpen(data.open)}
+      >
         <DialogTrigger disableButtonEnhancement>
-          <Button 
-            icon={<DocumentAddRegular />} 
+          <Button
+            icon={<DocumentAddRegular />}
             disabled={disabled}
             appearance="subtle"
           >
-            {isInclude ? 'Change Fragment' : 'Include Fragment'}
+            {isInclude ? "Change Fragment" : "Include Fragment"}
           </Button>
         </DialogTrigger>
-        
+
         <DialogSurface>
           <DialogBody>
             <DialogTitle>Select Fragment to Include</DialogTitle>
@@ -922,7 +1004,7 @@ export function IncludePickerWidget(props: WidgetProps) {
                 settingsTypeName={settingsTypeName}
                 onSelect={setSelectedFile}
                 selectedPath={selectedFile}
-                filterFragments={false}  // Show only fragments
+                filterFragments={false} // Show only fragments
                 fragmentsOnly={true}
               />
             </DialogContent>
@@ -930,7 +1012,11 @@ export function IncludePickerWidget(props: WidgetProps) {
               <DialogTrigger disableButtonEnhancement>
                 <Button appearance="secondary">Cancel</Button>
               </DialogTrigger>
-              <Button appearance="primary" onClick={handleSelect} disabled={!selectedFile}>
+              <Button
+                appearance="primary"
+                onClick={handleSelect}
+                disabled={!selectedFile}
+              >
                 Include
               </Button>
             </DialogActions>
@@ -949,28 +1035,28 @@ export function IncludePickerWidget(props: WidgetProps) {
 **File**: `src/components/actions/ActionBar.tsx`
 
 ```tsx
-import { useState, useCallback } from 'react';
-import { 
-  Button, 
-  Menu, 
-  MenuTrigger, 
-  MenuPopover, 
-  MenuList, 
+import { useCallback, useState } from "react";
+import {
+  Button,
+  Menu,
   MenuItem,
-  Spinner,
+  MenuList,
+  MenuPopover,
+  MenuTrigger,
   ProgressBar,
+  Spinner,
   Toast,
   Toaster,
-  useToastController
-} from '@fluentui/react-components';
-import { 
-  PlayRegular, 
-  PlayCircleRegular, 
+  useToastController,
+} from "@fluentui/react-components";
+import {
+  ChevronDownRegular,
+  PlayCircleRegular,
+  PlayRegular,
   SaveRegular,
-  ChevronDownRegular
-} from '@fluentui/react-icons';
-import { actionsClient } from '../../api/actions-client';
-import { settingsClient } from '../../api/settings-client';
+} from "@fluentui/react-icons";
+import { actionsClient } from "../../api/actions-client";
+import { settingsClient } from "../../api/settings-client";
 
 interface ActionBarProps {
   settingsTypeName: string;
@@ -993,10 +1079,12 @@ export function ActionBar({
   currentJson,
   hasChanges,
   actions,
-  onSaved
+  onSaved,
 }: ActionBarProps) {
   const [executing, setExecuting] = useState(false);
-  const [progress, setProgress] = useState<{ percent: number; message: string } | null>(null);
+  const [progress, setProgress] = useState<
+    { percent: number; message: string } | null
+  >(null);
   const { dispatchToast } = useToastController();
 
   // Save current changes
@@ -1007,13 +1095,13 @@ export function ActionBar({
         settingsTypeName,
         fileName,
         currentJson,
-        true // validate
+        true, // validate
       );
-      
+
       if (result.success) {
         dispatchToast(
           <Toast>Settings saved successfully</Toast>,
-          { intent: 'success' }
+          { intent: "success" },
         );
         onSaved();
       } else {
@@ -1024,13 +1112,13 @@ export function ActionBar({
               {result.validationErrors.map((e, i) => <li key={i}>{e}</li>)}
             </ul>
           </Toast>,
-          { intent: 'error' }
+          { intent: "error" },
         );
       }
     } catch (error) {
       dispatchToast(
         <Toast>Failed to save: {String(error)}</Toast>,
-        { intent: 'error' }
+        { intent: "error" },
       );
     } finally {
       setExecuting(false);
@@ -1046,13 +1134,13 @@ export function ActionBar({
         settingsTypeName,
         fileName,
         currentJson,
-        true
+        true,
       );
-      
+
       if (!saveResult.success) {
         dispatchToast(
           <Toast>Cannot run - validation errors</Toast>,
-          { intent: 'error' }
+          { intent: "error" },
         );
         return;
       }
@@ -1061,18 +1149,18 @@ export function ActionBar({
         action.name,
         settingsTypeName,
         currentJson,
-        true // persist
+        true, // persist
       );
-      
+
       if (result.success) {
         dispatchToast(
           <Toast>Action completed successfully</Toast>,
-          { intent: 'success' }
+          { intent: "success" },
         );
       } else {
         dispatchToast(
           <Toast>Action failed: {result.error}</Toast>,
-          { intent: 'error' }
+          { intent: "error" },
         );
       }
     } finally {
@@ -1081,63 +1169,78 @@ export function ActionBar({
   }, [settingsTypeName, fileName, currentJson, dispatchToast]);
 
   // Execute action WITHOUT persistence (run without saving)
-  const handleRunWithoutSaving = useCallback(async (action: ActionDefinition) => {
-    setExecuting(true);
-    try {
-      // Resolve composition first (in case of $extends/$include)
-      const resolved = await settingsClient.resolveComposition(settingsTypeName, currentJson);
-      
-      if (resolved.validationErrors.length > 0) {
-        dispatchToast(
-          <Toast>Cannot run - validation errors</Toast>,
-          { intent: 'error' }
+  const handleRunWithoutSaving = useCallback(
+    async (action: ActionDefinition) => {
+      setExecuting(true);
+      try {
+        // Resolve composition first (in case of $extends/$include)
+        const resolved = await settingsClient.resolveComposition(
+          settingsTypeName,
+          currentJson,
         );
-        return;
-      }
 
-      if (action.supportsProgress) {
-        // Use streaming for progress updates
-        for await (const update of actionsClient.executeWithProgress(
-          action.name,
-          settingsTypeName,
-          resolved.resolvedJson,
-          false // DO NOT persist
-        )) {
-          setProgress({ percent: update.percent, message: update.message });
+        if (resolved.validationErrors.length > 0) {
+          dispatchToast(
+            <Toast>Cannot run - validation errors</Toast>,
+            { intent: "error" },
+          );
+          return;
         }
-        setProgress(null);
-        dispatchToast(
-          <Toast>Action completed (changes not saved)</Toast>,
-          { intent: 'success' }
-        );
-      } else {
-        const result = await actionsClient.execute(
-          action.name,
-          settingsTypeName,
-          resolved.resolvedJson,
-          false // DO NOT persist
-        );
-        
-        if (result.success) {
+
+        if (action.supportsProgress) {
+          // Use streaming for progress updates
+          for await (
+            const update of actionsClient.executeWithProgress(
+              action.name,
+              settingsTypeName,
+              resolved.resolvedJson,
+              false, // DO NOT persist
+            )
+          ) {
+            setProgress({ percent: update.percent, message: update.message });
+          }
+          setProgress(null);
           dispatchToast(
             <Toast>Action completed (changes not saved)</Toast>,
-            { intent: 'success' }
+            { intent: "success" },
           );
         } else {
-          dispatchToast(
-            <Toast>Action failed: {result.error}</Toast>,
-            { intent: 'error' }
+          const result = await actionsClient.execute(
+            action.name,
+            settingsTypeName,
+            resolved.resolvedJson,
+            false, // DO NOT persist
           );
+
+          if (result.success) {
+            dispatchToast(
+              <Toast>Action completed (changes not saved)</Toast>,
+              { intent: "success" },
+            );
+          } else {
+            dispatchToast(
+              <Toast>Action failed: {result.error}</Toast>,
+              { intent: "error" },
+            );
+          }
         }
+      } finally {
+        setExecuting(false);
+        setProgress(null);
       }
-    } finally {
-      setExecuting(false);
-      setProgress(null);
-    }
-  }, [settingsTypeName, currentJson, dispatchToast]);
+    },
+    [settingsTypeName, currentJson, dispatchToast],
+  );
 
   return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 16px' }}>
+    <div
+      style={{
+        display: "flex",
+        gap: 8,
+        alignItems: "center",
+        padding: "8px 16px",
+      }}
+    >
       {/* Save button */}
       <Button
         icon={<SaveRegular />}
@@ -1150,8 +1253,8 @@ export function ActionBar({
       {/* Run dropdown */}
       <Menu>
         <MenuTrigger disableButtonEnhancement>
-          <Button 
-            icon={<PlayRegular />} 
+          <Button
+            icon={<PlayRegular />}
             disabled={executing}
             iconPosition="before"
           >
@@ -1177,8 +1280,8 @@ export function ActionBar({
       {/* Run Without Saving dropdown */}
       <Menu>
         <MenuTrigger disableButtonEnhancement>
-          <Button 
-            icon={<PlayCircleRegular />} 
+          <Button
+            icon={<PlayCircleRegular />}
             appearance="subtle"
             disabled={executing}
           >
@@ -1204,12 +1307,12 @@ export function ActionBar({
       {/* Loading/Progress indicator */}
       {executing && (
         <div style={{ flex: 1 }}>
-          {progress ? (
-            <ProgressBar value={progress.percent / 100} />
-          ) : (
-            <Spinner size="tiny" />
+          {progress
+            ? <ProgressBar value={progress.percent / 100} />
+            : <Spinner size="tiny" />}
+          {progress && (
+            <span style={{ marginLeft: 8 }}>{progress.message}</span>
           )}
-          {progress && <span style={{ marginLeft: 8 }}>{progress.message}</span>}
         </div>
       )}
 
@@ -1272,19 +1375,19 @@ public partial class SettingsEditorWindow : Window {
 
 ## File Summary
 
-| File | Description |
-|------|-------------|
-| `src/api/signalr-client.ts` | Base SignalR connection manager |
-| `src/api/schema-client.ts` | Typed client for SchemaHub |
-| `src/api/settings-client.ts` | Typed client for SettingsHub |
-| `src/api/actions-client.ts` | Typed client for ActionsHub |
-| `src/components/editor/MonacoJsonEditor.tsx` | Monaco editor with dynamic schema |
-| `src/components/form/SettingsForm.tsx` | RJSF form with custom widgets |
-| `src/components/form/widgets/DependentSelectWidget.tsx` | Cascading dropdown widget |
-| `src/components/form/widgets/ExtendsPickerWidget.tsx` | $extends file picker |
-| `src/components/form/widgets/IncludePickerWidget.tsx` | $include fragment picker |
-| `src/components/actions/ActionBar.tsx` | Run/Save action buttons |
-| `source/Pe.Ui/SettingsEditor/SettingsEditorWindow.xaml` | WPF WebView2 host |
+| File                                                    | Description                       |
+| ------------------------------------------------------- | --------------------------------- |
+| `src/api/signalr-client.ts`                             | Base SignalR connection manager   |
+| `src/api/schema-client.ts`                              | Typed client for SchemaHub        |
+| `src/api/settings-client.ts`                            | Typed client for SettingsHub      |
+| `src/api/actions-client.ts`                             | Typed client for ActionsHub       |
+| `src/components/editor/MonacoJsonEditor.tsx`            | Monaco editor with dynamic schema |
+| `src/components/form/SettingsForm.tsx`                  | RJSF form with custom widgets     |
+| `src/components/form/widgets/DependentSelectWidget.tsx` | Cascading dropdown widget         |
+| `src/components/form/widgets/ExtendsPickerWidget.tsx`   | $extends file picker              |
+| `src/components/form/widgets/IncludePickerWidget.tsx`   | $include fragment picker          |
+| `src/components/actions/ActionBar.tsx`                  | Run/Save action buttons           |
+| `source/Pe.Ui/SettingsEditor/SettingsEditorWindow.xaml` | WPF WebView2 host                 |
 
 ---
 
@@ -1325,6 +1428,7 @@ public partial class SettingsEditorWindow : Window {
 ## Open Questions
 
 1. **Theming**: Should the editor match Revit's theme (dark/light)?
-2. **Offline support**: What happens if the user opens the editor without Revit running?
+2. **Offline support**: What happens if the user opens the editor without Revit
+   running?
 3. **Multi-document**: How to handle switching between open Revit documents?
 4. **Validation UX**: Show inline validation errors or a separate panel?

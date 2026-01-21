@@ -19,7 +19,7 @@ public static class OpenDocumentExtensions {
     ///     - OpenAndActivateDocument(ModelPath) for cloud docs: SLOW/FAILS without network - has timeout warning
     /// </summary>
     public static void OpenAndActivateView(this UIApplication uiApp, View targetView) {
-        Debug.WriteLine(DocumentManager.LogDocumentState(targetView, "OpenAndActivateView START"));
+        Console.WriteLine(DocumentManager.LogDocumentState(targetView, "OpenAndActivateView START"));
 
         try {
             var targetDoc = targetView.Document;
@@ -29,7 +29,7 @@ public static class OpenDocumentExtensions {
             // (ActiveView setter doesn't stick when called from palette callbacks sometimes. Particularly for 
             // Sheets/Schedules which are already open.)
             if (DocumentManager.IsDocumentActive(targetDoc)) {
-                Debug.WriteLine(
+                Console.WriteLine(
                     $"[OpenAndActivateView] Document '{targetDoc.Title}' is active, using RequestViewChange");
                 targetUiDoc.RequestViewChange(targetView);
                 return;
@@ -37,14 +37,14 @@ public static class OpenDocumentExtensions {
 
             // CASE 2: Target document is open but not active
             if (DocumentManager.IsDocumentOpen(targetDoc)) {
-                Debug.WriteLine($"[OpenAndActivateView] Document '{targetDoc.Title}' is open but not active");
+                Console.WriteLine($"[OpenAndActivateView] Document '{targetDoc.Title}' is open but not active");
 
                 // For family documents, use the special family activation (saves to temp)
                 // REASON: Revit throws FileNotFoundException when trying to re-open .rfa files,
                 // even if the file exists on disk. Additionally, EditFamily creates documents with
                 // NO PathName, so OpenAndActivateDocument cannot be used at all. Temp file is required.
                 if (targetDoc.IsFamilyDocument) {
-                    Debug.WriteLine("[OpenAndActivateView] Target is family document, using family activation...");
+                    Console.WriteLine("[OpenAndActivateView] Target is family document, using family activation...");
                     ActivateOpenFamilyDocumentAndView(targetDoc, targetView);
                     return;
                 }
@@ -54,7 +54,7 @@ public static class OpenDocumentExtensions {
                 var existingDocPath = DocumentManager.GetDocumentModelPath(targetDoc);
                 if (existingDocPath != null) {
                     var isCloud = targetDoc.IsModelInCloud;
-                    Debug.WriteLine($"[OpenAndActivateView] Using OpenAndActivateDocument (isCloud={isCloud})");
+                    Console.WriteLine($"[OpenAndActivateView] Using OpenAndActivateDocument (isCloud={isCloud})");
 
                     // For cloud documents, use a timeout warning mechanism
                     if (isCloud) {
@@ -71,24 +71,24 @@ public static class OpenDocumentExtensions {
                     return;
                 }
 
-                Debug.WriteLine("[OpenAndActivateView] No path available, cannot switch to document");
+                Console.WriteLine("[OpenAndActivateView] No path available, cannot switch to document");
                 return;
             }
 
             // CASE 3: Document not open - try to open it via file path
             var newDocPath = DocumentManager.GetDocumentModelPath(targetDoc);
             if (newDocPath == null) {
-                Debug.WriteLine($"[OpenAndActivateView] Cannot open document '{targetDoc.Title}' - no valid path");
+                Console.WriteLine($"[OpenAndActivateView] Cannot open document '{targetDoc.Title}' - no valid path");
                 return;
             }
 
-            Debug.WriteLine($"[OpenAndActivateView] Opening document from path: {newDocPath}");
+            Console.WriteLine($"[OpenAndActivateView] Opening document from path: {newDocPath}");
             var newDocOptions = new OpenOptions { DetachFromCentralOption = DetachFromCentralOption.DoNotDetach };
             var openedUiDoc = uiApp.OpenAndActivateDocument(newDocPath, newDocOptions, false);
             openedUiDoc.RequestViewChange(targetView);
         } catch (Exception ex) {
-            Debug.WriteLine(DocumentManager.LogDocumentState(targetView, "OpenAndActivateView ERROR"));
-            Debug.WriteLine(ex.ToStringDemystified());
+            Console.WriteLine(DocumentManager.LogDocumentState(targetView, "OpenAndActivateView ERROR"));
+            Console.WriteLine(ex.ToStringDemystified());
         }
     }
 
@@ -104,47 +104,47 @@ public static class OpenDocumentExtensions {
     ///     skip SaveAs and use OpenAndActivateDocument directly with the existing path.
     /// </summary>
     public static void OpenAndActivateFamily(this UIApplication uiApp, Family family) {
-        Debug.WriteLine(DocumentManager.LogDocumentState(context: "OpenAndActivateFamily START"));
+        Console.WriteLine(DocumentManager.LogDocumentState(context: "OpenAndActivateFamily START"));
 
         try {
             // Check if family document is already open
             var existingFamDoc = DocumentManager.FindOpenFamilyDocument(family);
 
             if (existingFamDoc != null) {
-                Debug.WriteLine($"[OpenAndActivateFamily] Family '{family.Name}' is already open");
+                Console.WriteLine($"[OpenAndActivateFamily] Family '{family.Name}' is already open");
 
                 // If it's already the active document, nothing to do
                 if (DocumentManager.IsDocumentActive(existingFamDoc)) {
-                    Debug.WriteLine("[OpenAndActivateFamily] Family doc is active, nothing to do");
+                    Console.WriteLine("[OpenAndActivateFamily] Family doc is active, nothing to do");
                     return;
                 }
 
                 // Document is open but not active - need to switch to it
-                Debug.WriteLine("[OpenAndActivateFamily] Family doc is open but not active, switching...");
+                Console.WriteLine("[OpenAndActivateFamily] Family doc is open but not active, switching...");
                 ActivateOpenFamilyDocument(uiApp, existingFamDoc, family.Name);
                 return;
             }
 
             // Family document is not open - open it via EditFamily
-            Debug.WriteLine($"[OpenAndActivateFamily] Family '{family.Name}' is NOT open, calling EditFamily...");
+            Console.WriteLine($"[OpenAndActivateFamily] Family '{family.Name}' is NOT open, calling EditFamily...");
             var activeDoc = DocumentManager.GetActiveDocument();
             var famDoc = activeDoc?.EditFamily(family);
 
             if (famDoc == null) {
-                Debug.WriteLine($"[OpenAndActivateFamily] EditFamily returned null for '{family.Name}'");
+                Console.WriteLine($"[OpenAndActivateFamily] EditFamily returned null for '{family.Name}'");
                 return;
             }
 
-            Debug.WriteLine($"[OpenAndActivateFamily] EditFamily returned document '{famDoc.Title}'");
-            Debug.WriteLine(DocumentManager.LogDocumentState(context: "After EditFamily"));
+            Console.WriteLine($"[OpenAndActivateFamily] EditFamily returned document '{famDoc.Title}'");
+            Console.WriteLine(DocumentManager.LogDocumentState(context: "After EditFamily"));
 
             // EditFamily opens the document but does NOT activate it in the UI.
             // ShowElements is unreliable for activation.
             // The reliable approach: save to temp file and use OpenAndActivateDocument
             ActivateOpenFamilyDocument(uiApp, famDoc, family.Name);
         } catch (Exception ex) {
-            Debug.WriteLine(DocumentManager.LogDocumentState(context: "OpenAndActivateFamily ERROR"));
-            Debug.WriteLine(ex.ToStringDemystified());
+            Console.WriteLine(DocumentManager.LogDocumentState(context: "OpenAndActivateFamily ERROR"));
+            Console.WriteLine(ex.ToStringDemystified());
         }
     }
 
@@ -157,21 +157,21 @@ public static class OpenDocumentExtensions {
     private static void ActivateOpenFamilyDocument(UIApplication uiApp, Document famDoc, string familyName) {
         // OPTIMIZATION: If family already has a PathName, try direct activation first
         if (!string.IsNullOrEmpty(famDoc.PathName)) {
-            Debug.WriteLine(
+            Console.WriteLine(
                 $"[ActivateOpenFamilyDocument] Family has PathName, trying direct activation: {famDoc.PathName}");
             try {
                 _ = uiApp.OpenAndActivateDocument(famDoc.PathName);
-                Debug.WriteLine("[ActivateOpenFamilyDocument] Direct activation succeeded!");
+                Console.WriteLine("[ActivateOpenFamilyDocument] Direct activation succeeded!");
                 return;
             } catch (Exception ex) {
-                Debug.WriteLine($"[ActivateOpenFamilyDocument] Direct activation failed: {ex.Message}");
-                Debug.WriteLine("[ActivateOpenFamilyDocument] Falling back to SaveAs workaround...");
+                Console.WriteLine($"[ActivateOpenFamilyDocument] Direct activation failed: {ex.Message}");
+                Console.WriteLine("[ActivateOpenFamilyDocument] Falling back to SaveAs workaround...");
             }
         }
 
         // No PathName or direct activation failed - use SaveAs to stable temp path
         var tempPath = SaveFamilyToStableTempFile(famDoc, familyName);
-        Debug.WriteLine("[ActivateOpenFamilyDocument] Opening from temp path...");
+        Console.WriteLine("[ActivateOpenFamilyDocument] Opening from temp path...");
         _ = uiApp.OpenAndActivateDocument(tempPath);
     }
 
@@ -185,21 +185,21 @@ public static class OpenDocumentExtensions {
 
         // OPTIMIZATION: If family already has a PathName, try direct activation first
         if (!string.IsNullOrEmpty(famDoc.PathName)) {
-            Debug.WriteLine(
+            Console.WriteLine(
                 $"[ActivateOpenFamilyDocumentAndView] Family has PathName, trying direct activation: {famDoc.PathName}");
             try {
                 activatedUiDoc = uiApp.OpenAndActivateDocument(famDoc.PathName);
-                Debug.WriteLine("[ActivateOpenFamilyDocumentAndView] Direct activation succeeded!");
+                Console.WriteLine("[ActivateOpenFamilyDocumentAndView] Direct activation succeeded!");
             } catch (Exception ex) {
-                Debug.WriteLine($"[ActivateOpenFamilyDocumentAndView] Direct activation failed: {ex.Message}");
-                Debug.WriteLine("[ActivateOpenFamilyDocumentAndView] Falling back to SaveAs workaround...");
+                Console.WriteLine($"[ActivateOpenFamilyDocumentAndView] Direct activation failed: {ex.Message}");
+                Console.WriteLine("[ActivateOpenFamilyDocumentAndView] Falling back to SaveAs workaround...");
                 var tempPath = SaveFamilyToStableTempFile(famDoc, famDoc.Title);
                 activatedUiDoc = uiApp.OpenAndActivateDocument(tempPath);
             }
         } else {
             // No PathName - use SaveAs to stable temp path
             var tempPath = SaveFamilyToStableTempFile(famDoc, famDoc.Title);
-            Debug.WriteLine("[ActivateOpenFamilyDocumentAndView] Opening from temp path...");
+            Console.WriteLine("[ActivateOpenFamilyDocumentAndView] Opening from temp path...");
             activatedUiDoc = uiApp.OpenAndActivateDocument(tempPath);
         }
 
@@ -211,10 +211,10 @@ public static class OpenDocumentExtensions {
             .FirstOrDefault(v => v.Name == targetView.Name && v.ViewType == targetView.ViewType);
 
         if (viewByName != null) {
-            Debug.WriteLine($"[ActivateOpenFamilyDocumentAndView] Using RequestViewChange to '{viewByName.Name}'");
+            Console.WriteLine($"[ActivateOpenFamilyDocumentAndView] Using RequestViewChange to '{viewByName.Name}'");
             activatedUiDoc.RequestViewChange(viewByName);
         } else
-            Debug.WriteLine($"[ActivateOpenFamilyDocumentAndView] Could not find matching view '{targetView.Name}'");
+            Console.WriteLine($"[ActivateOpenFamilyDocumentAndView] Could not find matching view '{targetView.Name}'");
     }
 
     /// <summary>
@@ -233,7 +233,7 @@ public static class OpenDocumentExtensions {
         var safeName = SanitizeFileName(baseName);
         var tempPath = Path.Combine(tempDir, $"{safeName}.rfa");
 
-        Debug.WriteLine($"[SaveFamilyToStableTempFile] Saving to stable temp path: {tempPath}");
+        Console.WriteLine($"[SaveFamilyToStableTempFile] Saving to stable temp path: {tempPath}");
         famDoc.SaveAs(tempPath, new SaveAsOptions { OverwriteExistingFile = true });
 
         return tempPath;
@@ -266,7 +266,7 @@ public static class OpenDocumentExtensions {
         var uiApp = DocumentManager.uiapp;
         var timeoutTimer = new Timer(_ => {
             timerFired = true;
-            Debug.WriteLine($"[TryOpenCloudDocument] Timeout reached after {timeoutSeconds}s, showing warning...");
+            Console.WriteLine($"[TryOpenCloudDocument] Timeout reached after {timeoutSeconds}s, showing warning...");
 
             // Show warning on UI thread via WPF Dispatcher
             _ = Application.Current?.Dispatcher?.BeginInvoke(() =>
@@ -280,20 +280,20 @@ public static class OpenDocumentExtensions {
         }, null, timeoutSeconds * 1000, Timeout.Infinite);
 
         try {
-            Debug.WriteLine(
+            Console.WriteLine(
                 $"[TryOpenCloudDocument] Starting cloud document activation (timeout={timeoutSeconds}s)...");
 
             // Make the blocking API call
             var openOptions = new OpenOptions { DetachFromCentralOption = DetachFromCentralOption.DoNotDetach };
             var activatedUiDoc = uiApp.OpenAndActivateDocument(modelPath, openOptions, false);
 
-            Debug.WriteLine($"[TryOpenCloudDocument] OpenAndActivateDocument completed in {sw.ElapsedMilliseconds}ms");
+            Console.WriteLine($"[TryOpenCloudDocument] OpenAndActivateDocument completed in {sw.ElapsedMilliseconds}ms");
 
             // Success - switch to the target view
             activatedUiDoc.RequestViewChange(targetView);
             return true;
         } catch (RevitServerCommunicationException ex) {
-            Debug.WriteLine($"[TryOpenCloudDocument] Network error after {sw.ElapsedMilliseconds}ms: {ex.Message}");
+            Console.WriteLine($"[TryOpenCloudDocument] Network error after {sw.ElapsedMilliseconds}ms: {ex.Message}");
 
             // Show friendly error dialog
             _ = TaskDialog.Show(
@@ -303,8 +303,8 @@ public static class OpenDocumentExtensions {
                 "Click on the document tab directly to switch without network access.");
             return false;
         } catch (Exception ex) {
-            Debug.WriteLine($"[TryOpenCloudDocument] Unexpected error after {sw.ElapsedMilliseconds}ms: {ex.Message}");
-            Debug.WriteLine(ex.ToStringDemystified());
+            Console.WriteLine($"[TryOpenCloudDocument] Unexpected error after {sw.ElapsedMilliseconds}ms: {ex.Message}");
+            Console.WriteLine(ex.ToStringDemystified());
 
             _ = TaskDialog.Show(
                 "Error Switching Documents",
@@ -315,7 +315,7 @@ public static class OpenDocumentExtensions {
             timeoutTimer?.Dispose();
 
             if (timerFired) {
-                Debug.WriteLine(
+                Console.WriteLine(
                     $"[TryOpenCloudDocument] Operation completed after timeout warning (total: {sw.ElapsedMilliseconds}ms)");
             }
         }

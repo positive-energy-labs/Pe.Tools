@@ -24,7 +24,23 @@
         <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*"/>
         <PackageReference Include="NJsonSchema.NewtonsoftJson" Version="11.5.2"/>
         <PackageReference Include="Serilog" Version="4.3.0"/>
+        <PackageReference Include="Serilog.Extensions.Logging" Version="8.0.0"/>
+        <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0"/>
         <PackageReference Include="Serilog.Sinks.Debug" Version="3.0.0"/>
+
+        <!-- SignalR Self-Hosted Server (Newtonsoft JSON protocol) -->
+        <PackageReference Include="Microsoft.AspNetCore.SignalR.Protocols.NewtonsoftJson" Version="8.0.0"/>
+
+        <!-- Revit Task Service for thread marshaling -->
+        <PackageReference Include="ricaun.Revit.UI.Tasks" Version="1.*"/>
+
+        <!-- TypeScript Type Generation -->
+        <PackageReference Include="TypeGen" Version="4.6.0"/>
+    </ItemGroup>
+
+    <!-- ASP.NET Core Framework for self-hosted SignalR server -->
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
     </ItemGroup>
 
     <ItemGroup>

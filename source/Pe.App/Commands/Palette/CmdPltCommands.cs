@@ -97,7 +97,7 @@ public static class CommandPaletteService {
                 Execute = async item => {
                     if (item is PostableCommandItem cmdItem) {
                         var (success, error) = Global.Revit.Lib.Commands.Execute(uiApp, cmdItem.Command);
-                        if (error is not null) Debug.WriteLine("Error: " + error.Message + error.StackTrace);
+                        if (error is not null) Console.WriteLine("Error: " + error.Message + error.StackTrace);
                         if (success) commandHelper.UpdateCommandUsage(cmdItem.Command);
                     }
                 },

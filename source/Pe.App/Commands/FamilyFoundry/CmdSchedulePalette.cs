@@ -36,7 +36,10 @@ public class CmdSchedulePalette : IExternalCommand {
 
             // Context for Create Schedule tab
             var context = new ScheduleManagerContext {
-                Doc = doc, UiDoc = uiDoc, Storage = storage, SettingsManager = settingsManager
+                Doc = doc,
+                UiDoc = uiDoc,
+                Storage = storage,
+                SettingsManager = settingsManager
             };
 
             // Collect items for both tabs
@@ -166,7 +169,8 @@ public class CmdSchedulePalette : IExternalCommand {
         var profileJson = JsonSerializer.Serialize(
             profile,
             new JsonSerializerOptions {
-                WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                WriteIndented = true,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             });
 
         return new SchedulePreviewData {
@@ -191,7 +195,9 @@ public class CmdSchedulePalette : IExternalCommand {
     private static SchedulePreviewData
         CreateSanitizationErrorPreview(ScheduleListItem profileItem, JsonSanitizationException ex) {
         var preview = new SchedulePreviewData {
-            ProfileName = profileItem.TextPrimary, IsValid = false, RemainingErrors = []
+            ProfileName = profileItem.TextPrimary,
+            IsValid = false,
+            RemainingErrors = []
         };
 
         if (ex.AddedProperties.Any())
@@ -219,7 +225,8 @@ public class CmdSchedulePalette : IExternalCommand {
             var profileJson = JsonSerializer.Serialize(
                 spec,
                 new JsonSerializerOptions {
-                    WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                    WriteIndented = true,
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
                 });
 
             return new SchedulePreviewData {
@@ -529,7 +536,7 @@ public class CmdSchedulePalette : IExternalCommand {
             var outputPath = createOutputDir.Json($"{timestamp}_{result.ScheduleName}.json").Write(outputData);
             return outputPath;
         } catch (Exception ex) {
-            Debug.WriteLine($"Failed to write output: {ex.Message}");
+            Console.WriteLine($"Failed to write output: {ex.Message}");
             return null;
         }
     }

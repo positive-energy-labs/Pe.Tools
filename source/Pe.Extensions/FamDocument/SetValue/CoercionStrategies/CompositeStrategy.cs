@@ -15,11 +15,11 @@ public class CompositeStrategy : ICoercionStrategy {
         // DEBUG: Log which strategies are being checked
         foreach (var strategy in this._strategies) {
             var canMap = strategy.CanMap(context);
-            Debug.WriteLine($"[CompositeStrategy] {strategy.GetType().Name}.CanMap = {canMap}");
+            Console.WriteLine($"[CompositeStrategy] {strategy.GetType().Name}.CanMap = {canMap}");
             if (canMap) return true;
         }
 
-        Debug.WriteLine("[CompositeStrategy] No strategy could handle the conversion");
+        Console.WriteLine("[CompositeStrategy] No strategy could handle the conversion");
         return false;
     }
 

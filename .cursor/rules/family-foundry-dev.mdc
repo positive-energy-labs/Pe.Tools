@@ -343,7 +343,7 @@ When value mapping fails ("Cannot map X to Y using strategy Z"):
 Log actual values and each boolean condition at runtime:
 
 ```csharp
-Debug.WriteLine($"[Strategy.CanMap] " +
+Console.WriteLine($"[Strategy.CanMap] " +
     $"SourceValue='{context.SourceValue}' (type={context.SourceValue?.GetType().Name}), " +
     $"TargetDataType={context.TargetDataType?.TypeId}");
 ```

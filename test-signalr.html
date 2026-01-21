@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SignalR Test Client</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-top: 0;
+        }
+        .status {
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        .status.disconnected {
+            background: #fee;
+            color: #c33;
+            border: 1px solid #fcc;
+        }
+        .status.connecting {
+            background: #ffc;
+            color: #993;
+            border: 1px solid #ffb;
+        }
+        .status.connected {
+            background: #efe;
+            color: #393;
+            border: 1px solid #cfc;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .log {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+        }
+        .log-entry {
+            margin: 4px 0;
+            padding: 4px;
+            border-bottom: 1px solid #eee;
+        }
+        .log-entry.error {
+            color: #c33;
+            background: #fee;
+        }
+        .log-entry.success {
+            color: #393;
+        }
+        .info {
+            color: #666;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔌 SignalR Test Client</h1>
+        <p class="info">Testing connection to Revit SignalR backend at <code>http://localhost:5150</code></p>
+        
+        <div id="status" class="status disconnected">
+            Status: Disconnected
+        </div>
+
+        <div>
+            <button id="connectBtn" onclick="connect()">Connect</button>
+            <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+        </div>
+
+        <hr style="margin: 30px 0;">
+
+        <h2>Test Hub Methods</h2>
+        <div>
+            <button id="testDocInfoBtn" onclick="testGetDocumentInfo()" disabled>Test GetDocumentInfo</button>
+            <button id="testSchemaBtn" onclick="testGetSchema()" disabled>Test GetSchema</button>
+            <button id="testListSettingsBtn" onclick="testListSettings()" disabled>Test ListSettings</button>
+        </div>
+
+        <div id="result" class="result" style="display:none;"></div>
+
+        <h3>Console Log</h3>
+        <div id="log" class="log"></div>
+    </div>
+
+    <!-- SignalR Client Library from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.0/dist/browser/signalr.min.js"></script>
+    
+    <script>
+        let connection = null;
+        const statusEl = document.getElementById('status');
+        const resultEl = document.getElementById('result');
+        const logEl = document.getElementById('log');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const testDocInfoBtn = document.getElementById('testDocInfoBtn');
+        const testSchemaBtn = document.getElementById('testSchemaBtn');
+        const testListSettingsBtn = document.getElementById('testListSettingsBtn');
+
+        function log(message, isError = false, isSuccess = false) {
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry' + (isError ? ' error' : '') + (isSuccess ? ' success' : '');
+            entry.textContent = `[${timestamp}] ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+            
+            // Also log to browser console
+            if (isError) {
+                console.error(message);
+            } else {
+                console.log(message);
+            }
+        }
+
+        function updateStatus(state, message) {
+            statusEl.className = `status ${state}`;
+            statusEl.textContent = `Status: ${message}`;
+        }
+
+        function updateButtons(isConnected) {
+            connectBtn.disabled = isConnected;
+            disconnectBtn.disabled = !isConnected;
+            testDocInfoBtn.disabled = !isConnected;
+            testSchemaBtn.disabled = !isConnected;
+            testListSettingsBtn.disabled = !isConnected;
+        }
+
+        function showResult(data) {
+            resultEl.style.display = 'block';
+            resultEl.textContent = JSON.stringify(data, null, 2);
+        }
+
+        async function connect() {
+            if (connection && connection.state === signalR.HubConnectionState.Connected) {
+                log('Already connected', false);
+                return;
+            }
+
+            try {
+                updateStatus('connecting', 'Connecting...');
+                log('Creating connection to http://localhost:5150/hubs/schema');
+
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl("http://localhost:5150/hubs/schema", {
+                        skipNegotiation: false,
+                        transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.ServerSentEvents | signalR.HttpTransportType.LongPolling
+                    })
+                    .configureLogging(signalR.LogLevel.Information)
+                    .withAutomaticReconnect()
+                    .build();
+
+                connection.onclose((error) => {
+                    updateStatus('disconnected', 'Disconnected');
+                    updateButtons(false);
+                    if (error) {
+                        log(`Connection closed with error: ${error}`, true);
+                    } else {
+                        log('Connection closed', false);
+                    }
+                });
+
+                connection.onreconnecting((error) => {
+                    updateStatus('connecting', 'Reconnecting...');
+                    log(`Reconnecting... ${error || ''}`, false);
+                });
+
+                connection.onreconnected((connectionId) => {
+                    updateStatus('connected', 'Connected (reconnected)');
+                    log(`Reconnected successfully. Connection ID: ${connectionId}`, false, true);
+                });
+
+                await connection.start();
+                
+                updateStatus('connected', 'Connected ✓');
+                updateButtons(true);
+                log(`✓ Connected successfully! Connection ID: ${connection.connectionId}`, false, true);
+                log(`Connection state: ${connection.state}`, false, true);
+
+            } catch (error) {
+                updateStatus('disconnected', 'Connection Failed');
+                updateButtons(false);
+                log(`✗ Failed to connect: ${error.toString()}`, true);
+                showResult({ error: error.toString(), stack: error.stack });
+            }
+        }
+
+        async function disconnect() {
+            if (!connection) return;
+
+            try {
+                await connection.stop();
+                updateStatus('disconnected', 'Disconnected');
+                updateButtons(false);
+                log('Disconnected successfully', false);
+            } catch (error) {
+                log(`Error disconnecting: ${error}`, true);
+            }
+        }
+
+        async function testGetDocumentInfo() {
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected', true);
+                return;
+            }
+
+            try {
+                log('Calling SchemaHub.GetDocumentInfo()...');
+                const result = await connection.invoke("GetDocumentInfo");
+                
+                if (result === null) {
+                    log('✓ GetDocumentInfo returned null (no active document)', false, true);
+                    showResult({ message: 'No active document', result: null });
+                } else {
+                    log(`✓ GetDocumentInfo succeeded: ${result.title}`, false, true);
+                    showResult(result);
+                }
+            } catch (error) {
+                log(`✗ GetDocumentInfo failed: ${error}`, true);
+                showResult({ error: error.toString() });
+            }
+        }
+
+        async function testGetSchema() {
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected', true);
+                return;
+            }
+
+            try {
+                log('Calling SchemaHub.GetSchema({ settingsTypeName: "AutoTagSettings", isExtends: false })...');
+                const result = await connection.invoke("GetSchema", {
+                    settingsTypeName: "AutoTagSettings",
+                    isExtends: false
+                });
+                
+                log(`✓ GetSchema succeeded. Schema length: ${result.schemaJson.length} chars`, false, true);
+                
+                // Parse the schema JSON to show it nicely
+                const schema = JSON.parse(result.schemaJson);
+                showResult({ 
+                    schemaPreview: {
+                        title: schema.title,
+                        type: schema.type,
+                        properties: Object.keys(schema.properties || {})
+                    },
+                    fullSchemaLength: result.schemaJson.length,
+                    hasFragmentSchema: !!result.fragmentSchemaJson
+                });
+            } catch (error) {
+                log(`✗ GetSchema failed: ${error}`, true);
+                showResult({ error: error.toString() });
+            }
+        }
+
+        async function testListSettings() {
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected', true);
+                return;
+            }
+
+            try {
+                // Need to switch to SettingsHub for this test
+                log('Switching to SettingsHub...');
+                await disconnect();
+                
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl("http://localhost:5150/hubs/settings")
+                    .configureLogging(signalR.LogLevel.Information)
+                    .withAutomaticReconnect()
+                    .build();
+
+                await connection.start();
+                log('✓ Connected to SettingsHub', false, true);
+                
+                log('Calling SettingsHub.ListSettings({ settingsTypeName: "AutoTagSettings", subDirectory: null })...');
+                const result = await connection.invoke("ListSettings", {
+                    settingsTypeName: "AutoTagSettings",
+                    subDirectory: null
+                });
+                
+                log(`✓ ListSettings succeeded. Found ${result.length} files`, false, true);
+                showResult(result);
+                
+                // Switch back to SchemaHub
+                await disconnect();
+                await connect();
+                
+            } catch (error) {
+                log(`✗ ListSettings failed: ${error}`, true);
+                showResult({ error: error.toString() });
+            }
+        }
+
+        // Auto-connect on page load for convenience
+        log('Page loaded. Click "Connect" to start testing.');
+        log('Make sure Revit is running with the Pe.Tools add-in loaded.');
+    </script>
+</body>
+</html>

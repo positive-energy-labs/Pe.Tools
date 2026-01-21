@@ -138,7 +138,7 @@ public class Application : ExternalApplication {
         const string outputTemplate = "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}";
 
         Log.Logger = new LoggerConfiguration()
-            .WriteTo.Debug(LogEventLevel.Debug, outputTemplate)
+            .WriteTo.Console(LogEventLevel.Debug, outputTemplate)
             .MinimumLevel.Debug()
             .CreateLogger();
 

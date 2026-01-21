@@ -83,11 +83,11 @@ public static class FamilyPlacementHelper {
             new() {
                 Name = "Place",
                 Execute = async item => {
-                    Debug.WriteLine($"[FamilyPlacement] Starting placement for: {item.Family.Name}");
+                    Console.WriteLine($"[FamilyPlacement] Starting placement for: {item.Family.Name}");
 
                     var symbol = item.GetFirstSymbol();
                     if (symbol == null) {
-                        Debug.WriteLine($"[FamilyPlacement] No symbol found for: {item.Family.Name}");
+                        Console.WriteLine($"[FamilyPlacement] No symbol found for: {item.Family.Name}");
                         new Ballogger()
                             .Add(LogEventLevel.Warning, new StackFrame(),
                                 $"Family '{item.Family.Name}' has no types to place")
@@ -95,7 +95,7 @@ public static class FamilyPlacementHelper {
                         return;
                     }
 
-                    Debug.WriteLine($"[FamilyPlacement] Symbol found: {symbol.Name}, IsActive: {symbol.IsActive}");
+                    Console.WriteLine($"[FamilyPlacement] Symbol found: {symbol.Name}, IsActive: {symbol.IsActive}");
 
                     var uiDoc = uiApp.ActiveUIDocument;
                     var doc = uiDoc.Document;
@@ -103,36 +103,36 @@ public static class FamilyPlacementHelper {
                     try {
                         // Activate symbol if needed (requires transaction)
                         if (!symbol.IsActive) {
-                            Debug.WriteLine("[FamilyPlacement] Activating symbol...");
+                            Console.WriteLine("[FamilyPlacement] Activating symbol...");
                             using var activateTrans = new Transaction(doc, "Activate Family Symbol");
                             _ = activateTrans.Start();
                             symbol.Activate();
                             _ = activateTrans.Commit();
-                            Debug.WriteLine("[FamilyPlacement] Symbol activated");
+                            Console.WriteLine("[FamilyPlacement] Symbol activated");
                         }
 
-                        Debug.WriteLine("[FamilyPlacement] Prompting for point pick...");
+                        Console.WriteLine("[FamilyPlacement] Prompting for point pick...");
                         // Prompt user to pick a point for placement
                         var point = uiDoc.Selection.PickPoint($"Click to place {item.Family.Name}");
-                        Debug.WriteLine($"[FamilyPlacement] Point picked: {point}");
+                        Console.WriteLine($"[FamilyPlacement] Point picked: {point}");
 
                         // Place the family instance at the picked point
                         using var trans = new Transaction(doc, "Place Family Instance");
                         _ = trans.Start();
                         var instance = doc.Create.NewFamilyInstance(point, symbol, StructuralType.NonStructural);
                         _ = trans.Commit();
-                        Debug.WriteLine($"[FamilyPlacement] Instance created: {instance?.Id}");
+                        Console.WriteLine($"[FamilyPlacement] Instance created: {instance?.Id}");
 
                         // Reopen the palette with the same family list for continued placement
-                        Debug.WriteLine("[FamilyPlacement] Reopening palette after successful placement");
+                        Console.WriteLine("[FamilyPlacement] Reopening palette after successful placement");
                         ShowFamilyPlacementPalette(uiApp, familyNames, commandName);
                     } catch (OperationCanceledException) {
-                        Debug.WriteLine("[FamilyPlacement] User canceled placement (Escape pressed)");
+                        Console.WriteLine("[FamilyPlacement] User canceled placement (Escape pressed)");
                         // User pressed Escape during point picking
                         // Reopen palette anyway so they can choose another family or close it
                         ShowFamilyPlacementPalette(uiApp, familyNames, commandName);
                     } catch (Exception ex) {
-                        Debug.WriteLine($"[FamilyPlacement] ERROR: {ex.GetType().Name}: {ex.Message}");
+                        Console.WriteLine($"[FamilyPlacement] ERROR: {ex.GetType().Name}: {ex.Message}");
                         new Ballogger()
                             .Add(LogEventLevel.Error, new StackFrame(), ex, true)
                             .Show();

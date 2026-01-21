@@ -10,13 +10,13 @@ namespace Pe.Extensions.FamDocument.SetValue.CoercionStrategies;
 public class CoerceByStorageType : ICoercionStrategy {
     public bool CanMap(CoercionContext context) {
         // DEBUG: Log storage types for troubleshooting
-        Debug.WriteLine($"[CoerceByStorageType.CanMap] " +
+        Console.WriteLine($"[CoerceByStorageType.CanMap] " +
                         $"SourceStorageType={context.SourceStorageType}, " +
                         $"TargetStorageType={context.TargetStorageType}");
 
         // Same storage type - always compatible
         if (context.SourceStorageType == context.TargetStorageType) {
-            Debug.WriteLine("[CoerceByStorageType.CanMap] Same storage type - returning true");
+            Console.WriteLine("[CoerceByStorageType.CanMap] Same storage type - returning true");
             return true;
         }
 
@@ -32,7 +32,7 @@ public class CoerceByStorageType : ICoercionStrategy {
             _ => false
         };
 
-        Debug.WriteLine($"[CoerceByStorageType.CanMap] Pattern match result={result}");
+        Console.WriteLine($"[CoerceByStorageType.CanMap] Pattern match result={result}");
         return result;
     }
 
@@ -103,7 +103,7 @@ public class CoerceByStorageType : ICoercionStrategy {
         var isMeasurable = context.TargetDataType != null && UnitUtils.IsMeasurableSpec(context.TargetDataType);
         var regexResult = Regexes.TryExtractDouble(stringValue, out var extractedValue) &&
                           !string.IsNullOrWhiteSpace(stringValue);
-        Debug.WriteLine($"[CoerceByStorageType.CanParseStringToDouble] " +
+        Console.WriteLine($"[CoerceByStorageType.CanParseStringToDouble] " +
                         $"stringValue='{stringValue}', " +
                         $"isNullOrWhitespace={string.IsNullOrWhiteSpace(stringValue)}, " +
                         $"targetDataType={context.TargetDataType?.TypeId ?? "null"}, " +
@@ -119,10 +119,10 @@ public class CoerceByStorageType : ICoercionStrategy {
         // so UnitFormatUtils.TryParse() can't parse it. Use regex extraction instead.
         // Compare TypeId strings since ForgeTypeId == operator may not work as expected
         var isNumberType = dataType?.TypeId == SpecTypeId.Number.TypeId;
-        Debug.WriteLine(
+        Console.WriteLine(
             $"[CoerceByStorageType.CanParseStringToDouble] isNumberType={isNumberType} (comparing {dataType?.TypeId} to {SpecTypeId.Number.TypeId})");
         if (isNumberType) {
-            Debug.WriteLine(
+            Console.WriteLine(
                 $"[CoerceByStorageType.CanParseStringToDouble] Target is Number (unitless), using regex, result={regexResult}");
             return regexResult;
         }
@@ -130,13 +130,13 @@ public class CoerceByStorageType : ICoercionStrategy {
         // For measurable specs with actual units, use Revit's parser which understands imperial notation
         if (UnitUtils.IsMeasurableSpec(dataType)) {
             var parseResult = UnitFormatUtils.TryParse(context.FamilyDocument.GetUnits(), dataType, stringValue, out _);
-            Debug.WriteLine(
+            Console.WriteLine(
                 $"[CoerceByStorageType.CanParseStringToDouble] UnitFormatUtils.TryParse result={parseResult}");
             return parseResult;
         }
 
         // For non-measurable doubles, use simple regex extraction
-        Debug.WriteLine($"[CoerceByStorageType.CanParseStringToDouble] Using regex, result={regexResult}");
+        Console.WriteLine($"[CoerceByStorageType.CanParseStringToDouble] Using regex, result={regexResult}");
         return regexResult;
     }
 

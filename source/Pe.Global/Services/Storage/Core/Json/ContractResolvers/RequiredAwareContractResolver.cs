@@ -46,7 +46,7 @@ public class RequiredAwareContractResolver : RevitTypeContractResolver {
         property.ShouldSerialize = instance => {
             var actualValue = propInfo.GetValue(instance);
             var shouldSerialize = !this.AreValuesEqual(actualValue, defaultValue, propInfo.PropertyType);
-            // Debug.WriteLine($"{property.DeclaringType}.{property.PropertyName} {shouldSerialize}");
+            // Console.WriteLine($"{property.DeclaringType}.{property.PropertyName} {shouldSerialize}");
             return shouldSerialize;
         };
 
@@ -118,7 +118,7 @@ public class RequiredAwareContractResolver : RevitTypeContractResolver {
     /// </summary>
     private object? GetDefaultValue(PropertyInfo propertyInfo, object? defaultInstance) {
         try {
-            // if (defaultInstance == null) Debug.WriteLine($"property {propertyInfo.Name} is null");
+            // if (defaultInstance == null) Console.WriteLine($"property {propertyInfo.Name} is null");
             if (defaultInstance == null) return null;
             return propertyInfo.GetValue(defaultInstance);
         } catch {

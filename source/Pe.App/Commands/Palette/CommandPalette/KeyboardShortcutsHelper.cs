@@ -119,7 +119,7 @@ public class KeyboardShortcutsHelper {
             this._lastFileHash = FileUtils.ComputeFileHashFromText(File.ReadAllText(filePath));
         } catch (Exception ex) {
             // Log error but don't crash - return empty dictionary
-            Debug.WriteLine(
+            Console.WriteLine(
                 $"Error loading keyboard shortcuts: {ex.Message}"
             );
         }

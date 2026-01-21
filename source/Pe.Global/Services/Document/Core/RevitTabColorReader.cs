@@ -82,7 +82,7 @@ public static class RevitTabColorReader {
 
             return null;
         } catch (Exception ex) {
-            Debug.WriteLine($"[TabColorReader] EXCEPTION: {ex.Message}");
+            Console.WriteLine($"[TabColorReader] EXCEPTION: {ex.Message}");
             return null;
         }
     }

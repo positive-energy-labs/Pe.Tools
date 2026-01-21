@@ -119,7 +119,7 @@ public static class FamilyDocumentSetValue {
         var strategyInstance = ParamCoercionStrategyRegistry.Get(strategyName);
 
         // DEBUG: Trace coercion context for troubleshooting
-        Debug.WriteLine($"[SetValue] Source='{sourceParam.Definition.Name}', " +
+        Console.WriteLine($"[SetValue] Source='{sourceParam.Definition.Name}', " +
                         $"SourceStorageType={context.SourceStorageType}, " +
                         $"SourceDataType={context.SourceDataType?.TypeId ?? "null"}, " +
                         $"SourceValue='{context.SourceValue}' (type={context.SourceValue?.GetType().Name}), " +
@@ -131,7 +131,7 @@ public static class FamilyDocumentSetValue {
         if (!strategyInstance.CanMap(context)) {
             var targetDataType = targetParam.Definition.GetDataType();
             var dataTypeDisplay = targetDataType?.TypeId ?? "Unknown";
-            Debug.WriteLine($"[SetValue] CanMap returned FALSE for strategy '{strategyName}'");
+            Console.WriteLine($"[SetValue] CanMap returned FALSE for strategy '{strategyName}'");
             // Include detailed context in error message for debugging
             throw new Exception(
                 $"Cannot map '{sourceParam.Definition.Name}' to '{targetParam.Definition.Name}' ({dataTypeDisplay}) using strategy '{strategyName}'. " +

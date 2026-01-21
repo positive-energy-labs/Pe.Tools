@@ -41,7 +41,7 @@ public class RefPlaneDimCreator(
             }
 
             if (dimPlaneIds.SetEquals(planeIds)) {
-                Debug.WriteLine("[DimensionExists] Found existing dimension with matching planes");
+                Console.WriteLine("[DimensionExists] Found existing dimension with matching planes");
                 return true;
             }
         }
@@ -60,7 +60,7 @@ public class RefPlaneDimCreator(
         var p1 = rp1.BubbleEnd + (direction * offset);
         var p2 = p1 + (normal * distanceAlongNormal);
 
-        Debug.WriteLine($"[CreateDimensionLine] Distance: {distanceAlongNormal:F6}, Offset: {offset:F3}");
+        Console.WriteLine($"[CreateDimensionLine] Distance: {distanceAlongNormal:F6}, Offset: {offset:F3}");
 
         return Line.CreateBound(p1, p2);
     }
@@ -71,11 +71,11 @@ public class RefPlaneDimCreator(
     ///     Creates mirror planes: two planes symmetric around center.
     /// </summary>
     public void CreateMirrorPlanes(MirrorSpec spec) {
-        Debug.WriteLine($"[CreateMirrorPlanes] Processing: {spec.Name}, Center: {spec.CenterAnchor}");
+        Console.WriteLine($"[CreateMirrorPlanes] Processing: {spec.Name}, Center: {spec.CenterAnchor}");
 
         var center = query.Get(spec.CenterAnchor);
         if (center == null) {
-            Debug.WriteLine($"[CreateMirrorPlanes] Center anchor not found: {spec.CenterAnchor}");
+            Console.WriteLine($"[CreateMirrorPlanes] Center anchor not found: {spec.CenterAnchor}");
             logs.Add(new LogEntry($"Mirror planes: {spec.Name} @ {spec.CenterAnchor}")
                 .Error("Center anchor not found"));
             return;
@@ -86,11 +86,11 @@ public class RefPlaneDimCreator(
         var leftName = spec.GetLeftName(normal);
         var rightName = spec.GetRightName(normal);
 
-        Debug.WriteLine($"[CreateMirrorPlanes] Names - Left: '{leftName}', Right: '{rightName}'");
+        Console.WriteLine($"[CreateMirrorPlanes] Names - Left: '{leftName}', Right: '{rightName}'");
 
         // Check if already exist
         if (query.Get(leftName) != null && query.Get(rightName) != null) {
-            Debug.WriteLine("[CreateMirrorPlanes] Both planes already exist, skipping");
+            Console.WriteLine("[CreateMirrorPlanes] Both planes already exist, skipping");
             logs.Add(new LogEntry($"Mirror planes: {spec.Name} @ {spec.CenterAnchor}").Skip("Already exist"));
             return;
         }
@@ -112,17 +112,17 @@ public class RefPlaneDimCreator(
     ///     Creates offset plane: one plane offset from anchor.
     /// </summary>
     public void CreateOffsetPlane(OffsetSpec spec) {
-        Debug.WriteLine($"[CreateOffsetPlane] Processing: {spec.Name}, Anchor: {spec.AnchorName}");
+        Console.WriteLine($"[CreateOffsetPlane] Processing: {spec.Name}, Anchor: {spec.AnchorName}");
 
         var anchor = query.Get(spec.AnchorName);
         if (anchor == null) {
-            Debug.WriteLine($"[CreateOffsetPlane] Anchor not found: {spec.AnchorName}");
+            Console.WriteLine($"[CreateOffsetPlane] Anchor not found: {spec.AnchorName}");
             logs.Add(new LogEntry($"Offset plane: {spec.Name}").Error($"Anchor '{spec.AnchorName}' not found"));
             return;
         }
 
         if (query.Get(spec.Name) != null) {
-            Debug.WriteLine($"[CreateOffsetPlane] Plane already exists: {spec.Name}");
+            Console.WriteLine($"[CreateOffsetPlane] Plane already exists: {spec.Name}");
             logs.Add(new LogEntry($"Offset plane: {spec.Name}").Skip("Already exists"));
             return;
         }
@@ -143,20 +143,20 @@ public class RefPlaneDimCreator(
 
     private bool CreatePlane(string name, XYZ origin, XYZ t, XYZ cutVec, RpStrength strength) {
         if (query.Get(name) != null) {
-            Debug.WriteLine($"[CreatePlane] Already exists: {name}");
+            Console.WriteLine($"[CreatePlane] Already exists: {name}");
             return true; // Already exists is success
         }
 
         try {
-            Debug.WriteLine($"[CreatePlane] Creating: {name}");
+            Console.WriteLine($"[CreatePlane] Creating: {name}");
             var rp = doc.FamilyCreate.NewReferencePlane(origin + t, origin - t, cutVec, doc.ActiveView);
             rp.Name = name;
             _ = rp.get_Parameter(BuiltInParameter.ELEM_REFERENCE_NAME).Set((int)strength);
             _ = query.ReCache(name);
-            Debug.WriteLine($"[CreatePlane] Created: {name}, Id: {rp.Id}");
+            Console.WriteLine($"[CreatePlane] Created: {name}, Id: {rp.Id}");
             return true;
         } catch (Exception ex) {
-            Debug.WriteLine($"[CreatePlane] ERROR: {name}: {ex.Message}");
+            Console.WriteLine($"[CreatePlane] ERROR: {name}: {ex.Message}");
             logs.Add(new LogEntry($"RefPlane: {name}").Error(ex));
             return false;
         }
@@ -170,12 +170,12 @@ public class RefPlaneDimCreator(
     ///     Creates mirror dimensions: EQ constraint (3 planes) + parameter label (2 planes).
     /// </summary>
     public void CreateMirrorDimensions(MirrorSpec spec, int staggerIndex) {
-        Debug.WriteLine(
+        Console.WriteLine(
             $"[CreateMirrorDimensions] Processing: {spec.Name}, Center: {spec.CenterAnchor}, Stagger: {staggerIndex}");
 
         var center = query.Get(spec.CenterAnchor);
         if (center == null) {
-            Debug.WriteLine($"[CreateMirrorDimensions] Center not found: {spec.CenterAnchor}");
+            Console.WriteLine($"[CreateMirrorDimensions] Center not found: {spec.CenterAnchor}");
             return; // Plane creation would have logged the error
         }
 
@@ -187,7 +187,7 @@ public class RefPlaneDimCreator(
         var rightPlane = query.Get(rightName);
 
         if (leftPlane == null || rightPlane == null) {
-            Debug.WriteLine(
+            Console.WriteLine(
                 $"[CreateMirrorDimensions] Planes not found - Left: {leftPlane != null}, Right: {rightPlane != null}");
             logs.Add(new LogEntry($"Mirror dims: {spec.Name} @ {spec.CenterAnchor}").Error("Planes not found"));
             return;
@@ -197,7 +197,7 @@ public class RefPlaneDimCreator(
 
         // Create parameter dimension first (2 planes: left, right)
         if (this.DimensionExists(leftPlane, rightPlane)) {
-            Debug.WriteLine($"[CreateMirrorDimensions] Param dim already exists between {leftName} and {rightName}");
+            Console.WriteLine($"[CreateMirrorDimensions] Param dim already exists between {leftName} and {rightName}");
             logs.Add(new LogEntry($"Mirror param dim: {spec.Name} @ {spec.CenterAnchor}").Skip("Already exists"));
         } else {
             try {
@@ -206,7 +206,7 @@ public class RefPlaneDimCreator(
                 paramRefArray.Append(rightPlane.GetReference());
 
                 var paramDimLine = CreateDimensionLine(leftPlane, rightPlane, dimOffset);
-                Debug.WriteLine($"[CreateMirrorDimensions] Param dim line length: {paramDimLine.Length:F6}");
+                Console.WriteLine($"[CreateMirrorDimensions] Param dim line length: {paramDimLine.Length:F6}");
 
                 var paramDim = doc.FamilyCreate.NewLinearDimension(doc.ActiveView, paramDimLine, paramRefArray);
 
@@ -223,14 +223,14 @@ public class RefPlaneDimCreator(
                 } else
                     logs.Add(new LogEntry($"Mirror param dim: {spec.Name} @ {spec.CenterAnchor}").Success("Created"));
             } catch (Exception ex) {
-                Debug.WriteLine($"[CreateMirrorDimensions] Param dim ERROR: {ex.Message}");
+                Console.WriteLine($"[CreateMirrorDimensions] Param dim ERROR: {ex.Message}");
                 logs.Add(new LogEntry($"Mirror param dim: {spec.Name} @ {spec.CenterAnchor}").Error(ex));
             }
         }
 
         // Create EQ dimension (3 planes: left, center, right)
         if (this.DimensionExists(leftPlane, center, rightPlane)) {
-            Debug.WriteLine(
+            Console.WriteLine(
                 $"[CreateMirrorDimensions] EQ dim already exists between {leftName}, {spec.CenterAnchor}, {rightName}");
             logs.Add(new LogEntry($"Mirror EQ dim: {spec.Name} @ {spec.CenterAnchor}").Skip("Already exists"));
         } else {
@@ -241,13 +241,13 @@ public class RefPlaneDimCreator(
                 eqRefArray.Append(rightPlane.GetReference());
 
                 var eqDimLine = CreateDimensionLine(leftPlane, rightPlane, dimOffset - DimStaggerStep);
-                Debug.WriteLine($"[CreateMirrorDimensions] EQ dim line length: {eqDimLine.Length:F6}");
+                Console.WriteLine($"[CreateMirrorDimensions] EQ dim line length: {eqDimLine.Length:F6}");
 
                 var eqDim = doc.FamilyCreate.NewLinearDimension(doc.ActiveView, eqDimLine, eqRefArray);
                 eqDim.AreSegmentsEqual = true;
                 logs.Add(new LogEntry($"Mirror EQ dim: {spec.Name} @ {spec.CenterAnchor}").Success("Created"));
             } catch (Exception ex) {
-                Debug.WriteLine($"[CreateMirrorDimensions] EQ dim ERROR: {ex.Message}");
+                Console.WriteLine($"[CreateMirrorDimensions] EQ dim ERROR: {ex.Message}");
                 logs.Add(new LogEntry($"Mirror EQ dim: {spec.Name} @ {spec.CenterAnchor}").Error(ex));
             }
         }
@@ -257,20 +257,20 @@ public class RefPlaneDimCreator(
     ///     Creates offset dimension: single dimension between anchor and target.
     /// </summary>
     public void CreateOffsetDimension(OffsetSpec spec, int staggerIndex) {
-        Debug.WriteLine(
+        Console.WriteLine(
             $"[CreateOffsetDimension] Processing: {spec.Name}, Anchor: {spec.AnchorName}, Stagger: {staggerIndex}");
 
         var anchor = query.Get(spec.AnchorName);
         var target = query.Get(spec.Name);
 
         if (anchor == null || target == null) {
-            Debug.WriteLine(
+            Console.WriteLine(
                 $"[CreateOffsetDimension] Planes not found - Anchor: {anchor != null}, Target: {target != null}");
             return; // Plane creation would have logged the error
         }
 
         if (this.DimensionExists(anchor, target)) {
-            Debug.WriteLine(
+            Console.WriteLine(
                 $"[CreateOffsetDimension] Dimension already exists between {spec.AnchorName} and {spec.Name}");
             logs.Add(new LogEntry($"Offset dim: {spec.Name}").Skip("Already exists"));
             return;
@@ -284,7 +284,7 @@ public class RefPlaneDimCreator(
             refArray.Append(target.GetReference());
 
             var dimLine = CreateDimensionLine(anchor, target, dimOffset);
-            Debug.WriteLine($"[CreateOffsetDimension] Dim line length: {dimLine.Length:F6}");
+            Console.WriteLine($"[CreateOffsetDimension] Dim line length: {dimLine.Length:F6}");
 
             var dim = doc.FamilyCreate.NewLinearDimension(doc.ActiveView, dimLine, refArray);
 
@@ -298,7 +298,7 @@ public class RefPlaneDimCreator(
             } else
                 logs.Add(new LogEntry($"Offset dim: {spec.Name}").Success("Created"));
         } catch (Exception ex) {
-            Debug.WriteLine($"[CreateOffsetDimension] ERROR: {ex.Message}");
+            Console.WriteLine($"[CreateOffsetDimension] ERROR: {ex.Message}");
             logs.Add(new LogEntry($"Offset dim: {spec.Name}").Error(ex));
         }
     }

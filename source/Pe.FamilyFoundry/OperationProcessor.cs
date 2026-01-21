@@ -49,8 +49,8 @@ public class OperationProcessor(
                 try {
                     callback(context);
                 } catch (Exception ex) {
-                    Debug.WriteLine($"Failed to invoke per-family callback for {context.FamilyName}");
-                    Debug.WriteLine(ex.ToStringDemystified());
+                    Console.WriteLine($"Failed to invoke per-family callback for {context.FamilyName}");
+                    Console.WriteLine(ex.ToStringDemystified());
                 }
             };
         return this;

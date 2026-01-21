@@ -239,7 +239,7 @@ public class CoerceMeasurableToNumber : ICoercionStrategy {
         var hasDefaultUnit = hasSourceDataType && DefaultTargetUnits.TryGetValue(context.SourceDataType!, out _);
 
         // DEBUG: Log the decision chain
-        Debug.WriteLine($"[CoerceMeasurableToNumber.CanMap] " +
+        Console.WriteLine($"[CoerceMeasurableToNumber.CanMap] " +
                         $"TargetStorageType={context.TargetStorageType} (isDouble={isTargetDouble}), " +
                         $"TargetDataType={context.TargetDataType?.TypeId} (isNumber={isTargetNumber}), " +
                         $"SourceDataType={context.SourceDataType?.TypeId ?? "null"} (isMeasurable={isSourceMeasurable}), " +

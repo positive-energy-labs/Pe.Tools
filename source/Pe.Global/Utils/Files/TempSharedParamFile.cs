@@ -34,14 +34,14 @@ public class TempSharedParamFile : IDisposable {
             // Restore original shared parameters file setting first
             this._app.SharedParametersFilename = this.OriginalFileName;
         } catch {
-            Debug.WriteLine("Failed to restore original SharedParametersFilename.");
+            Console.WriteLine("Failed to restore original SharedParametersFilename.");
         }
 
         try {
             if (!string.IsNullOrWhiteSpace(this.TempFileName) && File.Exists(this.TempFileName))
                 File.Delete(this.TempFileName);
         } catch {
-            Debug.WriteLine("Failed to delete temporary shared param file.");
+            Console.WriteLine("Failed to delete temporary shared param file.");
         }
     }
 }

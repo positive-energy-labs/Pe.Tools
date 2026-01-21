@@ -53,7 +53,7 @@ public static class Automations {
         }
 
         if (condition == null) {
-            Debug.WriteLine("No search criteria provided for FindElement.");
+            Console.WriteLine("No search criteria provided for FindElement.");
             return null;
         }
 
@@ -63,32 +63,32 @@ public static class Automations {
     public static async Task<bool> ClickButtonAsync(string buttonName,
         string? automationId = null,
         AutomationElement? parent = null) => await Task.Run(() => {
-        var element = FindElement(automationId, buttonName, "button", parent);
-        if (element == null) {
-            Debug.WriteLine($"Button '{buttonName}' (AutomationId: '{automationId}') not found.");
+            var element = FindElement(automationId, buttonName, "button", parent);
+            if (element == null) {
+                Console.WriteLine($"Button '{buttonName}' (AutomationId: '{automationId}') not found.");
+                return false;
+            }
+
+            if (element.TryGetCurrentPattern(InvokePattern.Pattern, out var pattern)) {
+                (pattern as InvokePattern)?.Invoke();
+                return true;
+            }
+
+            Console.WriteLine($"Button '{buttonName}' (AutomationId: '{automationId}') does not support InvokePattern.");
             return false;
-        }
-
-        if (element.TryGetCurrentPattern(InvokePattern.Pattern, out var pattern)) {
-            (pattern as InvokePattern)?.Invoke();
-            return true;
-        }
-
-        Debug.WriteLine($"Button '{buttonName}' (AutomationId: '{automationId}') does not support InvokePattern.");
-        return false;
-    });
+        });
 
     public static async Task<bool> ClickListItemByNameAsync(string itemName) => await Task.Run(() => {
         var element = FindElement(name: itemName, localizedControlType: "list item");
         if (element == null) {
-            Debug.WriteLine($"List item '{itemName}' not found.");
+            Console.WriteLine($"List item '{itemName}' not found.");
             return false;
         }
 
         var rect = element.Current.BoundingRectangle;
         if (rect != Rect.Empty) {
             var clickablePoint = new Point(rect.Left + (rect.Width / 2), rect.Top + (rect.Height / 2));
-            Debug.WriteLine(
+            Console.WriteLine(
                 $"Simulating mouse click on list item '{itemName}' at {clickablePoint.X},{clickablePoint.Y}.");
             // this used to be System.Windows.Forms.Cursor.Position = new System.Drawing.Point((int)clickablePoint.X, (int)clickablePoint.Y);
             _ = SetCursorPos((int)clickablePoint.X, (int)clickablePoint.Y);
@@ -97,21 +97,21 @@ public static class Automations {
             return true;
         }
 
-        Debug.WriteLine($"Could not get clickable point for list item '{itemName}'.");
+        Console.WriteLine($"Could not get clickable point for list item '{itemName}'.");
         return false;
     });
 
     public static async Task<bool> ClickListItemByAutomationIdAsync(string? automationId) => await Task.Run(() => {
         var element = FindElement(automationId, localizedControlType: "list item");
         if (element == null) {
-            Debug.WriteLine($"List item with AutomationId: '{automationId}' not found.");
+            Console.WriteLine($"List item with AutomationId: '{automationId}' not found.");
             return false;
         }
 
         var rect = element.Current.BoundingRectangle;
         if (rect != Rect.Empty) {
             var clickablePoint = new Point(rect.Left + (rect.Width / 2), rect.Top + (rect.Height / 2));
-            Debug.WriteLine(
+            Console.WriteLine(
                 $"Simulating mouse click on list item with AutomationId: '{automationId}' at {clickablePoint.X},{clickablePoint.Y}.");
             // this used to be System.Windows.Forms.Cursor.Position = new System.Drawing.Point((int)clickablePoint.X, (int)clickablePoint.Y);
             _ = SetCursorPos((int)clickablePoint.X, (int)clickablePoint.Y);
@@ -120,7 +120,7 @@ public static class Automations {
             return true;
         }
 
-        Debug.WriteLine($"Could not get clickable point for list item with AutomationId: '{automationId}'.");
+        Console.WriteLine($"Could not get clickable point for list item with AutomationId: '{automationId}'.");
         return false;
     });
 
@@ -144,14 +144,14 @@ public static class Automations {
     public static bool BringWindowToForeground(string windowTitle) {
         var hWnd = FindWindow(null, windowTitle);
         if (hWnd == IntPtr.Zero) {
-            Debug.WriteLine($"Window with title '{windowTitle}' not found.");
+            Console.WriteLine($"Window with title '{windowTitle}' not found.");
             return false;
         }
 
         // Restore the window if it's minimized
         _ = ShowWindow(hWnd, SW_RESTORE);
         _ = SetForegroundWindow(hWnd);
-        Debug.WriteLine($"Brought window '{windowTitle}' to foreground.");
+        Console.WriteLine($"Brought window '{windowTitle}' to foreground.");
         return true;
     }
 }

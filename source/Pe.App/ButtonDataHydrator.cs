@@ -161,7 +161,7 @@ public static class ButtonDataHydrator {
 
     public static void AddButtonData(List<PushButton> buttons) {
         foreach (var button in buttons) {
-            Debug.WriteLine("button.ClassName: " + button.ClassName);
+            Console.WriteLine("button.ClassName: " + button.ClassName);
             var key = button.ClassName.Split('.').Last();
             if (ButtonDataRecords.TryGetValue(key, out var btnData)) {
                 _ = button.SetImage(btnData.SmallImage)

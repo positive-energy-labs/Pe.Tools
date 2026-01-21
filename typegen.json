@@ -1,0 +1,13 @@
+{
+    "assemblies": [
+        "source/Pe.Global/bin/Debug.R25/net8.0-windows/Pe.Global.dll"
+    ],
+    "outputPath": "settings-editor-frontend/src/generated",
+    "createIndexFile": true,
+    "enumStringInitializers": true,
+    "singleQuotes": false,
+    "tabLength": 4,
+    "explicitPublicAccessor": false,
+    "camelCasePropertyNames": true,
+    "camelCaseTypeNames": false
+}
