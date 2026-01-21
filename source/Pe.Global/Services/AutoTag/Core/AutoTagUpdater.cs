@@ -1,3 +1,7 @@
+using Pe.Global.Revit.Ui;
+using Serilog;
+using Serilog.Events;
+
 namespace Pe.Global.Services.AutoTag.Core;
 
 /// <summary>
@@ -7,11 +11,12 @@ namespace Pe.Global.Services.AutoTag.Core;
 public class AutoTagUpdater : IUpdater {
     private readonly AddInId _addInId;
     private readonly Dictionary<string, FamilySymbol> _tagTypeCache = new();
+    private readonly HashSet<string> _notifiedMissingTags = new();
     private readonly UpdaterId _updaterId;
     private AutoTagSettings? _settings;
 
     public AutoTagUpdater(AddInId addInId) {
-        this._addInId = addInId;
+        this._addInId = addInId; 
         this._updaterId = new UpdaterId(addInId, new Guid("A3F8B7C2-4D5E-4A9B-8C3D-1E2F3A4B5C6D"));
     }
 
@@ -29,36 +34,76 @@ public class AutoTagUpdater : IUpdater {
     /// </summary>
     public void Execute(UpdaterData data) {
         try {
+            var addedIds = data.GetAddedElementIds();
+            Log.Debug("AutoTag DMU: Execute called with {Count} added elements", addedIds.Count);
+
             // Check if globally enabled
-            if (this._settings?.Enabled != true || this._settings.Configurations.Count == 0) return;
+            if (this._settings == null) {
+                Log.Warning("AutoTag DMU: _settings is NULL - updater not configured");
+                return;
+            }
+
+            if (!this._settings.Enabled) {
+                Log.Debug("AutoTag DMU: Settings.Enabled is false - skipping");
+                return;
+            }
+
+            if (this._settings.Configurations.Count == 0) {
+                Log.Debug("AutoTag DMU: No configurations defined - skipping");
+                return;
+            }
+
+            Log.Debug("AutoTag DMU: Settings OK - Enabled={Enabled}, Configurations={Count}",
+                this._settings.Enabled, this._settings.Configurations.Count);
 
             var doc = data.GetDocument();
             var view = doc.ActiveView;
 
             // Don't tag in invalid view contexts
-            if (view == null || !this.IsTaggableView(view)) return;
+            if (view == null) {
+                Log.Warning("AutoTag DMU: ActiveView is null - skipping");
+                return;
+            }
 
-            foreach (var addedId in data.GetAddedElementIds()) {
+            if (!this.IsTaggableView(view)) {
+                Log.Debug("AutoTag DMU: View '{ViewName}' (type: {ViewType}) is not taggable - skipping",
+                    view.Name, view.ViewType);
+                return;
+            }
+
+            Log.Debug("AutoTag DMU: Processing in view '{ViewName}'", view.Name);
+
+            foreach (var addedId in addedIds) {
                 try {
                     var element = doc.GetElement(addedId);
                     if (element == null) continue;
 
                     this.ProcessElement(doc, element, view);
                 } catch (Exception ex) {
-                    // Log but don't fail entire batch
-                    Debug.WriteLine($"AutoTag: Failed to tag element {addedId}: {ex.Message}");
+                    Log.Error(ex, "AutoTag DMU: Failed to tag element {ElementId}", addedId);
                 }
             }
         } catch (Exception ex) {
-            // Critical error - don't crash Revit
-            Debug.WriteLine($"AutoTag: Execute failed: {ex.Message}");
+            Log.Error(ex, "AutoTag DMU: Execute failed");
         }
     }
 
     /// <summary>
     ///     Updates the settings used by this updater. Called by AutoTagService.
     /// </summary>
-    public void SetSettings(AutoTagSettings? settings) => this._settings = settings;
+    public void SetSettings(AutoTagSettings? settings) {
+        this._settings = settings;
+
+        // Clear notification tracking so user gets fresh notifications if they update settings
+        this._notifiedMissingTags.Clear();
+        this._tagTypeCache.Clear();
+
+        if (settings != null)
+            Log.Information("AutoTag DMU: Settings pushed - Enabled={Enabled}, Configurations={Count}",
+                settings.Enabled, settings.Configurations.Count);
+        else
+            Log.Warning("AutoTag DMU: Settings set to NULL");
+    }
 
     /// <summary>
     ///     Process a single element for auto-tagging.
@@ -73,6 +118,10 @@ public class AutoTagUpdater : IUpdater {
 
         if (config == null) return;
 
+        Log.Debug("AutoTag: Processing element {ElementId} in category '{Category}'", element.Id, category.Name);
+        Log.Debug("AutoTag: Config found - TagFamilyName='{TagFamily}', TagTypeName='{TagType}'",
+            config.TagFamilyName, config.TagTypeName);
+
         // Check view type filter
         if (!this.IsViewTypeAllowed(view, config)) return;
 
@@ -81,7 +130,11 @@ public class AutoTagUpdater : IUpdater {
 
         // Get tag type
         var tagType = this.GetOrCacheTagType(doc, category.BuiltInCategory, config);
-        if (tagType == null) return;
+        if (tagType == null) {
+            Log.Warning("AutoTag: No tag type found for '{TagFamily}:{TagType}' - skipping element {ElementId}",
+                config.TagFamilyName, config.TagTypeName, element.Id);
+            return;
+        }
 
         // Create tag
         this.CreateTag(doc, element, tagType, config, view);
@@ -97,7 +150,10 @@ public class AutoTagUpdater : IUpdater {
 
         if (this._tagTypeCache.TryGetValue(cacheKey, out var cachedType)) {
             // Verify it's still valid
-            if (cachedType.IsValidObject && doc.GetElement(cachedType.Id) != null) return cachedType;
+            if (cachedType.IsValidObject && doc.GetElement(cachedType.Id) != null) {
+                Log.Debug("AutoTag: Using cached tag type '{Family}:{Type}'", cachedType.FamilyName, cachedType.Name);
+                return cachedType;
+            }
 
             // Invalid, remove from cache
             _ = this._tagTypeCache.Remove(cacheKey);
@@ -105,15 +161,58 @@ public class AutoTagUpdater : IUpdater {
 
         // Find the tag type
         var tagCategory = CategoryTagMapping.GetTagCategory(elementCategory);
-        if (tagCategory == BuiltInCategory.INVALID) return null;
+        if (tagCategory == BuiltInCategory.INVALID) {
+            Log.Warning("AutoTag: No tag category mapping for element category {Category}", elementCategory);
+            return null;
+        }
 
-        var tagType = new FilteredElementCollector(doc)
+        Log.Debug("AutoTag: Searching for tag in category {TagCategory}", tagCategory);
+        Log.Debug("AutoTag: Looking for FamilyName='{ConfigFamily}', TypeName='{ConfigType}'",
+            config.TagFamilyName, config.TagTypeName);
+
+        // Get all available tags for debugging
+        var allTagsInCategory = new FilteredElementCollector(doc)
             .OfClass(typeof(FamilySymbol))
             .OfCategory(tagCategory)
             .Cast<FamilySymbol>()
+            .ToList();
+
+        Log.Debug("AutoTag: Found {Count} tag types in category {TagCategory}:", allTagsInCategory.Count, tagCategory);
+        foreach (var tag in allTagsInCategory.Take(10)) // Limit to first 10 to avoid log spam
+            Log.Debug("AutoTag:   - '{FamilyName}' : '{TypeName}'", tag.FamilyName, tag.Name);
+
+        if (allTagsInCategory.Count > 10)
+            Log.Debug("AutoTag:   ... and {More} more", allTagsInCategory.Count - 10);
+
+        // Try exact match first (family + type)
+        var tagType = allTagsInCategory
             .FirstOrDefault(fs =>
                 fs.FamilyName.Equals(config.TagFamilyName, StringComparison.OrdinalIgnoreCase) &&
                 fs.Name.Equals(config.TagTypeName, StringComparison.OrdinalIgnoreCase));
+
+        if (tagType != null) {
+            Log.Information("AutoTag: MATCHED tag '{Family}:{Type}' (Id: {Id})",
+                tagType.FamilyName, tagType.Name, tagType.Id);
+        } else {
+            // Type not found - try to find any type from the same family
+            var fallbackType = allTagsInCategory
+                .FirstOrDefault(fs => fs.FamilyName.Equals(config.TagFamilyName, StringComparison.OrdinalIgnoreCase));
+
+            if (fallbackType != null) {
+                Log.Warning("AutoTag: Type '{ConfigType}' not found, using fallback '{Family}:{Type}'",
+                    config.TagTypeName, fallbackType.FamilyName, fallbackType.Name);
+                tagType = fallbackType;
+
+                // Notify user about the fallback (only once per session)
+                this.NotifyTypeFallback(config, fallbackType, allTagsInCategory);
+            } else {
+                Log.Warning("AutoTag: NO MATCH found for '{ConfigFamily}:{ConfigType}'",
+                    config.TagFamilyName, config.TagTypeName);
+
+                // Notify user and disable this configuration (only once per session)
+                this.NotifyAndDisableConfig(config, allTagsInCategory);
+            }
+        }
 
         if (tagType != null) {
             // Ensure symbol is activated
@@ -123,6 +222,72 @@ public class AutoTagUpdater : IUpdater {
         }
 
         return tagType;
+    }
+
+    /// <summary>
+    ///     Notifies the user that the specified tag type wasn't found but a fallback was used.
+    /// </summary>
+    private void NotifyTypeFallback(AutoTagConfiguration config, FamilySymbol fallbackType, List<FamilySymbol> availableTags) {
+        var notificationKey = $"fallback::{config.CategoryName}::{config.TagFamilyName}::{config.TagTypeName}";
+
+        // Only notify once per session for this specific config
+        if (!this._notifiedMissingTags.Add(notificationKey)) return;
+
+        // Build helpful message with available alternatives
+        var availableTypes = availableTags
+            .Where(t => t.FamilyName.Equals(config.TagFamilyName, StringComparison.OrdinalIgnoreCase))
+            .Select(t => t.Name)
+            .ToList();
+
+        var message = $"Tag type '{config.TagTypeName}' not found in family '{config.TagFamilyName}'.";
+        message += $"\n\nUsing fallback: '{fallbackType.Name}'";
+        message += $"\n\nAvailable types:\n  • {string.Join("\n  • ", availableTypes)}";
+        message += "\n\nUpdate your AutoTag settings to use a valid type.";
+
+        // Show balloon notification
+        new Ballogger()
+            .Add(LogEventLevel.Warning, null, message)
+            .Show("AutoTag: Using Fallback Tag Type");
+    }
+
+    /// <summary>
+    ///     Notifies the user that a tag family wasn't found and disables the configuration.
+    /// </summary>
+    private void NotifyAndDisableConfig(AutoTagConfiguration config, List<FamilySymbol> availableTags) {
+        var notificationKey = $"{config.CategoryName}::{config.TagFamilyName}::{config.TagTypeName}";
+
+        // Only notify once per session for this specific config
+        if (!this._notifiedMissingTags.Add(notificationKey)) return;
+
+        // Disable this configuration so it doesn't keep trying
+        config.Enabled = false;
+        Log.Warning("AutoTag: Disabled configuration for '{Category}' - tag type not found", config.CategoryName);
+
+        // Build helpful message with available alternatives
+        var availableTypes = availableTags
+            .Where(t => t.FamilyName.Equals(config.TagFamilyName, StringComparison.OrdinalIgnoreCase))
+            .Select(t => t.Name)
+            .ToList();
+
+        var message = $"Tag type '{config.TagFamilyName}:{config.TagTypeName}' not found for category '{config.CategoryName}'.";
+
+        if (availableTypes.Count > 0)
+            message += $"\n\nAvailable types for this family:\n  • {string.Join("\n  • ", availableTypes)}";
+        else {
+            var availableFamilies = availableTags
+                .Select(t => t.FamilyName)
+                .Distinct()
+                .ToList();
+            if (availableFamilies.Count > 0)
+                message += $"\n\nAvailable tag families:\n  • {string.Join("\n  • ", availableFamilies)}";
+        }
+
+        message += "\n\nThis configuration has been disabled. Update your AutoTag settings to fix.";
+
+        // Show balloon notification
+        new Ballogger()
+            .Add(LogEventLevel.Warning, null, message)
+            .Show("AutoTag Configuration Error");
     }
 
     /// <summary>
@@ -142,7 +307,10 @@ public class AutoTagUpdater : IUpdater {
                 ? TagOrientation.Horizontal
                 : TagOrientation.Vertical;
 
-            _ = IndependentTag.Create(
+            Log.Information("AutoTag: Creating tag '{Family}:{Type}' (Id: {TagTypeId}) for element {ElementId}",
+                tagType.FamilyName, tagType.Name, tagType.Id, element.Id);
+
+            var tag = IndependentTag.Create(
                 doc,
                 tagType.Id,
                 view.Id,
@@ -151,8 +319,16 @@ public class AutoTagUpdater : IUpdater {
                 orientation,
                 location
             );
+
+            // Verify what was actually created
+            if (tag != null) {
+                var createdTagType = doc.GetElement(tag.GetTypeId()) as FamilySymbol;
+                if (createdTagType != null)
+                    Log.Information("AutoTag: Tag created successfully - actual type: '{Family}:{Type}' (Id: {Id})",
+                        createdTagType.FamilyName, createdTagType.Name, createdTagType.Id);
+            }
         } catch (Exception ex) {
-            Debug.WriteLine($"AutoTag: Failed to create tag: {ex.Message}");
+            Log.Error(ex, "AutoTag: Failed to create tag");
         }
     }
 

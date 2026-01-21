@@ -1,6 +1,6 @@
 ---
+globs: source/Pe.FamilyFoundry/*
 alwaysApply: false
-description: Development guide for Family Foundry operations, architecture, and patterns
 ---
 
 # Family Foundry Developer Guide

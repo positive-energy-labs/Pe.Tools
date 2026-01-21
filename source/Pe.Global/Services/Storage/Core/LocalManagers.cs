@@ -49,6 +49,10 @@ public abstract class BaseLocalManager {
     /// </summary>
     public string GetDatedCsvPath(string? filename = null) =>
         Path.Combine(this.DirectoryPath, $"{filename ?? this.Name}_{DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss")}.csv");
+
+    public List<FileInfo> ListJsonFiles() => Directory.GetFiles(this.DirectoryPath, "*.json").Select(f => new FileInfo(f)).ToList();
+
+    public List<FileInfo> ListCsvFiles() => Directory.GetFiles(this.DirectoryPath, "*.csv").Select(f => new FileInfo(f)).ToList();
 }
 
 public class SettingsManager : BaseLocalManager {

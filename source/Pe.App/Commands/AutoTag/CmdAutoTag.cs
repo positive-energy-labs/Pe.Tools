@@ -118,16 +118,16 @@ public class CmdAutoTag : IExternalCommand {
 
     private static string BuildStatusSummary(AutoTagStatus status) {
         var sb = new StringBuilder();
-        sb.AppendLine($"Configurations: {status.ConfigurationCount} total, {status.EnabledConfigurationCount} active");
+        _ = sb.AppendLine($"Configurations: {status.ConfigurationCount} total, {status.EnabledConfigurationCount} active");
 
         if (status.Configurations.Count > 0) {
-            sb.AppendLine();
-            sb.AppendLine("Active categories:");
+            _ = sb.AppendLine();
+            _ = sb.AppendLine("Active categories:");
             foreach (var config in status.Configurations.Where(c => c.Enabled).Take(5))
-                sb.AppendLine($"  • {config.CategoryName}");
+                _ = sb.AppendLine($"  • {config.CategoryName}");
 
             if (status.EnabledConfigurationCount > 5)
-                sb.AppendLine($"  ... and {status.EnabledConfigurationCount - 5} more");
+                _ = sb.AppendLine($"  ... and {status.EnabledConfigurationCount - 5} more");
         }
 
         return sb.ToString();
@@ -138,21 +138,21 @@ public class CmdAutoTag : IExternalCommand {
         if (settings == null) return;
 
         var sb = new StringBuilder();
-        sb.AppendLine($"Enabled: {settings.Enabled}");
-        sb.AppendLine($"Configurations: {settings.Configurations.Count}");
-        sb.AppendLine();
+        _ = sb.AppendLine($"Enabled: {settings.Enabled}");
+        _ = sb.AppendLine($"Configurations: {settings.Configurations.Count}");
+        _ = sb.AppendLine();
 
         foreach (var config in settings.Configurations) {
-            sb.AppendLine($"Category: {config.CategoryName}");
-            sb.AppendLine($"  Enabled: {config.Enabled}");
-            sb.AppendLine($"  Tag: {config.TagFamilyName} - {config.TagTypeName}");
-            sb.AppendLine($"  Leader: {config.AddLeader}");
-            sb.AppendLine($"  Orientation: {config.TagOrientation}");
-            sb.AppendLine($"  Offset: {config.OffsetDistance} ft @ {config.OffsetAngle}°");
-            sb.AppendLine($"  Skip if tagged: {config.SkipIfAlreadyTagged}");
+            _ = sb.AppendLine($"Category: {config.CategoryName}");
+            _ = sb.AppendLine($"  Enabled: {config.Enabled}");
+            _ = sb.AppendLine($"  Tag: {config.TagFamilyName} - {config.TagTypeName}");
+            _ = sb.AppendLine($"  Leader: {config.AddLeader}");
+            _ = sb.AppendLine($"  Orientation: {config.TagOrientation}");
+            _ = sb.AppendLine($"  Offset: {config.OffsetDistance} ft @ {config.OffsetAngle}°");
+            _ = sb.AppendLine($"  Skip if tagged: {config.SkipIfAlreadyTagged}");
             if (config.ViewTypeFilter.Count > 0)
-                sb.AppendLine($"  View filters: {string.Join(", ", config.ViewTypeFilter)}");
-            sb.AppendLine();
+                _ = sb.AppendLine($"  View filters: {string.Join(", ", config.ViewTypeFilter)}");
+            _ = sb.AppendLine();
         }
 
         var dialog = new TaskDialog("AutoTag Configuration") {
@@ -160,7 +160,7 @@ public class CmdAutoTag : IExternalCommand {
             MainContent = sb.ToString(),
             CommonButtons = TaskDialogCommonButtons.Close
         };
-        dialog.Show();
+        _ = dialog.Show();
     }
 
     #endregion
@@ -196,9 +196,9 @@ public class CmdAutoTag : IExternalCommand {
                 : "AutoTag initialized but disabled.\n\n" +
                   "Run this command again to enable or edit settings.";
 
-            TaskDialog.Show("AutoTag", statusMsg);
+            _ = TaskDialog.Show("AutoTag", statusMsg);
         } catch (Exception ex) {
-            TaskDialog.Show("AutoTag Error", $"Failed to initialize:\n{ex.Message}");
+            _ = TaskDialog.Show("AutoTag Error", $"Failed to initialize:\n{ex.Message}");
         }
     }
 
@@ -211,9 +211,9 @@ public class CmdAutoTag : IExternalCommand {
             AutoTagService.Instance.SaveSettingsForDocument(doc, settings);
 
             var status = settings.Enabled ? "enabled" : "disabled";
-            TaskDialog.Show("AutoTag", $"AutoTag has been {status}.");
+            _ = TaskDialog.Show("AutoTag", $"AutoTag has been {status}.");
         } catch (Exception ex) {
-            TaskDialog.Show("AutoTag Error", $"Failed to toggle:\n{ex.Message}");
+            _ = TaskDialog.Show("AutoTag Error", $"Failed to toggle:\n{ex.Message}");
         }
     }
 
@@ -224,13 +224,13 @@ public class CmdAutoTag : IExternalCommand {
     private Result ExecuteCatchUp(Document doc, UIDocument uiDoc) {
         var settings = AutoTagService.Instance.GetSettingsForDocument(doc);
         if (settings == null || !settings.Enabled) {
-            TaskDialog.Show("AutoTag", "AutoTag is not enabled for this document.");
+            _ = TaskDialog.Show("AutoTag", "AutoTag is not enabled for this document.");
             return Result.Cancelled;
         }
 
         var activeConfigs = settings.Configurations.Where(c => c.Enabled).ToList();
         if (activeConfigs.Count == 0) {
-            TaskDialog.Show("AutoTag", "No active tag configurations found.");
+            _ = TaskDialog.Show("AutoTag", "No active tag configurations found.");
             return Result.Cancelled;
         }
 
@@ -248,7 +248,7 @@ public class CmdAutoTag : IExternalCommand {
         var totalTagged = 0;
 
         using var tx = new Transaction(doc, "AutoTag Catch-Up");
-        tx.Start();
+        _ = tx.Start();
 
         try {
             foreach (var config in activeConfigs) {
@@ -257,15 +257,15 @@ public class CmdAutoTag : IExternalCommand {
                 Log.Information("AutoTag Catch-Up: Tagged {Count} {Category} elements", tagged, config.CategoryName);
             }
 
-            tx.Commit();
+            _ = tx.Commit();
 
-            TaskDialog.Show("AutoTag Catch-Up Complete",
+            _ = TaskDialog.Show("AutoTag Catch-Up Complete",
                 $"Successfully tagged {totalTagged} element(s) across {activeConfigs.Count} category(ies).");
 
             return Result.Succeeded;
         } catch (Exception ex) {
-            tx.RollBack();
-            TaskDialog.Show("AutoTag Error", $"Catch-up failed:\n{ex.Message}");
+            _ = tx.RollBack();
+            _ = TaskDialog.Show("AutoTag Error", $"Catch-up failed:\n{ex.Message}");
             return Result.Failed;
         }
     }
@@ -439,7 +439,7 @@ public class CmdAutoTag : IExternalCommand {
             }
         } else if (existingSettings != null) {
             this.ExportAndOpen(settingsFilePath, schemaFilePath, existingSettings);
-            TaskDialog.Show("AutoTag",
+            _ = TaskDialog.Show("AutoTag",
                 $"Settings exported to:\n{settingsFilePath}\n\n" +
                 "Edit with JSON autocomplete support.\n" +
                 "Run this command again to import.");
@@ -451,7 +451,7 @@ public class CmdAutoTag : IExternalCommand {
         var settingsFilePath = Path.Combine(settingsDir, "autotag-settings.json");
 
         if (!File.Exists(settingsFilePath)) {
-            TaskDialog.Show("AutoTag", $"No settings file found at:\n{settingsFilePath}");
+            _ = TaskDialog.Show("AutoTag", $"No settings file found at:\n{settingsFilePath}");
             return;
         }
 
@@ -461,7 +461,7 @@ public class CmdAutoTag : IExternalCommand {
     private void ExportAndOpen(string settingsFilePath, string schemaFilePath, AutoTagSettings settings) {
         var dir = Path.GetDirectoryName(settingsFilePath);
         if (dir != null && !Directory.Exists(dir))
-            Directory.CreateDirectory(dir);
+            _ = Directory.CreateDirectory(dir);
 
         // Generate schema with examples
         var schema = JsonSchemaFactory.CreateSchema<AutoTagSettings>(out var examplesProcessor);
@@ -483,18 +483,18 @@ public class CmdAutoTag : IExternalCommand {
             var settings = JsonConvert.DeserializeObject<AutoTagSettings>(json, JsonSettings);
 
             if (settings == null) {
-                TaskDialog.Show("Import Error", "Failed to parse settings file.");
+                _ = TaskDialog.Show("Import Error", "Failed to parse settings file.");
                 return;
             }
 
             AutoTagService.Instance.SaveSettingsForDocument(doc, settings);
 
-            TaskDialog.Show("AutoTag",
+            _ = TaskDialog.Show("AutoTag",
                 $"Settings imported!\n\n" +
                 $"Status: {(settings.Enabled ? "Enabled" : "Disabled")}\n" +
                 $"Configurations: {settings.Configurations.Count}");
         } catch (Exception ex) {
-            TaskDialog.Show("Import Error", $"Failed to import:\n{ex.Message}");
+            _ = TaskDialog.Show("Import Error", $"Failed to import:\n{ex.Message}");
         }
     }
 

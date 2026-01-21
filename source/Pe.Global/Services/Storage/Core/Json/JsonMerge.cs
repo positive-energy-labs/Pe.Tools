@@ -39,7 +39,7 @@ public static class JsonMerge {
 
             // Explicit null in child = remove from result
             if (childValue.Type == JTokenType.Null) {
-                target.Remove(propName);
+                _ = target.Remove(propName);
                 continue;
             }
 

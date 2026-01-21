@@ -2,12 +2,14 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
 using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
+using TypeGen.Core.TypeAnnotations;
 
 namespace Pe.Global.Services.AutoTag.Core;
 
 /// <summary>
 ///     Root settings container for AutoTag feature.
 /// </summary>
+[ExportTsInterface]
 public class AutoTagSettings {
     /// <summary>
     ///     Global enable/disable for AutoTag feature.
@@ -23,6 +25,7 @@ public class AutoTagSettings {
 /// <summary>
 ///     Configuration for auto-tagging a specific category of elements.
 /// </summary>
+[ExportTsInterface]
 public class AutoTagConfiguration {
     /// <summary>
     ///     The category name of elements to auto-tag (e.g., "Mechanical Equipment").
@@ -85,6 +88,7 @@ public class AutoTagConfiguration {
 /// <summary>
 ///     Tag orientation options.
 /// </summary>
+[ExportTsEnum]
 public enum TagOrientationMode {
     Horizontal,
     Vertical
@@ -93,6 +97,7 @@ public enum TagOrientationMode {
 /// <summary>
 ///     View type filter options for auto-tagging.
 /// </summary>
+[ExportTsEnum]
 public enum ViewTypeFilter {
     FloorPlan,
     CeilingPlan,

@@ -24,7 +24,7 @@ public class AutoTagService {
     public static AutoTagService Instance {
         get {
             _instance ??= new AutoTagService();
-            return _instance;
+            return _instance; 
         }
     }
 
@@ -42,7 +42,7 @@ public class AutoTagService {
     public void SaveSettingsForDocument(Autodesk.Revit.DB.Document doc, AutoTagSettings settings) {
         if (this._documentStorage == null) throw new InvalidOperationException("AutoTag service not initialized");
 
-        this._documentStorage.Write(doc, settings);
+        this._documentStorage.Write(doc, settings); 
         var docHash = doc.GetHashCode();
         this._documentSettings[docHash] = settings;
 

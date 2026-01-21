@@ -1,6 +1,6 @@
 ---
+globs: source/Pe.FamilyFoundry/*
 alwaysApply: false
-description: Family Foundry architecture and debugging approach
 ---
 
 # Family Foundry Architecture & Debugging
