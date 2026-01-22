@@ -72,11 +72,12 @@ public class ProfileListItem : IPaletteListItem {
     ///     Discovers all profile JSON files in a directory, excluding schema files.
     ///     If using a SettingsSubDir with recursive discovery, will find files in nested subdirectories.
     /// </summary>
-    public static List<ProfileListItem> DiscoverProfiles(SettingsSubDir subDir) {
+    public static List<ProfileListItem> DiscoverProfiles(SettingsManager subDir) {
         if (!Directory.Exists(subDir.DirectoryPath))
             return [];
 
-        var jsonFiles = subDir.ListJsonFiles();
+        var jsonFiles = subDir.ListJsonFilesRecursive().Where(f => !f.EndsWith("schema.json") && !f.Contains("schema-")).ToList();
+        if (jsonFiles.Count == 0) _ = subDir.Json<ProfileRemap>().Read();
         return jsonFiles
             .Select(relativePath => new ProfileListItem(
                 Path.Combine(subDir.DirectoryPath, relativePath),

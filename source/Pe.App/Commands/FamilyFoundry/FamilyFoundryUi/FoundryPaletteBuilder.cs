@@ -78,7 +78,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         var storage = new Storage(this._commandName);
         var settingsManager = storage.SettingsDir();
         var settings = settingsManager.Json<BaseSettings<TProfile>>().Read();
-        var profilesSubDir = settingsManager.SubDir("profiles", true);
+        var profilesSubDir = settingsManager.SubDir("profiles");
 
         // Discover profiles
         var profiles = ProfileListItem.DiscoverProfiles(profilesSubDir);
@@ -162,7 +162,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
 
     private PreviewData LoadValidPreviewData(ProfileListItem profileItem, FoundryContext<TProfile> context) {
         // Load the profile
-        var profile = context.SettingsManager.SubDir("profiles", true)
+        var profile = context.SettingsManager.SubDir("profiles")
             .Json<TProfile>($"{profileItem.TextPrimary}.json")
             .Read();
 

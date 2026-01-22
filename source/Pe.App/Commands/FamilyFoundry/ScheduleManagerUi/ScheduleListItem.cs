@@ -1,4 +1,5 @@
 using Newtonsoft.Json.Linq;
+using Pe.Global.Revit.Lib.Schedules;
 using Pe.Global.Services.Storage.Core;
 using Pe.Ui.Core;
 using System.IO;
@@ -60,11 +61,11 @@ public class ScheduleListItem : IPaletteListItem {
         try {
             var content = File.ReadAllText(filePath);
             var jObject = JObject.Parse(content);
-            return jObject.TryGetValue("CategoryName", out var token)
+            return (jObject.TryGetValue("CategoryName", out var token)
                 ? token.Value<string>()
-                : null;
+                : null) ?? string.Empty;
         } catch {
-            return null;
+            return string.Empty;
         }
     }
 
@@ -87,11 +88,12 @@ public class ScheduleListItem : IPaletteListItem {
     ///     Discovers all schedule profile JSON files in a directory, excluding schema files.
     ///     If using a SettingsSubDir with recursive discovery, will find files in nested subdirectories.
     /// </summary>
-    public static List<ScheduleListItem> DiscoverProfiles(SettingsSubDir subDir) {
+    public static List<ScheduleListItem> DiscoverProfiles(SettingsManager subDir) {
         if (!Directory.Exists(subDir.DirectoryPath))
             return [];
-
-        var jsonFiles = subDir.ListJsonFiles();
+        var jsonFiles = subDir.ListJsonFilesRecursive().Where(f => !f.EndsWith("schema.json") && !f.Contains("schema-")).ToList();
+        if (jsonFiles.Count == 0) _ = subDir.Json<ScheduleSpec>().Read();
+        
         return jsonFiles
             .Select(relativePath => new ScheduleListItem(
                 Path.Combine(subDir.DirectoryPath, relativePath),

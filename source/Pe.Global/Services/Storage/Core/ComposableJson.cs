@@ -290,19 +290,16 @@ public class ComposableJson<T> : JsonReader<T>, JsonWriter<T>, JsonReadWriter<T>
         var updatedJson = JObject.Parse(jsonContent);
 
         var validationErrors = this._fullSchema.Validate(updatedJson).ToList();
-        if (validationErrors.Any()) {
-            if (extendsName != null) {
-                var formattedErrors = ValidationErrorFormatter.Format(validationErrors);
-                throw JsonExtendsException.MergedValidationFailed(
-                    this.FilePath,
-                    this.GetBasePath(this.FilePath, extendsName),
-                    string.Join("\n  - ", formattedErrors));
-            }
-
-            throw new JsonValidationException(this.FilePath, validationErrors);
+        if (validationErrors.Count == 0) return content;
+        if (extendsName != null) {
+            var formattedErrors = ValidationErrorFormatter.Format(validationErrors);
+            throw JsonExtendsException.MergedValidationFailed(
+                this.FilePath,
+                this.GetBasePath(this.FilePath, extendsName),
+                string.Join("\n  - ", formattedErrors));
         }
 
-        return content;
+        throw new JsonValidationException(this.FilePath, validationErrors);
     }
 
     private JObject SanitizeBaseProfile(string basePath, JObject baseJObject) {
@@ -505,8 +502,9 @@ public class ComposableJson<T> : JsonReader<T>, JsonWriter<T>, JsonReadWriter<T>
             var itemType = propertyType.GetGenericArguments()[0];
 
             // Generate fragment schema using reflection
+            // Get the generic method (the one with no parameters)
             var createFragmentSchemaMethod = typeof(JsonSchemaFactory)
-                .GetMethod(nameof(JsonSchemaFactory.CreateFragmentSchema))!
+                .GetMethod(nameof(JsonSchemaFactory.CreateFragmentSchema), Type.EmptyTypes)!
                 .MakeGenericMethod(itemType);
 
             var fragmentSchema = (JsonSchema)createFragmentSchemaMethod.Invoke(null, null)!;

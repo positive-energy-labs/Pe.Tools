@@ -50,7 +50,7 @@ Think deeply about publicly exposed API surfaces and architecture choices.
 Library code should balance the tradeoffs of being intuitive to use and general
 purpose.
 
-Always ask before building the solution. The user will often be inside of a
+**Always ask before building the solution.** The user will often be inside of a
 Rider debug session attached to Revit, rebuilding breaks this. If ok, then build
 to check your work if the breadth of a change is big, or if your expectations
 and LSP are at odds. Use commands that minimize output like

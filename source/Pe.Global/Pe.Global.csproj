@@ -35,7 +35,7 @@
         <PackageReference Include="ricaun.Revit.UI.Tasks" Version="1.*"/>
 
         <!-- TypeScript Type Generation -->
-        <PackageReference Include="TypeGen" Version="4.6.0"/>
+        <PackageReference Include="TypeGen" Version="5.0.0"/>
     </ItemGroup>
 
     <!-- ASP.NET Core Framework for self-hosted SignalR server -->
@@ -46,11 +46,11 @@
     <ItemGroup>
     </ItemGroup>
 
-    <!-- Generate TypeScript types after build -->
-    <Target Name="GenerateTypeScriptTypes" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug.R25'">
+    <!-- Generate TypeScript types after build, takes a long time unfortunately -->
+    <!-- <Target Name="GenerateTypeScriptTypes" AfterTargets="Build">
         <Message Text="Generating TypeScript types with TypeGen..." Importance="high" />
         <Exec Command="dotnet typegen generate" WorkingDirectory="$(ProjectDir)" />
         <Message Text="TypeScript types generated successfully!" Importance="high" />
-    </Target>
+    </Target> -->
 
 </Project>

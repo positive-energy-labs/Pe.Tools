@@ -28,9 +28,10 @@ public class SettingsHub : Hub {
         var dir = storage.SettingsDir();
 
         if (!string.IsNullOrEmpty(request.SubDirectory))
-            dir = dir.SubDir(request.SubDirectory, false);
+            dir = dir.SubDir(request.SubDirectory);
 
-        var files = dir.ListJsonFiles()
+        var files = dir.ListJsonFilesShallow()
+            .Select(relativePath => new FileInfo(Path.Combine(dir.DirectoryPath, relativePath)))
             .Select(f => new SettingsFile(
                 f.FullName,
                 Path.GetFileNameWithoutExtension(f.Name),
@@ -85,86 +86,82 @@ public class SettingsHub : Hub {
     /// <summary>
     ///     Write settings to a file with optional validation.
     /// </summary>
-    public async Task<WriteSettingsResponse> WriteSettings(WriteSettingsRequest request) {
-        return await this._taskQueue.EnqueueAsync(uiApp => {
-            var storageName = this._typeRegistry.GetStorageName(request.SettingsTypeName);
-            var storage = new Storage.Storage(storageName);
-            var settingsDir = storage.SettingsDir();
-            var errors = new List<string>();
+    public async Task<WriteSettingsResponse> WriteSettings(WriteSettingsRequest request) => await this._taskQueue.EnqueueAsync(uiApp => {
+        var storageName = this._typeRegistry.GetStorageName(request.SettingsTypeName);
+        var storage = new Storage.Storage(storageName);
+        var settingsDir = storage.SettingsDir();
+        var errors = new List<string>();
 
-            if (request.Validate) {
-                try {
-                    var type = this._typeRegistry.ResolveType(request.SettingsTypeName);
-                    var schema = JsonSchemaFactory.CreateSchema(type, out var processor);
-                    processor.Finalize(schema);
-
-                    var validationErrors = schema.Validate(request.Json);
-                    errors.AddRange(validationErrors.Select(e => e.ToString()));
-
-                    if (errors.Count > 0)
-                        return new WriteSettingsResponse(false, errors);
-                } catch (Exception ex) {
-                    errors.Add($"Validation failed: {ex.Message}");
-                    return new WriteSettingsResponse(false, errors);
-                }
-            }
-
+        if (request.Validate) {
             try {
-                var filePath = Path.Combine(settingsDir.DirectoryPath, $"{request.FileName}.json");
-                File.WriteAllText(filePath, request.Json);
-                return new WriteSettingsResponse(true, []);
+                var type = this._typeRegistry.ResolveType(request.SettingsTypeName);
+                var schema = JsonSchemaFactory.CreateSchema(type, out var processor);
+                processor.Finalize(schema);
+
+                var validationErrors = schema.Validate(request.Json);
+                errors.AddRange(validationErrors.Select(e => e.ToString()));
+
+                if (errors.Count > 0)
+                    return new WriteSettingsResponse(false, errors);
             } catch (Exception ex) {
-                errors.Add($"Write failed: {ex.Message}");
+                errors.Add($"Validation failed: {ex.Message}");
                 return new WriteSettingsResponse(false, errors);
             }
-        });
-    }
+        }
+
+        try {
+            var filePath = Path.Combine(settingsDir.DirectoryPath, $"{request.FileName}.json");
+            File.WriteAllText(filePath, request.Json);
+            return new WriteSettingsResponse(true, []);
+        } catch (Exception ex) {
+            errors.Add($"Write failed: {ex.Message}");
+            return new WriteSettingsResponse(false, errors);
+        }
+    });
 
     /// <summary>
     ///     Resolve $extends and $include without saving.
     ///     Used for preview and "run without saving" scenarios.
     /// </summary>
-    public async Task<ReadSettingsResponse> ResolveComposition(string settingsTypeName, string json) {
-        return await this._taskQueue.EnqueueAsync(uiApp => {
-            var errors = new List<string>();
+    public async Task<ReadSettingsResponse> ResolveComposition(string settingsTypeName, string json) => await this._taskQueue.EnqueueAsync(uiApp => {
+        var errors = new List<string>();
 
-            try {
-                var storageName = this._typeRegistry.GetStorageName(settingsTypeName);
-                var storage = new Storage.Storage(storageName);
-                var settingsDir = storage.SettingsDir();
+        try {
+            var storageName = this._typeRegistry.GetStorageName(settingsTypeName);
+            var storage = new Storage.Storage(storageName);
+            var settingsDir = storage.SettingsDir();
 
-                var jObject = JObject.Parse(json);
+            var jObject = JObject.Parse(json);
 
-                // Check for $extends and resolve
-                if (jObject.TryGetValue("$extends", out var extendsToken)) {
-                    var extendsPath = extendsToken.Value<string>();
-                    if (!string.IsNullOrEmpty(extendsPath)) {
-                        var basePath = Path.Combine(settingsDir.DirectoryPath, extendsPath);
-                        if (File.Exists(basePath)) {
-                            var baseJson = JObject.Parse(File.ReadAllText(basePath));
-                            // Merge base into current (current overrides base)
-                            baseJson.Merge(jObject, new JsonMergeSettings {
-                                MergeArrayHandling = MergeArrayHandling.Replace,
-                                MergeNullValueHandling = MergeNullValueHandling.Merge
-                            });
-                            jObject = baseJson;
-                        } else {
-                            errors.Add($"Base file not found: {extendsPath}");
-                        }
+            // Check for $extends and resolve
+            if (jObject.TryGetValue("$extends", out var extendsToken)) {
+                var extendsPath = extendsToken.Value<string>();
+                if (!string.IsNullOrEmpty(extendsPath)) {
+                    var basePath = Path.Combine(settingsDir.DirectoryPath, extendsPath);
+                    if (File.Exists(basePath)) {
+                        var baseJson = JObject.Parse(File.ReadAllText(basePath));
+                        // Merge base into current (current overrides base)
+                        baseJson.Merge(jObject, new JsonMergeSettings {
+                            MergeArrayHandling = MergeArrayHandling.Replace,
+                            MergeNullValueHandling = MergeNullValueHandling.Merge
+                        });
+                        jObject = baseJson;
+                    } else {
+                        errors.Add($"Base file not found: {extendsPath}");
                     }
                 }
-
-                // Remove composition directives from output
-                _ = jObject.Remove("$extends");
-                _ = jObject.Remove("$schema");
-
-                return new ReadSettingsResponse(json, jObject.ToString(Formatting.Indented), errors);
-            } catch (Exception ex) {
-                errors.Add($"Resolution failed: {ex.Message}");
-                return new ReadSettingsResponse(json, json, errors);
             }
-        });
-    }
+
+            // Remove composition directives from output
+            _ = jObject.Remove("$extends");
+            _ = jObject.Remove("$schema");
+
+            return new ReadSettingsResponse(json, jObject.ToString(Formatting.Indented), errors);
+        } catch (Exception ex) {
+            errors.Add($"Resolution failed: {ex.Message}");
+            return new ReadSettingsResponse(json, json, errors);
+        }
+    });
 
     /// <summary>
     ///     Get list of available fragment files for $include.
@@ -175,10 +172,11 @@ public class SettingsHub : Hub {
         var dir = storage.SettingsDir();
 
         if (!string.IsNullOrEmpty(subDirectory))
-            dir = dir.SubDir(subDirectory, false);
+            dir = dir.SubDir(subDirectory);
 
-        var files = dir.ListJsonFiles()
-            .Where(f => f.Name.Contains("-fragment", StringComparison.OrdinalIgnoreCase))
+        var files = dir.ListJsonFilesShallow()
+            .Where(relativePath => relativePath.Contains("-fragment", StringComparison.OrdinalIgnoreCase))
+            .Select(relativePath => new FileInfo(Path.Combine(dir.DirectoryPath, relativePath)))
             .Select(f => new SettingsFile(
                 f.FullName,
                 Path.GetFileNameWithoutExtension(f.Name),

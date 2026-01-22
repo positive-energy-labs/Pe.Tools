@@ -32,9 +32,10 @@ public class CmdSchedulePalette : IExternalCommand {
         try {
             var storage = new Storage("Schedule Manager");
             var settingsManager = storage.SettingsDir();
-            var schedulesSubDir = settingsManager.SubDir("schedules", true);
+            var schedulesSubDir = settingsManager.SubDir("schedules");
+            var batchSubDir = settingsManager.SubDir("batch");
 
-            // Context for Create Schedule tab
+            // Context for Schedule tabs
             var context = new ScheduleManagerContext {
                 Doc = doc,
                 UiDoc = uiDoc,
@@ -44,18 +45,12 @@ public class CmdSchedulePalette : IExternalCommand {
 
             // Collect items for both tabs
             var createItems = ScheduleListItem.DiscoverProfiles(schedulesSubDir);
-            var serializeItems = new FilteredElementCollector(doc)
-                .OfClass(typeof(ViewSchedule))
-                .Cast<ViewSchedule>()
-                .Where(s => !s.Name.Contains("<Revision Schedule>"))
-                .OrderBy(s => s.Name)
-                .Select(s => new ScheduleSerializePaletteItem(s))
-                .ToList();
+            var batchItems = BatchScheduleListItem.DiscoverProfiles(batchSubDir);
 
             // Combine all items
             var allItems = new List<ISchedulePaletteItem>();
             allItems.AddRange(createItems.Select(i => new SchedulePaletteItemWrapper(i, ScheduleTabType.Create)));
-            allItems.AddRange(serializeItems.Select(i => new SchedulePaletteItemWrapper(i, ScheduleTabType.Serialize)));
+            allItems.AddRange(batchItems.Select(i => new SchedulePaletteItemWrapper(i, ScheduleTabType.Batch)));
 
             // Create preview panel
             var previewPanel = new SchedulePreviewPanel();
@@ -78,9 +73,9 @@ public class CmdSchedulePalette : IExternalCommand {
                     CanExecute = item => item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
                 },
                 new() {
-                    Name = "Serialize",
-                    Execute = item => this.HandleSerialize(item),
-                    CanExecute = item => item.TabType == ScheduleTabType.Serialize
+                    Name = "Run Batch",
+                    Execute = async item => this.HandleRunBatch(context, item),
+                    CanExecute = item => item.TabType == ScheduleTabType.Batch && item.GetBatchItem() != null
                 }
             };
 
@@ -96,9 +91,9 @@ public class CmdSchedulePalette : IExternalCommand {
                             FilterKeySelector = i => i.CategoryName
                         },
                         new TabDefinition<ISchedulePaletteItem> {
-                            Name = "Serialize",
-                            Filter = i => i.TabType == ScheduleTabType.Serialize,
-                            FilterKeySelector = i => i.TextPill
+                            Name = "Batch",
+                            Filter = i => i.TabType == ScheduleTabType.Batch,
+                            FilterKeySelector = i => string.Empty
                         }
                     ],
                     DefaultTabIndex = 0,
@@ -109,11 +104,10 @@ public class CmdSchedulePalette : IExternalCommand {
                             this.BuildPreviewData(item.GetCreateItem(), context);
                             if (context.PreviewData != null)
                                 previewPanel.UpdatePreview(context.PreviewData);
-                        } else {
-                            // Show serialization preview for serialize tab
-                            var serializeItem = item.GetSerializeItem();
-                            if (serializeItem != null) {
-                                var previewData = this.BuildSerializationPreview(serializeItem);
+                        } else if (item.TabType == ScheduleTabType.Batch) {
+                            var batchItem = item.GetBatchItem();
+                            if (batchItem != null) {
+                                var previewData = this.BuildBatchPreview(batchItem);
                                 previewPanel.UpdatePreview(previewData);
                             } else
                                 previewPanel.UpdatePreview(null);
@@ -161,7 +155,7 @@ public class CmdSchedulePalette : IExternalCommand {
 
     private SchedulePreviewData LoadValidPreviewData(ScheduleListItem profileItem, ScheduleManagerContext context) {
         // Load the profile
-        var profile = context.SettingsManager.SubDir("schedules", true)
+        var profile = context.SettingsManager.SubDir("schedules")
             .Json<ScheduleSpec>($"{profileItem.TextPrimary}.json")
             .Read();
 
@@ -216,37 +210,32 @@ public class CmdSchedulePalette : IExternalCommand {
             RemainingErrors = [$"{ex.GetType().Name}: {ex.Message}"]
         };
 
-    private SchedulePreviewData BuildSerializationPreview(ScheduleSerializePaletteItem serializeItem) {
+    private SchedulePreviewData BuildBatchPreview(BatchScheduleListItem batchItem) {
         try {
-            // Serialize the schedule to get the spec
-            var spec = ScheduleHelper.SerializeSchedule(serializeItem.Schedule);
+            var batchSettings = batchItem.LoadBatchSettings();
 
-            // Serialize to JSON exactly as it would be saved
-            var profileJson = JsonSerializer.Serialize(
-                spec,
-                new JsonSerializerOptions {
-                    WriteIndented = true,
-                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-                });
+            // Build a summary preview showing all schedules that will be created
+            var schedulesList = string.Join("\n", batchSettings.ScheduleFiles.Select((path, idx) => $"{idx + 1}. {path}"));
+            var profileJson = $"Batch will create {batchSettings.ScheduleFiles.Count} schedule(s):\n\n{schedulesList}";
 
             return new SchedulePreviewData {
-                ProfileName = spec.Name,
-                CategoryName = spec.CategoryName,
-                IsItemized = spec.IsItemized,
-                Fields = spec.Fields,
-                SortGroup = spec.SortGroup,
+                ProfileName = batchItem.TextPrimary,
+                CategoryName = "Batch Operation",
+                IsItemized = true,
+                Fields = [],
+                SortGroup = [],
                 ProfileJson = profileJson,
-                FilePath = string.Empty,
-                CreatedDate = null,
-                ModifiedDate = null,
-                ViewTemplateName = spec.ViewTemplateName ?? string.Empty,
+                FilePath = batchItem.FilePath,
+                CreatedDate = batchItem.CreatedDate,
+                ModifiedDate = batchItem.LastModified,
+                ViewTemplateName = string.Empty,
                 IsValid = true
             };
         } catch (Exception ex) {
             return new SchedulePreviewData {
-                ProfileName = serializeItem.TextPrimary,
+                ProfileName = batchItem.TextPrimary,
                 IsValid = false,
-                RemainingErrors = [$"Serialization error: {ex.Message}"]
+                RemainingErrors = [$"Batch preview error: {ex.Message}"]
             };
         }
     }
@@ -268,7 +257,7 @@ public class CmdSchedulePalette : IExternalCommand {
         // Load profile fresh for execution
         ScheduleSpec scheduleSpec;
         try {
-            scheduleSpec = ctx.SettingsManager.SubDir("schedules", true)
+            scheduleSpec = ctx.SettingsManager.SubDir("schedules")
                 .Json<ScheduleSpec>($"{ctx.SelectedProfile.TextPrimary}.json")
                 .Read();
         } catch (Exception ex) {
@@ -364,7 +353,7 @@ public class CmdSchedulePalette : IExternalCommand {
         // Update context with selected profile
         this.BuildPreviewData(profileItem, context);
 
-        var profile = context.SettingsManager.SubDir("schedules", true)
+        var profile = context.SettingsManager.SubDir("schedules")
             .Json<ScheduleSpec>($"{context.SelectedProfile.TextPrimary}.json")
             .Read();
 
@@ -426,57 +415,70 @@ public class CmdSchedulePalette : IExternalCommand {
         FileUtils.OpenInDefaultApp(filePath);
     }
 
-    private Task HandleSerialize(ISchedulePaletteItem item) {
-        var serializeItem = item.GetSerializeItem();
-        if (serializeItem == null) return Task.CompletedTask;
+    private void HandleRunBatch(ScheduleManagerContext context, ISchedulePaletteItem item) {
+        var batchItem = item.GetBatchItem();
+        if (batchItem == null) return;
 
         try {
-            var storage = new Storage("Schedule Manager");
-            var serializeOutputDir = storage.OutputDir().SubDir("serialize");
-            var spec = ScheduleHelper.SerializeSchedule(serializeItem.Schedule);
+            var batchSettings = batchItem.LoadBatchSettings();
+            var schedulesSubDir = context.SettingsManager.SubDir("schedules");
+            var results = new List<(string profileName, bool success, string errorMessage)>();
+            var createdSchedules = new List<string>();
 
-            // Prepend timestamp to filename
-            var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-            var filename = serializeOutputDir.Json($"{timestamp}_{spec.Name}.json").Write(spec);
+            foreach (var scheduleFile in batchSettings.ScheduleFiles) {
+                try {
+                    // Load the schedule spec
+                    var scheduleFilePath = Path.Combine(schedulesSubDir.DirectoryPath, scheduleFile);
+                    if (!File.Exists(scheduleFilePath)) {
+                        results.Add((scheduleFile, false, "File not found"));
+                        continue;
+                    }
 
+                    var scheduleSpec = schedulesSubDir.Json<ScheduleSpec>(scheduleFile).Read();
+
+                    // Create the schedule
+                    using var trans = new Transaction(context.Doc, $"Create Schedule: {scheduleSpec.Name}");
+                    _ = trans.Start();
+                    var result = ScheduleHelper.CreateSchedule(context.Doc, scheduleSpec);
+                    _ = trans.Commit();
+
+                    results.Add((scheduleFile, true, string.Empty));
+                    createdSchedules.Add(result.ScheduleName);
+
+                    // Write output for this schedule
+                    _ = this.WriteCreationOutput(context, result, scheduleFile);
+                } catch (Exception ex) {
+                    results.Add((scheduleFile, false, ex.Message));
+                }
+            }
+
+            // Show summary balloon
             var balloon = new Ballogger();
+            var successCount = results.Count(r => r.success);
+            var failCount = results.Count(r => !r.success);
+
             _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
-                $"Serialized schedule '{serializeItem.Schedule.Name}' to {filename}");
+                $"Batch Complete: {successCount} succeeded, {failCount} failed");
 
-            // Report what was serialized
-            _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
-                $"Fields: {spec.Fields.Count} ({spec.Fields.Count(f => f.CalculatedType != null)} calculated)");
-
-            if (spec.SortGroup.Count > 0) {
+            if (createdSchedules.Any()) {
                 _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
-                    $"Sort/Group: {spec.SortGroup.Count}");
+                    $"Created schedules:\n{string.Join("\n", createdSchedules.Select(s => $"  • {s}"))}");
             }
 
-            if (spec.Filters.Count > 0) {
-                _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
-                    $"Filters: {spec.Filters.Count}");
+            if (failCount > 0) {
+                var failures = results.Where(r => !r.success).ToList();
+                _ = balloon.Add(LogEventLevel.Warning, new StackFrame(),
+                    $"Failed schedules:\n{string.Join("\n", failures.Select(f => $"  • {f.profileName}: {f.errorMessage}"))}");
             }
 
-            var headerGroupCount = spec.Fields.Count(f => !string.IsNullOrEmpty(f.HeaderGroup));
-            if (headerGroupCount > 0) {
-                var uniqueGroups = spec.Fields
-                    .Where(f => !string.IsNullOrEmpty(f.HeaderGroup))
-                    .Select(f => f.HeaderGroup)
-                    .Distinct()
-                    .Count();
-                _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
-                    $"Header Groups: {uniqueGroups} group(s) across {headerGroupCount} field(s)");
-            }
-
-            balloon.Show();
+            var outputPath = context.Storage.OutputDir().SubDir("batch").DirectoryPath;
+            balloon.Show(() => FileUtils.OpenInDefaultApp(outputPath), "Open Output Folder");
         } catch (Exception ex) {
             new Ballogger().Add(LogEventLevel.Error, new StackFrame(), ex, true).Show();
         }
-
-        return Task.CompletedTask;
     }
 
-    private string WriteCreationOutput(ScheduleManagerContext ctx, ScheduleCreationResult result) {
+    private string WriteCreationOutput(ScheduleManagerContext ctx, ScheduleCreationResult result, string profileName = null) {
         try {
             var createOutputDir = ctx.Storage.OutputDir().SubDir("create");
 
@@ -484,7 +486,7 @@ public class CmdSchedulePalette : IExternalCommand {
                 result.ScheduleName,
                 result.CategoryName,
                 result.IsItemized,
-                ProfileName = ctx.SelectedProfile.TextPrimary,
+                ProfileName = profileName ?? ctx.SelectedProfile?.TextPrimary ?? "Unknown",
                 CreatedAt = DateTime.Now,
                 Summary =
                     new {
@@ -554,16 +556,9 @@ public class ScheduleManagerContext {
     public Dictionary<string, SchedulePreviewData> PreviewCache { get; } = new();
 }
 
-public class ScheduleSettings {
-    [Description(
-        "Current profile to use for the command. This determines which schedule profile is used when creating a schedule.")]
-    [Required]
-    public string CurrentProfile { get; set; } = "Default";
-}
-
 public enum ScheduleTabType {
     Create,
-    Serialize
+    Batch
 }
 
 /// <summary>
@@ -573,7 +568,7 @@ public interface ISchedulePaletteItem : IPaletteListItem {
     ScheduleTabType TabType { get; }
     string CategoryName { get; }
     ScheduleListItem GetCreateItem();
-    ScheduleSerializePaletteItem GetSerializeItem();
+    BatchScheduleListItem GetBatchItem();
 }
 
 /// <summary>
@@ -591,12 +586,12 @@ public class SchedulePaletteItemWrapper : ISchedulePaletteItem {
 
     public string CategoryName => this._inner switch {
         ScheduleListItem create => create.CategoryName,
-        ScheduleSerializePaletteItem serialize => serialize.TextSecondary,
+        BatchScheduleListItem => "Batch",
         _ => string.Empty
     };
 
     public ScheduleListItem GetCreateItem() => this._inner as ScheduleListItem;
-    public ScheduleSerializePaletteItem GetSerializeItem() => this._inner as ScheduleSerializePaletteItem;
+    public BatchScheduleListItem GetBatchItem() => this._inner as BatchScheduleListItem;
 
     // Delegate all IPaletteListItem members to inner
     public string TextPrimary => this._inner.TextPrimary;
@@ -605,30 +600,4 @@ public class SchedulePaletteItemWrapper : ISchedulePaletteItem {
     public Func<string> GetTextInfo => this._inner.GetTextInfo;
     public BitmapImage Icon => this._inner.Icon;
     public Color? ItemColor => this._inner.ItemColor;
-}
-
-public class ScheduleSerializePaletteItem(ViewSchedule schedule) : IPaletteListItem {
-    public ViewSchedule Schedule { get; } = schedule;
-    public string TextPrimary => this.Schedule.Name;
-
-    public string TextSecondary {
-        get {
-            var category = Category.GetCategory(this.Schedule.Document, this.Schedule.Definition.CategoryId);
-            return category?.Name ?? string.Empty;
-        }
-    }
-
-    public string TextPill { get; } = schedule.FindParameter("Discipline")?.AsValueString();
-
-    public Func<string> GetTextInfo => () => {
-        var category = Category.GetCategory(this.Schedule.Document, this.Schedule.Definition.CategoryId);
-        var fieldCount = this.Schedule.Definition.GetFieldCount();
-        return $"Id: {this.Schedule.Id}" +
-               $"\nCategory: {category?.Name ?? "Unknown"}" +
-               $"\nFields: {fieldCount}" +
-               $"\nDiscipline: {this.TextPill}";
-    };
-
-    public BitmapImage Icon => null;
-    public Color? ItemColor => null;
 }

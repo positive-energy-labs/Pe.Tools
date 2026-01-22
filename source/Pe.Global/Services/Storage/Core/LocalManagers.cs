@@ -50,9 +50,29 @@ public abstract class BaseLocalManager {
     public string GetDatedCsvPath(string? filename = null) =>
         Path.Combine(this.DirectoryPath, $"{filename ?? this.Name}_{DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss")}.csv");
 
-    public List<FileInfo> ListJsonFiles() => Directory.GetFiles(this.DirectoryPath, "*.json").Select(f => new FileInfo(f)).ToList();
+    public List<string> ListJsonFilesShallow(List<string>? excludePatterns = null) => [
+        .. Directory.GetFiles(this.DirectoryPath, "*.json",
+                SearchOption.TopDirectoryOnly)
+            .Select(f => Path.GetRelativePath(this.DirectoryPath, f))
+            .Where(f => !this.MatchesExcludePattern(f, excludePatterns ?? ["_*"]))
+            .ToList()
+    ];
 
-    public List<FileInfo> ListCsvFiles() => Directory.GetFiles(this.DirectoryPath, "*.csv").Select(f => new FileInfo(f)).ToList();
+    public List<string> ListJsonFilesRecursive(List<string>? excludePatterns = null) => [
+        .. Directory.GetFiles(this.DirectoryPath, "*.json", SearchOption.AllDirectories)
+            .Select(f => Path.GetRelativePath(this.DirectoryPath, f))
+            .Where(f => !this.MatchesExcludePattern(f, excludePatterns ?? ["_*"]))
+            .ToList()
+    ];
+
+    /// <summary>
+    ///     Checks if a relative path matches any exclusion pattern.
+    /// </summary>
+    private bool MatchesExcludePattern(string relativePath, List<string> excludePatterns) {
+        var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return segments.Any(seg => excludePatterns.Any(pattern =>
+            pattern.EndsWith("*") ? seg.StartsWith(pattern.TrimEnd('*')) : seg == pattern));
+    }
 }
 
 public class SettingsManager : BaseLocalManager {
@@ -82,59 +102,12 @@ public class SettingsManager : BaseLocalManager {
     /// </summary>
     /// <param name="subdirectory">The subdirectory path (relative to current directory)</param>
     /// <param name="recursiveDiscovery">Enable recursive file discovery for nested organization</param>
-    public SettingsSubDir SubDir(string subdirectory, bool recursiveDiscovery = false) {
+    public SettingsManager SubDir(string subdirectory) {
         var subdirectoryPath = Path.Combine(this.DirectoryPath, subdirectory);
         if (Path.GetFullPath(subdirectoryPath).StartsWith(Path.GetFullPath(this.DirectoryPath)))
-            return new SettingsSubDir(this.DirectoryPath, subdirectory, recursiveDiscovery);
+            return new SettingsManager(this.DirectoryPath, subdirectory);
 
         throw new ArgumentException($"Subdirectory path '{subdirectory}' would escape base directory.");
-    }
-}
-
-/// <summary>
-///     Extended SettingsManager for subdirectories with optional recursive file discovery.
-/// </summary>
-public class SettingsSubDir : SettingsManager {
-    private readonly List<string> _excludePatterns;
-
-    public SettingsSubDir(string parentPath,
-        string subDirName,
-        bool recursiveDiscovery,
-        List<string>? excludePatterns = null)
-        : base(parentPath, subDirName) {
-        this.RecursiveDiscovery = recursiveDiscovery;
-        this._excludePatterns = excludePatterns ?? ["_*"]; // Default: exclude _fragments, etc.
-    }
-
-    public bool RecursiveDiscovery { get; }
-
-    /// <summary>
-    ///     Lists all JSON files in this directory.
-    ///     If RecursiveDiscovery is enabled, includes files from all nested subdirectories.
-    ///     Returns relative paths from this directory (e.g., "electrical/panel.json").
-    ///     Excludes schema files and directories matching exclusion patterns (default: _*).
-    /// </summary>
-    public List<string> ListJsonFiles() {
-        if (!Directory.Exists(this.DirectoryPath))
-            return [];
-
-        var searchOption = this.RecursiveDiscovery ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-        var files = Directory.GetFiles(this.DirectoryPath, "*.json", searchOption);
-
-        return files
-            .Select(f => Path.GetRelativePath(this.DirectoryPath, f))
-            .Where(f => !f.EndsWith("schema.json") && !f.Contains("schema-"))
-            .Where(f => !this.MatchesExcludePattern(f))
-            .ToList();
-    }
-
-    /// <summary>
-    ///     Checks if a relative path matches any exclusion pattern.
-    /// </summary>
-    private bool MatchesExcludePattern(string relativePath) {
-        var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return segments.Any(seg => this._excludePatterns.Any(pattern =>
-            pattern.EndsWith("*") ? seg.StartsWith(pattern.TrimEnd('*')) : seg == pattern));
     }
 }
 

@@ -52,7 +52,7 @@ public class CmdFFManager : IExternalCommand {
         }
 
         // Load profile fresh for execution
-        var profile = ctx.SettingsManager.SubDir("profiles", true)
+        var profile = ctx.SettingsManager.SubDir("profiles")
             .Json<ProfileFamilyManager>($"{ctx.SelectedProfile.TextPrimary}.json")
             .Read();
 

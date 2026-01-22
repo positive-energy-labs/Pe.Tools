@@ -51,7 +51,7 @@ public class CmdFFMigrator : IExternalCommand {
     }
 
     private void HandlePlaceFamilies(FoundryContext<ProfileRemap> context) {
-        var profile = context.SettingsManager.SubDir("profiles", true)
+        var profile = context.SettingsManager.SubDir("profiles")
             .Json<ProfileRemap>($"{context.SelectedProfile.TextPrimary}.json")
             .Read();
         var families = profile.GetFamilies(context.Doc);
@@ -88,7 +88,7 @@ public class CmdFFMigrator : IExternalCommand {
         }
 
         // Load profile fresh for execution
-        var profile = ctx.SettingsManager.SubDir("profiles", true)
+        var profile = ctx.SettingsManager.SubDir("profiles")
             .Json<ProfileRemap>($"{ctx.SelectedProfile.TextPrimary}.json")
             .Read();
 
