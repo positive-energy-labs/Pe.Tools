@@ -23,36 +23,28 @@ public class ActionsHub : Hub {
     /// <summary>
     ///     Execute a Revit action with the provided settings.
     /// </summary>
-    public async Task<ExecuteActionResponse> Execute(ExecuteActionRequest request) {
-        return await this._taskQueue.EnqueueAsync(uiApp => {
-            try {
-                // Resolve the handler
-                var handler = this._actionRegistry.Resolve(request.ActionName);
-                if (handler == null) {
-                    return new ExecuteActionResponse(false, $"Unknown action: {request.ActionName}", null);
-                }
-
-                // Deserialize settings
-                var settingsType = this._typeRegistry.ResolveType(request.SettingsTypeName);
-                var settings = JsonConvert.DeserializeObject(request.SettingsJson, settingsType);
-                if (settings == null) {
-                    return new ExecuteActionResponse(false, "Failed to deserialize settings", null);
-                }
-
-                // Execute
-                object? result;
-                if (request.PersistSettings) {
-                    result = handler.Execute(uiApp, settings);
-                } else {
-                    result = handler.ExecuteWithoutPersist(uiApp, settings);
-                }
-
-                return new ExecuteActionResponse(true, null, result);
-            } catch (Exception ex) {
-                return new ExecuteActionResponse(false, ex.Message, null);
+    public async Task<ExecuteActionResponse> Execute(ExecuteActionRequest request) => await this._taskQueue.EnqueueAsync(uiApp => {
+        try {
+            // Resolve the handler
+            var handler = this._actionRegistry.Resolve(request.ActionName);
+            if (handler == null) {
+                return new ExecuteActionResponse(false, $"Unknown action: {request.ActionName}", null);
             }
-        });
-    }
+
+            // Deserialize settings
+            var settingsType = this._typeRegistry.ResolveType(request.SettingsTypeName);
+            var settings = JsonConvert.DeserializeObject(request.SettingsJson, settingsType);
+            if (settings == null) {
+                return new ExecuteActionResponse(false, "Failed to deserialize settings", null);
+            }
+
+            // Execute
+            var result = request.PersistSettings ? handler.Execute(uiApp, settings) : handler.ExecuteWithoutPersist(uiApp, settings);
+            return new ExecuteActionResponse(true, null, result);
+        } catch (Exception ex) {
+            return new ExecuteActionResponse(false, ex.Message, null);
+        }
+    });
 
     /// <summary>
     ///     Stream progress updates for long-running operations.
@@ -87,11 +79,7 @@ public class ActionsHub : Hub {
                 } else {
                     _ = channel.Writer.TryWrite(new ProgressUpdate(0, "Starting...", null));
 
-                    if (request.PersistSettings) {
-                        _ = handler.Execute(uiApp, settings);
-                    } else {
-                        _ = handler.ExecuteWithoutPersist(uiApp, settings);
-                    }
+                    _ = request.PersistSettings ? handler.Execute(uiApp, settings) : handler.ExecuteWithoutPersist(uiApp, settings);
 
                     _ = channel.Writer.TryWrite(new ProgressUpdate(100, "Complete", null));
                 }

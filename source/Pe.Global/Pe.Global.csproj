@@ -46,4 +46,11 @@
     <ItemGroup>
     </ItemGroup>
 
+    <!-- Generate TypeScript types after build -->
+    <Target Name="GenerateTypeScriptTypes" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug.R25'">
+        <Message Text="Generating TypeScript types with TypeGen..." Importance="high" />
+        <Exec Command="dotnet typegen generate" WorkingDirectory="$(ProjectDir)" />
+        <Message Text="TypeScript types generated successfully!" Importance="high" />
+    </Target>
+
 </Project>

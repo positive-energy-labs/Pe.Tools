@@ -124,6 +124,15 @@
             <button id="testListSettingsBtn" onclick="testListSettings()" disabled>Test ListSettings</button>
         </div>
 
+        <hr style="margin: 30px 0;">
+
+        <h2>Test AutoTag Actions</h2>
+        <div>
+            <button id="testAutoTagLoadBtn" onclick="testAutoTagLoad()" disabled>AutoTag.Load</button>
+            <button id="testAutoTagSaveBtn" onclick="testAutoTagSave()" disabled>AutoTag.Save</button>
+            <button id="testAutoTagStatusBtn" onclick="testAutoTagStatus()" disabled>AutoTag.GetStatus</button>
+        </div>
+
         <div id="result" class="result" style="display:none;"></div>
 
         <h3>Console Log</h3>
@@ -143,6 +152,9 @@
         const testDocInfoBtn = document.getElementById('testDocInfoBtn');
         const testSchemaBtn = document.getElementById('testSchemaBtn');
         const testListSettingsBtn = document.getElementById('testListSettingsBtn');
+        const testAutoTagLoadBtn = document.getElementById('testAutoTagLoadBtn');
+        const testAutoTagSaveBtn = document.getElementById('testAutoTagSaveBtn');
+        const testAutoTagStatusBtn = document.getElementById('testAutoTagStatusBtn');
 
         function log(message, isError = false, isSuccess = false) {
             const timestamp = new Date().toLocaleTimeString();
@@ -171,6 +183,9 @@
             testDocInfoBtn.disabled = !isConnected;
             testSchemaBtn.disabled = !isConnected;
             testListSettingsBtn.disabled = !isConnected;
+            testAutoTagLoadBtn.disabled = !isConnected;
+            testAutoTagSaveBtn.disabled = !isConnected;
+            testAutoTagStatusBtn.disabled = !isConnected;
         }
 
         function showResult(data) {
@@ -335,6 +350,161 @@
                 
             } catch (error) {
                 log(`✗ ListSettings failed: ${error}`, true);
+                showResult({ error: error.toString() });
+            }
+        }
+
+        async function testAutoTagLoad() {
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected', true);
+                return;
+            }
+
+            try {
+                // Switch to ActionsHub for this test
+                log('Switching to ActionsHub...');
+                await disconnect();
+                
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl("http://localhost:5150/hubs/actions")
+                    .configureLogging(signalR.LogLevel.Information)
+                    .withAutomaticReconnect()
+                    .build();
+
+                await connection.start();
+                log('✓ Connected to ActionsHub', false, true);
+                
+                log('Calling ActionsHub.Execute({ actionName: "AutoTag.Load", ... })...');
+                const result = await connection.invoke("Execute", {
+                    actionName: "AutoTag.Load",
+                    settingsTypeName: "AutoTagSettings",
+                    settingsJson: "{}",
+                    persistSettings: false
+                });
+                
+                if (result.success) {
+                    log(`✓ AutoTag.Load succeeded. HasSettings: ${result.result?.HasSettings}`, false, true);
+                } else {
+                    log(`✗ AutoTag.Load failed: ${result.error}`, true);
+                }
+                showResult(result);
+                
+                // Switch back to SchemaHub
+                await disconnect();
+                await connect();
+                
+            } catch (error) {
+                log(`✗ AutoTag.Load failed: ${error}`, true);
+                showResult({ error: error.toString() });
+            }
+        }
+
+        async function testAutoTagSave() {
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected', true);
+                return;
+            }
+
+            try {
+                // Switch to ActionsHub for this test
+                log('Switching to ActionsHub...');
+                await disconnect();
+                
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl("http://localhost:5150/hubs/actions")
+                    .configureLogging(signalR.LogLevel.Information)
+                    .withAutomaticReconnect()
+                    .build();
+
+                await connection.start();
+                log('✓ Connected to ActionsHub', false, true);
+                
+                // Create test settings
+                const testSettings = {
+                    enabled: true,
+                    configurations: [
+                        {
+                            categoryName: "Mechanical Equipment",
+                            tagFamilyName: "M_Mechanical Equipment Tag",
+                            tagTypeName: "Standard",
+                            enabled: true,
+                            addLeader: true,
+                            tagOrientation: "Horizontal",
+                            offsetDistance: 2.0,
+                            offsetAngle: 0.0,
+                            skipIfAlreadyTagged: true,
+                            viewTypeFilter: []
+                        }
+                    ]
+                };
+                
+                log('Calling ActionsHub.Execute({ actionName: "AutoTag.Save", ... })...');
+                const result = await connection.invoke("Execute", {
+                    actionName: "AutoTag.Save",
+                    settingsTypeName: "AutoTagSettings",
+                    settingsJson: JSON.stringify(testSettings),
+                    persistSettings: true
+                });
+                
+                if (result.success) {
+                    log(`✓ AutoTag.Save succeeded!`, false, true);
+                } else {
+                    log(`✗ AutoTag.Save failed: ${result.error}`, true);
+                }
+                showResult(result);
+                
+                // Switch back to SchemaHub
+                await disconnect();
+                await connect();
+                
+            } catch (error) {
+                log(`✗ AutoTag.Save failed: ${error}`, true);
+                showResult({ error: error.toString() });
+            }
+        }
+
+        async function testAutoTagStatus() {
+            if (!connection || connection.state !== signalR.HubConnectionState.Connected) {
+                log('Not connected', true);
+                return;
+            }
+
+            try {
+                // Switch to ActionsHub for this test
+                log('Switching to ActionsHub...');
+                await disconnect();
+                
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl("http://localhost:5150/hubs/actions")
+                    .configureLogging(signalR.LogLevel.Information)
+                    .withAutomaticReconnect()
+                    .build();
+
+                await connection.start();
+                log('✓ Connected to ActionsHub', false, true);
+                
+                log('Calling ActionsHub.Execute({ actionName: "AutoTag.GetStatus", ... })...');
+                const result = await connection.invoke("Execute", {
+                    actionName: "AutoTag.GetStatus",
+                    settingsTypeName: "AutoTagSettings",
+                    settingsJson: "{}",
+                    persistSettings: false
+                });
+                
+                if (result.success) {
+                    const status = result.result?.Status;
+                    log(`✓ AutoTag.GetStatus succeeded. Enabled: ${status?.isEnabled}, Configs: ${status?.configurationCount}`, false, true);
+                } else {
+                    log(`✗ AutoTag.GetStatus failed: ${result.error}`, true);
+                }
+                showResult(result);
+                
+                // Switch back to SchemaHub
+                await disconnect();
+                await connect();
+                
+            } catch (error) {
+                log(`✗ AutoTag.GetStatus failed: ${error}`, true);
                 showResult({ error: error.toString() });
             }
         }

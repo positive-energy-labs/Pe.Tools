@@ -1,8 +1,8 @@
 {
     "assemblies": [
-        "source/Pe.Global/bin/Debug.R25/net8.0-windows/Pe.Global.dll"
+        "bin/Debug.R25/Pe.Global.dll"
     ],
-    "outputPath": "settings-editor-frontend/src/generated",
+    "outputPath": "C:/Users/kaitp/source/repos/signalir-clientside-demo/v1/src/generated",
     "createIndexFile": true,
     "enumStringInitializers": true,
     "singleQuotes": false,

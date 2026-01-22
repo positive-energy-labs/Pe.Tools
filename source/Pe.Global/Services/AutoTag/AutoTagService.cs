@@ -37,6 +37,15 @@ public class AutoTagService {
     }
 
     /// <summary>
+    ///     Removes settings for a specific document when it's closed to prevent memory leaks.
+    /// </summary>
+    public void CleanupDocument(Autodesk.Revit.DB.Document doc) {
+        var docHash = doc.GetHashCode();
+        if (this._documentSettings.Remove(docHash))
+            Log.Debug("AutoTag: Cleaned up settings for closed document '{Title}'", doc.Title);
+    }
+
+    /// <summary>
     ///     Writes settings for a specific document and reloads AutoTag for that document.
     /// </summary>
     public void SaveSettingsForDocument(Autodesk.Revit.DB.Document doc, AutoTagSettings settings) {

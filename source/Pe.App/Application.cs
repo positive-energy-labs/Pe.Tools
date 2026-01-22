@@ -84,6 +84,9 @@ public class Application : ExternalApplication {
     private static void OnDocumentClosing(object sender, DocumentClosingEventArgs e) {
         if (e?.Document == null) return;
         DocumentManager.Instance.OnDocumentClosed(e.Document);
+        
+        // Clean up AutoTag settings for this document to prevent memory leak
+        AutoTagService.Instance.CleanupDocument(e.Document);
     }
 
     private static void OnDocumentChanged(object sender, DocumentChangedEventArgs e) {
@@ -122,14 +125,19 @@ public class Application : ExternalApplication {
 
         StartSignalRServer(new UIApplication(app));
 
-        // Unsubscribe after starting server once
+        // Unsubscribe after starting server once - must unsubscribe from ControlledApplication
         app.DocumentOpened -= OnDocumentOpened;
     }
 
     private static void StartSignalRServer(UIApplication uiApp) {
         try {
             _settingsEditorServer = new SettingsEditorServer();
-            _ = _settingsEditorServer.StartAsync(uiApp);
+            _ = _settingsEditorServer.StartAsync(uiApp, configureActionRegistry: registry => {
+                // Register AutoTag action handlers
+                registry.Register(new Pe.Global.Services.SignalR.Actions.AutoTagLoadHandler());
+                registry.Register(new Pe.Global.Services.SignalR.Actions.AutoTagSaveHandler());
+                registry.Register(new Pe.Global.Services.SignalR.Actions.AutoTagGetStatusHandler());
+            });
             Log.Information("SignalR settings editor server started successfully");
         } catch (Exception ex) {
             Log.Error(ex, "Failed to start SignalR settings editor server");

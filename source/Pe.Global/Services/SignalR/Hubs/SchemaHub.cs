@@ -15,7 +15,7 @@ public class SchemaHub : Hub {
     public SchemaHub(RevitTaskQueue taskQueue, SettingsTypeRegistry typeRegistry) {
         this._taskQueue = taskQueue;
         this._typeRegistry = typeRegistry;
-    }
+    } 
 
     /// <summary>
     ///     Get JSON schema for a settings type.
@@ -46,28 +46,47 @@ public class SchemaHub : Hub {
     ///     Get dynamic examples for a property, with optional filtering based on sibling values.
     /// </summary>
     public async Task<ExamplesResponse> GetExamples(ExamplesRequest request) => await this._taskQueue.EnqueueAsync(uiApp => {
-        var type = this._typeRegistry.ResolveType(request.SettingsTypeName);
-        var property = ResolveProperty(type, request.PropertyPath);
+        try {
+            var type = this._typeRegistry.ResolveType(request.SettingsTypeName);
+            var property = ResolveProperty(type, request.PropertyPath);
 
-        if (property == null)
+            if (property == null) {
+                Serilog.Log.Debug("GetExamples: Property '{PropertyPath}' not found on type '{TypeName}'",
+                    request.PropertyPath, request.SettingsTypeName);
+                return new ExamplesResponse([]);
+            }
+
+            var providerAttr = property.GetCustomAttribute<SchemaExamplesAttribute>();
+            if (providerAttr == null) {
+                Serilog.Log.Debug("GetExamples: No SchemaExamples attribute on property '{PropertyPath}'",
+                    request.PropertyPath);
+                return new ExamplesResponse([]);
+            }
+
+            var provider = Activator.CreateInstance(providerAttr.ProviderType) as IOptionsProvider;
+            if (provider == null) {
+                Serilog.Log.Warning("GetExamples: Failed to create provider '{ProviderType}'",
+                    providerAttr.ProviderType.Name);
+                return new ExamplesResponse([]);
+            }
+
+            Serilog.Log.Debug("GetExamples: Using provider '{ProviderType}' for property '{PropertyPath}'",
+                providerAttr.ProviderType.Name, request.PropertyPath);
+
+            // Handle dependent filtering
+            if (provider is IDependentOptionsProvider dependentProvider && request.SiblingValues is { Count: > 0 }) {
+                var examples = dependentProvider.GetExamples(request.SiblingValues).ToList();
+                Serilog.Log.Debug("GetExamples: Provider returned {Count} examples (dependent)", examples.Count);
+                return new ExamplesResponse(examples);
+            }
+
+            var result = provider.GetExamples().ToList();
+            Serilog.Log.Debug("GetExamples: Provider returned {Count} examples", result.Count);
+            return new ExamplesResponse(result);
+        } catch (Exception ex) {
+            Serilog.Log.Error(ex, "GetExamples failed for property '{PropertyPath}'", request.PropertyPath);
             return new ExamplesResponse([]);
-
-        var providerAttr = property.GetCustomAttribute<SchemaExamplesAttribute>();
-        if (providerAttr == null)
-            return new ExamplesResponse([]);
-
-        var provider = Activator.CreateInstance(providerAttr.ProviderType) as IOptionsProvider;
-        if (provider == null)
-            return new ExamplesResponse([]);
-
-        // Handle dependent filtering
-        if (provider is IDependentOptionsProvider dependentProvider && request.SiblingValues is { Count: > 0 }) {
-            return new ExamplesResponse(
-                dependentProvider.GetExamples(request.SiblingValues).ToList()
-            );
         }
-
-        return new ExamplesResponse(provider.GetExamples().ToList());
     });
 
     /// <summary>
@@ -88,24 +107,42 @@ public class SchemaHub : Hub {
         PropertyInfo? property = null;
         var currentType = type;
 
+        Serilog.Log.Debug("ResolveProperty: Starting resolution for path '{Path}' on type '{Type}'", propertyPath, type.Name);
+
         foreach (var part in parts) {
+            Serilog.Log.Debug("ResolveProperty: Processing part '{Part}', currentType = '{CurrentType}', isGeneric = {IsGeneric}", 
+                part, currentType.Name, currentType.IsGenericType);
+
             // Handle array item notation (e.g., "items" means get the element type)
-            if (part == "items" && currentType.IsGenericType) {
-                currentType = currentType.GetGenericArguments()[0];
+            // Skip if we've already been unwrapped by the List<T> handler below
+            if (part == "items") {
+                if (currentType.IsGenericType) {
+                    currentType = currentType.GetGenericArguments()[0];
+                    Serilog.Log.Debug("ResolveProperty: Unwrapped 'items' to generic type '{GenericType}'", currentType.Name);
+                } else {
+                    Serilog.Log.Debug("ResolveProperty: Skipping 'items' - type already unwrapped");
+                }
                 continue;
             }
 
             property = currentType.GetProperty(part, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
-            if (property == null) return null;
+            if (property == null) {
+                Serilog.Log.Warning("ResolveProperty: Property '{Part}' not found on type '{CurrentType}'", part, currentType.Name);
+                return null;
+            }
 
+            Serilog.Log.Debug("ResolveProperty: Found property '{PropertyName}' of type '{PropertyType}'", property.Name, property.PropertyType.Name);
             currentType = property.PropertyType;
 
-            // Handle List<T> types
+            // Handle List<T> types - auto-unwrap to element type
             if (currentType.IsGenericType && currentType.GetGenericTypeDefinition() == typeof(List<>)) {
-                currentType = currentType.GetGenericArguments()[0];
+                var elementType = currentType.GetGenericArguments()[0];
+                Serilog.Log.Debug("ResolveProperty: Auto-unwrapped List<{ElementType}> to {ElementType}", elementType.Name, elementType.Name);
+                currentType = elementType;
             }
         }
 
+        Serilog.Log.Debug("ResolveProperty: Resolution complete, final property = '{PropertyName}'", property?.Name ?? "null");
         return property;
     }
 }
