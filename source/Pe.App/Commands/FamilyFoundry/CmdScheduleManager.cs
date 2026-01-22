@@ -20,7 +20,7 @@ using Color = System.Windows.Media.Color;
 namespace Pe.Tools.Commands.FamilyFoundry;
 
 [Transaction(TransactionMode.Manual)]
-public class CmdSchedulePalette : IExternalCommand {
+public class CmdScheduleManager : IExternalCommand {
     public Result Execute(
         ExternalCommandData commandData,
         ref string message,
@@ -58,25 +58,20 @@ public class CmdSchedulePalette : IExternalCommand {
             // Define actions for the palette
             var actions = new List<PaletteAction<ISchedulePaletteItem>> {
                 new() {
-                    Name = "Create Schedule",
-                    Execute = async item => this.HandleCreateSchedule(context, item),
-                    CanExecute = item => item.TabType == ScheduleTabType.Create && context.PreviewData?.IsValid == true
+                    Name = "Open Profile File",
+                    Execute = async item => this.HandleOpenFile(item),
+                    CanExecute = item => item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
+                },
+                new() {
+                    Name = "Create Schedule/s",
+                    Execute = async item => this.HandleCreate(context, item),
+                    CanExecute = item => context.PreviewData?.IsValid == true
                 },
                 new() {
                     Name = "Place Sample Families",
                     Execute = async item => this.HandlePlaceSampleFamilies(context, item),
                     CanExecute = item => item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
                 },
-                new() {
-                    Name = "Open File",
-                    Execute = async item => this.HandleOpenFile(item),
-                    CanExecute = item => item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
-                },
-                new() {
-                    Name = "Run Batch",
-                    Execute = async item => this.HandleRunBatch(context, item),
-                    CanExecute = item => item.TabType == ScheduleTabType.Batch && item.GetBatchItem() != null
-                }
             };
 
             // Create the palette with tabs
@@ -239,8 +234,20 @@ public class CmdSchedulePalette : IExternalCommand {
             };
         }
     }
+    private void HandleCreate(ScheduleManagerContext ctx, ISchedulePaletteItem item) {
+        switch (item.TabType) {
+        case ScheduleTabType.Create:
+            this.HandleCreateSingle(ctx, item);
+            break;
+        case ScheduleTabType.Batch:
+            this.HandleCreateBatch(ctx, item);
+            break;
+        default:
+            throw new ArgumentException("Invalid schedule tab type");
+        }
+    }
 
-    private void HandleCreateSchedule(ScheduleManagerContext ctx, ISchedulePaletteItem item) {
+    private void HandleCreateSingle(ScheduleManagerContext ctx, ISchedulePaletteItem item) {
         var profileItem = item.GetCreateItem();
         if (profileItem == null) return;
 
@@ -296,6 +303,7 @@ public class CmdSchedulePalette : IExternalCommand {
                         result.SkippedFilters.Count > 0 ||
                         result.SkippedHeaderGroups.Count > 0 ||
                         !string.IsNullOrEmpty(result.SkippedViewTemplate) ||
+                        !string.IsNullOrEmpty(result.FilterBySheetSkipped) ||
                         result.Warnings.Count > 0;
 
         var hasHeaderGroups = result.AppliedHeaderGroups.Count > 0 || result.SkippedHeaderGroups.Count > 0;
@@ -321,6 +329,10 @@ public class CmdSchedulePalette : IExternalCommand {
                 "THERE WERE ISSUES WITH THE SCHEDULE CREATION. SEE THE OUTPUT FILE FOR DETAILS.")
             .AddIf(hasCalculatedFields, LogEventLevel.Warning, null,
                 $"{calculatedFieldCount} calculated field(s) require manual creation - see output file")
+            .AddIf(result.FilterBySheetApplied, LogEventLevel.Information, null,
+                "Filter by sheet: Enabled")
+            .AddIf(!string.IsNullOrEmpty(result.FilterBySheetSkipped), LogEventLevel.Warning, null,
+                $"Filter by sheet skipped: {result.FilterBySheetSkipped}")
             .AddIf(hasHeaderGroups, LogEventLevel.Information, null,
                 $"Field header(s) applied: {result.AppliedHeaderGroups.Count} / {headerGroupCount} ")
             .AddIf(hasFields, LogEventLevel.Information, null,
@@ -415,7 +427,7 @@ public class CmdSchedulePalette : IExternalCommand {
         FileUtils.OpenInDefaultApp(filePath);
     }
 
-    private void HandleRunBatch(ScheduleManagerContext context, ISchedulePaletteItem item) {
+    private void HandleCreateBatch(ScheduleManagerContext context, ISchedulePaletteItem item) {
         var batchItem = item.GetBatchItem();
         if (batchItem == null) return;
 
@@ -486,6 +498,8 @@ public class CmdSchedulePalette : IExternalCommand {
                 result.ScheduleName,
                 result.CategoryName,
                 result.IsItemized,
+                result.FilterBySheetApplied,
+                result.FilterBySheetSkipped,
                 ProfileName = profileName ?? ctx.SelectedProfile?.TextPrimary ?? "Unknown",
                 CreatedAt = DateTime.Now,
                 Summary =

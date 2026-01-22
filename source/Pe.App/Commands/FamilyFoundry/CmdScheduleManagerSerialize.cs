@@ -16,7 +16,7 @@ using Color = System.Windows.Media.Color;
 namespace Pe.Tools.Commands.FamilyFoundry;
 
 [Transaction(TransactionMode.Manual)]
-public class CmdScheduleSerialize : IExternalCommand {
+public class CmdScheduleManagerSerialize : IExternalCommand {
     public Result Execute(
         ExternalCommandData commandData,
         ref string message,
@@ -26,7 +26,7 @@ public class CmdScheduleSerialize : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var storage = new Storage("Schedule Serializer");
+            var storage = new Storage("Schedule Manager");
 
             // Collect all schedules in the document
             var serializeItems = new FilteredElementCollector(doc)
@@ -103,7 +103,8 @@ public class CmdScheduleSerialize : IExternalCommand {
             return new ScheduleSerializePreviewData {
                 ProfileName = serializeItem.TextPrimary,
                 IsValid = false,
-                ErrorMessage = $"Serialization error: {ex.Message}"
+                ErrorMessage = $"Serialization error: {ex.Message}",
+                ProfileJson = string.Empty
             };
         }
     }
@@ -168,7 +169,7 @@ public class ScheduleSerializePaletteItem(ViewSchedule schedule) : IPaletteListI
         }
     }
 
-    public string TextPill { get; } = schedule.FindParameter("Discipline")?.AsValueString();
+    public string? TextPill { get; } = schedule.FindParameter("Discipline")?.AsValueString();
 
     public Func<string> GetTextInfo => () => {
         var category = Category.GetCategory(this.Schedule.Document, this.Schedule.Definition.CategoryId);
@@ -179,17 +180,17 @@ public class ScheduleSerializePaletteItem(ViewSchedule schedule) : IPaletteListI
                $"\nDiscipline: {this.TextPill}";
     };
 
-    public BitmapImage Icon => null;
+    public BitmapImage? Icon => null;
     public Color? ItemColor => null;
 }
 
 public class ScheduleSerializePreviewData {
-    public string ProfileName { get; set; }
-    public string CategoryName { get; set; }
-    public bool IsItemized { get; set; }
-    public List<Pe.Global.Revit.Lib.Schedules.Fields.ScheduleFieldSpec> Fields { get; set; }
-    public List<Pe.Global.Revit.Lib.Schedules.SortGroup.ScheduleSortGroupSpec> SortGroup { get; set; }
-    public string ProfileJson { get; set; }
+    public required string ProfileName { get; set; }
+    public string? CategoryName { get; set; }
+    public bool? IsItemized { get; set; }
+    public List<Pe.Global.Revit.Lib.Schedules.Fields.ScheduleFieldSpec>? Fields { get; set; }
+    public List<Pe.Global.Revit.Lib.Schedules.SortGroup.ScheduleSortGroupSpec>? SortGroup { get; set; }
+    public required string ProfileJson { get; set; }
     public bool IsValid { get; set; }
-    public string ErrorMessage { get; set; }
+    public string? ErrorMessage { get; set; }
 }

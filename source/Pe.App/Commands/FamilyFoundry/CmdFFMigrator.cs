@@ -31,11 +31,11 @@ public class CmdFFMigrator : IExternalCommand {
 
         try {
             var window = new FoundryPaletteBuilder<ProfileRemap>("FF Migrator", doc, uiDoc)
+                .WithAction("Open Profile File", this.HandleOpenFile,
+                    ctx => ctx.SelectedProfile != null)
                 .WithAction("Process Families", this.HandleProcessFamilies,
                     ctx => ctx.PreviewData?.IsValid == true)
                 .WithAction("Place Families", this.HandlePlaceFamilies,
-                    ctx => ctx.SelectedProfile != null)
-                .WithAction("Open File", this.HandleOpenFile,
                     ctx => ctx.SelectedProfile != null)
                 .WithQueueBuilder(BuildQueue)
                 .WithPostProcess((ctx, familyNames) =>

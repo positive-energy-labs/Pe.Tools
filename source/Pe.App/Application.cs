@@ -145,38 +145,7 @@ public class Application : ExternalApplication {
         }
     }
 
-    private void CreateRibbon() {
-        const string tabName = "PE TOOLS";
-
-        var panelManage = this.Application.CreatePanel("Manage", tabName);
-        var panelTools = this.Application.CreatePanel("Tools", tabName);
-        var panelMigration = this.Application.CreatePanel("Migration", tabName);
-
-        var manageStackButton = panelManage.AddPullDownButton("General");
-
-        ButtonDataHydrator.AddButtonData([
-            manageStackButton.AddPushButton<CmdApsAuthPKCE>("OAuth PKCE"),
-            manageStackButton.AddPushButton<CmdApsAuthNormal>("OAuth Normal")
-        ]);
-
-        ButtonDataHydrator.AddButtonData([
-            panelMigration.AddPushButton<CmdSchedulePalette>("Schedule Manager"),
-            panelMigration.AddPushButton<CmdFFManager>("FF Manager"),
-            panelMigration.AddPushButton<CmdFFManagerSnapshot>("FF Manager Snapshot"),
-            panelMigration.AddPushButton<CmdFFMigrator>("FF Migrator"),
-            panelMigration.AddPushButton<CmdFFMakeATVariants>("Make AT Variants"),
-            panelMigration.AddPushButton<CmdFFParamAggregator>("FF Param Aggregator"),
-            manageStackButton.AddPushButton<CmdCacheParametersService>("Cache Params Svc"),
-
-            panelTools.AddPushButton<CmdPltCommands>("Command Palette"),
-            panelTools.AddPushButton<CmdPltViews>("View Palette"),
-            panelTools.AddPushButton<CmdPltMruViews>("MRU Views"),
-            panelTools.AddPushButton<CmdPltFamilies>("Family Palette"),
-            panelTools.AddPushButton<CmdPltFamilyElements>("Family Palette"),
-            panelTools.AddPushButton<CmdTapMaker>("Tap Maker"),
-            manageStackButton.AddPushButton<CmdAutoTag>("AutoTag")
-        ]);
-    }
+    private void CreateRibbon() => ButtonRegistry.BuildRibbon(this.Application, "PE TOOLS");
 
     private static void CreateLogger() {
         const string outputTemplate = "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}";
