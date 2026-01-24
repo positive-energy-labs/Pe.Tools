@@ -443,6 +443,7 @@ public class CmdScheduleManager : IExternalCommand {
                     var scheduleFilePath = Path.Combine(schedulesSubDir.DirectoryPath, scheduleFile);
                     if (!File.Exists(scheduleFilePath)) {
                         results.Add((scheduleFile, false, "File not found"));
+                        _ = this.WriteErrorOutput(context, scheduleFile, "File not found");
                         continue;
                     }
 
@@ -461,6 +462,7 @@ public class CmdScheduleManager : IExternalCommand {
                     _ = this.WriteCreationOutput(context, result, scheduleFile);
                 } catch (Exception ex) {
                     results.Add((scheduleFile, false, ex.Message));
+                    _ = this.WriteErrorOutput(context, scheduleFile, ex.Message, ex);
                 }
             }
 
@@ -553,6 +555,30 @@ public class CmdScheduleManager : IExternalCommand {
             return outputPath;
         } catch (Exception ex) {
             Console.WriteLine($"Failed to write output: {ex.Message}");
+            return null;
+        }
+    }
+
+    private string WriteErrorOutput(ScheduleManagerContext ctx, string profileName, string errorMessage, Exception ex = null) {
+        try {
+            var createOutputDir = ctx.Storage.OutputDir().SubDir("create");
+
+            var outputData = new {
+                ProfileName = profileName,
+                CreatedAt = DateTime.Now,
+                Success = false,
+                ErrorMessage = errorMessage,
+                ExceptionType = ex?.GetType().Name,
+                StackTrace = ex?.StackTrace
+            };
+
+            // Prepend timestamp to filename
+            var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+            var safeProfileName = Path.GetFileNameWithoutExtension(profileName);
+            var outputPath = createOutputDir.Json($"{timestamp}_ERROR_{safeProfileName}.json").Write(outputData);
+            return outputPath;
+        } catch (Exception writeEx) {
+            Console.WriteLine($"Failed to write error output: {writeEx.Message}");
             return null;
         }
     }

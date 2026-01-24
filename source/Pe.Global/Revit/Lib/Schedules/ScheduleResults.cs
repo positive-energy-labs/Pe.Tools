@@ -5,6 +5,8 @@ public class ScheduleCreationResult {
     public required string ScheduleName { get; init; }
     public required string CategoryName { get; init; }
     public bool IsItemized { get; init; }
+    public bool FilterBySheetApplied { get; set; }
+    public string? FilterBySheetSkipped { get; set; }
 
     public List<AppliedFieldInfo> AppliedFields { get; init; } = [];
     public List<string> SkippedFields { get; init; } = [];

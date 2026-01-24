@@ -21,6 +21,7 @@ public static class ScheduleHelper {
             Name = schedule.Name,
             CategoryName = categoryName,
             IsItemized = def.IsItemized,
+            FilterBySheet = def.IsFilteredBySheet,
             Fields = [],
             SortGroup = [],
             Filters = []
@@ -83,6 +84,22 @@ public static class ScheduleHelper {
         var def = schedule.Definition;
         def.IsItemized = spec.IsItemized;
         def.ClearFields();
+
+        // Apply filter-by-sheet setting
+        if (spec.FilterBySheet) {
+            if (def.IsValidCategoryForFilterBySheet()) {
+                try {
+                    def.IsFilteredBySheet = true;
+                    result.FilterBySheetApplied = true;
+                } catch (InvalidOperationException ex) {
+                    result.FilterBySheetSkipped =
+                        $"Category supports filter-by-sheet but could not enable: {ex.Message}";
+                }
+            } else {
+                result.FilterBySheetSkipped =
+                    $"Category '{spec.CategoryName}' does not support filter-by-sheet";
+            }
+        }
 
         // Apply fields using tuple aggregation
         foreach (var fieldSpec in spec.Fields.Where(f => f.CalculatedType is null)) {

@@ -8,25 +8,6 @@ namespace Pe.Extensions.FamDocument;
 public static class FamilyDocumentSetValue {
     /// <summary>
     ///     Sets a parameter's formula, then unsets it. The effect of this is a "set" on the
-    ///     parameter for ALL family types at once. Use when: setting this param's *value* equal to the *formula* of another
-    ///     param (pass the other's formula in as a string)
-    /// </summary>
-    /// <remarks>
-    ///     If the circumstances permit, this can be used in lue of iterating through every family type, a very expensive
-    ///     operation.
-    /// </remarks>
-    /// <returns>True if the value was set successfully</returns>
-    /// <exception cref="InvalidOperationException">Thrown if the StorageType is not supported or formula setting fails</exception>
-    public static bool SetUnsetFormula(this FamilyDocument famDoc, FamilyParameter param, FamilyParameter otherParam) {
-        // Parse string inputs into appropriate types
-
-        var success = famDoc.TrySetFormulaFast(param, otherParam.Definition.Name, out var errorMessage);
-        if (!success) throw new InvalidOperationException(errorMessage);
-        return famDoc.UnsetFormula(param);
-    }
-
-    /// <summary>
-    ///     Sets a parameter's formula, then unsets it. The effect of this is a "set" on the
     ///     parameter for ALL family types at once. Use when: setting this parameter to the same value for every family type
     ///     (Supports strings (with optional units like "10'", "120V"), numbers, and already-parsed values.
     /// </summary>
@@ -37,7 +18,7 @@ public static class FamilyDocumentSetValue {
     /// <param name="famDoc">The family document</param>
     /// <param name="param">The target parameter</param>
     /// <param name="value">Value to set - can be string (parsed based on parameter type), number, or typed value</param>
-    /// <param name="errorMessage">Error message if any, nulll by default</param>
+    /// <param name="errorMessage">Error message if any, null by default</param>
     /// <returns>True if the value was set successfully</returns>
     /// <exception cref="InvalidOperationException">Thrown if the StorageType is not supported or formula setting fails</exception>
     public static bool TrySetUnsetFormula(this FamilyDocument famDoc,

@@ -1,4 +1,5 @@
 using Pe.Extensions.FamDocument;
+using Pe.Extensions.FamDocument.GetValue;
 using Pe.Extensions.FamManager;
 using Pe.Extensions.FamParameter;
 using Pe.FamilyFoundry.OperationSettings;
@@ -23,8 +24,7 @@ public class BacklinkParamsToBuiltIn(MapParamsSettings settings)
             .Select(m => (
                 newParam: fm.FindParameter(m.NewName),
                 currParams: m.CurrNames.Select(fm.FindParameter)
-                    .Where(p => p is not null)
-                    .Where(p => p.IsBuiltInParameter()).ToList()
+                    .Where(p => p != null && p.IsBuiltInParameter()).ToList()
             ))
             .Where(m => m.newParam is not null)
             .Where(m => m.currParams.Any())
@@ -33,9 +33,10 @@ public class BacklinkParamsToBuiltIn(MapParamsSettings settings)
         var logs = new List<LogEntry>();
         foreach (var (newParam, currParams) in data) {
             foreach (var currParam in currParams) {
-                var success = doc.TrySetFormulaFast(currParam, newParam.Definition.Name, out var err);
+                if (newParam == null || currParam == null) break;
                 var log = new LogEntry($"Backlink {newParam.Definition.Name} → {currParam.Definition.Name}");
-                logs.Add(success
+                var successfulLink = doc.TrySetFormulaFast(currParam, newParam.Definition.Name, out var err);
+                logs.Add(successfulLink
                     ? log.Success("Successfully backlinked")
                     : log.Error(err ?? "Failed to set formula"));
                 break; // Only backlink first matching built-in per mapping

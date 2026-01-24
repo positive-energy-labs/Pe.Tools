@@ -17,9 +17,6 @@ public class OnFinishSettings {
 }
 
 public class ScheduleSpec {
-    [Description("Settings for what to do when the command completes")]
-    public OnFinishSettings? OnFinish { get; set; } = new();
-
     [Description("The name of the schedule as it will appear in the project browser.")]
     [Required]
     public string Name { get; set; } = string.Empty;
@@ -30,8 +27,21 @@ public class ScheduleSpec {
     public string CategoryName { get; set; } = string.Empty;
 
     [Description(
+        "The name of the view template to apply to this schedule. Leave empty to use no template. Must be a schedule-compatible view template.")]
+    [SchemaExamples(typeof(ScheduleViewTemplateNamesProvider))]
+    public string? ViewTemplateName { get; set; }
+
+    [Description(
+        "Style settings for the schedule title cell, including borders and text alignment. Must be applied before view template. Leave null to skip title styling.")]
+    public ScheduleTitleStyleSpec TitleStyle { get; set; } = new();
+
+    [Description(
         "Whether the schedule displays each element on a separate row (true) or combines multiple grouped elements onto the same row (false).")]
     public bool IsItemized { get; set; } = true;
+
+    [Description(
+        "When true, if the schedule is placed on a sheet, it will only show elements visible in the viewports on that sheet. Not all categories support this feature.")]
+    public bool FilterBySheet { get; set; } = false;
 
     [Description("List of fields (columns) to include in the schedule.")]
     [Includable("fields")]
@@ -43,15 +53,9 @@ public class ScheduleSpec {
 
     [Description("List of filters to restrict which elements appear in the schedule. Maximum of 8 filters.")]
     public List<ScheduleFilterSpec> Filters { get; set; } = [];
-
-    [Description(
-        "The name of the view template to apply to this schedule. Leave empty to use no template. Must be a schedule-compatible view template.")]
-    [SchemaExamples(typeof(ScheduleViewTemplateNamesProvider))]
-    public string? ViewTemplateName { get; set; }
-
-    [Description(
-        "Style settings for the schedule title cell, including borders and text alignment. Must be applied before view template. Leave null to skip title styling.")]
-    public ScheduleTitleStyleSpec TitleStyle { get; set; } = new();
+    
+    [Description("Settings for what to do when the command completes")]
+    public OnFinishSettings? OnFinishSettings { get; set; } = new();
 }
 
 /// <summary>

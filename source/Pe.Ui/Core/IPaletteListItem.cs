@@ -14,7 +14,7 @@ public interface IPaletteListItem {
     string TextSecondary { get; }
 
     /// <summary> Badge/pill text (e.g., keyboard shortcuts) </summary>
-    string TextPill { get; }
+    string? TextPill { get; }
 
     /// <summary>
     ///     Tooltip text generator for detailed information.
