@@ -53,6 +53,9 @@ public class Application : ExternalApplication {
         CreateLogger();
         this.CreateRibbon();
 
+        // Initialize task registry
+        Pe.App.Tasks.TaskInitializer.RegisterAllTasks();
+
         // Initialize AutoTag service
         AutoTagService.Instance.Initialize(this.Application.ActiveAddInId, this.Application);
     }
@@ -84,7 +87,7 @@ public class Application : ExternalApplication {
     private static void OnDocumentClosing(object sender, DocumentClosingEventArgs e) {
         if (e?.Document == null) return;
         DocumentManager.Instance.OnDocumentClosed(e.Document);
-        
+
         // Clean up AutoTag settings for this document to prevent memory leak
         AutoTagService.Instance.CleanupDocument(e.Document);
     }

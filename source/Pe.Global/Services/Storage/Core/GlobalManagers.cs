@@ -7,11 +7,11 @@ namespace Pe.Global.Services.Storage.Core;
 public class GlobalManager {
     private const string _dateTimeFormat = "yyyy-MM-dd HH:mm:ss";
     private const int _maxLines = 500;
-    private readonly string _globalPath;
+    public string DirectoryPath { get; init; }
 
     public GlobalManager(string basePath) {
-        this._globalPath = Path.Combine(basePath, "Global");
-        _ = Directory.CreateDirectory(this._globalPath);
+        this.DirectoryPath = Path.Combine(basePath, "Global");
+        _ = Directory.CreateDirectory(this.DirectoryPath);
     }
 
     /// <summary>
@@ -23,8 +23,8 @@ public class GlobalManager {
     /// </remarks>
     public JsonReader<GlobalSettings> SettingsJson() =>
         new ComposableJson<GlobalSettings>(
-            Path.Combine(this._globalPath, "settings.json"),
-            this._globalPath,
+            Path.Combine(this.DirectoryPath, "settings.json"),
+            this.DirectoryPath,
             JsonBehavior.Settings);
 
     /// <summary>
@@ -37,8 +37,8 @@ public class GlobalManager {
     /// </remarks>
     public JsonReadWriter<T> StateJson<T>(string filename) where T : class, new() =>
         new ComposableJson<T>(
-            Path.Combine(this._globalPath, $"{filename}.json"),
-            this._globalPath,
+            Path.Combine(this.DirectoryPath, $"{filename}.json"),
+            this.DirectoryPath,
             JsonBehavior.State);
 
     /// <summary>
@@ -49,7 +49,7 @@ public class GlobalManager {
     ///     File path is always `{basePath}/Global/log.txt`
     /// </remarks>
     public void LogTxt(string message) {
-        var logFilePath = Path.Combine(this._globalPath, "log.txt");
+        var logFilePath = Path.Combine(this.DirectoryPath, "log.txt");
         this.CleanLog(logFilePath);
         var logEntry =
             $"({DateTime.Now.ToString(_dateTimeFormat)}) {message}{Environment.NewLine}{Environment.NewLine}";

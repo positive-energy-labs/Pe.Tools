@@ -6,14 +6,14 @@
                              xmlns:core="clr-namespace:Pe.Ui.Core"
                              VerticalAlignment="Top">
     <Grid HorizontalAlignment="Stretch"
-          VerticalAlignment="Stretch">
+          VerticalAlignment="Top">
         <!-- Main container with sidebar support -->
         <Border x:Name="MainBorder"
                 HorizontalAlignment="Stretch"
-                VerticalAlignment="Stretch"
+                VerticalAlignment="Top"
                 Background="{ui:ThemeResource ApplicationBackgroundBrush}">
             <Grid HorizontalAlignment="Stretch"
-                  VerticalAlignment="Stretch">
+                  VerticalAlignment="Top">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition x:Name="SidebarColumn" Width="0" />
@@ -22,11 +22,11 @@
                 <!-- Main palette content -->
                 <Grid Grid.Column="0"
                       HorizontalAlignment="Stretch"
-                      VerticalAlignment="Stretch">
+                      VerticalAlignment="Top">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
@@ -73,7 +73,9 @@
                     </Border>
 
                     <!-- Item List -->
-                    <Border Grid.Row="2" Padding="4,0,4,0">
+                    <Border Grid.Row="2" 
+                            Padding="4,0,4,0"
+                            MaxHeight="350">
                         <local:ListView x:Name="ItemListView"
                                         ItemsSource="{Binding FilteredItems}"
                                         SelectedItem="{Binding SelectedItem}"

@@ -193,6 +193,24 @@ public sealed class ButtonRegistry {
             ToolTip = "Browse all family elements (parameters, connectors, dimensions, reference planes, nested families). Highlights selected elements. Only works in family documents.",
             Container = new ButtonContainer.Panel("Tools")
         }),
+        Register<CmdPltTasks>(new() {
+            Text = "Task Palette",
+            SmallImage = "Red_16.png",
+            LargeImage = "Red_32.png",
+            ToolTip = "Execute custom code snippets and tasks for prototyping and testing.",
+            LongDescription = """
+                Task Palette provides quick access to executable code snippets and utilities.
+                
+                Perfect for:
+                - Rapid prototyping of new features
+                - Testing Revit API behavior
+                - Running one-off cleanup or export operations
+                - Debugging and inspection tasks
+                
+                Tasks are organized by category and tracked by usage frequency.
+                """,
+            Container = new ButtonContainer.Panel("Tools")
+        }),
         Register<CmdTapMaker>(new() {
             Text = "Tap Maker",
             SmallImage = "Red_16.png",

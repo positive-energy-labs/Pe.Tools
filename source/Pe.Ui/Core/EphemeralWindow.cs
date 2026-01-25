@@ -42,7 +42,7 @@ public class EphemeralWindow : Window {
         this.ContentControl = content;
         this.EphemeralEnabled = ephemeralEnabled;
         this.Title = title;
-        this.SizeToContent = SizeToContent.Manual;
+        this.SizeToContent = SizeToContent.Height;
         this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         this.WindowStyle = WindowStyle.None;
         this.AllowsTransparency = true;
@@ -74,7 +74,8 @@ public class EphemeralWindow : Window {
         this._contentBorder = new BorderSpec()
             .Border(UiSz.l, UiSz.ss)
             .Width(this.BaseWidth, this.BaseWidth, this.BaseWidth)
-            .Height(350, 350, 350)
+            .Height(minHeight: 150, height: double.NaN, maxHeight: 600)
+            .VerticalAlign(VerticalAlignment.Top)
             .Margin(0, 40, 0, 0) // Top margin to make room for title gutter
             .CreateAround(content);
         _ = containerGrid.Children.Add(this._contentBorder);
@@ -123,11 +124,12 @@ public class EphemeralWindow : Window {
             Margin = new Thickness(12, 6, 12, 6) // Padding within the top gutter
         };
 
+        // Underlay stretches to match grid height (determined by content + its 40px top margin)
         var border = new BorderSpec()
             .Background(ThemeResource.ApplicationBackgroundBrush)
             .Border(UiSz.l, UiSz.ss)
             .Width(this.BaseWidth, this.BaseWidth, this.BaseWidth)
-            .Height(390, 390, 390) // 350 content + 40 top gutter
+            .VerticalAlign(VerticalAlignment.Stretch)
             .DropShadow()
             .CreateAround(titleText);
 
