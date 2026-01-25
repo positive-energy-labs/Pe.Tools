@@ -5,32 +5,44 @@ using System.Windows.Media;
 namespace Pe.Global.Revit.Ui;
 
 public class Ribbon {
-    public static IEnumerable<DiscoveredTab> GetAllTabs() {
-        var tabs = ComponentManager.Ribbon.Tabs;
-        return (from tab in tabs
-            where tab.IsVisible && tab.IsEnabled
-            select new DiscoveredTab {
+    /// <summary>
+    ///     Container types that can have child ribbon items.
+    ///     Static to avoid allocation on every HasItemsCollection call.
+    /// </summary>
+    private static readonly HashSet<string> ContainerTypes = [
+        "RibbonFoldPanel",
+        "RibbonRowPanel",
+        "RibbonSplitButton",
+        "RibbonChecklistButton",
+        "RvtMenuSplitButton",
+        "SplitRadioGroup",
+        "DesignOptionCombo",
+        "RibbonMenuItem"
+    ];
+
+    public static IEnumerable<DiscoveredTab> GetAllTabs() =>
+        ComponentManager.Ribbon.Tabs
+            .Where(tab => tab.IsVisible && tab.IsEnabled)
+            .Select(tab => new DiscoveredTab {
                 Id = tab.Id,
                 Name = tab.Title,
                 Panels = tab.Panels,
                 DockedPanels = tab.DockedPanelsView,
                 RibbonControl = tab.RibbonControl
-            }).ToList();
-    }
+            })
+            .ToList();
 
-    public static IEnumerable<DiscoveredPanel> GetAllPanels() {
-        var tabs = GetAllTabs();
-        var panelList = new List<DiscoveredPanel>();
-        foreach (var tab in tabs) {
-            panelList.AddRange(from panel in tab.Panels
-                where panel.IsVisible && panel.IsEnabled
-                select new DiscoveredPanel {
-                    Tab = panel.Tab, Cookie = panel.Cookie, Source = panel.Source, RibbonControl = panel.RibbonControl
-                });
-        }
-
-        return panelList;
-    }
+    public static IEnumerable<DiscoveredPanel> GetAllPanels() =>
+        GetAllTabs()
+            .SelectMany(tab => tab.Panels
+                .Where(panel => panel.IsVisible && panel.IsEnabled)
+                .Select(panel => new DiscoveredPanel {
+                    Tab = panel.Tab,
+                    Cookie = panel.Cookie,
+                    Source = panel.Source,
+                    RibbonControl = panel.RibbonControl
+                }))
+            .ToList();
 
     /// <summary>
     ///     Retrieves all commands from the ribbon with specialized handling for each item type.
@@ -63,13 +75,14 @@ public class Ribbon {
         DiscoveredPanel panel,
         List<DiscoveredCommand> commandList
     ) {
-        if (!item.IsEnabled) return null;
-        if (!item.IsVisible) return null;
+        // Note: IsVisible and IsEnabled are checked by caller for top-level items,
+        // but we still need to check for recursively processed child items
+        if (!item.IsEnabled || !item.IsVisible) return null;
 
         // Check if this is a leaf node (no children) - either not a container type, 
         // or a container with null/empty Items collection
-        var hasItemsCollection = HasItemsCollection(item);
-        var hasItems = hasItemsCollection && item.Items != null && item.Items.Count > 0;
+        var isContainer = IsContainerType(item);
+        var hasItems = isContainer && item.Items != null && item.Items.Count > 0;
 
         if (!hasItems) {
             // Extract image from ribbon item
@@ -107,16 +120,10 @@ public class Ribbon {
     }
 
     /// <summary> Determines if a ribbon item type supports having child items. </summary>
-    private static bool HasItemsCollection(dynamic item) {
+    private static bool IsContainerType(dynamic item) {
         // Cast to object first to avoid dynamic dispatch issues with extension methods
         var itemType = ((object)item).GetType().Name;
-        var containerTypes = new[] {
-            // Do not change unless to add
-            "RibbonFoldPanel", "RibbonRowPanel", "RibbonSplitButton", "RibbonChecklistButton", "RvtMenuSplitButton",
-            "SplitRadioGroup", "DesignOptionCombo", "RibbonMenuItem"
-        };
-
-        return containerTypes.Contains(itemType);
+        return ContainerTypes.Contains(itemType);
     }
 }
 

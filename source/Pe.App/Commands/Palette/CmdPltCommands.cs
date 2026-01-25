@@ -1,12 +1,14 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.CommandPalette;
+using Pe.Global.Revit.Ui;
 using Pe.Global.Services.Storage;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
 using Pe.Ui.ViewModels;
-using System.Diagnostics;
 using System.Text.RegularExpressions;
+using System.Windows;
+using System.Windows.Input;
 
 namespace Pe.App.Commands.Palette;
 
@@ -90,6 +92,12 @@ public static class CommandPaletteService {
             },
             searchConfig);
 
+        // Create shortcut editor sidebar panel
+        var shortcutEditor = new ShortcutEditorPanel(() => {
+            // Refresh commands after shortcut changes (cache is auto-cleared by ShortcutsService)
+            commandHelper.RefreshCommands();
+        });
+
         // Create actions
         var actions = new List<PaletteAction<PostableCommandItem>> {
             new() {
@@ -106,16 +114,38 @@ public static class CommandPaletteService {
                         return Global.Revit.Lib.Commands.IsAvailable(uiApp, cmdItem.Command);
                     return false;
                 }
+            },
+            new() {
+                Name = "Edit Shortcuts",
+                Key = Key.E,
+                Modifiers = ModifierKeys.Control,
+                NextPalette = item => {
+                    shortcutEditor.UpdateItem(item);
+                    return shortcutEditor;
+                },
+                CanExecute = _ => true
             }
         };
 
         // Create view model
         var viewModel = new PaletteViewModel<PostableCommandItem>(selectableItems, searchService);
 
+        // Create sidebar configuration
+        var sidebar = new PaletteSidebar {
+            Content = shortcutEditor,
+            Width = new GridLength(400)
+        };
+
         // Create palette using composition pattern (NOT inheritance)
         // Generic classes cannot inherit from XAML partial classes in Revit-hosted WPF
         var palette = new Ui.Components.Palette();
-        palette.Initialize(viewModel, actions);
+        palette.Initialize(viewModel, actions, paletteSidebar: sidebar);
+
+        // Wire up selection change to update the shortcut editor when sidebar is visible
+        viewModel.PropertyChanged += (_, e) => {
+            if (e.PropertyName == nameof(viewModel.SelectedItem) && viewModel.SelectedItem != null)
+                shortcutEditor.UpdateItem(viewModel.SelectedItem);
+        };
 
         // Wrap in EphemeralWindow and wire up parent reference for action deferral
         var window = new EphemeralWindow(palette, "Command Palette");

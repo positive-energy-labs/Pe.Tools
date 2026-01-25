@@ -1,6 +1,8 @@
 using Pe.Global.Revit.Lib;
 using Pe.Ui.Core;
+using System.ComponentModel;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
@@ -10,7 +12,12 @@ namespace Pe.App.Commands.Palette.CommandPalette;
 /// <summary>
 ///     Represents a PostableCommand item with additional metadata for the command palette
 /// </summary>
-public class PostableCommandItem : IPaletteListItem {
+public class PostableCommandItem : IPaletteListItem, INotifyPropertyChanged {
+    public event PropertyChangedEventHandler PropertyChanged;
+
+    private void OnPropertyChanged([CallerMemberName] string propertyName = null) =>
+        this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
     /// <summary>
     ///     For internal commands, the actual PostableCommand enum value
     ///     For external (addin) commands, the custom CommandId (e.g., CustomCtrl_%CustomCtrl_%...)
@@ -35,7 +42,18 @@ public class PostableCommandItem : IPaletteListItem {
     /// <summary>
     ///     Keyboard shortcuts for this command
     /// </summary>
-    public List<string> Shortcuts { get; set; } = new();
+    private List<string> _shortcuts = [];
+
+    public List<string> Shortcuts {
+        get => this._shortcuts;
+        set {
+            this._shortcuts = value ?? [];
+            this.OnPropertyChanged();
+            this.OnPropertyChanged(nameof(this.PrimaryShortcut));
+            this.OnPropertyChanged(nameof(this.AllShortcuts));
+            this.OnPropertyChanged(nameof(this.TextPill));
+        }
+    }
 
     /// <summary>
     ///     Menu paths for this command

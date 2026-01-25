@@ -1,3 +1,7 @@
+using Autodesk.Windows.ToolBars;
+using System.ComponentModel;
+using System.Data.Common;
+
 namespace Pe.App.Commands.Palette.TaskPalette;
 
 /// <summary>

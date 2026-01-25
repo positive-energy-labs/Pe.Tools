@@ -11,16 +11,13 @@ namespace Pe.App.Commands.Palette.CommandPalette;
 /// </summary>
 public class PostableCommandHelper(Storage storage) {
     private readonly CsvReadWriter<ItemUsageData> _state = storage.StateDir().Csv<ItemUsageData>();
-    private List<PostableCommandItem> _allCommands;
+    private List<PostableCommandItem>? _allCommands;
 
     /// <summary>
     ///     Gets all PostableCommand items with metadata, sorted by usage
     /// </summary>
     public List<PostableCommandItem> GetAllCommands() {
-        // if ( this._allCommands == null) 
-
-        this._allCommands = this.LoadPostableCommands();
-
+        this._allCommands ??= this.LoadPostableCommands();
         return this._allCommands;
     }
 
@@ -43,18 +40,14 @@ public class PostableCommandHelper(Storage storage) {
     ///     Refreshes the commands and shortcuts, clearing cached data
     /// </summary>
     public void RefreshCommands() =>
-        this._allCommands =
-            null; // This will force a reload of both commands and shortcuts on next GetAllCommands() call
+        this._allCommands = null;
 
     /// <summary>
     ///     Loads all PostableCommand enum values and creates metadata
     /// </summary>
     private List<PostableCommandItem> LoadPostableCommands() {
         var commands = new List<PostableCommandItem>();
-        var shortcutsService = KeyboardShortcutsHelper.Instance;
-
-        // Check if shortcuts are current, if not, clear the cache to force reload
-        if (!shortcutsService.IsShortcutsCurrent()) shortcutsService.ClearCache();
+        var shortcuts = ShortcutsService.Instance;
 
         // Get all commands from the ribbon
         var ribbonCommands = Ribbon.GetAllCommands();
@@ -69,8 +62,9 @@ public class PostableCommandHelper(Storage storage) {
                 LastUsed = usageData?.LastUsed ?? DateTime.MinValue,
                 ImageSource = command.Image
             };
-            // Try to get shortcut info from XML
-            var (shortcutInfo, infoErr) = shortcutsService.GetShortcutInfo(command.Id);
+
+            // Try to get shortcut info from XML cache (for name and paths)
+            var (shortcutInfo, infoErr) = shortcuts.GetShortcutInfo(command.Id);
             if (infoErr is not null) {
                 if (command.ItemType != "RibbonButton" || command.Panel.Contains("_shr_"))
                     continue;
@@ -82,9 +76,12 @@ public class PostableCommandHelper(Storage storage) {
 
             if (shortcutInfo is not null) {
                 commandItem.Name = shortcutInfo.CommandName;
-                commandItem.Shortcuts = shortcutInfo.Shortcuts;
                 commandItem.Paths = shortcutInfo.Paths;
             }
+
+            // Always get shortcuts from live UIFramework state (not XML cache)
+            // This ensures we see updates immediately after editing
+            commandItem.Shortcuts = shortcuts.GetLiveShortcuts(command.Id);
 
             commands.Add(commandItem);
         }
