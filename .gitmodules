@@ -1,0 +1,3 @@
+[submodule "source/external/RevitDBExplorer"]
+	path = source/external/RevitDBExplorer
+	url = https://github.com/NeVeSpl/RevitDBExplorer.git

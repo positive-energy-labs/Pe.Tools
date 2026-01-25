@@ -15,18 +15,18 @@ public class TabDefinition<TItem> where TItem : class, IPaletteListItem {
     /// <summary>
     ///     Display name for the tab.
     /// </summary>
-    public string Name { get; init; }
+    public required string Name { get; init; }
 
     /// <summary>
     ///     Filter predicate for items in this tab. Null means show all items (no filtering).
     /// </summary>
-    public Func<TItem, bool> Filter { get; init; }
+    public Func<TItem, bool>? Filter { get; init; }
 
     /// <summary>
     ///     Filter key selector for this tab's dropdown filter.
     ///     Null means no filtering dropdown is shown for this tab.
     /// </summary>
-    public Func<TItem, string> FilterKeySelector { get; init; }
+    public Func<TItem, string>? FilterKeySelector { get; init; }
 }
 
 /// <summary>
@@ -137,8 +137,14 @@ public static class PaletteFactory {
 
         var window = new EphemeralWindow(palette, title);
 
-        // Wire up parent window reference so palette can coordinate window sizing
+        // Wire up parent window reference FIRST so palette can access it when setting tray
         palette.SetParentWindow(window);
+
+        // Set up tray - always show at least the default ephemerality toggle
+        // If custom tray content is provided, it will be added below the toggle
+        var trayContent = options.Tray?.Content;
+        var trayMaxHeight = options.Tray?.MaxHeight ?? 200;
+        palette.SetTrayContent(trayContent, trayMaxHeight);
 
         return window;
     }
@@ -158,6 +164,22 @@ public class PaletteSidebar {
     ///     Width of the sidebar when expanded. Default: 450px.
     /// </summary>
     public GridLength Width { get; init; } = new(450);
+}
+
+/// <summary>
+///     Defines a collapsible tray for the palette that appears below the status bar.
+///     Trays start collapsed and can be manually expanded/collapsed via a toggle button.
+/// </summary>
+public class PaletteTray {
+    /// <summary>
+    ///     The UserControl to display in the tray.
+    /// </summary>
+    public UIElement? Content { get; init; }
+
+    /// <summary>
+    ///     Maximum height of the tray when expanded. Default: 200px.
+    /// </summary>
+    public double MaxHeight { get; init; } = 200;
 }
 
 /// <summary>
@@ -315,6 +337,30 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     ///     </code>
     /// </example>
     public PaletteSidebar Sidebar { get; init; }
+
+    /// <summary>
+    ///     Tray definition for the palette.
+    ///     Trays appear below the status bar, start collapsed, and can be manually expanded/collapsed.
+    ///     All trays automatically include a "Keep Open (Pin Window)" toggle for controlling ephemerality.
+    ///     If you provide custom content, it will be displayed below the default toggle with a separator.
+    ///     Default: null (tray still created with only the ephemerality toggle)
+    /// </summary>
+    /// <example>
+    ///     <code>
+    ///     // Minimal - only the default ephemerality toggle:
+    ///     // No Tray property needed, it's automatic
+    ///     
+    ///     // With custom content below the default toggle:
+    ///     Tray = new PaletteTray { Content = optionsPanel }
+    ///     
+    ///     // Custom max height:
+    ///     Tray = new PaletteTray { 
+    ///         Content = optionsPanel,
+    ///         MaxHeight = 300
+    ///     }
+    ///     </code>
+    /// </example>
+    public PaletteTray Tray { get; init; }
 
     /// <summary>
     ///     When true, prevents the palette from closing after action execution.

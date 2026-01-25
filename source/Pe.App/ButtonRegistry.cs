@@ -24,6 +24,11 @@ public sealed class ButtonRegistry {
         /// Button should be added to a pulldown button within a panel.
         /// </summary>
         public sealed record PullDown(string PullDownName, string PanelName) : ButtonContainer;
+
+        /// <summary>
+        /// Button should be added to a split button within a panel.
+        /// </summary>
+        public sealed record Split(string SplitName, string PanelName) : ButtonContainer;
     }
 
     /// <summary>
@@ -31,7 +36,7 @@ public sealed class ButtonRegistry {
     /// </summary>
     private interface IButtonRegistration {
         ButtonContainer Container { get; }
-        PushButton CreateButton(UIControlledApplication app, Dictionary<string, RibbonPanel> panels, Dictionary<string, PulldownButton> pulldowns);
+        PushButton CreateButton(UIControlledApplication app, Dictionary<string, RibbonPanel> panels, Dictionary<string, PulldownButton> pulldowns, Dictionary<string, SplitButton> splitButtons);
     }
 
     /// <summary>
@@ -48,10 +53,12 @@ public sealed class ButtonRegistry {
         public PushButton CreateButton(
             UIControlledApplication app,
             Dictionary<string, RibbonPanel> panels,
-            Dictionary<string, PulldownButton> pulldowns) {
+            Dictionary<string, PulldownButton> pulldowns,
+            Dictionary<string, SplitButton> splitButtons) {
             var button = this.Container switch {
                 ButtonContainer.Panel panel => this.CreatePanelButton(panels, panel),
                 ButtonContainer.PullDown pullDown => this.CreatePullDownButton(panels, pulldowns, pullDown),
+                ButtonContainer.Split split => this.CreateSplitButton(panels, splitButtons, split),
                 _ => throw new InvalidOperationException($"Unknown container type: {this.Container.GetType().Name}")
             };
 
@@ -83,6 +90,23 @@ public sealed class ButtonRegistry {
             }
 
             return pulldown.AddPushButton<TCommand>(this.Text);
+        }
+
+        private PushButton CreateSplitButton(
+            Dictionary<string, RibbonPanel> panels,
+            Dictionary<string, SplitButton> splitButtons,
+            ButtonContainer.Split splitContainer) {
+            var key = $"{splitContainer.PanelName}.{splitContainer.SplitName}";
+
+            if (!splitButtons.TryGetValue(key, out var splitButton)) {
+                if (!panels.TryGetValue(splitContainer.PanelName, out var panel))
+                    throw new InvalidOperationException($"Panel '{splitContainer.PanelName}' not found for split button '{splitContainer.SplitName}'.");
+
+                splitButton = panel.AddSplitButton(splitContainer.SplitName);
+                splitButtons[key] = splitButton;
+            }
+
+            return splitButton.AddPushButton<TCommand>(this.Text);
         }
 
         private void HydrateButtonMetadata(PushButton button) {
@@ -166,11 +190,32 @@ public sealed class ButtonRegistry {
             Container = new ButtonContainer.Panel("Tools")
         }),
         Register<CmdPltViews>(new() {
-            Text = "View Palette",
+            Text = "All",
+            SmallImage = "Red_16.png",
+            LargeImage = "Red_32.png",
+            ToolTip = "Search and open all views, schedules, and sheets in the current document.",
+            Container = new ButtonContainer.Split("View Palette", "Tools")
+        }),
+        Register<CmdPltViewsOnly>(new() {
+            Text = "Views",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Search and open views in the current document.",
-            Container = new ButtonContainer.Panel("Tools")
+            Container = new ButtonContainer.Split("View Palette", "Tools")
+        }),
+        Register<CmdPltSchedules>(new() {
+            Text = "Schedules",
+            SmallImage = "Red_16.png",
+            LargeImage = "Red_32.png",
+            ToolTip = "Search and open schedules in the current document.",
+            Container = new ButtonContainer.Split("View Palette", "Tools")
+        }),
+        Register<CmdPltSheets>(new() {
+            Text = "Sheets",
+            SmallImage = "Red_16.png",
+            LargeImage = "Red_32.png",
+            ToolTip = "Search and open sheets in the current document.",
+            Container = new ButtonContainer.Split("View Palette", "Tools")
         }),
         Register<CmdPltMruViews>(new() {
             Text = "MRU Views",
@@ -180,17 +225,10 @@ public sealed class ButtonRegistry {
             Container = new ButtonContainer.Panel("Tools")
         }),
         Register<CmdPltFamilies>(new() {
-            Text = "Family Palette",
+            Text = "Families",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
-            ToolTip = "Search families in the document. Click to edit family, Ctrl+Click to select all instances.",
-            Container = new ButtonContainer.Panel("Tools")
-        }),
-        Register<CmdPltFamilyElements>(new() {
-            Text = "Family Elements",
-            SmallImage = "Red_16.png",
-            LargeImage = "Red_32.png",
-            ToolTip = "Browse all family elements (parameters, connectors, dimensions, reference planes, nested families). Highlights selected elements. Only works in family documents.",
+            ToolTip = "Browse families in the document. Shows family types in normal documents, or family elements (parameters, dimensions, etc.) in family documents.",
             Container = new ButtonContainer.Panel("Tools")
         }),
         Register<CmdPltTasks>(new() {
@@ -276,12 +314,14 @@ public sealed class ButtonRegistry {
     public static void BuildRibbon(UIControlledApplication app, string tabName) {
         var panels = new Dictionary<string, RibbonPanel>();
         var pulldowns = new Dictionary<string, PulldownButton>();
+        var splitButtons = new Dictionary<string, SplitButton>();
 
         // Extract unique panel names in order of first appearance
         var panelNames = Registrations
             .Select(r => r.Container switch {
                 ButtonContainer.Panel p => p.PanelName,
                 ButtonContainer.PullDown pd => pd.PanelName,
+                ButtonContainer.Split s => s.PanelName,
                 _ => null
             })
             .OfType<string>()
@@ -294,6 +334,6 @@ public sealed class ButtonRegistry {
 
         // Create all buttons in registration order
         foreach (var registration in Registrations)
-            _ = registration.CreateButton(app, panels, pulldowns);
+            _ = registration.CreateButton(app, panels, pulldowns, splitButtons);
     }
 }

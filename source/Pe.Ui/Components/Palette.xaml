@@ -37,35 +37,45 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- Title Bar -->
+                <!-- Title Bar with Tabs -->
                 <Border x:Name="TitleBarBorder"
                         Grid.Row="0"
                         Padding="12,8,12,6">
-                    <ui:TextBlock x:Name="TitleText"
-                                  Text="Palette"
-                                  FontSize="16"
-                                  FontWeight="SemiBold"
-                                  Foreground="{ui:ThemeResource TextFillColorPrimaryBrush}" />
-                </Border>
-
-                <!-- Tab Bar (hidden when no tabs) -->
-                <Border x:Name="TabBarBorder"
-                        Grid.Row="1"
-                        Visibility="Collapsed"
-                        Padding="9,6,9,0"
-                        Background="Transparent">
-                    <ItemsControl x:Name="TabBarItemsControl">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel Orientation="Horizontal" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        
+                        <!-- Title on the left -->
+                        <ui:TextBlock x:Name="TitleText"
+                                      Grid.Column="0"
+                                      Text="Palette"
+                                      FontSize="16"
+                                      FontWeight="SemiBold"
+                                      VerticalAlignment="Center"
+                                      Foreground="{ui:ThemeResource TextFillColorPrimaryBrush}" />
+                        
+                        <!-- Tab Bar on the right (hidden when no tabs) -->
+                        <Border x:Name="TabBarBorder"
+                                Grid.Column="2"
+                                Visibility="Collapsed"
+                                Background="Transparent">
+                            <ItemsControl x:Name="TabBarItemsControl">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </Border>
+                    </Grid>
                 </Border>
 
                 <!-- Search Box with Filter -->
                 <Border x:Name="SearchBoxBorder"
-                        Grid.Row="2"
+                        Grid.Row="1"
                         ClipToBounds="True"
                         Background="Transparent">
                     <Grid x:Name="SearchBoxGrid"
@@ -91,7 +101,7 @@
                 </Border>
 
                 <!-- Item List - MaxHeight set dynamically in code based on DefaultVisibleItems -->
-                <Border Grid.Row="3" 
+                <Border Grid.Row="2" 
                         Padding="4,0,4,0">
                     <local:ListView x:Name="ItemListView"
                                     ItemsSource="{Binding FilteredItems}"
@@ -101,12 +111,13 @@
 
                 <!-- Status Bar -->
                 <Border x:Name="StatusBarBorder"
-                        Grid.Row="4"
+                        Grid.Row="3"
                         Background="{ui:ThemeResource CardBackgroundFillColorSecondaryBrush}">
                     <Grid x:Name="StatusBarGrid">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
                         <ui:TextBlock x:Name="ItemCountText"
@@ -124,7 +135,34 @@
                                       HorizontalAlignment="Right"
                                       FontSize="10"
                                       Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+
+                        <!-- Tray Toggle Button -->
+                        <ui:Button x:Name="TrayToggleButton"
+                                   Grid.Column="2"
+                                   Padding="4"
+                                   Margin="4,0,0,0"
+                                   Appearance="Secondary"
+                                   BorderThickness="0"
+                                   Visibility="Collapsed"
+                                   ToolTip="Show/Hide Options">
+                            <ui:SymbolIcon x:Name="TrayToggleIcon" Symbol="ChevronDown20" FontSize="12" />
+                        </ui:Button>
                     </Grid>
+                </Border>
+
+                <!-- Pull-Down Tray (collapsible) -->
+                <Border x:Name="TrayBorder"
+                        Grid.Row="4"
+                        Background="{ui:ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderThickness="0,1,0,0"
+                        BorderBrush="{ui:ThemeResource ControlStrokeColorDefaultBrush}"
+                        MaxHeight="0"
+                        ClipToBounds="True">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  Padding="12,8,12,8">
+                        <ContentControl x:Name="TrayContent" />
+                    </ScrollViewer>
                 </Border>
             </Grid>
         </Border>

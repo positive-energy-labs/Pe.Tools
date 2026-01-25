@@ -8,6 +8,7 @@ using System.Windows.Threading;
 using Visibility = System.Windows.Visibility;
 using Grid = System.Windows.Controls.Grid;
 using Button = Wpf.Ui.Controls.Button;
+using Application = System.Windows.Application;
 
 
 namespace Pe.Ui.Components;
@@ -42,6 +43,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     private const double DefaultSidebarWidth = 400;
     private const double ExpandedPanelWidth = 600;
     private const double DefaultPaletteWidth = 500;
+    private const double DefaultTrayMaxHeight = 200;
 
     /// <summary>
     ///     Number of visible items in the palette list before scrolling.
@@ -71,11 +73,13 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     private Func<object> _getSelectedItemFunc;
     private bool _isCtrlPressed;
     private bool _isPanelExpanded;
+    private bool _isTrayExpanded;
     private bool _keepOpenAfterAction;
     private Action _onCtrlReleased;
     private EphemeralWindow _parentWindow;
     private bool _sidebarAutoExpanded;
     private SelectableTextBox _tooltipPanel;
+    private double _trayMaxHeight = DefaultTrayMaxHeight;
 
     public Palette(bool isSearchBoxHidden = false) {
         this.InitializeComponent();
@@ -161,6 +165,9 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
 
         // Wire up expand button
         this.ExpandPanelButton.Click += this.ExpandPanelButton_Click;
+
+        // Wire up tray toggle button
+        this.TrayToggleButton.Click += this.TrayToggleButton_Click;
 
         var actionBinding = new ActionBinding<TItem>();
         if (actions != null && actions.Any()) actionBinding.RegisterRange(actions);
@@ -332,9 +339,89 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         }
     }
 
-    private void ExpandPanelButton_Click(object sender, RoutedEventArgs e) {
-        this.ExpandPanel();
+    private void ExpandPanelButton_Click(object sender, RoutedEventArgs e) => this.ExpandPanel();
+
+    /// <summary>
+    ///     Sets the tray content and shows the tray toggle button.
+    ///     The tray starts collapsed and can be expanded by clicking the toggle button.
+    ///     A default ephemerality toggle is automatically added to all trays.
+    /// </summary>
+    /// <param name="content">Optional custom content to add below the default toggle. Can be null.</param>
+    /// <param name="maxHeight">Maximum height when expanded. Defaults to 200px.</param>
+    public void SetTrayContent(UIElement? content, double maxHeight = DefaultTrayMaxHeight) {
+        // Create a container with default ephemerality toggle + custom content
+        var trayContainer = new StackPanel {
+            Orientation = Orientation.Vertical
+        };
+
+        // Add ephemerality toggle at the top
+        var ephemeralToggle = new Wpf.Ui.Controls.ToggleSwitch {
+            Content = "Keep Open (Pin Window)",
+            IsChecked = !this._parentWindow?.EphemeralEnabled ?? false,
+            ToolTip = "When enabled, the palette stays open when clicking outside. When disabled, the palette closes automatically."
+        };
+
+        ephemeralToggle.Checked += (_, _) => {
+            if (this._parentWindow != null)
+                this._parentWindow.EphemeralEnabled = false;
+        };
+
+        ephemeralToggle.Unchecked += (_, _) => {
+            if (this._parentWindow != null)
+                this._parentWindow.EphemeralEnabled = true;
+        };
+
+        _ = trayContainer.Children.Add(ephemeralToggle);
+
+        // Add separator if custom content is provided
+        if (content != null) {
+            var separator = new Wpf.Ui.Controls.CardControl {
+                Margin = new Thickness(0, 8, 0, 8),
+                Height = 1,
+                Background = (SolidColorBrush)Application.Current.Resources["ControlStrokeColorDefaultBrush"]
+            };
+            _ = trayContainer.Children.Add(separator);
+            _ = trayContainer.Children.Add(content);
+        }
+
+        this.TrayContent.Content = trayContainer;
+        this.TrayToggleButton.Visibility = Visibility.Visible;
+        this._trayMaxHeight = maxHeight;
     }
+
+    /// <summary>
+    ///     Toggles the tray between expanded and collapsed states.
+    /// </summary>
+    public void ToggleTray() {
+        if (this._isTrayExpanded)
+            this.CollapseTray();
+        else
+            this.ExpandTray();
+    }
+
+    /// <summary>
+    ///     Expands the tray to show its content.
+    /// </summary>
+    public void ExpandTray() {
+        if (this._isTrayExpanded) return;
+
+        this._isTrayExpanded = true;
+        this.TrayBorder.MaxHeight = this._trayMaxHeight;
+        this.TrayToggleIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.ChevronUp20;
+    }
+
+    /// <summary>
+    ///     Collapses the tray to hide its content.
+    /// </summary>
+    public void CollapseTray() {
+        if (!this._isTrayExpanded) return;
+
+        this._isTrayExpanded = false;
+        this.TrayBorder.MaxHeight = 0;
+        this.TrayToggleIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.ChevronDown20;
+    }
+
+    private void TrayToggleButton_Click(object sender, RoutedEventArgs e) => this.ToggleTray();
 
     /// <summary>
     ///     Sets the parent window reference for coordinating window size with sidebar expansion.
@@ -574,7 +661,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             var tabIndex = i; // Capture for closure
             var button = new Button {
                 Content = tabNames[i],
-                Margin = new Thickness(0, 0, 4, 0),
+                Margin = new Thickness(4, 0, 0, 0), // Left margin for spacing between tabs
                 Padding = new Thickness(8, 4, 8, 4),
                 Tag = tabIndex,
                 Focusable = false, // Keep focus in search box

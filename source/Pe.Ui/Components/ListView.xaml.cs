@@ -67,7 +67,7 @@ public partial class ListView {
 
         var hasKeyboardFocus = this.ItemListView.IsKeyboardFocusWithin;
         var itemCount = this.ItemListView.Items.Count;
-        
+
         if (!hasKeyboardFocus || itemCount == 0) return;
 
         // Check throttle to avoid rapid animations
@@ -94,7 +94,7 @@ public partial class ListView {
         this.Focusable = true;
 
         // Set focus to enable keyboard navigation
-        this.ItemListView.Focus();
+        _ = this.ItemListView.Focus();
     }
 
     private void OnInternalSelectionChanged(object sender, SelectionChangedEventArgs e) {
