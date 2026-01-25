@@ -17,7 +17,8 @@ public class Ribbon {
         "RvtMenuSplitButton",
         "SplitRadioGroup",
         "DesignOptionCombo",
-        "RibbonMenuItem"
+        "RibbonMenuItem",
+        "SwitchWindowMenuButton" // Dynamic menu showing open views 
     ];
 
     public static IEnumerable<DiscoveredTab> GetAllTabs() =>
@@ -125,6 +126,152 @@ public class Ribbon {
         var itemType = ((object)item).GetType().Name;
         return ContainerTypes.Contains(itemType);
     }
+
+    #region Diagnostic Logging
+
+    /// <summary>
+    ///     Logs all ribbon items on a specific tab for investigation.
+    ///     Use this to discover what type "Switch Windows" is.
+    /// </summary>
+    /// <param name="tabNameFilter">Optional: filter to specific tab (e.g., "View"). Null = all tabs.</param>
+    public static void LogAllRibbonItems(string? tabNameFilter = null) {
+        Console.WriteLine("=== RIBBON DIAGNOSTIC START ===");
+
+        foreach (var tab in ComponentManager.Ribbon.Tabs) {
+            if (tabNameFilter != null && !tab.Title.Contains(tabNameFilter, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            Console.WriteLine($"\n[TAB] '{tab.Title}' (Id={tab.Id}, Visible={tab.IsVisible}, Enabled={tab.IsEnabled})");
+
+            foreach (var panel in tab.Panels) {
+                Console.WriteLine($"  [PANEL] '{panel.Source?.Title}' (Cookie={panel.Cookie}, Visible={panel.IsVisible})");
+
+                if (panel.Source?.Items == null) continue;
+
+                foreach (var item in panel.Source.Items) {
+                    LogRibbonItemRecursive(item, indent: 4);
+                }
+            }
+        }
+
+        Console.WriteLine("\n=== RIBBON DIAGNOSTIC END ===");
+    }
+
+    /// <summary>
+    ///     Searches for a specific ribbon item by name/text and logs detailed info about it.
+    /// </summary>
+    public static void LogItemByName(string searchTerm) {
+        Console.WriteLine($"=== SEARCHING FOR: '{searchTerm}' ===");
+        var found = false;
+
+        foreach (var tab in ComponentManager.Ribbon.Tabs) {
+            foreach (var panel in tab.Panels) {
+                if (panel.Source?.Items == null) continue;
+
+                foreach (var item in panel.Source.Items) {
+                    found |= SearchAndLogItem(item, searchTerm, tab.Title, panel.Source.Title, 0);
+                }
+            }
+        }
+
+        if (!found) Console.WriteLine($"No items found matching '{searchTerm}'");
+        Console.WriteLine("=== SEARCH END ===");
+    }
+
+    private static bool SearchAndLogItem(dynamic item, string searchTerm, string tabName, string panelName, int depth) {
+        var found = false;
+        var itemType = ((object)item).GetType().Name;
+
+        string? id = null, name = null, text = null;
+        try { id = item.Id?.ToString(); } catch { }
+        try { name = item.Name?.ToString(); } catch { }
+        try { text = item.Text?.ToString(); } catch { }
+
+        var matchesSearch = (id?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                            (name?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                            (text?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false);
+
+        if (matchesSearch) {
+            found = true;
+            Console.WriteLine($"\n*** FOUND MATCH ***");
+            Console.WriteLine($"  Tab: {tabName}");
+            Console.WriteLine($"  Panel: {panelName}");
+            Console.WriteLine($"  Depth: {depth}");
+            LogRibbonItemDetailed(item);
+        }
+
+        // Recurse into children
+        try {
+            if (item.Items != null) {
+                foreach (var child in item.Items) {
+                    found |= SearchAndLogItem(child, searchTerm, tabName, panelName, depth + 1);
+                }
+            }
+        } catch { }
+
+        return found;
+    }
+
+    private static void LogRibbonItemRecursive(dynamic item, int indent) {
+        var prefix = new string(' ', indent);
+        var itemType = ((object)item).GetType().Name;
+
+        string? id = null, name = null, text = null;
+        bool visible = false, enabled = false;
+
+        try { id = item.Id?.ToString(); } catch { }
+        try { name = item.Name?.ToString(); } catch { }
+        try { text = item.Text?.ToString(); } catch { }
+        try { visible = item.IsVisible; } catch { }
+        try { enabled = item.IsEnabled; } catch { }
+
+        var displayName = !string.IsNullOrEmpty(text) ? text : (!string.IsNullOrEmpty(name) ? name : id);
+        Console.WriteLine($"{prefix}[{itemType}] '{displayName}' (Id={id}, V={visible}, E={enabled})");
+
+        // Try to recurse into children
+        try {
+            if (item.Items != null && item.Items.Count > 0) {
+                foreach (var child in item.Items) {
+                    LogRibbonItemRecursive(child, indent + 2);
+                }
+            }
+        } catch { }
+    }
+
+    private static void LogRibbonItemDetailed(dynamic item) {
+        var itemType = ((object)item).GetType().Name;
+        Console.WriteLine($"  Type: {itemType}");
+
+        // Log all readable properties
+        var props = ((object)item).GetType().GetProperties();
+        foreach (var prop in props) {
+            if (!prop.CanRead) continue;
+            try {
+                var value = prop.GetValue(item);
+                var valueStr = value?.ToString() ?? "<null>";
+                if (valueStr.Length > 100) valueStr = valueStr[..100] + "...";
+                Console.WriteLine($"    {prop.Name}: {valueStr}");
+            } catch (Exception ex) {
+                Console.WriteLine($"    {prop.Name}: <error: {ex.Message}>");
+            }
+        }
+
+        // Check for Items collection
+        try {
+            if (item.Items != null) {
+                Console.WriteLine($"  Children ({item.Items.Count}):");
+                foreach (var child in item.Items) {
+                    var childType = ((object)child).GetType().Name;
+                    string? childText = null, childId = null;
+                    try { childText = child.Text?.ToString(); } catch { }
+                    try { childId = child.Id?.ToString(); } catch { }
+                    Console.WriteLine($"    - [{childType}] '{childText ?? childId}'");
+                }
+            }
+        } catch { }
+    }
+
+    #endregion
 }
 
 public class DiscoveredTab {

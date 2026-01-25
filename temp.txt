@@ -1,0 +1,1168 @@
+✓ Task 'Diagnose Ribbon: Switch Windows' completed
+
+
+*** Check Revit console/output for ribbon diagnostic logs ***
+
+=== RIBBON DIAGNOSTIC END ===
+    [RibbonButton] 'Canvas
+Theme' (Id=ID_CANVAS_THEME_SWITCH, V=True, E=True)
+    [RibbonSeparator] '' (Id=, V=True, E=True)
+      [RibbonMenuItem] 'Keyboard Shortcuts' (Id=ID_KEYBOARD_SHORTCUT_DIALOG, V=True, E=True)
+      [RibbonMenuItem] 'Browser Organization' (Id=ID_BROWSER_ORGANIZATION, V=True, E=True)
+      [RibbonSeparator] '' (Id=, V=True, E=True)
+      [RibbonToggleButton] 'Recent Files' (Id=ID_STARTUP_PAGE, V=False, E=True)
+      [RibbonToggleButton] 'Status Bar - Design Options' (Id=ID_STATUSBAR_DESIGNOPTIONS, V=True, E=True)
+      [RibbonToggleButton] 'Status Bar - Worksets' (Id=ID_STATUSBAR_WORKSETS, V=True, E=True)
+      [RibbonToggleButton] 'Status Bar' (Id=ID_VIEW_STATUS_BAR, V=True, E=True)
+      [RibbonToggleButton] 'Content Delivery' (Id=ID_TOGGLE_CONTENT_DELIVERY, V=False, E=True)
+      [RibbonToggleButton] 'P&ID Modeler' (Id=ID_MEP_TOGGLE_PNID_BROWSER, V=True, E=True)
+      [RibbonToggleButton] 'MEP Fabrication Parts' (Id=ID_TOGGLE_FABPART_BROWSER, V=True, E=True)
+      [RibbonToggleButton] 'Properties' (Id=ID_TOGGLE_PROPERTIES_PALETTE, V=True, E=True)
+      [RibbonToggleButton] 'System Browser' (Id=ID_RBS_SYSTEM_NAVIGATOR, V=True, E=True)
+      [RibbonToggleButton] 'Project Browser' (Id=ID_VIEW_PROJECTEXPLORER, V=True, E=True)
+      [RibbonToggleButton] 'Navigation Bar' (Id=ID_NAVIGATION_BAR, V=True, E=True)
+      [RibbonToggleButton] 'ViewCube' (Id=ID_SHOW_VIEWCUBE, V=True, E=True)
+    [RibbonChecklistButton] 'User
+Interface' (Id=HID_APPLICATION_ELEMENTS_RibbonListButton, V=True, E=True)
+    [RibbonSeparator] '' (Id=, V=True, E=True)
+    [RibbonButton] 'Tile
+Views' (Id=ID_WINDOW_TILE_VERT, V=True, E=True)
+    [RibbonButton] 'Tab
+Views' (Id=ID_VIEW_TAB, V=True, E=True)
+    [RibbonButton] 'Close
+Inactive' (Id=ID_VIEW_CLOSE_INACTIVE, V=True, E=True)
+    [SwitchWindowMenuButton] 'Switch
+Windows' (Id=manage_views, V=True, E=True)
+  [PANEL] 'Windows' (Cookie=Panel=manageviews_shr_Windows_, Visible=True)
+      [RibbonButton] 'Scope
+Box' (Id=ID_VOLUME_OF_INTEREST, V=True, E=True)
+      [RibbonButton] 'Revision
+Schedule' (Id=ID_VIEW_NEW_REVISION_SCHEDULE, V=False, E=True)
+        [RibbonButton] 'View List' (Id=ID_NEW_VIEWLIST, V=True, E=True)
+        [RibbonButton] 'Note Block' (Id=ID_VIEW_NEW_NOTE_BLOCK, V=True, E=True)
+        [RibbonButton] 'Sheet List' (Id=ID_VIEW_NEW_DRAWING_LIST, V=True, E=True)
+        [RibbonButton] 'Material Takeoff' (Id=ID_VIEW_NEW_MATERIAL_TAKEOFF, V=True, E=True)
+        [RibbonButton] 'Graphical Column Schedule' (Id=ID_VIEW_NEW_GRAPH_SCHED_COLUMN, V=False, E=True)
+        [RibbonButton] 'Schedule/Quantities' (Id=ID_VIEW_NEW_SCHEDULE, V=True, E=True)
+      [RibbonSplitButton] 'Schedules' (Id=HID_SCHEDULES_RibbonListButton, V=True, E=True)
+        [RibbonButton] 'Keynote Legend' (Id=ID_VIEW_NEW_KEYNOTE_LEGEND, V=True, E=True)
+        [RibbonButton] 'Legend' (Id=ID_VIEW_NEW_LEGEND, V=True, E=True)
+      [RibbonSplitButton] 'Legends' (Id=HID_LEGENDS_RibbonListButton, V=True, E=True)
+        [RibbonButton] 'Duplicate as Dependent' (Id=ID_CREATE_DEPENDENT_VIEW, V=True, E=True)
+        [RibbonButton] 'Duplicate with Detailing' (Id=ID_DUPLICATE_WITH_DETAILING, V=True, E=True)
+        [RibbonButton] 'Duplicate View' (Id=ID_PRJBROWSER_COPY, V=True, E=True)
+      [RibbonSplitButton] 'Duplicate
+View' (Id=HID_DUPLICATE_VIEWS_RibbonListButton, V=True, E=True)
+      [RibbonButton] 'Drafting
+View' (Id=ID_VIEW_NEW_DRAFTING, V=True, E=True)
+    [RibbonFoldPanel] '' (Id=, V=True, E=True)
+        [RibbonButton] 'Framing Elevation' (Id=ID_BUTTON_BRACING_ELEVATION, V=True, E=True)
+        [RibbonButton] 'Elevation' (Id=ID_BUTTON_INTERIOR_ROOM_ELEVATION, V=True, E=True)
+      [RibbonSplitButton] 'Elevation' (Id=ID_BUTTON_INTERIOR_ROOM_ELEVATION_RibbonListButton, V=False, E=True)
+        [RibbonButton] 'Framing Elevation' (Id=ID_BUTTON_BRACING_ELEVATION, V=True, E=True)
+        [RibbonButton] 'Elevation' (Id=ID_BUTTON_INTERIOR_ROOM_ELEVATION, V=True, E=True)
+      [RibbonSplitButton] 'Elevation' (Id=ID_BUTTON_INTERIOR_ROOM_ELEVATION_RibbonListButton, V=True, E=True)
+      [RibbonButton] 'Elevation' (Id=ID_BUTTON_INTERIOR_ROOM_ELEVATION, V=False, E=True)
+        [RibbonButton] 'Building Elevation' (Id=ID_BUTTON_INTERIOR_ROOM_ELEVATION, V=True, E=True)
+        [RibbonButton] 'Framing Elevation' (Id=ID_BUTTON_BRACING_ELEVATION, V=True, E=True)
+      [RibbonSplitButton] 'Elevation' (Id=ID_BUTTON_BRACING_ELEVATION_RibbonListButton, V=False, E=True)
+        [RibbonButton] 'Area Plan' (Id=ID_VIEW_NEW_AREASCHEME, V=True, E=True)
+        [RibbonButton] 'Plan Region' (Id=ID_NEW_PLAN_REGION, V=True, E=True)
+        [RibbonButton] 'Structural Plan' (Id=ID_VIEW_NEW_STRUCTURAL_PLAN, V=False, E=True)
+        [RibbonButton] 'Reflected Ceiling Plan' (Id=ID_VIEW_NEW_RCP, V=True, E=True)
+        [RibbonButton] 'Floor Plan' (Id=ID_VIEW_NEW_PLAN, V=True, E=True)
+      [RibbonSplitButton] 'Plan
+Views' (Id=HID_PLAN_VIEWS_RibbonListButton, V=True, E=True)
+      [RibbonButton] 'Plan
+Region' (Id=ID_NEW_PLAN_REGION, V=False, E=True)
+      [RibbonButton] 'Structural
+Plan' (Id=ID_VIEW_NEW_STRUCTURAL_PLAN, V=False, E=True)
+      [RibbonButton] 'Floor
+Plan' (Id=ID_VIEW_NEW_PLAN, V=False, E=True)
+    [RibbonFoldPanel] '' (Id=, V=True, E=True)
+      [RibbonButton] 'Sketch' (Id=ID_VIEW_NEW_CALLOUT_SKETCH, V=True, E=True)
+      [RibbonButton] 'Rectangle' (Id=ID_VIEW_NEW_CALLOUT, V=True, E=True)
+    [RibbonSplitButton] 'Callout' (Id=ID_VIEW_NEW_CALLOUT_RibbonListButton, V=True, E=True)
+    [RibbonButton] 'Section' (Id=ID_VIEW_NEW_SECTION, V=True, E=True)
+    [RibbonButton] 'Camera' (Id=ID_VIEW_NEW_3DVIEW, V=False, E=True)
+    [RibbonButton] 'Default
+3D' (Id=ID_VIEW_DEFAULT_3DVIEW, V=False, E=True)
+      [RibbonButton] 'Walkthrough' (Id=ID_VIEW_NEW_WALKTHROUGH, V=True, E=True)
+      [RibbonButton] 'Camera' (Id=ID_VIEW_NEW_3DVIEW, V=True, E=True)
+      [RibbonButton] 'Perspective View' (Id=ID_VIEW_PERSP_VIEW, V=False, E=True)
+      [RibbonButton] 'Orthographic' (Id=ID_VIEW_DEFAULT_3DVIEW, V=False, E=True)
+      [RibbonButton] 'Default 3D View' (Id=ID_VIEW_DEFAULT_3DVIEW, V=True, E=True)
+    [RibbonSplitButton] '3D
+View' (Id=ID_VIEW_DEFAULT_3DVIEW, V=True, E=True)
+  [PANEL] 'Create' (Cookie=Panel=createview_shr_Create_, Visible=False)
+      [RibbonToggleButton] 'Thin
+Lines' (Id=ID_THIN_LINES, V=True, E=True)
+      [RibbonButton] 'Visibility/
+Graphics' (Id=ID_VIEW_CATEGORY_VISIBILITY, V=True, E=True)
+    [RibbonFoldPanel] '' (Id=, V=True, E=True)
+  [PANEL] 'Graphics' (Cookie=Panel=graphics_fam_Graphics_, Visible=True)
+      [RibbonCheckBox] 'Drag elements on selection' (Id=ID_TOGGLE_ALLOW_DRAG_ON_SELECTION, V=True, E=True)
+      [RibbonRowBreak] '' (Id=, V=True, E=True)
+      [RibbonCheckBox] 'Select elements by face' (Id=ID_TOGGLE_ALLOW_FACE_SELECTION, V=True, E=True)
+      [RibbonRowBreak] '' (Id=, V=True, E=True)
+      [RibbonCheckBox] 'Select pinned elements' (Id=ID_TOGGLE_ALLOW_PINNED_SELECTION, V=True, E=True)
+      [RibbonRowBreak] '' (Id=, V=True, E=True)
+      [RibbonCheckBox] 'Select underlay elements' (Id=ID_TOGGLE_ALLOW_UNDERLAY_SELECTION, V=True, E=True)
+      [RibbonRowBreak] '' (Id=, V=True, E=True)
+      [RibbonCheckBox] 'Select links' (Id=ID_TOGGLE_ALLOW_LINK_SELECTION, V=True, E=True)
+    [RibbonRowPanel] '' (Id=, V=True, E=True)
+    [RibbonPanelBreak] '' (Id=, V=True, E=True)
+    [RibbonButton] 'Modify' (Id=ID_BUTTON_SELECT, V=True, E=True)
+  [PANEL] 'Select' (Cookie=Panel=selection_shr_Select_, Visible=True)
+
+[TAB] 'View' (Id=View_Family, Visible=False, Enabled=True)
+    [RibbonButton] 'Canvas
+Theme' (Id=ID_CANVAS_THEME_SWITCH, V=True, E=True)
+    [RibbonSeparator] '' (Id=, V=True, E=True)
+      [RibbonMenuItem] 'Keyboard Shortcuts' (Id=ID_KEYBOARD_SHORTCUT_DIALOG, V=True, E=True)
+      [RibbonMenuItem] 'Browser Organization' (Id=ID_BROWSER_ORGANIZATION, V=True, E=True)
+      [RibbonSeparator] '' (Id=, V=True, E=True)
+      [RibbonToggleButton] 'Recent Files' (Id=ID_STARTUP_PAGE, V=False, E=True)
+      [RibbonToggleButton] 'Status Bar - Design Options' (Id=ID_STATUSBAR_DESIGNOPTIONS, V=True, E=True)
+      [RibbonToggleButton] 'Status Bar - Worksets' (Id=ID_STATUSBAR_WORKSETS, V=True, E=True)
+      [RibbonToggleButton] 'Status Bar' (Id=ID_VIEW_STATUS_BAR, V=True, E=True)
+      [RibbonToggleButton] 'Content Delivery' (Id=ID_TOGGLE_CONTENT_DELIVERY, V=False, E=True)
+      [RibbonToggleButton] 'P&ID Modeler' (Id=ID_MEP_TOGGLE_PNID_BROWSER, V=True, E=True)
+      [RibbonToggleButton] 'MEP Fabrication Parts' (Id=ID_TOGGLE_FABPART_BROWSER, V=True, E=True)
+      [RibbonToggleButton] 'Properties' (Id=ID_TOGGLE_PROPERTIES_PALETTE, V=True, E=True)
+      [RibbonToggleButton] 'System Browser' (Id=ID_RBS_SYSTEM_NAVIGATOR, V=True, E=True)
+      [RibbonToggleButton] 'Project Browser' (Id=ID_VIEW_PROJECTEXPLORER, V=True, E=True)
+      [RibbonToggleButton] 'Navigation Bar' (Id=ID_NAVIGATION_BAR, V=True, E=True)
+      [RibbonToggleButton] 'ViewCube' (Id=ID_SHOW_VIEWCUBE, V=True, E=True)
+    [RibbonChecklistButton] 'User
+Interface' (Id=HID_APPLICATION_ELEMENTS_RibbonListButton, V=True, E=True)
+    [RibbonSeparator] '' (Id=, V=True, E=True)
+    [RibbonButton] 'Tile
+Views' (Id=ID_WINDOW_TILE_VERT, V=True, E=True)
+    [RibbonButton] 'Tab
+Views' (Id=ID_VIEW_TAB, V=True, E=True)
+    [RibbonButton] 'Close
+Inactive' (Id=ID_VIEW_CLOSE_INACTIVE, V=True, E=True)
+    [SwitchWindowMenuButton] 'Switch
+Windows' (Id=manage_views, V=True, E=True)
+  [PANEL] 'Windows' (Cookie=Panel=manageviews_shr_Windows_, Visible=True)
+        [RibbonButton] 'Deactivate View' (Id=ID_VIEWPORT_ACTIVATE_BASE, V=True, E=True)
+        [RibbonButton] 'Activate View' (Id=ID_VIEWPORT_ACTIVATE, V=True, E=True)
+      [RibbonSplitButton] 'Viewports' (Id=HID_VIEWPORTS_RibbonListButton, V=True, E=True)
+      [RibbonButton] 'View
+Reference' (Id=ID_NEW_REFERENCE_VIEWER, V=True, E=True)
+      [RibbonButton] 'Matchline' (Id=ID_NEW_MATCHLINE, V=True, E=True)
+    [RibbonFoldPanel] '' (Id=, V=True, E=True)
+      [RibbonButton] 'Guide
+Grid' (Id=ID_CREATE_GUIDE_GRID, V=True, E=True)
+      [RibbonButton] 'Revisions' (Id=ID_SETTINGS_REVISIONS, V=True, E=True)
+      [RibbonButton] 'Title
+Block' (Id=ID_OBJECTS_PLACE_TITLEBLOCK, V=True, E=True)
+    [RibbonFoldPanel] '' (Id=, V=True, E=True)
+      [RibbonButton] 'View' (Id=ID_VIEW_PLACE_VIEW, V=True, E=True)
+      [RibbonButton] 'Sheet' (Id=ID_VIEW_NEW_SHEET, V=True, E=True)
+    [RibbonFoldPanel] '' (Id=, V=True, E=True)
+  [PANEL] 'Sheet Composition' (Cookie=Panel=sheets_shr_Sheet Composition_, Visible=True)
+      [RibbonButton] 'Scope
+Box' (Id=ID_VOLUME_OF_INTEREST, V=True, E=True)
+      [RibbonButton] 'Revision
+Schedule' (Id=ID_VIEW_NEW_REVISION_SCHEDULE, V=False, E=True)
+        [RibbonButton] 'View List' (Id=ID_NEW_VIEWLIST, V=True, E=True)
+        [RibbonButton] 'Note Block' (Id=ID_VIEW_NEW_NOTE_BLOCK, V=True, E=True)
+        [RibbonButton] 'Sheet List' (Id=ID_VIEW_NEW_DRAWING_LIST, V=True, E=True)
+        [RibbonButton] 'Material Takeoff' (Id=ID_VIEW_NEW_MATERIAL_TAKEOFF, V=True, E=True)
+        [RibbonButton] 'Graphical Column Schedule' (Id=ID_VIEW_NEW_GRAPH_SCHED_COLUMN, V=False, E=True)
+        [RibbonButton] 'Schedule/Quantities' (Id=ID_VIEW_NEW_SCHEDULE, V=True, E=True)
+      [RibbonSplitButton] 'Schedules' (Id=HID_SCHEDULES_RibbonListButton, V=True, E=True)
+        [RibbonButton] 'Keynote Legend' (Id=ID_VIEW_NEW_KEYNOTE_LEGEND, V=True, E=True)
+        [RibbonButton] 'Legend' (Id=ID_VIEW_NEW_LEGEND, V=True, E=True)
+      [RibbonSplitButton] 'Legends' (Id=HID_LEGENDS_RibbonListButton, V=True, E=True)
+        [RibbonButton] 'Duplicate as Dependent' (Id=ID_CREATE_DEPENDENT_VIEW, V=True, E=True)
+        [RibbonButton] 'Duplicate with Detailing' (Id=ID_DUPLICATE_WITH_DETAILING, V=True, E=True)
+        [RibbonButton] 'Duplicate View' (Id=ID_PRJBROWSER_COPY, V=True, E=True)
+      [RibbonSplitButton] 'Duplicate
+View' (Id=HID_DUPLICATE_VIEWS_RibbonListButton, V=True, E=True)
+      [RibbonButton] 'Drafting
+View' (Id=ID_VIEW_NEW_DRAFTING, V=True, E=True)
+    [RibbonFoldPanel] '' (Id=, V=True, E=True)
+        [RibbonButton] 'Framing Elevation' (Id=ID_BUTTON_BRACING_ELEVATION, V=True, E=True)
+        [RibbonButton] 'Elevation' (Id=ID_BUTTON_INTERIOR_ROOM_ELEVATION, V=True, E=True)
+      [RibbonSplitButton] 'Elevation' (Id=ID_BUTTON_INTERIOR_ROOM_ELEVATION_RibbonListButton, V=False, E=True)
+        [RibbonButton] 'Framing Elevation' (Id=ID_BUTTON_BRACING_ELEVATION, V=True, E=True)
+        [RibbonButton] 'Elevation' (Id=ID_BUTTON_INTERIOR_ROOM_ELEVATION, V=True, E=True)
+      [RibbonSplitButton] 'Elevation' (Id=ID_BUTTON_INTERIOR_ROOM_ELEVATION_RibbonListButton, V=True, E=True)
+      [RibbonButton] 'Elevation' (Id=ID_BUTTON_INTERIOR_ROOM_ELEVATION, V=False, E=True)
+        [RibbonButton] 'Building Elevation' (Id=ID_BUTTON_INTERIOR_ROOM_ELEVATION, V=True, E=True)
+        [RibbonButton] 'Framing Elevation' (Id=ID_BUTTON_BRACING_ELEVATION, V=True, E=True)
+      [RibbonSplitButton] 'Elevation' (Id=ID_BUTTON_BRACING_ELEVATION_RibbonListButton, V=False, E=True)
+        [RibbonButton] 'Area Plan' (Id=ID_VIEW_NEW_AREASCHEME, V=True, E=True)
+        [RibbonButton] 'Plan Region' (Id=ID_NEW_PLAN_REGION, V=True, E=True)
+        [RibbonButton] 'Structural Plan' (Id=ID_VIEW_NEW_STRUCTURAL_PLAN, V=False, E=True)
+        [RibbonButton] 'Reflected Ceiling Plan' (Id=ID_VIEW_NEW_RCP, V=True, E=True)
+        [RibbonButton] 'Floor Plan' (Id=ID_VIEW_NEW_PLAN, V=True, E=True)
+      [RibbonSplitButton] 'Plan
+Views' (Id=HID_PLAN_VIEWS_RibbonListButton, V=True, E=True)
+      [RibbonButton] 'Plan
+Region' (Id=ID_NEW_PLAN_REGION, V=False, E=True)
+      [RibbonButton] 'Structural
+Plan' (Id=ID_VIEW_NEW_STRUCTURAL_PLAN, V=False, E=True)
+      [RibbonButton] 'Floor
+Plan' (Id=ID_VIEW_NEW_PLAN, V=False, E=True)
+    [RibbonFoldPanel] '' (Id=, V=True, E=True)
+      [RibbonButton] 'Sketch' (Id=ID_VIEW_NEW_CALLOUT_SKETCH, V=True, E=True)
+      [RibbonButton] 'Rectangle' (Id=ID_VIEW_NEW_CALLOUT, V=True, E=True)
+    [RibbonSplitButton] 'Callout' (Id=ID_VIEW_NEW_CALLOUT_RibbonListButton, V=True, E=True)
+    [RibbonButton] 'Section' (Id=ID_VIEW_NEW_SECTION, V=True, E=True)
+    [RibbonButton] 'Camera' (Id=ID_VIEW_NEW_3DVIEW, V=False, E=True)
+    [RibbonButton] 'Default
+3D' (Id=ID_VIEW_DEFAULT_3DVIEW, V=False, E=True)
+      [RibbonButton] 'Walkthrough' (Id=ID_VIEW_NEW_WALKTHROUGH, V=True, E=True)
+      [RibbonButton] 'Camera' (Id=ID_VIEW_NEW_3DVIEW, V=True, E=True)
+      [RibbonButton] 'Perspective View' (Id=ID_VIEW_PERSP_VIEW, V=False, E=True)
+      [RibbonButton] 'Orthographic' (Id=ID_VIEW_DEFAULT_3DVIEW, V=False, E=True)
+      [RibbonButton] 'Default 3D View' (Id=ID_VIEW_DEFAULT_3DVIEW, V=True, E=True)
+    [RibbonSplitButton] '3D
+View' (Id=ID_VIEW_DEFAULT_3DVIEW, V=True, E=True)
+  [PANEL] 'Create' (Cookie=Panel=createview_shr_Create_, Visible=True)
+        [RibbonButton] 'Substitution Settings' (Id=ID_TWINMOTION_SUB_SETTINGS, V=True, E=True)
+        [RibbonButton] 'Export Settings' (Id=ID_TWINMOTION_SETTINGS, V=True, E=True)
+        [RibbonButton] 'Export Messages' (Id=ID_TWINMOTION_MESSAGES, V=True, E=True)
+        [RibbonButton] 'Export to Datasmith file' (Id=ID_TWINMOTION_EXPORT_TO_DATASMITH_FILE, V=True, E=True)
+        [RibbonSeparator] '' (Id=, V=True, E=True)
+        [RibbonButton] 'Connections' (Id=ID_TWINMOTION_DIRECT_LINK_CONNECTIONS, V=True, E=True)
+        [RibbonButton] 'Synchronize' (Id=ID_TWINMOTION_DIRECT_LINK_SYNCHRONIZE, V=True, E=True)
+        [RibbonButton] 'Auto Sync' (Id=ID_TWINMOTION_DIRECT_LINK_AUTOSYNC_DISABLE, V=True, E=True)
+        [RibbonButton] 'Auto Sync' (Id=ID_TWINMOTION_DIRECT_LINK_AUTOSYNC_ENABLE, V=True, E=True)
+        [RibbonSeparator] '' (Id=, V=True, E=True)
+        [RibbonButton] 'Open in Twinmotion ' (Id=ID_OPEN_IN_TWINMOTION, V=True, E=True)
+      [RibbonSplitButton] 'Twinmotion' (Id=ID_TWINMOTION_RibbonListButton, V=True, E=True)
+        [RibbonButton] 'Render Gallery' (Id=ID_PHOTO_RENDER_GALLERY, V=True, E=True)
+        [RibbonButton] 'Render in Cloud' (Id=ID_PHOTO_RENDER_IN_CLOUD, V=True, E=True)
+      [RibbonSplitButton] 'Cloud
+Rendering' (Id=, V=True, E=True)
+    [RibbonFoldPanel] '' (Id=, V=True, E=True)
+    [RibbonButton] 'Render' (Id=ID_PHOTO_RENDERING_VIEW, V=True, E=True)
+  [PANEL] 'Presentation' (Cookie=Panel=viewpresentation_shr_Presentation_, Visible=True)
+      [RibbonButton] 'Cut
+Profile' (Id=ID_EDIT_CUT_BOUNDARY, V=True, E=True)
+      [RibbonButton] 'Remove
+Hidden Lines' (Id=ID_UNHIDE_ELEMENTS_EDITOR, V=True, E=True)
+      [RibbonButton] 'Show
+Hidden Lines' (Id=ID_HIDE_ELEMENTS_EDITOR, V=True, E=True)
+    [RibbonFoldPanel] '' (Id=, V=True, E=True)
+      [RibbonToggleButton] 'Thin
+Lines' (Id=ID_THIN_LINES, V=True, E=True)
+      [RibbonButton] 'Filters' (Id=ID_SETTINGS_FILTERS, V=True, E=True)
+      [RibbonButton] 'Visibility/
+Graphics' (Id=ID_VIEW_CATEGORY_VISIBILITY, V=True, E=True)
+    [RibbonFoldPanel] '' (Id=, V=True, E=True)
+      [RibbonButton] 'Manage View Templates' (Id=ID_SETTINGS_VIEWTEMPLATES, V=True, E=True)
+      [RibbonSeparator] '' (Id=, V=True, E=True)
+      [RibbonButton] 'Create Template from Current View' (Id=ID_CREATE_VIEW_TEMPLATE, V=True, E=True)
+      [RibbonButton] 'Apply Template Properties to Current View' (Id=ID_APPLY_VIEW_TEMPLATE, V=True, E=True)
+    [RibbonSplitButton] 'View
+Templates' (Id=HID_VIEW_TEMPLATE_RibbonListButton, V=True, E=True)
+  [PANEL] 'Graphics' (Cookie=Panel=viewgraphics_shr_Graphics_, Visible=True)
+      [RibbonCheckBox] 'Drag elements on selection' (Id=ID_TOGGLE_ALLOW_DRAG_ON_SELECTION, V=True, E=True)
+      [RibbonRowBreak] '' (Id=, V=True, E=True)
+      [RibbonCheckBox] 'Select elements by face' (Id=ID_TOGGLE_ALLOW_FACE_SELECTION, V=True, E=True)
+      [RibbonRowBreak] '' (Id=, V=True, E=True)
+      [RibbonCheckBox] 'Select pinned elements' (Id=ID_TOGGLE_ALLOW_PINNED_SELECTION, V=True, E=True)
+      [RibbonRowBreak] '' (Id=, V=True, E=True)
+      [RibbonCheckBox] 'Select underlay elements' (Id=ID_TOGGLE_ALLOW_UNDERLAY_SELECTION, V=True, E=True)
+      [RibbonRowBreak] '' (Id=, V=True, E=True)
+      [RibbonCheckBox] 'Select links' (Id=ID_TOGGLE_ALLOW_LINK_SELECTION, V=True, E=True)
+    [RibbonRowPanel] '' (Id=, V=True, E=True)
+    [RibbonPanelBreak] '' (Id=, V=True, E=True)
+    [RibbonButton] 'Modify' (Id=ID_BUTTON_SELECT, V=True, E=True)
+  [PANEL] 'Select' (Cookie=Panel=selection_shr_Select_, Visible=True)
+
+[TAB] 'View' (Id=View, Visible=True, Enabled=True)
+=== RIBBON DIAGNOSTIC START ===
+
+
+=== FULL VIEW TAB DUMP ===
+=== SEARCH END ===
+    GroupLocation: Middle
+    Cookie: Item=ID_WINDOW_TILE_VERT_Tile
+Views_Tile Views
+    IsInitialized: False
+    AllowInStatusBar: True
+    AllowInToolBar: True
+    Size: Large
+    ResizeStyle: HideText
+    CanResizeHeightWithGrip: False
+    CanResizeWidth: False
+    Height: NaN
+    MaxHeight: ∞
+    MinHeight: 0
+    Width: NaN
+    MinWidth: 0
+    IsVisibleBinding: System.Windows.Data.Binding
+    IsEnabledBinding: System.Windows.Data.Binding
+    IsEnabled: True
+    IsVisible: True
+    UID: <null>
+    KeyTip: I
+    ShowToolTipOnDisabled: True
+    IsToolTipEnabled: True
+    HelpTopic: <null>
+    HelpSource: <null>
+    ToolTipResolver: Autodesk.Private.Windows.RibbonItemToolTipResolver
+    IsUsingDefaultToolTip: False
+    ToolTipOverride: <null>
+    ToolTip: <null>
+    ShowImage: True
+    ShowText: True
+    Tag: UIFramework.ControlHelperExtension
+    LargeImageBinding: System.Windows.Data.Binding
+    LargeImage: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    ImageBinding: System.Windows.Data.Binding
+    Image: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    Highlight: None
+    GroupName: <null>
+    Description: <null>
+    Name: Tile Views
+    TextOverride: Tile
+Views
+    TextBinding: System.Windows.Data.Binding
+    Text: Tile
+Views
+    AutomationName: Tile
+Views
+    Id: ID_WINDOW_TILE_VERT
+    IsActive: False
+    IsCheckedOverride: False
+    IsCheckedBinding: System.Windows.Data.Binding
+    IsChecked: False
+    IsCheckableOverride: False
+    IsCheckable: False
+    CommandParameter: <null>
+    CommandHandlerBinding: System.Windows.Data.Binding
+    CommandHandler: <null>
+    Orientation: Vertical
+    SupportedSubPanel: RibbonRowPanel, RibbonFoldPanel
+  Type: RibbonButton
+  Depth: 0
+  Panel: Windows
+  Tab: View
+
+*** FOUND MATCH ***
+  Children (0):
+    GroupLocation: Middle
+    Cookie: Item=manage_views_Switch
+Windows_
+    IsInitialized: False
+    AllowInStatusBar: True
+    AllowInToolBar: True
+    Size: Large
+    ResizeStyle: HideText
+    CanResizeHeightWithGrip: False
+    CanResizeWidth: False
+    Height: NaN
+    MaxHeight: ∞
+    MinHeight: 0
+    Width: NaN
+    MinWidth: 0
+    IsVisibleBinding: System.Windows.Data.Binding
+    IsEnabledBinding: System.Windows.Data.Binding
+    IsEnabled: True
+    IsVisible: True
+    UID: <null>
+    KeyTip: W
+    ShowToolTipOnDisabled: True
+    IsToolTipEnabled: True
+    HelpTopic: <null>
+    HelpSource: <null>
+    ToolTipResolver: Autodesk.Private.Windows.RibbonItemToolTipResolver
+    IsUsingDefaultToolTip: False
+    ToolTipOverride: <null>
+    ToolTip: <null>
+    ShowImage: True
+    ShowText: True
+    Tag: UIFramework.ControlHelperExtension
+    LargeImageBinding: System.Windows.Data.Binding
+    LargeImage: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    ImageBinding: System.Windows.Data.Binding
+    Image: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    Highlight: None
+    GroupName: <null>
+    Description: <null>
+    Name: <null>
+    TextBinding: System.Windows.Data.Binding
+    Text: Switch
+Windows
+    AutomationName: Switch
+Windows
+    Id: manage_views
+    IsActive: False
+    IsCheckedOverride: False
+    IsCheckedBinding: System.Windows.Data.Binding
+    IsChecked: False
+    IsCheckableOverride: False
+    IsCheckable: False
+    CommandParameter: <null>
+    CommandHandlerBinding: System.Windows.Data.Binding
+    CommandHandler: <null>
+    Orientation: Vertical
+    AllowOrientation: False
+    ListButtonStyle: MenuButton
+    HighlightDropDown: None
+    IsGrouping: False
+    SynchronizeOption: All
+    IsSynchronizedWithCurrentItem: False
+    IsSplit: False
+    CurrentBinding: System.Windows.Data.Binding
+    Current: <null>
+    ItemsView: System.Windows.Data.ListCollectionView
+    Items: Autodesk.Windows.RibbonItemCollection
+    SupportedSubPanel: RibbonRowPanel, RibbonFoldPanel
+    MenuItemStyle: <null>
+    TextOverride: Switch
+Windows
+  Type: SwitchWindowMenuButton
+  Depth: 0
+  Panel: Windows
+  Tab: View
+
+*** FOUND MATCH ***
+    GroupLocation: Middle
+    Cookie: Item=ID_CONTENT_CATALOG_DOCKED_WINDOW_Launch in Docked Window_
+    IsInitialized: False
+    AllowInStatusBar: True
+    AllowInToolBar: True
+    Size: Standard
+    ResizeStyle: HideText
+    CanResizeHeightWithGrip: False
+    CanResizeWidth: False
+    Height: NaN
+    MaxHeight: ∞
+    MinHeight: 0
+    Width: NaN
+    MinWidth: 0
+    IsVisibleBinding: System.Windows.Data.Binding
+    IsEnabledBinding: System.Windows.Data.Binding
+    IsEnabled: True
+    IsVisible: True
+    UID: <null>
+    KeyTip: <null>
+    ShowToolTipOnDisabled: True
+    IsToolTipEnabled: True
+    HelpTopic: <null>
+    HelpSource: <null>
+    ToolTipResolver: Autodesk.Private.Windows.RibbonItemToolTipResolver
+    IsUsingDefaultToolTip: False
+    ToolTipOverride: <null>
+    ToolTip: <null>
+    ShowImage: True
+    ShowText: True
+    Tag: UIFramework.ControlHelperExtension
+    LargeImageBinding: System.Windows.Data.Binding
+    LargeImage: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    ImageBinding: System.Windows.Data.Binding
+    Image: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    Highlight: None
+    GroupName: <null>
+    Description: <null>
+    Name: <null>
+    TextOverride: Launch in Docked Window
+    TextBinding: System.Windows.Data.Binding
+    Text: Launch in Docked Window
+    AutomationName: Launch in Docked Window
+    Id: ID_CONTENT_CATALOG_DOCKED_WINDOW
+    IsActive: False
+    IsCheckedOverride: False
+    IsCheckedBinding: System.Windows.Data.Binding
+    IsChecked: False
+    IsCheckableOverride: False
+    IsCheckable: False
+    CommandParameter: <null>
+    CommandHandlerBinding: System.Windows.Data.Binding
+    CommandHandler: <null>
+    Orientation: Horizontal
+    SupportedSubPanel: RibbonRowPanel, RibbonFoldPanel, RibbonFlowPanel
+  Type: RibbonButton
+  Depth: 1
+  Panel: Load from Library
+  Tab: Insert
+
+*** FOUND MATCH ***
+    GroupLocation: Middle
+    Cookie: Item=ID_WINDOW_TILE_VERT_Tile
+Views_Tile Views
+    IsInitialized: False
+    AllowInStatusBar: True
+    AllowInToolBar: True
+    Size: Large
+    ResizeStyle: HideText
+    CanResizeHeightWithGrip: False
+    CanResizeWidth: False
+    Height: NaN
+    MaxHeight: ∞
+    MinHeight: 0
+    Width: NaN
+    MinWidth: 0
+    IsVisibleBinding: System.Windows.Data.Binding
+    IsEnabledBinding: System.Windows.Data.Binding
+    IsEnabled: True
+    IsVisible: True
+    UID: <null>
+    KeyTip: I
+    ShowToolTipOnDisabled: True
+    IsToolTipEnabled: True
+    HelpTopic: <null>
+    HelpSource: <null>
+    ToolTipResolver: Autodesk.Private.Windows.RibbonItemToolTipResolver
+    IsUsingDefaultToolTip: False
+    ToolTipOverride: <null>
+    ToolTip: <null>
+    ShowImage: True
+    ShowText: True
+    Tag: UIFramework.ControlHelperExtension
+    LargeImageBinding: System.Windows.Data.Binding
+    LargeImage: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    ImageBinding: System.Windows.Data.Binding
+    Image: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    Highlight: None
+    GroupName: <null>
+    Description: <null>
+    Name: Tile Views
+    TextOverride: Tile
+Views
+    TextBinding: System.Windows.Data.Binding
+    Text: Tile
+Views
+    AutomationName: Tile
+Views
+    Id: ID_WINDOW_TILE_VERT
+    IsActive: False
+    IsCheckedOverride: False
+    IsCheckedBinding: System.Windows.Data.Binding
+    IsChecked: False
+    IsCheckableOverride: False
+    IsCheckable: False
+    CommandParameter: <null>
+    CommandHandlerBinding: System.Windows.Data.Binding
+    CommandHandler: <null>
+    Orientation: Vertical
+    SupportedSubPanel: RibbonRowPanel, RibbonFoldPanel
+  Type: RibbonButton
+  Depth: 0
+  Panel: Windows
+  Tab: View
+
+*** FOUND MATCH ***
+  Children (0):
+    GroupLocation: Middle
+    Cookie: Item=manage_views_Switch
+Windows_
+    IsInitialized: False
+    AllowInStatusBar: True
+    AllowInToolBar: True
+    Size: Large
+    ResizeStyle: HideText
+    CanResizeHeightWithGrip: False
+    CanResizeWidth: False
+    Height: NaN
+    MaxHeight: ∞
+    MinHeight: 0
+    Width: NaN
+    MinWidth: 0
+    IsVisibleBinding: System.Windows.Data.Binding
+    IsEnabledBinding: System.Windows.Data.Binding
+    IsEnabled: True
+    IsVisible: True
+    UID: <null>
+    KeyTip: W
+    ShowToolTipOnDisabled: True
+    IsToolTipEnabled: True
+    HelpTopic: <null>
+    HelpSource: <null>
+    ToolTipResolver: Autodesk.Private.Windows.RibbonItemToolTipResolver
+    IsUsingDefaultToolTip: False
+    ToolTipOverride: <null>
+    ToolTip: <null>
+    ShowImage: True
+    ShowText: True
+    Tag: UIFramework.ControlHelperExtension
+    LargeImageBinding: System.Windows.Data.Binding
+    LargeImage: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    ImageBinding: System.Windows.Data.Binding
+    Image: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    Highlight: None
+    GroupName: <null>
+    Description: <null>
+    Name: <null>
+    TextBinding: System.Windows.Data.Binding
+    Text: Switch
+Windows
+    AutomationName: Switch
+Windows
+    Id: manage_views
+    IsActive: False
+    IsCheckedOverride: False
+    IsCheckedBinding: System.Windows.Data.Binding
+    IsChecked: False
+    IsCheckableOverride: False
+    IsCheckable: False
+    CommandParameter: <null>
+    CommandHandlerBinding: System.Windows.Data.Binding
+    CommandHandler: <null>
+    Orientation: Vertical
+    AllowOrientation: False
+    ListButtonStyle: MenuButton
+    HighlightDropDown: None
+    IsGrouping: False
+    SynchronizeOption: All
+    IsSynchronizedWithCurrentItem: False
+    IsSplit: False
+    CurrentBinding: System.Windows.Data.Binding
+    Current: <null>
+    ItemsView: System.Windows.Data.ListCollectionView
+    Items: Autodesk.Windows.RibbonItemCollection
+    SupportedSubPanel: RibbonRowPanel, RibbonFoldPanel
+    MenuItemStyle: <null>
+    TextOverride: Switch
+Windows
+  Type: SwitchWindowMenuButton
+  Depth: 0
+  Panel: Windows
+  Tab: View
+
+*** FOUND MATCH ***
+    GroupLocation: Middle
+    Cookie: Item=ID_CONTENT_CATALOG_DOCKED_WINDOW_Launch in Docked Window_
+    IsInitialized: False
+    AllowInStatusBar: True
+    AllowInToolBar: True
+    Size: Standard
+    ResizeStyle: HideText
+    CanResizeHeightWithGrip: False
+    CanResizeWidth: False
+    Height: NaN
+    MaxHeight: ∞
+    MinHeight: 0
+    Width: NaN
+    MinWidth: 0
+    IsVisibleBinding: System.Windows.Data.Binding
+    IsEnabledBinding: System.Windows.Data.Binding
+    IsEnabled: True
+    IsVisible: True
+    UID: <null>
+    KeyTip: <null>
+    ShowToolTipOnDisabled: True
+    IsToolTipEnabled: True
+    HelpTopic: <null>
+    HelpSource: <null>
+    ToolTipResolver: Autodesk.Private.Windows.RibbonItemToolTipResolver
+    IsUsingDefaultToolTip: False
+    ToolTipOverride: <null>
+    ToolTip: <null>
+    ShowImage: True
+    ShowText: True
+    Tag: UIFramework.ControlHelperExtension
+    LargeImageBinding: System.Windows.Data.Binding
+    LargeImage: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    ImageBinding: System.Windows.Data.Binding
+    Image: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    Highlight: None
+    GroupName: <null>
+    Description: <null>
+    Name: <null>
+    TextOverride: Launch in Docked Window
+    TextBinding: System.Windows.Data.Binding
+    Text: Launch in Docked Window
+    AutomationName: Launch in Docked Window
+    Id: ID_CONTENT_CATALOG_DOCKED_WINDOW
+    IsActive: False
+    IsCheckedOverride: False
+    IsCheckedBinding: System.Windows.Data.Binding
+    IsChecked: False
+    IsCheckableOverride: False
+    IsCheckable: False
+    CommandParameter: <null>
+    CommandHandlerBinding: System.Windows.Data.Binding
+    CommandHandler: <null>
+    Orientation: Horizontal
+    SupportedSubPanel: RibbonRowPanel, RibbonFoldPanel, RibbonFlowPanel
+  Type: RibbonButton
+  Depth: 1
+  Panel: Load from Library
+  Tab: Insert
+
+*** FOUND MATCH ***
+    GroupLocation: First
+    Cookie: Item=ID_OBJECTS_WINDOW_Window_
+    IsInitialized: True
+    AllowInStatusBar: True
+    AllowInToolBar: True
+    Size: Large
+    ResizeStyle: HideText
+    CanResizeHeightWithGrip: False
+    CanResizeWidth: False
+    Height: NaN
+    MaxHeight: ∞
+    MinHeight: 0
+    Width: NaN
+    MinWidth: 0
+    IsVisibleBinding: System.Windows.Data.Binding
+    IsEnabledBinding: System.Windows.Data.Binding
+    IsEnabled: True
+    IsVisible: True
+    UID: <null>
+    KeyTip: N
+    ShowToolTipOnDisabled: True
+    IsToolTipEnabled: True
+    HelpTopic: <null>
+    HelpSource: <null>
+    ToolTipResolver: Autodesk.Private.Windows.RibbonItemToolTipResolver
+    IsUsingDefaultToolTip: False
+    ToolTipOverride: <null>
+    ToolTip: <null>
+    ShowImage: True
+    ShowText: True
+    Tag: UIFramework.ControlHelperExtension
+    LargeImageBinding: System.Windows.Data.Binding
+    LargeImage: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    ImageBinding: System.Windows.Data.Binding
+    Image: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    Highlight: None
+    GroupName: <null>
+    Description: <null>
+    Name: <null>
+    TextOverride: Window
+    TextBinding: System.Windows.Data.Binding
+    Text: Window
+    AutomationName: Window
+    Id: ID_OBJECTS_WINDOW
+    IsActive: False
+    IsCheckedOverride: False
+    IsCheckedBinding: System.Windows.Data.Binding
+    IsChecked: False
+    IsCheckableOverride: False
+    IsCheckable: False
+    CommandParameter: <null>
+    CommandHandlerBinding: System.Windows.Data.Binding
+    CommandHandler: <null>
+    Orientation: Vertical
+    SupportedSubPanel: RibbonRowPanel, RibbonFoldPanel
+  Type: RibbonButton
+  Depth: 1
+  Panel: Build
+  Tab: Architecture
+
+*** FOUND MATCH ***
+=== SEARCHING FOR: 'Window' ===
+=== SEARCH END ===
+    GroupLocation: Middle
+    Cookie: Item=ID_SWITCH_JOIN_ORDER_EDITOR_Switch Join Order_
+    IsInitialized: False
+    AllowInStatusBar: True
+    AllowInToolBar: True
+    Size: Standard
+    ResizeStyle: HideText
+    CanResizeHeightWithGrip: False
+    CanResizeWidth: False
+    Height: NaN
+    MaxHeight: ∞
+    MinHeight: 0
+    Width: NaN
+    MinWidth: 0
+    IsVisibleBinding: System.Windows.Data.Binding
+    IsEnabledBinding: System.Windows.Data.Binding
+    IsEnabled: True
+    IsVisible: True
+    UID: <null>
+    KeyTip: <null>
+    ShowToolTipOnDisabled: True
+    IsToolTipEnabled: True
+    HelpTopic: <null>
+    HelpSource: <null>
+    ToolTipResolver: Autodesk.Private.Windows.RibbonItemToolTipResolver
+    IsUsingDefaultToolTip: False
+    ToolTipOverride: <null>
+    ToolTip: <null>
+    ShowImage: True
+    ShowText: False
+    Tag: UIFramework.ControlHelperExtension
+    LargeImageBinding: System.Windows.Data.Binding
+    LargeImage: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    ImageBinding: System.Windows.Data.Binding
+    Image: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    Highlight: None
+    GroupName: <null>
+    Description: <null>
+    Name: <null>
+    TextOverride: Switch Join Order
+    TextBinding: System.Windows.Data.Binding
+    Text: Switch Join Order
+    AutomationName: Switch Join Order
+    Id: ID_SWITCH_JOIN_ORDER_EDITOR
+    IsActive: False
+    IsCheckedOverride: False
+    IsCheckedBinding: System.Windows.Data.Binding
+    IsChecked: False
+    IsCheckableOverride: False
+    IsCheckable: False
+    CommandParameter: <null>
+    CommandHandlerBinding: System.Windows.Data.Binding
+    CommandHandler: <null>
+    Orientation: Horizontal
+    SupportedSubPanel: RibbonRowPanel, RibbonFoldPanel, RibbonFlowPanel
+  Type: RibbonButton
+  Depth: 2
+  Panel: Geometry
+  Tab: Modify
+
+*** FOUND MATCH ***
+    GroupLocation: Middle
+    Cookie: Item=ID_SWITCH_JOIN_ORDER_EDITOR_Switch Join Order_
+    IsInitialized: False
+    AllowInStatusBar: True
+    AllowInToolBar: True
+    Size: Standard
+    ResizeStyle: HideText
+    CanResizeHeightWithGrip: False
+    CanResizeWidth: False
+    Height: NaN
+    MaxHeight: ∞
+    MinHeight: 0
+    Width: NaN
+    MinWidth: 0
+    IsVisibleBinding: System.Windows.Data.Binding
+    IsEnabledBinding: System.Windows.Data.Binding
+    IsEnabled: True
+    IsVisible: True
+    UID: <null>
+    KeyTip: <null>
+    ShowToolTipOnDisabled: True
+    IsToolTipEnabled: True
+    HelpTopic: <null>
+    HelpSource: <null>
+    ToolTipResolver: Autodesk.Private.Windows.RibbonItemToolTipResolver
+    IsUsingDefaultToolTip: False
+    ToolTipOverride: <null>
+    ToolTip: <null>
+    ShowImage: True
+    ShowText: False
+    Tag: UIFramework.ControlHelperExtension
+    LargeImageBinding: System.Windows.Data.Binding
+    LargeImage: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    ImageBinding: System.Windows.Data.Binding
+    Image: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    Highlight: None
+    GroupName: <null>
+    Description: <null>
+    Name: <null>
+    TextOverride: Switch Join Order
+    TextBinding: System.Windows.Data.Binding
+    Text: Switch Join Order
+    AutomationName: Switch Join Order
+    Id: ID_SWITCH_JOIN_ORDER_EDITOR
+    IsActive: False
+    IsCheckedOverride: False
+    IsCheckedBinding: System.Windows.Data.Binding
+    IsChecked: False
+    IsCheckableOverride: False
+    IsCheckable: False
+    CommandParameter: <null>
+    CommandHandlerBinding: System.Windows.Data.Binding
+    CommandHandler: <null>
+    Orientation: Horizontal
+    SupportedSubPanel: RibbonRowPanel, RibbonFoldPanel, RibbonFlowPanel
+  Type: RibbonButton
+  Depth: 2
+  Panel: Geometry
+  Tab: Modify
+
+*** FOUND MATCH ***
+    GroupLocation: Middle
+    Cookie: Item=ID_CANVAS_THEME_SWITCH_Canvas
+Theme_Canvas Theme
+    IsInitialized: False
+    AllowInStatusBar: True
+    AllowInToolBar: True
+    Size: Large
+    ResizeStyle: HideText
+    CanResizeHeightWithGrip: False
+    CanResizeWidth: False
+    Height: NaN
+    MaxHeight: ∞
+    MinHeight: 0
+    Width: NaN
+    MinWidth: 0
+    IsVisibleBinding: System.Windows.Data.Binding
+    IsEnabledBinding: System.Windows.Data.Binding
+    IsEnabled: True
+    IsVisible: True
+    UID: <null>
+    KeyTip: VM
+    ShowToolTipOnDisabled: True
+    IsToolTipEnabled: True
+    HelpTopic: <null>
+    HelpSource: <null>
+    ToolTipResolver: Autodesk.Private.Windows.RibbonItemToolTipResolver
+    IsUsingDefaultToolTip: False
+    ToolTipOverride: <null>
+    ToolTip: <null>
+    ShowImage: True
+    ShowText: True
+    Tag: UIFramework.ControlHelperExtension
+    LargeImageBinding: System.Windows.Data.Binding
+    LargeImage: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    ImageBinding: System.Windows.Data.Binding
+    Image: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    Highlight: None
+    GroupName: <null>
+    Description: <null>
+    Name: Canvas Theme
+    TextOverride: Canvas
+Theme
+    TextBinding: System.Windows.Data.Binding
+    Text: Canvas
+Theme
+    AutomationName: Canvas
+Theme
+    Id: ID_CANVAS_THEME_SWITCH
+    IsActive: False
+    IsCheckedOverride: False
+    IsCheckedBinding: System.Windows.Data.Binding
+    IsChecked: False
+    IsCheckableOverride: False
+    IsCheckable: False
+    CommandParameter: <null>
+    CommandHandlerBinding: System.Windows.Data.Binding
+    CommandHandler: <null>
+    Orientation: Vertical
+    SupportedSubPanel: RibbonRowPanel, RibbonFoldPanel
+  Type: RibbonButton
+  Depth: 0
+  Panel: Windows
+  Tab: View
+
+*** FOUND MATCH ***
+  Children (0):
+    GroupLocation: Middle
+    Cookie: Item=manage_views_Switch
+Windows_
+    IsInitialized: False
+    AllowInStatusBar: True
+    AllowInToolBar: True
+    Size: Large
+    ResizeStyle: HideText
+    CanResizeHeightWithGrip: False
+    CanResizeWidth: False
+    Height: NaN
+    MaxHeight: ∞
+    MinHeight: 0
+    Width: NaN
+    MinWidth: 0
+    IsVisibleBinding: System.Windows.Data.Binding
+    IsEnabledBinding: System.Windows.Data.Binding
+    IsEnabled: True
+    IsVisible: True
+    UID: <null>
+    KeyTip: W
+    ShowToolTipOnDisabled: True
+    IsToolTipEnabled: True
+    HelpTopic: <null>
+    HelpSource: <null>
+    ToolTipResolver: Autodesk.Private.Windows.RibbonItemToolTipResolver
+    IsUsingDefaultToolTip: False
+    ToolTipOverride: <null>
+    ToolTip: <null>
+    ShowImage: True
+    ShowText: True
+    Tag: UIFramework.ControlHelperExtension
+    LargeImageBinding: System.Windows.Data.Binding
+    LargeImage: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    ImageBinding: System.Windows.Data.Binding
+    Image: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    Highlight: None
+    GroupName: <null>
+    Description: <null>
+    Name: <null>
+    TextBinding: System.Windows.Data.Binding
+    Text: Switch
+Windows
+    AutomationName: Switch
+Windows
+    Id: manage_views
+    IsActive: False
+    IsCheckedOverride: False
+    IsCheckedBinding: System.Windows.Data.Binding
+    IsChecked: False
+    IsCheckableOverride: False
+    IsCheckable: False
+    CommandParameter: <null>
+    CommandHandlerBinding: System.Windows.Data.Binding
+    CommandHandler: <null>
+    Orientation: Vertical
+    AllowOrientation: False
+    ListButtonStyle: MenuButton
+    HighlightDropDown: None
+    IsGrouping: False
+    SynchronizeOption: All
+    IsSynchronizedWithCurrentItem: False
+    IsSplit: False
+    CurrentBinding: System.Windows.Data.Binding
+    Current: <null>
+    ItemsView: System.Windows.Data.ListCollectionView
+    Items: Autodesk.Windows.RibbonItemCollection
+    SupportedSubPanel: RibbonRowPanel, RibbonFoldPanel
+    MenuItemStyle: <null>
+    TextOverride: Switch
+Windows
+  Type: SwitchWindowMenuButton
+  Depth: 0
+  Panel: Windows
+  Tab: View
+
+*** FOUND MATCH ***
+    GroupLocation: Middle
+    Cookie: Item=ID_CANVAS_THEME_SWITCH_Canvas
+Theme_Canvas Theme
+    IsInitialized: False
+    AllowInStatusBar: True
+    AllowInToolBar: True
+    Size: Large
+    ResizeStyle: HideText
+    CanResizeHeightWithGrip: False
+    CanResizeWidth: False
+    Height: NaN
+    MaxHeight: ∞
+    MinHeight: 0
+    Width: NaN
+    MinWidth: 0
+    IsVisibleBinding: System.Windows.Data.Binding
+    IsEnabledBinding: System.Windows.Data.Binding
+    IsEnabled: True
+    IsVisible: True
+    UID: <null>
+    KeyTip: VM
+    ShowToolTipOnDisabled: True
+    IsToolTipEnabled: True
+    HelpTopic: <null>
+    HelpSource: <null>
+    ToolTipResolver: Autodesk.Private.Windows.RibbonItemToolTipResolver
+    IsUsingDefaultToolTip: False
+    ToolTipOverride: <null>
+    ToolTip: <null>
+    ShowImage: True
+    ShowText: True
+    Tag: UIFramework.ControlHelperExtension
+    LargeImageBinding: System.Windows.Data.Binding
+    LargeImage: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    ImageBinding: System.Windows.Data.Binding
+    Image: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    Highlight: None
+    GroupName: <null>
+    Description: <null>
+    Name: Canvas Theme
+    TextOverride: Canvas
+Theme
+    TextBinding: System.Windows.Data.Binding
+    Text: Canvas
+Theme
+    AutomationName: Canvas
+Theme
+    Id: ID_CANVAS_THEME_SWITCH
+    IsActive: False
+    IsCheckedOverride: False
+    IsCheckedBinding: System.Windows.Data.Binding
+    IsChecked: False
+    IsCheckableOverride: False
+    IsCheckable: False
+    CommandParameter: <null>
+    CommandHandlerBinding: System.Windows.Data.Binding
+    CommandHandler: <null>
+    Orientation: Vertical
+    SupportedSubPanel: RibbonRowPanel, RibbonFoldPanel
+  Type: RibbonButton
+  Depth: 0
+  Panel: Windows
+  Tab: View
+
+*** FOUND MATCH ***
+  Children (0):
+    GroupLocation: Middle
+    Cookie: Item=manage_views_Switch
+Windows_
+    IsInitialized: False
+    AllowInStatusBar: True
+    AllowInToolBar: True
+    Size: Large
+    ResizeStyle: HideText
+    CanResizeHeightWithGrip: False
+    CanResizeWidth: False
+    Height: NaN
+    MaxHeight: ∞
+    MinHeight: 0
+    Width: NaN
+    MinWidth: 0
+    IsVisibleBinding: System.Windows.Data.Binding
+    IsEnabledBinding: System.Windows.Data.Binding
+    IsEnabled: True
+    IsVisible: True
+    UID: <null>
+    KeyTip: W
+    ShowToolTipOnDisabled: True
+    IsToolTipEnabled: True
+    HelpTopic: <null>
+    HelpSource: <null>
+    ToolTipResolver: Autodesk.Private.Windows.RibbonItemToolTipResolver
+    IsUsingDefaultToolTip: False
+    ToolTipOverride: <null>
+    ToolTip: <null>
+    ShowImage: True
+    ShowText: True
+    Tag: UIFramework.ControlHelperExtension
+    LargeImageBinding: System.Windows.Data.Binding
+    LargeImage: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    ImageBinding: System.Windows.Data.Binding
+    Image: <error: The best overloaded method match for 'string.this[int]' has some invalid arguments>
+    Highlight: None
+    GroupName: <null>
+    Description: <null>
+    Name: <null>
+    TextBinding: System.Windows.Data.Binding
+    Text: Switch
+Windows
+    AutomationName: Switch
+Windows
+    Id: manage_views
+    IsActive: False
+    IsCheckedOverride: False
+    IsCheckedBinding: System.Windows.Data.Binding
+    IsChecked: False
+    IsCheckableOverride: False
+    IsCheckable: False
+    CommandParameter: <null>
+    CommandHandlerBinding: System.Windows.Data.Binding
+    CommandHandler: <null>
+    Orientation: Vertical
+    AllowOrientation: False
+    ListButtonStyle: MenuButton
+    HighlightDropDown: None
+    IsGrouping: False
+    SynchronizeOption: All
+    IsSynchronizedWithCurrentItem: False
+    IsSplit: False
+    CurrentBinding: System.Windows.Data.Binding
+    Current: <null>
+    ItemsView: System.Windows.Data.ListCollectionView
+    Items: Autodesk.Windows.RibbonItemCollection
+    SupportedSubPanel: RibbonRowPanel, RibbonFoldPanel
+    MenuItemStyle: <null>
+    TextOverride: Switch
+Windows
+  Type: SwitchWindowMenuButton
+  Depth: 0
+  Panel: Windows
+  Tab: View
+
+*** FOUND MATCH ***
+=== SEARCHING FOR: 'Switch' ===
+▶ Executing task: Diagnose Ribbon: Switch Windows
+✓ Registered 6 tasks
+2026-01-25 00:19:57 [INF] 🔄 Refreshing task registry...

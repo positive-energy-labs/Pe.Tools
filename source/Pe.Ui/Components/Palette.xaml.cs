@@ -1,6 +1,7 @@
 using Pe.Ui.Core;
 using Pe.Ui.ViewModels;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -37,8 +38,27 @@ public static class PaletteAttachedProperties {
 ///     with the Palette.xaml file. Generic behavior is handled via composition,
 ///     NOT inheritance (generic classes cannot inherit from XAML partial classes).
 /// </summary>
-public sealed partial class Palette : ICloseRequestable {
+public sealed partial class Palette : ICloseRequestable, ITitleable {
     private const double DefaultSidebarWidth = 400;
+    private const double ExpandedPanelWidth = 600;
+    private const double DefaultPaletteWidth = 500;
+
+    /// <summary>
+    ///     Number of visible items in the palette list before scrolling.
+    ///     Determines both list MaxHeight and default panel height.
+    /// </summary>
+    private const int DefaultVisibleItems = 7;
+
+    /// <summary>
+    ///     Approximate height per list item in pixels.
+    /// </summary>
+    private const double ItemHeight = 42;
+
+    /// <summary>
+    ///     Height of palette chrome (title bar + search + status bar).
+    ///     Used to calculate panel height to match palette.
+    /// </summary>
+    private const double PaletteChromeHeight = 115;
 
     private readonly bool _isSearchBoxHidden;
     private readonly List<Button> _tabButtons = [];
@@ -50,6 +70,7 @@ public sealed partial class Palette : ICloseRequestable {
     private FilterBox _filterBox;
     private Func<object> _getSelectedItemFunc;
     private bool _isCtrlPressed;
+    private bool _isPanelExpanded;
     private bool _keepOpenAfterAction;
     private Action _onCtrlReleased;
     private EphemeralWindow _parentWindow;
@@ -67,6 +88,13 @@ public sealed partial class Palette : ICloseRequestable {
     }
 
     public event EventHandler<CloseRequestedEventArgs> CloseRequested;
+
+    /// <summary>
+    ///     Sets the title displayed in the palette's title bar.
+    /// </summary>
+    public void SetTitle(string title) {
+        this.TitleText.Text = title;
+    }
 
     /// <summary>
     ///     Initializes the palette with type-specific behavior via composition.
@@ -108,13 +136,8 @@ public sealed partial class Palette : ICloseRequestable {
             _ = this.SearchBoxGrid.Children.Add(this._filterBox);
         }
 
+        // Apply styling to palette content borders
         new BorderSpec()
-            .Border()
-            .ApplyToBorder(this.MainBorder);
-        this.MainBorder.ClipToBounds = true;
-
-        new BorderSpec()
-            .Border((UiSz.l, UiSz.l, UiSz.none, UiSz.none))
             .Padding(UiSz.ll, UiSz.ll, UiSz.ll, UiSz.ll)
             .ApplyToBorder(this.SearchBoxBorder);
 
@@ -123,6 +146,21 @@ public sealed partial class Palette : ICloseRequestable {
             .Padding(UiSz.l, UiSz.s, UiSz.l, UiSz.s)
             .ApplyToBorder(this.StatusBarBorder);
         this.StatusBarBorder.ClipToBounds = true;
+
+        // Set initial palette width
+        this.PaletteBackground.Width = DefaultPaletteWidth;
+
+        // Calculate and set list height based on visible items
+        var listHeight = DefaultVisibleItems * ItemHeight;
+        var itemListBorder = (Border)this.ItemListView.Parent;
+        itemListBorder.MaxHeight = listHeight;
+
+        // Set panel default height to match palette with visible items
+        var defaultPanelHeight = PaletteChromeHeight + listHeight;
+        this.PanelBackground.MaxHeight = defaultPanelHeight;
+
+        // Wire up expand button
+        this.ExpandPanelButton.Click += this.ExpandPanelButton_Click;
 
         var actionBinding = new ActionBinding<TItem>();
         if (actions != null && actions.Any()) actionBinding.RegisterRange(actions);
@@ -225,17 +263,18 @@ public sealed partial class Palette : ICloseRequestable {
     }
 
     /// <summary>
-    ///     Expands the sidebar to the specified width.
-    ///     Only expands the parent window when transitioning from collapsed to expanded.
-    ///     Public for future "expand panel" button feature.
+    ///     Expands the sidebar/panel to the specified width.
+    ///     Adjusts corner radii so palette has flat right edge when panel is visible.
     /// </summary>
     public void ExpandSidebar(GridLength width) {
         var wasCollapsed = this.SidebarColumn.Width.Value == 0;
         this.SidebarColumn.Width = width;
 
-        // Only expand window when transitioning from collapsed to expanded
-        if (wasCollapsed)
-            this._parentWindow?.ExpandWidth(width.Value);
+        if (wasCollapsed) {
+            // Both sides get rounded inner corners (smaller radius) for visual separation
+            this.PaletteBackground.CornerRadius = new CornerRadius(8, 4, 4, 8);
+            this.PanelBackground.CornerRadius = new CornerRadius(4, 8, 8, 4);
+        }
     }
 
     /// <summary>
@@ -248,21 +287,22 @@ public sealed partial class Palette : ICloseRequestable {
     }
 
     /// <summary>
-    ///     Collapses the sidebar to width 0.
-    ///     Only collapses the parent window when transitioning from expanded to collapsed.
-    ///     Public for future "expand panel" button feature.
+    ///     Collapses the sidebar/panel to width 0.
+    ///     Restores full corner radius to palette.
     /// </summary>
     public void CollapseSidebar() {
         var currentWidth = this.SidebarColumn.Width.Value;
         if (currentWidth <= 0) return; // Already collapsed
 
         this.SidebarColumn.Width = new GridLength(0);
-        this._parentWindow?.CollapseWidth(currentWidth);
+
+        // Restore full corners to palette when panel is hidden
+        this.PaletteBackground.CornerRadius = new CornerRadius(8);
+        this._isPanelExpanded = false;
     }
 
     /// <summary>
     ///     Toggles the sidebar between expanded and collapsed states.
-    ///     Public for future "expand panel" button feature.
     /// </summary>
     public void ToggleSidebar() {
         if (this._currentSidebar == null) return;
@@ -271,6 +311,29 @@ public sealed partial class Palette : ICloseRequestable {
             this.CollapseSidebar();
         else
             this.ExpandSidebar(this._currentSidebar.Width);
+    }
+
+    /// <summary>
+    ///     Expands only the panel width (not the palette).
+    ///     Used by the expand button in the panel header.
+    /// </summary>
+    public void ExpandPanel() {
+        if (this._isPanelExpanded) {
+            // Collapse back to normal width and height
+            var currentWidth = this._currentSidebar?.Width ?? new GridLength(DefaultSidebarWidth);
+            this.SidebarColumn.Width = currentWidth;
+            this.PanelBackground.MaxHeight = PaletteChromeHeight + (DefaultVisibleItems * ItemHeight);
+            this._isPanelExpanded = false;
+        } else {
+            // Expand to larger width and height
+            this.SidebarColumn.Width = new GridLength(ExpandedPanelWidth);
+            this.PanelBackground.MaxHeight = PaletteChromeHeight + (DefaultVisibleItems * ItemHeight) + 300; // Extra 300px when expanded
+            this._isPanelExpanded = true;
+        }
+    }
+
+    private void ExpandPanelButton_Click(object sender, RoutedEventArgs e) {
+        this.ExpandPanel();
     }
 
     /// <summary>

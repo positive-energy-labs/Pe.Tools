@@ -1,12 +1,9 @@
-using Autodesk.Windows.ToolBars;
-using System.ComponentModel;
-using System.Data.Common;
-
 namespace Pe.App.Commands.Palette.TaskPalette;
 
 /// <summary>
 ///     Singleton registry for all executable tasks.
 ///     Handles task registration, persistence, and retrieval.
+///     Supports clearing and re-registration for hot-reload scenarios.
 /// </summary>
 public sealed class TaskRegistry {
     private static readonly Lazy<TaskRegistry> _instance = new(() => new TaskRegistry());
@@ -33,6 +30,28 @@ public sealed class TaskRegistry {
                     $"Task '{id}' is already registered. Each task class must have a unique name.");
 
             this._tasks[id] = task;
+        }
+    }
+
+    /// <summary>
+    ///     Registers a task using the provided type for ID generation.
+    ///     Used by reflection-based registration.
+    /// </summary>
+    public void RegisterByType(Type taskType, ITask task) {
+        var id = taskType.Name;
+
+        lock (this._lock) {
+            this._tasks[id] = task; // Allow overwrite for hot-reload
+        }
+    }
+
+    /// <summary>
+    ///     Clears all registered tasks.
+    ///     Used for hot-reload scenarios to re-scan and re-register tasks.
+    /// </summary>
+    public void Clear() {
+        lock (this._lock) {
+            this._tasks.Clear();
         }
     }
 

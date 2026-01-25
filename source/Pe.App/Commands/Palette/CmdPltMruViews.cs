@@ -60,10 +60,7 @@ public class CmdPltMruViews : IExternalCommand {
 public class MruViewPaletteItem : IPaletteListItem {
     public MruViewPaletteItem(View view) {
         this.View = view;
-        Console.WriteLine($"[MruViewPaletteItem] Creating item for view '{view.Name}' in doc '{view.Document.Title}'");
-        var color = DocumentManager.Instance.GetDocumentColor(view.Document);
-        this.ItemColor = color;
-        Console.WriteLine($"[MruViewPaletteItem] Item created with color #{color.R:X2}{color.G:X2}{color.B:X2}");
+        this.ItemColor = DocumentManager.Instance.GetDocumentColor(view.Document);
     }
 
     public View View { get; }

@@ -34,7 +34,7 @@
 
             <ui:TextBlock x:Name="PrimaryText"
                           Grid.Row="0"
-                          FontWeight="SemiBold"
+                          FontWeight="Normal"
                           TextTrimming="CharacterEllipsis"
                           Foreground="{ui:ThemeResource TextFillColorPrimaryBrush}" />
 

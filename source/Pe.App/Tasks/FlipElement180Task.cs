@@ -11,10 +11,6 @@ namespace Pe.App.Tasks;
 ///     Rotates around the element's bounding box center.
 /// </summary>
 public sealed class FlipElement180Task : ITask {
-    static FlipElement180Task() => TaskRegistry.Instance.Register(new FlipElement180Task());
-
-    public static void Register() { }
-
     public string Name => "Flip Element Upside Down";
     public string Description => "Click an element to flip it upside down";
     public string Category => "Edit";

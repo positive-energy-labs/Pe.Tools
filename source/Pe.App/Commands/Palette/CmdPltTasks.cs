@@ -5,6 +5,7 @@ using Pe.Global.Services.Storage;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
 using Pe.Ui.ViewModels;
+using Serilog;
 
 namespace Pe.App.Commands.Palette;
 
@@ -31,6 +32,10 @@ public class CmdPltTasks : IExternalCommand {
 
 public static class TaskPaletteService {
     public static EphemeralWindow Create(UIApplication uiApp, Storage persistence) {
+        // Refresh task registry on every palette open to support hot-reload
+        Log.Information("🔄 Refreshing task registry...");
+        Pe.App.Tasks.TaskInitializer.RegisterAllTasks();
+
         // Load all registered tasks
         var registeredTasks = TaskRegistry.Instance.GetAll();
 
@@ -61,7 +66,7 @@ public static class TaskPaletteService {
         // Build search cache for efficient filtering
         searchService.BuildSearchCache(taskItems);
 
-        // Single action: Execute
+        // Actions: Execute and Refresh
         var actions = new List<PaletteAction<TaskItem>> {
             new() {
                 Name = "Execute",

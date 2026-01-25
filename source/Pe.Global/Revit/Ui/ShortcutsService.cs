@@ -105,10 +105,18 @@ public class ShortcutsService {
     ///     Clears the cached shortcuts to force reloading on next access.
     /// </summary>
     public void ClearCache() {
+        this.ClearXmlCache();
+        this._uiFrameworkCommandsLoaded = false;
+    }
+
+    /// <summary>
+    ///     Clears only the XML cache (not the UIFramework state).
+    ///     Use after writes where UIFramework is already up-to-date.
+    /// </summary>
+    private void ClearXmlCache() {
         this._shortcuts = null;
         this._lastFileModified = default;
-        this._cachedFilePath = null;
-        this._uiFrameworkCommandsLoaded = false;
+        // Keep _cachedFilePath - the path doesn't change
     }
 
     #endregion
@@ -147,8 +155,9 @@ public class ShortcutsService {
             // Apply changes to Revit's internal state and persist
             KeyboardShortcutService.applyShortcutChanges(ShortcutsHelper.Commands);
 
-            // Auto-invalidate cache after write (forces reload on next read)
-            this.ClearCache();
+            // Only clear XML cache - UIFramework state is already current
+            // (avoids expensive ShortcutsHelper.LoadCommands() on next operation)
+            this.ClearXmlCache();
 
             return true;
         } catch (Exception ex) {

@@ -8,10 +8,6 @@ namespace Pe.App.Tasks;
 ///     Replace with your own task implementation.
 /// </summary>
 public sealed class ExampleTask : ITask {
-    static ExampleTask() => TaskRegistry.Instance.Register(new ExampleTask());
-
-    public static void Register() { }
-
     public string Name => "Example Task";
     public string Description => "A simple example task that prints a message";
     public string Category => "Examples";

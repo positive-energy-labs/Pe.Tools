@@ -19,8 +19,6 @@ public static class OpenDocumentExtensions {
     ///     - OpenAndActivateDocument(ModelPath) for cloud docs: SLOW/FAILS without network - has timeout warning
     /// </summary>
     public static void OpenAndActivateView(this UIApplication uiApp, View targetView) {
-        Console.WriteLine(DocumentManager.LogDocumentState(targetView, "OpenAndActivateView START"));
-
         try {
             var targetDoc = targetView.Document;
             var targetUiDoc = new UIDocument(targetDoc);
@@ -28,14 +26,13 @@ public static class OpenDocumentExtensions {
             // CASE 1: Target document is already the active document. Use RequestViewChange for reliability.
             // (ActiveView setter doesn't stick when called from palette callbacks sometimes. Particularly for 
             // Sheets/Schedules which are already open.)
+            // PERFORMANCE: This is the fast path for MRU views - ~99% of cases. No logging to minimize overhead.
             if (DocumentManager.IsDocumentActive(targetDoc)) {
-                Console.WriteLine(
-                    $"[OpenAndActivateView] Document '{targetDoc.Title}' is active, using RequestViewChange");
                 targetUiDoc.RequestViewChange(targetView);
                 return;
             }
 
-            // CASE 2: Target document is open but not active
+            // CASE 2: Target document is open but not active (less common, log for diagnostics)
             if (DocumentManager.IsDocumentOpen(targetDoc)) {
                 Console.WriteLine($"[OpenAndActivateView] Document '{targetDoc.Title}' is open but not active");
 
@@ -58,8 +55,7 @@ public static class OpenDocumentExtensions {
 
                     // For cloud documents, use a timeout warning mechanism
                     if (isCloud) {
-                        if (!TryOpenCloudDocumentWithTimeout(existingDocPath, targetView, 3)) {
-                        }
+                        _ = TryOpenCloudDocumentWithTimeout(existingDocPath, targetView, 3);
                     } else {
                         // Local documents - just open directly (fast)
                         var existingDocOptions =
@@ -75,7 +71,7 @@ public static class OpenDocumentExtensions {
                 return;
             }
 
-            // CASE 3: Document not open - try to open it via file path
+            // CASE 3: Document not open - try to open it via file path (rare case, log for diagnostics)
             var newDocPath = DocumentManager.GetDocumentModelPath(targetDoc);
             if (newDocPath == null) {
                 Console.WriteLine($"[OpenAndActivateView] Cannot open document '{targetDoc.Title}' - no valid path");
@@ -87,6 +83,7 @@ public static class OpenDocumentExtensions {
             var openedUiDoc = uiApp.OpenAndActivateDocument(newDocPath, newDocOptions, false);
             openedUiDoc.RequestViewChange(targetView);
         } catch (Exception ex) {
+            // Only log detailed state on error
             Console.WriteLine(DocumentManager.LogDocumentState(targetView, "OpenAndActivateView ERROR"));
             Console.WriteLine(ex.ToStringDemystified());
         }

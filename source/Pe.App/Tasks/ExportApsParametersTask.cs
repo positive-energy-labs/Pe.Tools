@@ -13,10 +13,6 @@ namespace Pe.App.Tasks;
 ///     Creates a persistent shared parameter file containing all parameters from the cached APS collection.
 /// </summary>
 public sealed class ExportApsParametersTask : ITask {
-    static ExportApsParametersTask() => TaskRegistry.Instance.Register(new ExportApsParametersTask());
-
-    public static void Register() { }
-
     public string Name => "Export APS Parameters to Shared Param File";
     public string? Description =>
         "Exports all Autodesk Parameters Service parameters to a shared parameter file (.txt)";

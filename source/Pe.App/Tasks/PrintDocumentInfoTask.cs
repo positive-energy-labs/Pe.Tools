@@ -7,10 +7,6 @@ namespace Pe.App.Tasks;
 ///     Prints detailed information about the active document.
 /// </summary>
 public sealed class PrintDocumentInfoTask : ITask {
-    static PrintDocumentInfoTask() => TaskRegistry.Instance.Register(new PrintDocumentInfoTask());
-
-    public static void Register() { }
-
     public string Name => "Print Document Info";
     public string Description => "Prints detailed information about the active document";
     public string Category => "Debug";

@@ -24,13 +24,11 @@ public class EphemeralWindow : Window {
     private const double ZoomMax = 1.5;
 
     private readonly Border _contentBorder;
-    private readonly Border? _underlayBorder;
     private readonly ScaleTransform? _zoomTransform;
     private bool _isClosing;
 
     public EphemeralWindow(Border contentBorder) {
         this._contentBorder = contentBorder;
-        this._underlayBorder = null;
         this.ContentControl = null;
     }
 
@@ -42,7 +40,7 @@ public class EphemeralWindow : Window {
         this.ContentControl = content;
         this.EphemeralEnabled = ephemeralEnabled;
         this.Title = title;
-        this.SizeToContent = SizeToContent.Height;
+        this.SizeToContent = SizeToContent.WidthAndHeight; // Size to both dimensions for independent palette/panel sizing
         this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         this.WindowStyle = WindowStyle.None;
         this.AllowsTransparency = true;
@@ -53,34 +51,31 @@ public class EphemeralWindow : Window {
         // Load WPF.UI theme resources for this window
         Theme.LoadResources(this);
 
-        // Create main container grid with centered alignment
         // Apply zoom transform for global UI scaling
         this._zoomTransform = new ScaleTransform(ZoomLevel, ZoomLevel);
-        var containerGrid = new Grid {
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            LayoutTransform = this._zoomTransform
+        
+        // Content border - transparent container, Palette manages its own backgrounds
+        // The title is passed to the Palette to render in its title bar area
+        this._contentBorder = new Border {
+            Child = content,
+            Background = Brushes.Transparent,
+            LayoutTransform = this._zoomTransform,
+            // Allow dragging from anywhere on the palette background
+            // (Palette will have its own title bar area for this)
+        };
+        
+        // Enable dragging from the content area
+        this._contentBorder.MouseLeftButtonDown += (_, e) => {
+            if (e.ClickCount == 1) this.DragMove();
         };
 
         // Enable Ctrl+/- zoom adjustment
         this.PreviewKeyDown += this.OnPreviewKeyDown;
 
-        // Create underlay border (extends beyond content with gutters)
-        this._underlayBorder = this.CreateUnderlayBorder(title);
-        this._underlayBorder.MouseLeftButtonDown += (_, _) => this.DragMove();
-        _ = containerGrid.Children.Add(this._underlayBorder);
+        this.Content = this._contentBorder;
 
-        // Create content border (sits on top of underlay)
-        this._contentBorder = new BorderSpec()
-            .Border(UiSz.l, UiSz.ss)
-            .Width(this.BaseWidth, this.BaseWidth, this.BaseWidth)
-            .Height(minHeight: 150, height: double.NaN, maxHeight: 600)
-            .VerticalAlign(VerticalAlignment.Top)
-            .Margin(0, 40, 0, 0) // Top margin to make room for title gutter
-            .CreateAround(content);
-        _ = containerGrid.Children.Add(this._contentBorder);
-
-        this.Content = containerGrid;
+        // Set title on Palette if it supports it
+        if (content is ITitleable titleable) titleable.SetTitle(title);
 
         // Subscribe to CloseRequested event if content implements it
         if (content is ICloseRequestable closeable) closeable.CloseRequested += this.OnContentCloseRequested;
@@ -108,33 +103,6 @@ public class EphemeralWindow : Window {
     ///     Default: true (ephemeral behavior enabled).
     /// </summary>
     public bool EphemeralEnabled { get; set; } = true;
-
-    /// <summary>
-    ///     Creates the underlay border that extends beyond the content with gutters for title and future settings.
-    /// </summary>
-    private Border CreateUnderlayBorder(string title) {
-        // Create title text for the top gutter
-        var titleText = new TextBlock {
-            Text = title,
-            VerticalAlignment = VerticalAlignment.Top,
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Foreground = new SolidColorBrush(Color.FromRgb(250, 250, 250)),
-            FontSize = Core.FontSize.Title,
-            FontWeight = FontWeights.SemiBold,
-            Margin = new Thickness(12, 6, 12, 6) // Padding within the top gutter
-        };
-
-        // Underlay stretches to match grid height (determined by content + its 40px top margin)
-        var border = new BorderSpec()
-            .Background(ThemeResource.ApplicationBackgroundBrush)
-            .Border(UiSz.l, UiSz.ss)
-            .Width(this.BaseWidth, this.BaseWidth, this.BaseWidth)
-            .VerticalAlign(VerticalAlignment.Stretch)
-            .DropShadow()
-            .CreateAround(titleText);
-
-        return border;
-    }
 
     private void OnContentCloseRequested(object? sender, CloseRequestedEventArgs e) =>
         this.CloseWindow(e.RestoreFocus);
@@ -168,42 +136,18 @@ public class EphemeralWindow : Window {
     }
 
     /// <summary>
-    ///     Expands the window width by the specified amount (for sidebars).
+    ///     No longer needed - window uses SizeToContent.WidthAndHeight and Palette manages its own sizing.
+    ///     Kept for API compatibility but is a no-op.
     /// </summary>
-    public void ExpandWidth(double additionalWidth) {
-        if (this._contentBorder == null) return;
-
-        var newWidth = this._contentBorder.Width + additionalWidth;
-        this._contentBorder.Width = newWidth;
-        this._contentBorder.MinWidth = newWidth;
-        this._contentBorder.MaxWidth = newWidth;
-
-        // Also expand underlay if present
-        if (this._underlayBorder != null) {
-            this._underlayBorder.Width = newWidth;
-            this._underlayBorder.MinWidth = newWidth;
-            this._underlayBorder.MaxWidth = newWidth;
-        }
-    }
+    [Obsolete("No longer needed - Palette manages its own sizing with independent backgrounds")]
+    public void ExpandWidth(double additionalWidth) { }
 
     /// <summary>
-    ///     Collapses the window width by the specified amount, respecting BaseWidth minimum.
+    ///     No longer needed - window uses SizeToContent.WidthAndHeight and Palette manages its own sizing.
+    ///     Kept for API compatibility but is a no-op.
     /// </summary>
-    public void CollapseWidth(double widthToRemove) {
-        if (this._contentBorder == null) return;
-
-        var newWidth = Math.Max(this.BaseWidth, this._contentBorder.Width - widthToRemove);
-        this._contentBorder.Width = newWidth;
-        this._contentBorder.MinWidth = newWidth;
-        this._contentBorder.MaxWidth = newWidth;
-
-        // Also collapse underlay if present
-        if (this._underlayBorder != null) {
-            this._underlayBorder.Width = newWidth;
-            this._underlayBorder.MinWidth = newWidth;
-            this._underlayBorder.MaxWidth = newWidth;
-        }
-    }
+    [Obsolete("No longer needed - Palette manages its own sizing with independent backgrounds")]
+    public void CollapseWidth(double widthToRemove) { }
 
     public void CloseWindow(bool restoreFocus = true) {
         if (this._isClosing) return;
@@ -399,4 +343,11 @@ public class CloseRequestedEventArgs : EventArgs {
 /// </summary>
 public interface ICloseRequestable {
     event EventHandler<CloseRequestedEventArgs> CloseRequested;
+}
+
+/// <summary>
+///     Interface for UserControls that can display a title.
+/// </summary>
+public interface ITitleable {
+    void SetTitle(string title);
 }

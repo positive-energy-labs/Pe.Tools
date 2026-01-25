@@ -9,11 +9,6 @@ namespace Pe.App.Tasks;
 ///     Useful for debugging parameter setup.
 /// </summary>
 public sealed class DebugParametersTask : ITask {
-    static DebugParametersTask() => TaskRegistry.Instance.Register(new DebugParametersTask());
-
-    // Force static constructor to run (called from TaskInitializer)
-    public static void Register() { }
-
     public string Name => "Debug Parameters";
     public string Description => "Prints all family parameters to console for debugging";
     public string Category => "Debug";
