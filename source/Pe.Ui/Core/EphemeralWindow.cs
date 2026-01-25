@@ -53,7 +53,7 @@ public class EphemeralWindow : Window {
 
         // Apply zoom transform for global UI scaling
         this._zoomTransform = new ScaleTransform(ZoomLevel, ZoomLevel);
-        
+
         // Content border - transparent container, Palette manages its own backgrounds
         // The title is passed to the Palette to render in its title bar area
         this._contentBorder = new Border {
@@ -63,7 +63,7 @@ public class EphemeralWindow : Window {
             // Allow dragging from anywhere on the palette background
             // (Palette will have its own title bar area for this)
         };
-        
+
         // Enable dragging from the content area
         this._contentBorder.MouseLeftButtonDown += (_, e) => {
             if (e.ClickCount == 1) this.DragMove();
@@ -134,20 +134,6 @@ public class EphemeralWindow : Window {
         this._zoomTransform.ScaleY = ZoomLevel;
         e.Handled = true;
     }
-
-    /// <summary>
-    ///     No longer needed - window uses SizeToContent.WidthAndHeight and Palette manages its own sizing.
-    ///     Kept for API compatibility but is a no-op.
-    /// </summary>
-    [Obsolete("No longer needed - Palette manages its own sizing with independent backgrounds")]
-    public void ExpandWidth(double additionalWidth) { }
-
-    /// <summary>
-    ///     No longer needed - window uses SizeToContent.WidthAndHeight and Palette manages its own sizing.
-    ///     Kept for API compatibility but is a no-op.
-    /// </summary>
-    [Obsolete("No longer needed - Palette manages its own sizing with independent backgrounds")]
-    public void CollapseWidth(double widthToRemove) { }
 
     public void CloseWindow(bool restoreFocus = true) {
         if (this._isClosing) return;

@@ -56,12 +56,15 @@ public static class JsonSchemaFactory {
 
         // Add $schema property (optional)
         fragmentSchema.Properties["$schema"] = new JsonSchemaProperty {
-            Type = JsonObjectType.String, IsRequired = false
+            Type = JsonObjectType.String,
+            IsRequired = false
         };
 
         // Add Items property (required array of item type)
         var itemsProperty = new JsonSchemaProperty {
-            Type = JsonObjectType.Array, Item = itemSchema, IsRequired = true
+            Type = JsonObjectType.Array,
+            Item = itemSchema,
+            IsRequired = true
         };
         fragmentSchema.Properties["Items"] = itemsProperty;
         fragmentSchema.RequiredProperties.Add("Items");
@@ -84,7 +87,8 @@ public static class JsonSchemaFactory {
         RevitTypeRegistry.Initialize();
 
         var settings = new NewtonsoftJsonSchemaGeneratorSettings {
-            FlattenInheritanceHierarchy = true, AlwaysAllowAdditionalObjectProperties = false
+            FlattenInheritanceHierarchy = true,
+            AlwaysAllowAdditionalObjectProperties = false
         };
 
         // Add individual TypeMappers for each registered Revit type
@@ -161,31 +165,6 @@ public static class JsonSchemaFactory {
         var relativeSchemaPath = Path.GetRelativePath(targetDir!, selectedSchemaPath);
 
         // Inject $schema reference
-        var jObject = JObject.Parse(jsonContent);
-        jObject["$schema"] = relativeSchemaPath.Replace("\\", "/");
-        return JsonConvert.SerializeObject(jObject, Formatting.Indented);
-    }
-
-    /// <summary>
-    ///     Legacy overload for backwards compatibility - writes single schema.
-    ///     Use the dual-schema overload for new code.
-    /// </summary>
-    [Obsolete("Use the dual-schema overload WriteAndInjectSchema(full, extends, ...) instead")]
-    public static string WriteAndInjectSchema(
-        JsonSchema schema,
-        string jsonContent,
-        string targetFilePath,
-        string schemaRootDirectory
-    ) {
-        var directory = Path.GetDirectoryName(targetFilePath);
-        if (directory != null && !Directory.Exists(directory))
-            _ = Directory.CreateDirectory(directory);
-
-        var schemaPath = Path.Combine(schemaRootDirectory, "schema.json");
-        File.WriteAllText(schemaPath, schema.ToJson());
-
-        var relativeSchemaPath = Path.GetRelativePath(directory!, schemaPath);
-
         var jObject = JObject.Parse(jsonContent);
         jObject["$schema"] = relativeSchemaPath.Replace("\\", "/");
         return JsonConvert.SerializeObject(jObject, Formatting.Indented);
