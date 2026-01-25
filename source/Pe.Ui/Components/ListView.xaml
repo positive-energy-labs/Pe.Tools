@@ -4,39 +4,30 @@
                              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                              xmlns:local="clr-namespace:Pe.Ui.Components"
                              xmlns:core="clr-namespace:Pe.Ui.Core"
+                             xmlns:controls="clr-namespace:Pe.Ui.Controls"
                              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
                              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="d">
     <UserControl.Resources>
         <ResourceDictionary>
 
-
-            <!-- ScrollViewer Style with WPF.UI DynamicScrollBar -->
-            <Style x:Key="CustomScrollViewerStyle" TargetType="ScrollViewer">
+            <!-- Override WPF.UI ListView template to use AnimatedScrollViewer -->
+            <Style x:Key="CustomListViewStyle" TargetType="{x:Type ui:ListView}">
                 <Setter Property="Background" Value="Transparent" />
-                <Setter Property="Padding" Value="0" />
+                <Setter Property="BorderThickness" Value="0" />
                 <Setter Property="Template">
                     <Setter.Value>
-                        <ControlTemplate TargetType="ScrollViewer">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-
-                                <ScrollContentPresenter Grid.Column="0"
-                                                        Content="{TemplateBinding Content}"
-                                                        ContentTemplate="{TemplateBinding ContentTemplate}"
-                                                        CanContentScroll="{TemplateBinding CanContentScroll}" />
-
-                                <ui:DynamicScrollBar x:Name="PART_VerticalScrollBar"
-                                                     Grid.Column="1"
-                                                     Orientation="Vertical"
-                                                     ViewportSize="{TemplateBinding ViewportHeight}"
-                                                     Maximum="{TemplateBinding ScrollableHeight}"
-                                                     Value="{Binding VerticalOffset, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay}"
-                                                     Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"
-                                                     Cursor="Arrow" />
-                            </Grid>
+                        <ControlTemplate TargetType="{x:Type ui:ListView}">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}">
+                                <controls:AnimatedScrollViewer Padding="{TemplateBinding Padding}"
+                                                               Focusable="False"
+                                                               HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                                               VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}"
+                                                               CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}">
+                                    <ItemsPresenter />
+                                </controls:AnimatedScrollViewer>
+                            </Border>
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
@@ -90,6 +81,7 @@
     </UserControl.Resources>
 
     <ui:ListView x:Name="ItemListView"
+                 Style="{StaticResource CustomListViewStyle}"
                  ItemsSource="{Binding ItemsSource, RelativeSource={RelativeSource AncestorType=local:ListView}}"
                  SelectedItem="{Binding SelectedItem, RelativeSource={RelativeSource AncestorType=local:ListView}, Mode=TwoWay}"
                  SelectedIndex="{Binding SelectedIndex, RelativeSource={RelativeSource AncestorType=local:ListView}, Mode=TwoWay}"
@@ -101,12 +93,11 @@
                  Background="Transparent"
                  BorderThickness="0"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 ScrollViewer.CanContentScroll="True"
                  HorizontalContentAlignment="Stretch"
                  VirtualizingStackPanel.IsVirtualizing="True"
                  VirtualizingStackPanel.VirtualizationMode="Recycling"
+                 VirtualizingPanel.ScrollUnit="Pixel"
                  ItemContainerStyle="{StaticResource ListViewItemStyle}">
-        <ui:ListView.Resources>
-            <Style TargetType="ScrollViewer" BasedOn="{StaticResource CustomScrollViewerStyle}" />
-        </ui:ListView.Resources>
     </ui:ListView>
 </core:RevitHostedUserControl>
