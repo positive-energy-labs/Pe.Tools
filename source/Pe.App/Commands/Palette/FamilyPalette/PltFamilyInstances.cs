@@ -1,8 +1,11 @@
 using Autodesk.Revit.UI;
+using Pe.App.Services;
+using Pe.Global.PolyFill;
 using Pe.Global.Revit.Ui;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
 
@@ -25,7 +28,7 @@ public static class PltFamilyInstances {
             .Cast<FamilyInstance>()
             .Where(fi => fi.Symbol.Family.Id == family.Id)
             .OrderBy(fi => fi.Symbol.Name)
-            .ThenBy(fi => fi.Id.IntegerValue)
+            .ThenBy(fi => fi.Id.Value())
             .Select(fi => new FamilyInstanceItem(fi))
             .ToList();
 
@@ -36,6 +39,19 @@ public static class PltFamilyInstances {
                     if (item?.Instance == null) return;
                     uidoc.ShowElements(item.Instance.Id);
                     uidoc.Selection.SetElementIds([item.Instance.Id]);
+                },
+                CanExecute = item => item != null
+            },
+            // Snoop the FamilyInstance
+            new() {
+                Name = "Snoop Instance",
+                Modifiers = ModifierKeys.Alt,
+                Execute = async item => {
+                    _ = RevitDbExplorerService.TrySnoopObject(
+                        uiapp,
+                        doc,
+                        item.Instance,
+                        $"Instance: {item.Instance.Symbol.Family.Name}: {item.Instance.Symbol.Name}");
                 },
                 CanExecute = item => item != null
             }

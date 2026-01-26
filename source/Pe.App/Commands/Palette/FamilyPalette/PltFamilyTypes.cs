@@ -1,10 +1,12 @@
 using Autodesk.Revit.UI;
+using Pe.App.Services;
 using Pe.Global.Revit.Ui;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
 using Serilog.Events;
 using System.Diagnostics;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
 using OperationCanceledException = Autodesk.Revit.Exceptions.OperationCanceledException;
@@ -59,6 +61,19 @@ public static class PltFamilyTypes {
                            && activeView.ViewType != ViewType.SystemBrowser
                            && activeView is not ViewSchedule;
                 }
+            },
+            // Snoop the FamilySymbol (type)
+            new() {
+                Name = "Snoop Type",
+                Modifiers = ModifierKeys.Alt,
+                Execute = async item => {
+                    _ = RevitDbExplorerService.TrySnoopObject(
+                        uiapp,
+                        doc,
+                        item.FamilySymbol,
+                        $"Type: {item.FamilySymbol.Family.Name}: {item.FamilySymbol.Name}");
+                },
+                CanExecute = item => item != null
             }
         };
 

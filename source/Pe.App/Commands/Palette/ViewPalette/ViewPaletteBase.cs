@@ -47,10 +47,16 @@ public abstract class ViewPaletteBase : IExternalCommand {
                     CanExecute = item => true
                 },
                 new() {
-                    Name = "Snoop View",
+                    Name = "Snoop",
                     Modifiers = System.Windows.Input.ModifierKeys.Alt,
                     Execute = async item => {
-                        _ = RevitDbExplorerService.TrySnoopElements(uiapp, item.View.Document, new[] { item.View });
+                        var title = item.ItemType switch {
+                            ViewItemType.View => $"View: {item.View.Name}",
+                            ViewItemType.Schedule => $"Schedule: {item.View.Name}",
+                            ViewItemType.Sheet => $"Sheet: {item.View.Name}",
+                            _ => item.View.Name
+                        };
+                        _ = RevitDbExplorerService.TrySnoopObject(uiapp, doc, item.View, title);
                     },
                     CanExecute = item => item != null
                 }

@@ -80,19 +80,12 @@ public class CmdPltFamilies : IExternalCommand {
                 Execute = async item => uiapp.OpenAndActivateFamily(item.Family),
                 CanExecute = item => item != null && item.Family.IsEditable
             },
-            // Snoop family instances - POC using PostCommand approach
+            // Snoop family - directly snoop the Family object
             new() {
                 Name = "Snoop Family",
                 Modifiers = ModifierKeys.Alt,
                 Execute = async item => {
-                    var instances = new FilteredElementCollector(doc)
-                        .OfClass(typeof(FamilyInstance))
-                        .Cast<FamilyInstance>()
-                        .Where(fi => fi.Symbol.Family.Id == item.Family.Id)
-                        .Cast<Element>()
-                        .ToList();
-
-                    _ = RevitDbExplorerService.TrySnoopElements(uiapp, doc, instances);
+                    _ = RevitDbExplorerService.TrySnoopObject(uiapp, doc, item.Family, $"Family: {item.Family.Name}");
                 },
                 CanExecute = item => item != null
             }
@@ -170,16 +163,23 @@ public class CmdPltFamilies : IExternalCommand {
                 CanExecute = item => item?.ElementType == FamilyElementType.Family &&
                                      item.FamilyInstance?.Symbol.Family.IsEditable == true
             },
-            // Snoop element - POC using PostCommand approach
+            // Snoop - works for all element types including FamilyParameter
             new() {
-                Name = "Snoop Element",
+                Name = "Snoop",
                 Modifiers = ModifierKeys.Alt,
                 Execute = async item => {
-                    if (item?.ElementId == null) return;
-                    var element = doc.GetElement(item.ElementId);
-                    _ = RevitDbExplorerService.TrySnoopElements(uiapp, doc, new[] { element });
+                    // Get the appropriate object based on element type
+                    object objectToSnoop = item.ElementType switch {
+                        FamilyElementType.Parameter => item.FamilyParam!,
+                        FamilyElementType.Connector => item.Connector!,
+                        FamilyElementType.Dimension => item.Dimension!,
+                        FamilyElementType.ReferencePlane => item.RefPlane!,
+                        FamilyElementType.Family => item.FamilyInstance!,
+                        _ => throw new InvalidOperationException($"Unknown element type: {item.ElementType}")
+                    };
+                    _ = RevitDbExplorerService.TrySnoopObject(uiApp: uiapp, doc, objectToSnoop, item.TextPrimary);
                 },
-                CanExecute = item => item?.ElementId != null
+                CanExecute = item => item != null
             }
         };
 
