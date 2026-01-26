@@ -1,5 +1,6 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
+using Pe.App.Services;
 using Pe.Extensions.UiApplication;
 using Pe.Global.Revit.Ui;
 using Pe.Global.Services.Storage;
@@ -44,6 +45,14 @@ public abstract class ViewPaletteBase : IExternalCommand {
                     Name = "Open",
                     Execute = async item => uiapp.OpenAndActivateView(item.View),
                     CanExecute = item => true
+                },
+                new() {
+                    Name = "Snoop View",
+                    Modifiers = System.Windows.Input.ModifierKeys.Alt,
+                    Execute = async item => {
+                        _ = RevitDbExplorerService.TrySnoopElements(uiapp, item.View.Document, new[] { item.View });
+                    },
+                    CanExecute = item => item != null
                 }
             };
 

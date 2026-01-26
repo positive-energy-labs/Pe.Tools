@@ -1,11 +1,13 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
+using Newtonsoft.Json;
 using Pe.App.Commands.Palette.CommandPalette;
 using Pe.Global.Revit.Ui;
 using Pe.Global.Services.Storage;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
 using Pe.Ui.ViewModels;
+using Serilog;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Input;
@@ -103,17 +105,11 @@ public static class CommandPaletteService {
             new() {
                 Name = "Execute",
                 Execute = async item => {
-                    if (item is PostableCommandItem cmdItem) {
-                        var (success, error) = Global.Revit.Lib.Commands.Execute(uiApp, cmdItem.Command);
-                        if (error is not null) Console.WriteLine("Error: " + error.Message + error.StackTrace);
-                        if (success) commandHelper.UpdateCommandUsage(cmdItem.Command);
-                    }
+                    var (success, error) = Global.Revit.Lib.Commands.Execute(uiApp, item.Command);
+                    if (error is not null) Log.Error("Error: " + error.Message + error.StackTrace);
+                    if (success) commandHelper.UpdateCommandUsage(item.Command);
                 },
-                CanExecute = item => {
-                    if (item is PostableCommandItem cmdItem)
-                        return Global.Revit.Lib.Commands.IsAvailable(uiApp, cmdItem.Command);
-                    return false;
-                }
+                CanExecute = item => Global.Revit.Lib.Commands.IsAvailable(uiApp, item.Command)
             },
             new() {
                 Name = "Edit Shortcuts",

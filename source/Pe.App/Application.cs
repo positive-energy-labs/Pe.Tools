@@ -12,8 +12,12 @@ using Pe.Tools.Commands.AutoTag;
 using Pe.Tools.Commands.FamilyFoundry;
 using Pe.Ui.Core;
 using ricaun.Revit.UI.Tasks;
+using ricaun.Revit.UI.Tasks.Extensions;
 using Serilog;
 using Serilog.Events;
+using RevitDBExplorer;
+using System.Diagnostics;
+
 
 namespace Pe.Tools;
 
@@ -51,6 +55,21 @@ public class Application : ExternalApplication {
         RevitTaskAccessor.RunAsync = async action => await _revitTaskService.Run(async () => await action());
 
         CreateLogger();
+
+        // Initialize RevitDBExplorer for embedded snooping
+        Log.Debug("Starting RevitDBExplorer initialization...");
+        try {
+            var uiApp = this.Application.GetUIApplication();
+            Log.Debug("Got UIApplication: {UIApp}", uiApp != null ? "Valid" : "NULL");
+
+            EmbeddedInitializer.Initialize(uiApp, embeddedIdentity: "Pe.Tools");
+            Log.Information("RevitDBExplorer initialized successfully for embedded use");
+            Log.Debug("EmbeddedInitializer.IsInitialized: {IsInit}", EmbeddedInitializer.IsInitialized);
+        } catch (Exception ex) {
+            Log.Error(ex, "Failed to initialize RevitDBExplorer - snooping will be unavailable: {Message}", ex.Message);
+            Log.Debug("Exception details: {Details}", ex.ToStringDemystified());
+        }
+
         this.CreateRibbon();
 
         // Initialize task registry
@@ -155,6 +174,7 @@ public class Application : ExternalApplication {
 
         Log.Logger = new LoggerConfiguration()
             .WriteTo.Console(LogEventLevel.Debug, outputTemplate)
+            .WriteTo.Debug(LogEventLevel.Debug, outputTemplate)  // Also write to Debug output (Visual Studio)
             .MinimumLevel.Debug()
             .CreateLogger();
 

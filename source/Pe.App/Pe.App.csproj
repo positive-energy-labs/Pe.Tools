@@ -22,6 +22,10 @@
         <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*"/>
         <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*"/>
         <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*"/>
+        
+        <!-- RevitDBExplorer - uses Revit version-specific package -->
+        <PackageReference Include="RevitDBExplorer.Embedded" Version="$(RevitVersion).*" />
+        
         <PackageReference Include="ricaun.Revit.UI.Tasks" Version="1.0.0"/>
 
         <!-- Build -->
@@ -58,5 +62,6 @@
     <Target Name="PostBuildAutoApprove" AfterTargets="Build" Condition="'$(BuildingByReSharper)' == 'true'">
         <Exec Command="powershell.exe -ExecutionPolicy Bypass -NoProfile -File &quot;$(MSBuildProjectDirectory)\PostBuildActions.ps1&quot; -ScriptDirectory &quot;$(MSBuildProjectDirectory)&quot;"/>
     </Target>
+
 
 </Project>

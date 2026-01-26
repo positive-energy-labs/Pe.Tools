@@ -1,6 +1,7 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.FamilyPalette;
+using Pe.App.Services;
 using Pe.Extensions.FamDocument;
 using Pe.Extensions.UiApplication;
 using Pe.Global.Revit.Ui;
@@ -78,6 +79,22 @@ public class CmdPltFamilies : IExternalCommand {
                 Modifiers = ModifierKeys.Control,
                 Execute = async item => uiapp.OpenAndActivateFamily(item.Family),
                 CanExecute = item => item != null && item.Family.IsEditable
+            },
+            // Snoop family instances - POC using PostCommand approach
+            new() {
+                Name = "Snoop Family",
+                Modifiers = ModifierKeys.Alt,
+                Execute = async item => {
+                    var instances = new FilteredElementCollector(doc)
+                        .OfClass(typeof(FamilyInstance))
+                        .Cast<FamilyInstance>()
+                        .Where(fi => fi.Symbol.Family.Id == item.Family.Id)
+                        .Cast<Element>()
+                        .ToList();
+
+                    _ = RevitDbExplorerService.TrySnoopElements(uiapp, doc, instances);
+                },
+                CanExecute = item => item != null
             }
         };
 
@@ -152,6 +169,17 @@ public class CmdPltFamilies : IExternalCommand {
                 },
                 CanExecute = item => item?.ElementType == FamilyElementType.Family &&
                                      item.FamilyInstance?.Symbol.Family.IsEditable == true
+            },
+            // Snoop element - POC using PostCommand approach
+            new() {
+                Name = "Snoop Element",
+                Modifiers = ModifierKeys.Alt,
+                Execute = async item => {
+                    if (item?.ElementId == null) return;
+                    var element = doc.GetElement(item.ElementId);
+                    _ = RevitDbExplorerService.TrySnoopElements(uiapp, doc, new[] { element });
+                },
+                CanExecute = item => item?.ElementId != null
             }
         };
 

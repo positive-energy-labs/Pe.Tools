@@ -1,0 +1,47 @@
+<Solution>
+  <Configurations>
+    <BuildType Name="Debug.R23" />
+    <BuildType Name="Debug.R24" />
+    <BuildType Name="Debug.R25" />
+    <BuildType Name="Debug.R26" />
+    <BuildType Name="Release.R23" />
+    <BuildType Name="Release.R24" />
+    <BuildType Name="Release.R25" />
+    <BuildType Name="Release.R26" />
+  </Configurations>
+  <Folder Name="/Automation/">
+    <Project Path="build/Build.csproj" Type="832f14a8-b248-4dd8-8004-3df028dbb372">
+      <BuildType Solution="Debug.R23|*" Project="Debug" />
+      <BuildType Solution="Debug.R24|*" Project="Debug" />
+      <BuildType Solution="Debug.R25|*" Project="Debug" />
+      <BuildType Solution="Debug.R26|*" Project="Debug" />
+      <BuildType Solution="Release.R23|*" Project="Release" />
+      <BuildType Solution="Release.R24|*" Project="Release" />
+      <BuildType Solution="Release.R25|*" Project="Release" />
+      <BuildType Solution="Release.R26|*" Project="Release" />
+      <Build Project="false" />
+    </Project>
+    <Project Path="install/Installer.csproj" Type="832f14a8-b248-4dd8-8004-3df028dbb372">
+      <BuildType Solution="Debug.R23|*" Project="Debug" />
+      <BuildType Solution="Debug.R24|*" Project="Debug" />
+      <BuildType Solution="Debug.R25|*" Project="Debug" />
+      <BuildType Solution="Debug.R26|*" Project="Debug" />
+      <BuildType Solution="Release.R23|*" Project="Release" />
+      <BuildType Solution="Release.R24|*" Project="Release" />
+      <BuildType Solution="Release.R25|*" Project="Release" />
+      <BuildType Solution="Release.R26|*" Project="Release" />
+      <Build Project="false" />
+    </Project>
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path=".gitignore" />
+    <File Path="build/appsettings.json" />
+    <File Path="Changelog.md" />
+    <File Path="Readme.md" />
+  </Folder>
+  <Project Path="source/Pe.App/Pe.App.csproj" />
+  <Project Path="source/Pe.Extensions/Pe.Extensions.csproj" />
+  <Project Path="source/Pe.FamilyFoundry/Pe.FamilyFoundry.csproj" />
+  <Project Path="source/Pe.Global/Pe.Global.csproj" />
+  <Project Path="source/Pe.Ui/Pe.Ui.csproj" />
+</Solution>
