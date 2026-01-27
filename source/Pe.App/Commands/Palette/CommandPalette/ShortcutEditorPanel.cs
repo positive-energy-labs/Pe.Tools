@@ -1,4 +1,6 @@
 using Pe.Global.Revit.Ui;
+using Pe.Ui.Core;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -13,15 +15,16 @@ namespace Pe.App.Commands.Palette.CommandPalette;
 /// <summary>
 ///     Sidebar panel for editing keyboard shortcuts on a command.
 ///     Displays current shortcuts with delete buttons and allows adding new ones.
+///     Implements <see cref="ISidebarPanel{TItem}" /> for auto-wiring with <see cref="PostableCommandItem" />.
 /// </summary>
-public class ShortcutEditorPanel : UserControl {
-    private readonly Action _onShortcutsChanged;
+public class ShortcutEditorPanel : UserControl, ISidebarPanel<PostableCommandItem> {
+    private readonly Action? _onShortcutsChanged;
     private readonly StackPanel _shortcutsList;
     private readonly TextBox _newShortcutInput;
     private readonly TextBlock _statusText;
-    private PostableCommandItem _currentItem;
+    private PostableCommandItem? _currentItem;
 
-    public ShortcutEditorPanel(Action onShortcutsChanged = null) {
+    public ShortcutEditorPanel(Action? onShortcutsChanged = null) {
         this._onShortcutsChanged = onShortcutsChanged;
 
         // Main container
@@ -114,13 +117,44 @@ public class ShortcutEditorPanel : UserControl {
         };
         _ = mainStack.Children.Add(this._statusText);
 
-        this.Content = mainStack;
+        base.Content = mainStack;
     }
 
+    #region ISidebarPanel Implementation
+
+    /// <inheritdoc />
+    UIElement ISidebarPanel<PostableCommandItem>.Content => this;
+
+    /// <inheritdoc />
+    public GridLength? PreferredWidth => new GridLength(400);
+
+    /// <inheritdoc />
     /// <summary>
-    ///     Updates the panel to display shortcuts for the given command item.
+    ///     Called immediately on selection change (before debounce).
+    ///     Clears status and shows placeholder.
     /// </summary>
-    public void UpdateItem(PostableCommandItem item) {
+    public void Clear() {
+        this._currentItem = null;
+        this.ClearStatus();
+
+        if (this.Content is StackPanel mainStack && mainStack.Children[0] is TextBlock header)
+            header.Text = "Select a command";
+
+        this._shortcutsList.Children.Clear();
+        _ = this._shortcutsList.Children.Add(new TextBlock {
+            Text = "No command selected",
+            FontStyle = FontStyles.Italic,
+            Foreground = Brushes.Gray
+        });
+    }
+
+    /// <inheritdoc />
+    /// <summary>
+    ///     Called after debounce with cancellation support.
+    /// </summary>
+    public void Update(PostableCommandItem? item, CancellationToken ct) {
+        if (ct.IsCancellationRequested) return;
+
         this._currentItem = item;
         this.ClearStatus();
 
@@ -130,6 +164,8 @@ public class ShortcutEditorPanel : UserControl {
 
         this.RefreshShortcutsList();
     }
+
+    #endregion
 
     private void RefreshShortcutsList() {
         this._shortcutsList.Children.Clear();
@@ -224,7 +260,7 @@ public class ShortcutEditorPanel : UserControl {
             return;
         }
 
-        var (success, error) = ShortcutsService.Instance.AddShortcut(this._currentItem.Command.Value, shortcut);
+        var (_, error) = ShortcutsService.Instance.AddShortcut(this._currentItem.Command.Value, shortcut);
 
         if (error != null) {
             this.ShowStatus(error.Message, isError: true);
@@ -241,8 +277,7 @@ public class ShortcutEditorPanel : UserControl {
     private void OnDeleteClick(object sender, RoutedEventArgs e) {
         if (sender is not Button button || button.Tag is not string shortcut) return;
         if (this._currentItem == null) return;
-
-        var (success, error) = ShortcutsService.Instance.RemoveShortcut(this._currentItem.Command.Value, shortcut);
+        var (_, error) = ShortcutsService.Instance.RemoveShortcut(this._currentItem.Command.Value, shortcut);
 
         if (error != null) {
             this.ShowStatus(error.Message, isError: true);
@@ -260,7 +295,7 @@ public class ShortcutEditorPanel : UserControl {
             return;
         }
 
-        var (success, error) = ShortcutsService.Instance.ClearShortcuts(this._currentItem.Command.Value);
+        var (_, error) = ShortcutsService.Instance.ClearShortcuts(this._currentItem.Command.Value);
 
         if (error != null) {
             this.ShowStatus(error.Message, isError: true);

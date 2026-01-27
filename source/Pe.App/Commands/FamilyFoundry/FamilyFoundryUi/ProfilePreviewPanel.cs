@@ -1,4 +1,5 @@
 using Pe.Ui.Core;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -12,12 +13,23 @@ namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 
 /// <summary>
 ///     Side panel that displays profile preview data including operations, parameters, and families.
-///     Designed to be used as a sidebar in the palette.
+///     Implements ISidebarPanel for auto-wiring with PaletteFactory.
+///     Preview data building is injected via delegate to support generic TProfile without making this class generic.
 /// </summary>
-public class ProfilePreviewPanel : UserControl {
+public class ProfilePreviewPanel : UserControl, ISidebarPanel<ProfileListItem> {
     private readonly WpfUiRichTextBox _richTextBox;
+    private readonly Func<ProfileListItem?, PreviewData?> _previewBuilder;
 
-    public ProfilePreviewPanel() {
+    /// <summary>
+    ///     Creates a ProfilePreviewPanel with injected preview building logic.
+    /// </summary>
+    /// <param name="previewBuilder">
+    ///     Delegate that builds PreviewData from a ProfileListItem.
+    ///     This delegate should handle caching and context updates internally.
+    /// </param>
+    public ProfilePreviewPanel(Func<ProfileListItem?, PreviewData?> previewBuilder) {
+        this._previewBuilder = previewBuilder;
+
         // Palette handles sidebar padding and scrolling - just provide the content
         this._richTextBox = new WpfUiRichTextBox {
             IsReadOnly = true,
@@ -31,10 +43,19 @@ public class ProfilePreviewPanel : UserControl {
         this.Content = this._richTextBox;
     }
 
-    /// <summary>
-    ///     Updates the preview panel with new data.
-    /// </summary>
-    public void UpdatePreview(PreviewData data) => this.UpdateContent(data);
+    /// <inheritdoc />
+    UIElement ISidebarPanel<ProfileListItem>.Content => this;
+
+    /// <inheritdoc />
+    public void Clear() => this._richTextBox.Document = FlowDocumentBuilder.Create();
+
+    /// <inheritdoc />
+    public void Update(ProfileListItem? item, CancellationToken ct) {
+        if (ct.IsCancellationRequested) return;
+        var data = this._previewBuilder(item);
+        if (ct.IsCancellationRequested) return;
+        this.UpdateContent(data);
+    }
 
     private void UpdateContent(PreviewData data) {
         if (data == null) {

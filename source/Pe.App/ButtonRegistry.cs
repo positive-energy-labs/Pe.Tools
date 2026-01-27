@@ -228,7 +228,28 @@ public sealed class ButtonRegistry {
             Text = "Families",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
-            ToolTip = "Browse families in the document. Shows family types in normal documents, or family elements (parameters, dimensions, etc.) in family documents.",
+            ToolTip = "Browse families in the current document.",
+            Container = new ButtonContainer.Split("Family Palette", "Tools")
+        }),
+        Register<CmdPltFamilyTypes>(new() {
+            Text = "Types",
+            SmallImage = "Red_16.png",
+            LargeImage = "Red_32.png",
+            ToolTip = "Browse family types in the current document.",
+            Container = new ButtonContainer.Split("Family Palette", "Tools")
+        }),
+        Register<CmdPltFamilyInstances>(new() {
+            Text = "Instances",
+            SmallImage = "Red_16.png",
+            LargeImage = "Red_32.png",
+            ToolTip = "Browse family instances in the current document.",
+            Container = new ButtonContainer.Split("Family Palette", "Tools")
+        }),
+        Register<CmdPltFamilyElements>(new() {
+            Text = "Family Elements",
+            SmallImage = "Red_16.png",
+            LargeImage = "Red_32.png",
+            ToolTip = "Browse elements inside the current family document.",
             Container = new ButtonContainer.Panel("Tools")
         }),
         Register<CmdPltTasks>(new() {

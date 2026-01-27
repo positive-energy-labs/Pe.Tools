@@ -85,8 +85,7 @@ public abstract class ViewPaletteBase : IExternalCommand {
                         }
                     ],
                     DefaultTabIndex = this.DefaultTabIndex,
-                    Sidebar = new PaletteSidebar { Content = previewPanel },
-                    OnSelectionChangedDebounced = previewPanel.UpdatePreview
+                    SidebarPanel = previewPanel
                 });
             window.Show();
 

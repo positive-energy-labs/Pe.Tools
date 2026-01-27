@@ -83,12 +83,6 @@ public class ActionBinding<TItem> : ActionBinding where TItem : class, IPaletteL
     }
 
     /// <summary>
-    ///     Returns true if the action is a "next palette" type (opens another palette in sidebar).
-    /// </summary>
-    public static bool IsNextPaletteAction(PaletteAction<TItem> action) =>
-        action.NextPalette != null;
-
-    /// <summary>
     ///     Finds the best matching action for the given input combination
     /// </summary>
     private PaletteAction<TItem> FindMatchingAction(Key? key, ModifierKeys modifiers) {

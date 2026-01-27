@@ -71,9 +71,9 @@
                     <Trigger Property="IsMouseOver" Value="True">
                         <Setter Property="Background" Value="{ui:ThemeResource SubtleFillColorSecondaryBrush}" />
                     </Trigger>
-                    <!-- Selected state -->
+                    <!-- Selected state - increased contrast -->
                     <Trigger Property="IsSelected" Value="True">
-                        <Setter Property="Background" Value="{ui:ThemeResource SubtleFillColorSecondaryBrush}" />
+                        <Setter Property="Background" Value="{ui:ThemeResource ControlFillColorDefaultBrush}" />
                     </Trigger>
                 </Style.Triggers>
             </Style>

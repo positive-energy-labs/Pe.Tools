@@ -37,8 +37,12 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
                 .Select(s => new ScheduleSerializePaletteItem(s))
                 .ToList<IPaletteListItem>();
 
-            // Create preview panel
-            var previewPanel = new ScheduleSerializePreviewPanel();
+            // Create preview panel with injected preview building logic
+            var previewPanel = new ScheduleSerializePreviewPanel(item => {
+                if (item == null) return null;
+                var serializeItem = (ScheduleSerializePaletteItem)item;
+                return this.BuildSerializationPreview(serializeItem);
+            });
 
             // Define action
             var actions = new List<PaletteAction<IPaletteListItem>> {
@@ -54,19 +58,8 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
                 new PaletteOptions<IPaletteListItem> {
                     Storage = storage,
                     PersistenceKey = item => item.TextPrimary,
-                    Tabs = null, // No tabs needed
                     FilterKeySelector = i => ((ScheduleSerializePaletteItem)i).TextPill,
-                    Sidebar = new PaletteSidebar { Content = previewPanel },
-                    OnSelectionChangedDebounced = item => {
-                        if (item == null) {
-                            previewPanel.UpdatePreview(null);
-                            return;
-                        }
-
-                        var serializeItem = (ScheduleSerializePaletteItem)item;
-                        var previewData = this.BuildSerializationPreview(serializeItem);
-                        previewPanel.UpdatePreview(previewData);
-                    }
+                    SidebarPanel = previewPanel
                 });
             window.Show();
 

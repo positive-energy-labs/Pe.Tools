@@ -1,4 +1,6 @@
 using Pe.Ui.Core;
+using System.Threading;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using WpfUiRichTextBox = Wpf.Ui.Controls.RichTextBox;
@@ -8,8 +10,9 @@ namespace Pe.App.Commands.Palette.ViewPalette;
 /// <summary>
 ///     Sidebar panel that displays view details using FlowDocumentBuilder.
 ///     Displays different information based on ViewItemType.
+///     Implements ISidebarPanel for auto-wiring with PaletteFactory.
 /// </summary>
-public class ViewPreviewPanel : UserControl {
+public class ViewPreviewPanel : UserControl, ISidebarPanel<UnifiedViewItem> {
     private readonly WpfUiRichTextBox _richTextBox;
 
     public ViewPreviewPanel() {
@@ -26,10 +29,14 @@ public class ViewPreviewPanel : UserControl {
         this.Content = this._richTextBox;
     }
 
-    /// <summary>
-    ///     Updates the preview panel with view information.
-    /// </summary>
-    public void UpdatePreview(UnifiedViewItem item) {
+    /// <inheritdoc />
+    UIElement ISidebarPanel<UnifiedViewItem>.Content => this;
+
+    /// <inheritdoc />
+    public void Clear() => this._richTextBox.Document = FlowDocumentBuilder.Create();
+
+    /// <inheritdoc />
+    public void Update(UnifiedViewItem? item, CancellationToken ct) {
         if (item == null) {
             this._richTextBox.Document = FlowDocumentBuilder.Create();
             return;

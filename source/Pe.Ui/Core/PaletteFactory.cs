@@ -2,6 +2,7 @@ using Pe.Global.Services.Storage;
 using Pe.Ui.Components;
 using Pe.Ui.Core.Services;
 using Pe.Ui.ViewModels;
+using System.Threading;
 using System.Windows;
 
 namespace Pe.Ui.Core;
@@ -116,14 +117,41 @@ public static class PaletteFactory {
             };
         }
 
-        // Wire up debounced selection changed callback if provided (delayed, for expensive operations)
-        if (options.OnSelectionChangedDebounced != null) {
-            viewModel.SelectionChangedDebounced += (_, _) => {
-                // Auto-expand sidebar on first valid selection
-                if (options.Sidebar != null && viewModel.SelectedItem != null)
-                    palette.ExpandSidebarOnce(options.Sidebar.Width);
+        // Wire up SidebarPanel if provided
+        PaletteSidebar? sidebar = null;
+        if (options.SidebarPanel != null) {
+            sidebar = new PaletteSidebar {
+                Content = options.SidebarPanel.Content,
+                Width = options.SidebarPanel.PreferredWidth ?? new GridLength(450)
+            };
 
-                options.OnSelectionChangedDebounced(viewModel.SelectedItem);
+            // Track cancellation for async loading - cancelled on each selection change
+            CancellationTokenSource? updateCts = null;
+
+            // Wire IMMEDIATE clear on selection change (pre-debounce) for responsive UI
+            viewModel.PropertyChanged += (_, e) => {
+                if (e.PropertyName != nameof(viewModel.SelectedItem)) return;
+
+                // Cancel any pending update work
+                updateCts?.Cancel();
+                updateCts?.Dispose();
+                updateCts = null;
+
+                // Clear immediately so stale content doesn't persist during navigation
+                options.SidebarPanel.Clear();
+            };
+
+            // Auto-wire debounced selection for ISidebarPanel with cancellation
+            viewModel.SelectionChangedDebounced += (_, _) => {
+                if (viewModel.SelectedItem != null)
+                    palette.ExpandSidebarOnce(sidebar.Width);
+
+                // Create new CTS for this update
+                updateCts?.Cancel();
+                updateCts?.Dispose();
+                updateCts = new CancellationTokenSource();
+
+                options.SidebarPanel.Update(viewModel.SelectedItem, updateCts.Token);
             };
         }
 
@@ -132,7 +160,7 @@ public static class PaletteFactory {
         if (options.Tabs is { Count: > 0 })
             tabNames = options.Tabs.Select(t => t.Name).ToList();
 
-        palette.Initialize(viewModel, actions, options.CustomKeyBindings, onCtrlReleased, options.Sidebar,
+        palette.Initialize(viewModel, actions, options.CustomKeyBindings, onCtrlReleased, sidebar,
             options.KeepOpenAfterAction, tabNames);
 
         var window = new EphemeralWindow(palette, title);
@@ -151,18 +179,11 @@ public static class PaletteFactory {
 }
 
 /// <summary>
-///     Defines a sidebar for the palette.
-///     Sidebars always start collapsed and auto-expand on first selection.
+///     Internal sidebar data structure used by PaletteFactory and Palette.
+///     Consumers should use <see cref="ISidebarPanel{TItem}" /> instead.
 /// </summary>
-public class PaletteSidebar {
-    /// <summary>
-    ///     The UserControl to display in the sidebar.
-    /// </summary>
-    public UIElement Content { get; init; }
-
-    /// <summary>
-    ///     Width of the sidebar when expanded. Default: 450px.
-    /// </summary>
+internal class PaletteSidebar {
+    public required UIElement Content { get; init; }
     public GridLength Width { get; init; } = new(450);
 }
 
@@ -195,7 +216,7 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     /// <example>
     ///     <code>Storage = new Storage(nameof(MyCmdClass))</code>
     /// </example>
-    public Storage Storage { get; init; }
+    public Storage? Storage { get; init; }
 
     /// <summary>
     ///     Function that returns a unique key for each item, used for persistence.
@@ -205,7 +226,7 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     /// <example>
     ///     <code>PersistenceKey = item => item.Element.Id.ToString()</code>
     /// </example>
-    public Func<TItem, string> PersistenceKey { get; init; }
+    public Func<TItem, string>? PersistenceKey { get; init; }
 
     /// <summary>
     ///     Search configuration controlling which fields to search and scoring weights.
@@ -236,7 +257,7 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     ///     FilterKeySelector = item => item.TextPill
     ///     </code>
     /// </example>
-    public Func<TItem, string> FilterKeySelector { get; init; }
+    public Func<TItem, string>? FilterKeySelector { get; init; }
 
     /// <summary>
     ///     Custom keyboard bindings for navigation.
@@ -249,7 +270,7 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     ///     CustomKeyBindings = keys;
     ///     </code>
     /// </example>
-    public CustomKeyBindings CustomKeyBindings { get; init; }
+    public CustomKeyBindings? CustomKeyBindings { get; init; }
 
     /// <summary>
     ///     Callback to mutate the view model after creation but before palette initialization.
@@ -262,7 +283,7 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     ///     ViewModelMutator = vm => { if (vm.FilteredItems.Count > 1) vm.SelectedIndex = 1; }
     ///     </code>
     /// </example>
-    public Action<PaletteViewModel<TItem>> ViewModelMutator { get; init; }
+    public Action<PaletteViewModel<TItem>>? ViewModelMutator { get; init; }
 
     /// <summary>
     ///     Factory function that receives the view model and returns an action to execute when Ctrl is released.
@@ -280,7 +301,7 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     ///     }
     ///     </code>
     /// </example>
-    public Func<PaletteViewModel<TItem>, Action> OnCtrlReleased { get; init; }
+    public Func<PaletteViewModel<TItem>, Action>? OnCtrlReleased { get; init; }
 
     /// <summary>
     ///     Callback invoked when the selected item changes in the palette.
@@ -295,48 +316,26 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     ///     }
     ///     </code>
     /// </example>
-    public Action<TItem> OnSelectionChanged { get; init; }
+    public Action<TItem?>? OnSelectionChanged { get; init; }
 
     /// <summary>
-    ///     Callback invoked when the selected item changes, after a debounce delay.
-    ///     Useful for expensive operations like loading JSON, building previews, or IO.
-    ///     The delay prevents triggering on every arrow key press.
-    ///     Default: null (no debounced selection change behavior)
-    /// </summary>
-    /// <example>
-    ///     <code>
-    ///     OnSelectionChangedDebounced = item => {
-    ///         if (item != null)
-    ///             BuildExpensivePreview(item); // Only fires after user stops navigating
-    ///     }
-    ///     </code>
-    /// </example>
-    public Action<TItem> OnSelectionChangedDebounced { get; init; }
-
-    /// <summary>
-    ///     Debounce delay in milliseconds for OnSelectionChangedDebounced callback.
+    ///     Debounce delay in milliseconds for sidebar panel updates.
     ///     Default: 300ms
     /// </summary>
     public int SelectionDebounceMs { get; init; } = 300;
 
     /// <summary>
-    ///     Sidebar definition for the palette.
+    ///     Sidebar panel implementing <see cref="ISidebarPanel{TItem}" />.
+    ///     Auto-wired to debounced selection changes with automatic Clear() and Update() calls.
     ///     Sidebars appear to the right of the main list, start collapsed, and auto-expand on first selection.
     ///     Default: null (no sidebar)
     /// </summary>
     /// <example>
     ///     <code>
-    ///     // Minimal configuration (uses default 450px width):
-    ///     Sidebar = new PaletteSidebar { Content = previewPanel }
-    ///     
-    ///     // Custom width:
-    ///     Sidebar = new PaletteSidebar { 
-    ///         Content = previewPanel,
-    ///         Width = new GridLength(600)
-    ///     }
+    ///     SidebarPanel = new MyPreviewPanel()
     ///     </code>
     /// </example>
-    public PaletteSidebar Sidebar { get; init; }
+    public ISidebarPanel<TItem>? SidebarPanel { get; init; }
 
     /// <summary>
     ///     Tray definition for the palette.
@@ -360,7 +359,7 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     ///     }
     ///     </code>
     /// </example>
-    public PaletteTray Tray { get; init; }
+    public PaletteTray? Tray { get; init; }
 
     /// <summary>
     ///     When true, prevents the palette from closing after action execution.
@@ -389,7 +388,7 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     ///     ]
     ///     </code>
     /// </example>
-    public List<TabDefinition<TItem>> Tabs { get; init; }
+    public List<TabDefinition<TItem>>? Tabs { get; init; }
 
     /// <summary>
     ///     Default selected tab index when palette opens.

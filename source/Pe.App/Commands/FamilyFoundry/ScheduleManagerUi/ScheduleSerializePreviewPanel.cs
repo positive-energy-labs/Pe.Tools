@@ -1,6 +1,7 @@
 using Pe.Global.Revit.Lib.Schedules.Fields;
 using Pe.Global.Revit.Lib.Schedules.SortGroup;
 using Pe.Ui.Core;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -10,11 +11,20 @@ namespace Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
 
 /// <summary>
 ///     Side panel that displays schedule serialization preview data.
+///     Implements ISidebarPanel for auto-wiring with PaletteFactory.
 /// </summary>
-public class ScheduleSerializePreviewPanel : UserControl {
+public class ScheduleSerializePreviewPanel : UserControl, ISidebarPanel<IPaletteListItem> {
     private readonly WpfUiRichTextBox _richTextBox;
+    private readonly Func<IPaletteListItem?, Pe.Tools.Commands.FamilyFoundry.ScheduleSerializePreviewData?> _previewBuilder;
 
-    public ScheduleSerializePreviewPanel() {
+    /// <summary>
+    ///     Creates a ScheduleSerializePreviewPanel with injected preview building logic.
+    /// </summary>
+    public ScheduleSerializePreviewPanel(
+        Func<IPaletteListItem?, Pe.Tools.Commands.FamilyFoundry.ScheduleSerializePreviewData?> previewBuilder
+    ) {
+        this._previewBuilder = previewBuilder;
+
         this._richTextBox = new WpfUiRichTextBox {
             IsReadOnly = true,
             Focusable = false,
@@ -27,11 +37,19 @@ public class ScheduleSerializePreviewPanel : UserControl {
         this.Content = this._richTextBox;
     }
 
-    /// <summary>
-    ///     Updates the preview panel with new data.
-    /// </summary>
-    public void UpdatePreview(Pe.Tools.Commands.FamilyFoundry.ScheduleSerializePreviewData data) =>
+    /// <inheritdoc />
+    UIElement ISidebarPanel<IPaletteListItem>.Content => this;
+
+    /// <inheritdoc />
+    public void Clear() => this._richTextBox.Document = FlowDocumentBuilder.Create();
+
+    /// <inheritdoc />
+    public void Update(IPaletteListItem? item, CancellationToken ct) {
+        if (ct.IsCancellationRequested) return;
+        var data = this._previewBuilder(item);
+        if (ct.IsCancellationRequested) return;
         this.UpdateContent(data);
+    }
 
     private void UpdateContent(Pe.Tools.Commands.FamilyFoundry.ScheduleSerializePreviewData data) {
         if (data == null) {

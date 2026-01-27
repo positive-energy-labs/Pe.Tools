@@ -5,6 +5,14 @@
                              xmlns:local="clr-namespace:Pe.Ui.Components"
                              xmlns:core="clr-namespace:Pe.Ui.Core"
                              VerticalAlignment="Top">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Inherit WpfUiResources which includes TextBox styles -->
+                <ResourceDictionary Source="pack://application:,,,/Pe.Ui;component/Core/WpfUiResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
     <!-- Outer Grid: Transparent container for independent palette/panel backgrounds -->
     <Grid HorizontalAlignment="Stretch"
           VerticalAlignment="Top">
@@ -37,7 +45,7 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- Title Bar with Tabs -->
+                <!-- Title Bar with Tabs and Pin Button -->
                 <Border x:Name="TitleBarBorder"
                         Grid.Row="0"
                         Padding="12,8,12,6">
@@ -45,6 +53,7 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         
@@ -57,7 +66,7 @@
                                       VerticalAlignment="Center"
                                       Foreground="{ui:ThemeResource TextFillColorPrimaryBrush}" />
                         
-                        <!-- Tab Bar on the right (hidden when no tabs) -->
+                        <!-- Tab Bar in the middle (hidden when no tabs) -->
                         <Border x:Name="TabBarBorder"
                                 Grid.Column="2"
                                 Visibility="Collapsed"
@@ -70,6 +79,18 @@
                                 </ItemsControl.ItemsPanel>
                             </ItemsControl>
                         </Border>
+                        
+                        <!-- Pin button on the far right -->
+                        <ui:Button x:Name="PinButton"
+                                   Grid.Column="3"
+                                   Padding="4"
+                                   Margin="8,0,0,0"
+                                   Appearance="Transparent"
+                                   BorderThickness="0"
+                                   ToolTip="Pin window (keep open when clicking outside)"
+                                   Cursor="Hand">
+                            <ui:SymbolIcon x:Name="PinIcon" Symbol="Pin24" FontSize="16" />
+                        </ui:Button>
                     </Grid>
                 </Border>
 
@@ -118,6 +139,7 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
                         <ui:TextBlock x:Name="ItemCountText"
@@ -125,7 +147,7 @@
                                       Text="{Binding FilteredItems.Count, StringFormat=\{0\} items}"
                                       VerticalAlignment="Center"
                                       HorizontalAlignment="Left"
-                                      FontSize="12"
+                                      FontSize="11"
                                       Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
 
                         <ui:TextBlock x:Name="HelpText"
@@ -133,12 +155,23 @@
                                       Text="↑↓ Navigate • ← Tooltip • → Actions • Click/Enter Execute • Esc Close"
                                       VerticalAlignment="Center"
                                       HorizontalAlignment="Right"
-                                      FontSize="10"
+                                      FontSize="11"
+                                      Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
+
+                        <!-- Tab switching hint (only visible when tabs exist) -->
+                        <ui:TextBlock x:Name="TabSwitchHint"
+                                      Grid.Column="2"
+                                      Text="• Ctrl+← → Tabs"
+                                      VerticalAlignment="Center"
+                                      HorizontalAlignment="Right"
+                                      Margin="4,0,0,0"
+                                      FontSize="11"
+                                      Visibility="Collapsed"
                                       Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
 
                         <!-- Tray Toggle Button -->
                         <ui:Button x:Name="TrayToggleButton"
-                                   Grid.Column="2"
+                                   Grid.Column="3"
                                    Padding="4"
                                    Margin="4,0,0,0"
                                    Appearance="Secondary"
@@ -219,7 +252,8 @@
                 </Border>
                 
                 <!-- Panel Content - FontSize 13 for better readability of table data -->
-                <ScrollViewer Grid.Row="1"
+                <ScrollViewer x:Name="PanelScrollViewer"
+                              Grid.Row="1"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"
                               Padding="12,8,12,12"

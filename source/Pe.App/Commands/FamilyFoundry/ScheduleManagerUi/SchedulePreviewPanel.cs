@@ -1,6 +1,8 @@
 using Pe.Global.Revit.Lib.Schedules.Fields;
 using Pe.Global.Revit.Lib.Schedules.SortGroup;
+using Pe.Tools.Commands.FamilyFoundry;
 using Pe.Ui.Core;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -10,12 +12,23 @@ namespace Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
 
 /// <summary>
 ///     Side panel that displays schedule profile preview data including fields, sort/group settings, and JSON.
-///     Designed to be used as a sidebar in the palette.
+///     Implements ISidebarPanel for auto-wiring with PaletteFactory.
+///     Preview data building is injected via delegate to support complex tab-specific logic.
 /// </summary>
-public class SchedulePreviewPanel : UserControl {
+public class SchedulePreviewPanel : UserControl, ISidebarPanel<ISchedulePaletteItem> {
     private readonly WpfUiRichTextBox _richTextBox;
+    private readonly Func<ISchedulePaletteItem?, SchedulePreviewData?> _previewBuilder;
 
-    public SchedulePreviewPanel() {
+    /// <summary>
+    ///     Creates a SchedulePreviewPanel with injected preview building logic.
+    /// </summary>
+    /// <param name="previewBuilder">
+    ///     Delegate that builds SchedulePreviewData from an ISchedulePaletteItem.
+    ///     This delegate should handle caching and context updates internally.
+    /// </param>
+    public SchedulePreviewPanel(Func<ISchedulePaletteItem?, SchedulePreviewData?> previewBuilder) {
+        this._previewBuilder = previewBuilder;
+
         // Palette handles sidebar padding and scrolling - just provide the content
         this._richTextBox = new WpfUiRichTextBox {
             IsReadOnly = true,
@@ -29,10 +42,19 @@ public class SchedulePreviewPanel : UserControl {
         this.Content = this._richTextBox;
     }
 
-    /// <summary>
-    ///     Updates the preview panel with new data.
-    /// </summary>
-    public void UpdatePreview(SchedulePreviewData data) => this.UpdateContent(data);
+    /// <inheritdoc />
+    UIElement ISidebarPanel<ISchedulePaletteItem>.Content => this;
+
+    /// <inheritdoc />
+    public void Clear() => this._richTextBox.Document = FlowDocumentBuilder.Create();
+
+    /// <inheritdoc />
+    public void Update(ISchedulePaletteItem? item, CancellationToken ct) {
+        if (ct.IsCancellationRequested) return;
+        var data = this._previewBuilder(item);
+        if (ct.IsCancellationRequested) return;
+        this.UpdateContent(data);
+    }
 
     private void UpdateContent(SchedulePreviewData data) {
         if (data == null) {

@@ -88,13 +88,6 @@ public partial class ListView {
         if (this._scrollViewer != null) {
             this._scrollViewer.ScrollingTime = this._scrollAnimationDuration;
         }
-
-        // Ensure the ListView is focusable
-        this.ItemListView.Focusable = true;
-        this.Focusable = true;
-
-        // Set focus to enable keyboard navigation
-        _ = this.ItemListView.Focus();
     }
 
     private void OnInternalSelectionChanged(object sender, SelectionChangedEventArgs e) {

@@ -96,8 +96,11 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
             OnFinishSettings = settings.OnProcessingFinish
         };
 
-        // Create preview panel
-        var previewPanel = new ProfilePreviewPanel();
+        // Create preview panel with injected preview building logic
+        var previewPanel = new ProfilePreviewPanel(item => {
+            this.BuildPreviewData(item, context);
+            return context.PreviewData;
+        });
 
         // Store window reference to be captured in actions
         EphemeralWindow window = null;
@@ -119,12 +122,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
                 PersistenceKey = item => item.TextPrimary,
                 SearchConfig = SearchConfig.PrimaryAndSecondary(),
                 FilterKeySelector = item => string.IsNullOrEmpty(item.ExtendsValue) ? "Base" : "Extended",
-                OnSelectionChangedDebounced = item => {
-                    this.BuildPreviewData(item, context);
-                    if (context.PreviewData != null)
-                        previewPanel.UpdatePreview(context.PreviewData);
-                },
-                Sidebar = new PaletteSidebar { Content = previewPanel }
+                SidebarPanel = previewPanel
             });
 
         return window;
@@ -199,7 +197,8 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         var profileJson = JsonSerializer.Serialize(
             profile,
             new JsonSerializerOptions {
-                WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                WriteIndented = true,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             });
 
         // Check operation enabled status from queue

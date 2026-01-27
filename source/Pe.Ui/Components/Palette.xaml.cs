@@ -83,6 +83,10 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
 
     public Palette(bool isSearchBoxHidden = false) {
         this.InitializeComponent();
+
+        // Don't add PreviewMouseWheel handler - let events flow naturally
+        // The SortableDataTable will handle Shift+Scroll itself
+
         if (isSearchBoxHidden) {
             this._isSearchBoxHidden = true;
             this.SearchBoxBorder.Visibility = Visibility.Collapsed;
@@ -103,8 +107,9 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     /// <summary>
     ///     Initializes the palette with type-specific behavior via composition.
     ///     This must be called after construction to wire up generic-specific logic.
+    ///     Internal: Only called by <see cref="PaletteFactory" />.
     /// </summary>
-    public void Initialize<TItem>(
+    internal void Initialize<TItem>(
         PaletteViewModel<TItem> viewModel,
         IEnumerable<PaletteAction<TItem>> actions,
         CustomKeyBindings customKeyBindings = null,
@@ -168,6 +173,9 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
 
         // Wire up tray toggle button
         this.TrayToggleButton.Click += this.TrayToggleButton_Click;
+
+        // Wire up pin button
+        this.PinButton.Click += this.PinButton_Click;
 
         var actionBinding = new ActionBinding<TItem>();
         if (actions != null && actions.Any()) actionBinding.RegisterRange(actions);
@@ -248,12 +256,6 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             if (selectedItem == null) return;
 
             viewModel.RecordUsage();
-
-            // NextPalette actions show content in sidebar
-            if (ActionBinding<TItem>.IsNextPaletteAction(action)) {
-                this.ShowNextPaletteInSidebar(action, selectedItem);
-                return;
-            }
 
             // If KeepOpenAfterAction is true, execute immediately and keep palette open
             if (this._keepOpenAfterAction) {
@@ -344,47 +346,13 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     /// <summary>
     ///     Sets the tray content and shows the tray toggle button.
     ///     The tray starts collapsed and can be expanded by clicking the toggle button.
-    ///     A default ephemerality toggle is automatically added to all trays.
     /// </summary>
-    /// <param name="content">Optional custom content to add below the default toggle. Can be null.</param>
+    /// <param name="content">Content to display in the tray.</param>
     /// <param name="maxHeight">Maximum height when expanded. Defaults to 200px.</param>
-    public void SetTrayContent(UIElement? content, double maxHeight = DefaultTrayMaxHeight) {
-        // Create a container with default ephemerality toggle + custom content
-        var trayContainer = new StackPanel {
-            Orientation = Orientation.Vertical
-        };
+    public void SetTrayContent(UIElement content, double maxHeight = DefaultTrayMaxHeight) {
+        if (content == null) return;
 
-        // Add ephemerality toggle at the top
-        var ephemeralToggle = new Wpf.Ui.Controls.ToggleSwitch {
-            Content = "Keep Open (Pin Window)",
-            IsChecked = !this._parentWindow?.EphemeralEnabled ?? false,
-            ToolTip = "When enabled, the palette stays open when clicking outside. When disabled, the palette closes automatically."
-        };
-
-        ephemeralToggle.Checked += (_, _) => {
-            if (this._parentWindow != null)
-                this._parentWindow.EphemeralEnabled = false;
-        };
-
-        ephemeralToggle.Unchecked += (_, _) => {
-            if (this._parentWindow != null)
-                this._parentWindow.EphemeralEnabled = true;
-        };
-
-        _ = trayContainer.Children.Add(ephemeralToggle);
-
-        // Add separator if custom content is provided
-        if (content != null) {
-            var separator = new Wpf.Ui.Controls.CardControl {
-                Margin = new Thickness(0, 8, 0, 8),
-                Height = 1,
-                Background = (SolidColorBrush)Application.Current.Resources["ControlStrokeColorDefaultBrush"]
-            };
-            _ = trayContainer.Children.Add(separator);
-            _ = trayContainer.Children.Add(content);
-        }
-
-        this.TrayContent.Content = trayContainer;
+        this.TrayContent.Content = content;
         this.TrayToggleButton.Visibility = Visibility.Visible;
         this._trayMaxHeight = maxHeight;
     }
@@ -424,31 +392,62 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     private void TrayToggleButton_Click(object sender, RoutedEventArgs e) => this.ToggleTray();
 
     /// <summary>
+    ///     Handles pin button clicks to toggle window pinning (ephemeral behavior).
+    /// </summary>
+    private void PinButton_Click(object sender, RoutedEventArgs e) {
+        if (this._parentWindow == null) return;
+
+        // Toggle ephemeral mode
+        this._parentWindow.EphemeralEnabled = !this._parentWindow.EphemeralEnabled;
+        this.UpdatePinButtonState();
+    }
+
+    /// <summary>
+    ///     Updates the pin button icon and color based on current pin state.
+    /// </summary>
+    private void UpdatePinButtonState() {
+        if (this._parentWindow == null) return;
+
+        var isPinned = !this._parentWindow.EphemeralEnabled;
+        var cornflowerBlue = new SolidColorBrush(System.Windows.Media.Color.FromRgb(100, 149, 237));
+        var lightBlue = new SolidColorBrush(System.Windows.Media.Color.FromRgb(126, 179, 255));
+        var defaultColor = (SolidColorBrush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+
+        if (isPinned) {
+            // Pinned state: filled pin icon in cornflower blue
+            this.PinIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.Pin24;
+            this.PinIcon.Filled = true;
+            this.PinIcon.Foreground = cornflowerBlue;
+            this.PinButton.ToolTip = "Unpin window (close when clicking outside)";
+
+            // Hover effect
+            this.PinButton.MouseEnter += (_, _) => this.PinIcon.Foreground = lightBlue;
+            this.PinButton.MouseLeave += (_, _) => this.PinIcon.Foreground = cornflowerBlue;
+        } else {
+            // Unpinned state: outline pin icon in default color
+            this.PinIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.Pin24;
+            this.PinIcon.Filled = false;
+            this.PinIcon.Foreground = defaultColor;
+            this.PinButton.ToolTip = "Pin window (keep open when clicking outside)";
+
+            // Clear hover handlers and use default hover
+            this.PinButton.MouseEnter -= (_, _) => this.PinIcon.Foreground = lightBlue;
+            this.PinButton.MouseLeave -= (_, _) => this.PinIcon.Foreground = cornflowerBlue;
+        }
+    }
+
+    /// <summary>
     ///     Sets the parent window reference for coordinating window size with sidebar expansion.
     /// </summary>
     public void SetParentWindow(EphemeralWindow window) {
         this._parentWindow = window;
 
+        // Initialize pin button state based on window's ephemeral setting
+        this.UpdatePinButtonState();
+
         // Propagate to nested palette in sidebar if present
         if (this.SidebarContent.Content is Palette nestedPalette)
             nestedPalette.SetParentWindow(window);
-    }
-
-    /// <summary>
-    ///     Shows the next palette content in the sidebar.
-    /// </summary>
-    private void ShowNextPaletteInSidebar<TItem>(PaletteAction<TItem> action, TItem item)
-        where TItem : class, IPaletteListItem {
-        var nextContent = action.NextPalette(item);
-
-        // Propagate parent window to nested palettes so they can defer execution
-        if (nextContent is Palette nestedPalette && this._parentWindow != null)
-            nestedPalette.SetParentWindow(this._parentWindow);
-
-        this.SidebarContent.Content = nextContent;
-
-        var width = this._currentSidebar?.Width ?? new GridLength(DefaultSidebarWidth);
-        this.ExpandSidebar(width);
     }
 
     private async Task<bool> ExecuteItemTyped<TItem>(
@@ -462,12 +461,6 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         if (action == null) return false;
 
         viewModel.RecordUsage();
-
-        // NextPalette actions show content in sidebar
-        if (ActionBinding<TItem>.IsNextPaletteAction(action)) {
-            this.ShowNextPaletteInSidebar(action, selectedItem);
-            return true;
-        }
 
         // If KeepOpenAfterAction is true, execute immediately and keep palette open
         if (this._keepOpenAfterAction) {
@@ -655,6 +648,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         if (tabNames == null || tabNames.Count == 0) return;
 
         this.TabBarBorder.Visibility = Visibility.Visible;
+        this.TabSwitchHint.Visibility = Visibility.Visible;
         this._tabButtons.Clear();
 
         for (var i = 0; i < tabNames.Count; i++) {

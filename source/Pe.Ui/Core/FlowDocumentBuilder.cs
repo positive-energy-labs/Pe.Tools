@@ -1,4 +1,4 @@
-using System.Windows;
+ using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Media;
 
@@ -18,7 +18,7 @@ public static class FlowDocumentBuilder {
             TextAlignment = TextAlignment.Left,
             FontFamily = Theme.FontFamily,
             FontSize = 13,
-            LineHeight = 20
+            LineHeight = 1 // Minimal line height for compact display
         };
         doc.SetResourceReference(FlowDocument.ForegroundProperty, "TextFillColorSecondaryBrush");
         return doc;
@@ -30,7 +30,8 @@ public static class FlowDocumentBuilder {
     public static FlowDocument AddHeader(this FlowDocument doc, string title, double? fontSize = null) {
         var size = fontSize ?? 14;
         var para = new Paragraph(new Run(title) { FontWeight = FontWeights.Bold, FontSize = size }) {
-            Margin = new Thickness(0, 0, 0, 8)
+            Margin = new Thickness(0, 0, 0, 6), // Reduced from 8
+            LineHeight = 1
         };
         doc.Blocks.Add(para);
         return doc;
@@ -41,7 +42,8 @@ public static class FlowDocumentBuilder {
     /// </summary>
     public static FlowDocument AddSectionHeader(this FlowDocument doc, string title) {
         var header = new Paragraph(new Run(title) { FontWeight = FontWeights.SemiBold }) {
-            Margin = new Thickness(0, 8, 0, 4)
+            Margin = new Thickness(0, 6, 0, 2), // Reduced from (0, 8, 0, 4)
+            LineHeight = 1
         };
         doc.Blocks.Add(header);
         return doc;
@@ -63,7 +65,8 @@ public static class FlowDocumentBuilder {
         var para = new Paragraph();
         para.Inlines.Add(new Run($"{key}: ") { FontWeight = FontWeights.SemiBold });
         para.Inlines.Add(new Run(value));
-        para.Margin = new Thickness(0, 0, 0, 2);
+        para.Margin = new Thickness(0, 0, 0, 0); // Removed bottom margin
+        para.LineHeight = 1; // Minimal line height
         doc.Blocks.Add(para);
         return doc;
     }
@@ -196,7 +199,8 @@ public static class FlowDocumentBuilder {
         var para = new Paragraph();
         var marker = enabled ? "✓ " : "✗ ";
         para.Inlines.Add(new Run(marker) {
-            FontWeight = FontWeights.Bold, Foreground = enabled ? Brushes.Green : Brushes.Red
+            FontWeight = FontWeights.Bold,
+            Foreground = enabled ? Brushes.Green : Brushes.Red
         });
         para.Inlines.Add(new Run(label));
         para.Margin = new Thickness(0, 0, 0, 2);
@@ -241,7 +245,8 @@ public static class FlowDocumentBuilder {
 
         foreach (var column in columnList) {
             var cell = new TableCell(new Paragraph(new Run(column) {
-                FontWeight = FontWeights.SemiBold, FontSize = size
+                FontWeight = FontWeights.SemiBold,
+                FontSize = size
             }) { Margin = new Thickness(4, 2, 4, 2) }) { Padding = new Thickness(0) };
             headerRow.Cells.Add(cell);
         }

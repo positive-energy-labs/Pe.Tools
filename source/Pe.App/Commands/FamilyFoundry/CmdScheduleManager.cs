@@ -52,8 +52,19 @@ public class CmdScheduleManager : IExternalCommand {
             allItems.AddRange(createItems.Select(i => new SchedulePaletteItemWrapper(i, ScheduleTabType.Create)));
             allItems.AddRange(batchItems.Select(i => new SchedulePaletteItemWrapper(i, ScheduleTabType.Batch)));
 
-            // Create preview panel
-            var previewPanel = new SchedulePreviewPanel();
+            // Create preview panel with injected preview building logic
+            var previewPanel = new SchedulePreviewPanel(item => {
+                if (item == null) return null;
+                if (item.TabType == ScheduleTabType.Create) {
+                    this.BuildPreviewData(item.GetCreateItem(), context);
+                    return context.PreviewData;
+                }
+                if (item.TabType == ScheduleTabType.Batch) {
+                    var batchItem = item.GetBatchItem();
+                    return batchItem != null ? this.BuildBatchPreview(batchItem) : null;
+                }
+                return null;
+            });
 
             // Define actions for the palette
             var actions = new List<PaletteAction<ISchedulePaletteItem>> {
@@ -92,22 +103,7 @@ public class CmdScheduleManager : IExternalCommand {
                         }
                     ],
                     DefaultTabIndex = 0,
-                    Sidebar = new PaletteSidebar { Content = previewPanel },
-                    OnSelectionChangedDebounced = item => {
-                        if (item == null) return;
-                        if (item.TabType == ScheduleTabType.Create) {
-                            this.BuildPreviewData(item.GetCreateItem(), context);
-                            if (context.PreviewData != null)
-                                previewPanel.UpdatePreview(context.PreviewData);
-                        } else if (item.TabType == ScheduleTabType.Batch) {
-                            var batchItem = item.GetBatchItem();
-                            if (batchItem != null) {
-                                var previewData = this.BuildBatchPreview(batchItem);
-                                previewPanel.UpdatePreview(previewData);
-                            } else
-                                previewPanel.UpdatePreview(null);
-                        }
-                    }
+                    SidebarPanel = previewPanel
                 });
             window.Show();
 

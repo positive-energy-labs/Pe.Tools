@@ -2,10 +2,12 @@ using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.CommandPalette;
 using Pe.Extensions.FamParameter;
 using Pe.Ui.Core;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Button = Wpf.Ui.Controls.Button;
 using Grid = System.Windows.Controls.Grid;
 using TextBlock = Wpf.Ui.Controls.TextBlock;
@@ -17,13 +19,15 @@ namespace Pe.App.Commands.Palette.FamilyPalette;
 /// <summary>
 ///     Interactive sidebar panel for family elements that displays element details
 ///     and associated elements with inline action buttons.
+///     Implements <see cref="ISidebarPanel{TItem}" /> for auto-wiring with <see cref="FamilyElementItem" />.
+///     Uses async loading pattern to keep the UI responsive during navigation.
 /// </summary>
-public class FamilyElementPreviewPanel : UserControl {
+public class FamilyElementPreviewPanel : UserControl, ISidebarPanel<FamilyElementItem> {
     private readonly UIDocument _uidoc;
     private readonly WpfUiRichTextBox _detailsBox;
     private readonly StackPanel _associatedElementsList;
     private readonly Border _associatedContainer;
-    private FamilyElementItem _currentItem;
+    private FamilyElementItem? _currentItem;
 
     public FamilyElementPreviewPanel(UIDocument uidoc) {
         this._uidoc = uidoc;
@@ -68,28 +72,56 @@ public class FamilyElementPreviewPanel : UserControl {
         this._associatedContainer.Child = this._associatedElementsList;
         _ = mainStack.Children.Add(this._associatedContainer);
 
-        this.Content = mainStack;
+        base.Content = mainStack;
     }
 
+    #region ISidebarPanel Implementation
+
+    /// <inheritdoc />
+    UIElement ISidebarPanel<FamilyElementItem>.Content => this;
+
+    /// <inheritdoc />
     /// <summary>
-    ///     Updates the preview panel with element information and associated elements.
+    ///     Called immediately on selection change (before debounce).
+    ///     Clears stale content so the user doesn't see old data during navigation.
     /// </summary>
-    public void UpdatePreview(FamilyElementItem item) {
+    public void Clear() {
+        this._currentItem = null;
+        this._detailsBox.Document = FlowDocumentBuilder.Create();
+        this._associatedElementsList.Children.Clear();
+        this._associatedContainer.Visibility = Visibility.Collapsed;
+    }
+
+    /// <inheritdoc />
+    /// <summary>
+    ///     Called after debounce with cancellation support.
+    ///     Uses dispatcher priority to keep UI responsive.
+    /// </summary>
+    public void Update(FamilyElementItem? item, CancellationToken ct) {
         this._currentItem = item;
 
         if (item == null) {
-            this._detailsBox.Document = FlowDocumentBuilder.Create();
-            this._associatedElementsList.Children.Clear();
-            this._associatedContainer.Visibility = Visibility.Collapsed;
+            this.Clear();
             return;
         }
 
-        // Build element details document
-        this._detailsBox.Document = this.BuildElementDetails(item);
+        if (ct.IsCancellationRequested) return;
 
-        // Build associated elements list
-        this.RefreshAssociatedElements(item);
+        // Schedule at lower priority to keep UI responsive
+        _ = this.Dispatcher.BeginInvoke(DispatcherPriority.Background, () => {
+            if (ct.IsCancellationRequested) return;
+
+            // Build element details document
+            this._detailsBox.Document = this.BuildElementDetails(item);
+
+            if (ct.IsCancellationRequested) return;
+
+            // Build associated elements list
+            this.RefreshAssociatedElements(item);
+        });
     }
+
+    #endregion
 
     private FlowDocument BuildElementDetails(FamilyElementItem item) {
         var doc = FlowDocumentBuilder.Create()
@@ -115,10 +147,9 @@ public class FamilyElementPreviewPanel : UserControl {
         case FamilyElementType.Dimension:
             _ = doc.AddKeyValue("Element ID", item.Dimension!.Id.ToString());
             _ = doc.AddKeyValue("Type", item.Dimension.DimensionType?.Name ?? "Unknown");
-            if (item.Dimension.Value.HasValue)
-                _ = doc.AddKeyValue("Value", $"{item.Dimension.Value.Value:F4}");
-            else
-                _ = doc.AddKeyValue("Segments", item.Dimension.NumberOfSegments.ToString());
+            _ = item.Dimension.Value.HasValue
+                ? doc.AddKeyValue("Value", $"{item.Dimension.Value.Value:F4}")
+                : doc.AddKeyValue("Segments", item.Dimension.NumberOfSegments.ToString());
             break;
 
         case FamilyElementType.ReferencePlane:
