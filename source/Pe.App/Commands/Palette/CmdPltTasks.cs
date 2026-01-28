@@ -66,10 +66,13 @@ public static class TaskPaletteService {
         // Use PaletteFactory for consistency
         return PaletteFactory.Create("Task Palette", taskItems, actions,
             new PaletteOptions<TaskItem> {
-                Storage = persistence,
-                PersistenceKey = item => item.Id,
+                Persistence = (persistence, item => item.Id),
                 SearchConfig = SearchConfig.PrimaryAndSecondary(),
-                FilterKeySelector = item => item.Task.Category ?? string.Empty
+                Tabs = [new TabDefinition<TaskItem> {
+                    Name = "All",
+                    Filter = null,
+                    FilterKeySelector = item => item.Task.Category ?? string.Empty
+                }]
             });
     }
 }

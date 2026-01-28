@@ -118,10 +118,13 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
             profiles,
             paletteActions,
             new PaletteOptions<ProfileListItem> {
-                Storage = storage,
-                PersistenceKey = item => item.TextPrimary,
+                Persistence = (storage, item => item.TextPrimary),
                 SearchConfig = SearchConfig.PrimaryAndSecondary(),
-                FilterKeySelector = item => string.IsNullOrEmpty(item.ExtendsValue) ? "Base" : "Extended",
+                Tabs = [new TabDefinition<ProfileListItem> {
+                    Name = "All",
+                    Filter = null,
+                    FilterKeySelector = item => string.IsNullOrEmpty(item.ExtendsValue) ? "Base" : "Extended"
+                }],
                 SidebarPanel = previewPanel
             });
 

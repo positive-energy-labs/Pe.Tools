@@ -135,8 +135,7 @@ public abstract class FamilyPaletteBase : IExternalCommand {
 
             var window = PaletteFactory.Create("Family Palette", items, actions,
                 new PaletteOptions<UnifiedFamilyItem> {
-                    Storage = new Storage(nameof(CmdPltFamilies)),
-                    PersistenceKey = item => item.PersistenceKey,
+                    Persistence = (new Storage(nameof(CmdPltFamilies)), item => item.PersistenceKey),
                     SearchConfig = SearchConfig.PrimaryAndSecondary(),
                     Tabs = [
                         new TabDefinition<UnifiedFamilyItem> {

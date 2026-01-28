@@ -88,8 +88,7 @@ public class CmdScheduleManager : IExternalCommand {
             // Create the palette with tabs
             var window = PaletteFactory.Create("Schedule Manager", allItems, actions,
                 new PaletteOptions<ISchedulePaletteItem> {
-                    Storage = storage,
-                    PersistenceKey = item => item.TextPrimary,
+                    Persistence = (storage, item => item.TextPrimary),
                     Tabs = [
                         new TabDefinition<ISchedulePaletteItem> {
                             Name = "Create",

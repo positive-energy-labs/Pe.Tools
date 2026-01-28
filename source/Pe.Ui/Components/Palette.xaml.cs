@@ -74,7 +74,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     private bool _isCtrlPressed;
     private bool _isPanelExpanded;
     private bool _isTrayExpanded;
-    private bool _keepOpenAfterAction;
+    private readonly bool _keepOpenAfterAction = false;
     private Action _onCtrlReleased;
     private EphemeralWindow _parentWindow;
     private bool _sidebarAutoExpanded;
@@ -114,17 +114,14 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         IEnumerable<PaletteAction<TItem>> actions,
         CustomKeyBindings customKeyBindings = null,
         Action onCtrlReleased = null,
-        PaletteSidebar paletteSidebar = null,
-        bool keepOpenAfterAction = false,
-        List<string> tabNames = null
+        PaletteSidebar paletteSidebar = null
     ) where TItem : class, IPaletteListItem {
         this.DataContext = viewModel;
         this._customKeyBindings = customKeyBindings;
-        this._keepOpenAfterAction = keepOpenAfterAction;
 
         // Initialize tabs if provided
-        if (tabNames is { Count: > 0 })
-            this.InitializeTabs(viewModel, tabNames);
+        if (viewModel.TabCount > 1)
+            this.InitializeTabs(viewModel);
 
         // Create FilterBox if filtering is enabled
         var hasFiltering = viewModel.AvailableFilterValues != null;
@@ -643,18 +640,18 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     /// <summary>
     ///     Initializes tab bar buttons and wires up selection.
     /// </summary>
-    private void InitializeTabs<TItem>(PaletteViewModel<TItem> viewModel, List<string> tabNames)
+    private void InitializeTabs<TItem>(PaletteViewModel<TItem> viewModel)
         where TItem : class, IPaletteListItem {
-        if (tabNames == null || tabNames.Count == 0) return;
+        if (viewModel.TabCount == 0) return;
 
         this.TabBarBorder.Visibility = Visibility.Visible;
         this.TabSwitchHint.Visibility = Visibility.Visible;
         this._tabButtons.Clear();
 
-        for (var i = 0; i < tabNames.Count; i++) {
+        for (var i = 0; i < viewModel.TabCount; i++) {
             var tabIndex = i; // Capture for closure
             var button = new Button {
-                Content = tabNames[i],
+                Content = viewModel.Tabs?[i].Name ?? $"Tab {i + 1}",
                 Margin = new Thickness(4, 0, 0, 0), // Left margin for spacing between tabs
                 Padding = new Thickness(8, 4, 8, 4),
                 Tag = tabIndex,

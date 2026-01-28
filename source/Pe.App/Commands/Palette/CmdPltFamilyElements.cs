@@ -82,10 +82,7 @@ public class CmdPltFamilyElements : IExternalCommand {
 
             var window = PaletteFactory.Create("Family Elements", items, actions,
                 new PaletteOptions<FamilyElementItem> {
-                    Storage = new Storage(nameof(CmdPltFamilyElements)),
-                    PersistenceKey = item => item.PersistenceKey,
                     SearchConfig = SearchConfig.PrimaryAndSecondary(),
-                    FilterKeySelector = item => item.TextPill,
                     Tabs = [
                         new TabDefinition<FamilyElementItem> {
                             Name = "All",

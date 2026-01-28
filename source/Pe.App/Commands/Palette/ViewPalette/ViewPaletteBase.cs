@@ -64,8 +64,7 @@ public abstract class ViewPaletteBase : IExternalCommand {
 
             var window = PaletteFactory.Create("View Palette", items, actions,
                 new PaletteOptions<UnifiedViewItem> {
-                    Storage = new Storage(nameof(CmdPltViews)),
-                    PersistenceKey = item => item.View.Id.ToString(),
+                    Persistence = (new Storage(nameof(CmdPltViews)), item => item.View.Id.ToString()),
                     Tabs = [
                         new TabDefinition<UnifiedViewItem> { Name = "All", Filter = null, FilterKeySelector = null },
                         new TabDefinition<UnifiedViewItem> {

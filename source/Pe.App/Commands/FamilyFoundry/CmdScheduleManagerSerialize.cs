@@ -35,7 +35,7 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
                 .Where(s => !s.Name.Contains("<Revision Schedule>"))
                 .OrderBy(s => s.Name)
                 .Select(s => new ScheduleSerializePaletteItem(s))
-                .ToList<IPaletteListItem>();
+                .ToList();
 
             // Create preview panel with injected preview building logic
             var previewPanel = new ScheduleSerializePreviewPanel(item => {
@@ -45,7 +45,7 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
             });
 
             // Define action
-            var actions = new List<PaletteAction<IPaletteListItem>> {
+            var actions = new List<PaletteAction<ScheduleSerializePaletteItem>> {
                 new() {
                     Name = "Serialize",
                     Execute = item => this.HandleSerialize(storage, item),
@@ -55,10 +55,13 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
 
             // Create the palette
             var window = PaletteFactory.Create("Schedule Serializer", serializeItems, actions,
-                new PaletteOptions<IPaletteListItem> {
-                    Storage = storage,
-                    PersistenceKey = item => item.TextPrimary,
-                    FilterKeySelector = i => ((ScheduleSerializePaletteItem)i).TextPill,
+                new PaletteOptions<ScheduleSerializePaletteItem> {
+                    Persistence = (storage, item => item.TextPrimary),
+                    Tabs = [new TabDefinition<ScheduleSerializePaletteItem> {
+                        Name = "All",
+                        Filter = null,
+                        FilterKeySelector = i => i.TextPill ?? string.Empty
+                    }],
                     SidebarPanel = previewPanel
                 });
             window.Show();

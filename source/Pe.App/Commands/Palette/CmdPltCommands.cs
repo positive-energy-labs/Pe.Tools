@@ -63,8 +63,7 @@ public static class CommandPaletteService {
         // Use PaletteFactory with SidebarPanel for auto-wiring
         return PaletteFactory.Create("Command Palette", selectableItems, actions,
             new PaletteOptions<PostableCommandItem> {
-                Storage = persistence,
-                PersistenceKey = item => item.Command.Value,
+                Persistence = (persistence, item => item.Command.Value),
                 SearchConfig = SearchConfig.PrimaryAndSecondary(),
                 SidebarPanel = shortcutEditor
             });

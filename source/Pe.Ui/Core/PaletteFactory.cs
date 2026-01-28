@@ -25,9 +25,19 @@ public class TabDefinition<TItem> where TItem : class, IPaletteListItem {
     public Func<TItem, bool>? Filter { get; init; }
 
     /// <summary>
-    ///     Filter key selector for this tab's dropdown filter.
-    ///     Null means no filtering dropdown is shown for this tab.
+    ///     Function that extracts a key from each item, enabling dropdown filtering by those keys.
+    ///     Default: null (filtering disabled)
     /// </summary>
+    /// <example>
+    ///     <code>
+    ///     // Filter by view type:
+    ///     FilterKeySelector = item => item.View.ViewType.ToString()
+    ///     
+    ///     // Filter by category:
+    ///     FilterKeySelector = item => item.TextPill
+    ///     </code>
+    /// </example>
+
     public Func<TItem, string>? FilterKeySelector { get; init; }
 }
 
@@ -40,10 +50,13 @@ public class TabDefinition<TItem> where TItem : class, IPaletteListItem {
 ///     <code>
 ///     var window = PaletteFactory.Create("Schedule Palette", items, actions,
 ///         new PaletteOptions&lt;SchedulePaletteItem&gt; {
-///             Storage = new Storage(nameof(CmdPltSchedules)),
-///             PersistenceKey = item => item.Schedule.Id.ToString(),
+///             Persistence = (storage, item => item.Schedule.Id.ToString()),
 ///             SearchConfig = SearchConfig.PrimaryAndSecondary(),
-///             FilterKeySelector = item => item.TextPill
+///             Tabs = [new TabDefinition<SchedulePaletteItem> {
+///                 Name = "All",
+///                 Filter = null,
+///                 FilterKeySelector = item => item.TextPill
+///             }]
 ///         });
 ///     window.Show();
 ///     </code>
@@ -69,31 +82,27 @@ public static class PaletteFactory {
         string title,
         IEnumerable<TItem> items,
         List<PaletteAction<TItem>> actions,
-        PaletteOptions<TItem> options = null
+        PaletteOptions<TItem> options
     ) where TItem : class, IPaletteListItem {
         options ??= new PaletteOptions<TItem>();
 
         // Create search service - with or without persistence based on configuration
-        var searchService = options.Storage != null && options.PersistenceKey != null
-            ? new SearchFilterService<TItem>(options.Storage, options.PersistenceKey, options.SearchConfig)
+        var searchService = options.Persistence != null
+            ? new SearchFilterService<TItem>(options.Persistence.Value.Storage, options.Persistence.Value.PersistenceKey, options.SearchConfig)
             : new SearchFilterService<TItem>(options.SearchConfig);
 
-        // Extract tab filters and per-tab filter key selectors for ViewModel
-        List<Func<TItem, bool>> tabFilters = null;
-        List<Func<TItem, string>> tabFilterKeySelectors = null;
-        if (options.Tabs is { Count: > 0 }) {
-            tabFilters = options.Tabs.Select(t => t.Filter).ToList();
-            tabFilterKeySelectors = options.Tabs.Select(t => t.FilterKeySelector).ToList();
-        }
+        // Normalize tab config for ViewModel (single-tab config for non-tab filtering)
+        List<TabDefinition<TItem>>? viewModelTabs = null;
+        if (options.Tabs is { Count: 0 })
+            throw new InvalidOperationException("Tabs must be provided");
+        if (options.Tabs is { Count: >= 1 })
+            viewModelTabs = options.Tabs;
 
         // Create view model with optional debounce delay and tabs
         var viewModel = new PaletteViewModel<TItem>(
             items,
             searchService,
-            options.FilterKeySelector,
-            options.SelectionDebounceMs,
-            tabFilters,
-            tabFilterKeySelectors,
+            viewModelTabs,
             options.DefaultTabIndex
         );
         options.ViewModelMutator?.Invoke(viewModel);
@@ -163,13 +172,7 @@ public static class PaletteFactory {
             };
         }
 
-        // Extract tab names for UI
-        List<string> tabNames = null;
-        if (options.Tabs is { Count: > 0 })
-            tabNames = options.Tabs.Select(t => t.Name).ToList();
-
-        palette.Initialize(viewModel, actions, options.CustomKeyBindings, onCtrlReleased, sidebar,
-            options.KeepOpenAfterAction, tabNames);
+        palette.Initialize(viewModel, actions, options.CustomKeyBindings, onCtrlReleased, sidebar);
 
         var window = new EphemeralWindow(palette, title);
 
@@ -218,23 +221,15 @@ public class PaletteTray {
 /// <typeparam name="TItem">The palette item type</typeparam>
 public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     /// <summary>
-    ///     Storage instance for persisting usage data. Required for persistence to work.
+    ///     For persisting usage data. Required for persistence to work.
     ///     Default: null (no persistence)
     /// </summary>
+    /// <param name="Storage">Storage instance for persisting usage data</param>
+    /// <param name="PersistenceKey">Function that returns a unique key for each item, used for persistence</param>
     /// <example>
     ///     <code>Storage = new Storage(nameof(MyCmdClass))</code>
     /// </example>
-    public Storage? Storage { get; init; }
-
-    /// <summary>
-    ///     Function that returns a unique key for each item, used for persistence.
-    ///     Required (along with Storage) for persistence to work.
-    ///     Default: null (no persistence)
-    /// </summary>
-    /// <example>
-    ///     <code>PersistenceKey = item => item.Element.Id.ToString()</code>
-    /// </example>
-    public Func<TItem, string>? PersistenceKey { get; init; }
+    public (Storage Storage, Func<TItem, string> PersistenceKey)? Persistence { get; init; }
 
     /// <summary>
     ///     Search configuration controlling which fields to search and scoring weights.
@@ -251,21 +246,6 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     ///     </code>
     /// </example>
     public SearchConfig SearchConfig { get; init; } = SearchConfig.Default();
-
-    /// <summary>
-    ///     Function that extracts a filter category from each item, enabling dropdown filtering.
-    ///     Default: null (filtering disabled)
-    /// </summary>
-    /// <example>
-    ///     <code>
-    ///     // Filter by view type:
-    ///     FilterKeySelector = item => item.View.ViewType.ToString()
-    ///     
-    ///     // Filter by category:
-    ///     FilterKeySelector = item => item.TextPill
-    ///     </code>
-    /// </example>
-    public Func<TItem, string>? FilterKeySelector { get; init; }
 
     /// <summary>
     ///     Custom keyboard bindings for navigation.
@@ -327,12 +307,6 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     public Action<TItem?>? OnSelectionChanged { get; init; }
 
     /// <summary>
-    ///     Debounce delay in milliseconds for sidebar panel updates.
-    ///     Default: 300ms
-    /// </summary>
-    public int SelectionDebounceMs { get; init; } = 300;
-
-    /// <summary>
     ///     Sidebar panel implementing <see cref="ISidebarPanel{TItem}" />.
     ///     Auto-wired to debounced selection changes with automatic Clear() and Update() calls.
     ///     Sidebars appear to the right of the main list, start collapsed, and auto-expand on first selection.
@@ -368,20 +342,6 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     ///     </code>
     /// </example>
     public PaletteTray? Tray { get; init; }
-
-    /// <summary>
-    ///     When true, prevents the palette from closing after action execution.
-    ///     Action executes immediately (not deferred) and the palette stays open.
-    ///     Useful for multi-item workflows like placing multiple families.
-    ///     Default: false (palette closes after action, execution is deferred)
-    /// </summary>
-    /// <example>
-    ///     <code>
-    ///     // For multi-placement workflows:
-    ///     KeepOpenAfterAction = true
-    ///     </code>
-    /// </example>
-    public bool KeepOpenAfterAction { get; init; } = false;
 
     /// <summary>
     ///     Tab definitions for tabbed palettes. If null or empty, no tab bar is shown.

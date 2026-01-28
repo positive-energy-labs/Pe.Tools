@@ -38,11 +38,9 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     private readonly List<TItem> _allItems;
     private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _debounceTimer;
-    private readonly Func<TItem, string> _filterKeySelector;
     private readonly SearchFilterService<TItem> _searchService;
     private readonly DispatcherTimer _selectionDebounceTimer;
-    private readonly List<Func<TItem, string>> _tabFilterKeySelectors;
-    private readonly List<Func<TItem, bool>> _tabFilters;
+    public readonly IReadOnlyList<TabDefinition<TItem>>? Tabs;
     private CancellationTokenSource? _filterCts;
     private int _filterSequence;
 
@@ -62,23 +60,20 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
 
     private int _selectedTabIndex;
 
+    private const int SelectionDebounceMs = 300;
+
     public PaletteViewModel(
         IEnumerable<TItem> items,
         SearchFilterService<TItem> searchService,
-        Func<TItem, string>? filterKeySelector = null,
-        int selectionDebounceMs = 300,
-        List<Func<TItem, bool>>? tabFilters = null,
-        List<Func<TItem, string>>? tabFilterKeySelectors = null,
+        IReadOnlyList<TabDefinition<TItem>>? tabs = null,
         int defaultTabIndex = 0
     ) {
         this._allItems = items.ToList();
         this._dispatcher = Dispatcher.CurrentDispatcher;
         this._searchService = searchService;
-        this._filterKeySelector = filterKeySelector;
-        this._tabFilters = tabFilters;
-        this._tabFilterKeySelectors = tabFilterKeySelectors;
-        this._selectedTabIndex =
-            tabFilters is { Count: > 0 } ? Math.Clamp(defaultTabIndex, 0, tabFilters.Count - 1) : 0;
+        this.Tabs = tabs;
+        var tabCount = tabs?.Count ?? 0;
+        this._selectedTabIndex = tabCount > 1 ? Math.Clamp(defaultTabIndex, 0, tabCount - 1) : 0;
 
         // Initialize debounce timer for search (100ms delay)
         this._debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
@@ -89,7 +84,7 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
 
         // Initialize debounce timer for selection changes (configurable, default 300ms)
         this._selectionDebounceTimer =
-            new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(selectionDebounceMs) };
+            new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(SelectionDebounceMs) };
         this._selectionDebounceTimer.Tick += (_, _) => {
             this._selectionDebounceTimer.Stop();
             this.SelectionChangedDebounced?.Invoke(this, EventArgs.Empty);
@@ -103,9 +98,8 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
         this.FilteredItems = new ObservableCollection<TItem>();
 
         // Initialize AvailableFilterValues collection (will be populated per-tab or globally)
-        var hasGlobalFilter = this._filterKeySelector != null;
-        var hasPerTabFilters = this._tabFilterKeySelectors?.Any(f => f != null) == true;
-        if (hasGlobalFilter || hasPerTabFilters)
+        var hasAnyFilterKeySelectors = this.Tabs?.Any(t => t.FilterKeySelector != null) == true;
+        if (hasAnyFilterKeySelectors)
             this.AvailableFilterValues = new ObservableCollection<string>();
 
         // Populate initial filter values
@@ -124,7 +118,7 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     public ObservableCollection<string> AvailableFilterValues { get; }
 
     /// <summary> Whether filtering is enabled for this palette </summary>
-    public bool IsFilteringEnabled => this._filterKeySelector != null;
+    public bool IsFilteringEnabled => this.CurrentTabHasFiltering;
 
     /// <summary> Currently selected filter value </summary>
     public string SelectedFilterValue {
@@ -136,15 +130,13 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     }
 
     /// <summary> Whether tabs are enabled for this palette </summary>
-    public bool HasTabs => this._tabFilters is { Count: > 0 };
+    public bool HasTabs => this.Tabs is { Count: > 1 };
 
     /// <summary> Number of tabs (0 if no tabs) </summary>
-    public int TabCount => this._tabFilters?.Count ?? 0;
+    public int TabCount => this.HasTabs ? this.Tabs?.Count ?? 0 : 0;
 
     /// <summary> Whether the current tab has filtering enabled </summary>
-    public bool CurrentTabHasFiltering =>
-        (this.HasTabs && this._tabFilterKeySelectors?[this._selectedTabIndex] != null) ||
-        (!this.HasTabs && this._filterKeySelector != null);
+    public bool CurrentTabHasFiltering => this.GetActiveTab(this._selectedTabIndex)?.FilterKeySelector != null;
 
     /// <summary> Currently selected tab index </summary>
     public int SelectedTabIndex {
@@ -208,22 +200,16 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
 
         this.AvailableFilterValues.Clear();
 
-        // Determine which filter key selector to use
-        Func<TItem, string> filterKeySelector = null;
-        if (this.HasTabs && this._tabFilterKeySelectors != null)
-            filterKeySelector = this._tabFilterKeySelectors[this._selectedTabIndex];
-        else if (!this.HasTabs)
-            filterKeySelector = this._filterKeySelector;
+        var activeTab = this.GetActiveTab(this._selectedTabIndex);
+        var filterKeySelector = activeTab?.FilterKeySelector;
 
         if (filterKeySelector == null) return;
 
         // Get items that pass current tab filter
         IEnumerable<TItem> tabItems = this._allItems;
-        if (this.HasTabs) {
-            var tabFilter = this._tabFilters?[this._selectedTabIndex];
-            if (tabFilter != null)
-                tabItems = tabItems.Where(tabFilter);
-        }
+        var tabFilter = activeTab?.Filter;
+        if (tabFilter != null)
+            tabItems = tabItems.Where(tabFilter);
 
         // Extract unique filter values
         var values = tabItems
@@ -234,6 +220,19 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
 
         foreach (var value in values)
             this.AvailableFilterValues.Add(value);
+    }
+
+    private TabDefinition<TItem>? GetActiveTab(int selectedIndex) =>
+        GetActiveTab(this.Tabs, selectedIndex);
+
+    private static TabDefinition<TItem>? GetActiveTab(
+        IReadOnlyList<TabDefinition<TItem>>? tabs,
+        int selectedIndex
+    ) {
+        if (tabs is not { Count: > 0 }) return null;
+
+        var index = Math.Clamp(selectedIndex, 0, tabs.Count - 1);
+        return tabs[index];
     }
 
     /// <summary>
@@ -248,34 +247,24 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
         var sequence = Interlocked.Increment(ref this._filterSequence);
 
         var selectedTabIndex = this._selectedTabIndex;
-        var hasTabs = this.HasTabs;
         var selectedFilterValue = this.SelectedFilterValue;
         var searchText = this.SearchText;
         var allItems = this._allItems;
-        var tabFilters = this._tabFilters;
-        var tabFilterKeySelectors = this._tabFilterKeySelectors;
-        var filterKeySelector = this._filterKeySelector;
+        var tabs = this.Tabs;
 
         _ = Task.Run(() => {
             if (token.IsCancellationRequested) return;
 
             IEnumerable<TItem> items = allItems;
 
-            // Stage 1: Tab filter (if tabs are enabled and current tab has a filter)
-            if (hasTabs && tabFilters is { Count: > 0 } &&
-                selectedTabIndex >= 0 && selectedTabIndex < tabFilters.Count) {
-                var tabFilter = tabFilters[selectedTabIndex];
-                if (tabFilter != null)
-                    items = items.Where(tabFilter);
-            }
+            // Stage 1: Tab filter (if current tab has a filter)
+            var activeTab = GetActiveTab(tabs, selectedTabIndex);
+            var tabFilter = activeTab?.Filter;
+            if (tabFilter != null)
+                items = items.Where(tabFilter);
 
-            // Stage 2: Category filter (use current tab's filter key selector or global fallback)
-            Func<TItem, string> currentFilterKeySelector = null;
-            if (hasTabs && tabFilterKeySelectors is { Count: > 0 } &&
-                selectedTabIndex >= 0 && selectedTabIndex < tabFilterKeySelectors.Count)
-                currentFilterKeySelector = tabFilterKeySelectors[selectedTabIndex];
-            else if (!hasTabs)
-                currentFilterKeySelector = filterKeySelector;
+            // Stage 2: Category filter (use current tab's filter key selector)
+            var currentFilterKeySelector = activeTab?.FilterKeySelector;
 
             if (currentFilterKeySelector != null && !string.IsNullOrEmpty(selectedFilterValue))
                 items = items.Where(item => currentFilterKeySelector(item) == selectedFilterValue);
