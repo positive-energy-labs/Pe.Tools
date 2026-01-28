@@ -18,7 +18,7 @@ namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 /// </summary>
 public class ProfilePreviewPanel : UserControl, ISidebarPanel<ProfileListItem> {
     private readonly WpfUiRichTextBox _richTextBox;
-    private readonly Func<ProfileListItem?, PreviewData?> _previewBuilder;
+    private readonly Func<ProfileListItem?, CancellationToken, PreviewData?> _previewBuilder;
 
     /// <summary>
     ///     Creates a ProfilePreviewPanel with injected preview building logic.
@@ -27,7 +27,7 @@ public class ProfilePreviewPanel : UserControl, ISidebarPanel<ProfileListItem> {
     ///     Delegate that builds PreviewData from a ProfileListItem.
     ///     This delegate should handle caching and context updates internally.
     /// </param>
-    public ProfilePreviewPanel(Func<ProfileListItem?, PreviewData?> previewBuilder) {
+    public ProfilePreviewPanel(Func<ProfileListItem?, CancellationToken, PreviewData?> previewBuilder) {
         this._previewBuilder = previewBuilder;
 
         // Palette handles sidebar padding and scrolling - just provide the content
@@ -52,7 +52,7 @@ public class ProfilePreviewPanel : UserControl, ISidebarPanel<ProfileListItem> {
     /// <inheritdoc />
     public void Update(ProfileListItem? item, CancellationToken ct) {
         if (ct.IsCancellationRequested) return;
-        var data = this._previewBuilder(item);
+        var data = this._previewBuilder(item, ct);
         if (ct.IsCancellationRequested) return;
         this.UpdateContent(data);
     }

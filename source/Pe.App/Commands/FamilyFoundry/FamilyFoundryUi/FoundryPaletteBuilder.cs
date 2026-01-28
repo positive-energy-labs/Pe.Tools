@@ -97,8 +97,8 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         };
 
         // Create preview panel with injected preview building logic
-        var previewPanel = new ProfilePreviewPanel(item => {
-            this.BuildPreviewData(item, context);
+        var previewPanel = new ProfilePreviewPanel((item, ct) => {
+            this.BuildPreviewData(item, context, ct);
             return context.PreviewData;
         });
 
@@ -128,11 +128,18 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         return window;
     }
 
-    private void BuildPreviewData(ProfileListItem profileItem, FoundryContext<TProfile> context) {
+    private void BuildPreviewData(
+        ProfileListItem profileItem,
+        FoundryContext<TProfile> context,
+        CancellationToken ct
+    ) {
+        if (ct.IsCancellationRequested) return;
         if (profileItem == null) {
             context.PreviewData = null;
             return;
         }
+
+        if (ct.IsCancellationRequested) return;
 
         // Check cache first
         if (context.PreviewCache.TryGetValue(profileItem.TextPrimary, out var cachedPreview)) {
@@ -141,14 +148,20 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
             return;
         }
 
+        if (ct.IsCancellationRequested) return;
+
         context.SelectedProfile = profileItem;
-        context.PreviewData = this.TryLoadPreviewData(profileItem, context);
+        context.PreviewData = this.TryLoadPreviewData(profileItem, context, ct);
         context.PreviewCache[profileItem.TextPrimary] = context.PreviewData;
     }
 
-    private PreviewData TryLoadPreviewData(ProfileListItem profileItem, FoundryContext<TProfile> context) {
+    private PreviewData TryLoadPreviewData(
+        ProfileListItem profileItem,
+        FoundryContext<TProfile> context,
+        CancellationToken ct
+    ) {
         try {
-            return this.LoadValidPreviewData(profileItem, context);
+            return this.LoadValidPreviewData(profileItem, context, ct);
         } catch (JsonValidationException ex) {
             return CreateValidationErrorPreview(profileItem, ex);
         } catch (JsonSanitizationException ex) {
@@ -158,23 +171,37 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         }
     }
 
-    private PreviewData LoadValidPreviewData(ProfileListItem profileItem, FoundryContext<TProfile> context) {
+    private PreviewData LoadValidPreviewData(
+        ProfileListItem profileItem,
+        FoundryContext<TProfile> context,
+        CancellationToken ct
+    ) {
+        if (ct.IsCancellationRequested) return null;
+
         // Load the profile
         var profile = context.SettingsManager.SubDir("profiles")
             .Json<TProfile>($"{profileItem.TextPrimary}.json")
             .Read();
 
+        if (ct.IsCancellationRequested) return null;
+
         // Get raw APS parameter models (no Revit API dependencies, safe to store)
         var apsParamModels = profile.GetFilteredApsParamModels();
+
+        if (ct.IsCancellationRequested) return null;
 
         // Build queue structure for preview (using temp file just for structure, not storing definitions)
         using var previewTempFile = new TempSharedParamFile(context.Doc);
         var previewApsParamData = BaseProfileSettings.ConvertToSharedParameterDefinitions(
             apsParamModels, previewTempFile);
 
+        if (ct.IsCancellationRequested) return null;
+
         var queue = this._queueBuilder(profile, previewApsParamData);
         var operationMetadata = queue.GetExecutableMetadata();
         var families = profile.GetFamilies(context.Doc);
+
+        if (ct.IsCancellationRequested) return null;
 
         // Extract APS parameter info
         var apsParameters = apsParamModels.Select(p => new ParameterInfo(
@@ -193,6 +220,8 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
             f.FamilyCategory?.Name ?? "Unknown"
         )).ToList();
 
+        if (ct.IsCancellationRequested) return null;
+
         // Serialize profile to JSON
         var profileJson = JsonSerializer.Serialize(
             profile,
@@ -200,6 +229,8 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
                 WriteIndented = true,
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             });
+
+        if (ct.IsCancellationRequested) return null;
 
         // Check operation enabled status from queue
         var operationInfos = new List<OperationInfo>();
@@ -216,6 +247,8 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
                 ));
             }
         }
+
+        if (ct.IsCancellationRequested) return null;
 
         return new PreviewData {
             ProfileName = profileItem.TextPrimary,

@@ -1,6 +1,8 @@
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
 using System.Collections.ObjectModel;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Threading;
 
 namespace Pe.Ui.ViewModels;
@@ -34,12 +36,15 @@ public interface IPaletteViewModel {
 public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewModel
     where TItem : class, IPaletteListItem {
     private readonly List<TItem> _allItems;
+    private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _debounceTimer;
     private readonly Func<TItem, string> _filterKeySelector;
     private readonly SearchFilterService<TItem> _searchService;
     private readonly DispatcherTimer _selectionDebounceTimer;
     private readonly List<Func<TItem, string>> _tabFilterKeySelectors;
     private readonly List<Func<TItem, bool>> _tabFilters;
+    private CancellationTokenSource? _filterCts;
+    private int _filterSequence;
 
     /// <summary> Previously selected item for efficient selection updates </summary>
     private TItem? _previousSelectedItem;
@@ -60,13 +65,14 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     public PaletteViewModel(
         IEnumerable<TItem> items,
         SearchFilterService<TItem> searchService,
-        Func<TItem, string> filterKeySelector = null,
+        Func<TItem, string>? filterKeySelector = null,
         int selectionDebounceMs = 300,
-        List<Func<TItem, bool>> tabFilters = null,
-        List<Func<TItem, string>> tabFilterKeySelectors = null,
+        List<Func<TItem, bool>>? tabFilters = null,
+        List<Func<TItem, string>>? tabFilterKeySelectors = null,
         int defaultTabIndex = 0
     ) {
         this._allItems = items.ToList();
+        this._dispatcher = Dispatcher.CurrentDispatcher;
         this._searchService = searchService;
         this._filterKeySelector = filterKeySelector;
         this._tabFilters = tabFilters;
@@ -75,7 +81,7 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
             tabFilters is { Count: > 0 } ? Math.Clamp(defaultTabIndex, 0, tabFilters.Count - 1) : 0;
 
         // Initialize debounce timer for search (100ms delay)
-        this._debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+        this._debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
         this._debounceTimer.Tick += (_, _) => {
             this._debounceTimer.Stop();
             this.FilterItems();
@@ -234,36 +240,65 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     ///     Filters items using 3-stage filtering: Tab -> Category Filter -> Search
     /// </summary>
     private void FilterItems() {
-        IEnumerable<TItem> items = this._allItems;
+        this._filterCts?.Cancel();
+        this._filterCts?.Dispose();
+        this._filterCts = new CancellationTokenSource();
 
-        // Stage 1: Tab filter (if tabs are enabled and current tab has a filter)
-        if (this.HasTabs) {
-            var tabFilter = this._tabFilters[this._selectedTabIndex];
-            if (tabFilter != null)
-                items = items.Where(tabFilter);
-        }
+        var token = this._filterCts.Token;
+        var sequence = Interlocked.Increment(ref this._filterSequence);
 
-        // Stage 2: Category filter (use current tab's filter key selector or global fallback)
-        Func<TItem, string> currentFilterKeySelector = null;
-        if (this.HasTabs && this._tabFilterKeySelectors != null)
-            currentFilterKeySelector = this._tabFilterKeySelectors[this._selectedTabIndex];
-        else if (!this.HasTabs)
-            currentFilterKeySelector = this._filterKeySelector;
+        var selectedTabIndex = this._selectedTabIndex;
+        var hasTabs = this.HasTabs;
+        var selectedFilterValue = this.SelectedFilterValue;
+        var searchText = this.SearchText;
+        var allItems = this._allItems;
+        var tabFilters = this._tabFilters;
+        var tabFilterKeySelectors = this._tabFilterKeySelectors;
+        var filterKeySelector = this._filterKeySelector;
 
-        if (currentFilterKeySelector != null && !string.IsNullOrEmpty(this.SelectedFilterValue))
-            items = items.Where(item => currentFilterKeySelector(item) == this.SelectedFilterValue);
+        _ = Task.Run(() => {
+            if (token.IsCancellationRequested) return;
 
-        // Stage 3: Search filter
-        var filtered = this._searchService.Filter(this.SearchText, items.ToList());
+            IEnumerable<TItem> items = allItems;
 
-        // Use efficient differential update instead of Clear/Add
-        this.UpdateCollectionEfficiently(this.FilteredItems, filtered);
+            // Stage 1: Tab filter (if tabs are enabled and current tab has a filter)
+            if (hasTabs && tabFilters is { Count: > 0 } &&
+                selectedTabIndex >= 0 && selectedTabIndex < tabFilters.Count) {
+                var tabFilter = tabFilters[selectedTabIndex];
+                if (tabFilter != null)
+                    items = items.Where(tabFilter);
+            }
 
-        // Reset selection to first item
-        this.SelectedIndex = this.FilteredItems.Count > 0 ? 0 : -1;
+            // Stage 2: Category filter (use current tab's filter key selector or global fallback)
+            Func<TItem, string> currentFilterKeySelector = null;
+            if (hasTabs && tabFilterKeySelectors is { Count: > 0 } &&
+                selectedTabIndex >= 0 && selectedTabIndex < tabFilterKeySelectors.Count)
+                currentFilterKeySelector = tabFilterKeySelectors[selectedTabIndex];
+            else if (!hasTabs)
+                currentFilterKeySelector = filterKeySelector;
 
-        // Notify that filtered items have changed
-        this.FilteredItemsChanged?.Invoke(this, EventArgs.Empty);
+            if (currentFilterKeySelector != null && !string.IsNullOrEmpty(selectedFilterValue))
+                items = items.Where(item => currentFilterKeySelector(item) == selectedFilterValue);
+
+            // Stage 3: Search filter
+            var filtered = this._searchService.Filter(searchText, items.ToList());
+
+            if (token.IsCancellationRequested) return;
+
+            this._dispatcher.Invoke(() => {
+                if (token.IsCancellationRequested) return;
+                if (sequence != this._filterSequence) return;
+
+                // Use efficient differential update instead of Clear/Add
+                this.UpdateCollectionEfficiently(this.FilteredItems, filtered);
+
+                // Reset selection to first item
+                this.SelectedIndex = this.FilteredItems.Count > 0 ? 0 : -1;
+
+                // Notify that filtered items have changed
+                this.FilteredItemsChanged?.Invoke(this, EventArgs.Empty);
+            }, DispatcherPriority.Background);
+        }, token);
     }
 
     /// <summary>
@@ -271,9 +306,11 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     ///     Uses differential updates to minimize CollectionChanged notifications.
     /// </summary>
     private void UpdateCollectionEfficiently(ObservableCollection<TItem> target, List<TItem> source) {
+        var sourceSet = new HashSet<TItem>(source);
+
         // Remove items not in source (iterate backwards to avoid index shifting)
         for (var i = target.Count - 1; i >= 0; i--) {
-            if (!source.Contains(target[i]))
+            if (!sourceSet.Contains(target[i]))
                 target.RemoveAt(i);
         }
 

@@ -27,7 +27,7 @@ public class SortableDataTable : UserControl {
         // Handle scroll at UserControl level BEFORE DataGrid's internal ScrollViewer consumes it
         this.PreviewMouseWheel += this.OnPreviewMouseWheel;
     }
-    
+
     public void SetData(List<DataTableColumn> columns, List<Dictionary<string, string>> rows) {
         this._columns.Clear();
         this._columns.AddRange(columns);
@@ -122,8 +122,8 @@ public class SortableDataTable : UserControl {
         };
 
         var sortIcon = new TextBlock {
-            Text = "⇅",
-            FontSize = 10,
+            Text = "↑↓",
+            FontSize = 12,
             Opacity = 0.5,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 0, 0)
@@ -173,7 +173,7 @@ public class SortableDataTable : UserControl {
             var scrollAmount = e.Delta * -0.5; // Adjust sensitivity, negative for natural direction
             var newOffset = this._scrollViewer.HorizontalOffset + scrollAmount;
             this._scrollViewer.ScrollToHorizontalOffset(Math.Max(0, newOffset));
-            
+
             return;
         }
 
@@ -184,7 +184,7 @@ public class SortableDataTable : UserControl {
         e.Handled = true;
         var verticalOffset = panelScrollViewer.VerticalOffset - e.Delta;
         panelScrollViewer.ScrollToVerticalOffset(Math.Max(0, verticalOffset));
-        
+
     }
 
     /// <summary>

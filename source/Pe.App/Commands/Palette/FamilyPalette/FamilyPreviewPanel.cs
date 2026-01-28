@@ -57,7 +57,6 @@ public class FamilyPreviewPanel : UserControl, ISidebarPanel<UnifiedFamilyItem> 
     /// <inheritdoc />
     /// <summary>
     ///     Called after debounce with cancellation support.
-    ///     Uses dispatcher priority to keep UI responsive.
     /// </summary>
     public void Update(UnifiedFamilyItem? item, CancellationToken ct) {
         if (item == null) {
@@ -72,19 +71,10 @@ public class FamilyPreviewPanel : UserControl, ISidebarPanel<UnifiedFamilyItem> 
         // This gives user instant feedback that something is loading
         this.ShowQuickPreview(item);
 
-        // Phase 2: Schedule expensive work at lower priority
-        // DispatcherPriority.Background allows input events to be processed first
-        _ = this.Dispatcher.BeginInvoke(DispatcherPriority.Background, () => {
-            if (ct.IsCancellationRequested) return;
-
-            // Get the full preview data (may be cached via Lazy<T>, or computed now)
-            var previewData = item.PreviewData;
-
-            if (ct.IsCancellationRequested) return;
-
-            // Render the full preview
-            this.UpdatePreview(previewData);
-        });
+        // Phase 2: Build and render full preview data
+        var previewData = item.PreviewData;
+        if (ct.IsCancellationRequested) return;
+        this.UpdatePreview(previewData);
     }
 
     /// <summary>
@@ -115,39 +105,6 @@ public class FamilyPreviewPanel : UserControl, ISidebarPanel<UnifiedFamilyItem> 
     }
 
     #endregion
-
-    /// <summary>Updates preview from a Family object</summary>
-    public void UpdatePreview(Family? family) {
-        if (family == null) {
-            this.ClearPreview();
-            return;
-        }
-
-        this._currentData = FamilyPreviewBuilder.BuildFromFamily(family, this._doc);
-        this.RenderPreview();
-    }
-
-    /// <summary>Updates preview from a FamilySymbol object</summary>
-    public void UpdatePreview(FamilySymbol? symbol) {
-        if (symbol == null) {
-            this.ClearPreview();
-            return;
-        }
-
-        this._currentData = FamilyPreviewBuilder.BuildFromFamilySymbol(symbol, this._doc);
-        this.RenderPreview();
-    }
-
-    /// <summary>Updates preview from a FamilyInstance object</summary>
-    public void UpdatePreview(FamilyInstance? instance) {
-        if (instance == null) {
-            this.ClearPreview();
-            return;
-        }
-
-        this._currentData = FamilyPreviewBuilder.BuildFromFamilyInstance(instance, this._doc);
-        this.RenderPreview();
-    }
 
     /// <summary>Updates preview from pre-built data</summary>
     public void UpdatePreview(FamilyPreviewData? data) {

@@ -153,7 +153,6 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
                 }
             }
 
-
             snapshots[key] = new ParamSnapshot {
                 Name = p.Definition.Name,
                 IsInstance = p.IsInstance,

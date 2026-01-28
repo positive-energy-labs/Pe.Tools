@@ -102,11 +102,7 @@ public static class FamilyPreviewBuilder {
         var typeCount = family.GetFamilySymbolIds().Count;
         var typeNames = new List<string> { symbol.Name }; // Only this type, not all types
 
-        var instance = FindInstanceForSymbol(doc, symbol);
-        var parameters = instance != null
-            ? CollectParametersFromInstance(instance, doc, typeNames)
-            : CollectParametersFromFamilyDocument(family, doc, typeNames, symbol.Name)
-              ?? CollectParametersFromSymbol(symbol, doc, typeNames);
+        // CollectParametersFromFamilyDocument(family, doc, typeNames, symbol.Name);
 
         return new FamilyPreviewData {
             Source = FamilyPreviewSource.FamilySymbol,
@@ -115,7 +111,7 @@ public static class FamilyPreviewBuilder {
             CategoryName = family.FamilyCategory?.Name ?? string.Empty,
             TypeCount = typeCount,
             TypeNames = typeNames,
-            Parameters = parameters
+            Parameters = CollectParametersFromSymbol(symbol, doc, typeNames)
         };
     }
 

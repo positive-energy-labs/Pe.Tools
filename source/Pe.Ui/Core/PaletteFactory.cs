@@ -4,6 +4,7 @@ using Pe.Ui.Core.Services;
 using Pe.Ui.ViewModels;
 using System.Threading;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace Pe.Ui.Core;
 
@@ -151,7 +152,14 @@ public static class PaletteFactory {
                 updateCts?.Dispose();
                 updateCts = new CancellationTokenSource();
 
-                options.SidebarPanel.Update(viewModel.SelectedItem, updateCts.Token);
+                var updateToken = updateCts.Token;
+
+                void RunUpdate() {
+                    if (updateToken.IsCancellationRequested) return;
+                    options.SidebarPanel.Update(viewModel.SelectedItem, updateToken);
+                }
+
+                _ = palette.Dispatcher.BeginInvoke(RunUpdate, DispatcherPriority.ApplicationIdle);
             };
         }
 
