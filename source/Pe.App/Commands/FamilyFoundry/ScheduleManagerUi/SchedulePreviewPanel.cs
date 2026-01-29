@@ -17,16 +17,16 @@ namespace Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
 /// </summary>
 public class SchedulePreviewPanel : UserControl, ISidebarPanel<ISchedulePaletteItem> {
     private readonly WpfUiRichTextBox _richTextBox;
-    private readonly Func<ISchedulePaletteItem?, SchedulePreviewData?> _previewBuilder;
+    private readonly Func<ISchedulePaletteItem?, CancellationToken, SchedulePreviewData?> _previewBuilder;
 
     /// <summary>
     ///     Creates a SchedulePreviewPanel with injected preview building logic.
     /// </summary>
     /// <param name="previewBuilder">
-    ///     Delegate that builds SchedulePreviewData from an ISchedulePaletteItem.
-    ///     This delegate should handle caching and context updates internally.
+    ///     Delegate that builds SchedulePreviewData from an ISchedulePaletteItem and cancellation token.
+    ///     This delegate should handle caching and context updates internally and respect ct when doing work.
     /// </param>
-    public SchedulePreviewPanel(Func<ISchedulePaletteItem?, SchedulePreviewData?> previewBuilder) {
+    public SchedulePreviewPanel(Func<ISchedulePaletteItem?, CancellationToken, SchedulePreviewData?> previewBuilder) {
         this._previewBuilder = previewBuilder;
 
         // Palette handles sidebar padding and scrolling - just provide the content
@@ -51,7 +51,7 @@ public class SchedulePreviewPanel : UserControl, ISidebarPanel<ISchedulePaletteI
     /// <inheritdoc />
     public void Update(ISchedulePaletteItem? item, CancellationToken ct) {
         if (ct.IsCancellationRequested) return;
-        var data = this._previewBuilder(item);
+        var data = this._previewBuilder(item, ct);
         if (ct.IsCancellationRequested) return;
         this.UpdateContent(data);
     }
@@ -94,7 +94,7 @@ public class SchedulePreviewPanel : UserControl, ISidebarPanel<ISchedulePaletteI
 
                 // Build table data
                 _ = doc.AddTable<ScheduleFieldSpec>(
-                    data.Fields,
+                    data.Fields, 
                     [
                         ("Name", f => f.ParameterName),
                         ("Header", f => f.ColumnHeaderOverride ?? string.Empty),

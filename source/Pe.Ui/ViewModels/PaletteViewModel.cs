@@ -65,7 +65,7 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     public PaletteViewModel(
         IEnumerable<TItem> items,
         SearchFilterService<TItem> searchService,
-        IReadOnlyList<TabDefinition<TItem>>? tabs = null,
+        IReadOnlyList<TabDefinition<TItem>> tabs,
         int defaultTabIndex = 0
     ) {
         this._allItems = items.ToList();

@@ -33,9 +33,6 @@ public abstract class FamilyPaletteBase : IExternalCommand {
             var uiapp = commandData.Application;
             var doc = uiapp.ActiveUIDocument.Document;
 
-            if (doc.IsFamilyDocument)
-                return CmdPltFamilyElements.ShowPalette(uiapp);
-
             return ShowPalette(uiapp, this.DefaultTabIndex);
         } catch (Exception ex) {
             Log.Error(ex, "Family palette command failed");

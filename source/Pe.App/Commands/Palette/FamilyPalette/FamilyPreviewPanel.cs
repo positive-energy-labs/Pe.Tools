@@ -1,4 +1,3 @@
-using Pe.Ui.Controls;
 using Pe.Ui.Core;
 using System.Threading;
 using System.Windows;
@@ -18,7 +17,7 @@ namespace Pe.App.Commands.Palette.FamilyPalette;
 public class FamilyPreviewPanel : UserControl, ISidebarPanel<UnifiedFamilyItem> {
     private readonly StackPanel _mainPanel;
     private readonly WpfUiRichTextBox _infoBox;
-    private readonly Document _doc;
+    private readonly Document _doc; 
     private FamilyPreviewData? _currentData;
 
     public FamilyPreviewPanel(Document doc) {
@@ -82,11 +81,6 @@ public class FamilyPreviewPanel : UserControl, ISidebarPanel<UnifiedFamilyItem> 
     ///     This runs before the expensive PreviewData computation.
     /// </summary>
     private void ShowQuickPreview(UnifiedFamilyItem item) {
-        // Clear any existing tables
-        var tablesToRemove = this._mainPanel.Children.OfType<SortableDataTable>().ToList();
-        foreach (var table in tablesToRemove)
-            this._mainPanel.Children.Remove(table);
-
         // Show basic info that's cheap to access (already computed in the item)
         var doc = FlowDocumentBuilder.Create();
         _ = doc.AddHeader(item.TextPrimary);
@@ -119,11 +113,6 @@ public class FamilyPreviewPanel : UserControl, ISidebarPanel<UnifiedFamilyItem> 
         this._currentData = null;
         this._infoBox.Document = FlowDocumentBuilder.Create();
 
-        // Clear any existing tables and buttons
-        var tablesToRemove = this._mainPanel.Children.OfType<SortableDataTable>().ToList();
-        foreach (var table in tablesToRemove)
-            this._mainPanel.Children.Remove(table);
-
     }
 
     private void RenderPreview() {
@@ -133,11 +122,6 @@ public class FamilyPreviewPanel : UserControl, ISidebarPanel<UnifiedFamilyItem> 
         }
 
         var data = this._currentData;
-
-        // Clear existing tables
-        var tablesToRemove = this._mainPanel.Children.OfType<SortableDataTable>().ToList();
-        foreach (var table in tablesToRemove)
-            this._mainPanel.Children.Remove(table);
 
         // Build info section with reduced line height
         var doc = FlowDocumentBuilder.Create();
@@ -183,12 +167,12 @@ public class FamilyPreviewPanel : UserControl, ISidebarPanel<UnifiedFamilyItem> 
             this._infoBox.Document.Blocks.Add(summaryPara);
 
             // Add parameter tables using custom control
-            this.AddParameterTable(data, isInstance: false, "Type Parameters");
-            this.AddParameterTable(data, isInstance: true, "Instance Parameters");
+            this.AddParameterTable(doc, data, isInstance: false, "Type Parameters");
+            this.AddParameterTable(doc, data, isInstance: true, "Instance Parameters");
         }
     }
 
-    private void AddParameterTable(FamilyPreviewData data, bool isInstance, string sectionTitle) {
+    private void AddParameterTable(FlowDocument doc, FamilyPreviewData data, bool isInstance, string sectionTitle) {
         var parameters = data.Parameters.Where(p => p.IsInstance == isInstance).ToList();
         if (parameters.Count == 0)
             return;
@@ -198,30 +182,31 @@ public class FamilyPreviewPanel : UserControl, ISidebarPanel<UnifiedFamilyItem> 
             Margin = new Thickness(0, 6, 0, 2),
             LineHeight = 1
         };
-        this._infoBox.Document.Blocks.Add(headerPara);
+        doc.Blocks.Add(headerPara);
 
         // For Family source with multiple types, show a multi-type table
         // For FamilySymbol/Instance, show single value column
-        var table = data.Source == FamilyPreviewSource.Family && data.TypeNames.Count > 1
-            ? this.BuildMultiTypeTable(data, parameters)
-            : this.BuildSingleTypeTable(data, parameters);
+        if (data.Source == FamilyPreviewSource.Family && data.TypeNames.Count > 1) {
+            var (columns, rows) = this.BuildMultiTypeTableData(data, parameters);
+            _ = doc.AddTable(columns, rows);
+            return;
+        }
 
-        _ = this._mainPanel.Children.Add(table);
+        var (singleColumns, singleRows) = this.BuildSingleTypeTableData(data, parameters);
+        _ = doc.AddTable(singleColumns, singleRows);
     }
 
-    private SortableDataTable BuildMultiTypeTable(FamilyPreviewData data, List<FamilyParameterPreview> parameters) {
+    private (List<string> columns, List<Dictionary<string, string>> rows) BuildMultiTypeTableData(
+        FamilyPreviewData data,
+        List<FamilyParameterPreview> parameters
+    ) {
         var hasFormulas = parameters.Any(p => !string.IsNullOrEmpty(p.Formula));
 
-        var builder = DataTableBuilder.Create()
-            .AddColumn("Name", 150, 200, 50)
-            .AddColumn("Type", 120, 150, 40);
-
+        var columns = new List<string> { "Name", "Type" };
         if (hasFormulas)
-            _ = builder.AddColumn("Formula", 150, 300, 80);
+            columns.Add("Formula");
 
-        // Add columns for each type
-        foreach (var typeName in data.TypeNames)
-            _ = builder.AddColumn(typeName, 120, 200, 60);
+        columns.AddRange(data.TypeNames);
 
         // Build rows using dictionary format for dynamic columns
         var rows = parameters.Select(param => {
@@ -237,23 +222,25 @@ public class FamilyPreviewPanel : UserControl, ISidebarPanel<UnifiedFamilyItem> 
                 row[typeName] = param.ValuesPerType.TryGetValue(typeName, out var v) ? v ?? "-" : "-";
 
             return row;
-        });
+        }).ToList();
 
-        return builder.AddRows(rows).Build();
+        return (columns, rows);
     }
 
-    private SortableDataTable BuildSingleTypeTable(FamilyPreviewData data, List<FamilyParameterPreview> parameters) {
+    private (List<string> columns, List<Dictionary<string, string>> rows) BuildSingleTypeTableData(
+        FamilyPreviewData data,
+        List<FamilyParameterPreview> parameters
+    ) {
         var typeName = data.TypeName ?? data.TypeNames.FirstOrDefault() ?? string.Empty;
 
-        return DataTableBuilder.Create()
-            .AddColumn("Name", 150, 200, 50)
-            .AddColumn("Type", 120, 150, 40)
-            .AddColumn("Value/Formula", 200, 400, 100)
-            .AddRows(parameters,
-                ("Name", p => p.Name),
-                ("Type", p => p.DataType),
-                ("Value/Formula", p => this.GetValueOrFormula(p, data, typeName)))
-            .Build();
+        var columns = new List<string> { "Name", "Type", "Value/Formula" };
+        var rows = parameters.Select(param => new Dictionary<string, string> {
+            ["Name"] = param.Name,
+            ["Type"] = param.DataType,
+            ["Value/Formula"] = this.GetValueOrFormula(param, data, typeName)
+        }).ToList();
+
+        return (columns, rows);
     }
 
     private string GetValueOrFormula(FamilyParameterPreview param, FamilyPreviewData data, string typeName) {

@@ -9,6 +9,8 @@ using Visibility = System.Windows.Visibility;
 using Grid = System.Windows.Controls.Grid;
 using Button = Wpf.Ui.Controls.Button;
 using Application = System.Windows.Application;
+using AnimatedScrollViewer = Pe.Ui.Controls.AnimatedScrollViewer;
+using Point = System.Windows.Point;
 
 
 namespace Pe.Ui.Components;
@@ -64,6 +66,8 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
 
     private readonly bool _isSearchBoxHidden;
     private readonly List<Button> _tabButtons = [];
+    private readonly SolidColorBrush _pinPinnedBrush = new(System.Windows.Media.Color.FromRgb(100, 149, 237));
+    private readonly SolidColorBrush _pinHoverBrush = new(System.Windows.Media.Color.FromRgb(126, 179, 255));
     private ActionBinding _actionBinding;
     private ActionMenu _actionMenu;
     private PaletteSidebar _currentSidebar;
@@ -74,7 +78,6 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     private bool _isCtrlPressed;
     private bool _isPanelExpanded;
     private bool _isTrayExpanded;
-    private readonly bool _keepOpenAfterAction = false;
     private Action _onCtrlReleased;
     private EphemeralWindow _parentWindow;
     private bool _sidebarAutoExpanded;
@@ -86,6 +89,9 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
 
         // Don't add PreviewMouseWheel handler - let events flow naturally
         // The SortableDataTable will handle Shift+Scroll itself
+        this.PinIcon.SetResourceReference(ForegroundProperty, "TextFillColorSecondaryBrush");
+        if (this.TabScrollViewer != null)
+            this.TabScrollViewer.PreviewMouseWheel += this.OnTabBarPreviewMouseWheel;
 
         if (isSearchBoxHidden) {
             this._isSearchBoxHidden = true;
@@ -255,7 +261,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             viewModel.RecordUsage();
 
             // If KeepOpenAfterAction is true, execute immediately and keep palette open
-            if (this._keepOpenAfterAction) {
+            if (!this._parentWindow.IsEphemeral) {
                 await actionBinding.ExecuteAsync(action, selectedItem);
                 return;
             }
@@ -395,7 +401,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         if (this._parentWindow == null) return;
 
         // Toggle ephemeral mode
-        this._parentWindow.EphemeralEnabled = !this._parentWindow.EphemeralEnabled;
+        this._parentWindow.IsEphemeral = !this._parentWindow.IsEphemeral;
         this.UpdatePinButtonState();
     }
 
@@ -405,31 +411,26 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     private void UpdatePinButtonState() {
         if (this._parentWindow == null) return;
 
-        var isPinned = !this._parentWindow.EphemeralEnabled;
-        var cornflowerBlue = new SolidColorBrush(System.Windows.Media.Color.FromRgb(100, 149, 237));
-        var lightBlue = new SolidColorBrush(System.Windows.Media.Color.FromRgb(126, 179, 255));
-        var defaultColor = (SolidColorBrush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+        var isPinned = !this._parentWindow.IsEphemeral;
+        this.PinButton.MouseEnter -= this.PinButton_MouseEnter;
+        this.PinButton.MouseLeave -= this.PinButton_MouseLeave;
 
         if (isPinned) {
             // Pinned state: filled pin icon in cornflower blue
             this.PinIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.Pin24;
             this.PinIcon.Filled = true;
-            this.PinIcon.Foreground = cornflowerBlue;
+            this.PinIcon.Foreground = this._pinPinnedBrush;
             this.PinButton.ToolTip = "Unpin window (close when clicking outside)";
 
             // Hover effect
-            this.PinButton.MouseEnter += (_, _) => this.PinIcon.Foreground = lightBlue;
-            this.PinButton.MouseLeave += (_, _) => this.PinIcon.Foreground = cornflowerBlue;
+            this.PinButton.MouseEnter += this.PinButton_MouseEnter;
+            this.PinButton.MouseLeave += this.PinButton_MouseLeave;
         } else {
             // Unpinned state: outline pin icon in default color
             this.PinIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.Pin24;
             this.PinIcon.Filled = false;
-            this.PinIcon.Foreground = defaultColor;
+            this.PinIcon.SetResourceReference(ForegroundProperty, "TextFillColorSecondaryBrush");
             this.PinButton.ToolTip = "Pin window (keep open when clicking outside)";
-
-            // Clear hover handlers and use default hover
-            this.PinButton.MouseEnter -= (_, _) => this.PinIcon.Foreground = lightBlue;
-            this.PinButton.MouseLeave -= (_, _) => this.PinIcon.Foreground = cornflowerBlue;
         }
     }
 
@@ -460,7 +461,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         viewModel.RecordUsage();
 
         // If KeepOpenAfterAction is true, execute immediately and keep palette open
-        if (this._keepOpenAfterAction) {
+        if (!this._parentWindow.IsEphemeral) {
             await actionBinding.ExecuteAsync(action, selectedItem);
             return true;
         }
@@ -510,6 +511,18 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             _ = this.SearchTextBox.Focus();
             this.SearchTextBox.SelectAll();
         }
+
+        this.UpdatePinButtonState();
+    }
+
+    private void PinButton_MouseEnter(object sender, MouseEventArgs e) {
+        if (this._parentWindow == null || this._parentWindow.IsEphemeral) return;
+        this.PinIcon.Foreground = this._pinHoverBrush;
+    }
+
+    private void PinButton_MouseLeave(object sender, MouseEventArgs e) {
+        if (this._parentWindow == null || this._parentWindow.IsEphemeral) return;
+        this.PinIcon.Foreground = this._pinPinnedBrush;
     }
 
     private async void UserControl_PreviewKeyDown(object sender, KeyEventArgs e) {
@@ -652,7 +665,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             var tabIndex = i; // Capture for closure
             var button = new Button {
                 Content = viewModel.Tabs?[i].Name ?? $"Tab {i + 1}",
-                Margin = new Thickness(4, 0, 0, 0), // Left margin for spacing between tabs
+                Margin = i == 0 ? new Thickness(0) : new Thickness(4, 0, 0, 0),
                 Padding = new Thickness(8, 4, 8, 4),
                 Tag = tabIndex,
                 Focusable = false, // Keep focus in search box
@@ -663,6 +676,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             button.Click += (_, _) => {
                 viewModel.SelectedTabIndex = tabIndex;
                 this.UpdateTabButtonStates(viewModel.SelectedTabIndex);
+                this.ScrollSelectedTabIntoView(viewModel.SelectedTabIndex);
             };
 
             this._tabButtons.Add(button);
@@ -672,11 +686,13 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         // Subscribe to tab changes from ViewModel (e.g., from keyboard navigation)
         viewModel.SelectedTabChanged += (_, _) => {
             this.UpdateTabButtonStates(viewModel.SelectedTabIndex);
+            this.ScrollSelectedTabIntoView(viewModel.SelectedTabIndex);
             this.UpdateFilterBoxVisibility(viewModel);
         };
 
         // Set initial state
         this.UpdateTabButtonStates(viewModel.SelectedTabIndex);
+        this.ScrollSelectedTabIntoView(viewModel.SelectedTabIndex);
         this.UpdateFilterBoxVisibility(viewModel);
     }
 
@@ -702,15 +718,64 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         for (var i = 0; i < this._tabButtons.Count; i++) {
             var button = this._tabButtons[i];
             if (i == selectedIndex) {
-                // Selected: subtle accent background with primary text
+                // Selected: lighter than palette background
                 button.SetResourceReference(BackgroundProperty, "ControlFillColorDefaultBrush");
                 button.SetResourceReference(ForegroundProperty, "TextFillColorPrimaryBrush");
+                button.FontWeight = FontWeights.SemiBold;
             } else {
-                // Unselected: transparent background with secondary text
-                button.Background = Brushes.Transparent;
+                // Unselected: same background as palette to read as buttons
+                button.SetResourceReference(BackgroundProperty, "ApplicationBackgroundBrush");
                 button.SetResourceReference(ForegroundProperty, "TextFillColorSecondaryBrush");
+                button.FontWeight = FontWeights.Normal;
             }
         }
+    }
+
+    private void ScrollSelectedTabIntoView(int selectedIndex) {
+        if (selectedIndex < 0 || selectedIndex >= this._tabButtons.Count) return;
+        var button = this._tabButtons[selectedIndex];
+        _ = this.Dispatcher.BeginInvoke(() => this.EnsureTabVisible(button), DispatcherPriority.Loaded);
+    }
+
+    private void EnsureTabVisible(Button button) {
+        if (this.TabScrollViewer == null) return;
+
+        this.TabScrollViewer.UpdateLayout();
+        button.UpdateLayout();
+
+        var transform = button.TransformToAncestor(this.TabScrollViewer);
+        var position = transform.Transform(new Point(0, 0));
+        var left = position.X;
+        var right = left + button.ActualWidth;
+        var viewportWidth = this.TabScrollViewer.ViewportWidth;
+        if (viewportWidth <= 0) return;
+
+        var target = this.TabScrollViewer.HorizontalOffset;
+        if (left < 0)
+            target += left;
+        else if (right > viewportWidth)
+            target += right - viewportWidth;
+
+        target = Math.Max(0, Math.Min(this.TabScrollViewer.ScrollableWidth, target));
+
+        if (this.TabScrollViewer is AnimatedScrollViewer animated)
+            animated.TargetHorizontalOffset = target;
+        else
+            this.TabScrollViewer.ScrollToHorizontalOffset(target);
+    }
+
+    private void OnTabBarPreviewMouseWheel(object sender, MouseWheelEventArgs e) {
+        if (this.TabScrollViewer == null) return;
+
+        e.Handled = true;
+        var scrollAmount = e.Delta * -0.5;
+        var target = this.TabScrollViewer.HorizontalOffset + scrollAmount;
+        target = Math.Max(0, Math.Min(this.TabScrollViewer.ScrollableWidth, target));
+
+        if (this.TabScrollViewer is AnimatedScrollViewer animated)
+            animated.TargetHorizontalOffset = target;
+        else
+            this.TabScrollViewer.ScrollToHorizontalOffset(target);
     }
 
     /// <summary>

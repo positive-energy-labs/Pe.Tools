@@ -1,4 +1,5 @@
- using System.Windows;
+using Pe.Ui.Controls;
+using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Media;
 
@@ -232,53 +233,16 @@ public static class FlowDocumentBuilder {
         if (columnList is not { Count: > 0 } || rowList is not { Count: > 0 })
             return doc;
 
-        var table = new Table { CellSpacing = 0, FontSize = size, Margin = margin ?? new Thickness(0, 0, 0, 12) };
+        var tableColumns = columnList
+            .Select(column => new DataTableColumn { Name = column })
+            .ToList();
+        var tableRows = rowList.Select(row => new Dictionary<string, string>(row)).ToList();
 
-        // Define columns
-        foreach (var _ in columnList)
-            table.Columns.Add(new TableColumn());
+        var table = new SortableDataTable { FontSize = size };
+        table.SetData(tableColumns, tableRows);
 
-        // Add header row
-        var headerGroup = new TableRowGroup();
-        var headerRow = new TableRow();
-        headerRow.SetResourceReference(TableRow.BackgroundProperty, "ControlFillColorDefaultBrush");
-
-        foreach (var column in columnList) {
-            var cell = new TableCell(new Paragraph(new Run(column) {
-                FontWeight = FontWeights.SemiBold,
-                FontSize = size
-            }) { Margin = new Thickness(4, 2, 4, 2) }) { Padding = new Thickness(0) };
-            headerRow.Cells.Add(cell);
-        }
-
-        headerGroup.Rows.Add(headerRow);
-        table.RowGroups.Add(headerGroup);
-
-        // Add data rows
-        var dataGroup = new TableRowGroup();
-        var isAlternate = false;
-
-        foreach (var rowData in rowList) {
-            var dataRow = new TableRow();
-
-            // Alternate row background for readability
-            if (isAlternate)
-                dataRow.SetResourceReference(TableRow.BackgroundProperty, "ControlFillColorDefaultBrush");
-
-            foreach (var column in columnList) {
-                var value = rowData.TryGetValue(column, out var v) ? v : string.Empty;
-                var cell = new TableCell(new Paragraph(new Run(value) { FontSize = size }) {
-                    Margin = new Thickness(4, 2, 4, 2)
-                }) { Padding = new Thickness(0) };
-                dataRow.Cells.Add(cell);
-            }
-
-            dataGroup.Rows.Add(dataRow);
-            isAlternate = !isAlternate;
-        }
-
-        table.RowGroups.Add(dataGroup);
-        doc.Blocks.Add(table);
+        var container = new BlockUIContainer { Child = table, Margin = margin ?? new Thickness(0, 0, 0, 12) };
+        doc.Blocks.Add(container);
         return doc;
     }
 

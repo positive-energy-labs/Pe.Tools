@@ -38,7 +38,7 @@ public class EphemeralWindow : Window {
         bool ephemeralEnabled = true
     ) {
         this.ContentControl = content;
-        this.EphemeralEnabled = ephemeralEnabled;
+        this.IsEphemeral = ephemeralEnabled;
         this.Title = title;
         this.SizeToContent = SizeToContent.WidthAndHeight; // Size to both dimensions for independent palette/panel sizing
         this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
@@ -102,7 +102,7 @@ public class EphemeralWindow : Window {
     ///     Controls whether the window should automatically close when focus is lost.
     ///     Default: true (ephemeral behavior enabled).
     /// </summary>
-    public bool EphemeralEnabled { get; set; } = true;
+    public bool IsEphemeral { get; set; } = true;
 
     private void OnContentCloseRequested(object? sender, CloseRequestedEventArgs e) =>
         this.CloseWindow(e.RestoreFocus);
@@ -202,7 +202,7 @@ public class EphemeralWindow : Window {
         if (msg == WM_ACTIVATE) {
             var activateType = (int)wParam & 0xFFFF;
 
-            if (activateType == WA_INACTIVE && !this._isClosing && this.EphemeralEnabled) {
+            if (activateType == WA_INACTIVE && !this._isClosing && this.IsEphemeral) {
                 // lParam contains the handle of the window being activated (may be zero)
                 var newActiveWindow = lParam;
                 var revitHandle = Process.GetCurrentProcess().MainWindowHandle;

@@ -53,7 +53,7 @@ public class CmdScheduleManager : IExternalCommand {
             allItems.AddRange(batchItems.Select(i => new SchedulePaletteItemWrapper(i, ScheduleTabType.Batch)));
 
             // Create preview panel with injected preview building logic
-            var previewPanel = new SchedulePreviewPanel(item => {
+            var previewPanel = new SchedulePreviewPanel((item, _) => {
                 if (item == null) return null;
                 if (item.TabType == ScheduleTabType.Create) {
                     this.BuildPreviewData(item.GetCreateItem(), context);

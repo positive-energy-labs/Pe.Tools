@@ -15,13 +15,13 @@ namespace Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
 /// </summary>
 public class ScheduleSerializePreviewPanel : UserControl, ISidebarPanel<IPaletteListItem> {
     private readonly WpfUiRichTextBox _richTextBox;
-    private readonly Func<IPaletteListItem?, Pe.Tools.Commands.FamilyFoundry.ScheduleSerializePreviewData?> _previewBuilder;
+    private readonly Func<IPaletteListItem?, CancellationToken, Pe.Tools.Commands.FamilyFoundry.ScheduleSerializePreviewData?> _previewBuilder;
 
     /// <summary>
     ///     Creates a ScheduleSerializePreviewPanel with injected preview building logic.
     /// </summary>
     public ScheduleSerializePreviewPanel(
-        Func<IPaletteListItem?, Pe.Tools.Commands.FamilyFoundry.ScheduleSerializePreviewData?> previewBuilder
+        Func<IPaletteListItem?, CancellationToken, Pe.Tools.Commands.FamilyFoundry.ScheduleSerializePreviewData?> previewBuilder
     ) {
         this._previewBuilder = previewBuilder;
 
@@ -46,7 +46,7 @@ public class ScheduleSerializePreviewPanel : UserControl, ISidebarPanel<IPalette
     /// <inheritdoc />
     public void Update(IPaletteListItem? item, CancellationToken ct) {
         if (ct.IsCancellationRequested) return;
-        var data = this._previewBuilder(item);
+        var data = this._previewBuilder(item, ct);
         if (ct.IsCancellationRequested) return;
         this.UpdateContent(data);
     }

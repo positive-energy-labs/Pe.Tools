@@ -3,6 +3,7 @@
                              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                              xmlns:local="clr-namespace:Pe.Ui.Components"
+                             xmlns:controls="clr-namespace:Pe.Ui.Controls"
                              xmlns:core="clr-namespace:Pe.Ui.Core"
                              VerticalAlignment="Top">
     <UserControl.Resources>
@@ -70,26 +71,40 @@
                         <Border x:Name="TabBarBorder"
                                 Grid.Column="2"
                                 Visibility="Collapsed"
-                                Background="Transparent">
-                            <ItemsControl x:Name="TabBarItemsControl">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal" />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                            </ItemsControl>
+                                Margin="0,0,4,0"
+                                Padding="4,3,4,3"
+                                Background="{ui:ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                CornerRadius="6"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center">
+                            <controls:AnimatedScrollViewer x:Name="TabScrollViewer"
+                                                           HorizontalScrollBarVisibility="Hidden"
+                                                           VerticalScrollBarVisibility="Disabled"
+                                                           HorizontalAlignment="Right"
+                                                           VerticalAlignment="Center">
+                                <ItemsControl x:Name="TabBarItemsControl">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </controls:AnimatedScrollViewer>
                         </Border>
                         
                         <!-- Pin button on the far right -->
                         <ui:Button x:Name="PinButton"
                                    Grid.Column="3"
                                    Padding="4"
-                                   Margin="8,0,0,0"
+                                   Margin="4,0,0,0"
                                    Appearance="Transparent"
                                    BorderThickness="0"
                                    ToolTip="Pin window (keep open when clicking outside)"
                                    Cursor="Hand">
-                            <ui:SymbolIcon x:Name="PinIcon" Symbol="Pin24" FontSize="16" />
+                            <ui:SymbolIcon x:Name="PinIcon"
+                                           Symbol="Pin24"
+                                           FontSize="16"
+                                           Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
                         </ui:Button>
                     </Grid>
                 </Border>

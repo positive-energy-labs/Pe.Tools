@@ -38,7 +38,7 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
                 .ToList();
 
             // Create preview panel with injected preview building logic
-            var previewPanel = new ScheduleSerializePreviewPanel(item => {
+            var previewPanel = new ScheduleSerializePreviewPanel((item, _) => {
                 if (item == null) return null;
                 var serializeItem = (ScheduleSerializePaletteItem)item;
                 return this.BuildSerializationPreview(serializeItem);

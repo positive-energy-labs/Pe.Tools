@@ -36,7 +36,7 @@ public class CmdPltFamilyElements : IExternalCommand {
             var uidoc = uiapp.ActiveUIDocument;
             var doc = uidoc.Document;
             if (!doc.IsFamilyDocument) {
-                TaskDialog.Show("Family Elements", "Family Elements palette is only available in family documents.");
+                _ = TaskDialog.Show("Family Elements", "Family Elements palette is only available in family documents.");
                 return Result.Cancelled;
             }
 

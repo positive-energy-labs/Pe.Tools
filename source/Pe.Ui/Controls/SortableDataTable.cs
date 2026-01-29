@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using Control = System.Windows.Controls.Control;
 
 namespace Pe.Ui.Controls;
 
@@ -23,6 +24,7 @@ public class SortableDataTable : UserControl {
     private ListSortDirection _currentSortDirection = ListSortDirection.Ascending;
 
     public SortableDataTable() {
+        this.FontSize = 13;
         this.BuildUI();
         // Handle scroll at UserControl level BEFORE DataGrid's internal ScrollViewer consumes it
         this.PreviewMouseWheel += this.OnPreviewMouseWheel;
@@ -74,7 +76,7 @@ public class SortableDataTable : UserControl {
             CanUserResizeRows = false,
             IsReadOnly = true,
             SelectionMode = DataGridSelectionMode.Single,
-            FontSize = 13,
+            FontSize = this.FontSize,
             RowHeight = 22, // Compact row height
             ColumnHeaderHeight = 24,
             BorderThickness = new Thickness(0),
@@ -87,6 +89,11 @@ public class SortableDataTable : UserControl {
         this._dataGrid.SetResourceReference(ForegroundProperty, "TextFillColorSecondaryBrush");
         this._dataGrid.SetResourceReference(DataGrid.RowBackgroundProperty, "ControlFillColorTransparentBrush");
         this._dataGrid.SetResourceReference(DataGrid.AlternatingRowBackgroundProperty, "ControlFillColorDefaultBrush");
+
+        // Center cell content vertically so text does not clip in compact rows
+        var cellStyle = new Style(typeof(DataGridCell));
+        cellStyle.Setters.Add(new Setter(Control.VerticalContentAlignmentProperty, VerticalAlignment.Center));
+        this._dataGrid.CellStyle = cellStyle;
 
         // Build columns
         foreach (var column in this._columns) {
@@ -144,7 +151,7 @@ public class SortableDataTable : UserControl {
 
         // Truncate text
         style.Setters.Add(new Setter(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis));
-        style.Setters.Add(new Setter(TextBlock.PaddingProperty, new Thickness(4, 0, 4, 0))); // Reduced vertical padding
+        style.Setters.Add(new Setter(TextBlock.PaddingProperty, new Thickness(4, 0, 4, 0)));
 
         // Tooltip that shows full text on hover
         style.Setters.Add(new Setter(ToolTipService.InitialShowDelayProperty, 300));
