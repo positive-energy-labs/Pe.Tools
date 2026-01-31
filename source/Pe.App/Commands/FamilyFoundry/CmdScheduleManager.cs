@@ -47,11 +47,6 @@ public class CmdScheduleManager : IExternalCommand {
             var createItems = ScheduleListItem.DiscoverProfiles(schedulesSubDir);
             var batchItems = BatchScheduleListItem.DiscoverProfiles(batchSubDir);
 
-            // Combine all items
-            var allItems = new List<ISchedulePaletteItem>();
-            allItems.AddRange(createItems.Select(i => new SchedulePaletteItemWrapper(i, ScheduleTabType.Create)));
-            allItems.AddRange(batchItems.Select(i => new SchedulePaletteItemWrapper(i, ScheduleTabType.Batch)));
-
             // Create preview panel with injected preview building logic
             var previewPanel = new SchedulePreviewPanel((item, _) => {
                 if (item == null) return null;
@@ -66,43 +61,53 @@ public class CmdScheduleManager : IExternalCommand {
                 return null;
             });
 
-            // Define actions for the palette
-            var actions = new List<PaletteAction<ISchedulePaletteItem>> {
-                new() {
-                    Name = "Open Profile File",
-                    Execute = async item => this.HandleOpenFile(item),
-                    CanExecute = item => item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
-                },
-                new() {
-                    Name = "Create Schedule/s",
-                    Execute = async item => this.HandleCreate(context, item),
-                    CanExecute = item => context.PreviewData?.IsValid == true
-                },
-                new() {
-                    Name = "Place Sample Families",
-                    Execute = async item => this.HandlePlaceSampleFamilies(context, item),
-                    CanExecute = item => item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
-                },
-            };
-
-            // Create the palette with tabs
-            var window = PaletteFactory.Create("Schedule Manager", allItems, actions,
+            // Create the palette with tabs - each tab defines its own items and actions
+            var window = PaletteFactory.Create("Schedule Manager",
                 new PaletteOptions<ISchedulePaletteItem> {
                     Persistence = (storage, item => item.TextPrimary),
+                    DefaultTabIndex = 0,
+                    SidebarPanel = previewPanel,
                     Tabs = [
                         new TabDefinition<ISchedulePaletteItem> {
                             Name = "Create",
-                            Filter = i => i.TabType == ScheduleTabType.Create,
-                            FilterKeySelector = i => i.CategoryName
+                            ItemProvider = () => createItems.Select(i => new SchedulePaletteItemWrapper(i, ScheduleTabType.Create)),
+                            FilterKeySelector = i => i.CategoryName,
+                            Actions = [
+                                new() {
+                                    Name = "Open Profile File",
+                                    Execute = async item => this.HandleOpenFile(item),
+                                    CanExecute = item => item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
+                                },
+                                new() {
+                                    Name = "Create Schedule",
+                                    Execute = async item => this.HandleCreate(context, item),
+                                    CanExecute = item => context.PreviewData?.IsValid == true
+                                },
+                                new() {
+                                    Name = "Place Sample Families",
+                                    Execute = async item => this.HandlePlaceSampleFamilies(context, item),
+                                    CanExecute = item => item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
+                                }
+                            ]
                         },
                         new TabDefinition<ISchedulePaletteItem> {
                             Name = "Batch",
-                            Filter = i => i.TabType == ScheduleTabType.Batch,
-                            FilterKeySelector = i => string.Empty
+                            ItemProvider = () => batchItems.Select(i => new SchedulePaletteItemWrapper(i, ScheduleTabType.Batch)),
+                            FilterKeySelector = i => string.Empty,
+                            Actions = [
+                                new() {
+                                    Name = "Open Profile File",
+                                    Execute = async item => this.HandleOpenFile(item),
+                                    CanExecute = item => item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
+                                },
+                                new() {
+                                    Name = "Create Schedules",
+                                    Execute = async item => this.HandleCreate(context, item),
+                                    CanExecute = item => context.PreviewData?.IsValid == true
+                                }
+                            ]
                         }
-                    ],
-                    DefaultTabIndex = 0,
-                    SidebarPanel = previewPanel
+                    ]
                 });
             window.Show();
 

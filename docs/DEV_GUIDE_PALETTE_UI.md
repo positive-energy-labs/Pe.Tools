@@ -14,18 +14,21 @@ public class CmdPltAllViews : IExternalCommand {
                 .OfClass(typeof(View))
                 .Cast<View>()
                 .OrderBy(v => v.Name)
-                .Select(v => new AllViewPaletteItem(v));
+                .Select(v => new AllViewPaletteItem(v))
+                .ToList();
 
-            var actions = new List<PaletteAction<AllViewPaletteItem>> {
-                new() { Name = "Open View", Execute = async item => uiapp.OpenAndActivateView(item.View) }
-            };
-
-            var window = PaletteFactory.Create("All Views Palette", items, actions,
+            var window = PaletteFactory.Create("All Views Palette",
                 new PaletteOptions<AllViewPaletteItem> {
-                    Storage = new Storage(nameof(CmdPltAllViews)),
-                    PersistenceKey = item => item.View.Id.ToString(),
+                    Persistence = (new Storage(nameof(CmdPltAllViews)), item => item.View.Id.ToString()),
                     SearchConfig = SearchConfig.Default(),
-                    FilterKeySelector = item => item.View.ViewType.ToString()
+                    Tabs = [new TabDefinition<AllViewPaletteItem> {
+                        Name = "All",
+                        ItemProvider = () => items,
+                        FilterKeySelector = item => item.View.ViewType.ToString(),
+                        Actions = [
+                            new() { Name = "Open View", Execute = async item => uiapp.OpenAndActivateView(item.View) }
+                        ]
+                    }]
                 });
             window.Show();
 
@@ -38,4 +41,6 @@ public class CmdPltAllViews : IExternalCommand {
 }
 ```
 
-It doesn't get much simplet than that.
+It doesn't get much simpler than that. Note that items and actions are now
+defined directly in the TabDefinition, making the palette configuration more
+cohesive and enabling per-tab lazy loading and per-tab actions.

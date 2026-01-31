@@ -10,7 +10,7 @@ namespace Pe.Ui.Core;
 
 /// <summary>
 ///     Defines a single tab in a tabbed palette.
-///     Filter predicate is null for "All" tabs that show everything.
+///     Filter predicate is null for "All" tabs that show everything. 
 /// </summary>
 /// <typeparam name="TItem">The palette item type</typeparam>
 public class TabDefinition<TItem> where TItem : class, IPaletteListItem {
@@ -20,7 +20,20 @@ public class TabDefinition<TItem> where TItem : class, IPaletteListItem {
     public required string Name { get; init; }
 
     /// <summary>
+    ///     Lazy item provider for this tab. Takes precedence over Filter if provided.
+    ///     Enables per-tab lazy loading - items are only collected when the tab is first activated.
+    ///     Default: null (use shared item collection with Filter)
+    /// </summary>
+    /// <example>
+    ///     <code>
+    ///     ItemProvider = () => FamilyActions.CollectFamilyTypes(doc)
+    ///     </code>
+    /// </example>
+    public Func<IEnumerable<TItem>>? ItemProvider { get; init; }
+
+    /// <summary>
     ///     Filter predicate for items in this tab. Null means show all items (no filtering).
+    ///     Only used if ItemProvider is null (i.e., using shared item collection).
     /// </summary>
     public Func<TItem, bool>? Filter { get; init; }
 
@@ -37,8 +50,22 @@ public class TabDefinition<TItem> where TItem : class, IPaletteListItem {
     ///     FilterKeySelector = item => item.TextPill
     ///     </code>
     /// </example>
-
     public Func<TItem, string>? FilterKeySelector { get; init; }
+
+    /// <summary>
+    ///     Per-tab actions. When provided, these actions replace global actions for this tab.
+    ///     Enables cleaner action lists by only showing relevant actions per tab.
+    ///     Default: null (use global actions)
+    /// </summary>
+    /// <example>
+    ///     <code>
+    ///     Actions = [
+    ///         new() { Name = "Place", Execute = async item => PlaceItem(item) },
+    ///         new() { Name = "Edit", Execute = async item => EditItem(item) }
+    ///     ]
+    ///     </code>
+    /// </example>
+    public List<PaletteAction<TItem>> Actions { get; init; } = [];
 }
 
 /// <summary>
@@ -48,23 +75,33 @@ public class TabDefinition<TItem> where TItem : class, IPaletteListItem {
 /// <example>
 ///     Basic usage with persistence and filtering:
 ///     <code>
-///     var window = PaletteFactory.Create("Schedule Palette", items, actions,
+///     var window = PaletteFactory.Create("Schedule Palette",
 ///         new PaletteOptions&lt;SchedulePaletteItem&gt; {
 ///             Persistence = (storage, item => item.Schedule.Id.ToString()),
 ///             SearchConfig = SearchConfig.PrimaryAndSecondary(),
 ///             Tabs = [new TabDefinition<SchedulePaletteItem> {
 ///                 Name = "All",
-///                 Filter = null,
-///                 FilterKeySelector = item => item.TextPill
+///                 ItemProvider = () => CollectSchedules(doc),
+///                 FilterKeySelector = item => item.TextPill,
+///                 Actions = [
+///                     new() { Name = "Open", Execute = async item => OpenSchedule(item) }
+///                 ]
 ///             }]
 ///         });
 ///     window.Show();
 ///     </code>
 /// </example>
 /// <example>
-///     Minimal usage (search enabled, no persistence):
+///     Minimal usage (no tabs, no persistence):
 ///     <code>
-///     var window = PaletteFactory.Create("My Palette", items, actions);
+///     var window = PaletteFactory.Create("My Palette",
+///         new PaletteOptions&lt;MyItem&gt; {
+///             Tabs = [new() {
+///                 Name = "All",
+///                 ItemProvider = () => GetItems(),
+///                 Actions = [new() { Name = "Execute", Execute = async item => DoAction(item) }]
+///             }]
+///         });
 ///     window.Show();
 ///     </code>
 /// </example>
@@ -74,38 +111,42 @@ public static class PaletteFactory {
     /// </summary>
     /// <typeparam name="TItem">The palette item type (must implement IPaletteListItem)</typeparam>
     /// <param name="title">Window title displayed in the floating pill</param>
-    /// <param name="items">Items to display in the palette list</param>
-    /// <param name="actions">Actions available for items (first action with no modifiers is the default)</param>
-    /// <param name="options">Optional configuration. If null, uses defaults (search enabled, no persistence)</param>
+    /// <param name="options">Configuration including tabs with ItemProvider and Actions. Tabs are required.</param>
     /// <returns>An EphemeralWindow ready to show</returns>
     public static EphemeralWindow Create<TItem>(
         string title,
-        IEnumerable<TItem> items,
-        List<PaletteAction<TItem>> actions,
         PaletteOptions<TItem> options
     ) where TItem : class, IPaletteListItem {
         options ??= new PaletteOptions<TItem>();
+
+        // Validation: tabs are now required
+        if (options.Tabs == null || !options.Tabs.Any()) {
+            throw new InvalidOperationException("Tabs are required. Each tab must define ItemProvider and optionally Actions.");
+        }
+
+        // Validation: all tabs must have ItemProvider
+        var tabsWithoutProvider = options.Tabs.Where(t => t.ItemProvider == null).ToList();
+        if (tabsWithoutProvider.Any()) {
+            throw new InvalidOperationException(
+                $"All tabs must have ItemProvider defined. " +
+                $"Tabs without ItemProvider: {string.Join(", ", tabsWithoutProvider.Select(t => t.Name))}");
+        }
 
         // Create search service - with or without persistence based on configuration
         var searchService = options.Persistence != null
             ? new SearchFilterService<TItem>(options.Persistence.Value.Storage, options.Persistence.Value.PersistenceKey, options.SearchConfig)
             : new SearchFilterService<TItem>(options.SearchConfig);
 
-        // Normalize tab config for ViewModel (single-tab config for non-tab filtering)
-        List<TabDefinition<TItem>>? viewModelTabs = null;
-        if (options.Tabs is { Count: 0 })
-            throw new InvalidOperationException("Tabs must be provided");
-        if (options.Tabs is { Count: >= 1 })
-            viewModelTabs = options.Tabs;
-
-        // Create view model with optional debounce delay and tabs
+        // Create view model with tabs (lazy loading via ItemProvider)
         var viewModel = new PaletteViewModel<TItem>(
-            items,
             searchService,
-            viewModelTabs,
+            options.Tabs,
             options.DefaultTabIndex
         );
-        options.ViewModelMutator?.Invoke(viewModel);
+
+        // Set up initial load callback if mutator is provided
+        if (options.ViewModelMutator != null)
+            viewModel.SetInitialLoadCallback(() => options.ViewModelMutator(viewModel));
 
         // Create palette - hide search box if search is disabled
         var isSearchDisabled = options.SearchConfig == null;
@@ -172,7 +213,7 @@ public static class PaletteFactory {
             };
         }
 
-        palette.Initialize(viewModel, actions, options.CustomKeyBindings, onCtrlReleased, sidebar);
+        palette.Initialize(viewModel, options.CustomKeyBindings, onCtrlReleased, sidebar);
 
         var window = new EphemeralWindow(palette, title);
 
@@ -245,7 +286,7 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     ///     SearchConfig = null
     ///     </code>
     /// </example>
-    public SearchConfig SearchConfig { get; init; } = SearchConfig.Default();
+    public SearchConfig? SearchConfig { get; init; } = SearchConfig.Default();
 
     /// <summary>
     ///     Custom keyboard bindings for navigation.
@@ -261,8 +302,9 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     public CustomKeyBindings? CustomKeyBindings { get; init; }
 
     /// <summary>
-    ///     Callback to mutate the view model after creation but before palette initialization.
-    ///     Useful for setting initial selection state.
+    ///     Callback to mutate the view model after initial items load.
+    ///     Called once after the first filter completes and items are populated.
+    ///     Useful for setting initial selection state (e.g., select second item for MRU palettes).
     ///     Default: null (no mutation)
     /// </summary>
     /// <example>

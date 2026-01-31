@@ -14,11 +14,14 @@ public interface IPaletteViewModel {
     IRelayCommand MoveSelectionUpCommand { get; }
     IRelayCommand MoveSelectionDownCommand { get; }
 
-    /// <summary>Whether tabs are enabled for this palette</summary>
+    /// <summary>Whether tabs are enabled for this palette (only true for multi-tab)</summary>
     bool HasTabs { get; }
 
-    /// <summary>Number of tabs (0 if no tabs)</summary>
+    /// <summary>Number of visible tabs for UI (0 if single-tab)</summary>
     int TabCount { get; }
+
+    /// <summary>Actual number of tab definitions (includes single-tab palettes)</summary>
+    int ActualTabCount { get; }
 
     /// <summary>Currently selected tab index</summary>
     int SelectedTabIndex { get; set; }
@@ -35,7 +38,6 @@ public interface IPaletteViewModel {
 /// </summary>
 public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewModel
     where TItem : class, IPaletteListItem {
-    private readonly List<TItem> _allItems;
     private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _debounceTimer;
     private readonly SearchFilterService<TItem> _searchService;
@@ -44,8 +46,17 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     private CancellationTokenSource? _filterCts;
     private int _filterSequence;
 
+    /// <summary> Per-tab item cache for lazy loading </summary>
+    private readonly Dictionary<int, List<TItem>> _tabItemsCache = new();
+
     /// <summary> Previously selected item for efficient selection updates </summary>
     private TItem? _previousSelectedItem;
+
+    /// <summary> Tracks whether this is the initial load (for higher priority rendering) </summary>
+    private bool _isInitialLoad = true;
+
+    /// <summary> Callback to run after initial items load (set via ViewModelMutator) </summary>
+    private Action? _onInitialLoadComplete;
 
     /// <summary> Current search text </summary>
     [ObservableProperty] private string _searchText = string.Empty;
@@ -63,12 +74,10 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     private const int SelectionDebounceMs = 300;
 
     public PaletteViewModel(
-        IEnumerable<TItem> items,
         SearchFilterService<TItem> searchService,
         IReadOnlyList<TabDefinition<TItem>> tabs,
         int defaultTabIndex = 0
     ) {
-        this._allItems = items.ToList();
         this._dispatcher = Dispatcher.CurrentDispatcher;
         this._searchService = searchService;
         this.Tabs = tabs;
@@ -92,9 +101,6 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
 
         this._searchService.LoadUsageData();
 
-        // Build search cache for all items (pre-compute lowercase strings and metadata)
-        this._searchService.BuildSearchCache(this._allItems);
-
         this.FilteredItems = new ObservableCollection<TItem>();
 
         // Initialize AvailableFilterValues collection (will be populated per-tab or globally)
@@ -110,6 +116,12 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
         if (this.FilteredItems.Count > 0)
             this.SelectedIndex = 0;
     }
+
+    /// <summary>
+    ///     Sets a callback to run once after the initial items load completes.
+    ///     Used for post-load mutations like setting initial selection.
+    /// </summary>
+    public void SetInitialLoadCallback(Action callback) => this._onInitialLoadComplete = callback;
 
     /// <summary> Filtered list of items based on search text and optional filter </summary>
     public ObservableCollection<TItem> FilteredItems { get; }
@@ -129,11 +141,20 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
         }
     }
 
-    /// <summary> Whether tabs are enabled for this palette </summary>
+    /// <summary> Whether the tab bar UI should be shown (only for multi-tab palettes) </summary>
     public bool HasTabs => this.Tabs is { Count: > 1 };
 
-    /// <summary> Number of tabs (0 if no tabs) </summary>
+    /// <summary>
+    ///     Number of visible tabs for UI purposes (0 if single-tab).
+    ///     Use <see cref="ActualTabCount"/> for action binding iteration.
+    /// </summary>
     public int TabCount => this.HasTabs ? this.Tabs?.Count ?? 0 : 0;
+
+    /// <summary>
+    ///     Actual number of tab definitions (includes single-tab palettes).
+    ///     Used for action binding setup and item loading.
+    /// </summary>
+    public int ActualTabCount => this.Tabs?.Count ?? 0;
 
     /// <summary> Whether the current tab has filtering enabled </summary>
     public bool CurrentTabHasFiltering => this.GetActiveTab(this._selectedTabIndex)?.FilterKeySelector != null;
@@ -148,6 +169,10 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
                 // Clear filter when switching tabs
                 this._selectedFilterValue = string.Empty;
                 this.OnPropertyChanged(nameof(this.SelectedFilterValue));
+
+                // Clear search cache (will be rebuilt when tab items are lazy loaded)
+                this._searchService.BuildSearchCache(new List<TItem>());
+
                 // Recompute available filter values for new tab
                 this.UpdateAvailableFilterValuesForCurrentTab();
                 this.FilterItems();
@@ -205,11 +230,8 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
 
         if (filterKeySelector == null) return;
 
-        // Get items that pass current tab filter
-        IEnumerable<TItem> tabItems = this._allItems;
-        var tabFilter = activeTab?.Filter;
-        if (tabFilter != null)
-            tabItems = tabItems.Where(tabFilter);
+        // Get items for current tab (lazy loaded or filtered)
+        var tabItems = this.GetItemsForCurrentTab();
 
         // Extract unique filter values
         var values = tabItems
@@ -236,6 +258,33 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     }
 
     /// <summary>
+    ///     Gets items for the current tab using lazy loading with caching.
+    ///     Loads items from ItemProvider on first access and caches them.
+    /// </summary>
+    private List<TItem> GetItemsForCurrentTab() {
+        var tab = GetActiveTab(this.Tabs, this._selectedTabIndex);
+
+        // Use ItemProvider with caching (all palettes now use lazy loading)
+        if (tab?.ItemProvider != null) {
+            // Check cache first
+            if (this._tabItemsCache.TryGetValue(this._selectedTabIndex, out var cached))
+                return cached;
+
+            // Load items from provider
+            var items = tab.ItemProvider().ToList();
+            this._tabItemsCache[this._selectedTabIndex] = items;
+
+            // Build search cache for this tab only
+            this._searchService.BuildSearchCache(items);
+
+            return items;
+        }
+
+        // Fallback: empty list if no ItemProvider (should not happen with current API)
+        return new List<TItem>();
+    }
+
+    /// <summary>
     ///     Filters items using 3-stage filtering: Tab -> Category Filter -> Search
     /// </summary>
     private void FilterItems() {
@@ -249,30 +298,30 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
         var selectedTabIndex = this._selectedTabIndex;
         var selectedFilterValue = this.SelectedFilterValue;
         var searchText = this.SearchText;
-        var allItems = this._allItems;
         var tabs = this.Tabs;
 
         _ = Task.Run(() => {
             if (token.IsCancellationRequested) return;
 
-            IEnumerable<TItem> items = allItems;
-
-            // Stage 1: Tab filter (if current tab has a filter)
+            // Get items for current tab (always lazy loaded via ItemProvider)
+            // Must get items on UI thread since it accesses cache
+            var items = this._dispatcher.Invoke(() => this.GetItemsForCurrentTab());
             var activeTab = GetActiveTab(tabs, selectedTabIndex);
-            var tabFilter = activeTab?.Filter;
-            if (tabFilter != null)
-                items = items.Where(tabFilter);
 
             // Stage 2: Category filter (use current tab's filter key selector)
             var currentFilterKeySelector = activeTab?.FilterKeySelector;
 
             if (currentFilterKeySelector != null && !string.IsNullOrEmpty(selectedFilterValue))
-                items = items.Where(item => currentFilterKeySelector(item) == selectedFilterValue);
+                items = items.Where(item => currentFilterKeySelector(item) == selectedFilterValue).ToList();
 
             // Stage 3: Search filter
-            var filtered = this._searchService.Filter(searchText, items.ToList());
+            var filtered = this._searchService.Filter(searchText, items);
 
             if (token.IsCancellationRequested) return;
+
+            // Use higher priority for initial load (Render), lower for subsequent filter updates (Background)
+            // This ensures list items appear quickly on first open, while keeping UI responsive during typing
+            var priority = this._isInitialLoad ? DispatcherPriority.Render : DispatcherPriority.Background;
 
             this._dispatcher.Invoke(() => {
                 if (token.IsCancellationRequested) return;
@@ -284,9 +333,18 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
                 // Reset selection to first item
                 this.SelectedIndex = this.FilteredItems.Count > 0 ? 0 : -1;
 
+                // Run initial load callback if set (e.g., to select a different item)
+                if (this._isInitialLoad && this._onInitialLoadComplete != null) {
+                    this._onInitialLoadComplete.Invoke();
+                    this._onInitialLoadComplete = null; // Clear after use
+                }
+
                 // Notify that filtered items have changed
                 this.FilteredItemsChanged?.Invoke(this, EventArgs.Empty);
-            }, DispatcherPriority.Background);
+
+                // Mark initial load as complete
+                this._isInitialLoad = false;
+            }, priority);
         }, token);
     }
 

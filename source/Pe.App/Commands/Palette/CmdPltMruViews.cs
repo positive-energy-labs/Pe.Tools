@@ -28,14 +28,15 @@ public class CmdPltMruViews : IExternalCommand {
     public static void Open(UIApplication uiapp) {
         var items = DocumentManager.Instance
             .GetMruOrderedViews(uiapp)
-            .Select(v => new MruViewPaletteItem(v));
+            .Select(v => new MruViewPaletteItem(v))
+            .ToList();
 
         var customKeys = new CustomKeyBindings();
         customKeys.Add(Key.OemTilde, NavigationAction.MoveDown, ModifierKeys.Control); // Ctrl+` cycles forward
         customKeys.Add(Key.OemTilde, NavigationAction.MoveUp,
             ModifierKeys.Control | ModifierKeys.Shift); // Ctrl+Shift+` cycles backward
 
-        var window = PaletteFactory.Create("Mru Views Palette", items, new List<PaletteAction<MruViewPaletteItem>>(),
+        var window = PaletteFactory.Create("Mru Views Palette",
             new PaletteOptions<MruViewPaletteItem> {
                 SearchConfig = null, // Disable search for MRU palette
                 CustomKeyBindings = customKeys,
@@ -43,6 +44,20 @@ public class CmdPltMruViews : IExternalCommand {
                     // Select second item (first is current view, second is previous)
                     if (vm.FilteredItems.Count > 1) vm.SelectedIndex = 1;
                 },
+                Tabs = [new TabDefinition<MruViewPaletteItem> {
+                    Name = "All",
+                    ItemProvider = () => items,
+                    Actions = [
+                        new() {
+                            Name = "Open View",
+                            Execute = item => {
+                                if (item.View != null)
+                                    uiapp.OpenAndActivateView(item.View);
+                                return Task.CompletedTask;
+                            }
+                        }
+                    ]
+                }],
                 OnCtrlReleased = vm => () => {
                     // Read the current SelectedItem when Ctrl is released (not at window creation)
                     var selectedItem = vm.SelectedItem;

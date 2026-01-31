@@ -44,25 +44,23 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
                 return this.BuildSerializationPreview(serializeItem);
             });
 
-            // Define action
-            var actions = new List<PaletteAction<ScheduleSerializePaletteItem>> {
-                new() {
-                    Name = "Serialize",
-                    Execute = item => this.HandleSerialize(storage, item),
-                    CanExecute = _ => true
-                }
-            };
-
             // Create the palette
-            var window = PaletteFactory.Create("Schedule Serializer", serializeItems, actions,
+            var window = PaletteFactory.Create("Schedule Serializer",
                 new PaletteOptions<ScheduleSerializePaletteItem> {
                     Persistence = (storage, item => item.TextPrimary),
+                    SidebarPanel = previewPanel,
                     Tabs = [new TabDefinition<ScheduleSerializePaletteItem> {
                         Name = "All",
-                        Filter = null,
-                        FilterKeySelector = i => i.TextPill ?? string.Empty
-                    }],
-                    SidebarPanel = previewPanel
+                        ItemProvider = () => serializeItems,
+                        FilterKeySelector = i => i.TextPill ?? string.Empty,
+                        Actions = [
+                            new() {
+                                Name = "Serialize",
+                                Execute = item => this.HandleSerialize(storage, item),
+                                CanExecute = _ => true
+                            }
+                        ]
+                    }]
                 });
             window.Show();
 

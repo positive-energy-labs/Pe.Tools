@@ -115,17 +115,16 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         // Create the palette with sidebar
         window = PaletteFactory.Create(
             $"{this._commandName} - Select Profile",
-            profiles,
-            paletteActions,
             new PaletteOptions<ProfileListItem> {
                 Persistence = (storage, item => item.TextPrimary),
                 SearchConfig = SearchConfig.PrimaryAndSecondary(),
+                SidebarPanel = previewPanel,
                 Tabs = [new TabDefinition<ProfileListItem> {
                     Name = "All",
-                    Filter = null,
-                    FilterKeySelector = item => string.IsNullOrEmpty(item.ExtendsValue) ? "Base" : "Extended"
-                }],
-                SidebarPanel = previewPanel
+                    ItemProvider = () => profiles,
+                    FilterKeySelector = item => string.IsNullOrEmpty(item.ExtendsValue) ? "Base" : "Extended",
+                    Actions = paletteActions
+                }]
             });
 
         return window;

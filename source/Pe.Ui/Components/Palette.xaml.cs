@@ -68,7 +68,6 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     private readonly List<Button> _tabButtons = [];
     private readonly SolidColorBrush _pinPinnedBrush = new(System.Windows.Media.Color.FromRgb(100, 149, 237));
     private readonly SolidColorBrush _pinHoverBrush = new(System.Windows.Media.Color.FromRgb(126, 179, 255));
-    private ActionBinding _actionBinding;
     private ActionMenu _actionMenu;
     private PaletteSidebar _currentSidebar;
     private CustomKeyBindings _customKeyBindings;
@@ -83,6 +82,9 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     private bool _sidebarAutoExpanded;
     private SelectableTextBox _tooltipPanel;
     private double _trayMaxHeight = DefaultTrayMaxHeight;
+
+    /// <summary> Per-tab action registry for dynamic action switching </summary>
+    private Dictionary<int, object>? _tabActionBindings;
 
     public Palette(bool isSearchBoxHidden = false) {
         this.InitializeComponent();
@@ -117,7 +119,6 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     /// </summary>
     internal void Initialize<TItem>(
         PaletteViewModel<TItem> viewModel,
-        IEnumerable<PaletteAction<TItem>> actions,
         CustomKeyBindings customKeyBindings = null,
         Action onCtrlReleased = null,
         PaletteSidebar paletteSidebar = null
@@ -180,16 +181,36 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         // Wire up pin button
         this.PinButton.Click += this.PinButton_Click;
 
-        var actionBinding = new ActionBinding<TItem>();
-        if (actions != null && actions.Any()) actionBinding.RegisterRange(actions);
+        // Validate: all tabs must have Actions defined (includes single-tab palettes)
+        for (var i = 0; i < viewModel.ActualTabCount; i++) {
+            var tab = viewModel.Tabs[i];
+            if (tab.Actions == null || !tab.Actions.Any()) {
+                throw new InvalidOperationException(
+                    $"Tab {i} ('{tab.Name}') does not have Actions defined. " +
+                    $"All tabs must define Actions. For single-tab palettes, create one tab with ItemProvider and Actions.");
+            }
+        }
+
+        // Build per-tab action bindings (includes single-tab palettes)
+        this._tabActionBindings = new Dictionary<int, object>();
+        for (var i = 0; i < viewModel.ActualTabCount; i++) {
+            var tab = viewModel.Tabs[i];
+            var tabActionBinding = new ActionBinding<TItem>();
+            tabActionBinding.RegisterRange(tab.Actions);
+            this._tabActionBindings[i] = tabActionBinding;
+        }
+
+        // Create action menu for right-click
         var actionMenu = new ActionMenu<TItem>([Key.Escape, Key.Left]);
 
         // Store type-erased references for non-generic code paths
-        this._actionBinding = actionBinding;
         this._actionMenu = actionMenu;
 
+        // Get the active action binding for the current tab (guaranteed to exist due to validation)
+        var activeActionBinding = this.GetActionBindingForTab<TItem>(viewModel.SelectedTabIndex)!;
+
         // Store ActionBinding as attached property so child controls can access it
-        PaletteAttachedProperties.SetActionBinding(this, actionBinding);
+        PaletteAttachedProperties.SetActionBinding(this, activeActionBinding);
 
         // Create tooltip panel programmatically
         this._tooltipPanel = new SelectableTextBox([Key.Escape, Key.Up, Key.Down, Key.Right]);
@@ -199,14 +220,15 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         this._executeItemFunc = async () => {
             var selectedItem = viewModel.SelectedItem;
             if (selectedItem == null) return false;
-            return await this.ExecuteItemTyped(selectedItem, actionBinding, viewModel, Keyboard.Modifiers);
+            var currentActionBinding = this.GetActionBindingForTab<TItem>(viewModel.SelectedTabIndex)!;
+            return await this.ExecuteItemTyped(selectedItem, currentActionBinding, viewModel, Keyboard.Modifiers);
         };
 
         // Store Ctrl-release callback if provided
         this._onCtrlReleased = onCtrlReleased;
 
         // Wire up typed event handlers
-        this.SetupTypedEventHandlers(viewModel, actionBinding, actionMenu);
+        this.SetupTypedEventHandlers(viewModel, actionMenu);
 
         // Wire up event handlers
         this.Loaded += this.UserControl_Loaded;
@@ -223,9 +245,27 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         }
     }
 
+    /// <summary>
+    ///     Gets the typed action binding for a specific tab.
+    /// </summary>
+    private ActionBinding<TItem>? GetActionBindingForTab<TItem>(int tabIndex) where TItem : class, IPaletteListItem {
+        if (this._tabActionBindings == null || !this._tabActionBindings.TryGetValue(tabIndex, out var binding))
+            return null;
+        return binding as ActionBinding<TItem>;
+    }
+
+    /// <summary>
+    ///     Gets the current tab's action binding (type-erased for non-generic contexts).
+    /// </summary>
+    private ActionBinding? GetCurrentActionBinding() {
+        if (this.DataContext is not IPaletteViewModel viewModel) return null;
+        if (this._tabActionBindings == null) return null;
+        if (!this._tabActionBindings.TryGetValue(viewModel.SelectedTabIndex, out var binding)) return null;
+        return binding as ActionBinding;
+    }
+
     private void SetupTypedEventHandlers<TItem>(
         PaletteViewModel<TItem> viewModel,
-        ActionBinding<TItem> actionBinding,
         ActionMenu<TItem> actionMenu
     ) where TItem : class, IPaletteListItem {
         this.ItemListView.ItemMouseLeftButtonUp += async (_, e) => {
@@ -233,7 +273,8 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             var item = source.DataContext as TItem;
             if (item == null) return;
             viewModel.SelectedItem = item;
-            _ = await this.ExecuteItemTyped(item, actionBinding, viewModel, Keyboard.Modifiers);
+            var currentActionBinding = this.GetActionBindingForTab<TItem>(viewModel.SelectedTabIndex)!;
+            _ = await this.ExecuteItemTyped(item, currentActionBinding, viewModel, Keyboard.Modifiers);
         };
 
         this.ItemListView.ItemMouseRightButtonUp += (_, e) => {
@@ -243,7 +284,8 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             viewModel.SelectedItem = item;
 
             e.Handled = this.ShowPopover(placementTarget => {
-                actionMenu.Actions = actionBinding.GetAllActions().ToList();
+                var currentActionBinding = this.GetActionBindingForTab<TItem>(viewModel.SelectedTabIndex)!;
+                actionMenu.Actions = currentActionBinding.GetAllActions().ToList();
                 actionMenu.Show(placementTarget, item);
             });
         };
@@ -260,14 +302,17 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
 
             viewModel.RecordUsage();
 
+            // Get the current tab's action binding
+            var currentActionBinding = this.GetActionBindingForTab<TItem>(viewModel.SelectedTabIndex)!;
+
             // If KeepOpenAfterAction is true, execute immediately and keep palette open
             if (!this._parentWindow.IsEphemeral) {
-                await actionBinding.ExecuteAsync(action, selectedItem);
+                await currentActionBinding.ExecuteAsync(action, selectedItem);
                 return;
             }
 
             // Default behavior: close window first, then defer execution
-            this.ExecuteDeferred(async () => await actionBinding.ExecuteAsync(action, selectedItem));
+            this.ExecuteDeferred(async () => await currentActionBinding.ExecuteAsync(action, selectedItem));
         };
 
         // Set up tooltip popover exit handler
@@ -588,7 +633,8 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             }
         } else if (e.Key == Key.Right && selectedItem != null) {
             e.Handled = this.ShowPopover(placementTarget => {
-                this._actionMenu?.SetActionsUntyped(this._actionBinding?.GetAllActionsUntyped());
+                var currentBinding = this.GetCurrentActionBinding();
+                this._actionMenu?.SetActionsUntyped(currentBinding?.GetAllActionsUntyped());
                 this._actionMenu?.ShowUntyped(placementTarget, selectedItem);
             });
         }
@@ -688,6 +734,11 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             this.UpdateTabButtonStates(viewModel.SelectedTabIndex);
             this.ScrollSelectedTabIntoView(viewModel.SelectedTabIndex);
             this.UpdateFilterBoxVisibility(viewModel);
+
+            // Update attached property with current tab's action binding
+            var currentBinding = this.GetActionBindingForTab<TItem>(viewModel.SelectedTabIndex);
+            if (currentBinding != null)
+                PaletteAttachedProperties.SetActionBinding(this, currentBinding);
         };
 
         // Set initial state

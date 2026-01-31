@@ -70,6 +70,7 @@ public static class FamilyPlacementHelper {
                 return family != null ? new FamilyPlacementItem(family) : null;
             })
             .Where(item => item != null)
+            .Cast<FamilyPlacementItem>()
             .ToList();
 
         if (items.Count == 0) {
@@ -78,77 +79,79 @@ public static class FamilyPlacementHelper {
             return;
         }
 
-        // Create action to place family via point picking, then reopen palette
-        var actions = new List<PaletteAction<FamilyPlacementItem>> {
-            new() {
-                Name = "Place",
-                Execute = async item => {
-                    Console.WriteLine($"[FamilyPlacement] Starting placement for: {item.Family.Name}");
-
-                    var symbol = item.GetFirstSymbol();
-                    if (symbol == null) {
-                        Console.WriteLine($"[FamilyPlacement] No symbol found for: {item.Family.Name}");
-                        new Ballogger()
-                            .Add(LogEventLevel.Warning, new StackFrame(),
-                                $"Family '{item.Family.Name}' has no types to place")
-                            .Show();
-                        return;
-                    }
-
-                    Console.WriteLine($"[FamilyPlacement] Symbol found: {symbol.Name}, IsActive: {symbol.IsActive}");
-
-                    var uiDoc = uiApp.ActiveUIDocument;
-                    var doc = uiDoc.Document;
-
-                    try {
-                        // Activate symbol if needed (requires transaction)
-                        if (!symbol.IsActive) {
-                            Console.WriteLine("[FamilyPlacement] Activating symbol...");
-                            using var activateTrans = new Transaction(doc, "Activate Family Symbol");
-                            _ = activateTrans.Start();
-                            symbol.Activate();
-                            _ = activateTrans.Commit();
-                            Console.WriteLine("[FamilyPlacement] Symbol activated");
-                        }
-
-                        Console.WriteLine("[FamilyPlacement] Prompting for point pick...");
-                        // Prompt user to pick a point for placement
-                        var point = uiDoc.Selection.PickPoint($"Click to place {item.Family.Name}");
-                        Console.WriteLine($"[FamilyPlacement] Point picked: {point}");
-
-                        // Place the family instance at the picked point
-                        using var trans = new Transaction(doc, "Place Family Instance");
-                        _ = trans.Start();
-                        var instance = doc.Create.NewFamilyInstance(point, symbol, StructuralType.NonStructural);
-                        _ = trans.Commit();
-                        Console.WriteLine($"[FamilyPlacement] Instance created: {instance?.Id}");
-
-                        // Reopen the palette with the same family list for continued placement
-                        Console.WriteLine("[FamilyPlacement] Reopening palette after successful placement");
-                        ShowFamilyPlacementPalette(uiApp, familyNames, commandName);
-                    } catch (OperationCanceledException) {
-                        Console.WriteLine("[FamilyPlacement] User canceled placement (Escape pressed)");
-                        // User pressed Escape during point picking
-                        // Reopen palette anyway so they can choose another family or close it
-                        ShowFamilyPlacementPalette(uiApp, familyNames, commandName);
-                    } catch (Exception ex) {
-                        Console.WriteLine($"[FamilyPlacement] ERROR: {ex.GetType().Name}: {ex.Message}");
-                        new Ballogger()
-                            .Add(LogEventLevel.Error, new StackFrame(), ex, true)
-                            .Show();
-                        // Still reopen palette on error
-                        ShowFamilyPlacementPalette(uiApp, familyNames, commandName);
-                    }
-
-                    await Task.CompletedTask;
-                },
-                CanExecute = item => item != null
-            }
-        };
-
-        var window = PaletteFactory.Create($"{commandName} - Place Families", items, actions,
+        var window = PaletteFactory.Create($"{commandName} - Place Families",
             new PaletteOptions<FamilyPlacementItem> {
-                SearchConfig = SearchConfig.PrimaryAndSecondary()
+                SearchConfig = SearchConfig.PrimaryAndSecondary(),
+                Tabs = [new TabDefinition<FamilyPlacementItem> {
+                    Name = "All",
+                    ItemProvider = () => items,
+                    Actions = [
+                        new() {
+                            Name = "Place",
+                            Execute = async item => {
+                                Console.WriteLine($"[FamilyPlacement] Starting placement for: {item.Family.Name}");
+
+                                var symbol = item.GetFirstSymbol();
+                                if (symbol == null) {
+                                    Console.WriteLine($"[FamilyPlacement] No symbol found for: {item.Family.Name}");
+                                    new Ballogger()
+                                        .Add(LogEventLevel.Warning, new StackFrame(),
+                                            $"Family '{item.Family.Name}' has no types to place")
+                                        .Show();
+                                    return;
+                                }
+
+                                Console.WriteLine($"[FamilyPlacement] Symbol found: {symbol.Name}, IsActive: {symbol.IsActive}");
+
+                                var uiDoc = uiApp.ActiveUIDocument;
+                                var doc = uiDoc.Document;
+
+                                try {
+                                    // Activate symbol if needed (requires transaction)
+                                    if (!symbol.IsActive) {
+                                        Console.WriteLine("[FamilyPlacement] Activating symbol...");
+                                        using var activateTrans = new Transaction(doc, "Activate Family Symbol");
+                                        _ = activateTrans.Start();
+                                        symbol.Activate();
+                                        _ = activateTrans.Commit();
+                                        Console.WriteLine("[FamilyPlacement] Symbol activated");
+                                    }
+
+                                    Console.WriteLine("[FamilyPlacement] Prompting for point pick...");
+                                    // Prompt user to pick a point for placement
+                                    var point = uiDoc.Selection.PickPoint($"Click to place {item.Family.Name}");
+                                    Console.WriteLine($"[FamilyPlacement] Point picked: {point}");
+
+                                    // Place the family instance at the picked point
+                                    using var trans = new Transaction(doc, "Place Family Instance");
+                                    _ = trans.Start();
+                                    var instance = doc.Create.NewFamilyInstance(point, symbol, StructuralType.NonStructural);
+                                    _ = trans.Commit();
+                                    Console.WriteLine($"[FamilyPlacement] Instance created: {instance?.Id}");
+
+                                    // Reopen the palette with the same family list for continued placement
+                                    Console.WriteLine("[FamilyPlacement] Reopening palette after successful placement");
+                                    ShowFamilyPlacementPalette(uiApp, familyNames, commandName);
+                                } catch (OperationCanceledException) {
+                                    Console.WriteLine("[FamilyPlacement] User canceled placement (Escape pressed)");
+                                    // User pressed Escape during point picking
+                                    // Reopen palette anyway so they can choose another family or close it
+                                    ShowFamilyPlacementPalette(uiApp, familyNames, commandName);
+                                } catch (Exception ex) {
+                                    Console.WriteLine($"[FamilyPlacement] ERROR: {ex.GetType().Name}: {ex.Message}");
+                                    new Ballogger()
+                                        .Add(LogEventLevel.Error, new StackFrame(), ex, true)
+                                        .Show();
+                                    // Still reopen palette on error
+                                    ShowFamilyPlacementPalette(uiApp, familyNames, commandName);
+                                }
+
+                                await Task.CompletedTask;
+                            },
+                            CanExecute = item => item != null
+                        }
+                    ]
+                }]
                 // Note: KeepOpenAfterAction cannot be used here because transactions
                 // require Revit API context (deferred execution), which closes the window
             });

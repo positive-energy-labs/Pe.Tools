@@ -1,8 +1,8 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
-using Pe.App.Commands.Palette;
+using Pe.Extensions.FamDocument;
+using Pe.Extensions.UiApplication;
 using Pe.Global.Revit.Ui;
-using Pe.Global.Services.Storage;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
 using Serilog;
@@ -12,12 +12,12 @@ using System.Diagnostics;
 namespace Pe.App.Commands.Palette.FamilyPalette;
 
 /// <summary>
-///     Base class for all family palette commands.
+///     Base class for all family elements palette commands.
 ///     Contains shared logic for building and showing the palette.
 ///     Derived classes only need to specify the default tab index.
 /// </summary>
 [Transaction(TransactionMode.Manual)]
-public abstract class FamilyPaletteBase : IExternalCommand {
+public abstract class FamilyElementsPaletteBase : IExternalCommand {
     /// <summary>
     ///     Override to specify which tab should be selected by default.
     /// </summary>
@@ -25,47 +25,53 @@ public abstract class FamilyPaletteBase : IExternalCommand {
 
     public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elementSet) {
         try {
-            var uiapp = commandData.Application;
-            var doc = uiapp.ActiveUIDocument.Document;
-
-            return ShowPalette(uiapp, this.DefaultTabIndex);
+            return ShowPalette(commandData.Application, this.DefaultTabIndex);
         } catch (Exception ex) {
-            Log.Error(ex, "Family palette command failed");
+            Log.Error(ex, "Family elements palette command failed");
             new Ballogger().Add(LogEventLevel.Error, new StackFrame(), ex, true).Show();
             return Result.Failed;
         }
     }
 
-    internal static Result ShowPalette(UIApplication uiapp, int defaultTabIndex, string? filterValue = null) {
+    internal static Result ShowPalette(UIApplication uiapp, int defaultTabIndex) {
         try {
-            var doc = uiapp.ActiveUIDocument.Document;
             var uidoc = uiapp.ActiveUIDocument;
+            var doc = uidoc.Document;
+
+            if (!doc.IsFamilyDocument) {
+                _ = TaskDialog.Show("Family Elements", "Family Elements palette is only available in family documents.");
+                return Result.Cancelled;
+            }
+
+            var familyDoc = new FamilyDocument(doc);
 
             // Create preview panel for sidebar
-            var previewPanel = new FamilyPreviewPanel(doc);
+            var previewPanel = new FamilyElementPreviewPanel(uidoc);
+
+            // Create highlighter for visual feedback
+            var highlighter = new ElementHighlighter(uidoc);
 
             // Create tab definitions with lazy loading
-            var tabs = FamilyTabConfig.CreateTabs(doc, uiapp, uidoc);
+            var tabs = FamilyElementsTabConfig.CreateTabs(doc, uiapp, uidoc, familyDoc);
 
-            var window = PaletteFactory.Create("Family Palette",
-                new PaletteOptions<UnifiedFamilyItem> {
-                    Persistence = (new Storage(nameof(CmdPltFamilies)), item => item.PersistenceKey),
+            var window = PaletteFactory.Create("Family Elements",
+                new PaletteOptions<FamilyElementItem> {
                     SearchConfig = SearchConfig.PrimaryAndSecondary(),
                     Tabs = tabs,
                     DefaultTabIndex = defaultTabIndex,
                     SidebarPanel = previewPanel,
-                    ViewModelMutator = vm => {
-                        if (string.IsNullOrWhiteSpace(filterValue)) return;
-                        vm.SelectedFilterValue = filterValue;
-                        if (vm.FilteredItems.Count > 0)
-                            vm.SelectedIndex = 0;
+                    OnSelectionChanged = item => {
+                        if (item?.ElementId != null)
+                            highlighter.Highlight(item.ElementId);
                     }
                 });
+
+            window.Closed += (_, _) => highlighter.Dispose();
             window.Show();
 
             return Result.Succeeded;
         } catch (Exception ex) {
-            Log.Error(ex, "Family palette failed to open");
+            Log.Error(ex, "Family elements palette failed to open");
             new Ballogger().Add(LogEventLevel.Error, new StackFrame(), ex, true).Show();
             return Result.Failed;
         }
