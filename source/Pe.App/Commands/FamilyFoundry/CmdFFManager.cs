@@ -70,7 +70,7 @@ public class CmdFFManager : IExternalCommand {
         // Force this to never be single transaction
         var executionOptions = new ExecutionOptions { SingleTransaction = false, OptimizeTypeOperations = false };
 
-        // Request both parameter and refplane snapshots
+        // Request both parameter and ref-plane snapshots
         var collectorQueue = new CollectorQueue()
             .Add(new ParamSectionCollector())
             .Add(new RefPlaneSectionCollector());
@@ -122,12 +122,49 @@ public class CmdFFManager : IExternalCommand {
             }
         ]);
 
+        // Extract parameters needed for dimension labeling from RefPlane specs
+        var dimLabelParamsSettings = ExtractDimLabelParams(profile);
+
         return new OperationQueue()
             .Add(new AddSharedParams(apsParamData))
+            .Add(new AddFamilyParams(dimLabelParamsSettings))  // Create dimension label params FIRST (no values)
             .Add(new MakeRefPlanesAndDims(profile.MakeRefPlaneAndDims))
             .Add(new AddAndSetParams(profile.AddAndSetParams, true))
             .Add(new MakeRefPlaneSubcategories(specs))
             .Add(new SortParams(new SortParamsSettings()));
+    }
+
+    /// <summary>
+    ///     Extracts parameter names from MirrorSpecs and OffsetSpecs and finds their settings
+    ///     in AddAndSetParams. These parameters are needed before dimension labeling.
+    /// </summary>
+    private static AddAndSetParamsSettings ExtractDimLabelParams(ProfileFamilyManager profile) {
+        // Collect all parameter names referenced in RefPlane specs
+        var paramNames = new List<string>();
+        paramNames.AddRange(profile.MakeRefPlaneAndDims.MirrorSpecs
+            .Where(s => !string.IsNullOrEmpty(s.Parameter))
+            .Select(s => s.Parameter));
+        paramNames.AddRange(profile.MakeRefPlaneAndDims.OffsetSpecs
+            .Where(s => !string.IsNullOrEmpty(s.Parameter))
+            .Select(s => s.Parameter));
+
+        var distinctParamNames = paramNames.Distinct().ToList();
+
+        Console.WriteLine($"[ExtractDimLabelParams] Found {distinctParamNames.Count} dimension label params: {string.Join(", ", distinctParamNames)}");
+
+        // Find the corresponding parameter settings from AddAndSetParams
+        var dimLabelParamSettings = profile.AddAndSetParams.Parameters
+            .Where(p => distinctParamNames.Contains(p.Name))
+            .ToList();
+
+        Console.WriteLine($"[ExtractDimLabelParams] Extracted {dimLabelParamSettings.Count} param settings for dimension labeling");
+
+        return new AddAndSetParamsSettings {
+            Enabled = dimLabelParamSettings.Count > 0,
+            CreateFamParamIfMissing = true,
+            OverrideExistingValues = false,  // Don't set values yet, just create params
+            Parameters = dimLabelParamSettings
+        };
     }
 }
 
