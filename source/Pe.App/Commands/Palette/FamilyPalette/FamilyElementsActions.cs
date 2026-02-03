@@ -1,7 +1,6 @@
-using Autodesk.Revit.UI;
 using Pe.App.Services;
 using Pe.Extensions.FamDocument;
-using Pe.Extensions.UiApplication;
+using Pe.Global.Services.Document;
 
 namespace Pe.App.Commands.Palette.FamilyPalette;
 
@@ -13,33 +12,33 @@ internal static class FamilyElementsActions {
     /// <summary>
     ///     Collects all family elements (families, parameters, dimensions, ref planes, connectors).
     /// </summary>
-    internal static IEnumerable<FamilyElementItem> CollectAllElements(Document doc, FamilyDocument familyDoc) {
+    internal static IEnumerable<FamilyElementItem> CollectAllElements(FamilyDocument familyDoc) {
         // Nested Families
-        foreach (var item in CollectFamilies(doc, familyDoc))
+        foreach (var item in CollectFamilies(familyDoc))
             yield return item;
 
         // Family Parameters
-        foreach (var item in CollectParameters(doc, familyDoc))
+        foreach (var item in CollectParameters(familyDoc))
             yield return item;
 
         // Dimensions
-        foreach (var item in CollectDimensions(doc, familyDoc))
+        foreach (var item in CollectDimensions(familyDoc))
             yield return item;
 
         // Reference Planes
-        foreach (var item in CollectReferencePlanes(doc, familyDoc))
+        foreach (var item in CollectReferencePlanes(familyDoc))
             yield return item;
 
         // Connectors
-        foreach (var item in CollectConnectors(doc, familyDoc))
+        foreach (var item in CollectConnectors(familyDoc))
             yield return item;
     }
 
     /// <summary>
     ///     Collects nested family instances in the family document.
     /// </summary>
-    internal static IEnumerable<FamilyElementItem> CollectFamilies(Document doc, FamilyDocument familyDoc) {
-        foreach (var instance in new FilteredElementCollector(doc)
+    internal static IEnumerable<FamilyElementItem> CollectFamilies(FamilyDocument familyDoc) {
+        foreach (var instance in new FilteredElementCollector(familyDoc)
                      .OfClass(typeof(FamilyInstance))
                      .Cast<FamilyInstance>())
             yield return new FamilyElementItem(instance, familyDoc);
@@ -48,7 +47,7 @@ internal static class FamilyElementsActions {
     /// <summary>
     ///     Collects family parameters.
     /// </summary>
-    internal static IEnumerable<FamilyElementItem> CollectParameters(Document doc, FamilyDocument familyDoc) {
+    internal static IEnumerable<FamilyElementItem> CollectParameters(FamilyDocument familyDoc) {
         foreach (var param in familyDoc.FamilyManager.Parameters.OfType<FamilyParameter>()
                      .OrderBy(p => p.Definition.Name))
             yield return new FamilyElementItem(param, familyDoc);
@@ -57,8 +56,8 @@ internal static class FamilyElementsActions {
     /// <summary>
     ///     Collects dimensions (excluding spot dimensions).
     /// </summary>
-    internal static IEnumerable<FamilyElementItem> CollectDimensions(Document doc, FamilyDocument familyDoc) {
-        foreach (var dim in new FilteredElementCollector(doc)
+    internal static IEnumerable<FamilyElementItem> CollectDimensions(FamilyDocument familyDoc) {
+        foreach (var dim in new FilteredElementCollector(familyDoc)
                      .OfClass(typeof(Dimension))
                      .Cast<Dimension>()
                      .Where(d => d is not SpotDimension))
@@ -68,8 +67,8 @@ internal static class FamilyElementsActions {
     /// <summary>
     ///     Collects reference planes.
     /// </summary>
-    internal static IEnumerable<FamilyElementItem> CollectReferencePlanes(Document doc, FamilyDocument familyDoc) {
-        foreach (var refPlane in new FilteredElementCollector(doc)
+    internal static IEnumerable<FamilyElementItem> CollectReferencePlanes(FamilyDocument familyDoc) {
+        foreach (var refPlane in new FilteredElementCollector(familyDoc)
                      .OfClass(typeof(ReferencePlane))
                      .Cast<ReferencePlane>())
             yield return new FamilyElementItem(refPlane, familyDoc);
@@ -78,8 +77,8 @@ internal static class FamilyElementsActions {
     /// <summary>
     ///     Collects connector elements.
     /// </summary>
-    internal static IEnumerable<FamilyElementItem> CollectConnectors(Document doc, FamilyDocument familyDoc) {
-        foreach (var connector in new FilteredElementCollector(doc)
+    internal static IEnumerable<FamilyElementItem> CollectConnectors(FamilyDocument familyDoc) {
+        foreach (var connector in new FilteredElementCollector(familyDoc)
                      .OfClass(typeof(ConnectorElement))
                      .Cast<ConnectorElement>())
             yield return new FamilyElementItem(connector, familyDoc);
@@ -88,7 +87,8 @@ internal static class FamilyElementsActions {
     /// <summary>
     ///     Zooms to and selects an element in the view.
     /// </summary>
-    internal static void HandleZoomToElement(UIDocument uidoc, FamilyElementItem? item) {
+    internal static void HandleZoomToElement(FamilyElementItem? item) {
+        var uidoc = DocumentManager.GetActiveUIDocument();
         if (item?.ElementId == null) return;
         uidoc.ShowElements(item.ElementId);
         uidoc.Selection.SetElementIds([item.ElementId]);
@@ -97,7 +97,7 @@ internal static class FamilyElementsActions {
     /// <summary>
     ///     Opens RevitLookup to snoop the selected element.
     /// </summary>
-    internal static void HandleSnoop(UIApplication uiapp, Document doc, FamilyElementItem? item) {
+    internal static void HandleSnoop(FamilyElementItem? item) {
         if (item == null) return;
         object objectToSnoop = item.ElementType switch {
             FamilyElementType.Parameter => item.FamilyParam!,
@@ -107,6 +107,7 @@ internal static class FamilyElementsActions {
             FamilyElementType.Family => item.FamilyInstance!,
             _ => throw new InvalidOperationException($"Unknown element type: {item.ElementType}")
         };
-        _ = RevitDbExplorerService.TrySnoopObject(uiApp: uiapp, doc, objectToSnoop, item.TextPrimary);
+        var doc = DocumentManager.GetActiveDocument();
+        _ = RevitDbExplorerService.TrySnoopObject(doc, objectToSnoop, item.TextPrimary);
     }
 }

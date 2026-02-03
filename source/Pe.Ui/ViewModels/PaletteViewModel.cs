@@ -1,8 +1,6 @@
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
 using System.Collections.ObjectModel;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Threading;
 
 namespace Pe.Ui.ViewModels;
@@ -38,25 +36,27 @@ public interface IPaletteViewModel {
 /// </summary>
 public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewModel
     where TItem : class, IPaletteListItem {
-    private readonly Dispatcher _dispatcher;
+    private const int SelectionDebounceMs = 300;
     private readonly DispatcherTimer _debounceTimer;
+    private readonly Dispatcher _dispatcher;
     private readonly SearchFilterService<TItem> _searchService;
     private readonly DispatcherTimer _selectionDebounceTimer;
-    public readonly IReadOnlyList<TabDefinition<TItem>>? Tabs;
-    private CancellationTokenSource? _filterCts;
-    private int _filterSequence;
 
     /// <summary> Per-tab item cache for lazy loading </summary>
     private readonly Dictionary<int, List<TItem>> _tabItemsCache = new();
 
-    /// <summary> Previously selected item for efficient selection updates </summary>
-    private TItem? _previousSelectedItem;
+    public readonly IReadOnlyList<TabDefinition<TItem>>? Tabs;
+    private CancellationTokenSource? _filterCts;
+    private int _filterSequence;
 
     /// <summary> Tracks whether this is the initial load (for higher priority rendering) </summary>
     private bool _isInitialLoad = true;
 
     /// <summary> Callback to run after initial items load (set via ViewModelMutator) </summary>
     private Action? _onInitialLoadComplete;
+
+    /// <summary> Previously selected item for efficient selection updates </summary>
+    private TItem? _previousSelectedItem;
 
     /// <summary> Current search text </summary>
     [ObservableProperty] private string _searchText = string.Empty;
@@ -70,8 +70,6 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     [ObservableProperty] private TItem? _selectedItem;
 
     private int _selectedTabIndex;
-
-    private const int SelectionDebounceMs = 300;
 
     public PaletteViewModel(
         SearchFilterService<TItem> searchService,
@@ -117,12 +115,6 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
             this.SelectedIndex = 0;
     }
 
-    /// <summary>
-    ///     Sets a callback to run once after the initial items load completes.
-    ///     Used for post-load mutations like setting initial selection.
-    /// </summary>
-    public void SetInitialLoadCallback(Action callback) => this._onInitialLoadComplete = callback;
-
     /// <summary> Filtered list of items based on search text and optional filter </summary>
     public ObservableCollection<TItem> FilteredItems { get; }
 
@@ -146,7 +138,7 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
 
     /// <summary>
     ///     Number of visible tabs for UI purposes (0 if single-tab).
-    ///     Use <see cref="ActualTabCount"/> for action binding iteration.
+    ///     Use <see cref="ActualTabCount" /> for action binding iteration.
     /// </summary>
     public int TabCount => this.HasTabs ? this.Tabs?.Count ?? 0 : 0;
 
@@ -183,6 +175,12 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
 
     /// <summary> Event raised when selected tab changes </summary>
     public event EventHandler SelectedTabChanged;
+
+    /// <summary>
+    ///     Sets a callback to run once after the initial items load completes.
+    ///     Used for post-load mutations like setting initial selection.
+    /// </summary>
+    public void SetInitialLoadCallback(Action callback) => this._onInitialLoadComplete = callback;
 
     /// <summary> Event raised when filtered items collection changes </summary>
     public event EventHandler FilteredItemsChanged;
@@ -412,6 +410,20 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
             this.SelectedItem = this.FilteredItems[value];
         else
             this.SelectedItem = default;
+    }
+
+    /// <summary>
+    ///     Invalidates the cached items for a specific tab, forcing a reload on next access.
+    ///     Useful when external state changes require refreshing the tab's data.
+    /// </summary>
+    public void InvalidateTabCache(int tabIndex) {
+        _ = this._tabItemsCache.Remove(tabIndex);
+
+        // If we're currently on the invalidated tab, trigger a refresh
+        if (tabIndex == this._selectedTabIndex) {
+            this.FilterItems();
+            this.UpdateAvailableFilterValuesForCurrentTab();
+        }
     }
 
     #endregion

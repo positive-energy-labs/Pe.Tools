@@ -39,8 +39,8 @@ public class SchemaExamplesAttribute : Attribute {
 ///     If false, examples are inlined at each property (classic behavior).
 /// </summary>
 public class SchemaExamplesProcessor : ISchemaProcessor {
-    private readonly Dictionary<Type, List<string>> _providerCache = new();
     private readonly Dictionary<Type, IReadOnlyList<string>> _dependentProviders = new();
+    private readonly Dictionary<Type, List<string>> _providerCache = new();
     private readonly Dictionary<Type, string> _providerToDefName = new();
     private readonly List<(JsonSchema schema, Type providerType)> _trackedSchemas = [];
 
@@ -69,9 +69,8 @@ public class SchemaExamplesProcessor : ISchemaProcessor {
                     this._providerCache[attr.ProviderType] = examples;
 
                     // Track dependent provider metadata
-                    if (provider is IDependentOptionsProvider dependentProvider) {
+                    if (provider is IDependentOptionsProvider dependentProvider)
                         this._dependentProviders[attr.ProviderType] = dependentProvider.DependsOn;
-                    }
                 }
 
                 // Determine target schema (item schema for arrays, property schema for direct strings)

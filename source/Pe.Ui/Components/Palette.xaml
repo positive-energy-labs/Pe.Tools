@@ -33,7 +33,7 @@
             <Border.Effect>
                 <DropShadowEffect Color="Black" Direction="270" ShadowDepth="2" BlurRadius="12" Opacity="0.5" />
             </Border.Effect>
-            
+
             <!-- Main palette content -->
             <Grid x:Name="PaletteContentGrid"
                   HorizontalAlignment="Stretch"
@@ -57,7 +57,7 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        
+
                         <!-- Title on the left -->
                         <ui:TextBlock x:Name="TitleText"
                                       Grid.Column="0"
@@ -66,7 +66,7 @@
                                       FontWeight="SemiBold"
                                       VerticalAlignment="Center"
                                       Foreground="{ui:ThemeResource TextFillColorPrimaryBrush}" />
-                        
+
                         <!-- Tab Bar in the middle (hidden when no tabs) -->
                         <Border x:Name="TabBarBorder"
                                 Grid.Column="2"
@@ -91,7 +91,7 @@
                                 </ItemsControl>
                             </controls:AnimatedScrollViewer>
                         </Border>
-                        
+
                         <!-- Pin button on the far right -->
                         <ui:Button x:Name="PinButton"
                                    Grid.Column="3"
@@ -137,7 +137,7 @@
                 </Border>
 
                 <!-- Item List - MaxHeight set dynamically in code based on DefaultVisibleItems -->
-                <Border Grid.Row="2" 
+                <Border Grid.Row="2"
                         Padding="4,0,4,0">
                     <local:ListView x:Name="ItemListView"
                                     ItemsSource="{Binding FilteredItems}"
@@ -229,15 +229,15 @@
             <Border.Effect>
                 <DropShadowEffect Color="Black" Direction="270" ShadowDepth="2" BlurRadius="12" Opacity="0.5" />
             </Border.Effect>
-            
+
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
-                
+
                 <!-- Panel Header with expand button -->
-                <Border Grid.Row="0" 
+                <Border Grid.Row="0"
                         Padding="12,8,8,4"
                         BorderThickness="0,0,0,1"
                         BorderBrush="{ui:ThemeResource ControlStrokeColorDefaultBrush}">
@@ -246,7 +246,7 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        
+
                         <ui:TextBlock x:Name="PanelTitle"
                                       Grid.Column="0"
                                       Text="Details"
@@ -254,7 +254,7 @@
                                       FontSize="12"
                                       FontWeight="SemiBold"
                                       Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" />
-                        
+
                         <ui:Button x:Name="ExpandPanelButton"
                                    Grid.Column="1"
                                    Padding="4"
@@ -265,7 +265,7 @@
                         </ui:Button>
                     </Grid>
                 </Border>
-                
+
                 <!-- Panel Content - FontSize 13 for better readability of table data -->
                 <ScrollViewer x:Name="PanelScrollViewer"
                               Grid.Row="1"

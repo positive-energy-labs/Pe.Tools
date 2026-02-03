@@ -1,6 +1,7 @@
- using Pe.Global.Services.AutoTag.Core;
+using Pe.Global.Services.AutoTag.Core;
 using Pe.Global.Services.Document;
 using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
+using Serilog;
 
 namespace Pe.Global.Services.Storage.Core.Json.SchemaProviders;
 
@@ -57,9 +58,6 @@ public class MultiCategoryTagProvider : IOptionsProvider {
 ///     Implements IDependentOptionsProvider to filter by CategoryName when provided.
 /// </summary>
 public class AnnotationTagFamilyNamesProvider : IDependentOptionsProvider {
-    /// <inheritdoc />
-    public IReadOnlyList<string> DependsOn => ["CategoryName"];
-
     /// <summary>
     ///     All BuiltInCategories that represent annotation tags.
     /// </summary>
@@ -131,15 +129,18 @@ public class AnnotationTagFamilyNamesProvider : IDependentOptionsProvider {
         BuiltInCategory.OST_WireTags
     ];
 
+    /// <inheritdoc />
+    public IReadOnlyList<string> DependsOn => ["CategoryName"];
+
     public IEnumerable<string> GetExamples() {
         try {
             var doc = DocumentManager.GetActiveDocument();
             if (doc == null) {
-                Serilog.Log.Warning("AnnotationTagFamilyNamesProvider: No document available");
+                Log.Warning("AnnotationTagFamilyNamesProvider: No document available");
                 return [];
             }
 
-            Serilog.Log.Debug("AnnotationTagFamilyNamesProvider: Querying ALL tag families from document '{Title}'", doc.Title);
+            Log.Debug("AnnotationTagFamilyNamesProvider: Querying ALL tag families from document '{Title}'", doc.Title);
 
             var tagFamilyNames = new HashSet<string>();
 
@@ -157,10 +158,11 @@ public class AnnotationTagFamilyNamesProvider : IDependentOptionsProvider {
                 }
             }
 
-            Serilog.Log.Debug("AnnotationTagFamilyNamesProvider: Found {Count} unique tag families (unfiltered)", tagFamilyNames.Count);
+            Log.Debug("AnnotationTagFamilyNamesProvider: Found {Count} unique tag families (unfiltered)",
+                tagFamilyNames.Count);
             return tagFamilyNames.OrderBy(name => name);
         } catch (Exception ex) {
-            Serilog.Log.Error(ex, "AnnotationTagFamilyNamesProvider: Exception while getting examples");
+            Log.Error(ex, "AnnotationTagFamilyNamesProvider: Exception while getting examples");
             return [];
         }
     }
@@ -176,16 +178,18 @@ public class AnnotationTagFamilyNamesProvider : IDependentOptionsProvider {
         try {
             var doc = DocumentManager.GetActiveDocument();
             if (doc == null) {
-                Serilog.Log.Warning("AnnotationTagFamilyNamesProvider: No document available");
+                Log.Warning("AnnotationTagFamilyNamesProvider: No document available");
                 return [];
             }
 
-            Serilog.Log.Debug("AnnotationTagFamilyNamesProvider: Filtering tag families for category '{CategoryName}'", categoryName);
+            Log.Debug("AnnotationTagFamilyNamesProvider: Filtering tag families for category '{CategoryName}'",
+                categoryName);
 
             // Get the element category BuiltInCategory from the name
             var elementCategory = CategoryTagMapping.GetBuiltInCategoryFromName(doc, categoryName);
             if (elementCategory == BuiltInCategory.INVALID) {
-                Serilog.Log.Warning("AnnotationTagFamilyNamesProvider: Category '{CategoryName}' not found or not taggable", categoryName);
+                Log.Warning("AnnotationTagFamilyNamesProvider: Category '{CategoryName}' not found or not taggable",
+                    categoryName);
                 return [];
             }
 
@@ -202,12 +206,14 @@ public class AnnotationTagFamilyNamesProvider : IDependentOptionsProvider {
                 .OrderBy(name => name)
                 .ToList();
 
-            Serilog.Log.Debug("AnnotationTagFamilyNamesProvider: Found {Count} tag families for category '{CategoryName}' (tag category: {TagCategory})",
+            Log.Debug(
+                "AnnotationTagFamilyNamesProvider: Found {Count} tag families for category '{CategoryName}' (tag category: {TagCategory})",
                 tagFamilyNames.Count, categoryName, tagCategory);
 
             return tagFamilyNames;
         } catch (Exception ex) {
-            Serilog.Log.Error(ex, "AnnotationTagFamilyNamesProvider: Exception while filtering by category '{CategoryName}'", categoryName);
+            Log.Error(ex, "AnnotationTagFamilyNamesProvider: Exception while filtering by category '{CategoryName}'",
+                categoryName);
             return [];
         }
     }

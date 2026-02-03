@@ -44,20 +44,22 @@ public class CmdPltMruViews : IExternalCommand {
                     // Select second item (first is current view, second is previous)
                     if (vm.FilteredItems.Count > 1) vm.SelectedIndex = 1;
                 },
-                Tabs = [new TabDefinition<MruViewPaletteItem> {
-                    Name = "All",
-                    ItemProvider = () => items,
-                    Actions = [
-                        new() {
-                            Name = "Open View",
-                            Execute = item => {
-                                if (item.View != null)
-                                    uiapp.OpenAndActivateView(item.View);
-                                return Task.CompletedTask;
+                Tabs = [
+                    new TabDefinition<MruViewPaletteItem> {
+                        Name = "All",
+                        ItemProvider = () => items,
+                        Actions = [
+                            new PaletteAction<MruViewPaletteItem> {
+                                Name = "Open View",
+                                Execute = item => {
+                                    if (item.View != null)
+                                        uiapp.OpenAndActivateView(item.View);
+                                    return Task.CompletedTask;
+                                }
                             }
-                        }
-                    ]
-                }],
+                        ]
+                    }
+                ],
                 OnCtrlReleased = vm => () => {
                     // Read the current SelectedItem when Ctrl is released (not at window creation)
                     var selectedItem = vm.SelectedItem;

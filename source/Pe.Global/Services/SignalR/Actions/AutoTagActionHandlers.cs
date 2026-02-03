@@ -1,4 +1,3 @@
-using Autodesk.Revit.UI;
 using Pe.Global.Services.AutoTag;
 using Pe.Global.Services.AutoTag.Core;
 
@@ -11,13 +10,10 @@ public class AutoTagLoadHandler : ActionHandler<AutoTagSettings> {
     public override string ActionName => "AutoTag.Load";
     public override string SettingsTypeName => "AutoTagSettings";
 
-    public override object? Execute(UIApplication uiApp, AutoTagSettings settings) {
-        return this.LoadSettings(uiApp); 
-    }
+    public override object? Execute(UIApplication uiApp, AutoTagSettings settings) => this.LoadSettings(uiApp);
 
-    public override object? ExecuteWithoutPersist(UIApplication uiApp, AutoTagSettings settings) {
-        return this.LoadSettings(uiApp);
-    }
+    public override object? ExecuteWithoutPersist(UIApplication uiApp, AutoTagSettings settings) =>
+        this.LoadSettings(uiApp);
 
     private object LoadSettings(UIApplication uiApp) {
         var doc = uiApp.ActiveUIDocument?.Document;
@@ -25,12 +21,7 @@ public class AutoTagLoadHandler : ActionHandler<AutoTagSettings> {
             return new { Success = false, Error = "No active document", Settings = (AutoTagSettings?)null };
 
         var settings = AutoTagService.Instance.GetSettingsForDocument(doc);
-        return new {
-            Success = true,
-            Error = (string?)null,
-            Settings = settings,
-            HasSettings = settings != null
-        };
+        return new { Success = true, Error = (string?)null, Settings = settings, HasSettings = settings != null };
     }
 }
 
@@ -83,13 +74,10 @@ public class AutoTagGetStatusHandler : ActionHandler<AutoTagSettings> {
     public override string ActionName => "AutoTag.GetStatus";
     public override string SettingsTypeName => "AutoTagSettings";
 
-    public override object? Execute(UIApplication uiApp, AutoTagSettings settings) {
-        return this.GetStatus(uiApp);
-    }
+    public override object? Execute(UIApplication uiApp, AutoTagSettings settings) => this.GetStatus(uiApp);
 
-    public override object? ExecuteWithoutPersist(UIApplication uiApp, AutoTagSettings settings) {
-        return this.GetStatus(uiApp);
-    }
+    public override object? ExecuteWithoutPersist(UIApplication uiApp, AutoTagSettings settings) =>
+        this.GetStatus(uiApp);
 
     private object GetStatus(UIApplication uiApp) {
         var doc = uiApp.ActiveUIDocument?.Document;
@@ -97,10 +85,6 @@ public class AutoTagGetStatusHandler : ActionHandler<AutoTagSettings> {
             return new { Success = false, Error = "No active document", Status = (AutoTagStatus?)null };
 
         var status = AutoTagService.Instance.GetStatus(doc);
-        return new {
-            Success = true,
-            Error = (string?)null,
-            Status = status
-        };
+        return new { Success = true, Error = (string?)null, Status = status };
     }
 }

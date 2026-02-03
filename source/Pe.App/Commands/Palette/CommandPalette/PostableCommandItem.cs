@@ -13,10 +13,10 @@ namespace Pe.App.Commands.Palette.CommandPalette;
 ///     Represents a PostableCommand item with additional metadata for the command palette
 /// </summary>
 public class PostableCommandItem : IPaletteListItem, INotifyPropertyChanged {
-    public event PropertyChangedEventHandler PropertyChanged;
-
-    private void OnPropertyChanged([CallerMemberName] string propertyName = null) =>
-        this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    /// <summary>
+    ///     Keyboard shortcuts for this command
+    /// </summary>
+    private List<string> _shortcuts = [];
 
     /// <summary>
     ///     For internal commands, the actual PostableCommand enum value
@@ -38,11 +38,6 @@ public class PostableCommandItem : IPaletteListItem, INotifyPropertyChanged {
     ///     Last time this command was executed
     /// </summary>
     public DateTime LastUsed { get; set; }
-
-    /// <summary>
-    ///     Keyboard shortcuts for this command
-    /// </summary>
-    private List<string> _shortcuts = [];
 
     public List<string> Shortcuts {
         get => this._shortcuts;
@@ -96,6 +91,8 @@ public class PostableCommandItem : IPaletteListItem, INotifyPropertyChanged {
         }
     }
 
+    public event PropertyChangedEventHandler PropertyChanged;
+
     // ISelectableItem implementation
     public string TextPrimary => this.Name;
     public string TextSecondary => this.TruncatedPaths;
@@ -136,6 +133,9 @@ public class PostableCommandItem : IPaletteListItem, INotifyPropertyChanged {
     }
 
     public Color? ItemColor => null;
+
+    private void OnPropertyChanged([CallerMemberName] string propertyName = null) =>
+        this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
     public override string ToString() => this.Name;
 }

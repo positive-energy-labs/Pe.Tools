@@ -7,7 +7,6 @@ namespace Pe.App.Commands.Palette;
 ///     Opens the view palette with the "All" tab selected.
 /// </summary>
 [Transaction(TransactionMode.Manual)]
-
 public class CmdPltViews : ViewPaletteBase {
     protected override int DefaultTabIndex => 0;
 }
@@ -27,7 +26,6 @@ public class CmdPltViewsOnly : ViewPaletteBase {
 public class CmdPltSchedules : ViewPaletteBase {
     protected override int DefaultTabIndex => 2;
 }
-
 
 /// <summary>
 ///     Opens the view palette with the "Sheets" tab selected.

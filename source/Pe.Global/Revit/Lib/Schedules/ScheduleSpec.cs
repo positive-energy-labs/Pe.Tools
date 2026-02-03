@@ -53,7 +53,7 @@ public class ScheduleSpec {
 
     [Description("List of filters to restrict which elements appear in the schedule. Maximum of 8 filters.")]
     public List<ScheduleFilterSpec> Filters { get; set; } = [];
-    
+
     [Description("Settings for what to do when the command completes")]
     public OnFinishSettings? OnFinishSettings { get; set; } = new();
 }

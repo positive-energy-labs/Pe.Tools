@@ -1,5 +1,3 @@
-using Autodesk.Revit.UI;
-
 namespace Pe.Global.Services.SignalR;
 
 /// <summary>
@@ -7,30 +5,28 @@ namespace Pe.Global.Services.SignalR;
 ///     Provides access to UIApplication and tracks document state.
 /// </summary>
 public class RevitContext {
+    public RevitContext(UIApplication uiApp) {
+        this.UIApplication = uiApp;
+        Current = this;
+    }
+
     /// <summary>
     ///     Singleton instance for global access (used by schema providers).
     /// </summary>
     public static RevitContext? Current { get; private set; }
 
-    private readonly UIApplication _uiApp;
-
-    public RevitContext(UIApplication uiApp) {
-        this._uiApp = uiApp;
-        Current = this;
-    }
-
     /// <summary>
     ///     The Revit UIApplication instance.
     /// </summary>
-    public UIApplication UIApplication => this._uiApp;
+    public UIApplication UIApplication { get; }
 
     /// <summary>
     ///     The currently active document, or null if none.
     /// </summary>
-    public Autodesk.Revit.DB.Document? Document => this._uiApp.ActiveUIDocument?.Document;
+    public Autodesk.Revit.DB.Document? Document => this.UIApplication.ActiveUIDocument?.Document;
 
     /// <summary>
     ///     The active UIDocument, or null if none.
     /// </summary>
-    public UIDocument? ActiveUIDocument => this._uiApp.ActiveUIDocument;
+    public UIDocument? ActiveUIDocument => this.UIApplication.ActiveUIDocument;
 }

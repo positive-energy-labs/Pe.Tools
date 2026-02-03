@@ -1,5 +1,5 @@
-using System.Reflection;
 using Pe.App.Commands.Palette.TaskPalette;
+using System.Reflection;
 
 namespace Pe.App.Tasks;
 

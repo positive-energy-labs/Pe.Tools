@@ -118,7 +118,8 @@ public class CmdAutoTag : IExternalCommand {
 
     private static string BuildStatusSummary(AutoTagStatus status) {
         var sb = new StringBuilder();
-        _ = sb.AppendLine($"Configurations: {status.ConfigurationCount} total, {status.EnabledConfigurationCount} active");
+        _ = sb.AppendLine(
+            $"Configurations: {status.ConfigurationCount} total, {status.EnabledConfigurationCount} active");
 
         if (status.Configurations.Count > 0) {
             _ = sb.AppendLine();

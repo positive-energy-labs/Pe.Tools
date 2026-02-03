@@ -1,8 +1,6 @@
 using Pe.Global.Revit.Lib.Schedules.Fields;
 using Pe.Global.Revit.Lib.Schedules.SortGroup;
-using Pe.Tools.Commands.FamilyFoundry;
 using Pe.Ui.Core;
-using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -16,8 +14,8 @@ namespace Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
 ///     Preview data building is injected via delegate to support complex tab-specific logic.
 /// </summary>
 public class SchedulePreviewPanel : UserControl, ISidebarPanel<ISchedulePaletteItem> {
-    private readonly WpfUiRichTextBox _richTextBox;
     private readonly Func<ISchedulePaletteItem?, CancellationToken, SchedulePreviewData?> _previewBuilder;
+    private readonly WpfUiRichTextBox _richTextBox;
 
     /// <summary>
     ///     Creates a SchedulePreviewPanel with injected preview building logic.
@@ -32,6 +30,7 @@ public class SchedulePreviewPanel : UserControl, ISidebarPanel<ISchedulePaletteI
         // Palette handles sidebar padding and scrolling - just provide the content
         this._richTextBox = new WpfUiRichTextBox {
             IsReadOnly = true,
+            IsDocumentEnabled = true,
             Focusable = false,
             IsTextSelectionEnabled = true,
             AutoWordSelection = false,
@@ -94,7 +93,7 @@ public class SchedulePreviewPanel : UserControl, ISidebarPanel<ISchedulePaletteI
 
                 // Build table data
                 _ = doc.AddTable<ScheduleFieldSpec>(
-                    data.Fields, 
+                    data.Fields,
                     [
                         ("Name", f => f.ParameterName),
                         ("Header", f => f.ColumnHeaderOverride ?? string.Empty),

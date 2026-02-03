@@ -148,6 +148,11 @@ public class FilterBox<TViewModel> : FilterBox where TViewModel : class {
         this._viewModel = viewModel;
         this._availableFilterValues = availableFilterValues;
         this.DataContext = viewModel;
+
+        // Set the ItemsSource directly instead of relying on binding
+        if (availableFilterValues != null) this.FilterAutoSuggestBox.ItemsSource = availableFilterValues;
+
+
         this.FilterAutoSuggestBox.SelectionChanged += this.FilterAutoSuggestBox_SelectionChanged;
         this.FilterAutoSuggestBox.PreviewKeyDown += this.FilterAutoSuggestBox_PreviewKeyDown;
     }

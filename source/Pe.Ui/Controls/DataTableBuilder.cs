@@ -39,6 +39,16 @@ public class DataTableBuilder {
     private DataTableBuilder() { }
 
     /// <summary>
+    ///     Returns true if there are any rows to display.
+    /// </summary>
+    public bool HasRows => this._rows.Count > 0;
+
+    /// <summary>
+    ///     Returns the number of rows.
+    /// </summary>
+    public int RowCount => this._rows.Count;
+
+    /// <summary>
     ///     Creates a new DataTableBuilder instance.
     /// </summary>
     public static DataTableBuilder Create() => new();
@@ -52,10 +62,7 @@ public class DataTableBuilder {
     /// <param name="maxCellLength">Maximum characters before truncation (default: 100)</param>
     public DataTableBuilder AddColumn(string name, double width = 0, double maxWidth = 250, int maxCellLength = 100) {
         this._columns.Add(new DataTableColumn {
-            Name = name,
-            Width = width,
-            MaxWidth = maxWidth,
-            MaxCellLength = maxCellLength
+            Name = name, Width = width, MaxWidth = maxWidth, MaxCellLength = maxCellLength
         });
         return this;
     }
@@ -89,6 +96,7 @@ public class DataTableBuilder {
                 row[column] = selector(item) ?? string.Empty;
             this._rows.Add(row);
         }
+
         return this;
     }
 
@@ -119,14 +127,4 @@ public class DataTableBuilder {
         table.SetData(this._columns, this._rows);
         return table;
     }
-
-    /// <summary>
-    ///     Returns true if there are any rows to display.
-    /// </summary>
-    public bool HasRows => this._rows.Count > 0;
-
-    /// <summary>
-    ///     Returns the number of rows.
-    /// </summary>
-    public int RowCount => this._rows.Count;
 }

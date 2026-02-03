@@ -1,5 +1,4 @@
 using Pe.Ui.Core;
-using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -19,6 +18,7 @@ public class ViewPreviewPanel : UserControl, ISidebarPanel<UnifiedViewItem> {
         // Palette handles sidebar padding and scrolling - just provide the content
         this._richTextBox = new WpfUiRichTextBox {
             IsReadOnly = true,
+            IsDocumentEnabled = true,
             Focusable = false,
             IsTextSelectionEnabled = true,
             AutoWordSelection = false,

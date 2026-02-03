@@ -1,12 +1,13 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.Global.Revit.Lib.Schedules;
+using Pe.Global.Revit.Lib.Schedules.Fields;
+using Pe.Global.Revit.Lib.Schedules.SortGroup;
 using Pe.Global.Revit.Ui;
 using Pe.Global.Services.Storage;
 using Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
 using Pe.Ui.Core;
 using Serilog.Events;
-using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -49,18 +50,20 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
                 new PaletteOptions<ScheduleSerializePaletteItem> {
                     Persistence = (storage, item => item.TextPrimary),
                     SidebarPanel = previewPanel,
-                    Tabs = [new TabDefinition<ScheduleSerializePaletteItem> {
-                        Name = "All",
-                        ItemProvider = () => serializeItems,
-                        FilterKeySelector = i => i.TextPill ?? string.Empty,
-                        Actions = [
-                            new() {
-                                Name = "Serialize",
-                                Execute = item => this.HandleSerialize(storage, item),
-                                CanExecute = _ => true
-                            }
-                        ]
-                    }]
+                    Tabs = [
+                        new TabDefinition<ScheduleSerializePaletteItem> {
+                            Name = "All",
+                            ItemProvider = () => serializeItems,
+                            FilterKeySelector = i => i.TextPill ?? string.Empty,
+                            Actions = [
+                                new PaletteAction<ScheduleSerializePaletteItem> {
+                                    Name = "Serialize",
+                                    Execute = item => this.HandleSerialize(storage, item),
+                                    CanExecute = _ => true
+                                }
+                            ]
+                        }
+                    ]
                 });
             window.Show();
 
@@ -80,8 +83,7 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
             var profileJson = JsonSerializer.Serialize(
                 spec,
                 new JsonSerializerOptions {
-                    WriteIndented = true,
-                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                    WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
                 });
 
             return new ScheduleSerializePreviewData {
@@ -182,8 +184,8 @@ public class ScheduleSerializePreviewData {
     public required string ProfileName { get; set; }
     public string? CategoryName { get; set; }
     public bool? IsItemized { get; set; }
-    public List<Pe.Global.Revit.Lib.Schedules.Fields.ScheduleFieldSpec>? Fields { get; set; }
-    public List<Pe.Global.Revit.Lib.Schedules.SortGroup.ScheduleSortGroupSpec>? SortGroup { get; set; }
+    public List<ScheduleFieldSpec>? Fields { get; set; }
+    public List<ScheduleSortGroupSpec>? SortGroup { get; set; }
     public required string ProfileJson { get; set; }
     public bool IsValid { get; set; }
     public string? ErrorMessage { get; set; }

@@ -10,13 +10,13 @@ namespace Pe.Global.Services.AutoTag.Core;
 /// </summary>
 public class AutoTagUpdater : IUpdater {
     private readonly AddInId _addInId;
-    private readonly Dictionary<string, FamilySymbol> _tagTypeCache = new();
     private readonly HashSet<string> _notifiedMissingTags = new();
+    private readonly Dictionary<string, FamilySymbol> _tagTypeCache = new();
     private readonly UpdaterId _updaterId;
     private AutoTagSettings? _settings;
 
     public AutoTagUpdater(AddInId addInId) {
-        this._addInId = addInId; 
+        this._addInId = addInId;
         this._updaterId = new UpdaterId(addInId, new Guid("A3F8B7C2-4D5E-4A9B-8C3D-1E2F3A4B5C6D"));
     }
 
@@ -98,10 +98,10 @@ public class AutoTagUpdater : IUpdater {
         this._notifiedMissingTags.Clear();
         this._tagTypeCache.Clear();
 
-        if (settings != null)
+        if (settings != null) {
             Log.Information("AutoTag DMU: Settings pushed - Enabled={Enabled}, Configurations={Count}",
                 settings.Enabled, settings.Configurations.Count);
-        else
+        } else
             Log.Warning("AutoTag DMU: Settings set to NULL");
     }
 
@@ -227,7 +227,9 @@ public class AutoTagUpdater : IUpdater {
     /// <summary>
     ///     Notifies the user that the specified tag type wasn't found but a fallback was used.
     /// </summary>
-    private void NotifyTypeFallback(AutoTagConfiguration config, FamilySymbol fallbackType, List<FamilySymbol> availableTags) {
+    private void NotifyTypeFallback(AutoTagConfiguration config,
+        FamilySymbol fallbackType,
+        List<FamilySymbol> availableTags) {
         var notificationKey = $"fallback::{config.CategoryName}::{config.TagFamilyName}::{config.TagTypeName}";
 
         // Only notify once per session for this specific config
@@ -269,7 +271,8 @@ public class AutoTagUpdater : IUpdater {
             .Select(t => t.Name)
             .ToList();
 
-        var message = $"Tag type '{config.TagFamilyName}:{config.TagTypeName}' not found for category '{config.CategoryName}'.";
+        var message =
+            $"Tag type '{config.TagFamilyName}:{config.TagTypeName}' not found for category '{config.CategoryName}'.";
 
         if (availableTypes.Count > 0)
             message += $"\n\nAvailable types for this family:\n  • {string.Join("\n  • ", availableTypes)}";
@@ -323,9 +326,10 @@ public class AutoTagUpdater : IUpdater {
             // Verify what was actually created
             if (tag != null) {
                 var createdTagType = doc.GetElement(tag.GetTypeId()) as FamilySymbol;
-                if (createdTagType != null)
+                if (createdTagType != null) {
                     Log.Information("AutoTag: Tag created successfully - actual type: '{Family}:{Type}' (Id: {Id})",
                         createdTagType.FamilyName, createdTagType.Name, createdTagType.Id);
+                }
             }
         } catch (Exception ex) {
             Log.Error(ex, "AutoTag: Failed to create tag");

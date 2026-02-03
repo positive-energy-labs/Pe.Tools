@@ -1,13 +1,13 @@
 {
-    "assemblies": [
-        "bin/Debug.R25/Pe.Global.dll"
-    ],
-    "outputPath": "C:/Users/kaitp/source/repos/signalir-clientside-demo/v1/src/generated",
-    "createIndexFile": true,
-    "enumStringInitializers": true,
-    "singleQuotes": false,
-    "tabLength": 4,
-    "explicitPublicAccessor": false,
-    "camelCasePropertyNames": true,
-    "camelCaseTypeNames": false
+  "assemblies": [
+    "bin/Debug.R25/Pe.Global.dll"
+  ],
+  "outputPath": "C:/Users/kaitp/source/repos/signalir-clientside-demo/v1/src/generated",
+  "createIndexFile": true,
+  "enumStringInitializers": true,
+  "singleQuotes": false,
+  "tabLength": 4,
+  "explicitPublicAccessor": false,
+  "camelCasePropertyNames": true,
+  "camelCaseTypeNames": false
 }

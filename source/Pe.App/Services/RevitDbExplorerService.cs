@@ -1,8 +1,7 @@
-using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using Serilog;
+using Pe.Global.Services.Document;
 using RevitDBExplorer;
-using RevitDBExplorer.Domain.Selectors;
+using Serilog;
 using System.Diagnostics;
 
 namespace Pe.App.Services;
@@ -61,28 +60,17 @@ public static class RevitDbExplorerService {
         }
     }
 
+
     /// <summary>
     ///     Opens RevitDBExplorer UI to snoop a single object.
     ///     Works for FamilyParameter, Family, FamilySymbol, Category, or any other Revit API object.
     /// </summary>
     /// <param name="uiApp">The UIApplication instance</param>
+    /// <param name="doc">The document containing the object</param>
     /// <param name="obj">The object to snoop</param>
     /// <param name="title">Optional title for the RDBE window</param>
-    public static Result<bool> TrySnoopObject(UIApplication uiApp, object obj, string? title = null) {
-        if (obj == null) {
-            Log.Warning("Object to snoop is null");
-            return false;
-        }
-
-        var doc = uiApp?.ActiveUIDocument?.Document;
-        return TrySnoopObjects(uiApp!, doc, [obj], title);
-    }
-
-    /// <summary>
-    ///     Opens RevitDBExplorer UI to snoop a single object with explicit document context.
-    /// </summary>
+    /// <returns>True if the object was snoopable, false otherwise</returns>
     public static Result<bool> TrySnoopObject(
-        UIApplication uiApp,
         Document doc,
         object obj,
         string? title = null
@@ -92,31 +80,6 @@ public static class RevitDbExplorerService {
             return false;
         }
 
-        return TrySnoopObjects(uiApp, doc, [obj], title);
-    }
-
-    /// <summary>
-    ///     Opens RevitDBExplorer UI to snoop elements (convenience wrapper).
-    /// </summary>
-    /// <param name="uiApp">The UIApplication instance</param>
-    /// <param name="doc">The document containing the elements</param>
-    /// <param name="elements">The elements to snoop</param>
-    public static Result<bool> TrySnoopElements(
-        UIApplication uiApp,
-        Document doc,
-        IEnumerable<Element> elements
-    ) {
-        var elementsList = elements?.ToList() ?? [];
-        if (elementsList.Count == 0) {
-            Log.Warning("No elements to snoop");
-            _ = TaskDialog.Show("Snoop", "No elements provided to snoop.");
-            return false;
-        }
-
-        var title = elementsList.Count == 1
-            ? $"{elementsList[0].GetType().Name}: {elementsList[0].Name}"
-            : $"{elementsList.Count} elements";
-
-        return TrySnoopObjects(uiApp, doc, elementsList.Cast<object>(), title);
+        return TrySnoopObjects(DocumentManager.uiapp, doc, [obj], title);
     }
 }

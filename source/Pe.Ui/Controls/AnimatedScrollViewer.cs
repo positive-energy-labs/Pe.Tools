@@ -47,8 +47,9 @@ public class AnimatedScrollViewer : ScrollViewer {
         typeof(AnimatedScrollViewer),
         new PropertyMetadata(0.0, OnHorizontalScrollOffsetChanged));
 
-    private ScrollBar? _verticalScrollBar;
     private ScrollBar? _horizontalScrollBar;
+
+    private ScrollBar? _verticalScrollBar;
 
     static AnimatedScrollViewer() =>
         DefaultStyleKeyProperty.OverrideMetadata(
@@ -91,49 +92,41 @@ public class AnimatedScrollViewer : ScrollViewer {
         base.OnApplyTemplate();
 
         this._verticalScrollBar = this.GetTemplateChild("PART_VerticalScrollBar") as ScrollBar;
-        if (this._verticalScrollBar != null) {
+        if (this._verticalScrollBar != null)
             this._verticalScrollBar.ValueChanged += this.OnVerticalScrollBarValueChanged;
-        }
 
         this._horizontalScrollBar = this.GetTemplateChild("PART_HorizontalScrollBar") as ScrollBar;
-        if (this._horizontalScrollBar != null) {
+        if (this._horizontalScrollBar != null)
             this._horizontalScrollBar.ValueChanged += this.OnHorizontalScrollBarValueChanged;
-        }
     }
 
     private static void OnTargetVerticalOffsetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) {
-        if (d is AnimatedScrollViewer viewer) {
-            viewer.AnimateVerticalScroll((double)e.NewValue);
-        }
+        if (d is AnimatedScrollViewer viewer) viewer.AnimateVerticalScroll((double)e.NewValue);
     }
 
     private static void OnTargetHorizontalOffsetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) {
-        if (d is AnimatedScrollViewer viewer) {
-            viewer.AnimateHorizontalScroll((double)e.NewValue);
-        }
+        if (d is AnimatedScrollViewer viewer) viewer.AnimateHorizontalScroll((double)e.NewValue);
     }
 
     private static void OnVerticalScrollOffsetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) {
-        if (d is AnimatedScrollViewer viewer) {
-            viewer.ScrollToVerticalOffset((double)e.NewValue);
-        }
+        if (d is AnimatedScrollViewer viewer) viewer.ScrollToVerticalOffset((double)e.NewValue);
     }
 
     private static void OnHorizontalScrollOffsetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) {
-        if (d is AnimatedScrollViewer viewer) {
-            viewer.ScrollToHorizontalOffset((double)e.NewValue);
-        }
+        if (d is AnimatedScrollViewer viewer) viewer.ScrollToHorizontalOffset((double)e.NewValue);
     }
 
-    private void OnVerticalScrollBarValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) => this.TargetVerticalOffset = e.NewValue;
+    private void OnVerticalScrollBarValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) =>
+        this.TargetVerticalOffset = e.NewValue;
 
-    private void OnHorizontalScrollBarValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) => this.TargetHorizontalOffset = e.NewValue;
+    private void OnHorizontalScrollBarValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) =>
+        this.TargetHorizontalOffset = e.NewValue;
 
     private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e) {
         var scrollAmount = e.Delta * SystemParameters.WheelScrollLines / 3.0;
         var newOffset = this.TargetVerticalOffset - scrollAmount;
         newOffset = Math.Max(0, Math.Min(this.ScrollableHeight, newOffset));
-        
+
         this.TargetVerticalOffset = newOffset;
         e.Handled = true;
     }
@@ -142,9 +135,7 @@ public class AnimatedScrollViewer : ScrollViewer {
         var animation = new DoubleAnimation(
             this.VerticalScrollOffset,
             targetOffset,
-            new Duration(this.ScrollingTime)) {
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-        };
+            new Duration(this.ScrollingTime)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
 
         this.BeginAnimation(VerticalScrollOffsetProperty, animation);
     }
@@ -153,9 +144,7 @@ public class AnimatedScrollViewer : ScrollViewer {
         var animation = new DoubleAnimation(
             this.HorizontalScrollOffset,
             targetOffset,
-            new Duration(this.ScrollingTime)) {
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-        };
+            new Duration(this.ScrollingTime)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
 
         this.BeginAnimation(HorizontalScrollOffsetProperty, animation);
     }

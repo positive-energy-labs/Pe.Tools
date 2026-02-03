@@ -1,5 +1,3 @@
-using Autodesk.Revit.UI;
-
 namespace Pe.Global.Services.SignalR.Actions;
 
 /// <summary>
@@ -17,6 +15,11 @@ public interface IActionHandler {
     string SettingsTypeName { get; }
 
     /// <summary>
+    ///     Whether this action supports progress reporting.
+    /// </summary>
+    bool SupportsProgress => false;
+
+    /// <summary>
     ///     Execute the action, persisting settings first if needed.
     /// </summary>
     /// <param name="uiApp">The Revit UIApplication</param>
@@ -31,11 +34,6 @@ public interface IActionHandler {
     /// <param name="settings">Deserialized settings object</param>
     /// <returns>Optional result object</returns>
     object? ExecuteWithoutPersist(UIApplication uiApp, object settings);
-
-    /// <summary>
-    ///     Whether this action supports progress reporting.
-    /// </summary>
-    bool SupportsProgress => false;
 
     /// <summary>
     ///     Execute with progress reporting for long-running operations.

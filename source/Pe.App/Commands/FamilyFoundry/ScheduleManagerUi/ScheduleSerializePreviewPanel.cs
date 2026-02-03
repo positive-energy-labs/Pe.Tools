@@ -1,7 +1,6 @@
 using Pe.Global.Revit.Lib.Schedules.Fields;
 using Pe.Global.Revit.Lib.Schedules.SortGroup;
 using Pe.Ui.Core;
-using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -14,19 +13,20 @@ namespace Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
 ///     Implements ISidebarPanel for auto-wiring with PaletteFactory.
 /// </summary>
 public class ScheduleSerializePreviewPanel : UserControl, ISidebarPanel<IPaletteListItem> {
+    private readonly Func<IPaletteListItem?, CancellationToken, ScheduleSerializePreviewData?> _previewBuilder;
     private readonly WpfUiRichTextBox _richTextBox;
-    private readonly Func<IPaletteListItem?, CancellationToken, Pe.Tools.Commands.FamilyFoundry.ScheduleSerializePreviewData?> _previewBuilder;
 
     /// <summary>
     ///     Creates a ScheduleSerializePreviewPanel with injected preview building logic.
     /// </summary>
     public ScheduleSerializePreviewPanel(
-        Func<IPaletteListItem?, CancellationToken, Pe.Tools.Commands.FamilyFoundry.ScheduleSerializePreviewData?> previewBuilder
+        Func<IPaletteListItem?, CancellationToken, ScheduleSerializePreviewData?> previewBuilder
     ) {
         this._previewBuilder = previewBuilder;
 
         this._richTextBox = new WpfUiRichTextBox {
             IsReadOnly = true,
+            IsDocumentEnabled = true,
             Focusable = false,
             IsTextSelectionEnabled = true,
             AutoWordSelection = false,
@@ -51,7 +51,7 @@ public class ScheduleSerializePreviewPanel : UserControl, ISidebarPanel<IPalette
         this.UpdateContent(data);
     }
 
-    private void UpdateContent(Pe.Tools.Commands.FamilyFoundry.ScheduleSerializePreviewData data) {
+    private void UpdateContent(ScheduleSerializePreviewData data) {
         if (data == null) {
             this._richTextBox.Document = FlowDocumentBuilder.Create();
             return;

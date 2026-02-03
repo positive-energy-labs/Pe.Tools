@@ -15,6 +15,11 @@ namespace Pe.Global.Services.Storage;
 public class DocumentSettingsStorage<T> where T : class, new() {
     private static readonly JsonSerializerSettings JsonSettings;
 
+    private readonly Guid _schemaGuid;
+    private readonly string _schemaName;
+    private readonly string _storageElementName;
+    private readonly string _vendorId;
+
     static DocumentSettingsStorage() {
         JsonSettings = new JsonSerializerSettings {
             Formatting = Formatting.Indented,
@@ -23,11 +28,6 @@ public class DocumentSettingsStorage<T> where T : class, new() {
         };
         JsonSettings.Converters.Add(new StringEnumConverter());
     }
-
-    private readonly Guid _schemaGuid;
-    private readonly string _schemaName;
-    private readonly string _storageElementName;
-    private readonly string _vendorId;
 
     /// <summary>
     ///     Creates a new document settings storage for the specified type.

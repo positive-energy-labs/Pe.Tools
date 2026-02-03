@@ -132,25 +132,27 @@ public class FamilyElementItem : IPaletteListItem {
             }
 
             // Arrays
-            foreach (var array in this.FamilyParam.AssociatedArrays(this.FamilyDoc))
+            foreach (var array in this.FamilyParam.AssociatedArrays(this.FamilyDoc)) {
                 results.Add(new AssociatedElement(
                     $"Array (ID: {array.Id})",
                     "Array",
                     array.Id,
                     AssociatedElementType.Array
                 ));
+            }
 
             // Connectors
-            foreach (var connector in this.FamilyParam.AssociatedConnectors(this.FamilyDoc))
+            foreach (var connector in this.FamilyParam.AssociatedConnectors(this.FamilyDoc)) {
                 results.Add(new AssociatedElement(
                     $"{connector.Domain} Connector (ID: {connector.Id})",
                     "Connector",
                     connector.Id,
                     AssociatedElementType.Connector
                 ));
+            }
 
             // Formula Dependents
-            foreach (var fp in this.FamilyParam.GetDependents(this.FamilyDoc.FamilyManager.Parameters))
+            foreach (var fp in this.FamilyParam.GetDependents(this.FamilyDoc.FamilyManager.Parameters)) {
                 results.Add(new AssociatedElement(
                     fp.Definition.Name,
                     "Parameter",
@@ -158,13 +160,14 @@ public class FamilyElementItem : IPaletteListItem {
                     AssociatedElementType.Parameter,
                     fp
                 ));
+            }
 
             break;
 
         case FamilyElementType.Dimension:
             try {
                 var label = this.Dimension!.FamilyLabel;
-                if (label != null)
+                if (label != null) {
                     results.Add(new AssociatedElement(
                         label.Definition.Name,
                         "Label Parameter",
@@ -172,6 +175,7 @@ public class FamilyElementItem : IPaletteListItem {
                         AssociatedElementType.Parameter,
                         label
                     ));
+                }
             } catch { }
 
             break;
@@ -179,7 +183,7 @@ public class FamilyElementItem : IPaletteListItem {
         case FamilyElementType.Connector:
             foreach (Parameter param in this.Connector!.Parameters) {
                 var associated = this.FamilyDoc.FamilyManager.GetAssociatedFamilyParameter(param);
-                if (associated != null)
+                if (associated != null) {
                     results.Add(new AssociatedElement(
                         $"{param.Definition.Name} → {associated.Definition.Name}",
                         "Parameter Association",
@@ -187,6 +191,7 @@ public class FamilyElementItem : IPaletteListItem {
                         AssociatedElementType.Parameter,
                         associated
                     ));
+                }
             }
 
             break;
@@ -194,7 +199,7 @@ public class FamilyElementItem : IPaletteListItem {
         case FamilyElementType.Family:
             foreach (Parameter param in this.FamilyInstance!.Parameters) {
                 var associated = this.FamilyDoc.FamilyManager.GetAssociatedFamilyParameter(param);
-                if (associated != null)
+                if (associated != null) {
                     results.Add(new AssociatedElement(
                         $"{param.Definition.Name} → {associated.Definition.Name}",
                         "Parameter Association",
@@ -202,6 +207,7 @@ public class FamilyElementItem : IPaletteListItem {
                         AssociatedElementType.Parameter,
                         associated
                     ));
+                }
             }
 
             break;

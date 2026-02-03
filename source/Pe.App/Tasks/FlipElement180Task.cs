@@ -3,6 +3,7 @@ using Autodesk.Revit.UI.Selection;
 using Pe.App.Commands.Palette.TaskPalette;
 using Pe.Global.PolyFill;
 using Serilog;
+using OperationCanceledException = Autodesk.Revit.Exceptions.OperationCanceledException;
 
 namespace Pe.App.Tasks;
 
@@ -81,7 +82,7 @@ public sealed class FlipElement180Task : ITask {
             _ = trans.Commit();
 
             Log.Information($"✓ Flipped element '{element.Name}' (ID: {element.Id.Value()}) upside down\n");
-        } catch (Autodesk.Revit.Exceptions.OperationCanceledException) {
+        } catch (OperationCanceledException) {
             Log.Information("⚠ Selection cancelled\n");
         } catch (Exception ex) {
             Log.Information($"✗ Failed to flip element: {ex.Message}");

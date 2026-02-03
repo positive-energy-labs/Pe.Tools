@@ -24,9 +24,9 @@ public class BatchScheduleSettings {
 ///     Palette list item representing a batch schedule configuration.
 /// </summary>
 public class BatchScheduleListItem : IPaletteListItem {
+    private readonly SettingsManager _batchSubDir;
     private readonly FileInfo _fileInfo;
     private readonly string _relativePath;
-    private readonly SettingsManager _batchSubDir;
 
     public BatchScheduleListItem(string filePath, string relativePath, SettingsManager batchSubDir) {
         this.FilePath = filePath;
@@ -77,7 +77,8 @@ public class BatchScheduleListItem : IPaletteListItem {
         if (!Directory.Exists(subDir.DirectoryPath))
             return [];
         // force default to be made
-        var jsonFiles = subDir.ListJsonFilesRecursive().Where(f => !f.EndsWith("schema.json") && !f.Contains("schema-")).ToList();
+        var jsonFiles = subDir.ListJsonFilesRecursive().Where(f => !f.EndsWith("schema.json") && !f.Contains("schema-"))
+            .ToList();
         if (jsonFiles.Count == 0) _ = subDir.Json<BatchScheduleSettings>().Read();
 
         return jsonFiles

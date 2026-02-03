@@ -54,9 +54,9 @@ public static class OpenDocumentExtensions {
                     Console.WriteLine($"[OpenAndActivateView] Using OpenAndActivateDocument (isCloud={isCloud})");
 
                     // For cloud documents, use a timeout warning mechanism
-                    if (isCloud) {
+                    if (isCloud)
                         _ = TryOpenCloudDocumentWithTimeout(existingDocPath, targetView, 3);
-                    } else {
+                    else {
                         // Local documents - just open directly (fast)
                         var existingDocOptions =
                             new OpenOptions { DetachFromCentralOption = DetachFromCentralOption.DoNotDetach };
@@ -284,7 +284,8 @@ public static class OpenDocumentExtensions {
             var openOptions = new OpenOptions { DetachFromCentralOption = DetachFromCentralOption.DoNotDetach };
             var activatedUiDoc = uiApp.OpenAndActivateDocument(modelPath, openOptions, false);
 
-            Console.WriteLine($"[TryOpenCloudDocument] OpenAndActivateDocument completed in {sw.ElapsedMilliseconds}ms");
+            Console.WriteLine(
+                $"[TryOpenCloudDocument] OpenAndActivateDocument completed in {sw.ElapsedMilliseconds}ms");
 
             // Success - switch to the target view
             activatedUiDoc.RequestViewChange(targetView);
@@ -300,7 +301,8 @@ public static class OpenDocumentExtensions {
                 "Click on the document tab directly to switch without network access.");
             return false;
         } catch (Exception ex) {
-            Console.WriteLine($"[TryOpenCloudDocument] Unexpected error after {sw.ElapsedMilliseconds}ms: {ex.Message}");
+            Console.WriteLine(
+                $"[TryOpenCloudDocument] Unexpected error after {sw.ElapsedMilliseconds}ms: {ex.Message}");
             Console.WriteLine(ex.ToStringDemystified());
 
             _ = TaskDialog.Show(

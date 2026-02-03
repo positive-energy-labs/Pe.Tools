@@ -5,11 +5,12 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Wpf.Ui.Controls;
 using Visibility = System.Windows.Visibility;
 using Grid = System.Windows.Controls.Grid;
 using Button = Wpf.Ui.Controls.Button;
-using Application = System.Windows.Application;
 using AnimatedScrollViewer = Pe.Ui.Controls.AnimatedScrollViewer;
+using Color = System.Windows.Media.Color;
 using Point = System.Windows.Point;
 
 
@@ -65,9 +66,9 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     private const double PaletteChromeHeight = 115;
 
     private readonly bool _isSearchBoxHidden;
+    private readonly SolidColorBrush _pinHoverBrush = new(Color.FromRgb(126, 179, 255));
+    private readonly SolidColorBrush _pinPinnedBrush = new(Color.FromRgb(100, 149, 237));
     private readonly List<Button> _tabButtons = [];
-    private readonly SolidColorBrush _pinPinnedBrush = new(System.Windows.Media.Color.FromRgb(100, 149, 237));
-    private readonly SolidColorBrush _pinHoverBrush = new(System.Windows.Media.Color.FromRgb(126, 179, 255));
     private ActionMenu _actionMenu;
     private PaletteSidebar _currentSidebar;
     private CustomKeyBindings _customKeyBindings;
@@ -80,11 +81,12 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     private Action _onCtrlReleased;
     private EphemeralWindow _parentWindow;
     private bool _sidebarAutoExpanded;
-    private SelectableTextBox _tooltipPanel;
-    private double _trayMaxHeight = DefaultTrayMaxHeight;
 
     /// <summary> Per-tab action registry for dynamic action switching </summary>
     private Dictionary<int, object>? _tabActionBindings;
+
+    private SelectableTextBox _tooltipPanel;
+    private double _trayMaxHeight = DefaultTrayMaxHeight;
 
     public Palette(bool isSearchBoxHidden = false) {
         this.InitializeComponent();
@@ -108,9 +110,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     /// <summary>
     ///     Sets the title displayed in the palette's title bar.
     /// </summary>
-    public void SetTitle(string title) {
-        this.TitleText.Text = title;
-    }
+    public void SetTitle(string title) => this.TitleText.Text = title;
 
     /// <summary>
     ///     Initializes the palette with type-specific behavior via composition.
@@ -384,7 +384,8 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         } else {
             // Expand to larger width and height
             this.SidebarColumn.Width = new GridLength(ExpandedPanelWidth);
-            this.PanelBackground.MaxHeight = PaletteChromeHeight + (DefaultVisibleItems * ItemHeight) + 300; // Extra 300px when expanded
+            this.PanelBackground.MaxHeight =
+                PaletteChromeHeight + (DefaultVisibleItems * ItemHeight) + 300; // Extra 300px when expanded
             this._isPanelExpanded = true;
         }
     }
@@ -423,7 +424,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
 
         this._isTrayExpanded = true;
         this.TrayBorder.MaxHeight = this._trayMaxHeight;
-        this.TrayToggleIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.ChevronUp20;
+        this.TrayToggleIcon.Symbol = SymbolRegular.ChevronUp20;
     }
 
     /// <summary>
@@ -434,7 +435,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
 
         this._isTrayExpanded = false;
         this.TrayBorder.MaxHeight = 0;
-        this.TrayToggleIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.ChevronDown20;
+        this.TrayToggleIcon.Symbol = SymbolRegular.ChevronDown20;
     }
 
     private void TrayToggleButton_Click(object sender, RoutedEventArgs e) => this.ToggleTray();
@@ -462,7 +463,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
 
         if (isPinned) {
             // Pinned state: filled pin icon in cornflower blue
-            this.PinIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.Pin24;
+            this.PinIcon.Symbol = SymbolRegular.Pin24;
             this.PinIcon.Filled = true;
             this.PinIcon.Foreground = this._pinPinnedBrush;
             this.PinButton.ToolTip = "Unpin window (close when clicking outside)";
@@ -472,7 +473,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             this.PinButton.MouseLeave += this.PinButton_MouseLeave;
         } else {
             // Unpinned state: outline pin icon in default color
-            this.PinIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.Pin24;
+            this.PinIcon.Symbol = SymbolRegular.Pin24;
             this.PinIcon.Filled = false;
             this.PinIcon.SetResourceReference(ForegroundProperty, "TextFillColorSecondaryBrush");
             this.PinButton.ToolTip = "Pin window (keep open when clicking outside)";

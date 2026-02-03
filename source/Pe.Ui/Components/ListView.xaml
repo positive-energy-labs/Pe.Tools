@@ -90,8 +90,6 @@
                  MouseRightButtonUp="ItemListView_MouseRightButtonUp"
                  MouseMove="ItemListView_MouseMove"
                  MouseLeave="ItemListView_MouseLeave"
-                 Background="Transparent"
-                 BorderThickness="0"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                  ScrollViewer.CanContentScroll="True"
                  HorizontalContentAlignment="Stretch"
@@ -100,6 +98,5 @@
                  VirtualizingPanel.ScrollUnit="Pixel"
                  VirtualizingPanel.CacheLength="2,2"
                  VirtualizingPanel.CacheLengthUnit="Page"
-                 ItemContainerStyle="{StaticResource ListViewItemStyle}">
-    </ui:ListView>
+                 ItemContainerStyle="{StaticResource ListViewItemStyle}" />
 </core:RevitHostedUserControl>

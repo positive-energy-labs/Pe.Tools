@@ -12,74 +12,81 @@ internal static class FamilyTabConfig {
     /// <summary>
     ///     Creates the tab definitions for the Family palette.
     /// </summary>
-    internal static List<TabDefinition<UnifiedFamilyItem>> CreateTabs(
+    internal static (List<TabDefinition<UnifiedFamilyItem>> Tabs, FamilyInstancesOptions? InstancesOptions) CreateTabs(
         Document doc,
-        UIApplication uiapp,
         UIDocument uidoc
-    ) => [
-            new TabDefinition<UnifiedFamilyItem> {
+    ) {
+        // Create options for Family Instances tab
+        var instancesOptions = new FamilyInstancesOptions();
+        var tabs = new List<TabDefinition<UnifiedFamilyItem>> {
+            new() {
                 Name = "Families",
                 ItemProvider = () => FamilyActions.CollectFamilies(doc),
                 FilterKeySelector = i => i.TextPill,
                 Actions = [
-                    new() {
+                    new PaletteAction<UnifiedFamilyItem> {
                         Name = "Family Types",
-                        Execute = async item => FamilyPaletteBase.ShowPalette(uiapp, defaultTabIndex: 1, filterValue: item?.Family?.Name)
+                        Execute = async item => FamilyPaletteBase.ShowPalette(1, item?.Family?.Name)
                     },
-                    new() {
+                    new PaletteAction<UnifiedFamilyItem> {
                         Name = "Open/Edit",
                         Modifiers = ModifierKeys.Control,
-                        Execute = async item => FamilyActions.HandleOpenEditFamily(uiapp, item),
-                        CanExecute = item => item != null && item.GetFamily()?.IsEditable == true
+                        Execute = async item => FamilyActions.HandleOpenEditFamily(item),
+                        CanExecute = item => item?.GetFamily()?.IsEditable == true
                     },
-                    new() {
+                    new PaletteAction<UnifiedFamilyItem> {
+                        Name = "Place Types",
+                        Execute = async item => FamilyPlacementHelper.ShowPlacementPaletteForFamily(item?.Family),
+                        CanExecute = item => item?.Family != null && FamilyActions.CanPlaceInView(uidoc.ActiveView)
+                    },
+                    new PaletteAction<UnifiedFamilyItem> {
                         Name = "Snoop",
                         Modifiers = ModifierKeys.Alt,
-                        Execute = async item => FamilyActions.HandleSnoop(uiapp, doc, item),
-                        CanExecute = item => item != null
+                        Execute = async item => FamilyActions.HandleSnoop(doc, item)
                     }
                 ]
             },
-            new TabDefinition<UnifiedFamilyItem> {
+            new() {
                 Name = "Family Types",
                 ItemProvider = () => FamilyActions.CollectFamilyTypes(doc),
                 FilterKeySelector = i => i.TextPill,
                 Actions = [
-                    new() {
+                    new PaletteAction<UnifiedFamilyItem> {
                         Name = "Place",
                         Execute = async item => FamilyActions.HandlePlace(doc, uidoc, item),
                         CanExecute = item => item != null && FamilyActions.CanPlaceInView(uidoc.ActiveView)
                     },
-                    new() {
+                    new PaletteAction<UnifiedFamilyItem> {
                         Name = "Open/Edit",
                         Modifiers = ModifierKeys.Control,
-                        Execute = async item => FamilyActions.HandleOpenEditFamilyType(uiapp, item),
-                        CanExecute = item => item != null && item.GetFamily()?.IsEditable == true
+                        Execute = async item => FamilyActions.HandleOpenEditFamilyType(item),
+                        CanExecute = item => item?.GetFamily()?.IsEditable == true
                     },
-                    new() {
+                    new PaletteAction<UnifiedFamilyItem> {
                         Name = "Inspect Instances",
-                        Execute = async item => FamilyPaletteBase.ShowPalette(uiapp, defaultTabIndex: 2, filterValue: item?.FamilySymbol?.Name)
+                        Execute = async item => FamilyPaletteBase.ShowPalette(2, item?.FamilySymbol?.Name)
                     },
-                    new() {
+                    new PaletteAction<UnifiedFamilyItem> {
                         Name = "Snoop",
                         Modifiers = ModifierKeys.Alt,
-                        Execute = async item => FamilyActions.HandleSnoop(uiapp, doc, item),
-                        CanExecute = item => item != null
+                        Execute = async item => FamilyActions.HandleSnoop(doc, item)
                     }
                 ]
             },
-            new TabDefinition<UnifiedFamilyItem> {
+            new() {
                 Name = "Family Instances",
-                ItemProvider = () => FamilyActions.CollectFamilyInstances(doc),
+                ItemProvider = () => FamilyActions.CollectFamilyInstances(doc, uidoc, instancesOptions),
                 FilterKeySelector = i => i.TextPill,
                 Actions = [
-                    new() {
+                    new PaletteAction<UnifiedFamilyItem> {
                         Name = "Snoop",
                         Modifiers = ModifierKeys.Alt,
-                        Execute = async item => FamilyActions.HandleSnoop(uiapp, doc, item),
-                        CanExecute = item => item != null
+                        Execute = async item => FamilyActions.HandleSnoop(doc, item)
                     }
                 ]
             }
-        ];
+        };
+
+        return (tabs, instancesOptions);
+    }
 }

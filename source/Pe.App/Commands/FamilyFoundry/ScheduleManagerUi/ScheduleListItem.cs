@@ -91,9 +91,10 @@ public class ScheduleListItem : IPaletteListItem {
     public static List<ScheduleListItem> DiscoverProfiles(SettingsManager subDir) {
         if (!Directory.Exists(subDir.DirectoryPath))
             return [];
-        var jsonFiles = subDir.ListJsonFilesRecursive().Where(f => !f.EndsWith("schema.json") && !f.Contains("schema-")).ToList();
+        var jsonFiles = subDir.ListJsonFilesRecursive().Where(f => !f.EndsWith("schema.json") && !f.Contains("schema-"))
+            .ToList();
         if (jsonFiles.Count == 0) _ = subDir.Json<ScheduleSpec>().Read();
-        
+
         return jsonFiles
             .Select(relativePath => new ScheduleListItem(
                 Path.Combine(subDir.DirectoryPath, relativePath),

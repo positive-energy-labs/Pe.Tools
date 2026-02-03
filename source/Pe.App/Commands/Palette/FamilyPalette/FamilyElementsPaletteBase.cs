@@ -1,7 +1,6 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.Extensions.FamDocument;
-using Pe.Extensions.UiApplication;
 using Pe.Global.Revit.Ui;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
@@ -39,7 +38,8 @@ public abstract class FamilyElementsPaletteBase : IExternalCommand {
             var doc = uidoc.Document;
 
             if (!doc.IsFamilyDocument) {
-                _ = TaskDialog.Show("Family Elements", "Family Elements palette is only available in family documents.");
+                _ = TaskDialog.Show("Family Elements",
+                    "Family Elements palette is only available in family documents.");
                 return Result.Cancelled;
             }
 
@@ -52,7 +52,7 @@ public abstract class FamilyElementsPaletteBase : IExternalCommand {
             var highlighter = new ElementHighlighter(uidoc);
 
             // Create tab definitions with lazy loading
-            var tabs = FamilyElementsTabConfig.CreateTabs(doc, uiapp, uidoc, familyDoc);
+            var tabs = FamilyElementsTabConfig.CreateTabs(familyDoc);
 
             var window = PaletteFactory.Create("Family Elements",
                 new PaletteOptions<FamilyElementItem> {

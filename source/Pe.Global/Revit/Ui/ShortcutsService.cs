@@ -1,5 +1,3 @@
-using Pe.Global.Revit.Utils;
-using System.IO;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using UIFramework;
@@ -13,9 +11,9 @@ namespace Pe.Global.Revit.Ui;
 /// </summary>
 public class ShortcutsService {
     private static readonly Lazy<ShortcutsService> _instance = new(() => new ShortcutsService());
+    private string _cachedFilePath;
 
     private DateTime _lastFileModified;
-    private string _cachedFilePath;
     private Dictionary<string, ShortcutInfo> _shortcuts;
     private bool _uiFrameworkCommandsLoaded;
 

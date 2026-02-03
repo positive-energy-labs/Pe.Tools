@@ -1,4 +1,3 @@
-using Autodesk.Revit.UI;
 using ricaun.Revit.UI.Tasks;
 
 namespace Pe.Global.Services.SignalR;
@@ -21,7 +20,7 @@ public class RevitTaskQueue {
     /// </summary>
     public async Task<T> EnqueueAsync<T>(Func<UIApplication, T> action) {
         T? result = default;
-        await this._revitTaskService.Run(async () => {
+        _ = await this._revitTaskService.Run(async () => {
             result = action(this._context.UIApplication);
             await Task.CompletedTask;
         });
@@ -32,10 +31,9 @@ public class RevitTaskQueue {
     /// <summary>
     ///     Enqueue a void action to run on the Revit thread and await completion.
     /// </summary>
-    public async Task EnqueueAsync(Action<UIApplication> action) {
+    public async Task EnqueueAsync(Action<UIApplication> action) =>
         await this._revitTaskService.Run(async () => {
             action(this._context.UIApplication);
             await Task.CompletedTask;
         });
-    }
 }

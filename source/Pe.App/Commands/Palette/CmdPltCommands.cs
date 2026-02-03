@@ -1,7 +1,6 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.CommandPalette;
-using Pe.Global.Revit.Ui;
 using Pe.Global.Services.Storage;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
@@ -30,25 +29,27 @@ public class CmdPltCommands : IExternalCommand {
             var selectableItems = BuildSelectableItems(commandItems);
 
             var window = PaletteFactory.Create("Command Palette",
-               new PaletteOptions<PostableCommandItem> {
-                   Persistence = (persistence, item => item.Command.Value),
-                   SearchConfig = SearchConfig.PrimaryAndSecondary(),
-                   Tabs = [new TabDefinition<PostableCommandItem> {
-                        Name = "All",
-                        ItemProvider = () => selectableItems,
-                        Actions = [
-                            new() {
-                                Name = "Execute",
-                                Execute = async item => {
-                                    var (success, error) = Global.Revit.Lib.Commands.Execute(uiapp, item.Command);
-                                    if (error is not null) Log.Error("Error: " + error.Message + error.StackTrace);
-                                    if (success) commandHelper.UpdateCommandUsage(item.Command);
-                                },
-                                CanExecute = item => Global.Revit.Lib.Commands.IsAvailable(uiapp, item.Command)
-                            }
-                        ]
-                    }]
-               });
+                new PaletteOptions<PostableCommandItem> {
+                    Persistence = (persistence, item => item.Command.Value),
+                    SearchConfig = SearchConfig.PrimaryAndSecondary(),
+                    Tabs = [
+                        new TabDefinition<PostableCommandItem> {
+                            Name = "All",
+                            ItemProvider = () => selectableItems,
+                            Actions = [
+                                new PaletteAction<PostableCommandItem> {
+                                    Name = "Execute",
+                                    Execute = async item => {
+                                        var (success, error) = Global.Revit.Lib.Commands.Execute(uiapp, item.Command);
+                                        if (error is not null) Log.Error("Error: " + error.Message + error.StackTrace);
+                                        if (success) commandHelper.UpdateCommandUsage(item.Command);
+                                    },
+                                    CanExecute = item => Global.Revit.Lib.Commands.IsAvailable(uiapp, item.Command)
+                                }
+                            ]
+                        }
+                    ]
+                });
             window.Show();
 
             return Result.Succeeded;

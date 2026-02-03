@@ -1,5 +1,6 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
+using Pe.App.Commands.Palette.FamilyPalette;
 using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.OperationGroups;
 using Pe.FamilyFoundry.Operations;

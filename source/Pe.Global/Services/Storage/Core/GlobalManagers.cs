@@ -7,12 +7,13 @@ namespace Pe.Global.Services.Storage.Core;
 public class GlobalManager {
     private const string _dateTimeFormat = "yyyy-MM-dd HH:mm:ss";
     private const int _maxLines = 500;
-    public string DirectoryPath { get; init; }
 
     public GlobalManager(string basePath) {
         this.DirectoryPath = Path.Combine(basePath, "Global");
         _ = Directory.CreateDirectory(this.DirectoryPath);
     }
+
+    public string DirectoryPath { get; init; }
 
     /// <summary>
     ///     Manager for the settings.json in the Global directory. Handles only reads to the file.

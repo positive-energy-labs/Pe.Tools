@@ -76,7 +76,8 @@ public class ProfileListItem : IPaletteListItem {
         if (!Directory.Exists(subDir.DirectoryPath))
             return [];
 
-        var jsonFiles = subDir.ListJsonFilesRecursive().Where(f => !f.EndsWith("schema.json") && !f.Contains("schema-")).ToList();
+        var jsonFiles = subDir.ListJsonFilesRecursive().Where(f => !f.EndsWith("schema.json") && !f.Contains("schema-"))
+            .ToList();
         if (jsonFiles.Count == 0) _ = subDir.Json<ProfileRemap>().Read();
         return jsonFiles
             .Select(relativePath => new ProfileListItem(
