@@ -1,10 +1,8 @@
-using System.IO;
-using Autodesk.Revit.ApplicationServices;
-using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.TaskPalette;
 using Pe.Global.Services.Aps.Models;
 using Pe.Global.Services.Storage;
+using System.IO;
 
 namespace Pe.App.Tasks;
 
@@ -14,6 +12,7 @@ namespace Pe.App.Tasks;
 /// </summary>
 public sealed class ExportApsParametersTask : ITask {
     public string Name => "Export APS Parameters to Shared Param File";
+
     public string? Description =>
         "Exports all Autodesk Parameters Service parameters to a shared parameter file (.txt)";
 
@@ -24,9 +23,9 @@ public sealed class ExportApsParametersTask : ITask {
             // Load cached APS parameters
             const string cacheFilename = "parameters-service-cache";
             var apsParamsCache = Storage.GlobalDir().StateJson<ParametersApi.Parameters>(cacheFilename);
-            var cacheFilePath = System.IO.Path.Combine(Storage.GlobalDir().DirectoryPath, $"{cacheFilename}.json");
+            var cacheFilePath = Path.Combine(Storage.GlobalDir().DirectoryPath, $"{cacheFilename}.json");
 
-            if (!System.IO.File.Exists(cacheFilePath)) {
+            if (!File.Exists(cacheFilePath)) {
                 Console.WriteLine(
                     "❌ APS parameters cache not found. Run 'Cache Params Svc' command first to download parameters.");
                 return;
@@ -51,7 +50,7 @@ public sealed class ExportApsParametersTask : ITask {
             var output = this.GetOutput();
             var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
             var outputFileName = $"APS_Parameters_{timestamp}.txt";
-            var outputPath = System.IO.Path.Combine(output.DirectoryPath, outputFileName);
+            var outputPath = Path.Combine(output.DirectoryPath, outputFileName);
 
             // Create shared parameter file
             var app = uiApp.Application;
@@ -65,7 +64,7 @@ public sealed class ExportApsParametersTask : ITask {
                 var defFile = app.OpenSharedParameterFile();
                 if (defFile == null) {
                     // File doesn't exist, create it
-                    System.IO.File.WriteAllText(outputPath, string.Empty);
+                    File.WriteAllText(outputPath, string.Empty);
                     defFile = app.OpenSharedParameterFile();
                 }
 
@@ -99,16 +98,17 @@ public sealed class ExportApsParametersTask : ITask {
 
                         // Create external definition
                         var externalDef = group.Definitions.Create(
-                            new ExternalDefinitionCreationOptions(param.Name ?? "Unknown", downloadOpts.GetSpecTypeId()) {
+                            new ExternalDefinitionCreationOptions(param.Name ?? "Unknown",
+                                downloadOpts.GetSpecTypeId()) {
                                 GUID = downloadOpts.GetGuid(),
                                 Visible = downloadOpts.Visible,
                                 UserModifiable = !param.ReadOnly,
                                 Description = param.Description ?? string.Empty
                             });
 
-                        if (externalDef != null) {
+                        if (externalDef != null)
                             successCount++;
-                        } else {
+                        else {
                             Console.WriteLine($"  ⚠ Failed to create definition: {param.Name}");
                             errorCount++;
                         }
@@ -118,14 +118,14 @@ public sealed class ExportApsParametersTask : ITask {
                     }
                 }
 
-                Console.WriteLine($"\n=== Export Summary ===");
+                Console.WriteLine("\n=== Export Summary ===");
                 Console.WriteLine($"  ✓ Created: {successCount}");
                 if (skipCount > 0)
                     Console.WriteLine($"  ⊘ Skipped (already exists): {skipCount}");
                 if (errorCount > 0)
                     Console.WriteLine($"  ✗ Errors: {errorCount}");
                 Console.WriteLine($"  📄 File: {outputPath}");
-                Console.WriteLine($"===================\n");
+                Console.WriteLine("===================\n");
             } finally {
                 // Restore original shared parameters file setting
                 try {

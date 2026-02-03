@@ -3,21 +3,15 @@ using Autodesk.Revit.DB.ExtensibleStorage;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Events;
 using Nice3point.Revit.Toolkit.External;
-using Pe.App.Commands.Palette;
+using Pe.App.Tasks;
 using Pe.Global.Services.AutoTag;
 using Pe.Global.Services.Document;
 using Pe.Global.Services.SignalR;
-using Pe.Tools.Commands;
-using Pe.Tools.Commands.AutoTag;
-using Pe.Tools.Commands.FamilyFoundry;
+using Pe.Global.Services.SignalR.Actions;
 using Pe.Ui.Core;
 using ricaun.Revit.UI.Tasks;
-using ricaun.Revit.UI.Tasks.Extensions;
 using Serilog;
 using Serilog.Events;
-using RevitDBExplorer;
-using System.Diagnostics;
-
 
 namespace Pe.Tools;
 
@@ -55,25 +49,10 @@ public class Application : ExternalApplication {
         RevitTaskAccessor.RunAsync = async action => await _revitTaskService.Run(async () => await action());
 
         CreateLogger();
-
-        // Initialize RevitDBExplorer for embedded snooping
-        Log.Debug("Starting RevitDBExplorer initialization...");
-        try {
-            var uiApp = this.Application.GetUIApplication();
-            Log.Debug("Got UIApplication: {UIApp}", uiApp != null ? "Valid" : "NULL");
-
-            EmbeddedInitializer.Initialize(uiApp, embeddedIdentity: "Pe.Tools");
-            Log.Information("RevitDBExplorer initialized successfully for embedded use");
-            Log.Debug("EmbeddedInitializer.IsInitialized: {IsInit}", EmbeddedInitializer.IsInitialized);
-        } catch (Exception ex) {
-            Log.Error(ex, "Failed to initialize RevitDBExplorer - snooping will be unavailable: {Message}", ex.Message);
-            Log.Debug("Exception details: {Details}", ex.ToStringDemystified());
-        }
-
         this.CreateRibbon();
 
         // Initialize task registry
-        Pe.App.Tasks.TaskInitializer.RegisterAllTasks();
+        TaskInitializer.RegisterAllTasks();
 
         // Initialize AutoTag service
         AutoTagService.Instance.Initialize(this.Application.ActiveAddInId, this.Application);
@@ -156,9 +135,9 @@ public class Application : ExternalApplication {
             _settingsEditorServer = new SettingsEditorServer();
             _ = _settingsEditorServer.StartAsync(uiApp, configureActionRegistry: registry => {
                 // Register AutoTag action handlers
-                registry.Register(new Pe.Global.Services.SignalR.Actions.AutoTagLoadHandler());
-                registry.Register(new Pe.Global.Services.SignalR.Actions.AutoTagSaveHandler());
-                registry.Register(new Pe.Global.Services.SignalR.Actions.AutoTagGetStatusHandler());
+                registry.Register(new AutoTagLoadHandler());
+                registry.Register(new AutoTagSaveHandler());
+                registry.Register(new AutoTagGetStatusHandler());
             });
             Log.Information("SignalR settings editor server started successfully");
         } catch (Exception ex) {
@@ -174,7 +153,7 @@ public class Application : ExternalApplication {
 
         Log.Logger = new LoggerConfiguration()
             .WriteTo.Console(LogEventLevel.Debug, outputTemplate)
-            .WriteTo.Debug(LogEventLevel.Debug, outputTemplate)  // Also write to Debug output (Visual Studio)
+            .WriteTo.Debug(LogEventLevel.Debug, outputTemplate) // Also write to Debug output (Visual Studio)
             .MinimumLevel.Debug()
             .CreateLogger();
 

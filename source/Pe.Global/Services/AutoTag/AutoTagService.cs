@@ -13,9 +13,9 @@ namespace Pe.Global.Services.AutoTag;
 public class AutoTagService {
     private static AutoTagService? _instance;
     private readonly Dictionary<int, AutoTagSettings?> _documentSettings = new();
-    private DocumentSettingsStorage<AutoTagSettings>? _documentStorage;
     private AddInId? _addInId;
     private UIControlledApplication? _app;
+    private DocumentSettingsStorage<AutoTagSettings>? _documentStorage;
     private AutoTagUpdater? _updater;
 
     /// <summary>
@@ -24,7 +24,7 @@ public class AutoTagService {
     public static AutoTagService Instance {
         get {
             _instance ??= new AutoTagService();
-            return _instance; 
+            return _instance;
         }
     }
 
@@ -51,7 +51,7 @@ public class AutoTagService {
     public void SaveSettingsForDocument(Autodesk.Revit.DB.Document doc, AutoTagSettings settings) {
         if (this._documentStorage == null) throw new InvalidOperationException("AutoTag service not initialized");
 
-        this._documentStorage.Write(doc, settings); 
+        this._documentStorage.Write(doc, settings);
         var docHash = doc.GetHashCode();
         this._documentSettings[docHash] = settings;
 
@@ -80,8 +80,8 @@ public class AutoTagService {
             // Initialize document storage with vendor-based access control
             // Schema GUID v3 - uses VendorId "Development" to match .addin manifest
             this._documentStorage = new DocumentSettingsStorage<AutoTagSettings>(
-                schemaGuid: new Guid("B9F3E5A7-2C4D-6B8F-0E1A-3D5C7F9B1E2A"),
-                schemaName: "PeAutoTagSettings"
+                new Guid("B9F3E5A7-2C4D-6B8F-0E1A-3D5C7F9B1E2A"),
+                "PeAutoTagSettings"
             );
 
             // Create and register updater
@@ -156,9 +156,10 @@ public class AutoTagService {
             // Register triggers if enabled
             if (settings.Enabled && settings.Configurations.Count > 0)
                 this.RegisterTriggersForDocument(doc, settings);
-            else
+            else {
                 Log.Debug("AutoTag: Skipping trigger registration for '{Title}' (disabled or no configurations)",
                     doc.Title);
+            }
         } catch (Exception ex) {
             Log.Error(ex, "AutoTag: Failed to process document open");
         }

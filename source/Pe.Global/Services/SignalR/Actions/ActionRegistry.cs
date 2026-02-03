@@ -9,16 +9,13 @@ public class ActionRegistry {
     /// <summary>
     ///     Register an action handler.
     /// </summary>
-    public void Register(IActionHandler handler) {
-        this._handlers[handler.ActionName] = handler;
-    }
+    public void Register(IActionHandler handler) => this._handlers[handler.ActionName] = handler;
 
     /// <summary>
     ///     Resolve an action handler by name.
     /// </summary>
-    public IActionHandler? Resolve(string actionName) {
-        return this._handlers.TryGetValue(actionName, out var handler) ? handler : null;
-    }
+    public IActionHandler? Resolve(string actionName) =>
+        this._handlers.TryGetValue(actionName, out var handler) ? handler : null;
 
     /// <summary>
     ///     Get all registered action names.
@@ -28,8 +25,7 @@ public class ActionRegistry {
     /// <summary>
     ///     Get actions for a specific settings type.
     /// </summary>
-    public IEnumerable<IActionHandler> GetActionsForType(string settingsTypeName) {
-        return this._handlers.Values.Where(h =>
+    public IEnumerable<IActionHandler> GetActionsForType(string settingsTypeName) =>
+        this._handlers.Values.Where(h =>
             h.SettingsTypeName.Equals(settingsTypeName, StringComparison.OrdinalIgnoreCase));
-    }
 }

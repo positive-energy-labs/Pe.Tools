@@ -119,12 +119,14 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
                 Persistence = (storage, item => item.TextPrimary),
                 SearchConfig = SearchConfig.PrimaryAndSecondary(),
                 SidebarPanel = previewPanel,
-                Tabs = [new TabDefinition<ProfileListItem> {
-                    Name = "All",
-                    ItemProvider = () => profiles,
-                    FilterKeySelector = item => string.IsNullOrEmpty(item.ExtendsValue) ? "Base" : "Extended",
-                    Actions = paletteActions
-                }]
+                Tabs = [
+                    new TabDefinition<ProfileListItem> {
+                        Name = "All",
+                        ItemProvider = () => profiles,
+                        FilterKeySelector = item => string.IsNullOrEmpty(item.ExtendsValue) ? "Base" : "Extended",
+                        Actions = paletteActions
+                    }
+                ]
             });
 
         return window;
@@ -228,8 +230,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         var profileJson = JsonSerializer.Serialize(
             profile,
             new JsonSerializerOptions {
-                WriteIndented = true,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             });
 
         if (ct.IsCancellationRequested) return null;

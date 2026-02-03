@@ -30,7 +30,7 @@ public class AddAndMapSharedParams(
         return ops;
     }
 }
- 
+
 public class PreProcessMappings(
     MapParamsSettings settings,
     IEnumerable<SharedParameterDefinition> sharedParams

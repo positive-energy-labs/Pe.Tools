@@ -1,8 +1,9 @@
 using Pe.Extensions.FamDocument;
 using Pe.Extensions.FamDocument.GetValue;
 using Pe.Extensions.FamParameter;
-using Pe.Global.Services.Document;
 using Pe.Global.PolyFill;
+using Pe.Global.Services.Document;
+using ArgumentException = Autodesk.Revit.Exceptions.ArgumentException;
 
 namespace Pe.App.Commands.Palette.FamilyPalette;
 
@@ -83,8 +84,8 @@ public static class FamilyPreviewBuilder {
             foreach (Parameter param in symbol.Parameters) {
                 if (param.Definition == null) continue;
 
-                var key = GetParamKey(param.Definition.Name, isInstance: false);
-                var preview = GetOrCreatePreview(results, key, param, isInstance: false, typeNames);
+                var key = GetParamKey(param.Definition.Name, false);
+                var preview = GetOrCreatePreview(results, key, param, false, typeNames);
                 preview.ValuesPerType[symbol.Name] = GetParameterValueString(param, doc);
             }
         }
@@ -174,8 +175,8 @@ public static class FamilyPreviewBuilder {
         foreach (Parameter param in symbol.Parameters) {
             if (param.Definition == null) continue;
 
-            var key = GetParamKey(param.Definition.Name, isInstance: false);
-            var preview = GetOrCreatePreview(results, key, param, isInstance: false, typeNames);
+            var key = GetParamKey(param.Definition.Name, false);
+            var preview = GetOrCreatePreview(results, key, param, false, typeNames);
             preview.ValuesPerType[symbol.Name] = GetParameterValueString(param, doc);
         }
 
@@ -194,8 +195,8 @@ public static class FamilyPreviewBuilder {
         foreach (Parameter param in instance.Parameters) {
             if (param.Definition == null) continue;
 
-            var key = GetParamKey(param.Definition.Name, isInstance: true);
-            var preview = GetOrCreatePreview(results, key, param, isInstance: true, typeNames);
+            var key = GetParamKey(param.Definition.Name, true);
+            var preview = GetOrCreatePreview(results, key, param, true, typeNames);
             var value = GetParameterValueString(param, doc);
 
             // For instance source, store in InstanceValue and also in ValuesPerType for display
@@ -208,8 +209,8 @@ public static class FamilyPreviewBuilder {
         foreach (Parameter param in symbol.Parameters) {
             if (param.Definition == null) continue;
 
-            var key = GetParamKey(param.Definition.Name, isInstance: false);
-            var preview = GetOrCreatePreview(results, key, param, isInstance: false, typeNames);
+            var key = GetParamKey(param.Definition.Name, false);
+            var preview = GetOrCreatePreview(results, key, param, false, typeNames);
             preview.ValuesPerType[symbol.Name] = GetParameterValueString(param, doc);
         }
 
@@ -283,9 +284,10 @@ public static class FamilyPreviewBuilder {
             return existing;
 
         Guid? sharedGuid = null;
-        if (param.IsShared) {
-            try { sharedGuid = param.GUID; } catch { /* GUID access can throw */ }
-        }
+        if (param.IsShared)
+            try { sharedGuid = param.GUID; } catch {
+                /* GUID access can throw */
+            }
 
         var created = new FamilyParameterPreview {
             Name = param.Definition.Name,
@@ -327,9 +329,10 @@ public static class FamilyPreviewBuilder {
         var def = param.Definition;
 
         Guid? sharedGuid = null;
-        if (param.IsShared) {
-            try { sharedGuid = param.GUID; } catch { /* GUID access can throw */ }
-        }
+        if (param.IsShared)
+            try { sharedGuid = param.GUID; } catch {
+                /* GUID access can throw */
+            }
 
         var created = new FamilyParameterPreview {
             Name = def.Name,
@@ -353,7 +356,7 @@ public static class FamilyPreviewBuilder {
     private static string SafeGetLabel(Func<string> getLabel) {
         try {
             return getLabel();
-        } catch (Autodesk.Revit.Exceptions.ArgumentException) {
+        } catch (ArgumentException) {
             return string.Empty;
         }
     }

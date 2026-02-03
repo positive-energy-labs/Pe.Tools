@@ -8,6 +8,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using Binding = System.Windows.Data.Binding;
 using Visibility = System.Windows.Visibility;
 
 namespace Pe.Ui.Components;
@@ -39,6 +40,10 @@ public partial class AutoSuggestBox : RevitHostedUserControl {
 
         // Note: Base class RevitHostedUserControl loads WpfUiResources before this runs
         this.InitializeComponent();
+
+        // Set default popup width to match textbox
+        var widthBinding = new Binding("ActualWidth") { Source = this.PART_TextBox, Mode = BindingMode.OneWay };
+        this.PART_SuggestionsPopup.SetBinding(WidthProperty, widthBinding);
 
         // Event handlers
         this.PART_SuggestionsList.PreviewMouseLeftButtonUp += this.OnSuggestionListMouseUp;
@@ -137,6 +142,23 @@ public partial class AutoSuggestBox : RevitHostedUserControl {
         set => this.SetValue(TextBoxStyleProperty, value);
     }
 
+    public static readonly DependencyProperty AdaptivePopupWidthProperty = DependencyProperty.Register(
+        nameof(AdaptivePopupWidth), typeof(bool), typeof(AutoSuggestBox),
+        new PropertyMetadata(false, OnAdaptivePopupWidthChanged));
+
+    /// <summary>
+    ///     When true, the popup width adapts to fit the longest suggestion item.
+    ///     When false (default), the popup width matches the textbox width.
+    /// </summary>
+    public bool AdaptivePopupWidth {
+        get => (bool)this.GetValue(AdaptivePopupWidthProperty);
+        set => this.SetValue(AdaptivePopupWidthProperty, value);
+    }
+
+    private static void OnAdaptivePopupWidthChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) {
+        if (d is AutoSuggestBox box) box.UpdatePopupWidth();
+    }
+
     #endregion
 
     #region Internal Properties
@@ -225,6 +247,45 @@ public partial class AutoSuggestBox : RevitHostedUserControl {
             : this.FilteredItems.Count > 0 && !string.IsNullOrEmpty(searchText) && this.PART_TextBox.IsFocused;
 
         this.IsSuggestionListOpen = shouldOpen;
+
+        // Update popup width if adaptive mode is enabled
+        if (this.AdaptivePopupWidth) this.UpdatePopupWidth();
+    }
+
+    /// <summary>
+    ///     Updates the popup width based on the content when AdaptivePopupWidth is enabled.
+    /// </summary>
+    private void UpdatePopupWidth() {
+        if (!this.AdaptivePopupWidth) {
+            // Reset to default behavior (bind to textbox width)
+            var widthBinding = new Binding("ActualWidth") { Source = this.PART_TextBox, Mode = BindingMode.OneWay };
+            this.PART_SuggestionsPopup.SetBinding(WidthProperty, widthBinding);
+            return;
+        }
+
+        if (this.FilteredItems.Count == 0) return;
+
+        // Measure the longest item
+        var maxWidth = this.PART_TextBox.ActualWidth; // Minimum width = textbox width
+
+        // Create a temporary TextBlock to measure text width
+        var measureBlock = new TextBlock {
+            FontFamily = this.PART_TextBox.FontFamily,
+            FontSize = this.PART_TextBox.FontSize,
+            FontWeight = this.PART_TextBox.FontWeight
+        };
+
+        foreach (var item in this.FilteredItems) {
+            measureBlock.Text = item.PrimaryText;
+            measureBlock.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            var itemWidth = measureBlock.DesiredSize.Width + 40; // Add padding for list item margins/padding
+
+            if (itemWidth > maxWidth) maxWidth = itemWidth;
+        }
+
+        // Clear the binding and set explicit width
+        BindingOperations.ClearBinding(this.PART_SuggestionsPopup, WidthProperty);
+        this.PART_SuggestionsPopup.Width = maxWidth;
     }
 
     private bool IsMatch(string search, string text) {

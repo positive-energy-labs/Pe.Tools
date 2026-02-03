@@ -2,7 +2,6 @@ using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.CommandPalette;
 using Pe.Extensions.FamParameter;
 using Pe.Ui.Core;
-using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -23,10 +22,10 @@ namespace Pe.App.Commands.Palette.FamilyPalette;
 ///     Uses async loading pattern to keep the UI responsive during navigation.
 /// </summary>
 public class FamilyElementPreviewPanel : UserControl, ISidebarPanel<FamilyElementItem> {
-    private readonly UIDocument _uidoc;
-    private readonly WpfUiRichTextBox _detailsBox;
-    private readonly StackPanel _associatedElementsList;
     private readonly Border _associatedContainer;
+    private readonly StackPanel _associatedElementsList;
+    private readonly WpfUiRichTextBox _detailsBox;
+    private readonly UIDocument _uidoc;
     private FamilyElementItem? _currentItem;
 
     public FamilyElementPreviewPanel(UIDocument uidoc) {
@@ -38,6 +37,7 @@ public class FamilyElementPreviewPanel : UserControl, ISidebarPanel<FamilyElemen
         // Element details section (top)
         this._detailsBox = new WpfUiRichTextBox {
             IsReadOnly = true,
+            IsDocumentEnabled = true,
             Focusable = false,
             IsTextSelectionEnabled = true,
             AutoWordSelection = false,
@@ -74,54 +74,6 @@ public class FamilyElementPreviewPanel : UserControl, ISidebarPanel<FamilyElemen
 
         base.Content = mainStack;
     }
-
-    #region ISidebarPanel Implementation
-
-    /// <inheritdoc />
-    UIElement ISidebarPanel<FamilyElementItem>.Content => this;
-
-    /// <inheritdoc />
-    /// <summary>
-    ///     Called immediately on selection change (before debounce).
-    ///     Clears stale content so the user doesn't see old data during navigation.
-    /// </summary>
-    public void Clear() {
-        this._currentItem = null;
-        this._detailsBox.Document = FlowDocumentBuilder.Create();
-        this._associatedElementsList.Children.Clear();
-        this._associatedContainer.Visibility = Visibility.Collapsed;
-    }
-
-    /// <inheritdoc />
-    /// <summary>
-    ///     Called after debounce with cancellation support.
-    ///     Uses dispatcher priority to keep UI responsive.
-    /// </summary>
-    public void Update(FamilyElementItem? item, CancellationToken ct) {
-        this._currentItem = item;
-
-        if (item == null) {
-            this.Clear();
-            return;
-        }
-
-        if (ct.IsCancellationRequested) return;
-
-        // Schedule at lower priority to keep UI responsive
-        _ = this.Dispatcher.BeginInvoke(DispatcherPriority.Background, () => {
-            if (ct.IsCancellationRequested) return;
-
-            // Build element details document
-            this._detailsBox.Document = this.BuildElementDetails(item);
-
-            if (ct.IsCancellationRequested) return;
-
-            // Build associated elements list
-            this.RefreshAssociatedElements(item);
-        });
-    }
-
-    #endregion
 
     private FlowDocument BuildElementDetails(FamilyElementItem item) {
         var doc = FlowDocumentBuilder.Create()
@@ -186,9 +138,7 @@ public class FamilyElementPreviewPanel : UserControl, ISidebarPanel<FamilyElemen
     }
 
     private Grid CreateAssociatedElementRow(AssociatedElement element) {
-        var row = new Grid {
-            Margin = new Thickness(0, 4, 0, 4)
-        };
+        var row = new Grid { Margin = new Thickness(0, 4, 0, 4) };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
@@ -204,19 +154,11 @@ public class FamilyElementPreviewPanel : UserControl, ISidebarPanel<FamilyElemen
 
         var infoStack = new StackPanel();
 
-        var nameText = new TextBlock {
-            Text = element.Name,
-            FontSize = 12,
-            TextWrapping = TextWrapping.Wrap
-        };
+        var nameText = new TextBlock { Text = element.Name, FontSize = 12, TextWrapping = TextWrapping.Wrap };
         nameText.SetResourceReference(ForegroundProperty, "TextFillColorPrimaryBrush");
         _ = infoStack.Children.Add(nameText);
 
-        var typeText = new TextBlock {
-            Text = element.Type,
-            FontSize = 10,
-            Opacity = 0.7
-        };
+        var typeText = new TextBlock { Text = element.Type, FontSize = 10, Opacity = 0.7 };
         typeText.SetResourceReference(ForegroundProperty, "TextFillColorSecondaryBrush");
         _ = infoStack.Children.Add(typeText);
 
@@ -257,4 +199,52 @@ public class FamilyElementPreviewPanel : UserControl, ISidebarPanel<FamilyElemen
             break;
         }
     }
+
+    #region ISidebarPanel Implementation
+
+    /// <inheritdoc />
+    UIElement ISidebarPanel<FamilyElementItem>.Content => this;
+
+    /// <inheritdoc />
+    /// <summary>
+    ///     Called immediately on selection change (before debounce).
+    ///     Clears stale content so the user doesn't see old data during navigation.
+    /// </summary>
+    public void Clear() {
+        this._currentItem = null;
+        this._detailsBox.Document = FlowDocumentBuilder.Create();
+        this._associatedElementsList.Children.Clear();
+        this._associatedContainer.Visibility = Visibility.Collapsed;
+    }
+
+    /// <inheritdoc />
+    /// <summary>
+    ///     Called after debounce with cancellation support.
+    ///     Uses dispatcher priority to keep UI responsive.
+    /// </summary>
+    public void Update(FamilyElementItem? item, CancellationToken ct) {
+        this._currentItem = item;
+
+        if (item == null) {
+            this.Clear();
+            return;
+        }
+
+        if (ct.IsCancellationRequested) return;
+
+        // Schedule at lower priority to keep UI responsive
+        _ = this.Dispatcher.BeginInvoke(DispatcherPriority.Background, () => {
+            if (ct.IsCancellationRequested) return;
+
+            // Build element details document
+            this._detailsBox.Document = this.BuildElementDetails(item);
+
+            if (ct.IsCancellationRequested) return;
+
+            // Build associated elements list
+            this.RefreshAssociatedElements(item);
+        });
+    }
+
+    #endregion
 }

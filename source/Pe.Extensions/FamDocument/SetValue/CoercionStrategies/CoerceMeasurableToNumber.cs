@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace Pe.Extensions.FamDocument.SetValue.CoercionStrategies;
 
 /// <summary>
@@ -240,10 +238,10 @@ public class CoerceMeasurableToNumber : ICoercionStrategy {
 
         // DEBUG: Log the decision chain
         Console.WriteLine($"[CoerceMeasurableToNumber.CanMap] " +
-                        $"TargetStorageType={context.TargetStorageType} (isDouble={isTargetDouble}), " +
-                        $"TargetDataType={context.TargetDataType?.TypeId} (isNumber={isTargetNumber}), " +
-                        $"SourceDataType={context.SourceDataType?.TypeId ?? "null"} (isMeasurable={isSourceMeasurable}), " +
-                        $"hasDefaultUnit={hasDefaultUnit}");
+                          $"TargetStorageType={context.TargetStorageType} (isDouble={isTargetDouble}), " +
+                          $"TargetDataType={context.TargetDataType?.TypeId} (isNumber={isTargetNumber}), " +
+                          $"SourceDataType={context.SourceDataType?.TypeId ?? "null"} (isMeasurable={isSourceMeasurable}), " +
+                          $"hasDefaultUnit={hasDefaultUnit}");
 
         if (!isTargetDouble) return false;
         if (!isTargetNumber) return false;

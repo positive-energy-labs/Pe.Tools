@@ -1,12 +1,13 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
-using Pe.App.Commands.Palette;
 using Pe.Global.Revit.Ui;
+using Pe.Global.Services.Document;
 using Pe.Global.Services.Storage;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
 using Serilog;
 using Serilog.Events;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 
 namespace Pe.App.Commands.Palette.FamilyPalette;
@@ -28,7 +29,7 @@ public abstract class FamilyPaletteBase : IExternalCommand {
             var uiapp = commandData.Application;
             var doc = uiapp.ActiveUIDocument.Document;
 
-            return ShowPalette(uiapp, this.DefaultTabIndex);
+            return ShowPalette(this.DefaultTabIndex);
         } catch (Exception ex) {
             Log.Error(ex, "Family palette command failed");
             new Ballogger().Add(LogEventLevel.Error, new StackFrame(), ex, true).Show();
@@ -36,16 +37,33 @@ public abstract class FamilyPaletteBase : IExternalCommand {
         }
     }
 
-    internal static Result ShowPalette(UIApplication uiapp, int defaultTabIndex, string? filterValue = null) {
+    internal static Result ShowPalette(int defaultTabIndex, string? filterValue = null) {
         try {
-            var doc = uiapp.ActiveUIDocument.Document;
-            var uidoc = uiapp.ActiveUIDocument;
+            var uiapp = DocumentManager.uiapp;
+            var doc = DocumentManager.GetActiveDocument();
+            var uidoc = DocumentManager.GetActiveUIDocument();
+            if (doc == null || uidoc == null) {
+                Log.Error("Failed to get active document or UIDocument");
+                return Result.Failed;
+            }
 
             // Create preview panel for sidebar
             var previewPanel = new FamilyPreviewPanel(doc);
 
             // Create tab definitions with lazy loading
-            var tabs = FamilyTabConfig.CreateTabs(doc, uiapp, uidoc);
+            var (tabs, instancesOptions) = FamilyTabConfig.CreateTabs(doc, uidoc);
+
+            // Create tray panel for Family Instances tab (index 2)
+            PaletteTray? tray = null;
+            var availableCategories = new ObservableCollection<string>();
+            if (instancesOptions != null) {
+                // Collect available categories for the filter
+                foreach (var category in FamilyActions.CollectFamilyInstanceCategories(doc))
+                    availableCategories.Add(category);
+
+                var trayPanel = new FamilyInstancesTrayPanel(instancesOptions, availableCategories);
+                tray = new PaletteTray { Content = trayPanel, MaxHeight = 250 };
+            }
 
             var window = PaletteFactory.Create("Family Palette",
                 new PaletteOptions<UnifiedFamilyItem> {
@@ -54,11 +72,29 @@ public abstract class FamilyPaletteBase : IExternalCommand {
                     Tabs = tabs,
                     DefaultTabIndex = defaultTabIndex,
                     SidebarPanel = previewPanel,
+                    Tray = tray,
                     ViewModelMutator = vm => {
-                        if (string.IsNullOrWhiteSpace(filterValue)) return;
-                        vm.SelectedFilterValue = filterValue;
-                        if (vm.FilteredItems.Count > 0)
-                            vm.SelectedIndex = 0;
+                        // Apply initial filter if provided
+                        if (!string.IsNullOrWhiteSpace(filterValue)) {
+                            vm.SelectedFilterValue = filterValue;
+                            if (vm.FilteredItems.Count > 0)
+                                vm.SelectedIndex = 0;
+                        }
+
+                        // Wire up property change notifications to reload items when options change
+                        if (instancesOptions != null) {
+                            instancesOptions.PropertyChanged += (sender, e) => {
+                                // When ShowAnnotationSymbols changes, update the category list
+                                if (e.PropertyName == nameof(FamilyInstancesOptions.ShowAnnotationSymbols)) {
+                                    availableCategories.Clear();
+                                    foreach (var category in FamilyActions.CollectFamilyInstanceCategories(doc))
+                                        availableCategories.Add(category);
+                                }
+
+                                // Invalidate cache for Family Instances tab (index 2) when any option changes
+                                vm.InvalidateTabCache(2);
+                            };
+                        }
                     }
                 });
             window.Show();

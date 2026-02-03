@@ -23,7 +23,8 @@ public static class JsonSchemaFactory {
     ///     Creates both full and extends-relaxed schemas for a type (non-generic overload).
     ///     The extends schema has no required properties except $extends itself.
     /// </summary>
-    public static (JsonSchema Full, JsonSchema Extends) CreateSchemas(Type type, out SchemaExamplesProcessor examplesProcessor) {
+    public static (JsonSchema Full, JsonSchema Extends) CreateSchemas(Type type,
+        out SchemaExamplesProcessor examplesProcessor) {
         var full = CreateSchema(type, out examplesProcessor);
         examplesProcessor.Finalize(full);
         SchemaMetadataProcessor.AllowSchemaProperty(full);
@@ -56,15 +57,12 @@ public static class JsonSchemaFactory {
 
         // Add $schema property (optional)
         fragmentSchema.Properties["$schema"] = new JsonSchemaProperty {
-            Type = JsonObjectType.String,
-            IsRequired = false
+            Type = JsonObjectType.String, IsRequired = false
         };
 
         // Add Items property (required array of item type)
         var itemsProperty = new JsonSchemaProperty {
-            Type = JsonObjectType.Array,
-            Item = itemSchema,
-            IsRequired = true
+            Type = JsonObjectType.Array, Item = itemSchema, IsRequired = true
         };
         fragmentSchema.Properties["Items"] = itemsProperty;
         fragmentSchema.RequiredProperties.Add("Items");
@@ -87,8 +85,7 @@ public static class JsonSchemaFactory {
         RevitTypeRegistry.Initialize();
 
         var settings = new NewtonsoftJsonSchemaGeneratorSettings {
-            FlattenInheritanceHierarchy = true,
-            AlwaysAllowAdditionalObjectProperties = false
+            FlattenInheritanceHierarchy = true, AlwaysAllowAdditionalObjectProperties = false
         };
 
         // Add individual TypeMappers for each registered Revit type

@@ -7,10 +7,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
-using Wpf.Ui.Markup;
-using Color = System.Windows.Media.Color;
-using Grid = System.Windows.Controls.Grid;
-using TextBlock = Wpf.Ui.Controls.TextBlock;
 
 namespace Pe.Ui.Core;
 
@@ -40,7 +36,8 @@ public class EphemeralWindow : Window {
         this.ContentControl = content;
         this.IsEphemeral = ephemeralEnabled;
         this.Title = title;
-        this.SizeToContent = SizeToContent.WidthAndHeight; // Size to both dimensions for independent palette/panel sizing
+        this.SizeToContent =
+            SizeToContent.WidthAndHeight; // Size to both dimensions for independent palette/panel sizing
         this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         this.WindowStyle = WindowStyle.None;
         this.AllowsTransparency = true;
@@ -57,9 +54,7 @@ public class EphemeralWindow : Window {
         // Content border - transparent container, Palette manages its own backgrounds
         // The title is passed to the Palette to render in its title bar area
         this._contentBorder = new Border {
-            Child = content,
-            Background = Brushes.Transparent,
-            LayoutTransform = this._zoomTransform,
+            Child = content, Background = Brushes.Transparent, LayoutTransform = this._zoomTransform
             // Allow dragging from anywhere on the palette background
             // (Palette will have its own title bar area for this)
         };

@@ -200,8 +200,7 @@ public static class FlowDocumentBuilder {
         var para = new Paragraph();
         var marker = enabled ? "✓ " : "✗ ";
         para.Inlines.Add(new Run(marker) {
-            FontWeight = FontWeights.Bold,
-            Foreground = enabled ? Brushes.Green : Brushes.Red
+            FontWeight = FontWeights.Bold, Foreground = enabled ? Brushes.Green : Brushes.Red
         });
         para.Inlines.Add(new Run(label));
         para.Margin = new Thickness(0, 0, 0, 2);

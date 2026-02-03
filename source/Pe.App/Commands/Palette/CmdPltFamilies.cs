@@ -26,4 +26,3 @@ public class CmdPltFamilyTypes : FamilyPaletteBase {
 public class CmdPltFamilyInstances : FamilyPaletteBase {
     protected override int DefaultTabIndex => 2;
 }
-

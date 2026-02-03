@@ -38,10 +38,7 @@ public class Ribbon {
             .SelectMany(tab => tab.Panels
                 .Where(panel => panel.IsVisible && panel.IsEnabled)
                 .Select(panel => new DiscoveredPanel {
-                    Tab = panel.Tab,
-                    Cookie = panel.Cookie,
-                    Source = panel.Source,
-                    RibbonControl = panel.RibbonControl
+                    Tab = panel.Tab, Cookie = panel.Cookie, Source = panel.Source, RibbonControl = panel.RibbonControl
                 }))
             .ToList();
 
@@ -144,13 +141,12 @@ public class Ribbon {
             Console.WriteLine($"\n[TAB] '{tab.Title}' (Id={tab.Id}, Visible={tab.IsVisible}, Enabled={tab.IsEnabled})");
 
             foreach (var panel in tab.Panels) {
-                Console.WriteLine($"  [PANEL] '{panel.Source?.Title}' (Cookie={panel.Cookie}, Visible={panel.IsVisible})");
+                Console.WriteLine(
+                    $"  [PANEL] '{panel.Source?.Title}' (Cookie={panel.Cookie}, Visible={panel.IsVisible})");
 
                 if (panel.Source?.Items == null) continue;
 
-                foreach (var item in panel.Source.Items) {
-                    LogRibbonItemRecursive(item, indent: 4);
-                }
+                foreach (var item in panel.Source.Items) LogRibbonItemRecursive(item, 4);
             }
         }
 
@@ -168,9 +164,8 @@ public class Ribbon {
             foreach (var panel in tab.Panels) {
                 if (panel.Source?.Items == null) continue;
 
-                foreach (var item in panel.Source.Items) {
+                foreach (var item in panel.Source.Items)
                     found |= SearchAndLogItem(item, searchTerm, tab.Title, panel.Source.Title, 0);
-                }
             }
         }
 
@@ -184,7 +179,9 @@ public class Ribbon {
 
         string? id = null, name = null, text = null;
         try { id = item.Id?.ToString(); } catch { }
+
         try { name = item.Name?.ToString(); } catch { }
+
         try { text = item.Text?.ToString(); } catch { }
 
         var matchesSearch = (id?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
@@ -193,7 +190,7 @@ public class Ribbon {
 
         if (matchesSearch) {
             found = true;
-            Console.WriteLine($"\n*** FOUND MATCH ***");
+            Console.WriteLine("\n*** FOUND MATCH ***");
             Console.WriteLine($"  Tab: {tabName}");
             Console.WriteLine($"  Panel: {panelName}");
             Console.WriteLine($"  Depth: {depth}");
@@ -202,11 +199,9 @@ public class Ribbon {
 
         // Recurse into children
         try {
-            if (item.Items != null) {
-                foreach (var child in item.Items) {
+            if (item.Items != null)
+                foreach (var child in item.Items)
                     found |= SearchAndLogItem(child, searchTerm, tabName, panelName, depth + 1);
-                }
-            }
         } catch { }
 
         return found;
@@ -220,21 +215,23 @@ public class Ribbon {
         bool visible = false, enabled = false;
 
         try { id = item.Id?.ToString(); } catch { }
+
         try { name = item.Name?.ToString(); } catch { }
+
         try { text = item.Text?.ToString(); } catch { }
+
         try { visible = item.IsVisible; } catch { }
+
         try { enabled = item.IsEnabled; } catch { }
 
-        var displayName = !string.IsNullOrEmpty(text) ? text : (!string.IsNullOrEmpty(name) ? name : id);
+        var displayName = !string.IsNullOrEmpty(text) ? text : !string.IsNullOrEmpty(name) ? name : id;
         Console.WriteLine($"{prefix}[{itemType}] '{displayName}' (Id={id}, V={visible}, E={enabled})");
 
         // Try to recurse into children
         try {
-            if (item.Items != null && item.Items.Count > 0) {
-                foreach (var child in item.Items) {
+            if (item.Items != null && item.Items.Count > 0)
+                foreach (var child in item.Items)
                     LogRibbonItemRecursive(child, indent + 2);
-                }
-            }
         } catch { }
     }
 
@@ -264,7 +261,9 @@ public class Ribbon {
                     var childType = ((object)child).GetType().Name;
                     string? childText = null, childId = null;
                     try { childText = child.Text?.ToString(); } catch { }
+
                     try { childId = child.Id?.ToString(); } catch { }
+
                     Console.WriteLine($"    - [{childType}] '{childText ?? childId}'");
                 }
             }

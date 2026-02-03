@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Point = System.Windows.Point;
 using WpfUiListViewItem = Wpf.Ui.Controls.ListViewItem;
 
@@ -39,10 +40,11 @@ public partial class ListView {
         typeof(ListView),
         new PropertyMetadata(false));
 
-    private AnimatedScrollViewer? _scrollViewer;
-    private DateTime _lastSelectionChangeTime = DateTime.MinValue;
-    private readonly TimeSpan _selectionChangeThrottle = TimeSpan.FromMilliseconds(50);
     private readonly TimeSpan _scrollAnimationDuration = TimeSpan.FromMilliseconds(300);
+    private readonly TimeSpan _selectionChangeThrottle = TimeSpan.FromMilliseconds(50);
+    private DateTime _lastSelectionChangeTime = DateTime.MinValue;
+
+    private AnimatedScrollViewer? _scrollViewer;
 
 
     public ListView() {
@@ -60,6 +62,21 @@ public partial class ListView {
         this.ItemListView.PreviewKeyDown += this.OnPreviewKeyDown;
 
         this.Loaded += this.OnLoaded;
+    }
+
+    public IEnumerable ItemsSource {
+        get => (IEnumerable)this.GetValue(ItemsSourceProperty);
+        set => this.SetValue(ItemsSourceProperty, value);
+    }
+
+    public object SelectedItem {
+        get => this.GetValue(SelectedItemProperty);
+        set => this.SetValue(SelectedItemProperty, value);
+    }
+
+    public int SelectedIndex {
+        get => (int)this.GetValue(SelectedIndexProperty);
+        set => this.SetValue(SelectedIndexProperty, value);
     }
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e) {
@@ -85,9 +102,7 @@ public partial class ListView {
         this._scrollViewer = FindScrollViewer(this.ItemListView);
 
         // Configure scroll animation timing to match keyboard navigation throttle
-        if (this._scrollViewer != null) {
-            this._scrollViewer.ScrollingTime = this._scrollAnimationDuration;
-        }
+        if (this._scrollViewer != null) this._scrollViewer.ScrollingTime = this._scrollAnimationDuration;
     }
 
     private void OnInternalSelectionChanged(object sender, SelectionChangedEventArgs e) {
@@ -96,7 +111,7 @@ public partial class ListView {
         var selectedItem = e.AddedItems[0];
         // Use dispatcher to ensure the container is generated and laid out
         _ = this.Dispatcher.BeginInvoke(() => this.AnimateScrollIntoView(selectedItem),
-            System.Windows.Threading.DispatcherPriority.Loaded);
+            DispatcherPriority.Loaded);
     }
 
     private void AnimateScrollIntoView(object item) {
@@ -132,9 +147,8 @@ public partial class ListView {
         targetOffset = Math.Clamp(targetOffset, 0, this._scrollViewer.ScrollableHeight);
 
         // Only animate if we're moving a significant distance
-        if (Math.Abs(this._scrollViewer.TargetVerticalOffset - targetOffset) > 1) {
+        if (Math.Abs(this._scrollViewer.TargetVerticalOffset - targetOffset) > 1)
             this._scrollViewer.TargetVerticalOffset = targetOffset;
-        }
     }
 
     private static AnimatedScrollViewer? FindScrollViewer(DependencyObject parent) {
@@ -144,22 +158,8 @@ public partial class ListView {
             var result = FindScrollViewer(child);
             if (result != null) return result;
         }
+
         return null;
-    }
-
-    public IEnumerable ItemsSource {
-        get => (IEnumerable)this.GetValue(ItemsSourceProperty);
-        set => this.SetValue(ItemsSourceProperty, value);
-    }
-
-    public object SelectedItem {
-        get => this.GetValue(SelectedItemProperty);
-        set => this.SetValue(SelectedItemProperty, value);
-    }
-
-    public int SelectedIndex {
-        get => (int)this.GetValue(SelectedIndexProperty);
-        set => this.SetValue(SelectedIndexProperty, value);
     }
 
     public static bool GetHasIcons(DependencyObject obj) => (bool)obj.GetValue(HasIconsProperty);

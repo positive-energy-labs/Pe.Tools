@@ -61,8 +61,7 @@
                AllowsTransparency="True"
                Focusable="False"
                PopupAnimation="Slide"
-               StaysOpen="True"
-               Width="{Binding ElementName=PART_TextBox, Path=ActualWidth}">
+               StaysOpen="True">
 
             <Border Background="{DynamicResource FlyoutBackground}"
                     BorderBrush="{DynamicResource FlyoutBorderBrush}"

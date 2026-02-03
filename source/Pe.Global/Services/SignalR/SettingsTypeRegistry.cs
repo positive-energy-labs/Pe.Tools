@@ -7,17 +7,15 @@ namespace Pe.Global.Services.SignalR;
 ///     Maps friendly type names to their actual .NET types.
 /// </summary>
 public class SettingsTypeRegistry {
-    private readonly Dictionary<string, Type> _types = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _storageNames = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Type> _types = new(StringComparer.OrdinalIgnoreCase);
 
-    public SettingsTypeRegistry() {
+    public SettingsTypeRegistry() =>
         // Register built-in types
         this.Register<AutoTagSettings>("AutoTagSettings", "AutoTag");
 
-        // Note: ProfileRemap and ScheduleSpec are in Pe.FamilyFoundry which may not be available
-        // They should be registered by the consuming application if needed
-    }
-
+    // Note: ProfileRemap and ScheduleSpec are in Pe.FamilyFoundry which may not be available
+    // They should be registered by the consuming application if needed
     /// <summary>
     ///     Register a settings type with its friendly name and storage name.
     /// </summary>

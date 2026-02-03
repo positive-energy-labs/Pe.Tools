@@ -1,5 +1,4 @@
 using Pe.Extensions.FamDocument.SetValue.Utils;
-using System.Diagnostics;
 
 namespace Pe.Extensions.FamDocument.SetValue.CoercionStrategies;
 
@@ -11,8 +10,8 @@ public class CoerceByStorageType : ICoercionStrategy {
     public bool CanMap(CoercionContext context) {
         // DEBUG: Log storage types for troubleshooting
         Console.WriteLine($"[CoerceByStorageType.CanMap] " +
-                        $"SourceStorageType={context.SourceStorageType}, " +
-                        $"TargetStorageType={context.TargetStorageType}");
+                          $"SourceStorageType={context.SourceStorageType}, " +
+                          $"TargetStorageType={context.TargetStorageType}");
 
         // Same storage type - always compatible
         if (context.SourceStorageType == context.TargetStorageType) {
@@ -26,8 +25,7 @@ public class CoerceByStorageType : ICoercionStrategy {
             (StorageType.Integer, StorageType.Double) => true,
             (StorageType.Double, StorageType.String) => true,
             (StorageType.Double, StorageType.Integer) => true,
-            (StorageType.String, StorageType.Integer) => Regexes.TryExtractInteger(
-                context.SourceValue.ToString(), out _),
+            (StorageType.String, StorageType.Integer) => CanParseStringToInteger(context),
             (StorageType.String, StorageType.Double) => CanParseStringToDouble(context),
             _ => false
         };
@@ -59,7 +57,9 @@ public class CoerceByStorageType : ICoercionStrategy {
 
             // Set to integer by extracting integer from the stringParam's value
             (StorageType.String, StorageType.Integer) =>
-                Regexes.ExtractInteger(context.SourceValue.ToString() ?? string.Empty),
+                Regexes.TryExtractInteger(context.SourceValue.ToString() ?? string.Empty, out var integer)
+                    ? integer
+                    : ParseStringToYesNo(context.SourceValue.ToString() ?? string.Empty),
 
             // Set to double by parsing string - uses Revit's parser for measurable specs (imperial notation)
             (StorageType.String, StorageType.Double) =>
@@ -92,6 +92,21 @@ public class CoerceByStorageType : ICoercionStrategy {
     }
 
     /// <summary>
+    ///     Checks if a string value can be parsed to integer.
+    ///     Handles both numeric strings and Yes/No boolean values.
+    /// </summary>
+    private static bool CanParseStringToInteger(CoercionContext context) {
+        var stringValue = context.SourceValue?.ToString();
+        if (string.IsNullOrWhiteSpace(stringValue)) return false;
+
+        // Check for Yes/No boolean values
+        if (stringValue is "Yes" or "No") return true;
+
+        // Check for numeric integer values
+        return Regexes.TryExtractInteger(stringValue, out _);
+    }
+
+    /// <summary>
     ///     Checks if a string value can be parsed to double for the target parameter.
     ///     Uses Revit's UnitFormatUtils for measurable specs (handles imperial notation like "0' - 1/2\""),
     ///     falls back to regex extraction for plain numbers.
@@ -104,12 +119,12 @@ public class CoerceByStorageType : ICoercionStrategy {
         var regexResult = Regexes.TryExtractDouble(stringValue, out var extractedValue) &&
                           !string.IsNullOrWhiteSpace(stringValue);
         Console.WriteLine($"[CoerceByStorageType.CanParseStringToDouble] " +
-                        $"stringValue='{stringValue}', " +
-                        $"isNullOrWhitespace={string.IsNullOrWhiteSpace(stringValue)}, " +
-                        $"targetDataType={context.TargetDataType?.TypeId ?? "null"}, " +
-                        $"isMeasurableSpec={isMeasurable}, " +
-                        $"regexCanExtract={regexResult}" +
-                        (regexResult ? $", extractedValue={extractedValue}" : ""));
+                          $"stringValue='{stringValue}', " +
+                          $"isNullOrWhitespace={string.IsNullOrWhiteSpace(stringValue)}, " +
+                          $"targetDataType={context.TargetDataType?.TypeId ?? "null"}, " +
+                          $"isMeasurableSpec={isMeasurable}, " +
+                          $"regexCanExtract={regexResult}" +
+                          (regexResult ? $", extractedValue={extractedValue}" : ""));
 
         if (string.IsNullOrWhiteSpace(stringValue)) return false;
 
@@ -161,10 +176,16 @@ public class CoerceByStorageType : ICoercionStrategy {
 
             // Fall back to regex if Revit's parser fails (shouldn't happen if CanMap passed)
             throw new ArgumentException(
-                $"Failed to parse '{stringValue}' as {dataType.ToLabel()} using Revit's UnitFormatUtils");
+                $"Failed to parse '{stringValue}' as {dataType!.ToLabel()} using Revit's UnitFormatUtils");
         }
 
         // For non-measurable doubles, use simple regex extraction
         return Regexes.ExtractDouble(stringValue);
+    }
+
+    private static int ParseStringToYesNo(string stringValue) {
+        if (stringValue == "Yes") return 1;
+        if (stringValue == "No") return 0;
+        return 0;
     }
 }

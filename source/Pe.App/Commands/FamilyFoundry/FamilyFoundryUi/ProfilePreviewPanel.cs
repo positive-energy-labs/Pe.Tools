@@ -1,5 +1,4 @@
 using Pe.Ui.Core;
-using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -17,8 +16,8 @@ namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 ///     Preview data building is injected via delegate to support generic TProfile without making this class generic.
 /// </summary>
 public class ProfilePreviewPanel : UserControl, ISidebarPanel<ProfileListItem> {
-    private readonly WpfUiRichTextBox _richTextBox;
     private readonly Func<ProfileListItem?, CancellationToken, PreviewData?> _previewBuilder;
+    private readonly WpfUiRichTextBox _richTextBox;
 
     /// <summary>
     ///     Creates a ProfilePreviewPanel with injected preview building logic.
@@ -33,6 +32,7 @@ public class ProfilePreviewPanel : UserControl, ISidebarPanel<ProfileListItem> {
         // Palette handles sidebar padding and scrolling - just provide the content
         this._richTextBox = new WpfUiRichTextBox {
             IsReadOnly = true,
+            IsDocumentEnabled = true,
             Focusable = false,
             IsTextSelectionEnabled = true,
             AutoWordSelection = false,

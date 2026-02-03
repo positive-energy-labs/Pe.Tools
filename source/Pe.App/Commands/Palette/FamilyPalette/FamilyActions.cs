@@ -3,6 +3,7 @@ using Pe.App.Services;
 using Pe.Extensions.UiApplication;
 using Pe.Global.PolyFill;
 using Pe.Global.Services.Document;
+using OperationCanceledException = Autodesk.Revit.Exceptions.OperationCanceledException;
 
 namespace Pe.App.Commands.Palette.FamilyPalette;
 
@@ -48,6 +49,51 @@ internal static class FamilyActions {
     }
 
     /// <summary>
+    ///     Collects family instances filtered by the provided options.
+    /// </summary>
+    internal static IEnumerable<UnifiedFamilyItem> CollectFamilyInstances(
+        Document doc,
+        UIDocument uidoc,
+        FamilyInstancesOptions options
+    ) {
+        var instances = options.FilterByActiveView
+            ? new FilteredElementCollector(doc, uidoc.ActiveView.Id)
+                .OfClass(typeof(FamilyInstance))
+                .Cast<FamilyInstance>()
+            : new FilteredElementCollector(doc)
+                .OfClass(typeof(FamilyInstance))
+                .Cast<FamilyInstance>();
+
+        // Start with base collection - filter by active view if requested
+
+        // Filter out annotation symbols unless explicitly shown
+        if (!options.ShowAnnotationSymbols) {
+            instances = instances
+                .Where(i => i.Category?.CategoryType != CategoryType.Annotation)
+                .Where(i => i.Category?.Name != "Detail Items");
+        }
+
+        // Filter by category if selected
+        if (!string.IsNullOrEmpty(options.SelectedCategory))
+            instances = instances.Where(i => i.Category?.Name == options.SelectedCategory);
+
+        foreach (var instance in instances.OrderBy(i => i.Symbol.Name).ThenBy(i => i.Id.Value()))
+            yield return new UnifiedFamilyItem(instance, doc);
+    }
+
+    /// <summary>
+    ///     Collects all unique categories from family instances in the document.
+    /// </summary>
+    internal static IEnumerable<string> CollectFamilyInstanceCategories(Document doc) =>
+        new FilteredElementCollector(doc)
+            .OfClass(typeof(FamilyInstance))
+            .Cast<FamilyInstance>()
+            .Select(i => i.Category?.Name)
+            .Where(name => !string.IsNullOrEmpty(name))
+            .Distinct()
+            .OrderBy(name => name)!;
+
+    /// <summary>
     ///     Handles placing a family type in the active view.
     /// </summary>
     internal static void HandlePlace(Document doc, UIDocument uidoc, UnifiedFamilyItem? item) {
@@ -58,7 +104,7 @@ internal static class FamilyActions {
             if (!item.FamilySymbol.IsActive) item.FamilySymbol.Activate();
             _ = trans.Commit();
             uidoc.PromptForFamilyInstancePlacement(item.FamilySymbol);
-        } catch (Autodesk.Revit.Exceptions.OperationCanceledException) {
+        } catch (OperationCanceledException) {
             // User canceled placement - expected behavior
         }
     }
@@ -66,23 +112,23 @@ internal static class FamilyActions {
     /// <summary>
     ///     Opens and activates a family for editing.
     /// </summary>
-    internal static void HandleOpenEditFamily(UIApplication uiapp, UnifiedFamilyItem? item) {
+    internal static void HandleOpenEditFamily(UnifiedFamilyItem? item) {
         if (item?.Family != null)
-            uiapp.OpenAndActivateFamily(item.Family);
+            DocumentManager.uiapp.OpenAndActivateFamily(item.Family);
     }
 
     /// <summary>
     ///     Opens a family and activates the specific type.
     /// </summary>
-    internal static void HandleOpenEditFamilyType(UIApplication uiapp, UnifiedFamilyItem? item) {
+    internal static void HandleOpenEditFamilyType(UnifiedFamilyItem? item) {
         if (item?.FamilySymbol != null)
-            OpenAndActivateFamilyType(uiapp, item.FamilySymbol);
+            OpenAndActivateFamilyType(item.FamilySymbol);
     }
 
     /// <summary>
     ///     Opens RevitLookup to snoop the selected item.
     /// </summary>
-    internal static void HandleSnoop(UIApplication uiapp, Document doc, UnifiedFamilyItem? item) {
+    internal static void HandleSnoop(Document doc, UnifiedFamilyItem? item) {
         if (item == null) return;
         object objectToSnoop = item.ItemType switch {
             FamilyItemType.Family => item.Family!,
@@ -96,7 +142,7 @@ internal static class FamilyActions {
             FamilyItemType.FamilyInstance => $"Instance: {item.FamilyInstance!.Symbol.Name} ({item.FamilyInstance.Id})",
             _ => string.Empty
         };
-        _ = RevitDbExplorerService.TrySnoopObject(uiapp, doc, objectToSnoop, title);
+        _ = RevitDbExplorerService.TrySnoopObject(doc, objectToSnoop, title);
     }
 
     /// <summary>
@@ -104,17 +150,17 @@ internal static class FamilyActions {
     /// </summary>
     internal static bool CanPlaceInView(View activeView) =>
         !activeView.IsTemplate
-            && activeView.ViewType != ViewType.Legend
-            && activeView.ViewType != ViewType.DrawingSheet
-            && activeView.ViewType != ViewType.DraftingView
-            && activeView.ViewType != ViewType.SystemBrowser
-            && activeView is not ViewSchedule;
+        && activeView.ViewType != ViewType.Legend
+        && activeView.ViewType != ViewType.DrawingSheet
+        && activeView.ViewType != ViewType.DraftingView
+        && activeView.ViewType != ViewType.SystemBrowser
+        && activeView is not ViewSchedule;
 
     /// <summary>
     ///     Opens a family and activates a specific type within it.
     /// </summary>
-    private static void OpenAndActivateFamilyType(UIApplication uiapp, FamilySymbol symbol) {
-        uiapp.OpenAndActivateFamily(symbol.Family);
+    private static void OpenAndActivateFamilyType(FamilySymbol symbol) {
+        DocumentManager.uiapp.OpenAndActivateFamily(symbol.Family);
 
         var famDoc = DocumentManager.FindOpenFamilyDocument(symbol.Family);
         if (famDoc?.IsFamilyDocument != true) return;

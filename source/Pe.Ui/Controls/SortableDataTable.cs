@@ -1,5 +1,3 @@
-using Pe.Ui.Controls;
-using Serilog;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows;
@@ -7,7 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
-using Control = System.Windows.Controls.Control;
+using Binding = System.Windows.Data.Binding;
 
 namespace Pe.Ui.Controls;
 
@@ -16,12 +14,12 @@ namespace Pe.Ui.Controls;
 ///     and compact styling. Designed for preview panels.
 /// </summary>
 public class SortableDataTable : UserControl {
-    private readonly ObservableCollection<DataTableRow> _rows = new();
     private readonly List<DataTableColumn> _columns = new();
-    private DataGrid? _dataGrid;
-    private AnimatedScrollViewer? _scrollViewer;
+    private readonly ObservableCollection<DataTableRow> _rows = new();
     private string? _currentSortColumn;
     private ListSortDirection _currentSortDirection = ListSortDirection.Ascending;
+    private DataGrid? _dataGrid;
+    private AnimatedScrollViewer? _scrollViewer;
 
     public SortableDataTable() {
         this.FontSize = 13;
@@ -49,7 +47,7 @@ public class SortableDataTable : UserControl {
         // Ensure this control can receive mouse input
         this.IsEnabled = true;
         this.IsHitTestVisible = true;
-        this.Background = System.Windows.Media.Brushes.Transparent; // Required for hit-testing on empty areas
+        this.Background = Brushes.Transparent; // Required for hit-testing on empty areas
 
         // Horizontal scrollviewer for the table
         this._scrollViewer = new AnimatedScrollViewer {
@@ -58,7 +56,7 @@ public class SortableDataTable : UserControl {
             Margin = new Thickness(0),
             IsEnabled = true,
             IsHitTestVisible = true,
-            Background = System.Windows.Media.Brushes.Transparent
+            Background = Brushes.Transparent
         };
 
         this.Content = this._scrollViewer;
@@ -92,14 +90,14 @@ public class SortableDataTable : UserControl {
 
         // Center cell content vertically so text does not clip in compact rows
         var cellStyle = new Style(typeof(DataGridCell));
-        cellStyle.Setters.Add(new Setter(Control.VerticalContentAlignmentProperty, VerticalAlignment.Center));
+        cellStyle.Setters.Add(new Setter(VerticalContentAlignmentProperty, VerticalAlignment.Center));
         this._dataGrid.CellStyle = cellStyle;
 
         // Build columns
         foreach (var column in this._columns) {
             var dataGridColumn = new DataGridTextColumn {
                 Header = this.CreateSortableHeader(column.Name),
-                Binding = new System.Windows.Data.Binding($"Cells[{column.Name}]"),
+                Binding = new Binding($"Cells[{column.Name}]"),
                 Width = column.Width > 0 ? new DataGridLength(column.Width) : DataGridLength.Auto,
                 MinWidth = 60,
                 MaxWidth = column.MaxWidth > 0 ? column.MaxWidth : double.PositiveInfinity,
@@ -158,9 +156,7 @@ public class SortableDataTable : UserControl {
         style.Setters.Add(new Setter(ToolTipService.ShowDurationProperty, 30000));
 
         // Bind tooltip to the TextBlock's own Text property
-        var tooltipBinding = new System.Windows.Data.Binding("Text") {
-            RelativeSource = new RelativeSource(RelativeSourceMode.Self)
-        };
+        var tooltipBinding = new Binding("Text") { RelativeSource = new RelativeSource(RelativeSourceMode.Self) };
         style.Setters.Add(new Setter(ToolTipProperty, tooltipBinding));
 
         return style;
@@ -184,14 +180,13 @@ public class SortableDataTable : UserControl {
             return;
         }
 
-        // Normal scroll = pass to panel's ScrollViewer (ancestor, not immediate parent)
-        var panelScrollViewer = FindAncestor<ScrollViewer>(this);
+        // Normal scroll = pass to panel's ScrollViewer (ancestor, not RichTextBox's internal ScrollViewer)
+        var panelScrollViewer = FindPanelScrollViewer(this);
         if (panelScrollViewer == null) return;
 
         e.Handled = true;
         var verticalOffset = panelScrollViewer.VerticalOffset - e.Delta;
         panelScrollViewer.ScrollToVerticalOffset(Math.Max(0, verticalOffset));
-
     }
 
     /// <summary>
@@ -204,6 +199,29 @@ public class SortableDataTable : UserControl {
                 return typed;
             parent = VisualTreeHelper.GetParent(parent);
         }
+
+        return null;
+    }
+
+    private static ScrollViewer? FindPanelScrollViewer(DependencyObject obj) {
+        var parent = VisualTreeHelper.GetParent(obj);
+        while (parent != null) {
+            if (parent is ScrollViewer scrollViewer) {
+                // Skip RichTextBox/FlowDocument internal scroll viewers
+                var templatedParent = scrollViewer.TemplatedParent;
+                if (templatedParent is RichTextBox ||
+                    templatedParent is FlowDocumentScrollViewer)
+                    goto ContinueWalk;
+
+                // Prefer a scrollviewer that can actually scroll vertically
+                if (scrollViewer.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled)
+                    return scrollViewer;
+            }
+
+            ContinueWalk:
+            parent = VisualTreeHelper.GetParent(parent);
+        }
+
         return null;
     }
 
@@ -211,7 +229,8 @@ public class SortableDataTable : UserControl {
         e.Handled = true;
 
         var columnName = ((StackPanel)e.Column.Header).Children.OfType<TextBlock>().First().Text;
-        var direction = this._currentSortColumn == columnName && this._currentSortDirection == ListSortDirection.Ascending
+        var direction = this._currentSortColumn == columnName &&
+                        this._currentSortDirection == ListSortDirection.Ascending
             ? ListSortDirection.Descending
             : ListSortDirection.Ascending;
 

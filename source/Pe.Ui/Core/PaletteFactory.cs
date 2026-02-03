@@ -1,8 +1,6 @@
-using Pe.Global.Services.Storage;
 using Pe.Ui.Components;
 using Pe.Ui.Core.Services;
 using Pe.Ui.ViewModels;
-using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
 
@@ -10,7 +8,7 @@ namespace Pe.Ui.Core;
 
 /// <summary>
 ///     Defines a single tab in a tabbed palette.
-///     Filter predicate is null for "All" tabs that show everything. 
+///     Filter predicate is null for "All" tabs that show everything.
 /// </summary>
 /// <typeparam name="TItem">The palette item type</typeparam>
 public class TabDefinition<TItem> where TItem : class, IPaletteListItem {
@@ -79,16 +77,17 @@ public class TabDefinition<TItem> where TItem : class, IPaletteListItem {
 ///         new PaletteOptions&lt;SchedulePaletteItem&gt; {
 ///             Persistence = (storage, item => item.Schedule.Id.ToString()),
 ///             SearchConfig = SearchConfig.PrimaryAndSecondary(),
-///             Tabs = [new TabDefinition<SchedulePaletteItem> {
-///                 Name = "All",
-///                 ItemProvider = () => CollectSchedules(doc),
-///                 FilterKeySelector = item => item.TextPill,
-///                 Actions = [
-///                     new() { Name = "Open", Execute = async item => OpenSchedule(item) }
-///                 ]
+///             Tabs = [new TabDefinition<SchedulePaletteItem>
+///             {
+///             Name = "All",
+///             ItemProvider = () => CollectSchedules(doc),
+///             FilterKeySelector = item => item.TextPill,
+///             Actions = [
+///             new() { Name = "Open", Execute = async item => OpenSchedule(item) }
+///             ]
 ///             }]
-///         });
-///     window.Show();
+///             });
+///             window.Show();
 ///     </code>
 /// </example>
 /// <example>
@@ -120,9 +119,9 @@ public static class PaletteFactory {
         options ??= new PaletteOptions<TItem>();
 
         // Validation: tabs are now required
-        if (options.Tabs == null || !options.Tabs.Any()) {
-            throw new InvalidOperationException("Tabs are required. Each tab must define ItemProvider and optionally Actions.");
-        }
+        if (options.Tabs == null || !options.Tabs.Any())
+            throw new InvalidOperationException(
+                "Tabs are required. Each tab must define ItemProvider and optionally Actions.");
 
         // Validation: all tabs must have ItemProvider
         var tabsWithoutProvider = options.Tabs.Where(t => t.ItemProvider == null).ToList();
@@ -134,7 +133,8 @@ public static class PaletteFactory {
 
         // Create search service - with or without persistence based on configuration
         var searchService = options.Persistence != null
-            ? new SearchFilterService<TItem>(options.Persistence.Value.Storage, options.Persistence.Value.PersistenceKey, options.SearchConfig)
+            ? new SearchFilterService<TItem>(options.Persistence.Value.Storage,
+                options.Persistence.Value.PersistenceKey, options.SearchConfig)
             : new SearchFilterService<TItem>(options.SearchConfig);
 
         // Create view model with tabs (lazy loading via ItemProvider)
@@ -270,7 +270,7 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     /// <example>
     ///     <code>Storage = new Storage(nameof(MyCmdClass))</code>
     /// </example>
-    public (Storage Storage, Func<TItem, string> PersistenceKey)? Persistence { get; init; }
+    public (Global.Services.Storage.Storage Storage, Func<TItem, string> PersistenceKey)? Persistence { get; init; }
 
     /// <summary>
     ///     Search configuration controlling which fields to search and scoring weights.

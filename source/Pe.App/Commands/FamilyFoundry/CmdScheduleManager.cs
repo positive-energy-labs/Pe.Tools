@@ -1,6 +1,6 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
-using Pe.FamilyFoundry;
+using Pe.App.Commands.Palette.FamilyPalette;
 using Pe.Global.Revit.Lib.Schedules;
 using Pe.Global.Revit.Ui;
 using Pe.Global.Services.Storage;
@@ -8,8 +8,6 @@ using Pe.Global.Services.Storage.Core;
 using Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
 using Pe.Ui.Core;
 using Serilog.Events;
-using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
@@ -37,10 +35,7 @@ public class CmdScheduleManager : IExternalCommand {
 
             // Context for Schedule tabs
             var context = new ScheduleManagerContext {
-                Doc = doc,
-                UiDoc = uiDoc,
-                Storage = storage,
-                SettingsManager = settingsManager
+                Doc = doc, UiDoc = uiDoc, Storage = storage, SettingsManager = settingsManager
             };
 
             // Collect items for both tabs
@@ -54,10 +49,12 @@ public class CmdScheduleManager : IExternalCommand {
                     this.BuildPreviewData(item.GetCreateItem(), context);
                     return context.PreviewData;
                 }
+
                 if (item.TabType == ScheduleTabType.Batch) {
                     var batchItem = item.GetBatchItem();
                     return batchItem != null ? this.BuildBatchPreview(batchItem) : null;
                 }
+
                 return null;
             });
 
@@ -70,37 +67,43 @@ public class CmdScheduleManager : IExternalCommand {
                     Tabs = [
                         new TabDefinition<ISchedulePaletteItem> {
                             Name = "Create",
-                            ItemProvider = () => createItems.Select(i => new SchedulePaletteItemWrapper(i, ScheduleTabType.Create)),
+                            ItemProvider =
+                                () => createItems.Select(i =>
+                                    new SchedulePaletteItemWrapper(i, ScheduleTabType.Create)),
                             FilterKeySelector = i => i.CategoryName,
                             Actions = [
-                                new() {
+                                new PaletteAction<ISchedulePaletteItem> {
                                     Name = "Open Profile File",
                                     Execute = async item => this.HandleOpenFile(item),
-                                    CanExecute = item => item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
+                                    CanExecute = item =>
+                                        item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
                                 },
-                                new() {
+                                new PaletteAction<ISchedulePaletteItem> {
                                     Name = "Create Schedule",
                                     Execute = async item => this.HandleCreate(context, item),
                                     CanExecute = item => context.PreviewData?.IsValid == true
                                 },
-                                new() {
+                                new PaletteAction<ISchedulePaletteItem> {
                                     Name = "Place Sample Families",
                                     Execute = async item => this.HandlePlaceSampleFamilies(context, item),
-                                    CanExecute = item => item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
+                                    CanExecute = item =>
+                                        item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
                                 }
                             ]
                         },
                         new TabDefinition<ISchedulePaletteItem> {
                             Name = "Batch",
-                            ItemProvider = () => batchItems.Select(i => new SchedulePaletteItemWrapper(i, ScheduleTabType.Batch)),
+                            ItemProvider =
+                                () => batchItems.Select(i => new SchedulePaletteItemWrapper(i, ScheduleTabType.Batch)),
                             FilterKeySelector = i => string.Empty,
                             Actions = [
-                                new() {
+                                new PaletteAction<ISchedulePaletteItem> {
                                     Name = "Open Profile File",
                                     Execute = async item => this.HandleOpenFile(item),
-                                    CanExecute = item => item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
+                                    CanExecute = item =>
+                                        item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
                                 },
-                                new() {
+                                new PaletteAction<ISchedulePaletteItem> {
                                     Name = "Create Schedules",
                                     Execute = async item => this.HandleCreate(context, item),
                                     CanExecute = item => context.PreviewData?.IsValid == true
@@ -158,8 +161,7 @@ public class CmdScheduleManager : IExternalCommand {
         var profileJson = JsonSerializer.Serialize(
             profile,
             new JsonSerializerOptions {
-                WriteIndented = true,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             });
 
         return new SchedulePreviewData {
@@ -184,9 +186,7 @@ public class CmdScheduleManager : IExternalCommand {
     private static SchedulePreviewData
         CreateSanitizationErrorPreview(ScheduleListItem profileItem, JsonSanitizationException ex) {
         var preview = new SchedulePreviewData {
-            ProfileName = profileItem.TextPrimary,
-            IsValid = false,
-            RemainingErrors = []
+            ProfileName = profileItem.TextPrimary, IsValid = false, RemainingErrors = []
         };
 
         if (ex.AddedProperties.Any())
@@ -210,7 +210,8 @@ public class CmdScheduleManager : IExternalCommand {
             var batchSettings = batchItem.LoadBatchSettings();
 
             // Build a summary preview showing all schedules that will be created
-            var schedulesList = string.Join("\n", batchSettings.ScheduleFiles.Select((path, idx) => $"{idx + 1}. {path}"));
+            var schedulesList =
+                string.Join("\n", batchSettings.ScheduleFiles.Select((path, idx) => $"{idx + 1}. {path}"));
             var profileJson = $"Batch will create {batchSettings.ScheduleFiles.Count} schedule(s):\n\n{schedulesList}";
 
             return new SchedulePreviewData {
@@ -234,6 +235,7 @@ public class CmdScheduleManager : IExternalCommand {
             };
         }
     }
+
     private void HandleCreate(ScheduleManagerContext ctx, ISchedulePaletteItem item) {
         switch (item.TabType) {
         case ScheduleTabType.Create:
@@ -492,7 +494,9 @@ public class CmdScheduleManager : IExternalCommand {
         }
     }
 
-    private string WriteCreationOutput(ScheduleManagerContext ctx, ScheduleCreationResult result, string profileName = null) {
+    private string WriteCreationOutput(ScheduleManagerContext ctx,
+        ScheduleCreationResult result,
+        string profileName = null) {
         try {
             var createOutputDir = ctx.Storage.OutputDir().SubDir("create");
 
@@ -559,7 +563,10 @@ public class CmdScheduleManager : IExternalCommand {
         }
     }
 
-    private string WriteErrorOutput(ScheduleManagerContext ctx, string profileName, string errorMessage, Exception ex = null) {
+    private string WriteErrorOutput(ScheduleManagerContext ctx,
+        string profileName,
+        string errorMessage,
+        Exception ex = null) {
         try {
             var createOutputDir = ctx.Storage.OutputDir().SubDir("create");
 
@@ -569,7 +576,7 @@ public class CmdScheduleManager : IExternalCommand {
                 Success = false,
                 ErrorMessage = errorMessage,
                 ExceptionType = ex?.GetType().Name,
-                StackTrace = ex?.StackTrace
+                ex?.StackTrace
             };
 
             // Prepend timestamp to filename

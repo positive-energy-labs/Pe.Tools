@@ -27,6 +27,8 @@ public class DocumentManager {
         }
     }
 
+    public static UIDocument GetActiveUIDocument() => uiapp.ActiveUIDocument;
+
     /// <summary>Gets the active document from the UIApplication. </summary>
     public static Autodesk.Revit.DB.Document? GetActiveDocument() => uiapp?.ActiveUIDocument?.Document;
 

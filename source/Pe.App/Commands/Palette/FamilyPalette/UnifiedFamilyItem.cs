@@ -20,8 +20,8 @@ public enum FamilyItemType {
 /// </summary>
 public class UnifiedFamilyItem : IPaletteListItem {
     private readonly Document _doc;
-    private readonly Lazy<string> _textSecondary;
     private readonly Lazy<FamilyPreviewData> _previewData;
+    private readonly Lazy<string> _textSecondary;
 
     public UnifiedFamilyItem(Family family, Document doc) {
         this._doc = doc;
@@ -80,16 +80,6 @@ public class UnifiedFamilyItem : IPaletteListItem {
     public FamilyInstance? FamilyInstance { get; }
 
     /// <summary>
-    ///     Gets the Family for any item type.
-    /// </summary>
-    public Family? GetFamily() => this.ItemType switch {
-        FamilyItemType.Family => this.Family,
-        FamilyItemType.FamilyType => this.FamilySymbol?.Family,
-        FamilyItemType.FamilyInstance => this.FamilyInstance?.Symbol.Family,
-        _ => null
-    };
-
-    /// <summary>
     ///     Gets a unique persistence key for usage tracking.
     /// </summary>
     public string PersistenceKey => this.ItemType switch {
@@ -125,6 +115,16 @@ public class UnifiedFamilyItem : IPaletteListItem {
 
     public BitmapImage? Icon => null;
     public Color? ItemColor => null;
+
+    /// <summary>
+    ///     Gets the Family for any item type.
+    /// </summary>
+    public Family? GetFamily() => this.ItemType switch {
+        FamilyItemType.Family => this.Family,
+        FamilyItemType.FamilyType => this.FamilySymbol?.Family,
+        FamilyItemType.FamilyInstance => this.FamilyInstance?.Symbol.Family,
+        _ => null
+    };
 
     private string GetFamilyTypeNames() {
         // Just show the count - much cheaper than enumerating all names

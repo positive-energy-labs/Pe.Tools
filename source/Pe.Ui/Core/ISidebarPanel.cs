@@ -1,4 +1,3 @@
-using System.Threading;
 using System.Windows;
 
 namespace Pe.Ui.Core;
@@ -9,6 +8,16 @@ namespace Pe.Ui.Core;
 /// </summary>
 /// <typeparam name="TItem">The palette item type</typeparam>
 public interface ISidebarPanel<in TItem> where TItem : class, IPaletteListItem {
+    /// <summary>
+    ///     The UIElement to display in the sidebar.
+    /// </summary>
+    UIElement Content { get; }
+
+    /// <summary>
+    ///     Optional preferred width for the sidebar. Null uses the default (450px).
+    /// </summary>
+    GridLength? PreferredWidth => null;
+
     /// <summary>
     ///     Called immediately when selection changes, before debounce.
     ///     Use this to clear stale content or show a loading indicator.
@@ -24,14 +33,4 @@ public interface ISidebarPanel<in TItem> where TItem : class, IPaletteListItem {
     /// <param name="item">The newly selected item, or null if cleared</param>
     /// <param name="ct">Cancellation token that fires when selection changes again</param>
     void Update(TItem? item, CancellationToken ct);
-
-    /// <summary>
-    ///     The UIElement to display in the sidebar.
-    /// </summary>
-    UIElement Content { get; }
-
-    /// <summary>
-    ///     Optional preferred width for the sidebar. Null uses the default (450px).
-    /// </summary>
-    GridLength? PreferredWidth => null;
 }

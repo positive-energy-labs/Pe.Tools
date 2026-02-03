@@ -101,13 +101,13 @@ public static class FamilyDocumentSetValue {
 
         // DEBUG: Trace coercion context for troubleshooting
         Console.WriteLine($"[SetValue] Source='{sourceParam.Definition.Name}', " +
-                        $"SourceStorageType={context.SourceStorageType}, " +
-                        $"SourceDataType={context.SourceDataType?.TypeId ?? "null"}, " +
-                        $"SourceValue='{context.SourceValue}' (type={context.SourceValue?.GetType().Name}), " +
-                        $"Target='{targetParam.Definition.Name}', " +
-                        $"TargetStorageType={context.TargetStorageType}, " +
-                        $"TargetDataType={context.TargetDataType?.TypeId ?? "null"}, " +
-                        $"Strategy={strategyName}");
+                          $"SourceStorageType={context.SourceStorageType}, " +
+                          $"SourceDataType={context.SourceDataType?.TypeId ?? "null"}, " +
+                          $"SourceValue='{context.SourceValue}' (type={context.SourceValue?.GetType().Name}), " +
+                          $"Target='{targetParam.Definition.Name}', " +
+                          $"TargetStorageType={context.TargetStorageType}, " +
+                          $"TargetDataType={context.TargetDataType?.TypeId ?? "null"}, " +
+                          $"Strategy={strategyName}");
 
         if (!strategyInstance.CanMap(context)) {
             var targetDataType = targetParam.Definition.GetDataType();

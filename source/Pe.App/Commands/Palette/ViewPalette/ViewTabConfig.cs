@@ -20,15 +20,10 @@ internal static class ViewTabConfig {
         // Define actions once (same for all tabs)
         var commonActions = new List<PaletteAction<UnifiedViewItem>> {
             new() {
-                Name = "Open",
-                Execute = async item => ViewActions.HandleOpen(uiapp, item),
-                CanExecute = item => true
+                Name = "Open", Execute = async item => ViewActions.HandleOpen(uiapp, item), CanExecute = item => true
             },
             new() {
-                Name = "Snoop",
-                Modifiers = ModifierKeys.Alt,
-                Execute = async item => ViewActions.HandleSnoop(uiapp, doc, item),
-                CanExecute = item => item != null
+                Name = "Snoop", Modifiers = ModifierKeys.Alt, Execute = async item => ViewActions.HandleSnoop(doc, item)
             }
         };
 
@@ -49,7 +44,8 @@ internal static class ViewTabConfig {
                 Name = "Schedules",
                 ItemProvider = () => ViewActions.CollectSchedules(doc, sheetCache),
                 FilterKeySelector = i => i.TextPill,
-                Actions = commonActions //TODO: add "Place on Sheet" and "Open Sheets" actions, see UIDocument.CanPlaceElementType and UIDocument.PostRequestForElementTypePlacement
+                Actions =
+                    commonActions //TODO: add "Place on Sheet" and "Open Sheets" actions, see UIDocument.CanPlaceElementType and UIDocument.PostRequestForElementTypePlacement
             },
             new TabDefinition<UnifiedViewItem> {
                 Name = "Sheets",

@@ -7,9 +7,9 @@ namespace Pe.App.Commands.Palette.TaskPalette;
 /// </summary>
 public sealed class TaskRegistry {
     private static readonly Lazy<TaskRegistry> _instance = new(() => new TaskRegistry());
+    private readonly object _lock = new();
 
     private readonly Dictionary<string, ITask> _tasks = new();
-    private readonly object _lock = new();
 
     private TaskRegistry() { }
 
@@ -25,9 +25,10 @@ public sealed class TaskRegistry {
         var id = typeof(T).Name;
 
         lock (this._lock) {
-            if (this._tasks.ContainsKey(id))
+            if (this._tasks.ContainsKey(id)) {
                 throw new InvalidOperationException(
                     $"Task '{id}' is already registered. Each task class must have a unique name.");
+            }
 
             this._tasks[id] = task;
         }
@@ -40,9 +41,7 @@ public sealed class TaskRegistry {
     public void RegisterByType(Type taskType, ITask task) {
         var id = taskType.Name;
 
-        lock (this._lock) {
-            this._tasks[id] = task; // Allow overwrite for hot-reload
-        }
+        lock (this._lock) this._tasks[id] = task; // Allow overwrite for hot-reload
     }
 
     /// <summary>
@@ -50,27 +49,21 @@ public sealed class TaskRegistry {
     ///     Used for hot-reload scenarios to re-scan and re-register tasks.
     /// </summary>
     public void Clear() {
-        lock (this._lock) {
-            this._tasks.Clear();
-        }
+        lock (this._lock) this._tasks.Clear();
     }
 
     /// <summary>
     ///     Gets all registered tasks with their IDs.
     /// </summary>
     public IReadOnlyList<(string Id, ITask Task)> GetAll() {
-        lock (this._lock) {
-            return this._tasks.Select(kvp => (kvp.Key, kvp.Value)).ToList();
-        }
+        lock (this._lock) return this._tasks.Select(kvp => (kvp.Key, kvp.Value)).ToList();
     }
 
     /// <summary>
     ///     Gets a task by ID (type name)
     /// </summary>
     public ITask GetById(string id) {
-        lock (this._lock) {
-            return this._tasks.GetValueOrDefault(id);
-        }
+        lock (this._lock) return this._tasks.GetValueOrDefault(id);
     }
 
     /// <summary>

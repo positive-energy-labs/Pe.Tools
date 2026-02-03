@@ -1,6 +1,6 @@
 using Pe.Ui.Core;
-using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Color = System.Windows.Media.Color;
 
 namespace Pe.App.Commands.Palette.TaskPalette;
 
@@ -36,5 +36,5 @@ public class TaskItem : IPaletteListItem {
     public string TextPill => this.Task.Category ?? string.Empty;
     public Func<string> GetTextInfo => () => this.Task.Description ?? string.Empty;
     public BitmapImage Icon => null; // Future: custom icons per task
-    public System.Windows.Media.Color? ItemColor => null; // Future: category-based colors
+    public Color? ItemColor => null; // Future: category-based colors
 }

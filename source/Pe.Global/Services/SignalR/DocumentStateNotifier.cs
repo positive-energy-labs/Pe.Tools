@@ -10,9 +10,6 @@ namespace Pe.Global.Services.SignalR;
 ///     Monitors Revit document changes and notifies connected SignalR clients.
 /// </summary>
 public class DocumentStateNotifier : IDisposable {
-    private readonly IHubContext<SchemaHub> _schemaHub;
-    private readonly Application _app;
-
     /// <summary>
     ///     Categories that, when modified, should trigger an examples refresh.
     /// </summary>
@@ -26,6 +23,9 @@ public class DocumentStateNotifier : IDisposable {
         // Add more tag categories as needed
     ];
 
+    private readonly Application _app;
+    private readonly IHubContext<SchemaHub> _schemaHub;
+
     public DocumentStateNotifier(IHubContext<SchemaHub> schemaHub, Application app) {
         this._schemaHub = schemaHub;
         this._app = app;
@@ -34,6 +34,12 @@ public class DocumentStateNotifier : IDisposable {
         this._app.DocumentChanged += this.OnDocumentChanged;
         this._app.DocumentOpened += this.OnDocumentOpened;
         this._app.DocumentClosed += this.OnDocumentClosed;
+    }
+
+    public void Dispose() {
+        this._app.DocumentChanged -= this.OnDocumentChanged;
+        this._app.DocumentOpened -= this.OnDocumentOpened;
+        this._app.DocumentClosed -= this.OnDocumentClosed;
     }
 
     private void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e) {
@@ -103,11 +109,5 @@ public class DocumentStateNotifier : IDisposable {
         } catch (Exception ex) {
             Log.Error(ex, "DocumentStateNotifier: Error handling DocumentChanged");
         }
-    }
-
-    public void Dispose() {
-        this._app.DocumentChanged -= this.OnDocumentChanged;
-        this._app.DocumentOpened -= this.OnDocumentOpened;
-        this._app.DocumentClosed -= this.OnDocumentClosed;
     }
 }

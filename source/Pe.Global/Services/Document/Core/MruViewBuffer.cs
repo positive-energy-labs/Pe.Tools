@@ -9,6 +9,7 @@ namespace Pe.Global.Services.Document.Core;
 /// </summary>
 public class MruViewBuffer {
     private const int MaxBufferSize = 50;
+
     // Threshold for same-document switching: 2s captures rapid user navigation
     // Threshold for cross-document switching: 2s filters out transient "Start Up Page" views
     private static readonly TimeSpan MinViewDuration = TimeSpan.FromSeconds(2);
@@ -21,8 +22,10 @@ public class MruViewBuffer {
     /// <summary>
     ///     Records a view activation. The previous view is committed to the MRU buffer based on:
     ///     1. If active >= 2s: Always commit (intentional navigation)
-    ///     2. If active < 2s AND we crossed a document boundary to get to it: Filter out (transient during doc switch)
-    ///     3. If active < 2s AND stayed in same document: Commit (rapid same-doc navigation)
+    ///     2. If active
+    ///     < 2s AND we crossed a document boundary to get to it: Filter out ( transient during doc switch)
+    ///         3. If active
+    ///     < 2s AND stayed in same document: Commit ( rapid same-doc navigation)
     /// </summary>
     public void RecordViewActivation(Autodesk.Revit.DB.Document doc, ElementId viewId) {
         if (doc == null || viewId == null || viewId == ElementId.InvalidElementId) return;
@@ -74,7 +77,7 @@ public class MruViewBuffer {
             // Only skip if the document is closed (view can't be accessed)
             var targetDoc = DocumentManager.FindDocumentByName(viewRef.DocumentTitle);
             if (targetDoc == null) continue;
-            
+
             // Get the view element - this works even if the view tab is closed
             if (targetDoc.GetElement(viewRef.ViewId) is not View view) continue;
 
@@ -108,20 +111,23 @@ public class MruViewBuffer {
     ///     Determines if the previous view should be committed to the MRU buffer.
     ///     Strategy:
     ///     1. Views active >= 2s: Always commit (intentional navigation)
-    ///     2. Views active < 2s where we CROSSED document boundary to get to them: Filter out (transient during doc switch)
-    ///     3. Views active < 2s within same document: Commit (rapid same-doc navigation)
-    ///     
-    ///     Example: DocA View1 → DocB StartUpPage (0.1s) → DocB View2
-    ///     When deciding about StartUpPage, we check:
-    ///     - priorViewRef = DocA View1 (the view before StartUpPage)
-    ///     - previousViewRef = DocB StartUpPage (the view we're deciding about)
-    ///     - StartUpPage's doc != priorView's doc → crossed boundary → FILTER OUT ✅
+    ///     2. Views active
+    ///     < 2s where we CROSSED document boundary to get to them: Filter out ( transient during doc switch)
+    ///         3. Views active
+    ///     < 2s within same document: Commit ( rapid same-doc navigation)
+    ///         Example: DocA View1 → DocB StartUpPage (0.1 s) → DocB View2
+    ///         When deciding about StartUpPage, we check:
+    ///         - priorViewRef= DocA View1 ( the view before StartUpPage)
+    ///         - previousViewRef= DocB StartUpPage ( the view we're deciding about)
+    ///     - StartUpPage' s doc !=
+    ///         priorView's doc → crossed boundary → FILTER OUT ✅
+    /// 
     /// </summary>
     private bool ShouldCommitPreviousView(ViewReference previousViewRef, ViewReference? priorViewRef) {
         if (previousViewRef == null) return false;
 
         var duration = DateTime.Now - previousViewRef.ActivatedAt;
-        
+
         // Always commit views that were active for 2s+ (intentional navigation)
         if (duration >= MinViewDuration) {
             Console.WriteLine(
