@@ -19,45 +19,26 @@ public enum FamilyItemType {
 ///     Enables a single tabbed palette for all family-related elements in project documents.
 /// </summary>
 public class UnifiedFamilyItem : IPaletteListItem {
-    private readonly Document _doc;
-    private readonly Lazy<FamilyPreviewData> _previewData;
     private readonly Lazy<string> _textSecondary;
 
-    public UnifiedFamilyItem(Family family, Document doc) {
-        this._doc = doc;
+    public UnifiedFamilyItem(Family family) {
         this.ItemType = FamilyItemType.Family;
         this.Family = family;
         this._textSecondary = new Lazy<string>(this.GetFamilyTypeNames);
-        // Use BuildFromFamilyWithParameters to include parameter tables in the preview
-        // The async loading pattern in FamilyPreviewPanel ensures this doesn't block the UI
-        this._previewData = new Lazy<FamilyPreviewData>(() =>
-            FamilyPreviewBuilder.BuildFromFamilyWithParameters(this.Family!, this._doc));
     }
 
-    public UnifiedFamilyItem(FamilySymbol familySymbol, Document doc) {
-        this._doc = doc;
+    public UnifiedFamilyItem(FamilySymbol familySymbol) {
         this.ItemType = FamilyItemType.FamilyType;
         this.FamilySymbol = familySymbol;
         // Family name is a simple property access, no need for lazy
         this._textSecondary = new Lazy<string>(() => familySymbol.Family.Name);
-        this._previewData = new Lazy<FamilyPreviewData>(() =>
-            FamilyPreviewBuilder.BuildFromFamilySymbol(this.FamilySymbol!, this._doc));
     }
 
-    public UnifiedFamilyItem(FamilyInstance familyInstance, Document doc) {
-        this._doc = doc;
+    public UnifiedFamilyItem(FamilyInstance familyInstance) {
         this.ItemType = FamilyItemType.FamilyInstance;
         this.FamilyInstance = familyInstance;
         this._textSecondary = new Lazy<string>(this.GetInstanceLocation);
-        this._previewData = new Lazy<FamilyPreviewData>(() =>
-            FamilyPreviewBuilder.BuildFromFamilyInstance(this.FamilyInstance!, this._doc));
     }
-
-    /// <summary>
-    ///     Lazily-computed preview data for the sidebar panel.
-    ///     Computed once on first access, then cached for subsequent accesses.
-    /// </summary>
-    public FamilyPreviewData PreviewData => this._previewData.Value;
 
     /// <summary>
     ///     The type of family item this represents.

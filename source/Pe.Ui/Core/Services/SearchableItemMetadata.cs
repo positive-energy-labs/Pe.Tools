@@ -1,10 +1,9 @@
 namespace Pe.Ui.Core.Services;
 
 /// <summary>
-///     Pre-computed searchable metadata for palette items to avoid repeated string operations.
-///     This is cached once per item and reused across all searches.
+///     Searchable metadata for palette items. Built on-demand per snapshot.
 /// </summary>
-internal class SearchableItemMetadata {
+public class SearchableItemMetadata {
     /// <summary> Primary text in lowercase (e.g., command name) </summary>
     public string PrimaryLower { get; init; } = string.Empty;
 

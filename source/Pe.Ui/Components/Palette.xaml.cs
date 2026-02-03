@@ -136,6 +136,8 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             this._filterBox = new FilterBox<PaletteViewModel<TItem>>(
                 viewModel,
                 [Key.Tab, Key.Escape],
+                () => viewModel.SelectedFilterValue,
+                value => viewModel.SelectedFilterValue = value,
                 viewModel.AvailableFilterValues
             ) {
                 // Set initial visibility based on current tab

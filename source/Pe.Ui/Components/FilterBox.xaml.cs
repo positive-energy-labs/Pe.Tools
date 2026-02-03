@@ -140,12 +140,20 @@ public partial class FilterBox : IPopoverExit {
 /// </summary>
 public class FilterBox<TViewModel> : FilterBox where TViewModel : class {
     private readonly ObservableCollection<string>? _availableFilterValues;
+    private readonly Func<string?> _getSelectedValue;
+    private readonly Action<string?> _setSelectedValue;
     private readonly TViewModel _viewModel;
 
-    public FilterBox(TViewModel viewModel,
+    public FilterBox(
+        TViewModel viewModel,
         List<Key> closeKeys,
-        ObservableCollection<string>? availableFilterValues = null) : base(closeKeys) {
+        Func<string?> getSelectedValue,
+        Action<string?> setSelectedValue,
+        ObservableCollection<string>? availableFilterValues = null
+    ) : base(closeKeys) {
         this._viewModel = viewModel;
+        this._getSelectedValue = getSelectedValue;
+        this._setSelectedValue = setSelectedValue;
         this._availableFilterValues = availableFilterValues;
         this.DataContext = viewModel;
 
@@ -187,19 +195,18 @@ public class FilterBox<TViewModel> : FilterBox where TViewModel : class {
     }
 
     private void UpdateSelectedFilterValue(string? value) {
-        var selectedValueProperty = typeof(TViewModel).GetProperty("SelectedFilterValue");
-        var currentValue = selectedValueProperty?.GetValue(this._viewModel) as string;
+        var currentValue = this._getSelectedValue();
         if (currentValue == value) return;
 
         if (string.IsNullOrEmpty(value)) {
             // enable clearing the value
-            selectedValueProperty?.SetValue(this._viewModel, value);
+            this._setSelectedValue(value);
             return;
         }
 
         // Validate that the value exists in available filter values
         if (this._availableFilterValues == null) return;
         if (!this._availableFilterValues.Contains(value)) return;
-        selectedValueProperty?.SetValue(this._viewModel, value);
+        this._setSelectedValue(value);
     }
 }

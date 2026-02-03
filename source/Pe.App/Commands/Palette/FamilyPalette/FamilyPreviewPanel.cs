@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
+using System.Threading.Tasks;
 using WpfUiRichTextBox = Wpf.Ui.Controls.RichTextBox;
 
 namespace Pe.App.Commands.Palette.FamilyPalette;
@@ -10,10 +11,8 @@ namespace Pe.App.Commands.Palette.FamilyPalette;
 /// <summary>
 ///     Reusable sidebar panel for displaying family/type/instance previews.
 ///     Shows family info, parameter table with values per type or formulas, and instance-specific details.
-///     Implements <see cref="ISidebarPanel{TItem}" /> for auto-wiring with <see cref="UnifiedFamilyItem" />.
-///     Uses async loading pattern to keep the UI responsive during navigation.
 /// </summary>
-public class FamilyPreviewPanel : UserControl, ISidebarPanel<UnifiedFamilyItem> {
+public class FamilyPreviewPanel : PaletteSidebarPanel<UnifiedFamilyItem, FamilyPreviewData> {
     private readonly Document _doc;
     private readonly WpfUiRichTextBox _infoBox;
     private readonly StackPanel _mainPanel;
@@ -119,7 +118,8 @@ public class FamilyPreviewPanel : UserControl, ISidebarPanel<UnifiedFamilyItem> 
 
         // Add section header to info box
         var headerPara = new Paragraph(new Run(sectionTitle) { FontWeight = FontWeights.SemiBold }) {
-            Margin = new Thickness(0, 6, 0, 2), LineHeight = 1
+            Margin = new Thickness(0, 6, 0, 2),
+            LineHeight = 1
         };
         doc.Blocks.Add(headerPara);
 
@@ -189,40 +189,22 @@ public class FamilyPreviewPanel : UserControl, ISidebarPanel<UnifiedFamilyItem> 
         return param.ValuesPerType.TryGetValue(typeName, out var v) ? v ?? "-" : "-";
     }
 
-    #region ISidebarPanel Implementation
+    protected override void ShowLoading(UnifiedFamilyItem item) => this.ShowQuickPreview(item);
 
-    /// <inheritdoc />
-    UIElement ISidebarPanel<UnifiedFamilyItem>.Content => this;
+    protected override async Task<FamilyPreviewData?> BuildDataAsync(UnifiedFamilyItem item, CancellationToken ct) {
+        if (ct.IsCancellationRequested) return null;
 
-    /// <inheritdoc />
-    /// <summary>
-    ///     Called immediately on selection change (before debounce).
-    ///     Clears stale content so the user doesn't see old data during navigation.
-    /// </summary>
-    public void Clear() => this.ClearPreview();
-
-    /// <inheritdoc />
-    /// <summary>
-    ///     Called after debounce with cancellation support.
-    /// </summary>
-    public void Update(UnifiedFamilyItem? item, CancellationToken ct) {
-        if (item == null) {
-            this.ClearPreview();
-            return;
-        }
-
-        // Check for cancellation before starting work
-        if (ct.IsCancellationRequested) return;
-
-        // Phase 1: Show immediate lightweight content (header/basic info)
-        // This gives user instant feedback that something is loading
-        this.ShowQuickPreview(item);
-
-        // Phase 2: Build and render full preview data
-        var previewData = item.PreviewData;
-        if (ct.IsCancellationRequested) return;
-        this.UpdatePreview(previewData);
+        return await PaletteThreading.RunRevitAsync(() => item.ItemType switch {
+            FamilyItemType.Family => FamilyPreviewBuilder.BuildFromFamilyWithParameters(item.Family!, this._doc),
+            FamilyItemType.FamilyType => FamilyPreviewBuilder.BuildFromFamilySymbol(item.FamilySymbol!, this._doc),
+            FamilyItemType.FamilyInstance => FamilyPreviewBuilder.BuildFromFamilyInstance(item.FamilyInstance!, this._doc),
+            _ => null
+        }, ct);
     }
+
+    protected override void RenderData(FamilyPreviewData? data) => this.UpdatePreview(data);
+
+    protected override void ClearContent() => this.ClearPreview();
 
     /// <summary>
     ///     Shows lightweight preview content immediately.
@@ -236,12 +218,11 @@ public class FamilyPreviewPanel : UserControl, ISidebarPanel<UnifiedFamilyItem> 
 
         // Add loading indicator for parameters
         var loadingPara = new Paragraph(new Run("Loading...") {
-            FontStyle = FontStyles.Italic, Foreground = Brushes.Gray
+            FontStyle = FontStyles.Italic,
+            Foreground = Brushes.Gray
         }) { Margin = new Thickness(0, 8, 0, 0) };
         doc.Blocks.Add(loadingPara);
 
         this._infoBox.Document = doc;
     }
-
-    #endregion
 }

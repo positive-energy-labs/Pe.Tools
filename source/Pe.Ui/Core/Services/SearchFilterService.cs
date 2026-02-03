@@ -12,43 +12,37 @@ public class SearchFilterService<TItem> where TItem : class, IPaletteListItem {
 
     // String similarity algorithms
     private readonly JaroWinkler _jaroWinkler = new();
-    private readonly Func<TItem, string> _keyGenerator;
-    private readonly Dictionary<TItem, SearchableItemMetadata> _searchCache = new();
+    private readonly Func<TItem, string>? _keyGenerator;
     private readonly SearchConfig _searchConfig;
-    private readonly CsvReadWriter<ItemUsageData> _state;
+    private readonly CsvReadWriter<ItemUsageData>? _state;
     private Dictionary<string, ItemUsageData> _usageCache = new();
+    private readonly object _usageLock = new();
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="SearchFilterService{TItem}" /> class.
     /// </summary>
-    /// <param name="storage"></param>
-    /// <param name="keyGenerator"></param>
-    /// <param name="searchConfig"></param>
     public SearchFilterService(
-        Storage storage,
-        Func<TItem, string> keyGenerator,
-        SearchConfig searchConfig = null
+        SearchConfig? searchConfig = null,
+        Storage? storage = null,
+        Func<TItem, string>? keyGenerator = null
     ) {
         this._searchConfig = searchConfig ?? SearchConfig.Default();
         this._keyGenerator = keyGenerator;
-        this._state = storage.StateDir().Csv<ItemUsageData>();
+        this._state = storage?.StateDir().Csv<ItemUsageData>();
     }
 
-    public SearchFilterService(
-        SearchConfig searchConfig = null
-    ) => this._searchConfig = searchConfig ?? SearchConfig.Default();
+    private bool IsStorageDisabled => this._state is null || this._keyGenerator is null;
 
-    private bool IsStorageDisabled => this._state is null && this._keyGenerator is null;
-
-    public List<TItem> Filter(string searchText, IEnumerable<TItem> items) {
-        var itemsList = items as List<TItem> ?? items.ToList();
-        if (!itemsList.Any()) return [];
+    public List<TItem> Filter(string searchText, IEnumerable<PaletteSearchSnapshot<TItem>> snapshots) {
+        var snapshotList = snapshots as List<PaletteSearchSnapshot<TItem>> ?? snapshots.ToList();
+        if (!snapshotList.Any()) return [];
 
         if (string.IsNullOrWhiteSpace(searchText)) {
             // No search text - keep most recent at top, sort rest by used date then usage count
-            var ordered = itemsList
-                .OrderByDescending(this.GetLastUsedDate)
-                .ThenByDescending(this.GetUsageCount)
+            var ordered = snapshotList
+                .OrderByDescending(s => this.GetLastUsedDate(s.UsageKey))
+                .ThenByDescending(s => this.GetUsageCount(s.UsageKey))
+                .Select(s => s.Item)
                 .ToList();
 
             return [ordered.First(), .. ordered.Skip(1).ToList()];
@@ -57,63 +51,61 @@ public class SearchFilterService<TItem> where TItem : class, IPaletteListItem {
         var searchLower = searchText.ToLowerInvariant();
 
         // Use LINQ for cleaner, more functional approach
-        return itemsList
-            .Select(item => (item, score: this.CalculateItemSearchScore(item, searchLower)))
+        return snapshotList
+            .Select(s => (item: s.Item, score: this.CalculateItemSearchScore(s, searchLower), s.UsageKey))
             .Where(x => x.score > 0)
             .OrderByDescending(x => x.score)
-            .ThenByDescending(x => this.GetUsageCount(x.item))
-            .ThenByDescending(x => this.GetLastUsedDate(x.item))
+            .ThenByDescending(x => this.GetUsageCount(x.UsageKey))
+            .ThenByDescending(x => this.GetLastUsedDate(x.UsageKey))
             .Select(x => x.item)
             .ToList();
     }
 
     public void RecordUsage(TItem item) {
         if (this.IsStorageDisabled) return;
-        var key = this._keyGenerator(item);
+        var key = this._keyGenerator!(item);
         if (string.IsNullOrWhiteSpace(key)) return;
-        var existing = this._usageCache.GetValueOrDefault(key);
+        ItemUsageData existing;
+        lock (this._usageLock)
+            existing = this._usageCache.GetValueOrDefault(key);
         var usageCount = (existing?.UsageCount ?? 0) + 1;
 
         var usageData = new ItemUsageData { ItemKey = key, UsageCount = usageCount, LastUsed = DateTime.Now };
 
         _ = this._state.WriteRow(key, usageData);
-        this._usageCache[key] = usageData;
+        lock (this._usageLock)
+            this._usageCache[key] = usageData;
     }
 
     public void LoadUsageData() {
         if (this.IsStorageDisabled) return;
 
-        this._usageCache = this._state.Read();
+        lock (this._usageLock)
+            this._usageCache = this._state!.Read();
     }
 
     /// <summary>
-    ///     Builds search metadata cache for a collection of items.
-    ///     This should be called once when initializing the search service with a new item set.
+    ///     Builds searchable metadata for a single item.
     /// </summary>
-    public void BuildSearchCache(IEnumerable<TItem> items) {
-        this._searchCache.Clear();
+    public SearchableItemMetadata BuildMetadata(TItem item) {
+        // Only evaluate TextInfo if it's actually needed for search
+        var infoText = this._searchConfig?.SearchFields.HasFlag(SearchFields.TextInfo) == true
+            ? item.GetTextInfo?.Invoke() ?? string.Empty
+            : string.Empty;
 
-        foreach (var item in items) {
-            // Only evaluate TextInfo if it's actually needed for search
-            var infoText = this._searchConfig?.SearchFields.HasFlag(SearchFields.TextInfo) == true
-                ? item.GetTextInfo?.Invoke() ?? string.Empty
-                : string.Empty;
+        var allText = this._searchConfig?.SearchFields.HasFlag(SearchFields.TextInfo) == true
+            ? $"{item.TextPrimary} {item.TextSecondary} {item.TextPill} {infoText}"
+            : $"{item.TextPrimary} {item.TextSecondary} {item.TextPill}";
 
-            var allText = this._searchConfig?.SearchFields.HasFlag(SearchFields.TextInfo) == true
-                ? $"{item.TextPrimary} {item.TextSecondary} {item.TextPill} {infoText}"
-                : $"{item.TextPrimary} {item.TextSecondary} {item.TextPill}";
-
-            var metadata = new SearchableItemMetadata {
-                PrimaryLower = (item.TextPrimary ?? string.Empty).ToLowerInvariant(),
-                SecondaryLower = (item.TextSecondary ?? string.Empty).ToLowerInvariant(),
-                PillLower = (item.TextPill ?? string.Empty).ToLowerInvariant(),
-                InfoLower = infoText.ToLowerInvariant(),
-                PrimaryWords = SplitIntoWords(item.TextPrimary ?? string.Empty),
-                PrimaryAcronym = BuildAcronym(item.TextPrimary ?? string.Empty),
-                AllWords = SplitIntoWords(allText)
-            };
-            this._searchCache[item] = metadata;
-        }
+        return new SearchableItemMetadata {
+            PrimaryLower = (item.TextPrimary ?? string.Empty).ToLowerInvariant(),
+            SecondaryLower = (item.TextSecondary ?? string.Empty).ToLowerInvariant(),
+            PillLower = (item.TextPill ?? string.Empty).ToLowerInvariant(),
+            InfoLower = infoText.ToLowerInvariant(),
+            PrimaryWords = SplitIntoWords(item.TextPrimary ?? string.Empty),
+            PrimaryAcronym = BuildAcronym(item.TextPrimary ?? string.Empty),
+            AllWords = SplitIntoWords(allText)
+        };
     }
 
     private static string[] SplitIntoWords(string text) {
@@ -131,30 +123,33 @@ public class SearchFilterService<TItem> where TItem : class, IPaletteListItem {
         return string.Concat(words.Select(w => w.Length > 0 ? char.ToLower(w[0]) : ' '));
     }
 
-    private int GetUsageCount(TItem item) {
-        if (this.IsStorageDisabled) return 0;
-        var key = this._keyGenerator(item);
-        if (string.IsNullOrWhiteSpace(key)) return 0;
-        return this._usageCache.GetValueOrDefault(key)?.UsageCount ?? 0;
+    internal string? GetUsageKey(TItem item) {
+        if (this.IsStorageDisabled) return null;
+        var key = this._keyGenerator!(item);
+        return string.IsNullOrWhiteSpace(key) ? null : key;
     }
 
-    private DateTime GetLastUsedDate(TItem item) {
+    private int GetUsageCount(string? key) {
+        if (this.IsStorageDisabled) return 0;
+        if (string.IsNullOrWhiteSpace(key)) return 0;
+        lock (this._usageLock)
+            return this._usageCache.GetValueOrDefault(key)?.UsageCount ?? 0;
+    }
+
+    private DateTime GetLastUsedDate(string? key) {
         if (this.IsStorageDisabled) return DateTime.MinValue;
-        var key = this._keyGenerator(item);
         if (string.IsNullOrWhiteSpace(key)) return DateTime.MinValue;
-        var lastUsedDateTime = this._usageCache.TryGetValue(key, out var usageData)
-            ? usageData.LastUsed
-            : DateTime.MinValue;
-        return lastUsedDateTime.Date;
+        ItemUsageData? usageData;
+        lock (this._usageLock)
+            usageData = this._usageCache.GetValueOrDefault(key);
+        return usageData?.LastUsed.Date ?? DateTime.MinValue;
     }
 
     /// <summary>
     ///     Calculates search score for an item across all configured fields
     /// </summary>
-    private double CalculateItemSearchScore(TItem item, string searchLower) {
-        // Get cached metadata for this item
-        if (!this._searchCache.TryGetValue(item, out var metadata))
-            return 0;
+    private double CalculateItemSearchScore(PaletteSearchSnapshot<TItem> snapshot, string searchLower) {
+        var metadata = snapshot.Metadata;
 
         var fields = this._searchConfig.SearchFields;
         var weights = this._searchConfig.FieldWeights;
@@ -194,7 +189,7 @@ public class SearchFilterService<TItem> where TItem : class, IPaletteListItem {
 
         // Apply custom score adjuster if provided
         if (this._searchConfig.CustomScoreAdjuster != null && maxScore > 0)
-            maxScore = this._searchConfig.CustomScoreAdjuster(item, maxScore);
+            maxScore = this._searchConfig.CustomScoreAdjuster(snapshot.Item, maxScore);
 
         return maxScore;
     }
@@ -314,57 +309,4 @@ public class SearchFilterService<TItem> where TItem : class, IPaletteListItem {
         return charBefore is ' ' or '-' or '_';
     }
 
-    /// <summary>
-    ///     Calculates score for multi-token searches
-    ///     Example: "v pal" matches "views palette"
-    /// </summary>
-    private double CalculateMultiTokenScore(string text, string search) {
-        var searchTokens = search.Split([' '], StringSplitOptions.RemoveEmptyEntries);
-        if (searchTokens.Length < 2) return 0;
-
-        var totalScore = 0.0;
-        var matchedTokens = 0;
-
-        foreach (var token in searchTokens) {
-            var tokenScore = 0.0;
-
-            if (text.StartsWith(token))
-                tokenScore = 70;
-            else if (text.Contains(token))
-                tokenScore = 50;
-            else if (this.IsWordBoundaryMatch(text, token))
-                tokenScore = 30;
-
-            if (tokenScore > 0) {
-                totalScore += tokenScore;
-                matchedTokens++;
-            }
-        }
-
-        // All tokens must match
-        if (matchedTokens != searchTokens.Length) return 0;
-
-        // Apply penalty for multi-token search (0.8x)
-        return totalScore * 0.8;
-    }
-
-    /// <summary>
-    ///     Simple fuzzy matching algorithm
-    /// </summary>
-    private double CalculateFuzzyScore(string text, string search) {
-        if (search.Length > text.Length)
-            return 0;
-
-        var matches = 0;
-        var searchIndex = 0;
-
-        for (var i = 0; i < text.Length && searchIndex < search.Length; i++) {
-            if (text[i] == search[searchIndex]) {
-                matches++;
-                searchIndex++;
-            }
-        }
-
-        return (double)matches / search.Length;
-    }
 }

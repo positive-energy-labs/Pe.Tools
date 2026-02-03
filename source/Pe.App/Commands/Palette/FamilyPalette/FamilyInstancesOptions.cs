@@ -60,7 +60,6 @@ public class FamilyInstancesOptions : INotifyPropertyChanged {
 
     /// <summary>
     ///     Alias for SelectedCategory to work with FilterBox component.
-    ///     FilterBox uses reflection to find a property named "SelectedFilterValue".
     /// </summary>
     public string? SelectedFilterValue {
         get => this.SelectedCategory;

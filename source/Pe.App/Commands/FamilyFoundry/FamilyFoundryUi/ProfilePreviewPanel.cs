@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
+using System.Threading.Tasks;
 using WpfUiRichTextBox = Wpf.Ui.Controls.RichTextBox;
 
 // Note: This panel has complex domain-specific rendering that benefits from manual FlowDocument building.
@@ -15,8 +16,8 @@ namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 ///     Implements ISidebarPanel for auto-wiring with PaletteFactory.
 ///     Preview data building is injected via delegate to support generic TProfile without making this class generic.
 /// </summary>
-public class ProfilePreviewPanel : UserControl, ISidebarPanel<ProfileListItem> {
-    private readonly Func<ProfileListItem?, CancellationToken, PreviewData?> _previewBuilder;
+public class ProfilePreviewPanel : PaletteSidebarPanel<ProfileListItem, PreviewData> {
+    private readonly Func<ProfileListItem?, CancellationToken, Task<PreviewData?>> _previewBuilder;
     private readonly WpfUiRichTextBox _richTextBox;
 
     /// <summary>
@@ -26,7 +27,7 @@ public class ProfilePreviewPanel : UserControl, ISidebarPanel<ProfileListItem> {
     ///     Delegate that builds PreviewData from a ProfileListItem.
     ///     This delegate should handle caching and context updates internally.
     /// </param>
-    public ProfilePreviewPanel(Func<ProfileListItem?, CancellationToken, PreviewData?> previewBuilder) {
+    public ProfilePreviewPanel(Func<ProfileListItem?, CancellationToken, Task<PreviewData?>> previewBuilder) {
         this._previewBuilder = previewBuilder;
 
         // Palette handles sidebar padding and scrolling - just provide the content
@@ -43,19 +44,14 @@ public class ProfilePreviewPanel : UserControl, ISidebarPanel<ProfileListItem> {
         this.Content = this._richTextBox;
     }
 
-    /// <inheritdoc />
-    UIElement ISidebarPanel<ProfileListItem>.Content => this;
-
-    /// <inheritdoc />
-    public void Clear() => this._richTextBox.Document = FlowDocumentBuilder.Create();
-
-    /// <inheritdoc />
-    public void Update(ProfileListItem? item, CancellationToken ct) {
-        if (ct.IsCancellationRequested) return;
-        var data = this._previewBuilder(item, ct);
-        if (ct.IsCancellationRequested) return;
-        this.UpdateContent(data);
+    protected override async Task<PreviewData?> BuildDataAsync(ProfileListItem item, CancellationToken ct) {
+        if (ct.IsCancellationRequested) return null;
+        return await this._previewBuilder(item, ct);
     }
+
+    protected override void RenderData(PreviewData? data) => this.UpdateContent(data);
+
+    protected override void ClearContent() => this._richTextBox.Document = FlowDocumentBuilder.Create();
 
     private void UpdateContent(PreviewData data) {
         if (data == null) {

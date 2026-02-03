@@ -21,7 +21,7 @@ internal static class FamilyActions {
                      .Cast<Family>()
                      .Where(f => !string.IsNullOrWhiteSpace(f.Name))
                      .OrderBy(f => f.Name))
-            yield return new UnifiedFamilyItem(family, doc);
+            yield return new UnifiedFamilyItem(family);
     }
 
     /// <summary>
@@ -33,7 +33,7 @@ internal static class FamilyActions {
                      .Cast<FamilySymbol>()
                      .OrderBy(s => s.Family.Name)
                      .ThenBy(s => s.Name))
-            yield return new UnifiedFamilyItem(symbol, doc);
+            yield return new UnifiedFamilyItem(symbol);
     }
 
     /// <summary>
@@ -45,7 +45,7 @@ internal static class FamilyActions {
                      .Cast<FamilyInstance>()
                      .OrderBy(i => i.Symbol.Name)
                      .ThenBy(i => i.Id.Value()))
-            yield return new UnifiedFamilyItem(instance, doc);
+            yield return new UnifiedFamilyItem(instance);
     }
 
     /// <summary>
@@ -78,7 +78,7 @@ internal static class FamilyActions {
             instances = instances.Where(i => i.Category?.Name == options.SelectedCategory);
 
         foreach (var instance in instances.OrderBy(i => i.Symbol.Name).ThenBy(i => i.Id.Value()))
-            yield return new UnifiedFamilyItem(instance, doc);
+            yield return new UnifiedFamilyItem(instance);
     }
 
     /// <summary>

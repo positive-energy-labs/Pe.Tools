@@ -28,27 +28,33 @@ public class FamilyInstancesTrayPanel : RevitHostedUserControl {
 
         // Show Annotation Symbols Toggle
         var annotationToggle = new ToggleSwitch {
-            Content = "Show Annotation Symbols", Margin = new Thickness(0, 0, 0, 8)
+            Content = "Show Annotation Symbols",
+            Margin = new Thickness(0, 0, 0, 8)
         };
         _ = annotationToggle.SetBinding(ToggleSwitch.IsCheckedProperty,
             new Binding(nameof(FamilyInstancesOptions.ShowAnnotationSymbols)) {
-                Source = options, Mode = BindingMode.TwoWay
+                Source = options,
+                Mode = BindingMode.TwoWay
             });
         _ = stackPanel.Children.Add(annotationToggle);
 
         // Filter by Active View Toggle
         var activeViewToggle = new ToggleSwitch {
-            Content = "Filter by Active View", Margin = new Thickness(0, 0, 0, 8)
+            Content = "Filter by Active View",
+            Margin = new Thickness(0, 0, 0, 8)
         };
         _ = activeViewToggle.SetBinding(ToggleSwitch.IsCheckedProperty,
             new Binding(nameof(FamilyInstancesOptions.FilterByActiveView)) {
-                Source = options, Mode = BindingMode.TwoWay
+                Source = options,
+                Mode = BindingMode.TwoWay
             });
         _ = stackPanel.Children.Add(activeViewToggle);
 
         // Category Filter Label
         var categoryLabel = new TextBlock {
-            Text = "Filter by Category:", FontSize = 12, Margin = new Thickness(0, 4, 0, 4)
+            Text = "Filter by Category:",
+            FontSize = 12,
+            Margin = new Thickness(0, 4, 0, 4)
         };
         categoryLabel.SetResourceReference(ForegroundProperty, "TextFillColorSecondaryBrush");
         _ = stackPanel.Children.Add(categoryLabel);
@@ -60,6 +66,8 @@ public class FamilyInstancesTrayPanel : RevitHostedUserControl {
             Child = new FilterBox<FamilyInstancesOptions>(
                 options,
                 [Key.Escape],
+                () => options.SelectedFilterValue,
+                value => options.SelectedFilterValue = value,
                 availableCategories
             )
         };

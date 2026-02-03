@@ -1,6 +1,7 @@
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
 using System.Collections.ObjectModel;
+using System.Threading;
 using System.Windows.Threading;
 
 namespace Pe.Ui.ViewModels;
@@ -42,8 +43,10 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     private readonly SearchFilterService<TItem> _searchService;
     private readonly DispatcherTimer _selectionDebounceTimer;
 
-    /// <summary> Per-tab item cache for lazy loading </summary>
-    private readonly Dictionary<int, List<TItem>> _tabItemsCache = new();
+    /// <summary> Snapshot of the current tab for safe background filtering </summary>
+    private List<PaletteSearchSnapshot<TItem>> _currentSnapshot = [];
+    private int _snapshotTabIndex = -1;
+    private readonly SemaphoreSlim _snapshotGate = new(1, 1);
 
     public readonly IReadOnlyList<TabDefinition<TItem>>? Tabs;
     private CancellationTokenSource? _filterCts;
@@ -54,9 +57,6 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
 
     /// <summary> Callback to run after initial items load (set via ViewModelMutator) </summary>
     private Action? _onInitialLoadComplete;
-
-    /// <summary> Previously selected item for efficient selection updates </summary>
-    private TItem? _previousSelectedItem;
 
     /// <summary> Current search text </summary>
     [ObservableProperty] private string _searchText = string.Empty;
@@ -162,8 +162,9 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
                 this._selectedFilterValue = string.Empty;
                 this.OnPropertyChanged(nameof(this.SelectedFilterValue));
 
-                // Clear search cache (will be rebuilt when tab items are lazy loaded)
-                this._searchService.BuildSearchCache(new List<TItem>());
+                // Invalidate snapshot when switching tabs
+                this._snapshotTabIndex = -1;
+                this._currentSnapshot = [];
 
                 // Recompute available filter values for new tab
                 this.UpdateAvailableFilterValuesForCurrentTab();
@@ -218,28 +219,25 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     /// <summary>
     ///     Updates the available filter values based on the current tab's filter key selector.
     /// </summary>
-    private void UpdateAvailableFilterValuesForCurrentTab() {
+    private void UpdateAvailableFilterValuesForCurrentTab() =>
+        _ = this.UpdateAvailableFilterValuesForCurrentTabAsync();
+
+    private async Task UpdateAvailableFilterValuesForCurrentTabAsync() {
         if (this.AvailableFilterValues == null) return;
 
-        this.AvailableFilterValues.Clear();
-
-        var activeTab = this.GetActiveTab(this._selectedTabIndex);
-        var filterKeySelector = activeTab?.FilterKeySelector;
-
-        if (filterKeySelector == null) return;
-
-        // Get items for current tab (lazy loaded or filtered)
-        var tabItems = this.GetItemsForCurrentTab();
-
-        // Extract unique filter values
-        var values = tabItems
-            .Select(filterKeySelector)
+        var snapshot = await this.GetSnapshotForCurrentTabAsync(CancellationToken.None);
+        var values = snapshot
+            .Select(s => s.FilterKey)
             .Where(key => !string.IsNullOrEmpty(key))
             .Distinct()
-            .OrderBy(key => key);
+            .OrderBy(key => key)
+            .ToList();
 
-        foreach (var value in values)
-            this.AvailableFilterValues.Add(value);
+        await this._dispatcher.InvokeAsync(() => {
+            this.AvailableFilterValues.Clear();
+            foreach (var value in values)
+                this.AvailableFilterValues.Add(value);
+        }, DispatcherPriority.Background);
     }
 
     private TabDefinition<TItem>? GetActiveTab(int selectedIndex) =>
@@ -256,36 +254,56 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     }
 
     /// <summary>
-    ///     Gets items for the current tab using lazy loading with caching.
-    ///     Loads items from ItemProvider on first access and caches them.
+    ///     Builds a snapshot for the current tab in Revit context.
+    ///     Snapshot is cached per-tab to avoid repeated Revit API access during typing.
     /// </summary>
-    private List<TItem> GetItemsForCurrentTab() {
-        var tab = GetActiveTab(this.Tabs, this._selectedTabIndex);
+    private async Task<List<PaletteSearchSnapshot<TItem>>> GetSnapshotForCurrentTabAsync(CancellationToken ct) {
+        var tabIndex = this._selectedTabIndex;
+        if (this._snapshotTabIndex == tabIndex && this._currentSnapshot.Count > 0)
+            return this._currentSnapshot;
 
-        // Use ItemProvider with caching (all palettes now use lazy loading)
-        if (tab?.ItemProvider != null) {
-            // Check cache first
-            if (this._tabItemsCache.TryGetValue(this._selectedTabIndex, out var cached))
-                return cached;
+        await this._snapshotGate.WaitAsync(ct);
+        try {
+            if (this._snapshotTabIndex == tabIndex && this._currentSnapshot.Count > 0)
+                return this._currentSnapshot;
 
-            // Load items from provider
-            var items = tab.ItemProvider().ToList();
-            this._tabItemsCache[this._selectedTabIndex] = items;
+            var tab = GetActiveTab(this.Tabs, tabIndex);
+            if (tab?.ItemProvider == null)
+                return [];
 
-            // Build search cache for this tab only
-            this._searchService.BuildSearchCache(items);
+            var snapshot = await PaletteThreading.RunRevitAsync(() => {
+                var items = tab.ItemProvider().ToList();
+                var filterKeySelector = tab.FilterKeySelector;
 
-            return items;
+                var list = new List<PaletteSearchSnapshot<TItem>>(items.Count);
+                foreach (var item in items) {
+                    var metadata = this._searchService.BuildMetadata(item);
+                    var filterKey = filterKeySelector?.Invoke(item) ?? string.Empty;
+                    var usageKey = this._searchService.GetUsageKey(item);
+                    list.Add(new PaletteSearchSnapshot<TItem>(item, metadata, filterKey, usageKey));
+                }
+
+                return list;
+            }, ct);
+
+            if (ct.IsCancellationRequested || snapshot == null) return [];
+
+            this._currentSnapshot = snapshot;
+            this._snapshotTabIndex = tabIndex;
+            return snapshot;
+        } finally {
+            this._snapshotGate.Release();
         }
-
-        // Fallback: empty list if no ItemProvider (should not happen with current API)
-        return new List<TItem>();
     }
 
     /// <summary>
     ///     Filters items using 3-stage filtering: Tab -> Category Filter -> Search
     /// </summary>
     private void FilterItems() {
+        _ = this.FilterItemsAsync();
+    }
+
+    private async Task FilterItemsAsync() {
         this._filterCts?.Cancel();
         this._filterCts?.Dispose();
         this._filterCts = new CancellationTokenSource();
@@ -298,22 +316,23 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
         var searchText = this.SearchText;
         var tabs = this.Tabs;
 
-        _ = Task.Run(() => {
+        try {
             if (token.IsCancellationRequested) return;
 
-            // Get items for current tab (always lazy loaded via ItemProvider)
-            // Must get items on UI thread since it accesses cache
-            var items = this._dispatcher.Invoke(() => this.GetItemsForCurrentTab());
+            var snapshot = await this.GetSnapshotForCurrentTabAsync(token);
             var activeTab = GetActiveTab(tabs, selectedTabIndex);
-
-            // Stage 2: Category filter (use current tab's filter key selector)
             var currentFilterKeySelector = activeTab?.FilterKeySelector;
 
-            if (currentFilterKeySelector != null && !string.IsNullOrEmpty(selectedFilterValue))
-                items = items.Where(item => currentFilterKeySelector(item) == selectedFilterValue).ToList();
+            var filteredSnapshots = snapshot;
+            if (currentFilterKeySelector != null && !string.IsNullOrEmpty(selectedFilterValue)) {
+                filteredSnapshots = snapshot
+                    .Where(s => s.FilterKey == selectedFilterValue)
+                    .ToList();
+            }
 
-            // Stage 3: Search filter
-            var filtered = this._searchService.Filter(searchText, items);
+            var filteredItems = await PaletteThreading.RunBackgroundAsync(
+                () => this._searchService.Filter(searchText, filteredSnapshots),
+                token);
 
             if (token.IsCancellationRequested) return;
 
@@ -321,12 +340,12 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
             // This ensures list items appear quickly on first open, while keeping UI responsive during typing
             var priority = this._isInitialLoad ? DispatcherPriority.Render : DispatcherPriority.Background;
 
-            this._dispatcher.Invoke(() => {
+            await this._dispatcher.InvokeAsync(() => {
                 if (token.IsCancellationRequested) return;
                 if (sequence != this._filterSequence) return;
 
                 // Use efficient differential update instead of Clear/Add
-                this.UpdateCollectionEfficiently(this.FilteredItems, filtered);
+                this.UpdateCollectionEfficiently(this.FilteredItems, filteredItems);
 
                 // Reset selection to first item
                 this.SelectedIndex = this.FilteredItems.Count > 0 ? 0 : -1;
@@ -343,7 +362,9 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
                 // Mark initial load as complete
                 this._isInitialLoad = false;
             }, priority);
-        }, token);
+        } catch (OperationCanceledException) {
+            // Swallow cancellations
+        }
     }
 
     /// <summary>
@@ -397,8 +418,6 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     }
 
     partial void OnSelectedItemChanged(TItem value) {
-        this._previousSelectedItem = value;
-
         // Restart selection debounce timer
         this._selectionDebounceTimer.Stop();
         this._selectionDebounceTimer.Start();
@@ -417,7 +436,10 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     ///     Useful when external state changes require refreshing the tab's data.
     /// </summary>
     public void InvalidateTabCache(int tabIndex) {
-        _ = this._tabItemsCache.Remove(tabIndex);
+        if (this._snapshotTabIndex == tabIndex) {
+            this._snapshotTabIndex = -1;
+            this._currentSnapshot = [];
+        }
 
         // If we're currently on the invalidated tab, trigger a refresh
         if (tabIndex == this._selectedTabIndex) {

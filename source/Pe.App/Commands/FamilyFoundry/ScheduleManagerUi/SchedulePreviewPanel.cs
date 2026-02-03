@@ -4,6 +4,7 @@ using Pe.Ui.Core;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Threading.Tasks;
 using WpfUiRichTextBox = Wpf.Ui.Controls.RichTextBox;
 
 namespace Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
@@ -13,8 +14,8 @@ namespace Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
 ///     Implements ISidebarPanel for auto-wiring with PaletteFactory.
 ///     Preview data building is injected via delegate to support complex tab-specific logic.
 /// </summary>
-public class SchedulePreviewPanel : UserControl, ISidebarPanel<ISchedulePaletteItem> {
-    private readonly Func<ISchedulePaletteItem?, CancellationToken, SchedulePreviewData?> _previewBuilder;
+public class SchedulePreviewPanel : PaletteSidebarPanel<ISchedulePaletteItem, SchedulePreviewData> {
+    private readonly Func<ISchedulePaletteItem?, CancellationToken, Task<SchedulePreviewData?>> _previewBuilder;
     private readonly WpfUiRichTextBox _richTextBox;
 
     /// <summary>
@@ -24,7 +25,7 @@ public class SchedulePreviewPanel : UserControl, ISidebarPanel<ISchedulePaletteI
     ///     Delegate that builds SchedulePreviewData from an ISchedulePaletteItem and cancellation token.
     ///     This delegate should handle caching and context updates internally and respect ct when doing work.
     /// </param>
-    public SchedulePreviewPanel(Func<ISchedulePaletteItem?, CancellationToken, SchedulePreviewData?> previewBuilder) {
+    public SchedulePreviewPanel(Func<ISchedulePaletteItem?, CancellationToken, Task<SchedulePreviewData?>> previewBuilder) {
         this._previewBuilder = previewBuilder;
 
         // Palette handles sidebar padding and scrolling - just provide the content
@@ -41,19 +42,14 @@ public class SchedulePreviewPanel : UserControl, ISidebarPanel<ISchedulePaletteI
         this.Content = this._richTextBox;
     }
 
-    /// <inheritdoc />
-    UIElement ISidebarPanel<ISchedulePaletteItem>.Content => this;
-
-    /// <inheritdoc />
-    public void Clear() => this._richTextBox.Document = FlowDocumentBuilder.Create();
-
-    /// <inheritdoc />
-    public void Update(ISchedulePaletteItem? item, CancellationToken ct) {
-        if (ct.IsCancellationRequested) return;
-        var data = this._previewBuilder(item, ct);
-        if (ct.IsCancellationRequested) return;
-        this.UpdateContent(data);
+    protected override async Task<SchedulePreviewData?> BuildDataAsync(ISchedulePaletteItem item, CancellationToken ct) {
+        if (ct.IsCancellationRequested) return null;
+        return await this._previewBuilder(item, ct);
     }
+
+    protected override void RenderData(SchedulePreviewData? data) => this.UpdateContent(data);
+
+    protected override void ClearContent() => this._richTextBox.Document = FlowDocumentBuilder.Create();
 
     private void UpdateContent(SchedulePreviewData data) {
         if (data == null) {

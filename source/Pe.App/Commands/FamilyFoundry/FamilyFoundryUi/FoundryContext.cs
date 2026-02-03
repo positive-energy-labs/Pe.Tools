@@ -20,5 +20,4 @@ public class FoundryContext<TProfile> where TProfile : BaseProfileSettings {
     // UI state: what's currently selected and displayed
     public ProfileListItem SelectedProfile { get; set; }
     public PreviewData PreviewData { get; set; }
-    public Dictionary<string, PreviewData> PreviewCache { get; } = new();
 }

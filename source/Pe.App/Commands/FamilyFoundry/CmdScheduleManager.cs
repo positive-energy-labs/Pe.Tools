@@ -12,6 +12,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
 
@@ -35,7 +36,10 @@ public class CmdScheduleManager : IExternalCommand {
 
             // Context for Schedule tabs
             var context = new ScheduleManagerContext {
-                Doc = doc, UiDoc = uiDoc, Storage = storage, SettingsManager = settingsManager
+                Doc = doc,
+                UiDoc = uiDoc,
+                Storage = storage,
+                SettingsManager = settingsManager
             };
 
             // Collect items for both tabs
@@ -43,19 +47,24 @@ public class CmdScheduleManager : IExternalCommand {
             var batchItems = BatchScheduleListItem.DiscoverProfiles(batchSubDir);
 
             // Create preview panel with injected preview building logic
-            var previewPanel = new SchedulePreviewPanel((item, _) => {
+            var previewPanel = new SchedulePreviewPanel(async (item, ct) => {
                 if (item == null) return null;
-                if (item.TabType == ScheduleTabType.Create) {
-                    this.BuildPreviewData(item.GetCreateItem(), context);
-                    return context.PreviewData;
-                }
 
-                if (item.TabType == ScheduleTabType.Batch) {
-                    var batchItem = item.GetBatchItem();
-                    return batchItem != null ? this.BuildBatchPreview(batchItem) : null;
-                }
+                return await Task.Run(() => {
+                    if (ct.IsCancellationRequested) return null;
 
-                return null;
+                    if (item.TabType == ScheduleTabType.Create) {
+                        this.BuildPreviewData(item.GetCreateItem(), context);
+                        return context.PreviewData;
+                    }
+
+                    if (item.TabType == ScheduleTabType.Batch) {
+                        var batchItem = item.GetBatchItem();
+                        return batchItem != null ? this.BuildBatchPreview(batchItem) : null;
+                    }
+
+                    return null;
+                }, ct);
             });
 
             // Create the palette with tabs - each tab defines its own items and actions
@@ -127,16 +136,8 @@ public class CmdScheduleManager : IExternalCommand {
             return;
         }
 
-        // Check cache first
-        if (context.PreviewCache.TryGetValue(profileItem.TextPrimary, out var cachedPreview)) {
-            context.PreviewData = cachedPreview;
-            context.SelectedProfile = profileItem;
-            return;
-        }
-
         context.SelectedProfile = profileItem;
         context.PreviewData = this.TryLoadPreviewData(profileItem, context);
-        context.PreviewCache[profileItem.TextPrimary] = context.PreviewData;
     }
 
     private SchedulePreviewData TryLoadPreviewData(ScheduleListItem profileItem, ScheduleManagerContext context) {
@@ -161,7 +162,8 @@ public class CmdScheduleManager : IExternalCommand {
         var profileJson = JsonSerializer.Serialize(
             profile,
             new JsonSerializerOptions {
-                WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                WriteIndented = true,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             });
 
         return new SchedulePreviewData {
@@ -186,7 +188,9 @@ public class CmdScheduleManager : IExternalCommand {
     private static SchedulePreviewData
         CreateSanitizationErrorPreview(ScheduleListItem profileItem, JsonSanitizationException ex) {
         var preview = new SchedulePreviewData {
-            ProfileName = profileItem.TextPrimary, IsValid = false, RemainingErrors = []
+            ProfileName = profileItem.TextPrimary,
+            IsValid = false,
+            RemainingErrors = []
         };
 
         if (ex.AddedProperties.Any())
@@ -600,7 +604,6 @@ public class ScheduleManagerContext {
     // UI state: what's currently selected and displayed
     public ScheduleListItem SelectedProfile { get; set; }
     public SchedulePreviewData PreviewData { get; set; }
-    public Dictionary<string, SchedulePreviewData> PreviewCache { get; } = new();
 }
 
 public enum ScheduleTabType {

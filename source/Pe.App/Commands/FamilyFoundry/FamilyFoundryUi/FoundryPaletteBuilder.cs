@@ -7,6 +7,8 @@ using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 
@@ -97,9 +99,11 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         };
 
         // Create preview panel with injected preview building logic
-        var previewPanel = new ProfilePreviewPanel((item, ct) => {
-            this.BuildPreviewData(item, context, ct);
-            return context.PreviewData;
+        var previewPanel = new ProfilePreviewPanel(async (item, ct) => {
+            var data = await this.BuildPreviewDataAsync(item, context, ct);
+            context.SelectedProfile = item;
+            context.PreviewData = data;
+            return data;
         });
 
         // Store window reference to be captured in actions
@@ -132,40 +136,24 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         return window;
     }
 
-    private void BuildPreviewData(
+    private async Task<PreviewData?> BuildPreviewDataAsync(
         ProfileListItem profileItem,
         FoundryContext<TProfile> context,
         CancellationToken ct
     ) {
-        if (ct.IsCancellationRequested) return;
-        if (profileItem == null) {
-            context.PreviewData = null;
-            return;
-        }
+        if (ct.IsCancellationRequested) return null;
+        if (profileItem == null) return null;
 
-        if (ct.IsCancellationRequested) return;
-
-        // Check cache first
-        if (context.PreviewCache.TryGetValue(profileItem.TextPrimary, out var cachedPreview)) {
-            context.PreviewData = cachedPreview;
-            context.SelectedProfile = profileItem;
-            return;
-        }
-
-        if (ct.IsCancellationRequested) return;
-
-        context.SelectedProfile = profileItem;
-        context.PreviewData = this.TryLoadPreviewData(profileItem, context, ct);
-        context.PreviewCache[profileItem.TextPrimary] = context.PreviewData;
+        return await this.TryLoadPreviewDataAsync(profileItem, context, ct);
     }
 
-    private PreviewData TryLoadPreviewData(
+    private async Task<PreviewData?> TryLoadPreviewDataAsync(
         ProfileListItem profileItem,
         FoundryContext<TProfile> context,
         CancellationToken ct
     ) {
         try {
-            return this.LoadValidPreviewData(profileItem, context, ct);
+            return await this.LoadValidPreviewDataAsync(profileItem, context, ct);
         } catch (JsonValidationException ex) {
             return CreateValidationErrorPreview(profileItem, ex);
         } catch (JsonSanitizationException ex) {
@@ -175,7 +163,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         }
     }
 
-    private PreviewData LoadValidPreviewData(
+    private async Task<PreviewData?> LoadValidPreviewDataAsync(
         ProfileListItem profileItem,
         FoundryContext<TProfile> context,
         CancellationToken ct
@@ -195,17 +183,19 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         if (ct.IsCancellationRequested) return null;
 
         // Build queue structure for preview (using temp file just for structure, not storing definitions)
-        using var previewTempFile = new TempSharedParamFile(context.Doc);
-        var previewApsParamData = BaseProfileSettings.ConvertToSharedParameterDefinitions(
-            apsParamModels, previewTempFile);
+        var previewApsParamData = await PaletteThreading.RunRevitAsync(() => {
+            using var previewTempFile = new TempSharedParamFile(context.Doc);
+            return BaseProfileSettings.ConvertToSharedParameterDefinitions(apsParamModels, previewTempFile);
+        }, ct);
 
-        if (ct.IsCancellationRequested) return null;
+        if (ct.IsCancellationRequested || previewApsParamData == null) return null;
 
         var queue = this._queueBuilder(profile, previewApsParamData);
         var operationMetadata = queue.GetExecutableMetadata();
-        var families = profile.GetFamilies(context.Doc);
 
-        if (ct.IsCancellationRequested) return null;
+        var families = await PaletteThreading.RunRevitAsync(() => profile.GetFamilies(context.Doc), ct);
+
+        if (ct.IsCancellationRequested || families == null) return null;
 
         // Extract APS parameter info
         var apsParameters = apsParamModels.Select(p => new ParameterInfo(
@@ -230,7 +220,8 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         var profileJson = JsonSerializer.Serialize(
             profile,
             new JsonSerializerOptions {
-                WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                WriteIndented = true,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             });
 
         if (ct.IsCancellationRequested) return null;

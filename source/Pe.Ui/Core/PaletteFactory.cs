@@ -8,7 +8,6 @@ namespace Pe.Ui.Core;
 
 /// <summary>
 ///     Defines a single tab in a tabbed palette.
-///     Filter predicate is null for "All" tabs that show everything.
 /// </summary>
 /// <typeparam name="TItem">The palette item type</typeparam>
 public class TabDefinition<TItem> where TItem : class, IPaletteListItem {
@@ -18,9 +17,8 @@ public class TabDefinition<TItem> where TItem : class, IPaletteListItem {
     public required string Name { get; init; }
 
     /// <summary>
-    ///     Lazy item provider for this tab. Takes precedence over Filter if provided.
+    ///     Lazy item provider for this tab.
     ///     Enables per-tab lazy loading - items are only collected when the tab is first activated.
-    ///     Default: null (use shared item collection with Filter)
     /// </summary>
     /// <example>
     ///     <code>
@@ -28,12 +26,6 @@ public class TabDefinition<TItem> where TItem : class, IPaletteListItem {
     ///     </code>
     /// </example>
     public Func<IEnumerable<TItem>>? ItemProvider { get; init; }
-
-    /// <summary>
-    ///     Filter predicate for items in this tab. Null means show all items (no filtering).
-    ///     Only used if ItemProvider is null (i.e., using shared item collection).
-    /// </summary>
-    public Func<TItem, bool>? Filter { get; init; }
 
     /// <summary>
     ///     Function that extracts a key from each item, enabling dropdown filtering by those keys.
@@ -132,10 +124,13 @@ public static class PaletteFactory {
         }
 
         // Create search service - with or without persistence based on configuration
-        var searchService = options.Persistence != null
-            ? new SearchFilterService<TItem>(options.Persistence.Value.Storage,
-                options.Persistence.Value.PersistenceKey, options.SearchConfig)
-            : new SearchFilterService<TItem>(options.SearchConfig);
+        SearchFilterService<TItem> searchService;
+        if (options.Persistence != null) {
+            var (storage, key) = options.Persistence.Value;
+            searchService = new SearchFilterService<TItem>(options.SearchConfig, storage, key);
+        } else {
+            searchService = new SearchFilterService<TItem>(options.SearchConfig);
+        }
 
         // Create view model with tabs (lazy loading via ItemProvider)
         var viewModel = new PaletteViewModel<TItem>(
@@ -387,14 +382,14 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
 
     /// <summary>
     ///     Tab definitions for tabbed palettes. If null or empty, no tab bar is shown.
-    ///     Each tab can have a filter predicate; null filter means show all items.
+    ///     Each tab must define ItemProvider and Actions.
     /// </summary>
     /// <example>
     ///     <code>
     ///     Tabs = [
-    ///         new() { Name = "All", Filter = null },
-    ///         new() { Name = "Views", Filter = i => i.ItemType == ViewItemType.View },
-    ///         new() { Name = "Schedules", Filter = i => i.ItemType == ViewItemType.Schedule }
+    ///         new() { Name = "All", ItemProvider = () => GetAll(), Actions = actions },
+    ///         new() { Name = "Views", ItemProvider = () => GetViews(), Actions = actions },
+    ///         new() { Name = "Schedules", ItemProvider = () => GetSchedules(), Actions = actions }
     ///     ]
     ///     </code>
     /// </example>
