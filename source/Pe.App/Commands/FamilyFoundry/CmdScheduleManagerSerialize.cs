@@ -51,17 +51,14 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
                     Persistence = (storage, item => item.TextPrimary),
                     SidebarPanel = previewPanel,
                     Tabs = [
-                        new TabDefinition<ScheduleSerializePaletteItem> {
-                            Name = "All",
-                            ItemProvider = () => serializeItems,
-                            FilterKeySelector = i => i.TextPill ?? string.Empty,
-                            Actions = [
-                                new PaletteAction<ScheduleSerializePaletteItem> {
-                                    Name = "Serialize",
-                                    Execute = item => this.HandleSerialize(storage, item),
-                                    CanExecute = _ => true
-                                }
-                            ]
+                        new TabDefinition<ScheduleSerializePaletteItem>(
+                            "All",
+                            () => serializeItems,
+                            new PaletteAction<ScheduleSerializePaletteItem> {
+                                Name = "Serialize",
+                                Execute = item => this.HandleSerialize(storage, item),                            }
+                        ) {
+                            FilterKeySelector = i => i.TextPill ?? string.Empty
                         }
                     ]
                 });
@@ -83,7 +80,8 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
             var profileJson = JsonSerializer.Serialize(
                 spec,
                 new JsonSerializerOptions {
-                    WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                    WriteIndented = true,
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
                 });
 
             return new ScheduleSerializePreviewData {

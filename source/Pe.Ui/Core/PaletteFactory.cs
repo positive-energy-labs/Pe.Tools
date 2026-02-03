@@ -10,11 +10,29 @@ namespace Pe.Ui.Core;
 ///     Defines a single tab in a tabbed palette.
 /// </summary>
 /// <typeparam name="TItem">The palette item type</typeparam>
-public class TabDefinition<TItem> where TItem : class, IPaletteListItem {
+public sealed class TabDefinition<TItem> where TItem : class, IPaletteListItem {
+    public TabDefinition(
+        string name,
+        Func<IEnumerable<TItem>> itemProvider,
+        IEnumerable<PaletteAction<TItem>> actions
+    ) {
+        this.Name = string.IsNullOrWhiteSpace(name)
+            ? throw new ArgumentException("Tab name is required.", nameof(name))
+            : name;
+        this.ItemProvider = itemProvider ?? throw new ArgumentNullException(nameof(itemProvider));
+        this.Actions = actions?.ToList() ?? throw new ArgumentNullException(nameof(actions));
+    }
+
+    public TabDefinition(
+        string name,
+        Func<IEnumerable<TItem>> itemProvider,
+        params PaletteAction<TItem>[] actions
+    ) : this(name, itemProvider, (IEnumerable<PaletteAction<TItem>>)actions) { }
+
     /// <summary>
     ///     Display name for the tab.
     /// </summary>
-    public required string Name { get; init; }
+    public string Name { get; }
 
     /// <summary>
     ///     Lazy item provider for this tab.
@@ -25,7 +43,7 @@ public class TabDefinition<TItem> where TItem : class, IPaletteListItem {
     ///     ItemProvider = () => FamilyActions.CollectFamilyTypes(doc)
     ///     </code>
     /// </example>
-    public Func<IEnumerable<TItem>>? ItemProvider { get; init; }
+    public Func<IEnumerable<TItem>> ItemProvider { get; }
 
     /// <summary>
     ///     Function that extracts a key from each item, enabling dropdown filtering by those keys.
@@ -55,7 +73,7 @@ public class TabDefinition<TItem> where TItem : class, IPaletteListItem {
     ///     ]
     ///     </code>
     /// </example>
-    public List<PaletteAction<TItem>> Actions { get; init; } = [];
+    public List<PaletteAction<TItem>> Actions { get; }
 }
 
 /// <summary>
@@ -69,16 +87,19 @@ public class TabDefinition<TItem> where TItem : class, IPaletteListItem {
 ///         new PaletteOptions&lt;SchedulePaletteItem&gt; {
 ///             Persistence = (storage, item => item.Schedule.Id.ToString()),
 ///             SearchConfig = SearchConfig.PrimaryAndSecondary(),
-///             Tabs = [new TabDefinition<SchedulePaletteItem>
-///             {
-///             Name = "All",
-///             ItemProvider = () => CollectSchedules(doc),
-///             FilterKeySelector = item => item.TextPill,
-///             Actions = [
-///             new() { Name = "Open", Execute = async item => OpenSchedule(item) }
+///             Tabs = [
+///                 new TabDefinition<SchedulePaletteItem>(
+///                     "All",
+///                     () => CollectSchedules(doc),
+///                     new PaletteAction<SchedulePaletteItem> {
+///                         Name = "Open",
+///                         Execute = async item => OpenSchedule(item)
+///                     }
+///                 ) {
+///                     FilterKeySelector = item => item.TextPill
+///                 }
 ///             ]
-///             }]
-///             });
+///         });
 ///             window.Show();
 ///     </code>
 /// </example>
@@ -87,11 +108,13 @@ public class TabDefinition<TItem> where TItem : class, IPaletteListItem {
 ///     <code>
 ///     var window = PaletteFactory.Create("My Palette",
 ///         new PaletteOptions&lt;MyItem&gt; {
-///             Tabs = [new() {
-///                 Name = "All",
-///                 ItemProvider = () => GetItems(),
-///                 Actions = [new() { Name = "Execute", Execute = async item => DoAction(item) }]
-///             }]
+///             Tabs = [
+///                 new TabDefinition<MyItem>(
+///                     "All",
+///                     () => GetItems(),
+///                     new PaletteAction<MyItem> { Name = "Execute", Execute = async item => DoAction(item) }
+///                 )
+///             ]
 ///         });
 ///     window.Show();
 ///     </code>
@@ -108,19 +131,17 @@ public static class PaletteFactory {
         string title,
         PaletteOptions<TItem> options
     ) where TItem : class, IPaletteListItem {
-        options ??= new PaletteOptions<TItem>();
-
-        // Validation: tabs are now required
-        if (options.Tabs == null || !options.Tabs.Any())
+        // Validation: tabs are required
+        if (options.Tabs == null || options.Tabs.Count == 0)
             throw new InvalidOperationException(
-                "Tabs are required. Each tab must define ItemProvider and optionally Actions.");
+                "Tabs are required. Each tab must define ItemProvider and Actions.");
 
-        // Validation: all tabs must have ItemProvider
-        var tabsWithoutProvider = options.Tabs.Where(t => t.ItemProvider == null).ToList();
-        if (tabsWithoutProvider.Any()) {
+        // Validation: all tabs must have actions
+        var tabsWithoutActions = options.Tabs.Where(t => t.Actions == null || t.Actions.Count == 0).ToList();
+        if (tabsWithoutActions.Count > 0) {
             throw new InvalidOperationException(
-                $"All tabs must have ItemProvider defined. " +
-                $"Tabs without ItemProvider: {string.Join(", ", tabsWithoutProvider.Select(t => t.Name))}");
+                $"All tabs must define Actions. " +
+                $"Tabs without Actions: {string.Join(", ", tabsWithoutActions.Select(t => t.Name))}");
         }
 
         // Create search service - with or without persistence based on configuration

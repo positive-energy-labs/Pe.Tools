@@ -124,11 +124,12 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
                 SearchConfig = SearchConfig.PrimaryAndSecondary(),
                 SidebarPanel = previewPanel,
                 Tabs = [
-                    new TabDefinition<ProfileListItem> {
-                        Name = "All",
-                        ItemProvider = () => profiles,
-                        FilterKeySelector = item => string.IsNullOrEmpty(item.ExtendsValue) ? "Base" : "Extended",
-                        Actions = paletteActions
+                    new TabDefinition<ProfileListItem>(
+                        "All",
+                        () => profiles,
+                        paletteActions
+                    ) {
+                        FilterKeySelector = item => string.IsNullOrEmpty(item.ExtendsValue) ? "Base" : "Extended"
                     }
                 ]
             });

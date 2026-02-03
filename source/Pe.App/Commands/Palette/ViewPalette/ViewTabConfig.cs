@@ -28,30 +28,32 @@ internal static class ViewTabConfig {
         };
 
         return [
-            new TabDefinition<UnifiedViewItem> {
-                Name = "All",
-                ItemProvider = () => ViewActions.CollectAllViews(doc, sheetCache),
-                FilterKeySelector = null,
-                Actions = commonActions
+            new TabDefinition<UnifiedViewItem>(
+                "All",
+                () => ViewActions.CollectAllViews(doc, sheetCache),
+                commonActions
+            ),
+            new TabDefinition<UnifiedViewItem>(
+                "Views",
+                () => ViewActions.CollectViews(doc, sheetCache),
+                commonActions
+            ) {
+                FilterKeySelector = i => i.TextPill
             },
-            new TabDefinition<UnifiedViewItem> {
-                Name = "Views",
-                ItemProvider = () => ViewActions.CollectViews(doc, sheetCache),
-                FilterKeySelector = i => i.TextPill,
-                Actions = commonActions
+            new TabDefinition<UnifiedViewItem>(
+                "Schedules",
+                () => ViewActions.CollectSchedules(doc, sheetCache),
+                commonActions
+            ) {
+                FilterKeySelector = i => i.TextPill
+                //TODO: add "Place on Sheet" and "Open Sheets" actions, see UIDocument.CanPlaceElementType and UIDocument.PostRequestForElementTypePlacement
             },
-            new TabDefinition<UnifiedViewItem> {
-                Name = "Schedules",
-                ItemProvider = () => ViewActions.CollectSchedules(doc, sheetCache),
-                FilterKeySelector = i => i.TextPill,
-                Actions =
-                    commonActions //TODO: add "Place on Sheet" and "Open Sheets" actions, see UIDocument.CanPlaceElementType and UIDocument.PostRequestForElementTypePlacement
-            },
-            new TabDefinition<UnifiedViewItem> {
-                Name = "Sheets",
-                ItemProvider = () => ViewActions.CollectSheets(doc, sheetCache),
-                FilterKeySelector = i => i.TextPill,
-                Actions = commonActions
+            new TabDefinition<UnifiedViewItem>(
+                "Sheets",
+                () => ViewActions.CollectSheets(doc, sheetCache),
+                commonActions
+            ) {
+                FilterKeySelector = i => i.TextPill
             }
         ];
     }

@@ -33,21 +33,19 @@ public class CmdPltCommands : IExternalCommand {
                     Persistence = (persistence, item => item.Command.Value),
                     SearchConfig = SearchConfig.PrimaryAndSecondary(),
                     Tabs = [
-                        new TabDefinition<PostableCommandItem> {
-                            Name = "All",
-                            ItemProvider = () => selectableItems,
-                            Actions = [
-                                new PaletteAction<PostableCommandItem> {
-                                    Name = "Execute",
-                                    Execute = async item => {
-                                        var (success, error) = Global.Revit.Lib.Commands.Execute(uiapp, item.Command);
-                                        if (error is not null) Log.Error("Error: " + error.Message + error.StackTrace);
-                                        if (success) commandHelper.UpdateCommandUsage(item.Command);
-                                    },
-                                    CanExecute = item => Global.Revit.Lib.Commands.IsAvailable(uiapp, item.Command)
-                                }
-                            ]
-                        }
+                        new TabDefinition<PostableCommandItem>(
+                            "All",
+                            () => selectableItems,
+                            new PaletteAction<PostableCommandItem> {
+                                Name = "Execute",
+                                Execute = async item => {
+                                    var (success, error) = Global.Revit.Lib.Commands.Execute(uiapp, item.Command);
+                                    if (error is not null) Log.Error("Error: " + error.Message + error.StackTrace);
+                                    if (success) commandHelper.UpdateCommandUsage(item.Command);
+                                },
+                                CanExecute = item => Global.Revit.Lib.Commands.IsAvailable(uiapp, item.Command)
+                            }
+                        )
                     ]
                 });
             window.Show();

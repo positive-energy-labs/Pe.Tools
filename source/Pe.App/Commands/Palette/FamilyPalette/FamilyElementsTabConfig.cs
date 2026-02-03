@@ -15,102 +15,90 @@ internal static class FamilyElementsTabConfig {
     internal static List<TabDefinition<FamilyElementItem>> CreateTabs(
         FamilyDocument familyDoc
     ) => [
-        new() {
-            Name = "All",
-            ItemProvider = () => FamilyElementsActions.CollectAllElements(familyDoc),
-            FilterKeySelector = i => i.TextPill,
-            Actions = [
-                new PaletteAction<FamilyElementItem> {
-                    Name = "Zoom to Element",
-                    Execute = async item => FamilyElementsActions.HandleZoomToElement(item),
-                    CanExecute = item => item?.ElementType != FamilyElementType.Parameter && item?.ElementId != null
-                },
-                new PaletteAction<FamilyElementItem> {
-                    Name = "Snoop",
-                    Modifiers = ModifierKeys.Alt,
-                    Execute = async item => FamilyElementsActions.HandleSnoop(item)
-                }
-            ]
+        new TabDefinition<FamilyElementItem>(
+            "All",
+            () => FamilyElementsActions.CollectAllElements(familyDoc),
+            new PaletteAction<FamilyElementItem> {
+                Name = "Zoom to Element",
+                Execute = async item => FamilyElementsActions.HandleZoomToElement(item),
+                CanExecute = item => item?.ElementType != FamilyElementType.Parameter && item?.ElementId != null
+            },
+            new PaletteAction<FamilyElementItem> {
+                Name = "Snoop",
+                Modifiers = ModifierKeys.Alt,
+                Execute = async item => FamilyElementsActions.HandleSnoop(item)
+            }
+        ) {
+            FilterKeySelector = i => i.TextPill
         },
-        new() {
-            Name = "Families",
-            ItemProvider = () => FamilyElementsActions.CollectFamilies(familyDoc),
-            FilterKeySelector = i => i.TextPill,
-            Actions = [
-                new PaletteAction<FamilyElementItem> {
-                    Name = "Zoom to Element",
-                    Execute = async item => FamilyElementsActions.HandleZoomToElement(item),
-                    CanExecute = item => item?.ElementId != null
-                },
-                new PaletteAction<FamilyElementItem> {
-                    Name = "Snoop",
-                    Modifiers = ModifierKeys.Alt,
-                    Execute = async item => FamilyElementsActions.HandleSnoop(item)
-                }
-            ]
+        new TabDefinition<FamilyElementItem>(
+            "Families",
+            () => FamilyElementsActions.CollectFamilies(familyDoc),
+            new PaletteAction<FamilyElementItem> {
+                Name = "Zoom to Element",
+                Execute = async item => FamilyElementsActions.HandleZoomToElement(item),
+                CanExecute = item => item?.ElementId != null
+            },
+            new PaletteAction<FamilyElementItem> {
+                Name = "Snoop",
+                Modifiers = ModifierKeys.Alt,
+                Execute = async item => FamilyElementsActions.HandleSnoop(item)
+            }
+        ) {
+            FilterKeySelector = i => i.TextPill
         },
-        new() {
-            Name = "Params",
-            ItemProvider = () => FamilyElementsActions.CollectParameters(familyDoc),
-            FilterKeySelector = i => i.TextPill,
-            Actions = [
-                new PaletteAction<FamilyElementItem> {
-                    Name = "Snoop",
-                    Modifiers = ModifierKeys.Alt,
-                    Execute = async item => FamilyElementsActions.HandleSnoop(item)
-                }
-            ]
+        new TabDefinition<FamilyElementItem>(
+            "Params",
+            () => FamilyElementsActions.CollectParameters(familyDoc),
+            new PaletteAction<FamilyElementItem> {
+                Name = "Snoop",
+                Modifiers = ModifierKeys.Alt,
+                Execute = async item => FamilyElementsActions.HandleSnoop(item)
+            }
+        ) {
+            FilterKeySelector = i => i.TextPill
         },
-        new() {
-            Name = "Dims",
-            ItemProvider = () => FamilyElementsActions.CollectDimensions(familyDoc),
-            FilterKeySelector = null,
-            Actions = [
-                new PaletteAction<FamilyElementItem> {
-                    Name = "Zoom to Element",
-                    Execute = async item => FamilyElementsActions.HandleZoomToElement(item),
-                    CanExecute = item => item?.ElementId != null
-                },
-                new PaletteAction<FamilyElementItem> {
-                    Name = "Snoop",
-                    Modifiers = ModifierKeys.Alt,
-                    Execute = async item => FamilyElementsActions.HandleSnoop(item)
-                }
-            ]
-        },
-        new() {
-            Name = "Ref Planes",
-            ItemProvider = () => FamilyElementsActions.CollectReferencePlanes(familyDoc),
-            FilterKeySelector = null,
-            Actions = [
-                new PaletteAction<FamilyElementItem> {
-                    Name = "Zoom to Element",
-                    Execute = async item => FamilyElementsActions.HandleZoomToElement(item),
-                    CanExecute = item => item?.ElementId != null
-                },
-                new PaletteAction<FamilyElementItem> {
-                    Name = "Snoop",
-                    Modifiers = ModifierKeys.Alt,
-                    Execute = async item => FamilyElementsActions.HandleSnoop(item)
-                }
-            ]
-        },
-        new() {
-            Name = "Connectors",
-            ItemProvider = () => FamilyElementsActions.CollectConnectors(familyDoc),
-            FilterKeySelector = null,
-            Actions = [
-                new PaletteAction<FamilyElementItem> {
-                    Name = "Zoom to Element",
-                    Execute = async item => FamilyElementsActions.HandleZoomToElement(item),
-                    CanExecute = item => item?.ElementId != null
-                },
-                new PaletteAction<FamilyElementItem> {
-                    Name = "Snoop",
-                    Modifiers = ModifierKeys.Alt,
-                    Execute = async item => FamilyElementsActions.HandleSnoop(item)
-                }
-            ]
-        }
+        new TabDefinition<FamilyElementItem>(
+            "Dims",
+            () => FamilyElementsActions.CollectDimensions(familyDoc),
+            new PaletteAction<FamilyElementItem> {
+                Name = "Zoom to Element",
+                Execute = async item => FamilyElementsActions.HandleZoomToElement(item),
+                CanExecute = item => item?.ElementId != null
+            },
+            new PaletteAction<FamilyElementItem> {
+                Name = "Snoop",
+                Modifiers = ModifierKeys.Alt,
+                Execute = async item => FamilyElementsActions.HandleSnoop(item)
+            }
+        ),
+        new TabDefinition<FamilyElementItem>(
+            "Ref Planes",
+            () => FamilyElementsActions.CollectReferencePlanes(familyDoc),
+            new PaletteAction<FamilyElementItem> {
+                Name = "Zoom to Element",
+                Execute = async item => FamilyElementsActions.HandleZoomToElement(item),
+                CanExecute = item => item?.ElementId != null
+            },
+            new PaletteAction<FamilyElementItem> {
+                Name = "Snoop",
+                Modifiers = ModifierKeys.Alt,
+                Execute = async item => FamilyElementsActions.HandleSnoop(item)
+            }
+        ),
+        new TabDefinition<FamilyElementItem>(
+            "Connectors",
+            () => FamilyElementsActions.CollectConnectors(familyDoc),
+            new PaletteAction<FamilyElementItem> {
+                Name = "Zoom to Element",
+                Execute = async item => FamilyElementsActions.HandleZoomToElement(item),
+                CanExecute = item => item?.ElementId != null
+            },
+            new PaletteAction<FamilyElementItem> {
+                Name = "Snoop",
+                Modifiers = ModifierKeys.Alt,
+                Execute = async item => FamilyElementsActions.HandleSnoop(item)
+            }
+        )
     ];
 }

@@ -39,26 +39,23 @@ public class CmdPltTasks : IExternalCommand {
                     Persistence = (persistence, item => item.Id),
                     SearchConfig = SearchConfig.PrimaryAndSecondary(),
                     Tabs = [
-                        new TabDefinition<TaskItem> {
-                            Name = "All",
-                            ItemProvider = () => taskItems,
-                            FilterKeySelector = item => item.Task.Category ?? string.Empty,
-                            Actions = [
-                                new PaletteAction<TaskItem> {
-                                    Name = "Execute",
-                                    Execute = async item => {
-                                        try {
-                                            Console.WriteLine($"Executing task: {item.Task.Name}");
-                                            await item.Task.ExecuteAsync(uiapp);
-                                            Console.WriteLine($"Task '{item.Task.Name}' completed\n");
-                                        } catch (Exception ex) {
-                                            Console.WriteLine($"Task '{item.Task.Name}' failed: {ex.Message}");
-                                            Console.WriteLine(ex.StackTrace);
-                                        }
-                                    },
-                                    CanExecute = _ => true
-                                }
-                            ]
+                        new TabDefinition<TaskItem>(
+                            "All",
+                            () => taskItems,
+                            new PaletteAction<TaskItem> {
+                                Name = "Execute",
+                                Execute = async item => {
+                                    try {
+                                        Console.WriteLine($"Executing task: {item.Task.Name}");
+                                        await item.Task.ExecuteAsync(uiapp);
+                                        Console.WriteLine($"Task '{item.Task.Name}' completed\n");
+                                    } catch (Exception ex) {
+                                        Console.WriteLine($"Task '{item.Task.Name}' failed: {ex.Message}");
+                                        Console.WriteLine(ex.StackTrace);
+                                    }
+                                },                            }
+                        ) {
+                            FilterKeySelector = item => item.Task.Category ?? string.Empty
                         }
                     ]
                 });

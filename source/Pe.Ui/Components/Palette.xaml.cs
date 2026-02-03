@@ -183,16 +183,6 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         // Wire up pin button
         this.PinButton.Click += this.PinButton_Click;
 
-        // Validate: all tabs must have Actions defined (includes single-tab palettes)
-        for (var i = 0; i < viewModel.ActualTabCount; i++) {
-            var tab = viewModel.Tabs[i];
-            if (tab.Actions == null || !tab.Actions.Any()) {
-                throw new InvalidOperationException(
-                    $"Tab {i} ('{tab.Name}') does not have Actions defined. " +
-                    $"All tabs must define Actions. For single-tab palettes, create one tab with ItemProvider and Actions.");
-            }
-        }
-
         // Build per-tab action bindings (includes single-tab palettes)
         this._tabActionBindings = new Dictionary<int, object>();
         for (var i = 0; i < viewModel.ActualTabCount; i++) {
