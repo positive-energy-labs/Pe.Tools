@@ -27,6 +27,8 @@ public class DocumentManager {
         }
     }
 
+    public static IntPtr GetActiveWindow() => uiapp.MainWindowHandle;
+
     public static UIDocument GetActiveUIDocument() => uiapp.ActiveUIDocument;
 
     /// <summary>Gets the active document from the UIApplication. </summary>

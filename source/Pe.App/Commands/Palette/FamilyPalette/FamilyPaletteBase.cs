@@ -53,12 +53,12 @@ public abstract class FamilyPaletteBase : IExternalCommand {
             // Create tab definitions with lazy loading
             var (tabs, instancesOptions) = FamilyTabConfig.CreateTabs(doc, uidoc);
 
-            // Create tray panel for Family Instances tab (index 2)
+            // Create tray panel for Family palette tabs
             PaletteTray? tray = null;
             var availableCategories = new ObservableCollection<string>();
             if (instancesOptions != null) {
                 // Collect available categories for the filter
-                foreach (var category in FamilyActions.CollectFamilyInstanceCategories(doc))
+                foreach (var category in FamilyActions.CollectFamilyCategories(doc, uidoc, instancesOptions))
                     availableCategories.Add(category);
 
                 var trayPanel = new FamilyInstancesTrayPanel(instancesOptions, availableCategories);
@@ -84,14 +84,17 @@ public abstract class FamilyPaletteBase : IExternalCommand {
                         // Wire up property change notifications to reload items when options change
                         if (instancesOptions != null) {
                             instancesOptions.PropertyChanged += (sender, e) => {
-                                // When ShowAnnotationSymbols changes, update the category list
-                                if (e.PropertyName == nameof(FamilyInstancesOptions.ShowAnnotationSymbols)) {
+                                var shouldRefreshCategories = e.PropertyName is nameof(FamilyInstancesOptions.ShowAnnotationSymbols)
+                                    or nameof(FamilyInstancesOptions.FilterByActiveView);
+                                if (shouldRefreshCategories) {
                                     availableCategories.Clear();
-                                    foreach (var category in FamilyActions.CollectFamilyInstanceCategories(doc))
+                                    foreach (var category in FamilyActions.CollectFamilyCategories(doc, uidoc, instancesOptions))
                                         availableCategories.Add(category);
                                 }
 
-                                // Invalidate cache for Family Instances tab (index 2) when any option changes
+                                // Invalidate all Family palette tabs when any option changes
+                                vm.InvalidateTabCache(0);
+                                vm.InvalidateTabCache(1);
                                 vm.InvalidateTabCache(2);
                             };
                         }

@@ -617,7 +617,9 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             if (this._currentSidebar != null) {
                 this.ExpandSidebar(this._currentSidebar.Width);
                 e.Handled = true;
-            } else {
+            }
+            //  TODO: sidebar is more useful primitive and for UX, make the textinfo just be a shortcut to showing info in a sidebar
+            else {
                 // Fallback to tooltip for palettes without sidebar
                 e.Handled = this.ShowPopover(placementTarget => {
                     var tooltipText = item.GetTextInfo?.Invoke();
@@ -727,6 +729,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             this.UpdateTabButtonStates(viewModel.SelectedTabIndex);
             this.ScrollSelectedTabIntoView(viewModel.SelectedTabIndex);
             this.UpdateFilterBoxVisibility(viewModel);
+            this._filterBox?.ResetForTabChange();
 
             // Update attached property with current tab's action binding
             var currentBinding = this.GetActionBindingForTab<TItem>(viewModel.SelectedTabIndex);

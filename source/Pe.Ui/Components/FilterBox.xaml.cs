@@ -95,10 +95,11 @@ public partial class FilterBox : IPopoverExit {
     }
 
     protected void FilterAutoSuggestBox_GotFocus(object sender, RoutedEventArgs e) {
-        if (this._isExpanded) return;
+        if (!this._isExpanded)
+            this.Expand();
 
-        this.Expand();
         this.FilterAutoSuggestBox.Text = string.Empty;
+        this.FilterAutoSuggestBox.RefreshSuggestions();
         e.Handled = true;
     }
 
@@ -131,6 +132,11 @@ public partial class FilterBox : IPopoverExit {
         this._isExpanded = false;
 
         this._collapseStoryboard?.Begin();
+    }
+
+    public void ResetForTabChange() {
+        this.FilterAutoSuggestBox.Text = string.Empty;
+        this.FilterAutoSuggestBox.RefreshSuggestions();
     }
 }
 

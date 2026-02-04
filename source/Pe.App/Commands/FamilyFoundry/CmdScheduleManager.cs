@@ -439,7 +439,7 @@ public class CmdScheduleManager : IExternalCommand {
             var schedulesSubDir = context.SettingsManager.SubDir("schedules");
             var results = new List<(string profileName, bool success, string errorMessage)>();
             var createdSchedules = new List<string>();
-
+            
             foreach (var scheduleFile in batchSettings.ScheduleFiles) {
                 try {
                     // Load the schedule spec

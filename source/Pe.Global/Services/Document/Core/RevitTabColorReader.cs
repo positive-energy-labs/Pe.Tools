@@ -1,9 +1,9 @@
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
 using WpfColor = System.Windows.Media.Color;
+using Pe.Global.Services.Document;
 
 namespace Pe.Global.Services.Document.Core;
 
@@ -88,60 +88,20 @@ public static class RevitTabColorReader {
     }
 
     /// <summary>
-    ///     Gets the main Revit window by enumerating all HWNDs and finding the one with DockingManager
+    ///     Gets the main Revit window using the active Revit window handle.
     /// </summary>
     private static Visual? GetMainRevitWindow() {
         try {
-            var currentProcessId = Process.GetCurrentProcess().Id;
-            var windowsWithDockingManager = new List<IntPtr>();
+            var mainWindowHandle = DocumentManager.GetActiveWindow();
+            if (mainWindowHandle == IntPtr.Zero) return null;
 
-            // Enumerate all top-level windows
-            _ = EnumWindows((hwnd, lParam) => {
-                _ = GetWindowThreadProcessId(hwnd, out var processId);
-
-                // Only check windows belonging to our process
-                if (processId != currentProcessId) return true;
-
-                try {
-                    // Try to get HwndSource for this window
-                    var source = HwndSource.FromHwnd(hwnd);
-                    if (source?.RootVisual == null) return true;
-
-                    // Check if this window contains a DockingManager
-                    var hasDockingManager = source.RootVisual
-                        ?.FindDescendantsByTypeName("DockingManager")
-                        .Any() ?? false;
-
-                    if (hasDockingManager) {
-                        windowsWithDockingManager.Add(hwnd);
-                        return false; // Stop enumeration
-                    }
-                } catch {
-                    // Ignore windows we can't access
-                }
-
-                return true; // Continue enumeration
-            }, IntPtr.Zero);
-
-            // Return the first window with DockingManager
-            if (windowsWithDockingManager.Count > 0) {
-                var hwnd = windowsWithDockingManager[0];
-                var source = HwndSource.FromHwnd(hwnd);
-                // FromHwnd can return null if the window is invalid or destroyed
-                if (source?.RootVisual is Visual rootVisual) return rootVisual;
-            }
-
-            return null;
+            var source = HwndSource.FromHwnd(mainWindowHandle);
+            // FromHwnd can return null if the window is invalid or destroyed
+            return source?.RootVisual as Visual;
         } catch {
             return null;
         }
     }
-
-    [DllImport("user32.dll")]
-    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
     /// <summary>
     ///     Extension method to find all descendants of a specific type in the WPF visual tree
@@ -179,7 +139,4 @@ public static class RevitTabColorReader {
                 yield return descendant;
         }
     }
-
-    // P/Invoke declarations
-    private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
 }
