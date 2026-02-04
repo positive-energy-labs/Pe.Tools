@@ -1,5 +1,6 @@
 using Pe.Global.Services.Document;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
@@ -245,16 +246,6 @@ public class EphemeralWindow : Window {
                 // Don't restore focus if: Alt+Tab is active, switching to another app, or Revit is already foreground
                 var shouldRestoreFocus = !isAltTabActive && !isSwitchingToOtherApp && !isRevitAlreadyForeground;
 
-                var actionType = isAltTabActive
-                    ? $"Alt+Tab active (target: {this.GetWindowTitle(targetWindow)})"
-                    : targetWindow == IntPtr.Zero
-                        ? "Click outside (desktop/void)"
-                        : targetWindow == revitHandle
-                            ? isRevitAlreadyForeground
-                                ? "Clicking Revit (already foreground)"
-                                : "Switching to Revit"
-                            : $"Switching to: {this.GetWindowTitle(targetWindow)}";
-
                 // Use Dispatcher to avoid issues with closing during message processing
                 _ = this.Dispatcher.BeginInvoke(new Action(() => {
                     if (!this._isClosing) this.CloseWindow(shouldRestoreFocus);
@@ -263,32 +254,6 @@ public class EphemeralWindow : Window {
         }
 
         return IntPtr.Zero;
-    }
-
-    private string GetWindowTitle(IntPtr hwnd) {
-        if (hwnd == IntPtr.Zero) return "null";
-
-        try {
-            const int maxLength = 256;
-            var title = new StringBuilder(maxLength);
-            _ = GetWindowText(hwnd, title, maxLength);
-            var titleText = title.ToString();
-
-            if (string.IsNullOrEmpty(titleText)) {
-                // Try to get process name instead
-                _ = GetWindowThreadProcessId(hwnd, out var processId);
-                try {
-                    var process = Process.GetProcessById((int)processId);
-                    return $"[Process: {process.ProcessName}]";
-                } catch {
-                    return $"[HWND: {hwnd}]";
-                }
-            }
-
-            return titleText;
-        } catch {
-            return $"[HWND: {hwnd}]";
-        }
     }
 
     private const int GWL_EXSTYLE = -20;
