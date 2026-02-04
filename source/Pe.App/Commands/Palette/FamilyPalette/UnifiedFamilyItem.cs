@@ -19,25 +19,20 @@ public enum FamilyItemType {
 ///     Enables a single tabbed palette for all family-related elements in project documents.
 /// </summary>
 public class UnifiedFamilyItem : IPaletteListItem {
-    private readonly Lazy<string> _textSecondary;
 
     public UnifiedFamilyItem(Family family) {
         this.ItemType = FamilyItemType.Family;
         this.Family = family;
-        this._textSecondary = new Lazy<string>(this.GetFamilyTypeNames);
     }
 
     public UnifiedFamilyItem(FamilySymbol familySymbol) {
         this.ItemType = FamilyItemType.FamilyType;
         this.FamilySymbol = familySymbol;
-        // Family name is a simple property access, no need for lazy
-        this._textSecondary = new Lazy<string>(() => familySymbol.Family.Name);
     }
 
     public UnifiedFamilyItem(FamilyInstance familyInstance) {
         this.ItemType = FamilyItemType.FamilyInstance;
         this.FamilyInstance = familyInstance;
-        this._textSecondary = new Lazy<string>(this.GetInstanceLocation);
     }
 
     /// <summary>
@@ -64,33 +59,25 @@ public class UnifiedFamilyItem : IPaletteListItem {
     ///     Gets a unique persistence key for usage tracking.
     /// </summary>
     public string PersistenceKey => this.ItemType switch {
-        FamilyItemType.Family => $"F:{this.Family!.Id}",
-        FamilyItemType.FamilyType => $"T:{this.FamilySymbol!.Id}",
-        FamilyItemType.FamilyInstance => $"I:{this.FamilyInstance!.Id}",
+        FamilyItemType.Family => $"F:{this.Family?.Id}",
+        FamilyItemType.FamilyType => $"T:{this.FamilySymbol?.Id}",
+        FamilyItemType.FamilyInstance => $"I:{this.FamilyInstance?.Id}",
         _ => string.Empty
     };
 
     public string TextPrimary => this.ItemType switch {
-        FamilyItemType.Family => this.Family!.Name,
-        FamilyItemType.FamilyType => this.FamilySymbol!.Name,
-        FamilyItemType.FamilyInstance => $"{this.FamilyInstance!.Symbol.Name} ({this.FamilyInstance.Id.Value()})",
+        FamilyItemType.Family => this.GetFamily()?.Name ?? "Unknown",
+        FamilyItemType.FamilyType => this.GetFamilySymbol()?.Name ?? "Unknown",
+        FamilyItemType.FamilyInstance => $"{this.GetFamilySymbol()?.Name ?? "Unknown"}",
         _ => string.Empty
     };
 
-    public string TextSecondary => this._textSecondary.Value;
-
-    /// <summary>
-    ///     TextPill returns the filter category for each item type:
-    ///     - Family: Category name (filter by category)
-    ///     - FamilyType: Family name (filter by family)
-    ///     - FamilyInstance: Type name (filter by type)
-    /// </summary>
-    public string TextPill => this.ItemType switch {
-        FamilyItemType.Family => this.Family!.FamilyCategory?.Name ?? string.Empty,
-        FamilyItemType.FamilyType => this.FamilySymbol!.Family.Name,
-        FamilyItemType.FamilyInstance => this.FamilyInstance!.Symbol.Name,
+    public string TextSecondary => this.ItemType switch {
+        FamilyItemType.Family => this.GetFamilyTypeNames(),
+        FamilyItemType.FamilyType => this.GetFamily()?.Name ?? "Unknown",
         _ => string.Empty
     };
+    public string TextPill => this.GetFamily()?.FamilyCategory?.Name ?? "Unknown";
 
     public Func<string>? GetTextInfo => null; // Sidebar preview provides detailed info
 
@@ -104,6 +91,12 @@ public class UnifiedFamilyItem : IPaletteListItem {
         FamilyItemType.Family => this.Family,
         FamilyItemType.FamilyType => this.FamilySymbol?.Family,
         FamilyItemType.FamilyInstance => this.FamilyInstance?.Symbol.Family,
+        _ => null
+    };
+
+    public FamilySymbol? GetFamilySymbol() => this.ItemType switch {
+        FamilyItemType.FamilyType => this.FamilySymbol,
+        FamilyItemType.FamilyInstance => this.FamilyInstance?.Symbol,
         _ => null
     };
 

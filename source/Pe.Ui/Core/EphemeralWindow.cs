@@ -1,5 +1,5 @@
+using Pe.Global.Services.Document;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
@@ -38,7 +38,13 @@ public class EphemeralWindow : Window {
         this.Title = title;
         this.SizeToContent =
             SizeToContent.WidthAndHeight; // Size to both dimensions for independent palette/panel sizing
-        this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        var ownerHandle = DocumentManager.GetActiveWindow();
+        if (ownerHandle != IntPtr.Zero) {
+            _ = new WindowInteropHelper(this) { Owner = ownerHandle };
+            this.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        } else {
+            this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        }
         this.WindowStyle = WindowStyle.None;
         this.AllowsTransparency = true;
         this.Background = Brushes.Transparent;
@@ -54,7 +60,9 @@ public class EphemeralWindow : Window {
         // Content border - transparent container, Palette manages its own backgrounds
         // The title is passed to the Palette to render in its title bar area
         this._contentBorder = new Border {
-            Child = content, Background = Brushes.Transparent, LayoutTransform = this._zoomTransform
+            Child = content,
+            Background = Brushes.Transparent,
+            LayoutTransform = this._zoomTransform
             // Allow dragging from anywhere on the palette background
             // (Palette will have its own title bar area for this)
         };
@@ -158,8 +166,7 @@ public class EphemeralWindow : Window {
     /// </remarks>
     public static void RestoreRevitFocus() {
         try {
-            var revitProcess = Process.GetCurrentProcess();
-            var revitHandle = revitProcess.MainWindowHandle;
+            var revitHandle = DocumentManager.GetActiveWindow();
             if (revitHandle != IntPtr.Zero) {
                 var success = SetForegroundWindow(revitHandle);
             }
@@ -200,7 +207,7 @@ public class EphemeralWindow : Window {
             if (activateType == WA_INACTIVE && !this._isClosing && this.IsEphemeral) {
                 // lParam contains the handle of the window being activated (may be zero)
                 var newActiveWindow = lParam;
-                var revitHandle = Process.GetCurrentProcess().MainWindowHandle;
+                var revitHandle = DocumentManager.GetActiveWindow();
 
                 // Get actual foreground window (more reliable than lParam)
                 var actualForegroundWindow = GetForegroundWindow();

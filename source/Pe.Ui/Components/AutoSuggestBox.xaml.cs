@@ -1,6 +1,7 @@
 using Pe.Ui.Core;
 using System.Collections;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
@@ -34,6 +35,8 @@ public class AutoSuggestBoxItem {
 }
 
 public partial class AutoSuggestBox : RevitHostedUserControl {
+    private INotifyCollectionChanged? _itemsSourceNotifier;
+
     public AutoSuggestBox() {
         // Initialize FilteredItems before InitializeComponent so binding works
         this.FilteredItems = new ObservableCollection<AutoSuggestBoxItem>();
@@ -46,6 +49,7 @@ public partial class AutoSuggestBox : RevitHostedUserControl {
         this.PART_SuggestionsPopup.SetBinding(WidthProperty, widthBinding);
 
         // Event handlers
+        this.PART_SuggestionsList.PreviewMouseLeftButtonDown += this.OnSuggestionListMouseDown;
         this.PART_SuggestionsList.PreviewMouseLeftButtonUp += this.OnSuggestionListMouseUp;
         this.PART_TextBox.TextChanged += this.OnTextBoxTextChanged;
         this.PART_TextBox.GotFocus += this.OnTextBoxGotFocus;
@@ -185,6 +189,8 @@ public partial class AutoSuggestBox : RevitHostedUserControl {
 
     public new void Focus() => this.PART_TextBox.Focus();
 
+    public void RefreshSuggestions() => this.UpdateFilteredItems();
+
     private static void OnTextChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) {
         if (d is not AutoSuggestBox box) return;
         box.SyncTextBoxFromProperty();
@@ -206,16 +212,37 @@ public partial class AutoSuggestBox : RevitHostedUserControl {
     }
 
     private void OnTextBoxGotFocus(object sender, RoutedEventArgs e) {
-        // Show suggestions when focused if AlwaysShowSuggestions is true
-        if (this.AlwaysShowSuggestions && this.FilteredItems.Count > 0) this.IsSuggestionListOpen = true;
+        this.UpdateFilteredItems();
     }
 
-    private void OnTextBoxLostFocus(object sender, RoutedEventArgs e) =>
+    private void OnTextBoxLostFocus(object sender, RoutedEventArgs e) {
+        if (this.IsFocusWithinSuggestionsList(Keyboard.FocusedElement as DependencyObject)) return;
         this.IsSuggestionListOpen = false;
+    }
 
     private static void OnItemsSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) {
-        if (d is AutoSuggestBox box) box.UpdateFilteredItems();
+        if (d is not AutoSuggestBox box) return;
+        box.UpdateItemsSourceSubscription(e.OldValue as INotifyCollectionChanged, e.NewValue as INotifyCollectionChanged);
+        box.UpdateFilteredItems();
     }
+
+    private void UpdateItemsSourceSubscription(
+        INotifyCollectionChanged? oldSource,
+        INotifyCollectionChanged? newSource
+    ) {
+        if (ReferenceEquals(oldSource, newSource)) return;
+
+        if (oldSource != null)
+            oldSource.CollectionChanged -= this.OnItemsSourceCollectionChanged;
+
+        if (newSource != null)
+            newSource.CollectionChanged += this.OnItemsSourceCollectionChanged;
+
+        this._itemsSourceNotifier = newSource;
+    }
+
+    private void OnItemsSourceCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
+        this.UpdateFilteredItems();
 
     private void UpdateFilteredItems() {
         if (this.ItemsSource == null) {
@@ -233,7 +260,9 @@ public partial class AutoSuggestBox : RevitHostedUserControl {
 
             if (string.IsNullOrEmpty(searchText) || this.IsMatch(searchText, primaryText)) {
                 items.Add(new AutoSuggestBoxItem {
-                    PrimaryText = primaryText, SecondaryText = secondaryText, Value = item
+                    PrimaryText = primaryText,
+                    SecondaryText = secondaryText,
+                    Value = item
                 });
             }
         }
@@ -392,6 +421,20 @@ public partial class AutoSuggestBox : RevitHostedUserControl {
             this.PART_SuggestionsList.SelectedItem = suggestItem;
             this.CommitSelection();
         }
+
+        e.Handled = true;
+    }
+
+    private void OnSuggestionListMouseDown(object sender, MouseButtonEventArgs e) => e.Handled = true;
+
+    private bool IsFocusWithinSuggestionsList(DependencyObject? focusedElement) {
+        var current = focusedElement;
+        while (current != null) {
+            if (ReferenceEquals(current, this.PART_SuggestionsList)) return true;
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return false;
     }
 
     #endregion

@@ -77,6 +77,9 @@
                              SelectionMode="Single"
                              Background="Transparent"
                              BorderThickness="0"
+                             ScrollViewer.VerticalScrollBarVisibility="Hidden"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.CanContentScroll="True"
                              KeyboardNavigation.DirectionalNavigation="Cycle">
                     <ui:ListView.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -90,12 +93,14 @@
                             <StackPanel Orientation="Vertical" Margin="0">
                                 <ui:TextBlock Text="{Binding PrimaryText}"
                                               TextWrapping="NoWrap"
-                                              TextTrimming="CharacterEllipsis" />
+                                              TextTrimming="CharacterEllipsis"
+                                              ToolTip="{Binding PrimaryText}" />
                                 <ui:TextBlock Text="{Binding SecondaryText}"
                                               FontSize="12"
                                               Visibility="{Binding SecondaryText, Converter={StaticResource StringToVisibilityConverter}}"
                                               TextWrapping="NoWrap"
-                                              TextTrimming="CharacterEllipsis" />
+                                              TextTrimming="CharacterEllipsis"
+                                              ToolTip="{Binding SecondaryText}" />
                             </StackPanel>
                         </DataTemplate>
                     </ui:ListView.ItemTemplate>
