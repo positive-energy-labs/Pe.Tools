@@ -150,7 +150,7 @@ internal static class FormulaUtils {
 
         // Unit suffixes don't contain regular ASCII digits (0-9), but may contain 
         // Unicode superscripts (², ³) or subscripts (₂, ₃) which are allowed
-        if (token.Any(char.IsAsciiDigit)) return false;
+        if (token.Any(c => c >= '0' && c <= '9')) return false;
 
         // Must contain at least one letter
         if (!token.Any(char.IsLetter)) return false;

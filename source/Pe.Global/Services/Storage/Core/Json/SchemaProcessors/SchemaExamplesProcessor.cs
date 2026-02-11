@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Pe.Global.PolyFill;
 using NJsonSchema;
 using NJsonSchema.Generation;
 using Pe.Global.Services.Storage.Core.Json.SchemaProviders;

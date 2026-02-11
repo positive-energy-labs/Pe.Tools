@@ -54,7 +54,7 @@ public class JsonExtendsException : Exception {
         string basePath,
         Exception innerException
     ) => new($"""
-              Base profile '{Path.GetFileName(basePath)}' failed validation (required by '{Path.GetFileName(childPath)}'):
+              Base profile '{Path.GetFileName(basePath)}' failed validation (by '{Path.GetFileName(childPath)}'):
                 {innerException.Message}
                 
               Fix the base profile before loading profiles that extend it.

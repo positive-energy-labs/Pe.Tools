@@ -7,7 +7,7 @@ public enum SnapshotSource {
     /// <summary>Data collected from project document (faster for parameters)</summary>
     Project,
 
-    /// <summary>Data collected from family document (required for ref planes/dims)</summary>
+    /// <summary>Data collected from family document (for ref planes/dims)</summary>
     FamilyDoc
 }
 

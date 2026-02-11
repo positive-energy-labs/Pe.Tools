@@ -8,10 +8,16 @@
         <IsRepackable Condition="$(Configuration.Contains('Debug'))">false</IsRepackable>
 
 
+        <!-- Map configuration suffix to Revit version -->
+        <RevitVersion Condition="$(Configuration.Contains('R23'))">2023</RevitVersion>
+        <RevitVersion Condition="$(Configuration.Contains('R24'))">2024</RevitVersion>
+        <RevitVersion Condition="$(Configuration.Contains('R25'))">2025</RevitVersion>
+        <RevitVersion Condition="$(Configuration.Contains('R26'))">2026</RevitVersion>
         <!-- Default to 2025 for "Debug"/"Release" configs, and also for broader LSP support (e.g. Cursor) -->
         <!-- NOTE: update as Positive Energy migrated to newer Revit Versions -->
         <RevitVersion Condition="'$(RevitVersion)' == ''">2025</RevitVersion>
-        <TargetFramework>net8.0-windows</TargetFramework>
+        <TargetFramework Condition="'$(RevitVersion)' == '2023' or '$(RevitVersion)' == '2024'">net48</TargetFramework>
+        <TargetFramework Condition="'$(RevitVersion)' == '2025' or '$(RevitVersion)' == '2026'">net8.0-windows</TargetFramework>
     </PropertyGroup>
 
     <ItemGroup>
@@ -30,8 +36,12 @@
         <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0"/>
         <PackageReference Include="Serilog.Sinks.Debug" Version="3.0.0"/>
 
-        <!-- SignalR Self-Hosted Server (Newtonsoft JSON protocol) -->
-        <PackageReference Include="Microsoft.AspNetCore.SignalR.Protocols.NewtonsoftJson" Version="8.0.0"/>
+        <!-- SignalR Self-Hosted Server (Newtonsoft JSON protocol) - net8 only -->
+        <PackageReference Include="Microsoft.AspNetCore.SignalR.Protocols.NewtonsoftJson" Version="8.0.0" Condition="'$(TargetFramework)' != 'net48'"/>
+
+        <!-- Polyfills for net48 compatibility with modern C# features -->
+        <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all" Condition="'$(TargetFramework)' == 'net48'"/>
+        <PackageReference Include="System.Net.Http" Version="4.3.4" Condition="'$(TargetFramework)' == 'net48'"/>
 
         <!-- Revit Task Service for thread marshaling -->
         <PackageReference Include="ricaun.Revit.UI.Tasks" Version="1.*"/>
@@ -40,9 +50,14 @@
         <PackageReference Include="TypeGen" Version="5.0.0"/>
     </ItemGroup>
 
-    <!-- ASP.NET Core Framework for self-hosted SignalR server -->
-    <ItemGroup>
+    <!-- ASP.NET Core Framework for self-hosted SignalR server - net8 only -->
+    <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
         <FrameworkReference Include="Microsoft.AspNetCore.App"/>
+    </ItemGroup>
+
+    <!-- Exclude SignalR source files from net48 compilation -->
+    <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+        <Compile Remove="Services\SignalR\**\*.cs"/>
     </ItemGroup>
 
     <ItemGroup>

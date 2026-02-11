@@ -189,7 +189,7 @@ public static class PaletteFactory {
         if (options.SidebarPanel != null) {
             sidebar = new PaletteSidebar {
                 Content = options.SidebarPanel.Content,
-                Width = options.SidebarPanel.PreferredWidth ?? new GridLength(450)
+                Width = new GridLength(450)
             };
 
             // Track cancellation for async loading - cancelled on each selection change
@@ -251,7 +251,7 @@ public static class PaletteFactory {
 ///     Consumers should use <see cref="ISidebarPanel{TItem}" /> instead.
 /// </summary>
 internal class PaletteSidebar {
-    public required UIElement Content { get; init; }
+    public UIElement Content { get; init; }
     public GridLength Width { get; init; } = new(450);
 }
 

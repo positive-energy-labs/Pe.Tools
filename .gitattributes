@@ -1,0 +1,19 @@
+# Auto detect text files and normalize line endings to LF in the repository
+* text=auto
+
+# Explicitly declare text files you want to always be normalized and converted
+# to native line endings on checkout (CRLF on Windows, LF on Unix)
+*.cs text diff=csharp
+*.csproj text diff=csharp
+*.xaml text
+*.md text
+*.json text
+*.xml text
+*.txt text
+*.config text
+
+# Denote all files that are truly binary and should not be modified
+*.png binary
+*.jpg binary
+*.dll binary
+*.exe binary

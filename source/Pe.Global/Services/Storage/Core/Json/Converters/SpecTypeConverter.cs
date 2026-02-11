@@ -10,7 +10,7 @@ namespace Pe.Global.Services.Storage.Core.Json.Converters;
 /// </summary>
 public class SpecTypeConverter : JsonConverter<ForgeTypeId> {
     private static readonly Lazy<Dictionary<string, ForgeTypeId>> _labelMap =
-        new(SpecNamesProvider.GetLabelToForgeMap());
+        new(() => SpecNamesProvider.GetLabelToForgeMap());
 
     public override void WriteJson(JsonWriter writer, ForgeTypeId? value, JsonSerializer serializer) {
         if (value == null) {

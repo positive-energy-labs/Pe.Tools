@@ -155,6 +155,6 @@ public class DiagnosticLogger : IDisposable {
     private static string SanitizeFileName(string fileName) {
         var invalid = Path.GetInvalidFileNameChars();
         var sanitized = new string(fileName.Select(c => invalid.Contains(c) ? '_' : c).ToArray());
-        return sanitized.Length > 50 ? sanitized[..50] : sanitized;
+        return sanitized.Length > 50 ? sanitized.Substring(0, 50) : sanitized;
     }
 }

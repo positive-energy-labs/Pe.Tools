@@ -1,4 +1,5 @@
 using NJsonSchema;
+using Pe.Global.PolyFill;
 using NJsonSchema.Validation;
 using ValidationError = NJsonSchema.Validation.ValidationError;
 
@@ -44,7 +45,7 @@ public static class ValidationErrorFormatter {
             break;
 
         case ValidationErrorKind.PropertyRequired:
-            yield return $"{indent}{error.Path}: Missing required property '{error.Property}'";
+            yield return $"{indent}{error.Path}: Missing property '{error.Property}'";
             break;
 
         case ValidationErrorKind.NoAdditionalPropertiesAllowed:
@@ -158,7 +159,7 @@ public static class ValidationErrorFormatter {
     ///     Used to identify which branch of a oneOf failed.
     /// </summary>
     private static string ExtractSchemaHint(JsonSchema schema) {
-        // Try to identify by required properties
+        // Try to identify by properties
         if (schema.RequiredProperties.Any())
             return $"requires '{string.Join("', '", schema.RequiredProperties)}'";
 

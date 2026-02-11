@@ -10,10 +10,10 @@ namespace Pe.FamilyFoundry.Snapshots;
 /// </summary>
 public class MirrorSpec {
     /// <summary>Base name - generates "{Name} (Left)" and "{Name} (Right)" planes</summary>
-    public required string Name { get; init; }
+    public string Name { get; init; }
 
     /// <summary>The center anchor plane (e.g., "Center (Left/Right)")</summary>
-    public required string CenterAnchor { get; init; }
+    public string CenterAnchor { get; init; }
 
     /// <summary>Parameter to assign to the 2-plane dimension label</summary>
     public string? Parameter { get; init; }
@@ -45,13 +45,13 @@ public class MirrorSpec {
 /// </summary>
 public class OffsetSpec {
     /// <summary>Name of the plane being created</summary>
-    public required string Name { get; init; }
+    public string Name { get; init; }
 
     /// <summary>The anchor/reference plane to offset from</summary>
-    public required string AnchorName { get; init; }
+    public string AnchorName { get; init; }
 
     /// <summary>Direction of offset from anchor (Positive or Negative along normal)</summary>
-    public required OffsetDirection Direction { get; init; }
+    public OffsetDirection Direction { get; init; }
 
     /// <summary>Parameter to assign to the dimension label</summary>
     public string? Parameter { get; init; }

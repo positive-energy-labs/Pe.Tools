@@ -10,39 +10,39 @@ public class ParametersApi {
     }
 
     public class Groups {
-        [UsedImplicitly] public required Pagination Pagination { get; init; }
-        [UsedImplicitly] public required List<GroupResults> Results { get; init; }
+        [UsedImplicitly] public Pagination Pagination { get; init; }
+        [UsedImplicitly] public List<GroupResults> Results { get; init; }
 
         public class GroupResults {
-            [UsedImplicitly] public required string Id { get; init; }
-            [UsedImplicitly] public required string Title { get; init; }
-            [UsedImplicitly] public required string Description { get; init; }
-            [UsedImplicitly] public required string CreatedBy { get; init; } // make date?
-            [UsedImplicitly] public required string CreatedAt { get; init; } // make date?
-            [UsedImplicitly] public required string UpdatedBy { get; init; }
-            [UsedImplicitly] public required string UpdatedAt { get; init; } // make date?
+            [UsedImplicitly] public string Id { get; init; }
+            [UsedImplicitly] public string Title { get; init; }
+            [UsedImplicitly] public string Description { get; init; }
+            [UsedImplicitly] public string CreatedBy { get; init; } // make date?
+            [UsedImplicitly] public string CreatedAt { get; init; } // make date?
+            [UsedImplicitly] public string UpdatedBy { get; init; }
+            [UsedImplicitly] public string UpdatedAt { get; init; } // make date?
         }
     }
 
     public class Collections {
-        [UsedImplicitly] public required Pagination Pagination { get; init; }
+        [UsedImplicitly] public Pagination Pagination { get; init; }
 
-        [UsedImplicitly] public required List<CollectionResults> Results { get; init; }
+        [UsedImplicitly] public List<CollectionResults> Results { get; init; }
 
         public class CollectionResults {
-            [UsedImplicitly] public required string Id { get; init; }
-            [UsedImplicitly] public required string Title { get; init; }
-            [UsedImplicitly] public required string Description { get; init; }
-            [UsedImplicitly] public required FieldId Group { get; init; }
-            [UsedImplicitly] public required FieldId Account { get; init; }
+            [UsedImplicitly] public string Id { get; init; }
+            [UsedImplicitly] public string Title { get; init; }
+            [UsedImplicitly] public string Description { get; init; }
+            [UsedImplicitly] public FieldId Group { get; init; }
+            [UsedImplicitly] public FieldId Account { get; init; }
             [UsedImplicitly] public bool IsArchived { get; init; }
-            [UsedImplicitly] public required string CreatedBy { get; init; }
-            [UsedImplicitly] public required string CreatedAt { get; init; }
-            [UsedImplicitly] public required string UpdatedBy { get; init; }
-            [UsedImplicitly] public required string UpdatedAt { get; init; }
+            [UsedImplicitly] public string CreatedBy { get; init; }
+            [UsedImplicitly] public string CreatedAt { get; init; }
+            [UsedImplicitly] public string UpdatedBy { get; init; }
+            [UsedImplicitly] public string UpdatedAt { get; init; }
 
             public class FieldId {
-                [UsedImplicitly] public required string Id { get; init; }
+                [UsedImplicitly] public string Id { get; init; }
             }
         }
     }
@@ -73,8 +73,8 @@ public class ParametersApi {
             public ParameterDownloadOpts DownloadOptions => this._downloadOptions ??= new ParameterDownloadOpts(this);
 
             public class RawMetadataValue {
-                [UsedImplicitly] public required string Id { get; init; }
-                [UsedImplicitly] public required object Value { get; init; }
+                [UsedImplicitly] public string Id { get; init; }
+                [UsedImplicitly] public object Value { get; init; }
             }
 
             public class ParameterDownloadOpts {
@@ -230,8 +230,8 @@ public class ParametersApi {
                 }
 
                 public class MetadataBinding {
-                    [UsedImplicitly] public required string BindingId { get; init; }
-                    [UsedImplicitly] public required string Id { get; init; }
+                    [UsedImplicitly] public string BindingId { get; init; }
+                    [UsedImplicitly] public string Id { get; init; }
                 }
             }
         }

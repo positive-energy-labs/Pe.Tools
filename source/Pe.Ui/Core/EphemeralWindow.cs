@@ -1,4 +1,5 @@
 using Pe.Global.Services.Document;
+using Pe.Global.PolyFill;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -132,7 +133,7 @@ public class EphemeralWindow : Window {
         // Ctrl+0 resets to 100%, otherwise adjust by delta
         ZoomLevel = e.Key == Key.D0
             ? 1.0
-            : Math.Clamp(ZoomLevel + zoomDelta.Value, ZoomMin, ZoomMax);
+            : BclExtensions.Clamp(ZoomLevel + zoomDelta.Value, ZoomMin, ZoomMax);
 
         this._zoomTransform.ScaleX = ZoomLevel;
         this._zoomTransform.ScaleY = ZoomLevel;

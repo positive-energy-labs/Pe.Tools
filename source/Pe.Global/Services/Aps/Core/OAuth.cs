@@ -66,7 +66,7 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
             try {
                 var newCached = CreateCachedToken(token);
                 UpdateCache(clientId, newCached);
-                // AccessToken is required in OAuthToken, guaranteed non-null
+                // AccessToken is in OAuthToken, guaranteed non-null
                 tcs.SetResult(token.AccessToken!);
             } catch (Exception ex) {
                 tcs.SetResult(new Exception($"Failed to cache token: {ex.Message}"));
@@ -149,7 +149,7 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
     /// <param name="fallbackRefreshToken">Refresh token to use if response doesn't include one</param>
     private static CachedToken CreateCachedToken(OAuthToken token, string? fallbackRefreshToken = null) =>
         new(
-            // AccessToken and RefreshToken are required in OAuthToken, guaranteed non-null
+            // AccessToken and RefreshToken are in OAuthToken, guaranteed non-null
             token.AccessToken!,
             token.RefreshToken ?? fallbackRefreshToken ?? "",
             DateTime.UtcNow.AddSeconds(token.ExpiresIn ?? DefaultExpirationSeconds)
@@ -225,7 +225,7 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
     ///     deadlocks when called from UI synchronization contexts (common in Revit add-ins).
     /// </remarks>
     private static OAuthToken? ExecuteTokenRefresh(string clientId, string? clientSecret, string refreshToken) {
-        // Client secret is required for token refresh
+        // Client secret is for token refresh
         if (string.IsNullOrEmpty(clientSecret))
             return null;
 

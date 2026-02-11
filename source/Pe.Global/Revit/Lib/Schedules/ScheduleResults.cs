@@ -1,9 +1,9 @@
 namespace Pe.Global.Revit.Lib.Schedules;
 
 public class ScheduleCreationResult {
-    public required ViewSchedule Schedule { get; init; }
-    public required string ScheduleName { get; init; }
-    public required string CategoryName { get; init; }
+    public ViewSchedule Schedule { get; init; }
+    public string ScheduleName { get; init; }
+    public string CategoryName { get; init; }
     public bool IsItemized { get; init; }
     public bool FilterBySheetApplied { get; set; }
     public string? FilterBySheetSkipped { get; set; }
@@ -28,8 +28,8 @@ public class ScheduleCreationResult {
 }
 
 public class AppliedFieldInfo {
-    public required string ParameterName { get; init; }
-    public required string ColumnHeaderOverride { get; init; }
+    public string ParameterName { get; init; }
+    public string ColumnHeaderOverride { get; init; }
     public bool IsHidden { get; init; }
     public double? ColumnWidth { get; init; }
     public ScheduleFieldDisplayType DisplayType { get; init; }
@@ -37,7 +37,7 @@ public class AppliedFieldInfo {
 }
 
 public class AppliedSortGroupInfo {
-    public required string FieldName { get; init; }
+    public string FieldName { get; init; }
     public ScheduleSortOrder SortOrder { get; init; }
     public bool ShowHeader { get; init; }
     public bool ShowFooter { get; init; }
@@ -45,15 +45,15 @@ public class AppliedSortGroupInfo {
 }
 
 public class AppliedFilterInfo {
-    public required string FieldName { get; init; }
+    public string FieldName { get; init; }
     public ScheduleFilterType FilterType { get; init; }
-    public required string Value { get; init; }
-    public required string StorageType { get; init; }
+    public string Value { get; init; }
+    public string StorageType { get; init; }
 }
 
 public record CalculatedFieldGuidance {
-    public required string FieldName { get; init; }
-    public required string CalculatedType { get; init; }
+    public string FieldName { get; init; }
+    public string CalculatedType { get; init; }
     public string? Guidance { get; init; }
     public string? PercentageOfField { get; init; }
 }

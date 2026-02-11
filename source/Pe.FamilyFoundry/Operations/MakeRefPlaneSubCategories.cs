@@ -31,9 +31,9 @@ namespace Pe.FamilyFoundry.Operations;
 //     }
 // };
 public record RefPlaneSubcategorySpec {
-    public required RpStrength Strength { get; init; }
-    public required string Name { get; init; }
-    public required Color Color { get; init; }
+    public RpStrength Strength { get; init; }
+    public string Name { get; init; }
+    public Color Color { get; init; }
     public string LinePatternName { get; init; } = "Dash"; // null = use solid line
 
     public ElementId GetLinePatternId(Document doc) {

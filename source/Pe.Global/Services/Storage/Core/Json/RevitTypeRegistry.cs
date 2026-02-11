@@ -11,7 +11,7 @@ namespace Pe.Global.Services.Storage.Core.Json;
 /// </summary>
 public class TypeRegistration {
     /// <summary> The JSON Schema type this C# type should be represented as </summary>
-    public required JsonObjectType SchemaType { get; init; }
+    public JsonObjectType SchemaType { get; init; }
 
     /// <summary> Optional: Type of discriminator attribute (e.g., ForgeKindAttribute for ForgeTypeId) </summary>
     public Type? DiscriminatorType { get; init; }

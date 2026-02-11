@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Pe.Global.PolyFill;
 using Newtonsoft.Json.Linq;
 
 namespace Pe.Global.Services.Storage.Core.Json;
@@ -186,7 +187,7 @@ public static class JsonArrayComposer {
                           ?? Path.GetDirectoryName(Path.GetFullPath(fragmentPath))
                           ?? throw JsonExtendsException.InvalidFragmentFormat(fragmentPath, "Invalid fragment path");
         var schemaPath = Path.Combine(schemaDirectory, "schema-fragment.json");
-        var relativeSchemaPath = Path.GetRelativePath(fragmentDir, schemaPath).Replace("\\", "/");
+        var relativeSchemaPath = BclExtensions.GetRelativePath(fragmentDir, schemaPath).Replace("\\", "/");
 
         // Add $schema property
         fragmentObj["$schema"] = relativeSchemaPath;

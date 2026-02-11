@@ -12,13 +12,13 @@ public class TaskItem : IPaletteListItem {
     /// <summary>
     ///     The underlying task implementation
     /// </summary>
-    public required ITask Task { get; init; }
+    public ITask Task { get; init; }
 
     /// <summary>
     ///     Unique identifier derived from the task's type name.
     ///     Used for persistence and duplicate prevention.
     /// </summary>
-    public required string Id { get; init; }
+    public string Id { get; init; }
 
     /// <summary>
     ///     Number of times this task has been used (for prioritization)

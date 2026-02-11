@@ -6,8 +6,10 @@ using Nice3point.Revit.Toolkit.External;
 using Pe.App.Tasks;
 using Pe.Global.Services.AutoTag;
 using Pe.Global.Services.Document;
+#if !NET48
 using Pe.Global.Services.SignalR;
 using Pe.Global.Services.SignalR.Actions;
+#endif
 using Pe.Ui.Core;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
@@ -28,7 +30,9 @@ public class Application : ExternalApplication {
     /// <summary>
     ///     SignalR server for settings editor frontend.
     /// </summary>
+#if !NET48
     private static SettingsEditorServer? _settingsEditorServer;
+#endif
 
     public override void OnStartup() {
         // Subscribe to ViewActivated event for MRU tracking
@@ -40,8 +44,10 @@ public class Application : ExternalApplication {
         // Subscribe to DocumentChanged for AutoTag settings change detection
         this.Application.ControlledApplication.DocumentChanged += OnDocumentChanged;
 
+#if !NET48
         // Subscribe to DocumentOpened to start SignalR server on first document open
         this.Application.ControlledApplication.DocumentOpened += OnDocumentOpened;
+#endif
 
         // Initialize RevitTaskService for async/deferred execution in Revit API context
         _revitTaskService = new RevitTaskService(this.Application);
@@ -62,14 +68,18 @@ public class Application : ExternalApplication {
         app.ViewActivated -= OnViewActivated;
         app.ControlledApplication.DocumentClosing -= OnDocumentClosing;
         app.ControlledApplication.DocumentChanged -= OnDocumentChanged;
+#if !NET48
         app.ControlledApplication.DocumentOpened -= OnDocumentOpened;
+#endif
         _revitTaskService?.Dispose();
 
         // Shutdown AutoTag service
         AutoTagService.Instance.Shutdown();
 
+#if !NET48
         // Stop SignalR server
         _settingsEditorServer?.Dispose();
+#endif
 
         return Result.Succeeded;
     }
@@ -118,6 +128,7 @@ public class Application : ExternalApplication {
 
     public override void OnShutdown() => Log.CloseAndFlush();
 
+#if !NET48
     private static void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e) {
         // Start SignalR server on first document open (when we have access to UIApplication)
         if (_settingsEditorServer != null) return;
@@ -145,6 +156,7 @@ public class Application : ExternalApplication {
             // Don't fail startup if SignalR fails - it's optional functionality
         }
     }
+#endif
 
     private void CreateRibbon() => ButtonRegistry.BuildRibbon(this.Application, "PE TOOLS");
 

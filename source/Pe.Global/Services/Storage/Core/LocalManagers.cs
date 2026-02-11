@@ -1,5 +1,5 @@
 using Pe.Global.Services.Storage.Core.Json;
-
+using Pe.Global.PolyFill;
 namespace Pe.Global.Services.Storage.Core;
 
 public abstract class BaseLocalManager {
@@ -30,7 +30,7 @@ public abstract class BaseLocalManager {
         var name = filename ?? this.Name;
         // Remove .json extension if present, since we'll add it after the timestamp
         if (name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-            name = name[..^5];
+            name = name.Substring(0, name.Length - 5);
 
         var nameWithTimestamp = $"{name}_{DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss")}";
         var nameWithExt = FileUtils.EnsureExtension(nameWithTimestamp, ".json");
@@ -53,14 +53,14 @@ public abstract class BaseLocalManager {
     public List<string> ListJsonFilesShallow(List<string>? excludePatterns = null) => [
         .. Directory.GetFiles(this.DirectoryPath, "*.json",
                 SearchOption.TopDirectoryOnly)
-            .Select(f => Path.GetRelativePath(this.DirectoryPath, f))
+            .Select(f => BclExtensions.GetRelativePath(this.DirectoryPath, f))
             .Where(f => !this.MatchesExcludePattern(f, excludePatterns ?? ["_*"]))
             .ToList()
     ];
 
     public List<string> ListJsonFilesRecursive(List<string>? excludePatterns = null) => [
         .. Directory.GetFiles(this.DirectoryPath, "*.json", SearchOption.AllDirectories)
-            .Select(f => Path.GetRelativePath(this.DirectoryPath, f))
+            .Select(f => BclExtensions.GetRelativePath(this.DirectoryPath, f))
             .Where(f => !this.MatchesExcludePattern(f, excludePatterns ?? ["_*"]))
             .ToList()
     ];

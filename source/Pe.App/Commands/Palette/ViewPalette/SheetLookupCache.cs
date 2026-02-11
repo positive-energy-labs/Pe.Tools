@@ -1,3 +1,5 @@
+using Pe.Global.PolyFill;
+
 namespace Pe.App.Commands.Palette.ViewPalette;
 
 /// <summary>

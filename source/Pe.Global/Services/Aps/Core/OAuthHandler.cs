@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Pe.Global.PolyFill;
 using Pe.Global.Services.Aps.Models;
 using System.Net;
 using System.Net.Sockets;
@@ -19,7 +20,7 @@ namespace Pe.Global.Services.Aps.Core;
 internal static class OAuthHandler {
     #region Authorization URL
 
-    /// <summary>Generates the OAuth authorization URL with all required parameters</summary>
+    /// <summary>Generates the OAuth authorization URL with all parameters</summary>
     private static string BuildAuthorizationUrl(OAuthFlowData flow) {
         var scopeParam = Uri.EscapeDataString(string.Join(" ", OAuthConfig.RequestedScopes));
         var redirectParam = Uri.EscapeDataString(OAuthConfig.CallbackUri);
@@ -148,7 +149,8 @@ internal static class OAuthHandler {
     /// <summary>Exchanges an authorization code for an access token</summary>
     private static Task<OAuthToken> ExchangeCodeForTokenAsync(OAuthFlowData flow, string code) {
         var additionalParams = new Dictionary<string, string> {
-            ["code"] = code, ["redirect_uri"] = OAuthConfig.CallbackUri
+            ["code"] = code,
+            ["redirect_uri"] = OAuthConfig.CallbackUri
         };
 
         // PKCE flow sends code_verifier, confidential flow sends client_secret
@@ -269,7 +271,7 @@ internal static class OAuthHandler {
         var queryStart = parts[1].IndexOf('?');
         if (queryStart < 0) return null;
 
-        var queryString = parts[1][(queryStart + 1)..];
+        var queryString = parts[1].Substring(queryStart + 1);
         var parameters = queryString
             .Split('&')
             .Select(p => p.Split('='))

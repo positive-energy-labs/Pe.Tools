@@ -179,12 +179,12 @@ public class ScheduleSerializePaletteItem(ViewSchedule schedule) : IPaletteListI
 }
 
 public class ScheduleSerializePreviewData {
-    public required string ProfileName { get; set; }
+    public string ProfileName { get; set; }
     public string? CategoryName { get; set; }
     public bool? IsItemized { get; set; }
     public List<ScheduleFieldSpec>? Fields { get; set; }
     public List<ScheduleSortGroupSpec>? SortGroup { get; set; }
-    public required string ProfileJson { get; set; }
+    public string ProfileJson { get; set; }
     public bool IsValid { get; set; }
     public string? ErrorMessage { get; set; }
 }

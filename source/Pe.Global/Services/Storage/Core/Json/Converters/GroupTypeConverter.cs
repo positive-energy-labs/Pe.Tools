@@ -11,7 +11,7 @@ namespace Pe.Global.Services.Storage.Core.Json.Converters;
 /// </summary>
 public class GroupTypeConverter : JsonConverter<ForgeTypeId> {
     private static readonly Lazy<Dictionary<string, ForgeTypeId>> _labelMap =
-        new(PropertyGroupNamesProvider.GetLabelForgeMap());
+        new(() => PropertyGroupNamesProvider.GetLabelForgeMap());
 
     public override void WriteJson(JsonWriter writer, ForgeTypeId? value, JsonSerializer serializer) {
         if (value == null) {

@@ -7,7 +7,7 @@ namespace Pe.FamilyFoundry.Aggregators.Snapshots;
 ///     Each section tracks its source (Project vs FamilyDoc) and collection timestamp.
 /// </summary>
 public class FamilySnapshot {
-    public required string FamilyName { get; init; }
+    public string FamilyName { get; init; }
 
     /// <summary>Parameter snapshots with source tracking</summary>
     public SnapshotSection<ParamSnapshot> Parameters { get; set; }

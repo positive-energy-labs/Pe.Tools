@@ -62,7 +62,7 @@ public class OperationContext {
 ///     Context for a single family's processing run. Properties populated by pipeline and immutable after completion.
 /// </summary>
 public class FamilyProcessingContext {
-    public required string FamilyName { get; init; }
+    public string FamilyName { get; init; }
 
     /// <summary>Snapshot collected before processing.</summary>
     public FamilySnapshot PreProcessSnapshot { get; internal set; }

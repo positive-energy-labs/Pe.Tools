@@ -288,12 +288,12 @@ public sealed class ButtonRegistry {
     ///     Strongly-typed button registration that includes command type, display metadata, and container.
     /// </summary>
     private sealed record ButtonRegistration<TCommand> : IButtonRegistration where TCommand : IExternalCommand, new() {
-        public required string Text { get; init; }
-        public required string SmallImage { get; init; }
-        public required string LargeImage { get; init; }
-        public required string ToolTip { get; init; }
+        public string Text { get; init; }
+        public string SmallImage { get; init; }
+        public string LargeImage { get; init; }
+        public string ToolTip { get; init; }
         public string? LongDescription { get; init; }
-        public required ButtonContainer Container { get; init; }
+        public ButtonContainer Container { get; init; }
 
         public PushButton CreateButton(
             UIControlledApplication app,

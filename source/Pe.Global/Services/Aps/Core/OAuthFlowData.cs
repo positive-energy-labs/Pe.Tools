@@ -8,7 +8,7 @@ namespace Pe.Global.Services.Aps.Core;
 ///     Self-contained: includes its own PKCE generation (no external dependencies).
 /// </summary>
 internal sealed record OAuthFlowData {
-    public required string ClientId { get; init; }
+    public string ClientId { get; init; }
     public string? ClientSecret { get; init; }
     public string? CodeVerifier { get; init; }
 

@@ -11,7 +11,7 @@ namespace Pe.Global.Services.Storage.Core.Json.ContractResolvers;
 ///     1. Applies discriminator-based converters to properties - inherited from RevitTypeContractResolver
 ///     2. Orders properties by declaration order (respecting inheritance) - inherited from OrderedContractResolver
 ///     3. Always serializes properties marked with [Required] attribute or 'required' keyword
-///     4. Skips serializing non-required properties when they equal their class-defined default values
+///     4. Skips serializing non-properties when they equal their class-defined default values
 /// </summary>
 public class RequiredAwareContractResolver : RevitTypeContractResolver {
     private readonly Dictionary<Type, object> _defaultInstanceCache = new();
@@ -23,12 +23,12 @@ public class RequiredAwareContractResolver : RevitTypeContractResolver {
 
         // Check if property is required
         if (this.IsRequiredProperty(propInfo)) {
-            // Always serialize required properties, even if they have default values
+            // Always serialize properties, even if they have default values
             property.DefaultValueHandling = DefaultValueHandling.Include;
             return property;
         }
 
-        // For non-required properties, skip when they equal their default value
+        // For non-properties, skip when they equal their default value
         var declaringType = propInfo.DeclaringType;
         if (declaringType == null) return property;
 
@@ -54,7 +54,7 @@ public class RequiredAwareContractResolver : RevitTypeContractResolver {
     }
 
     /// <summary>
-    ///     Checks if a property is required (either via [Required] attribute or C# 'required' keyword).
+    ///     Checks if a property is (either via [Required] attribute or C# 'required' keyword).
     /// </summary>
     private bool IsRequiredProperty(PropertyInfo propertyInfo) {
         // Check for [Required] attribute from System.ComponentModel.DataAnnotations
@@ -79,7 +79,7 @@ public class RequiredAwareContractResolver : RevitTypeContractResolver {
 
     /// <summary>
     ///     Attempts to create a default instance of the type for comparison.
-    ///     Handles types with parameterless constructors and types with required properties.
+    ///     Handles types with parameterless constructors and types with properties.
     /// </summary>
     private object? TryCreateDefaultInstance(Type type) {
         try {
@@ -87,10 +87,10 @@ public class RequiredAwareContractResolver : RevitTypeContractResolver {
             return Activator.CreateInstance(type);
         } catch {
             try {
-                // For types with required properties, try to find a constructor and pass default values
+                // For types with properties, try to find a constructor and pass default values
                 var constructors = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
 
-                // Try to find the simplest constructor (one that might be generated for records with required properties)
+                // Try to find the simplest constructor (one that might be generated for records with properties)
                 var constructor = constructors.OrderBy(c => c.GetParameters().Length).FirstOrDefault();
                 if (constructor != null) {
                     var parameters = constructor.GetParameters();

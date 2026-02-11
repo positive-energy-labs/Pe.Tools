@@ -275,33 +275,33 @@ public class Ribbon {
 
 public class DiscoveredTab {
     /// <summary> Name, what you see in UI. RibbonTab.Title, DefaultTitle, AutomationName are always same</summary>
-    public required string Name { get; set; }
+    public string Name { get; set; }
 
     /// <summary> Internal ID, not sure what it's used for</summary>
-    public required string Id { get; set; }
+    public string Id { get; set; }
 
     /// <summary> Panels contained within the tab</summary>
-    public required RibbonPanelCollection Panels { get; set; }
+    public RibbonPanelCollection Panels { get; set; }
 
     /// <summary> TBD: Not sure what this is, but possibly useful</summary>
-    public required ICollectionView DockedPanels { get; set; }
+    public ICollectionView DockedPanels { get; set; }
 
     /// <summary> TBD: Not sure what this is, but possibly useful</summary>
-    public required RibbonControl RibbonControl { get; set; }
+    public RibbonControl RibbonControl { get; set; }
 }
 
 public class DiscoveredPanel {
     /// <summary> The parent tab of this panel</summary>
-    public required RibbonTab Tab { get; set; }
+    public RibbonTab Tab { get; set; }
 
     /// <summary> Internal ID, not sure what it's used for and has a strange format</summary>
-    public required string Cookie { get; set; }
+    public string Cookie { get; set; }
 
     /// <summary> Can access Panel items via RibbonPanelSource.Items</summary>
-    public required RibbonPanelSource Source { get; set; }
+    public RibbonPanelSource Source { get; set; }
 
     /// <summary> TBD: Not sure what this is, but possibly useful</summary>
-    public required RibbonControl RibbonControl { get; set; }
+    public RibbonControl RibbonControl { get; set; }
 }
 
 public class DiscoveredCommand {
@@ -312,19 +312,19 @@ public class DiscoveredCommand {
     ///     There are often near duplicates, like ID_OBJECTS_FAMSYM and ID_OBJECTS_FAMSYM_RibbonListButton
     ///     It is also often empty or not a commandId at all.
     /// </summary>
-    public required string Id { get; set; }
+    public string Id { get; set; }
 
     /// <summary>
     ///     Human-readable name of the command, often empty.
     ///     If empty, this.Text may be non-empty. Both may also be empty.
     /// </summary>
-    public required string Name { get; set; }
+    public string Name { get; set; }
 
     /// <summary>
     ///     Another type of name, always similar to Name, often empty.
     ///     RibbonItem.Text, AutomationName, and TextBinding always seem to be same.
     /// </summary>
-    public required string Text { get; set; }
+    public string Text { get; set; }
 
     /// <summary> Often empty, look into ToolTipResolver for more information. </summary>
     public object? ToolTip { get; set; }
@@ -333,12 +333,12 @@ public class DiscoveredCommand {
     public ImageSource? Image { get; set; }
 
     /// <summary> A standin for tooltip? seems to be non-empty more often than Tooltip is.</summary>
-    public required string Description { get; set; }
+    public string Description { get; set; }
 
     public object? ToolTipResolver { get; set; }
-    public required string Tab { get; set; }
-    public required string Panel { get; set; }
+    public string Tab { get; set; }
+    public string Panel { get; set; }
 
     /// <summary> Type of the item, e.g. RibbonButton, RibbonToggleButton, etc. </summary>
-    public required string ItemType { get; set; }
+    public string ItemType { get; set; }
 }

@@ -14,16 +14,11 @@ public interface ISidebarPanel<in TItem> where TItem : class, IPaletteListItem {
     UIElement Content { get; }
 
     /// <summary>
-    ///     Optional preferred width for the sidebar. Null uses the default (450px).
-    /// </summary>
-    GridLength? PreferredWidth => null;
-
-    /// <summary>
     ///     Called immediately when selection changes, before debounce.
     ///     Use this to clear stale content or show a loading indicator.
     ///     Keep this method lightweight - it runs on every selection change.
     /// </summary>
-    void Clear() { }
+    void Clear();
 
     /// <summary>
     ///     Called when the selected item changes (debounced).

@@ -7,10 +7,10 @@ namespace Pe.Extensions.FamDocument.SetValue;
 ///     Supports both value-to-param and param-to-param mapping scenarios.
 /// </summary>
 public record CoercionContext {
-    public required FamilyDocument FamilyDocument { get; init; }
-    public required FamilyManager FamilyManager { get; init; }
-    public required FamilyParameter TargetParam { get; init; }
-    public required object SourceValue { get; init; }
+    public FamilyDocument FamilyDocument { get; init; }
+    public FamilyManager FamilyManager { get; init; }
+    public FamilyParameter TargetParam { get; init; }
+    public object SourceValue { get; init; }
 
     /// <summary>
     ///     The string representation of the source parameter's internally stored value.

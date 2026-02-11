@@ -2,7 +2,6 @@ using Autodesk.Revit.Exceptions;
 using Autodesk.Revit.UI;
 using Pe.Global.Services.Document;
 using System.Diagnostics;
-using System.Windows;
 
 namespace Pe.Extensions.UiApplication;
 
@@ -263,18 +262,8 @@ public static class OpenDocumentExtensions {
         var uiApp = DocumentManager.uiapp;
         var timeoutTimer = new Timer(_ => {
             timerFired = true;
-            Console.WriteLine($"[TryOpenCloudDocument] Timeout reached after {timeoutSeconds}s, showing warning...");
-
-            // Show warning on UI thread via WPF Dispatcher
-            _ = Application.Current?.Dispatcher?.BeginInvoke(() =>
-                MessageBox.Show(
-                    "The cloud model is taking a long time to respond.\n\n" +
-                    "This usually means there's a network connectivity issue.\n" +
-                    "The operation will continue, but you may need to wait or check your connection.",
-                    "Cloud Model - Slow Response",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning));
-        }, null, timeoutSeconds * 1000, Timeout.Infinite);
+            Console.WriteLine($"[TryOpenCloudDocument] Timeout reached after {timeoutSeconds}s.");
+        }, null, (int)(timeoutSeconds * 1000), Timeout.Infinite);
 
         try {
             Console.WriteLine(
@@ -286,6 +275,14 @@ public static class OpenDocumentExtensions {
 
             Console.WriteLine(
                 $"[TryOpenCloudDocument] OpenAndActivateDocument completed in {sw.ElapsedMilliseconds}ms");
+
+            if (timerFired) {
+                _ = TaskDialog.Show(
+                    "Cloud Model - Slow Response",
+                    "The cloud model took a long time to respond.\n\n" +
+                    "This usually indicates a network connectivity issue.\n" +
+                    "The operation completed, but you may want to verify your connection.");
+            }
 
             // Success - switch to the target view
             activatedUiDoc.RequestViewChange(targetView);

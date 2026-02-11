@@ -17,7 +17,7 @@ public static class FamilyDocumentFindParameter {
 
         var parameterPart = typeIdParts[1];
         var dashIndex = parameterPart.IndexOf('-');
-        var guidText = dashIndex > 0 ? parameterPart[..dashIndex] : parameterPart;
+        var guidText = dashIndex > 0 ? parameterPart.Substring(0, dashIndex) : parameterPart;
 
         if (!Guid.TryParse(guidText, out var guid))
             throw new ArgumentException($"Could not extract GUID from parameterTypeId: {typeId}");

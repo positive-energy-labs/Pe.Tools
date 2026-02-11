@@ -15,7 +15,7 @@ public record ParamDefinitionBase {
     [SchemaExamples(typeof(SharedParameterNamesProvider))]
     [Description("The name of the parameter")]
     [Required]
-    public required string Name { get; init; }
+    public string Name { get; init; }
 
     [Description(
         "Whether the parameter is an instance parameter (true) or a type parameter (false). Defaults to true.")]
@@ -45,7 +45,7 @@ public record ParamSnapshot : ParamDefinitionBase {
     // Note: JSON serialization preserves null vs "" distinction when using proper serializer settings.
     public Dictionary<string, string?> ValuesPerType { get; init; } = new(StringComparer.Ordinal);
 
-    // Audit metadata (not required for replay, but useful)
+    // Audit metadata (not for replay, but useful)
     public bool IsBuiltIn { get; init; } = false;
     public Guid? SharedGuid { get; init; } = null;
     public StorageType StorageType { get; init; }

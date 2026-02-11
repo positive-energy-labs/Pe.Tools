@@ -1,4 +1,5 @@
 using Pe.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Global.PolyFill;
 using Pe.Global;
 using Pe.Global.Services.Storage;
 using Pe.Global.Services.Storage.Core;
@@ -292,7 +293,9 @@ public class ProcessingResultBuilder(Storage storage) {
         return new {
             Family = ctx.FamilyName,
             Summary = new {
-                ParametersRemoved = removed.Count, ParametersAdded = added.Count, ParametersModified = modified.Count
+                ParametersRemoved = removed.Count,
+                ParametersAdded = added.Count,
+                ParametersModified = modified.Count
             },
             Removed = removed.Any() ? removed : null,
             Added = added.Any() ? added : null,
@@ -318,10 +321,9 @@ public class ProcessingResultBuilder(Storage storage) {
     public static List<ParamSnapshot> SortAndOrder(List<ParamSnapshot> snapshots) {
         snapshots ??= [];
         return snapshots.Select(s => s with {
-            ValuesPerType = new Dictionary<string, string>(
-                s.ValuesPerType.OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase),
-                StringComparer.Ordinal
-            )
+            ValuesPerType = s.ValuesPerType
+                .OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.Ordinal)
         }).ToList();
     }
 

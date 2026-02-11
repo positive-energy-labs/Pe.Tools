@@ -91,7 +91,9 @@ public class SetParamValuesPerType(AddAndSetParamsSettings settings)
         var fm = famDoc.FamilyManager;
 
         // Check for double-quoted string literal: "\"text\"" → strip quotes
-        var actualValue = IsQuotedStringLiteral(userValue) ? userValue.Trim()[1..^1] : userValue;
+        var actualValue = IsQuotedStringLiteral(userValue)
+            ? userValue.Trim().Substring(1, userValue.Trim().Length - 2)
+            : userValue;
 
         // Reject values that contain parameter references (check AFTER stripping quotes)
         var referencedParams = fm.Parameters.GetReferencedIn(actualValue).ToList();

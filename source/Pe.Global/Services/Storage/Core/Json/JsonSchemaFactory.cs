@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using NJsonSchema.Generation;
 using NJsonSchema.NewtonsoftJson.Generation;
+using Pe.Global.PolyFill;
 using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
 
 namespace Pe.Global.Services.Storage.Core.Json;
@@ -14,14 +15,14 @@ namespace Pe.Global.Services.Storage.Core.Json;
 public static class JsonSchemaFactory {
     /// <summary>
     ///     Creates both full and extends-relaxed schemas for a type.
-    ///     The extends schema has no required properties except $extends itself.
+    ///     The extends schema has no properties except $extends itself.
     /// </summary>
     public static (JsonSchema Full, JsonSchema Extends) CreateSchemas<T>() =>
         CreateSchemas(typeof(T), out _);
 
     /// <summary>
     ///     Creates both full and extends-relaxed schemas for a type (non-generic overload).
-    ///     The extends schema has no required properties except $extends itself.
+    ///     The extends schema has no properties except $extends itself.
     /// </summary>
     public static (JsonSchema Full, JsonSchema Extends) CreateSchemas(Type type,
         out SchemaExamplesProcessor examplesProcessor) {
@@ -57,12 +58,15 @@ public static class JsonSchemaFactory {
 
         // Add $schema property (optional)
         fragmentSchema.Properties["$schema"] = new JsonSchemaProperty {
-            Type = JsonObjectType.String, IsRequired = false
+            Type = JsonObjectType.String,
+            IsRequired = false
         };
 
-        // Add Items property (required array of item type)
+        // Add Items property (array of item type)
         var itemsProperty = new JsonSchemaProperty {
-            Type = JsonObjectType.Array, Item = itemSchema, IsRequired = true
+            Type = JsonObjectType.Array,
+            Item = itemSchema,
+            IsRequired = true
         };
         fragmentSchema.Properties["Items"] = itemsProperty;
         fragmentSchema.RequiredProperties.Add("Items");
@@ -85,7 +89,8 @@ public static class JsonSchemaFactory {
         RevitTypeRegistry.Initialize();
 
         var settings = new NewtonsoftJsonSchemaGeneratorSettings {
-            FlattenInheritanceHierarchy = true, AlwaysAllowAdditionalObjectProperties = false
+            FlattenInheritanceHierarchy = true,
+            AlwaysAllowAdditionalObjectProperties = false
         };
 
         // Add individual TypeMappers for each registered Revit type
@@ -102,18 +107,18 @@ public static class JsonSchemaFactory {
     }
 
     /// <summary>
-    ///     Creates a deep clone of the schema with all required properties cleared,
-    ///     making only $extends required instead.
+    ///     Creates a deep clone of the schema with all properties cleared,
+    ///     making only $extends instead.
     /// </summary>
     private static JsonSchema CloneAndRelaxRequirements(JsonSchema full) {
         // Deep clone via JSON round-trip
         var extendsJson = full.ToJson();
         var extends = JsonSchema.FromJsonAsync(extendsJson).GetAwaiter().GetResult();
 
-        // Clear all required properties at root level
+        // Clear all properties at root level
         extends.RequiredProperties.Clear();
 
-        // Make $extends required instead
+        // Make $extends instead
         if (extends.Properties.TryGetValue("$extends", out var extendsProp)) {
             extendsProp.IsRequired = true;
             extends.RequiredProperties.Add("$extends");
@@ -126,7 +131,7 @@ public static class JsonSchemaFactory {
     ///     Writes both schema files to disk and injects the appropriate $schema reference
     ///     based on whether the content uses $extends.
     /// </summary>
-    /// <param name="fullSchema">The full schema (all required properties)</param>
+    /// <param name="fullSchema">The full schema (all properties)</param>
     /// <param name="extendsSchema">The relaxed schema (only $extends required)</param>
     /// <param name="jsonContent">The JSON content to inject the schema reference into</param>
     /// <param name="targetFilePath">Path to the target JSON file</param>
@@ -159,7 +164,7 @@ public static class JsonSchemaFactory {
         var selectedSchemaPath = hasExtends ? extendsSchemaPath : fullSchemaPath;
 
         // Calculate relative path from target file to selected schema
-        var relativeSchemaPath = Path.GetRelativePath(targetDir!, selectedSchemaPath);
+        var relativeSchemaPath = BclExtensions.GetRelativePath(targetDir!, selectedSchemaPath);
 
         // Inject $schema reference
         var jObject = JObject.Parse(jsonContent);

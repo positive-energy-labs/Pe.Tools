@@ -1,4 +1,5 @@
 using Pe.Ui.Core;
+using Pe.Global.PolyFill;
 using Pe.Ui.Core.Services;
 using System.Collections.ObjectModel;
 using System.Threading;
@@ -80,7 +81,7 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
         this._searchService = searchService;
         this.Tabs = tabs;
         var tabCount = tabs?.Count ?? 0;
-        this._selectedTabIndex = tabCount > 1 ? Math.Clamp(defaultTabIndex, 0, tabCount - 1) : 0;
+        this._selectedTabIndex = tabCount > 1 ? BclExtensions.Clamp(defaultTabIndex, 0, tabCount - 1) : 0;
 
         // Initialize debounce timer for search (100ms delay)
         this._debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
@@ -156,7 +157,7 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
         get => this._selectedTabIndex;
         set {
             if (!this.HasTabs) return;
-            var clampedValue = Math.Clamp(value, 0, this.TabCount - 1);
+            var clampedValue = BclExtensions.Clamp(value, 0, this.TabCount - 1);
             if (this.SetProperty(ref this._selectedTabIndex, clampedValue)) {
                 // Clear filter when switching tabs
                 this._selectedFilterValue = string.Empty;
@@ -249,7 +250,7 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     ) {
         if (tabs is not { Count: > 0 }) return null;
 
-        var index = Math.Clamp(selectedIndex, 0, tabs.Count - 1);
+        var index = BclExtensions.Clamp(selectedIndex, 0, tabs.Count - 1);
         return tabs[index];
     }
 

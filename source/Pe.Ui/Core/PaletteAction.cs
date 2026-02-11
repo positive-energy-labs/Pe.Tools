@@ -10,7 +10,7 @@ public record PaletteAction<TItem> where TItem : IPaletteListItem {
     /// <summary>Display name for the action (for debugging/logging)</summary>
     public string Name { get; init; } = string.Empty;
 
-    /// <summary>Keyboard modifiers required (Ctrl, Shift, Alt, etc.)</summary>
+    /// <summary>Keyboard modifiers (Ctrl, Shift, Alt, etc.)</summary>
     public ModifierKeys Modifiers { get; init; } = ModifierKeys.None;
 
     /// <summary>Keyboard key that triggers this action</summary>
