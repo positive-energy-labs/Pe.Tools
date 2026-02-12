@@ -39,8 +39,13 @@ public class MakeElecConnector(MakeElecConnectorSettings settings) : DocOperatio
             .ToList();
 
         if (!connectorElements.Any()) {
-            connectorElements.Add(MakeElectricalConnector(doc));
-            logs.Add(new LogEntry("Create connector").Success());
+            if (!TryMakeElectricalConnector(doc, out var connectorElement, out var failureMessage) || connectorElement == null) {
+                logs.Add(new LogEntry("Create connector").Error(failureMessage));
+                return new OperationLog(this.Name, logs);
+            }
+
+            connectorElements.Add(connectorElement);
+            logs.Add(new LogEntry("Create connector").Success("Created electrical connector"));
         }
 
         foreach (var connectorElement in connectorElements)
@@ -92,33 +97,69 @@ public class MakeElecConnector(MakeElecConnectorSettings settings) : DocOperatio
             .OfType<FamilyParameter>()
             .FirstOrDefault(fp => fp.Definition.Name == name);
 
-    /// <summary>
-    ///     Make an electrical connector on the family at the origin
-    /// </summary>
-    private static ConnectorElement MakeElectricalConnector(FamilyDocument doc) {
-        var referenceCollector = new FilteredElementCollector(doc)
+    private static bool TryMakeElectricalConnector(
+        FamilyDocument doc,
+        out ConnectorElement? connectorElement,
+        out string failureMessage
+    ) {
+        connectorElement = null;
+        var attempts = new List<string>();
+
+        foreach (var referencePlane in GetConnectorHostCandidates(doc)) {
+            try {
+                var planeReference = referencePlane.GetReference();
+                if (planeReference == null) {
+                    attempts.Add($"'{referencePlane.Name}': no valid reference");
+                    continue;
+                }
+
+                connectorElement = ConnectorElement.CreateElectricalConnector(
+                    doc,
+                    ElectricalSystemType.PowerBalanced,
+                    planeReference
+                );
+                failureMessage = string.Empty;
+                return true;
+            } catch (Exception ex) {
+                attempts.Add($"'{referencePlane.Name}': {ex.Message}");
+            }
+        }
+
+        failureMessage = attempts.Count == 0
+            ? "Could not create electrical connector: no candidate reference planes were found."
+            : $"Could not create electrical connector. Attempts: {string.Join(" | ", attempts)}";
+        return false;
+    }
+
+    private static IEnumerable<ReferencePlane> GetConnectorHostCandidates(FamilyDocument doc) {
+        var referencePlanes = new FilteredElementCollector(doc)
             .OfClass(typeof(ReferencePlane))
             .Cast<ReferencePlane>()
-            .FirstOrDefault(rp => rp.Name is "Center (Left/Right)" or "CenterLR");
+            .ToList();
 
-        Reference faceReference = null;
+        if (!referencePlanes.Any())
+            return [];
 
-        faceReference = new Reference(referenceCollector);
+        var preferredNames = new[] {
+            "Center (Left/Right)",
+            "CenterLR",
+            "Center (Front/Back)",
+            "CenterFB",
+            "Reference Plane"
+        };
 
-        if (faceReference == null) {
-            throw new InvalidOperationException(
-                "Could not find a suitable planar face or reference plane to place the electrical connector on.");
-        }
+        var preferredSet = new HashSet<string>(preferredNames, StringComparer.OrdinalIgnoreCase);
 
-        try {
-            // Create the electrical connector using PowerCircuit system type
-            return ConnectorElement.CreateElectricalConnector(
-                doc,
-                ElectricalSystemType.PowerBalanced,
-                faceReference);
-        } catch (Exception ex) {
-            throw new InvalidOperationException($"Failed to create electrical connector: {ex.Message}", ex);
-        }
+        var preferred = preferredNames
+            .Select(name => referencePlanes.FirstOrDefault(rp =>
+                string.Equals(rp.Name, name, StringComparison.OrdinalIgnoreCase)))
+            .Where(rp => rp != null)
+            .Cast<ReferencePlane>();
+
+        var fallback = referencePlanes
+            .Where(rp => !preferredSet.Contains(rp.Name));
+
+        return preferred.Concat(fallback);
     }
 }
 

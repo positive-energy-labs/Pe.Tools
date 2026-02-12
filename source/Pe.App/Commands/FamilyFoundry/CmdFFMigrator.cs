@@ -10,6 +10,7 @@ using Pe.Global;
 using Pe.Global.Revit.Lib;
 using Pe.Global.Revit.Ui;
 using Pe.Global.Services.Storage;
+using Pe.Global.Services.Storage.Core.Json;
 using Pe.Global.Utils.Files;
 using Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 using Serilog.Events;
@@ -22,6 +23,8 @@ namespace Pe.Tools.Commands.FamilyFoundry;
 
 [Transaction(TransactionMode.Manual)]
 public class CmdFFMigrator : IExternalCommand {
+    private const bool EnableToonIncludes = true;
+
     public Result Execute(
         ExternalCommandData commandData,
         ref string message,
@@ -32,6 +35,7 @@ public class CmdFFMigrator : IExternalCommand {
 
         try {
             var window = new FoundryPaletteBuilder<ProfileRemap>("FF Migrator", doc, uiDoc)
+                .WithToonIncludes(EnableToonIncludes)
                 .WithAction("Open Profile File", this.HandleOpenFile,
                     ctx => ctx.SelectedProfile != null)
                 .WithAction("Process Families", this.HandleProcessFamilies,
@@ -52,6 +56,7 @@ public class CmdFFMigrator : IExternalCommand {
     }
 
     private void HandlePlaceFamilies(FoundryContext<ProfileRemap> context) {
+        using var toonScope = JsonArrayComposer.EnableToonIncludesScope(EnableToonIncludes);
         var profile = context.SettingsManager.SubDir("profiles")
             .Json<ProfileRemap>($"{context.SelectedProfile.TextPrimary}.json")
             .Read();
@@ -88,6 +93,7 @@ public class CmdFFMigrator : IExternalCommand {
             return;
         }
 
+        using var toonScope = JsonArrayComposer.EnableToonIncludesScope(EnableToonIncludes);
         // Load profile fresh for execution
         var profile = ctx.SettingsManager.SubDir("profiles")
             .Json<ProfileRemap>($"{ctx.SelectedProfile.TextPrimary}.json")
@@ -198,7 +204,12 @@ public class CmdFFMigrator : IExternalCommand {
             .SelectMany(m => m.CurrNames)
             .Concat(apsParamNames);
 
-        profile.AddAndSetParams.AddParameters(BuildInternalParams(profile));
+        var internalParams = BuildInternalParams(profile)
+            .Where(internalParam => profile.AddAndSetParams.Parameters.All(existing =>
+                !string.Equals(existing.Name, internalParam.Name, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        profile.AddAndSetParams.AddParameters(internalParams);
         var apsAndAddedParamNames = apsParamNames
             .Concat(profile.AddAndSetParams.Parameters.Select(p => p.Name))
             .ToList();

@@ -1,0 +1,25 @@
+<Project Sdk="Nice3point.Revit.Sdk/6.0.2">
+  <PropertyGroup>
+    <Configurations>Debug.R23;Debug.R24;Debug.R25;Debug.R26</Configurations>
+    <Configurations>$(Configurations);Release.R23;Release.R24;Release.R25;Release.R26</Configurations>
+    <IsRepackable Condition="$(Configuration.Contains('Release'))">true</IsRepackable>
+    <IsRepackable Condition="$(Configuration.Contains('Debug'))">false</IsRepackable>
+
+    <RevitVersion Condition="$(Configuration.Contains('R23'))">2023</RevitVersion>
+    <RevitVersion Condition="$(Configuration.Contains('R24'))">2024</RevitVersion>
+    <RevitVersion Condition="$(Configuration.Contains('R25'))">2025</RevitVersion>
+    <RevitVersion Condition="$(Configuration.Contains('R26'))">2026</RevitVersion>
+    <RevitVersion Condition="'$(RevitVersion)' == '' or '$(RevitVersion)' == '-1'">2025</RevitVersion>
+
+    <TargetFramework Condition="'$(RevitVersion)' == '2023' or '$(RevitVersion)' == '2024'">net48</TargetFramework>
+    <TargetFramework Condition="'$(RevitVersion)' == '2025' or '$(RevitVersion)' == '2026'">net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all" Condition="'$(TargetFramework)' == 'net48'" />
+  </ItemGroup>
+</Project>

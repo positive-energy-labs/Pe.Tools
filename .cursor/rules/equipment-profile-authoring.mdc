@@ -1,0 +1,83 @@
+---
+description: General workflow for authoring Family Foundry equipment profiles
+alwaysApply: false
+---
+
+# Equipment Profile Authoring Workflow
+
+Use this rule manually when creating or updating Family Foundry profiles for
+mechanical, plumbing, or electrical equipment families.
+
+## Core Intent and Principles
+
+Unless otherwise told, follow these principles:
+
+- Build profiles that are accurate, repeatable, and easy to maintain.
+- Prefer clear explicit values over clever formulas.
+- Treat profiles as data products: source-traceable, testable, and revisable.
+- Be minimal. If the use-case does not require data for every model, then only
+  make the profilef or the data that the usre needs (ie. ignore unneeded models,
+  ignore unused parameters)
+
+## Source-of-Truth Order
+
+When sources conflict ask the user for how to prioritize them. A common
+prioritization might look like:
+
+1. Project schedule (or similar like user-provided equipment selection)
+2. Project-specific template/snapshot parameter schema
+3. Manufacturer submittal tables (dimensions/electrical/performance)
+4. Product website/general marketing pages
+
+Note that that the parameter names to use and the equipment submittal/spec data
+are separate concerns. Before outputting a profile, confirm with the user that
+you have correctly mapped items on the submittal to the correct parameters.
+
+## Standard Authoring Loop
+
+1. Identify profile scope (ask user for input):
+   1. What type of equipment is this (different types often get different
+      parameters)?f
+   2. Does the user need every size of this equipment's series?
+2. Discover allowed parameter names from a real
+   snapshot/template/parameter-service-cache (verify with user).
+3. Build a mapping table: source field -> target parameter -> units -> per-type
+   key.
+4. Choose type keys intentionally (almost always model number).
+5. Populate `ValueOrFormula` or `ValuesPerType` with explicit values based on
+   data sources provided by user; avoid formulas unless required or otherwise
+   told.
+6. Validate JSON parse and quickly sanity-check key/value completeness.
+
+## Quality Checks Before Hand-off
+
+- JSON is valid.
+- Every target type has the required minimum parameters populated.
+- Electrical and dimensional values use consistent units/format.
+- Profile filename clearly signals manufacturer + equipment series.
+
+## Common Failure Modes
+
+- Carrying placeholder snapshot values into final profiles.
+- Mixing old and new parameter systems in one profile.
+- Using source data for the wrong equipment configuration (split vs packaged).
+- Assuming missing values instead of leaving them explicit as unknown.
+
+## Company Standards
+
+- Binary options that affect an equipment's data should be encoded at the family
+  or family type level rather than the parameter level.
+  - For example: If a heat pump can operate at both 208V and 240V then make two
+    family types for each model number (eg. "W5AH018 208V" and "W5AH018 240V").
+    If a heat pump can be installed with or without a drain pan heater (and this
+    affects the electrical info) then make two separate families for the model
+    series (eg. "W5AH018" and "W5AH018 w/ Drain Pan Heater"). Likely the only
+    thing different between the variants would be the voltage and a few other
+    electrical parameters. While these examples are showcase electrical
+    variation (because its the most common), the same principles apply to other
+    types of variation.
+  - There is no good rule of thumb for choosing a family-level or
+    family-type-level distinction. Just do your best or ask the user for
+    guidance if unsure.
+- We do not care about wattage, only voltage and then all of the amperage values
+  that we have parameters for (in order of importance: MCA, MOCP, FLA, RLA).

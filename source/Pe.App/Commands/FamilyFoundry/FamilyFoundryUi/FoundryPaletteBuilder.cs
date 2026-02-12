@@ -2,6 +2,7 @@ using Autodesk.Revit.UI;
 using Pe.FamilyFoundry;
 using Pe.Global;
 using Pe.Global.Services.Storage;
+using Pe.Global.Services.Storage.Core.Json;
 using Pe.Global.Utils.Files;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
@@ -25,6 +26,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
     private readonly UIDocument _uiDoc;
     private Action<FoundryContext<TProfile>, List<string>> _postProcess;
     private Func<TProfile, List<SharedParameterDefinition>, OperationQueue> _queueBuilder;
+    private bool _enableToonIncludes;
 
     public FoundryPaletteBuilder(string commandName, Document doc, UIDocument uiDoc) {
         this._commandName = commandName;
@@ -66,6 +68,14 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         Action<FoundryContext<TProfile>, List<string>> postProcess
     ) {
         this._postProcess = postProcess;
+        return this;
+    }
+
+    /// <summary>
+    ///     Enables TOON fragment includes while loading profile JSON in this palette flow.
+    /// </summary>
+    public FoundryPaletteBuilder<TProfile> WithToonIncludes(bool enabled = true) {
+        this._enableToonIncludes = enabled;
         return this;
     }
 
@@ -172,6 +182,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         if (ct.IsCancellationRequested) return null;
 
         // Load the profile
+        using var toonScope = JsonArrayComposer.EnableToonIncludesScope(this._enableToonIncludes);
         var profile = context.SettingsManager.SubDir("profiles")
             .Json<TProfile>($"{profileItem.TextPrimary}.json")
             .Read();
@@ -299,9 +310,30 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         new() {
             ProfileName = profileItem.TextPrimary,
             IsValid = false,
-            RemainingErrors = new List<string> { $"{ex.GetType().Name}: {ex.Message}" },
+            RemainingErrors = BuildGenericErrorMessages(ex),
             AppliedFixes = new List<string>()
         };
+
+    private static List<string> BuildGenericErrorMessages(Exception ex) {
+        if (ex is InvalidOperationException invalidOp &&
+            invalidOp.Message.StartsWith("Duplicate parameter names in AddAndSetParams.Parameters:",
+                StringComparison.Ordinal))
+            return new List<string> {
+                invalidOp.Message,
+                "Fix: keep exactly one entry per parameter name under AddAndSetParams.Parameters.",
+                "Tip: if you define _FOUNDRY LAST PROCESSED AT in the profile, remove duplicate definitions."
+            };
+
+        if (ex is ArgumentException arg &&
+            arg.Message.Contains("same key has already been added", StringComparison.OrdinalIgnoreCase))
+            return new List<string> {
+                $"{arg.GetType().Name}: {arg.Message}",
+                "Likely cause: duplicate keys in profile collections (commonly AddAndSetParams parameter names).",
+                "Fix: ensure parameter names are unique per profile."
+            };
+
+        return new List<string> { $"{ex.GetType().Name}: {ex.Message}" };
+    }
 }
 
 /// <summary>

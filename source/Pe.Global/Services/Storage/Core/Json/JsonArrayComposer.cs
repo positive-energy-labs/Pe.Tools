@@ -1,6 +1,10 @@
 using Newtonsoft.Json;
 using Pe.Global.PolyFill;
 using Newtonsoft.Json.Linq;
+using System.Threading;
+#if NET8_0_OR_GREATER
+using Toon;
+#endif
 
 namespace Pe.Global.Services.Storage.Core.Json;
 
@@ -26,6 +30,17 @@ namespace Pe.Global.Services.Storage.Core.Json;
 /// </remarks>
 public static class JsonArrayComposer {
     private const string IncludeProperty = "$include";
+    private static readonly AsyncLocal<bool> ToonIncludesEnabled = new();
+
+    /// <summary>
+    ///     Enables TOON fragment resolution for the current async flow scope.
+    ///     Use this to opt-in command paths incrementally without global behavior changes.
+    /// </summary>
+    public static IDisposable EnableToonIncludesScope(bool enabled = true) {
+        var previous = ToonIncludesEnabled.Value;
+        ToonIncludesEnabled.Value = enabled;
+        return new Scope(() => ToonIncludesEnabled.Value = previous);
+    }
 
     /// <summary>
     ///     Recursively processes a JObject, expanding <c>$include</c> directives in all arrays.
@@ -128,13 +143,25 @@ public static class JsonArrayComposer {
     ///     Resolves a fragment path relative to the base directory.
     /// </summary>
     private static string ResolveFragmentPath(string includePath, string baseDirectory) {
-        // Add .json extension if not present
-        var fragmentFile = includePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
-            ? includePath
-            : $"{includePath}.json";
+        var hasJsonExt = includePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+        var hasToonExt = includePath.EndsWith(".toon", StringComparison.OrdinalIgnoreCase);
 
-        // Resolve relative to base directory
-        return Path.GetFullPath(Path.Combine(baseDirectory, fragmentFile));
+        if (hasJsonExt || hasToonExt) {
+            // Explicit extension path
+            return Path.GetFullPath(Path.Combine(baseDirectory, includePath));
+        }
+
+        // Extensionless path: prefer JSON, then TOON (if enabled)
+        var jsonPath = Path.GetFullPath(Path.Combine(baseDirectory, $"{includePath}.json"));
+        if (File.Exists(jsonPath)) return jsonPath;
+
+        if (ToonIncludesEnabled.Value) {
+            var toonPath = Path.GetFullPath(Path.Combine(baseDirectory, $"{includePath}.toon"));
+            if (File.Exists(toonPath)) return toonPath;
+        }
+
+        // Keep prior behavior of reporting the expected JSON path when unresolved
+        return jsonPath;
     }
 
     /// <summary>
@@ -146,8 +173,7 @@ public static class JsonArrayComposer {
         if (!File.Exists(fragmentPath)) throw JsonExtendsException.FragmentNotFound(fragmentPath);
 
         try {
-            var content = File.ReadAllText(fragmentPath);
-            var token = JToken.Parse(content);
+            var token = ParseFragmentToken(fragmentPath);
 
             // Expect fragment to be an object with "Items" property
             if (token is not JObject fragmentObj) {
@@ -177,6 +203,31 @@ public static class JsonArrayComposer {
         }
     }
 
+    private static JToken ParseFragmentToken(string fragmentPath) {
+        var ext = Path.GetExtension(fragmentPath);
+        if (ext.Equals(".json", StringComparison.OrdinalIgnoreCase)) {
+            return JToken.Parse(File.ReadAllText(fragmentPath));
+        }
+
+        if (ext.Equals(".toon", StringComparison.OrdinalIgnoreCase)) {
+            if (!ToonIncludesEnabled.Value) {
+                throw new InvalidOperationException(
+                    $"TOON fragment include is disabled for path '{fragmentPath}'. " +
+                    $"Enable via {nameof(EnableToonIncludesScope)} in the calling command path.");
+            }
+
+#if NET8_0_OR_GREATER
+            var toonContent = File.ReadAllText(fragmentPath);
+            var json = ToonTranspiler.DecodeToJson(toonContent);
+            return JToken.Parse(json);
+#else
+            throw new PlatformNotSupportedException("TOON fragment decoding is only available on NET8+ builds.");
+#endif
+        }
+
+        throw new InvalidOperationException($"Unsupported fragment extension '{ext}' for path '{fragmentPath}'.");
+    }
+
     /// <summary>
     ///     Injects $schema reference into a fragment file.
     ///     This enables LSP validation for fragment files.
@@ -194,5 +245,15 @@ public static class JsonArrayComposer {
 
         // Write back to file
         File.WriteAllText(fragmentPath, JsonConvert.SerializeObject(fragmentObj, Formatting.Indented));
+    }
+
+    private sealed class Scope(Action onDispose) : IDisposable {
+        private bool _disposed;
+
+        public void Dispose() {
+            if (this._disposed) return;
+            this._disposed = true;
+            onDispose();
+        }
     }
 }

@@ -8,6 +8,7 @@ using Pe.FamilyFoundry.Snapshots;
 using Pe.Global;
 using Pe.Global.Revit.Lib;
 using Pe.Global.Revit.Ui;
+using Pe.Global.Services.Storage.Core.Json;
 using Pe.Global.Utils.Files;
 using Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 using Serilog.Events;
@@ -20,6 +21,8 @@ namespace Pe.Tools.Commands.FamilyFoundry;
 
 [Transaction(TransactionMode.Manual)]
 public class CmdFFManager : IExternalCommand {
+    private const bool EnableToonIncludes = true;
+
     public Result Execute(
         ExternalCommandData commandData,
         ref string message,
@@ -30,6 +33,7 @@ public class CmdFFManager : IExternalCommand {
 
         try {
             var window = new FoundryPaletteBuilder<ProfileFamilyManager>("FF Manager", doc, uiDoc)
+                .WithToonIncludes(EnableToonIncludes)
                 .WithAction("Apply Profile", this.HandleApplyProfile,
                     ctx => ctx.PreviewData?.IsValid == true)
                 .WithQueueBuilder(BuildQueue)
@@ -52,6 +56,7 @@ public class CmdFFManager : IExternalCommand {
         }
 
         // Load profile fresh for execution
+        using var toonScope = JsonArrayComposer.EnableToonIncludesScope(EnableToonIncludes);
         var profile = ctx.SettingsManager.SubDir("profiles")
             .Json<ProfileFamilyManager>($"{ctx.SelectedProfile.TextPrimary}.json")
             .Read();
@@ -114,14 +119,19 @@ public class CmdFFManager : IExternalCommand {
             new() { Strength = RpStrength.CenterFB, Name = "Center", Color = new Color(115, 0, 253) }
         };
 
-        profile.AddAndSetParams.AddParameters([
-            new ParamSettingModel {
-                Name = "_FOUNDRY LAST PROCESSED AT",
-                DataType = SpecTypeId.String.Text,
-                ValueOrFormula = $"\"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\"",
-                SetAsFormula = false
-            }
-        ]);
+        var hasProcessedAtParam = profile.AddAndSetParams.Parameters.Any(p =>
+            string.Equals(p.Name, "_FOUNDRY LAST PROCESSED AT", StringComparison.OrdinalIgnoreCase));
+
+        if (!hasProcessedAtParam) {
+            profile.AddAndSetParams.AddParameters([
+                new ParamSettingModel {
+                    Name = "_FOUNDRY LAST PROCESSED AT",
+                    DataType = SpecTypeId.String.Text,
+                    ValueOrFormula = $"\"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\"",
+                    SetAsFormula = false
+                }
+            ]);
+        }
 
         // Extract parameters needed for dimension labeling from RefPlane specs
         var dimLabelParamsSettings = ExtractDimLabelParams(profile);

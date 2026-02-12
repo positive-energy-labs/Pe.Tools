@@ -61,6 +61,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\Toon\Toon.csproj"/>
     </ItemGroup>
 
     <!-- Generate TypeScript types after build, takes a long time unfortunately -->
