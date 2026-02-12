@@ -1,5 +1,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
+using Pe.Global.Services.Storage.Core.Json;
+using Pe.Global.Services.Storage.Core.Json.Converters;
 using System.Collections;
 using System.ComponentModel.DataAnnotations;
 using System.Runtime.CompilerServices;
@@ -20,6 +22,8 @@ public class RequiredAwareContractResolver : RevitTypeContractResolver {
         var property = base.CreateProperty(member, memberSerialization);
 
         if (property.PropertyType == null || member is not PropertyInfo propInfo) return property;
+
+        this.ApplyUniformChildKeySerialization(property, propInfo);
 
         // Check if property is required
         if (this.IsRequiredProperty(propInfo)) {
@@ -51,6 +55,15 @@ public class RequiredAwareContractResolver : RevitTypeContractResolver {
         };
 
         return property;
+    }
+
+    private void ApplyUniformChildKeySerialization(JsonProperty property, PropertyInfo propertyInfo) {
+        var uniformAttr = propertyInfo.GetCustomAttribute<UniformChildKeysAttribute>();
+        if (uniformAttr == null) return;
+        if (property.PropertyType == typeof(string)) return;
+        if (!typeof(IEnumerable).IsAssignableFrom(property.PropertyType)) return;
+
+        property.Converter = new UniformChildKeysListConverter(uniformAttr.MissingValue);
     }
 
     /// <summary>

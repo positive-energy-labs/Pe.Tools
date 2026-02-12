@@ -7,7 +7,7 @@ namespace Pe.FamilyFoundry.OperationGroups;
 /// <summary>
 ///     Operation group that optionally creates missing family types and parameters, then sets their values/formulas.
 ///     Execution order:
-///     0. CreateFamilyTypes (if CreateMissingFamilyTypes=true) - creates missing family types from ValuesPerType keys
+///     0. CreateFamilyTypes (if CreateMissingFamilyTypes=true) - creates missing family types from PerTypeValuesTable columns
 ///     1. AddFamilyParams (if CreateFamParamIfMissing=true) - creates missing family params
 ///     2. SetParamValues - sets formulas (default) or global values based on SetAsFormula property
 ///     3. SetParamValuesPerType - handles explicit per-type values and failed global value fallbacks
@@ -33,10 +33,14 @@ public class AddAndSetParams(AddAndSetParamsSettings settings, bool createMissin
         AddAndSetParamsSettings settings,
         bool createMissingFamilyTypes
     ) {
+        var perTypeValuesByParameter = settings.GetPerTypeValuesByParameter();
+
         // Sort parameters by dependency order (modifies the Parameters list in place)
         var sortedParams = SortByDependencies(settings.Parameters);
         settings.Parameters.Clear();
         settings.Parameters.AddRange(sortedParams);
+
+        ValidateParameterValueSources(settings.Parameters, perTypeValuesByParameter);
 
         var ops = new List<IOperation>();
 
@@ -55,6 +59,41 @@ public class AddAndSetParams(AddAndSetParamsSettings settings, bool createMissin
         ops.Add(new SetParamValuesPerType(settings));
 
         return ops;
+    }
+
+    private static void ValidateParameterValueSources(
+        List<ParamSettingModel> parameters,
+        Dictionary<string, Dictionary<string, string>> perTypeValuesByParameter
+    ) {
+        var parameterNames = parameters
+            .Where(p => !string.IsNullOrWhiteSpace(p.Name))
+            .Select(p => p.Name)
+            .ToList();
+        var parameterNameSet = new HashSet<string>(parameterNames, StringComparer.Ordinal);
+
+        var unknownTableRows = perTypeValuesByParameter.Keys
+            .Where(name => !parameterNameSet.Contains(name))
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+        if (unknownTableRows.Count > 0) {
+            throw new InvalidOperationException(
+                $"AddAndSetParams validation failed: PerTypeValuesTable contains row(s) for unknown parameter(s): " +
+                $"{string.Join(", ", unknownTableRows)}. " +
+                "Each row's 'Parameter' value must match a Name in AddAndSetParams.Parameters.");
+        }
+
+        foreach (var parameter in parameters) {
+            var hasGlobalValue = !string.IsNullOrWhiteSpace(parameter.ValueOrFormula);
+            var hasPerTypeValues = perTypeValuesByParameter.TryGetValue(parameter.Name, out var valuesPerType)
+                                   && valuesPerType.Count > 0;
+
+            if (hasGlobalValue && hasPerTypeValues) {
+                throw new InvalidOperationException(
+                    $"AddAndSetParams validation failed for parameter '{parameter.Name}': " +
+                    "cannot define both ValueOrFormula and PerTypeValuesTable values. " +
+                    "Use exactly one value source per parameter.");
+            }
+        }
     }
 
     /// <summary>

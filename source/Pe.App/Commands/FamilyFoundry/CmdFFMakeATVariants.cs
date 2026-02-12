@@ -5,6 +5,7 @@ using Pe.FamilyFoundry.OperationGroups;
 using Pe.FamilyFoundry.Operations;
 using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Snapshots;
+using Pe.Global.PolyFill;
 using Pe.Global.Revit.Ui;
 using Pe.Global.Services.Storage;
 using Serilog.Events;
@@ -126,16 +127,27 @@ public class ATVariantQueueFactory {
     public ATVariantQueueFactory(ATVariantSettings baseSettings) => this._baseSettings = baseSettings;
 
     public VariantSpec CreateVariant(ATVariantDescriptor descriptor) {
+        var perTypeValues = this._baseSettings.SecondLetterDict
+            .ToDictionary(kv => kv.Key, kv => descriptor.SystemLetter + kv.Value + "X-#", StringComparer.Ordinal);
+
         // Create the parameter settings for PE_G___TagInstance
         var paramSettings = new ParamSettingModel {
             Name = "PE_G___TagInstance",
-            ValuesPerType = this._baseSettings.SecondLetterDict
-                .ToDictionary(kv => kv.Key, kv => descriptor.SystemLetter + kv.Value + "X-#"),
             SetAsFormula = false
         };
 
+        var perTypeRow = new Dictionary<string, string>(StringComparer.Ordinal) {
+            [AddAndSetParamsSettings.PerTypeValuesTableParameterColumn] = paramSettings.Name
+        };
+
+        foreach (var (typeName, value) in perTypeValues)
+            perTypeRow[typeName] = value;
+
         // Build synthetic settings that will be logged
-        var syntheticSettings = new AddAndSetParamsSettings { Parameters = [paramSettings] };
+        var syntheticSettings = new AddAndSetParamsSettings {
+            Parameters = [paramSettings],
+            PerTypeValuesTable = [perTypeRow]
+        };
 
         // Build operation queue
         var queue = new OperationQueue()

@@ -32,7 +32,7 @@ public class SetParamValues(AddAndSetParamsSettings settings)
         });
 
         foreach (var (p, log) in data) {
-            // Skip if using ValuesPerType (handled by SetParamValuesPerType)
+            // Skip when no global value/formula is provided (handled by SetParamValuesPerType via table data)
             if (string.IsNullOrWhiteSpace(p.ValueOrFormula)) continue;
 
             var parameter = fm.FindParameter(p.Name);

@@ -324,6 +324,33 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
                 "Tip: if you define _FOUNDRY LAST PROCESSED AT in the profile, remove duplicate definitions."
             };
 
+        if (ex is InvalidOperationException invalidOpSplitModel &&
+            invalidOpSplitModel.Message.Contains("missing value source", StringComparison.OrdinalIgnoreCase))
+            return new List<string> {
+                invalidOpSplitModel.Message,
+                "Fix: for each AddAndSetParams.Parameters item, choose one source:",
+                " - ValueOrFormula for global value/formula, OR",
+                " - a matching AddAndSetParams.PerTypeValuesTable row where Parameter == Name."
+            };
+
+        if (ex is InvalidOperationException invalidOpConflict &&
+            invalidOpConflict.Message.Contains("cannot define both ValueOrFormula and PerTypeValuesTable values",
+                StringComparison.OrdinalIgnoreCase))
+            return new List<string> {
+                invalidOpConflict.Message,
+                "Fix: remove one source so each parameter uses only one value source.",
+                "Use ValueOrFormula for global assignment, or PerTypeValuesTable for per-type assignment."
+            };
+
+        if (ex is InvalidOperationException invalidOpUnknownTableRow &&
+            invalidOpUnknownTableRow.Message.Contains("PerTypeValuesTable contains row(s) for unknown parameter(s)",
+                StringComparison.OrdinalIgnoreCase))
+            return new List<string> {
+                invalidOpUnknownTableRow.Message,
+                "Fix: every PerTypeValuesTable row must reference an existing parameter name.",
+                "Set row.Parameter to exactly match a Name in AddAndSetParams.Parameters."
+            };
+
         if (ex is ArgumentException arg &&
             arg.Message.Contains("same key has already been added", StringComparison.OrdinalIgnoreCase))
             return new List<string> {

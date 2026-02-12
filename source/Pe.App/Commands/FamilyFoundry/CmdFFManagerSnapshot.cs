@@ -98,7 +98,7 @@ public class CmdFFManagerSnapshot : IExternalCommand {
     ///     Converts a FamilySnapshot to a ProfileFamilyManager that can be used by CmdFFManager.
     /// </summary>
     private static ProfileFamilyManager ConvertSnapshotToProfile(FamilySnapshot snapshot) {
-        var paramSettings = ConvertParamsToSettings(snapshot.Parameters?.Data ?? []);
+        var (paramSettings, perTypeValuesTable) = ConvertParamsToSettings(snapshot.Parameters?.Data ?? []);
         var mirrorSpecs = snapshot.RefPlanesAndDims?.MirrorSpecs ?? [];
         var offsetSpecs = snapshot.RefPlanesAndDims?.OffsetSpecs ?? [];
         var rectangleExtrusions = snapshot.Extrusions?.Rectangles ?? [];
@@ -129,7 +129,8 @@ public class CmdFFManagerSnapshot : IExternalCommand {
                 Enabled = paramSettings.Count > 0,
                 CreateFamParamIfMissing = true,
                 OverrideExistingValues = true,
-                Parameters = paramSettings
+                Parameters = paramSettings,
+                PerTypeValuesTable = perTypeValuesTable
             },
             MakeConstrainedExtrusions = new MakeConstrainedExtrusionsSettings {
                 Enabled = hasConstrainedExtrusions,
@@ -141,10 +142,12 @@ public class CmdFFManagerSnapshot : IExternalCommand {
 
     /// <summary>
     ///     Converts ParamSnapshots to ParamSettingModels for the profile.
-    ///     Handles the mutual exclusivity of ValueOrFormula vs ValuesPerType.
+    ///     Returns both parameter models and a transposed per-type values table.
     /// </summary>
-    private static List<ParamSettingModel> ConvertParamsToSettings(List<ParamSnapshot> snapshots) {
-        var result = new List<ParamSettingModel>();
+    private static (List<ParamSettingModel> Parameters, List<Dictionary<string, string>> PerTypeValuesTable)
+        ConvertParamsToSettings(List<ParamSnapshot> snapshots) {
+        var parameters = new List<ParamSettingModel>();
+        var perTypeValuesTable = new List<Dictionary<string, string>>();
 
         foreach (var snap in snapshots) {
             // Skip built-in parameters (cannot be created/managed by profile)
@@ -153,63 +156,20 @@ public class CmdFFManagerSnapshot : IExternalCommand {
             // Skip project parameters (not family parameters)
             if (snap.IsProjectParameter) continue;
 
-            var setting = ConvertSingleParam(snap);
-            if (setting != null)
-                result.Add(setting);
+            parameters.Add(new ParamSettingModel {
+                Name = snap.Name,
+                IsInstance = snap.IsInstance,
+                PropertiesGroup = snap.PropertiesGroup,
+                DataType = snap.DataType,
+                ValueOrFormula = snap.ValueOrFormula,
+                SetAsFormula = snap.SetAsFormula
+            });
+
+            var row = snap.ToPerTypeValuesTableRow(AddAndSetParamsSettings.PerTypeValuesTableParameterColumn);
+            if (row != null)
+                perTypeValuesTable.Add(row);
         }
 
-        return result;
-    }
-
-    /// <summary>
-    ///     Converts a single ParamSnapshot to a ParamSettingModel.
-    ///     Priority: Formula > Uniform Value > Per-Type Values
-    /// </summary>
-    private static ParamSettingModel? ConvertSingleParam(ParamSnapshot snap) {
-        // Case 1: Has formula - use ValueOrFormula with SetAsFormula=true
-        if (!string.IsNullOrWhiteSpace(snap.Formula)) {
-            return new ParamSettingModel {
-                Name = snap.Name,
-                IsInstance = snap.IsInstance,
-                PropertiesGroup = snap.PropertiesGroup,
-                DataType = snap.DataType,
-                ValueOrFormula = snap.Formula,
-                SetAsFormula = true
-            };
-        }
-
-        // Get non-null values
-        var nonNullValues = snap.ValuesPerType
-            .Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
-            .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
-
-        // Skip if no values at all
-        if (nonNullValues.Count == 0)
-            return null;
-
-        // Case 2: All values are the same - use ValueOrFormula with SetAsFormula=false
-        var distinctValues = nonNullValues.Values.Distinct().ToList();
-        return distinctValues.Count switch {
-            1 when string.IsNullOrWhiteSpace(distinctValues.First()) => null,
-            1 => new ParamSettingModel {
-                Name = snap.Name,
-                IsInstance = snap.IsInstance,
-                PropertiesGroup = snap.PropertiesGroup,
-                DataType = snap.DataType,
-                ValueOrFormula = distinctValues[0],
-                SetAsFormula = false,
-                ValuesPerType = null
-            },
-            _ => new ParamSettingModel {
-                Name = snap.Name,
-                IsInstance = snap.IsInstance,
-                PropertiesGroup = snap.PropertiesGroup,
-                DataType = snap.DataType,
-                SetAsFormula = true, // default, ignored when ValueOrFormula is null
-                ValuesPerType = nonNullValues
-            }
-        };
-
-        // Case 3: Different values per type - use ValuesPerType
+        return (parameters, perTypeValuesTable);
     }
 }

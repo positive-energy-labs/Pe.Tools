@@ -5,14 +5,16 @@
     <IsRepackable Condition="$(Configuration.Contains('Release'))">true</IsRepackable>
     <IsRepackable Condition="$(Configuration.Contains('Debug'))">false</IsRepackable>
 
-    <RevitVersion Condition="$(Configuration.Contains('R23'))">2023</RevitVersion>
-    <RevitVersion Condition="$(Configuration.Contains('R24'))">2024</RevitVersion>
-    <RevitVersion Condition="$(Configuration.Contains('R25'))">2025</RevitVersion>
-    <RevitVersion Condition="$(Configuration.Contains('R26'))">2026</RevitVersion>
-    <RevitVersion Condition="'$(RevitVersion)' == '' or '$(RevitVersion)' == '-1'">2025</RevitVersion>
-
-    <TargetFramework Condition="'$(RevitVersion)' == '2023' or '$(RevitVersion)' == '2024'">net48</TargetFramework>
-    <TargetFramework Condition="'$(RevitVersion)' == '2025' or '$(RevitVersion)' == '2026'">net8.0-windows</TargetFramework>
+    <!-- Map configuration suffix to Revit version -->
+    
+   
+   
+   
+    
+    <!-- Default to 2025 for "Debug"/"Release" configs, and also for broader LSP support (e.g. Cursor) -->
+    <!-- NOTE: update as Positive Energy migrated to newer Revit Versions -->
+    <RevitVersion>2025</RevitVersion>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>

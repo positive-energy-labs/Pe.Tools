@@ -10,7 +10,7 @@ namespace Pe.FamilyFoundry.Operations;
 /// <summary>
 ///     Sets parameter values on a per-type basis.
 ///     Handles two scenarios:
-///     1. Explicit per-type values from PerTypeParameters (different value per named type)
+///     1. Explicit per-type values from AddAndSetParamsSettings.PerTypeValuesTable
 ///     2. Fallback for Parameters that failed SetGlobalValue (deferred via GroupContext)
 ///     Values are context-aware but must NOT contain parameter references
 ///     (formulas with param refs should use SetParamValues instead).
@@ -31,6 +31,7 @@ public class SetParamValuesPerType(AddAndSetParamsSettings settings)
 
         var fm = famDoc.FamilyManager;
         var currentTypeName = fm.CurrentType?.Name;
+        var perTypeValuesByParameter = this.Settings.GetPerTypeValuesByParameter();
 
         // Check if all work items are already handled
         var incomplete = groupContext.GetAllInComplete();
@@ -49,16 +50,16 @@ public class SetParamValuesPerType(AddAndSetParamsSettings settings)
                 continue;
             }
 
-            // Determine the value to set: prioritize ValueOrFormula over ValuesPerType
+            // Determine the value to set: fallback global value first, then explicit table-based per-type value
             string? valueToSet = null;
             var isFallback = false;
 
             if (!string.IsNullOrWhiteSpace(paramModel.ValueOrFormula)) {
                 valueToSet = paramModel.ValueOrFormula;
                 isFallback = true;
-            } else if (paramModel.ValuesPerType?.Count > 0
-                       && currentTypeName is not null
-                       && paramModel.ValuesPerType.TryGetValue(currentTypeName, out var perTypeValue))
+            } else if (currentTypeName is not null
+                       && perTypeValuesByParameter.TryGetValue(paramModel.Name, out var valuesPerType)
+                       && valuesPerType.TryGetValue(currentTypeName, out var perTypeValue))
                 valueToSet = perTypeValue;
 
             // Skip if no value to set
@@ -99,7 +100,8 @@ public class SetParamValuesPerType(AddAndSetParamsSettings settings)
         var referencedParams = fm.Parameters.GetReferencedIn(actualValue).ToList();
         if (referencedParams.Count != 0) {
             throw new InvalidOperationException(
-                $"Per-type value '{actualValue}' contains parameter references. Use ValueOrFormula with SetAsFormula=true for formulas, not ValuesPerType.");
+                $"Per-type value '{actualValue}' contains parameter references. " +
+                "Use ValueOrFormula with SetAsFormula=true for formulas, not PerTypeValuesTable.");
         }
 
         _ = famDoc.SetValue(parameter, actualValue, nameof(BuiltInCoercionStrategy.CoerceByStorageType));

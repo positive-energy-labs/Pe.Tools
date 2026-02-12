@@ -44,4 +44,5 @@
     <Project Path="source/Pe.FamilyFoundry/Pe.FamilyFoundry.csproj"/>
     <Project Path="source/Pe.Global/Pe.Global.csproj"/>
     <Project Path="source/Pe.Ui/Pe.Ui.csproj"/>
+    <Project Path="source/Toon/Toon.csproj"/>
 </Solution>

@@ -3,6 +3,7 @@ using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
 using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using System.Linq;
 
 namespace Pe.FamilyFoundry.Aggregators.Snapshots;
 
@@ -56,6 +57,23 @@ public record ParamSnapshot : ParamDefinitionBase {
     /// </summary>
     public bool IsProjectParameter { get; init; } = false;
 
+    /// <summary>
+    ///     Settings-compatible value field.
+    ///     - Formula when formula exists.
+    ///     - Uniform value when all non-empty type values are the same.
+    ///     - Null when values vary by type (use PerTypeValuesTable row).
+    /// </summary>
+    public string? ValueOrFormula =>
+        !string.IsNullOrWhiteSpace(this.Formula)
+            ? this.Formula
+            : this.TryGetUniformNonEmptyValue();
+
+    /// <summary>
+    ///     Settings-compatible assignment mode.
+    ///     True only when this snapshot represents a formula.
+    /// </summary>
+    public bool SetAsFormula => !string.IsNullOrWhiteSpace(this.Formula);
+
     /// <summary>Checks if a parameter has a (non-empty) value for all family types.</summary>
     public bool HasValueForAllTypes() {
         if (this is null) return false;
@@ -75,5 +93,36 @@ public record ParamSnapshot : ParamDefinitionBase {
                     .Select(kv => kv.Key)
             ]
             : [.. this.ValuesPerType.Keys];
+    }
+
+    /// <summary>
+    ///     Builds a settings-compatible per-type table row when values are not representable
+    ///     by ValueOrFormula (non-uniform values with no formula).
+    /// </summary>
+    public Dictionary<string, string>? ToPerTypeValuesTableRow(string parameterColumnName = "Parameter") {
+        if (!string.IsNullOrWhiteSpace(this.Formula)) return null;
+
+        var nonNullValues = this.ValuesPerType
+            .Where(kv => !string.IsNullOrWhiteSpace(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
+            .ToDictionary(kv => kv.Key, kv => kv.Value!, StringComparer.Ordinal);
+
+        if (nonNullValues.Count == 0) return null;
+        if (nonNullValues.Values.Distinct(StringComparer.Ordinal).Count() == 1) return null;
+
+        var row = new Dictionary<string, string>(StringComparer.Ordinal) {
+            [parameterColumnName] = this.Name
+        };
+        foreach (var kv in nonNullValues)
+            row[kv.Key] = kv.Value;
+        return row;
+    }
+
+    private string? TryGetUniformNonEmptyValue() {
+        var distinctValues = this.ValuesPerType.Values
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return distinctValues.Count == 1 ? distinctValues[0] : null;
     }
 }

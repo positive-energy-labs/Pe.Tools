@@ -42,6 +42,8 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
     /// <summary>
     ///     Supplements existing project-collected data with formulas from family document.
     ///     ValuesPerType already exist from project collection, we just add Formula field.
+    ///     The collected shape is later serialized into split settings-compatible form
+    ///     (Parameters + PerTypeValuesTable) by snapshot output builders.
     /// </summary>
     private void SupplementWithFormulas(FamilySnapshot snapshot, FamilyDocument famDoc) {
         if (snapshot.Parameters?.Data == null || snapshot.Parameters.Data.Count == 0)

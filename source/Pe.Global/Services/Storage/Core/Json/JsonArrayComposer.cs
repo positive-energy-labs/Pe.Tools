@@ -30,6 +30,7 @@ namespace Pe.Global.Services.Storage.Core.Json;
 /// </remarks>
 public static class JsonArrayComposer {
     private const string IncludeProperty = "$include";
+    private const string FragmentsDirectoryName = "_fragments";
     private static readonly AsyncLocal<bool> ToonIncludesEnabled = new();
 
     /// <summary>
@@ -143,25 +144,44 @@ public static class JsonArrayComposer {
     ///     Resolves a fragment path relative to the base directory.
     /// </summary>
     private static string ResolveFragmentPath(string includePath, string baseDirectory) {
-        var hasJsonExt = includePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
-        var hasToonExt = includePath.EndsWith(".toon", StringComparison.OrdinalIgnoreCase);
+        var normalizedIncludePath = includePath.Replace('\\', '/').Trim();
+        ValidateIncludePath(normalizedIncludePath);
+        var relativePath = normalizedIncludePath.Replace('/', Path.DirectorySeparatorChar);
+
+        var hasJsonExt = normalizedIncludePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+        var hasToonExt = normalizedIncludePath.EndsWith(".toon", StringComparison.OrdinalIgnoreCase);
 
         if (hasJsonExt || hasToonExt) {
             // Explicit extension path
-            return Path.GetFullPath(Path.Combine(baseDirectory, includePath));
+            return Path.GetFullPath(Path.Combine(baseDirectory, relativePath));
         }
 
         // Extensionless path: prefer JSON, then TOON (if enabled)
-        var jsonPath = Path.GetFullPath(Path.Combine(baseDirectory, $"{includePath}.json"));
+        var jsonPath = Path.GetFullPath(Path.Combine(baseDirectory, $"{relativePath}.json"));
         if (File.Exists(jsonPath)) return jsonPath;
 
         if (ToonIncludesEnabled.Value) {
-            var toonPath = Path.GetFullPath(Path.Combine(baseDirectory, $"{includePath}.toon"));
+            var toonPath = Path.GetFullPath(Path.Combine(baseDirectory, $"{relativePath}.toon"));
             if (File.Exists(toonPath)) return toonPath;
         }
 
         // Keep prior behavior of reporting the expected JSON path when unresolved
         return jsonPath;
+    }
+
+    private static void ValidateIncludePath(string includePath) {
+        if (string.IsNullOrWhiteSpace(includePath))
+            throw JsonExtendsException.InvalidIncludePath(includePath);
+        if (Path.IsPathRooted(includePath))
+            throw JsonExtendsException.InvalidIncludePath(includePath);
+
+        var segments = includePath.Split(['/'], StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0)
+            throw JsonExtendsException.InvalidIncludePath(includePath);
+        if (!segments[0].Equals(FragmentsDirectoryName, StringComparison.OrdinalIgnoreCase))
+            throw JsonExtendsException.InvalidIncludePath(includePath);
+        if (segments.Any(s => s == "." || s == ".."))
+            throw JsonExtendsException.InvalidIncludePath(includePath);
     }
 
     /// <summary>
@@ -175,24 +195,31 @@ public static class JsonArrayComposer {
         try {
             var token = ParseFragmentToken(fragmentPath);
 
+            // Also support fragments authored as a bare array for flexibility.
+            if (token is JArray directArray)
+                return directArray;
+
             // Expect fragment to be an object with "Items" property
             if (token is not JObject fragmentObj) {
                 throw JsonExtendsException.InvalidFragmentFormat(
                     fragmentPath,
-                    $"Expected object with 'Items' property, got {token.Type}"
+                    $"Expected object with 'Items' property or bare array, got {token.Type}"
                 );
             }
 
             // Extract the Items array
-            if (!fragmentObj.TryGetValue("Items", out var itemsToken) || itemsToken is not JArray array) {
+            if (!TryGetItemsArray(fragmentObj, out var array)) {
                 throw JsonExtendsException.InvalidFragmentFormat(
                     fragmentPath,
                     "Missing or invalid 'Items' property"
                 );
             }
 
-            // Inject schema reference if schema directory provided and not already present
-            if (fragmentSchemaDirectory != null && !fragmentObj.ContainsKey("$schema"))
+            // Inject schema reference only for JSON fragments. Writing JSON into a .toon file
+            // would silently corrupt Toon-authored fragments.
+            var isJsonFragment = Path.GetExtension(fragmentPath)
+                .Equals(".json", StringComparison.OrdinalIgnoreCase);
+            if (isJsonFragment && fragmentSchemaDirectory != null && !fragmentObj.ContainsKey("$schema"))
                 InjectFragmentSchema(fragmentPath, fragmentObj, fragmentSchemaDirectory!);
 
             return array;
@@ -201,6 +228,26 @@ public static class JsonArrayComposer {
         } catch (Exception ex) {
             throw JsonExtendsException.FragmentLoadFailed(fragmentPath, ex);
         }
+    }
+
+    private static bool TryGetItemsArray(JObject fragmentObj, out JArray array) {
+        array = null!;
+
+        if (fragmentObj.TryGetValue("Items", StringComparison.OrdinalIgnoreCase, out var itemsToken)
+            && itemsToken is JArray caseInsensitiveArray) {
+            array = caseInsensitiveArray;
+            return true;
+        }
+
+        // Defensive fallback: handle accidental BOM-prefixed property names.
+        var bomPrefixed = fragmentObj.Properties()
+            .FirstOrDefault(p => p.Name.TrimStart('\uFEFF').Equals("Items", StringComparison.OrdinalIgnoreCase));
+        if (bomPrefixed?.Value is JArray bomArray) {
+            array = bomArray;
+            return true;
+        }
+
+        return false;
     }
 
     private static JToken ParseFragmentToken(string fragmentPath) {

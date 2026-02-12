@@ -4,6 +4,7 @@ using Pe.Global;
 using Pe.Global.Services.Storage;
 using Pe.Global.Services.Storage.Core;
 using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
+using Pe.FamilyFoundry.OperationSettings;
 
 namespace Pe.FamilyFoundry;
 
@@ -307,7 +308,7 @@ public class ProcessingResultBuilder(Storage storage) {
     private static void SerializeSnapshotSections(FamilySnapshot snapshot, OutputManager output, string prefix) {
         if (snapshot.Parameters?.Data != null && snapshot.Parameters.Data.Count > 0) {
             var paramsData = snapshot.Parameters.Data;
-            _ = output.Json($"snapshot-parameters-{prefix}.json").Write(SortAndOrder(paramsData));
+            _ = output.Json($"snapshot-parameters-{prefix}.json").Write(ToSettingsCompatibleSnapshot(paramsData));
         }
 
         if (snapshot.RefPlanesAndDims != null) {
@@ -332,6 +333,35 @@ public class ProcessingResultBuilder(Storage storage) {
                 .OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.Ordinal)
         }).ToList();
+    }
+
+    private static AddAndSetParamsSettings ToSettingsCompatibleSnapshot(List<ParamSnapshot> snapshots) {
+        var ordered = SortAndOrder(snapshots);
+
+        var parameters = ordered
+            .Select(s => new ParamSettingModel {
+                Name = s.Name,
+                IsInstance = s.IsInstance,
+                PropertiesGroup = s.PropertiesGroup,
+                DataType = s.DataType,
+                ValueOrFormula = s.ValueOrFormula,
+                SetAsFormula = s.SetAsFormula
+            })
+            .ToList();
+
+        var perTypeValuesTable = ordered
+            .Select(s => s.ToPerTypeValuesTableRow(AddAndSetParamsSettings.PerTypeValuesTableParameterColumn))
+            .Where(r => r != null)
+            .Select(r => r!)
+            .ToList();
+
+        return new AddAndSetParamsSettings {
+            Enabled = parameters.Count > 0,
+            CreateFamParamIfMissing = true,
+            OverrideExistingValues = true,
+            Parameters = parameters,
+            PerTypeValuesTable = perTypeValuesTable
+        };
     }
 
     private static string SanitizeDirName(string name) {

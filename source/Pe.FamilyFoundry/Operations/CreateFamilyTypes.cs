@@ -4,13 +4,13 @@ using Pe.FamilyFoundry.OperationSettings;
 namespace Pe.FamilyFoundry.Operations;
 
 /// <summary>
-///     Creates missing family types referenced in ValuesPerType dictionaries.
+///     Creates missing family types referenced in AddAndSetParamsSettings.PerTypeValuesTable columns.
 ///     Runs as a DocOperation (once per family) to create all missing types upfront.
 /// </summary>
 public class CreateFamilyTypes(AddAndSetParamsSettings settings)
     : DocOperation<AddAndSetParamsSettings>(settings) {
     public override string Description =>
-        "Create missing family types that are referenced in ValuesPerType dictionaries.";
+        "Create missing family types that are referenced in PerTypeValuesTable columns.";
 
     public override OperationLog Execute(
         FamilyDocument famDoc,
@@ -19,16 +19,11 @@ public class CreateFamilyTypes(AddAndSetParamsSettings settings)
     ) {
         var fm = famDoc.FamilyManager;
 
-        // Collect all unique type names from ValuesPerType across all parameters
-        var referencedTypeNames = this.Settings.Parameters
-            .Where(p => p.ValuesPerType != null)
-            .SelectMany(p => p.ValuesPerType.Keys)
-            .Distinct(StringComparer.Ordinal)
-            .ToHashSet(StringComparer.Ordinal);
+        var referencedTypeNames = this.Settings.GetReferencedFamilyTypeNames();
 
         if (referencedTypeNames.Count == 0) {
             return new OperationLog(this.Name, [
-                new LogEntry("No types referenced").Skip("No ValuesPerType dictionaries found")
+                new LogEntry("No types referenced").Skip("No PerTypeValuesTable type columns found")
             ]);
         }
 
