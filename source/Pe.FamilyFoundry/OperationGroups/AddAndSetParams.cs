@@ -62,6 +62,19 @@ public class AddAndSetParams(AddAndSetParamsSettings settings, bool createMissin
     ///     Parameters with no dependencies come first, followed by parameters that depend on them.
     /// </summary>
     private static List<ParamSettingModel> SortByDependencies(List<ParamSettingModel> parameters) {
+        var duplicateNames = parameters
+            .Where(p => !string.IsNullOrWhiteSpace(p.Name))
+            .GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (duplicateNames.Count > 0)
+            throw new InvalidOperationException(
+                $"Duplicate parameter names in AddAndSetParams.Parameters: {string.Join(", ", duplicateNames)}. " +
+                "Each parameter name must appear only once in a profile.");
+
         // IMPORTANT: Always return a NEW list to avoid the caller clearing the original
         // when they do Clear() + AddRange() with the returned list
         if (parameters.Count <= 1) return new List<ParamSettingModel>(parameters);

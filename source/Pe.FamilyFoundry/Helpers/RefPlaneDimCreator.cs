@@ -64,6 +64,26 @@ public class RefPlaneDimCreator(
         return Line.CreateBound(p1, p2);
     }
 
+    private static Line CreateDimensionLine(ReferencePlane rp1, ReferencePlane rp2, double offset, View view) {
+        var normal = rp1.Normal.Normalize();
+        var rp1Mid = (rp1.BubbleEnd + rp1.FreeEnd) * 0.5;
+        var rp2Mid = (rp2.BubbleEnd + rp2.FreeEnd) * 0.5;
+        var distanceAlongNormal = (rp2Mid - rp1Mid).DotProduct(normal);
+
+        // Height-like dimensions need a line in the target view plane.
+        var isHeightLike = Math.Abs(normal.Z) > 0.95;
+        if (!isHeightLike || view == null)
+            return CreateDimensionLine(rp1, rp2, offset);
+
+        var up = view.UpDirection.Normalize();
+        var right = view.RightDirection.Normalize();
+        var dimAxis = Math.Abs(up.DotProduct(normal)) > 0.8 ? up : normal;
+
+        var p1 = rp1Mid + (right * offset);
+        var p2 = p1 + (dimAxis * distanceAlongNormal);
+        return Line.CreateBound(p1, p2);
+    }
+
     #region Plane Creation (First Operation)
 
     /// <summary>
@@ -316,16 +336,17 @@ public class RefPlaneDimCreator(
         }
 
         var dimOffset = DimStaggerStep + (DimStaggerStep * staggerIndex);
+        var dimView = this.GetBestDimensionView(anchor, target);
 
         try {
             var refArray = new ReferenceArray();
             refArray.Append(anchor.GetReference());
             refArray.Append(target.GetReference());
 
-            var dimLine = CreateDimensionLine(anchor, target, dimOffset);
+            var dimLine = CreateDimensionLine(anchor, target, dimOffset, dimView);
             Console.WriteLine($"[CreateOffsetDimension] Dim line length: {dimLine.Length:F6}");
 
-            var dim = doc.FamilyCreate.NewLinearDimension(doc.ActiveView, dimLine, refArray);
+            var dim = doc.FamilyCreate.NewLinearDimension(dimView, dimLine, refArray);
 
             if (!string.IsNullOrEmpty(spec.Parameter)) {
                 var param = doc.FamilyManager.get_Parameter(spec.Parameter);
@@ -340,6 +361,22 @@ public class RefPlaneDimCreator(
             Console.WriteLine($"[CreateOffsetDimension] ERROR: {ex.Message}");
             logs.Add(new LogEntry($"Offset dim: {spec.Name}").Error(ex));
         }
+    }
+
+    private View GetBestDimensionView(ReferencePlane anchor, ReferencePlane target) {
+        var isHeightLike = Math.Abs(anchor.Normal.Normalize().Z) > 0.95 &&
+                           Math.Abs(target.Normal.Normalize().Z) > 0.95;
+        if (!isHeightLike)
+            return doc.ActiveView;
+
+        var elevation = new FilteredElementCollector(doc)
+            .OfClass(typeof(View))
+            .Cast<View>()
+            .FirstOrDefault(v =>
+                !v.IsTemplate &&
+                (v.ViewType == ViewType.Elevation || v.ViewType == ViewType.Section));
+
+        return elevation ?? doc.ActiveView;
     }
 
     #endregion

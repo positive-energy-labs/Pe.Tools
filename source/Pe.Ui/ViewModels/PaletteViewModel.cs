@@ -346,7 +346,7 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
                 if (sequence != this._filterSequence) return;
 
                 // Use efficient differential update instead of Clear/Add
-                this.UpdateCollectionEfficiently(this.FilteredItems, filteredItems);
+                UpdateCollectionEfficiently(this.FilteredItems, filteredItems);
 
                 // Reset selection to first item
                 this.SelectedIndex = this.FilteredItems.Count > 0 ? 0 : -1;
@@ -369,29 +369,18 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     }
 
     /// <summary>
-    ///     Efficiently updates an ObservableCollection to match a target list.
-    ///     Uses differential updates to minimize CollectionChanged notifications.
+    ///     Updates the bound collection using a reset-style flow.
+    ///     WPF list views can occasionally throw internal index exceptions when they
+    ///     process dense, mixed add/remove/replace batches from rapid filtering.
+    ///     This favors stability over micro-optimizing change notifications.
     /// </summary>
-    private void UpdateCollectionEfficiently(ObservableCollection<TItem> target, List<TItem> source) {
-        var sourceSet = new HashSet<TItem>(source);
+    private static void UpdateCollectionEfficiently(ObservableCollection<TItem> target, List<TItem> source) {
+        if (ReferenceEquals(target, source)) return;
+        if (target.Count == source.Count && target.SequenceEqual(source)) return;
 
-        // Remove items not in source (iterate backwards to avoid index shifting)
-        for (var i = target.Count - 1; i >= 0; i--) {
-            if (!sourceSet.Contains(target[i]))
-                target.RemoveAt(i);
-        }
-
-        // Add/reorder items from source
-        for (var i = 0; i < source.Count; i++) {
-            if (i >= target.Count) {
-                // Need to add new item
-                target.Add(source[i]);
-            } else if (!EqualityComparer<TItem>.Default.Equals(target[i], source[i])) {
-                // Item at this position is different, update it
-                target[i] = source[i];
-            }
-            // else: item is already in the correct position, no action needed
-        }
+        target.Clear();
+        foreach (var item in source)
+            target.Add(item);
     }
 
     /// <summary>

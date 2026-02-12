@@ -126,6 +126,7 @@ public class MakeConstrainedExtrusions(MakeConstrainedExtrusionsSettings setting
         string key
     ) {
         try {
+            var alignView = GetBestAlignmentView(doc, bottomPlane, topPlane);
             var opts = new Options { ComputeReferences = true };
             var geom = extrusion.get_Geometry(opts);
             var solid = geom.OfType<Solid>().FirstOrDefault(s => s.Faces.Size > 0);
@@ -155,12 +156,37 @@ public class MakeConstrainedExtrusions(MakeConstrainedExtrusionsSettings setting
             }
 
             if (minFace?.Reference != null)
-                _ = doc.FamilyCreate.NewAlignment(doc.ActiveView, minFace.Reference, bottomPlane.GetReference());
+                TryCreateAlignment(doc, alignView, minFace.Reference, bottomPlane.GetReference());
             if (maxFace?.Reference != null)
-                _ = doc.FamilyCreate.NewAlignment(doc.ActiveView, maxFace.Reference, topPlane.GetReference());
+                TryCreateAlignment(doc, alignView, maxFace.Reference, topPlane.GetReference());
         } catch (Exception ex) {
             logs.Add(new LogEntry(key).Error($"Created extrusion, but failed height face alignment: {ex.Message}"));
         }
+    }
+
+    private static void TryCreateAlignment(Document doc, View view, Reference faceRef, Reference planeRef) {
+        try {
+            _ = doc.FamilyCreate.NewAlignment(view, faceRef, planeRef);
+        } catch {
+            // Retry swapped order for edge cases where one reference position is rejected.
+            _ = doc.FamilyCreate.NewAlignment(view, planeRef, faceRef);
+        }
+    }
+
+    private static View GetBestAlignmentView(Document doc, ReferencePlane p1, ReferencePlane p2) {
+        var isHeightLike = Math.Abs(p1.Normal.Normalize().Z) > 0.95 &&
+                           Math.Abs(p2.Normal.Normalize().Z) > 0.95;
+        if (!isHeightLike)
+            return doc.ActiveView;
+
+        var elevation = new FilteredElementCollector(doc)
+            .OfClass(typeof(View))
+            .Cast<View>()
+            .FirstOrDefault(v =>
+                !v.IsTemplate &&
+                (v.ViewType == ViewType.Elevation || v.ViewType == ViewType.Section));
+
+        return elevation ?? doc.ActiveView;
     }
 
     private static void TryAlignSketchLinesToPlanes(
