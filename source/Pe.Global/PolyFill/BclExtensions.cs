@@ -10,7 +10,6 @@ public static class BclExtensions {
         ///     Polyfill for Path.GetRelativePath (added in .NET Core 2.0).
         /// </summary>
         public static string GetRelativePath(string relativeTo, string path) {
-#if NET48
         relativeTo = Path.GetFullPath(relativeTo);
         path = Path.GetFullPath(path);
 
@@ -37,9 +36,6 @@ public static class BclExtensions {
         );
 
         return string.IsNullOrEmpty(relativePath) ? "." : relativePath;
-#else
-                return BclExtensions.GetRelativePath(relativeTo, path);
-#endif
         }
 
         /// <summary>
@@ -66,19 +62,7 @@ public static class BclExtensions {
 #if NET48
         return dictionary.TryGetValue(key, out var value) ? value : default;
 #else
-                return dictionary.GetValueOrDefault(key);
-#endif
-        }
-
-        /// <summary>
-        ///     Gets the value associated with the specified key, or the specified default value if the key is not present.
-        ///     Polyfill for Dictionary.GetValueOrDefault (added in .NET Core 2.0).
-        /// </summary>
-        public static TValue GetValueOrDefault<TKey, TValue>(this Dictionary<TKey, TValue> dictionary, TKey key, TValue defaultValue) {
-#if NET48
-        return dictionary.TryGetValue(key, out var value) ? value : defaultValue;
-#else
-                return dictionary.GetValueOrDefault(key, defaultValue);
+        return dictionary.TryGetValue(key, out var value) ? value : default;
 #endif
         }
 
@@ -87,12 +71,8 @@ public static class BclExtensions {
         ///     Polyfill for KeyValuePair.Deconstruct (added in C# 7.0 / .NET Core 2.0).
         /// </summary>
         public static void Deconstruct<TKey, TValue>(this KeyValuePair<TKey, TValue> kvp, out TKey key, out TValue value) {
-#if NET48
         key = kvp.Key;
         value = kvp.Value;
-#else
-                kvp.Deconstruct(out key, out value);
-#endif
         }
 
         /// <summary>
@@ -100,14 +80,10 @@ public static class BclExtensions {
         ///     Polyfill for Math.Clamp (added in .NET Core 2.0).
         /// </summary>
         public static int Clamp(int value, int min, int max) {
-#if NET48
         if (min > max) throw new ArgumentException($"min ({min}) must be less than or equal to max ({max})");
         if (value < min) return min;
         if (value > max) return max;
         return value;
-#else
-                return BclExtensions.Clamp(value, min, max);
-#endif
         }
 
         /// <summary>
@@ -115,13 +91,9 @@ public static class BclExtensions {
         ///     Polyfill for Math.Clamp (added in .NET Core 2.0).
         /// </summary>
         public static double Clamp(double value, double min, double max) {
-#if NET48
         if (min > max) throw new ArgumentException($"min ({min}) must be less than or equal to max ({max})");
         if (value < min) return min;
         if (value > max) return max;
         return value;
-#else
-                return BclExtensions.Clamp(value, min, max);
-#endif
         }
 }

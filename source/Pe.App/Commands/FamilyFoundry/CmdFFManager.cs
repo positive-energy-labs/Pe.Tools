@@ -73,7 +73,8 @@ public class CmdFFManager : IExternalCommand {
         // Request both parameter and ref-plane snapshots
         var collectorQueue = new CollectorQueue()
             .Add(new ParamSectionCollector())
-            .Add(new RefPlaneSectionCollector());
+            .Add(new RefPlaneSectionCollector())
+            .Add(new ExtrusionSectionCollector());
 
         using var processor = new OperationProcessor(ctx.Doc, executionOptions);
         var logs = processor
@@ -129,6 +130,7 @@ public class CmdFFManager : IExternalCommand {
             .Add(new AddSharedParams(apsParamData))
             .Add(new AddFamilyParams(dimLabelParamsSettings))  // Create dimension label params FIRST (no values)
             .Add(new MakeRefPlanesAndDims(profile.MakeRefPlaneAndDims))
+            .Add(new MakeConstrainedExtrusions(profile.MakeConstrainedExtrusions))
             .Add(new AddAndSetParams(profile.AddAndSetParams, true))
             .Add(new MakeRefPlaneSubcategories(specs))
             .Add(new SortParams(new SortParamsSettings()));
@@ -176,4 +178,8 @@ public class ProfileFamilyManager : BaseProfileSettings {
     [Description("Settings for setting parameter values and adding family parameters.")]
     [Required]
     public AddAndSetParamsSettings AddAndSetParams { get; init; } = new();
+
+    [Description("Settings for creating constrained extrusions from canonical reference-plane specs.")]
+    [Required]
+    public MakeConstrainedExtrusionsSettings MakeConstrainedExtrusions { get; init; } = new();
 }

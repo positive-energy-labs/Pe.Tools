@@ -316,6 +316,13 @@ public class ProcessingResultBuilder(Storage storage) {
             if (hasSpecs)
                 _ = output.Json($"snapshot-refplanesanddims-{prefix}.json").Write(snapshot.RefPlanesAndDims);
         }
+
+        if (snapshot.Extrusions != null) {
+            var hasExtrusions = snapshot.Extrusions.Rectangles.Count > 0 ||
+                                snapshot.Extrusions.Circles.Count > 0;
+            if (hasExtrusions)
+                _ = output.Json($"snapshot-extrusions-{prefix}.json").Write(snapshot.Extrusions);
+        }
     }
 
     public static List<ParamSnapshot> SortAndOrder(List<ParamSnapshot> snapshots) {

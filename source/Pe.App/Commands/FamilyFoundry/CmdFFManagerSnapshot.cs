@@ -86,6 +86,11 @@ public class CmdFFManagerSnapshot : IExternalCommand {
         if (refPlaneCollector.ShouldCollect(snapshot))
             refPlaneCollector.Collect(snapshot, famDoc);
 
+        // Collect constrained extrusions
+        var extrusionCollector = new ExtrusionSectionCollector();
+        if (extrusionCollector.ShouldCollect(snapshot))
+            extrusionCollector.Collect(snapshot, famDoc);
+
         return snapshot;
     }
 
@@ -96,7 +101,10 @@ public class CmdFFManagerSnapshot : IExternalCommand {
         var paramSettings = ConvertParamsToSettings(snapshot.Parameters?.Data ?? []);
         var mirrorSpecs = snapshot.RefPlanesAndDims?.MirrorSpecs ?? [];
         var offsetSpecs = snapshot.RefPlanesAndDims?.OffsetSpecs ?? [];
+        var rectangleExtrusions = snapshot.Extrusions?.Rectangles ?? [];
+        var circleExtrusions = snapshot.Extrusions?.Circles ?? [];
         var hasRefPlaneSpecs = mirrorSpecs.Count > 0 || offsetSpecs.Count > 0;
+        var hasConstrainedExtrusions = rectangleExtrusions.Count > 0 || circleExtrusions.Count > 0;
 
         return new ProfileFamilyManager {
             ExecutionOptions = new ExecutionOptions { SingleTransaction = false, OptimizeTypeOperations = true },
@@ -108,17 +116,25 @@ public class CmdFFManagerSnapshot : IExternalCommand {
             },
             FilterApsParams = new BaseProfileSettings.FilterApsParamsSettings {
                 // Empty - snapshot captures exact parameters, no APS filtering needed
-                IncludeNames = new IncludeSharedParameter(), ExcludeNames = new ExcludeSharedParameter()
+                IncludeNames = new IncludeSharedParameter(),
+                ExcludeNames = new ExcludeSharedParameter()
             },
             MakeRefPlaneAndDims =
                 new MakeRefPlaneAndDimsSettings {
-                    Enabled = hasRefPlaneSpecs, MirrorSpecs = mirrorSpecs, OffsetSpecs = offsetSpecs
+                    Enabled = hasRefPlaneSpecs,
+                    MirrorSpecs = mirrorSpecs,
+                    OffsetSpecs = offsetSpecs
                 },
             AddAndSetParams = new AddAndSetParamsSettings {
                 Enabled = paramSettings.Count > 0,
                 CreateFamParamIfMissing = true,
                 OverrideExistingValues = true,
                 Parameters = paramSettings
+            },
+            MakeConstrainedExtrusions = new MakeConstrainedExtrusionsSettings {
+                Enabled = hasConstrainedExtrusions,
+                Rectangles = rectangleExtrusions,
+                Circles = circleExtrusions
             }
         };
     }

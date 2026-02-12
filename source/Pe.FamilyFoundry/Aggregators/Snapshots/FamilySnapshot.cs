@@ -15,5 +15,8 @@ public class FamilySnapshot {
     /// <summary>Reference plane and dimension specs with source tracking</summary>
     public RefPlaneSnapshot RefPlanesAndDims { get; set; }
 
+    /// <summary>Constrained extrusion specs with source tracking</summary>
+    public ExtrusionSnapshot Extrusions { get; set; }
+
     // Future sections: Connectors, etc.
 }

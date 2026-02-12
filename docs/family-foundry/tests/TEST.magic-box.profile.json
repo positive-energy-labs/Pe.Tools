@@ -1,0 +1,118 @@
+{
+  "ExecutionOptions": {
+    "SingleTransaction": false,
+    "OptimizeTypeOperations": false
+  },
+  "FilterFamilies": {
+    "IncludeUnusedFamilies": true,
+    "IncludeCategoriesEqualing": [],
+    "IncludeByCondition": {
+      "FieldName": "",
+      "FilterType": "Equal",
+      "Value": ""
+    },
+    "IncludeNames": {
+      "Equaling": [
+        "__CURRENT_FAMILY__"
+      ],
+      "Containing": [],
+      "StartingWith": []
+    },
+    "ExcludeNames": {
+      "Equaling": [],
+      "Containing": [],
+      "StartingWith": []
+    }
+  },
+  "FilterApsParams": {
+    "IncludeNames": {
+      "Equaling": [],
+      "Containing": [],
+      "StartingWith": []
+    },
+    "ExcludeNames": {
+      "Equaling": [],
+      "Containing": [],
+      "StartingWith": []
+    }
+  },
+  "MakeRefPlaneAndDims": {
+    "MirrorSpecs": [
+      {
+        "Name": "Width1",
+        "CenterAnchor": "Center (Left/Right)",
+        "Parameter": "PE_G_Dim_Width1",
+        "Strength": "StrongRef"
+      },
+      {
+        "Name": "Length1",
+        "CenterAnchor": "Center (Front/Back)",
+        "Parameter": "PE_G_Dim_Length1",
+        "Strength": "StrongRef"
+      }
+    ],
+    "OffsetSpecs": [
+      {
+        "Name": "Height1 (Top)",
+        "AnchorName": "Reference Plane",
+        "Direction": "Positive",
+        "Parameter": "PE_G_Dim_Height1",
+        "Strength": "StrongRef"
+      }
+    ],
+    "Enabled": true
+  },
+  "MakeConstrainedExtrusions": {
+    "Rectangles": [
+      {
+        "Name": "MagicBox",
+        "IsSolid": true,
+        "StartOffset": 0.0,
+        "EndOffset": 1.0,
+        "SketchPlaneName": "Reference Plane",
+        "PairAPlane1": "Width1 (Left)",
+        "PairAPlane2": "Width1 (Right)",
+        "PairAParameter": "PE_G_Dim_Width1",
+        "PairBPlane1": "Length1 (Back)",
+        "PairBPlane2": "Length1 (Front)",
+        "PairBParameter": "PE_G_Dim_Length1",
+        "HeightPlaneBottom": "Reference Plane",
+        "HeightPlaneTop": "Height1 (Top)",
+        "HeightParameter": "PE_G_Dim_Height1"
+      }
+    ],
+    "Circles": [],
+    "Enabled": true
+  },
+  "AddAndSetParams": {
+    "OverrideExistingValues": true,
+    "CreateFamParamIfMissing": true,
+    "Parameters": [
+      {
+        "Name": "PE_G_Dim_Width1",
+        "IsInstance": false,
+        "PropertiesGroup": "Dimensions",
+        "DataType": "Length (Common)",
+        "ValueOrFormula": "4'",
+        "SetAsFormula": false
+      },
+      {
+        "Name": "PE_G_Dim_Length1",
+        "IsInstance": false,
+        "PropertiesGroup": "Dimensions",
+        "DataType": "Length (Common)",
+        "ValueOrFormula": "6'",
+        "SetAsFormula": false
+      },
+      {
+        "Name": "PE_G_Dim_Height1",
+        "IsInstance": false,
+        "PropertiesGroup": "Dimensions",
+        "DataType": "Length (Common)",
+        "ValueOrFormula": "3'",
+        "SetAsFormula": false
+      }
+    ],
+    "Enabled": true
+  }
+}

@@ -113,7 +113,7 @@ public class RefPlaneDimCreator(
     public void CreateOffsetPlane(OffsetSpec spec) {
         Console.WriteLine($"[CreateOffsetPlane] Processing: {spec.Name}, Anchor: {spec.AnchorName}");
 
-        var anchor = query.Get(spec.AnchorName);
+        var anchor = this.ResolveReferencePlane(spec.AnchorName);
         if (anchor == null) {
             Console.WriteLine($"[CreateOffsetPlane] Anchor not found: {spec.AnchorName}");
             logs.Add(new LogEntry($"Offset plane: {spec.Name}").Error($"Anchor '{spec.AnchorName}' not found"));
@@ -159,6 +159,46 @@ public class RefPlaneDimCreator(
             logs.Add(new LogEntry($"RefPlane: {name}").Error(ex));
             return false;
         }
+    }
+
+    private ReferencePlane? ResolveReferencePlane(string requestedName) {
+        if (string.IsNullOrWhiteSpace(requestedName))
+            return null;
+
+        var exact = query.Get(requestedName);
+        if (exact != null)
+            return exact;
+
+        foreach (var alias in GetAnchorAliases(requestedName)) {
+            var match = query.Get(alias);
+            if (match != null)
+                return match;
+        }
+
+        // Final fallback for level-like anchors: use the first horizontal level-like plane.
+        if (requestedName.IndexOf("level", StringComparison.OrdinalIgnoreCase) < 0)
+            return null;
+
+        return new FilteredElementCollector(doc)
+            .OfClass(typeof(ReferencePlane))
+            .Cast<ReferencePlane>()
+            .FirstOrDefault(rp =>
+                !string.IsNullOrWhiteSpace(rp.Name) &&
+                rp.Name.IndexOf("level", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                Math.Abs(rp.Normal.Normalize().Z) > 0.95);
+    }
+
+    private static IEnumerable<string> GetAnchorAliases(string requestedName) {
+        if (!requestedName.Equals("Ref. Level", StringComparison.OrdinalIgnoreCase))
+            return [];
+
+        return [
+            "Reference Level",
+            "Ref Level",
+            "Lower Ref. Level",
+            "Lower Reference Level",
+            "Level"
+        ];
     }
 
     #endregion
