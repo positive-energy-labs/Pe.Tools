@@ -10,33 +10,9 @@ namespace Pe.Global.Services.Storage.Core.Json;
 
 /// <summary>
 ///     Factory for creating JSON schemas with standardized processor configuration.
-///     Supports dual schema generation for $extends composition pattern.
+///     Supports schema generation and schema injection for settings files.
 /// </summary>
 public static class JsonSchemaFactory {
-    /// <summary>
-    ///     Creates both full and extends-relaxed schemas for a type.
-    ///     The extends schema has no properties except $extends itself.
-    /// </summary>
-    public static (JsonSchema Full, JsonSchema Extends) CreateSchemas<T>() =>
-        CreateSchemas(typeof(T), out _);
-
-    /// <summary>
-    ///     Creates both full and extends-relaxed schemas for a type (non-generic overload).
-    ///     The extends schema has no properties except $extends itself.
-    /// </summary>
-    public static (JsonSchema Full, JsonSchema Extends) CreateSchemas(Type type,
-        out SchemaExamplesProcessor examplesProcessor) {
-        var full = CreateSchema(type, out examplesProcessor);
-        examplesProcessor.Finalize(full);
-        SchemaMetadataProcessor.AllowSchemaProperty(full);
-        SchemaMetadataProcessor.AllowExtendsProperty(full);
-
-        // Create extends variant: same schema but only $extends is required
-        var extends = CloneAndRelaxRequirements(full);
-
-        return (full, extends);
-    }
-
     /// <summary>
     ///     Creates a fragment schema for array items of type T.
     ///     Fragment files are objects with an "Items" property containing an array of T.
@@ -103,48 +79,24 @@ public static class JsonSchemaFactory {
         settings.SchemaProcessors.Add(examplesProcessor);
         settings.SchemaProcessors.Add(new IncludableSchemaProcessor());
 
-        return new JsonSchemaGenerator(settings).Generate(type);
+        var schema = new JsonSchemaGenerator(settings).Generate(type);
+        SchemaMetadataProcessor.AllowSchemaProperty(schema);
+        return schema;
     }
 
     /// <summary>
-    ///     Creates a deep clone of the schema with all properties cleared,
-    ///     making only $extends instead.
-    /// </summary>
-    private static JsonSchema CloneAndRelaxRequirements(JsonSchema full) {
-        // Deep clone via JSON round-trip
-        var extendsJson = full.ToJson();
-        var extends = JsonSchema.FromJsonAsync(extendsJson).GetAwaiter().GetResult();
-
-        // Clear all properties at root level
-        extends.RequiredProperties.Clear();
-
-        // Make $extends instead
-        if (extends.Properties.TryGetValue("$extends", out var extendsProp)) {
-            extendsProp.IsRequired = true;
-            extends.RequiredProperties.Add("$extends");
-        }
-
-        return extends;
-    }
-
-    /// <summary>
-    ///     Writes both schema files to disk and injects the appropriate $schema reference
-    ///     based on whether the content uses $extends.
+    ///     Writes the schema file to disk and injects the $schema reference.
     /// </summary>
     /// <param name="fullSchema">The full schema (all properties)</param>
-    /// <param name="extendsSchema">The relaxed schema (only $extends required)</param>
     /// <param name="jsonContent">The JSON content to inject the schema reference into</param>
     /// <param name="targetFilePath">Path to the target JSON file</param>
     /// <param name="schemaDirectory">Directory where schema files should be written</param>
-    /// <param name="hasExtends">Whether the content contains $extends directive</param>
     /// <returns>Modified JSON content with $schema property</returns>
     public static string WriteAndInjectSchema(
         JsonSchema fullSchema,
-        JsonSchema extendsSchema,
         string jsonContent,
         string targetFilePath,
-        string schemaDirectory,
-        bool hasExtends
+        string schemaDirectory
     ) {
         // Ensure directories exist
         var targetDir = Path.GetDirectoryName(targetFilePath);
@@ -153,18 +105,12 @@ public static class JsonSchemaFactory {
         if (!Directory.Exists(schemaDirectory))
             _ = Directory.CreateDirectory(schemaDirectory);
 
-        // Write both schema files
+        // Write schema file
         var fullSchemaPath = Path.Combine(schemaDirectory, "schema.json");
-        var extendsSchemaPath = Path.Combine(schemaDirectory, "schema-extends.json");
-
         File.WriteAllText(fullSchemaPath, fullSchema.ToJson());
-        File.WriteAllText(extendsSchemaPath, extendsSchema.ToJson());
 
-        // Select appropriate schema based on content
-        var selectedSchemaPath = hasExtends ? extendsSchemaPath : fullSchemaPath;
-
-        // Calculate relative path from target file to selected schema
-        var relativeSchemaPath = BclExtensions.GetRelativePath(targetDir!, selectedSchemaPath);
+        // Calculate relative path from target file to schema
+        var relativeSchemaPath = BclExtensions.GetRelativePath(targetDir!, fullSchemaPath);
 
         // Inject $schema reference
         var jObject = JObject.Parse(jsonContent);

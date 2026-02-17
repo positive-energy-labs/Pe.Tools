@@ -10,10 +10,7 @@ namespace Pe.Global.Services.SignalR;
 ///     Request to get a JSON schema for a settings type.
 /// </summary>
 [ExportTsInterface]
-public record SchemaRequest(
-    string SettingsTypeName,
-    bool IsExtends = false
-);
+public record SchemaRequest(string SettingsTypeName);
 
 /// <summary>
 ///     Response containing the generated JSON schema.

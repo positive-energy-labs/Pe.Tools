@@ -30,23 +30,6 @@ public static class JsonDiff {
         return patch;
     }
 
-    /// <summary>
-    ///     Creates a patch and adds the $extends property for saving as a child profile.
-    /// </summary>
-    /// <param name="baseObj">The base object to diff against</param>
-    /// <param name="editedObj">The edited object</param>
-    /// <param name="extendsName">The name of the base profile (without .json extension)</param>
-    /// <returns>A sparse JObject ready to be saved as a child profile</returns>
-    public static JObject CreateChildProfile(JObject baseObj, JObject editedObj, string extendsName) {
-        var patch = CreatePatch(baseObj, editedObj);
-
-        // Add $extends as the first property
-        var result = new JObject { ["$extends"] = extendsName };
-        foreach (var prop in patch.Properties()) result[prop.Name] = prop.Value;
-
-        return result;
-    }
-
     private static void CreatePatchRecursive(JObject baseObj, JObject editedObj, JObject patch) {
         var allPropertyNames = baseObj.Properties()
             .Select(p => p.Name)

@@ -106,7 +106,7 @@ public class JsonArrayComposerToonIncludeTests
             }
             """);
 
-    var ex = Assert.Throws<JsonExtendsException>(() => JsonArrayComposer.ExpandIncludes(root, baseDir));
+    var ex = Assert.Throws<JsonCompositionException>(() => JsonArrayComposer.ExpandIncludes(root, baseDir));
     Assert.Contains("Fragment file not found", ex.Message, StringComparison.Ordinal);
     Assert.Contains("_fragments", ex.Message, StringComparison.Ordinal);
   }

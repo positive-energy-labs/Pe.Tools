@@ -2,11 +2,9 @@ using Xunit;
 
 namespace Toon.Tests;
 
-public class StrictDecodeTests
-{
+public class StrictDecodeTests {
   [Fact]
-  public void Decode_ThrowsOnArrayCountMismatch_WhenStrict()
-  {
+  public void Decode_ThrowsOnArrayCountMismatch_WhenStrict() {
     const string toon = """
                             items[2]:
                               - one
@@ -17,8 +15,7 @@ public class StrictDecodeTests
   }
 
   [Fact]
-  public void Decode_AllowsArrayCountMismatch_WhenNotStrict()
-  {
+  public void Decode_AllowsArrayCountMismatch_WhenNotStrict() {
     const string toon = """
                             items[2]:
                               - one
@@ -29,8 +26,7 @@ public class StrictDecodeTests
   }
 
   [Fact]
-  public void Decode_ThrowsOnInvalidIndent_WhenStrict()
-  {
+  public void Decode_ThrowsOnInvalidIndent_WhenStrict() {
     const string toon = """
                             user:
                                name: Ada
@@ -38,5 +34,13 @@ public class StrictDecodeTests
 
     var ex = Assert.Throws<ToonParseException>(() => ToonTranspiler.DecodeToJson(toon));
     Assert.Contains("Indentation must align", ex.Message, StringComparison.Ordinal);
+  }
+
+  [Fact]
+  public void Decode_ThrowsOnTabIndent_WhenStrict() {
+    const string toon = "user:\n\tname: Ada";
+
+    var ex = Assert.Throws<ToonParseException>(() => ToonTranspiler.DecodeToJson(toon));
+    Assert.Contains("Tabs are not allowed in indentation in strict mode", ex.Message, StringComparison.Ordinal);
   }
 }

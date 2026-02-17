@@ -139,7 +139,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
                         () => profiles,
                         paletteActions
                     ) {
-                        FilterKeySelector = item => string.IsNullOrEmpty(item.ExtendsValue) ? "Base" : "Extended"
+                        FilterKeySelector = _ => "Profiles"
                     }
                 ]
             });

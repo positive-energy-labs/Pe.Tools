@@ -83,14 +83,14 @@ public class SettingsManager : BaseLocalManager {
     public override string Name { get; init; } = DefaultName;
 
     /// <summary>
-    ///     Creates a JSON reader for settings files. Supports $extends and $include composition.
+    ///     Creates a JSON reader for settings files. Supports $include composition.
     ///     Crashes if file doesn't exist (creates default for user review).
     /// </summary>
     public JsonReader<T> Json<T>() where T : class, new() =>
         new ComposableJson<T>(this.GetJsonPath(), this.DirectoryPath, JsonBehavior.Settings);
 
     /// <summary>
-    ///     Creates a JSON reader for settings files. Supports $extends and $include composition.
+    ///     Creates a JSON reader for settings files. Supports $include composition.
     ///     Crashes if file doesn't exist (creates default for user review).
     /// </summary>
     public JsonReader<T> Json<T>(string filename) where T : class, new() =>

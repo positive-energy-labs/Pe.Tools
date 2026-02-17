@@ -23,9 +23,7 @@ public class SchemaHub : Hub {
     /// </summary>
     public async Task<SchemaResponse> GetSchema(SchemaRequest request) => await this._taskQueue.EnqueueAsync(uiApp => {
         var type = this._typeRegistry.ResolveType(request.SettingsTypeName);
-
-        var (full, extends) = JsonSchemaFactory.CreateSchemas(type, out var examplesProcessor);
-        var targetSchema = request.IsExtends ? extends : full;
+        var targetSchema = JsonSchemaFactory.CreateSchema(type, out var examplesProcessor);
         examplesProcessor.Finalize(targetSchema);
 
         // Try to get fragment schema if the type supports $include
@@ -84,7 +82,7 @@ public class SchemaHub : Hub {
                 }
 
                 var result = provider.GetExamples().ToList();
-                Log.Debug("GetExamples: Provider returned {Count} examples", result.Count);
+                Log.Debug($"GetExamples: Provider returned {result.Count} examples");
                 return new ExamplesResponse(result);
             } catch (Exception ex) {
                 Log.Error(ex, "GetExamples failed for property '{PropertyPath}'", request.PropertyPath);

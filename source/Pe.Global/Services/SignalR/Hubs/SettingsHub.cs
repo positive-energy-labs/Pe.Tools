@@ -44,7 +44,7 @@ public class SettingsHub : Hub {
     }
 
     /// <summary>
-    ///     Read a settings file, optionally resolving $extends and $include.
+    ///     Read a settings file, optionally resolving $include composition.
     /// </summary>
     public async Task<ReadSettingsResponse> ReadSettings(ReadSettingsRequest request) =>
         await this._taskQueue.EnqueueAsync(uiApp => {
@@ -63,16 +63,10 @@ public class SettingsHub : Hub {
 
             if (request.ResolveComposition) {
                 try {
-                    var type = this._typeRegistry.ResolveType(request.SettingsTypeName);
-                    var composableType = typeof(ComposableJson<>).MakeGenericType(type);
-
-                    // Create instance and resolve
-                    var composable = Activator.CreateInstance(composableType, settingsDir, request.FileName);
-                    var readRawMethod = composableType.GetMethod("ReadRaw");
-                    if (readRawMethod != null) {
-                        var resolved = readRawMethod.Invoke(composable, null) as JObject;
-                        if (resolved != null) resolvedJson = resolved.ToString(Formatting.Indented);
-                    }
+                    var jObject = JObject.Parse(rawJson);
+                    JsonArrayComposer.ExpandIncludes(jObject, settingsDir.DirectoryPath, settingsDir.DirectoryPath);
+                    _ = jObject.Remove("$schema");
+                    resolvedJson = jObject.ToString(Formatting.Indented);
                 } catch (Exception ex) {
                     errors.Add($"Composition resolution failed: {ex.Message}");
                 }
@@ -119,7 +113,7 @@ public class SettingsHub : Hub {
         });
 
     /// <summary>
-    ///     Resolve $extends and $include without saving.
+    ///     Resolve $include composition without saving.
     ///     Used for preview and "run without saving" scenarios.
     /// </summary>
     public async Task<ReadSettingsResponse> ResolveComposition(string settingsTypeName, string json) =>
@@ -133,27 +127,7 @@ public class SettingsHub : Hub {
 
                 var jObject = JObject.Parse(json);
 
-                // Check for $extends and resolve
-                if (jObject.TryGetValue("$extends", out var extendsToken)) {
-                    var extendsPath = extendsToken.Value<string>();
-                    if (!string.IsNullOrEmpty(extendsPath)) {
-                        var basePath = Path.Combine(settingsDir.DirectoryPath, extendsPath);
-                        if (File.Exists(basePath)) {
-                            var baseJson = JObject.Parse(File.ReadAllText(basePath));
-                            // Merge base into current (current overrides base)
-                            baseJson.Merge(jObject,
-                                new JsonMergeSettings {
-                                    MergeArrayHandling = MergeArrayHandling.Replace,
-                                    MergeNullValueHandling = MergeNullValueHandling.Merge
-                                });
-                            jObject = baseJson;
-                        } else
-                            errors.Add($"Base file not found: {extendsPath}");
-                    }
-                }
-
-                // Remove composition directives from output
-                _ = jObject.Remove("$extends");
+                JsonArrayComposer.ExpandIncludes(jObject, settingsDir.DirectoryPath, settingsDir.DirectoryPath);
                 _ = jObject.Remove("$schema");
 
                 return new ReadSettingsResponse(json, jObject.ToString(Formatting.Indented), errors);

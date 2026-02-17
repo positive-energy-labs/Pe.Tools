@@ -5,18 +5,19 @@ using NJsonSchema;
 using NJsonSchema.Validation;
 using Pe.Global.Services.Storage.Core.Json;
 using Pe.Global.Services.Storage.Core.Json.ContractResolvers;
+using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
+using System.Reflection;
 using System.Text.RegularExpressions;
 
 namespace Pe.Global.Services.Storage.Core;
 
 /// <summary>
-///     Unified JSON file handler with schema validation, composition support ($extends/$include),
-///     and behavior-based read/write patterns. Replaces both Json&lt;T&gt; and JsonWithExtends&lt;T&gt;.
+///     Unified JSON file handler with schema validation and composition support ($include),
+///     and behavior-based read/write patterns.
 /// </summary>
 /// <remarks>
 ///     <para>Composition features:</para>
 ///     <list type="bullet">
-///         <item><c>$extends</c>: Inherit from a base profile, with child properties overriding base</item>
 ///         <item><c>$include</c>: Compose arrays from reusable fragment files</item>
 ///     </list>
 ///     <para>Behavior modes:</para>
@@ -27,8 +28,6 @@ namespace Pe.Global.Services.Storage.Core;
 ///     </list>
 /// </remarks>
 public class ComposableJson<T> : JsonReader<T>, JsonWriter<T>, JsonReadWriter<T> where T : class, new() {
-    private const string ExtendsProperty = "$extends";
-
     private readonly JsonBehavior _behavior;
 
     private readonly JsonSerializerSettings _deserialSettings = new() {
@@ -38,7 +37,6 @@ public class ComposableJson<T> : JsonReader<T>, JsonWriter<T>, JsonReadWriter<T>
         NullValueHandling = NullValueHandling.Ignore
     };
 
-    private readonly JsonSchema _extendsSchema;
     private readonly JsonSchema _fullSchema;
     private readonly string _schemaDirectory;
 
@@ -57,8 +55,9 @@ public class ComposableJson<T> : JsonReader<T>, JsonWriter<T>, JsonReadWriter<T>
 
         _ = this.EnsureDirectoryExists();
 
-        // Generate both schema variants
-        (this._fullSchema, this._extendsSchema) = JsonSchemaFactory.CreateSchemas<T>();
+        this._fullSchema = JsonSchemaFactory.CreateSchema<T>(out var examplesProcessor);
+        examplesProcessor.Finalize(this._fullSchema);
+        SchemaMetadataProcessor.AllowSchemaProperty(this._fullSchema);
 
         // Generate fragment schemas for any [Includable] properties
         this.GenerateFragmentSchemas();
@@ -73,19 +72,19 @@ public class ComposableJson<T> : JsonReader<T>, JsonWriter<T>, JsonReadWriter<T>
     // ============================================================
 
     /// <summary>
-    ///     Reads the JSON file, resolving any $extends and $include directives.
+    ///     Reads the JSON file, resolving any $include directives.
     ///     Behavior varies by JsonBehavior mode.
     /// </summary>
     public T Read() {
         if (!this.FileExists)
             return this.HandleMissingFile();
 
-        var (jObj, hasExtends, hasIncludes) = this.LoadAndInjectSchema();
+        var (jObj, hasIncludes) = this.LoadAndInjectSchema();
 
-        if (!hasExtends && !hasIncludes)
+        if (!hasIncludes)
             return this.ReadSimple(jObj);
 
-        return this.ReadWithComposition(jObj, hasExtends, hasIncludes);
+        return this.ReadWithComposition(jObj);
     }
 
     /// <summary>
@@ -156,26 +155,24 @@ public class ComposableJson<T> : JsonReader<T>, JsonWriter<T>, JsonReadWriter<T>
 
     /// <summary>
     ///     Loads the JSON file, detects composition directives, and injects appropriate schema.
-    ///     Returns the parsed JObject and flags indicating composition features.
+    ///     Returns the parsed JObject and include composition flag.
     /// </summary>
-    private (JObject jObj, bool hasExtends, bool hasIncludes) LoadAndInjectSchema() {
+    private (JObject jObj, bool hasIncludes) LoadAndInjectSchema() {
         var originalContent = File.ReadAllText(this.FilePath);
         var jObj = JObject.Parse(originalContent);
 
         // Check for composition directives
-        var hasExtends = jObj.TryGetValue(ExtendsProperty, out _);
         var hasIncludes = this.ContainsIncludeDirectives(jObj);
 
-        // Inject appropriate schema reference based on content
+        // Inject schema reference
         var contentWithSchema = JsonSchemaFactory.WriteAndInjectSchema(
-            this._fullSchema, this._extendsSchema, originalContent,
-            this.FilePath, this._schemaDirectory, hasExtends);
+            this._fullSchema, originalContent, this.FilePath, this._schemaDirectory);
         File.WriteAllText(this.FilePath, contentWithSchema);
 
         // Re-parse after schema injection
         jObj = JObject.Parse(contentWithSchema);
 
-        return (jObj, hasExtends, hasIncludes);
+        return (jObj, hasIncludes);
     }
 
     // ============================================================
@@ -198,52 +195,25 @@ public class ComposableJson<T> : JsonReader<T>, JsonWriter<T>, JsonReadWriter<T>
     }
 
     /// <summary>
-    ///     Reads a file with composition directives ($extends and/or $include).
-    ///     Resolves inheritance, expands includes, and applies sanitization for Settings behavior.
+    ///     Reads a file with composition directives ($include).
+    ///     Expands includes and applies sanitization for Settings behavior.
     /// </summary>
-    private T ReadWithComposition(JObject jObj, bool hasExtends, bool hasIncludes) {
-        // Resolve inheritance if present
-        JObject resolved;
-        var extendsName = string.Empty;
-
-        if (hasExtends) {
-            if (!jObj.TryGetValue(ExtendsProperty, out var extendsToken))
-                throw new InvalidOperationException("hasExtends was true but $extends token not found");
-
-            // Validate $extends value
-            if (extendsToken.Type != JTokenType.String || string.IsNullOrWhiteSpace(extendsToken.Value<string>()))
-                throw JsonExtendsException.InvalidExtendsValue(this.FilePath, extendsToken.Type.ToString());
-
-            extendsName = extendsToken.Value<string>()!;
-            var inheritanceChain = new List<string> { Path.GetFileNameWithoutExtension(this.FilePath) };
-            resolved = this.ResolveInheritance(this.FilePath, jObj, extendsName, inheritanceChain);
-        } else
-            resolved = jObj;
-
+    private T ReadWithComposition(JObject jObj) {
+        var resolved = jObj;
         // Expand $include directives
-        if (hasIncludes) {
-            // Use schema directory as base for fragment resolution
-            // This ensures fragments are resolved from the root settings directory,
-            // not from nested subdirectories like WIP/
-            JsonArrayComposer.ExpandIncludes(resolved, this._schemaDirectory, this._schemaDirectory);
-        }
+        // Use schema directory as base for fragment resolution
+        // This ensures fragments are resolved from the root settings directory,
+        // not from nested subdirectories like WIP/
+        JsonArrayComposer.ExpandIncludes(resolved, this._schemaDirectory, this._schemaDirectory,
+            this.GetFragmentSchemaFileName);
 
         // For Settings behavior, apply sanitization to fix schema drift
-        if (this._behavior == JsonBehavior.Settings) return this.SanitizeComposedJson(resolved, extendsName);
+        if (this._behavior == JsonBehavior.Settings) return this.SanitizeComposedJson(resolved);
 
         // For other behaviors, validate and throw on errors
         var validationErrors = this._fullSchema.Validate(resolved).ToList();
-        if (validationErrors.Any()) {
-            if (extendsName != null) {
-                var formattedErrors = ValidationErrorFormatter.Format(validationErrors);
-                throw JsonExtendsException.MergedValidationFailed(
-                    this.FilePath,
-                    this.GetBasePath(this.FilePath, extendsName),
-                    string.Join("\n  - ", formattedErrors));
-            }
-
+        if (validationErrors.Any())
             throw new JsonValidationException(this.FilePath, validationErrors);
-        }
 
         return this.Deserialize(resolved);
     }
@@ -271,7 +241,7 @@ public class ComposableJson<T> : JsonReader<T>, JsonWriter<T>, JsonReadWriter<T>
         return content;
     }
 
-    private T SanitizeComposedJson(JObject resolvedJson, string extendsName) {
+    private T SanitizeComposedJson(JObject resolvedJson) {
         // Attempt deserialization with type migrations if needed
         T content;
         try {
@@ -291,42 +261,7 @@ public class ComposableJson<T> : JsonReader<T>, JsonWriter<T>, JsonReadWriter<T>
 
         var validationErrors = this._fullSchema.Validate(updatedJson).ToList();
         if (validationErrors.Count == 0) return content;
-        if (extendsName != null) {
-            var formattedErrors = ValidationErrorFormatter.Format(validationErrors);
-            throw JsonExtendsException.MergedValidationFailed(
-                this.FilePath,
-                this.GetBasePath(this.FilePath, extendsName),
-                string.Join("\n  - ", formattedErrors));
-        }
-
         throw new JsonValidationException(this.FilePath, validationErrors);
-    }
-
-    private JObject SanitizeBaseProfile(string basePath, JObject baseJObject) {
-        // Attempt deserialization with type migrations if needed
-        T content;
-        try {
-            content = this.Deserialize(baseJObject);
-        } catch (JsonSerializationException ex) {
-            var migratedJson = JsonTypeMigrations.TryApplyMigrations(baseJObject, ex, out _);
-            if (migratedJson != null) {
-                File.WriteAllText(basePath, JsonConvert.SerializeObject(migratedJson, Formatting.Indented));
-                content = this.Deserialize(migratedJson);
-            } else
-                throw;
-        }
-
-        // Serialize with current schema to add missing properties and remove additional ones
-        var jsonContent = this.Serialize(content);
-
-        // Inject schema and write to file
-        var contentWithSchema = JsonSchemaFactory.WriteAndInjectSchema(
-            this._fullSchema, this._extendsSchema, jsonContent,
-            basePath, this._schemaDirectory, false);
-        File.WriteAllText(basePath, contentWithSchema);
-
-        // Return the sanitized JObject
-        return JObject.Parse(File.ReadAllText(basePath));
     }
 
     // ============================================================
@@ -341,107 +276,6 @@ public class ComposableJson<T> : JsonReader<T>, JsonWriter<T>, JsonReadWriter<T>
             _ => false
         };
 
-    private JObject ResolveInheritance(
-        string childPath,
-        JObject childJObject,
-        string extendsName,
-        List<string> inheritanceChain
-    ) {
-        var basePath = this.GetBasePath(childPath, extendsName);
-
-        // Check for circular inheritance
-        if (inheritanceChain.Contains(extendsName)) {
-            inheritanceChain.Add(extendsName);
-            throw JsonExtendsException.CircularInheritance(childPath, inheritanceChain);
-        }
-
-        if (!File.Exists(basePath))
-            throw JsonExtendsException.BaseNotFound(childPath, extendsName, basePath);
-
-        inheritanceChain.Add(extendsName);
-
-        // Load base profile
-        string baseContent;
-        JObject baseJObject;
-        try {
-            baseContent = File.ReadAllText(basePath);
-            baseJObject = JObject.Parse(baseContent);
-        } catch (Exception ex) {
-            throw JsonExtendsException.BaseValidationFailed(childPath, basePath, ex);
-        }
-
-        // Check if base also extends something (multi-level inheritance)
-        if (baseJObject.TryGetValue(ExtendsProperty, out var baseExtendsToken)) {
-            if (baseExtendsToken.Type != JTokenType.String ||
-                string.IsNullOrWhiteSpace(baseExtendsToken.Value<string>()))
-                throw JsonExtendsException.InvalidExtendsValue(basePath, baseExtendsToken.Type.ToString());
-
-            var baseExtendsName = baseExtendsToken.Value<string>()!;
-            baseJObject = this.ResolveInheritance(basePath, baseJObject, baseExtendsName, inheritanceChain);
-
-            // Write schema for this intermediate base file
-            var baseWithSchema = JsonSchemaFactory.WriteAndInjectSchema(
-                this._fullSchema, this._extendsSchema, baseContent, basePath, this._schemaDirectory, true);
-            File.WriteAllText(basePath, baseWithSchema);
-        } else {
-            // Base has no extends - validate and sanitize if needed
-            try {
-                var baseErrors = this._fullSchema.Validate(baseJObject).ToList();
-                if (baseErrors.Any()) {
-                    // For Settings behavior, sanitize the base profile
-                    baseJObject = this._behavior == JsonBehavior.Settings
-                        ? this.SanitizeBaseProfile(basePath, baseJObject)
-                        : throw new JsonValidationException(basePath, baseErrors);
-                } else {
-                    // Write schema for base file
-                    var baseWithSchema = JsonSchemaFactory.WriteAndInjectSchema(
-                        this._fullSchema, this._extendsSchema, baseContent, basePath, this._schemaDirectory,
-                        false);
-                    File.WriteAllText(basePath, baseWithSchema);
-
-                    baseJObject = JObject.Parse(File.ReadAllText(basePath));
-                }
-            } catch (JsonValidationException) {
-                throw;
-            } catch (Exception ex) {
-                throw JsonExtendsException.BaseValidationFailed(childPath, basePath, ex);
-            }
-        }
-
-        // Remove $extends from child before merging
-        var childForMerge = (JObject)childJObject.DeepClone();
-        _ = childForMerge.Remove(ExtendsProperty);
-
-        return JsonMerge.DeepMerge(baseJObject, childForMerge);
-    }
-
-    /// <summary>
-    ///     Resolves the base profile path from an $extends value.
-    ///     Paths are resolved relative to the child file's directory.
-    ///     Security: ensures resolved path stays within schema directory.
-    /// </summary>
-    /// <remarks>
-    ///     Examples (child at "WIP/ASHP.json"):
-    ///     - "$extends": "MechEquip" → WIP/MechEquip.json
-    ///     - "$extends": "../MechEquip" → MechEquip.json (parent directory)
-    /// </remarks>
-    private string GetBasePath(string childPath, string extendsName) {
-        var baseName = extendsName.EndsWith(".json") ? extendsName : $"{extendsName}.json";
-        var childDirectory = Path.GetDirectoryName(childPath)!;
-
-        // Resolve relative to child's directory
-        var resolved = Path.GetFullPath(Path.Combine(childDirectory, baseName));
-
-        // Security: ensure we don't escape the schema directory
-        var schemaRoot = Path.GetFullPath(this._schemaDirectory);
-        if (!resolved.StartsWith(schemaRoot, StringComparison.OrdinalIgnoreCase)) {
-            throw new InvalidOperationException(
-                $"$extends path '{extendsName}' would escape schema directory. " +
-                $"Resolved to: {resolved}, Schema root: {schemaRoot}");
-        }
-
-        return resolved;
-    }
 
     // ============================================================
     // CORE OPERATIONS
@@ -465,8 +299,7 @@ public class ComposableJson<T> : JsonReader<T>, JsonWriter<T>, JsonReadWriter<T>
 
         if (injectSchema) {
             jsonContent = JsonSchemaFactory.WriteAndInjectSchema(
-                this._fullSchema, this._extendsSchema, jsonContent,
-                this.FilePath, this._schemaDirectory, false);
+                this._fullSchema, jsonContent, this.FilePath, this._schemaDirectory);
         }
 
         File.WriteAllText(this.FilePath, jsonContent);
@@ -481,15 +314,12 @@ public class ComposableJson<T> : JsonReader<T>, JsonWriter<T>, JsonReadWriter<T>
 
     /// <summary>
     ///     Generates fragment schemas for any properties marked with [Includable].
-    ///     Currently generates a single schema-fragment.json for all fragment types.
-    ///     FragmentSchemaName attribute is reserved for future use if multiple fragment types are needed.
+    ///     One schema is generated per unique fragment schema name.
     /// </summary>
     private void GenerateFragmentSchemas() {
         var type = typeof(T);
         var properties = type.GetProperties();
-
-        // Find first [Includable] property to generate schema from
-        // In practice, there's typically only one fragment type per schema
+        var generatedSchemaNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var property in properties) {
             var includableAttr = property.GetCustomAttribute<IncludableAttribute>();
             if (includableAttr == null) continue;
@@ -500,6 +330,9 @@ public class ComposableJson<T> : JsonReader<T>, JsonWriter<T>, JsonReadWriter<T>
                 continue;
 
             var itemType = propertyType.GetGenericArguments()[0];
+            var schemaName = this.GetFragmentSchemaFileName(property.Name);
+            if (!generatedSchemaNames.Add(schemaName))
+                continue;
 
             // Generate fragment schema using reflection
             // Get the generic method (the one with no parameters)
@@ -509,19 +342,25 @@ public class ComposableJson<T> : JsonReader<T>, JsonWriter<T>, JsonReadWriter<T>
 
             var fragmentSchema = (JsonSchema)createFragmentSchemaMethod.Invoke(null, null)!;
 
-            // Write single fragment schema for simplicity
-            // Future: could use FragmentSchemaName to generate multiple schemas if needed
-            var schemaFileName = "schema-fragment.json";
-            var schemaPath = Path.Combine(this._schemaDirectory, schemaFileName);
+            var schemaPath = Path.Combine(this._schemaDirectory, schemaName);
 
             if (!Directory.Exists(this._schemaDirectory))
                 _ = Directory.CreateDirectory(this._schemaDirectory);
 
             File.WriteAllText(schemaPath, fragmentSchema.ToJson());
-
-            // Only generate one schema file (use first [Includable] property found)
-            break;
         }
+    }
+
+    private string GetFragmentSchemaFileName(string? propertyName) {
+        if (string.IsNullOrWhiteSpace(propertyName))
+            return "schema-fragment.json";
+
+        var property = typeof(T).GetProperty(propertyName,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+        var schemaName = property?.GetCustomAttribute<IncludableAttribute>()?.FragmentSchemaName
+                         ?? propertyName.ToLowerInvariant();
+
+        return $"schema-fragment-{schemaName}.json";
     }
 }
 
@@ -555,7 +394,7 @@ public static class ValidationErrorCollectionExtensions {
 
 /// <summary>Handles JSON recovery operations for schema validation errors</summary>
 file static class JsonRecovery {
-    private static readonly HashSet<string> IgnoredProperties = ["$schema", "$extends"];
+    private static readonly HashSet<string> IgnoredProperties = ["$schema"];
 
     private static List<string> GetAllPropertyPaths(JObject obj, string prefix = "") {
         var paths = new List<string>();

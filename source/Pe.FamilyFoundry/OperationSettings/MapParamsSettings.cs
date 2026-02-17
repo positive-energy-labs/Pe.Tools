@@ -1,6 +1,7 @@
 using Pe.Extensions.FamDocument.SetValue;
 using Pe.Extensions.FamManager;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Global.Services.Storage.Core.Json;
 using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
 using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
 using System.ComponentModel;
@@ -11,6 +12,7 @@ namespace Pe.FamilyFoundry.OperationSettings;
 public class MapParamsSettings : IOperationSettings {
     [Description("List of parameter remapping rules")]
     [Required]
+    [Includable("mapping-data")]
     public List<MappingData> MappingData { get; init; } = [];
 
     [Description("Disable per-type fallback to speed up processing. Do not use outside of testing")]

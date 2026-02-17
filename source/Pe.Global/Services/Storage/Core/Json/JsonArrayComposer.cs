@@ -1,7 +1,6 @@
 using Newtonsoft.Json;
 using Pe.Global.PolyFill;
 using Newtonsoft.Json.Linq;
-using System.Threading;
 #if NET8_0_OR_GREATER
 using Toon;
 #endif
@@ -31,17 +30,12 @@ namespace Pe.Global.Services.Storage.Core.Json;
 public static class JsonArrayComposer {
     private const string IncludeProperty = "$include";
     private const string FragmentsDirectoryName = "_fragments";
-    private static readonly AsyncLocal<bool> ToonIncludesEnabled = new();
 
     /// <summary>
-    ///     Enables TOON fragment resolution for the current async flow scope.
-    ///     Use this to opt-in command paths incrementally without global behavior changes.
+    ///     Backward-compatible no-op scope.
+    ///     TOON fragment resolution is always enabled for <c>$include</c> lookups.
     /// </summary>
-    public static IDisposable EnableToonIncludesScope(bool enabled = true) {
-        var previous = ToonIncludesEnabled.Value;
-        ToonIncludesEnabled.Value = enabled;
-        return new Scope(() => ToonIncludesEnabled.Value = previous);
-    }
+    public static IDisposable EnableToonIncludesScope(bool enabled = true) => NoOpScope.Instance;
 
     /// <summary>
     ///     Recursively processes a JObject, expanding <c>$include</c> directives in all arrays.
@@ -49,8 +43,17 @@ public static class JsonArrayComposer {
     /// <param name="obj">The JObject to process (modified in place)</param>
     /// <param name="baseDirectory">Base directory for resolving relative fragment paths</param>
     /// <param name="fragmentSchemaDirectory">Optional directory where fragment schemas are stored (for schema injection)</param>
-    public static void ExpandIncludes(JObject obj, string baseDirectory, string? fragmentSchemaDirectory = null) =>
-        ExpandIncludes(obj, baseDirectory, [], fragmentSchemaDirectory);
+    /// <param name="fragmentSchemaFileResolver">
+    ///     Optional resolver for property-specific fragment schema file names.
+    ///     When omitted, <c>schema-fragment.json</c> is used.
+    /// </param>
+    public static void ExpandIncludes(
+        JObject obj,
+        string baseDirectory,
+        string? fragmentSchemaDirectory = null,
+        Func<string?, string>? fragmentSchemaFileResolver = null
+    ) =>
+        ExpandIncludes(obj, baseDirectory, [], fragmentSchemaDirectory, fragmentSchemaFileResolver);
 
     /// <summary>
     ///     Recursively processes a JObject, expanding <c>$include</c> directives in all arrays.
@@ -60,15 +63,18 @@ public static class JsonArrayComposer {
         JObject obj,
         string baseDirectory,
         HashSet<string> visitedFragments,
-        string? fragmentSchemaDirectory
+        string? fragmentSchemaDirectory,
+        Func<string?, string>? fragmentSchemaFileResolver
     ) {
         foreach (var prop in obj.Properties().ToList()) {
             switch (prop.Value) {
             case JArray array:
-                obj[prop.Name] = ExpandArrayIncludes(array, baseDirectory, visitedFragments, fragmentSchemaDirectory);
+                obj[prop.Name] = ExpandArrayIncludes(array, baseDirectory, visitedFragments, fragmentSchemaDirectory,
+                    prop.Name, fragmentSchemaFileResolver);
                 break;
             case JObject childObj:
-                ExpandIncludes(childObj, baseDirectory, visitedFragments, fragmentSchemaDirectory);
+                ExpandIncludes(childObj, baseDirectory, visitedFragments, fragmentSchemaDirectory,
+                    fragmentSchemaFileResolver);
                 break;
             }
         }
@@ -81,7 +87,9 @@ public static class JsonArrayComposer {
         JArray array,
         string baseDirectory,
         HashSet<string> visitedFragments,
-        string? fragmentSchemaDirectory
+        string? fragmentSchemaDirectory,
+        string? propertyName,
+        Func<string?, string>? fragmentSchemaFileResolver
     ) {
         var result = new JArray();
 
@@ -91,7 +99,7 @@ public static class JsonArrayComposer {
             case JObject obj when obj.TryGetValue(IncludeProperty, out var includeToken): {
                 // Validate include value
                 if (includeToken.Type != JTokenType.String || string.IsNullOrWhiteSpace(includeToken.Value<string>())) {
-                    throw JsonExtendsException.InvalidIncludeValue(
+                    throw JsonCompositionException.InvalidIncludeValue(
                         includeToken.Type == JTokenType.String ? "empty string" : includeToken.Type.ToString()
                     );
                 }
@@ -102,14 +110,15 @@ public static class JsonArrayComposer {
                 // Check for circular includes
                 var normalizedPath = Path.GetFullPath(fragmentPath).ToLowerInvariant();
                 if (visitedFragments.Contains(normalizedPath)) {
-                    throw JsonExtendsException.CircularFragmentInclude(
+                    throw JsonCompositionException.CircularFragmentInclude(
                         fragmentPath,
                         visitedFragments.Append(normalizedPath).ToList()
                     );
                 }
 
                 // Load and expand the fragment (with schema injection if directory provided)
-                var fragmentArray = LoadFragment(fragmentPath, fragmentSchemaDirectory);
+                var fragmentArray = LoadFragment(fragmentPath, fragmentSchemaDirectory, propertyName,
+                    fragmentSchemaFileResolver);
 
                 // Track this fragment for circular detection
                 var newVisited = new HashSet<string>(visitedFragments) { normalizedPath };
@@ -117,7 +126,7 @@ public static class JsonArrayComposer {
                 // Recursively expand includes within the fragment
                 var expandedFragment =
                     ExpandArrayIncludes(fragmentArray, Path.GetDirectoryName(fragmentPath)!, newVisited,
-                        fragmentSchemaDirectory);
+                        fragmentSchemaDirectory, propertyName, fragmentSchemaFileResolver);
 
                 // Add all fragment items to result
                 foreach (var fragmentItem in expandedFragment) result.Add(fragmentItem.DeepClone());
@@ -127,7 +136,8 @@ public static class JsonArrayComposer {
             // If it's an object, recursively process it for nested arrays
             case JObject itemObj: {
                 var cloned = (JObject)itemObj.DeepClone();
-                ExpandIncludes(cloned, baseDirectory, visitedFragments, fragmentSchemaDirectory);
+                ExpandIncludes(cloned, baseDirectory, visitedFragments, fragmentSchemaDirectory,
+                    fragmentSchemaFileResolver);
                 result.Add(cloned);
                 break;
             }
@@ -156,14 +166,12 @@ public static class JsonArrayComposer {
             return Path.GetFullPath(Path.Combine(baseDirectory, relativePath));
         }
 
-        // Extensionless path: prefer JSON, then TOON (if enabled)
+        // Extensionless path: prefer JSON, then TOON.
         var jsonPath = Path.GetFullPath(Path.Combine(baseDirectory, $"{relativePath}.json"));
         if (File.Exists(jsonPath)) return jsonPath;
 
-        if (ToonIncludesEnabled.Value) {
-            var toonPath = Path.GetFullPath(Path.Combine(baseDirectory, $"{relativePath}.toon"));
-            if (File.Exists(toonPath)) return toonPath;
-        }
+        var toonPath = Path.GetFullPath(Path.Combine(baseDirectory, $"{relativePath}.toon"));
+        if (File.Exists(toonPath)) return toonPath;
 
         // Keep prior behavior of reporting the expected JSON path when unresolved
         return jsonPath;
@@ -171,17 +179,17 @@ public static class JsonArrayComposer {
 
     private static void ValidateIncludePath(string includePath) {
         if (string.IsNullOrWhiteSpace(includePath))
-            throw JsonExtendsException.InvalidIncludePath(includePath);
+            throw JsonCompositionException.InvalidIncludePath(includePath);
         if (Path.IsPathRooted(includePath))
-            throw JsonExtendsException.InvalidIncludePath(includePath);
+            throw JsonCompositionException.InvalidIncludePath(includePath);
 
         var segments = includePath.Split(['/'], StringSplitOptions.RemoveEmptyEntries);
         if (segments.Length == 0)
-            throw JsonExtendsException.InvalidIncludePath(includePath);
+            throw JsonCompositionException.InvalidIncludePath(includePath);
         if (!segments[0].Equals(FragmentsDirectoryName, StringComparison.OrdinalIgnoreCase))
-            throw JsonExtendsException.InvalidIncludePath(includePath);
+            throw JsonCompositionException.InvalidIncludePath(includePath);
         if (segments.Any(s => s == "." || s == ".."))
-            throw JsonExtendsException.InvalidIncludePath(includePath);
+            throw JsonCompositionException.InvalidIncludePath(includePath);
     }
 
     /// <summary>
@@ -189,8 +197,13 @@ public static class JsonArrayComposer {
     ///     Fragment files are expected to be JSON objects with an "Items" property containing the array.
     ///     Optionally injects $schema reference if schema directory is provided.
     /// </summary>
-    private static JArray LoadFragment(string fragmentPath, string? fragmentSchemaDirectory) {
-        if (!File.Exists(fragmentPath)) throw JsonExtendsException.FragmentNotFound(fragmentPath);
+    private static JArray LoadFragment(
+        string fragmentPath,
+        string? fragmentSchemaDirectory,
+        string? propertyName,
+        Func<string?, string>? fragmentSchemaFileResolver
+    ) {
+        if (!File.Exists(fragmentPath)) throw JsonCompositionException.FragmentNotFound(fragmentPath);
 
         try {
             var token = ParseFragmentToken(fragmentPath);
@@ -201,7 +214,7 @@ public static class JsonArrayComposer {
 
             // Expect fragment to be an object with "Items" property
             if (token is not JObject fragmentObj) {
-                throw JsonExtendsException.InvalidFragmentFormat(
+                throw JsonCompositionException.InvalidFragmentFormat(
                     fragmentPath,
                     $"Expected object with 'Items' property or bare array, got {token.Type}"
                 );
@@ -209,7 +222,7 @@ public static class JsonArrayComposer {
 
             // Extract the Items array
             if (!TryGetItemsArray(fragmentObj, out var array)) {
-                throw JsonExtendsException.InvalidFragmentFormat(
+                throw JsonCompositionException.InvalidFragmentFormat(
                     fragmentPath,
                     "Missing or invalid 'Items' property"
                 );
@@ -220,13 +233,14 @@ public static class JsonArrayComposer {
             var isJsonFragment = Path.GetExtension(fragmentPath)
                 .Equals(".json", StringComparison.OrdinalIgnoreCase);
             if (isJsonFragment && fragmentSchemaDirectory != null && !fragmentObj.ContainsKey("$schema"))
-                InjectFragmentSchema(fragmentPath, fragmentObj, fragmentSchemaDirectory!);
+                InjectFragmentSchema(fragmentPath, fragmentObj, fragmentSchemaDirectory!,
+                    fragmentSchemaFileResolver?.Invoke(propertyName));
 
             return array;
-        } catch (JsonExtendsException) {
+        } catch (JsonCompositionException) {
             throw; // Re-throw our custom exceptions
         } catch (Exception ex) {
-            throw JsonExtendsException.FragmentLoadFailed(fragmentPath, ex);
+            throw JsonCompositionException.FragmentLoadFailed(fragmentPath, ex);
         }
     }
 
@@ -257,12 +271,6 @@ public static class JsonArrayComposer {
         }
 
         if (ext.Equals(".toon", StringComparison.OrdinalIgnoreCase)) {
-            if (!ToonIncludesEnabled.Value) {
-                throw new InvalidOperationException(
-                    $"TOON fragment include is disabled for path '{fragmentPath}'. " +
-                    $"Enable via {nameof(EnableToonIncludesScope)} in the calling command path.");
-            }
-
 #if NET8_0_OR_GREATER
             var toonContent = File.ReadAllText(fragmentPath);
             var json = ToonTranspiler.DecodeToJson(toonContent);
@@ -279,12 +287,17 @@ public static class JsonArrayComposer {
     ///     Injects $schema reference into a fragment file.
     ///     This enables LSP validation for fragment files.
     /// </summary>
-    private static void InjectFragmentSchema(string fragmentPath, JObject fragmentObj, string schemaDirectory) {
+    private static void InjectFragmentSchema(
+        string fragmentPath,
+        JObject fragmentObj,
+        string schemaDirectory,
+        string? schemaFileName
+    ) {
         // Calculate relative path to fragment schema
         var fragmentDir = Path.GetDirectoryName(fragmentPath)
                           ?? Path.GetDirectoryName(Path.GetFullPath(fragmentPath))
-                          ?? throw JsonExtendsException.InvalidFragmentFormat(fragmentPath, "Invalid fragment path");
-        var schemaPath = Path.Combine(schemaDirectory, "schema-fragment.json");
+                          ?? throw JsonCompositionException.InvalidFragmentFormat(fragmentPath, "Invalid fragment path");
+        var schemaPath = Path.Combine(schemaDirectory, schemaFileName ?? "schema-fragment.json");
         var relativeSchemaPath = BclExtensions.GetRelativePath(fragmentDir, schemaPath).Replace("\\", "/");
 
         // Add $schema property
@@ -294,13 +307,8 @@ public static class JsonArrayComposer {
         File.WriteAllText(fragmentPath, JsonConvert.SerializeObject(fragmentObj, Formatting.Indented));
     }
 
-    private sealed class Scope(Action onDispose) : IDisposable {
-        private bool _disposed;
-
-        public void Dispose() {
-            if (this._disposed) return;
-            this._disposed = true;
-            onDispose();
-        }
+    private sealed class NoOpScope : IDisposable {
+        public static readonly NoOpScope Instance = new();
+        public void Dispose() { }
     }
 }
