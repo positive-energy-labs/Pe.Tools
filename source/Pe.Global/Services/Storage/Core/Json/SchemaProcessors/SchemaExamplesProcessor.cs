@@ -77,12 +77,13 @@ public class SchemaExamplesProcessor : ISchemaProcessor {
                 // Determine target schema (item schema for arrays, property schema for direct strings)
                 var targetSchema = propSchema.Item ?? propSchema;
 
-                // Add x-depends-on and x-provider metadata for dependent providers
-                if (this._dependentProviders.TryGetValue(attr.ProviderType, out var dependsOn)) {
-                    targetSchema.ExtensionData ??= new Dictionary<string, object?>();
+                // Tag provider-backed fields so clients can avoid requesting examples for non-provider fields.
+                targetSchema.ExtensionData ??= new Dictionary<string, object?>();
+                targetSchema.ExtensionData["x-provider"] = attr.ProviderType.Name;
+
+                // Add dependency metadata for dependent providers.
+                if (this._dependentProviders.TryGetValue(attr.ProviderType, out var dependsOn))
                     targetSchema.ExtensionData["x-depends-on"] = dependsOn;
-                    targetSchema.ExtensionData["x-provider"] = attr.ProviderType.Name;
-                }
 
                 if (this.ConsolidateDuplicates) {
                     // Track for later - we'll add $refs in Finalize()

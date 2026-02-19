@@ -14,9 +14,9 @@ namespace Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
 /// </summary>
 public class ScheduleListItem : IPaletteListItem {
     public readonly FileInfo _fileInfo;
-    private readonly string _relativePath;
+    private readonly string? _relativePath;
 
-    public ScheduleListItem(string filePath, string relativePath = null) {
+    public ScheduleListItem(string filePath, string? relativePath = null) {
         this.FilePath = filePath;
         this._fileInfo = new FileInfo(filePath);
         this._relativePath = relativePath;
@@ -49,9 +49,9 @@ public class ScheduleListItem : IPaletteListItem {
     /// <summary> Field count badge </summary>
     public string TextPill => $"{this.FieldCount} fields";
 
-    public Func<string> GetTextInfo => null; // Tooltip disabled - info shown in preview panel
+    public Func<string> GetTextInfo => null!; // Tooltip disabled - info shown in preview panel
 
-    public BitmapImage Icon => null;
+    public BitmapImage Icon => null!;
     public WpfColor? ItemColor => null;
 
     /// <summary>
@@ -91,14 +91,16 @@ public class ScheduleListItem : IPaletteListItem {
     public static List<ScheduleListItem> DiscoverProfiles(SettingsManager subDir) {
         if (!Directory.Exists(subDir.DirectoryPath))
             return [];
-        var jsonFiles = subDir.ListJsonFilesRecursive().Where(f => !f.EndsWith("schema.json") && !f.Contains("schema-"))
-            .ToList();
-        if (jsonFiles.Count == 0) _ = subDir.Json<ScheduleSpec>().Read();
+        var discovered = subDir.Discover(new SettingsDiscoveryOptions(
+            Recursive: true,
+            IncludeFragments: false,
+            IncludeSchemas: false
+        ));
 
-        return jsonFiles
-            .Select(relativePath => new ScheduleListItem(
-                Path.Combine(subDir.DirectoryPath, relativePath),
-                relativePath))
+        return discovered.Files
+            .Select(file => new ScheduleListItem(
+                Path.Combine(subDir.DirectoryPath, file.RelativePath),
+                file.RelativePath))
             .OrderByDescending(p => p.LastModified)
             .ToList();
     }

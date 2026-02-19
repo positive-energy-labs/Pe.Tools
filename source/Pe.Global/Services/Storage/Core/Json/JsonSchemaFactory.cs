@@ -10,9 +10,44 @@ namespace Pe.Global.Services.Storage.Core.Json;
 
 /// <summary>
 ///     Factory for creating JSON schemas with standardized processor configuration.
-///     Supports schema generation and schema injection for settings files.
+///     Supports schema generation and schema injection for settings files. 
 /// </summary>
 public static class JsonSchemaFactory {
+    /// <summary>
+    ///     Creates an authoring schema for local files/tooling scenarios.
+    /// </summary>
+    public static JsonSchema CreateAuthoringSchema<T>(out SchemaExamplesProcessor examplesProcessor) =>
+        CreateAuthoringSchema(typeof(T), out examplesProcessor);
+
+    /// <summary>
+    ///     Creates an authoring schema for local files/tooling scenarios (non-generic overload).
+    /// </summary>
+    public static JsonSchema CreateAuthoringSchema(Type type, out SchemaExamplesProcessor examplesProcessor) =>
+        CreateSchema(type, out examplesProcessor);
+
+    /// <summary>
+    ///     Creates a frontend render schema optimized for UI generation.
+    /// </summary>
+    public static JsonSchema CreateRenderSchema<T>(out SchemaExamplesProcessor examplesProcessor) =>
+        CreateRenderSchema(typeof(T), out examplesProcessor);
+
+    /// <summary>
+    ///     Creates a frontend render schema optimized for UI generation (non-generic overload).
+    /// </summary>
+    public static JsonSchema CreateRenderSchema(Type type, out SchemaExamplesProcessor examplesProcessor) {
+        var renderJson = CreateRenderSchemaJson(type, out examplesProcessor);
+        return JsonSchema.FromJsonAsync(renderJson).GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    ///     Creates frontend render schema JSON optimized for UI generation.
+    /// </summary>
+    public static string CreateRenderSchemaJson(Type type, out SchemaExamplesProcessor examplesProcessor) {
+        var authoringSchema = CreateAuthoringSchema(type, out examplesProcessor);
+        examplesProcessor.Finalize(authoringSchema);
+        return RenderSchemaTransformer.TransformToJson(authoringSchema, type);
+    }
+
     /// <summary>
     ///     Creates a fragment schema for array items of type T.
     ///     Fragment files are objects with an "Items" property containing an array of T.
@@ -26,8 +61,9 @@ public static class JsonSchemaFactory {
     /// </summary>
     public static JsonSchema CreateFragmentSchema(Type itemType, out SchemaExamplesProcessor examplesProcessor) {
         // Create schema for the item type
-        var itemSchema = CreateSchema(itemType, out examplesProcessor);
-        examplesProcessor.Finalize(itemSchema);
+        var itemSchema = CreateAuthoringSchema(itemType, out examplesProcessor);
+        // TODO: an agent review said this was a bug, but i'm worries removing it is dangerous
+        // examplesProcessor.Finalize(itemSchema);
 
         // Create wrapper schema with Items property
         var fragmentSchema = new JsonSchema { Type = JsonObjectType.Object, AllowAdditionalProperties = false };
