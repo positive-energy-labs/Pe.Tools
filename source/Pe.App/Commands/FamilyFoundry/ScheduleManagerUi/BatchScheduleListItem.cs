@@ -68,7 +68,7 @@ public class BatchScheduleListItem : IPaletteListItem {
     ///     Loads the batch settings from the file.
     /// </summary>
     public BatchScheduleSettings LoadBatchSettings() =>
-        this._batchSubDir.Json<BatchScheduleSettings>(Path.GetFileName(this.FilePath)).Read();
+        this._batchSubDir.JsonByRelativePath<BatchScheduleSettings>(this._relativePath).Read();
 
     /// <summary>
     ///     Discovers all batch configuration JSON files in a directory.
@@ -76,15 +76,17 @@ public class BatchScheduleListItem : IPaletteListItem {
     public static List<BatchScheduleListItem> DiscoverProfiles(SettingsManager subDir) {
         if (!Directory.Exists(subDir.DirectoryPath))
             return [];
-        // force default to be made
-        var jsonFiles = subDir.ListJsonFilesRecursive().Where(f => !f.EndsWith("schema.json") && !f.Contains("schema-"))
-            .ToList();
-        if (jsonFiles.Count == 0) _ = subDir.Json<BatchScheduleSettings>().Read();
 
-        return jsonFiles
-            .Select(relativePath => new BatchScheduleListItem(
-                Path.Combine(subDir.DirectoryPath, relativePath),
-                relativePath,
+        var discovered = subDir.Discover(new SettingsDiscoveryOptions(
+            Recursive: true,
+            IncludeFragments: false,
+            IncludeSchemas: false
+        ));
+
+        return discovered.Files
+            .Select(file => new BatchScheduleListItem(
+                Path.Combine(subDir.DirectoryPath, file.RelativePath),
+                file.RelativePath,
                 subDir))
             .OrderByDescending(p => p.LastModified)
             .ToList();

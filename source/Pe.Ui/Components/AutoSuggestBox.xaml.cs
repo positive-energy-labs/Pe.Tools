@@ -3,12 +3,14 @@ using System.Collections;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Globalization;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Binding = System.Windows.Data.Binding;
 using Visibility = System.Windows.Visibility;
 
@@ -36,6 +38,7 @@ public class AutoSuggestBoxItem {
 
 public partial class AutoSuggestBox : RevitHostedUserControl {
     private INotifyCollectionChanged? _itemsSourceNotifier;
+    private int _refreshScheduled;
 
     public AutoSuggestBox() {
         // Initialize FilteredItems before InitializeComponent so binding works
@@ -56,7 +59,7 @@ public partial class AutoSuggestBox : RevitHostedUserControl {
         this.PART_TextBox.LostFocus += this.OnTextBoxLostFocus;
         this.Loaded += (s, e) => {
             this.PART_TextBox.Text = string.Empty;
-            if (this.AlwaysShowSuggestions) this.UpdateFilteredItems();
+            if (this.AlwaysShowSuggestions) this.RequestFilteredItemsRefresh();
         };
     }
 
@@ -189,7 +192,7 @@ public partial class AutoSuggestBox : RevitHostedUserControl {
 
     public new void Focus() => this.PART_TextBox.Focus();
 
-    public void RefreshSuggestions() => this.UpdateFilteredItems();
+    public void RefreshSuggestions() => this.RequestFilteredItemsRefresh();
 
     private static void OnTextChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) {
         if (d is not AutoSuggestBox box) return;
@@ -208,11 +211,11 @@ public partial class AutoSuggestBox : RevitHostedUserControl {
 
     private void OnTextBoxTextChanged(object sender, TextChangedEventArgs e) {
         this.Text = this.PART_TextBox.Text;
-        this.UpdateFilteredItems();
+        this.RequestFilteredItemsRefresh();
     }
 
     private void OnTextBoxGotFocus(object sender, RoutedEventArgs e) {
-        this.UpdateFilteredItems();
+        this.RequestFilteredItemsRefresh();
     }
 
     private void OnTextBoxLostFocus(object sender, RoutedEventArgs e) {
@@ -223,7 +226,7 @@ public partial class AutoSuggestBox : RevitHostedUserControl {
     private static void OnItemsSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) {
         if (d is not AutoSuggestBox box) return;
         box.UpdateItemsSourceSubscription(e.OldValue as INotifyCollectionChanged, e.NewValue as INotifyCollectionChanged);
-        box.UpdateFilteredItems();
+        box.RequestFilteredItemsRefresh();
     }
 
     private void UpdateItemsSourceSubscription(
@@ -242,19 +245,45 @@ public partial class AutoSuggestBox : RevitHostedUserControl {
     }
 
     private void OnItemsSourceCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
-        this.UpdateFilteredItems();
+        this.RequestFilteredItemsRefresh();
 
-    private void UpdateFilteredItems() {
+    private void RequestFilteredItemsRefresh() {
+        if (!this.Dispatcher.CheckAccess()) {
+            _ = this.Dispatcher.BeginInvoke(
+                DispatcherPriority.Background,
+                new Action(this.RequestFilteredItemsRefresh));
+            return;
+        }
+
+        if (Interlocked.Exchange(ref this._refreshScheduled, 1) == 1)
+            return;
+
+        _ = this.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => {
+            _ = Interlocked.Exchange(ref this._refreshScheduled, 0);
+            this.UpdateFilteredItemsCore();
+        }));
+    }
+
+    private void UpdateFilteredItemsCore() {
         if (this.ItemsSource == null) {
-            this.FilteredItems.Clear();
+            this.FilteredItems = new ObservableCollection<AutoSuggestBoxItem>();
             this.IsSuggestionListOpen = false;
             return;
         }
 
         var searchText = this.Text?.Trim() ?? string.Empty;
         var items = new List<AutoSuggestBoxItem>();
+        List<object> sourceSnapshot;
 
-        foreach (var item in this.ItemsSource) {
+        try {
+            sourceSnapshot = this.ItemsSource.Cast<object>().ToList();
+        } catch (InvalidOperationException) {
+            // Source changed mid-enumeration; defer and retry on next dispatcher cycle.
+            this.RequestFilteredItemsRefresh();
+            return;
+        }
+
+        foreach (var item in sourceSnapshot) {
             var primaryText = this.GetPropertyValue(item, this.DisplayMemberPath) ?? item.ToString() ?? string.Empty;
             var secondaryText = this.GetPropertyValue(item, this.SubtextMemberPath) ?? string.Empty;
 
@@ -267,8 +296,7 @@ public partial class AutoSuggestBox : RevitHostedUserControl {
             }
         }
 
-        this.FilteredItems.Clear();
-        foreach (var item in items) this.FilteredItems.Add(item);
+        this.FilteredItems = new ObservableCollection<AutoSuggestBoxItem>(items);
 
         // Determine if suggestions should be shown
         var shouldOpen = this.AlwaysShowSuggestions

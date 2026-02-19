@@ -55,7 +55,7 @@ public class ComposableJson<T> : JsonReader<T>, JsonWriter<T>, JsonReadWriter<T>
 
         _ = this.EnsureDirectoryExists();
 
-        this._fullSchema = JsonSchemaFactory.CreateSchema<T>(out var examplesProcessor);
+        this._fullSchema = JsonSchemaFactory.CreateAuthoringSchema<T>(out var examplesProcessor);
         examplesProcessor.Finalize(this._fullSchema);
         SchemaMetadataProcessor.AllowSchemaProperty(this._fullSchema);
 

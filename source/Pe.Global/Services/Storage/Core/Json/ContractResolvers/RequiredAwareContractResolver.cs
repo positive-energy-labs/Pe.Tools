@@ -94,37 +94,9 @@ public class RequiredAwareContractResolver : RevitTypeContractResolver {
     ///     Attempts to create a default instance of the type for comparison.
     ///     Handles types with parameterless constructors and types with properties.
     /// </summary>
-    private object? TryCreateDefaultInstance(Type type) {
-        try {
-            // Try regular parameterless construction first
-            return Activator.CreateInstance(type);
-        } catch {
-            try {
-                // For types with properties, try to find a constructor and pass default values
-                var constructors = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
-
-                // Try to find the simplest constructor (one that might be generated for records with properties)
-                var constructor = constructors.OrderBy(c => c.GetParameters().Length).FirstOrDefault();
-                if (constructor != null) {
-                    var parameters = constructor.GetParameters();
-                    var paramValues = new object?[parameters.Length];
-
-                    for (var i = 0; i < parameters.Length; i++) {
-                        var paramType = parameters[i].ParameterType;
-                        // Try to create a default value for each parameter
-                        paramValues[i] = paramType.IsValueType ? Activator.CreateInstance(paramType) : null;
-                    }
-
-                    return constructor.Invoke(paramValues);
-                }
-            } catch {
-                // Ignore and fall through
-            }
-
-            // If all else fails, return null (will skip default value comparisons)
-            return null;
-        }
-    }
+    private object? TryCreateDefaultInstance(Type type) =>
+        // Shared default-instance strategy so schema defaults and serialization remain aligned.
+        DefaultInstanceFactory.TryCreateDefaultInstance(type);
 
     /// <summary>
     ///     Gets the default value for a property from the default instance.

@@ -30,7 +30,7 @@ public abstract class BaseLocalManager {
         var name = filename ?? this.Name;
         // Remove .json extension if present, since we'll add it after the timestamp
         if (name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-            name = name.Substring(0, name.Length - 5);
+            name = name[..^5];
 
         var nameWithTimestamp = $"{name}_{DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss")}";
         var nameWithExt = FileUtils.EnsureExtension(nameWithTimestamp, ".json");
@@ -49,21 +49,6 @@ public abstract class BaseLocalManager {
     /// </summary>
     public string GetDatedCsvPath(string? filename = null) =>
         Path.Combine(this.DirectoryPath, $"{filename ?? this.Name}_{DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss")}.csv");
-
-    public List<string> ListJsonFilesShallow(List<string>? excludePatterns = null) => [
-        .. Directory.GetFiles(this.DirectoryPath, "*.json",
-                SearchOption.TopDirectoryOnly)
-            .Select(f => BclExtensions.GetRelativePath(this.DirectoryPath, f))
-            .Where(f => !this.MatchesExcludePattern(f, excludePatterns ?? ["_*"]))
-            .ToList()
-    ];
-
-    public List<string> ListJsonFilesRecursive(List<string>? excludePatterns = null) => [
-        .. Directory.GetFiles(this.DirectoryPath, "*.json", SearchOption.AllDirectories)
-            .Select(f => BclExtensions.GetRelativePath(this.DirectoryPath, f))
-            .Where(f => !this.MatchesExcludePattern(f, excludePatterns ?? ["_*"]))
-            .ToList()
-    ];
 
     /// <summary>
     ///     Checks if a relative path matches any exclusion pattern.
@@ -97,6 +82,53 @@ public class SettingsManager : BaseLocalManager {
         new ComposableJson<T>(this.GetJsonPath(filename), this.DirectoryPath, JsonBehavior.Settings);
 
     /// <summary>
+    ///     Creates a JSON reader for a nested relative JSON path under this settings root.
+    ///     The relative path may include subdirectories and can omit the .json extension.
+    /// </summary>
+    public JsonReader<T> JsonByRelativePath<T>(string relativePath) where T : class, new() =>
+        new ComposableJson<T>(
+            this.ResolveSafeRelativeJsonPath(relativePath),
+            this.DirectoryPath,
+            JsonBehavior.Settings
+        );
+
+    /// <summary>
+    ///     Resolves a relative settings file path to an absolute safe JSON path.
+    ///     Blocks path traversal and normalizes optional extension usage.
+    /// </summary>
+    public string ResolveSafeRelativeJsonPath(string relativePath) =>
+        SettingsPathing.ResolveSafeRelativeJsonPath(this.DirectoryPath, relativePath, nameof(relativePath));
+
+    /// <summary>
+    ///     Discovers settings files under this settings root and returns both flat and tree data.
+    /// </summary>
+    public SettingsDiscoveryResult Discover(SettingsDiscoveryOptions? options = null) {
+        options ??= new SettingsDiscoveryOptions();
+        var discoveryRootPath = this.ResolveSafeSubDirectoryPath(options.SubDirectory);
+        var normalizedRootRelativePath = SettingsPathing.NormalizeRelativePath(options.SubDirectory, nameof(options.SubDirectory));
+        var rootName = string.IsNullOrWhiteSpace(normalizedRootRelativePath)
+            ? this.Name
+            : normalizedRootRelativePath.Split('/').Last();
+
+        if (!Directory.Exists(discoveryRootPath))
+            return new SettingsDiscoveryResult(
+                [],
+                new SettingsDirectoryNode(rootName, normalizedRootRelativePath, [], [])
+            );
+
+        var searchOption = options.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+        var files = Directory.EnumerateFiles(discoveryRootPath, "*.json", searchOption)
+            .Select(path => SettingsDiscoveryBuilder.CreateSettingsFileEntry(path, this.DirectoryPath))
+            .Where(entry => options.IncludeFragments || !entry.IsFragment)
+            .Where(entry => options.IncludeSchemas || !entry.IsSchema)
+            .OrderByDescending(entry => entry.ModifiedUtc)
+            .ToList();
+
+        var tree = SettingsDiscoveryBuilder.BuildDirectoryTree(rootName, normalizedRootRelativePath, files);
+        return new SettingsDiscoveryResult(files, tree);
+    }
+
+    /// <summary>
     ///     Navigate to a subdirectory for accessing files within nested folders.
     ///     Supports multi-level nesting via chaining or path strings (e.g., "profiles/production").
     /// </summary>
@@ -109,6 +141,9 @@ public class SettingsManager : BaseLocalManager {
 
         throw new ArgumentException($"Subdirectory path '{subdirectory}' would escape base directory.");
     }
+
+    private string ResolveSafeSubDirectoryPath(string? subdirectory) =>
+        SettingsPathing.ResolveSafeSubDirectoryPath(this.DirectoryPath, subdirectory, nameof(subdirectory));
 }
 
 public class StateManager : BaseLocalManager {

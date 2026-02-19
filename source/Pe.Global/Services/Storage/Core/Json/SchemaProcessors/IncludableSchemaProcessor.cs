@@ -91,7 +91,6 @@ public class IncludableSchemaProcessor : ISchemaProcessor {
         };
 
         schema.Properties["$include"] = includeProperty;
-        schema.RequiredProperties.Add("$include");
 
         return schema;
     }

@@ -5,7 +5,8 @@ namespace Pe.Global.Services.Storage.Core.Json.SchemaProviders;
 /// <summary>
 ///     Options provider that can filter results based on sibling property values.
 ///     Extend this interface when a dropdown's options depend on another field's value
-///     (e.g., TagTypeName depends on TagFamilyName).
+///     (e.g., TagTypeName depends on TagFamilyName). For cross-cutting context keys
+///     (like selected families), use keys from <see cref="OptionContextKeys" />.
 /// </summary>
 public interface IDependentOptionsProvider : IOptionsProvider {
     /// <summary>

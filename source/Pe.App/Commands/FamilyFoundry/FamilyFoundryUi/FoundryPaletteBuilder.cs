@@ -184,7 +184,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         // Load the profile
         using var toonScope = JsonArrayComposer.EnableToonIncludesScope(this._enableToonIncludes);
         var profile = context.SettingsManager.SubDir("profiles")
-            .Json<TProfile>($"{profileItem.TextPrimary}.json")
+            .JsonByRelativePath<TProfile>(profileItem.TextPrimary)
             .Read();
 
         if (ct.IsCancellationRequested) return null;

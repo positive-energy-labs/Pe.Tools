@@ -152,7 +152,7 @@ public class CmdScheduleManager : IExternalCommand {
     private SchedulePreviewData LoadValidPreviewData(ScheduleListItem profileItem, ScheduleManagerContext context) {
         // Load the profile
         var profile = context.SettingsManager.SubDir("schedules")
-            .Json<ScheduleSpec>($"{profileItem.TextPrimary}.json")
+            .JsonByRelativePath<ScheduleSpec>(profileItem.TextPrimary)
             .Read();
 
         // Serialize profile to JSON
@@ -268,7 +268,7 @@ public class CmdScheduleManager : IExternalCommand {
         ScheduleSpec scheduleSpec;
         try {
             scheduleSpec = ctx.SettingsManager.SubDir("schedules")
-                .Json<ScheduleSpec>($"{ctx.SelectedProfile.TextPrimary}.json")
+                .JsonByRelativePath<ScheduleSpec>(ctx.SelectedProfile.TextPrimary)
                 .Read();
         } catch (Exception ex) {
             new Ballogger()
@@ -369,7 +369,7 @@ public class CmdScheduleManager : IExternalCommand {
         this.BuildPreviewData(profileItem, context);
 
         var profile = context.SettingsManager.SubDir("schedules")
-            .Json<ScheduleSpec>($"{context.SelectedProfile.TextPrimary}.json")
+            .JsonByRelativePath<ScheduleSpec>(context.SelectedProfile.TextPrimary)
             .Read();
 
         // Get families of the schedule's category
@@ -439,7 +439,7 @@ public class CmdScheduleManager : IExternalCommand {
             var schedulesSubDir = context.SettingsManager.SubDir("schedules");
             var results = new List<(string profileName, bool success, string errorMessage)>();
             var createdSchedules = new List<string>();
-            
+
             foreach (var scheduleFile in batchSettings.ScheduleFiles) {
                 try {
                     // Load the schedule spec
@@ -450,7 +450,7 @@ public class CmdScheduleManager : IExternalCommand {
                         continue;
                     }
 
-                    var scheduleSpec = schedulesSubDir.Json<ScheduleSpec>(scheduleFile).Read();
+                    var scheduleSpec = schedulesSubDir.JsonByRelativePath<ScheduleSpec>(scheduleFile).Read();
 
                     // Create the schedule
                     using var trans = new Transaction(context.Doc, $"Create Schedule: {scheduleSpec.Name}");

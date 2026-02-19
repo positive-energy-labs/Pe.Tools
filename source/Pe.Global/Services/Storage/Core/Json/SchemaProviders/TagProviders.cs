@@ -130,7 +130,7 @@ public class AnnotationTagFamilyNamesProvider : IDependentOptionsProvider {
     ];
 
     /// <inheritdoc />
-    public IReadOnlyList<string> DependsOn => ["CategoryName"];
+    public IReadOnlyList<string> DependsOn => [OptionContextKeys.CategoryName];
 
     public IEnumerable<string> GetExamples() {
         try {
@@ -172,7 +172,7 @@ public class AnnotationTagFamilyNamesProvider : IDependentOptionsProvider {
     /// </summary>
     public IEnumerable<string> GetExamples(IReadOnlyDictionary<string, string> siblingValues) {
         // If no CategoryName provided, return unfiltered list
-        if (!siblingValues.TryGetValue("CategoryName", out var categoryName) || string.IsNullOrEmpty(categoryName))
+        if (!siblingValues.TryGetValue(OptionContextKeys.CategoryName, out var categoryName) || string.IsNullOrEmpty(categoryName))
             return this.GetExamples();
 
         try {
@@ -225,7 +225,7 @@ public class AnnotationTagFamilyNamesProvider : IDependentOptionsProvider {
 /// </summary>
 public class AnnotationTagTypeNamesProvider : IDependentOptionsProvider {
     /// <inheritdoc />
-    public IReadOnlyList<string> DependsOn => ["TagFamilyName"];
+    public IReadOnlyList<string> DependsOn => [OptionContextKeys.TagFamilyName];
 
     /// <summary>
     ///     Returns all tag type names (unfiltered).
@@ -262,7 +262,7 @@ public class AnnotationTagTypeNamesProvider : IDependentOptionsProvider {
     /// </summary>
     public IEnumerable<string> GetExamples(IReadOnlyDictionary<string, string> siblingValues) {
         // If no TagFamilyName provided, return unfiltered list
-        if (!siblingValues.TryGetValue("TagFamilyName", out var familyName) || string.IsNullOrEmpty(familyName))
+        if (!siblingValues.TryGetValue(OptionContextKeys.TagFamilyName, out var familyName) || string.IsNullOrEmpty(familyName))
             return this.GetExamples();
 
         try {
