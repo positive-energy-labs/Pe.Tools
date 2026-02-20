@@ -17,13 +17,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Toon\Toon.csproj" />
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(EnablePeGlobalIncludeTests)' == 'true'">
     <ProjectReference Include="..\Pe.Global\Pe.Global.csproj" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(EnablePeGlobalIncludeTests)' != 'true'">
+  <ItemGroup Condition="'$(EnableExternalFixtureTests)' != 'true'">
+    <Compile Remove="CorpusProfileTests.cs" />
     <Compile Remove="JsonArrayComposerToonIncludeTests.cs" />
   </ItemGroup>
 </Project>

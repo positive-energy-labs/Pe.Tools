@@ -47,7 +47,7 @@ settings editor so future implementation work stays aligned.
 - Client event contract names are centralized via `HubClientEventNames` (for
   example `DocumentChanged`) to reduce string drift.
 
-### Frontend
+### Frontend (Stack)
 
 - Router: TanStack Router.
 - Form runtime: TanStack Form.
@@ -116,7 +116,29 @@ settings editor so future implementation work stays aligned.
 
 ### Frontend
 
---- REDACTED ---
+- `C:/Users/kaitp/source/repos/signalir-clientside-demo/v2/src/routes/settings-editor.tsx`
+  - Route-level orchestration for module/file/port search params and page-level
+    UX (generated form, save/refresh, payload viewers, communication log).
+- `C:/Users/kaitp/source/repos/signalir-clientside-demo/v2/src/lib/use-settings-editor-client.ts`
+  - Single SignalR client/runtime for `/hubs/settings-editor`.
+  - Handles connection lifecycle and `DocumentChanged` invalidation behavior.
+- `C:/Users/kaitp/source/repos/signalir-clientside-demo/v2/src/features/settings-editor/queries.ts`
+  - One TanStack Query hook per envelope hub method.
+  - Query keys split by domain (`catalog`, `list`, `schema`, `read`, `examples`,
+    `parameter-catalog`).
+- `C:/Users/kaitp/source/repos/signalir-clientside-demo/v2/src/features/settings-editor/schema-to-field-render.tsx`
+  - `SchemaToFieldRender` implementation.
+  - Recursive schema walking with `$ref`/`oneOf`/`allOf` resolution and array
+    item handling.
+  - Provider-aware field rendering and dependent sibling-context wiring.
+- `C:/Users/kaitp/source/repos/signalir-clientside-demo/v2/src/features/settings-editor/schema-utils.ts`
+  - Render schema parsing/normalization helpers.
+  - Default-value hydration and payload-to-default merge behavior.
+- `C:/Users/kaitp/source/repos/signalir-clientside-demo/v2/src/components/ui/combobox.tsx`
+  - Multi-select combobox primitive used by provider-backed string arrays.
+- `C:/Users/kaitp/source/repos/signalir-clientside-demo/v2/src/generated/`
+  - TypeGen-exported backend contracts (plus short-term sync patches while
+    regenerating types).
 
 ## Implementation Principles
 

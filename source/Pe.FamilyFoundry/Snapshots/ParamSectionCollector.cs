@@ -1,10 +1,9 @@
-using Autodesk.Revit.DB.Structure;
 using Pe.Extensions.FamDocument;
 using Pe.Extensions.FamDocument.GetValue;
 using Pe.Extensions.FamManager;
 using Pe.Extensions.FamParameter;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
-using Pe.Global.PolyFill;
+using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
 
 namespace Pe.FamilyFoundry.Snapshots;
 
@@ -76,61 +75,27 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
     }
 
     private SnapshotSection<ParamSnapshot> CollectFromProject(Document doc, Family family) {
-        var symbols = GetAllSymbols(family);
-        if (symbols.Count == 0)
-            return new SnapshotSection<ParamSnapshot> { Source = SnapshotSource.Project, IsPartial = true };
+        var selectedFamilyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { family.Name };
+        var collected = ProjectFamilyParameterCollector.Collect(doc, selectedFamilyNames);
 
-        var typeNames = symbols
-            .Select(s => s.Name)
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-
-        // Build set of project parameter names from ParameterBindings
-        var projectParamNames = GetProjectParameterNames(doc);
-
-        var snapshots = new Dictionary<string, ParamSnapshot>(StringComparer.Ordinal);
-        var instanceCollectionCount = 0;
-
-        using var tx = new Transaction(doc, "Temp Instance for Param Snapshot Collection");
-        _ = tx.Start();
-
-        try {
-            foreach (var symbol in symbols) {
-                if (!symbol.IsActive)
-                    symbol.Activate();
-
-                var typeName = symbol.Name;
-
-                // Collect type parameters from FamilySymbol (IsInstance = false)
-                CollectTypeParams(symbol, typeName, typeNames, snapshots, projectParamNames);
-
-                // Collect instance parameters from temp FamilyInstance (IsInstance = true)
-                var tempInstance = doc.Create.NewFamilyInstance(
-                    XYZ.Zero,
-                    symbol,
-                    StructuralType.NonStructural);
-
-                if (tempInstance is not null) {
-                    CollectInstanceParams(tempInstance, typeName, typeNames, snapshots, projectParamNames);
-                    instanceCollectionCount++;
-                }
-            }
-        } finally {
-            if (tx.HasStarted())
-                _ = tx.RollBack();
-        }
-
-        // Always mark as partial - project collection cannot get formulas
-        // Family doc collector will supplement with formulas
-        // Also partial if we couldn't create temp instances for all symbols
-        // Allow for better filterting out of Proj Parameters in the family collector counterpart
+        // Always mark as partial - project collection cannot get formulas.
+        // Family doc collector will supplement with formulas.
         return new SnapshotSection<ParamSnapshot> {
             Source = SnapshotSource.Project,
             IsPartial = true,
             Data = [
-                .. snapshots.Values
-                    .OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
-                    .ThenByDescending(s => s.IsInstance)
+                .. collected.Select(item => new ParamSnapshot {
+                    Name = item.Name,
+                    IsInstance = item.IsInstance,
+                    PropertiesGroup = item.PropertiesGroup,
+                    DataType = item.DataType,
+                    Formula = null,
+                    ValuesPerType = item.ValuesPerType,
+                    IsBuiltIn = item.IsBuiltIn,
+                    SharedGuid = item.SharedGuid,
+                    StorageType = item.StorageType,
+                    IsProjectParameter = item.IsProjectParameter
+                })
             ]
         };
     }
@@ -201,159 +166,5 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
 
     // ==================== Helpers ====================
 
-    private static void CollectTypeParams(
-        FamilySymbol symbol,
-        string typeName,
-        List<string> allTypeNames,
-        Dictionary<string, ParamSnapshot> snapshots,
-        HashSet<string> projectParamNames
-    ) {
-        foreach (var p in symbol.Parameters.OfType<Parameter>().Where(p => p.Definition != null)) {
-            var key = GetKey(p.Definition.Name, false);
-            var snap = GetOrCreateSnapshot(p, false, allTypeNames, snapshots, key, projectParamNames);
-            snap.ValuesPerType[typeName] = GetParameterValueString(p, symbol.Document);
-        }
-    }
-
-    private static void CollectInstanceParams(
-        FamilyInstance instance,
-        string typeName,
-        List<string> allTypeNames,
-        Dictionary<string, ParamSnapshot> snapshots,
-        HashSet<string> projectParamNames
-    ) {
-        foreach (var p in instance.Parameters.OfType<Parameter>().Where(p => p.Definition != null)) {
-            var key = GetKey(p.Definition.Name, true);
-            var snap = GetOrCreateSnapshot(p, true, allTypeNames, snapshots, key, projectParamNames);
-            snap.ValuesPerType[typeName] = GetParameterValueString(p, instance.Document);
-        }
-    }
-
-    /// <summary>
-    ///     Gets the string value of a Parameter, handling all storage types correctly.
-    ///     - Double: Returns unit-formatted string (e.g., "10'", "120 V")
-    ///     - String: Returns the raw string value
-    ///     - Integer (Yes/No): Returns "Yes" or "No"
-    ///     - Integer (other): Returns the integer as string
-    ///     - ElementId: Returns the element name if available, otherwise null
-    /// </summary>
-    private static string? GetParameterValueString(Parameter param, Document doc) {
-        if (!param.HasValue) return null;
-
-        return param.StorageType switch {
-            StorageType.String => param.AsString(),
-            StorageType.Integer => GetIntegerValueString(param),
-            StorageType.Double => param.AsValueString(),
-            StorageType.ElementId => GetElementIdValueString(param, doc),
-            _ => null
-        };
-    }
-
-    private static string GetIntegerValueString(Parameter param) {
-        var intValue = param.AsInteger();
-        var dataType = param.Definition.GetDataType();
-
-        // Yes/No parameters should return "Yes" or "No" for human readability
-        if (dataType == SpecTypeId.Boolean.YesNo)
-            return intValue == 1 ? "Yes" : "No";
-
-        return intValue.ToString();
-    }
-
-    private static string? GetElementIdValueString(Parameter param, Document doc) {
-        var elementId = param.AsElementId();
-        if (elementId == null || elementId == ElementId.InvalidElementId)
-            return null;
-
-        // Try to get the element name from the document
-        var element = doc.GetElement(elementId);
-        if (element != null) {
-            // Format: "ElementName [ID:12345]" - human-readable and parseable
-            return $"{element.Name} [ID:{elementId.Value()}]";
-        }
-
-        // Fallback to ID-only format if element not found
-        return $"[ID:{elementId.Value()}]";
-    }
-
-    private static ParamSnapshot GetOrCreateSnapshot(
-        Parameter param,
-        bool isInstance,
-        List<string> allTypeNames,
-        Dictionary<string, ParamSnapshot> snapshots,
-        string key,
-        HashSet<string> projectParamNames
-    ) {
-        if (snapshots.TryGetValue(key, out var existing))
-            return existing;
-
-        var def = param.Definition ?? throw new InvalidOperationException("Parameter.Definition is null.");
-
-        var isBuiltIn = param.IsBuiltInParameter();
-        Guid? sharedGuid = null;
-        if (param.IsShared) {
-            try { sharedGuid = param.GUID; } catch {
-                /* GUID access can still throw sometimes */
-            }
-        }
-
-        var values = allTypeNames.ToDictionary(t => t, _ => (string?)null, StringComparer.Ordinal);
-
-        var created = new ParamSnapshot {
-            Name = def.Name,
-            IsInstance = isInstance,
-            PropertiesGroup = def.GetGroupTypeId(),
-            DataType = def.GetDataType(),
-            Formula = null, // Formula not available in project context
-            ValuesPerType = values,
-            IsBuiltIn = isBuiltIn,
-            SharedGuid = sharedGuid,
-            StorageType = param.StorageType,
-            IsProjectParameter = projectParamNames.Contains(def.Name)
-        };
-
-        snapshots[key] = created;
-        return created;
-    }
-
     private static string GetKey(string name, bool isInstance) => $"{name}|{isInstance}";
-
-    private static List<FamilySymbol> GetAllSymbols(Family family) {
-        var symbolIds = family.GetFamilySymbolIds();
-        if (symbolIds == null || symbolIds.Count == 0)
-            return [];
-
-        return symbolIds
-            .Select(id => family.Document.GetElement(id) as FamilySymbol)
-            .Where(s => s != null)
-            .ToList()!;
-    }
-
-    /// <summary>
-    ///     Gets the names of all project parameters from Document.ParameterBindings.
-    ///     Returns empty set if doc is a family document (ParameterBindings throws for family docs).
-    /// </summary>
-    private static HashSet<string> GetProjectParameterNames(Document doc) {
-        if (doc.IsFamilyDocument)
-            return new HashSet<string>(StringComparer.Ordinal);
-
-        var projectParamNames = new HashSet<string>(StringComparer.Ordinal);
-
-        try {
-            var bindingMap = doc.ParameterBindings;
-            var iterator = bindingMap.ForwardIterator();
-            iterator.Reset();
-
-            while (iterator.MoveNext()) {
-                var definition = iterator.Key;
-                if (definition != null)
-                    _ = projectParamNames.Add(definition.Name);
-            }
-        } catch {
-            // ParameterBindings can throw InvalidOperationException for family documents
-            // or other edge cases - return empty set
-        }
-
-        return projectParamNames;
-    }
 }

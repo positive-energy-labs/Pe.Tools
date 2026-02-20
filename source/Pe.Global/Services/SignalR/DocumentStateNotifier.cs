@@ -10,48 +10,66 @@ namespace Pe.Global.Services.SignalR;
 ///     Monitors Revit document changes and notifies connected SignalR clients.
 /// </summary>
 public class DocumentStateNotifier : IDisposable {
-    /// <summary>
-    ///     Categories that, when modified, should trigger an examples refresh.
-    /// </summary>
-    private static readonly BuiltInCategory[] RelevantCategories = [
-        BuiltInCategory.OST_GenericAnnotation,
-        BuiltInCategory.OST_MultiCategoryTags,
-        BuiltInCategory.OST_MechanicalEquipmentTags,
-        BuiltInCategory.OST_ElectricalEquipmentTags,
-        BuiltInCategory.OST_PipeAccessoryTags,
-        BuiltInCategory.OST_DuctAccessoryTags
-        // Add more tag categories as needed
-    ];
+    private static readonly TimeSpan DocumentChangedMinInterval = TimeSpan.FromMilliseconds(750);
 
     private readonly Application _app;
-    private readonly IHubContext<SchemaHub> _schemaHub;
+    private readonly IHubContext<SettingsEditorHub> _settingsEditorHub;
+    private readonly object _sync = new();
+    private DateTime _lastDocumentChangedNotificationUtc = DateTime.MinValue;
+    private bool _disposed;
+    private bool _isInitialized;
+    private bool _isDocumentChangedSubscribed;
+    private bool _isDocumentOpenedSubscribed;
+    private bool _isDocumentClosedSubscribed;
 
-    public DocumentStateNotifier(IHubContext<SchemaHub> schemaHub, Application app) {
-        this._schemaHub = schemaHub;
+    public DocumentStateNotifier(IHubContext<SettingsEditorHub> settingsEditorHub, Application app) {
+        this._settingsEditorHub = settingsEditorHub;
         this._app = app;
+    }
 
-        // Subscribe to Revit events
-        this._app.DocumentChanged += this.OnDocumentChanged;
-        this._app.DocumentOpened += this.OnDocumentOpened;
-        this._app.DocumentClosed += this.OnDocumentClosed;
+    /// <summary>
+    ///     Initialize Revit document event subscriptions.
+    ///     Must be called from a valid Revit API context.
+    /// </summary>
+    public void InitializeSubscriptions() {
+        lock (this._sync) {
+            if (this._disposed || this._isInitialized)
+                return;
+
+            this.TrySubscribeDocumentChanged();
+            this.TrySubscribeDocumentOpened();
+            this.TrySubscribeDocumentClosed();
+
+            this._isInitialized = true;
+        }
     }
 
     public void Dispose() {
-        this._app.DocumentChanged -= this.OnDocumentChanged;
-        this._app.DocumentOpened -= this.OnDocumentOpened;
-        this._app.DocumentClosed -= this.OnDocumentClosed;
+        lock (this._sync) {
+            if (this._disposed)
+                return;
+
+            if (this._isDocumentChangedSubscribed)
+                this._app.DocumentChanged -= this.OnDocumentChanged;
+
+            if (this._isDocumentOpenedSubscribed)
+                this._app.DocumentOpened -= this.OnDocumentOpened;
+
+            if (this._isDocumentClosedSubscribed)
+                this._app.DocumentClosed -= this.OnDocumentClosed;
+
+            this._disposed = true;
+        }
     }
 
     private void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e) {
         try {
-            var doc = e.Document;
-            var docInfo = new DocumentInfo(doc.Title, doc.PathName, doc.IsModified);
+            if (!HubConnectionTracker.HasActiveConnections)
+                return;
 
-            // Notify clients about new document and invalidate examples
-            _ = this._schemaHub.Clients.All.SendAsync("DocumentChanged",
-                new DocumentChangedNotification(docInfo, true));
-
-            Log.Debug("DocumentStateNotifier: Document opened - {Title}", doc.Title);
+            // Notify clients about document change and invalidate examples.
+            _ = this._settingsEditorHub.Clients.All.SendAsync(HubClientEventNames.DocumentChanged);
+            Log.Debug("DocumentStateNotifier: Document opened - {Title}", e.Document.Title);
         } catch (Exception ex) {
             Log.Error(ex, "DocumentStateNotifier: Error handling DocumentOpened");
         }
@@ -59,10 +77,10 @@ public class DocumentStateNotifier : IDisposable {
 
     private void OnDocumentClosed(object? sender, DocumentClosedEventArgs e) {
         try {
-            // Notify clients that document was closed
-            _ = this._schemaHub.Clients.All.SendAsync("DocumentChanged",
-                new DocumentChangedNotification(null, true));
+            if (!HubConnectionTracker.HasActiveConnections)
+                return;
 
+            _ = this._settingsEditorHub.Clients.All.SendAsync(HubClientEventNames.DocumentChanged);
             Log.Debug("DocumentStateNotifier: Document closed");
         } catch (Exception ex) {
             Log.Error(ex, "DocumentStateNotifier: Error handling DocumentClosed");
@@ -71,43 +89,64 @@ public class DocumentStateNotifier : IDisposable {
 
     private void OnDocumentChanged(object? sender, DocumentChangedEventArgs e) {
         try {
-            // Check if any relevant elements were modified
-            var doc = e.GetDocument();
-            var allChangedIds = e.GetModifiedElementIds()
-                .Concat(e.GetAddedElementIds())
-                .Concat(e.GetDeletedElementIds());
+            if (!HubConnectionTracker.HasActiveConnections)
+                return;
 
-            var hasRelevantChanges = allChangedIds.Any(id => {
-                try {
-                    var element = doc.GetElement(id);
-                    if (element == null) return false;
+            // Revit can emit document-changed very frequently during some operations.
+            // Debounce notifications to avoid notification/refetch storms.
+            var modifiedCount = e.GetModifiedElementIds().Count;
+            var addedCount = e.GetAddedElementIds().Count;
+            var deletedCount = e.GetDeletedElementIds().Count;
+            if (modifiedCount == 0 && addedCount == 0 && deletedCount == 0)
+                return;
 
-                    // Check if it's a FamilySymbol (tag type)
-                    if (element is FamilySymbol) return true;
+            lock (this._sync) {
+                var utcNow = DateTime.UtcNow;
+                if (utcNow - this._lastDocumentChangedNotificationUtc < DocumentChangedMinInterval)
+                    return;
 
-                    // Check if it's a Family
-                    if (element is Family) return true;
-
-                    // Check category
-                    var category = element.Category;
-                    if (category == null) return false;
-
-                    return RelevantCategories.Any(bc =>
-                        category.BuiltInCategory == bc);
-                } catch {
-                    return false;
-                }
-            });
-
-            if (hasRelevantChanges) {
-                var docInfo = new DocumentInfo(doc.Title, doc.PathName, doc.IsModified);
-                _ = this._schemaHub.Clients.All.SendAsync("DocumentChanged",
-                    new DocumentChangedNotification(docInfo, true));
-
-                Log.Debug("DocumentStateNotifier: Relevant changes detected, notifying clients");
+                this._lastDocumentChangedNotificationUtc = utcNow;
             }
+
+            // TODO: Split this into module-scoped signals once module-specific
+            // invalidation rules are defined. For now, treat any document change
+            // as a generic "something changed" signal.
+            _ = this._settingsEditorHub.Clients.All.SendAsync(HubClientEventNames.DocumentChanged);
+            Log.Debug(
+                "DocumentStateNotifier: Document changed - generic notification sent (Modified={Modified}, Added={Added}, Deleted={Deleted})",
+                modifiedCount,
+                addedCount,
+                deletedCount
+            );
         } catch (Exception ex) {
             Log.Error(ex, "DocumentStateNotifier: Error handling DocumentChanged");
+        }
+    }
+
+    private void TrySubscribeDocumentChanged() {
+        try {
+            this._app.DocumentChanged += this.OnDocumentChanged;
+            this._isDocumentChangedSubscribed = true;
+        } catch (Exception ex) {
+            Log.Warning(ex, "DocumentStateNotifier: Failed to subscribe DocumentChanged.");
+        }
+    }
+
+    private void TrySubscribeDocumentOpened() {
+        try {
+            this._app.DocumentOpened += this.OnDocumentOpened;
+            this._isDocumentOpenedSubscribed = true;
+        } catch (Exception ex) {
+            Log.Warning(ex, "DocumentStateNotifier: Failed to subscribe DocumentOpened.");
+        }
+    }
+
+    private void TrySubscribeDocumentClosed() {
+        try {
+            this._app.DocumentClosed += this.OnDocumentClosed;
+            this._isDocumentClosedSubscribed = true;
+        } catch (Exception ex) {
+            Log.Warning(ex, "DocumentStateNotifier: Failed to subscribe DocumentClosed.");
         }
     }
 }

@@ -1,7 +1,9 @@
 using Autodesk.Revit.UI;
 using Pe.FamilyFoundry;
 using Pe.Global;
+using Pe.Global.Services.SignalR.Modules;
 using Pe.Global.Services.Storage;
+using Pe.Global.Services.Storage.Core;
 using Pe.Global.Services.Storage.Core.Json;
 using Pe.Global.Utils.Files;
 using Pe.Ui.Core;
@@ -22,14 +24,21 @@ namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSettings, new() {
     private readonly List<FoundryAction<TProfile>> _actions = [];
     private readonly string _commandName;
+    private readonly ISettingsModule<TProfile> _settingsModule;
     private readonly Document _doc;
     private readonly UIDocument _uiDoc;
     private Action<FoundryContext<TProfile>, List<string>> _postProcess;
     private Func<TProfile, List<SharedParameterDefinition>, OperationQueue> _queueBuilder;
     private bool _enableToonIncludes;
 
-    public FoundryPaletteBuilder(string commandName, Document doc, UIDocument uiDoc) {
-        this._commandName = commandName;
+    public FoundryPaletteBuilder(
+        string displayName,
+        ISettingsModule<TProfile> settingsModule,
+        Document doc,
+        UIDocument uiDoc
+    ) {
+        this._commandName = displayName;
+        this._settingsModule = settingsModule;
         this._doc = doc;
         this._uiDoc = uiDoc;
     }
@@ -87,10 +96,10 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
             throw new InvalidOperationException("Queue builder must be set via WithQueueBuilder()");
 
         // Setup storage and settings
-        var storage = new Storage(this._commandName);
-        var settingsManager = storage.SettingsDir();
+        var storage = new Storage(this._settingsModule.ModuleKey);
+        var settingsManager = this._settingsModule.SettingsRoot();
         var settings = settingsManager.Json<BaseSettings<TProfile>>().Read();
-        var profilesSubDir = settingsManager.SubDir("profiles");
+        var profilesSubDir = this.ResolveProfilesSettingsManager();
 
         // Discover profiles
         var profiles = ProfileListItem.DiscoverProfiles(profilesSubDir);
@@ -183,7 +192,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
 
         // Load the profile
         using var toonScope = JsonArrayComposer.EnableToonIncludesScope(this._enableToonIncludes);
-        var profile = context.SettingsManager.SubDir("profiles")
+        var profile = this.ResolveProfilesSettingsManager()
             .JsonByRelativePath<TProfile>(profileItem.TextPrimary)
             .Read();
 
@@ -361,6 +370,8 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
 
         return new List<string> { $"{ex.GetType().Name}: {ex.Message}" };
     }
+
+    private SettingsManager ResolveProfilesSettingsManager() => this._settingsModule.SettingsDir();
 }
 
 /// <summary>

@@ -133,13 +133,10 @@ public class SettingsManager : BaseLocalManager {
     ///     Supports multi-level nesting via chaining or path strings (e.g., "profiles/production").
     /// </summary>
     /// <param name="subdirectory">The subdirectory path (relative to current directory)</param>
-    /// <param name="recursiveDiscovery">Enable recursive file discovery for nested organization</param>
     public SettingsManager SubDir(string subdirectory) {
-        var subdirectoryPath = Path.Combine(this.DirectoryPath, subdirectory);
-        if (Path.GetFullPath(subdirectoryPath).StartsWith(Path.GetFullPath(this.DirectoryPath)))
-            return new SettingsManager(this.DirectoryPath, subdirectory);
-
-        throw new ArgumentException($"Subdirectory path '{subdirectory}' would escape base directory.");
+        var resolvedSubdirectoryPath = this.ResolveSafeSubDirectoryPath(subdirectory);
+        var relativeSubdirectoryPath = BclExtensions.GetRelativePath(this.DirectoryPath, resolvedSubdirectoryPath);
+        return new SettingsManager(this.DirectoryPath, relativeSubdirectoryPath);
     }
 
     private string ResolveSafeSubDirectoryPath(string? subdirectory) =>
