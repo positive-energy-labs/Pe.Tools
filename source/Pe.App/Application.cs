@@ -4,11 +4,12 @@ using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Events;
 using Nice3point.Revit.Toolkit.External;
 using Pe.App.Tasks;
+using Pe.Tools.Commands.FamilyFoundry.SignalR;
 using Pe.Global.Services.AutoTag;
 using Pe.Global.Services.Document;
 #if !NET48
 using Pe.Global.Services.SignalR;
-using Pe.Global.Services.SignalR.Actions;
+using Pe.Global.Services.SignalR.Modules;
 #endif
 using Pe.Ui.Core;
 using ricaun.Revit.UI.Tasks;
@@ -45,8 +46,8 @@ public class Application : ExternalApplication {
         this.Application.ControlledApplication.DocumentChanged += OnDocumentChanged;
 
 #if !NET48
-        // Subscribe to DocumentOpened to start SignalR server on first document open
-        this.Application.ControlledApplication.DocumentOpened += OnDocumentOpened;
+        // Start SignalR server during application startup.
+        StartSignalRServer(DocumentManager.uiapp);
 #endif
 
         // Initialize RevitTaskService for async/deferred execution in Revit API context
@@ -69,7 +70,6 @@ public class Application : ExternalApplication {
         app.ControlledApplication.DocumentClosing -= OnDocumentClosing;
         app.ControlledApplication.DocumentChanged -= OnDocumentChanged;
 #if !NET48
-        app.ControlledApplication.DocumentOpened -= OnDocumentOpened;
 #endif
         _revitTaskService?.Dispose();
 
@@ -129,28 +129,25 @@ public class Application : ExternalApplication {
     public override void OnShutdown() => Log.CloseAndFlush();
 
 #if !NET48
-    private static void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e) {
-        // Start SignalR server on first document open (when we have access to UIApplication)
-        if (_settingsEditorServer != null) return;
-
-        if (sender is not Autodesk.Revit.ApplicationServices.Application app) return;
-
-        StartSignalRServer(new UIApplication(app));
-
-        // Unsubscribe after starting server once - must unsubscribe from ControlledApplication
-        app.DocumentOpened -= OnDocumentOpened;
-    }
-
     private static void StartSignalRServer(UIApplication uiApp) {
         try {
+            if (_settingsEditorServer != null) return;
+
             _settingsEditorServer = new SettingsEditorServer();
-            _ = _settingsEditorServer.StartAsync(uiApp, configureActionRegistry: registry => {
-                // Register AutoTag action handlers
-                registry.Register(new AutoTagLoadHandler());
-                registry.Register(new AutoTagSaveHandler());
-                registry.Register(new AutoTagGetStatusHandler());
+            var startTask = _settingsEditorServer.StartAsync(uiApp, configureModules: modules => {
+                modules.Register<AutoTagSettingsModule>();
+                modules.Register<FFManagerSettingsModule>();
+                modules.Register<FFMigratorSettingsModule>();
             });
-            Log.Information("SignalR settings editor server started successfully");
+            _ = startTask.ContinueWith(task => {
+                if (task.IsCompletedSuccessfully) {
+                    Log.Information("SignalR settings editor server started successfully");
+                    return;
+                }
+
+                if (task.Exception != null)
+                    Log.Error(task.Exception, "Failed to start SignalR settings editor server");
+            }, TaskScheduler.Default);
         } catch (Exception ex) {
             Log.Error(ex, "Failed to start SignalR settings editor server");
             // Don't fail startup if SignalR fails - it's optional functionality

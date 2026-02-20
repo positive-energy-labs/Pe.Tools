@@ -62,8 +62,8 @@ public static class JsonSchemaFactory {
     public static JsonSchema CreateFragmentSchema(Type itemType, out SchemaExamplesProcessor examplesProcessor) {
         // Create schema for the item type
         var itemSchema = CreateAuthoringSchema(itemType, out examplesProcessor);
-        // TODO: an agent review said this was a bug, but i'm worries removing it is dangerous
-        // examplesProcessor.Finalize(itemSchema);
+        // Finalization is intentionally caller-owned to keep fragment and root
+        // schema lifecycles explicit and avoid duplicating definition wiring.
 
         // Create wrapper schema with Items property
         var fragmentSchema = new JsonSchema { Type = JsonObjectType.Object, AllowAdditionalProperties = false };

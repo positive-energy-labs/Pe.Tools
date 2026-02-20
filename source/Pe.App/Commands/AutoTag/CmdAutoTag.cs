@@ -465,7 +465,7 @@ public class CmdAutoTag : IExternalCommand {
             _ = Directory.CreateDirectory(dir);
 
         // Generate schema with examples
-        var schema = JsonSchemaFactory.CreateSchema<AutoTagSettings>(out var examplesProcessor);
+        var schema = JsonSchemaFactory.CreateAuthoringSchema<AutoTagSettings>(out var examplesProcessor);
         examplesProcessor.Finalize(schema);
         File.WriteAllText(schemaFilePath, schema.ToJson());
 

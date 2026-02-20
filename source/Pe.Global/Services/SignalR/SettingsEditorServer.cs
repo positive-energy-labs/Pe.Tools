@@ -2,9 +2,11 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json.Serialization;
 using Newtonsoft.Json;
-using Pe.Global.Services.SignalR.Actions;
+using Newtonsoft.Json.Converters;
 using Pe.Global.Services.SignalR.Hubs;
+using Pe.Global.Services.SignalR.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
 
@@ -49,10 +51,11 @@ public class SettingsEditorServer : IDisposable {
     /// <param name="uiApp">The Revit UIApplication instance</param>
     /// <param name="configureServices">Optional callback to configure additional services</param>
     /// <param name="configureActionRegistry">Optional callback to register action handlers</param>
+    /// <param name="configureModules">Optional callback to register settings modules</param>
     public async Task StartAsync(
         UIApplication uiApp,
         Action<IServiceCollection>? configureServices = null,
-        Action<ActionRegistry>? configureActionRegistry = null) {
+        Action<SettingsModuleRegistry>? configureModules = null) {
         if (this.IsRunning) {
             Log.Warning("SettingsEditorServer is already running");
             return;
@@ -67,11 +70,14 @@ public class SettingsEditorServer : IDisposable {
 
             // Configure SignalR
             _ = builder.Services.AddSignalR(options => {
-                    options.EnableDetailedErrors = true;
-                    options.MaximumReceiveMessageSize = 1024 * 1024; // 1MB
-                })
-                .AddNewtonsoftJsonProtocol(options =>
-                    options.PayloadSerializerSettings.NullValueHandling = NullValueHandling.Ignore);
+                options.EnableDetailedErrors = true;
+                options.MaximumReceiveMessageSize = 1024 * 1024; // 1MB
+            })
+                .AddNewtonsoftJsonProtocol(options => {
+                    options.PayloadSerializerSettings.NullValueHandling = NullValueHandling.Ignore;
+                    options.PayloadSerializerSettings.ContractResolver = new CamelCasePropertyNamesContractResolver();
+                    options.PayloadSerializerSettings.Converters.Add(new StringEnumConverter());
+                });
 
             // Configure CORS for development
             _ = builder.Services.AddCors(options => options.AddDefaultPolicy(policy => _ = policy.WithOrigins(
@@ -87,6 +93,7 @@ public class SettingsEditorServer : IDisposable {
             // Register core services
             var revitContext = new RevitContext(uiApp);
             _ = builder.Services.AddSingleton(revitContext);
+            _ = builder.Services.AddSingleton(uiApp.Application);
 
             // Create RevitTaskService for thread marshaling
             var revitTaskService = new RevitTaskService(uiApp);
@@ -94,12 +101,13 @@ public class SettingsEditorServer : IDisposable {
             _ = builder.Services.AddSingleton(revitTaskService);
             _ = builder.Services.AddSingleton<RevitTaskQueue>();
 
-            _ = builder.Services.AddSingleton<SettingsTypeRegistry>();
+            // Register module registry
+            var moduleRegistry = new SettingsModuleRegistry();
+            configureModules?.Invoke(moduleRegistry);
 
-            // Register action registry and allow consumers to configure it
-            var actionRegistry = new ActionRegistry();
-            configureActionRegistry?.Invoke(actionRegistry);
-            _ = builder.Services.AddSingleton(actionRegistry);
+            _ = builder.Services.AddSingleton(moduleRegistry);
+            _ = builder.Services.AddSingleton<DocumentStateNotifier>();
+            _ = builder.Services.AddSingleton<EndpointThrottleGate>();
 
             // Allow consumers to add additional services
             configureServices?.Invoke(builder.Services);
@@ -109,14 +117,13 @@ public class SettingsEditorServer : IDisposable {
             _ = builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 10 * 1024 * 1024);
 
             this._app = builder.Build();
+            this._app.Services.GetRequiredService<DocumentStateNotifier>().InitializeSubscriptions();
 
             // Configure middleware
             _ = this._app.UseCors();
 
-            // Map hubs
-            _ = this._app.MapHub<SchemaHub>("/hubs/schema");
-            _ = this._app.MapHub<SettingsHub>("/hubs/settings");
-            _ = this._app.MapHub<ActionsHub>("/hubs/actions");
+            // Map hub
+            _ = this._app.MapHub<SettingsEditorHub>("/hubs/settings-editor");
 
             // Start the server
             await this._app.StartAsync();

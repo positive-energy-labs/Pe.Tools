@@ -7,6 +7,7 @@ using Pe.Global.Services.Storage;
 using Pe.Global.Services.Storage.Core;
 using Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
 using Pe.Ui.Core;
+using Serilog;
 using Serilog.Events;
 using System.Diagnostics;
 using System.IO;
@@ -50,21 +51,33 @@ public class CmdScheduleManager : IExternalCommand {
             var previewPanel = new SchedulePreviewPanel(async (item, ct) => {
                 if (item == null) return null;
 
-                return await Task.Run(() => {
+                if (item.TabType == ScheduleTabType.Create) {
+                    var createItem = item.GetCreateItem();
+                    if (createItem == null || ct.IsCancellationRequested) return null;
+
+                    var previewData = await Task.Run(
+                        () => this.TryLoadPreviewData(createItem, context.SettingsManager),
+                        ct);
                     if (ct.IsCancellationRequested) return null;
 
-                    if (item.TabType == ScheduleTabType.Create) {
-                        this.BuildPreviewData(item.GetCreateItem(), context);
-                        return context.PreviewData;
-                    }
+                    // Update shared UI context only after background work completes.
+                    context.SelectedProfile = createItem;
+                    context.PreviewData = previewData;
+                    return previewData;
+                }
 
-                    if (item.TabType == ScheduleTabType.Batch) {
-                        var batchItem = item.GetBatchItem();
-                        return batchItem != null ? this.BuildBatchPreview(batchItem) : null;
-                    }
+                if (item.TabType == ScheduleTabType.Batch) {
+                    var batchItem = item.GetBatchItem();
+                    if (batchItem == null || ct.IsCancellationRequested) return null;
 
-                    return null;
-                }, ct);
+                    var previewData = await Task.Run(() => this.BuildBatchPreview(batchItem), ct);
+                    if (ct.IsCancellationRequested) return null;
+
+                    context.PreviewData = previewData;
+                    return previewData;
+                }
+
+                return null;
             });
 
             // Create the palette with tabs - each tab defines its own items and actions
@@ -134,12 +147,15 @@ public class CmdScheduleManager : IExternalCommand {
         }
 
         context.SelectedProfile = profileItem;
-        context.PreviewData = this.TryLoadPreviewData(profileItem, context);
+        context.PreviewData = this.TryLoadPreviewData(profileItem, context.SettingsManager);
     }
 
-    private SchedulePreviewData TryLoadPreviewData(ScheduleListItem profileItem, ScheduleManagerContext context) {
+    private SchedulePreviewData TryLoadPreviewData(
+        ScheduleListItem profileItem,
+        SettingsManager settingsManager
+    ) {
         try {
-            return this.LoadValidPreviewData(profileItem, context);
+            return this.LoadValidPreviewData(profileItem, settingsManager);
         } catch (JsonValidationException ex) {
             return CreateValidationErrorPreview(profileItem, ex);
         } catch (JsonSanitizationException ex) {
@@ -149,9 +165,12 @@ public class CmdScheduleManager : IExternalCommand {
         }
     }
 
-    private SchedulePreviewData LoadValidPreviewData(ScheduleListItem profileItem, ScheduleManagerContext context) {
+    private SchedulePreviewData LoadValidPreviewData(
+        ScheduleListItem profileItem,
+        SettingsManager settingsManager
+    ) {
         // Load the profile
-        var profile = context.SettingsManager.SubDir("schedules")
+        var profile = settingsManager.SubDir("schedules")
             .JsonByRelativePath<ScheduleSpec>(profileItem.TextPrimary)
             .Read();
 
@@ -559,7 +578,7 @@ public class CmdScheduleManager : IExternalCommand {
             var outputPath = createOutputDir.Json($"{timestamp}_{result.ScheduleName}.json").Write(outputData);
             return outputPath;
         } catch (Exception ex) {
-            Console.WriteLine($"Failed to write output: {ex.Message}");
+            Log.Error(ex, "Failed to write schedule creation output");
             return null;
         }
     }
@@ -586,7 +605,7 @@ public class CmdScheduleManager : IExternalCommand {
             var outputPath = createOutputDir.Json($"{timestamp}_ERROR_{safeProfileName}.json").Write(outputData);
             return outputPath;
         } catch (Exception writeEx) {
-            Console.WriteLine($"Failed to write error output: {writeEx.Message}");
+            Log.Error(writeEx, "Failed to write schedule error output");
             return null;
         }
     }

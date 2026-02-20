@@ -1,4 +1,5 @@
 using Autodesk.Revit.Attributes;
+using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.FamilyPalette;
 using Pe.FamilyFoundry;
@@ -10,19 +11,24 @@ using Pe.Global;
 using Pe.Global.Revit.Lib;
 using Pe.Global.Revit.Ui;
 using Pe.Global.Services.Storage;
+using Pe.Global.Services.Storage.Core;
 using Pe.Global.Services.Storage.Core.Json;
 using Pe.Global.Utils.Files;
+using Pe.Tools.Commands.FamilyFoundry.SignalR;
 using Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 using Serilog.Events;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.IO;
+using Newtonsoft.Json;
 
 namespace Pe.Tools.Commands.FamilyFoundry;
 
 [Transaction(TransactionMode.Manual)]
 public class CmdFFMigrator : IExternalCommand {
+    private const string CommandDisplayName = "FF Migrator";
+    private static readonly FFMigratorSettingsModule SettingsModule = new();
     private const bool EnableToonIncludes = true;
 
     public Result Execute(
@@ -34,17 +40,19 @@ public class CmdFFMigrator : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var window = new FoundryPaletteBuilder<ProfileRemap>("FF Migrator", doc, uiDoc)
+
+            var window = new FoundryPaletteBuilder<ProfileRemap>(CommandDisplayName, SettingsModule, doc, uiDoc)
                 .WithToonIncludes(EnableToonIncludes)
+                .WithAction("Open Settings Editor", this.HandleOpenSettingsEditor)
                 .WithAction("Open Profile File", this.HandleOpenFile,
                     ctx => ctx.SelectedProfile != null)
                 .WithAction("Process Families", this.HandleProcessFamilies,
                     ctx => ctx.PreviewData?.IsValid == true)
                 .WithAction("Place Families", this.HandlePlaceFamilies,
                     ctx => ctx.SelectedProfile != null)
-                .WithQueueBuilder(BuildQueue)
+                .WithQueueBuilder(BuildQueueCore)
                 .WithPostProcess((ctx, familyNames) =>
-                    FamilyPlacementHelper.PromptAndPlaceFamilies(ctx.UiDoc.Application, familyNames, "FF Migrator"))
+                    FamilyPlacementHelper.PromptAndPlaceFamilies(ctx.UiDoc.Application, familyNames, CommandDisplayName))
                 .Build();
 
             window.Show();
@@ -56,32 +64,36 @@ public class CmdFFMigrator : IExternalCommand {
     }
 
     private void HandlePlaceFamilies(FoundryContext<ProfileRemap> context) {
-        using var toonScope = JsonArrayComposer.EnableToonIncludesScope(EnableToonIncludes);
-        var profile = context.SettingsManager.SubDir("profiles")
-            .Json<ProfileRemap>($"{context.SelectedProfile.TextPrimary}.json")
-            .Read();
-        var families = profile.GetFamilies(context.Doc);
-        FamilyPlacementHelper.PromptAndPlaceFamilies(context.UiDoc.Application, families.Select(f => f.Name).ToList(),
-            "FF Migrator");
+        if (context.SelectedProfile == null) return;
 
-        new Ballogger()
-            .Add(LogEventLevel.Information, new StackFrame(),
-                $"Schema regenerated for {context.SelectedProfile.TextPrimary}")
-            .Show();
+        try {
+            var profile = ReadProfile(
+                context.SelectedProfile.TextPrimary,
+                SettingsModule.DefaultSubDirectory,
+                EnableToonIncludes
+            );
+            var placeResult = PlaceFamiliesCore(context.UiDoc.Application, profile);
+            var level = placeResult.Success ? LogEventLevel.Information : LogEventLevel.Error;
+            var message = placeResult.Success
+                ? $"Placed {placeResult.PlacedCount} family entries for profile '{context.SelectedProfile.TextPrimary}'."
+                : placeResult.Error ?? "Failed to place families.";
+            new Ballogger().Add(level, new StackFrame(), message).Show();
+        } catch (Exception ex) {
+            new Ballogger().Add(LogEventLevel.Error, new StackFrame(), ex, true).Show();
+        }
     }
 
     private void HandleOpenFile(FoundryContext<ProfileRemap> context) {
         if (context.SelectedProfile == null) return;
-
-        var filePath = context.SelectedProfile.FilePath;
-        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) {
-            new Ballogger()
-                .Add(LogEventLevel.Warning, new StackFrame(), $"Profile file not found: {filePath}")
-                .Show();
-            return;
-        }
-
-        FileUtils.OpenInDefaultApp(filePath);
+        var result = OpenProfileInDefaultApp(
+            context.SelectedProfile.TextPrimary,
+            SettingsModule.DefaultSubDirectory
+        );
+        var level = result.Success ? LogEventLevel.Information : LogEventLevel.Warning;
+        var message = result.Success
+            ? $"Opened profile file: {result.FilePath}"
+            : result.Error ?? "Profile file could not be opened.";
+        new Ballogger().Add(level, new StackFrame(), message).Show();
     }
 
     private void HandleProcessFamilies(FoundryContext<ProfileRemap> ctx) {
@@ -93,66 +105,221 @@ public class CmdFFMigrator : IExternalCommand {
             return;
         }
 
-        using var toonScope = JsonArrayComposer.EnableToonIncludesScope(EnableToonIncludes);
-        // Load profile fresh for execution
-        var profile = ctx.SettingsManager.SubDir("profiles")
-            .Json<ProfileRemap>($"{ctx.SelectedProfile.TextPrimary}.json")
-            .Read();
+        var profile = ReadProfile(
+            ctx.SelectedProfile.TextPrimary,
+            SettingsModule.DefaultSubDirectory,
+            EnableToonIncludes
+        );
+        var runResult = ProcessFamiliesCore(
+            ctx.UiDoc.Application,
+            profile,
+            ctx.SelectedProfile.TextPrimary,
+            ctx.OnFinishSettings
+        );
+        var level = runResult.Success ? LogEventLevel.Information : LogEventLevel.Error;
+        var message = runResult.Success
+            ? $"Processed {runResult.FamilyCount} families in {runResult.TotalMs:F0}ms."
+            : runResult.Error ?? "Processing failed.";
+        new Ballogger().Add(level, new StackFrame(), message).Show();
+        if (runResult.ProcessedFamilyNames.Count > 0)
+            FamilyPlacementHelper.PromptAndPlaceFamilies(
+                ctx.UiDoc.Application,
+                runResult.ProcessedFamilyNames,
+                CommandDisplayName
+            );
+    }
 
-        // Get raw APS parameter models and convert with fresh TempSharedParamFile
-        var apsParamModels = profile.GetFilteredApsParamModels();
-
-        // Create fresh TempSharedParamFile and convert raw APS models to SharedParameterDefinitions.
-        // The temp file stays alive for the entire ProcessFamilies operation.
-        using var tempFile = new TempSharedParamFile(ctx.Doc);
-        var apsParamData = BaseProfileSettings.ConvertToSharedParameterDefinitions(
-            apsParamModels, tempFile);
-
-        var queue = BuildQueue(profile, apsParamData);
-
-        var outputFolderPath = ctx.Storage.OutputDir().DirectoryPath;
-
-        // Request both parameter and refplane snapshots
-        var collectorQueue = new CollectorQueue()
-            .Add(new ParamSectionCollector())
-            .Add(new RefPlaneSectionCollector());
-
-        // Setup result builder for incremental writes
-        var resultBuilder = new ProcessingResultBuilder(ctx.Storage)
-                .WithProfile(profile, ctx.SelectedProfile.TextPrimary)
-                .WithOperationMetadata(queue)
-            ;
-        using var processor = new OperationProcessor(ctx.Doc, profile.ExecutionOptions);
-        var logs = processor
-            .SelectFamilies(() => {
-                var picked = Pickers.GetSelectedFamilies(ctx.UiDoc);
-                return picked.Any() ? picked : profile.GetFamilies(ctx.Doc);
-            })
-            .WithPerFamilyCallback(familyCtx =>
-                // Write output for each family as it completes
-                resultBuilder.WriteSingleFamilyOutput(familyCtx)
-            )
-            .ProcessQueue(queue, collectorQueue, outputFolderPath, ctx.OnFinishSettings);
-
-        // Write summary file aggregating all families
-        resultBuilder.WriteMultiFamilySummary(logs.totalMs, ctx.OnFinishSettings.OpenOutputFilesOnCommandFinish);
-
-        var balloon = new Ballogger();
-        foreach (var logCtx in logs.contexts) {
-            _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
-                $"Processed {logCtx.FamilyName} in {logCtx.TotalMs}ms");
+    private void HandleOpenSettingsEditor(FoundryContext<ProfileRemap> context) {
+        var selectedProfileName = context.SelectedProfile?.TextPrimary;
+        var launched = TryLaunchSettingsEditorRoute(selectedProfileName);
+        if (launched) {
+            new Ballogger()
+                .Add(
+                    LogEventLevel.Information,
+                    new StackFrame(),
+                    "Opened FF Migrator settings editor route in your default browser."
+                )
+                .Show();
+            return;
         }
 
-        balloon.Show();
+        new Ballogger()
+            .Add(
+                LogEventLevel.Warning,
+                new StackFrame(),
+                "Could not open settings editor route. Check PE_SETTINGS_EDITOR_BASE_URL and PE_SETTINGS_EDITOR_SIGNALR_BASE_URL."
+            )
+            .Show();
+    }
 
-        // Prompt user to place families in a view for testing
-        var processedFamilyNames = logs.contexts
-            .Select(c => c.FamilyName)
-            .Where(name => !string.IsNullOrEmpty(name) && name != "ERROR")
+    private static bool TryLaunchSettingsEditorRoute(string? selectedProfileName = null) {
+        try {
+            var baseUrl = Environment.GetEnvironmentVariable("PE_SETTINGS_EDITOR_BASE_URL");
+            if (string.IsNullOrWhiteSpace(baseUrl))
+                baseUrl = "http://localhost:3000";
+
+            var routePath = Environment.GetEnvironmentVariable("PE_SETTINGS_EDITOR_FFMIGRATOR_ROUTE");
+            if (string.IsNullOrWhiteSpace(routePath))
+                routePath = "/internal/settings-editor";
+            if (!routePath.StartsWith('/'))
+                routePath = "/" + routePath;
+
+            var signalRBaseUrl = Environment.GetEnvironmentVariable("PE_SETTINGS_EDITOR_SIGNALR_BASE_URL");
+            if (string.IsNullOrWhiteSpace(signalRBaseUrl))
+                signalRBaseUrl = "http://localhost:5150";
+
+            var moduleKey = Uri.EscapeDataString(SettingsModule.ModuleKey);
+            var signalRBaseUrlEscaped = Uri.EscapeDataString(signalRBaseUrl);
+            var profileNameEscaped = selectedProfileName is { Length: > 0 }
+                ? Uri.EscapeDataString(selectedProfileName)
+                : null;
+            var targetUrl =
+                $"{baseUrl.TrimEnd('/')}{routePath}?moduleKey={moduleKey}&signalrBaseUrl={signalRBaseUrlEscaped}";
+            if (!string.IsNullOrWhiteSpace(profileNameEscaped))
+                targetUrl += $"&file={profileNameEscaped}";
+
+            _ = Process.Start(new ProcessStartInfo(targetUrl) { UseShellExecute = true });
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    internal static FFMigratorPlaceFamiliesActionResult PlaceFamiliesCore(UIApplication uiApp, ProfileRemap profile) {
+        var doc = uiApp.ActiveUIDocument?.Document;
+        if (doc == null)
+            return new FFMigratorPlaceFamiliesActionResult(false, "No active document.", [], 0);
+
+        try {
+            var familyNames = profile.GetFamilies(doc)
+                .Select(f => f.Name)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (familyNames.Count == 0)
+                return new FFMigratorPlaceFamiliesActionResult(
+                    false,
+                    "No families matched the current profile settings.",
+                    [],
+                    0
+                );
+
+            FamilyPlacementHelper.PromptAndPlaceFamilies(uiApp, familyNames, CommandDisplayName);
+            return new FFMigratorPlaceFamiliesActionResult(true, null, familyNames, familyNames.Count);
+        } catch (Exception ex) {
+            return new FFMigratorPlaceFamiliesActionResult(false, ex.Message, [], 0);
+        }
+    }
+
+    internal static FFMigratorProcessFamiliesActionResult ProcessFamiliesCore(
+        UIApplication uiApp,
+        ProfileRemap profile,
+        string profileName,
+        LoadAndSaveOptions? onFinishSettings = null
+    ) {
+        var uiDoc = uiApp.ActiveUIDocument;
+        var doc = uiDoc?.Document;
+        if (doc == null || uiDoc == null)
+            return new FFMigratorProcessFamiliesActionResult(
+                false,
+                "No active document.",
+                null,
+                [],
+                0,
+                0
+            );
+
+        var storage = new Storage(SettingsModule.ModuleKey);
+
+        try {
+            using var tempFile = new TempSharedParamFile(doc);
+            var apsParamData = BaseProfileSettings.ConvertToSharedParameterDefinitions(
+                profile.GetFilteredApsParamModels(),
+                tempFile
+            );
+            var queue = BuildQueueCore(profile, apsParamData);
+            var outputFolderPath = storage.OutputDir().DirectoryPath;
+            var collectorQueue = new CollectorQueue()
+                .Add(new ParamSectionCollector())
+                .Add(new RefPlaneSectionCollector());
+            var finishSettings = onFinishSettings ?? new LoadAndSaveOptions {
+                OpenOutputFilesOnCommandFinish = false
+            };
+
+            var resultBuilder = new ProcessingResultBuilder(storage)
+                .WithProfile(profile, profileName)
+                .WithOperationMetadata(queue);
+            using var processor = new OperationProcessor(doc, profile.ExecutionOptions);
+            var logs = processor
+                .SelectFamilies(() => {
+                    var picked = Pickers.GetSelectedFamilies(uiDoc);
+                    return picked.Any() ? picked : profile.GetFamilies(doc);
+                })
+                .WithPerFamilyCallback(familyCtx => resultBuilder.WriteSingleFamilyOutput(familyCtx))
+                .ProcessQueue(queue, collectorQueue, outputFolderPath, finishSettings);
+
+            resultBuilder.WriteMultiFamilySummary(logs.totalMs, finishSettings.OpenOutputFilesOnCommandFinish);
+            var processedFamilyNames = logs.contexts
+                .Select(c => c.FamilyName)
+                .Where(name => !string.IsNullOrWhiteSpace(name) &&
+                               !string.Equals(name, "ERROR", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var hasErrors = logs.contexts.Any(ctx => {
+                var (_, error) = ctx.OperationLogs;
+                return error != null;
+            });
+
+            return new FFMigratorProcessFamiliesActionResult(
+                !hasErrors,
+                hasErrors ? "Processing completed with errors. Review generated logs." : null,
+                outputFolderPath,
+                processedFamilyNames,
+                logs.totalMs,
+                logs.contexts.Count
+            );
+        } catch (Exception ex) {
+            return new FFMigratorProcessFamiliesActionResult(
+                false,
+                ex.Message,
+                null,
+                [],
+                0,
+                0
+            );
+        }
+    }
+
+    internal static OperationQueue BuildQueueCore(ProfileRemap profile, List<SharedParameterDefinition> apsParamData) {
+        var profileClone = DeepCloneProfile(profile);
+        var apsParamNames = apsParamData.Select(p => p.ExternalDefinition.Name).ToList();
+        var mappingDataAllNames = profileClone.AddAndMapSharedParams.MappingData
+            .SelectMany(m => m.CurrNames)
+            .Concat(apsParamNames);
+        var internalParams = BuildInternalParams(profileClone)
+            .Where(internalParam => profileClone.AddAndSetParams.Parameters.All(existing =>
+                !string.Equals(existing.Name, internalParam.Name, StringComparison.OrdinalIgnoreCase)))
             .ToList();
-        FamilyPlacementHelper.PromptAndPlaceFamilies(ctx.UiDoc.Application, processedFamilyNames, "FF Migrator");
+        profileClone.AddAndSetParams.AddParameters(internalParams);
+        var apsAndAddedParamNames = apsParamNames
+            .Concat(profileClone.AddAndSetParams.Parameters.Select(p => p.Name))
+            .ToList();
 
-        // TempSharedParamFile is disposed here AFTER ProcessFamilies completes
+        return new OperationQueue()
+            .Add(new PurgeNestedFamilies(profileClone.PurgeNestedFamilies))
+            .Add(new PurgeReferencePlanes(profileClone.PurgeReferencePlanes))
+            .Add(new PurgeModelLines(profileClone.PurgeModelLines))
+            .Add(new PurgeParams(profileClone.PurgeParams, mappingDataAllNames))
+            .Add(new AddAndMapSharedParams(profileClone.AddAndMapSharedParams, apsParamData))
+            .Add(new AddAndSetParams(profileClone.AddAndSetParams))
+            .Add(new MakeElecConnector(profileClone.MakeElectricalConnector))
+            .Add(new PurgeParams(profileClone.PurgeParams, apsAndAddedParamNames))
+            .Add(new SortParams(profileClone.SortParams));
+    }
+
+    private static ProfileRemap DeepCloneProfile(ProfileRemap profile) {
+        var json = JsonConvert.SerializeObject(profile, Formatting.None);
+        var clone = JsonConvert.DeserializeObject<ProfileRemap>(json);
+        return clone ?? throw new InvalidOperationException("Failed to clone ProfileRemap settings.");
     }
 
     private static List<ParamSettingModel> BuildInternalParams(ProfileRemap profile) {
@@ -167,7 +334,8 @@ public class CmdFFMigrator : IExternalCommand {
             }
         ];
 
-        if (!profile.MakeElectricalConnector.Enabled) return paramList;
+        if (!profile.MakeElectricalConnector.Enabled)
+            return paramList;
 
         var voltageName = profile.MakeElectricalConnector.SourceParameterNames.Voltage;
         var numberOfPolesName = profile.MakeElectricalConnector.SourceParameterNames.NumberOfPoles;
@@ -190,41 +358,50 @@ public class CmdFFMigrator : IExternalCommand {
         ];
     }
 
-    /// <summary>
-    ///     Builds the operation queue from profile settings and APS parameter data.
-    ///     This is used both for preview (with temp conversions) and execution (with real conversions).
-    /// </summary>
-    private static OperationQueue BuildQueue(
-        ProfileRemap profile,
-        List<SharedParameterDefinition> apsParamData
+    internal static string ResolveProfileFilePath(string relativePath, string? subDirectory = null) {
+        var settingsDir = ResolveSettingsManager(subDirectory);
+        return settingsDir.ResolveSafeRelativeJsonPath(relativePath);
+    }
+
+    internal static ProfileRemap ReadProfile(
+        string relativePath,
+        string? subDirectory = null,
+        bool enableToonIncludes = true
     ) {
-        var apsParamNames = apsParamData.Select(p => p.ExternalDefinition.Name).ToList();
+        using var toonScope = JsonArrayComposer.EnableToonIncludesScope(enableToonIncludes);
+        var settingsManager = ResolveSettingsManager(subDirectory);
+        return settingsManager
+            .JsonByRelativePath<ProfileRemap>(relativePath)
+            .Read();
+    }
 
-        var mappingDataAllNames = profile.AddAndMapSharedParams.MappingData
-            .SelectMany(m => m.CurrNames)
-            .Concat(apsParamNames);
+    internal static FFMigratorOpenProfileFileActionResult OpenProfileInDefaultApp(
+        string relativePath,
+        string? subDirectory = null
+    ) {
+        try {
+            var filePath = ResolveProfileFilePath(relativePath, subDirectory);
+            if (!File.Exists(filePath))
+                return new FFMigratorOpenProfileFileActionResult(
+                    false,
+                    $"Profile file not found: {Path.GetFileName(filePath)}",
+                    filePath,
+                    false
+                );
 
-        var internalParams = BuildInternalParams(profile)
-            .Where(internalParam => profile.AddAndSetParams.Parameters.All(existing =>
-                !string.Equals(existing.Name, internalParam.Name, StringComparison.OrdinalIgnoreCase)))
-            .ToList();
+            FileUtils.OpenInDefaultApp(filePath);
+            return new FFMigratorOpenProfileFileActionResult(true, null, filePath, true);
+        } catch (Exception ex) {
+            return new FFMigratorOpenProfileFileActionResult(false, ex.Message, null, false);
+        }
+    }
 
-        profile.AddAndSetParams.AddParameters(internalParams);
-        var apsAndAddedParamNames = apsParamNames
-            .Concat(profile.AddAndSetParams.Parameters.Select(p => p.Name))
-            .ToList();
-
-
-        return new OperationQueue()
-            .Add(new PurgeNestedFamilies(profile.PurgeNestedFamilies))
-            .Add(new PurgeReferencePlanes(profile.PurgeReferencePlanes))
-            .Add(new PurgeModelLines(profile.PurgeModelLines))
-            .Add(new PurgeParams(profile.PurgeParams, mappingDataAllNames))
-            .Add(new AddAndMapSharedParams(profile.AddAndMapSharedParams, apsParamData))
-            .Add(new AddAndSetParams(profile.AddAndSetParams))
-            .Add(new MakeElecConnector(profile.MakeElectricalConnector))
-            .Add(new PurgeParams(profile.PurgeParams, apsAndAddedParamNames))
-            .Add(new SortParams(profile.SortParams));
+    private static SettingsManager ResolveSettingsManager(string? subDirectory) {
+        var root = SettingsModule.SettingsRoot();
+        var targetSubDir = string.IsNullOrWhiteSpace(subDirectory)
+            ? SettingsModule.DefaultSubDirectory
+            : subDirectory;
+        return root.SubDir(targetSubDir);
     }
 }
 
@@ -262,3 +439,26 @@ public class ProfileRemap : BaseProfileSettings {
     [Required]
     public SortParamsSettings SortParams { get; init; } = new();
 }
+
+internal record FFMigratorProcessFamiliesActionResult(
+    bool Success,
+    string? Error,
+    string? OutputFolderPath,
+    List<string> ProcessedFamilyNames,
+    double TotalMs,
+    int FamilyCount
+);
+
+internal record FFMigratorPlaceFamiliesActionResult(
+    bool Success,
+    string? Error,
+    List<string> FamilyNames,
+    int PlacedCount
+);
+
+internal record FFMigratorOpenProfileFileActionResult(
+    bool Success,
+    string? Error,
+    string? FilePath,
+    bool Opened
+);

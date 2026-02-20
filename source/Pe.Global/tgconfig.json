@@ -2,7 +2,7 @@
   "assemblies": [
     "bin/Debug.R25/Pe.Global.dll"
   ],
-  "outputPath": "C:/Users/kaitp/source/repos/signalir-clientside-demo/v1/src/generated",
+  "outputPath": "C:/Users/kaitp/source/repos/signalir-clientside-demo/v2/src/generated",
   "createIndexFile": true,
   "enumStringInitializers": true,
   "singleQuotes": false,

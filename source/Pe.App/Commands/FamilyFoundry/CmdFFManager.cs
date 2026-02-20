@@ -11,6 +11,8 @@ using Pe.Global.Revit.Ui;
 using Pe.Global.Services.Storage.Core.Json;
 using Pe.Global.Utils.Files;
 using Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
+using Pe.Tools.Commands.FamilyFoundry.SignalR;
+using Serilog;
 using Serilog.Events;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
@@ -21,6 +23,7 @@ namespace Pe.Tools.Commands.FamilyFoundry;
 
 [Transaction(TransactionMode.Manual)]
 public class CmdFFManager : IExternalCommand {
+    private static readonly FFManagerSettingsModule SettingsModule = new();
     private const bool EnableToonIncludes = true;
 
     public Result Execute(
@@ -32,7 +35,7 @@ public class CmdFFManager : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var window = new FoundryPaletteBuilder<ProfileFamilyManager>("FF Manager", doc, uiDoc)
+            var window = new FoundryPaletteBuilder<ProfileFamilyManager>("FF Manager", SettingsModule, doc, uiDoc)
                 .WithToonIncludes(EnableToonIncludes)
                 .WithAction("Apply Profile", this.HandleApplyProfile,
                     ctx => ctx.PreviewData?.IsValid == true)
@@ -57,8 +60,8 @@ public class CmdFFManager : IExternalCommand {
 
         // Load profile fresh for execution
         using var toonScope = JsonArrayComposer.EnableToonIncludesScope(EnableToonIncludes);
-        var profile = ctx.SettingsManager.SubDir("profiles")
-            .Json<ProfileFamilyManager>($"{ctx.SelectedProfile.TextPrimary}.json")
+        var profile = SettingsModule.SettingsDir()
+            .JsonByRelativePath<ProfileFamilyManager>(ctx.SelectedProfile.TextPrimary)
             .Read();
 
         // Get raw APS parameter models and convert with fresh TempSharedParamFile
@@ -162,14 +165,19 @@ public class CmdFFManager : IExternalCommand {
 
         var distinctParamNames = paramNames.Distinct().ToList();
 
-        Console.WriteLine($"[ExtractDimLabelParams] Found {distinctParamNames.Count} dimension label params: {string.Join(", ", distinctParamNames)}");
+        Log.Debug(
+            "[ExtractDimLabelParams] Found {ParamCount} dimension label params: {ParamNames}",
+            distinctParamNames.Count,
+            string.Join(", ", distinctParamNames));
 
         // Find the corresponding parameter settings from AddAndSetParams
         var dimLabelParamSettings = profile.AddAndSetParams.Parameters
             .Where(p => distinctParamNames.Contains(p.Name))
             .ToList();
 
-        Console.WriteLine($"[ExtractDimLabelParams] Extracted {dimLabelParamSettings.Count} param settings for dimension labeling");
+        Log.Debug(
+            "[ExtractDimLabelParams] Extracted {SettingCount} param settings for dimension labeling",
+            dimLabelParamSettings.Count);
 
         return new AddAndSetParamsSettings {
             Enabled = dimLabelParamSettings.Count > 0,
