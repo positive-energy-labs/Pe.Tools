@@ -1,7 +1,9 @@
-namespace Pe.Global.Services.SignalR.Modules;
+using Pe.Global.Services.Storage.Modules;
+
+namespace Pe.Global.Services.Storage.Modules;
 
 /// <summary>
-///     Registry for SignalR settings modules.
+///     Registry for settings modules.
 /// </summary>
 public class SettingsModuleRegistry {
     private readonly Dictionary<string, ISettingsModule> _modules = new(StringComparer.OrdinalIgnoreCase);

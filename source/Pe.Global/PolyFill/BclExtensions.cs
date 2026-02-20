@@ -96,4 +96,51 @@ public static class BclExtensions {
         if (value > max) return max;
         return value;
         }
+
+        /// <summary>
+        ///     Splits a string with options including TrimEntries support.
+        ///     Polyfill for StringSplitOptions.TrimEntries (added in .NET 5).
+        /// </summary>
+        public static string[] SplitAndTrim(this string value, char separator, StringSplitOptions options = StringSplitOptions.None) {
+            var parts = value.Split(new[] { separator }, options);
+            return TrimIfRequested(parts, options);
+        }
+
+        /// <summary>
+        ///     Splits a string with options including TrimEntries support.
+        ///     Polyfill for StringSplitOptions.TrimEntries (added in .NET 5).
+        /// </summary>
+        public static string[] SplitAndTrim(this string value, char[] separators, StringSplitOptions options = StringSplitOptions.None) {
+            var parts = value.Split(separators, options);
+            return TrimIfRequested(parts, options);
+        }
+
+        /// <summary>
+        ///     Joins strings with a character separator.
+        ///     Polyfill for string.Join(char, IEnumerable) (added in .NET Core).
+        /// </summary>
+        public static string JoinWith(this IEnumerable<string> values, char separator) {
+            return string.Join(separator.ToString(), values);
+        }
+
+        /// <summary>
+        ///     Joins strings with a string separator.
+        ///     Framework-agnostic wrapper around string.Join.
+        /// </summary>
+        public static string JoinWith(this IEnumerable<string> values, string separator) {
+            return string.Join(separator, values);
+        }
+
+        private static string[] TrimIfRequested(string[] parts, StringSplitOptions options) {
+            const int TrimEntriesFlag = 2;
+            var shouldTrim = ((int)options & TrimEntriesFlag) == TrimEntriesFlag;
+            
+            if (!shouldTrim)
+                return parts;
+
+            for (var i = 0; i < parts.Length; i++)
+                parts[i] = parts[i].Trim();
+
+            return parts;
+        }
 }

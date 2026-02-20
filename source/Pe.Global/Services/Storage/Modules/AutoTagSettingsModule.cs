@@ -1,9 +1,9 @@
 using Pe.Global.Services.AutoTag.Core;
 
-namespace Pe.Global.Services.SignalR.Modules;
+namespace Pe.Global.Services.Storage.Modules;
 
 /// <summary>
-///     SignalR module for AutoTag settings.
+///     Settings module for AutoTag.
 /// </summary>
 public class AutoTagSettingsModule : SettingsModuleBase<AutoTagSettings> {
     public AutoTagSettingsModule() : base("AutoTag", "autotag") { }
