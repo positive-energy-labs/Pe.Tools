@@ -1,4 +1,5 @@
 using Pe.Extensions.FamDocument;
+using Pe.Extensions.FamDocument.GetValue;
 using Pe.Extensions.FamManager;
 using Pe.FamilyFoundry.OperationSettings;
 
@@ -49,6 +50,12 @@ public class MapParams(MapParamsSettings settings)
                 var mappingDesc = $"{currParam.Definition.Name} → {mapping.NewName}";
                 lastMappingDesc = mappingDesc;
                 try {
+                    // Empty string values are common for optional per-type data.
+                    // Treat them as "no value for this type" so later types can still map.
+                    var sourceValue = doc.GetValue(currParam);
+                    if (sourceValue is string str && string.IsNullOrWhiteSpace(str))
+                        continue;
+
                     if (tgtParam.Formula != null) _ = doc.UnsetFormula(tgtParam);
 
                     _ = doc.SetValue(tgtParam, currParam, mapping.MappingStrategy);

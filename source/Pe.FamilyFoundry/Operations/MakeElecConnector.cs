@@ -104,25 +104,16 @@ public class MakeElecConnector(MakeElecConnectorSettings settings) : DocOperatio
     ) {
         connectorElement = null;
         var attempts = new List<string>();
+        var hostCandidates = GetReferencePlaneHostCandidates(doc)
+            .Concat(GetPlanarFaceHostCandidates(doc));
 
-        foreach (var referencePlane in GetConnectorHostCandidates(doc)) {
-            try {
-                var planeReference = referencePlane.GetReference();
-                if (planeReference == null) {
-                    attempts.Add($"'{referencePlane.Name}': no valid reference");
-                    continue;
-                }
-
-                connectorElement = ConnectorElement.CreateElectricalConnector(
-                    doc,
-                    ElectricalSystemType.PowerBalanced,
-                    planeReference
-                );
+        foreach (var candidate in hostCandidates) {
+            if (TryCreateConnectorForCandidate(doc, candidate, out connectorElement, out var attemptMessage)) {
                 failureMessage = string.Empty;
                 return true;
-            } catch (Exception ex) {
-                attempts.Add($"'{referencePlane.Name}': {ex.Message}");
             }
+
+            attempts.Add(attemptMessage);
         }
 
         failureMessage = attempts.Count == 0
@@ -131,14 +122,53 @@ public class MakeElecConnector(MakeElecConnectorSettings settings) : DocOperatio
         return false;
     }
 
-    private static IEnumerable<ReferencePlane> GetConnectorHostCandidates(FamilyDocument doc) {
+    private sealed record ConnectorHostCandidate(Reference HostReference, Edge? Edge, string Source);
+
+    private static bool TryCreateConnectorForCandidate(
+        FamilyDocument doc,
+        ConnectorHostCandidate candidate,
+        out ConnectorElement? connectorElement,
+        out string attemptMessage
+    ) {
+        connectorElement = null;
+        try {
+            connectorElement = ConnectorElement.CreateElectricalConnector(
+                doc,
+                ElectricalSystemType.PowerBalanced,
+                candidate.HostReference
+            );
+            attemptMessage = string.Empty;
+            return true;
+        } catch (Exception refOnlyEx) {
+            if (candidate.Edge == null) {
+                attemptMessage = $"{candidate.Source}: {refOnlyEx.Message}";
+                return false;
+            }
+
+            try {
+                connectorElement = ConnectorElement.CreateElectricalConnector(
+                    doc,
+                    ElectricalSystemType.PowerBalanced,
+                    candidate.HostReference,
+                    candidate.Edge
+                );
+                attemptMessage = string.Empty;
+                return true;
+            } catch (Exception refEdgeEx) {
+                attemptMessage = $"{candidate.Source}: {refOnlyEx.Message} | with edge: {refEdgeEx.Message}";
+                return false;
+            }
+        }
+    }
+
+    private static IEnumerable<ConnectorHostCandidate> GetReferencePlaneHostCandidates(FamilyDocument doc) {
         var referencePlanes = new FilteredElementCollector(doc)
             .OfClass(typeof(ReferencePlane))
             .Cast<ReferencePlane>()
             .ToList();
 
         if (!referencePlanes.Any())
-            return [];
+            yield break;
 
         var preferredNames = new[] {
             "Center (Left/Right)",
@@ -159,7 +189,97 @@ public class MakeElecConnector(MakeElecConnectorSettings settings) : DocOperatio
         var fallback = referencePlanes
             .Where(rp => !preferredSet.Contains(rp.Name));
 
-        return preferred.Concat(fallback);
+        foreach (var referencePlane in preferred.Concat(fallback)) {
+            Reference planeReference;
+            try {
+                planeReference = referencePlane.GetReference();
+            } catch {
+                // Let downstream attempt reporting handle this in a consistent way.
+                continue;
+            }
+            yield return new ConnectorHostCandidate(planeReference, null, $"'{referencePlane.Name}'");
+        }
+    }
+
+    private static IEnumerable<ConnectorHostCandidate> GetPlanarFaceHostCandidates(FamilyDocument doc) {
+        var revitDoc = doc.Document;
+        var options = new Options {
+            ComputeReferences = true,
+            IncludeNonVisibleObjects = true,
+            DetailLevel = ViewDetailLevel.Fine
+        };
+
+        var candidates = new List<(ConnectorHostCandidate Candidate, double Area)>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        var elements = new FilteredElementCollector(revitDoc)
+            .WhereElementIsNotElementType()
+            .ToElements();
+
+        foreach (var element in elements) {
+            if (element is ConnectorElement) continue;
+
+            GeometryElement geometry;
+            try {
+                geometry = element.get_Geometry(options);
+            } catch {
+                continue;
+            }
+
+            if (geometry == null) continue;
+
+            foreach (var (face, source) in EnumeratePlanarFaces(geometry, $"ElementId={element.Id}")) {
+                if (face.Reference == null) continue;
+
+                string stableRef;
+                try {
+                    stableRef = face.Reference.ConvertToStableRepresentation(revitDoc);
+                } catch {
+                    stableRef = $"{element.Id}:{source}:{face.Area}";
+                }
+
+                if (!seen.Add(stableRef)) continue;
+
+                var firstEdge = face.EdgeLoops
+                    .Cast<EdgeArray>()
+                    .SelectMany(loop => loop.Cast<Edge>())
+                    .FirstOrDefault();
+
+                candidates.Add((new ConnectorHostCandidate(face.Reference, firstEdge, source), face.Area));
+            }
+        }
+
+        return candidates
+            .OrderByDescending(x => x.Area)
+            .Select(x => x.Candidate);
+    }
+
+    private static IEnumerable<(PlanarFace Face, string Source)> EnumeratePlanarFaces(
+        GeometryElement geometry,
+        string sourcePrefix
+    ) {
+        foreach (var obj in geometry) {
+            switch (obj) {
+                case Solid solid when solid.Faces.Size > 0:
+                    foreach (Face face in solid.Faces) {
+                        if (face is PlanarFace planarFace)
+                            yield return (planarFace, $"{sourcePrefix}/SolidFace");
+                    }
+                    break;
+
+                case GeometryInstance instance:
+                    GeometryElement instanceGeometry;
+                    try {
+                        instanceGeometry = instance.GetInstanceGeometry();
+                    } catch {
+                        continue;
+                    }
+
+                    foreach (var nested in EnumeratePlanarFaces(instanceGeometry, $"{sourcePrefix}/Instance"))
+                        yield return nested;
+                    break;
+            }
+        }
     }
 }
 
