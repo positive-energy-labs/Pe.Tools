@@ -14,7 +14,7 @@ using Pe.Global.Services.Storage;
 using Pe.Global.Services.Storage.Core;
 using Pe.Global.Services.Storage.Core.Json;
 using Pe.Global.Utils.Files;
-using Pe.Tools.Commands.FamilyFoundry.SignalR;
+using Pe.Tools.Commands.FamilyFoundry.Modules;
 using Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 using Serilog.Events;
 using System.ComponentModel;
@@ -161,7 +161,7 @@ public class CmdFFMigrator : IExternalCommand {
             var routePath = Environment.GetEnvironmentVariable("PE_SETTINGS_EDITOR_FFMIGRATOR_ROUTE");
             if (string.IsNullOrWhiteSpace(routePath))
                 routePath = "/internal/settings-editor";
-            if (!routePath.StartsWith('/'))
+            if (!routePath.StartsWith("/", StringComparison.Ordinal))
                 routePath = "/" + routePath;
 
             var signalRBaseUrl = Environment.GetEnvironmentVariable("PE_SETTINGS_EDITOR_SIGNALR_BASE_URL");

@@ -12,7 +12,7 @@ public static class ProjectFamilyParameterCollector {
         var values = rawNames
             .Trim()
             .Trim('[', ']')
-            .Split([',', ';', '|'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .SplitAndTrim([',', ';', '|'], StringSplitOptions.RemoveEmptyEntries)
             .Select(name => name.Trim('"'))
             .Where(name => !string.IsNullOrWhiteSpace(name));
 

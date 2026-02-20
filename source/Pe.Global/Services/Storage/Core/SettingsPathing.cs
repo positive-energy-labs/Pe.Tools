@@ -21,7 +21,7 @@ public static class SettingsPathing {
         if (string.IsNullOrWhiteSpace(normalized))
             throw new ArgumentException("Relative path is required.", paramName);
 
-        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var segments = normalized.SplitAndTrim('/', StringSplitOptions.RemoveEmptyEntries);
         if (segments.Length == 0)
             throw new ArgumentException("Relative path is required.", paramName);
 
@@ -40,10 +40,9 @@ public static class SettingsPathing {
             throw new ArgumentException("Relative path must include a file name.", paramName);
 
         var directorySegments = segments.Take(segments.Length - 1);
-        var safeRelativeWithExtension = string.Join(
-            Path.DirectorySeparatorChar,
-            directorySegments.Append($"{normalizedFileName}.json")
-        );
+        var safeRelativeWithExtension = directorySegments
+            .Append($"{normalizedFileName}.json")
+            .JoinWith(Path.DirectorySeparatorChar);
 
         var combined = Path.GetFullPath(Path.Combine(rootPath, safeRelativeWithExtension));
         EnsurePathUnderRoot(combined, rootPath, paramName);
@@ -58,7 +57,7 @@ public static class SettingsPathing {
         if (string.IsNullOrWhiteSpace(normalized))
             return string.Empty;
 
-        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var segments = normalized.SplitAndTrim('/', StringSplitOptions.RemoveEmptyEntries);
         if (segments.Length == 0)
             return string.Empty;
 
@@ -73,7 +72,7 @@ public static class SettingsPathing {
                 paramName
             );
 
-        return string.Join('/', segments);
+        return segments.JoinWith('/');
     }
 
     public static void EnsurePathUnderRoot(string candidatePath, string rootPath, string paramName) {
@@ -129,7 +128,7 @@ public static class SettingsDiscoveryBuilder {
         var root = new SettingsDirectoryNode(rootName, rootRelativePath, [], []);
         foreach (var file in files) {
             var localRelativePath = GetLocalRelativePath(file.RelativePath, rootRelativePath);
-            var localSegments = localRelativePath.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var localSegments = localRelativePath.SplitAndTrim('/', StringSplitOptions.RemoveEmptyEntries);
             if (localSegments.Length == 0)
                 continue;
 
