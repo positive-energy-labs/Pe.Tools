@@ -1,0 +1,6 @@
+{
+    "msbuild": {
+        "Configuration": "Debug.R25",
+        "Platform": "Any CPU"
+    }
+}
