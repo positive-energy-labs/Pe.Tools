@@ -29,3 +29,8 @@ Libraries rapid fire quick reference:
   primarily related to Revit families and parameters. These help unify the
   family document/FamilyManager APIs and also wrap for easier use.
 
+## Dev
+
+To enable LSP in Cursor, you must set `"dotnet.server.useOmnisharp": true` in
+settings.json. This will allow Cursor's lack of support for IDE config
+specification to suppliment with the omnisharp.json file in the root.
