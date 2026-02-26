@@ -1,11 +1,18 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.Global.Services.Storage.Core.Json;
-using System;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using System.Linq;
 
 namespace Pe.FamilyFoundry.OperationSettings;
+
+[JsonConverter(typeof(StringEnumConverter))]
+public enum ParamSettingMode {
+    Value,
+    Formula,
+}
+
 
 /// <summary>
 ///     Parameter setting model for parameter metadata plus optional global value/formula.
@@ -22,22 +29,23 @@ public record ParamSettingModel : ParamDefinitionBase {
         "Global value or formula to apply to all family types. " +
         "Unit-formatted strings (e.g., \"10'\", \"120V\", \"35 SF\") are fully supported. " +
         "By default, this is set as a formula (even if it contains no parameter references). " +
-        "Set SetAsFormula=false to set as a value instead. " +
+        "Set SetAs=false to set as a value instead. " +
         "If null, per-type values can be supplied through AddAndSetParamsSettings.PerTypeValuesTable.")]
-    public string ValueOrFormula { get; init; } = null;
+    public string? ValueOrFormula { get; init; } = null;
 
     /// <summary>
     ///     Whether ValueOrFormula should be set as a formula (true) or a value (false).
     ///     Only applicable when ValueOrFormula is set. Ignored when parameter values come from PerTypeValuesTable.
     /// </summary>
     [Description(
-        "Whether ValueOrFormula should be set as a formula (true) or a value (false). " +
-        "Defaults to true. Setting as a formula 'locks' the parameter from manual editing. " +
-        "Set to false to: 1) calculate values per family type without setting a formula, or " +
-        "2) set a simple number/text value without locking the parameter. " +
-        "Only applicable when ValueOrFormula is set. Ignored when parameter values come from PerTypeValuesTable.")]
+        "Whether ValueOrFormula should be set as a formula or a value (default is formula)." +
+        "Note that like you can set a value (e.g. \"120V\") as a formula" +
+        "you can also set a formula as a value (e.g \"length1 + length2\")." +
+        "Under the hood this sets then unsets the formula, which results with every " +
+        "family type containing the would-be results of the formula. " +
+        "\n Of course you can still set a value as a value and a formula as a formula")]
     [Required]
-    public bool SetAsFormula { get; init; } = true;
+    public ParamSettingMode SetAs { get; init; } = ParamSettingMode.Formula;
 
     /// <summary>
     ///     Tooltip/description shown in Revit UI. Only applies to family parameters (not shared/built-in).

@@ -6,28 +6,34 @@ using Pe.FamilyFoundry.OperationSettings;
 namespace Pe.FamilyFoundry.Operations;
 
 /// <summary>
-///     Sets parameter values or formulas based on SetAsFormula property.
-///     - If SetAsFormula is true (default) → SetFormula (applies to all types, "locks" the parameter)
-///     - If SetAsFormula is false → SetGlobalValue (fast path for all types at once)
+///     Sets parameter values or formulas based on SetAs property.
+///     - If SetAs is true (default) → SetFormula (applies to all types, "locks" the parameter)
+///     - If SetAs is false → SetGlobalValue (fast path for all types at once)
 ///     On SetGlobalValue failure, defers to SetParamValuesPerType via GroupContext.
 /// </summary>
 public class SetParamValues(AddAndSetParamsSettings settings)
     : DocOperation<AddAndSetParamsSettings>(settings) {
     public override string Description =>
-        "Set parameter values or formulas based on SetAsFormula property.";
+        "Set parameter values or formulas based on SetAs property.";
 
     public override OperationLog Execute(FamilyDocument doc,
         FamilyProcessingContext processingContext,
         OperationContext groupContext) {
-        if (groupContext is null) {
+        if (groupContext is null) { 
             throw new InvalidOperationException(
                 $"{this.Name} requires a GroupContext (must be used within an OperationGroup)");
         }
 
         var fm = doc.FamilyManager;
+        var paramModelByName = this.Settings.Parameters
+            .Where(p => !string.IsNullOrWhiteSpace(p.Name))
+            .ToDictionary(p => p.Name, StringComparer.Ordinal);
+
         var incomplete = groupContext.GetAllInComplete();
         var data = incomplete.Select(e => {
-            var paramModel = this.Settings.Parameters.First(p => e.Key == p.Name);
+            var paramModel = paramModelByName.TryGetValue(e.Key, out var configuredParam)
+                ? configuredParam
+                : new ParamSettingModel { Name = e.Key };
             return (paramModel, e.Value);
         });
 
@@ -46,7 +52,7 @@ public class SetParamValues(AddAndSetParamsSettings settings)
                 continue;
             }
 
-            if (p.SetAsFormula) {
+            if (p.SetAs == ParamSettingMode.Formula) {
                 var success = doc.TrySetFormula(parameter, p.ValueOrFormula, out var errMsg);
                 _ = success
                     ? log.Success("Set formula")

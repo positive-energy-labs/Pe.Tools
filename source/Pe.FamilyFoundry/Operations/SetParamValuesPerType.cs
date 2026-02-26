@@ -32,6 +32,9 @@ public class SetParamValuesPerType(AddAndSetParamsSettings settings)
         var fm = famDoc.FamilyManager;
         var currentTypeName = fm.CurrentType?.Name;
         var perTypeValuesByParameter = this.Settings.GetPerTypeValuesByParameter();
+        var paramModelByName = this.Settings.Parameters
+            .Where(p => !string.IsNullOrWhiteSpace(p.Name))
+            .ToDictionary(p => p.Name, StringComparer.Ordinal);
 
         // Check if all work items are already handled
         var incomplete = groupContext.GetAllInComplete();
@@ -39,7 +42,9 @@ public class SetParamValuesPerType(AddAndSetParamsSettings settings)
 
         // Check if any unhandled param has work to do for current type
         var data = incomplete.Select(e => {
-            var paramModel = this.Settings.Parameters.First(p => e.Key == p.Name);
+            var paramModel = paramModelByName.TryGetValue(e.Key, out var configuredParam)
+                ? configuredParam
+                : new ParamSettingModel { Name = e.Key };
             return (paramModel, e.Value);
         });
 
@@ -90,10 +95,11 @@ public class SetParamValuesPerType(AddAndSetParamsSettings settings)
     /// </summary>
     private static void SetValueForCurrentFamType(FamilyDocument famDoc, FamilyParameter parameter, string userValue) {
         var fm = famDoc.FamilyManager;
+        var trimmedUserValue = userValue.Trim();
 
         // Check for double-quoted string literal: "\"text\"" → strip quotes
         var actualValue = IsQuotedStringLiteral(userValue)
-            ? userValue.Trim().Substring(1, userValue.Trim().Length - 2)
+            ? trimmedUserValue[1..^1]
             : userValue;
 
         // Reject values that contain parameter references (check AFTER stripping quotes)
@@ -101,7 +107,7 @@ public class SetParamValuesPerType(AddAndSetParamsSettings settings)
         if (referencedParams.Count != 0) {
             throw new InvalidOperationException(
                 $"Per-type value '{actualValue}' contains parameter references. " +
-                "Use ValueOrFormula with SetAsFormula=true for formulas, not PerTypeValuesTable.");
+                "Use ValueOrFormula with SetAs=true for formulas, not PerTypeValuesTable.");
         }
 
         _ = famDoc.SetValue(parameter, actualValue, nameof(BuiltInCoercionStrategy.CoerceByStorageType));

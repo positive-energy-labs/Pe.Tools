@@ -330,7 +330,7 @@ public class CmdFFMigrator : IExternalCommand {
                 DataType = SpecTypeId.String.Text,
                 IsInstance = false,
                 ValueOrFormula = $"\"{DateTime.Now:yyyy_MM_dd HH:mm:ss}\"",
-                SetAsFormula = true
+                SetAs = ParamSettingMode.Formula
             }
         ];
 
@@ -347,12 +347,12 @@ public class CmdFFMigrator : IExternalCommand {
                 Name = numberOfPolesName,
                 ValueOrFormula =
                     $"if({voltageName} = 120, 1, if({voltageName} = 208, 2, (if({voltageName} = 240, 2, 1))))",
-                SetAsFormula = true
+                SetAs = ParamSettingMode.Formula
             },
             new ParamSettingModel {
                 Name = apparentPowerName,
                 ValueOrFormula = $"{voltageName} * {mcaName} * 0.8 * if({numberOfPolesName} = 3, sqrt(3), 1)",
-                SetAsFormula = true
+                SetAs = ParamSettingMode.Formula
             },
             .. paramList
         ];

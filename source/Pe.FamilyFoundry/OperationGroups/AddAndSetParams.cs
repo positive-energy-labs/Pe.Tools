@@ -9,17 +9,17 @@ namespace Pe.FamilyFoundry.OperationGroups;
 ///     Execution order:
 ///     0. CreateFamilyTypes (if CreateMissingFamilyTypes=true) - creates missing family types from PerTypeValuesTable columns
 ///     1. AddFamilyParams (if CreateFamParamIfMissing=true) - creates missing family params
-///     2. SetParamValues - sets formulas (default) or global values based on SetAsFormula property
+///     2. SetParamValues - sets formulas (default) or global values based on SetAs property
 ///     3. SetParamValuesPerType - handles explicit per-type values and failed global value fallbacks
 /// </summary>
 public class AddAndSetParams(AddAndSetParamsSettings settings, bool createMissingFamilyTypes = false)
     : OperationGroup<AddAndSetParamsSettings>(
         InitializeDescription(),
         InitializeOperations(settings, createMissingFamilyTypes),
-        settings.Parameters.Select(p => p.Name)) {
+        GetGroupContextKeys(settings)) {
     public static string InitializeDescription() =>
         $"Set a parameter within the family to a value or formula. " +
-        $"By default, values are set as formulas (even simple numbers/text). Use <{nameof(ParamSettingModel.SetAsFormula)}>=false to set as values instead. " +
+        $"By default, <{nameof(ParamSettingModel.ValueOrFormula)}> are set as formulas (even simple numbers/text). Use <{nameof(ParamSettingModel.SetAs)}>=false to set as values instead. " +
         $"If <{nameof(AddAndSetParamsSettings.OverrideExistingValues)}> is true, then existing parameter values will be overwritten. " +
         $"If <{nameof(AddAndSetParamsSettings.CreateFamParamIfMissing)}> is true, then a family parameter will be created " +
         $"with <{nameof(ParamDefinitionBase.Name)}>. The default values of the parameter are:" +
@@ -46,7 +46,7 @@ public class AddAndSetParams(AddAndSetParamsSettings settings, bool createMissin
 
         // 0. Optionally create missing family types first (before anything else)
         if (createMissingFamilyTypes)
-            ops.Add(new CreateFamilyTypes(settings));
+            ops.Add(new CreateFamilyTypes(settings)); 
 
         // 1. Optionally create missing params
         if (settings.CreateFamParamIfMissing)
@@ -61,27 +61,21 @@ public class AddAndSetParams(AddAndSetParamsSettings settings, bool createMissin
         return ops;
     }
 
+    private static IEnumerable<string> GetGroupContextKeys(AddAndSetParamsSettings settings) {
+        var keys = settings.Parameters
+            .Where(p => !string.IsNullOrWhiteSpace(p.Name))
+            .Select(p => p.Name)
+            .Concat(settings.GetPerTypeValuesByParameter().Keys)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return keys;
+    }
+
     private static void ValidateParameterValueSources(
         List<ParamSettingModel> parameters,
         Dictionary<string, Dictionary<string, string>> perTypeValuesByParameter
     ) {
-        var parameterNames = parameters
-            .Where(p => !string.IsNullOrWhiteSpace(p.Name))
-            .Select(p => p.Name)
-            .ToList();
-        var parameterNameSet = new HashSet<string>(parameterNames, StringComparer.Ordinal);
-
-        var unknownTableRows = perTypeValuesByParameter.Keys
-            .Where(name => !parameterNameSet.Contains(name))
-            .OrderBy(name => name, StringComparer.Ordinal)
-            .ToList();
-        if (unknownTableRows.Count > 0) {
-            throw new InvalidOperationException(
-                $"AddAndSetParams validation failed: PerTypeValuesTable contains row(s) for unknown parameter(s): " +
-                $"{string.Join(", ", unknownTableRows)}. " +
-                "Each row's 'Parameter' value must match a Name in AddAndSetParams.Parameters.");
-        }
-
         foreach (var parameter in parameters) {
             var hasGlobalValue = !string.IsNullOrWhiteSpace(parameter.ValueOrFormula);
             var hasPerTypeValues = perTypeValuesByParameter.TryGetValue(parameter.Name, out var valuesPerType)

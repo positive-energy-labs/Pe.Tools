@@ -131,8 +131,7 @@ public class CmdFFManager : IExternalCommand {
                     Name = "_FOUNDRY LAST PROCESSED AT",
                     DataType = SpecTypeId.String.Text,
                     ValueOrFormula = $"\"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\"",
-                    SetAsFormula = false
-                }
+                    SetAs = ParamSettingMode.Formula                }
             ]);
         }
 

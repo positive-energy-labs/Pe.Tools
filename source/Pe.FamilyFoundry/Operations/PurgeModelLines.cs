@@ -39,30 +39,33 @@ public class PurgeModelLines(DefaultOperationSettings settings) : DocOperation<D
             .ToList();
 
         var (grouped, aligned, other) = (0, 0, 0);
+        var deletedIds = new HashSet<ElementId>();
 
         foreach (var entry in lines) {
-            var line = entry.Line;
-            var groupId = entry.GroupId;
-            var alignments = entry.Alignments;
-            if (deleteAlignedLines && alignments.Any()) {
-                var deleted = famDoc.Document.Delete(line.Id);
-                if (deleted.Count != 0) aligned++;
-            }
+            try {
+                var line = entry.Line;
+                if (deletedIds.Contains(line.Id)) continue;
+                var groupId = entry.GroupId;
+                var alignments = entry.Alignments;
 
-            if (deleteGroupedLines && groupId > 0) {
-                var deleted = famDoc.Document.Delete(line.Id);
-                if (deleted.Count != 0) grouped++;
-            }
+                var shouldDelete = (deleteAlignedLines && alignments.Count != 0) ||
+                                  (deleteGroupedLines && groupId > 0) ||
+                                  (!(groupId > 0) && alignments.Count == 0);
+                if (!shouldDelete) continue;
 
-            if (!(groupId > 0) && !(alignments.Count != 0)) {
                 var deleted = famDoc.Document.Delete(line.Id);
-                if (deleted.Count != 0) other++;
+                foreach (var id in deleted) deletedIds.Add(id);
+                if (deleteAlignedLines && alignments.Count != 0) aligned++;
+                else if (deleteGroupedLines && groupId > 0) grouped++;
+                else other++;
+            } catch (Autodesk.Revit.Exceptions.InvalidObjectException) {
+                // Element was cascade-deleted when a group mate was deleted
             }
         }
 
 
         List<LogEntry> logs = [
-            new LogEntry("Grouped").Success($"Deleted {grouped} aligned lines"),
+            new LogEntry("Grouped").Success($"Deleted {grouped} grouped lines"),
             new LogEntry("Aligned").Success($"Deleted {aligned} aligned lines"),
             new LogEntry("Other").Success($"Deleted {other} other lines")
         ];

@@ -345,7 +345,7 @@ public class ProcessingResultBuilder(Storage storage) {
                 PropertiesGroup = s.PropertiesGroup,
                 DataType = s.DataType,
                 ValueOrFormula = s.ValueOrFormula,
-                SetAsFormula = s.SetAsFormula
+                SetAs = s.SetAs
             })
             .ToList();
 

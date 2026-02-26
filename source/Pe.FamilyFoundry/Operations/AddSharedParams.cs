@@ -20,6 +20,8 @@ public class AddSharedParams(
             var name = sharedParam.ExternalDefinition.Name;
             try {
                 var addedParam = doc.AddSharedParameter(sharedParam);
+                // if (addedParam.StorageType == StorageType.Integer || addedParam.StorageType == StorageType.Double) {
+                doc.SetValue(addedParam, (object)null);
                 logs.Add(new LogEntry(addedParam.Definition.Name).Success("Added"));
             } catch (Exception ex) {
                 logs.Add(new LogEntry(name).Error(ex));

@@ -133,8 +133,7 @@ public class ATVariantQueueFactory {
         // Create the parameter settings for PE_G___TagInstance
         var paramSettings = new ParamSettingModel {
             Name = "PE_G___TagInstance",
-            SetAsFormula = false
-        };
+            SetAs = ParamSettingMode.Value        };
 
         var perTypeRow = new Dictionary<string, string>(StringComparer.Ordinal) {
             [AddAndSetParamsSettings.PerTypeValuesTableParameterColumn] = paramSettings.Name

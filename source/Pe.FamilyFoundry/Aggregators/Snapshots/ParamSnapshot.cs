@@ -1,3 +1,4 @@
+using Pe.FamilyFoundry.OperationSettings;
 using Pe.Global.Services.Storage.Core.Json.RevitTypes;
 using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
 using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
@@ -72,7 +73,7 @@ public record ParamSnapshot : ParamDefinitionBase {
     ///     Settings-compatible assignment mode.
     ///     True only when this snapshot represents a formula.
     /// </summary>
-    public bool SetAsFormula => !string.IsNullOrWhiteSpace(this.Formula);
+    public ParamSettingMode SetAs => !string.IsNullOrWhiteSpace(this.Formula) ? ParamSettingMode.Formula : ParamSettingMode.Value;
 
     /// <summary>Checks if a parameter has a (non-empty) value for all family types.</summary>
     public bool HasValueForAllTypes() {

@@ -144,7 +144,21 @@ public class CoerceByStorageType : ICoercionStrategy {
 
         // For measurable specs with actual units, use Revit's parser which understands imperial notation
         if (UnitUtils.IsMeasurableSpec(dataType)) {
-            var parseResult = UnitFormatUtils.TryParse(context.FamilyDocument.GetUnits(), dataType, stringValue, out _);
+            var parseResult = UnitFormatUtils.TryParse(
+                context.FamilyDocument.GetUnits(),
+                dataType,
+                stringValue,
+                out _
+            );
+            if (!parseResult) {
+                var normalizedValue = NormalizeForUnitParsing(stringValue);
+                parseResult = UnitFormatUtils.TryParse(
+                    context.FamilyDocument.GetUnits(),
+                    dataType,
+                    normalizedValue,
+                    out _
+                );
+            }
             Console.WriteLine(
                 $"[CoerceByStorageType.CanParseStringToDouble] UnitFormatUtils.TryParse result={parseResult}");
             return parseResult;
@@ -174,7 +188,10 @@ public class CoerceByStorageType : ICoercionStrategy {
             if (UnitFormatUtils.TryParse(context.FamilyDocument.GetUnits(), dataType, stringValue, out var parsed))
                 return parsed;
 
-            // Fall back to regex if Revit's parser fails (shouldn't happen if CanMap passed)
+            var normalizedValue = NormalizeForUnitParsing(stringValue);
+            if (UnitFormatUtils.TryParse(context.FamilyDocument.GetUnits(), dataType, normalizedValue, out parsed))
+                return parsed;
+
             throw new ArgumentException(
                 $"Failed to parse '{stringValue}' as {dataType!.ToLabel()} using Revit's UnitFormatUtils");
         }
@@ -188,4 +205,13 @@ public class CoerceByStorageType : ICoercionStrategy {
         if (stringValue == "No") return 0;
         return 0;
     }
+
+    /// <summary>
+    ///     Normalizes a string for unit parsing by removing commas and whitespace.
+    ///     This is necessary for fallback behavior
+    /// </summary>
+    private static string NormalizeForUnitParsing(string input) =>
+        string.IsNullOrWhiteSpace(input)
+            ? string.Empty
+            : input.Replace(",", string.Empty).Trim();
 }

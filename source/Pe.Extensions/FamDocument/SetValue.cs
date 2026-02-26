@@ -140,7 +140,7 @@ public static class FamilyDocumentSetValue {
     public static FamilyParameter? SetValue(
         this FamilyDocument famDoc,
         FamilyParameter targetParam,
-        object sourceValue,
+        object? sourceValue,
         string strategyName = nameof(BCS.Strict)
     ) {
         var context = CoercionContext.FromValue(famDoc, sourceValue, targetParam);

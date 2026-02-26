@@ -152,6 +152,7 @@ public class CmdFFManagerSnapshot : IExternalCommand {
         foreach (var snap in snapshots) {
             // Skip built-in parameters (cannot be created/managed by profile)
             if (snap.IsBuiltIn) continue;
+            if (snap.SharedGuid != null && string.IsNullOrWhiteSpace(snap.ValueOrFormula)) continue;
 
             // Skip project parameters (not family parameters)
             if (snap.IsProjectParameter) continue;
@@ -162,7 +163,7 @@ public class CmdFFManagerSnapshot : IExternalCommand {
                 PropertiesGroup = snap.PropertiesGroup,
                 DataType = snap.DataType,
                 ValueOrFormula = snap.ValueOrFormula,
-                SetAsFormula = snap.SetAsFormula
+                SetAs = snap.SetAs
             });
 
             var row = snap.ToPerTypeValuesTableRow(AddAndSetParamsSettings.PerTypeValuesTableParameterColumn);

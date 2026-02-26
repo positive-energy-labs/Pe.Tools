@@ -26,17 +26,18 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
             // Filter out project parameters (which don't have a counterpart in the family, this is an unusual-ish case)
             snapshot.Parameters.Data =
                 [.. data.Where(s => famDoc.FamilyManager.FindParameter(s.Name) != null)];
-            this.SupplementWithFormulas(snapshot, famDoc);
-        } else
+            SupplementWithFormulas(snapshot, famDoc);
+        } else {
             snapshot.Parameters = this.CollectFromFamilyDoc(famDoc);
+        }
     }
 
     // IProjectCollector implementation (preferred - runs first)
-    bool IProjectCollector.ShouldCollect(FamilySnapshot snapshot) =>
+    bool IProjectCollector.ShouldCollect(FamilySnapshot snapshot) => 
         snapshot.Parameters?.Data?.Count == 0 || snapshot.Parameters == null;
 
     public void Collect(FamilySnapshot snapshot, Document projectDoc, Family family) =>
-        snapshot.Parameters = this.CollectFromProject(projectDoc, family);
+        snapshot.Parameters = CollectFromProject(projectDoc, family);
 
     /// <summary>
     ///     Supplements existing project-collected data with formulas from family document.
@@ -44,7 +45,7 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
     ///     The collected shape is later serialized into split settings-compatible form
     ///     (Parameters + PerTypeValuesTable) by snapshot output builders.
     /// </summary>
-    private void SupplementWithFormulas(FamilySnapshot snapshot, FamilyDocument famDoc) {
+    private static void SupplementWithFormulas(FamilySnapshot snapshot, FamilyDocument famDoc) {
         if (snapshot.Parameters?.Data == null || snapshot.Parameters.Data.Count == 0)
             return;
 
@@ -74,7 +75,7 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
         snapshot.Parameters.Data = updatedData;
     }
 
-    private SnapshotSection<ParamSnapshot> CollectFromProject(Document doc, Family family) {
+    private static SnapshotSection<ParamSnapshot> CollectFromProject(Document doc, Family family) {
         var selectedFamilyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { family.Name };
         var collected = ProjectFamilyParameterCollector.Collect(doc, selectedFamilyNames);
 
@@ -146,7 +147,11 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
                     if (!snapshots.TryGetValue(key, out var snap))
                         continue;
 
-                    snap.ValuesPerType[t.Name] = famDoc.GetValueString(p); // must support this in SetValue.
+                    var value = famDoc.GetValueString(p); // must support this in SetValue.
+                    if (IsDefaultNumericValue(famDoc, p))
+                        value = null;
+
+                    snap.ValuesPerType[t.Name] = value;
                 }
             }
         } finally {
@@ -165,6 +170,23 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
     }
 
     // ==================== Helpers ====================
+
+    private static bool IsDefaultNumericValue(FamilyDocument famDoc, FamilyParameter parameter) {
+        var rawValue = famDoc.GetValue(parameter);
+        if (rawValue == null) return true;
+
+        if (parameter.StorageType == StorageType.Double)
+            return rawValue is double doubleValue && Math.Abs(doubleValue) <= 1e-9;
+
+        if (parameter.StorageType != StorageType.Integer)
+            return false;
+
+        // Keep Yes/No values explicit ("No"/"Yes") and only suppress numeric integer zero.
+        if (parameter.Definition.GetDataType() == SpecTypeId.Boolean.YesNo)
+            return false;
+
+        return rawValue is int intValue && intValue == 0;
+    }
 
     private static string GetKey(string name, bool isInstance) => $"{name}|{isInstance}";
 }
