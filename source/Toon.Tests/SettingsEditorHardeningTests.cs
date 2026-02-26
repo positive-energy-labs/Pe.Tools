@@ -14,15 +14,11 @@ public class SettingsEditorHardeningTests {
     [Fact]
     public void Hub_requests_do_not_expose_subdirectory() {
         Assert.DoesNotContain(
-            typeof(ListSettingsRequest).GetProperties(),
+            typeof(SettingsCatalogRequest).GetProperties(),
             property => string.Equals(property.Name, "SubDirectory", StringComparison.OrdinalIgnoreCase)
         );
         Assert.DoesNotContain(
-            typeof(ReadSettingsRequest).GetProperties(),
-            property => string.Equals(property.Name, "SubDirectory", StringComparison.OrdinalIgnoreCase)
-        );
-        Assert.DoesNotContain(
-            typeof(WriteSettingsRequest).GetProperties(),
+            typeof(ValidateSettingsRequest).GetProperties(),
             property => string.Equals(property.Name, "SubDirectory", StringComparison.OrdinalIgnoreCase)
         );
     }
