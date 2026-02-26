@@ -27,7 +27,8 @@ namespace Pe.Tools.Commands.FamilyFoundry;
 
 [Transaction(TransactionMode.Manual)]
 public class CmdFFMigrator : IExternalCommand {
-    private const string CommandDisplayName = "FF Migrator";
+    public const string AddinKey = nameof(CmdFFMigrator);
+    public const string DisplayName = "FF Migrator";
     private static readonly FFMigratorSettingsModule SettingsModule = new();
     private const bool EnableToonIncludes = true;
 
@@ -41,7 +42,7 @@ public class CmdFFMigrator : IExternalCommand {
 
         try {
 
-            var window = new FoundryPaletteBuilder<ProfileRemap>(CommandDisplayName, SettingsModule, doc, uiDoc)
+            var window = new FoundryPaletteBuilder<ProfileRemap>(DisplayName, SettingsModule, doc, uiDoc)
                 .WithToonIncludes(EnableToonIncludes)
                 .WithAction("Open Settings Editor", this.HandleOpenSettingsEditor)
                 .WithAction("Open Profile File", this.HandleOpenFile,
@@ -52,7 +53,7 @@ public class CmdFFMigrator : IExternalCommand {
                     ctx => ctx.SelectedProfile != null)
                 .WithQueueBuilder(BuildQueueCore)
                 .WithPostProcess((ctx, familyNames) =>
-                    FamilyPlacementHelper.PromptAndPlaceFamilies(ctx.UiDoc.Application, familyNames, CommandDisplayName))
+                    FamilyPlacementHelper.PromptAndPlaceFamilies(ctx.UiDoc.Application, familyNames, DisplayName))
                 .Build();
 
             window.Show();
@@ -125,7 +126,7 @@ public class CmdFFMigrator : IExternalCommand {
             FamilyPlacementHelper.PromptAndPlaceFamilies(
                 ctx.UiDoc.Application,
                 runResult.ProcessedFamilyNames,
-                CommandDisplayName
+                DisplayName
             );
     }
 
@@ -204,7 +205,7 @@ public class CmdFFMigrator : IExternalCommand {
                     0
                 );
 
-            FamilyPlacementHelper.PromptAndPlaceFamilies(uiApp, familyNames, CommandDisplayName);
+            FamilyPlacementHelper.PromptAndPlaceFamilies(uiApp, familyNames, DisplayName);
             return new FFMigratorPlaceFamiliesActionResult(true, null, familyNames, familyNames.Count);
         } catch (Exception ex) {
             return new FFMigratorPlaceFamiliesActionResult(false, ex.Message, [], 0);
@@ -229,7 +230,7 @@ public class CmdFFMigrator : IExternalCommand {
                 0
             );
 
-        var storage = new Storage(SettingsModule.ModuleKey);
+        var storage = new Storage(AddinKey);
 
         try {
             using var tempFile = new TempSharedParamFile(doc);

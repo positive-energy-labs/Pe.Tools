@@ -23,6 +23,8 @@ namespace Pe.Tools.Commands.FamilyFoundry;
 
 [Transaction(TransactionMode.Manual)]
 public class CmdFFManager : IExternalCommand {
+    public const string AddinKey = nameof(CmdFFManager);
+    public const string DisplayName = "FF Manager";
     private static readonly FFManagerSettingsModule SettingsModule = new();
     private const bool EnableToonIncludes = true;
 
@@ -35,7 +37,7 @@ public class CmdFFManager : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var window = new FoundryPaletteBuilder<ProfileFamilyManager>("FF Manager", SettingsModule, doc, uiDoc)
+            var window = new FoundryPaletteBuilder<ProfileFamilyManager>(DisplayName, SettingsModule, doc, uiDoc)
                 .WithToonIncludes(EnableToonIncludes)
                 .WithAction("Apply Profile", this.HandleApplyProfile,
                     ctx => ctx.PreviewData?.IsValid == true)

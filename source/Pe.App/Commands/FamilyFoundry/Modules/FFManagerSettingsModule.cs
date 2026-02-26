@@ -7,5 +7,5 @@ namespace Pe.Tools.Commands.FamilyFoundry.Modules;
 ///     Settings module for FF Manager.
 /// </summary>
 public class FFManagerSettingsModule : SettingsModuleBase<ProfileFamilyManager> {
-    public FFManagerSettingsModule() : base("FFManager", "profiles") { }
+    public FFManagerSettingsModule() : base(CmdFFManager.AddinKey, "profiles") { }
 }

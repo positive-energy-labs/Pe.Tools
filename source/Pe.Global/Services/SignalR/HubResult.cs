@@ -46,15 +46,6 @@ internal static class HubResultEnvelopeExtensions {
     public static ParameterCatalogEnvelopeResponse ToParameterCatalogEnvelope(this HubResult<ParameterCatalogData> result) =>
         new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
 
-    public static SettingsListEnvelopeResponse ToSettingsListEnvelope(this HubResult<SettingsListData> result) =>
-        new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
-
     public static SettingsCatalogEnvelopeResponse ToSettingsCatalogEnvelope(this HubResult<SettingsCatalogData> result) =>
         new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
-
-    public static SettingsReadEnvelopeResponse ToSettingsReadEnvelope(this HubResult<SettingsReadData> result) =>
-        new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
-
-    public static SettingsWriteEnvelopeResponse ToSettingsWriteEnvelope(this HubResult<object?> result) =>
-        new(result.Ok, result.Code, result.Message, result.Issues);
 }

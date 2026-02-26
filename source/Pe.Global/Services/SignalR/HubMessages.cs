@@ -46,69 +46,11 @@ public record SettingsCatalogItem(
 );
 
 /// <summary>
-///     Directory node for settings file tree views.
-/// </summary>
-[ExportTsInterface]
-public record SettingsDirectoryTreeNode(
-    string Name,
-    string RelativePath,
-    List<SettingsDirectoryTreeNode> Directories,
-    List<SettingsFileTreeNode> Files
-);
-
-/// <summary>
-///     File node for settings file tree views.
-/// </summary>
-[ExportTsInterface]
-public record SettingsFileTreeNode(
-    string Name,
-    string RelativePath,
-    string RelativePathWithoutExtension,
-    string Id,
-    DateTimeOffset Modified,
-    bool IsFragment,
-    bool IsSchema
-);
-
-/// <summary>
-///     Request to list settings files.
-/// </summary>
-[ExportTsInterface]
-public record ListSettingsRequest(
-    string ModuleKey,
-    bool Recursive = false,
-    bool IncludeFragments = true
-);
-
-/// <summary>
 ///     Request to list available module settings targets.
 /// </summary>
 [ExportTsInterface]
 public record SettingsCatalogRequest(
     string? ModuleKey = null
-);
-
-/// <summary>
-///     Request to read a settings file.
-/// </summary>
-[ExportTsInterface]
-public record ReadSettingsRequest(
-    string ModuleKey,
-    string RelativePath,
-    bool ResolveComposition,
-    string? RequestId = null
-);
-
-/// <summary>
-///     Request to write settings to a file.
-/// </summary>
-[ExportTsInterface]
-public record WriteSettingsRequest(
-    string ModuleKey,
-    string RelativePath,
-    string Json,
-    bool Validate,
-    string? RequestId = null
 );
 
 /// <summary>
@@ -257,31 +199,11 @@ public record ParameterCatalogEnvelopeResponse(
 );
 
 /// <summary>
-///     Envelope-friendly settings list payload.
-/// </summary>
-[ExportTsInterface]
-public record SettingsListData(
-    List<SettingsFileTreeNode> Files,
-    SettingsDirectoryTreeNode? Tree = null
-);
-
-/// <summary>
 ///     Envelope-friendly settings target catalog payload.
 /// </summary>
 [ExportTsInterface]
 public record SettingsCatalogData(
     List<SettingsCatalogItem> Targets
-);
-
-/// <summary>
-///     Envelope response for list-settings requests. Not exported; frontend uses a generic HubEnvelope type.
-/// </summary>
-public record SettingsListEnvelopeResponse(
-    bool Ok,
-    EnvelopeCode Code,
-    string Message,
-    List<ValidationIssue> Issues,
-    SettingsListData? Data
 );
 
 /// <summary>
@@ -295,51 +217,3 @@ public record SettingsCatalogEnvelopeResponse(
     SettingsCatalogData? Data
 );
 
-/// <summary>
-///     Optional composition metadata for future fragment-aware save workflows.
-/// </summary>
-[ExportTsInterface]
-public record CompositionSourceMapEntry(
-    string JsonPointer,
-    string RelativePath
-);
-
-/// <summary>
-///     Read-time composition metadata emitted alongside settings payloads.
-/// </summary>
-[ExportTsInterface]
-public record CompositionMetadata(
-    bool IsComposed,
-    List<CompositionSourceMapEntry> SourceMap
-);
-
-/// <summary>
-///     Envelope-friendly settings read payload.
-/// </summary>
-[ExportTsInterface]
-public record SettingsReadData(
-    string Json,
-    string ResolvedJson,
-    CompositionMetadata? Composition = null
-);
-
-/// <summary>
-///     Envelope response for read-settings requests. Not exported; frontend uses a generic HubEnvelope type.
-/// </summary>
-public record SettingsReadEnvelopeResponse(
-    bool Ok,
-    EnvelopeCode Code,
-    string Message,
-    List<ValidationIssue> Issues,
-    SettingsReadData? Data
-);
-
-/// <summary>
-///     Envelope response for write-settings requests. Not exported; frontend uses a generic HubEnvelope type.
-/// </summary>
-public record SettingsWriteEnvelopeResponse(
-    bool Ok,
-    EnvelopeCode Code,
-    string Message,
-    List<ValidationIssue> Issues
-);
