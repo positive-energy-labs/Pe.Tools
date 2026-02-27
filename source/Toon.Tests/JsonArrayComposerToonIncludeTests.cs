@@ -165,6 +165,81 @@ public class JsonArrayComposerToonIncludeTests {
         Assert.Equal("prefixed", fields[0]!["Name"]!.Value<string>());
     }
 
+    [Fact]
+    public void ExpandIncludes_DetectsCircularIncludesAcrossNestedFragments() {
+        using var sandbox = new TempDir();
+        var baseDir = sandbox.Path;
+        var fragmentsDir = System.IO.Path.Combine(baseDir, "_fragmentNames");
+        _ = Directory.CreateDirectory(fragmentsDir);
+
+        File.WriteAllText(
+            System.IO.Path.Combine(fragmentsDir, "a.json"),
+            """
+            {
+              "Items": [
+                { "$include": "_fragmentNames/b" }
+              ]
+            }
+            """);
+        File.WriteAllText(
+            System.IO.Path.Combine(fragmentsDir, "b.json"),
+            """
+            {
+              "Items": [
+                { "$include": "_fragmentNames/a" }
+              ]
+            }
+            """);
+
+        var root = JObject.Parse(
+            """
+            {
+              "Fields": [
+                { "$include": "_fragmentNames/a" }
+              ]
+            }
+            """);
+
+        var ex = Assert.Throws<JsonCompositionException>(() =>
+            JsonArrayComposer.ExpandIncludes(root, baseDir, baseDir, ["_fragmentNames"]));
+        Assert.Contains("Circular fragment include detected", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ExpandIncludes_AllowsSiblingReuseOfSameFragment() {
+        using var sandbox = new TempDir();
+        var baseDir = sandbox.Path;
+        var fragmentsDir = System.IO.Path.Combine(baseDir, "_fragmentNames");
+        _ = Directory.CreateDirectory(fragmentsDir);
+
+        File.WriteAllText(
+            System.IO.Path.Combine(fragmentsDir, "frag.json"),
+            """
+            {
+              "Items": [
+                { "Name": "reused" }
+              ]
+            }
+            """);
+
+        var root = JObject.Parse(
+            """
+            {
+              "Fields": [
+                { "$include": "_fragmentNames/frag" },
+                { "$include": "_fragmentNames/frag" }
+              ]
+            }
+            """);
+
+        JsonArrayComposer.ExpandIncludes(root, baseDir, baseDir, ["_fragmentNames"]);
+
+        var fields = (JArray)root["Fields"]!;
+        Assert.Equal(2, fields.Count);
+        Assert.Equal("reused", fields[0]!["Name"]!.Value<string>());
+        Assert.Equal("reused", fields[1]!["Name"]!.Value<string>());
+    }
+
     private sealed class TempDir : IDisposable {
         public TempDir() {
             this.Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"toon-include-test-{Guid.NewGuid():N}");

@@ -144,10 +144,10 @@ public class CmdFFManagerSnapshot : IExternalCommand {
     ///     Converts ParamSnapshots to ParamSettingModels for the profile.
     ///     Returns both parameter models and a transposed per-type values table.
     /// </summary>
-    private static (List<ParamSettingModel> Parameters, List<Dictionary<string, string>> PerTypeValuesTable)
+    private static (List<ParamSettingModel> Parameters, List<PerTypeValueRow> PerTypeValuesTable)
         ConvertParamsToSettings(List<ParamSnapshot> snapshots) {
         var parameters = new List<ParamSettingModel>();
-        var perTypeValuesTable = new List<Dictionary<string, string>>();
+        var perTypeValuesTable = new List<PerTypeValueRow>();
 
         foreach (var snap in snapshots) {
             // Skip built-in parameters (cannot be created/managed by profile)
@@ -166,7 +166,7 @@ public class CmdFFManagerSnapshot : IExternalCommand {
                 SetAs = snap.SetAs
             });
 
-            var row = snap.ToPerTypeValuesTableRow(AddAndSetParamsSettings.PerTypeValuesTableParameterColumn);
+            var row = snap.ToPerTypeValuesTableRow();
             if (row != null)
                 perTypeValuesTable.Add(row);
         }

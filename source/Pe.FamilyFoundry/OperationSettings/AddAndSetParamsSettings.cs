@@ -1,7 +1,10 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Linq;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.Global.Services.Storage.Core.Json;
+using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
+using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
@@ -55,6 +58,20 @@ public record ParamSettingModel : ParamDefinitionBase {
     public string? Tooltip { get; init; } = null;
 }
 
+/// <summary>
+///     Per-type table row with a strongly-typed parameter name and dynamic type columns.
+///     Dynamic family type columns are captured by JsonExtensionData and serialized flat.
+/// </summary>
+public record PerTypeValueRow {
+    [SchemaExamples(typeof(SharedParameterNamesProvider))]
+    [Description("The parameter name for this per-type value row.")]
+    [Required]
+    public string Parameter { get; init; } = string.Empty;
+
+    [JsonExtensionData]
+    public IDictionary<string, JToken> ValuesByType { get; init; } = new Dictionary<string, JToken>(StringComparer.Ordinal);
+}
+
 public class AddAndSetParamsSettings : IOperationSettings {
     public const string PerTypeValuesTableParameterColumn = "Parameter";
 
@@ -77,7 +94,7 @@ public class AddAndSetParamsSettings : IOperationSettings {
         "Values are always set as values (not formulas). " +
         "Mutually exclusive with ValueOrFormula.")]
     [UniformChildKeys]
-    public List<Dictionary<string, string>> PerTypeValuesTable { get; init; } = [];
+    public List<PerTypeValueRow> PerTypeValuesTable { get; init; } = [];
 
     public bool Enabled { get; init; } = true;
 
@@ -89,11 +106,7 @@ public class AddAndSetParamsSettings : IOperationSettings {
 
         for (var rowIndex = 0; rowIndex < this.PerTypeValuesTable.Count; rowIndex++) {
             var row = this.PerTypeValuesTable[rowIndex];
-
-            var parameterNamePair = row.FirstOrDefault(kv =>
-                string.Equals(kv.Key, PerTypeValuesTableParameterColumn, StringComparison.OrdinalIgnoreCase));
-
-            var parameterName = parameterNamePair.Value?.Trim();
+            var parameterName = row.Parameter?.Trim();
             if (string.IsNullOrWhiteSpace(parameterName)) {
                 throw new InvalidOperationException(
                     $"Per-type values table row {rowIndex + 1} is missing required '{PerTypeValuesTableParameterColumn}' value.");
@@ -105,11 +118,9 @@ public class AddAndSetParamsSettings : IOperationSettings {
                 valuesByParameter[parameterNameKey] = valuesPerType;
             }
 
-            foreach (var kvp in row) {
+            foreach (var kvp in row.ValuesByType) {
                 var typeName = kvp.Key;
-                var value = kvp.Value;
-                if (string.Equals(typeName, PerTypeValuesTableParameterColumn, StringComparison.OrdinalIgnoreCase))
-                    continue;
+                var value = kvp.Value?.ToString();
                 if (string.IsNullOrWhiteSpace(typeName) || string.IsNullOrWhiteSpace(value))
                     continue;
                 if (valuesPerType.ContainsKey(typeName)) {

@@ -100,7 +100,7 @@ public record ParamSnapshot : ParamDefinitionBase {
     ///     Builds a settings-compatible per-type table row when values are not representable
     ///     by ValueOrFormula (non-uniform values with no formula).
     /// </summary>
-    public Dictionary<string, string>? ToPerTypeValuesTableRow(string parameterColumnName = "Parameter") {
+    public PerTypeValueRow? ToPerTypeValuesTableRow() {
         if (!string.IsNullOrWhiteSpace(this.Formula)) return null;
 
         var nonNullValues = this.ValuesPerType
@@ -110,11 +110,11 @@ public record ParamSnapshot : ParamDefinitionBase {
         if (nonNullValues.Count == 0) return null;
         if (nonNullValues.Values.Distinct(StringComparer.Ordinal).Count() == 1) return null;
 
-        var row = new Dictionary<string, string>(StringComparer.Ordinal) {
-            [parameterColumnName] = this.Name
+        var row = new PerTypeValueRow {
+            Parameter = this.Name
         };
         foreach (var kv in nonNullValues)
-            row[kv.Key] = kv.Value;
+            row.ValuesByType[kv.Key] = kv.Value;
         return row;
     }
 

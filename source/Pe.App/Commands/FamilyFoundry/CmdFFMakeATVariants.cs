@@ -135,12 +135,12 @@ public class ATVariantQueueFactory {
             Name = "PE_G___TagInstance",
             SetAs = ParamSettingMode.Value        };
 
-        var perTypeRow = new Dictionary<string, string>(StringComparer.Ordinal) {
-            [AddAndSetParamsSettings.PerTypeValuesTableParameterColumn] = paramSettings.Name
+        var perTypeRow = new PerTypeValueRow {
+            Parameter = paramSettings.Name
         };
 
         foreach (var (typeName, value) in perTypeValues)
-            perTypeRow[typeName] = value;
+            perTypeRow.ValuesByType[typeName] = value;
 
         // Build synthetic settings that will be logged
         var syntheticSettings = new AddAndSetParamsSettings {

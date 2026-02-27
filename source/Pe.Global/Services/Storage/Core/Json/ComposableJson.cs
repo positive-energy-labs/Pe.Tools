@@ -85,21 +85,21 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
     }
 
     public bool IsCacheValid(int maxAgeMinutes, Func<T, bool>? contentValidator = null) {
-        if (_cachedData == null)
+        if (this._cachedData == null)
             return false;
 
         if (!File.Exists(this.FilePath))
             return false;
 
         var fileModified = new DateTimeOffset(File.GetLastWriteTimeUtc(this.FilePath), TimeSpan.Zero);
-        if (fileModified > _cachedModifiedUtc)
+        if (fileModified > this._cachedModifiedUtc)
             return false;
 
-        var age = DateTimeOffset.UtcNow - _cachedModifiedUtc;
+        var age = DateTimeOffset.UtcNow - this._cachedModifiedUtc;
         if (age.TotalMinutes > maxAgeMinutes)
             return false;
 
-        if (contentValidator != null && !contentValidator(_cachedData))
+        if (contentValidator != null && !contentValidator(this._cachedData))
             return false;
 
         return true;
@@ -115,7 +115,7 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
             : ComposableJson<T>.CreateAuthoringSchema();
         _ = this.WriteWithSchema(defaultInstance, authoringSchema);
 
-        if (_behavior == JsonBehavior.Settings) {
+        if (this._behavior == JsonBehavior.Settings) {
             throw new FileNotFoundException(
                 $"""
                 Settings file not found: {this.FilePath}
@@ -128,7 +128,7 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
     private string WriteWithSchema(T data, JsonSchema? authoringSchema = null) {
         var jsonContent = this.Serialize(data);
 
-        if (_behavior != JsonBehavior.Output) {
+        if (this._behavior != JsonBehavior.Output) {
             var schema = authoringSchema ?? ComposableJson<T>.CreateAuthoringSchema();
             jsonContent = JsonSchemaFactory.WriteAndInjectSchema(schema, jsonContent, this.FilePath, this._schemaDirectory);
         }
@@ -310,8 +310,8 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
         jsonContent.TrimEnd('\r', '\n') + Environment.NewLine;
 
     private void UpdateCache(T data) {
-        _cachedData = data;
-        _cachedModifiedUtc = File.Exists(this.FilePath)
+        this._cachedData = data;
+        this._cachedModifiedUtc = File.Exists(this.FilePath)
             ? new DateTimeOffset(File.GetLastWriteTimeUtc(this.FilePath), TimeSpan.Zero)
             : DateTimeOffset.UtcNow;
     }

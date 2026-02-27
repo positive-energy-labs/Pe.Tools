@@ -350,7 +350,7 @@ public class ProcessingResultBuilder(Storage storage) {
             .ToList();
 
         var perTypeValuesTable = ordered
-            .Select(s => s.ToPerTypeValuesTableRow(AddAndSetParamsSettings.PerTypeValuesTableParameterColumn))
+            .Select(s => s.ToPerTypeValuesTableRow())
             .Where(r => r != null)
             .Select(r => r!)
             .ToList();
