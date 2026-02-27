@@ -36,7 +36,7 @@ public class JsonCompositionException : Exception {
       string foundType
   ) => new($"""
               Invalid '$include' value.
-                Expected: a non-empty string path (e.g., "_fragments/header-fields")
+                Expected: a non-empty string path (e.g., "_fields/header")
                 Found: {foundType}
               """);
 
@@ -44,8 +44,8 @@ public class JsonCompositionException : Exception {
   public static JsonCompositionException InvalidIncludePath(string includePath) =>
       new($"""
               Invalid '$include' path '{includePath}'.
-                Fragment includes must point to files under the '_fragments' directory.
-                Example: "_fragments/my-fragment"
+                Fragment includes must start with an allowed designated root from [Includable(...)].
+                Example: "_fields/my-fragment"
                 Relative traversal segments ('.' or '..') and absolute paths are not allowed.
               """);
 

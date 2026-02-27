@@ -99,13 +99,10 @@ public static class SettingsDiscoveryBuilder {
             '/',
             StringSplitOptions.RemoveEmptyEntries | (StringSplitOptions)2 /* TrimEntries, polyfill for net48 */);
         var isSchema = fileInfo.Name.Equals("schema.json", StringComparison.OrdinalIgnoreCase) ||
-                       fileInfo.Name.Contains("schema-", StringComparison.OrdinalIgnoreCase) ||
-                       fileInfo.Name.Contains("schema_", StringComparison.OrdinalIgnoreCase);
+                       fileInfo.Name.Equals("fragment.schema.json", StringComparison.OrdinalIgnoreCase);
         var isFragmentDirectory = relativeSegments.Any(segment =>
-            string.Equals(segment, "_fragments", StringComparison.OrdinalIgnoreCase));
-        var isFragment = isFragmentDirectory ||
-                         fileInfo.Name.Contains("-fragment", StringComparison.OrdinalIgnoreCase) ||
-                         fileInfo.Name.Contains("_fragment", StringComparison.OrdinalIgnoreCase);
+            segment.StartsWith("_", StringComparison.OrdinalIgnoreCase));
+        var isFragment = isFragmentDirectory;
         var kind = isSchema
             ? SettingsFileKind.Schema
             : isFragment

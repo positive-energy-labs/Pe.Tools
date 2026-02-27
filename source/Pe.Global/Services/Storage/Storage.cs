@@ -47,4 +47,15 @@ public class Storage(string addinName) {
     ///     There is NO DEFAULT FILE PATH for output files.
     /// </remarks>
     public OutputManager OutputDir() => new(this._addinPath);
+
+    /// <summary>
+    ///     Canonical add-in key derived from the command class name.
+    ///     Use this key for storage folder names and SignalR module keys.
+    /// </summary>
+    public static string AddinKey<TAddin>() => typeof(TAddin).Name;
+
+    /// <summary>
+    ///     Canonical add-in key derived from a runtime type.
+    /// </summary>
+    public static string AddinKey(Type addinType) => addinType.Name;
 }

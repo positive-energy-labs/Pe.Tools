@@ -176,8 +176,6 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
             return await this.LoadValidPreviewDataAsync(profileItem, context, ct);
         } catch (JsonValidationException ex) {
             return CreateValidationErrorPreview(profileItem, ex);
-        } catch (JsonSanitizationException ex) {
-            return CreateSanitizationErrorPreview(profileItem, ex);
         } catch (Exception ex) {
             return CreateGenericErrorPreview(profileItem, ex);
         }
@@ -296,24 +294,6 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
             RemainingErrors = ex.ValidationErrors,
             AppliedFixes = new List<string>()
         };
-
-    private static PreviewData
-        CreateSanitizationErrorPreview(ProfileListItem profileItem, JsonSanitizationException ex) {
-        var preview = new PreviewData {
-            ProfileName = profileItem.TextPrimary,
-            IsValid = false,
-            AppliedFixes = ex.AppliedMigrations,
-            RemainingErrors = new List<string>()
-        };
-
-        if (ex.AddedProperties.Any())
-            preview.RemainingErrors.Add($"Added properties: {string.Join(", ", ex.AddedProperties)}");
-
-        if (ex.RemovedProperties.Any())
-            preview.RemainingErrors.Add($"Removed properties: {string.Join(", ", ex.RemovedProperties)}");
-
-        return preview;
-    }
 
     private static PreviewData CreateGenericErrorPreview(ProfileListItem profileItem, Exception ex) =>
         new() {

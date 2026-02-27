@@ -86,44 +86,6 @@ public class CrashProgramException : Exception {
 }
 
 /// <summary>
-///     Exception thrown when JSON sanitization detects schema changes.
-///     Contains structured information about applied fixes and remaining errors.
-/// </summary>
-public class JsonSanitizationException : Exception {
-    public JsonSanitizationException(
-        string filePath,
-        List<string> addedProperties,
-        List<string> removedProperties,
-        List<string> appliedMigrations
-    ) : base(FormatMessage(filePath, addedProperties, removedProperties, appliedMigrations)) {
-        this.FilePath = filePath;
-        this.AddedProperties = addedProperties ?? new List<string>();
-        this.RemovedProperties = removedProperties ?? new List<string>();
-        this.AppliedMigrations = appliedMigrations ?? new List<string>();
-    }
-
-    public string FilePath { get; }
-    public List<string> AddedProperties { get; }
-    public List<string> RemovedProperties { get; }
-    public List<string> AppliedMigrations { get; }
-
-    private static string FormatMessage(
-        string filePath,
-        List<string> addedProperties,
-        List<string> removedProperties,
-        List<string> appliedMigrations
-    ) {
-        var message = $"JSON file {filePath} has been updated.";
-        if (addedProperties.Any()) message += $"\nAdded properties:\n\t-{string.Join("\n\t-", addedProperties)}";
-        if (removedProperties.Any()) message += $"\nRemoved properties:\n\t-{string.Join("\n\t-", removedProperties)}";
-        if (appliedMigrations.Any()) message += $"\nApplied migrations:\n\t-{string.Join("\n\t-", appliedMigrations)}";
-        message += "\nPlease review the settings before running again.";
-        return message;
-    }
-}
-
-
-/// <summary>
 ///     Extension methods for Exception class
 /// </summary>
 public static class ExceptionExtensions {

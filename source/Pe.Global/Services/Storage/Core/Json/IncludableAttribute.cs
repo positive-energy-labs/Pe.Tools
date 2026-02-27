@@ -15,7 +15,7 @@ namespace Pe.Global.Services.Storage.Core.Json;
 ///     <para>This generates a schema that allows either:</para>
 ///     <list type="bullet">
 ///         <item>Regular ScheduleFieldSpec objects</item>
-///         <item>Include directive objects: { "$include": "_fragments/header" }</item>
+///         <item>Include directive objects: { "$include": "_fields/header" }</item>
 ///     </list>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Property)]
@@ -30,7 +30,8 @@ public class IncludableAttribute : Attribute {
     public IncludableAttribute(string? fragmentSchemaName = null) => this.FragmentSchemaName = fragmentSchemaName;
 
     /// <summary>
-    ///     Name used for fragment schema file (e.g., "fields" → "schema-fragment-fields.json").
+    ///     Root directory key for fragments. Effective include root is always "_" + this value.
+    ///     Example: "fields" => "_fields", "_fields" => "__fields".
     ///     If not specified, uses the property name in lowercase.
     /// </summary>
     public string? FragmentSchemaName { get; }

@@ -4,7 +4,7 @@ namespace Pe.Global.Services.Storage.Core.Json;
 ///     Defines read/write behavior for JSON files based on their semantic purpose.
 /// </summary>
 public enum JsonBehavior {
-    /// <summary>Settings: crash if missing (force user review), sanitize on read</summary>
+    /// <summary>Settings: crash if missing (force user review), strict validate/read/write with schema</summary>
     Settings,
 
     /// <summary>State: create default silently, full read/write with schema</summary>

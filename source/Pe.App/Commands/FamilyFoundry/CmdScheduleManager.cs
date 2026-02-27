@@ -158,8 +158,6 @@ public class CmdScheduleManager : IExternalCommand {
             return this.LoadValidPreviewData(profileItem, settingsManager);
         } catch (JsonValidationException ex) {
             return CreateValidationErrorPreview(profileItem, ex);
-        } catch (JsonSanitizationException ex) {
-            return CreateSanitizationErrorPreview(profileItem, ex);
         } catch (Exception ex) {
             return CreateGenericErrorPreview(profileItem, ex);
         }
@@ -200,23 +198,6 @@ public class CmdScheduleManager : IExternalCommand {
     private static SchedulePreviewData CreateValidationErrorPreview(ScheduleListItem profileItem,
         JsonValidationException ex) =>
         new() { ProfileName = profileItem.TextPrimary, IsValid = false, RemainingErrors = ex.ValidationErrors };
-
-    private static SchedulePreviewData
-        CreateSanitizationErrorPreview(ScheduleListItem profileItem, JsonSanitizationException ex) {
-        var preview = new SchedulePreviewData {
-            ProfileName = profileItem.TextPrimary,
-            IsValid = false,
-            RemainingErrors = []
-        };
-
-        if (ex.AddedProperties.Any())
-            preview.RemainingErrors.Add($"Added properties: {string.Join(", ", ex.AddedProperties)}");
-
-        if (ex.RemovedProperties.Any())
-            preview.RemainingErrors.Add($"Removed properties: {string.Join(", ", ex.RemovedProperties)}");
-
-        return preview;
-    }
 
     private static SchedulePreviewData CreateGenericErrorPreview(ScheduleListItem profileItem, Exception ex) =>
         new() {

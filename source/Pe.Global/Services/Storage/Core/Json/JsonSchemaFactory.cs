@@ -132,17 +132,22 @@ public static class JsonSchemaFactory {
         JsonSchema fullSchema,
         string jsonContent,
         string targetFilePath,
-        string schemaDirectory
+        string schemaDirectory,
+        string schemaFileName = "schema.json",
+        bool resolveClosestSchemaDirectory = true
     ) {
         // Ensure directories exist
         var targetDir = Path.GetDirectoryName(targetFilePath);
         if (targetDir != null && !Directory.Exists(targetDir))
             _ = Directory.CreateDirectory(targetDir);
-        if (!Directory.Exists(schemaDirectory))
-            _ = Directory.CreateDirectory(schemaDirectory);
+        var resolvedSchemaDirectory = resolveClosestSchemaDirectory
+            ? ResolveSchemaDirectory(targetFilePath, schemaDirectory)
+            : Path.GetFullPath(schemaDirectory);
+        if (!Directory.Exists(resolvedSchemaDirectory))
+            _ = Directory.CreateDirectory(resolvedSchemaDirectory);
 
         // Write schema file
-        var fullSchemaPath = Path.Combine(schemaDirectory, "schema.json");
+        var fullSchemaPath = Path.Combine(resolvedSchemaDirectory, schemaFileName);
         File.WriteAllText(fullSchemaPath, fullSchema.ToJson());
 
         // Calculate relative path from target file to schema
@@ -152,5 +157,45 @@ public static class JsonSchemaFactory {
         var jObject = JObject.Parse(jsonContent);
         jObject["$schema"] = relativeSchemaPath.Replace("\\", "/");
         return JsonConvert.SerializeObject(jObject, Formatting.Indented);
+    }
+
+    /// <summary>
+    ///     Resolves the schema directory for a target file by preferring the closest existing <c>schema.json</c>
+    ///     between the file's directory and the provided schema root. If none exists, defaults to the target file's directory.
+    /// </summary>
+    public static string ResolveSchemaDirectory(string targetFilePath, string schemaRootDirectory) {
+        var targetDir = Path.GetDirectoryName(Path.GetFullPath(targetFilePath))
+                        ?? throw new ArgumentException("Target file path must include a directory.", nameof(targetFilePath));
+        var normalizedSchemaRoot = Path.GetFullPath(schemaRootDirectory)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        if (!IsPathUnderRoot(targetDir, normalizedSchemaRoot)) {
+            return targetDir;
+        }
+
+        var current = targetDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        while (true) {
+            var schemaPath = Path.Combine(current, "schema.json");
+            if (File.Exists(schemaPath))
+                return current;
+
+            if (string.Equals(current, normalizedSchemaRoot, StringComparison.OrdinalIgnoreCase))
+                break;
+
+            var parent = Directory.GetParent(current)?.FullName;
+            if (string.IsNullOrWhiteSpace(parent))
+                break;
+            current = parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+
+        return targetDir;
+    }
+
+    private static bool IsPathUnderRoot(string candidatePath, string rootPath) {
+        var normalizedCandidate = Path.GetFullPath(candidatePath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var normalizedRoot = Path.GetFullPath(rootPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return normalizedCandidate.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
     }
 }

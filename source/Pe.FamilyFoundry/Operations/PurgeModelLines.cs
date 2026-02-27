@@ -48,15 +48,18 @@ public class PurgeModelLines(DefaultOperationSettings settings) : DocOperation<D
                 var groupId = entry.GroupId;
                 var alignments = entry.Alignments;
 
-                var shouldDelete = (deleteAlignedLines && alignments.Count != 0) ||
-                                  (deleteGroupedLines && groupId > 0) ||
-                                  (!(groupId > 0) && alignments.Count == 0);
+                var shouldDeleteGrouped = deleteGroupedLines && groupId > 0;
+                var shouldDeleteAligned = deleteAlignedLines && alignments.Count != 0;
+                var isOther = !(groupId > 0) && alignments.Count == 0;
+                // Keep "other" line deletion tied to purge intent; do nothing when all deletion flags are off.
+                var shouldDeleteOther = isOther && (deleteGroupedLines || deleteAlignedLines);
+                var shouldDelete = shouldDeleteGrouped || shouldDeleteAligned || shouldDeleteOther;
                 if (!shouldDelete) continue;
 
                 var deleted = famDoc.Document.Delete(line.Id);
                 foreach (var id in deleted) deletedIds.Add(id);
-                if (deleteAlignedLines && alignments.Count != 0) aligned++;
-                else if (deleteGroupedLines && groupId > 0) grouped++;
+                if (shouldDeleteAligned) aligned++;
+                else if (shouldDeleteGrouped) grouped++;
                 else other++;
             } catch (Autodesk.Revit.Exceptions.InvalidObjectException) {
                 // Element was cascade-deleted when a group mate was deleted
