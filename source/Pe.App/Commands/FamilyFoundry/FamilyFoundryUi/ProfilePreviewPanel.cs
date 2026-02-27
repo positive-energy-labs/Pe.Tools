@@ -34,7 +34,7 @@ public class ProfilePreviewPanel : PaletteSidebarPanel<ProfileListItem, PreviewD
         this._richTextBox = new WpfUiRichTextBox {
             IsReadOnly = true,
             IsDocumentEnabled = true,
-            Focusable = false,
+            Focusable = true,
             IsTextSelectionEnabled = true,
             AutoWordSelection = false,
             VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,

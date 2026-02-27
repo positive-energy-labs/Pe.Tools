@@ -1,4 +1,5 @@
 using Pe.Global.Services.Aps.Models;
+using Serilog;
 
 namespace Pe.Global.Services.Aps.Core;
 
@@ -44,7 +45,7 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
         }
 
         // PHASE 3: Full OAuth flow (user interaction required)
-        return this.PerformFullOAuthFlow(clientId, clientSecret);
+        return PerformFullOAuthFlow(clientId, clientSecret);
     }
 
     #region Full OAuth Flow
@@ -52,11 +53,14 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
     /// <summary>
     ///     Performs the full 3-legged OAuth flow, opening browser for user consent.
     /// </summary>
-    private string PerformFullOAuthFlow(string clientId, string clientSecret) {
+    private static string PerformFullOAuthFlow(string clientId, string clientSecret) {
         var tcs = new TaskCompletionSource<Result<string>>();
+
+        Log.Information("[OAuth] Starting 3-legged OAuth flow for clientId: {ClientId}", clientId?.Substring(0, Math.Min(8, clientId?.Length ?? 0)) + "...");
 
         OAuthHandler.Invoke3LeggedOAuth(clientId, clientSecret, token => {
             if (token == null) {
+                Log.Warning("[OAuth] Callback received null token (authentication failed or was denied)");
                 tcs.SetResult(new Exception(
                     "Authentication was denied or failed. Please try again. " +
                     "In the event of unexpected failure after 2 or 3 attempts, contact the developer."));
@@ -67,17 +71,34 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
                 var newCached = CreateCachedToken(token);
                 UpdateCache(clientId, newCached);
                 // AccessToken is in OAuthToken, guaranteed non-null
+                Log.Information("[OAuth] Callback recieved and token cached successfully");
                 tcs.SetResult(token.AccessToken!);
             } catch (Exception ex) {
+                Log.Error(ex, "[OAuth] Failed to cache token");
                 tcs.SetResult(new Exception($"Failed to cache token: {ex.Message}"));
             }
         });
 
-        // Wait for callback - this is intentional blocking as we need the token before returning
-        tcs.Task.Wait();
+        // Wait for callback with timeout to prevent infinite freeze
+        var timeout = TimeSpan.FromMinutes(0.5);
+        var completed = tcs.Task.Wait(timeout);
+
+        if (!completed) {
+            Log.Warning("[OAuth] Authentication timed out after {TimeoutSeconds}s", timeout.TotalSeconds);
+            throw new TimeoutException(
+                $"OAuth authentication timed out after {timeout.TotalSeconds} seconds. " +
+                "The browser may have been closed or redirected to an error page. " +
+                "Please try again. If the issue persists, check your APS credentials in Global settings.");
+        }
 
         var (accessToken, error) = tcs.Task.Result;
-        return error is not null ? throw error : accessToken;
+        if (error is not null) {
+            Log.Error(error, "[OAuth] Authentication failed");
+            throw error;
+        }
+
+        Log.Information("[OAuth] Authentication completed successfully");
+        return accessToken is not null ? accessToken : throw new Exception("Access token is null");
     }
 
     #endregion
@@ -207,8 +228,10 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
                 if (!RefreshInProgress.Contains(clientId)) {
                     // Other thread finished - check if we got a fresh token
                     if (TokenCache.TryGetValue(clientId, out var cached) &&
-                        DateTime.UtcNow < cached.ExpiresAt.AddSeconds(-ExpirationBufferSeconds))
+                        DateTime.UtcNow < cached.ExpiresAt.AddSeconds(-ExpirationBufferSeconds)) {
                         return cached.AccessToken;
+                    }
+
                     break; // Refresh finished but failed, we'll need to try ourselves or do full flow
                 }
             }

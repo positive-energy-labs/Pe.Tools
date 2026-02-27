@@ -1,6 +1,7 @@
 using Newtonsoft.Json;
 using Pe.Global.PolyFill;
 using Pe.Global.Services.Aps.Models;
+using Serilog;
 using System.Net;
 using System.Net.Sockets;
 
@@ -98,26 +99,40 @@ internal static class OAuthHandler {
     // TCP listener for receiving OAuth callbacks - static because only one OAuth flow can run at a time
     private static readonly TcpListener TcpListener = new(IPAddress.Loopback, OAuthConfig.CallbackPort);
 
+    // Lock to ensure only one OAuth flow executes at a time
+    private static readonly object OAuthFlowLock = new();
+
     /// <summary>
     ///     Executes the OAuth flow: opens browser, waits for callback, exchanges code for token.
     /// </summary>
     private static void ExecuteOAuthFlow(string authUrl, OAuthFlowData flowData, CallbackDelegate callback) {
-        try {
-            // Ensure clean state
-            TcpListener.Stop();
-            TcpListener.Start();
+        lock (OAuthFlowLock) {
+            try {
+                Log.Information("[OAuthHandler] Starting OAuth flow execution (acquired lock). {AuthUrl}", string.Concat(authUrl.AsSpan(0, Math.Min(100, authUrl.Length)), "..."));
 
-            if (((IPEndPoint)TcpListener.LocalEndpoint).Port != OAuthConfig.CallbackPort)
-                throw new InvalidOperationException($"Failed to bind TCP listener to port {OAuthConfig.CallbackPort}");
+                TcpListener.Stop();
+                TcpListener.Start();
 
-            // Open browser for user authorization
-            _ = Process.Start(new ProcessStartInfo(authUrl) { UseShellExecute = true });
+                var localEndpoint = (IPEndPoint)TcpListener.LocalEndpoint;
+                Log.Information("[OAuthHandler] TCP listener started on port {Port}", localEndpoint.Port);
 
-            // Handle callback asynchronously
-            _ = Task.Run(async () => await HandleCallbackAsync(flowData, callback).ConfigureAwait(false));
-        } catch {
-            // TODO: update this to give feedback
-            callback?.Invoke(null);
+                if (localEndpoint.Port != OAuthConfig.CallbackPort) {
+                    Log.Error("[OAuthHandler] TCP listener bound to wrong port. Expected: {Expected}, Actual: {Actual}",
+                        OAuthConfig.CallbackPort, localEndpoint.Port);
+                    throw new InvalidOperationException($"Failed to bind TCP listener to port {OAuthConfig.CallbackPort}");
+                }
+
+                // Open browser for user authorization
+                _ = Process.Start(new ProcessStartInfo(authUrl) { UseShellExecute = true });
+                Log.Information("[OAuthHandler] Browser opened successfully");
+
+                // Handle callback synchronously (we're already in a lock, so blocking is fine)
+                HandleCallbackAsync(flowData, callback).ConfigureAwait(false).GetAwaiter().GetResult();
+                Log.Information("[OAuthHandler] OAuth flow execution completed");
+            } catch (Exception ex) {
+                Log.Error(ex, "[OAuthHandler] Failed to execute OAuth flow");
+                callback?.Invoke(null);
+            }
         }
     }
 
@@ -126,18 +141,39 @@ internal static class OAuthHandler {
     /// </summary>
     private static async Task HandleCallbackAsync(OAuthFlowData flowData, CallbackDelegate callback) {
         try {
+            Log.Information("[OAuthHandler] Waiting for authorization code callback...");
+
+            // Add timeout for waiting on callback
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(.5));
             var authorizationCode = await WaitForAuthorizationCodeAsync().ConfigureAwait(false);
+
+            Log.Information("[OAuthHandler] Authorization code received: {CodePreview}...",
+                authorizationCode?[..Math.Min(10, authorizationCode?.Length ?? 0)]);
 
             // Exchange code for token
             if (!string.IsNullOrEmpty(authorizationCode)) {
+                Log.Information("[OAuthHandler] Exchanging authorization code for token...");
                 var token = await ExchangeCodeForTokenAsync(flowData, authorizationCode).ConfigureAwait(false);
+
+                if (token != null) {
+                    Log.Information("[OAuthHandler] Token exchange successful");
+                } else {
+                    Log.Warning("[OAuthHandler] Token exchange returned null");
+                }
+
                 callback?.Invoke(token);
-            } else
+            } else {
+                Log.Warning("[OAuthHandler] Authorization code was null or empty");
                 callback?.Invoke(null);
-        } catch {
-            // TODO: update this to give feedback
+            }
+        } catch (OperationCanceledException) {
+            Log.Warning("[OAuthHandler] Callback timed out - no response received within timeout period");
+            callback?.Invoke(null);
+        } catch (Exception ex) {
+            Log.Error(ex, "[OAuthHandler] Error during callback handling");
             callback?.Invoke(null);
         } finally {
+            Log.Information("[OAuthHandler] Stopping TCP listener");
             TcpListener.Stop();
         }
     }
@@ -147,7 +183,7 @@ internal static class OAuthHandler {
     #region Token Exchange
 
     /// <summary>Exchanges an authorization code for an access token</summary>
-    private static Task<OAuthToken> ExchangeCodeForTokenAsync(OAuthFlowData flow, string code) {
+    private static Task<OAuthToken?> ExchangeCodeForTokenAsync(OAuthFlowData flow, string code) {
         var additionalParams = new Dictionary<string, string> {
             ["code"] = code,
             ["redirect_uri"] = OAuthConfig.CallbackUri
@@ -191,17 +227,29 @@ internal static class OAuthHandler {
     private static async Task<OAuthToken?> PostTokenRequestAsync(
         Dictionary<string, string> formData,
         CancellationToken cancellationToken) {
+        Log.Information("[OAuthHandler] Posting token request to {Endpoint}", OAuthConfig.TokenEndpoint);
+
         using var content = new FormUrlEncodedContent(formData);
         var response = await OAuthConfig.HttpClient.PostAsync(OAuthConfig.TokenEndpoint, content, cancellationToken)
             .ConfigureAwait(false);
 
-        var responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
-        if (!response.IsSuccessStatusCode)
+        if (!response.IsSuccessStatusCode) {
+            Log.Error("[OAuthHandler] Token request failed. Status: {StatusCode}, Body: {ResponseBody}",
+                response.StatusCode, responseBody);
             throw new HttpRequestException($"Token request failed: {response.StatusCode} - {responseBody}");
+        }
 
+        Log.Information("[OAuthHandler] Token request successful, deserializing response...");
         var token = JsonConvert.DeserializeObject<OAuthToken>(responseBody);
-        return token ?? throw new JsonSerializationException("Token response could not be parsed");
+
+        if (token == null) {
+            Log.Error("[OAuthHandler] Failed to deserialize token response. Body: {ResponseBody}", responseBody);
+            throw new JsonSerializationException("Token response could not be parsed");
+        }
+
+        return token;
     }
 
     #endregion
@@ -212,36 +260,70 @@ internal static class OAuthHandler {
     ///     Accepts the OAuth callback, reads the authorization code and returns it after responding to the browser.
     /// </summary>
     private static async Task<string> WaitForAuthorizationCodeAsync() {
+        Log.Information("[OAuthHandler] Accepting TCP client connection...");
         var client = await TcpListener.AcceptTcpClientAsync().ConfigureAwait(false);
+        Log.Information("[OAuthHandler] TCP client connected from {RemoteEndpoint}", client.Client.RemoteEndPoint);
+
         var request = ReadHttpRequest(client);
+        Log.Information("[OAuthHandler] HTTP request received ({Length} bytes)", request.Length);
+        Log.Debug("[OAuthHandler] Request content: {Request}", request.Substring(0, Math.Min(500, request.Length)));
+
         var authorizationCode = ExtractAuthorizationCode(request);
+
+        if (string.IsNullOrEmpty(authorizationCode)) {
+            Log.Warning("[OAuthHandler] Failed to extract authorization code from request");
+        } else {
+            Log.Information("[OAuthHandler] Authorization code extracted successfully");
+        }
 
         // Send response page to browser
         var responsePage = string.IsNullOrEmpty(authorizationCode)
             ? OAuthCallbackPages.ErrorPage
             : OAuthCallbackPages.SuccessPage;
+
+        Log.Information("[OAuthHandler] Sending response page to browser ({PageType})",
+            string.IsNullOrEmpty(authorizationCode) ? "Error" : "Success");
+
         await WriteHttpResponseAsync(client, responsePage).ConfigureAwait(false);
         client.Dispose();
 
-        if (authorizationCode is null)
+        if (authorizationCode is null) {
+            Log.Error("[OAuthHandler] Authorization code not found in callback request");
             throw new InvalidOperationException("Authorization code not found");
+        }
 
         return authorizationCode;
     }
 
     /// <summary>Reads an HTTP request from a TCP client</summary>
     private static string ReadHttpRequest(TcpClient client) {
-        var buffer = new byte[client.ReceiveBufferSize];
+        var buffer = new byte[4096];
         using var memoryStream = new MemoryStream();
         var networkStream = client.GetStream();
 
+        // Wait for data with timeout
+        var timeout = 5000; // 5 seconds
+        var startTime = Environment.TickCount;
+
+        // Wait until data is available or timeout
+        while (!networkStream.DataAvailable) {
+            if (Environment.TickCount - startTime > timeout) {
+                Log.Warning("[OAuthHandler] Timeout waiting for HTTP request data");
+                return string.Empty;
+            }
+            Thread.Sleep(10);
+        }
+
+        // Read all available data
         while (networkStream.DataAvailable) {
             var bytesRead = networkStream.Read(buffer, 0, buffer.Length);
             if (bytesRead <= 0) break;
             memoryStream.Write(buffer, 0, bytesRead);
         }
 
-        return Encoding.UTF8.GetString(memoryStream.ToArray());
+        var result = Encoding.UTF8.GetString(memoryStream.ToArray());
+        Log.Debug("[OAuthHandler] Read {ByteCount} bytes from HTTP request", memoryStream.Length);
+        return result;
     }
 
     /// <summary>Writes an HTTP response to a TCP client</summary>
