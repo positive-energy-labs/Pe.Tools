@@ -318,8 +318,13 @@ public class CmdFFMigrator : IExternalCommand {
     }
 
     private static ProfileRemap DeepCloneProfile(ProfileRemap profile) {
-        var json = JsonConvert.SerializeObject(profile, Formatting.None);
-        var clone = JsonConvert.DeserializeObject<ProfileRemap>(json);
+        var settings = new JsonSerializerSettings {
+            ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+            PreserveReferencesHandling = PreserveReferencesHandling.None,
+            MaxDepth = 128
+        };
+        var json = JsonConvert.SerializeObject(profile, Formatting.None, settings);
+        var clone = JsonConvert.DeserializeObject<ProfileRemap>(json, settings);
         return clone ?? throw new InvalidOperationException("Failed to clone ProfileRemap settings.");
     }
 

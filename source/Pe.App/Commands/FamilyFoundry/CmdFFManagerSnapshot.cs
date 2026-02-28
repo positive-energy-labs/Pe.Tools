@@ -116,7 +116,7 @@ public class CmdFFManagerSnapshot : IExternalCommand {
             },
             FilterApsParams = new BaseProfileSettings.FilterApsParamsSettings {
                 // Empty - snapshot captures exact parameters, no APS filtering needed
-                IncludeNames = new IncludeSharedParameter(),
+                IncludeNames = new IncludeSharedParameter(), 
                 ExcludeNames = new ExcludeSharedParameter()
             },
             MakeRefPlaneAndDims =
@@ -152,10 +152,14 @@ public class CmdFFManagerSnapshot : IExternalCommand {
         foreach (var snap in snapshots) {
             // Skip built-in parameters (cannot be created/managed by profile)
             if (snap.IsBuiltIn) continue;
-            if (snap.SharedGuid != null && string.IsNullOrWhiteSpace(snap.ValueOrFormula)) continue;
 
             // Skip project parameters (not family parameters)
             if (snap.IsProjectParameter) continue;
+
+            var perTypeRow = snap.ToPerTypeValuesTableRow();
+            var hasGlobalValueOrFormula = !string.IsNullOrWhiteSpace(snap.ValueOrFormula);
+            // Skip params that have no replayable assignment source.
+            if (!hasGlobalValueOrFormula && perTypeRow == null) continue;
 
             parameters.Add(new ParamSettingModel {
                 Name = snap.Name,
@@ -166,9 +170,8 @@ public class CmdFFManagerSnapshot : IExternalCommand {
                 SetAs = snap.SetAs
             });
 
-            var row = snap.ToPerTypeValuesTableRow();
-            if (row != null)
-                perTypeValuesTable.Add(row);
+            if (perTypeRow != null)
+                perTypeValuesTable.Add(perTypeRow);
         }
 
         return (parameters, perTypeValuesTable);

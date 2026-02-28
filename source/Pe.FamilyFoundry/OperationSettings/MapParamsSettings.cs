@@ -33,10 +33,11 @@ public class MapParamsSettings : IOperationSettings {
     /// <param name="fm">FamilyManager instance for resolving parameters</param>
     /// <param name="processingContext">Optional context for snapshot data and value counts; may be null</param>
     /// <returns>FamilyParameters ranked by data quality (most populated types first) and user priority</returns>
-    public List<FamilyParameter> GetRankedCurrParams(
+    public static List<FamilyParameter> GetRankedCurrParams(
         List<string> currNames,
         FamilyManager fm,
-        FamilyProcessingContext processingContext = null) {
+        FamilyProcessingContext? processingContext = null
+    ) {
         // No context? Return params in user priority order
         if (processingContext == null) {
             return [
@@ -44,8 +45,8 @@ public class MapParamsSettings : IOperationSettings {
                     .Select(fm.FindParameter)
                     .Where(p => p is not null)
                     .Where(p => {
-                        // Edge-case: param.Definition throws a null reference exception
-                        try {
+                        try { // Edge-case: param.Definition throws a null reference exception
+                            if (p is null) return false;
                             return !string.IsNullOrWhiteSpace(p.Definition.Name);
                         } catch {
                             return false;
@@ -63,14 +64,14 @@ public class MapParamsSettings : IOperationSettings {
             .Where(x => x.GetTypesWithValue().Count > 0);
 
         var paramSnapshots = candidateSnapshots.ToList();
-        if (!paramSnapshots.Any()) return [];
+        if (paramSnapshots.Count == 0) return [];
 
         var deduplicated = paramSnapshots
             .GroupBy(GetValueSignature)
             .Select(g => g.First());
 
         var enumerable = deduplicated.ToList();
-        if (!enumerable.Any()) return [];
+        if (enumerable.Count == 0) return [];
 
         // 4. Order by quality (most types with values first). exclude 
         return [
@@ -79,10 +80,9 @@ public class MapParamsSettings : IOperationSettings {
                 .OrderByDescending(x => x.c)
                 .ThenBy(x => currNames.IndexOf(x.n)) // preserve user priority as tiebreaker
                 .Select(x => fm.FindParameter(x.n))
-                .Where(p => p is not null)
                 .Where(p => {
-                    // Edge-case: param.Definition throws a null reference exception
                     try {
+                        if (p is null) return false;
                         return !string.IsNullOrWhiteSpace(p.Definition.Name);
                     } catch {
                         return false;
@@ -92,8 +92,6 @@ public class MapParamsSettings : IOperationSettings {
     }
 
     private static string GetValueSignature(ParamSnapshot snapshot) {
-        // Create stable signature from all type values (sorted by type name for consistency)
-        // For parameters with formulas, include the formula in the signature
         if (!string.IsNullOrWhiteSpace(snapshot.Formula)) return $"FORMULA:{snapshot.Formula}";
 
         var sortedValues = snapshot.ValuesPerType
@@ -112,7 +110,7 @@ public class MappingData {
     [Description("New parameter name to map to")]
     [Required]
     [SchemaExamples(typeof(SharedParameterNamesProvider))]
-    public string NewName { get; init; }
+    public required string NewName { get; init; }
 
     [Description(
         "Coercion strategy to use for the remapping. CoerceByStorageType will be used when none is specified.")]

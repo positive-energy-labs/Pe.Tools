@@ -1,15 +1,16 @@
 using Autodesk.Revit.UI;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using Pe.FamilyFoundry;
 using Pe.Global;
 using Pe.Global.Services.Storage;
 using Pe.Global.Services.Storage.Core;
 using Pe.Global.Services.Storage.Core.Json;
+using Pe.Global.Services.Storage.Core.Json.ContractResolvers;
 using Pe.Global.Services.Storage.Modules;
 using Pe.Global.Utils.Files;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -236,11 +237,13 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         if (ct.IsCancellationRequested) return null;
 
         // Serialize profile to JSON
-        var profileJson = JsonSerializer.Serialize(
+        var profileJson = JsonConvert.SerializeObject(
             profile,
-            new JsonSerializerOptions {
-                WriteIndented = true,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            Formatting.Indented,
+            new JsonSerializerSettings {
+                Converters = [new StringEnumConverter()],
+                ContractResolver = new RequiredAwareContractResolver(),
+                NullValueHandling = NullValueHandling.Ignore
             });
 
         if (ct.IsCancellationRequested) return null;
