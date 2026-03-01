@@ -38,9 +38,11 @@ public class PreProcessMappings(
     public override string Description =>
         "Mark irrelevant mapping data as skipped and attempt to map CurrNames that are built-in parameters";
 
-    public override OperationLog Execute(FamilyDocument doc,
+    public override OperationLog Execute(
+        FamilyDocument doc,
         FamilyProcessingContext processingContext,
-        OperationContext groupContext) {
+        OperationContext groupContext
+    ) {
         if (groupContext is null) {
             throw new InvalidOperationException(
                 $"{this.Name} requires a GroupContext (must be used within an OperationGroup)");
@@ -55,13 +57,13 @@ public class PreProcessMappings(
         });
 
         foreach (var (mapping, log) in data) {
-            var filteredCurrNames = this.Settings.GetRankedCurrParams(
+            var filteredCurrNames = MapParamsSettings.GetRankedCurrParams(
                 mapping.CurrNames,
                 fm,
                 processingContext
             );
 
-            var sharedParamFound = sharedParamsDict.TryGetValue(mapping.NewName, out var sharedParam);
+            var sharedParam = sharedParamsDict[mapping.NewName];
 
             if (fm.FindParameter(mapping.NewName) != null) {
                 _ = filteredCurrNames.Count == 0
@@ -70,7 +72,7 @@ public class PreProcessMappings(
                 continue;
             }
 
-            if (!sharedParamFound) {
+            if (sharedParam == null) {
                 _ = log.Skip("Target shared parameter not found");
                 continue;
             }
@@ -85,11 +87,9 @@ public class PreProcessMappings(
             foreach (var currParam in filteredCurrNames.TakeWhile(_ => !foundMatch)) {
                 try {
                     if (!currParam.IsBuiltInParameter()) continue;
-                    if (this.TryMapBuiltInParameter(doc, currParam, sharedParam, out var builtInLogMsg)) {
-                        foundMatch = true;
-                        _ = log.Success(builtInLogMsg);
-                    }
-                } catch (Exception) {
+                    foundMatch = TryMapBuiltInParameter(doc, currParam, sharedParam);
+                    if (foundMatch) _ = log.Success($"Mapped built-in {currParam.Definition.Name} → {sharedParam.ExternalDefinition.Name}");
+                } catch {
                     _ = log.Defer($"{currParam} → {mapping.NewName}"); // allow retrying 
                 }
             }
@@ -98,30 +98,23 @@ public class PreProcessMappings(
         return new OperationLog(this.Name, groupContext.TakeSnapshot());
     }
 
-    private bool TryMapBuiltInParameter(
+    private static bool TryMapBuiltInParameter(
         FamilyDocument doc,
         FamilyParameter builtInParam,
-        SharedParameterDefinition sharedParam,
-        out string logMessage) {
-        logMessage = null;
-        var builtInParamName = builtInParam.Definition.Name;
+        SharedParameterDefinition sharedParam
+    ) {
         try {
+            var builtInParamName = builtInParam.Definition.Name;
             // Add the shared parameter (returns existing if already present)
             var builtInDataType = builtInParam.Definition.GetDataType();
             var sharedDataType = sharedParam.ExternalDefinition.GetDataType();
 
             if (builtInDataType == sharedDataType) {
                 var newParam = doc.AddSharedParameter(sharedParam);
-                if (!doc.TrySetFormula(newParam, builtInParamName, out var errorMessage)) {
-                    logMessage = $"Failed to set formula on parameter {newParam.Definition.Name}: {errorMessage}";
-                    return false;
-                }
-
+                if (!doc.TrySetFormula(newParam, builtInParamName, out _)) return false;
                 _ = doc.UnsetFormula(newParam);
-                logMessage = $"Mapped built-in {builtInParamName} → {newParam.Definition.Name}";
             }
-        } catch (Exception ex) {
-            logMessage = $"Failed to map built-in {builtInParamName}: {ex.Message}";
+        } catch {
             return false;
         }
 

@@ -291,30 +291,27 @@ public class CmdFFMigrator : IExternalCommand {
     }
 
     internal static OperationQueue BuildQueueCore(ProfileRemap profile, List<SharedParameterDefinition> apsParamData) {
-        var profileClone = DeepCloneProfile(profile);
+        var pClone = DeepCloneProfile(profile);
         var apsParamNames = apsParamData.Select(p => p.ExternalDefinition.Name).ToList();
-        var mappingDataAllNames = profileClone.AddAndMapSharedParams.MappingData
+        var mappingDataAllNames = pClone.AddAndMapSharedParams.MappingData
             .SelectMany(m => m.CurrNames)
             .Concat(apsParamNames);
-        var internalParams = BuildInternalParams(profileClone)
-            .Where(internalParam => profileClone.AddAndSetParams.Parameters.All(existing =>
+        var internalParams = BuildInternalParams(pClone)
+            .Where(internalParam => pClone.AddAndSetParams.Parameters.All(existing =>
                 !string.Equals(existing.Name, internalParam.Name, StringComparison.OrdinalIgnoreCase)))
             .ToList();
-        profileClone.AddAndSetParams.AddParameters(internalParams);
+        pClone.AddAndSetParams.AddParameters(internalParams);
         var apsAndAddedParamNames = apsParamNames
-            .Concat(profileClone.AddAndSetParams.Parameters.Select(p => p.Name))
+            .Concat(pClone.AddAndSetParams.Parameters.Select(p => p.Name))
             .ToList();
 
         return new OperationQueue()
-            .Add(new PurgeNestedFamilies(profileClone.PurgeNestedFamilies))
-            .Add(new PurgeReferencePlanes(profileClone.PurgeReferencePlanes))
-            .Add(new PurgeModelLines(profileClone.PurgeModelLines))
-            .Add(new PurgeParams(profileClone.PurgeParams, mappingDataAllNames))
-            .Add(new AddAndMapSharedParams(profileClone.AddAndMapSharedParams, apsParamData))
-            .Add(new AddAndSetParams(profileClone.AddAndSetParams))
-            .Add(new MakeElecConnector(profileClone.MakeElectricalConnector))
-            .Add(new PurgeParams(profileClone.PurgeParams, apsAndAddedParamNames))
-            .Add(new SortParams(profileClone.SortParams));
+            .Add(new CleanFamilyDocument(pClone.CleanFamilyDocument, mappingDataAllNames))
+            .Add(new AddAndMapSharedParams(pClone.AddAndMapSharedParams, apsParamData))
+            .Add(new AddAndSetParams(pClone.AddAndSetParams))
+            .Add(new MakeElecConnector(pClone.MakeElectricalConnector))
+            .Add(new PurgeParams(new PurgeParamsSettings { Enabled = pClone.CleanFamilyDocument.EnablePurgeParams }, apsAndAddedParamNames))
+            .Add(new SortParams(pClone.SortParams));
     }
 
     private static ProfileRemap DeepCloneProfile(ProfileRemap profile) {
@@ -412,37 +409,19 @@ public class CmdFFMigrator : IExternalCommand {
 }
 
 public class ProfileRemap : BaseProfileSettings {
-    [Description("Settings for deleting unused nested families")]
-    [Required]
-    public DefaultOperationSettings PurgeNestedFamilies { get; init; } = new();
-
-    [Description("Settings for deleting unused reference planes")]
-    [Required]
-    public PurgeReferencePlanesSettings PurgeReferencePlanes { get; init; } = new();
-
-    [Description(
-        "Settings for deleting model lines. Model lines are typically superfluous. most cannot be seen, and the ones that can be are just visual sugar")]
-    [Required]
-    public DefaultOperationSettings PurgeModelLines { get; init; } = new();
-
-    [Description("Settings for deleting unused parameters")]
-    [Required]
-    public PurgeParamsSettings PurgeParams { get; init; } = new();
+    [Description("Settings for cleaning the family document")]
+    public CleanFamilyDocumentSettings CleanFamilyDocument { get; init; } = new();
 
     [Description("Settings for parameter mapping (add/replace and remap)")]
-    [Required]
     public MapParamsSettings AddAndMapSharedParams { get; init; } = new();
 
     [Description("Settings for setting parameter values and adding family parameters.")]
-    [Required]
     public AddAndSetParamsSettings AddAndSetParams { get; init; } = new();
 
     [Description("Settings for hydrating electrical connectors")]
-    [Required]
     public MakeElecConnectorSettings MakeElectricalConnector { get; init; } = new();
 
     [Description("Settings for sorting parameters within each property group.")]
-    [Required]
     public SortParamsSettings SortParams { get; init; } = new();
 }
 

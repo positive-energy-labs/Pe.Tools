@@ -136,7 +136,11 @@ public class PurgeParams : DocOperation<PurgeParamsSettings> {
     }
 }
 
-public class PurgeParamsSettings : IOperationSettings {
+public class PurgeParamsSettings : PurgeParamsBase, IOperationSettings {
+    public bool Enabled { get; init; } = true;
+}
+
+public class PurgeParamsBase {
     [Description(
         "Whether to delete parameters that have no value for every family type, regardless of whether they are used in the family. This is rare but possible. This setting is useful for properties like url variations where there are often multiple url parameters with no value.")]
     public bool DirectDeleteEmptyParameters { get; init; } = true;
@@ -151,8 +155,6 @@ public class PurgeParamsSettings : IOperationSettings {
         "Exclude parameters from the deletion list. Parameters matching any exclude filter (Equaling, Containing, or StartingWith) will be protected from deletion.")]
     [Required]
     public ExcludeSharedParameter ExcludeNames { get; init; } = new();
-
-    public bool Enabled { get; init; } = true;
 
     public bool Filter(FamilyParameter p) => !this.IsExcluded(p);
 
