@@ -77,7 +77,21 @@ public class CmdCacheParametersService : IExternalCommand {
     private static void WriteToon(List<EnrichedParameterData> data, string filePath) {
         if (data.Count == 0) return;
 
-        var json = JsonConvert.SerializeObject(data, Formatting.Indented);
+        var abridgedData = data.Select(p => new {
+            p.Id,
+            p.Name,
+            p.Description,
+            p.IsInstance,
+            p.ValueTypeId,
+            p.SpecId,
+            p.SpecLabel,
+            p.GroupId,
+            p.GroupLabel,
+            p.CategoryIds,
+        }
+        ).ToList();
+
+        var json = JsonConvert.SerializeObject(abridgedData, Formatting.Indented);
         var toon = ToonTranspiler.EncodeJson(json, ToonOptions.Default);
         File.WriteAllText(filePath, toon);
     }
@@ -110,10 +124,9 @@ public class CmdCacheParametersService : IExternalCommand {
         // Parameters list
         for (var i = 0; i < data.Count; i++) {
             var param = data[i];
-            _ = sb.AppendLine($"## {i + 1}. **{param.Name}**");
+            _ = sb.AppendLine($"## {i + 1}. ({(param.IsInstance ? "INST" : "TYPE")}) **{param.Name}**");
             _ = sb.AppendLine($"- Description: {(string.IsNullOrWhiteSpace(param.Description) ? "No description provided" : param.Description)}");
             _ = sb.AppendLine($"- Spec: {param.SpecLabel} (`{param.SpecId}`)");
-            _ = sb.AppendLine($"- Scope: {(param.IsInstance ? "INSTANCE" : "TYPE")}");
 
             if (param.ReadOnly)
                 _ = sb.AppendLine($"Read-Only: Yes");
@@ -208,7 +221,7 @@ public class EnrichedParameterData {
         this.Name = param.Name;
         this.Description = param.Description;
         this.SpecId = param.SpecId;
-        this.SpecLabel = GetSpecLabel(param.SpecId);
+        this.SpecLabel = new ForgeTypeId(param.SpecId).ToLabel();
         this.ValueTypeId = param.ValueTypeId;
         this.ReadOnly = param.ReadOnly;
         this.CreatedBy = param.CreatedBy;
@@ -224,13 +237,14 @@ public class EnrichedParameterData {
                 .Value as ParametersApi.Parameters.ParametersResult.ParameterDownloadOpts.MetadataBinding;
 
             this.GroupId = groupId?.Id;
-            this.GroupLabel = GetGroupLabel(this.GroupId);
+            this.GroupLabel = new ForgeTypeId(this.GroupId).ToLabel();
 
             var categories = param.Metadata
                 .FirstOrDefault(m => m.Id == "categories")?
                 .Value as List<ParametersApi.Parameters.ParametersResult.ParameterDownloadOpts.MetadataBinding>;
 
             this.CategoryIds = categories?.Select(c => c.Id).ToList() ?? [];
+            this.CategoryLabels = categories?.Select(c => new ForgeTypeId(c.Id).ToLabel()).ToList() ?? [];
         }
     }
 
@@ -249,18 +263,7 @@ public class EnrichedParameterData {
     public string? GroupId { get; }
     public string GroupLabel { get; } = string.Empty;
     public List<string> CategoryIds { get; } = [];
-
-    private static string GetSpecLabel(string? specId) {
-        if (string.IsNullOrEmpty(specId)) return string.Empty;
-        var forgeTypeId = new ForgeTypeId(specId);
-        return SpecNamesProvider.GetLabelForForge(forgeTypeId);
-    }
-
-    private static string GetGroupLabel(string? groupId) {
-        if (string.IsNullOrEmpty(groupId)) return string.Empty;
-        var forgeTypeId = new ForgeTypeId(groupId);
-        return PropertyGroupNamesProvider.GetLabelForForge(forgeTypeId);
-    }
+    public List<string> CategoryLabels { get; } = [];
 }
 
 public class CacheParametersService : Aps.IOAuthTokenProvider, Aps.IParametersTokenProvider {

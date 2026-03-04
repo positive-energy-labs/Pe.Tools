@@ -1,6 +1,7 @@
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Structure;
 using Pe.Global.PolyFill;
+using Pe.Global.Services.Document;
 
 namespace Pe.Global.Services.Storage.Core.Json.SchemaProviders;
 
@@ -204,23 +205,13 @@ public static class ProjectFamilyParameterCollector {
         if (doc.IsFamilyDocument)
             return new HashSet<string>(StringComparer.Ordinal);
 
-        var projectParamNames = new HashSet<string>(StringComparer.Ordinal);
-
         try {
-            var bindingMap = doc.ParameterBindings;
-            var iterator = bindingMap.ForwardIterator();
-            iterator.Reset();
-
-            while (iterator.MoveNext()) {
-                var definition = iterator.Key;
-                if (definition != null)
-                    _ = projectParamNames.Add(definition.Name);
-            }
+            return DocumentManager.GetProjectParameterBindings(doc)
+                .Select(p => p.def.Name)
+                .ToHashSet(StringComparer.Ordinal);
         } catch {
-            // Return empty set when parameter bindings are not available.
+            return new HashSet<string>(StringComparer.Ordinal);
         }
-
-        return projectParamNames;
     }
 }
 

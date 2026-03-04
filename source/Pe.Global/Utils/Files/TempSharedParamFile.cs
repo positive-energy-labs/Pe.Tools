@@ -9,30 +9,27 @@ namespace Pe.Global.Utils.Files;
 /// </summary>
 public class TempSharedParamFile : IDisposable {
     public TempSharedParamFile(Document doc) {
-        this._app = doc.Application;
-        this.OriginalFileName = this._app.SharedParametersFilename;
+        this.App = doc.Application;
+        this.OriginalFileName = this.App.SharedParametersFilename;
 
         var tempSharedParamFile = Path.GetTempFileName() + ".txt";
         using (File.Create(tempSharedParamFile)) { } // Create empty file
 
-        this._app.SharedParametersFilename = tempSharedParamFile;
+        this.App.SharedParametersFilename = tempSharedParamFile;
 
-        var tempFile = this._app.OpenSharedParameterFile();
-        this.DefinitionFile = tempFile;
-        this.TempGroup = tempFile.Groups.get_Item("TempGroup") ?? tempFile.Groups.Create("TempGroup");
-        this.TempFileName = tempFile.Filename;
+        this.DefinitionFile = this.App.OpenSharedParameterFile();
     }
 
     public DefinitionFile DefinitionFile { get; }
-    public DefinitionGroup TempGroup { get; }
-    public string TempFileName { get; }
+    public DefinitionGroup TempGroup => this.DefinitionFile.Groups.get_Item("TempGroup") ?? this.DefinitionFile.Groups.Create("TempGroup");
+    public string TempFileName => this.DefinitionFile.Filename;
     public string OriginalFileName { get; }
-    private Application _app { get; }
+    private Application App { get; }
 
     public void Dispose() {
         try {
             // Restore original shared parameters file setting first
-            this._app.SharedParametersFilename = this.OriginalFileName;
+            this.App.SharedParametersFilename = this.OriginalFileName;
         } catch {
             Console.WriteLine("Failed to restore original SharedParametersFilename.");
         }

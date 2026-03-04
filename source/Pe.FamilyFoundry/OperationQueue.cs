@@ -121,7 +121,7 @@ public class OperationQueue {
 
         return singleTransaction
             ? this.BundleFuncs(funcs)
-            : funcs.ToArray();
+            : [.. funcs];
     }
 
     private List<(IExecutable Executable, OperationContext Ctx)> ToExecutableList() =>
@@ -134,9 +134,9 @@ public class OperationQueue {
         foreach (var (op, ctx) in this._operations) {
             var isTypeOp = IsTypeOperation(op);
 
-            if (isTypeOp)
+            if (isTypeOp) {
                 currentBatch.Add((op, ctx));
-            else {
+            } else {
                 if (currentBatch.Count > 0) {
                     // MergedTypeOperation stores its own contexts, pass null at execution
                     finalOps.Add((new MergedTypeOperation(currentBatch), null));

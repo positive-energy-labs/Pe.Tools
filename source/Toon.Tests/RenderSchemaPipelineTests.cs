@@ -57,11 +57,23 @@ public class RenderSchemaPipelineTests {
         Assert.True(itemsSchema["default"] is JArray);
     }
 
+    [Fact]
+    public void CreateRenderSchema_AllowsPresetProperty_ForPresettableObjects() {
+        var schemaJson = JsonSchemaFactory.CreateRenderSchemaJson(typeof(RenderPresetSchemaTestSettings), out _);
+        var root = JObject.Parse(schemaJson);
+        var modelSchema = root["properties"]?["Model"] as JObject;
+        var presetSchema = modelSchema?["properties"]?["$preset"] as JObject;
+
+        Assert.NotNull(modelSchema);
+        Assert.NotNull(presetSchema);
+        Assert.Equal("string", presetSchema!["type"]?.Value<string>());
+    }
+
     private class RenderSchemaTestSettings {
         [SchemaExamples(typeof(TestOptionsProvider))]
         public string ProviderBacked { get; init; } = string.Empty;
 
-        [Includable("test-items")]
+        [Includable(IncludableFragmentRoot.TestItems)]
         public List<string> Items { get; init; } = [];
 
         public bool Enabled { get; init; }
@@ -69,5 +81,14 @@ public class RenderSchemaPipelineTests {
 
     private class TestOptionsProvider : IOptionsProvider {
         public IEnumerable<string> GetExamples() => ["A", "B"];
+    }
+
+    private class RenderPresetSchemaTestSettings {
+        [Presettable("preset-model")]
+        public RenderPresetModel Model { get; init; } = new();
+    }
+
+    private class RenderPresetModel {
+        public bool Enabled { get; init; } = true;
     }
 }

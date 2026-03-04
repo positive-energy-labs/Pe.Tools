@@ -57,7 +57,7 @@ public class PreProcessMappings(
         });
 
         foreach (var (mapping, log) in data) {
-            var filteredCurrNames = MapParamsSettings.GetRankedCurrParams(
+            var filteredCurrNames = this.Settings.GetRankedCurrParams(
                 mapping.CurrNames,
                 fm,
                 processingContext

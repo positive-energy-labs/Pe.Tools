@@ -27,15 +27,39 @@ public class DocumentManager {
         }
     }
 
+    /// <summary>
+    /// Returns <c>doc.ParameterBindings</c> as an IEnumerable of <c>(Definition, ElementBinding)</c>.
+    /// Revit gives <c>DefinitionBindingMapIterator</c>, which is awkward for LINQ.
+    /// This adapter provides an ergonomic IEnumerable over project bindings.
+    /// </summary>
+    public static IEnumerable<(Definition def, ElementBinding binding)> GetProjectParameterBindings(Autodesk.Revit.DB.Document doc) {
+        if (doc.IsFamilyDocument) yield break;
+
+        var iter = doc.ParameterBindings.ForwardIterator();
+        while (iter.MoveNext()) {
+            if (iter is { Key: { } def, Current: ElementBinding binding }) {
+                yield return (def, binding);
+            }
+        }
+    }
+
+    /// <summary>
+    /// For the current active document, converts <c>doc.ParameterBindings</c> to an IEnumerable of <c>(Definition, ElementBinding)</c>.
+    /// Revit gives <c>DefinitionBindingMapIterator</c>, which is awkward for LINQ.
+    /// This adapter provides an ergonomic IEnumerable over project bindings.
+    /// </summary>
+    public static IEnumerable<(Definition def, ElementBinding binding)> GetProjectParameterBindings() =>
+        GetProjectParameterBindings(GetActiveDocument());
+
     public static IntPtr GetActiveWindow() => uiapp.MainWindowHandle;
 
     public static UIDocument GetActiveUIDocument() => uiapp.ActiveUIDocument;
 
     /// <summary>Gets the active document from the UIApplication. </summary>
-    public static Autodesk.Revit.DB.Document? GetActiveDocument() => uiapp?.ActiveUIDocument?.Document;
+    public static Autodesk.Revit.DB.Document GetActiveDocument() => uiapp.ActiveUIDocument.Document;
 
     /// <summary>Gets the active view from the UIApplication. </summary>
-    public static View? GetActiveView() => uiapp?.ActiveUIDocument?.ActiveView;
+    public static View GetActiveView() => uiapp.ActiveUIDocument.ActiveView;
 
 
     /// <summary>Gets all open documents from the UIApplication. </summary>

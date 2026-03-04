@@ -12,7 +12,7 @@ namespace Pe.FamilyFoundry.OperationSettings;
 public class MapParamsSettings : IOperationSettings {
     [Description("List of parameter remapping rules")]
     [Required]
-    [Includable("mapping-data")]
+    [Includable(IncludableFragmentRoot.MappingData)]
     public List<MappingData> MappingData { get; init; } = [];
 
     [Description("Disable per-type fallback to speed up processing. Do not use outside of testing")]
@@ -33,7 +33,7 @@ public class MapParamsSettings : IOperationSettings {
     /// <param name="fm">FamilyManager instance for resolving parameters</param>
     /// <param name="processingContext">Optional context for snapshot data and value counts; may be null</param>
     /// <returns>FamilyParameters ranked by data quality (most populated types first) and user priority</returns>
-    public static List<FamilyParameter> GetRankedCurrParams(
+    public List<FamilyParameter> GetRankedCurrParams(
         List<string> currNames,
         FamilyManager fm,
         FamilyProcessingContext? processingContext = null

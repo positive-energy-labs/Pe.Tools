@@ -60,7 +60,7 @@ public class FFMigratorSchemaStressSettings {
 
     [Description("Mapping rows used to stress dependent providers and nested validation rendering.")]
     [Required]
-    [Includable("stress-mapping-data")]
+    [Includable(IncludableFragmentRoot.StressMappingData)]
     public List<SchemaStressMappingData> MappingData { get; init; } = [];
 
     [Description("Enabled flag for consistency with operation-style settings contracts.")]
