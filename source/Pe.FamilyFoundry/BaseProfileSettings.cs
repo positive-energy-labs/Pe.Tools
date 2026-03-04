@@ -3,6 +3,7 @@ using Pe.Global;
 using Pe.Global.Revit.Lib.Schedules;
 using Pe.Global.Revit.Lib.Schedules.Filters;
 using Pe.Global.Services.Storage;
+using Pe.Global.Services.Storage.Core.Json;
 using Pe.Global.Utils.Files;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
@@ -14,7 +15,9 @@ namespace Pe.FamilyFoundry;
 
 public class BaseProfileSettings {
     [Required] public ExecutionOptions ExecutionOptions { get; init; } = new();
+    [Presettable("filter-families")]
     [Required] public FilterFamiliesSettings FilterFamilies { get; init; } = new();
+    [Presettable("filter-aps-params")]
     [Required] public FilterApsParamsSettings FilterApsParams { get; init; } = new();
 
     public List<Family> GetFamilies(Document doc) =>

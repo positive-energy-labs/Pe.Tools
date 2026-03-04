@@ -30,7 +30,6 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
     private readonly UIDocument _uiDoc;
     private Action<FoundryContext<TProfile>, List<string>> _postProcess;
     private Func<TProfile, List<SharedParameterDefinition>, OperationQueue> _queueBuilder;
-    private bool _enableToonIncludes;
 
     public FoundryPaletteBuilder(
         string displayName,
@@ -78,14 +77,6 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         Action<FoundryContext<TProfile>, List<string>> postProcess
     ) {
         this._postProcess = postProcess;
-        return this;
-    }
-
-    /// <summary>
-    ///     Enables TOON fragment includes while loading profile JSON in this palette flow.
-    /// </summary>
-    public FoundryPaletteBuilder<TProfile> WithToonIncludes(bool enabled = true) {
-        this._enableToonIncludes = enabled;
         return this;
     }
 
@@ -190,7 +181,6 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         if (ct.IsCancellationRequested) return null;
 
         // Load the profile
-        using var toonScope = JsonArrayComposer.EnableToonIncludesScope(this._enableToonIncludes);
         var profile = this.ResolveProfilesSettingsManager()
             .JsonByRelativePath<TProfile>(profileItem.TextPrimary)
             .Read();
