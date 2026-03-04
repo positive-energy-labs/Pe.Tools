@@ -19,11 +19,11 @@ public class AddAndMapSharedParams(
         IEnumerable<SharedParameterDefinition> sharedParams
     ) {
         var sharedParameterDefinitions = sharedParams as SharedParameterDefinition[] ?? sharedParams.ToArray();
-        var ops = new List<IOperation> {
+        var ops = settings.Enabled ? new List<IOperation> {
             new PreProcessMappings(settings, sharedParameterDefinitions),
             new MapReplaceParams(settings, sharedParameterDefinitions),
             new AddUnmappedSharedParams(settings, sharedParameterDefinitions)
-        };
+        } : [];
         if (!settings.DisablePerTypeFallback) ops.Add(new MapParams(settings));
         ops.Add(new BacklinkParamsToBuiltIn(settings));
 

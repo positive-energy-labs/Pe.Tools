@@ -310,7 +310,7 @@ public class CmdFFMigrator : IExternalCommand {
             .Add(new AddAndMapSharedParams(pClone.AddAndMapSharedParams, apsParamData))
             .Add(new AddAndSetParams(pClone.AddAndSetParams))
             .Add(new MakeElecConnector(pClone.MakeElectricalConnector))
-            .Add(new PurgeParams(new PurgeParamsSettings { Enabled = pClone.CleanFamilyDocument.EnablePurgeParams }, apsAndAddedParamNames))
+            .Add(new PurgeParams(pClone.CleanFamilyDocument.ResolvedPurgeParamsSettings, apsAndAddedParamNames))
             .Add(new SortParams(pClone.SortParams));
     }
 

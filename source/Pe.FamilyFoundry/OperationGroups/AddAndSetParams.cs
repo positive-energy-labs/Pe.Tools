@@ -43,6 +43,7 @@ public class AddAndSetParams(AddAndSetParamsSettings settings, bool createMissin
         ValidateParameterValueSources(settings.Parameters, perTypeValuesByParameter);
 
         var ops = new List<IOperation>();
+        if (!settings.Enabled) return ops;
 
         // 0. Optionally create missing family types first (before anything else)
         if (createMissingFamilyTypes)

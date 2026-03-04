@@ -3,13 +3,11 @@ using System.Diagnostics;
 
 namespace Pe.FamilyFoundry;
 
-public class AbortOperationException : Exception {
+/// <summary>
+///     Creates an abort operation exception with a message explaining why the operation was aborted.
+/// </summary>
+public class AbortOperationException(string message) : Exception(Clean(message)) {
     private static readonly string DefaultMessage = "Aborted: no more work to do.";
-
-    /// <summary>
-    ///     Creates an abort operation exception with a message explaining why the operation was aborted.
-    /// </summary>
-    public AbortOperationException(string message) : base(Clean(message)) { }
 
     private static string Clean(string message) =>
         string.IsNullOrWhiteSpace(message) ? DefaultMessage : message;
@@ -36,13 +34,11 @@ public interface IOperation : IExecutable {
 ///     Base abstract class for document-level operations.
 ///     Document-level operations are executed on the entire family document all at once.
 /// </summary>
-public abstract class DocOperation<TSettings> : IOperation
+public abstract class DocOperation<TSettings>(TSettings settings) : IOperation
     where TSettings : IOperationSettings {
-    private string _nameOverride;
+    private string? _nameOverride;
 
-    protected DocOperation(TSettings settings) => this.Settings = settings;
-
-    public TSettings Settings { get; set; }
+    public TSettings Settings { get; set; } = settings;
     public abstract string Description { get; }
 
     /// <summary>
@@ -91,13 +87,11 @@ public abstract class DocOperation<TSettings> : IOperation
 ///     Type-level operations are executed for each type in the family document.
 ///     The OperationEnqueuer batches consecutive type-operations for better performance.
 /// </summary>
-public abstract class TypeOperation<TSettings> : IOperation
+public abstract class TypeOperation<TSettings>(TSettings settings) : IOperation
     where TSettings : IOperationSettings {
-    private string _nameOverride;
+    private string? _nameOverride;
 
-    protected TypeOperation(TSettings settings) => this.Settings = settings;
-
-    public TSettings Settings { get; set; }
+    public TSettings Settings { get; set; } = settings;
     public abstract string Description { get; }
 
     /// <summary>
@@ -166,18 +160,15 @@ public abstract class TypeOperation<TSettings> : IOperation
     public void AbortOperation(string message) => throw new AbortOperationException(message);
 }
 
-public class MergedTypeOperation : IExecutable {
+public class MergedTypeOperation(List<(IOperation Op, OperationContext Ctx)> operations) : IExecutable {
     private readonly HashSet<IOperation> _abortedOps = [];
 
-    public MergedTypeOperation(List<(IOperation Op, OperationContext Ctx)> operations) =>
-        this.Operations = operations;
-
-    public List<(IOperation Op, OperationContext Ctx)> Operations { get; }
+    public List<(IOperation Op, OperationContext Ctx)> Operations { get; } = operations;
 
     public Func<FamilyDocument, FamilyProcessingContext, List<OperationLog>> ToFunc(OperationContext ignoredContext) =>
         (famDoc, processingContext) => {
-            string currFamTypeName = null;
-            string currOpName = null;
+            string? currFamTypeName = null;
+            string? currOpName = null;
             try {
                 var fm = famDoc.FamilyManager;
                 var operationLogs = new List<OperationLog>();
@@ -252,8 +243,9 @@ public class DefaultOperationSettings : IOperationSettings {
 }
 
 /// <summary>
-///     Container for grouping related operations that share settings.
-///     Groups are not operations themselves - they are unwrapped into individual operations when added to the queue.
+///     Container for grouping related operations that share settings. Groups are not operations themselves.
+///     A consequence of this is that settings.Enabled has no bearing on the individual operation/s Enabled state
+///     unless you manually map this in the construction of the operations.
 ///     The name is automatically derived from the type name.
 ///     Groups create a shared OperationContext for inter-operation coordination.
 /// </summary>

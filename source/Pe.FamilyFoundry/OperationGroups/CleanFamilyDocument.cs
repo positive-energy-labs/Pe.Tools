@@ -17,8 +17,21 @@ public class CleanFamilyDocumentSettings : IOperationSettings {
     [Description("Whether to purge unused parameters from the family")]
     public bool EnablePurgeParams { get; init; } = true;
 
+    public bool ShouldPurgeNestedFamilies => this.Enabled && this.EnablePurgeNestedFamilies;
+    public bool ShouldPurgeReferencePlanes => this.Enabled && this.EnablePurgeReferencePlanes;
+    public bool ShouldPurgeModelLines => this.Enabled && this.EnablePurgeModelLines;
+    public bool ShouldPurgeParams => this.Enabled && this.EnablePurgeParams;
+
     // TODO: describe
     public PurgeParamsBase PurgeParamsSettings { get; init; } = new();
+
+    public PurgeParamsSettings ResolvedPurgeParamsSettings => new() {
+        Enabled = this.ShouldPurgeParams,
+        DirectDeleteEmptyParameters = this.PurgeParamsSettings.DirectDeleteEmptyParameters,
+        ConsiderZeroValueAsEmpty = this.PurgeParamsSettings.ConsiderZeroValueAsEmpty,
+        ConsiderEmptyStringAsEmpty = this.PurgeParamsSettings.ConsiderEmptyStringAsEmpty,
+        ExcludeNames = this.PurgeParamsSettings.ExcludeNames
+    };
 }
 
 public class CleanFamilyDocument(
@@ -31,9 +44,9 @@ public class CleanFamilyDocument(
     ) {
 
     public static List<IOperation> InitializeOperations(CleanFamilyDocumentSettings settings, IEnumerable<string> ExcludeParamNames) => [
-            new PurgeNestedFamilies(new DefaultOperationSettings { Enabled = settings.EnablePurgeNestedFamilies }),
-            new PurgeReferencePlanes(new PurgeReferencePlanesSettings { Enabled = settings.EnablePurgeReferencePlanes }),
-            new PurgeModelLines(new DefaultOperationSettings { Enabled = settings.EnablePurgeModelLines }),
-            new PurgeParams(new PurgeParamsSettings { Enabled = settings.EnablePurgeParams}, ExcludeParamNames),
+            new PurgeNestedFamilies(new DefaultOperationSettings { Enabled = settings.ShouldPurgeNestedFamilies }),
+            new PurgeReferencePlanes(new PurgeReferencePlanesSettings { Enabled = settings.ShouldPurgeReferencePlanes }),
+            new PurgeModelLines(new DefaultOperationSettings { Enabled = settings.ShouldPurgeModelLines }),
+            new PurgeParams(settings.ResolvedPurgeParamsSettings, ExcludeParamNames),
         ];
 }
