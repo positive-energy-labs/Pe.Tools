@@ -44,7 +44,7 @@ public class ScheduleSpec {
     public bool FilterBySheet { get; set; } = false;
 
     [Description("List of fields (columns) to include in the schedule.")]
-    [Includable("fields")]
+    [Includable(IncludableFragmentRoot.Fields)]
     [Required]
     public List<ScheduleFieldSpec> Fields { get; set; } = [];
 

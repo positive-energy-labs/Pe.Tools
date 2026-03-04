@@ -33,13 +33,13 @@ public class JsonArrayComposerToonIncludeTests {
             """
             {
               "Fields": [
-                { "$include": "_fragmentNames/frag" }
+                { "$include": "@local/_fragmentNames/frag" }
               ]
             }
             """);
 
         using var scope = JsonArrayComposer.EnableToonIncludesScope(true);
-        JsonArrayComposer.ExpandIncludes(root, baseDir, baseDir, ["_fragmentNames"]);
+        JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]);
 
         var fields = (JArray)root["Fields"]!;
         Assert.Single(fields);
@@ -65,13 +65,13 @@ public class JsonArrayComposerToonIncludeTests {
             """
             {
               "Fields": [
-                { "$include": "_fragmentNames/frag" }
+                { "$include": "@local/_fragmentNames/frag" }
               ]
             }
             """);
 
         using var scope = JsonArrayComposer.EnableToonIncludesScope(true);
-        JsonArrayComposer.ExpandIncludes(root, baseDir, baseDir, ["_fragmentNames"]);
+        JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]);
 
         var fields = (JArray)root["Fields"]!;
         Assert.Equal(2, fields.Count);
@@ -97,13 +97,13 @@ public class JsonArrayComposerToonIncludeTests {
             """
             {
               "Fields": [
-                { "$include": "_fragmentNames/frag" }
+                { "$include": "@local/_fragmentNames/frag" }
               ]
             }
             """);
 
         var ex = Assert.Throws<JsonCompositionException>(() =>
-            JsonArrayComposer.ExpandIncludes(root, baseDir, baseDir, ["_fragmentNames"]));
+            JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]));
         Assert.Contains("Fragment file not found", ex.Message, StringComparison.Ordinal);
         Assert.Contains("_fragmentNames", ex.Message, StringComparison.Ordinal);
     }
@@ -117,13 +117,32 @@ public class JsonArrayComposerToonIncludeTests {
             """
             {
               "Fields": [
-                { "$include": "notAllowed/frag" }
+                { "$include": "@local/notAllowed/frag" }
               ]
             }
             """);
 
         var ex = Assert.Throws<JsonCompositionException>(() =>
-            JsonArrayComposer.ExpandIncludes(root, baseDir, baseDir, ["_fragmentNames"]));
+            JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]));
+        Assert.Contains("Invalid '$include' path", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ExpandIncludes_RejectsBareLocalIncludePath() {
+        using var sandbox = new TempDir();
+        var baseDir = sandbox.Path;
+
+        var root = JObject.Parse(
+            """
+            {
+              "Fields": [
+                { "$include": "_fragmentNames/frag" }
+              ]
+            }
+            """);
+
+        var ex = Assert.Throws<JsonCompositionException>(() =>
+            JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]));
         Assert.Contains("Invalid '$include' path", ex.Message, StringComparison.Ordinal);
     }
 
@@ -148,14 +167,13 @@ public class JsonArrayComposerToonIncludeTests {
             """
             {
               "Fields": [
-                { "$include": "_fragmentNames/frag" }
+                { "$include": "@local/_fragmentNames/frag" }
               ]
             }
             """);
 
         JsonArrayComposer.ExpandIncludes(
             root,
-            System.IO.Path.Combine(baseDir, "profiles", "MechEquip"),
             System.IO.Path.Combine(baseDir, "profiles"),
             ["_fragmentNames"]
         );
@@ -177,7 +195,7 @@ public class JsonArrayComposerToonIncludeTests {
             """
             {
               "Items": [
-                { "$include": "_fragmentNames/b" }
+                { "$include": "@local/_fragmentNames/b" }
               ]
             }
             """);
@@ -186,7 +204,7 @@ public class JsonArrayComposerToonIncludeTests {
             """
             {
               "Items": [
-                { "$include": "_fragmentNames/a" }
+                { "$include": "@local/_fragmentNames/a" }
               ]
             }
             """);
@@ -195,13 +213,13 @@ public class JsonArrayComposerToonIncludeTests {
             """
             {
               "Fields": [
-                { "$include": "_fragmentNames/a" }
+                { "$include": "@local/_fragmentNames/a" }
               ]
             }
             """);
 
         var ex = Assert.Throws<JsonCompositionException>(() =>
-            JsonArrayComposer.ExpandIncludes(root, baseDir, baseDir, ["_fragmentNames"]));
+            JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]));
         Assert.Contains("Circular fragment include detected", ex.Message, StringComparison.Ordinal);
     }
 
@@ -226,18 +244,139 @@ public class JsonArrayComposerToonIncludeTests {
             """
             {
               "Fields": [
-                { "$include": "_fragmentNames/frag" },
-                { "$include": "_fragmentNames/frag" }
+                { "$include": "@local/_fragmentNames/frag" },
+                { "$include": "@local/_fragmentNames/frag" }
               ]
             }
             """);
 
-        JsonArrayComposer.ExpandIncludes(root, baseDir, baseDir, ["_fragmentNames"]);
+        JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]);
 
         var fields = (JArray)root["Fields"]!;
         Assert.Equal(2, fields.Count);
         Assert.Equal("reused", fields[0]!["Name"]!.Value<string>());
         Assert.Equal("reused", fields[1]!["Name"]!.Value<string>());
+    }
+
+    [Fact]
+    public void ExpandIncludes_ResolvesGlobalPrefixedIncludes_WhenGlobalRootProvided() {
+        using var sandbox = new TempDir();
+        var settingsRoot = System.IO.Path.Combine(sandbox.Path, "CmdFFMigrator", "settings");
+        _ = Directory.CreateDirectory(settingsRoot);
+
+        var localFragmentsDir = System.IO.Path.Combine(settingsRoot, "_fragmentNames");
+        _ = Directory.CreateDirectory(localFragmentsDir);
+        File.WriteAllText(
+            System.IO.Path.Combine(localFragmentsDir, "local.json"),
+            """
+            {
+              "Items": [
+                { "Name": "local-value" }
+              ]
+            }
+            """);
+
+        var globalFragmentsDir = System.IO.Path.Combine(sandbox.Path, "Global", "fragments", "_fragmentNames");
+        _ = Directory.CreateDirectory(globalFragmentsDir);
+        File.WriteAllText(
+            System.IO.Path.Combine(globalFragmentsDir, "global-frag.json"),
+            """
+            {
+              "Items": [
+                { "Name": "global-value" }
+              ]
+            }
+            """);
+
+        var root = JObject.Parse(
+            """
+            {
+              "Fields": [
+                { "$include": "@local/_fragmentNames/local" },
+                { "$include": "@global/_fragmentNames/global-frag" }
+              ]
+            }
+            """);
+
+        JsonArrayComposer.ExpandIncludes(
+            root,
+            settingsRoot,
+            ["_fragmentNames"],
+            globalFragmentsDirectory: System.IO.Path.Combine(sandbox.Path, "Global", "fragments")
+        );
+
+        var fields = (JArray)root["Fields"]!;
+        Assert.Equal(2, fields.Count);
+        Assert.Equal("local-value", fields[0]!["Name"]!.Value<string>());
+        Assert.Equal("global-value", fields[1]!["Name"]!.Value<string>());
+    }
+
+    [Fact]
+    public void ExpandIncludes_GlobalPrefixedIncludes_ThrowWhenGlobalRootMissing() {
+        using var sandbox = new TempDir();
+        var baseDir = sandbox.Path;
+        var root = JObject.Parse(
+            """
+            {
+              "Fields": [
+                { "$include": "@global/_fragmentNames/global-frag" }
+              ]
+            }
+            """);
+
+        var ex = Assert.Throws<JsonCompositionException>(() =>
+            JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]));
+        Assert.Contains("Invalid '$include' path", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ExpandIncludes_GlobalPrefixedIncludes_RequireAllowedRoot() {
+        using var sandbox = new TempDir();
+        var settingsRoot = System.IO.Path.Combine(sandbox.Path, "CmdFFMigrator", "settings");
+        _ = Directory.CreateDirectory(settingsRoot);
+
+        var root = JObject.Parse(
+            """
+            {
+              "Fields": [
+                { "$include": "@global/shared/global-frag" }
+              ]
+            }
+            """);
+
+        var ex = Assert.Throws<JsonCompositionException>(() =>
+            JsonArrayComposer.ExpandIncludes(
+                root,
+                settingsRoot,
+                ["_fragmentNames"],
+                globalFragmentsDirectory: System.IO.Path.Combine(sandbox.Path, "Global", "fragments")
+            ));
+        Assert.Contains("Invalid '$include' path", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ExpandIncludes_GlobalPrefixedIncludes_RequireUnderscoredRoot() {
+        using var sandbox = new TempDir();
+        var settingsRoot = System.IO.Path.Combine(sandbox.Path, "CmdFFMigrator", "settings");
+        _ = Directory.CreateDirectory(settingsRoot);
+
+        var root = JObject.Parse(
+            """
+            {
+              "Fields": [
+                { "$include": "@global/fragmentNames/global-frag" }
+              ]
+            }
+            """);
+
+        var ex = Assert.Throws<JsonCompositionException>(() =>
+            JsonArrayComposer.ExpandIncludes(
+                root,
+                settingsRoot,
+                ["_fragmentNames"],
+                globalFragmentsDirectory: System.IO.Path.Combine(sandbox.Path, "Global", "fragments")
+            ));
+        Assert.Contains("Invalid '$include' path", ex.Message, StringComparison.Ordinal);
     }
 
     private sealed class TempDir : IDisposable {
