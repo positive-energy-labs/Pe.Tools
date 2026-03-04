@@ -63,7 +63,10 @@ public class PreProcessMappings(
                 processingContext
             );
 
-            var sharedParam = sharedParamsDict[mapping.NewName];
+            if (!sharedParamsDict.TryGetValue(mapping.NewName, out var sharedParam)) {
+                _ = log.Skip($"Mapping data 'NewName' ({mapping.NewName}) does not match a shared parameter from the filtered set");
+                continue;
+            }
 
             if (fm.FindParameter(mapping.NewName) != null) {
                 _ = filteredCurrNames.Count == 0
@@ -73,12 +76,12 @@ public class PreProcessMappings(
             }
 
             if (sharedParam == null) {
-                _ = log.Skip("Target shared parameter not found");
+                _ = log.Skip("Target shared parameter does not exist");
                 continue;
             }
 
             if (filteredCurrNames.Count == 0) {
-                _ = log.Skip("Useful source parameter/s not found");
+                _ = log.Skip("Useful source parameter/s do not exist");
                 continue;
             }
 

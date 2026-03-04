@@ -26,7 +26,6 @@ public class CmdFFManager : IExternalCommand {
     public const string AddinKey = nameof(CmdFFManager);
     public const string DisplayName = "FF Manager";
     private static readonly FFManagerSettingsModule SettingsModule = new();
-    private const bool EnableToonIncludes = true;
 
     public Result Execute(
         ExternalCommandData commandData,
@@ -38,7 +37,6 @@ public class CmdFFManager : IExternalCommand {
 
         try {
             var window = new FoundryPaletteBuilder<ProfileFamilyManager>(DisplayName, SettingsModule, doc, uiDoc)
-                .WithToonIncludes(EnableToonIncludes)
                 .WithAction("Apply Profile", this.HandleApplyProfile,
                     ctx => ctx.PreviewData?.IsValid == true)
                 .WithQueueBuilder(BuildQueue)
@@ -61,7 +59,6 @@ public class CmdFFManager : IExternalCommand {
         }
 
         // Load profile fresh for execution
-        using var toonScope = JsonArrayComposer.EnableToonIncludesScope(EnableToonIncludes);
         var profile = SettingsModule.SettingsDir()
             .JsonByRelativePath<ProfileFamilyManager>(ctx.SelectedProfile.TextPrimary)
             .Read();

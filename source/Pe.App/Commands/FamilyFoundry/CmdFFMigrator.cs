@@ -30,7 +30,6 @@ public class CmdFFMigrator : IExternalCommand {
     public const string AddinKey = nameof(CmdFFMigrator);
     public const string DisplayName = "FF Migrator";
     private static readonly FFMigratorSettingsModule SettingsModule = new();
-    private const bool EnableToonIncludes = true;
 
     public Result Execute(
         ExternalCommandData commandData,
@@ -43,7 +42,6 @@ public class CmdFFMigrator : IExternalCommand {
         try {
 
             var window = new FoundryPaletteBuilder<ProfileRemap>(DisplayName, SettingsModule, doc, uiDoc)
-                .WithToonIncludes(EnableToonIncludes)
                 .WithAction("Open Settings Editor", this.HandleOpenSettingsEditor)
                 .WithAction("Open Profile File", this.HandleOpenFile,
                     ctx => ctx.SelectedProfile != null)
@@ -70,8 +68,7 @@ public class CmdFFMigrator : IExternalCommand {
         try {
             var profile = ReadProfile(
                 context.SelectedProfile.TextPrimary,
-                SettingsModule.DefaultSubDirectory,
-                EnableToonIncludes
+                SettingsModule.DefaultSubDirectory
             );
             var placeResult = PlaceFamiliesCore(context.UiDoc.Application, profile);
             var level = placeResult.Success ? LogEventLevel.Information : LogEventLevel.Error;
@@ -108,8 +105,7 @@ public class CmdFFMigrator : IExternalCommand {
 
         var profile = ReadProfile(
             ctx.SelectedProfile.TextPrimary,
-            SettingsModule.DefaultSubDirectory,
-            EnableToonIncludes
+            SettingsModule.DefaultSubDirectory
         );
         var runResult = ProcessFamiliesCore(
             ctx.UiDoc.Application,
@@ -368,10 +364,8 @@ public class CmdFFMigrator : IExternalCommand {
 
     internal static ProfileRemap ReadProfile(
         string relativePath,
-        string? subDirectory = null,
-        bool enableToonIncludes = true
+        string? subDirectory = null
     ) {
-        using var toonScope = JsonArrayComposer.EnableToonIncludesScope(enableToonIncludes);
         var settingsManager = ResolveSettingsManager(subDirectory);
         return settingsManager
             .JsonByRelativePath<ProfileRemap>(relativePath)

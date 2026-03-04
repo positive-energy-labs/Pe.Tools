@@ -1,3 +1,4 @@
+using NJsonSchema.Annotations;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.FamilyFoundry.Operations;
 using Pe.FamilyFoundry.OperationSettings;
@@ -17,14 +18,23 @@ public class CleanFamilyDocumentSettings : IOperationSettings {
     [Description("Whether to purge unused parameters from the family")]
     public bool EnablePurgeParams { get; init; } = true;
 
-    public bool ShouldPurgeNestedFamilies => this.Enabled && this.EnablePurgeNestedFamilies;
-    public bool ShouldPurgeReferencePlanes => this.Enabled && this.EnablePurgeReferencePlanes;
-    public bool ShouldPurgeModelLines => this.Enabled && this.EnablePurgeModelLines;
-    public bool ShouldPurgeParams => this.Enabled && this.EnablePurgeParams;
-
     // TODO: describe
     public PurgeParamsBase PurgeParamsSettings { get; init; } = new();
 
+
+    [JsonSchemaIgnore]
+    public bool ShouldPurgeNestedFamilies => this.Enabled && this.EnablePurgeNestedFamilies;
+
+    [JsonSchemaIgnore]
+    public bool ShouldPurgeReferencePlanes => this.Enabled && this.EnablePurgeReferencePlanes;
+
+    [JsonSchemaIgnore]
+    public bool ShouldPurgeModelLines => this.Enabled && this.EnablePurgeModelLines;
+
+    [JsonSchemaIgnore]
+    public bool ShouldPurgeParams => this.Enabled && this.EnablePurgeParams;
+
+    [JsonSchemaIgnore]
     public PurgeParamsSettings ResolvedPurgeParamsSettings => new() {
         Enabled = this.ShouldPurgeParams,
         DirectDeleteEmptyParameters = this.PurgeParamsSettings.DirectDeleteEmptyParameters,
