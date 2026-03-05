@@ -16,6 +16,24 @@ public class GlobalManager {
     public string DirectoryPath { get; init; }
 
     /// <summary>
+    ///     Shared root for reusable JSON include fragments across commands.
+    ///     Path: {basePath}/Global/fragments
+    /// </summary>
+    public string FragmentsDirectoryPath {
+        get {
+            var path = Path.Combine(this.DirectoryPath, "fragments");
+            _ = Directory.CreateDirectory(path);
+            return path;
+        }
+    }
+
+    /// <summary>
+    ///     Resolves a safe absolute path under Global/fragments.
+    /// </summary>
+    public string ResolveSafeGlobalFragmentPath(string relativePath) =>
+        SettingsPathing.ResolveSafeRelativeJsonPath(this.FragmentsDirectoryPath, relativePath, nameof(relativePath));
+
+    /// <summary>
     ///     Manager for the settings.json in the Global directory. Handles only reads to the file.
     /// </summary>
     /// <remarks>

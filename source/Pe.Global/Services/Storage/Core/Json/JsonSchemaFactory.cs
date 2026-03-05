@@ -5,6 +5,9 @@ using NJsonSchema.Generation;
 using NJsonSchema.NewtonsoftJson.Generation;
 using Pe.Global.PolyFill;
 using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
+using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Pe.Global.Services.Storage.Core.Json;
 
@@ -13,6 +16,9 @@ namespace Pe.Global.Services.Storage.Core.Json;
 ///     Supports schema generation and schema injection for settings files. 
 /// </summary>
 public static class JsonSchemaFactory {
+    private static readonly ConcurrentDictionary<string, string> _schemaHashesByPath =
+        new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     ///     Creates an authoring schema for local files/tooling scenarios.
     /// </summary>
@@ -114,6 +120,7 @@ public static class JsonSchemaFactory {
         settings.SchemaProcessors.Add(new OneOfSchemaProcessor());
         settings.SchemaProcessors.Add(examplesProcessor);
         settings.SchemaProcessors.Add(new IncludableSchemaProcessor());
+        settings.SchemaProcessors.Add(new PresettableSchemaProcessor());
 
         var schema = new JsonSchemaGenerator(settings).Generate(type);
         SchemaMetadataProcessor.AllowSchemaProperty(schema);
@@ -126,76 +133,71 @@ public static class JsonSchemaFactory {
     /// <param name="fullSchema">The full schema (all properties)</param>
     /// <param name="jsonContent">The JSON content to inject the schema reference into</param>
     /// <param name="targetFilePath">Path to the target JSON file</param>
-    /// <param name="schemaDirectory">Directory where schema files should be written</param>
+    /// <param name="schemaFilePath">Absolute file path where the schema should be written</param>
     /// <returns>Modified JSON content with $schema property</returns>
     public static string WriteAndInjectSchema(
         JsonSchema fullSchema,
         string jsonContent,
         string targetFilePath,
-        string schemaDirectory,
-        string schemaFileName = "schema.json",
-        bool resolveClosestSchemaDirectory = true
+        string schemaFilePath
     ) {
         // Ensure directories exist
         var targetDir = Path.GetDirectoryName(targetFilePath);
         if (targetDir != null && !Directory.Exists(targetDir))
             _ = Directory.CreateDirectory(targetDir);
-        var resolvedSchemaDirectory = resolveClosestSchemaDirectory
-            ? ResolveSchemaDirectory(targetFilePath, schemaDirectory)
-            : Path.GetFullPath(schemaDirectory);
-        if (!Directory.Exists(resolvedSchemaDirectory))
-            _ = Directory.CreateDirectory(resolvedSchemaDirectory);
+        var normalizedSchemaFilePath = Path.GetFullPath(schemaFilePath);
+        var schemaDirectory = Path.GetDirectoryName(normalizedSchemaFilePath)
+                              ?? throw new ArgumentException("Schema path must include a directory.", nameof(schemaFilePath));
+        if (!Directory.Exists(schemaDirectory))
+            _ = Directory.CreateDirectory(schemaDirectory);
 
-        // Write schema file
-        var fullSchemaPath = Path.Combine(resolvedSchemaDirectory, schemaFileName);
-        File.WriteAllText(fullSchemaPath, fullSchema.ToJson());
+        // Write schema only when content changed to reduce I/O churn.
+        var schemaJson = EnsureTrailingNewline(fullSchema.ToJson());
+        WriteIfChanged(normalizedSchemaFilePath, schemaJson);
 
         // Calculate relative path from target file to schema
-        var relativeSchemaPath = BclExtensions.GetRelativePath(targetDir!, fullSchemaPath);
+        var relativeSchemaPath = BclExtensions.GetRelativePath(targetDir!, normalizedSchemaFilePath);
+        relativeSchemaPath = NormalizeSchemaReference(relativeSchemaPath);
 
         // Inject $schema reference
         var jObject = JObject.Parse(jsonContent);
-        jObject["$schema"] = relativeSchemaPath.Replace("\\", "/");
+        jObject["$schema"] = relativeSchemaPath;
         return JsonConvert.SerializeObject(jObject, Formatting.Indented);
     }
 
-    /// <summary>
-    ///     Resolves the schema directory for a target file by preferring the closest existing <c>schema.json</c>
-    ///     between the file's directory and the provided schema root. If none exists, defaults to the target file's directory.
-    /// </summary>
-    public static string ResolveSchemaDirectory(string targetFilePath, string schemaRootDirectory) {
-        var targetDir = Path.GetDirectoryName(Path.GetFullPath(targetFilePath))
-                        ?? throw new ArgumentException("Target file path must include a directory.", nameof(targetFilePath));
-        var normalizedSchemaRoot = Path.GetFullPath(schemaRootDirectory)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+    private static void WriteIfChanged(string schemaFilePath, string newContent) {
+        var contentHash = ComputeHash(newContent);
+        if (_schemaHashesByPath.TryGetValue(schemaFilePath, out var cachedHash) &&
+            string.Equals(cachedHash, contentHash, StringComparison.Ordinal) &&
+            File.Exists(schemaFilePath))
+            return;
 
-        if (!IsPathUnderRoot(targetDir, normalizedSchemaRoot)) {
-            return targetDir;
+        if (File.Exists(schemaFilePath)) {
+            var existingContent = File.ReadAllText(schemaFilePath);
+            if (string.Equals(existingContent, newContent, StringComparison.Ordinal)) {
+                _schemaHashesByPath[schemaFilePath] = contentHash;
+                return;
+            }
         }
 
-        var current = targetDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        while (true) {
-            var schemaPath = Path.Combine(current, "schema.json");
-            if (File.Exists(schemaPath))
-                return current;
-
-            if (string.Equals(current, normalizedSchemaRoot, StringComparison.OrdinalIgnoreCase))
-                break;
-
-            var parent = Directory.GetParent(current)?.FullName;
-            if (string.IsNullOrWhiteSpace(parent))
-                break;
-            current = parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        }
-
-        return targetDir;
+        File.WriteAllText(schemaFilePath, newContent);
+        _schemaHashesByPath[schemaFilePath] = contentHash;
     }
 
-    private static bool IsPathUnderRoot(string candidatePath, string rootPath) {
-        var normalizedCandidate = Path.GetFullPath(candidatePath)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        var normalizedRoot = Path.GetFullPath(rootPath)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        return normalizedCandidate.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
+    private static string NormalizeSchemaReference(string relativeSchemaPath) {
+        var normalizedPath = relativeSchemaPath.Replace("\\", "/");
+        if (normalizedPath.StartsWith("./", StringComparison.Ordinal) ||
+            normalizedPath.StartsWith("../", StringComparison.Ordinal))
+            return normalizedPath;
+        return $"./{normalizedPath}";
     }
+
+    private static string ComputeHash(string content) {
+        using var hashAlgorithm = SHA256.Create();
+        var bytes = hashAlgorithm.ComputeHash(Encoding.UTF8.GetBytes(content));
+        return BitConverter.ToString(bytes).Replace("-", string.Empty);
+    }
+
+    private static string EnsureTrailingNewline(string jsonContent) =>
+        jsonContent.TrimEnd('\r', '\n') + Environment.NewLine;
 }

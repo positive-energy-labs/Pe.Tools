@@ -38,7 +38,6 @@ public class JsonArrayComposerToonIncludeTests {
             }
             """);
 
-        using var scope = JsonArrayComposer.EnableToonIncludesScope(true);
         JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]);
 
         var fields = (JArray)root["Fields"]!;
@@ -47,7 +46,7 @@ public class JsonArrayComposerToonIncludeTests {
     }
 
     [Fact]
-    public void ExpandIncludes_ResolvesToon_WhenJsonMissingAndScopeEnabled() {
+    public void ExpandIncludes_ResolvesToon_WhenJsonMissing() {
         using var sandbox = new TempDir();
         var baseDir = sandbox.Path;
         var fragmentsDir = System.IO.Path.Combine(baseDir, "_fragmentNames");
@@ -70,7 +69,6 @@ public class JsonArrayComposerToonIncludeTests {
             }
             """);
 
-        using var scope = JsonArrayComposer.EnableToonIncludesScope(true);
         JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]);
 
         var fields = (JArray)root["Fields"]!;
@@ -80,7 +78,7 @@ public class JsonArrayComposerToonIncludeTests {
     }
 
     [Fact]
-    public void ExpandIncludes_ToonMissingScope_ThrowsNotFoundUsingJsonPath() {
+    public void ExpandIncludes_ResolvesToon_WhenOnlyToonExists() {
         using var sandbox = new TempDir();
         var baseDir = sandbox.Path;
         var fragmentsDir = System.IO.Path.Combine(baseDir, "_fragmentNames");
@@ -102,10 +100,11 @@ public class JsonArrayComposerToonIncludeTests {
             }
             """);
 
-        var ex = Assert.Throws<JsonCompositionException>(() =>
-            JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]));
-        Assert.Contains("Fragment file not found", ex.Message, StringComparison.Ordinal);
-        Assert.Contains("_fragmentNames", ex.Message, StringComparison.Ordinal);
+        JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]);
+
+        var fields = (JArray)root["Fields"]!;
+        Assert.Single(fields);
+        Assert.Equal("only-toon", fields[0]!["Name"]!.Value<string>());
     }
 
     [Fact]

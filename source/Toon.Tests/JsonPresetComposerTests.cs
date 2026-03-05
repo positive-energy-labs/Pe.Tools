@@ -7,7 +7,7 @@ namespace Toon.Tests;
 
 public class JsonPresetComposerTests {
     [Fact]
-    public void ExpandPresets_AppliesInlineOverridesWithShallowReplacement() {
+    public void ExpandPresets_RejectsInlineOverridesWhenPresetIsPresent() {
         using var sandbox = new TempDir();
         var presetsDir = Path.Combine(sandbox.Path, "_filter-aps-params");
         _ = Directory.CreateDirectory(presetsDir);
@@ -41,13 +41,48 @@ public class JsonPresetComposerTests {
             """
         );
 
+        var ex = Assert.Throws<JsonCompositionException>(() =>
+            JsonPresetComposer.ExpandPresets(root, sandbox.Path, ["_filter-aps-params"]));
+        Assert.Contains("Preset composition does not support inline overrides", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ExpandPresets_ReplacesEntireObject_WhenPresetOnlyIsUsed() {
+        using var sandbox = new TempDir();
+        var presetsDir = Path.Combine(sandbox.Path, "_filter-aps-params");
+        _ = Directory.CreateDirectory(presetsDir);
+        File.WriteAllText(
+            Path.Combine(presetsDir, "base.json"),
+            """
+            {
+              "Enabled": true,
+              "IncludeNames": {
+                "Equaling": ["PE_G_Dim_Height1"],
+                "StartingWith": ["PE_G___"]
+              },
+              "ExcludeNames": {
+                "Equaling": ["PE_G___Fluid"]
+              }
+            }
+            """
+        );
+
+        var root = JObject.Parse(
+            """
+            {
+              "FilterApsParams": {
+                "$preset": "@local/_filter-aps-params/base"
+              }
+            }
+            """
+        );
+
         _ = JsonPresetComposer.ExpandPresets(root, sandbox.Path, ["_filter-aps-params"]);
 
         var filter = (JObject)root["FilterApsParams"]!;
-        Assert.False(filter["Enabled"]!.Value<bool>());
-        Assert.Equal("PE_G_Dim_Width1", filter["IncludeNames"]!["Equaling"]![0]!.Value<string>());
-        Assert.Null(filter["IncludeNames"]!["StartingWith"]);
-        Assert.Equal("PE_G___Fluid", filter["ExcludeNames"]!["Equaling"]![0]!.Value<string>());
+        Assert.True(filter["Enabled"]!.Value<bool>());
+        Assert.Equal("PE_G_Dim_Height1", filter["IncludeNames"]!["Equaling"]![0]!.Value<string>());
+        Assert.Equal("PE_G___", filter["IncludeNames"]!["StartingWith"]![0]!.Value<string>());
     }
 
     [Fact]

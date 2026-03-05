@@ -62,11 +62,16 @@ public class RenderSchemaPipelineTests {
         var schemaJson = JsonSchemaFactory.CreateRenderSchemaJson(typeof(RenderPresetSchemaTestSettings), out _);
         var root = JObject.Parse(schemaJson);
         var modelSchema = root["properties"]?["Model"] as JObject;
-        var presetSchema = modelSchema?["properties"]?["$preset"] as JObject;
+        var oneOf = modelSchema?["oneOf"] as JArray;
+        var presetBranch = oneOf?.OfType<JObject>()
+            .FirstOrDefault(branch => branch["properties"]?["$preset"] != null);
+        var presetSchema = presetBranch?["properties"]?["$preset"] as JObject;
 
         Assert.NotNull(modelSchema);
+        Assert.NotNull(oneOf);
         Assert.NotNull(presetSchema);
         Assert.Equal("string", presetSchema!["type"]?.Value<string>());
+        Assert.Contains("$preset", presetBranch?["required"]?.Values<string>() ?? []);
     }
 
     private class RenderSchemaTestSettings {

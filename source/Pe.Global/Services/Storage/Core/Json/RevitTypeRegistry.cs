@@ -34,6 +34,7 @@ public class TypeRegistration {
 ///     This registry maps C# types to their JSON schema representation and associated providers.
 /// </summary>
 public static class RevitTypeRegistry {
+    private static readonly object _syncRoot = new();
     private static readonly Dictionary<Type, TypeRegistration> _registrations = new();
     private static bool _initialized;
 
@@ -42,32 +43,38 @@ public static class RevitTypeRegistry {
     ///     Safe to call multiple times (only runs once).
     /// </summary>
     public static void Initialize() {
-        if (_initialized) return;
+        if (_initialized)
+            return;
 
-        // ForgeTypeId with discriminator - requires [ForgeKind] attribute
-        Register<ForgeTypeId>(new TypeRegistration {
-            SchemaType = JsonObjectType.String,
-            DiscriminatorType = typeof(ForgeKindAttribute),
-            ProviderSelector = attr => attr switch {
-                ForgeKindAttribute { Kind: ForgeKind.Spec } => typeof(SpecNamesProvider),
-                ForgeKindAttribute { Kind: ForgeKind.Group } => typeof(PropertyGroupNamesProvider),
-                _ => null
-            },
-            ConverterSelector = attr => attr switch {
-                ForgeKindAttribute { Kind: ForgeKind.Spec } => typeof(SpecTypeConverter),
-                ForgeKindAttribute { Kind: ForgeKind.Group } => typeof(GroupTypeConverter),
-                _ => null
-            }
-        });
+        lock (_syncRoot) {
+            if (_initialized)
+                return;
 
-        // Category without discriminator - always uses CategoryNamesProvider
-        Register<Category>(new TypeRegistration {
-            SchemaType = JsonObjectType.String,
-            DefaultProvider = typeof(CategoryNamesProvider),
-            DefaultConverter = typeof(CategoryConverter)
-        });
+            // ForgeTypeId with discriminator - requires [ForgeKind] attribute
+            Register<ForgeTypeId>(new TypeRegistration {
+                SchemaType = JsonObjectType.String,
+                DiscriminatorType = typeof(ForgeKindAttribute),
+                ProviderSelector = attr => attr switch {
+                    ForgeKindAttribute { Kind: ForgeKind.Spec } => typeof(SpecNamesProvider),
+                    ForgeKindAttribute { Kind: ForgeKind.Group } => typeof(PropertyGroupNamesProvider),
+                    _ => null
+                },
+                ConverterSelector = attr => attr switch {
+                    ForgeKindAttribute { Kind: ForgeKind.Spec } => typeof(SpecTypeConverter),
+                    ForgeKindAttribute { Kind: ForgeKind.Group } => typeof(GroupTypeConverter),
+                    _ => null
+                }
+            });
 
-        _initialized = true;
+            // Category without discriminator - always uses CategoryNamesProvider
+            Register<Category>(new TypeRegistration {
+                SchemaType = JsonObjectType.String,
+                DefaultProvider = typeof(CategoryNamesProvider),
+                DefaultConverter = typeof(CategoryConverter)
+            });
+
+            _initialized = true;
+        }
     }
 
     /// <summary>
@@ -80,22 +87,26 @@ public static class RevitTypeRegistry {
     ///     Try to get registration for a type.
     /// </summary>
     public static bool TryGet(Type type, out TypeRegistration? registration) {
-        // Direct match
-        if (_registrations.TryGetValue(type, out registration))
-            return true;
+        lock (_syncRoot) {
+            // Direct match
+            if (_registrations.TryGetValue(type, out registration))
+                return true;
 
-        // Fallback: match by type name (for cross-assembly scenarios)
-        registration = _registrations.Values.FirstOrDefault(r =>
-            _registrations.Keys.Any(k => k.Name == type.Name));
-        return registration != null;
+            // Fallback: match by type name (for cross-assembly scenarios)
+            registration = _registrations.Values.FirstOrDefault(r =>
+                _registrations.Keys.Any(k => k.Name == type.Name));
+            return registration != null;
+        }
     }
 
     /// <summary>
     ///     Clear all registrations (useful for testing).
     /// </summary>
     public static void Clear() {
-        _registrations.Clear();
-        _initialized = false;
+        lock (_syncRoot) {
+            _registrations.Clear();
+            _initialized = false;
+        }
     }
 
     /// <summary>
@@ -105,7 +116,9 @@ public static class RevitTypeRegistry {
     /// </summary>
     public static IEnumerable<ITypeMapper> CreateTypeMappers() {
         Initialize();
-        return _registrations.Select(kvp => new RevitTypeMapper(kvp.Key, kvp.Value));
+        lock (_syncRoot) {
+            return _registrations.Select(kvp => new RevitTypeMapper(kvp.Key, kvp.Value)).ToArray();
+        }
     }
 }
 

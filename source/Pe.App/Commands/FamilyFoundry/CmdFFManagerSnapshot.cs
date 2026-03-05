@@ -28,7 +28,7 @@ public class CmdFFManagerSnapshot : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var storage = new Storage("FF Manager");
+            var storage = new Storage(CmdFFManager.AddinKey);
 
             // Collect snapshot data from the family
             var snapshot = CollectFamilySnapshot(doc);

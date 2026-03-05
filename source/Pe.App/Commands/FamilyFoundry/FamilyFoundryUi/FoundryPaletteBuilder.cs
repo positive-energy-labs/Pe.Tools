@@ -24,10 +24,14 @@ namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 /// <typeparam name="TProfile">The profile type (must inherit from BaseProfileSettings)</typeparam>
 public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSettings, new() {
     private readonly List<FoundryAction<TProfile>> _actions = [];
+    private readonly object _profileReaderGate = new();
+    private readonly Dictionary<string, JsonReader<TProfile>> _profileReadersByRelativePath =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly string _commandName;
     private readonly ISettingsModule<TProfile> _settingsModule;
     private readonly Document _doc;
     private readonly UIDocument _uiDoc;
+    private SettingsManager? _profilesSettingsManager;
     private Action<FoundryContext<TProfile>, List<string>> _postProcess;
     private Func<TProfile, List<SharedParameterDefinition>, OperationQueue> _queueBuilder;
 
@@ -92,6 +96,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         var settingsManager = this._settingsModule.SettingsRoot();
         var settings = settingsManager.Json<BaseSettings<TProfile>>().Read();
         var profilesSubDir = this.ResolveProfilesSettingsManager();
+        this._profilesSettingsManager = profilesSubDir;
 
         // Discover profiles
         var profiles = ProfileListItem.DiscoverProfiles(profilesSubDir);
@@ -181,9 +186,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         if (ct.IsCancellationRequested) return null;
 
         // Load the profile
-        var profile = this.ResolveProfilesSettingsManager()
-            .JsonByRelativePath<TProfile>(profileItem.TextPrimary)
-            .Read();
+        var profile = this.GetProfileReader(profileItem.TextPrimary).Read();
 
         if (ct.IsCancellationRequested) return null;
 
@@ -344,7 +347,19 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         return new List<string> { $"{ex.GetType().Name}: {ex.Message}" };
     }
 
-    private SettingsManager ResolveProfilesSettingsManager() => this._settingsModule.SettingsDir();
+    private SettingsManager ResolveProfilesSettingsManager() => this._profilesSettingsManager ??= this._settingsModule.SettingsDir();
+
+    private JsonReader<TProfile> GetProfileReader(string relativePath) {
+        lock (this._profileReaderGate) {
+            if (this._profileReadersByRelativePath.TryGetValue(relativePath, out var reader))
+                return reader;
+
+            var profilesManager = this.ResolveProfilesSettingsManager();
+            var createdReader = profilesManager.JsonByRelativePath<TProfile>(relativePath);
+            this._profileReadersByRelativePath[relativePath] = createdReader;
+            return createdReader;
+        }
+    }
 }
 
 /// <summary>

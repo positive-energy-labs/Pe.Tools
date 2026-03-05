@@ -9,7 +9,7 @@ namespace Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
 ///     Generates oneOf schema: either the regular item type OR an include directive object.
 /// </summary>
 /// <remarks>
-///     <para>For a property marked with [Includable("fields")]:</para>
+///     <para>For a property marked with [Includable(IncludableFragmentRoot.Fields)]:</para>
 ///     <code>
 ///     public List&lt;ScheduleFieldSpec&gt; Fields { get; set; }
 ///     </code>
@@ -51,7 +51,7 @@ public class IncludableSchemaProcessor : ISchemaProcessor {
             if (propSchema.Item == null) continue;
 
             // Transform array items to oneOf: [regularItem, includeDirective]
-            var includeDirectiveSchema = CreateIncludeDirectiveSchema();
+            var includeDirectiveSchema = CreateIncludeDirectiveSchema(includableAttr);
             var originalItemSchema = propSchema.Item;
 
             var newItemSchema = new JsonSchema();
@@ -81,7 +81,14 @@ public class IncludableSchemaProcessor : ISchemaProcessor {
     /// <summary>
     ///     Creates the schema for $include directive objects.
     /// </summary>
-    private static JsonSchema CreateIncludeDirectiveSchema() {
+    private static JsonSchema CreateIncludeDirectiveSchema(IncludableAttribute includableAttr) {
+        var fragmentSchemaName = string.IsNullOrWhiteSpace(includableAttr.FragmentSchemaName)
+            ? null
+            : includableAttr.FragmentSchemaName;
+        var normalizedRoot = fragmentSchemaName == null
+            ? null
+            : IncludableFragmentRoots.NormalizeRoot(fragmentSchemaName);
+
         var schema = new JsonSchema { Type = JsonObjectType.Object, AllowAdditionalProperties = false };
 
         var includeProperty = new JsonSchemaProperty {
@@ -89,6 +96,13 @@ public class IncludableSchemaProcessor : ISchemaProcessor {
             Description = "Path to fragment file (relative to schema directory, without .json extension)",
             IsRequired = true
         };
+        if (!string.IsNullOrWhiteSpace(normalizedRoot)) {
+            includeProperty.ExtensionData ??= new Dictionary<string, object?>();
+            includeProperty.ExtensionData["examples"] = new List<string> {
+                $"@local/{normalizedRoot}/my-fragment",
+                $"@global/{normalizedRoot}/my-fragment"
+            };
+        }
 
         schema.Properties["$include"] = includeProperty;
 
