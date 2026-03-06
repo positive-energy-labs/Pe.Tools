@@ -68,7 +68,7 @@ public class OperationProcessor(
         var totalSw = Stopwatch.StartNew();
 
         // Disable collectors if requested in execution options
-        if (this._exOpts.DisableCollectors) collectorQueue = null;
+        if (!this._exOpts.EnableCollectors) collectorQueue = null;
 
         var contexts = this.OpenDoc.IsFamilyDocument
             ? this.ProcessFamilyDocument(queue, collectorQueue)
@@ -87,7 +87,7 @@ public class OperationProcessor(
         var totalSw = Stopwatch.StartNew();
 
         // Disable collectors if requested in execution options
-        if (this._exOpts.DisableCollectors) collectorQueue = null;
+        if (!this._exOpts.EnableCollectors) collectorQueue = null;
 
         var contexts = this.OpenDoc.IsFamilyDocument
             ? this.ProcessFamilyDocument(queue, collectorQueue)
@@ -305,8 +305,12 @@ public class ExecutionOptions {
     public bool OptimizeTypeOperations { get; init; } = true;
 
     [Description(
-        "Disable collectors to speed up processing. Do not use outside of testing, it may effect what parameters are purged")]
-    public bool DisableCollectors { get; init; } = false;
+        "When enabled parameter collectors will take a snapshot of parameter values pre and post family processing. " +
+        "Having the data from the pre snapshot will enable the processor to maintain higher data integrity. Without" +
+        "collection more parameters are likely to be purged in every purging even.t" +
+        "In many cases the same results can be obtained without the collection's data. " +
+        "Disabling collectors will reduce processing time, especially for families that are complicated with many family types. + ")]
+    public bool EnableCollectors { get; init; } = true;
 }
 
 public class LoadAndSaveOptions {
