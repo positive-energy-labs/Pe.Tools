@@ -32,7 +32,7 @@ public abstract class BaseLocalManager {
         if (name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
             name = name[..^5];
 
-        var nameWithTimestamp = $"{name}_{DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss")}";
+        var nameWithTimestamp = $"{name}_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}";
         var nameWithExt = FileUtils.EnsureExtension(nameWithTimestamp, ".json");
         return Path.Combine(this.DirectoryPath, nameWithExt);
     }
@@ -48,16 +48,7 @@ public abstract class BaseLocalManager {
     ///     default.
     /// </summary>
     public string GetDatedCsvPath(string? filename = null) =>
-        Path.Combine(this.DirectoryPath, $"{filename ?? this.Name}_{DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss")}.csv");
-
-    /// <summary>
-    ///     Checks if a relative path matches any exclusion pattern.
-    /// </summary>
-    private bool MatchesExcludePattern(string relativePath, List<string> excludePatterns) {
-        var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return segments.Any(seg => excludePatterns.Any(pattern =>
-            pattern.EndsWith("*") ? seg.StartsWith(pattern.TrimEnd('*')) : seg == pattern));
-    }
+        Path.Combine(this.DirectoryPath, $"{filename ?? this.Name}_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.csv");
 }
 
 public class SettingsManager : BaseLocalManager {

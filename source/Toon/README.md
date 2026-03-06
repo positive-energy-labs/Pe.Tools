@@ -34,7 +34,7 @@ Standalone JSON<->TOON transpiler with verification focused on Family Foundry-st
 
 ## Verification methodology
 
-Verification is implemented in `source/Toon.Tests` with:
+Verification is implemented in `source/Pe.Tools.Tests` using a Revit-backed TUnit host (`Nice3point.TUnit.Revit`) with:
 
 - Deterministic unit tests for parser/encoder behavior.
 - Strict-mode failure tests (indentation/count mismatch).

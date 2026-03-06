@@ -3,25 +3,27 @@ using Pe.Global.PolyFill;
 using Pe.Global.Services.Storage.Core.Json;
 using Pe.Global.Services.Storage.Core;
 using System.ComponentModel.DataAnnotations;
-using Xunit;
 
-namespace Toon.Tests;
+namespace Pe.Tools.Tests;
 
-public class ComposableJsonContractTests {
-    [Fact]
-    public void Write_ReturnsFilePath() {
+public sealed class ComposableJsonContractTests : RevitTestBase
+{
+    [Test]
+    public async Task Write_ReturnsFilePath()
+    {
         using var sandbox = new TempDir();
         var filePath = Path.Combine(sandbox.Path, "output.json");
         var json = new ComposableJson<TestData>(filePath, sandbox.Path, JsonBehavior.Output);
 
         var result = json.Write(new TestData { Name = "ok" });
 
-        Assert.Equal(filePath, result);
-        Assert.True(File.Exists(filePath));
+        await Assert.That(result).IsEqualTo(filePath);
+        await Assert.That(File.Exists(filePath)).IsTrue();
     }
 
-    [Fact]
-    public void Read_RejectsIncludeOutsideIncludableProperty() {
+    [Test]
+    public async Task Read_RejectsIncludeOutsideIncludableProperty()
+    {
         using var sandbox = new TempDir();
         var settingsPath = Path.Combine(sandbox.Path, "settings.json");
         var fragmentRoot = Path.Combine(sandbox.Path, "_allowed-items");
@@ -49,12 +51,12 @@ public class ComposableJsonContractTests {
         );
 
         var json = new ComposableJson<IncludeScopedSettings>(settingsPath, sandbox.Path, JsonBehavior.Settings);
-        var exception = Assert.Throws<JsonValidationException>(json.Read);
-        Assert.NotNull(exception);
+        _ = await Assert.That(json.Read).Throws<JsonValidationException>();
     }
 
-    [Fact]
-    public void Read_AllowsIncludeOnIncludableProperty() {
+    [Test]
+    public async Task Read_AllowsIncludeOnIncludableProperty()
+    {
         using var sandbox = new TempDir();
         var settingsPath = Path.Combine(sandbox.Path, "settings.json");
         var fragmentRoot = Path.Combine(sandbox.Path, "_allowed-items");
@@ -84,12 +86,13 @@ public class ComposableJsonContractTests {
         var json = new ComposableJson<IncludeScopedSettings>(settingsPath, sandbox.Path, JsonBehavior.Settings);
         var result = json.Read();
 
-        var includedItem = Assert.Single(result.AllowedItems);
-        Assert.Equal("from-fragment", includedItem.Name);
+        var includedItem = await Assert.That(result.AllowedItems).HasSingleItem();
+        await Assert.That(includedItem.Name).IsEqualTo("from-fragment");
     }
 
-    [Fact]
-    public void Read_RejectsPresetOutsidePresettableProperty() {
+    [Test]
+    public async Task Read_RejectsPresetOutsidePresettableProperty()
+    {
         using var sandbox = new TempDir();
         var settingsPath = Path.Combine(sandbox.Path, "settings.json");
         var presetRoot = Path.Combine(sandbox.Path, "_allowed-model");
@@ -115,12 +118,12 @@ public class ComposableJsonContractTests {
         );
 
         var json = new ComposableJson<PresetScopedSettings>(settingsPath, sandbox.Path, JsonBehavior.Settings);
-        var exception = Assert.Throws<JsonValidationException>(json.Read);
-        Assert.NotNull(exception);
+        _ = await Assert.That(json.Read).Throws<JsonValidationException>();
     }
 
-    [Fact]
-    public void Read_AllowsPresetOnPresettableProperty() {
+    [Test]
+    public async Task Read_AllowsPresetOnPresettableProperty()
+    {
         using var sandbox = new TempDir();
         var settingsPath = Path.Combine(sandbox.Path, "settings.json");
         var presetRoot = Path.Combine(sandbox.Path, "_allowed-model");
@@ -148,11 +151,12 @@ public class ComposableJsonContractTests {
         var json = new ComposableJson<PresetScopedSettings>(settingsPath, sandbox.Path, JsonBehavior.Settings);
         var result = json.Read();
 
-        Assert.Equal("preset-model", result.AllowedModel.RequiredName);
+        await Assert.That(result.AllowedModel.RequiredName).IsEqualTo("preset-model");
     }
 
-    [Fact]
-    public void Read_DoesNotRewriteFragmentWhenSchemaContentIsUnchanged() {
+    [Test]
+    public async Task Read_DoesNotRewriteFragmentWhenSchemaContentIsUnchanged()
+    {
         using var sandbox = new TempDir();
         var settingsPath = Path.Combine(sandbox.Path, "settings.json");
         var fragmentRoot = Path.Combine(sandbox.Path, "_allowed-items");
@@ -190,20 +194,21 @@ public class ComposableJsonContractTests {
         var secondContent = File.ReadAllText(fragmentPath);
         var secondWriteUtc = File.GetLastWriteTimeUtc(fragmentPath);
 
-        Assert.Equal(firstContent, secondContent);
-        Assert.Equal(firstWriteUtc, secondWriteUtc);
-        Assert.False(File.Exists(Path.Combine(fragmentRoot, "fragment.schema.json")));
+        await Assert.That(secondContent).IsEqualTo(firstContent);
+        await Assert.That(secondWriteUtc).IsEqualTo(firstWriteUtc);
+        await Assert.That(File.Exists(Path.Combine(fragmentRoot, "fragment.schema.json"))).IsFalse();
         var fragmentSchemaPath = SettingsPathing.ResolveCentralizedFragmentSchemaPath(
             sandbox.Path,
             SettingsPathing.DirectiveScope.Local,
             isPresetDirective: false,
             rootSegment: "_allowed-items"
         );
-        Assert.True(File.Exists(fragmentSchemaPath));
+        await Assert.That(File.Exists(fragmentSchemaPath)).IsTrue();
     }
 
-    [Fact]
-    public void Read_ReinjectsSchemaToCentralizedGlobalPath_ForNestedProfileFile() {
+    [Test]
+    public async Task Read_ReinjectsSchemaToCentralizedGlobalPath_ForNestedProfileFile()
+    {
         using var sandbox = new TempDir();
         var profilesRoot = Path.Combine(sandbox.Path, "CmdFFMigrator", "settings", "profiles");
         var profileDirectory = Path.Combine(profilesRoot, "MechEquip");
@@ -224,14 +229,16 @@ public class ComposableJsonContractTests {
 
         var updatedRoot = JObject.Parse(File.ReadAllText(settingsPath));
         var expectedSchemaPath = SettingsPathing.ResolveCentralizedProfileSchemaPath(profilesRoot, typeof(IncludeScopedSettings));
-        Assert.Equal(GetExpectedSchemaReference(settingsPath, expectedSchemaPath), updatedRoot["$schema"]?.Value<string>());
-        Assert.True(File.Exists(expectedSchemaPath));
-        Assert.False(File.Exists(Path.Combine(profileDirectory, "schema.json")));
-        Assert.False(File.Exists(Path.Combine(profilesRoot, "schema.json")));
+        await Assert.That(updatedRoot["$schema"]?.Value<string>())
+            .IsEqualTo(GetExpectedSchemaReference(settingsPath, expectedSchemaPath));
+        await Assert.That(File.Exists(expectedSchemaPath)).IsTrue();
+        await Assert.That(File.Exists(Path.Combine(profileDirectory, "schema.json"))).IsFalse();
+        await Assert.That(File.Exists(Path.Combine(profilesRoot, "schema.json"))).IsFalse();
     }
 
-    [Fact]
-    public void Read_IgnoresInvalidAuthoringSchemaReference_DuringRuntimeValidation() {
+    [Test]
+    public async Task Read_IgnoresInvalidAuthoringSchemaReference_DuringRuntimeValidation()
+    {
         using var sandbox = new TempDir();
         var profilesRoot = Path.Combine(sandbox.Path, "CmdFFMigrator", "settings", "profiles");
         _ = Directory.CreateDirectory(profilesRoot);
@@ -249,14 +256,16 @@ public class ComposableJsonContractTests {
         var json = new ComposableJson<IncludeScopedSettings>(settingsPath, profilesRoot, JsonBehavior.Settings);
         var result = json.Read();
 
-        Assert.Empty(result.AllowedItems);
+        await Assert.That(result.AllowedItems).IsEmpty();
         var updatedRoot = JObject.Parse(File.ReadAllText(settingsPath));
         var expectedSchemaPath = SettingsPathing.ResolveCentralizedProfileSchemaPath(profilesRoot, typeof(IncludeScopedSettings));
-        Assert.Equal(GetExpectedSchemaReference(settingsPath, expectedSchemaPath), updatedRoot["$schema"]?.Value<string>());
+        await Assert.That(updatedRoot["$schema"]?.Value<string>())
+            .IsEqualTo(GetExpectedSchemaReference(settingsPath, expectedSchemaPath));
     }
 
-    [Fact]
-    public void Write_DoesNotRewriteCentralSchema_WhenSchemaIsUnchanged() {
+    [Test]
+    public async Task Write_DoesNotRewriteCentralSchema_WhenSchemaIsUnchanged()
+    {
         using var sandbox = new TempDir();
         var profilesRoot = Path.Combine(sandbox.Path, "CmdFFMigrator", "settings", "profiles");
         _ = Directory.CreateDirectory(profilesRoot);
@@ -273,53 +282,65 @@ public class ComposableJsonContractTests {
         _ = json.Write(new TestData { Name = "stable" });
         var secondWriteUtc = File.GetLastWriteTimeUtc(schemaPath);
 
-        Assert.Equal(firstWriteUtc, secondWriteUtc);
+        await Assert.That(secondWriteUtc).IsEqualTo(firstWriteUtc);
     }
 
-    private sealed class TestData {
+    private sealed class TestData
+    {
         public string Name { get; set; } = string.Empty;
     }
 
-    private sealed class IncludeScopedSettings {
+    private sealed class IncludeScopedSettings
+    {
         [Includable("allowed-items")]
         public List<IncludeItem> AllowedItems { get; init; } = [];
         public List<IncludeItem> DisallowedItems { get; init; } = [];
     }
 
-    private sealed class IncludeItem {
+    private sealed class IncludeItem
+    {
         [Required]
         public string Name { get; init; } = string.Empty;
     }
 
-    private sealed class PresetScopedSettings {
+    private sealed class PresetScopedSettings
+    {
         [Presettable("allowed-model")]
         public PresetModel AllowedModel { get; init; } = new();
         public PresetModel DisallowedModel { get; init; } = new();
     }
 
-    private sealed class PresetModel {
+    private sealed class PresetModel
+    {
         [Required]
         public string RequiredName { get; init; } = string.Empty;
     }
 
-    private sealed class TempDir : IDisposable {
-        public TempDir() {
+    private sealed class TempDir : IDisposable
+    {
+        public TempDir()
+        {
             this.Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"composable-json-contract-{Guid.NewGuid():N}");
             _ = Directory.CreateDirectory(this.Path);
         }
 
         public string Path { get; }
 
-        public void Dispose() {
-            try {
+        public void Dispose()
+        {
+            try
+            {
                 Directory.Delete(this.Path, recursive: true);
-            } catch {
+            }
+            catch
+            {
                 // ignore cleanup failures in tests
             }
         }
     }
 
-    private static string GetExpectedSchemaReference(string targetFilePath, string schemaPath) {
+    private static string GetExpectedSchemaReference(string targetFilePath, string schemaPath)
+    {
         var targetDirectory = Path.GetDirectoryName(targetFilePath)!;
         var relativePath = BclExtensions.GetRelativePath(targetDirectory, schemaPath).Replace("\\", "/");
         return relativePath.StartsWith("./", StringComparison.Ordinal) || relativePath.StartsWith("../", StringComparison.Ordinal)

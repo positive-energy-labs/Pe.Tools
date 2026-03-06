@@ -1,0 +1,34 @@
+<Project Sdk="Nice3point.Revit.Sdk/6.0.2">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Configurations>Debug.R23;Debug.R24;Debug.R25;Debug.R26</Configurations>
+    <Configurations>$(Configurations);Release.R23;Release.R24;Release.R25;Release.R26</Configurations>
+    <_IsNoRevitConfig Condition="'$(RevitVersion)' == '' Or '$(RevitVersion)' == '-1'">true</_IsNoRevitConfig>
+    <RevitVersion Condition="'$(_IsNoRevitConfig)' == 'true'">2025</RevitVersion>
+    <TargetFramework Condition="'$(_IsNoRevitConfig)' == 'true'">net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Nice3point.TUnit.Revit" Version="$(RevitVersion).*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Toon\Toon.csproj" />
+    <ProjectReference Include="..\Pe.Global\Pe.Global.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(EnableExternalFixtureTests)' != 'true'">
+    <Compile Remove="CorpusProfileTests.cs" />
+    <Compile Remove="JsonArrayComposerToonIncludeTests.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="TUnit.Core.Executors.TestExecutorAttribute">
+      <_Parameter1>typeof(Nice3point.TUnit.Revit.Executors.RevitThreadExecutor)</_Parameter1>
+      <_Parameter1_IsLiteral>true</_Parameter1_IsLiteral>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>

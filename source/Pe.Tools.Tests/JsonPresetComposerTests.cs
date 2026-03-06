@@ -1,13 +1,14 @@
 using Newtonsoft.Json.Linq;
 using Pe.Global.Services.Storage.Core.Json;
 using System.ComponentModel.DataAnnotations;
-using Xunit;
 
-namespace Toon.Tests;
+namespace Pe.Tools.Tests;
 
-public class JsonPresetComposerTests {
-    [Fact]
-    public void ExpandPresets_RejectsInlineOverridesWhenPresetIsPresent() {
+public sealed class JsonPresetComposerTests : RevitTestBase
+{
+    [Test]
+    public async Task ExpandPresets_RejectsInlineOverridesWhenPresetIsPresent()
+    {
         using var sandbox = new TempDir();
         var presetsDir = Path.Combine(sandbox.Path, "_filter-aps-params");
         _ = Directory.CreateDirectory(presetsDir);
@@ -41,13 +42,16 @@ public class JsonPresetComposerTests {
             """
         );
 
-        var ex = Assert.Throws<JsonCompositionException>(() =>
-            JsonPresetComposer.ExpandPresets(root, sandbox.Path, ["_filter-aps-params"]));
-        Assert.Contains("Preset composition does not support inline overrides", ex.Message, StringComparison.Ordinal);
+        var exception = (await Assert.That(() => JsonPresetComposer.ExpandPresets(root, sandbox.Path, ["_filter-aps-params"]))
+            .Throws<JsonCompositionException>())!;
+        await Assert.That(exception.Message)
+            .Contains("Preset composition does not support inline overrides")
+            .WithComparison(StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ExpandPresets_ReplacesEntireObject_WhenPresetOnlyIsUsed() {
+    [Test]
+    public async Task ExpandPresets_ReplacesEntireObject_WhenPresetOnlyIsUsed()
+    {
         using var sandbox = new TempDir();
         var presetsDir = Path.Combine(sandbox.Path, "_filter-aps-params");
         _ = Directory.CreateDirectory(presetsDir);
@@ -80,13 +84,14 @@ public class JsonPresetComposerTests {
         _ = JsonPresetComposer.ExpandPresets(root, sandbox.Path, ["_filter-aps-params"]);
 
         var filter = (JObject)root["FilterApsParams"]!;
-        Assert.True(filter["Enabled"]!.Value<bool>());
-        Assert.Equal("PE_G_Dim_Height1", filter["IncludeNames"]!["Equaling"]![0]!.Value<string>());
-        Assert.Equal("PE_G___", filter["IncludeNames"]!["StartingWith"]![0]!.Value<string>());
+        await Assert.That(filter["Enabled"]!.Value<bool>()).IsTrue();
+        await Assert.That(filter["IncludeNames"]!["Equaling"]![0]!.Value<string>()).IsEqualTo("PE_G_Dim_Height1");
+        await Assert.That(filter["IncludeNames"]!["StartingWith"]![0]!.Value<string>()).IsEqualTo("PE_G___");
     }
 
-    [Fact]
-    public void ExpandPresets_RejectsBareLocalPath() {
+    [Test]
+    public async Task ExpandPresets_RejectsBareLocalPath()
+    {
         using var sandbox = new TempDir();
         var root = JObject.Parse(
             """
@@ -98,13 +103,14 @@ public class JsonPresetComposerTests {
             """
         );
 
-        var ex = Assert.Throws<JsonCompositionException>(() =>
-            JsonPresetComposer.ExpandPresets(root, sandbox.Path, ["_filter-aps-params"]));
-        Assert.Contains("Invalid '$preset' path", ex.Message, StringComparison.Ordinal);
+        var exception = (await Assert.That(() => JsonPresetComposer.ExpandPresets(root, sandbox.Path, ["_filter-aps-params"]))
+            .Throws<JsonCompositionException>())!;
+        await Assert.That(exception.Message).Contains("Invalid '$preset' path").WithComparison(StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ExpandPresets_DetectsCircularPresetIncludes() {
+    [Test]
+    public async Task ExpandPresets_DetectsCircularPresetIncludes()
+    {
         using var sandbox = new TempDir();
         var presetsDir = Path.Combine(sandbox.Path, "_filter-aps-params");
         _ = Directory.CreateDirectory(presetsDir);
@@ -136,13 +142,16 @@ public class JsonPresetComposerTests {
             """
         );
 
-        var ex = Assert.Throws<JsonCompositionException>(() =>
-            JsonPresetComposer.ExpandPresets(root, sandbox.Path, ["_filter-aps-params"]));
-        Assert.Contains("Circular preset include detected", ex.Message, StringComparison.Ordinal);
+        var exception = (await Assert.That(() => JsonPresetComposer.ExpandPresets(root, sandbox.Path, ["_filter-aps-params"]))
+            .Throws<JsonCompositionException>())!;
+        await Assert.That(exception.Message)
+            .Contains("Circular preset include detected")
+            .WithComparison(StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ComposableJson_ValidatesRequiredFieldsAfterPresetExpansion() {
+    [Test]
+    public async Task ComposableJson_ValidatesRequiredFieldsAfterPresetExpansion()
+    {
         using var sandbox = new TempDir();
         var settingsPath = Path.Combine(sandbox.Path, "settings.json");
         var presetsDir = Path.Combine(sandbox.Path, "_preset-model");
@@ -168,33 +177,41 @@ public class JsonPresetComposerTests {
         );
 
         var json = new ComposableJson<PresetContainer>(settingsPath, sandbox.Path, JsonBehavior.Settings);
-        _ = Assert.Throws<JsonValidationException>(json.Read);
+        _ = await Assert.That(json.Read).Throws<JsonValidationException>();
     }
 
-    private sealed class PresetContainer {
+    private sealed class PresetContainer
+    {
         [Required]
         [Presettable("preset-model")]
         public PresetModel Model { get; init; } = new();
     }
 
-    private sealed class PresetModel {
+    private sealed class PresetModel
+    {
         [Required]
         public string RequiredName { get; init; } = string.Empty;
         public bool Enabled { get; init; } = true;
     }
 
-    private sealed class TempDir : IDisposable {
-        public TempDir() {
+    private sealed class TempDir : IDisposable
+    {
+        public TempDir()
+        {
             this.Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"preset-composer-test-{Guid.NewGuid():N}");
             _ = Directory.CreateDirectory(this.Path);
         }
 
         public string Path { get; }
 
-        public void Dispose() {
-            try {
+        public void Dispose()
+        {
+            try
+            {
                 Directory.Delete(this.Path, recursive: true);
-            } catch {
+            }
+            catch
+            {
                 // ignore cleanup failures in tests
             }
         }

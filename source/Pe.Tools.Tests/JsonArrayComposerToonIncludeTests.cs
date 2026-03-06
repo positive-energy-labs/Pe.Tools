@@ -1,12 +1,13 @@
 using Newtonsoft.Json.Linq;
 using Pe.Global.Services.Storage.Core.Json;
-using Xunit;
 
-namespace Toon.Tests;
+namespace Pe.Tools.Tests;
 
-public class JsonArrayComposerToonIncludeTests {
-    [Fact]
-    public void ExpandIncludes_UsesJsonBeforeToon_WhenBothExist() {
+public sealed class JsonArrayComposerToonIncludeTests : RevitTestBase
+{
+    [Test]
+    public async Task ExpandIncludes_UsesJsonBeforeToon_WhenBothExist()
+    {
         using var sandbox = new TempDir();
         var baseDir = sandbox.Path;
         var fragmentsDir = System.IO.Path.Combine(baseDir, "_fragmentNames");
@@ -41,12 +42,13 @@ public class JsonArrayComposerToonIncludeTests {
         JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]);
 
         var fields = (JArray)root["Fields"]!;
-        Assert.Single(fields);
-        Assert.Equal("json-only", fields[0]!["Name"]!.Value<string>());
+        var field = await Assert.That(fields).HasSingleItem();
+        await Assert.That(field!["Name"]!.Value<string>()).IsEqualTo("json-only");
     }
 
-    [Fact]
-    public void ExpandIncludes_ResolvesToon_WhenJsonMissing() {
+    [Test]
+    public async Task ExpandIncludes_ResolvesToon_WhenJsonMissing()
+    {
         using var sandbox = new TempDir();
         var baseDir = sandbox.Path;
         var fragmentsDir = System.IO.Path.Combine(baseDir, "_fragmentNames");
@@ -72,13 +74,14 @@ public class JsonArrayComposerToonIncludeTests {
         JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]);
 
         var fields = (JArray)root["Fields"]!;
-        Assert.Equal(2, fields.Count);
-        Assert.Equal("W5BM024", fields[0]!["Type"]!.Value<string>());
-        Assert.Equal("208V", fields[0]!["Value"]!.Value<string>());
+        await Assert.That(fields.Count).IsEqualTo(2);
+        await Assert.That(fields[0]!["Type"]!.Value<string>()).IsEqualTo("W5BM024");
+        await Assert.That(fields[0]!["Value"]!.Value<string>()).IsEqualTo("208V");
     }
 
-    [Fact]
-    public void ExpandIncludes_ResolvesToon_WhenOnlyToonExists() {
+    [Test]
+    public async Task ExpandIncludes_ResolvesToon_WhenOnlyToonExists()
+    {
         using var sandbox = new TempDir();
         var baseDir = sandbox.Path;
         var fragmentsDir = System.IO.Path.Combine(baseDir, "_fragmentNames");
@@ -103,12 +106,13 @@ public class JsonArrayComposerToonIncludeTests {
         JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]);
 
         var fields = (JArray)root["Fields"]!;
-        Assert.Single(fields);
-        Assert.Equal("only-toon", fields[0]!["Name"]!.Value<string>());
+        var field = await Assert.That(fields).HasSingleItem();
+        await Assert.That(field!["Name"]!.Value<string>()).IsEqualTo("only-toon");
     }
 
-    [Fact]
-    public void ExpandIncludes_RejectsIncludeOutsideAllowedRoots() {
+    [Test]
+    public async Task ExpandIncludes_RejectsIncludeOutsideAllowedRoots()
+    {
         using var sandbox = new TempDir();
         var baseDir = sandbox.Path;
 
@@ -121,13 +125,14 @@ public class JsonArrayComposerToonIncludeTests {
             }
             """);
 
-        var ex = Assert.Throws<JsonCompositionException>(() =>
-            JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]));
-        Assert.Contains("Invalid '$include' path", ex.Message, StringComparison.Ordinal);
+        var exception = await Assert.That(() => JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]))
+            .Throws<JsonCompositionException>();
+        await Assert.That(exception.Message).Contains("Invalid '$include' path").WithComparison(StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ExpandIncludes_RejectsBareLocalIncludePath() {
+    [Test]
+    public async Task ExpandIncludes_RejectsBareLocalIncludePath()
+    {
         using var sandbox = new TempDir();
         var baseDir = sandbox.Path;
 
@@ -140,13 +145,14 @@ public class JsonArrayComposerToonIncludeTests {
             }
             """);
 
-        var ex = Assert.Throws<JsonCompositionException>(() =>
-            JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]));
-        Assert.Contains("Invalid '$include' path", ex.Message, StringComparison.Ordinal);
+        var exception = await Assert.That(() => JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]))
+            .Throws<JsonCompositionException>();
+        await Assert.That(exception.Message).Contains("Invalid '$include' path").WithComparison(StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ExpandIncludes_ResolvesFromDesignatedRootForNestedProfiles() {
+    [Test]
+    public async Task ExpandIncludes_ResolvesFromDesignatedRootForNestedProfiles()
+    {
         using var sandbox = new TempDir();
         var baseDir = sandbox.Path;
         var profilesRoot = System.IO.Path.Combine(baseDir, "profiles", "_fragmentNames");
@@ -178,12 +184,13 @@ public class JsonArrayComposerToonIncludeTests {
         );
 
         var fields = (JArray)root["Fields"]!;
-        Assert.Single(fields);
-        Assert.Equal("prefixed", fields[0]!["Name"]!.Value<string>());
+        var field = await Assert.That(fields).HasSingleItem();
+        await Assert.That(field!["Name"]!.Value<string>()).IsEqualTo("prefixed");
     }
 
-    [Fact]
-    public void ExpandIncludes_DetectsCircularIncludesAcrossNestedFragments() {
+    [Test]
+    public async Task ExpandIncludes_DetectsCircularIncludesAcrossNestedFragments()
+    {
         using var sandbox = new TempDir();
         var baseDir = sandbox.Path;
         var fragmentsDir = System.IO.Path.Combine(baseDir, "_fragmentNames");
@@ -217,13 +224,16 @@ public class JsonArrayComposerToonIncludeTests {
             }
             """);
 
-        var ex = Assert.Throws<JsonCompositionException>(() =>
-            JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]));
-        Assert.Contains("Circular fragment include detected", ex.Message, StringComparison.Ordinal);
+        var exception = await Assert.That(() => JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]))
+            .Throws<JsonCompositionException>();
+        await Assert.That(exception.Message)
+            .Contains("Circular fragment include detected")
+            .WithComparison(StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ExpandIncludes_AllowsSiblingReuseOfSameFragment() {
+    [Test]
+    public async Task ExpandIncludes_AllowsSiblingReuseOfSameFragment()
+    {
         using var sandbox = new TempDir();
         var baseDir = sandbox.Path;
         var fragmentsDir = System.IO.Path.Combine(baseDir, "_fragmentNames");
@@ -252,13 +262,14 @@ public class JsonArrayComposerToonIncludeTests {
         JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]);
 
         var fields = (JArray)root["Fields"]!;
-        Assert.Equal(2, fields.Count);
-        Assert.Equal("reused", fields[0]!["Name"]!.Value<string>());
-        Assert.Equal("reused", fields[1]!["Name"]!.Value<string>());
+        await Assert.That(fields.Count).IsEqualTo(2);
+        await Assert.That(fields[0]!["Name"]!.Value<string>()).IsEqualTo("reused");
+        await Assert.That(fields[1]!["Name"]!.Value<string>()).IsEqualTo("reused");
     }
 
-    [Fact]
-    public void ExpandIncludes_ResolvesGlobalPrefixedIncludes_WhenGlobalRootProvided() {
+    [Test]
+    public async Task ExpandIncludes_ResolvesGlobalPrefixedIncludes_WhenGlobalRootProvided()
+    {
         using var sandbox = new TempDir();
         var settingsRoot = System.IO.Path.Combine(sandbox.Path, "CmdFFMigrator", "settings");
         _ = Directory.CreateDirectory(settingsRoot);
@@ -305,13 +316,14 @@ public class JsonArrayComposerToonIncludeTests {
         );
 
         var fields = (JArray)root["Fields"]!;
-        Assert.Equal(2, fields.Count);
-        Assert.Equal("local-value", fields[0]!["Name"]!.Value<string>());
-        Assert.Equal("global-value", fields[1]!["Name"]!.Value<string>());
+        await Assert.That(fields.Count).IsEqualTo(2);
+        await Assert.That(fields[0]!["Name"]!.Value<string>()).IsEqualTo("local-value");
+        await Assert.That(fields[1]!["Name"]!.Value<string>()).IsEqualTo("global-value");
     }
 
-    [Fact]
-    public void ExpandIncludes_GlobalPrefixedIncludes_ThrowWhenGlobalRootMissing() {
+    [Test]
+    public async Task ExpandIncludes_GlobalPrefixedIncludes_ThrowWhenGlobalRootMissing()
+    {
         using var sandbox = new TempDir();
         var baseDir = sandbox.Path;
         var root = JObject.Parse(
@@ -323,13 +335,14 @@ public class JsonArrayComposerToonIncludeTests {
             }
             """);
 
-        var ex = Assert.Throws<JsonCompositionException>(() =>
-            JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]));
-        Assert.Contains("Invalid '$include' path", ex.Message, StringComparison.Ordinal);
+        var exception = await Assert.That(() => JsonArrayComposer.ExpandIncludes(root, baseDir, ["_fragmentNames"]))
+            .Throws<JsonCompositionException>();
+        await Assert.That(exception.Message).Contains("Invalid '$include' path").WithComparison(StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ExpandIncludes_GlobalPrefixedIncludes_RequireAllowedRoot() {
+    [Test]
+    public async Task ExpandIncludes_GlobalPrefixedIncludes_RequireAllowedRoot()
+    {
         using var sandbox = new TempDir();
         var settingsRoot = System.IO.Path.Combine(sandbox.Path, "CmdFFMigrator", "settings");
         _ = Directory.CreateDirectory(settingsRoot);
@@ -343,18 +356,18 @@ public class JsonArrayComposerToonIncludeTests {
             }
             """);
 
-        var ex = Assert.Throws<JsonCompositionException>(() =>
-            JsonArrayComposer.ExpandIncludes(
+        var exception = await Assert.That(() => JsonArrayComposer.ExpandIncludes(
                 root,
                 settingsRoot,
                 ["_fragmentNames"],
-                globalFragmentsDirectory: System.IO.Path.Combine(sandbox.Path, "Global", "fragments")
-            ));
-        Assert.Contains("Invalid '$include' path", ex.Message, StringComparison.Ordinal);
+                globalFragmentsDirectory: System.IO.Path.Combine(sandbox.Path, "Global", "fragments")))
+            .Throws<JsonCompositionException>();
+        await Assert.That(exception.Message).Contains("Invalid '$include' path").WithComparison(StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ExpandIncludes_GlobalPrefixedIncludes_RequireUnderscoredRoot() {
+    [Test]
+    public async Task ExpandIncludes_GlobalPrefixedIncludes_RequireUnderscoredRoot()
+    {
         using var sandbox = new TempDir();
         var settingsRoot = System.IO.Path.Combine(sandbox.Path, "CmdFFMigrator", "settings");
         _ = Directory.CreateDirectory(settingsRoot);
@@ -368,28 +381,33 @@ public class JsonArrayComposerToonIncludeTests {
             }
             """);
 
-        var ex = Assert.Throws<JsonCompositionException>(() =>
-            JsonArrayComposer.ExpandIncludes(
+        var exception = await Assert.That(() => JsonArrayComposer.ExpandIncludes(
                 root,
                 settingsRoot,
                 ["_fragmentNames"],
-                globalFragmentsDirectory: System.IO.Path.Combine(sandbox.Path, "Global", "fragments")
-            ));
-        Assert.Contains("Invalid '$include' path", ex.Message, StringComparison.Ordinal);
+                globalFragmentsDirectory: System.IO.Path.Combine(sandbox.Path, "Global", "fragments")))
+            .Throws<JsonCompositionException>();
+        await Assert.That(exception.Message).Contains("Invalid '$include' path").WithComparison(StringComparison.Ordinal);
     }
 
-    private sealed class TempDir : IDisposable {
-        public TempDir() {
+    private sealed class TempDir : IDisposable
+    {
+        public TempDir()
+        {
             this.Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"toon-include-test-{Guid.NewGuid():N}");
             _ = Directory.CreateDirectory(this.Path);
         }
 
         public string Path { get; }
 
-        public void Dispose() {
-            try {
+        public void Dispose()
+        {
+            try
+            {
                 Directory.Delete(this.Path, recursive: true);
-            } catch {
+            }
+            catch
+            {
                 // ignore cleanup failures in tests
             }
         }

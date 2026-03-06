@@ -1,19 +1,19 @@
 using System.Diagnostics;
-using Xunit;
 
-namespace Toon.Tests;
+namespace Pe.Tools.Tests;
 
-public class CliDifferentialTests
+public sealed class CliDifferentialTests : RevitTestBase
 {
-    [Fact]
-    public void CliIsAvailable_ForDifferentialSuite()
+    [Test]
+    public async Task CliIsAvailable_ForDifferentialSuite()
     {
         var runner = ToonCliRunner.CreateOrThrow();
-        Assert.False(string.IsNullOrWhiteSpace(runner.CommandDescription));
+
+        await Assert.That(string.IsNullOrWhiteSpace(runner.CommandDescription)).IsFalse();
     }
 
-    [Fact]
-    public void OurEncoder_ToonDecodedByCli_MatchesOriginalJson()
+    [Test]
+    public async Task OurEncoder_ToonDecodedByCli_MatchesOriginalJson()
     {
         var runner = ToonCliRunner.CreateOrThrow();
         const string json = """
@@ -30,11 +30,11 @@ public class CliDifferentialTests
         var toon = ToonTranspiler.EncodeJson(json);
         var cliDecodedJson = runner.DecodeToJson(toon);
 
-        Assert.True(JsonSemanticComparer.AreEquivalent(json, cliDecodedJson));
+        await Assert.That(JsonSemanticComparer.AreEquivalent(json, cliDecodedJson)).IsTrue();
     }
 
-    [Fact]
-    public void CliEncoder_ToonDecodedByOurParser_MatchesOriginalJson()
+    [Test]
+    public async Task CliEncoder_ToonDecodedByOurParser_MatchesOriginalJson()
     {
         var runner = ToonCliRunner.CreateOrThrow();
         const string json = """
@@ -50,7 +50,7 @@ public class CliDifferentialTests
         var cliToon = runner.EncodeToToon(json);
         var decodedByUs = ToonTranspiler.DecodeToJson(cliToon);
 
-        Assert.True(JsonSemanticComparer.AreEquivalent(json, decodedByUs));
+        await Assert.That(JsonSemanticComparer.AreEquivalent(json, decodedByUs)).IsTrue();
     }
 }
 
