@@ -1,6 +1,11 @@
-# Settings Editor SignalR Contract (Frontend)
+# Settings Editor SignalR Contract
 
-This is the practical contract a frontend needs to integrate with the Settings Editor backend.
+This document describes the SignalR contract exposed by this repo for the external
+TypeScript settings-editor frontend.
+
+It does not describe general settings file management inside `Pe.Tools`. In this
+repo, settings discovery, file reads, and JSON composition are filesystem-first
+and handled by the storage/composition services under `source/Pe.Global/Services/Storage/`.
 
 ## Transport
 
@@ -8,41 +13,50 @@ This is the practical contract a frontend needs to integrate with the Settings E
 - Protocol: SignalR JSON protocol (camelCase payloads)
 - Pattern: `connection.invoke("<MethodName>", request)`
 
+## Scope
+
+- The frontend lives in a separate repository.
+- This repo exposes one hub at `"/hubs/settings-editor"`.
+- This repo owns the SignalR transport contract:
+  - request DTOs
+  - response/envelope DTOs
+  - enums
+  - hub event names
+  - hub method names
+  - hub route constants
+- SignalR is currently used for:
+  - schema generation
+  - server-authoritative validation
+  - provider-backed examples/options
+  - Revit-derived parameter catalog queries
+  - generic `DocumentChanged` invalidation events
+- SignalR is not the source of truth for listing, reading, composing, or writing
+  settings files. Those flows are handled locally against the filesystem in this
+  repo.
+
 ## Core Rules
 
-- `moduleKey` is required for almost every request and is the server-side identity for both transport and storage.
-- The client does **not** choose settings subdirectories. The server owns that via module registration.
+- `moduleKey` is required for almost every request and is the server-side identity
+  for module metadata and schema/validation routing.
+- The client does **not** choose settings subdirectories. Any module metadata the
+  hub returns is owned by backend module registration.
 - All method results use an envelope shape:
   - `ok: boolean`
   - `code: "Ok" | "Failed" | "WithErrors" | "NoDocument" | "Exception"`
   - `message: string`
   - `issues: ValidationIssue[]`
   - `data: T | null`
+- Concrete envelope DTOs are backend-defined and exported for TypeScript
+  consumption. Frontend code should not hand-maintain duplicate envelope
+  response types for hub methods.
 - Serializer behavior: null fields are omitted from payloads (`nullValueHandling=ignore`), so frontend decoding should treat nullable members as optional.
 
 ## Hub Methods
 
 - `GetSettingsCatalogEnvelope(SettingsCatalogRequest)`
-  - Discover available module targets.
+  - Discover available module targets/metadata.
   - Request: `{ moduleKey?: string }`
   - Response data: `SettingsCatalogData`
-
-- `ListSettingsEnvelope(ListSettingsRequest)`
-  - List files and directory tree for one module.
-  - Request: `{ moduleKey: string, recursive?: boolean, includeFragments?: boolean }`
-  - Response data: `SettingsListData`
-
-- `ReadSettingsEnvelope(ReadSettingsRequest)`
-  - Read a single settings file.
-  - Request: `{ moduleKey: string, relativePath: string, resolveComposition: boolean, requestId?: string }`
-  - Response data: `SettingsReadData`
-  - `data.json` is raw file content; `data.resolvedJson` is composition-expanded when requested.
-  - `data.composition` is optional metadata for future fragment-aware save behavior.
-
-- `WriteSettingsEnvelope(WriteSettingsRequest)`
-  - Write a single settings file.
-  - Request: `{ moduleKey: string, relativePath: string, json: string, validate: boolean, requestId?: string }`
-  - Response data: none (status + issues only)
 
 - `ValidateSettingsEnvelope(ValidateSettingsRequest)`
   - Server-authoritative validation against module schema.
@@ -79,17 +93,35 @@ connection.on("DocumentChanged", () => {
 });
 ```
 
+## Backend-Owned Transport Constants
+
+- Hub route constant: `HubRoutes.SettingsEditor`
+- Hub method names: `HubMethodNames.*`
+- Client event names: `HubClientEventNames.*`
+
 ## Minimal Usage Flow
 
 1. Connect to `"/hubs/settings-editor"`.
 2. Call `GetSettingsCatalogEnvelope` for module picker/target bootstrap.
-3. Call `GetSchemaEnvelope` and `ListSettingsEnvelope` for selected module.
-4. Read file via `ReadSettingsEnvelope`.
-5. On edits:
-   - optional pre-check: `ValidateSettingsEnvelope`
-   - persist: `WriteSettingsEnvelope`
+3. Use the selected module metadata to align the external frontend with local
+   filesystem-backed settings conventions.
+4. Call `GetSchemaEnvelope` for render schema generation.
+5. Call `ValidateSettingsEnvelope` before save when server-authoritative
+   validation is needed.
 6. For provider-backed fields, call `GetExamplesEnvelope` as needed.
-7. Subscribe to `DocumentChanged` and invalidate dependent caches.
+7. For mapping or document-aware UIs, call `GetParameterCatalogEnvelope` as
+   needed.
+8. Subscribe to `DocumentChanged` and invalidate dependent caches.
+
+## Non-Goals
+
+The following operations are not currently part of the hub contract in this
+repo:
+
+- listing settings files
+- reading settings files
+- writing settings files
+- server-side composition expansion for editor file IO
 
 ## Envelope Handling Recommendation
 

@@ -297,14 +297,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             // Get the current tab's action binding
             var currentActionBinding = this.GetActionBindingForTab<TItem>(viewModel.SelectedTabIndex)!;
 
-            // If KeepOpenAfterAction is true, execute immediately and keep palette open
-            if (!this._parentWindow.IsEphemeral) {
-                await currentActionBinding.ExecuteAsync(action, selectedItem);
-                return;
-            }
-
-            // Default behavior: close window first, then defer execution
-            this.ExecuteDeferred(async () => await currentActionBinding.ExecuteAsync(action, selectedItem));
+            await this.ExecutePaletteActionAsync(currentActionBinding, action, selectedItem);
         };
 
         // Set up tooltip popover exit handler
@@ -498,19 +491,33 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
 
         viewModel.RecordUsage();
 
-        // If KeepOpenAfterAction is true, execute immediately and keep palette open
-        if (!this._parentWindow.IsEphemeral) {
-            await actionBinding.ExecuteAsync(action, selectedItem);
-            return true;
-        }
-
-        // Default behavior: close window first, then defer execution to Revit API context
-        this.ExecuteDeferred(async () => await actionBinding.ExecuteAsync(action, selectedItem));
+        await this.ExecutePaletteActionAsync(actionBinding, action, selectedItem);
         return true;
     }
 
     /// <summary>
-    ///     Closes the window and defers action execution to Revit API context via Window.Closed event.
+    ///     Executes a palette action while keeping its configured execution lane
+    ///     independent from whether the window is pinned or ephemeral.
+    /// </summary>
+    private Task ExecutePaletteActionAsync<TItem>(
+        ActionBinding<TItem> actionBinding,
+        PaletteAction<TItem> action,
+        TItem item
+    ) where TItem : class, IPaletteListItem {
+        if (this._parentWindow == null) {
+            throw new InvalidOperationException(
+                "Palette parent window not set. Use PaletteFactory.Create or call SetParentWindow.");
+        }
+
+        if (!this._parentWindow.IsEphemeral)
+            return actionBinding.ExecuteAsync(action, item);
+
+        this.ExecuteDeferred(() => actionBinding.ExecuteAsync(action, item));
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    ///     Closes the window first, then runs the provided callback after the window has closed.
     /// </summary>
     private void ExecuteDeferred(Func<Task> action) {
         if (this._parentWindow == null) {
@@ -518,18 +525,25 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
                 "Palette parent window not set. Use PaletteFactory.Create or call SetParentWindow.");
         }
 
+        void ClosedHandler(object? sender, EventArgs args) {
+            this._parentWindow.Closed -= ClosedHandler;
+            _ = action();
+        }
+
+        this._parentWindow.Closed += ClosedHandler;
+        this.RequestClose();
+    }
+
+    /// <summary>
+    ///     Closes the window first, then re-enters Revit context before invoking the callback.
+    /// </summary>
+    private void ExecuteDeferredInRevitContext(Func<Task> action) {
         if (!RevitTaskAccessor.IsConfigured) {
             throw new InvalidOperationException(
                 "RevitTaskAccessor not configured. Wire up in App.OnStartup.");
         }
 
-        void ClosedHandler(object sender, EventArgs args) {
-            this._parentWindow.Closed -= ClosedHandler;
-            _ = RevitTaskAccessor.RunAsync(async () => await action());
-        }
-
-        this._parentWindow.Closed += ClosedHandler;
-        this.RequestClose();
+        this.ExecuteDeferred(() => RevitTaskAccessor.RunAsync(action));
     }
 
     private void RequestClose(bool restoreFocus = true) =>
@@ -629,7 +643,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         } else if (e.Key == Key.Right && selectedItem != null) {
             e.Handled = this.ShowPopover(placementTarget => {
                 var currentBinding = this.GetCurrentActionBinding();
-                this._actionMenu?.SetActionsUntyped(currentBinding?.GetAllActionsUntyped());
+                this._actionMenu?.SetActionsUntyped(currentBinding?.GetAllActionsUntyped() ?? Array.Empty<object>());
                 this._actionMenu?.ShowUntyped(placementTarget, selectedItem);
             });
         }
@@ -648,7 +662,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
 
         // Defer the Ctrl-released callback to Revit API context
         var callback = this._onCtrlReleased;
-        this.ExecuteDeferred(() => {
+        this.ExecuteDeferredInRevitContext(() => {
             callback();
             return Task.CompletedTask;
         });

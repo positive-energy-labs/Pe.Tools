@@ -29,7 +29,7 @@ public class Application : ExternalApplication {
     private static RevitTaskService _revitTaskService;
 
     /// <summary>
-    ///     SignalR server for settings editor frontend.
+    ///     SignalR server for the external settings-editor frontend.
     /// </summary>
 #if !NET48
     private static SettingsEditorServer? _settingsEditorServer;

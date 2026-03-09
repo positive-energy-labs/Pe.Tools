@@ -134,7 +134,7 @@ public class CmdFFMigrator : IExternalCommand {
                 .Add(
                     LogEventLevel.Information,
                     new StackFrame(),
-                    "Opened FF Migrator settings editor route in your default browser."
+                    "Opened FF Migrator external settings-editor route in your default browser."
                 )
                 .Show();
             return;
@@ -144,7 +144,7 @@ public class CmdFFMigrator : IExternalCommand {
             .Add(
                 LogEventLevel.Warning,
                 new StackFrame(),
-                "Could not open settings editor route. Check PE_SETTINGS_EDITOR_BASE_URL and PE_SETTINGS_EDITOR_SIGNALR_BASE_URL."
+                "Could not open external settings-editor route. Check PE_SETTINGS_EDITOR_BASE_URL and PE_SETTINGS_EDITOR_SIGNALR_BASE_URL."
             )
             .Show();
     }
