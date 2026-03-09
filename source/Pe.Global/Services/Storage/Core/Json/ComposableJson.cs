@@ -2,6 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using NJsonSchema;
+using Pe.Global.PolyFill;
 using Pe.Global.Services.Storage.Core;
 using Pe.Global.Services.Storage.Core.Json.ContractResolvers;
 using System.Reflection;

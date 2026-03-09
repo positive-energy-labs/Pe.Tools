@@ -1,4 +1,22 @@
-﻿using File = ModularPipelines.FileSystem.File;
+﻿using Build.Attributes;
+using Build.Options;
+using Microsoft.Extensions.Options;
+using ModularPipelines.Context;
+using ModularPipelines.Git.Extensions;
+using ModularPipelines.Modules;
+using Sourcy.DotNet;
+using ModularPipelines.Attributes;
+using ModularPipelines.Context;
+using ModularPipelines.DotNet.Extensions;
+using ModularPipelines.DotNet.Options;
+using ModularPipelines.Enums;
+using ModularPipelines.FileSystem;
+using ModularPipelines.Models;
+using ModularPipelines.Modules;
+using ModularPipelines.Options;
+using Shouldly;
+using Sourcy.DotNet;
+using File = ModularPipelines.FileSystem.File;
 
 namespace Build.Modules;
 
@@ -13,7 +31,7 @@ public sealed class CreateInstallerModule : Module<CommandResult> {
         var versioningResult = await GetModule<ResolveVersioningModule>();
         var versioning = versioningResult.Value!;
 
-        var wixTarget = new File(Projects.Pe.Tools.FullName);
+        var wixTarget = new File(Projects.Pe_App.FullName);
         var wixInstaller = new File(Projects.Installer.FullName);
         var wixToolFolder = await InstallWixAsync(context, cancellationToken);
 

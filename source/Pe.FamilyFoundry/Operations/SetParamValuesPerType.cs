@@ -4,7 +4,7 @@ using Pe.Extensions.FamDocument.SetValue;
 using Pe.Extensions.FamManager;
 using Pe.Extensions.FamParameter.Formula;
 using Pe.FamilyFoundry.OperationSettings;
-
+using System;
 namespace Pe.FamilyFoundry.Operations;
 
 /// <summary>
@@ -99,7 +99,7 @@ public class SetParamValuesPerType(AddAndSetParamsSettings settings)
 
         // Check for double-quoted string literal: "\"text\"" → strip quotes
         var actualValue = IsQuotedStringLiteral(userValue)
-            ? trimmedUserValue[1..^1]
+            ? trimmedUserValue.Substring(1, trimmedUserValue.Length - 2)
             : userValue;
 
         // Reject values that contain parameter references (check AFTER stripping quotes)

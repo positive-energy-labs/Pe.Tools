@@ -3,7 +3,7 @@
     <PropertyGroup>
         <Configurations>Debug.R23;Debug.R24;Debug.R25;Debug.R26</Configurations>
         <Configurations>$(Configurations);Release.R23;Release.R24;Release.R25;Release.R26</Configurations>
-        <IsRepackable Condition="$(Configuration.Contains('Release'))">true</IsRepackable>
+        <IsRepackable Condition="$(Configuration.Contains('Release'))">false</IsRepackable>
         <IsRepackable Condition="$(Configuration.Contains('Debug'))">false</IsRepackable>
 
 
@@ -16,20 +16,24 @@
 
     <ItemGroup>
         <!-- Revit Platform -->
-        <PackageReference Include="Nice3point.Revit.Api.UIFramework" Version="$(RevitVersion).*"/>
-        <PackageReference Include="Nice3point.Revit.Api.UIFrameworkServices" Version="$(RevitVersion).*"/>
-        <PackageReference Include="Nice3point.Revit.Toolkit" Version="$(RevitVersion).*"/>
-        <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*"/>
-        <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*"/>
-        <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*"/>
+        <PackageReference Include="ILRepack" Version="2.0.44">
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+          <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="Nice3point.Revit.Api.UIFramework" Version="$(RevitVersion).*" />
+        <PackageReference Include="Nice3point.Revit.Api.UIFrameworkServices" Version="$(RevitVersion).*" />
+        <PackageReference Include="Nice3point.Revit.Toolkit" Version="$(RevitVersion).*" />
+        <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*" />
+        <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*" />
+        <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Pe.Global\Pe.Global.csproj"/>
+        <ProjectReference Include="..\Pe.Global\Pe.Global.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-        <Folder Include="PolyFill\"/>
+        <Folder Include="PolyFill\" />
     </ItemGroup>
 
 </Project>

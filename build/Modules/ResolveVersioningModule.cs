@@ -1,4 +1,19 @@
+using Build.Attributes;
 using Build.Options;
+using Microsoft.Extensions.Options;
+using ModularPipelines.Context;
+using ModularPipelines.Git.Extensions;
+using ModularPipelines.Modules;
+using Sourcy.DotNet;
+using ModularPipelines.Attributes;
+using ModularPipelines.Context;
+using ModularPipelines.DotNet.Extensions;
+using ModularPipelines.DotNet.Options;
+using ModularPipelines.Enums;
+using ModularPipelines.Git.Options;
+using ModularPipelines.Models;
+using ModularPipelines.Modules;
+using Sourcy.DotNet;
 
 namespace Build.Modules;
 

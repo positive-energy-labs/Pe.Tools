@@ -1,3 +1,4 @@
+using Pe.Global.PolyFill;
 using Pe.Extensions.FamDocument;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
 
@@ -61,7 +62,7 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
             return false;
 
         spec = new ConstrainedRectangleExtrusionSpec {
-            Name = $"Extrusion_{extrusion.Id.IntegerValue}",
+            Name = $"Extrusion_{extrusion.Id.Value()}",
             IsSolid = extrusion.IsSolid,
             StartOffset = extrusion.StartOffset,
             EndOffset = extrusion.EndOffset,
@@ -89,7 +90,7 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
             return false;
 
         spec = new ConstrainedCircleExtrusionSpec {
-            Name = $"Extrusion_{extrusion.Id.IntegerValue}",
+            Name = $"Extrusion_{extrusion.Id.Value()}",
             IsSolid = extrusion.IsSolid,
             StartOffset = extrusion.StartOffset,
             EndOffset = extrusion.EndOffset,

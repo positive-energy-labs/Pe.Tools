@@ -76,6 +76,18 @@ public static class BclExtensions {
     }
 
     /// <summary>
+    ///     Reads HTTP content as a string with a framework-agnostic API surface.
+    ///     .NET Framework does not expose the cancellation-token overload.
+    /// </summary>
+    public static Task<string> ReadAsStringAsyncCompat(this HttpContent content, CancellationToken cancellationToken) {
+#if NET48
+        return content.ReadAsStringAsync();
+#else
+        return content.ReadAsStringAsync(cancellationToken);
+#endif
+    }
+
+    /// <summary>
     ///     Clamps a value between a minimum and maximum value.
     ///     Polyfill for Math.Clamp (added in .NET Core 2.0).
     /// </summary>

@@ -1,4 +1,19 @@
-﻿namespace Build.Modules;
+﻿using Build.Attributes;
+using Build.Options;
+using Microsoft.Extensions.Options;
+using ModularPipelines.Context;
+using ModularPipelines.Git.Extensions;
+using ModularPipelines.Modules;
+using Sourcy.DotNet;
+using ModularPipelines.Attributes;
+using ModularPipelines.Context;
+using ModularPipelines.DotNet.Extensions;
+using ModularPipelines.DotNet.Options;
+using ModularPipelines.Models;
+using ModularPipelines.Modules;
+using Sourcy.DotNet;
+
+namespace Build.Modules;
 
 /// <summary>
 ///     Compile the add-in for each supported Revit configuration.
@@ -30,7 +45,7 @@ public sealed class CompileProjectModule : Module {
         string configuration,
         CancellationToken cancellationToken) =>
         await context.DotNet().Build(new DotNetBuildOptions {
-            ProjectSolution = Solutions.Pe.Tools.FullName,
+            ProjectSolution = Solutions.Pe_Tools.FullName,
             Configuration = configuration,
             Properties = [
                 ("VersionPrefix", versioning.VersionPrefix),
