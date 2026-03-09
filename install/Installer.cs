@@ -1,4 +1,7 @@
 ﻿using Installer;
+using WixSharp;
+using WixSharp.CommonTasks;
+using WixSharp.Controls;
 
 const string outputName = "Pe.Tools";
 const string projectName = "Pe.Tools";

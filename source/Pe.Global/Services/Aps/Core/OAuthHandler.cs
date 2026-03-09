@@ -108,7 +108,8 @@ internal static class OAuthHandler {
     private static void ExecuteOAuthFlow(string authUrl, OAuthFlowData flowData, CallbackDelegate callback) {
         lock (OAuthFlowLock) {
             try {
-                Log.Information("[OAuthHandler] Starting OAuth flow execution (acquired lock). {AuthUrl}", string.Concat(authUrl.AsSpan(0, Math.Min(100, authUrl.Length)), "..."));
+                var authUrlPreview = authUrl.Length <= 100 ? authUrl : authUrl[..100] + "...";
+                Log.Information("[OAuthHandler] Starting OAuth flow execution (acquired lock). {AuthUrl}", authUrlPreview);
 
                 TcpListener.Stop();
                 TcpListener.Start();
@@ -233,7 +234,7 @@ internal static class OAuthHandler {
         var response = await OAuthConfig.HttpClient.PostAsync(OAuthConfig.TokenEndpoint, content, cancellationToken)
             .ConfigureAwait(false);
 
-        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var responseBody = await response.Content.ReadAsStringAsyncCompat(cancellationToken).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode) {
             Log.Error("[OAuthHandler] Token request failed. Status: {StatusCode}, Body: {ResponseBody}",

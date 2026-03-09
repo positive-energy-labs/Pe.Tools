@@ -1,4 +1,22 @@
-﻿namespace Build.Modules;
+﻿using Build.Attributes;
+using Build.Options;
+using Microsoft.Extensions.Options;
+using Microsoft.VisualStudio.SolutionPersistence.Model;
+using Microsoft.VisualStudio.SolutionPersistence.Serializer;
+using ModularPipelines.Context;
+using ModularPipelines.Git.Extensions;
+using ModularPipelines.Modules;
+using Sourcy.DotNet;
+using ModularPipelines.Attributes;
+using ModularPipelines.Context;
+using ModularPipelines.DotNet.Extensions;
+using ModularPipelines.DotNet.Options;
+using ModularPipelines.Models;
+using ModularPipelines.Modules;
+using Shouldly;
+using Sourcy.DotNet;
+
+namespace Build.Modules;
 
 /// <summary>
 ///     Resolve solution configurations required to compile the add-in for all supported Revit versions.

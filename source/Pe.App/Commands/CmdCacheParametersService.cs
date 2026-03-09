@@ -111,7 +111,10 @@ public class CmdCacheParametersService : IExternalCommand {
         if (sections.Count != 0) {
             _ = sb.AppendLine();
             _ = sb.AppendLine("Sections:");
-            foreach (var (prefix, (start, end)) in sections.OrderBy(kvp => kvp.Value.start)) {
+            foreach (var section in sections.OrderBy(kvp => kvp.Value.start)) {
+                var prefix = section.Key;
+                var start = section.Value.start;
+                var end = section.Value.end;
                 var count = end - start + 1;
                 _ = sb.AppendLine($"- `{prefix}*`: #{start}-{end} ({count} params)");
             }

@@ -1,4 +1,22 @@
-﻿using Build.Options;
+﻿using Autodesk.PackageBuilder;
+using Build.Attributes;
+using Build.Options;
+using Microsoft.Extensions.Options;
+using ModularPipelines.Context;
+using ModularPipelines.Git.Extensions;
+using ModularPipelines.Modules;
+using Sourcy.DotNet;
+using ModularPipelines.Attributes;
+using ModularPipelines.Context;
+using ModularPipelines.DotNet.Extensions;
+using ModularPipelines.DotNet.Options;
+using ModularPipelines.FileSystem;
+using ModularPipelines.Models;
+using ModularPipelines.Modules;
+using Shouldly;
+using Sourcy.DotNet;
+using System.Diagnostics.CodeAnalysis;
+using System.Text.RegularExpressions;
 using File = ModularPipelines.FileSystem.File;
 
 namespace Build.Modules;
@@ -14,7 +32,7 @@ public sealed partial class CreateBundleModule(IOptions<BundleOptions> bundleOpt
         var versioningResult = await GetModule<ResolveVersioningModule>();
         var versioning = versioningResult.Value!;
 
-        var bundleTarget = new File(Projects.Pe.Tools.FullName);
+        var bundleTarget = new File(Projects.Pe_App.FullName);
         var targetDirectories = bundleTarget.Folder!
             .GetFolder("bin")
             .GetFolders(folder => folder.Name == "publish")
@@ -38,7 +56,7 @@ public sealed partial class CreateBundleModule(IOptions<BundleOptions> bundleOpt
 
     private static void PackFiles(Folder[] targetDirectories, Folder contentFolder) {
         foreach (var targetDirectory in targetDirectories) {
-            TryParseVersion(configuration, out var version)
+            TryParseVersion(targetDirectory.Path, out var version)
                 .ShouldBeTrue($"Could not parse version from directory name: {targetDirectory.Path}");
 
             var versionFolder = contentFolder.CreateFolder(version);
@@ -71,7 +89,7 @@ public sealed partial class CreateBundleModule(IOptions<BundleOptions> bundleOpt
                 .Url(bundleOptions.Value.VendorUrl);
 
             foreach (var targetDirectory in targetDirectories) {
-                TryParseVersion(configuration, out var version)
+                TryParseVersion(targetDirectory.Path, out var version)
                     .ShouldBeTrue($"Could not parse version from directory name: {targetDirectory.Path}");
 
                 var addinManifests = targetDirectory.GetFiles(file => file.Extension == ".addin");

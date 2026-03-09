@@ -1,4 +1,8 @@
-﻿namespace Installer;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Text.RegularExpressions;
+using WixSharp;
+
+namespace Installer;
 
 public static partial class Generator {
     /// <summary>
