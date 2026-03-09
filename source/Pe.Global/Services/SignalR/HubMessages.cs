@@ -10,6 +10,27 @@ public static class HubClientEventNames {
     public const string DocumentChanged = nameof(DocumentChanged);
 }
 
+/// <summary>
+///     SignalR hub method names exposed by <see cref="Hubs.SettingsEditorHub" />.
+///     Exported so external clients do not hand-maintain invoke strings.
+/// </summary>
+[ExportTsClass]
+public static class HubMethodNames {
+    public const string GetSchemaEnvelope = nameof(GetSchemaEnvelope);
+    public const string GetExamplesEnvelope = nameof(GetExamplesEnvelope);
+    public const string ValidateSettingsEnvelope = nameof(ValidateSettingsEnvelope);
+    public const string GetParameterCatalogEnvelope = nameof(GetParameterCatalogEnvelope);
+    public const string GetSettingsCatalogEnvelope = nameof(GetSettingsCatalogEnvelope);
+}
+
+/// <summary>
+///     SignalR transport constants for the external settings-editor frontend.
+/// </summary>
+[ExportTsClass]
+public static class HubRoutes {
+    public const string SettingsEditor = "/hubs/settings-editor";
+}
+
 // =============================================================================
 // Schema Hub Messages
 // =============================================================================
@@ -101,8 +122,9 @@ public record SchemaData(
 );
 
 /// <summary>
-///     Envelope response for schema requests. Not exported; frontend uses a generic HubEnvelope type.
+///     Envelope response for schema requests.
 /// </summary>
+[ExportTsInterface]
 public record SchemaEnvelopeResponse(
     bool Ok,
     EnvelopeCode Code,
@@ -120,8 +142,9 @@ public record ExamplesData(
 );
 
 /// <summary>
-///     Envelope response for examples requests. Not exported; frontend uses a generic HubEnvelope type.
+///     Envelope response for examples requests.
 /// </summary>
+[ExportTsInterface]
 public record ExamplesEnvelopeResponse(
     bool Ok,
     EnvelopeCode Code,
@@ -140,8 +163,9 @@ public record ValidationData(
 );
 
 /// <summary>
-///     Envelope response for validation requests. Not exported; frontend uses a generic HubEnvelope type.
+///     Envelope response for validation requests.
 /// </summary>
+[ExportTsInterface]
 public record ValidationEnvelopeResponse(
     bool Ok,
     EnvelopeCode Code,
@@ -188,8 +212,9 @@ public record ParameterCatalogData(
 );
 
 /// <summary>
-///     Envelope response for parameter catalog requests. Not exported; frontend uses a generic HubEnvelope type.
+///     Envelope response for parameter catalog requests.
 /// </summary>
+[ExportTsInterface]
 public record ParameterCatalogEnvelopeResponse(
     bool Ok,
     EnvelopeCode Code,
@@ -207,8 +232,9 @@ public record SettingsCatalogData(
 );
 
 /// <summary>
-///     Envelope response for settings-catalog requests. Not exported; frontend uses a generic HubEnvelope type.
+///     Envelope response for settings-catalog requests.
 /// </summary>
+[ExportTsInterface]
 public record SettingsCatalogEnvelopeResponse(
     bool Ok,
     EnvelopeCode Code,

@@ -13,7 +13,7 @@ using Serilog;
 namespace Pe.Global.Services.SignalR;
 
 /// <summary>
-///     Self-hosted SignalR server for the settings editor frontend.
+///     Self-hosted SignalR server for the external settings-editor frontend.
 ///     Runs as a Kestrel instance within the Revit add-in process.
 /// </summary>
 public class SettingsEditorServer : IDisposable {

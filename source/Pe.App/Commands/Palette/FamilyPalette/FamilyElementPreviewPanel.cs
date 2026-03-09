@@ -6,7 +6,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
-using System.Windows.Threading;
 using Button = Wpf.Ui.Controls.Button;
 using Grid = System.Windows.Controls.Grid;
 using TextBlock = Wpf.Ui.Controls.TextBlock;
@@ -18,10 +17,9 @@ namespace Pe.App.Commands.Palette.FamilyPalette;
 /// <summary>
 ///     Interactive sidebar panel for family elements that displays element details
 ///     and associated elements with inline action buttons.
-///     Implements <see cref="ISidebarPanel{TItem}" /> for auto-wiring with <see cref="FamilyElementItem" />.
-///     Uses async loading pattern to keep the UI responsive during navigation.
+///     Uses the shared sidebar pipeline so association gathering stays off the dispatcher path.
 /// </summary>
-public class FamilyElementPreviewPanel : UserControl, ISidebarPanel<FamilyElementItem> {
+public class FamilyElementPreviewPanel : PaletteSidebarPanel<FamilyElementItem, FamilyElementPreviewData> {
     private readonly Border _associatedContainer;
     private readonly StackPanel _associatedElementsList;
     private readonly WpfUiRichTextBox _detailsBox;
@@ -75,54 +73,103 @@ public class FamilyElementPreviewPanel : UserControl, ISidebarPanel<FamilyElemen
         base.Content = mainStack;
     }
 
-    private FlowDocument BuildElementDetails(FamilyElementItem item) {
+    protected override void ShowLoading(FamilyElementItem item) {
+        this._currentItem = item;
+
         var doc = FlowDocumentBuilder.Create()
             .AddHeader(item.TextPrimary);
 
+        var loadingPara = new Paragraph(new Run("Loading...") {
+            FontStyle = FontStyles.Italic,
+            Foreground = Brushes.Gray
+        }) { Margin = new Thickness(0, 8, 0, 0) };
+
+        doc.Blocks.Add(loadingPara);
+        this._detailsBox.Document = doc;
+        this._associatedElementsList.Children.Clear();
+        this._associatedContainer.Visibility = Visibility.Collapsed;
+    }
+
+    protected override async Task<FamilyElementPreviewData?> BuildDataAsync(FamilyElementItem item, CancellationToken ct) {
+        if (ct.IsCancellationRequested) return null;
+        return await PaletteThreading.RunRevitAsync(() => this.BuildPreviewData(item), ct);
+    }
+
+    protected override void RenderData(FamilyElementPreviewData? data) {
+        if (data == null) {
+            this.ClearContent();
+            return;
+        }
+
+        this._currentItem = data.Item;
+
+        var doc = FlowDocumentBuilder.Create()
+            .AddHeader(data.Header);
+
+        foreach (var (key, value) in data.Details)
+            _ = doc.AddKeyValue(key, value);
+
+        this._detailsBox.Document = doc;
+        this.RefreshAssociatedElements(data.AssociatedElements);
+    }
+
+    protected override void ClearContent() {
+        this._currentItem = null;
+        this._detailsBox.Document = FlowDocumentBuilder.Create();
+        this._associatedElementsList.Children.Clear();
+        this._associatedContainer.Visibility = Visibility.Collapsed;
+    }
+
+    private FamilyElementPreviewData BuildPreviewData(FamilyElementItem item) {
+        var details = new List<(string key, string value)>();
+
         switch (item.ElementType) {
         case FamilyElementType.Parameter:
-            _ = doc.AddKeyValue("Type/Instance", item.FamilyParam!.GetTypeInstanceDesignation());
-            _ = doc.AddKeyValue("Data Type", item.FamilyParam.Definition.GetDataType().ToLabel());
-            _ = doc.AddKeyValue("Storage Type", item.FamilyParam.StorageType.ToString());
-            _ = doc.AddKeyValue("Is Built-In", item.FamilyParam.IsBuiltInParameter().ToString());
-            _ = doc.AddKeyValue("Is Shared", item.FamilyParam.IsShared.ToString());
+            var familyParam = item.FamilyParam!;
+            details.Add(("Type/Instance", familyParam.GetTypeInstanceDesignation()));
+            details.Add(("Data Type", familyParam.Definition?.GetDataType().ToLabel() ?? string.Empty));
+            details.Add(("Storage Type", familyParam.StorageType.ToString()));
+            details.Add(("Is Built-In", familyParam.IsBuiltInParameter().ToString()));
+            details.Add(("Is Shared", familyParam.IsShared.ToString()));
 
-            if (!string.IsNullOrEmpty(item.FamilyParam.Formula))
-                _ = doc.AddKeyValue("Formula", item.FamilyParam.Formula);
+            if (!string.IsNullOrEmpty(familyParam.Formula))
+                details.Add(("Formula", familyParam.Formula));
             break;
 
         case FamilyElementType.Connector:
-            _ = doc.AddKeyValue("Element ID", item.Connector!.Id.ToString());
-            _ = doc.AddKeyValue("Domain", item.Connector.Domain.ToString());
+            details.Add(("Element ID", item.Connector!.Id.ToString()));
+            details.Add(("Domain", item.Connector.Domain.ToString()));
             break;
 
         case FamilyElementType.Dimension:
-            _ = doc.AddKeyValue("Element ID", item.Dimension!.Id.ToString());
-            _ = doc.AddKeyValue("Type", item.Dimension.DimensionType?.Name ?? "Unknown");
-            _ = item.Dimension.Value.HasValue
-                ? doc.AddKeyValue("Value", $"{item.Dimension.Value.Value:F4}")
-                : doc.AddKeyValue("Segments", item.Dimension.NumberOfSegments.ToString());
+            details.Add(("Element ID", item.Dimension!.Id.ToString()));
+            details.Add(("Type", item.Dimension.DimensionType?.Name ?? "Unknown"));
+            details.Add(item.Dimension.Value.HasValue
+                ? ("Value", $"{item.Dimension.Value.Value:F4}")
+                : ("Segments", item.Dimension.NumberOfSegments.ToString()));
             break;
 
         case FamilyElementType.ReferencePlane:
-            _ = doc.AddKeyValue("Element ID", item.RefPlane!.Id.ToString());
-            _ = doc.AddKeyValue("Name", item.RefPlane.Name.NullIfEmpty() ?? "(unnamed)");
+            details.Add(("Element ID", item.RefPlane!.Id.ToString()));
+            details.Add(("Name", item.RefPlane.Name.NullIfEmpty() ?? "(unnamed)"));
             break;
 
         case FamilyElementType.Family:
-            _ = doc.AddKeyValue("Family", item.FamilyInstance!.Symbol.FamilyName);
-            _ = doc.AddKeyValue("Type", item.FamilyInstance.Symbol.Name);
-            _ = doc.AddKeyValue("Element ID", item.FamilyInstance.Id.ToString());
+            details.Add(("Family", item.FamilyInstance!.Symbol.FamilyName));
+            details.Add(("Type", item.FamilyInstance.Symbol.Name));
+            details.Add(("Element ID", item.FamilyInstance.Id.ToString()));
             break;
         }
 
-        return doc;
+        return new FamilyElementPreviewData(
+            item,
+            item.TextPrimary,
+            details,
+            item.GetAssociatedElements());
     }
 
-    private void RefreshAssociatedElements(FamilyElementItem item) {
+    private void RefreshAssociatedElements(IReadOnlyList<AssociatedElement> associated) {
         this._associatedElementsList.Children.Clear();
-
-        var associated = item.GetAssociatedElements();
 
         if (associated.Count == 0) {
             this._associatedContainer.Visibility = Visibility.Collapsed;
@@ -199,52 +246,11 @@ public class FamilyElementPreviewPanel : UserControl, ISidebarPanel<FamilyElemen
             break;
         }
     }
-
-    #region ISidebarPanel Implementation
-
-    /// <inheritdoc />
-    UIElement ISidebarPanel<FamilyElementItem>.Content => this;
-
-    /// <inheritdoc />
-    /// <summary>
-    ///     Called immediately on selection change (before debounce).
-    ///     Clears stale content so the user doesn't see old data during navigation.
-    /// </summary>
-    public void Clear() {
-        this._currentItem = null;
-        this._detailsBox.Document = FlowDocumentBuilder.Create();
-        this._associatedElementsList.Children.Clear();
-        this._associatedContainer.Visibility = Visibility.Collapsed;
-    }
-
-    /// <inheritdoc />
-    /// <summary>
-    ///     Called after debounce with cancellation support.
-    ///     Uses dispatcher priority to keep UI responsive.
-    /// </summary>
-    public void Update(FamilyElementItem? item, CancellationToken ct) {
-        this._currentItem = item;
-
-        if (item == null) {
-            this.Clear();
-            return;
-        }
-
-        if (ct.IsCancellationRequested) return;
-
-        // Schedule at lower priority to keep UI responsive
-        _ = this.Dispatcher.BeginInvoke(DispatcherPriority.Background, () => {
-            if (ct.IsCancellationRequested) return;
-
-            // Build element details document
-            this._detailsBox.Document = this.BuildElementDetails(item);
-
-            if (ct.IsCancellationRequested) return;
-
-            // Build associated elements list
-            this.RefreshAssociatedElements(item);
-        });
-    }
-
-    #endregion
 }
+
+public sealed record FamilyElementPreviewData(
+    FamilyElementItem Item,
+    string Header,
+    List<(string key, string value)> Details,
+    List<AssociatedElement> AssociatedElements
+);

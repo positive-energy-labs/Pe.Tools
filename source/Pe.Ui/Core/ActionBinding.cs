@@ -10,6 +10,11 @@ public abstract class ActionBinding {
     ///     Gets all registered actions as untyped objects
     /// </summary>
     public abstract IEnumerable<object> GetAllActionsUntyped();
+
+    /// <summary>
+    ///     Returns whether an item has any enabled actions.
+    /// </summary>
+    public abstract bool HasAvailableActionsUntyped(IPaletteListItem item);
 }
 
 /// <summary>
@@ -32,13 +37,13 @@ public class ActionBinding<TItem> : ActionBinding where TItem : class, IPaletteL
     ///     Gets all available actions for a given item (filtered by CanExecute)
     /// </summary>
     public IEnumerable<PaletteAction<TItem>> GetAvailableActions(TItem item) =>
-        this._actions.Where(a => a.CanExecute(item));
+        this._actions.Where(a => this.CanExecute(a, item));
 
     /// <summary>
     ///     Non-generic helper to check if any action can execute for an item
     ///     Used by UI controls that don't know the generic type
     /// </summary>
-    public bool HasAvailableActions(IPaletteListItem item) {
+    public override bool HasAvailableActionsUntyped(IPaletteListItem item) {
         if (item is not TItem typedItem) return false;
         return this.GetAvailableActions(typedItem).Any();
     }
@@ -52,23 +57,33 @@ public class ActionBinding<TItem> : ActionBinding where TItem : class, IPaletteL
     public override IEnumerable<object> GetAllActionsUntyped() => this._actions;
 
     /// <summary>
-    ///     Executes the action's Execute delegate for a given item.
+    ///     Executes the action on its configured lane for a given item.
     ///     Throws if no Execute method is defined.
     /// </summary>
     public async Task ExecuteAsync(PaletteAction<TItem> action, TItem item) {
         if (action.Execute == null)
             throw new InvalidOperationException($"Action '{action.Name}' has no Execute method defined");
 
-        await action.Execute(item);
+        if (action.ExecutionLane == PaletteActionExecutionLane.Ui) {
+            await action.Execute(item);
+            return;
+        }
+
+        if (!RevitTaskAccessor.IsConfigured) {
+            throw new InvalidOperationException(
+                "RevitTaskAccessor not configured. Wire up in Application.OnStartup.");
+        }
+
+        await RevitTaskAccessor.RunAsync(() => action.Execute(item));
     }
 
     /// <summary>
     ///     Finds the matching action for a keyboard event without executing it.
     ///     Returns null if no action matches or CanExecute returns false.
     /// </summary>
-    public PaletteAction<TItem> TryFindAction(TItem item, Key key, ModifierKeys modifiers) {
+    public PaletteAction<TItem>? TryFindAction(TItem item, Key key, ModifierKeys modifiers) {
         var action = this.FindMatchingAction(key, modifiers);
-        if (action == null || !action.CanExecute(item)) return null;
+        if (action == null || !this.CanExecute(action, item)) return null;
         return action;
     }
 
@@ -76,16 +91,18 @@ public class ActionBinding<TItem> : ActionBinding where TItem : class, IPaletteL
     ///     Finds the matching action for a mouse event without executing it.
     ///     Returns null if no action matches or CanExecute returns false.
     /// </summary>
-    public PaletteAction<TItem> TryFindAction(TItem item, ModifierKeys modifiers) {
+    public PaletteAction<TItem>? TryFindAction(TItem item, ModifierKeys modifiers) {
         var action = this.FindMatchingAction(null, modifiers);
-        if (action == null || !action.CanExecute(item)) return null;
+        if (action == null || !this.CanExecute(action, item)) return null;
         return action;
     }
+
+    public bool CanExecute(PaletteAction<TItem> action, TItem item) => action.CanExecute(item);
 
     /// <summary>
     ///     Finds the best matching action for the given input combination
     /// </summary>
-    private PaletteAction<TItem> FindMatchingAction(Key? key, ModifierKeys modifiers) {
+    private PaletteAction<TItem>? FindMatchingAction(Key? key, ModifierKeys modifiers) {
         // Find exact matches first (most specific)
         // Match if modifiers match AND (key matches OR action has no specific key)
         var exactMatch = this._actions.FirstOrDefault(a =>

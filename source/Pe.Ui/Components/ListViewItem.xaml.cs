@@ -56,7 +56,7 @@ public partial class ListViewItem : Border {
 
         // Update Pill Text and Visibility
         var hasPill = !string.IsNullOrWhiteSpace(item.TextPill);
-        this.PillBorder.Text = hasPill ? item.TextPill : string.Empty;
+        this.PillBorder.Text = hasPill ? item.TextPill ?? string.Empty : string.Empty;
         this.PillBorder.Visibility = hasPill ? Visibility.Visible : Visibility.Collapsed;
 
         // Update Icon and Visibility
@@ -157,24 +157,17 @@ public partial class ListViewItem : Border {
         var actionBinding = this.FindActionBinding();
         if (actionBinding == null) return true; // Default to executable if no actions found
 
-        // Use reflection to call HasAvailableActions method
-        var hasAvailableActionsMethod = actionBinding.GetType().GetMethod("HasAvailableActions");
-        if (hasAvailableActionsMethod != null) {
-            var result = hasAvailableActionsMethod.Invoke(actionBinding, new object[] { item });
-            return result is bool canExecute && canExecute;
-        }
-
-        return true; // Default to executable if method not found
+        return actionBinding.HasAvailableActionsUntyped(item);
     }
 
     /// <summary>
     ///     Finds the ActionBinding by walking up the visual tree to find SelectablePalette
     /// </summary>
-    private object FindActionBinding() {
+    private ActionBinding? FindActionBinding() {
         var current = this.Parent;
         while (current != null) {
             var actionBinding = PaletteAttachedProperties.GetActionBinding(current);
-            if (actionBinding != null) return actionBinding;
+            if (actionBinding is ActionBinding typedBinding) return typedBinding;
 
             current = current is FrameworkElement fe ? fe.Parent : null;
         }

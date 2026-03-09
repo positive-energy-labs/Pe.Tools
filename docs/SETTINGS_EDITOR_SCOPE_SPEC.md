@@ -1,9 +1,9 @@
-# SignalR Settings Editor - Scope and Architecture
+# Settings Editor Integration - Scope and Architecture
 
 ## Purpose
 
-Capture the architecture decisions and current stack for the SignalR-backed
-settings editor so future implementation work stays aligned.
+Capture the architecture decisions and current state for the external
+settings-editor integration so future work in this repo stays aligned.
 
 ## Core Decisions
 
@@ -20,49 +20,47 @@ settings editor so future implementation work stays aligned.
   - Authoring schemas remain backend/local-tooling assets for JSON file
     intellisense.
 - **Module-first backend registration**
-  - Settings/actions are registered by module instead of ad-hoc startup wiring.
-  - Module metadata is the source of truth for settings identity and location
-    (`ModuleName`, `SettingsTypeName`, `StorageName`, `DefaultSubDirectory`).
-- **TanStack Form as frontend runtime foundation**
-  - TanStack Form handles field state, submit lifecycle, linked-field behavior,
-    and validation orchestration.
-  - Schema walking remains custom and explicit.
+  - Settings modules are registered by module instead of ad-hoc startup wiring.
+  - Module metadata is the source of truth for schema/validation identity and
+    default storage conventions (`ModuleKey`, `SettingsTypeName`,
+    `DefaultSubDirectory`).
 - **Typed envelope contract for hub responses**
   - Hub responses use a typed envelope (`ok`, typed `code`, `message`, `issues`,
     `data`) so frontend branching is stable and machine-readable.
-- **Typed hub clients over raw method-string invocations**
-  - Frontend feature code consumes typed hub clients/hooks rather than calling
-    SignalR `invoke` with method-name strings directly.
+- **Backend-owned transport constants**
+  - Hub routes, hub method names, DTOs, enums, and event names are defined in
+    this repo and exported for the external frontend.
+- **Filesystem as source of truth for settings files**
+  - In this repo, settings listing, reads, writes, and composition are local
+    filesystem concerns, not SignalR concerns.
 
 ## Current Implemented Architecture
 
-### Backend
+### Backend In This Repo
 
-- SignalR hubs: `SchemaHub`, `SettingsHub`, `ActionsHub`.
+- SignalR hub: `SettingsEditorHub`.
 - Module registration: `SettingsModuleRegistry` + `ISettingsModule<TSettings>`.
 - Structured validation contract: `ValidationIssue` from
-  `SchemaHub.ValidateSettings`.
+  `SettingsEditorHub.ValidateSettingsEnvelope`.
 - Dynamic options via providers: `IOptionsProvider` /
   `IDependentOptionsProvider`.
 - Client event contract names are centralized via `HubClientEventNames` (for
   example `DocumentChanged`) to reduce string drift.
+- Local settings discovery uses `SettingsManager.Discover(...)`.
+- Local file composition uses `ComposableJson<T>` + `JsonCompositionPipeline`.
 
-### Frontend (Stack)
+### External Frontend
 
-- Router: TanStack Router.
-- Form runtime: TanStack Form.
-- Query/cache runtime: TanStack Query.
-- UI controls: shadcn components.
-- Transport model: shared SignalR runtime, typed hub clients, focused hub hooks.
-- Rendering model: custom schema walker + field adapters.
+The frontend lives in a separate TypeScript repository. This repo should only
+document the contract and backend responsibilities it exposes to that frontend,
+not frontend implementation details.
 
 ### Cross-layer Contract
 
 - Typed envelope response model:
   - `ok`, typed `code`, `message`, `issues`, `data`.
 - Settings catalog response model:
-  - `files[]` flat list and `tree` directory projection from the same backend
-    discovery pass.
+  - module target metadata for frontend target selection.
 - JSON Schema + targeted metadata:
   - `x-depends-on`
   - `x-provider`
@@ -77,30 +75,31 @@ settings editor so future implementation work stays aligned.
 - Internal schema pipelines:
   - authoring pipeline: rich schema for local files/VS Code intellisense.
   - render pipeline: pre-resolved schema for frontend field rendering.
+- Local storage pipelines:
+  - filesystem discovery for settings files/directories.
+  - local composition for `$include` and `$preset` expansion.
 
 ### Runtime Interaction Model
 
-- Frontend composition layers:
-  - SignalR transport/runtime.
-  - Typed hub clients (`schema`, `actions`, `settings`).
-  - Feature hooks that orchestrate query/cache + UI behavior.
+- Frontend/backend boundary:
+  - external frontend connects to the single settings-editor hub.
+  - frontend handles its own file IO strategy outside this repo.
 - Hub state tracking:
-  - Connection state and error are tracked per hub, not only globally.
+  - server tracks active connections for notification gating.
 - Invalidation:
   - Document-change notifications invalidate schema/options-dependent caches.
 
 ### Data Loading Strategy
 
 - Default:
-  - Server-filtered options/providers remain the default path for deterministic,
-    Revit-authoritative behavior.
-- Targeted expansion:
-  - Rich catalog endpoints are added for workflows that need full metadata on
-    the client (for example mapping UIs), with optional client-side filtering on
-    top.
+  - filesystem-backed settings discovery/composition remains the default path
+    inside this repo.
+- SignalR path:
+  - server-filtered options/providers, validation, schema generation, and
+    document-aware parameter catalogs remain the SignalR use cases.
 - Constraint:
-  - Preserve simple attribute/provider authoring on backend while enabling
-    richer frontend UX where justified.
+  - preserve simple attribute/provider authoring on backend while keeping file
+    storage concerns out of the hub surface.
 
 ## Key Locations
 
@@ -114,38 +113,19 @@ settings editor so future implementation work stays aligned.
 - `source/Pe.Global/Services/Storage/Core/Json/SchemaProcessors/`
 - `source/Pe.Global/Services/Storage/Core/Json/SchemaProviders/`
 
-### Frontend
+### External Frontend
 
-- `C:/Users/kaitp/source/repos/signalir-clientside-demo/v2/src/routes/settings-editor.tsx`
-  - Route-level orchestration for module/file/port search params and page-level
-    UX (generated form, save/refresh, payload viewers, communication log).
-- `C:/Users/kaitp/source/repos/signalir-clientside-demo/v2/src/lib/use-settings-editor-client.ts`
-  - Single SignalR client/runtime for `/hubs/settings-editor`.
-  - Handles connection lifecycle and `DocumentChanged` invalidation behavior.
-- `C:/Users/kaitp/source/repos/signalir-clientside-demo/v2/src/features/settings-editor/queries.ts`
-  - One TanStack Query hook per envelope hub method.
-  - Query keys split by domain (`catalog`, `list`, `schema`, `read`, `examples`,
-    `parameter-catalog`).
-- `C:/Users/kaitp/source/repos/signalir-clientside-demo/v2/src/features/settings-editor/schema-to-field-render.tsx`
-  - `SchemaToFieldRender` implementation.
-  - Recursive schema walking with `$ref`/`oneOf`/`allOf` resolution and array
-    item handling.
-  - Provider-aware field rendering and dependent sibling-context wiring.
-- `C:/Users/kaitp/source/repos/signalir-clientside-demo/v2/src/features/settings-editor/schema-utils.ts`
-  - Render schema parsing/normalization helpers.
-  - Default-value hydration and payload-to-default merge behavior.
-- `C:/Users/kaitp/source/repos/signalir-clientside-demo/v2/src/components/ui/combobox.tsx`
-  - Multi-select combobox primitive used by provider-backed string arrays.
-- `C:/Users/kaitp/source/repos/signalir-clientside-demo/v2/src/generated/`
-  - TypeGen-exported backend contracts (plus short-term sync patches while
-    regenerating types).
+- Not in this repository.
+- Consume the hub contract documented in `docs/SETTINGS_EDITOR_SIGNALR_CONTRACT.md`.
+- Do not assume this repo contains the authoritative frontend runtime or file IO
+  behavior.
 
 ## Implementation Principles
 
 - Favor type-safe APIs and compile-time checks.
 - Keep execution flow linear and debuggable.
 - Keep metadata minimal; avoid early DSL over-abstraction.
-- Coordinate backend and frontend design together.
+- Coordinate backend and external frontend design together.
 - Aarchitect metadata to integrate easily into TanStack Form and Query
 - Preserve clear user feedback (status, progress, field-level errors).
 - Maximally reduce the surface area of generated code.
@@ -160,7 +140,7 @@ settings editor so future implementation work stays aligned.
 - Validation and options remain responsive and deterministic.
 - Schema walking remains explicit while runtime behavior is standardized.
 
-## Target Frontend Use Case Examples
+## Remaining SignalR Use Case Examples
 
 - Get family type name based on a family name.
 - Get shared parameters in document, from parameters-service-cache, or from a

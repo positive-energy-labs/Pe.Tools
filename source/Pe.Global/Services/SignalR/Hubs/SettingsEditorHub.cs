@@ -13,7 +13,9 @@ using System.Reflection;
 namespace Pe.Global.Services.SignalR.Hubs;
 
 /// <summary>
-///     Unified SignalR hub for settings schema and file operations.
+///     Unified SignalR hub for external settings-editor integration.
+///     Exposes schema, validation, examples, and document-aware catalog endpoints.
+///     File listing/read/write and JSON composition are handled locally by storage services.
 /// </summary>
 public class SettingsEditorHub : Hub {
     private static readonly TimeSpan ExamplesThrottleWindow = TimeSpan.FromMilliseconds(350);
