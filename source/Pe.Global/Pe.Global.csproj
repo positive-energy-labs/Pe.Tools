@@ -54,9 +54,14 @@
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
     </ItemGroup>
 
-    <!-- Exclude SignalR source files from net48 compilation -->
+    <!-- Exclude settings editor host and SignalR source files from net48 compilation -->
     <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+        <Compile Remove="Services\SettingsEditor\**\*.Net8.cs" />
         <Compile Remove="Services\SignalR\**\*.cs" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
+        <Compile Remove="Services\SettingsEditor\**\*.Net48.cs" />
     </ItemGroup>
 
     <ItemGroup>
