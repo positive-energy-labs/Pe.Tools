@@ -14,11 +14,11 @@ namespace Pe.Global.Services.SignalR.Hubs;
 
 /// <summary>
 ///     Unified SignalR hub for external settings-editor integration.
-///     Exposes schema, validation, examples, and document-aware catalog endpoints.
+///     Exposes schema, validation, field-options, and document-aware catalog endpoints.
 ///     File listing/read/write and JSON composition are handled locally by storage services.
 /// </summary>
 public class SettingsEditorHub : Hub {
-    private static readonly TimeSpan ExamplesThrottleWindow = TimeSpan.FromMilliseconds(350);
+    private static readonly TimeSpan FieldOptionsThrottleWindow = TimeSpan.FromMilliseconds(350);
     private static readonly TimeSpan ParameterCatalogThrottleWindow = TimeSpan.FromMilliseconds(750);
 
     private readonly SettingsModuleRegistry _moduleRegistry;
@@ -60,24 +60,61 @@ public class SettingsEditorHub : Hub {
         return result.ToSchemaEnvelope();
     }
 
-    public async Task<ExamplesEnvelopeResponse> GetExamplesEnvelope(ExamplesRequest request) {
+    public Task<ServerCapabilitiesEnvelopeResponse> GetServerCapabilitiesEnvelope() {
+        try {
+            var data = this.BuildServerCapabilitiesCore();
+            return Task.FromResult(
+                HubResult
+                    .Success(
+                        data,
+                        EnvelopeCode.Ok,
+                        $"Resolved {data.AvailableModules.Count} registered settings modules."
+                    )
+                    .ToServerCapabilitiesEnvelope()
+            );
+        } catch (Exception ex) {
+            return Task.FromResult(
+                HubResult
+                    .Failure<ServerCapabilitiesData>(
+                        EnvelopeCode.Failed,
+                        ex.Message,
+                        [
+                            HubResult.ExceptionIssue(
+                                "GetServerCapabilitiesException",
+                                ex,
+                                "Verify module registration and transport metadata configuration."
+                            )
+                        ]
+                    )
+                    .ToServerCapabilitiesEnvelope()
+            );
+        }
+    }
+
+    public async Task<FieldOptionsEnvelopeResponse> GetFieldOptionsEnvelope(FieldOptionsRequest request) {
         var key = BuildThrottleKey(
             this.Context.ConnectionId,
-            "examples",
+            "field-options",
             request.ModuleKey,
-            request.PropertyPath,
-            request.SiblingValues
+            $"{request.PropertyPath}:{request.SourceKey}",
+            request.ContextValues
         );
 
         var (response, decision) = await this._throttleGate.ExecuteAsync(
             key,
-            ExamplesThrottleWindow,
+            FieldOptionsThrottleWindow,
             async () => {
-                var result = await this.GetExamplesCore(request);
-                return result.ToExamplesEnvelope();
+                var result = await this.GetFieldOptionsCore(request);
+                return new FieldOptionsEnvelopeResponse(
+                    result.Ok,
+                    result.Code,
+                    result.Message,
+                    result.Issues,
+                    result.Data
+                );
             }
         );
-        LogThrottleDecision(nameof(GetExamplesEnvelope), decision, request.ModuleKey, request.PropertyPath);
+        LogThrottleDecision(nameof(GetFieldOptionsEnvelope), decision, request.ModuleKey, request.PropertyPath);
         return response;
     }
 
@@ -92,7 +129,7 @@ public class SettingsEditorHub : Hub {
             "parameter-catalog",
             request.ModuleKey,
             null,
-            request.SiblingValues
+            request.ContextValues
         );
         var (response, decision) = await this._throttleGate.ExecuteAsync(
             key,
@@ -125,25 +162,8 @@ public class SettingsEditorHub : Hub {
                         )
                         .ToParameterCatalogEnvelope();
 
-                var selectedFamilies = ParseSelectedFamilyNames(request.SiblingValues);
-                var collected = ProjectFamilyParameterCollector.Collect(doc, selectedFamilies);
-                var apsGuids = LoadApsParameterGuids();
-
-                var entries = collected
-                    .Select(entry => new ParameterCatalogEntry(
-                        Name: entry.Name,
-                        StorageType: entry.StorageType.ToString(),
-                        DataType: entry.DataType.TypeId,
-                        IsShared: entry.IsShared,
-                        IsInstance: entry.IsInstance,
-                        IsBuiltIn: entry.IsBuiltIn,
-                        IsProjectParameter: entry.IsProjectParameter,
-                        IsParamService: entry.IsShared && entry.SharedGuid.HasValue && apsGuids.Contains(entry.SharedGuid.Value),
-                        SharedGuid: entry.SharedGuid?.ToString(),
-                        FamilyNames: entry.FamilyNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList(),
-                        TypeNames: entry.ValuesPerType.Keys.OrderBy(n => n, StringComparer.Ordinal).ToList()
-                    ))
-                    .ToList();
+                var selectedFamilies = ParseSelectedFamilyNames(request.ContextValues);
+                var entries = ParameterCatalogOptionFactory.Build(selectedFamilies);
 
                 var familyCount = entries.SelectMany(e => e.FamilyNames).Distinct(StringComparer.OrdinalIgnoreCase).Count();
                 var typeCount = entries.SelectMany(e => e.TypeNames).Distinct(StringComparer.Ordinal).Count();
@@ -173,11 +193,10 @@ public class SettingsEditorHub : Hub {
         });
 
     private SettingsCatalogData BuildSettingsCatalogCore(SettingsCatalogRequest request) {
-        var targets = this._moduleRegistry.GetModules()
+        var targets = this.BuildAvailableModules()
             .Where(module =>
                 string.IsNullOrWhiteSpace(request.ModuleKey) ||
                 module.ModuleKey.Equals(request.ModuleKey, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(module => module.ModuleKey)
             .Select(module => new SettingsCatalogItem(
                 module.ModuleKey,
                 $"{module.ModuleKey} / {module.SettingsTypeName} / {module.DefaultSubDirectory}",
@@ -186,6 +205,22 @@ public class SettingsEditorHub : Hub {
             ))
             .ToList();
         return new SettingsCatalogData(targets);
+    }
+
+    private ServerCapabilitiesData BuildServerCapabilitiesCore() {
+        var availableModules = this.BuildAvailableModules();
+        var supportedDatasets = Enum.GetValues<FieldOptionsDatasetKind>().ToList();
+
+        return new ServerCapabilitiesData(
+            ContractVersion: SettingsEditorProtocol.ContractVersion,
+            Transport: SettingsEditorProtocol.Transport,
+            ServerVersion: GetServerVersion(),
+            SupportsFragmentSchema: true,
+            SupportsRichInvalidationPayload: true,
+            SupportsFieldOptionDatasets: supportedDatasets.Count > 0,
+            SupportedDatasets: supportedDatasets,
+            AvailableModules: availableModules
+        );
     }
 
     public Task<SettingsCatalogEnvelopeResponse> GetSettingsCatalogEnvelope(SettingsCatalogRequest request) {
@@ -296,7 +331,7 @@ public class SettingsEditorHub : Hub {
             }
         });
 
-    private async Task<HubResult<ExamplesData>> GetExamplesCore(ExamplesRequest request) =>
+    private async Task<HubResult<FieldOptionsData>> GetFieldOptionsCore(FieldOptionsRequest request) =>
         await this._taskQueue.EnqueueAsync(uiApp => {
             try {
                 var type = this._moduleRegistry.ResolveByModuleKey(request.ModuleKey).SettingsType;
@@ -304,22 +339,43 @@ public class SettingsEditorHub : Hub {
 
                 if (property == null)
                     return HubResult.Success(
-                        new ExamplesData([]),
+                        new FieldOptionsData(
+                            request.SourceKey,
+                            FieldOptionsMode.Suggestion,
+                            true,
+                            []
+                        ),
                         EnvelopeCode.Ok,
-                        "Property not found for examples provider."
+                        "Property not found for field options provider."
                     );
 
                 var providerAttr = property.GetCustomAttribute<SchemaExamplesAttribute>();
                 if (providerAttr == null)
                     return HubResult.Success(
-                        new ExamplesData([]),
+                        new FieldOptionsData(
+                            request.SourceKey,
+                            FieldOptionsMode.Suggestion,
+                            true,
+                            []
+                        ),
                         EnvelopeCode.Ok,
-                        "No examples provider configured for property."
+                        "No field options provider configured for property."
+                    );
+                if (!string.Equals(providerAttr.ProviderType.Name, request.SourceKey, StringComparison.Ordinal))
+                    return HubResult.Success(
+                        new FieldOptionsData(
+                            request.SourceKey,
+                            FieldOptionsMode.Suggestion,
+                            true,
+                            []
+                        ),
+                        EnvelopeCode.Ok,
+                        "Requested field options source does not match property provider."
                     );
 
                 var provider = Activator.CreateInstance(providerAttr.ProviderType) as IOptionsProvider;
                 if (provider == null)
-                    return HubResult.Failure<ExamplesData>(
+                    return HubResult.Failure<FieldOptionsData>(
                         EnvelopeCode.Failed,
                         $"Failed to create provider '{providerAttr.ProviderType.Name}'.",
                         [
@@ -332,37 +388,47 @@ public class SettingsEditorHub : Hub {
                                 "Ensure provider has a public parameterless constructor."
                             )
                         ]
-                    ) with { Data = new ExamplesData([]) };
+                    ) with {
+                        Data = new FieldOptionsData(
+                            request.SourceKey,
+                            FieldOptionsMode.Suggestion,
+                            true,
+                            []
+                        )
+                    };
 
-                if (provider is IDependentOptionsProvider dependentProvider &&
-                    request.SiblingValues is { Count: > 0 }) {
-                    var dependentExamples = dependentProvider.GetExamples(request.SiblingValues).ToList();
-                    return HubResult.Success(
-                        new ExamplesData(dependentExamples),
-                        EnvelopeCode.Ok,
-                        $"Retrieved {dependentExamples.Count} examples."
-                    );
-                }
+                var items = ResolveFieldOptionItems(provider, request.ContextValues);
 
-                var examples = provider.GetExamples().ToList();
                 return HubResult.Success(
-                    new ExamplesData(examples),
+                    new FieldOptionsData(
+                        request.SourceKey,
+                        FieldOptionsMode.Suggestion,
+                        true,
+                        items
+                    ),
                     EnvelopeCode.Ok,
-                    $"Retrieved {examples.Count} examples."
+                    $"Retrieved {items.Count} field options."
                 );
             } catch (Exception ex) {
-                Log.Error(ex, "GetExamples failed for property '{PropertyPath}'", request.PropertyPath);
-                return HubResult.Failure<ExamplesData>(
+                Log.Error(ex, "GetFieldOptions failed for property '{PropertyPath}'", request.PropertyPath);
+                return HubResult.Failure<FieldOptionsData>(
                     EnvelopeCode.Failed,
                     ex.Message,
                     [
                         HubResult.ExceptionIssue(
-                            "ExamplesException",
+                            "FieldOptionsException",
                             ex,
                             "Check provider configuration and request path."
                         )
                     ]
-                ) with { Data = new ExamplesData([]) };
+                ) with {
+                    Data = new FieldOptionsData(
+                        request.SourceKey,
+                        FieldOptionsMode.Suggestion,
+                        true,
+                        []
+                    )
+                };
             }
         });
 
@@ -396,37 +462,51 @@ public class SettingsEditorHub : Hub {
         return property;
     }
 
-    private static HashSet<string> ParseSelectedFamilyNames(IReadOnlyDictionary<string, string>? siblingValues) {
-        if (siblingValues == null ||
-            !siblingValues.TryGetValue(OptionContextKeys.SelectedFamilyNames, out var rawFamilyNames))
+    private List<SettingsModuleDescriptor> BuildAvailableModules() =>
+        this._moduleRegistry.GetModules()
+            .OrderBy(module => module.ModuleKey, StringComparer.OrdinalIgnoreCase)
+            .Select(module => new SettingsModuleDescriptor(
+                ModuleKey: module.ModuleKey,
+                DefaultSubDirectory: module.DefaultSubDirectory,
+                SettingsTypeName: module.SettingsTypeName,
+                SettingsTypeFullName: module.SettingsType.FullName ?? module.SettingsType.Name
+            ))
+            .ToList();
+
+    private static string? GetServerVersion() =>
+        typeof(SettingsEditorHub).Assembly.GetName().Version?.ToString();
+
+    private static HashSet<string> ParseSelectedFamilyNames(IReadOnlyDictionary<string, string>? contextValues) {
+        if (contextValues == null ||
+            !contextValues.TryGetValue(OptionContextKeys.SelectedFamilyNames, out var rawFamilyNames))
             return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         return ProjectFamilyParameterCollector.ParseDelimitedFamilyNames(rawFamilyNames);
     }
 
-    private static HashSet<Guid> LoadApsParameterGuids() {
-        try {
-            var cache = Pe.Global.Services.Storage.Storage.GlobalDir()
-                .StateJson<ParametersApi.Parameters>("parameters-service-cache")
-                as JsonReader<ParametersApi.Parameters>;
-            if (cache == null || !File.Exists(cache.FilePath))
-                return [];
+    private static List<FieldOptionItem> ResolveFieldOptionItems(
+        IOptionsProvider provider,
+        IReadOnlyDictionary<string, string>? contextValues
+    ) {
+        if (provider is IDependentOptionsProvider dependentProvider &&
+            contextValues is { Count: > 0 })
+            return dependentProvider
+                .GetExamples(contextValues)
+                .Select(ToFieldOptionItem)
+                .ToList();
 
-            var results = cache.Read().Results;
-            if (results == null)
-                return [];
-
-            var guids = new HashSet<Guid>();
-            foreach (var param in results) {
-                try { _ = guids.Add(param.DownloadOptions.GetGuid()); } catch {
-                    // Skip entries with unparseable GUIDs.
-                }
-            }
-            return guids;
-        } catch {
-            return [];
-        }
+        return provider
+            .GetExamples()
+            .Select(ToFieldOptionItem)
+            .ToList();
     }
+
+    private static FieldOptionItem ToFieldOptionItem(string value) =>
+        new(
+            Value: value,
+            Label: value,
+            Description: null
+        );
 
     private static string BuildThrottleKey(
         string? connectionId,

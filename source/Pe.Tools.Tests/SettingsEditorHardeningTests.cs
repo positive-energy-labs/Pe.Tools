@@ -1,5 +1,6 @@
 using Pe.Global.Services.SignalR;
 using Pe.Global.Services.Storage.Core;
+using Newtonsoft.Json;
 
 namespace Pe.Tools.Tests;
 
@@ -20,6 +21,82 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase
             .DoesNotContain(property => string.Equals(property.Name, "SubDirectory", StringComparison.OrdinalIgnoreCase));
         await Assert.That(typeof(ValidateSettingsRequest).GetProperties())
             .DoesNotContain(property => string.Equals(property.Name, "SubDirectory", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Test]
+    public async Task ParameterCatalogRequest_uses_context_values()
+    {
+        var properties = typeof(ParameterCatalogRequest).GetProperties()
+            .Select(property => property.Name)
+            .ToList();
+
+        await Assert.That(properties).Contains(nameof(ParameterCatalogRequest.ContextValues));
+        await Assert.That(properties).DoesNotContain("SiblingValues");
+    }
+
+    [Test]
+    public async Task Hub_method_names_include_server_capabilities()
+    {
+        var methods = typeof(HubMethodNames).GetFields()
+            .Where(field => field.IsLiteral)
+            .Select(field => field.GetRawConstantValue()?.ToString())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToList();
+
+        await Assert.That(methods).Contains(nameof(HubMethodNames.GetServerCapabilitiesEnvelope));
+    }
+
+    [Test]
+    public async Task SettingsEditorJson_serializes_contracts_as_camel_case_and_omits_nulls()
+    {
+        var payload = new ServerCapabilitiesEnvelopeResponse(
+            Ok: true,
+            Code: EnvelopeCode.Ok,
+            Message: "ready",
+            Issues: [],
+            Data: new ServerCapabilitiesData(
+                ContractVersion: SettingsEditorProtocol.ContractVersion,
+                Transport: SettingsEditorProtocol.Transport,
+                ServerVersion: null,
+                SupportsFragmentSchema: true,
+                SupportsRichInvalidationPayload: true,
+                SupportsFieldOptionDatasets: true,
+                SupportedDatasets: [FieldOptionsDatasetKind.ParameterCatalog],
+                AvailableModules: [
+                    new SettingsModuleDescriptor(
+                        ModuleKey: "FFMigrator",
+                        DefaultSubDirectory: "profiles",
+                        SettingsTypeName: "ProfileRemap",
+                        SettingsTypeFullName: "Pe.Tools.Commands.FamilyFoundry.ProfileRemap"
+                    )
+                ]
+            )
+        );
+
+        var json = JsonConvert.SerializeObject(payload, SettingsEditorJson.CreateSerializerSettings());
+
+        await Assert.That(json).Contains("\"contractVersion\":2");
+        await Assert.That(json).Contains("\"availableModules\"");
+        await Assert.That(json).Contains("\"moduleKey\":\"FFMigrator\"");
+        await Assert.That(json).DoesNotContain("serverVersion");
+    }
+
+    [Test]
+    public async Task DocumentInvalidationEvent_exposes_machine_readable_reason_and_flags()
+    {
+        var payload = new DocumentInvalidationEvent(
+            Reason: DocumentInvalidationReason.Changed,
+            DocumentTitle: "Test Model",
+            HasActiveDocument: true,
+            InvalidateFieldOptions: true,
+            InvalidateCatalogs: true,
+            InvalidateSchema: false
+        );
+
+        await Assert.That(payload.Reason).IsEqualTo(DocumentInvalidationReason.Changed);
+        await Assert.That(payload.InvalidateFieldOptions).IsTrue();
+        await Assert.That(payload.InvalidateCatalogs).IsTrue();
+        await Assert.That(payload.InvalidateSchema).IsFalse();
     }
 
     [Test]

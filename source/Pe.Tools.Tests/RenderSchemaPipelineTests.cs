@@ -1,6 +1,8 @@
 using Newtonsoft.Json.Linq;
+using Pe.Global.Services.SignalR;
 using Pe.Global.Services.Storage.Core.Json;
 using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
+using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
 
 namespace Pe.Tools.Tests;
 
@@ -14,8 +16,38 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase
         var providerBacked = root["properties"]?["ProviderBacked"] as JObject;
 
         await Assert.That(providerBacked).IsNotNull();
-        await Assert.That(providerBacked!["x-provider"]).IsNotNull();
+        await Assert.That(providerBacked!["x-options"]).IsNotNull();
         await Assert.That(providerBacked["examples"]).IsNull();
+    }
+
+    [Test]
+    public async Task CreateRenderSchema_emits_single_field_options_descriptor()
+    {
+        var schemaJson = JsonSchemaFactory.CreateRenderSchemaJson(typeof(RenderSchemaTestSettings), out _);
+        var root = JObject.Parse(schemaJson);
+        var providerBacked = root["properties"]?["ProviderBacked"] as JObject;
+        var source = providerBacked?["x-options"] as JObject;
+
+        await Assert.That(providerBacked).IsNotNull();
+        await Assert.That(source).IsNotNull();
+        await Assert.That(source!["key"]?.Value<string>()).IsEqualTo(nameof(TestOptionsProvider));
+        await Assert.That(source["resolver"]?.Value<string>()).IsEqualTo("Remote");
+        await Assert.That(source["dataset"]).IsNull();
+    }
+
+    [Test]
+    public async Task CreateRenderSchema_emits_dataset_hint_for_dataset_backed_provider()
+    {
+        var schemaJson = JsonSchemaFactory.CreateRenderSchemaJson(typeof(RenderSchemaDatasetTestSettings), out _);
+        var root = JObject.Parse(schemaJson);
+        var providerBacked = root["properties"]?["ProviderBacked"] as JObject;
+        var source = providerBacked?["x-options"] as JObject;
+
+        await Assert.That(providerBacked).IsNotNull();
+        await Assert.That(source).IsNotNull();
+        await Assert.That(source!["key"]?.Value<string>()).IsEqualTo(nameof(TestDatasetOptionsProvider));
+        await Assert.That(source["resolver"]?.Value<string>()).IsEqualTo("Dataset");
+        await Assert.That(source["dataset"]?.Value<string>()).IsEqualTo("ParameterCatalog");
     }
 
     [Test]
@@ -92,6 +124,19 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase
 
     private sealed class TestOptionsProvider : IOptionsProvider
     {
+        public IEnumerable<string> GetExamples() => ["A", "B"];
+    }
+
+    private sealed class RenderSchemaDatasetTestSettings
+    {
+        [SchemaExamples(typeof(TestDatasetOptionsProvider))]
+        public string ProviderBacked { get; init; } = string.Empty;
+    }
+
+    private sealed class TestDatasetOptionsProvider : IOptionsProvider, IFieldOptionsClientHintProvider
+    {
+        public FieldOptionsResolverKind Resolver => FieldOptionsResolverKind.Dataset;
+        public FieldOptionsDatasetKind? Dataset => FieldOptionsDatasetKind.ParameterCatalog;
         public IEnumerable<string> GetExamples() => ["A", "B"];
     }
 

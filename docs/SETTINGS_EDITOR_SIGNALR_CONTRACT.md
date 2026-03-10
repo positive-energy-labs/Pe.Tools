@@ -24,12 +24,16 @@ and handled by the storage/composition services under `source/Pe.Global/Services
   - hub event names
   - hub method names
   - hub route constants
+- The backend module registry is the source of truth for which settings modules
+  are available. Frontends should consume exported module metadata rather than
+  maintaining their own module list.
 - SignalR is currently used for:
+  - server capability and module discovery
   - schema generation
   - server-authoritative validation
   - provider-backed examples/options
   - Revit-derived parameter catalog queries
-  - generic `DocumentChanged` invalidation events
+  - document invalidation events
 - SignalR is not the source of truth for listing, reading, composing, or writing
   settings files. Those flows are handled locally against the filesystem in this
   repo.
@@ -46,12 +50,20 @@ and handled by the storage/composition services under `source/Pe.Global/Services
   - `message: string`
   - `issues: ValidationIssue[]`
   - `data: T | null`
+- The frontend should call `GetServerCapabilitiesEnvelope` during startup and
+  treat `contractVersion` plus `availableModules` as the canonical source of
+  transport compatibility.
 - Concrete envelope DTOs are backend-defined and exported for TypeScript
   consumption. Frontend code should not hand-maintain duplicate envelope
   response types for hub methods.
 - Serializer behavior: null fields are omitted from payloads (`nullValueHandling=ignore`), so frontend decoding should treat nullable members as optional.
 
 ## Hub Methods
+
+- `GetServerCapabilitiesEnvelope()`
+  - Get transport metadata, exported module descriptors, and supported dataset
+    features.
+  - Response data: `ServerCapabilitiesData`
 
 - `GetSettingsCatalogEnvelope(SettingsCatalogRequest)`
   - Discover available module targets/metadata.
@@ -69,27 +81,30 @@ and handled by the storage/composition services under `source/Pe.Global/Services
   - Response data: `SchemaData`
   - `fragmentSchemaJson` may be `null` for modules without fragment schema or when generation fails.
 
-- `GetExamplesEnvelope(ExamplesRequest)`
+- `GetFieldOptionsEnvelope(FieldOptionsRequest)`
   - Get options/examples for a specific property path.
-  - Request: `{ moduleKey: string, propertyPath: string, siblingValues?: Record<string,string> }`
-  - Response data: `ExamplesData`
+  - Request: { `moduleKey: string`, `propertyPath: string`, `sourceKey: string`, `contextValues?: Record<string,string>` }
+  - Response data: `FieldOptionsData`
   - Endpoint-level throttling is applied server-side.
 
 - `GetParameterCatalogEnvelope(ParameterCatalogRequest)`
   - Get richer parameter entries for mapping UI scenarios.
-  - Request: `{ moduleKey: string, siblingValues?: Record<string,string> }`
+  - Request: `{ moduleKey: string, contextValues?: Record<string,string> }`
   - Response data: `ParameterCatalogData`
   - Endpoint-level throttling is applied server-side.
 
 ## Client Event Subscription
 
 - Event name: `DocumentChanged`
-- Meaning: generic "something in document state changed"
-- Recommended behavior: invalidate schema/options/catalog queries that depend on active document state.
+- Payload: `DocumentInvalidationEvent`
+- Meaning: machine-readable document-sensitive invalidation signal
+- Recommended behavior: invalidate options/catalog queries according to payload flags.
 
 ```ts
-connection.on("DocumentChanged", () => {
-  queryClient.invalidateQueries({ queryKey: ["settings-editor"] });
+connection.on("DocumentChanged", (event) => {
+  if (event.invalidateFieldOptions || event.invalidateCatalogs) {
+    queryClient.invalidateQueries({ queryKey: ["settings-editor"] });
+  }
 });
 ```
 
@@ -102,16 +117,20 @@ connection.on("DocumentChanged", () => {
 ## Minimal Usage Flow
 
 1. Connect to `"/hubs/settings-editor"`.
-2. Call `GetSettingsCatalogEnvelope` for module picker/target bootstrap.
-3. Use the selected module metadata to align the external frontend with local
+2. Call `GetServerCapabilitiesEnvelope` for startup compatibility and module
+   registry data.
+3. Call `GetSettingsCatalogEnvelope` for module picker/target bootstrap when a
+   settings-target-specific list is needed.
+4. Use the selected module metadata to align the external frontend with local
    filesystem-backed settings conventions.
-4. Call `GetSchemaEnvelope` for render schema generation.
-5. Call `ValidateSettingsEnvelope` before save when server-authoritative
+5. Call `GetSchemaEnvelope` for render schema generation.
+6. Call `ValidateSettingsEnvelope` before save when server-authoritative
    validation is needed.
-6. For provider-backed fields, call `GetExamplesEnvelope` as needed.
-7. For mapping or document-aware UIs, call `GetParameterCatalogEnvelope` as
+7. For provider-backed fields, call `GetFieldOptionsEnvelope` as needed.
+8. For mapping or document-aware UIs, call `GetParameterCatalogEnvelope` as
    needed.
-8. Subscribe to `DocumentChanged` and invalidate dependent caches.
+9. Subscribe to `DocumentChanged` and invalidate dependent caches according to
+   the payload flags.
 
 ## Non-Goals
 

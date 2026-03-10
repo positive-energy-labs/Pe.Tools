@@ -2,6 +2,7 @@ using Newtonsoft.Json;
 using Pe.Global.PolyFill;
 using NJsonSchema;
 using NJsonSchema.Generation;
+using Pe.Global.Services.SignalR;
 using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
 
 namespace Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
@@ -51,6 +52,12 @@ public class SchemaExamplesProcessor : ISchemaProcessor {
     /// </summary>
     public bool ConsolidateDuplicates { get; init; } = true;
 
+    private static FieldOptionsDependencyScope GetDependencyScope(string key) =>
+        string.Equals(key, OptionContextKeys.SelectedFamilyNames, StringComparison.Ordinal) ||
+        string.Equals(key, OptionContextKeys.SelectedCategoryName, StringComparison.Ordinal)
+            ? FieldOptionsDependencyScope.Context
+            : FieldOptionsDependencyScope.Sibling;
+
     public void Process(SchemaProcessorContext context) {
         if (!context.ContextualType.Type.IsClass) return;
 
@@ -61,6 +68,8 @@ public class SchemaExamplesProcessor : ISchemaProcessor {
             var propertyName = GetJsonPropertyName(property);
             var schemaProperties = context.Schema.Properties;
             if (schemaProperties == null || !schemaProperties.TryGetValue(propertyName, out var propSchema)) continue;
+
+            var targetSchema = propSchema.Item ?? propSchema;
 
             try {
                 // Get or create examples for this provider type (cached to avoid duplicate instantiation)
@@ -74,25 +83,45 @@ public class SchemaExamplesProcessor : ISchemaProcessor {
                         this._dependentProviders[attr.ProviderType] = dependentProvider.DependsOn;
                 }
 
-                // Determine target schema (item schema for arrays, property schema for direct strings)
-                var targetSchema = propSchema.Item ?? propSchema;
+                var providerInstance = Activator.CreateInstance(attr.ProviderType) as IOptionsProvider;
+                if (providerInstance == null) continue;
+                var clientHintProvider = providerInstance as IFieldOptionsClientHintProvider;
 
-                // Tag provider-backed fields so clients can avoid requesting examples for non-provider fields.
-                targetSchema.ExtensionData ??= new Dictionary<string, object?>();
-                targetSchema.ExtensionData["x-provider"] = attr.ProviderType.Name;
-
-                // Add dependency metadata for dependent providers.
-                if (this._dependentProviders.TryGetValue(attr.ProviderType, out var dependsOn))
-                    targetSchema.ExtensionData["x-depends-on"] = dependsOn;
+                var dependsOn = this._dependentProviders.TryGetValue(attr.ProviderType, out var dependencyKeys)
+                    ? dependencyKeys
+                        .Select(key => new FieldOptionsDependencySchema(
+                            key,
+                            GetDependencyScope(key)
+                        ))
+                        .ToList()
+                    : [];
+                var optionSource = new FieldOptionsSourceSchema(
+                    Key: attr.ProviderType.Name,
+                    Resolver: clientHintProvider?.Resolver ?? FieldOptionsResolverKind.Remote,
+                    Dataset: clientHintProvider?.Dataset,
+                    Mode: FieldOptionsMode.Suggestion,
+                    AllowsCustomValue: true,
+                    DependsOn: dependsOn
+                );
 
                 if (this.ConsolidateDuplicates) {
                     // Track for later - we'll add $refs in Finalize()
                     this._trackedSchemas.Add((targetSchema, attr.ProviderType));
                 } else {
-                    // Inline mode: just add examples directly
+                    // Inline mode: merge examples directly.
                     targetSchema.ExtensionData ??= new Dictionary<string, object?>();
-                    targetSchema.ExtensionData["examples"] = examples;
+                    var merged = (targetSchema.ExtensionData.TryGetValue("examples", out var existing) &&
+                                  existing is IEnumerable<string> existingExamples
+                            ? existingExamples
+                            : [])
+                        .Concat(examples)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                    targetSchema.ExtensionData["examples"] = merged;
                 }
+
+                targetSchema.ExtensionData ??= new Dictionary<string, object?>();
+                targetSchema.ExtensionData["x-options"] = optionSource;
             } catch {
                 // Fail silently - examples are a nicety, not critical
             }
@@ -126,8 +155,7 @@ public class SchemaExamplesProcessor : ISchemaProcessor {
             var defName = this._providerToDefName[providerType];
 
             // Create a reference schema
-            var refSchema = new JsonSchema();
-            refSchema.Reference = rootSchema.Definitions[defName];
+            var refSchema = new JsonSchema { Reference = rootSchema.Definitions[defName] };
 
             // Add the reference using AllOf
             schema.AllOf.Add(refSchema);

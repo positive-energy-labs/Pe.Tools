@@ -1,4 +1,6 @@
 using TypeGen.Core.TypeAnnotations;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace Pe.Global.Services.SignalR;
 
@@ -16,8 +18,9 @@ public static class HubClientEventNames {
 /// </summary>
 [ExportTsClass]
 public static class HubMethodNames {
+    public const string GetServerCapabilitiesEnvelope = nameof(GetServerCapabilitiesEnvelope);
     public const string GetSchemaEnvelope = nameof(GetSchemaEnvelope);
-    public const string GetExamplesEnvelope = nameof(GetExamplesEnvelope);
+    public const string GetFieldOptionsEnvelope = nameof(GetFieldOptionsEnvelope);
     public const string ValidateSettingsEnvelope = nameof(ValidateSettingsEnvelope);
     public const string GetParameterCatalogEnvelope = nameof(GetParameterCatalogEnvelope);
     public const string GetSettingsCatalogEnvelope = nameof(GetSettingsCatalogEnvelope);
@@ -31,6 +34,15 @@ public static class HubRoutes {
     public const string SettingsEditor = "/hubs/settings-editor";
 }
 
+/// <summary>
+///     Stable transport metadata for frontend/backend compatibility checks.
+/// </summary>
+[ExportTsClass]
+public static class SettingsEditorProtocol {
+    public const string Transport = "signalr";
+    public const int ContractVersion = 2;
+}
+
 // =============================================================================
 // Schema Hub Messages
 // =============================================================================
@@ -42,13 +54,36 @@ public static class HubRoutes {
 public record SchemaRequest(string ModuleKey);
 
 /// <summary>
-///     Request to get examples for a specific property, with optional sibling filtering.
+///     Request to get normalized field options for a specific property/source pair.
 /// </summary>
 [ExportTsInterface]
-public record ExamplesRequest(
+public record FieldOptionsRequest(
     string ModuleKey,
     string PropertyPath,
-    Dictionary<string, string>? SiblingValues
+    string SourceKey,
+    Dictionary<string, string>? ContextValues
+);
+
+/// <summary>
+///     Schema descriptor for field-option dependencies used by render-schema consumers.
+/// </summary>
+[ExportTsInterface]
+public record FieldOptionsDependencySchema(
+    string Key,
+    FieldOptionsDependencyScope Scope
+);
+
+/// <summary>
+///     Schema descriptor for a field's remote option source used in render schemas.
+/// </summary>
+[ExportTsInterface]
+public record FieldOptionsSourceSchema(
+    string Key,
+    FieldOptionsResolverKind Resolver,
+    FieldOptionsDatasetKind? Dataset,
+    FieldOptionsMode Mode,
+    bool AllowsCustomValue,
+    List<FieldOptionsDependencySchema> DependsOn
 );
 
 // =============================================================================
@@ -67,11 +102,50 @@ public record SettingsCatalogItem(
 );
 
 /// <summary>
+///     Canonical descriptor for a backend-registered settings module.
+/// </summary>
+[ExportTsInterface]
+public record SettingsModuleDescriptor(
+    string ModuleKey,
+    string DefaultSubDirectory,
+    string SettingsTypeName,
+    string SettingsTypeFullName
+);
+
+/// <summary>
+///     Backend-owned feature/capability metadata for the settings-editor transport.
+/// </summary>
+[ExportTsInterface]
+public record ServerCapabilitiesData(
+    int ContractVersion,
+    string Transport,
+    string? ServerVersion,
+    bool SupportsFragmentSchema,
+    bool SupportsRichInvalidationPayload,
+    bool SupportsFieldOptionDatasets,
+    List<FieldOptionsDatasetKind> SupportedDatasets,
+    List<SettingsModuleDescriptor> AvailableModules
+);
+
+/// <summary>
 ///     Request to list available module settings targets.
 /// </summary>
 [ExportTsInterface]
 public record SettingsCatalogRequest(
     string? ModuleKey = null
+);
+
+/// <summary>
+///     Structured invalidation payload emitted on document-sensitive changes.
+/// </summary>
+[ExportTsInterface]
+public record DocumentInvalidationEvent(
+    DocumentInvalidationReason Reason,
+    string? DocumentTitle,
+    bool HasActiveDocument,
+    bool InvalidateFieldOptions,
+    bool InvalidateCatalogs,
+    bool InvalidateSchema
 );
 
 /// <summary>
@@ -112,6 +186,41 @@ public enum EnvelopeCode {
     Exception
 }
 
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum FieldOptionsDependencyScope {
+    Sibling,
+    Context
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum FieldOptionsMode {
+    Suggestion,
+    Constraint
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum FieldOptionsResolverKind {
+    Remote,
+    Dataset
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum FieldOptionsDatasetKind {
+    ParameterCatalog
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum DocumentInvalidationReason {
+    Opened,
+    Closed,
+    Changed
+}
+
 /// <summary>
 ///     Envelope-friendly render schema payload.
 /// </summary>
@@ -134,23 +243,36 @@ public record SchemaEnvelopeResponse(
 );
 
 /// <summary>
-///     Envelope-friendly examples payload.
+///     Option item for schema-driven field rendering.
 /// </summary>
 [ExportTsInterface]
-public record ExamplesData(
-    List<string> Examples
+public record FieldOptionItem(
+    string Value,
+    string Label,
+    string? Description
 );
 
 /// <summary>
-///     Envelope response for examples requests.
+///     Envelope-friendly normalized field options payload.
 /// </summary>
 [ExportTsInterface]
-public record ExamplesEnvelopeResponse(
+public record FieldOptionsData(
+    string SourceKey,
+    FieldOptionsMode Mode,
+    bool AllowsCustomValue,
+    List<FieldOptionItem> Items
+);
+
+/// <summary>
+///     Envelope response for field options requests.
+/// </summary>
+[ExportTsInterface]
+public record FieldOptionsEnvelopeResponse(
     bool Ok,
     EnvelopeCode Code,
     string Message,
     List<ValidationIssue> Issues,
-    ExamplesData? Data
+    FieldOptionsData? Data
 );
 
 /// <summary>
@@ -175,12 +297,24 @@ public record ValidationEnvelopeResponse(
 );
 
 /// <summary>
+///     Envelope response for server capability requests.
+/// </summary>
+[ExportTsInterface]
+public record ServerCapabilitiesEnvelopeResponse(
+    bool Ok,
+    EnvelopeCode Code,
+    string Message,
+    List<ValidationIssue> Issues,
+    ServerCapabilitiesData? Data
+);
+
+/// <summary>
 ///     Request for a richer parameter catalog used by mapping UIs.
 /// </summary>
 [ExportTsInterface]
 public record ParameterCatalogRequest(
     string ModuleKey,
-    Dictionary<string, string>? SiblingValues
+    Dictionary<string, string>? ContextValues
 );
 
 /// <summary>

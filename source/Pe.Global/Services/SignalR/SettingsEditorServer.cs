@@ -2,9 +2,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json.Serialization;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
 using Pe.Global.Services.SignalR.Hubs;
 using Pe.Global.Services.Storage.Modules;
 using ricaun.Revit.UI.Tasks;
@@ -73,11 +70,7 @@ public class SettingsEditorServer : IDisposable {
                 options.EnableDetailedErrors = true;
                 options.MaximumReceiveMessageSize = 1024 * 1024; // 1MB
             })
-                .AddNewtonsoftJsonProtocol(options => {
-                    options.PayloadSerializerSettings.NullValueHandling = NullValueHandling.Ignore;
-                    options.PayloadSerializerSettings.ContractResolver = new CamelCasePropertyNamesContractResolver();
-                    options.PayloadSerializerSettings.Converters.Add(new StringEnumConverter());
-                });
+                .AddNewtonsoftJsonProtocol(SettingsEditorJson.ConfigureProtocol);
 
             // Configure CORS for development
             _ = builder.Services.AddCors(options => options.AddDefaultPolicy(policy => _ = policy.WithOrigins(

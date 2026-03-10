@@ -25,7 +25,7 @@ public static class RenderSchemaTransformer {
 
     private static void RemoveProviderExamplesRecursive(JToken token) {
         if (token is JObject obj) {
-            if (obj["x-provider"] != null)
+            if (obj["x-options"] != null)
                 _ = obj.Remove("examples");
 
             foreach (var property in obj.Properties())

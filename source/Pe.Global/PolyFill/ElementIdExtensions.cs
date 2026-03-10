@@ -15,8 +15,6 @@ public static class ElementIdExtensions {
 #if REVIT2025 || REVIT2026
         elementId.Value;
 #else
-#pragma warning disable CS0618 // IntegerValue is deprecated but needed for 2024 and earlier versions
             elementId.IntegerValue;
-#pragma warning restore CS0618
 #endif
 }

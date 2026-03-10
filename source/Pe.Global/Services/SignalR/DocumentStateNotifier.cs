@@ -67,8 +67,16 @@ public class DocumentStateNotifier : IDisposable {
             if (!HubConnectionTracker.HasActiveConnections)
                 return;
 
-            // Notify clients about document change and invalidate examples.
-            _ = this._settingsEditorHub.Clients.All.SendAsync(HubClientEventNames.DocumentChanged);
+            this.PublishDocumentInvalidation(
+                new DocumentInvalidationEvent(
+                    Reason: DocumentInvalidationReason.Opened,
+                    DocumentTitle: e.Document.Title,
+                    HasActiveDocument: true,
+                    InvalidateFieldOptions: true,
+                    InvalidateCatalogs: true,
+                    InvalidateSchema: false
+                )
+            );
             Log.Debug("DocumentStateNotifier: Document opened - {Title}", e.Document.Title);
         } catch (Exception ex) {
             Log.Error(ex, "DocumentStateNotifier: Error handling DocumentOpened");
@@ -80,7 +88,16 @@ public class DocumentStateNotifier : IDisposable {
             if (!HubConnectionTracker.HasActiveConnections)
                 return;
 
-            _ = this._settingsEditorHub.Clients.All.SendAsync(HubClientEventNames.DocumentChanged);
+            this.PublishDocumentInvalidation(
+                new DocumentInvalidationEvent(
+                    Reason: DocumentInvalidationReason.Closed,
+                    DocumentTitle: null,
+                    HasActiveDocument: false,
+                    InvalidateFieldOptions: true,
+                    InvalidateCatalogs: true,
+                    InvalidateSchema: false
+                )
+            );
             Log.Debug("DocumentStateNotifier: Document closed");
         } catch (Exception ex) {
             Log.Error(ex, "DocumentStateNotifier: Error handling DocumentClosed");
@@ -111,7 +128,16 @@ public class DocumentStateNotifier : IDisposable {
             // TODO: Split this into module-scoped signals once module-specific
             // invalidation rules are defined. For now, treat any document change
             // as a generic "something changed" signal.
-            _ = this._settingsEditorHub.Clients.All.SendAsync(HubClientEventNames.DocumentChanged);
+            this.PublishDocumentInvalidation(
+                new DocumentInvalidationEvent(
+                    Reason: DocumentInvalidationReason.Changed,
+                    DocumentTitle: e.GetDocument().Title,
+                    HasActiveDocument: true,
+                    InvalidateFieldOptions: true,
+                    InvalidateCatalogs: true,
+                    InvalidateSchema: false
+                )
+            );
             Log.Debug(
                 "DocumentStateNotifier: Document changed - generic notification sent (Modified={Modified}, Added={Added}, Deleted={Deleted})",
                 modifiedCount,
@@ -122,6 +148,14 @@ public class DocumentStateNotifier : IDisposable {
             Log.Error(ex, "DocumentStateNotifier: Error handling DocumentChanged");
         }
     }
+
+    private void PublishDocumentInvalidation(DocumentInvalidationEvent payload) =>
+        _ = this._settingsEditorHub.Clients.All
+            .SendAsync(HubClientEventNames.DocumentChanged, payload)
+            .ContinueWith(task => {
+                if (task.Exception != null)
+                    Log.Warning(task.Exception, "DocumentStateNotifier: Failed to publish document invalidation.");
+            }, TaskScheduler.Default);
 
     private void TrySubscribeDocumentChanged() {
         try {

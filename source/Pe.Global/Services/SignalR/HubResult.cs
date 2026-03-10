@@ -37,10 +37,13 @@ internal static class HubResultEnvelopeExtensions {
     public static SchemaEnvelopeResponse ToSchemaEnvelope(this HubResult<SchemaData> result) =>
         new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
 
-    public static ExamplesEnvelopeResponse ToExamplesEnvelope(this HubResult<ExamplesData> result) =>
+    public static FieldOptionsEnvelopeResponse ToFieldOptionsEnvelope(this HubResult<FieldOptionsData> result) =>
         new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
 
     public static ValidationEnvelopeResponse ToValidationEnvelope(this HubResult<ValidationData> result) =>
+        new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
+
+    public static ServerCapabilitiesEnvelopeResponse ToServerCapabilitiesEnvelope(this HubResult<ServerCapabilitiesData> result) =>
         new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
 
     public static ParameterCatalogEnvelopeResponse ToParameterCatalogEnvelope(this HubResult<ParameterCatalogData> result) =>

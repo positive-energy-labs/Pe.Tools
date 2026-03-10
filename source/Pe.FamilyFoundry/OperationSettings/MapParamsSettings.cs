@@ -104,7 +104,7 @@ public class MapParamsSettings : IOperationSettings {
 public class MappingData {
     [Description("Current parameter names to map from (ordered by priority)")]
     [Required]
-    // TODO: [SchemaExamples(typeof(FamilyParameterNamesProvider))] We want to display the parameter names that are contained on the subset of selected families. 
+    [SchemaExamples(typeof(FamilyParameterNamesProvider))]
     public List<string> CurrNames { get; set; } = [];
 
     [Description("New parameter name to map to")]

@@ -8,6 +8,7 @@
   "singleQuotes": false,
   "tabLength": 4,
   "explicitPublicAccessor": false,
+  "useImportType": true,
   "camelCasePropertyNames": true,
   "camelCaseTypeNames": false
 }
