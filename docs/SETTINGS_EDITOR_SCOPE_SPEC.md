@@ -38,7 +38,9 @@ settings-editor integration so future work in this repo stays aligned.
 
 ### Backend In This Repo
 
-- SignalR hub: `SettingsEditorHub`.
+- External SignalR host: `Pe.Host`.
+- Revit-side bridge runtime: `Pe.Global.Services.Host.HostRuntime`.
+- Shared transport/contracts project: `Pe.Host.Contracts`.
 - Module registration: `SettingsModuleRegistry` + `ISettingsModule<TSettings>`.
 - Structured validation contract: `ValidationIssue` from
   `SettingsEditorHub.ValidateSettingsEnvelope`.
@@ -49,7 +51,7 @@ settings-editor integration so future work in this repo stays aligned.
 - Local settings discovery uses `SettingsManager.Discover(...)`.
 - Local file composition uses `ComposableJson<T>` + `JsonCompositionPipeline`.
 
-### External Frontend
+### Frontend Paths
 
 The frontend lives in a separate TypeScript repository. This repo should only
 document the contract and backend responsibilities it exposes to that frontend,
@@ -82,12 +84,16 @@ not frontend implementation details.
 ### Runtime Interaction Model
 
 - Frontend/backend boundary:
-  - external frontend connects to the single settings-editor hub.
+  - external frontend connects to the single settings-editor hub hosted outside
+    Revit.
   - frontend handles its own file IO strategy outside this repo.
-- Hub state tracking:
-  - server tracks active connections for notification gating.
+- Host/add-in boundary:
+  - Revit connects to the external host over named pipes only when the user
+    explicitly enables the bridge.
+  - the bridge is expected to be disconnected by default for Revit performance.
 - Invalidation:
-  - Document-change notifications invalidate schema/options-dependent caches.
+  - document-change notifications are emitted by the Revit bridge agent and
+    forwarded by the external host to browser clients.
 
 ### Data Loading Strategy
 
@@ -103,12 +109,12 @@ not frontend implementation details.
 
 ## Key Locations
 
-### Backend (`Pe.Tools`)
+### Backend Paths
 
 - `source/Pe.App/`
-- `source/Pe.Global/Services/SignalR/`
-- `source/Pe.Global/Services/SignalR/Hubs/`
-- `source/Pe.Global/Services/SignalR/Actions/`
+- `source/Pe.Host/`
+- `source/Pe.Host.Contracts/`
+- `source/Pe.Global/Services/Host/`
 - `source/Pe.Global/Services/Storage/Core/Json/`
 - `source/Pe.Global/Services/Storage/Core/Json/SchemaProcessors/`
 - `source/Pe.Global/Services/Storage/Core/Json/SchemaProviders/`

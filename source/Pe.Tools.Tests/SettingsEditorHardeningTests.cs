@@ -1,6 +1,9 @@
-using Pe.Global.Services.SignalR;
+using Pe.Global.Services.Host;
+using Pe.Host.Contracts;
 using Pe.Global.Services.Storage.Core;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Serialization;
 
 namespace Pe.Tools.Tests;
 
@@ -35,7 +38,7 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase
     }
 
     [Test]
-    public async Task Hub_method_names_include_server_capabilities()
+    public async Task Hub_method_names_include_host_status()
     {
         var methods = typeof(HubMethodNames).GetFields()
             .Where(field => field.IsLiteral)
@@ -43,25 +46,29 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .ToList();
 
-        await Assert.That(methods).Contains(nameof(HubMethodNames.GetServerCapabilitiesEnvelope));
+        await Assert.That(methods).Contains(nameof(HubMethodNames.GetHostStatusEnvelope));
     }
 
     [Test]
-    public async Task SettingsEditorJson_serializes_contracts_as_camel_case_and_omits_nulls()
+    public async Task Json_serializes_contracts_as_camel_case_and_omits_nulls()
     {
-        var payload = new ServerCapabilitiesEnvelopeResponse(
+        var payload = new HostStatusEnvelopeResponse(
             Ok: true,
             Code: EnvelopeCode.Ok,
             Message: "ready",
             Issues: [],
-            Data: new ServerCapabilitiesData(
-                ContractVersion: SettingsEditorProtocol.ContractVersion,
-                Transport: SettingsEditorProtocol.Transport,
+            Data: new HostStatusData(
+                HostIsRunning: true,
+                BridgeIsConnected: true,
+                HasActiveDocument: true,
+                ActiveDocumentTitle: "Test Model",
+                RevitVersion: "2025",
+                RuntimeFramework: ".NET 8.0",
+                HostContractVersion: HostProtocol.ContractVersion,
+                HostTransport: HostProtocol.Transport,
                 ServerVersion: null,
-                SupportsFragmentSchema: true,
-                SupportsRichInvalidationPayload: true,
-                SupportsFieldOptionDatasets: true,
-                SupportedDatasets: [FieldOptionsDatasetKind.ParameterCatalog],
+                BridgeContractVersion: BridgeProtocol.ContractVersion,
+                BridgeTransport: BridgeProtocol.Transport,
                 AvailableModules: [
                     new SettingsModuleDescriptor(
                         ModuleKey: "FFMigrator",
@@ -69,13 +76,14 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase
                         SettingsTypeName: "ProfileRemap",
                         SettingsTypeFullName: "Pe.Tools.Commands.FamilyFoundry.ProfileRemap"
                     )
-                ]
+                ],
+                DisconnectReason: null
             )
         );
 
-        var json = JsonConvert.SerializeObject(payload, SettingsEditorJson.CreateSerializerSettings());
+        var json = JsonConvert.SerializeObject(payload, CreateSerializerSettings());
 
-        await Assert.That(json).Contains("\"contractVersion\":2");
+        await Assert.That(json).Contains("\"hostContractVersion\":2");
         await Assert.That(json).Contains("\"availableModules\"");
         await Assert.That(json).Contains("\"moduleKey\":\"FFMigrator\"");
         await Assert.That(json).DoesNotContain("serverVersion");
@@ -100,6 +108,80 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase
     }
 
     [Test]
+    public async Task BridgeProtocol_exposes_named_pipe_defaults()
+    {
+        await Assert.That(BridgeProtocol.Transport).IsEqualTo("named-pipes");
+        await Assert.That(BridgeProtocol.DefaultPipeName).IsEqualTo("Pe.Host.Bridge");
+    }
+
+    [Test]
+    public async Task Contracts_assembly_does_not_include_runtime_helpers()
+    {
+        var contractsAssembly = typeof(BridgeProtocol).Assembly;
+
+        await Assert.That(contractsAssembly.GetType("Pe.Host.Contracts.HostEnvironment")).IsNull();
+        await Assert.That(contractsAssembly.GetType("Pe.Host.Contracts.Json")).IsNull();
+    }
+
+    [Test]
+    public async Task HostStatusEnvelopeResponse_serializes_machine_readable_state()
+    {
+        var payload = new HostStatusEnvelopeResponse(
+            Ok: true,
+            Code: EnvelopeCode.Ok,
+            Message: "connected",
+            Issues: [],
+            Data: new HostStatusData(
+                HostIsRunning: true,
+                BridgeIsConnected: true,
+                HasActiveDocument: true,
+                ActiveDocumentTitle: "Active Model",
+                RevitVersion: "2025",
+                RuntimeFramework: ".NET 8.0",
+                HostContractVersion: HostProtocol.ContractVersion,
+                HostTransport: HostProtocol.Transport,
+                ServerVersion: "1.2.3",
+                BridgeContractVersion: BridgeProtocol.ContractVersion,
+                BridgeTransport: BridgeProtocol.Transport,
+                AvailableModules: [
+                    new SettingsModuleDescriptor("FFMigrator", "profiles", "ProfileRemap", "Pe.Tools.ProfileRemap")
+                ],
+                DisconnectReason: null
+            )
+        );
+
+        var json = JsonConvert.SerializeObject(payload, CreateSerializerSettings());
+
+        await Assert.That(json).Contains("\"hostIsRunning\":true");
+        await Assert.That(json).Contains("\"bridgeIsConnected\":true");
+        await Assert.That(json).Contains("\"activeDocumentTitle\":\"Active Model\"");
+        await Assert.That(json).Contains("\"bridgeTransport\":\"named-pipes\"");
+    }
+
+    [Test]
+    public async Task BridgeFrame_serializes_kind_and_payload_as_camel_case()
+    {
+        var frame = new BridgeFrame(
+            Kind: BridgeFrameKind.Handshake,
+            Handshake: new BridgeHandshake(
+                ContractVersion: BridgeProtocol.ContractVersion,
+                Transport: BridgeProtocol.Transport,
+                RevitVersion: "2025",
+                RuntimeFramework: ".NET 8.0",
+                HasActiveDocument: true,
+                ActiveDocumentTitle: "Test Model",
+                AvailableModules: []
+            )
+        );
+
+        var json = JsonConvert.SerializeObject(frame, CreateSerializerSettings());
+
+        await Assert.That(json).Contains("\"kind\":\"Handshake\"");
+        await Assert.That(json).Contains("\"handshake\"");
+        await Assert.That(json).Contains("\"activeDocumentTitle\":\"Test Model\"");
+    }
+
+    [Test]
     public async Task ResolveSafeSubDirectoryPath_rejects_traversal_segments()
     {
         var root = Path.Combine(Path.GetTempPath(), "pe-tools-settings-hardening");
@@ -110,9 +192,9 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase
     }
 
     [Test]
-    public async Task EndpointThrottleGate_coalesces_inflight_and_caches()
+    public async Task ThrottleGate_coalesces_inflight_and_caches()
     {
-        var gate = new EndpointThrottleGate();
+        var gate = new ThrottleGate();
         var key = "conn:examples:FFMigrator:FamilyName";
         var invoked = 0;
         var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -146,4 +228,21 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase
         await Assert.That(cached.Decision).IsEqualTo(ThrottleDecision.CacheHit);
         await Assert.That(cached.Result).IsEqualTo("ok");
     }
+
+    [Test]
+    public async Task Host_services_no_longer_include_TaskQueue_wrapper()
+    {
+        await Assert.That(typeof(RequestService).Assembly.GetType("Pe.Global.Services.Host.TaskQueue")).IsNull();
+    }
+
+    private static JsonSerializerSettings CreateSerializerSettings()
+    {
+        var settings = new JsonSerializerSettings {
+            NullValueHandling = NullValueHandling.Ignore,
+            ContractResolver = new CamelCasePropertyNamesContractResolver()
+        };
+        settings.Converters.Add(new StringEnumConverter());
+        return settings;
+    }
+
 }

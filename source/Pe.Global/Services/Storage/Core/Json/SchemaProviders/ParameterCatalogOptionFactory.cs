@@ -1,5 +1,5 @@
 using Pe.Global.Services.Aps.Models;
-using Pe.Global.Services.SignalR;
+using Pe.Host.Contracts;
 using Pe.Global.Services.Storage.Core;
 
 namespace Pe.Global.Services.Storage.Core.Json.SchemaProviders;

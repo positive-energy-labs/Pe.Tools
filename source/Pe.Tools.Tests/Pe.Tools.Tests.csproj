@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+        <ProjectReference Include="..\Pe.Host.Contracts\Pe.Host.Contracts.csproj" />
     <ProjectReference Include="..\Toon\Toon.csproj" />
     <ProjectReference Include="..\Pe.Global\Pe.Global.csproj" />
   </ItemGroup>

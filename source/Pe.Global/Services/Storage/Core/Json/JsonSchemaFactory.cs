@@ -25,11 +25,17 @@ public static class JsonSchemaFactory {
     public static JsonSchema CreateAuthoringSchema<T>(out SchemaExamplesProcessor examplesProcessor) =>
         CreateAuthoringSchema(typeof(T), out examplesProcessor);
 
+    public static JsonSchema CreateAuthoringSchema<T>(out SchemaExamplesProcessor examplesProcessor, bool resolveExamples) =>
+        CreateAuthoringSchema(typeof(T), out examplesProcessor, resolveExamples);
+
     /// <summary>
     ///     Creates an authoring schema for local files/tooling scenarios (non-generic overload).
     /// </summary>
     public static JsonSchema CreateAuthoringSchema(Type type, out SchemaExamplesProcessor examplesProcessor) =>
         CreateSchema(type, out examplesProcessor);
+
+    public static JsonSchema CreateAuthoringSchema(Type type, out SchemaExamplesProcessor examplesProcessor, bool resolveExamples) =>
+        CreateSchema(type, out examplesProcessor, resolveExamples);
 
     /// <summary>
     ///     Creates a frontend render schema optimized for UI generation.
@@ -37,11 +43,19 @@ public static class JsonSchemaFactory {
     public static JsonSchema CreateRenderSchema<T>(out SchemaExamplesProcessor examplesProcessor) =>
         CreateRenderSchema(typeof(T), out examplesProcessor);
 
+    public static JsonSchema CreateRenderSchema<T>(out SchemaExamplesProcessor examplesProcessor, bool resolveExamples) =>
+        CreateRenderSchema(typeof(T), out examplesProcessor, resolveExamples);
+
     /// <summary>
     ///     Creates a frontend render schema optimized for UI generation (non-generic overload).
     /// </summary>
     public static JsonSchema CreateRenderSchema(Type type, out SchemaExamplesProcessor examplesProcessor) {
         var renderJson = CreateRenderSchemaJson(type, out examplesProcessor);
+        return JsonSchema.FromJsonAsync(renderJson).GetAwaiter().GetResult();
+    }
+
+    public static JsonSchema CreateRenderSchema(Type type, out SchemaExamplesProcessor examplesProcessor, bool resolveExamples) {
+        var renderJson = CreateRenderSchemaJson(type, out examplesProcessor, resolveExamples);
         return JsonSchema.FromJsonAsync(renderJson).GetAwaiter().GetResult();
     }
 
@@ -54,12 +68,21 @@ public static class JsonSchemaFactory {
         return RenderSchemaTransformer.TransformToJson(authoringSchema, type);
     }
 
+    public static string CreateRenderSchemaJson(Type type, out SchemaExamplesProcessor examplesProcessor, bool resolveExamples) {
+        var authoringSchema = CreateAuthoringSchema(type, out examplesProcessor, resolveExamples);
+        examplesProcessor.Finalize(authoringSchema);
+        return RenderSchemaTransformer.TransformToJson(authoringSchema, type);
+    }
+
     /// <summary>
     ///     Creates a fragment schema for array items of type T.
     ///     Fragment files are objects with an "Items" property containing an array of T.
     /// </summary>
     public static JsonSchema CreateFragmentSchema<T>() =>
         CreateFragmentSchema(typeof(T), out _);
+
+    public static JsonSchema CreateFragmentSchema<T>(out SchemaExamplesProcessor examplesProcessor, bool resolveExamples) =>
+        CreateFragmentSchema(typeof(T), out examplesProcessor, resolveExamples);
 
     /// <summary>
     ///     Creates a fragment schema for array items (non-generic overload).
@@ -92,12 +115,35 @@ public static class JsonSchemaFactory {
         return fragmentSchema;
     }
 
+    public static JsonSchema CreateFragmentSchema(Type itemType, out SchemaExamplesProcessor examplesProcessor, bool resolveExamples) {
+        var itemSchema = CreateAuthoringSchema(itemType, out examplesProcessor, resolveExamples);
+        var fragmentSchema = new JsonSchema { Type = JsonObjectType.Object, AllowAdditionalProperties = false };
+
+        fragmentSchema.Properties["$schema"] = new JsonSchemaProperty {
+            Type = JsonObjectType.String,
+            IsRequired = false
+        };
+
+        var itemsProperty = new JsonSchemaProperty {
+            Type = JsonObjectType.Array,
+            Item = itemSchema,
+            IsRequired = true
+        };
+        fragmentSchema.Properties["Items"] = itemsProperty;
+        fragmentSchema.RequiredProperties.Add("Items");
+
+        return fragmentSchema;
+    }
+
     /// <summary>
     ///     Creates a JSON schema for type T with all standard processors registered.
     ///     Includes RevitTypeSchemaProcessor, OneOfSchemaProcessor, and SchemaExamplesProcessor.
     /// </summary>
     public static JsonSchema CreateSchema<T>(out SchemaExamplesProcessor examplesProcessor) =>
         CreateSchema(typeof(T), out examplesProcessor);
+
+    public static JsonSchema CreateSchema<T>(out SchemaExamplesProcessor examplesProcessor, bool resolveExamples) =>
+        CreateSchema(typeof(T), out examplesProcessor, resolveExamples);
 
     /// <summary>
     ///     Creates a JSON schema for the specified type with all standard processors registered (non-generic overload).
@@ -116,6 +162,29 @@ public static class JsonSchemaFactory {
             settings.TypeMappers.Add(mapper);
 
         examplesProcessor = new SchemaExamplesProcessor();
+        settings.SchemaProcessors.Add(new RevitTypeSchemaProcessor());
+        settings.SchemaProcessors.Add(new OneOfSchemaProcessor());
+        settings.SchemaProcessors.Add(examplesProcessor);
+        settings.SchemaProcessors.Add(new IncludableSchemaProcessor());
+        settings.SchemaProcessors.Add(new PresettableSchemaProcessor());
+
+        var schema = new JsonSchemaGenerator(settings).Generate(type);
+        SchemaMetadataProcessor.AllowSchemaProperty(schema);
+        return schema;
+    }
+
+    public static JsonSchema CreateSchema(Type type, out SchemaExamplesProcessor examplesProcessor, bool resolveExamples) {
+        RevitTypeRegistry.Initialize();
+
+        var settings = new NewtonsoftJsonSchemaGeneratorSettings {
+            FlattenInheritanceHierarchy = true,
+            AlwaysAllowAdditionalObjectProperties = false
+        };
+
+        foreach (var mapper in RevitTypeRegistry.CreateTypeMappers())
+            settings.TypeMappers.Add(mapper);
+
+        examplesProcessor = new SchemaExamplesProcessor { ResolveExamples = resolveExamples };
         settings.SchemaProcessors.Add(new RevitTypeSchemaProcessor());
         settings.SchemaProcessors.Add(new OneOfSchemaProcessor());
         settings.SchemaProcessors.Add(examplesProcessor);

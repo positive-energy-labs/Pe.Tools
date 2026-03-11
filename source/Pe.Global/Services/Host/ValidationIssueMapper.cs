@@ -1,10 +1,8 @@
 using NJsonSchema.Validation;
+using Pe.Host.Contracts;
 
-namespace Pe.Global.Services.SignalR;
+namespace Pe.Global.Services.Host;
 
-/// <summary>
-///     Maps NJsonSchema validation errors to stable envelope-friendly validation issues.
-/// </summary>
 public static class ValidationIssueMapper {
     public static IReadOnlyList<ValidationIssue> ToValidationIssues(IEnumerable<ValidationError> errors) =>
         errors.SelectMany(ToValidationIssues).ToList();
@@ -42,7 +40,7 @@ public static class ValidationIssueMapper {
 
         if (trimmed.StartsWith("#/")) {
             var segments = trimmed[2..]
-                .Split('/', StringSplitOptions.RemoveEmptyEntries)
+                .Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(segment => segment.Replace("~1", "/").Replace("~0", "~"))
                 .ToList();
 
@@ -66,7 +64,7 @@ public static class ValidationIssueMapper {
         if (trimmed.StartsWith("/")) {
             var slashSegments = trimmed
                 .TrimStart('/')
-                .Split('/', StringSplitOptions.RemoveEmptyEntries)
+                .Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(segment => segment.Replace("~1", "/").Replace("~0", "~"));
 
             var slashNormalized = "$";

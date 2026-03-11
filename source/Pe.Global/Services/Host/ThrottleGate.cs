@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace Pe.Global.Services.SignalR;
+namespace Pe.Global.Services.Host;
 
 public enum ThrottleDecision {
     Executed,
@@ -8,10 +8,7 @@ public enum ThrottleDecision {
     Coalesced
 }
 
-/// <summary>
-///     Endpoint-level throttle/coalescing gate for high-frequency hub calls.
-/// </summary>
-public class EndpointThrottleGate {
+public class ThrottleGate {
     private readonly ConcurrentDictionary<string, CachedEntry> _cache = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, Lazy<Task<object?>>> _inFlight = new(StringComparer.Ordinal);
 

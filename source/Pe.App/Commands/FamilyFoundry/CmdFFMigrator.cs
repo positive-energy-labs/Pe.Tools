@@ -10,12 +10,14 @@ using Pe.FamilyFoundry.Snapshots;
 using Pe.Global;
 using Pe.Global.Revit.Lib;
 using Pe.Global.Revit.Ui;
+using Pe.Global.Services.Host;
 using Pe.Global.Services.Storage;
 using Pe.Global.Services.Storage.Core;
 using Pe.Global.Services.Storage.Core.Json;
 using Pe.Global.Utils.Files;
 using Pe.Tools.Commands.FamilyFoundry.Modules;
 using Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
+using Pe.Tools.SettingsEditor;
 using Serilog.Events;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
@@ -128,7 +130,7 @@ public class CmdFFMigrator : IExternalCommand {
 
     private void HandleOpenSettingsEditor(FoundryContext<ProfileRemap> context) {
         var selectedProfileName = context.SelectedProfile?.TextPrimary;
-        var launched = TryLaunchSettingsEditorRoute(selectedProfileName);
+        var launched = SettingsEditorBrowser.TryLaunch(SettingsModule.ModuleKey, selectedProfileName);
         if (launched) {
             new Ballogger()
                 .Add(
@@ -147,39 +149,6 @@ public class CmdFFMigrator : IExternalCommand {
                 "Could not open external settings-editor route. Check PE_SETTINGS_EDITOR_BASE_URL and PE_SETTINGS_EDITOR_SIGNALR_BASE_URL."
             )
             .Show();
-    }
-
-    private static bool TryLaunchSettingsEditorRoute(string? selectedProfileName = null) {
-        try {
-            var baseUrl = Environment.GetEnvironmentVariable("PE_SETTINGS_EDITOR_BASE_URL");
-            if (string.IsNullOrWhiteSpace(baseUrl))
-                baseUrl = "http://localhost:3000";
-
-            var routePath = Environment.GetEnvironmentVariable("PE_SETTINGS_EDITOR_FFMIGRATOR_ROUTE");
-            if (string.IsNullOrWhiteSpace(routePath))
-                routePath = "/internal/settings-editor";
-            if (!routePath.StartsWith("/", StringComparison.Ordinal))
-                routePath = "/" + routePath;
-
-            var signalRBaseUrl = Environment.GetEnvironmentVariable("PE_SETTINGS_EDITOR_SIGNALR_BASE_URL");
-            if (string.IsNullOrWhiteSpace(signalRBaseUrl))
-                signalRBaseUrl = "http://localhost:5150";
-
-            var moduleKey = Uri.EscapeDataString(SettingsModule.ModuleKey);
-            var signalRBaseUrlEscaped = Uri.EscapeDataString(signalRBaseUrl);
-            var profileNameEscaped = selectedProfileName is { Length: > 0 }
-                ? Uri.EscapeDataString(selectedProfileName)
-                : null;
-            var targetUrl =
-                $"{baseUrl.TrimEnd('/')}{routePath}?moduleKey={moduleKey}&signalrBaseUrl={signalRBaseUrlEscaped}";
-            if (!string.IsNullOrWhiteSpace(profileNameEscaped))
-                targetUrl += $"&file={profileNameEscaped}";
-
-            _ = Process.Start(new ProcessStartInfo(targetUrl) { UseShellExecute = true });
-            return true;
-        } catch {
-            return false;
-        }
     }
 
     internal static FFMigratorPlaceFamiliesActionResult PlaceFamiliesCore(UIApplication uiApp, ProfileRemap profile) {

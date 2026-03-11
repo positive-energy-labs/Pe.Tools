@@ -1,4 +1,4 @@
-using Pe.Global.Services.SignalR;
+using Pe.Host.Contracts;
 
 namespace Pe.Global.Services.Storage.Core.Json.SchemaProviders;
 

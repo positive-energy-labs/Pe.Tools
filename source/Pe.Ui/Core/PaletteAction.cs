@@ -26,7 +26,7 @@ public record PaletteAction<TItem> where TItem : IPaletteListItem {
     ///     Action body. Use async lambdas: <c>Execute = async item => await DoWork(item)</c>.
     ///     For sync work: <c>Execute = async item => DoSyncWork(item)</c>.
     /// </summary>
-    public required Func<TItem, Task> Execute { get; init; }
+    public Func<TItem, Task> Execute { get; init; } = _ => Task.CompletedTask;
 
     /// <summary>
     ///     Controls where the action runs.

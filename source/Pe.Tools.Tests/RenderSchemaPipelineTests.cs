@@ -1,5 +1,5 @@
 using Newtonsoft.Json.Linq;
-using Pe.Global.Services.SignalR;
+using Pe.Host.Contracts;
 using Pe.Global.Services.Storage.Core.Json;
 using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
 using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
@@ -79,6 +79,24 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase
     }
 
     [Test]
+    public async Task Lightweight_render_schema_skips_provider_example_resolution_but_keeps_field_option_metadata()
+    {
+        CountingOptionsProvider.ExampleCallCount = 0;
+
+        var schemaJson = JsonSchemaFactory.CreateRenderSchemaJson(
+            typeof(LightweightRenderSchemaTestSettings),
+            out _,
+            resolveExamples: false
+        );
+        var root = JObject.Parse(schemaJson);
+        var providerBacked = root["properties"]?["ProviderBacked"] as JObject;
+
+        await Assert.That(providerBacked).IsNotNull();
+        await Assert.That(providerBacked!["x-options"]).IsNotNull();
+        await Assert.That(CountingOptionsProvider.ExampleCallCount).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task CreateFragmentSchema_can_be_finalized_and_transformed_for_rendering()
     {
         var fragmentSchema = JsonSchemaFactory.CreateFragmentSchema(typeof(RenderSchemaTestSettings), out var processor);
@@ -133,11 +151,28 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase
         public string ProviderBacked { get; init; } = string.Empty;
     }
 
+    private sealed class LightweightRenderSchemaTestSettings
+    {
+        [SchemaExamples(typeof(CountingOptionsProvider))]
+        public string ProviderBacked { get; init; } = string.Empty;
+    }
+
     private sealed class TestDatasetOptionsProvider : IOptionsProvider, IFieldOptionsClientHintProvider
     {
         public FieldOptionsResolverKind Resolver => FieldOptionsResolverKind.Dataset;
         public FieldOptionsDatasetKind? Dataset => FieldOptionsDatasetKind.ParameterCatalog;
         public IEnumerable<string> GetExamples() => ["A", "B"];
+    }
+
+    private sealed class CountingOptionsProvider : IOptionsProvider
+    {
+        public static int ExampleCallCount { get; set; }
+
+        public IEnumerable<string> GetExamples()
+        {
+            ExampleCallCount++;
+            return ["A", "B"];
+        }
     }
 
     private sealed class RenderPresetSchemaTestSettings

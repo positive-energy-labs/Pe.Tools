@@ -2,7 +2,7 @@ using Newtonsoft.Json;
 using Pe.Global.PolyFill;
 using NJsonSchema;
 using NJsonSchema.Generation;
-using Pe.Global.Services.SignalR;
+using Pe.Host.Contracts;
 using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
 
 namespace Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
@@ -52,6 +52,11 @@ public class SchemaExamplesProcessor : ISchemaProcessor {
     /// </summary>
     public bool ConsolidateDuplicates { get; init; } = true;
 
+    /// <summary>
+    ///     If false, skip provider example resolution and only emit client metadata such as x-options.
+    /// </summary>
+    public bool ResolveExamples { get; init; } = true;
+
     private static FieldOptionsDependencyScope GetDependencyScope(string key) =>
         string.Equals(key, OptionContextKeys.SelectedFamilyNames, StringComparison.Ordinal) ||
         string.Equals(key, OptionContextKeys.SelectedCategoryName, StringComparison.Ordinal)
@@ -70,22 +75,25 @@ public class SchemaExamplesProcessor : ISchemaProcessor {
             if (schemaProperties == null || !schemaProperties.TryGetValue(propertyName, out var propSchema)) continue;
 
             var targetSchema = propSchema.Item ?? propSchema;
+            if (targetSchema == null)
+                continue;
 
             try {
-                // Get or create examples for this provider type (cached to avoid duplicate instantiation)
-                if (!this._providerCache.TryGetValue(attr.ProviderType, out var examples)) {
-                    if (Activator.CreateInstance(attr.ProviderType) is not IOptionsProvider provider) continue;
-                    examples = provider.GetExamples().ToList();
-                    this._providerCache[attr.ProviderType] = examples;
+                if (Activator.CreateInstance(attr.ProviderType) is not IOptionsProvider provider)
+                    continue;
 
-                    // Track dependent provider metadata
-                    if (provider is IDependentOptionsProvider dependentProvider)
-                        this._dependentProviders[attr.ProviderType] = dependentProvider.DependsOn;
+                if (provider is IDependentOptionsProvider dependentProvider)
+                    this._dependentProviders[attr.ProviderType] = dependentProvider.DependsOn;
+
+                List<string>? examples = null;
+                if (this.ResolveExamples) {
+                    if (!this._providerCache.TryGetValue(attr.ProviderType, out examples)) {
+                        examples = provider.GetExamples().ToList();
+                        this._providerCache[attr.ProviderType] = examples;
+                    }
                 }
 
-                var providerInstance = Activator.CreateInstance(attr.ProviderType) as IOptionsProvider;
-                if (providerInstance == null) continue;
-                var clientHintProvider = providerInstance as IFieldOptionsClientHintProvider;
+                var clientHintProvider = provider as IFieldOptionsClientHintProvider;
 
                 var dependsOn = this._dependentProviders.TryGetValue(attr.ProviderType, out var dependencyKeys)
                     ? dependencyKeys
@@ -104,16 +112,17 @@ public class SchemaExamplesProcessor : ISchemaProcessor {
                     DependsOn: dependsOn
                 );
 
-                if (this.ConsolidateDuplicates) {
+                if (this.ResolveExamples && this.ConsolidateDuplicates) {
                     // Track for later - we'll add $refs in Finalize()
-                    this._trackedSchemas.Add((targetSchema, attr.ProviderType));
-                } else {
+                    this._trackedSchemas.Add((schema: targetSchema, providerType: attr.ProviderType));
+                } else if (this.ResolveExamples && examples != null) {
                     // Inline mode: merge examples directly.
                     targetSchema.ExtensionData ??= new Dictionary<string, object?>();
-                    var merged = (targetSchema.ExtensionData.TryGetValue("examples", out var existing) &&
-                                  existing is IEnumerable<string> existingExamples
-                            ? existingExamples
-                            : [])
+                    var existingExamples = targetSchema.ExtensionData.TryGetValue("examples", out var existing) &&
+                                           existing is IEnumerable<string> enumerableExamples
+                        ? enumerableExamples
+                        : [];
+                    var merged = existingExamples
                         .Concat(examples)
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList();

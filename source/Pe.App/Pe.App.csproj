@@ -27,7 +27,7 @@
         <!-- RevitDBExplorer - uses Revit version-specific package -->
         <PackageReference Include="RevitDBExplorer.Embedded" Version="$(RevitVersion).*" />
 
-        <PackageReference Include="ricaun.Revit.UI.Tasks" Version="1.0.0" />
+        <PackageReference Include="ricaun.Revit.UI.Tasks" Version="1.*" />
 
         <!-- Build -->
         <PackageReference Include="ILRepack" Version="2.0.44">

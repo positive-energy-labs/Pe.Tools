@@ -7,10 +7,8 @@ using Pe.App.Tasks;
 using Pe.Tools.Commands.FamilyFoundry.Modules;
 using Pe.Global.Services.AutoTag;
 using Pe.Global.Services.Document;
+using Pe.Global.Services.Host;
 using Pe.Global.Services.Storage.Modules;
-#if !NET48
-using Pe.Global.Services.SignalR;
-#endif
 using Pe.Ui.Core;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
@@ -26,14 +24,7 @@ public class Application : ExternalApplication {
     /// <summary>
     ///     RevitTaskService for executing code in Revit API context from async/WPF contexts.
     /// </summary>
-    private static RevitTaskService _revitTaskService;
-
-    /// <summary>
-    ///     SignalR server for the external settings-editor frontend.
-    /// </summary>
-#if !NET48
-    private static SettingsEditorServer? _settingsEditorServer;
-#endif
+    private static RevitTaskService? _revitTaskService;
 
     public override void OnStartup() {
         // Subscribe to ViewActivated event for MRU tracking
@@ -45,15 +36,19 @@ public class Application : ExternalApplication {
         // Subscribe to DocumentChanged for AutoTag settings change detection
         this.Application.ControlledApplication.DocumentChanged += OnDocumentChanged;
 
-#if !NET48
-        // Start SignalR server during application startup.
-        StartSignalRServer(DocumentManager.uiapp);
-#endif
-
         // Initialize RevitTaskService for async/deferred execution in Revit API context
-        _revitTaskService = new RevitTaskService(this.Application);
-        _revitTaskService.Initialize();
-        RevitTaskAccessor.RunAsync = async action => await _revitTaskService.Run(async () => await action());
+        var revitTaskService = new RevitTaskService(this.Application);
+        revitTaskService.Initialize();
+        _revitTaskService = revitTaskService;
+        RevitTaskAccessor.RunAsync = async action => await revitTaskService.Run(async () => await action());
+
+        // Initialize the settings editor bridge metadata, but keep the bridge disconnected
+        // until the user explicitly connects from the Revit UI.
+        HostRuntime.Initialize(revitTaskService, modules => {
+            modules.Register<AutoTagSettingsModule>();
+            modules.Register<FFManagerSettingsModule>();
+            modules.Register<FFMigratorSettingsModule>();
+        });
 
         CreateLogger();
         this.CreateRibbon();
@@ -69,22 +64,17 @@ public class Application : ExternalApplication {
         app.ViewActivated -= OnViewActivated;
         app.ControlledApplication.DocumentClosing -= OnDocumentClosing;
         app.ControlledApplication.DocumentChanged -= OnDocumentChanged;
-#if !NET48
-#endif
         _revitTaskService?.Dispose();
 
         // Shutdown AutoTag service
         AutoTagService.Instance.Shutdown();
 
-#if !NET48
-        // Stop SignalR server
-        _settingsEditorServer?.Dispose();
-#endif
+        HostRuntime.Shutdown();
 
         return Result.Succeeded;
     }
 
-    private static void OnViewActivated(object sender, ViewActivatedEventArgs e) {
+    private static void OnViewActivated(object? sender, ViewActivatedEventArgs e) {
         if (e?.CurrentActiveView == null) return;
         if (sender is not UIApplication) return;
 
@@ -92,7 +82,7 @@ public class Application : ExternalApplication {
         DocumentManager.Instance.RecordViewActivation(e.CurrentActiveView.Document, e.CurrentActiveView.Id);
     }
 
-    private static void OnDocumentClosing(object sender, DocumentClosingEventArgs e) {
+    private static void OnDocumentClosing(object? sender, DocumentClosingEventArgs e) {
         if (e?.Document == null) return;
         DocumentManager.Instance.OnDocumentClosed(e.Document);
 
@@ -100,7 +90,7 @@ public class Application : ExternalApplication {
         AutoTagService.Instance.CleanupDocument(e.Document);
     }
 
-    private static void OnDocumentChanged(object sender, DocumentChangedEventArgs e) {
+    private static void OnDocumentChanged(object? sender, DocumentChangedEventArgs e) {
         if (e?.GetDocument() == null) return;
 
         try {
@@ -127,33 +117,6 @@ public class Application : ExternalApplication {
     }
 
     public override void OnShutdown() => Log.CloseAndFlush();
-
-#if !NET48
-    private static void StartSignalRServer(UIApplication uiApp) {
-        try {
-            if (_settingsEditorServer != null) return;
-
-            _settingsEditorServer = new SettingsEditorServer();
-            var startTask = _settingsEditorServer.StartAsync(uiApp, configureModules: modules => {
-                modules.Register<AutoTagSettingsModule>();
-                modules.Register<FFManagerSettingsModule>();
-                modules.Register<FFMigratorSettingsModule>();
-            });
-            _ = startTask.ContinueWith(task => {
-                if (task.IsCompletedSuccessfully) {
-                    Log.Information("SignalR settings editor server started successfully");
-                    return;
-                }
-
-                if (task.Exception != null)
-                    Log.Error(task.Exception, "Failed to start SignalR settings editor server");
-            }, TaskScheduler.Default);
-        } catch (Exception ex) {
-            Log.Error(ex, "Failed to start SignalR settings editor server");
-            // Don't fail startup if SignalR fails - it's optional functionality
-        }
-    }
-#endif
 
     private void CreateRibbon() => ButtonRegistry.BuildRibbon(this.Application, "PE TOOLS");
 
