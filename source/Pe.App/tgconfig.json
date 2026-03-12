@@ -1,6 +1,7 @@
 {
   "assemblies": [
-    "bin/Debug.R25/Pe.Global.dll"
+    "bin/Debug.R25/Pe.Global.dll",
+    "bin/Debug.R25/Pe.Host.Contracts.dll"
   ],
   "outputPath": "C:/Users/kaitp/source/repos/signalir-clientside-demo/v3/src/generated",
   "createIndexFile": true,

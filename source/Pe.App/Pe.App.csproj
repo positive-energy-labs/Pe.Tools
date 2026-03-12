@@ -29,6 +29,9 @@
 
         <PackageReference Include="ricaun.Revit.UI.Tasks" Version="1.*" />
 
+        <!-- TypeScript Type Generation -->
+        <PackageReference Include="TypeGen" Version="5.0.0" />
+
         <!-- Build -->
         <PackageReference Include="ILRepack" Version="2.0.44">
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

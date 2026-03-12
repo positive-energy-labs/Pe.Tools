@@ -41,9 +41,6 @@
 
         <!-- Revit Task Service for thread marshaling -->
         <PackageReference Include="ricaun.Revit.UI.Tasks" Version="1.*" />
-
-        <!-- TypeScript Type Generation -->
-        <PackageReference Include="TypeGen" Version="5.0.0" />
     </ItemGroup>
 
     <!-- Exclude host net48 shims from incompatible target frameworks -->
