@@ -5,9 +5,8 @@ using Pe.FamilyFoundry.OperationGroups;
 using Pe.FamilyFoundry.Operations;
 using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Snapshots;
-using Pe.Global.PolyFill;
 using Pe.Global.Revit.Ui;
-using Pe.Global.Services.Storage;
+using Pe.StorageRuntime.Revit;
 using Serilog.Events;
 using System.Diagnostics;
 
@@ -23,8 +22,8 @@ public class CmdFFMakeATVariants : IExternalCommand {
         var doc = commandData.Application.ActiveUIDocument.Document;
 
         try {
-            var storage = new Storage("FF AT Variants");
-            var settings = storage.SettingsDir().Json<ATVariantSettings>().Read();
+            var storage = new StorageClient("FF AT Variants");
+            var settings = storage.StateDir().Json<ATVariantSettings>("settings").Read();
             var outputFolderPath = storage.OutputDir().DirectoryPath;
 
             // Define variants declaratively
@@ -131,21 +130,16 @@ public class ATVariantQueueFactory {
             .ToDictionary(kv => kv.Key, kv => descriptor.SystemLetter + kv.Value + "X-#", StringComparer.Ordinal);
 
         // Create the parameter settings for PE_G___TagInstance
-        var paramSettings = new ParamSettingModel {
-            Name = "PE_G___TagInstance",
-            SetAs = ParamSettingMode.Value        };
+        var paramSettings = new ParamSettingModel { Name = "PE_G___TagInstance", SetAs = ParamSettingMode.Value };
 
-        var perTypeRow = new PerTypeValueRow {
-            Parameter = paramSettings.Name
-        };
+        var perTypeRow = new PerTypeValueRow { Parameter = paramSettings.Name };
 
         foreach (var (typeName, value) in perTypeValues)
             perTypeRow.ValuesByType[typeName] = value;
 
         // Build synthetic settings that will be logged
         var syntheticSettings = new AddAndSetParamsSettings {
-            Parameters = [paramSettings],
-            PerTypeValuesTable = [perTypeRow]
+            Parameters = [paramSettings], PerTypeValuesTable = [perTypeRow]
         };
 
         // Build operation queue

@@ -2,6 +2,7 @@
 using WixSharp;
 using WixSharp.CommonTasks;
 using WixSharp.Controls;
+using Assembly = System.Reflection.Assembly;
 
 const string outputName = "Pe.Tools";
 const string projectName = "Pe.Tools";
@@ -31,7 +32,7 @@ void BuildSingleUserMsi() {
     project.Dirs = [
         new InstallDir(@"%AppDataFolder%\Autodesk\Revit\Addins\", wixEntities)
     ];
-    project.BuildMsi();
+    _ = project.BuildMsi();
 }
 
 void BuildMultiUserUserMsi() {
@@ -40,5 +41,5 @@ void BuildMultiUserUserMsi() {
     project.Dirs = [
         new InstallDir(@"%CommonAppDataFolder%\Autodesk\Revit\Addins\", wixEntities)
     ];
-    project.BuildMsi();
+    _ = project.BuildMsi();
 }

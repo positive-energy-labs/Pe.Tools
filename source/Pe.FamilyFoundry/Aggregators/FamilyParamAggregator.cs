@@ -2,7 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.FamilyFoundry.Snapshots;
-using Pe.Global.Services.Storage;
+using Pe.StorageRuntime.Revit;
 
 namespace Pe.FamilyFoundry.Aggregators;
 
@@ -104,7 +104,7 @@ public static class FamilyParamAggregator {
     /// <summary>
     ///     Writes aggregated data to CSV file.
     /// </summary>
-    public static string WriteToCsv(IEnumerable<AggregatedParamData> data, Storage storage) {
+    public static string WriteToCsv(IEnumerable<AggregatedParamData> data, StorageClient storage) {
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
         var filename = $"param-aggregation_{timestamp}.csv";
         var filePath = Path.Combine(storage.OutputDir().DirectoryPath, filename);

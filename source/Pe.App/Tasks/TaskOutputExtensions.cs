@@ -1,7 +1,7 @@
 using Pe.App.Commands.Palette;
 using Pe.App.Commands.Palette.TaskPalette;
-using Pe.Global.Services.Storage;
-using Pe.Global.Services.Storage.Core;
+using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime.Revit.Core;
 
 namespace Pe.App.Tasks;
 
@@ -18,7 +18,7 @@ public static class TaskOutputExtensions {
     /// <returns>OutputManager scoped to the task's output subdirectory</returns>
     public static OutputManager GetOutput<TTask>(this TTask _) where TTask : ITask {
         var taskTypeName = typeof(TTask).Name;
-        var storage = new Storage(nameof(CmdPltTasks));
+        var storage = new StorageClient(nameof(CmdPltTasks));
         return storage.OutputDir().SubDir(taskTypeName);
     }
 }

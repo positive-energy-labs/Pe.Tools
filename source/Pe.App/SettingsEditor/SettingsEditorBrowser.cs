@@ -10,7 +10,11 @@ internal static class SettingsEditorBrowser {
     private const string DefaultFrontendRoute = "/settings-prototype";
     private const string DefaultSignalRBaseUrl = "http://localhost:5180";
 
-    public static bool TryLaunch(string? moduleKey = null, string? file = null) {
+    public static bool TryLaunch(
+        string? moduleKey = null,
+        string? rootKey = null,
+        string? relativePath = null
+    ) {
         try {
             var baseUrl = GetValueOrDefault(FrontendBaseUrlVariable, DefaultFrontendBaseUrl);
             var routePath = NormalizeRoutePath(GetValueOrDefault(FrontendRouteVariable, DefaultFrontendRoute));
@@ -23,8 +27,11 @@ internal static class SettingsEditorBrowser {
             if (!string.IsNullOrWhiteSpace(moduleKey))
                 query.Add($"moduleKey={Uri.EscapeDataString(moduleKey)}");
 
-            if (!string.IsNullOrWhiteSpace(file))
-                query.Add($"file={Uri.EscapeDataString(file)}");
+            if (!string.IsNullOrWhiteSpace(rootKey))
+                query.Add($"rootKey={Uri.EscapeDataString(rootKey)}");
+
+            if (!string.IsNullOrWhiteSpace(relativePath))
+                query.Add($"relativePath={Uri.EscapeDataString(relativePath)}");
 
             var targetUrl = $"{baseUrl.TrimEnd('/')}{routePath}?{string.Join("&", query)}";
             _ = Process.Start(new ProcessStartInfo(targetUrl) { UseShellExecute = true });

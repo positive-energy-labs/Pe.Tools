@@ -1,17 +1,17 @@
 using Pe.FamilyFoundry.Aggregators.Snapshots;
-using Pe.Global.PolyFill;
-using Pe.Global;
-using Pe.Global.Services.Storage;
-using Pe.Global.Services.Storage.Core;
-using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
 using Pe.FamilyFoundry.OperationSettings;
+using Pe.Global;
+using Pe.Global.PolyFill;
+using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime.Revit.Core;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
 namespace Pe.FamilyFoundry;
 
 /// <summary>
 ///     Fluent builder for generating processing result output files.
 /// </summary>
-public class ProcessingResultBuilder(Storage storage) {
+public class ProcessingResultBuilder(StorageClient storage) {
     private readonly List<FamilyProcessingContext> _familyContexts = [];
     private readonly OutputManager _runOutput = storage.OutputDir().TimestampedSubDir();
     private List<(string Name, string Description, string Type, string IsMerged)> _operationMetadata = [];
@@ -294,9 +294,7 @@ public class ProcessingResultBuilder(Storage storage) {
         return new {
             Family = ctx.FamilyName,
             Summary = new {
-                ParametersRemoved = removed.Count,
-                ParametersAdded = added.Count,
-                ParametersModified = modified.Count
+                ParametersRemoved = removed.Count, ParametersAdded = added.Count, ParametersModified = modified.Count
             },
             Removed = removed.Any() ? removed : null,
             Added = added.Any() ? added : null,
@@ -381,8 +379,8 @@ public class ProcessingResultBuilder(Storage storage) {
 /// <summary>
 ///     Builder for dry-run output.
 /// </summary>
-public class DryRunResultBuilder(Storage storage) {
-    private readonly Storage _storage = storage;
+public class DryRunResultBuilder(StorageClient storage) {
+    private readonly StorageClient _storage = storage;
     private List<SharedParameterDefinition> _apsParams = [];
     private List<Family> _families = [];
     private List<(string Name, string Description, string Type, string IsMerged)> _operationMetadata = [];
