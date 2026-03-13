@@ -1,10 +1,9 @@
 using Pe.FamilyFoundry.OperationSettings;
-using Pe.Global.Services.Storage.Core.Json.RevitTypes;
-using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
-using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.StorageRuntime.Revit.Core.Json.RevitTypes;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using System.Linq;
 
 namespace Pe.FamilyFoundry.Aggregators.Snapshots;
 
@@ -73,7 +72,8 @@ public record ParamSnapshot : ParamDefinitionBase {
     ///     Settings-compatible assignment mode.
     ///     True only when this snapshot represents a formula.
     /// </summary>
-    public ParamSettingMode SetAs => !string.IsNullOrWhiteSpace(this.Formula) ? ParamSettingMode.Formula : ParamSettingMode.Value;
+    public ParamSettingMode SetAs =>
+        !string.IsNullOrWhiteSpace(this.Formula) ? ParamSettingMode.Formula : ParamSettingMode.Value;
 
     /// <summary>Checks if a parameter has a (non-empty) value for all family types.</summary>
     public bool HasValueForAllTypes() {
@@ -110,9 +110,7 @@ public record ParamSnapshot : ParamDefinitionBase {
         if (nonNullValues.Count == 0) return null;
         if (nonNullValues.Values.Distinct(StringComparer.Ordinal).Count() == 1) return null;
 
-        var row = new PerTypeValueRow {
-            Parameter = this.Name
-        };
+        var row = new PerTypeValueRow { Parameter = this.Name };
         foreach (var kv in nonNullValues)
             row.ValuesByType[kv.Key] = kv.Value;
         return row;

@@ -6,7 +6,8 @@ using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Snapshots;
 using Pe.Global.Revit.Ui;
-using Pe.Global.Services.Storage;
+using Pe.SettingsCatalog.Runtime.FamilyFoundry;
+using Pe.StorageRuntime.Revit;
 using Serilog.Events;
 using System.Diagnostics;
 using System.IO;
@@ -28,7 +29,7 @@ public class CmdFFManagerSnapshot : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var storage = new Storage(CmdFFManager.AddinKey);
+            var storage = new StorageClient(CmdFFManager.AddinKey);
 
             // Collect snapshot data from the family
             var snapshot = CollectFamilySnapshot(doc);
@@ -116,14 +117,11 @@ public class CmdFFManagerSnapshot : IExternalCommand {
             },
             FilterApsParams = new BaseProfileSettings.FilterApsParamsSettings {
                 // Empty - snapshot captures exact parameters, no APS filtering needed
-                IncludeNames = new IncludeSharedParameter(), 
-                ExcludeNames = new ExcludeSharedParameter()
+                IncludeNames = new IncludeSharedParameter(), ExcludeNames = new ExcludeSharedParameter()
             },
             MakeRefPlaneAndDims =
                 new MakeRefPlaneAndDimsSettings {
-                    Enabled = hasRefPlaneSpecs,
-                    MirrorSpecs = mirrorSpecs,
-                    OffsetSpecs = offsetSpecs
+                    Enabled = hasRefPlaneSpecs, MirrorSpecs = mirrorSpecs, OffsetSpecs = offsetSpecs
                 },
             AddAndSetParams = new AddAndSetParamsSettings {
                 Enabled = paramSettings.Count > 0,
@@ -133,9 +131,7 @@ public class CmdFFManagerSnapshot : IExternalCommand {
                 PerTypeValuesTable = perTypeValuesTable
             },
             MakeConstrainedExtrusions = new MakeConstrainedExtrusionsSettings {
-                Enabled = hasConstrainedExtrusions,
-                Rectangles = rectangleExtrusions,
-                Circles = circleExtrusions
+                Enabled = hasConstrainedExtrusions, Rectangles = rectangleExtrusions, Circles = circleExtrusions
             }
         };
     }

@@ -4,11 +4,10 @@ using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Events;
 using Nice3point.Revit.Toolkit.External;
 using Pe.App.Tasks;
-using Pe.Tools.Commands.FamilyFoundry.Modules;
 using Pe.Global.Services.AutoTag;
 using Pe.Global.Services.Document;
 using Pe.Global.Services.Host;
-using Pe.Global.Services.Storage.Modules;
+using Pe.SettingsCatalog.Revit;
 using Pe.Ui.Core;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
@@ -44,11 +43,7 @@ public class Application : ExternalApplication {
 
         // Initialize the settings editor bridge metadata, but keep the bridge disconnected
         // until the user explicitly connects from the Revit UI.
-        HostRuntime.Initialize(revitTaskService, modules => {
-            modules.Register<AutoTagSettingsModule>();
-            modules.Register<FFManagerSettingsModule>();
-            modules.Register<FFMigratorSettingsModule>();
-        });
+        HostRuntime.Initialize(revitTaskService, KnownSettingsRevitModules.RegisterKnownSettingsModules);
 
         CreateLogger();
         this.CreateRibbon();

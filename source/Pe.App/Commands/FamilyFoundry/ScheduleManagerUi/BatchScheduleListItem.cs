@@ -1,5 +1,6 @@
 using Newtonsoft.Json.Linq;
-using Pe.Global.Services.Storage.Core;
+using Pe.StorageRuntime;
+using Pe.StorageRuntime.Revit.Core;
 using Pe.Ui.Core;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
@@ -24,11 +25,11 @@ public class BatchScheduleSettings {
 ///     Palette list item representing a batch schedule configuration.
 /// </summary>
 public class BatchScheduleListItem : IPaletteListItem {
-    private readonly SettingsManager _batchSubDir;
+    private readonly StateManager _batchSubDir;
     private readonly FileInfo _fileInfo;
     private readonly string _relativePath;
 
-    public BatchScheduleListItem(string filePath, string relativePath, SettingsManager batchSubDir) {
+    public BatchScheduleListItem(string filePath, string relativePath, StateManager batchSubDir) {
         this.FilePath = filePath;
         this._fileInfo = new FileInfo(filePath);
         this._relativePath = relativePath;
@@ -73,7 +74,7 @@ public class BatchScheduleListItem : IPaletteListItem {
     /// <summary>
     ///     Discovers all batch configuration JSON files in a directory.
     /// </summary>
-    public static List<BatchScheduleListItem> DiscoverProfiles(SettingsManager subDir) {
+    public static List<BatchScheduleListItem> DiscoverProfiles(StateManager subDir) {
         if (!Directory.Exists(subDir.DirectoryPath))
             return [];
 

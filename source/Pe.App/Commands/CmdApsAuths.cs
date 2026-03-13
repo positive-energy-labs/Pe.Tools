@@ -2,7 +2,7 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.Global.Revit.Ui;
 using Pe.Global.Services.Aps;
-using Pe.Global.Services.Storage;
+using Pe.StorageRuntime.Revit;
 using Serilog.Events;
 using System.Diagnostics;
 
@@ -45,11 +45,11 @@ public class CmdApsAuthPKCE : IExternalCommand {
 }
 
 public class ApsAuthNormal : Aps.IOAuthTokenProvider {
-    public string GetClientId() => Storage.GlobalDir().SettingsJson().Read().ApsWebClientId1;
-    public string GetClientSecret() => Storage.GlobalDir().SettingsJson().Read().ApsWebClientSecret1;
+    public string GetClientId() => StorageClient.GlobalDir().SettingsJson().Read().ApsWebClientId1;
+    public string GetClientSecret() => StorageClient.GlobalDir().SettingsJson().Read().ApsWebClientSecret1;
 }
 
 public class ApsAuthPkce : Aps.IOAuthTokenProvider {
-    public string GetClientId() => Storage.GlobalDir().SettingsJson().Read().ApsDesktopClientId1;
+    public string GetClientId() => StorageClient.GlobalDir().SettingsJson().Read().ApsDesktopClientId1;
     public string GetClientSecret() => null;
 }

@@ -1,7 +1,7 @@
 using Autodesk.Revit.DB.ExtensibleStorage;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Pe.Global.Services.Storage.Core.Json.ContractResolvers;
+using Pe.StorageRuntime.Revit.Core.Json.ContractResolvers;
 using Serilog;
 
 namespace Pe.Global.Services.Storage;

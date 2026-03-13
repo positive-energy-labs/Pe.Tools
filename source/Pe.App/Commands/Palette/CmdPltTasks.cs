@@ -2,7 +2,7 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.TaskPalette;
 using Pe.App.Tasks;
-using Pe.Global.Services.Storage;
+using Pe.StorageRuntime.Revit;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
 using Serilog;
@@ -18,7 +18,7 @@ public class CmdPltTasks : IExternalCommand {
     ) {
         try {
             var uiapp = commandData.Application;
-            var persistence = new Storage(nameof(CmdPltTasks));
+            var persistence = new StorageClient(nameof(CmdPltTasks));
 
             // Refresh task registry on every palette open to support hot-reload
             Log.Information("Refreshing task registry...");
@@ -53,10 +53,9 @@ public class CmdPltTasks : IExternalCommand {
                                         Console.WriteLine($"Task '{item.Task.Name}' failed: {ex.Message}");
                                         Console.WriteLine(ex.StackTrace);
                                     }
-                                },                            }
-                        ) {
-                            FilterKeySelector = item => item.Task.Category ?? string.Empty
-                        }
+                                }
+                            }
+                        ) { FilterKeySelector = item => item.Task.Category ?? string.Empty }
                     ]
                 });
             window.Show();

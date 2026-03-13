@@ -2,10 +2,9 @@ using Pe.Global.Revit.Lib.Schedules.Fields;
 using Pe.Global.Revit.Lib.Schedules.Filters;
 using Pe.Global.Revit.Lib.Schedules.SortGroup;
 using Pe.Global.Revit.Lib.Schedules.TitleStyle;
-using Pe.Global.Services.Document;
-using Pe.Global.Services.Storage.Core.Json;
-using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
-using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.StorageRuntime.Json;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
@@ -21,10 +20,10 @@ public class ScheduleSpec {
     [Required]
     public string Name { get; set; } = string.Empty;
 
-    [Description("The Revit category to schedule (e.g., 'Mechanical Equipment', 'Plumbing Fixtures', 'Doors').")]
+    [Description("The built-in Revit category to schedule (for example 'Mechanical Equipment' or 'Doors').")]
     [SchemaExamples(typeof(CategoryNamesProvider))]
     [Required]
-    public string CategoryName { get; set; } = string.Empty;
+    public BuiltInCategory CategoryName { get; set; } = BuiltInCategory.INVALID;
 
     [Description(
         "The name of the view template to apply to this schedule. Leave empty to use no template. Must be a schedule-compatible view template.")]
@@ -64,9 +63,9 @@ public class ScheduleSpec {
 ///     Returns common default line styles if no document is available.
 /// </summary>
 public class LineStyleNamesProvider : IOptionsProvider {
-    public IEnumerable<string> GetExamples() {
+    public IEnumerable<string> GetExamples(SettingsProviderContext context) {
         try {
-            var doc = DocumentManager.GetActiveDocument();
+            var doc = context.GetActiveDocument();
             if (doc == null || doc.IsFamilyDocument) {
                 // Return common default Revit line styles
                 return [

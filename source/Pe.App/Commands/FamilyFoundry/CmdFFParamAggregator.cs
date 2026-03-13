@@ -5,9 +5,9 @@ using Pe.FamilyFoundry.Snapshots;
 using Pe.Global.PolyFill;
 using Pe.Global.Revit.Lib;
 using Pe.Global.Revit.Ui;
-using Pe.Global.Services.Storage;
-using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
-using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
+using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Serilog.Events;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
@@ -26,11 +26,8 @@ public class CmdFFParamAggregator : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var storage = new Storage("FF Param Aggregator");
-            var settingsManager = storage.SettingsDir();
-
-            // Load settings (creates default file if missing)
-            var settings = settingsManager.Json<ParamAggregatorSettings>("settings.json").Read();
+            var storage = new StorageClient("FF Param Aggregator");
+            var settings = storage.StateDir().Json<ParamAggregatorSettings>("settings").Read();
 
             // Get families - either selected or ALL families (or filtered by category)
             var selectedFamilies = Pickers.GetSelectedFamilies(uiDoc);
