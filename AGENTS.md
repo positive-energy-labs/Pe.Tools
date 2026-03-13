@@ -49,7 +49,11 @@ of Revit's search paths for addins.
 Due to how debug-and-attach works, rebuilding ANYTHING amid a debug session will
 break Hot Reloads. Therfore DO NOT build anything unless otherwise asked.
 
-## Do's
+---
+
+## LIVING MEMORY (update as needed to avoid common mistakes and bad assumptions)
+
+### Do's
 
 1. Always do your research into existing patterns/solutions before writing code.
 2. Follow, but also think critically about existing code. We want consistency
@@ -82,7 +86,7 @@ break Hot Reloads. Therfore DO NOT build anything unless otherwise asked.
     type-safety.
 14. Centralize comments into blocks rather than sprinkling them throughout.
 
-## Don'ts 👎👎👎
+### Don'ts 👎👎👎
 
 1. Don't write markdown summaries unless asked!
 2. Don't nest `for` loops or `if` statements more than 4 times in a single
@@ -96,15 +100,3 @@ break Hot Reloads. Therfore DO NOT build anything unless otherwise asked.
    add an `[Obsolete]` attribute, delete the method and update consumers. We
    want the enforce ONE way to do something. If a new way to is better, refactor
    the old to use the new.
-
-## TidBits
-
-nint UIControlledApplication.MainWindowHandle { get; } Get the handle of the
-Revit main window.
-
-Returns the main window handle of the Revit application. This handle should be
-used when displaying modal dialogs and message windows to insure that they are
-properly parented. This property replaces
-System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle property, which
-is no longer a reliable method of retrieving the main window handle starting
-with Revit 2019.

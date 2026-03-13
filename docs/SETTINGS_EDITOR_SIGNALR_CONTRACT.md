@@ -7,13 +7,14 @@ The browser-facing SignalR host is now expected to run out of process. Revit
 participates only when the user manually connects the local named-pipe bridge
 from the `Settings Editor` command inside the add-in.
 
-It does not describe general settings file management inside `Pe.Tools`. In this
-repo, settings discovery, file reads, and JSON composition are filesystem-first
-and handled by the storage/composition services under `source/Pe.Global/Services/Storage/`.
+It does not describe general settings file management inside `Pe.Tools`. Storage
+CRUD now lives on the host HTTP surface and is backed by the shared storage
+contracts in `source/Pe.StorageRuntime/Documents/`.
 
 ## Transport
 
 - SignalR hub route: `http://localhost:5180/hubs/settings-editor`
+- Storage HTTP base: `http://localhost:5180/api/settings`
 - Protocol: SignalR JSON protocol (camelCase payloads)
 - Pattern: `connection.invoke("<MethodName>", request)`
 - Host lifecycle: manual external host process
@@ -52,9 +53,8 @@ and handled by the storage/composition services under `source/Pe.Global/Services
   - provider-backed examples/options
   - Revit-derived parameter catalog queries
   - document invalidation events
-- SignalR is not the source of truth for listing, reading, composing, or writing
-  settings files. Those flows are handled locally against the filesystem in this
-  repo.
+- SignalR is not the source of truth for listing, reading, composing, validating,
+  or writing settings files. Those flows are handled by the host HTTP endpoints.
 - Revit-aware hub methods are fulfilled through the manual named-pipe bridge to
   the add-in, not by hosting Kestrel inside Revit.
 
@@ -134,8 +134,31 @@ connection.on("DocumentChanged", (event) => {
 ## Backend-Owned Transport Constants
 
 - Hub route constant: `HubRoutes.Default`
+- HTTP route constants: `HttpRoutes.*`
 - Hub method names: `HubMethodNames.*`
 - Client event names: `HubClientEventNames.*`
+
+## Storage HTTP Endpoints
+
+- `GET /api/settings/workspaces`
+  - Returns workspace/module/root metadata for host-backed editing.
+- `GET /api/settings/tree`
+  - Query: `moduleKey`, `rootKey`, optional discovery flags.
+  - Returns filesystem discovery for one module root.
+- `POST /api/settings/document/open`
+  - Request: `OpenSettingsDocumentRequest`
+  - Returns `SettingsDocumentSnapshot` with raw content, optional composed
+    content, dependency metadata, and validation results.
+- `POST /api/settings/document/compose`
+  - Request: `OpenSettingsDocumentRequest`
+  - Returns the same snapshot shape with composed content requested.
+- `POST /api/settings/document/validate`
+  - Request: `ValidateSettingsDocumentRequest`
+  - Returns `SettingsValidationResult`.
+- `POST /api/settings/document/save`
+  - Request: `SaveSettingsDocumentRequest`
+  - Returns `SaveSettingsDocumentResult` including `writeApplied`,
+    `conflictDetected`, and validation issues.
 
 ## Minimal Usage Flow
 
@@ -144,15 +167,17 @@ connection.on("DocumentChanged", (event) => {
    registry data.
 3. Call `GetSettingsCatalogEnvelope` for module picker/target bootstrap when a
    settings-target-specific list is needed.
-4. Use the selected module metadata to align the external frontend with local
-   filesystem-backed settings conventions.
-5. Call `GetSchemaEnvelope` for render schema generation.
-6. Call `ValidateSettingsEnvelope` before save when server-authoritative
-   validation is needed.
-7. For provider-backed fields, call `GetFieldOptionsEnvelope` as needed.
-8. For mapping or document-aware UIs, call `GetParameterCatalogEnvelope` as
+4. Call `GET /api/settings/workspaces` and `GET /api/settings/tree` to discover
+   editable documents.
+5. Call `POST /api/settings/document/open` for the base document and use the
+   returned dependency metadata to open fragments through the same endpoint.
+6. Call `GetSchemaEnvelope` for render schema generation.
+7. Call `POST /api/settings/document/validate` or rely on validation returned
+   from `open` and `save`.
+8. For provider-backed fields, call `GetFieldOptionsEnvelope` as needed.
+9. For mapping or document-aware UIs, call `GetParameterCatalogEnvelope` as
    needed.
-9. Subscribe to `DocumentChanged` and invalidate dependent caches according to
+10. Subscribe to `DocumentChanged` and invalidate dependent caches according to
    the payload flags.
 
 ## Manual Bridge Workflow
@@ -171,6 +196,8 @@ repo:
 - reading settings files
 - writing settings files
 - server-side composition expansion for editor file IO
+
+Those operations are part of the host HTTP contract instead.
 
 ## Envelope Handling Recommendation
 
