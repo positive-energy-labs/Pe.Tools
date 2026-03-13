@@ -31,8 +31,8 @@ settings-editor integration so future work in this repo stays aligned.
   - Hub routes, hub method names, DTOs, enums, and event names are defined in
     this repo and exported for the external frontend.
 - **Filesystem as source of truth for settings files**
-  - In this repo, settings listing, reads, writes, and composition are local
-    filesystem concerns, not SignalR concerns.
+  - In this repo, settings listing, reads, writes, composition, and validation
+    are host-owned filesystem concerns, not SignalR concerns.
 
 ## Current Implemented Architecture
 
@@ -49,7 +49,8 @@ settings-editor integration so future work in this repo stays aligned.
 - Client event contract names are centralized via `HubClientEventNames` (for
   example `DocumentChanged`) to reduce string drift.
 - Local settings discovery uses `SettingsManager.Discover(...)`.
-- Local file composition uses `ComposableJson<T>` + `JsonCompositionPipeline`.
+- Host-backed storage uses `LocalDiskSettingsStorageBackend`.
+- Shared file composition uses `JsonCompositionPipeline`.
 
 ### Frontend Paths
 
@@ -78,15 +79,17 @@ not frontend implementation details.
   - authoring pipeline: rich schema for local files/VS Code intellisense.
   - render pipeline: pre-resolved schema for frontend field rendering.
 - Local storage pipelines:
-  - filesystem discovery for settings files/directories.
-  - local composition for `$include` and `$preset` expansion.
+  - HTTP-backed filesystem discovery for settings files/directories.
+  - host-backed composition for `$include` and `$preset` expansion.
+  - host-backed validation on open/save/validate.
 
 ### Runtime Interaction Model
 
 - Frontend/backend boundary:
   - external frontend connects to the single settings-editor hub hosted outside
     Revit.
-  - frontend handles its own file IO strategy outside this repo.
+  - frontend consumes host HTTP endpoints for document IO and SignalR for
+    Revit-derived capabilities.
 - Host/add-in boundary:
   - Revit connects to the external host over named pipes only when the user
     explicitly enables the bridge.
@@ -98,8 +101,7 @@ not frontend implementation details.
 ### Data Loading Strategy
 
 - Default:
-  - filesystem-backed settings discovery/composition remains the default path
-    inside this repo.
+  - host HTTP is the public entry point for storage CRUD.
 - SignalR path:
   - server-filtered options/providers, validation, schema generation, and
     document-aware parameter catalogs remain the SignalR use cases.
