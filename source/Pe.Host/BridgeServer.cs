@@ -1,7 +1,6 @@
-using Microsoft.AspNetCore.SignalR;
 using Newtonsoft.Json;
 using Pe.Host.Contracts;
-using Pe.Host.Hubs;
+using Pe.Host.Services;
 using System.Collections.Concurrent;
 using System.IO.Pipes;
 using System.Text;
@@ -9,11 +8,11 @@ using System.Text;
 namespace Pe.Host;
 
 public sealed class BridgeServer(
-        IHubContext<BridgeHub> hubContext,
+        HostEventStreamService eventStreamService,
         ILogger<BridgeServer> logger,
         BridgeHostOptions options
     ) : BackgroundService {
-    private readonly IHubContext<BridgeHub> _hubContext = hubContext;
+    private readonly HostEventStreamService _eventStreamService = eventStreamService;
     private readonly ILogger<BridgeServer> _logger = logger;
     private readonly JsonSerializerSettings _serializerSettings = HostJson.CreateSerializerSettings();
     private readonly BridgeHostOptions _options = options;
@@ -125,6 +124,12 @@ public sealed class BridgeServer(
 
             ValidateHandshake(handshake);
             this.UpdateHandshake(handshake);
+            await this.PublishHostStatusChangedAsync(
+                HostStatusChangedReason.BridgeConnected,
+                handshake.HasActiveDocument,
+                handshake.ActiveDocumentTitle,
+                cancellationToken
+            );
             this._logger.LogInformation(
                 "Revit bridge connected: RevitVersion={RevitVersion}, Runtime={RuntimeFramework}, Modules={ModuleCount}, HasActiveDocument={HasActiveDocument}, ActiveDocumentTitle={ActiveDocumentTitle}",
                 handshake.RevitVersion,
@@ -152,6 +157,12 @@ public sealed class BridgeServer(
                     if (frame.Handshake != null) {
                         ValidateHandshake(frame.Handshake);
                         this.UpdateHandshake(frame.Handshake);
+                        await this.PublishHostStatusChangedAsync(
+                            HostStatusChangedReason.BridgeHandshakeRefreshed,
+                            frame.Handshake.HasActiveDocument,
+                            frame.Handshake.ActiveDocumentTitle,
+                            cancellationToken
+                        );
                         this._logger.LogInformation("Revit bridge handshake refreshed.");
                     }
                     break;
@@ -172,11 +183,22 @@ public sealed class BridgeServer(
         if (bridgeEvent == null)
             return;
 
-        if (string.Equals(bridgeEvent.EventName, HubClientEventNames.DocumentChanged, StringComparison.Ordinal)) {
+        if (string.Equals(bridgeEvent.EventName, SettingsHostEventNames.DocumentChanged, StringComparison.Ordinal)) {
             var payload = Newtonsoft.Json.JsonConvert.DeserializeObject<DocumentInvalidationEvent>(bridgeEvent.PayloadJson, this._serializerSettings);
             if (payload != null) {
+                var previousSnapshot = this.GetSnapshot();
                 this.UpdateDocumentState(payload);
-                await this._hubContext.Clients.All.SendAsync(HubClientEventNames.DocumentChanged, payload, cancellationToken);
+                await this._eventStreamService.PublishDocumentChangedAsync(payload, cancellationToken);
+
+                if (previousSnapshot.HasActiveDocument != payload.HasActiveDocument ||
+                    !string.Equals(previousSnapshot.ActiveDocumentTitle, payload.DocumentTitle, StringComparison.Ordinal)) {
+                    await this.PublishHostStatusChangedAsync(
+                        HostStatusChangedReason.ActiveDocumentChanged,
+                        payload.HasActiveDocument,
+                        payload.DocumentTitle,
+                        cancellationToken
+                    );
+                }
             }
         }
     }
@@ -202,6 +224,12 @@ public sealed class BridgeServer(
         this._logger.LogInformation("Bridge server resetting session: Reason={Reason}, PendingRequests={PendingCount}", reason, pendingCount);
         session?.Dispose();
         this.ClearConnection(reason);
+        _ = this.PublishHostStatusChangedAsync(
+            HostStatusChangedReason.BridgeDisconnected,
+            false,
+            null,
+            CancellationToken.None
+        );
 
         foreach (var pending in this._pending.ToArray())
             if (this._pending.TryRemove(pending.Key, out var completion))
@@ -237,6 +265,16 @@ public sealed class BridgeServer(
         lock (this._snapshotSync)
             this._snapshot = BridgeSnapshot.Disconnected(disconnectReason);
     }
+
+    private Task PublishHostStatusChangedAsync(
+        HostStatusChangedReason reason,
+        bool hasActiveDocument,
+        string? documentTitle,
+        CancellationToken cancellationToken
+    ) => this._eventStreamService.PublishHostStatusChangedAsync(
+        new HostStatusChangedEvent(reason, hasActiveDocument, documentTitle),
+        cancellationToken
+    );
 
     private static void ValidateHandshake(BridgeHandshake handshake) {
         if (!string.Equals(handshake.Transport, BridgeProtocol.Transport, StringComparison.Ordinal))

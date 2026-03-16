@@ -4,9 +4,9 @@ using Newtonsoft.Json.Converters;
 using Pe.FamilyFoundry;
 using Pe.Global;
 using Pe.Global.Utils.Files;
+using Pe.StorageRuntime.Json.ContractResolvers;
 using Pe.StorageRuntime.Revit;
 using Pe.StorageRuntime.Revit.Core.Json;
-using Pe.StorageRuntime.Revit.Core.Json.ContractResolvers;
 using Pe.StorageRuntime.Revit.Modules;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
@@ -226,7 +226,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
             Formatting.Indented,
             new JsonSerializerSettings {
                 Converters = [new StringEnumConverter()],
-                ContractResolver = new RequiredAwareContractResolver(),
+                ContractResolver = new RequiredAwareContractResolver(RevitTypeRegistry.TryGet),
                 NullValueHandling = NullValueHandling.Ignore
             });
 

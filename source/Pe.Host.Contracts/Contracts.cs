@@ -4,12 +4,6 @@ using TypeGen.Core.TypeAnnotations;
 
 namespace Pe.Host.Contracts;
 
-[ExportTsClass]
-public static class HubClientEventNames {
-    public const string DocumentChanged = nameof(DocumentChanged);
-}
-
-[ExportTsClass]
 public static class HubMethodNames {
     public const string GetHostStatusEnvelope = nameof(GetHostStatusEnvelope);
     public const string GetSchemaEnvelope = nameof(GetSchemaEnvelope);
@@ -20,25 +14,31 @@ public static class HubMethodNames {
 }
 
 [ExportTsClass]
-public static class HubRoutes {
-    public const string Default = "/hubs/settings-editor";
+public static class SettingsHostEventNames {
+    public const string DocumentChanged = "document-changed";
+    public const string HostStatusChanged = "host-status-changed";
 }
 
 [ExportTsClass]
 public static class HttpRoutes {
     public const string SettingsBase = "/api/settings";
+    public const string HostStatus = SettingsBase + "/host-status";
+    public const string Schema = SettingsBase + "/schema";
     public const string Workspaces = SettingsBase + "/workspaces";
     public const string Tree = SettingsBase + "/tree";
+    public const string FieldOptions = SettingsBase + "/field-options";
+    public const string ParameterCatalog = SettingsBase + "/parameter-catalog";
     public const string OpenDocument = SettingsBase + "/document/open";
     public const string ComposeDocument = SettingsBase + "/document/compose";
     public const string ValidateDocument = SettingsBase + "/document/validate";
     public const string SaveDocument = SettingsBase + "/document/save";
+    public const string Events = SettingsBase + "/events";
 }
 
 [ExportTsClass]
 public static class HostProtocol {
-    public const string Transport = "signalr";
-    public const int ContractVersion = 7;
+    public const string Transport = "http+sse";
+    public const int ContractVersion = 8;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
@@ -315,6 +315,22 @@ public record DocumentInvalidationEvent(
     bool InvalidateFieldOptions,
     bool InvalidateCatalogs,
     bool InvalidateSchema
+);
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum HostStatusChangedReason {
+    BridgeConnected,
+    BridgeDisconnected,
+    BridgeHandshakeRefreshed,
+    ActiveDocumentChanged
+}
+
+[ExportTsInterface]
+public record HostStatusChangedEvent(
+    HostStatusChangedReason Reason,
+    bool HasActiveDocument,
+    string? DocumentTitle
 );
 
 [ExportTsInterface]

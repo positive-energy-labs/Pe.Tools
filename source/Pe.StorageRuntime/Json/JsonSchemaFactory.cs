@@ -22,12 +22,8 @@ public interface IJsonSchemaCapabilityAugmenter {
     );
 }
 
-public sealed class JsonSchemaBuildOptions {
-    public JsonSchemaBuildOptions(SettingsProviderContext providerContext) {
-        this.ProviderContext = providerContext ?? throw new ArgumentNullException(nameof(providerContext));
-    }
-
-    public SettingsProviderContext ProviderContext { get; }
+public sealed class JsonSchemaBuildOptions(SettingsProviderContext providerContext) {
+    public SettingsProviderContext ProviderContext { get; } = providerContext ?? throw new ArgumentNullException(nameof(providerContext));
     public bool ResolveExamples { get; init; } = true;
 }
 

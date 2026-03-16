@@ -2,7 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Collections;
 
-namespace Pe.StorageRuntime.Revit.Core.Json.Converters;
+namespace Pe.StorageRuntime.Json.Converters;
 
 public class UniformChildKeysListConverter(string missingValue = "") : JsonConverter {
     public override bool CanRead => false;
@@ -34,12 +34,12 @@ public class UniformChildKeysListConverter(string missingValue = "") : JsonConve
         var seenHeaders = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var row in list) {
-            var rowObj = ToJObject(row, serializer);
-            rows.Add(rowObj);
+            var rowObject = ToJObject(row, serializer);
+            rows.Add(rowObject);
 
-            foreach (var prop in rowObj.Properties()) {
-                if (seenHeaders.Add(prop.Name))
-                    headerOrder.Add(prop.Name);
+            foreach (var property in rowObject.Properties()) {
+                if (seenHeaders.Add(property.Name))
+                    headerOrder.Add(property.Name);
             }
         }
 
@@ -62,8 +62,8 @@ public class UniformChildKeysListConverter(string missingValue = "") : JsonConve
     private static JObject ToJObject(object? row, JsonSerializer serializer) {
         if (row is null)
             return new JObject();
-        if (row is JObject jObject)
-            return (JObject)jObject.DeepClone();
+        if (row is JObject jsonObject)
+            return (JObject)jsonObject.DeepClone();
 
         var token = JToken.FromObject(row, serializer);
         return token as JObject ?? new JObject();

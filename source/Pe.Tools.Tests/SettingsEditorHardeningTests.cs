@@ -106,7 +106,7 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
 
         var json = JsonConvert.SerializeObject(payload, CreateSerializerSettings());
 
-        await Assert.That(json).Contains("\"hostContractVersion\":7");
+        await Assert.That(json).Contains($"\"hostContractVersion\":{HostProtocol.ContractVersion}");
         await Assert.That(json).Contains("\"availableModules\"");
         await Assert.That(json).Contains("\"moduleKey\":\"FFMigrator\"");
         await Assert.That(json).Contains("\"defaultRootKey\":\"profiles\"");
@@ -128,6 +128,19 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
         await Assert.That(payload.InvalidateFieldOptions).IsTrue();
         await Assert.That(payload.InvalidateCatalogs).IsTrue();
         await Assert.That(payload.InvalidateSchema).IsFalse();
+    }
+
+    [Test]
+    public async Task HostStatusChangedEvent_exposes_machine_readable_reason_and_document_state() {
+        var payload = new HostStatusChangedEvent(
+            HostStatusChangedReason.ActiveDocumentChanged,
+            true,
+            "Test Model"
+        );
+
+        await Assert.That(payload.Reason).IsEqualTo(HostStatusChangedReason.ActiveDocumentChanged);
+        await Assert.That(payload.HasActiveDocument).IsTrue();
+        await Assert.That(payload.DocumentTitle).IsEqualTo("Test Model");
     }
 
     [Test]
@@ -180,6 +193,7 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
         await Assert.That(json).Contains("\"bridgeIsConnected\":true");
         await Assert.That(json).Contains("\"providerMode\":\"BridgeEnhanced\"");
         await Assert.That(json).Contains("\"activeDocumentTitle\":\"Active Model\"");
+        await Assert.That(json).Contains($"\"hostTransport\":\"{HostProtocol.Transport}\"");
         await Assert.That(json).Contains("\"bridgeTransport\":\"named-pipes\"");
     }
 

@@ -1,20 +1,20 @@
 namespace Pe.Host;
 
 public sealed record BridgeHostOptions(
-    string SignalRBaseUrl,
+    string HostBaseUrl,
     string PipeName,
     IReadOnlyList<string> AllowedOrigins
 ) {
     private const string FrontendBaseUrlVariable = "PE_SETTINGS_EDITOR_BASE_URL";
-    private const string SignalRBaseUrlVariable = "PE_SETTINGS_EDITOR_SIGNALR_BASE_URL";
+    private const string HostBaseUrlVariable = "PE_SETTINGS_EDITOR_HOST_BASE_URL";
     private const string PipeNameVariable = "PE_SETTINGS_EDITOR_PIPE_NAME";
     private const string DefaultFrontendBaseUrl = "http://localhost:5150";
-    private const string DefaultSignalRBaseUrl = "http://localhost:5180";
+    private const string DefaultHostBaseUrl = "http://localhost:5180";
 
     public static BridgeHostOptions FromEnvironment() {
         var frontendBaseUrl = GetValueOrDefault(FrontendBaseUrlVariable, DefaultFrontendBaseUrl);
         return new(
-            GetValueOrDefault(SignalRBaseUrlVariable, DefaultSignalRBaseUrl),
+            GetValueOrDefault(HostBaseUrlVariable, DefaultHostBaseUrl),
             GetValueOrDefault(PipeNameVariable, Pe.Host.Contracts.BridgeProtocol.DefaultPipeName),
             BuildAllowedOrigins(frontendBaseUrl)
         );

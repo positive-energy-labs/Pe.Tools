@@ -1,21 +1,15 @@
 using NJsonSchema;
 using NJsonSchema.Generation.TypeMappers;
+using Pe.StorageRuntime.Json;
 using Pe.StorageRuntime.Revit.Core.Json.Converters;
 using Pe.StorageRuntime.Revit.Core.Json.RevitTypes;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
 namespace Pe.StorageRuntime.Revit.Core.Json;
 
-public class TypeRegistration {
-    public JsonObjectType SchemaType { get; init; }
-    public Type? DiscriminatorType { get; init; }
-    public Func<Attribute, Type?>? ProviderSelector { get; init; }
-    public Func<Attribute, Type?>? ConverterSelector { get; init; }
-}
-
 public static class RevitTypeRegistry {
     private static readonly object SyncRoot = new();
-    private static readonly Dictionary<Type, TypeRegistration> Registrations = new();
+    private static readonly Dictionary<Type, JsonTypeRegistration> Registrations = new();
     private static bool Initialized;
 
     public static void Initialize() {
@@ -26,7 +20,7 @@ public static class RevitTypeRegistry {
             if (Initialized)
                 return;
 
-            Register<ForgeTypeId>(new TypeRegistration {
+            Register<ForgeTypeId>(new JsonTypeRegistration {
                 SchemaType = JsonObjectType.String,
                 DiscriminatorType = typeof(ForgeKindAttribute),
                 ProviderSelector = attr => attr switch {
@@ -42,7 +36,7 @@ public static class RevitTypeRegistry {
             });
 
             // Built-in categories round-trip without a live document.
-            Register<BuiltInCategory>(new TypeRegistration {
+            Register<BuiltInCategory>(new JsonTypeRegistration {
                 SchemaType = JsonObjectType.String,
                 ProviderSelector = _ => typeof(CategoryNamesProvider),
                 ConverterSelector = _ => typeof(BuiltInCategoryConverter)
@@ -52,17 +46,27 @@ public static class RevitTypeRegistry {
         }
     }
 
-    private static void Register<T>(TypeRegistration registration) =>
+    private static void Register<T>(JsonTypeRegistration registration) =>
         Registrations[typeof(T)] = registration;
 
-    public static bool TryGet(Type type, out TypeRegistration? registration) {
+    public static bool TryGet(Type type, out JsonTypeRegistration? registration) {
+        Initialize();
+
         lock (SyncRoot) {
             if (Registrations.TryGetValue(type, out registration))
                 return true;
 
-            registration = Registrations.Values.FirstOrDefault(_ =>
-                Registrations.Keys.Any(key => key.Name == type.Name));
-            return registration != null;
+            var matchingType = Registrations.Keys.FirstOrDefault(key =>
+                string.Equals(key.FullName, type.FullName, StringComparison.Ordinal) ||
+                string.Equals(key.Name, type.Name, StringComparison.Ordinal)
+            );
+            if (matchingType == null) {
+                registration = null;
+                return false;
+            }
+
+            registration = Registrations[matchingType];
+            return true;
         }
     }
 
@@ -79,7 +83,7 @@ public static class RevitTypeRegistry {
     }
 }
 
-public class RevitTypeMapper(Type mappedType, TypeRegistration registration) : ITypeMapper {
+public class RevitTypeMapper(Type mappedType, JsonTypeRegistration registration) : ITypeMapper {
     private readonly JsonObjectType _schemaType = registration.SchemaType;
 
     public Type MappedType { get; } = mappedType;
