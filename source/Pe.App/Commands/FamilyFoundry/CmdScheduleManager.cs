@@ -1,19 +1,21 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
+using Newtonsoft.Json;
 using Pe.App.Commands.Palette.FamilyPalette;
 using Pe.Global.Revit.Lib.Schedules;
 using Pe.Global.Revit.Ui;
-using Pe.Global.Services.Storage;
-using Pe.Global.Services.Storage.Core;
+using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime.Revit.Core;
+using Pe.StorageRuntime.Revit.Core.Json;
+using Pe.StorageRuntime.Revit.Core.Json.ContractResolvers;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.StorageRuntime.Revit.Modules;
 using Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
 using Pe.Ui.Core;
 using Serilog;
 using Serilog.Events;
 using System.Diagnostics;
 using System.IO;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
 
@@ -30,21 +32,17 @@ public class CmdScheduleManager : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var storage = new Storage("Schedule Manager");
-            var settingsManager = storage.SettingsDir();
-            var schedulesSubDir = settingsManager.SubDir("schedules");
-            var batchSubDir = settingsManager.SubDir("batch");
+            var storage = new StorageClient("Schedule Manager");
+            var profilesStorage = ScheduleManagerProfilesModule.Instance.SharedStorage();
+            var batchSubDir = storage.StateDir().SubDir("batch");
 
             // Context for Schedule tabs
             var context = new ScheduleManagerContext {
-                Doc = doc,
-                UiDoc = uiDoc,
-                Storage = storage,
-                SettingsManager = settingsManager
+                Doc = doc, UiDoc = uiDoc, Storage = storage, ProfilesStorage = profilesStorage
             };
 
             // Collect items for both tabs
-            var createItems = ScheduleListItem.DiscoverProfiles(schedulesSubDir);
+            var createItems = ScheduleListItem.DiscoverProfiles(profilesStorage);
             var batchItems = BatchScheduleListItem.DiscoverProfiles(batchSubDir);
 
             // Create preview panel with injected preview building logic
@@ -56,7 +54,7 @@ public class CmdScheduleManager : IExternalCommand {
                     if (createItem == null || ct.IsCancellationRequested) return null;
 
                     var previewData = await Task.Run(
-                        () => this.TryLoadPreviewData(createItem, context.SettingsManager),
+                        () => this.TryLoadPreviewData(createItem, context.ProfilesStorage),
                         ct);
                     if (ct.IsCancellationRequested) return null;
 
@@ -94,8 +92,7 @@ public class CmdScheduleManager : IExternalCommand {
                             new PaletteAction<ISchedulePaletteItem> {
                                 Name = "Open Profile File",
                                 Execute = async item => this.HandleOpenFile(item),
-                                CanExecute = item =>
-                                    item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
+                                CanExecute = item => item.GetCreateItem() != null
                             },
                             new PaletteAction<ISchedulePaletteItem> {
                                 Name = "Create Schedule",
@@ -108,9 +105,7 @@ public class CmdScheduleManager : IExternalCommand {
                                 CanExecute = item =>
                                     item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
                             }
-                        ) {
-                            FilterKeySelector = i => i.CategoryName
-                        },
+                        ) { FilterKeySelector = i => i.CategoryName },
                         new TabDefinition<ISchedulePaletteItem>(
                             "Batch",
                             () => batchItems.Select(i =>
@@ -118,17 +113,14 @@ public class CmdScheduleManager : IExternalCommand {
                             new PaletteAction<ISchedulePaletteItem> {
                                 Name = "Open Profile File",
                                 Execute = async item => this.HandleOpenFile(item),
-                                CanExecute = item =>
-                                    item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
+                                CanExecute = item => item.GetBatchItem() != null
                             },
                             new PaletteAction<ISchedulePaletteItem> {
                                 Name = "Create Schedules",
                                 Execute = async item => this.HandleCreate(context, item),
                                 CanExecute = item => context.PreviewData?.IsValid == true
                             }
-                        ) {
-                            FilterKeySelector = i => string.Empty
-                        }
+                        ) { FilterKeySelector = i => string.Empty }
                     ]
                 });
             window.Show();
@@ -147,15 +139,15 @@ public class CmdScheduleManager : IExternalCommand {
         }
 
         context.SelectedProfile = profileItem;
-        context.PreviewData = this.TryLoadPreviewData(profileItem, context.SettingsManager);
+        context.PreviewData = this.TryLoadPreviewData(profileItem, context.ProfilesStorage);
     }
 
     private SchedulePreviewData TryLoadPreviewData(
         ScheduleListItem profileItem,
-        SettingsManager settingsManager
+        SharedModuleSettingsStorage profilesStorage
     ) {
         try {
-            return this.LoadValidPreviewData(profileItem, settingsManager);
+            return this.LoadValidPreviewData(profileItem, profilesStorage);
         } catch (JsonValidationException ex) {
             return CreateValidationErrorPreview(profileItem, ex);
         } catch (Exception ex) {
@@ -165,24 +157,21 @@ public class CmdScheduleManager : IExternalCommand {
 
     private SchedulePreviewData LoadValidPreviewData(
         ScheduleListItem profileItem,
-        SettingsManager settingsManager
+        SharedModuleSettingsStorage profilesStorage
     ) {
-        // Load the profile
-        var profile = settingsManager.SubDir("schedules")
-            .JsonByRelativePath<ScheduleSpec>(profileItem.TextPrimary)
-            .Read();
+        var profile = profilesStorage.ReadRequired<ScheduleSpec>(profileItem.TextPrimary);
 
         // Serialize profile to JSON
-        var profileJson = JsonSerializer.Serialize(
+        var profileJson = JsonConvert.SerializeObject(
             profile,
-            new JsonSerializerOptions {
-                WriteIndented = true,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            Formatting.Indented,
+            new JsonSerializerSettings {
+                NullValueHandling = NullValueHandling.Ignore, ContractResolver = new RevitTypeContractResolver()
             });
 
         return new SchedulePreviewData {
             ProfileName = profileItem.TextPrimary,
-            CategoryName = profile.CategoryName,
+            CategoryName = CategoryNamesProvider.GetLabelForBuiltInCategory(profile.CategoryName),
             IsItemized = profile.IsItemized,
             Fields = profile.Fields,
             SortGroup = profile.SortGroup,
@@ -267,9 +256,7 @@ public class CmdScheduleManager : IExternalCommand {
         // Load profile fresh for execution
         ScheduleSpec scheduleSpec;
         try {
-            scheduleSpec = ctx.SettingsManager.SubDir("schedules")
-                .JsonByRelativePath<ScheduleSpec>(ctx.SelectedProfile.TextPrimary)
-                .Read();
+            scheduleSpec = ctx.ProfilesStorage.ReadRequired<ScheduleSpec>(ctx.SelectedProfile.TextPrimary);
         } catch (Exception ex) {
             new Ballogger()
                 .Add(LogEventLevel.Error, new StackFrame(), ex, true)
@@ -368,16 +355,15 @@ public class CmdScheduleManager : IExternalCommand {
         // Update context with selected profile
         this.BuildPreviewData(profileItem, context);
 
-        var profile = context.SettingsManager.SubDir("schedules")
-            .JsonByRelativePath<ScheduleSpec>(context.SelectedProfile.TextPrimary)
-            .Read();
+        var profile = context.ProfilesStorage.ReadRequired<ScheduleSpec>(context.SelectedProfile.TextPrimary);
 
         // Get families of the schedule's category
-        var category = context.Doc.Settings.Categories.get_Item(profile.CategoryName);
+        var category = Category.GetCategory(context.Doc, profile.CategoryName);
+        var categoryLabel = CategoryNamesProvider.GetLabelForBuiltInCategory(profile.CategoryName);
 
         if (category == null) {
             new Ballogger()
-                .Add(LogEventLevel.Warning, new StackFrame(), $"Category '{profile.CategoryName}' not found")
+                .Add(LogEventLevel.Warning, new StackFrame(), $"Category '{categoryLabel}' not found")
                 .Show();
             return;
         }
@@ -391,7 +377,7 @@ public class CmdScheduleManager : IExternalCommand {
         if (allFamilies.Count == 0) {
             new Ballogger()
                 .Add(LogEventLevel.Warning, new StackFrame(),
-                    $"No {profile.CategoryName} families found in the project")
+                    $"No {categoryLabel} families found in the project")
                 .Show();
             return;
         }
@@ -416,10 +402,7 @@ public class CmdScheduleManager : IExternalCommand {
     }
 
     private void HandleOpenFile(ISchedulePaletteItem item) {
-        var profileItem = item.GetCreateItem();
-        if (profileItem == null) return;
-
-        var filePath = profileItem.FilePath;
+        var filePath = item.GetCreateItem()?.FilePath ?? item.GetBatchItem()?.FilePath;
         if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) {
             new Ballogger()
                 .Add(LogEventLevel.Warning, new StackFrame(), $"Profile file not found: {filePath}")
@@ -436,21 +419,20 @@ public class CmdScheduleManager : IExternalCommand {
 
         try {
             var batchSettings = batchItem.LoadBatchSettings();
-            var schedulesSubDir = context.SettingsManager.SubDir("schedules");
             var results = new List<(string profileName, bool success, string errorMessage)>();
             var createdSchedules = new List<string>();
 
             foreach (var scheduleFile in batchSettings.ScheduleFiles) {
                 try {
                     // Load the schedule spec
-                    var scheduleFilePath = Path.Combine(schedulesSubDir.DirectoryPath, scheduleFile);
+                    var scheduleFilePath = context.ProfilesStorage.ResolveDocumentPath(scheduleFile);
                     if (!File.Exists(scheduleFilePath)) {
                         results.Add((scheduleFile, false, "File not found"));
                         _ = this.WriteErrorOutput(context, scheduleFile, "File not found");
                         continue;
                     }
 
-                    var scheduleSpec = schedulesSubDir.JsonByRelativePath<ScheduleSpec>(scheduleFile).Read();
+                    var scheduleSpec = context.ProfilesStorage.ReadRequired<ScheduleSpec>(scheduleFile);
 
                     // Create the schedule
                     using var trans = new Transaction(context.Doc, $"Create Schedule: {scheduleSpec.Name}");
@@ -595,12 +577,18 @@ public class CmdScheduleManager : IExternalCommand {
 public class ScheduleManagerContext {
     public Document Doc { get; init; }
     public UIDocument UiDoc { get; init; }
-    public Storage Storage { get; init; }
-    public SettingsManager SettingsManager { get; init; }
+    public StorageClient Storage { get; init; }
+    public SharedModuleSettingsStorage ProfilesStorage { get; init; }
 
     // UI state: what's currently selected and displayed
     public ScheduleListItem SelectedProfile { get; set; }
     public SchedulePreviewData PreviewData { get; set; }
+}
+
+internal sealed class ScheduleManagerProfilesModule : SettingsModuleBase<ScheduleSpec> {
+    public static ScheduleManagerProfilesModule Instance { get; } = new();
+
+    private ScheduleManagerProfilesModule() : base("Schedule Manager", "schedules") { }
 }
 
 public enum ScheduleTabType {

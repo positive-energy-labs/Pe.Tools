@@ -2,9 +2,11 @@ using Pe.FamilyFoundry.OperationSettings;
 using Pe.Global;
 using Pe.Global.Revit.Lib.Schedules;
 using Pe.Global.Revit.Lib.Schedules.Filters;
-using Pe.Global.Services.Storage;
-using Pe.Global.Services.Storage.Core.Json;
 using Pe.Global.Utils.Files;
+using Pe.StorageRuntime.Json;
+using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using ParamModelRes = Pe.Global.Services.Aps.Models.ParametersApi.Parameters.ParametersResult;
@@ -15,10 +17,14 @@ namespace Pe.FamilyFoundry;
 
 public class BaseProfileSettings {
     [Required] public ExecutionOptions ExecutionOptions { get; init; } = new();
+
     [Presettable("filter-families")]
-    [Required] public FilterFamiliesSettings FilterFamilies { get; init; } = new();
+    [Required]
+    public FilterFamiliesSettings FilterFamilies { get; init; } = new();
+
     [Presettable("filter-aps-params")]
-    [Required] public FilterApsParamsSettings FilterApsParams { get; init; } = new();
+    [Required]
+    public FilterApsParamsSettings FilterApsParams { get; init; } = new();
 
     public List<Family> GetFamilies(Document doc) =>
         new FilteredElementCollector(doc)
@@ -32,7 +38,7 @@ public class BaseProfileSettings {
     ///     These can be safely cached and converted to SharedParameterDefinitions later.
     /// </summary>
     public List<ParamModelRes> GetFilteredApsParamModels() {
-        var apsParams = Storage.GlobalDir().StateJson<ParamModel>("parameters-service-cache").Read();
+        var apsParams = StorageClient.GlobalDir().StateJson<ParamModel>("parameters-service-cache").Read();
         if (apsParams.Results != null) {
             return apsParams.Results
                 .Where(this.FilterApsParams.Filter)
@@ -67,8 +73,9 @@ public class BaseProfileSettings {
         public bool IncludeUnusedFamilies { get; init; } = true;
 
         [Description("Categories of families to include (eg. Mechanical Equipment, Plumbing Fixtures, etc.)")]
+        [SchemaExamples(typeof(CategoryNamesProvider))]
         [Required]
-        public List<Category> IncludeCategoriesEqualing { get; init; } = [];
+        public List<BuiltInCategory> IncludeCategoriesEqualing { get; init; } = [];
 
         [Description(
             "Optional conditional filter based on family parameter values. Uses schedule filter logic to evaluate parameter conditions. Leave FieldName empty to disable this filter.")]
@@ -89,10 +96,12 @@ public class BaseProfileSettings {
         public bool Filter(Family f, Document doc) {
             var familyName = f.Name;
             var familyCategory = f.FamilyCategory;
+            var familyBuiltInCategory = familyCategory?.BuiltInCategory ?? BuiltInCategory.INVALID;
 
             // Step 1: Filter by category if specified
             if (this.IncludeCategoriesEqualing.Any()) {
-                if (familyCategory == null || !this.IncludeCategoriesEqualing.Any(familyCategory.Equals))
+                if (familyBuiltInCategory == BuiltInCategory.INVALID ||
+                    !this.IncludeCategoriesEqualing.Contains(familyBuiltInCategory))
                     return false;
             }
 
@@ -116,7 +125,9 @@ public class BaseProfileSettings {
 
             // Use ScheduleHelper to evaluate the filter using Revit's native schedule filtering
             var scheduleSpec = new ScheduleSpec {
-                Name = "Family Filter", CategoryName = familyCategory?.Name ?? "", Filters = [this.IncludeByCondition]
+                Name = "Family Filter",
+                CategoryName = familyBuiltInCategory,
+                Filters = [this.IncludeByCondition]
             };
 
             var matchingFamilies = ScheduleHelper.GetFamiliesMatchingFilters(doc, scheduleSpec, [f]);

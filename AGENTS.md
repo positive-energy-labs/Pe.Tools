@@ -63,28 +63,31 @@ break Hot Reloads. Therfore DO NOT build anything unless otherwise asked.
    intuitive to use and general purpose.
 4. **If given permmission to build** then use commands that minimize output like
    `dotnet build -c "Debug.R25" -nologo -clp:NoSummary /p:WarningLevel=0`
-5. Exceptions should generally be avoided, prefer the `Result<TValue>` or
+5. For `Pe.Tools.Tests`, prefer `dotnet run --project source/Pe.Tools.Tests/Pe.Tools.Tests.csproj -c "Debug.R25" -- --disable-logo --no-progress --output Normal`
+   over `dotnet test`. This project uses TUnit as an executable test runner, and `dotnet test` can pass unsupported args and leave `Pe.Tools.Tests.exe` processes running.
+6. If `Pe.Tools.Tests.exe` is locked during rebuild, check for lingering `Pe.Tools.Tests` processes and terminate them before retrying. A reliable cleanup path is `Get-CimInstance Win32_Process -Filter "Name = 'Pe.Tools.Tests.exe'" | ForEach-Object { Invoke-CimMethod -InputObject $_ -MethodName Terminate }`.
+7. Exceptions should generally be avoided, prefer the `Result<TValue>` or
    `Try...` patterns, particularly if it's part of the public API surface and/or
    may be exposed to users. using the `Result<TValue` type allows us to _return_
    errors rather than throw, which is better for perf. For both DX posterity,
    record common footguns/suggestions in error messages, for example: special
    transaction needs for RVT API methods, a method (eg.
    FamilyManager.SetFormula) throw unhelpful error messages, etc.
-6. Reduce nesting in written code and stacktraces. Use method extraction or
+8. Reduce nesting in written code and stacktraces. Use method extraction or
    condition inversion to avoid nesting in written code. Prefer sequential
    execution flow with early `return`/`break`/`continue`/`throw` over nesting.
-7. Type-safety do's: label/handle nullables correctly, use generics, use
+9. Type-safety do's: label/handle nullables correctly, use generics, use
    `nameof()`, us ``is` and pattern matching,
-8. Use LINQ and Fluent APIs when possible.
-9. Use extension methods to get commonly used finicky code out of sight.
-10. Research the breath of a problem and attempt to prove it before trying to
+10. Use LINQ and Fluent APIs when possible.
+11. Use extension methods to get commonly used finicky code out of sight.
+12. Research the breath of a problem and attempt to prove it before trying to
     solve it.
-11. Use Serilogs Log.<Level> rather than Console.WriteLine or Debug.WriteLine.
-12. Weigh the addition of new code against the cost of maintenance and DX.
-13. Apply project standards to all code. If existing code doesn't follow the
+13. Use Serilogs Log.<Level> rather than Console.WriteLine or Debug.WriteLine.
+14. Weigh the addition of new code against the cost of maintenance and DX.
+15. Apply project standards to all code. If existing code doesn't follow the
     standards, refactor it to do so. Pay close attention to nullability and
     type-safety.
-14. Centralize comments into blocks rather than sprinkling them throughout.
+16. Centralize comments into blocks rather than sprinkling them throughout.
 
 ### Don'ts 👎👎👎
 

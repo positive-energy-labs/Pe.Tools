@@ -1,15 +1,19 @@
-using Pe.Global.Services.Storage.Core.Json;
-using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
-using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
-using Pe.Global.Services.Storage.Modules;
-using NJsonSchema;
-using Serilog;
-using System.Reflection;
-using Pe.Host.Contracts;
-using System.Collections.Concurrent;
-using System.Diagnostics;
+using Pe.StorageRuntime.Json;
 using Pe.Global.Services.Document;
+using Pe.Host.Contracts;
+using Pe.StorageRuntime.Capabilities;
+using Pe.StorageRuntime.Documents;
+using Pe.StorageRuntime.Revit.Core.Json;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.StorageRuntime.Revit.Context;
+using Pe.StorageRuntime.Revit.Modules;
+using Pe.StorageRuntime.Revit.Validation;
 using ricaun.Revit.UI.Tasks;
+using Serilog;
+using System.Collections.Concurrent;
+using RuntimeSettingsDocumentId = Pe.StorageRuntime.Documents.SettingsDocumentId;
+using RuntimeSettingsValidationIssue = Pe.StorageRuntime.Documents.SettingsValidationIssue;
 
 namespace Pe.Global.Services.Host;
 
@@ -21,10 +25,13 @@ public class RequestService {
     private static readonly TimeSpan ParameterCatalogThrottleWindow = TimeSpan.FromMilliseconds(750);
 
     private readonly SettingsModuleRegistry _moduleRegistry;
+    private readonly IRevitContextAccessor _revitContextAccessor = new DocumentManagerRevitContextAccessor();
+    private readonly RevitTaskService _revitTaskService;
     private readonly ConcurrentDictionary<string, SchemaData> _schemaCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ThrottleGate _throttleGate;
-    private readonly ConcurrentDictionary<string, JsonSchema> _validationSchemaCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly RevitTaskService _revitTaskService;
+
+    private readonly ConcurrentDictionary<string, ISettingsDocumentValidator> _validationValidatorCache =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public RequestService(
         RevitTaskService revitTaskService,
@@ -38,11 +45,12 @@ public class RequestService {
 
     public async Task<SchemaEnvelopeResponse> GetSchemaEnvelopeAsync(SchemaRequest request) {
         var stopwatch = Stopwatch.StartNew();
-        Log.Information("Settings editor request starting: Method={Method}, ModuleKey={ModuleKey}", nameof(GetSchemaEnvelopeAsync), request.ModuleKey);
+        Log.Information("Settings editor request starting: Method={Method}, ModuleKey={ModuleKey}",
+            nameof(this.GetSchemaEnvelopeAsync), request.ModuleKey);
         var result = await this.GetSchemaCore(request);
         Log.Information(
             "Settings editor request completed: Method={Method}, ModuleKey={ModuleKey}, Ok={Ok}, Code={Code}, ElapsedMs={ElapsedMs}",
-            nameof(GetSchemaEnvelopeAsync),
+            nameof(this.GetSchemaEnvelopeAsync),
             request.ModuleKey,
             result.Ok,
             result.Code,
@@ -77,17 +85,20 @@ public class RequestService {
                 );
             }
         );
-        LogThrottleDecision(nameof(GetFieldOptionsEnvelopeAsync), decision, request.ModuleKey, request.PropertyPath);
+        LogThrottleDecision(nameof(this.GetFieldOptionsEnvelopeAsync), decision, request.ModuleKey,
+            request.PropertyPath);
         return response;
     }
 
     public async Task<ValidationEnvelopeResponse> ValidateSettingsEnvelopeAsync(ValidateSettingsRequest request) {
         var stopwatch = Stopwatch.StartNew();
-        Log.Information("Settings editor request starting: Method={Method}, ModuleKey={ModuleKey}, PayloadLength={PayloadLength}", nameof(ValidateSettingsEnvelopeAsync), request.ModuleKey, request.SettingsJson?.Length ?? 0);
+        Log.Information(
+            "Settings editor request starting: Method={Method}, ModuleKey={ModuleKey}, PayloadLength={PayloadLength}",
+            nameof(this.ValidateSettingsEnvelopeAsync), request.ModuleKey, request.SettingsJson?.Length ?? 0);
         var result = await this.ValidateSettingsCore(request);
         Log.Information(
             "Settings editor request completed: Method={Method}, ModuleKey={ModuleKey}, Ok={Ok}, Code={Code}, ElapsedMs={ElapsedMs}",
-            nameof(ValidateSettingsEnvelopeAsync),
+            nameof(this.ValidateSettingsEnvelopeAsync),
             request.ModuleKey,
             result.Ok,
             result.Code,
@@ -112,15 +123,16 @@ public class RequestService {
             ParameterCatalogThrottleWindow,
             () => this.GetParameterCatalogCore(request)
         );
-        LogThrottleDecision(nameof(GetParameterCatalogEnvelopeAsync), decision, request.ModuleKey, null);
+        LogThrottleDecision(nameof(this.GetParameterCatalogEnvelopeAsync), decision, request.ModuleKey, null);
         return response;
     }
 
     private async Task<ParameterCatalogEnvelopeResponse> GetParameterCatalogCore(ParameterCatalogRequest request) =>
         await this.EnqueueAsync(() => {
             try {
-                var doc = DocumentManager.GetActiveDocument();
-                if (doc == null)
+                var providerContext = this.CreateProviderContext(request.ContextValues);
+                var doc = providerContext.GetActiveDocument();
+                if (doc == null) {
                     return Result
                         .Failure<ParameterCatalogData>(
                             EnvelopeCode.NoDocument,
@@ -137,11 +149,14 @@ public class RequestService {
                             ]
                         )
                         .ToParameterCatalogEnvelope();
+                }
 
-                var selectedFamilies = ParseSelectedFamilyNames(request.ContextValues);
-                var entries = ParameterCatalogOptionFactory.Build(selectedFamilies);
+                var entries = ParameterCatalogOptionFactory.Build(providerContext)
+                    .Select(ToHostParameterCatalogEntry)
+                    .ToList();
 
-                var familyCount = entries.SelectMany(e => e.FamilyNames).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+                var familyCount = entries.SelectMany(e => e.FamilyNames).Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count();
                 var typeCount = entries.SelectMany(e => e.TypeNames).Distinct(StringComparer.Ordinal).Count();
 
                 return Result
@@ -174,7 +189,7 @@ public class RequestService {
             if (this._schemaCache.TryGetValue(module.ModuleKey, out var cachedSchema))
                 return Result.Success(cachedSchema, EnvelopeCode.Ok, "Schema loaded from cache.");
 
-        var schemaData = await this.EnqueueAsync(() => this.GetOrCreateSchemaData(module));
+            var schemaData = await this.EnqueueAsync(() => this.GetOrCreateSchemaData(module));
             return Result.Success(schemaData, EnvelopeCode.Ok, "Schema generated.");
         } catch (Exception ex) {
             return Result.Failure<SchemaData>(
@@ -194,17 +209,19 @@ public class RequestService {
     private async Task<Result<ValidationData>> ValidateSettingsCore(ValidateSettingsRequest request) {
         try {
             var module = this._moduleRegistry.ResolveByModuleKey(request.ModuleKey);
-            var schema = this._validationSchemaCache.TryGetValue(module.ModuleKey, out var cachedSchema)
-                ? cachedSchema
-                : await this.EnqueueAsync(() => this.GetOrCreateValidationSchema(module));
-
-            var issues = await Task.Run(() =>
-                    ValidationIssueMapper.ToValidationIssues(schema.Validate(request.SettingsJson)).ToList()
-                );
+            var validator = this._validationValidatorCache.TryGetValue(module.ModuleKey, out var cachedValidator)
+                ? cachedValidator
+                : await this.EnqueueAsync(() => this.GetOrCreateValidationValidator(module));
+            var validation = await Task.Run(() => validator.Validate(
+                new RuntimeSettingsDocumentId(module.ModuleKey, module.DefaultSubDirectory, "__bridge_validation__"),
+                request.SettingsJson,
+                null
+            ));
+            var issues = validation.Issues.Select(ToHostValidationIssue).ToList();
             var issueCount = issues.Count;
 
             return Result.Success(
-                new ValidationData(issueCount == 0, issues),
+                new ValidationData(validation.IsValid, issues),
                 EnvelopeCode.Ok,
                 issueCount == 0 ? "Validation passed." : "Validation returned issues.",
                 issues
@@ -224,7 +241,9 @@ public class RequestService {
                 EnvelopeCode.Failed,
                 ex.Message,
                 issues
-            ) with { Data = new ValidationData(false, issues) };
+            ) with {
+                Data = new ValidationData(false, issues)
+            };
         }
     }
 
@@ -241,11 +260,13 @@ public class RequestService {
                 if (providerAttr == null)
                     return EmptyFieldOptions(request.SourceKey, "No field options provider configured for property.");
 
-                if (!string.Equals(providerAttr.ProviderType.Name, request.SourceKey, StringComparison.Ordinal))
-                    return EmptyFieldOptions(request.SourceKey, "Requested field options source does not match property provider.");
+                if (!string.Equals(providerAttr.ProviderType.Name, request.SourceKey, StringComparison.Ordinal)) {
+                    return EmptyFieldOptions(request.SourceKey,
+                        "Requested field options source does not match property provider.");
+                }
 
                 var provider = Activator.CreateInstance(providerAttr.ProviderType) as IOptionsProvider;
-                if (provider == null)
+                if (provider == null) {
                     return Result.Failure<FieldOptionsData>(
                         EnvelopeCode.Failed,
                         $"Failed to create provider '{providerAttr.ProviderType.Name}'.",
@@ -259,9 +280,15 @@ public class RequestService {
                                 "Ensure provider has a public parameterless constructor."
                             )
                         ]
-                    ) with { Data = EmptyFieldOptionsData(request.SourceKey) };
+                    ) with {
+                        Data = EmptyFieldOptionsData(request.SourceKey)
+                    };
+                }
 
-                var items = ResolveFieldOptionItems(provider, request.ContextValues);
+                var items = ResolveFieldOptionItems(
+                    provider,
+                    this.CreateProviderContext(request.ContextValues)
+                );
 
                 return Result.Success(
                     new FieldOptionsData(
@@ -285,7 +312,9 @@ public class RequestService {
                             "Check provider configuration and request path."
                         )
                     ]
-                ) with { Data = EmptyFieldOptionsData(request.SourceKey) };
+                ) with {
+                    Data = EmptyFieldOptionsData(request.SourceKey)
+                };
             }
         });
 
@@ -322,13 +351,12 @@ public class RequestService {
             return cachedSchema;
 
         var type = module.SettingsType;
-        var targetSchemaJson = JsonSchemaFactory.CreateRenderSchemaJson(type, out _, resolveExamples: false);
+        var providerContext = this.CreateProviderContext();
+        var targetSchemaJson = RevitJsonSchemaFactory.CreateEditorSchemaJson(type, providerContext);
 
         string? fragmentSchemaJson = null;
         try {
-            var fragmentSchema = JsonSchemaFactory.CreateFragmentSchema(type, out var fragProcessor, resolveExamples: false);
-            fragProcessor.Finalize(fragmentSchema);
-            fragmentSchemaJson = RenderSchemaTransformer.TransformFragmentToJson(fragmentSchema, type);
+            fragmentSchemaJson = RevitJsonSchemaFactory.CreateEditorFragmentSchemaJson(type, providerContext);
         } catch (Exception ex) {
             Log.Warning(
                 ex,
@@ -343,13 +371,16 @@ public class RequestService {
         return generatedSchema;
     }
 
-    private JsonSchema GetOrCreateValidationSchema(ISettingsModule module) {
-        if (this._validationSchemaCache.TryGetValue(module.ModuleKey, out var cachedSchema))
-            return cachedSchema;
+    private ISettingsDocumentValidator GetOrCreateValidationValidator(ISettingsModule module) {
+        if (this._validationValidatorCache.TryGetValue(module.ModuleKey, out var cachedValidator))
+            return cachedValidator;
 
-        var schema = JsonSchemaFactory.CreateAuthoringSchema(module.SettingsType, out _, resolveExamples: false);
-        _ = this._validationSchemaCache.TryAdd(module.ModuleKey, schema);
-        return schema;
+        var validator = new SchemaBackedSettingsDocumentValidator(
+            module.SettingsType,
+            SettingsCapabilityTier.RevitAssembly
+        );
+        _ = this._validationValidatorCache.TryAdd(module.ModuleKey, validator);
+        return validator;
     }
 
     private static FieldOptionsData EmptyFieldOptionsData(string sourceKey) =>
@@ -390,36 +421,53 @@ public class RequestService {
         return property;
     }
 
-    private static HashSet<string> ParseSelectedFamilyNames(IReadOnlyDictionary<string, string>? contextValues) {
-        if (contextValues == null ||
-            !contextValues.TryGetValue(OptionContextKeys.SelectedFamilyNames, out var rawFamilyNames))
-            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        return ProjectFamilyParameterCollector.ParseDelimitedFamilyNames(rawFamilyNames);
-    }
-
     private static List<FieldOptionItem> ResolveFieldOptionItems(
         IOptionsProvider provider,
-        IReadOnlyDictionary<string, string>? contextValues
-    ) {
-        if (provider is IDependentOptionsProvider dependentProvider &&
-            contextValues is { Count: > 0 })
-            return dependentProvider
-                .GetExamples(contextValues)
-                .Select(ToFieldOptionItem)
-                .ToList();
-
-        return provider
-            .GetExamples()
+        SettingsProviderContext context
+    ) =>
+        provider
+            .GetExamples(context)
             .Select(ToFieldOptionItem)
             .ToList();
-    }
+
+    private SettingsProviderContext CreateProviderContext(
+        IReadOnlyDictionary<string, string>? contextValues = null
+    ) => new(
+        SettingsCapabilityTier.LiveRevitDocument,
+        this._revitContextAccessor,
+        contextValues
+    );
+
+    private static ParameterCatalogEntry ToHostParameterCatalogEntry(ParameterCatalogOption entry) =>
+        new(
+            entry.Name,
+            entry.StorageType,
+            entry.DataType,
+            entry.IsShared,
+            entry.IsInstance,
+            entry.IsBuiltIn,
+            entry.IsProjectParameter,
+            entry.IsParamService,
+            entry.SharedGuid,
+            entry.FamilyNames,
+            entry.TypeNames
+        );
 
     private static FieldOptionItem ToFieldOptionItem(string value) =>
         new(
-            Value: value,
-            Label: value,
-            Description: null
+            value,
+            value,
+            null
+        );
+
+    private static ValidationIssue ToHostValidationIssue(RuntimeSettingsValidationIssue issue) =>
+        new(
+            issue.Path,
+            null,
+            issue.Code,
+            issue.Severity,
+            issue.Message,
+            issue.Suggestion
         );
 
     private static string BuildThrottleKey(
@@ -437,7 +485,8 @@ public class RequestService {
                     .OrderBy(pair => pair.Key, StringComparer.Ordinal)
                     .Select(pair => $"{pair.Key}={pair.Value}")
             );
-        return $"{connectionId ?? "no-connection"}:{endpoint}:{moduleKey}:{propertyPath ?? string.Empty}:{siblingSignature}";
+        return
+            $"{connectionId ?? "no-connection"}:{endpoint}:{moduleKey}:{propertyPath ?? string.Empty}:{siblingSignature}";
     }
 
     private static void LogThrottleDecision(
@@ -456,12 +505,13 @@ public class RequestService {
             return;
         }
 
-        if (decision == ThrottleDecision.Coalesced)
+        if (decision == ThrottleDecision.Coalesced) {
             Log.Debug(
                 "Throttle coalesced request: Endpoint={Endpoint}, ModuleKey={ModuleKey}, PropertyPath={PropertyPath}",
                 endpoint,
                 moduleKey,
                 propertyPath
             );
+        }
     }
 }

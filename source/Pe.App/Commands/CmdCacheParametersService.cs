@@ -4,8 +4,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.Global.Services.Aps;
 using Pe.Global.Services.Aps.Models;
-using Pe.Global.Services.Storage;
-using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
+using Pe.StorageRuntime.Revit;
 using System.IO;
 using System.Text;
 using Toon;
@@ -19,7 +18,7 @@ public class CmdCacheParametersService : IExternalCommand {
         ref string message,
         ElementSet elements) {
         var cacheFilename = "parameters-service-cache";
-        var apsParamsCache = Storage.GlobalDir().StateJson<ParametersApi.Parameters>(cacheFilename);
+        var apsParamsCache = StorageClient.GlobalDir().StateJson<ParametersApi.Parameters>(cacheFilename);
 
         var svcAps = new Aps(new CacheParametersService());
         var parameters = Task.Run(async () =>
@@ -35,11 +34,11 @@ public class CmdCacheParametersService : IExternalCommand {
     private static void WriteAdditionalFormats(ParametersApi.Parameters parameters, string baseFilename) {
         if (parameters?.Results == null) return;
 
-        var globalDir = Storage.GlobalDir().DirectoryPath;
+        var globalDir = StorageClient.GlobalDir().DirectoryPath;
         var basePath = Path.Combine(globalDir, baseFilename);
 
         var enrichedData = parameters.Results
-            .Where(p => p.IsArchived == false)
+            .Where(p => !p.IsArchived)
             .OrderBy(p => p.Name)
             .Select(p => new EnrichedParameterData(p))
             .ToList();
@@ -78,17 +77,17 @@ public class CmdCacheParametersService : IExternalCommand {
         if (data.Count == 0) return;
 
         var abridgedData = data.Select(p => new {
-            p.Id,
-            p.Name,
-            p.Description,
-            p.IsInstance,
-            p.ValueTypeId,
-            p.SpecId,
-            p.SpecLabel,
-            p.GroupId,
-            p.GroupLabel,
-            p.CategoryIds,
-        }
+                p.Id,
+                p.Name,
+                p.Description,
+                p.IsInstance,
+                p.ValueTypeId,
+                p.SpecId,
+                p.SpecLabel,
+                p.GroupId,
+                p.GroupLabel,
+                p.CategoryIds
+            }
         ).ToList();
 
         var json = JsonConvert.SerializeObject(abridgedData, Formatting.Indented);
@@ -128,11 +127,12 @@ public class CmdCacheParametersService : IExternalCommand {
         for (var i = 0; i < data.Count; i++) {
             var param = data[i];
             _ = sb.AppendLine($"## {i + 1}. ({(param.IsInstance ? "INST" : "TYPE")}) **{param.Name}**");
-            _ = sb.AppendLine($"- Description: {(string.IsNullOrWhiteSpace(param.Description) ? "No description provided" : param.Description)}");
+            _ = sb.AppendLine(
+                $"- Description: {(string.IsNullOrWhiteSpace(param.Description) ? "No description provided" : param.Description)}");
             _ = sb.AppendLine($"- Spec: {param.SpecLabel} (`{param.SpecId}`)");
 
             if (param.ReadOnly)
-                _ = sb.AppendLine($"Read-Only: Yes");
+                _ = sb.AppendLine("Read-Only: Yes");
 
             _ = sb.AppendLine();
         }
@@ -179,7 +179,6 @@ public class CmdCacheParametersService : IExternalCommand {
         List<EnrichedParameterData> data,
         int prefixLength,
         int minConsecutiveCount) {
-
         var sections = new Dictionary<string, (int start, int end)>();
 
         if (data.Count == 0) return sections;
@@ -193,9 +192,8 @@ public class CmdCacheParametersService : IExternalCommand {
             // If prefix changes, check if previous section was long enough
             if (prefix != currentPrefix) {
                 var sectionLength = i - sectionStart;
-                if (sectionLength >= minConsecutiveCount && !string.IsNullOrEmpty(currentPrefix)) {
+                if (sectionLength >= minConsecutiveCount && !string.IsNullOrEmpty(currentPrefix))
                     sections[currentPrefix] = (sectionStart + 1, i); // +1 for 1-indexed display
-                }
 
                 currentPrefix = prefix;
                 sectionStart = i;
@@ -204,9 +202,8 @@ public class CmdCacheParametersService : IExternalCommand {
 
         // Handle the last section
         var lastSectionLength = data.Count - sectionStart;
-        if (lastSectionLength >= minConsecutiveCount && !string.IsNullOrEmpty(currentPrefix)) {
+        if (lastSectionLength >= minConsecutiveCount && !string.IsNullOrEmpty(currentPrefix))
             sections[currentPrefix] = (sectionStart + 1, data.Count);
-        }
 
         return sections;
     }
@@ -271,13 +268,13 @@ public class EnrichedParameterData {
 
 public class CacheParametersService : Aps.IOAuthTokenProvider, Aps.IParametersTokenProvider {
 #if DEBUG
-    public string GetClientId() => Storage.GlobalDir().SettingsJson().Read().ApsWebClientId1;
-    public string GetClientSecret() => Storage.GlobalDir().SettingsJson().Read().ApsWebClientSecret1;
+    public string GetClientId() => StorageClient.GlobalDir().SettingsJson().Read().ApsWebClientId1;
+    public string GetClientSecret() => StorageClient.GlobalDir().SettingsJson().Read().ApsWebClientSecret1;
 #else
-    public string GetClientId() => Storage.GlobalDir().SettingsJson().Read().ApsDesktopClientId1;
+    public string GetClientId() => StorageClient.GlobalDir().SettingsJson().Read().ApsDesktopClientId1;
     public string GetClientSecret() => null;
 #endif
-    public string GetAccountId() => Storage.GlobalDir().SettingsJson().Read().Bim360AccountId;
-    public string GetGroupId() => Storage.GlobalDir().SettingsJson().Read().ParamServiceGroupId;
-    public string GetCollectionId() => Storage.GlobalDir().SettingsJson().Read().ParamServiceCollectionId;
+    public string GetAccountId() => StorageClient.GlobalDir().SettingsJson().Read().Bim360AccountId;
+    public string GetGroupId() => StorageClient.GlobalDir().SettingsJson().Read().ParamServiceGroupId;
+    public string GetCollectionId() => StorageClient.GlobalDir().SettingsJson().Read().ParamServiceCollectionId;
 }

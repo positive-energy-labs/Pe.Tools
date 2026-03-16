@@ -1,9 +1,8 @@
-using Autodesk.Revit.UI;
 using Pe.Global.Services.Document;
-using Pe.Global.Services.Storage.Modules;
+using Pe.StorageRuntime.Revit.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
-using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace Pe.Global.Services.Host;
 
@@ -23,7 +22,6 @@ public record RuntimeStatus(
     string? RuntimeFramework,
     string? LastError
 );
-
 
 /// <summary>
 ///     Manual lifecycle for the external host bridge.
@@ -49,11 +47,10 @@ public static class HostRuntime {
             _revitTaskService = revitTaskService;
             _lastError = null;
             Log.Information(
-                "Settings editor runtime initialized: Pipe={PipeName}, ConnectTimeoutMs={ConnectTimeoutMs}, Modules={ModuleCount}, ActiveDocument={ActiveDocumentTitle}",
+                "Settings editor runtime initialized: Pipe={PipeName}, ConnectTimeoutMs={ConnectTimeoutMs}, Modules={ModuleCount}",
                 _connectionOptions.PipeName,
                 _connectionOptions.ConnectTimeoutMs,
-                registry.GetModules().Count(),
-                DocumentManager.GetActiveDocument()?.Title
+                registry.GetModules().Count()
             );
         }
     }
@@ -80,7 +77,8 @@ public static class HostRuntime {
 
             var disposeStopwatch = Stopwatch.StartNew();
             _agent?.Dispose();
-            Log.Information("Settings editor runtime cleared existing bridge agent in {ElapsedMs} ms.", disposeStopwatch.ElapsedMilliseconds);
+            Log.Information("Settings editor runtime cleared existing bridge agent in {ElapsedMs} ms.",
+                disposeStopwatch.ElapsedMilliseconds);
             _agent = null;
 
             try {
@@ -121,10 +119,12 @@ public static class HostRuntime {
                 return new RuntimeActionResult(true, "Bridge is already disconnected.");
 
             var disconnectStopwatch = Stopwatch.StartNew();
-            Log.Information("Settings editor runtime disconnect starting: Pipe={PipeName}", _connectionOptions.PipeName);
+            Log.Information("Settings editor runtime disconnect starting: Pipe={PipeName}",
+                _connectionOptions.PipeName);
             _agent.Dispose();
             _agent = null;
-            Log.Information("Settings editor runtime disconnect completed in {ElapsedMs} ms.", disconnectStopwatch.ElapsedMilliseconds);
+            Log.Information("Settings editor runtime disconnect completed in {ElapsedMs} ms.",
+                disconnectStopwatch.ElapsedMilliseconds);
             return new RuntimeActionResult(true, "Disconnected from host.");
         }
     }
@@ -135,29 +135,31 @@ public static class HostRuntime {
             Log.Information("Settings editor runtime shutdown starting.");
             _agent?.Dispose();
             _agent = null;
-            Log.Information("Settings editor runtime shutdown completed in {ElapsedMs} ms.", shutdownStopwatch.ElapsedMilliseconds);
+            Log.Information("Settings editor runtime shutdown completed in {ElapsedMs} ms.",
+                shutdownStopwatch.ElapsedMilliseconds);
         }
     }
 
     public static RuntimeStatus GetStatus() {
         lock (Sync) {
-            if (_agent != null)
+            if (_agent != null) {
                 return _agent.GetStatus() with {
                     IsInitialized = _moduleRegistry != null,
                     PipeName = _connectionOptions.PipeName,
                     LastError = _lastError ?? _agent.LastError
                 };
+            }
 
             return new RuntimeStatus(
-                IsInitialized: _moduleRegistry != null,
-                IsConnected: false,
-                PipeName: _connectionOptions.PipeName,
-                HasActiveDocument: DocumentManager.GetActiveDocument() != null,
-                ActiveDocumentTitle: DocumentManager.GetActiveDocument()?.Title,
-                AvailableModuleCount: _moduleRegistry?.GetModules().Count() ?? 0,
-                RevitVersion: Pe.Global.Revit.Utils.Utils.GetRevitVersion(),
-                RuntimeFramework: System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
-                LastError: _lastError
+                _moduleRegistry != null,
+                false,
+                _connectionOptions.PipeName,
+                DocumentManager.GetActiveDocument() != null,
+                DocumentManager.GetActiveDocument()?.Title,
+                _moduleRegistry?.GetModules().Count() ?? 0,
+                Revit.Utils.Utils.GetRevitVersion(),
+                RuntimeInformation.FrameworkDescription,
+                _lastError
             );
         }
     }
