@@ -1,8 +1,6 @@
 using Autodesk.Revit.DB.Electrical;
 using Pe.Extensions.FamDocument;
-using Pe.StorageRuntime.Json.SchemaProcessors;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
 using System.ComponentModel.DataAnnotations;
 
 namespace Pe.FamilyFoundry.Operations;
@@ -286,19 +284,15 @@ public class MakeElecConnectorSettings : IOperationSettings {
     public bool Enabled { get; init; } = true;
 
     public class Parameters {
-        [SchemaExamples(typeof(SharedParameterNamesProvider))]
         [Required]
         public string NumberOfPoles { get; init; } = "PE_E___NumberOfPoles";
 
-        [SchemaExamples(typeof(SharedParameterNamesProvider))]
         [Required]
         public string ApparentPower { get; init; } = "PE_E___ApparentPower";
 
-        [SchemaExamples(typeof(SharedParameterNamesProvider))]
         [Required]
         public string Voltage { get; init; } = "PE_E___Voltage";
 
-        [SchemaExamples(typeof(SharedParameterNamesProvider))]
         [Required]
         public string MinimumCircuitAmpacity { get; init; } = "PE_E___MCA";
     }

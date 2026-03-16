@@ -5,9 +5,7 @@ using Pe.FamilyFoundry.Snapshots;
 using Pe.Global.PolyFill;
 using Pe.Global.Revit.Lib;
 using Pe.Global.Revit.Ui;
-using Pe.StorageRuntime.Json.SchemaProcessors;
 using Pe.StorageRuntime.Revit;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Serilog.Events;
 using System.ComponentModel;
@@ -98,7 +96,6 @@ public class ParamAggregatorSettings {
     [Description(
         "Optional list of categories to filter families and schedules. " +
         "When empty, ALL families and schedules in the document will be analyzed.")]
-    [SchemaExamples(typeof(CategoryNamesProvider))]
     [Required]
     public List<Category> CategoryFilter { get; init; } = [];
 

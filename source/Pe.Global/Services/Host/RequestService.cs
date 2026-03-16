@@ -3,10 +3,9 @@ using Pe.Global.Services.Document;
 using Pe.Host.Contracts;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Documents;
-using Pe.StorageRuntime.Json.SchemaProcessors;
-using Pe.StorageRuntime.Json.SchemaProviders;
+using Pe.StorageRuntime.Json.FieldOptions;
+using Pe.StorageRuntime.Json.SchemaDefinitions;
 using Pe.StorageRuntime.Revit.Core.Json;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Pe.StorageRuntime.Revit.Context;
 using Pe.StorageRuntime.Revit.Modules;
@@ -132,7 +131,7 @@ public class RequestService {
     private async Task<ParameterCatalogEnvelopeResponse> GetParameterCatalogCore(ParameterCatalogRequest request) =>
         await this.EnqueueAsync(() => {
             try {
-                var providerContext = this.CreateProviderContext(request.ContextValues);
+                var providerContext = this.CreateFieldOptionsContext(request.ContextValues);
                 var doc = providerContext.GetActiveDocument();
                 if (doc == null) {
                     return Result
@@ -201,7 +200,7 @@ public class RequestService {
                     Result.ExceptionIssue(
                         "SchemaException",
                         ex,
-                        "Ensure module registration and schema processors are valid."
+                        "Ensure module registration, schema definitions, and type bindings are valid."
                     )
                 ]
             );
@@ -253,33 +252,36 @@ public class RequestService {
         await this.EnqueueAsync(() => {
             try {
                 var type = this._moduleRegistry.ResolveByModuleKey(request.ModuleKey).SettingsType;
-                var property = ResolveProperty(type, request.PropertyPath);
+                var property = SettingsPropertyPathResolver.ResolveProperty(type, request.PropertyPath);
 
                 if (property == null)
                     return EmptyFieldOptions(request.SourceKey, "Property not found for field options provider.");
 
-                var providerAttr = property.GetCustomAttribute<SchemaExamplesAttribute>();
-                if (providerAttr == null)
-                    return EmptyFieldOptions(request.SourceKey, "No field options provider configured for property.");
+                var fieldOptions = SettingsFieldOptionsService.Shared.GetOptionsAsync(
+                        type,
+                        request.PropertyPath,
+                        request.SourceKey,
+                        this.CreateFieldOptionsContext(request.ContextValues)
+                    )
+                    .AsTask()
+                    .GetAwaiter()
+                    .GetResult();
 
-                if (!string.Equals(providerAttr.ProviderType.Name, request.SourceKey, StringComparison.Ordinal)) {
-                    return EmptyFieldOptions(request.SourceKey,
-                        "Requested field options source does not match property provider.");
-                }
+                if (fieldOptions.Kind == FieldOptionsResultKind.Empty)
+                    return EmptyFieldOptions(request.SourceKey, fieldOptions.Message);
 
-                var provider = Activator.CreateInstance(providerAttr.ProviderType) as IOptionsProvider;
-                if (provider == null) {
+                if (fieldOptions.Kind == FieldOptionsResultKind.Unsupported) {
                     return Result.Failure<FieldOptionsData>(
                         EnvelopeCode.Failed,
-                        $"Failed to create provider '{providerAttr.ProviderType.Name}'.",
+                        fieldOptions.Message,
                         [
                             new ValidationIssue(
                                 "$",
                                 null,
-                                "ProviderCreationFailed",
+                                "FieldOptionsUnsupported",
                                 "error",
-                                $"Failed to create provider '{providerAttr.ProviderType.Name}'.",
-                                "Ensure provider has a public parameterless constructor."
+                                fieldOptions.Message,
+                                "Check active document state and runtime capability availability."
                             )
                         ]
                     ) with {
@@ -287,20 +289,34 @@ public class RequestService {
                     };
                 }
 
-                var items = ResolveFieldOptionItems(
-                    provider,
-                    this.CreateProviderContext(request.ContextValues)
-                );
+                if (fieldOptions.Kind == FieldOptionsResultKind.Failure) {
+                    return Result.Failure<FieldOptionsData>(
+                        EnvelopeCode.Failed,
+                        fieldOptions.Message,
+                        [
+                            new ValidationIssue(
+                                "$",
+                                null,
+                                "FieldOptionsException",
+                                "error",
+                                fieldOptions.Message,
+                                "Check field option source configuration and request path."
+                            )
+                        ]
+                    ) with {
+                        Data = EmptyFieldOptionsData(request.SourceKey)
+                    };
+                }
 
                 return Result.Success(
                     new FieldOptionsData(
                         request.SourceKey,
                         FieldOptionsMode.Suggestion,
                         true,
-                        items
+                        fieldOptions.Items.Select(ToFieldOptionItem).ToList()
                     ),
                     EnvelopeCode.Ok,
-                    $"Retrieved {items.Count} field options."
+                    fieldOptions.Message
                 );
             } catch (Exception ex) {
                 Log.Error(ex, "GetFieldOptions failed for property '{PropertyPath}'", request.PropertyPath);
@@ -353,8 +369,11 @@ public class RequestService {
             return cachedSchema;
 
         var type = module.SettingsType;
-        var providerContext = this.CreateProviderContext();
-        var generatedSchemaData = RevitJsonSchemaFactory.CreateEditorSchemaData(type, providerContext);
+        var generatedSchemaData = RevitJsonSchemaFactory.CreateEditorSchemaData(
+            type,
+            SettingsRuntimeCapabilityProfiles.LiveDocument,
+            this._revitContextAccessor
+        );
 
         if (generatedSchemaData.FragmentSchemaJson == null) {
             Log.Warning(
@@ -378,7 +397,7 @@ public class RequestService {
 
         var validator = new SchemaBackedSettingsDocumentValidator(
             module.SettingsType,
-            SettingsCapabilityTier.RevitAssembly
+            SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly
         );
         _ = this._validationValidatorCache.TryAdd(module.ModuleKey, validator);
         return validator;
@@ -392,49 +411,10 @@ public class RequestService {
             []
         );
 
-    private static PropertyInfo? ResolveProperty(Type type, string propertyPath) {
-        var parts = propertyPath.Split('.');
-        PropertyInfo? property = null;
-        var currentType = type;
-
-        foreach (var part in parts) {
-            if (part == "items") {
-                if (currentType.IsGenericType)
-                    currentType = currentType.GetGenericArguments()[0];
-
-                continue;
-            }
-
-            property = currentType.GetProperty(part,
-                BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
-            if (property == null) {
-                Log.Debug("ResolveProperty: Property '{Part}' not found on type '{CurrentType}'", part,
-                    currentType.Name);
-                return null;
-            }
-
-            currentType = property.PropertyType;
-
-            if (currentType.IsGenericType && currentType.GetGenericTypeDefinition() == typeof(List<>))
-                currentType = currentType.GetGenericArguments()[0];
-        }
-
-        return property;
-    }
-
-    private static List<FieldOptionItem> ResolveFieldOptionItems(
-        IOptionsProvider provider,
-        SettingsProviderContext context
-    ) =>
-        provider
-            .GetExamples(context)
-            .Select(ToFieldOptionItem)
-            .ToList();
-
-    private SettingsProviderContext CreateProviderContext(
+    private FieldOptionsExecutionContext CreateFieldOptionsContext(
         IReadOnlyDictionary<string, string>? contextValues = null
     ) => new(
-        SettingsCapabilityTier.LiveRevitDocument,
+        SettingsRuntimeCapabilityProfiles.LiveDocument,
         this._revitContextAccessor,
         contextValues
     );
@@ -454,11 +434,12 @@ public class RequestService {
             entry.TypeNames
         );
 
-    private static FieldOptionItem ToFieldOptionItem(string value) =>
-        new(
-            value,
-            value,
-            null
+    private static Pe.Host.Contracts.FieldOptionItem ToFieldOptionItem(
+        Pe.StorageRuntime.Json.FieldOptions.FieldOptionItem item
+    ) => new(
+            item.Value,
+            item.Label,
+            item.Description
         );
 
     private static ValidationIssue ToHostValidationIssue(RuntimeSettingsValidationIssue issue) =>

@@ -38,8 +38,8 @@ settings-editor integration so future work in this repo stays aligned.
 - Revit-side bridge runtime: `Pe.Global.Services.Host.HostRuntime`
 - Shared transport and contracts project: `Pe.Host.Contracts`
 - Module registration: `SettingsModuleRegistry` + `ISettingsModule<TSettings>`
-- Dynamic options via providers: `IOptionsProvider` /
-  `IDependentOptionsProvider`
+- Dynamic field metadata and runtime options: explicit schema definitions +
+  `IFieldOptionsSource`
 - Client event names are centralized via `SettingsHostEventNames`
 - Local settings discovery uses `SettingsManager.Discover(...)`
 - Host-backed storage uses `LocalDiskSettingsStorageBackend`
@@ -54,9 +54,8 @@ not frontend implementation details.
 ### Cross-layer Contract
 
 - JSON schema plus targeted metadata:
-  - `x-depends-on`
-  - `x-provider`
-  - optional `x-field` hints
+  - `x-options`
+  - `x-runtime-capabilities`
 - Structured validation payloads remain machine-readable.
 - Type generation:
   - backend messages and enums are exported with TypeGen and consumed as
@@ -64,6 +63,8 @@ not frontend implementation details.
 - Internal schema pipelines:
   - authoring pipeline for local files and editor tooling
   - render pipeline for frontend field rendering
+  - explicit schema-definition augmentation instead of attribute-driven runtime
+    provider reflection
 - Local storage pipelines:
   - HTTP-backed filesystem discovery for settings files and directories
   - host-backed composition for `$include` and `$preset` expansion
@@ -92,7 +93,7 @@ not frontend implementation details.
   - SSE is the public entry point for invalidation-only push events
 - Internal bridge path:
   - named-pipe RPC is still used between `Pe.Host` and the Revit add-in for
-    document-aware provider work
+    document-aware field-option source execution
 
 ## Key Locations
 
@@ -102,9 +103,8 @@ not frontend implementation details.
 - `source/Pe.Host/`
 - `source/Pe.Host.Contracts/`
 - `source/Pe.Global/Services/Host/`
-- `source/Pe.Global/Services/Storage/Core/Json/`
-- `source/Pe.Global/Services/Storage/Core/Json/SchemaProcessors/`
-- `source/Pe.Global/Services/Storage/Core/Json/SchemaProviders/`
+- `source/Pe.StorageRuntime/`
+- `source/Pe.StorageRuntime.Revit/`
 
 ### External Frontend
 

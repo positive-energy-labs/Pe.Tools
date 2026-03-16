@@ -1,11 +1,11 @@
 using Pe.StorageRuntime.Capabilities;
+using Pe.StorageRuntime.Json.FieldOptions;
 using Pe.StorageRuntime.Json.SchemaProviders;
 
 namespace Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
-[SettingsCapabilityTier(SettingsCapabilityTier.LiveRevitDocument)]
 public static class ParameterCatalogOptionFactory {
-    public static List<ParameterCatalogOption> Build(SettingsProviderContext context) {
+    public static List<ParameterCatalogOption> Build(FieldOptionsExecutionContext context) {
         var doc = context.GetActiveDocument();
         if (doc == null)
             return [];

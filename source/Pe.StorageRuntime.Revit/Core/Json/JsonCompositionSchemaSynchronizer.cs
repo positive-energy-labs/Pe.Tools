@@ -1,8 +1,6 @@
 using NJsonSchema;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Json.SchemaProviders;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
 namespace Pe.StorageRuntime.Revit.Core.Json;
 
@@ -16,7 +14,7 @@ internal sealed class JsonCompositionSchemaSynchronizer(
     private readonly IReadOnlyDictionary<string, Type> _presetObjectTypesByRoot = presetObjectTypesByRoot;
     private readonly Dictionary<string, JsonSchema> _presetSchemasByRoot = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _schemaDirectory = schemaDirectory;
-    private readonly SettingsProviderContext _providerContext = new(SettingsCapabilityTier.LiveRevitDocument);
+    private readonly SettingsRuntimeCapabilities _capabilities = SettingsRuntimeCapabilityProfiles.LiveDocument;
 
     public void EnsureFragmentSchema(SettingsCompositionArtifact artifact) {
         if (!this._fragmentItemTypesByRoot.TryGetValue(artifact.ResolvedDirective.RootSegment, out var itemType)) {
@@ -34,7 +32,7 @@ internal sealed class JsonCompositionSchemaSynchronizer(
             artifact.ResolvedDirective.RootSegment
         );
         if (!this._fragmentSchemasByRoot.TryGetValue(artifact.ResolvedDirective.RootSegment, out var fragmentSchema)) {
-            fragmentSchema = RevitJsonSchemaFactory.BuildFragmentSchema(itemType, this._providerContext);
+            fragmentSchema = RevitJsonSchemaFactory.BuildFragmentSchema(itemType, this._capabilities);
             this._fragmentSchemasByRoot[artifact.ResolvedDirective.RootSegment] = fragmentSchema;
         }
 
@@ -65,7 +63,7 @@ internal sealed class JsonCompositionSchemaSynchronizer(
             artifact.ResolvedDirective.RootSegment
         );
         if (!this._presetSchemasByRoot.TryGetValue(artifact.ResolvedDirective.RootSegment, out var presetSchema)) {
-            presetSchema = RevitJsonSchemaFactory.BuildAuthoringSchema(objectType, this._providerContext);
+            presetSchema = RevitJsonSchemaFactory.BuildAuthoringSchema(objectType, this._capabilities);
             this._presetSchemasByRoot[artifact.ResolvedDirective.RootSegment] = presetSchema;
         }
 

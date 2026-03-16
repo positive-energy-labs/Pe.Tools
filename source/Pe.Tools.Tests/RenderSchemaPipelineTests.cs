@@ -1,10 +1,9 @@
 using Newtonsoft.Json.Linq;
-using Pe.StorageRuntime.Json;
 using Pe.StorageRuntime.Capabilities;
+using Pe.StorageRuntime.Json;
+using Pe.StorageRuntime.Json.FieldOptions;
+using Pe.StorageRuntime.Json.SchemaDefinitions;
 using Pe.StorageRuntime.Json.SchemaProcessors;
-using Pe.StorageRuntime.Revit.Core.Json;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
 namespace Pe.Tools.Tests;
 
@@ -123,7 +122,6 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase {
     }
 
     private sealed class RenderSchemaTestSettings {
-        [SchemaExamples(typeof(TestOptionsProvider))]
         public string ProviderBacked { get; init; } = string.Empty;
 
         [Includable(IncludableFragmentRoot.TestItems)]
@@ -132,32 +130,96 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase {
         public bool Enabled { get; init; }
     }
 
-    private sealed class TestOptionsProvider : IOptionsProvider {
-        public IEnumerable<string> GetExamples(SettingsProviderContext context) => ["A", "B"];
+    private sealed class RenderSchemaTestSettingsDefinition : SettingsSchemaDefinition<RenderSchemaTestSettings> {
+        public override void Configure(ISettingsSchemaBuilder<RenderSchemaTestSettings> builder) {
+            builder.Property(item => item.ProviderBacked, property => property.UseFieldOptions<TestOptionsProvider>());
+        }
     }
 
     private sealed class RenderSchemaDatasetTestSettings {
-        [SchemaExamples(typeof(TestDatasetOptionsProvider))]
         public string ProviderBacked { get; init; } = string.Empty;
     }
 
     private sealed class LightweightRenderSchemaTestSettings {
-        [SchemaExamples(typeof(CountingOptionsProvider))]
         public string ProviderBacked { get; init; } = string.Empty;
     }
 
-    private sealed class TestDatasetOptionsProvider : IOptionsProvider, IFieldOptionsClientHintProvider {
-        public SettingsOptionsResolverKind Resolver => SettingsOptionsResolverKind.Dataset;
-        public SettingsOptionsDatasetKind? Dataset => SettingsOptionsDatasetKind.ParameterCatalog;
-        public IEnumerable<string> GetExamples(SettingsProviderContext context) => ["A", "B"];
+    private sealed class RenderSchemaDatasetTestSettingsDefinition
+        : SettingsSchemaDefinition<RenderSchemaDatasetTestSettings> {
+        public override void Configure(ISettingsSchemaBuilder<RenderSchemaDatasetTestSettings> builder) {
+            builder.Property(item => item.ProviderBacked, property => property.UseFieldOptions<TestDatasetOptionsProvider>());
+        }
     }
 
-    private sealed class CountingOptionsProvider : IOptionsProvider {
+    private sealed class LightweightRenderSchemaTestSettingsDefinition
+        : SettingsSchemaDefinition<LightweightRenderSchemaTestSettings> {
+        public override void Configure(ISettingsSchemaBuilder<LightweightRenderSchemaTestSettings> builder) {
+            builder.Property(item => item.ProviderBacked, property => property.UseFieldOptions<CountingOptionsProvider>());
+        }
+    }
+
+    private sealed class TestOptionsProvider : IFieldOptionsSource {
+        public FieldOptionsDescriptor Describe() => new(
+            nameof(TestOptionsProvider),
+            SettingsOptionsResolverKind.Remote,
+            null,
+            SettingsOptionsMode.Suggestion,
+            true,
+            [],
+            SettingsRuntimeCapabilityProfiles.LiveDocument
+        );
+
+        public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
+            FieldOptionsExecutionContext context,
+            CancellationToken cancellationToken = default
+        ) => ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([
+            new("A", "A", null),
+            new("B", "B", null)
+        ]);
+    }
+
+    private sealed class TestDatasetOptionsProvider : IFieldOptionsSource {
+        public FieldOptionsDescriptor Describe() => new(
+            nameof(TestDatasetOptionsProvider),
+            SettingsOptionsResolverKind.Dataset,
+            SettingsOptionsDatasetKind.ParameterCatalog,
+            SettingsOptionsMode.Suggestion,
+            true,
+            [],
+            SettingsRuntimeCapabilityProfiles.LiveDocument
+        );
+
+        public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
+            FieldOptionsExecutionContext context,
+            CancellationToken cancellationToken = default
+        ) => ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([
+            new("A", "A", null),
+            new("B", "B", null)
+        ]);
+    }
+
+    private sealed class CountingOptionsProvider : IFieldOptionsSource {
         public static int ExampleCallCount { get; set; }
 
-        public IEnumerable<string> GetExamples(SettingsProviderContext context) {
+        public FieldOptionsDescriptor Describe() => new(
+            nameof(CountingOptionsProvider),
+            SettingsOptionsResolverKind.Remote,
+            null,
+            SettingsOptionsMode.Suggestion,
+            true,
+            [],
+            SettingsRuntimeCapabilityProfiles.LiveDocument
+        );
+
+        public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
+            FieldOptionsExecutionContext context,
+            CancellationToken cancellationToken = default
+        ) {
             ExampleCallCount++;
-            return ["A", "B"];
+            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([
+                new("A", "A", null),
+                new("B", "B", null)
+            ]);
         }
     }
 
@@ -169,8 +231,16 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase {
         public bool Enabled { get; init; } = true;
     }
 
-    private static JsonSchemaBuildOptions CreateOptions(bool resolveExamples = false) =>
-        new(new SettingsProviderContext(SettingsCapabilityTier.LiveRevitDocument)) {
-            ResolveExamples = resolveExamples
+    private static JsonSchemaBuildOptions CreateOptions(bool resolveExamples = false) {
+        EnsureDefinitionsRegistered();
+        return new(SettingsRuntimeCapabilityProfiles.LiveDocument) {
+            ResolveFieldOptionSamples = resolveExamples
         };
+    }
+
+    private static void EnsureDefinitionsRegistered() {
+        SettingsSchemaDefinitionRegistry.Shared.Register(new RenderSchemaTestSettingsDefinition());
+        SettingsSchemaDefinitionRegistry.Shared.Register(new RenderSchemaDatasetTestSettingsDefinition());
+        SettingsSchemaDefinitionRegistry.Shared.Register(new LightweightRenderSchemaTestSettingsDefinition());
+    }
 }

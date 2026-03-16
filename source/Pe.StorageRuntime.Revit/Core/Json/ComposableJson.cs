@@ -3,9 +3,7 @@ using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Json.SchemaProviders;
 using Pe.StorageRuntime.Modules;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using System.Reflection;
 
 namespace Pe.StorageRuntime.Revit.Core.Json;
@@ -30,7 +28,7 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
     private readonly string _schemaDirectory;
 
     private readonly JsonSerializerSettings _serialSettings =
-        RevitJsonFormatting.CreateRequiredAwareRevitIndentedSettings(RevitTypeRegistry.TryGet);
+        RevitJsonFormatting.CreateRequiredAwareRevitIndentedSettings();
 
     private T? _cachedData;
     private DateTimeOffset _cachedModifiedUtc;
@@ -205,7 +203,7 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
     private static JsonSchema CreateAuthoringSchema() {
         return RevitJsonSchemaFactory.BuildAuthoringSchema(
             typeof(T),
-            new SettingsProviderContext(SettingsCapabilityTier.LiveRevitDocument)
+            SettingsRuntimeCapabilityProfiles.LiveDocument
         );
     }
 

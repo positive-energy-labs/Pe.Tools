@@ -4,10 +4,7 @@ using Pe.Global.Revit.Lib.Schedules;
 using Pe.Global.Revit.Lib.Schedules.Filters;
 using Pe.Global.Utils.Files;
 using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Json.SchemaProcessors;
 using Pe.StorageRuntime.Revit;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using ParamModelRes = Pe.Global.Services.Aps.Models.ParametersApi.Parameters.ParametersResult;
@@ -74,7 +71,6 @@ public class BaseProfileSettings {
         public bool IncludeUnusedFamilies { get; init; } = true;
 
         [Description("Categories of families to include (eg. Mechanical Equipment, Plumbing Fixtures, etc.)")]
-        [SchemaExamples(typeof(CategoryNamesProvider))]
         [Required]
         public List<BuiltInCategory> IncludeCategoriesEqualing { get; init; } = [];
 

@@ -1,8 +1,5 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Pe.StorageRuntime.Json.SchemaProcessors;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using TypeGen.Core.TypeAnnotations;
 
 namespace Pe.SettingsCatalog.Revit.AutoTag;
@@ -16,13 +13,10 @@ public class AutoTagSettings {
 
 [ExportTsInterface]
 public class AutoTagConfiguration {
-    [SchemaExamples(typeof(TaggableCategoryNamesProvider))]
     public BuiltInCategory BuiltInCategory { get; set; } = BuiltInCategory.INVALID;
 
-    [SchemaExamples(typeof(AnnotationTagFamilyNamesProvider))]
     public string TagFamilyName { get; set; } = string.Empty;
 
-    [SchemaExamples(typeof(AnnotationTagTypeNamesProvider))]
     public string TagTypeName { get; set; } = "Standard";
 
     public bool Enabled { get; set; } = true;

@@ -3,18 +3,16 @@ using Newtonsoft.Json.Linq;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Documents;
 using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Json.SchemaProviders;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
 
 namespace Pe.StorageRuntime.Revit.Validation;
 
 public sealed class SchemaBackedSettingsDocumentValidator(
     Type settingsType,
-    SettingsCapabilityTier availableCapabilityTier = SettingsCapabilityTier.RevitAssembly) : ISettingsDocumentValidator {
+    SettingsRuntimeCapabilities? availableCapabilities = null) : ISettingsDocumentValidator {
     private readonly Lazy<NJsonSchema.JsonSchema> _schema = new(() => CreateSchema(
         settingsType,
-        availableCapabilityTier
+        availableCapabilities ?? SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly
     ));
 
     public SettingsValidationResult Validate(
@@ -52,11 +50,11 @@ public sealed class SchemaBackedSettingsDocumentValidator(
 
     private static NJsonSchema.JsonSchema CreateSchema(
         Type settingsType,
-        SettingsCapabilityTier availableCapabilityTier
+        SettingsRuntimeCapabilities availableCapabilities
     ) => JsonSchemaFactory.BuildAuthoringSchema(
         settingsType,
-        new JsonSchemaBuildOptions(new SettingsProviderContext(availableCapabilityTier)) {
-            ResolveExamples = false
+        new JsonSchemaBuildOptions(availableCapabilities) {
+            ResolveFieldOptionSamples = false
         }
     );
 }

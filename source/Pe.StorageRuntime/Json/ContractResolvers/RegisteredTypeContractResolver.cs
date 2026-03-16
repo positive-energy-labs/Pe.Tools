@@ -4,8 +4,12 @@ using System.Reflection;
 
 namespace Pe.StorageRuntime.Json.ContractResolvers;
 
-public class RegisteredTypeContractResolver(JsonTypeRegistrationLookup? registrationLookup = null) : OrderedContractResolver {
-    private readonly JsonTypeRegistrationLookup? _registrationLookup = registrationLookup;
+public class RegisteredTypeContractResolver : OrderedContractResolver {
+    private readonly JsonTypeSchemaBindingRegistry _bindingRegistry;
+
+    public RegisteredTypeContractResolver(JsonTypeSchemaBindingRegistry? bindingRegistry = null) {
+        this._bindingRegistry = bindingRegistry ?? JsonTypeSchemaBindingRegistry.Shared;
+    }
 
     protected override JsonProperty CreateProperty(MemberInfo member, MemberSerialization memberSerialization) {
         var property = base.CreateProperty(member, memberSerialization);
@@ -13,10 +17,10 @@ public class RegisteredTypeContractResolver(JsonTypeRegistrationLookup? registra
             return property;
 
         var targetType = ResolveTargetType(propertyInfo.PropertyType);
-        if (!this.TryGetTypeRegistration(targetType, out var registration) || registration == null)
+        if (!this.TryGetTypeBinding(targetType, out var binding))
             return property;
 
-        var converter = CreateConverter(propertyInfo, registration);
+        var converter = binding.CreateConverter(propertyInfo);
         if (converter == null)
             return property;
 
@@ -28,14 +32,8 @@ public class RegisteredTypeContractResolver(JsonTypeRegistrationLookup? registra
         return property;
     }
 
-    protected virtual bool TryGetTypeRegistration(Type type, out JsonTypeRegistration? registration) {
-        if (this._registrationLookup == null) {
-            registration = null;
-            return false;
-        }
-
-        return this._registrationLookup(type, out registration);
-    }
+    protected virtual bool TryGetTypeBinding(Type type, out IJsonTypeSchemaBinding binding) =>
+        this._bindingRegistry.TryGet(type, out binding!);
 
     protected static Type ResolveTargetType(Type propertyType) {
         var unwrappedType = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
@@ -74,29 +72,5 @@ public class RegisteredTypeContractResolver(JsonTypeRegistrationLookup? registra
                genericTypeDefinition == typeof(IEnumerable<>) ||
                genericTypeDefinition == typeof(IReadOnlyList<>) ||
                genericTypeDefinition == typeof(IReadOnlyCollection<>);
-    }
-
-    private static JsonConverter? CreateConverter(PropertyInfo propertyInfo, JsonTypeRegistration registration) {
-        Type? converterType = null;
-
-        if (registration is { DiscriminatorType: { } discriminatorType, ConverterSelector: { } converterSelector }) {
-            var discriminatorAttribute = propertyInfo.GetCustomAttribute(discriminatorType);
-            if (discriminatorAttribute != null)
-                converterType = converterSelector(discriminatorAttribute);
-        } else if (registration.ConverterSelector is { } defaultConverterSelector) {
-            converterType = defaultConverterSelector(null);
-        }
-
-
-        if (converterType == null)
-            return null;
-
-        var converterInstance = Activator.CreateInstance(converterType);
-        if (converterInstance is JsonConverter converter)
-            return converter;
-
-        throw new InvalidOperationException(
-            $"Converter {converterType.FullName} could not be created."
-        );
     }
 }

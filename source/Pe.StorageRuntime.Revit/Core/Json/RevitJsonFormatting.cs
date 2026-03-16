@@ -15,12 +15,10 @@ public static class RevitJsonFormatting {
     }
 
     public static JsonSerializerSettings CreateRequiredAwareRevitIndentedSettings(
-        JsonTypeRegistrationLookup tryResolveType
+        JsonTypeSchemaBindingRegistry? bindingRegistry = null
     ) {
-        ArgumentNullException.ThrowIfNull(tryResolveType);
-
         var settings = CreateIndentedSettings();
-        settings.ContractResolver = new RequiredAwareContractResolver(tryResolveType);
+        settings.ContractResolver = new RequiredAwareContractResolver(bindingRegistry);
         AddStringEnumConverter(settings);
         return settings;
     }

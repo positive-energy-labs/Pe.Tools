@@ -1,5 +1,3 @@
-using Pe.StorageRuntime.Json.SchemaProcessors;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
 using System.ComponentModel;
 
 namespace Pe.Global.Revit.Lib.Schedules.TitleStyle;
@@ -10,22 +8,18 @@ namespace Pe.Global.Revit.Lib.Schedules.TitleStyle;
 public class TitleBorderStyleSpec {
     [Description(
         "Line style name for the top border (matches Line Styles in project). Leave null to not apply a top border.")]
-    [SchemaExamples(typeof(LineStyleNamesProvider))]
     public string? TopLineStyleName { get; set; }
 
     [Description(
         "Line style name for the bottom border (matches Line Styles in project). Leave null to not apply a bottom border.")]
-    [SchemaExamples(typeof(LineStyleNamesProvider))]
     public string? BottomLineStyleName { get; set; } = "Medium Lines";
 
     [Description(
         "Line style name for the left border (matches Line Styles in project). Leave null to not apply a left border.")]
-    [SchemaExamples(typeof(LineStyleNamesProvider))]
     public string? LeftLineStyleName { get; set; }
 
     [Description(
         "Line style name for the right border (matches Line Styles in project). Leave null to not apply a right border.")]
-    [SchemaExamples(typeof(LineStyleNamesProvider))]
     public string? RightLineStyleName { get; set; }
 
     /// <summary>

@@ -1,13 +1,28 @@
 using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Json.SchemaProviders;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
+using Pe.StorageRuntime.Json.FieldOptions;
 
 namespace Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
-[SettingsCapabilityTier(SettingsCapabilityTier.RevitAssembly)]
-public class SpecNamesProvider : IOptionsProvider {
-    public IEnumerable<string> GetExamples(SettingsProviderContext context) =>
-        GetLabelToForgeMap().Keys;
+public class SpecNamesProvider : IFieldOptionsSource {
+    public FieldOptionsDescriptor Describe() => new(
+        nameof(SpecNamesProvider),
+        SettingsOptionsResolverKind.Remote,
+        null,
+        SettingsOptionsMode.Suggestion,
+        true,
+        [],
+        SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly
+    );
+
+    public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
+        FieldOptionsExecutionContext context,
+        CancellationToken cancellationToken = default
+    ) => ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(
+        GetLabelToForgeMap()
+            .Keys
+            .Select(value => new FieldOptionItem(value, value, null))
+            .ToList()
+    );
 
     public static Dictionary<string, ForgeTypeId> GetLabelToForgeMap() {
         var labelMap = new Dictionary<string, ForgeTypeId>();

@@ -2,10 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Json.SchemaProcessors;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
@@ -63,7 +60,6 @@ public record ParamSettingModel : ParamDefinitionBase {
 ///     Dynamic family type columns are captured by JsonExtensionData and serialized flat.
 /// </summary>
 public record PerTypeValueRow {
-    [SchemaExamples(typeof(SharedParameterNamesProvider))]
     [Description("The parameter name for this per-type value row.")]
     [Required]
     public string Parameter { get; init; } = string.Empty;

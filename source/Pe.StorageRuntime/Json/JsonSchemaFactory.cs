@@ -4,8 +4,10 @@ using NJsonSchema;
 using NJsonSchema.Generation;
 using NJsonSchema.NewtonsoftJson.Generation;
 using Pe.StorageRuntime.Capabilities;
+using Pe.StorageRuntime.Context;
+using Pe.StorageRuntime.Json.FieldOptions;
+using Pe.StorageRuntime.Json.SchemaDefinitions;
 using Pe.StorageRuntime.Json.SchemaProcessors;
-using Pe.StorageRuntime.Json.SchemaProviders;
 using Pe.StorageRuntime.PolyFill;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
@@ -13,16 +15,23 @@ using System.Text;
 
 namespace Pe.StorageRuntime.Json;
 
-public interface IJsonSchemaCapabilityAugmenter {
-    void Configure(
-        NewtonsoftJsonSchemaGeneratorSettings settings,
-        SettingsProviderContext providerContext
-    );
-}
+public sealed class JsonSchemaBuildOptions(
+    SettingsRuntimeCapabilities capabilities,
+    ISettingsDocumentContextAccessor? documentContextAccessor = null
+) {
+    public SettingsRuntimeCapabilities Capabilities { get; } =
+        capabilities ?? throw new ArgumentNullException(nameof(capabilities));
 
-public sealed class JsonSchemaBuildOptions(SettingsProviderContext providerContext) {
-    public SettingsProviderContext ProviderContext { get; } = providerContext ?? throw new ArgumentNullException(nameof(providerContext));
-    public bool ResolveExamples { get; init; } = true;
+    public ISettingsDocumentContextAccessor? DocumentContextAccessor { get; } = documentContextAccessor;
+    public bool ResolveFieldOptionSamples { get; init; } = true;
+
+    public FieldOptionsExecutionContext CreateFieldOptionsExecutionContext(
+        IReadOnlyDictionary<string, string>? fieldValues = null
+    ) => new(
+        this.Capabilities,
+        this.DocumentContextAccessor,
+        fieldValues
+    );
 }
 
 public sealed record JsonSchemaData(
@@ -31,18 +40,6 @@ public sealed record JsonSchemaData(
 );
 
 public static class JsonSchemaFactory {
-    private static readonly List<IJsonSchemaCapabilityAugmenter> Augmenters = [];
-    private static readonly object SyncRoot = new();
-
-    public static void RegisterAugmenter(IJsonSchemaCapabilityAugmenter augmenter) {
-        lock (SyncRoot) {
-            if (Augmenters.Any(existing => existing.GetType() == augmenter.GetType()))
-                return;
-
-            Augmenters.Add(augmenter);
-        }
-    }
-
     public static JsonSchema BuildAuthoringSchema(Type type, JsonSchemaBuildOptions options) {
         if (type == null)
             throw new ArgumentNullException(nameof(type));
@@ -102,36 +99,26 @@ public static class JsonSchemaFactory {
 
 
     private static JsonSchema BuildRawAuthoringSchema(Type type, JsonSchemaBuildOptions options) {
-        var settings = CreateGeneratorSettings(
-            options.ProviderContext,
-            options.ResolveExamples
-        );
+        var settings = CreateGeneratorSettings(options);
         var schema = new JsonSchemaGenerator(settings).Generate(type);
         SchemaMetadataProcessor.AllowSchemaProperty(schema);
         return schema;
     }
 
-    private static NewtonsoftJsonSchemaGeneratorSettings CreateGeneratorSettings(
-        SettingsProviderContext providerContext,
-        bool resolveExamples
-    ) {
+    private static NewtonsoftJsonSchemaGeneratorSettings CreateGeneratorSettings(JsonSchemaBuildOptions options) {
         var settings = new NewtonsoftJsonSchemaGeneratorSettings {
             FlattenInheritanceHierarchy = true,
             AlwaysAllowAdditionalObjectProperties = false
         };
 
-        lock (SyncRoot) {
-            foreach (var augmenter in Augmenters)
-                augmenter.Configure(settings, providerContext);
-        }
+        foreach (var mapper in JsonTypeSchemaBindingRegistry.Shared.CreateTypeMappers())
+            settings.TypeMappers.Add(mapper);
 
         settings.SchemaProcessors.Add(new SchemaOneOfProcessor());
-        settings.SchemaProcessors.Add(new SchemaExamplesProcessor {
-            ResolveExamples = resolveExamples,
-            ProviderContext = providerContext
-        });
+        settings.SchemaProcessors.Add(new JsonTypeSchemaBindingProcessor(options));
         settings.SchemaProcessors.Add(new SchemaIncludesProcessor());
         settings.SchemaProcessors.Add(new SchemaPresetsProcessor());
+        settings.SchemaProcessors.Add(new SchemaDefinitionProcessor(options));
 
         return settings;
     }

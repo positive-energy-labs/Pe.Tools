@@ -1,6 +1,5 @@
 using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Json.SchemaProviders;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
+using Pe.StorageRuntime.Json.FieldOptions;
 
 namespace Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
@@ -9,10 +8,26 @@ namespace Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 ///     Document-independent implementation using LabelUtils.GetLabelFor().
 ///     Used to enable LSP autocomplete for category name properties.
 /// </summary>
-[SettingsCapabilityTier(SettingsCapabilityTier.RevitAssembly)]
-public class CategoryNamesProvider : IOptionsProvider {
-    public IEnumerable<string> GetExamples(SettingsProviderContext context) =>
-        GetLabelToBuiltInCategoryMap().Keys;
+public class CategoryNamesProvider : IFieldOptionsSource {
+    public FieldOptionsDescriptor Describe() => new(
+        nameof(CategoryNamesProvider),
+        SettingsOptionsResolverKind.Remote,
+        null,
+        SettingsOptionsMode.Suggestion,
+        true,
+        [],
+        SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly
+    );
+
+    public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
+        FieldOptionsExecutionContext context,
+        CancellationToken cancellationToken = default
+    ) => ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(
+        GetLabelToBuiltInCategoryMap()
+            .Keys
+            .Select(value => new FieldOptionItem(value, value, null))
+            .ToList()
+    );
 
     public static Dictionary<string, BuiltInCategory> GetLabelToBuiltInCategoryMap() {
         var labelMap = new Dictionary<string, BuiltInCategory>(StringComparer.OrdinalIgnoreCase);

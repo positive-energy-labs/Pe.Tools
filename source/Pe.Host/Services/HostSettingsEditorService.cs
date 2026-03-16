@@ -2,13 +2,10 @@ using Pe.Host.Contracts;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Documents;
 using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Json.SchemaProcessors;
-using Pe.StorageRuntime.Json.SchemaProviders;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.StorageRuntime.Json.FieldOptions;
+using Pe.StorageRuntime.Json.SchemaDefinitions;
 using Pe.StorageRuntime.Revit.Validation;
 using System.Collections.Concurrent;
-using System.Reflection;
 using RuntimeSettingsDocumentId = Pe.StorageRuntime.Documents.SettingsDocumentId;
 using RuntimeSettingsValidationIssue = Pe.StorageRuntime.Documents.SettingsValidationIssue;
 
@@ -46,7 +43,7 @@ public sealed class HostSettingsEditorService(IHostSettingsModuleCatalog moduleC
                         "SchemaException",
                         "error",
                         GetDetailedExceptionMessage(ex),
-                        "Verify Revit assembly resolution and schema processor configuration."
+                        "Verify Revit assembly resolution and schema definition or type-binding registration."
                     )
                 ],
                 null
@@ -80,7 +77,7 @@ public sealed class HostSettingsEditorService(IHostSettingsModuleCatalog moduleC
                 module.ModuleKey,
                 _ => new SchemaBackedSettingsDocumentValidator(
                     module.SettingsType,
-                    SettingsCapabilityTier.RevitAssembly
+                    SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly
                 )
             );
             var validation = validator.Validate(
@@ -134,7 +131,7 @@ public sealed class HostSettingsEditorService(IHostSettingsModuleCatalog moduleC
                 return true;
             }
 
-            var property = ResolveProperty(module.SettingsType, request.PropertyPath);
+            var property = SettingsPropertyPathResolver.ResolveProperty(module.SettingsType, request.PropertyPath);
             if (property == null) {
                 response = CreateFieldOptionsSuccess(
                     request.SourceKey,
@@ -144,42 +141,38 @@ public sealed class HostSettingsEditorService(IHostSettingsModuleCatalog moduleC
                 return true;
             }
 
-            var providerAttribute = property.GetCustomAttribute<SchemaExamplesAttribute>();
-            if (providerAttribute == null) {
-                response = CreateFieldOptionsSuccess(
+            var fieldOptions = SettingsFieldOptionsService.Shared.GetOptionsAsync(
+                    module.SettingsType,
+                    request.PropertyPath,
                     request.SourceKey,
-                    "No field options provider configured for property.",
-                    []
-                );
-                return true;
-            }
+                    new FieldOptionsExecutionContext(
+                        SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly,
+                        null,
+                        request.ContextValues
+                    )
+                )
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
 
-            var providerCapabilityTier = SettingsCapabilityResolver.GetRequiredTier(providerAttribute.ProviderType);
-            if (providerCapabilityTier > SettingsCapabilityTier.RevitAssembly)
+            if (fieldOptions.Kind == FieldOptionsResultKind.Unsupported)
                 return false;
 
-            if (Activator.CreateInstance(providerAttribute.ProviderType) is not IOptionsProvider provider) {
+            if (fieldOptions.Kind == FieldOptionsResultKind.Failure) {
                 response = CreateFieldOptionsFailure(
                     request.SourceKey,
-                    $"Failed to create provider '{providerAttribute.ProviderType.Name}'.",
-                    "Ensure the provider has a public parameterless constructor."
+                    fieldOptions.Message,
+                    "Check field option source configuration and request path."
                 );
                 return true;
             }
-
-            var items = provider
-                .GetExamples(new SettingsProviderContext(
-                    SettingsCapabilityTier.RevitAssembly,
-                    null,
-                    request.ContextValues
-                ))
-                .Select(value => new FieldOptionItem(value, value, null))
-                .ToList();
 
             response = CreateFieldOptionsSuccess(
                 request.SourceKey,
-                $"Retrieved {items.Count} field options.",
-                items
+                fieldOptions.Message,
+                fieldOptions.Items
+                    .Select(item => new Pe.Host.Contracts.FieldOptionItem(item.Value, item.Label, item.Description))
+                    .ToList()
             );
             return true;
         } catch (Exception ex) {
@@ -195,8 +188,8 @@ public sealed class HostSettingsEditorService(IHostSettingsModuleCatalog moduleC
     private static SchemaData CreateSchemaData(Type settingsType) {
         var schemaData = JsonSchemaFactory.CreateEditorSchemaData(
             settingsType,
-            new JsonSchemaBuildOptions(new SettingsProviderContext(SettingsCapabilityTier.RevitAssembly)) {
-                ResolveExamples = false
+            new JsonSchemaBuildOptions(SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly) {
+                ResolveFieldOptionSamples = false
             }
         );
 
@@ -206,7 +199,7 @@ public sealed class HostSettingsEditorService(IHostSettingsModuleCatalog moduleC
     private static FieldOptionsEnvelopeResponse CreateFieldOptionsSuccess(
         string sourceKey,
         string message,
-        List<FieldOptionItem> items
+        List<Pe.Host.Contracts.FieldOptionItem> items
     ) => new(
         true,
         EnvelopeCode.Ok,
@@ -226,34 +219,6 @@ public sealed class HostSettingsEditorService(IHostSettingsModuleCatalog moduleC
         [new ValidationIssue("$", null, "FieldOptionsException", "error", message, suggestion)],
         new FieldOptionsData(sourceKey, FieldOptionsMode.Suggestion, true, [])
     );
-
-    private static PropertyInfo? ResolveProperty(Type type, string propertyPath) {
-        var parts = propertyPath.Split('.');
-        PropertyInfo? property = null;
-        var currentType = type;
-
-        foreach (var part in parts) {
-            if (part == "items") {
-                if (currentType.IsGenericType)
-                    currentType = currentType.GetGenericArguments()[0];
-
-                continue;
-            }
-
-            property = currentType.GetProperty(
-                part,
-                BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase
-            );
-            if (property == null)
-                return null;
-
-            currentType = property.PropertyType;
-            if (currentType.IsGenericType && currentType.GetGenericTypeDefinition() == typeof(List<>))
-                currentType = currentType.GetGenericArguments()[0];
-        }
-
-        return property;
-    }
 
     private static ValidationIssue ToHostValidationIssue(RuntimeSettingsValidationIssue issue) =>
         new(

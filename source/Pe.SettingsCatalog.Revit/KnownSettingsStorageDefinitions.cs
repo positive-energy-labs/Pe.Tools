@@ -6,7 +6,7 @@ namespace Pe.SettingsCatalog.Revit;
 
 public static class KnownSettingsStorageDefinitions {
     public static IReadOnlyDictionary<string, SettingsStorageModuleDefinition> Create(
-        SettingsCapabilityTier availableCapabilityTier
+        SettingsRuntimeCapabilities availableCapabilities
     ) =>
         KnownSettingsSchemas.All.ToDictionary(
             schema => schema.ModuleKey,
@@ -16,7 +16,7 @@ public static class KnownSettingsStorageDefinitions {
                 schema.StorageOptions,
                 schema.SettingsType == typeof(object)
                     ? null
-                    : new SchemaBackedSettingsDocumentValidator(schema.SettingsType, availableCapabilityTier)
+                    : new SchemaBackedSettingsDocumentValidator(schema.SettingsType, availableCapabilities)
             ),
             StringComparer.OrdinalIgnoreCase
         );

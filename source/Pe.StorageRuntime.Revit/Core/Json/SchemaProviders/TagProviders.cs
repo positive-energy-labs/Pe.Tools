@@ -1,4 +1,5 @@
 using Pe.StorageRuntime.Capabilities;
+using Pe.StorageRuntime.Json.FieldOptions;
 using Pe.StorageRuntime.Json.SchemaProviders;
 using Pe.StorageRuntime.Revit.AutoTag;
 
@@ -7,21 +8,36 @@ namespace Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 /// <summary>
 ///     Provides category names that can be auto-tagged.
 /// </summary>
-[SettingsCapabilityTier(SettingsCapabilityTier.LiveRevitDocument)]
-public class TaggableCategoryNamesProvider : IOptionsProvider {
-    public IEnumerable<string> GetExamples(SettingsProviderContext context) {
+public class TaggableCategoryNamesProvider : IFieldOptionsSource {
+    public FieldOptionsDescriptor Describe() => new(
+        nameof(TaggableCategoryNamesProvider),
+        SettingsOptionsResolverKind.Remote,
+        null,
+        SettingsOptionsMode.Suggestion,
+        true,
+        [],
+        SettingsRuntimeCapabilityProfiles.LiveDocument
+    );
+
+    public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
+        FieldOptionsExecutionContext context,
+        CancellationToken cancellationToken = default
+    ) {
         try {
             var doc = context.GetActiveDocument();
             if (doc == null)
-                return [];
+                return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([]);
 
-            return CategoryTagMapping.GetTaggableCategories()
+            var items = CategoryTagMapping.GetTaggableCategories()
                 .Select(category => CategoryTagMapping.GetCategoryName(doc, category))
                 .Where(name => !string.IsNullOrWhiteSpace(name))
                 .Cast<string>()
-                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .Select(value => new FieldOptionItem(value, value, null))
+                .ToList();
+            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(items);
         } catch {
-            return [];
+            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([]);
         }
     }
 }
@@ -29,23 +45,38 @@ public class TaggableCategoryNamesProvider : IOptionsProvider {
 /// <summary>
 ///     Provides multi-category tag family names available in the current document.
 /// </summary>
-[SettingsCapabilityTier(SettingsCapabilityTier.LiveRevitDocument)]
-public class MultiCategoryTagProvider : IOptionsProvider {
-    public IEnumerable<string> GetExamples(SettingsProviderContext context) {
+public class MultiCategoryTagProvider : IFieldOptionsSource {
+    public FieldOptionsDescriptor Describe() => new(
+        nameof(MultiCategoryTagProvider),
+        SettingsOptionsResolverKind.Remote,
+        null,
+        SettingsOptionsMode.Suggestion,
+        true,
+        [],
+        SettingsRuntimeCapabilityProfiles.LiveDocument
+    );
+
+    public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
+        FieldOptionsExecutionContext context,
+        CancellationToken cancellationToken = default
+    ) {
         try {
             var doc = context.GetActiveDocument();
             if (doc == null)
-                return [];
+                return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([]);
 
-            return new FilteredElementCollector(doc)
+            var items = new FilteredElementCollector(doc)
                 .OfClass(typeof(FamilySymbol))
                 .OfCategory(BuiltInCategory.OST_MultiCategoryTags)
                 .Cast<FamilySymbol>()
                 .Select(symbol => symbol.FamilyName)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .Select(value => new FieldOptionItem(value, value, null))
+                .ToList();
+            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(items);
         } catch {
-            return [];
+            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([]);
         }
     }
 }
@@ -53,8 +84,7 @@ public class MultiCategoryTagProvider : IOptionsProvider {
 /// <summary>
 ///     Provides annotation tag family names available in the current document.
 /// </summary>
-[SettingsCapabilityTier(SettingsCapabilityTier.LiveRevitDocument)]
-public class AnnotationTagFamilyNamesProvider : IDependentOptionsProvider {
+public class AnnotationTagFamilyNamesProvider : IFieldOptionsSource {
     public static readonly BuiltInCategory[] TagCategories = [
         BuiltInCategory.OST_CaseworkTags,
         BuiltInCategory.OST_CeilingTags,
@@ -123,31 +153,43 @@ public class AnnotationTagFamilyNamesProvider : IDependentOptionsProvider {
         BuiltInCategory.OST_WireTags
     ];
 
-    public IReadOnlyList<string> DependsOn => [OptionContextKeys.CategoryName];
+    public FieldOptionsDescriptor Describe() => new(
+        nameof(AnnotationTagFamilyNamesProvider),
+        SettingsOptionsResolverKind.Remote,
+        null,
+        SettingsOptionsMode.Suggestion,
+        true,
+        [new FieldOptionsDependency(OptionContextKeys.CategoryName, SettingsOptionsDependencyScope.Sibling)],
+        SettingsRuntimeCapabilityProfiles.LiveDocument
+    );
 
-    public IEnumerable<string> GetExamples(SettingsProviderContext context) {
+    public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
+        FieldOptionsExecutionContext context,
+        CancellationToken cancellationToken = default
+    ) {
         var doc = context.GetActiveDocument();
         if (doc == null)
-            return [];
+            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([]);
 
         var categoryName = context.TryGetContextValue(OptionContextKeys.CategoryName, out var selectedCategoryName)
             ? selectedCategoryName
             : null;
         if (string.IsNullOrWhiteSpace(categoryName))
-            return GetAllTagFamilyNames(doc);
+            return ToItems(GetAllTagFamilyNames(doc));
 
         var elementCategory = CategoryTagMapping.GetBuiltInCategoryFromName(doc, categoryName);
         if (elementCategory == BuiltInCategory.INVALID)
-            return [];
+            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([]);
 
         var tagCategory = CategoryTagMapping.GetTagCategory(elementCategory);
-        return new FilteredElementCollector(doc)
+        var items = new FilteredElementCollector(doc)
             .OfClass(typeof(FamilySymbol))
             .OfCategory(tagCategory)
             .Cast<FamilySymbol>()
             .Select(symbol => symbol.FamilyName)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
+        return ToItems(items);
     }
 
     private static IEnumerable<string> GetAllTagFamilyNames(Autodesk.Revit.DB.Document doc) {
@@ -167,19 +209,34 @@ public class AnnotationTagFamilyNamesProvider : IDependentOptionsProvider {
 
         return familyNames.OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
     }
+
+    private static ValueTask<IReadOnlyList<FieldOptionItem>> ToItems(IEnumerable<string> values) =>
+        ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(
+            values.Select(value => new FieldOptionItem(value, value, null)).ToList()
+        );
 }
 
 /// <summary>
 ///     Provides tag type names for annotation tags in the current document.
 /// </summary>
-[SettingsCapabilityTier(SettingsCapabilityTier.LiveRevitDocument)]
-public class AnnotationTagTypeNamesProvider : IDependentOptionsProvider {
-    public IReadOnlyList<string> DependsOn => [OptionContextKeys.TagFamilyName];
+public class AnnotationTagTypeNamesProvider : IFieldOptionsSource {
+    public FieldOptionsDescriptor Describe() => new(
+        nameof(AnnotationTagTypeNamesProvider),
+        SettingsOptionsResolverKind.Remote,
+        null,
+        SettingsOptionsMode.Suggestion,
+        true,
+        [new FieldOptionsDependency(OptionContextKeys.TagFamilyName, SettingsOptionsDependencyScope.Sibling)],
+        SettingsRuntimeCapabilityProfiles.LiveDocument
+    );
 
-    public IEnumerable<string> GetExamples(SettingsProviderContext context) {
+    public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
+        FieldOptionsExecutionContext context,
+        CancellationToken cancellationToken = default
+    ) {
         var doc = context.GetActiveDocument();
         if (doc == null)
-            return [];
+            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([]);
 
         var familyName = context.TryGetContextValue(OptionContextKeys.TagFamilyName, out var selectedFamilyName)
             ? selectedFamilyName
@@ -203,6 +260,11 @@ public class AnnotationTagTypeNamesProvider : IDependentOptionsProvider {
             }
         }
 
-        return typeNames.OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
+        return ToItems(typeNames.OrderBy(name => name, StringComparer.OrdinalIgnoreCase));
     }
+
+    private static ValueTask<IReadOnlyList<FieldOptionItem>> ToItems(IEnumerable<string> values) =>
+        ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(
+            values.Select(value => new FieldOptionItem(value, value, null)).ToList()
+        );
 }

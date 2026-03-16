@@ -11,7 +11,7 @@ public sealed record SettingsCatalogModule(
 
 public static class KnownSettingsCatalogModules {
     private static SettingsStorageModuleOptions SharedStorageOptions { get; } = new(
-        SettingsDirectiveRootCatalog.GlobalIncludeRoots,
+        ["_shared", .. SettingsDirectiveRootCatalog.GlobalIncludeRoots],
         SettingsDirectiveRootCatalog.GlobalPresetRoots
     );
 

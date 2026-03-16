@@ -1,8 +1,5 @@
 using Pe.FamilyFoundry.OperationSettings;
-using Pe.StorageRuntime.Json.SchemaProcessors;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Pe.StorageRuntime.Revit.Core.Json.RevitTypes;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
@@ -14,7 +11,6 @@ namespace Pe.FamilyFoundry.Aggregators.Snapshots;
 ///     Contains the minimum information needed to identify or create a parameter.
 /// </summary>
 public record ParamDefinitionBase {
-    [SchemaExamples(typeof(SharedParameterNamesProvider))]
     [Description("The name of the parameter")]
     [Required]
     public string Name { get; init; }

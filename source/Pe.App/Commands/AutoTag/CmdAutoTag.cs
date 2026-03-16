@@ -474,7 +474,7 @@ public class CmdAutoTag : IExternalCommand {
         // Generate schema with examples
         var schema = RevitJsonSchemaFactory.BuildAuthoringSchema(
             typeof(AutoTagSettings),
-            new SettingsProviderContext(SettingsCapabilityTier.LiveRevitDocument)
+            SettingsRuntimeCapabilityProfiles.LiveDocument
         );
 
         // Serialize with $schema reference

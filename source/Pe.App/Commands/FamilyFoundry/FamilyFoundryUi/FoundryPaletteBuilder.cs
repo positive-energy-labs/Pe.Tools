@@ -226,7 +226,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
             Formatting.Indented,
             new JsonSerializerSettings {
                 Converters = [new StringEnumConverter()],
-                ContractResolver = new RequiredAwareContractResolver(RevitTypeRegistry.TryGet),
+                ContractResolver = new RequiredAwareContractResolver(),
                 NullValueHandling = NullValueHandling.Ignore
             });
 

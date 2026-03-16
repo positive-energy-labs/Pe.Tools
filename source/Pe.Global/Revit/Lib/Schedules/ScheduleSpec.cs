@@ -2,11 +2,11 @@ using Pe.Global.Revit.Lib.Schedules.Fields;
 using Pe.Global.Revit.Lib.Schedules.Filters;
 using Pe.Global.Revit.Lib.Schedules.SortGroup;
 using Pe.Global.Revit.Lib.Schedules.TitleStyle;
+using Pe.StorageRuntime.Capabilities;
+using Pe.StorageRuntime.Json.FieldOptions;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Json.SchemaProcessors;
-using Pe.StorageRuntime.Json.SchemaProviders;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
+using Pe.StorageRuntime.Revit.Core.Json;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
@@ -23,13 +23,11 @@ public class ScheduleSpec {
     public string Name { get; set; } = string.Empty;
 
     [Description("The built-in Revit category to schedule (for example 'Mechanical Equipment' or 'Doors').")]
-    [SchemaExamples(typeof(CategoryNamesProvider))]
     [Required]
     public BuiltInCategory CategoryName { get; set; } = BuiltInCategory.INVALID;
 
     [Description(
         "The name of the view template to apply to this schedule. Leave empty to use no template. Must be a schedule-compatible view template.")]
-    [SchemaExamples(typeof(ScheduleViewTemplateNamesProvider))]
     public string? ViewTemplateName { get; set; }
 
     [Description(
@@ -64,29 +62,42 @@ public class ScheduleSpec {
 ///     Used to enable LSP autocomplete for line style name properties.
 ///     Returns common default line styles if no document is available.
 /// </summary>
-public class LineStyleNamesProvider : IOptionsProvider {
-    public IEnumerable<string> GetExamples(SettingsProviderContext context) {
+public class LineStyleNamesProvider : IFieldOptionsSource {
+    public FieldOptionsDescriptor Describe() => new(
+        nameof(LineStyleNamesProvider),
+        SettingsOptionsResolverKind.Remote,
+        null,
+        SettingsOptionsMode.Suggestion,
+        true,
+        [],
+        SettingsRuntimeCapabilityProfiles.LiveDocument
+    );
+
+    public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
+        FieldOptionsExecutionContext context,
+        CancellationToken cancellationToken = default
+    ) {
         try {
-            var doc = context.GetActiveDocument();
+            var doc = context.GetActiveDocument<Autodesk.Revit.DB.Document>();
             if (doc == null || doc.IsFamilyDocument) {
                 // Return common default Revit line styles
-                return [
+                return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(new[] {
                     "Thin Lines",
                     "Medium Lines",
                     "Wide Lines",
                     "Heavy Line",
                     "<Invisible lines>"
-                ];
+                }.Select(value => new FieldOptionItem(value, value, null)).ToList());
             }
 
             var lineCategory = doc.Settings.Categories.get_Item(BuiltInCategory.OST_Lines);
             if (lineCategory == null) {
-                return [
+                return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(new[] {
                     "Thin Lines",
                     "Medium Lines",
                     "Wide Lines",
                     "Heavy Line"
-                ];
+                }.Select(value => new FieldOptionItem(value, value, null)).ToList());
             }
 
             var lineStyles = new List<string>();
@@ -95,16 +106,21 @@ public class LineStyleNamesProvider : IOptionsProvider {
                     lineStyles.Add(subCategory.Name);
             }
 
-            return lineStyles.OrderBy(name => name);
+            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(
+                lineStyles
+                    .OrderBy(name => name)
+                    .Select(value => new FieldOptionItem(value, value, null))
+                    .ToList()
+            );
         } catch {
             // No document available or error - return common defaults
-            return [
+            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(new[] {
                 "Thin Lines",
                 "Medium Lines",
                 "Wide Lines",
                 "Heavy Line",
                 "<Invisible lines>"
-            ];
+            }.Select(value => new FieldOptionItem(value, value, null)).ToList());
         }
     }
 }

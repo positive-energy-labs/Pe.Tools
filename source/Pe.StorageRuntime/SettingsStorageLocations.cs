@@ -45,7 +45,9 @@ public static class SettingsStorageLocations {
         if (string.IsNullOrWhiteSpace(rootKey))
             throw new ArgumentException("Root key is required.", nameof(rootKey));
 
-        var settingsDirectory = ResolveModuleSettingsDirectory(basePath, moduleKey);
+        var settingsDirectory = string.Equals(moduleKey, "Global", StringComparison.OrdinalIgnoreCase)
+            ? ResolveModuleDirectory(basePath, moduleKey)
+            : ResolveModuleSettingsDirectory(basePath, moduleKey);
         return SettingsPathing.ResolveSafeSubDirectoryPath(settingsDirectory, rootKey, nameof(rootKey));
     }
 }

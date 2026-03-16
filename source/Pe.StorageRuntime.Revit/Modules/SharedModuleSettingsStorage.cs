@@ -7,13 +7,17 @@ namespace Pe.StorageRuntime.Revit.Modules;
 
 public sealed class SharedModuleSettingsStorage(
     ISettingsModule module,
-    SettingsCapabilityTier availableCapabilityTier = SettingsCapabilityTier.RevitAssembly,
+    SettingsRuntimeCapabilities? availableCapabilities = null,
     IReadOnlyDictionary<string, SettingsStorageModuleDefinition>? moduleDefinitionsByModuleKey = null,
     string? basePath = null) {
     private readonly LocalDiskSettingsStorageBackend _backend = new(
         basePath ?? StorageClient.BasePath,
-        availableCapabilityTier,
-        CreateModuleDefinitionLookup(module, moduleDefinitionsByModuleKey, availableCapabilityTier)
+        availableCapabilities ?? SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly,
+        CreateModuleDefinitionLookup(
+            module,
+            moduleDefinitionsByModuleKey,
+            availableCapabilities ?? SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly
+        )
     );
 
     private readonly string _basePath = basePath ?? StorageClient.BasePath;
@@ -91,7 +95,7 @@ public sealed class SharedModuleSettingsStorage(
     private static IReadOnlyDictionary<string, SettingsStorageModuleDefinition> CreateModuleDefinitionLookup(
         ISettingsModule module,
         IReadOnlyDictionary<string, SettingsStorageModuleDefinition>? explicitDefinitions,
-        SettingsCapabilityTier availableCapabilityTier
+        SettingsRuntimeCapabilities availableCapabilities
     ) {
         if (explicitDefinitions != null) {
             if (!explicitDefinitions.ContainsKey(module.ModuleKey)) {
@@ -111,7 +115,7 @@ public sealed class SharedModuleSettingsStorage(
                     ? null
                     : new SchemaBackedSettingsDocumentValidator(
                         module.SettingsType,
-                        availableCapabilityTier
+                        availableCapabilities
                     )
             )
         };

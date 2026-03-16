@@ -24,23 +24,23 @@ public interface IHostSettingsModuleCatalog {
 }
 
 public sealed class HostSettingsModuleCatalog : IHostSettingsModuleCatalog {
-    private readonly SettingsCapabilityTier _availableCapabilityTier;
+    private readonly SettingsRuntimeCapabilities _availableCapabilities;
     private readonly IReadOnlyList<SettingsSchemaRegistration> _modules = KnownSettingsSchemas.All;
     private readonly IReadOnlyDictionary<string, SettingsSchemaRegistration> _modulesByModuleKey;
     private readonly IReadOnlyList<HostSettingsModuleDescriptor> _transportDescriptors;
     private readonly HostWorkspacesData _workspaces;
 
     public HostSettingsModuleCatalog()
-        : this(null, SettingsCapabilityTier.RevitAssembly) { }
+        : this(null, SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly) { }
 
     public HostSettingsModuleCatalog(IHostBridgeCapabilityService bridgeCapabilityService)
-        : this(bridgeCapabilityService, SettingsCapabilityTier.RevitAssembly) { }
+        : this(bridgeCapabilityService, SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly) { }
 
     public HostSettingsModuleCatalog(
         IHostBridgeCapabilityService? bridgeCapabilityService,
-        SettingsCapabilityTier availableCapabilityTier
+        SettingsRuntimeCapabilities availableCapabilities
     ) {
-        this._availableCapabilityTier = availableCapabilityTier;
+        this._availableCapabilities = availableCapabilities;
         this._modulesByModuleKey = this._modules.ToDictionary(
             module => module.ModuleKey,
             StringComparer.OrdinalIgnoreCase
@@ -72,7 +72,7 @@ public sealed class HostSettingsModuleCatalog : IHostSettingsModuleCatalog {
     public IReadOnlyList<HostSettingsModuleDescriptor> GetTransportDescriptors() => this._transportDescriptors;
 
     public IReadOnlyDictionary<string, SettingsStorageModuleDefinition> GetStorageDefinitions() =>
-        KnownSettingsStorageDefinitions.Create(this._availableCapabilityTier);
+        KnownSettingsStorageDefinitions.Create(this._availableCapabilities);
 
     public HostWorkspacesData GetWorkspaces() => this._workspaces;
 

@@ -12,12 +12,14 @@ namespace Pe.StorageRuntime.Documents;
 /// </summary>
 public sealed class LocalDiskSettingsStorageBackend(
     string? basePath = null,
-    SettingsCapabilityTier availableCapabilityTier = SettingsCapabilityTier.RevitAssembly,
+    SettingsRuntimeCapabilities? availableCapabilities = null,
     IReadOnlyDictionary<string, SettingsStorageModuleDefinition>? moduleDefinitionsByModuleKey = null
     ) : ISettingsStorageBackend {
     private readonly string _basePath = string.IsNullOrWhiteSpace(basePath)
             ? SettingsStorageLocations.GetDefaultBasePath()
             : Path.GetFullPath(basePath);
+    private readonly SettingsRuntimeCapabilities _availableCapabilities =
+        availableCapabilities ?? SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly;
     private readonly IReadOnlyDictionary<string, SettingsStorageModuleDefinition> _moduleDefinitionsByModuleKey =
             moduleDefinitionsByModuleKey ??
             new Dictionary<string, SettingsStorageModuleDefinition>(StringComparer.OrdinalIgnoreCase);
@@ -409,7 +411,7 @@ public sealed class LocalDiskSettingsStorageBackend(
         SettingsStorageModuleDefinition moduleDefinition
     ) => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
         ["backend"] = "local-disk",
-        ["availableCapabilityTier"] = availableCapabilityTier.ToString(),
+        ["availableCapabilities"] = JsonConvert.SerializeObject(this._availableCapabilities.ToMetadata()),
         ["schemaValidation"] = moduleDefinition.Validator == null ? "not-configured" : "configured",
         ["compositionPolicy"] = includeComposedContent ? "module-scoped" : "not-requested",
         ["dependencyScopes"] = "local,global"

@@ -11,6 +11,8 @@ using Pe.StorageRuntime;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Documents;
 using Pe.StorageRuntime.Json;
+using Pe.StorageRuntime.Json.FieldOptions;
+using Pe.StorageRuntime.Json.SchemaDefinitions;
 using Pe.StorageRuntime.Modules;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Pe.StorageRuntime.Revit.Modules;
@@ -320,7 +322,9 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
     public async Task Host_settings_catalog_uses_shared_known_storage_definition_lookup() {
         var catalog = new HostSettingsModuleCatalog();
         var hostDefinitions = catalog.GetStorageDefinitions();
-        var sharedDefinitions = KnownSettingsStorageDefinitions.Create(SettingsCapabilityTier.RevitAssembly);
+        var sharedDefinitions = KnownSettingsStorageDefinitions.Create(
+            SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly
+        );
 
         await Assert.That(hostDefinitions.Keys.OrderBy(key => key))
             .IsEquivalentTo(sharedDefinitions.Keys.OrderBy(key => key));
@@ -378,11 +382,44 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
     }
 
     [Test]
-    public async Task CapabilityResolver_distinguishes_revit_assembly_and_live_document_providers() {
-        await Assert.That(SettingsCapabilityResolver.GetRequiredTier(typeof(PropertyGroupNamesProvider)))
-            .IsEqualTo(SettingsCapabilityTier.RevitAssembly);
-        await Assert.That(SettingsCapabilityResolver.GetRequiredTier(typeof(FamilyNamesProvider)))
-            .IsEqualTo(SettingsCapabilityTier.LiveRevitDocument);
+    public async Task Field_option_descriptors_distinguish_revit_assembly_and_live_document_sources() {
+        await Assert.That(new PropertyGroupNamesProvider().Describe().RequiredCapabilities)
+            .IsEqualTo(SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly);
+        await Assert.That(new FamilyNamesProvider().Describe().RequiredCapabilities)
+            .IsEqualTo(SettingsRuntimeCapabilityProfiles.LiveDocument);
+    }
+
+    [Test]
+    public async Task Host_local_field_options_failures_are_not_reported_as_success() {
+        SettingsSchemaDefinitionRegistry.Shared.Register(new ThrowingFieldOptionsTestSettingsDefinition());
+
+        var module = new SettingsSchemaRegistration(
+            new SettingsCatalogModule(
+                "ThrowingFieldOptions",
+                "profiles",
+                SettingsStorageModuleOptions.Empty
+            ),
+            typeof(ThrowingFieldOptionsTestSettings)
+        );
+        var service = new HostSettingsEditorService(new TestHostSettingsModuleCatalog([module]));
+
+        var handled = service.TryGetFieldOptionsEnvelopeLocally(
+            new FieldOptionsRequest(
+                module.ModuleKey,
+                nameof(ThrowingFieldOptionsTestSettings.Value),
+                nameof(ThrowingFieldOptionsSource),
+                null
+            ),
+            out var response
+        );
+
+        await Assert.That(handled).IsTrue();
+        await Assert.That(response.Ok).IsFalse();
+        await Assert.That(response.Code).IsEqualTo(EnvelopeCode.Failed);
+        await Assert.That(response.Message).IsEqualTo("boom");
+        await Assert.That(response.Issues)
+            .Contains(issue => string.Equals(issue.Code, "FieldOptionsException", StringComparison.Ordinal));
+        await Assert.That(response.Data?.Items).IsEmpty();
     }
 
     [Test]
@@ -392,13 +429,13 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
         var moduleDefinitions = CreateSharedStorageModuleDefinitions();
         var revitConsumer = new SharedModuleSettingsStorage(
             new SharedStorageSpikeProofModule(),
-            SettingsCapabilityTier.RevitAssembly,
+            SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly,
             moduleDefinitions,
             sandbox.Path
         );
         var sharedBackend = new LocalDiskSettingsStorageBackend(
             sandbox.Path,
-            SettingsCapabilityTier.RevitAssembly,
+            SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly,
             moduleDefinitions
         );
         WriteComposableProfileFixture(sandbox.Path, documentId);
@@ -427,8 +464,8 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
                 dependency.Scope == RuntimeSettingsDirectiveScope.Local &&
                 dependency.Kind == RuntimeSettingsDocumentDependencyKind.Include);
         await Assert.That(composed.Validation.IsValid).IsTrue();
-        await Assert.That(composed.CapabilityHints["availableCapabilityTier"])
-            .IsEqualTo(SettingsCapabilityTier.RevitAssembly.ToString());
+        await Assert.That(composed.CapabilityHints["availableCapabilities"])
+            .Contains("\"hasRevitAssembly\":true");
         await Assert.That(composed.CapabilityHints["compositionPolicy"]).IsEqualTo("module-scoped");
 
         var saved = await sharedBackend.SaveAsync(new RuntimeSaveSettingsDocumentRequest(
@@ -454,7 +491,7 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
         var documentId = new RuntimeSettingsDocumentId(SharedStorageModuleKey, "profiles", "profile-a");
         var sharedBackend = new LocalDiskSettingsStorageBackend(
             sandbox.Path,
-            SettingsCapabilityTier.RevitAssembly,
+            SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly,
             CreateSharedStorageModuleDefinitions()
         );
         WriteSimpleProfileFixture(sandbox.Path, documentId);
@@ -503,7 +540,7 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
         var documentId = new RuntimeSettingsDocumentId(SharedStorageModuleKey, "other-root", "profile-a");
         var sharedBackend = new LocalDiskSettingsStorageBackend(
             sandbox.Path,
-            SettingsCapabilityTier.RevitAssembly,
+            SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly,
             CreateSharedStorageModuleDefinitions()
         );
 
@@ -517,7 +554,7 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
         var documentId = new RuntimeSettingsDocumentId(SharedStorageModuleKey, "profiles", "profile-a");
         var sharedBackend = new LocalDiskSettingsStorageBackend(
             sandbox.Path,
-            SettingsCapabilityTier.RevitAssembly,
+            SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly,
             CreateSharedStorageModuleDefinitions()
         );
 
@@ -547,7 +584,7 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
         var documentId = new RuntimeSettingsDocumentId(SharedStorageModuleKey, "profiles", "profile-a");
         var sharedBackend = new LocalDiskSettingsStorageBackend(
             sandbox.Path,
-            SettingsCapabilityTier.RevitAssembly,
+            SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly,
             CreateSharedStorageModuleDefinitions()
         );
         WriteGlobalComposableProfileFixture(sandbox.Path, documentId);
@@ -647,7 +684,7 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
         var documentId = new RuntimeSettingsDocumentId(SharedStorageModuleKey, "profiles", "profile-a");
         var sharedBackend = new LocalDiskSettingsStorageBackend(
             sandbox.Path,
-            SettingsCapabilityTier.RevitAssembly,
+            SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly,
             CreateSharedStorageModuleDefinitions()
         );
         var rawContent =
@@ -890,5 +927,63 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
 
     private sealed class SharedStorageSpikeProofItem {
         public string Name { get; init; } = string.Empty;
+    }
+
+    private sealed class ThrowingFieldOptionsTestSettings {
+        public string Value { get; init; } = string.Empty;
+    }
+
+    private sealed class ThrowingFieldOptionsTestSettingsDefinition
+        : SettingsSchemaDefinition<ThrowingFieldOptionsTestSettings> {
+        public override void Configure(ISettingsSchemaBuilder<ThrowingFieldOptionsTestSettings> builder) {
+            builder.Property(item => item.Value, property => property.UseFieldOptions<ThrowingFieldOptionsSource>());
+        }
+    }
+
+    private sealed class ThrowingFieldOptionsSource : IFieldOptionsSource {
+        public FieldOptionsDescriptor Describe() => new(
+            nameof(ThrowingFieldOptionsSource),
+            SettingsOptionsResolverKind.Remote,
+            null,
+            SettingsOptionsMode.Suggestion,
+            true,
+            [],
+            SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly
+        );
+
+        public ValueTask<IReadOnlyList<Pe.StorageRuntime.Json.FieldOptions.FieldOptionItem>> GetOptionsAsync(
+            FieldOptionsExecutionContext context,
+            CancellationToken cancellationToken = default
+        ) => throw new InvalidOperationException("boom");
+    }
+
+    private sealed class TestHostSettingsModuleCatalog(IReadOnlyList<SettingsSchemaRegistration> modules)
+        : IHostSettingsModuleCatalog {
+        private readonly IReadOnlyList<SettingsSchemaRegistration> _modules = modules;
+        private readonly IReadOnlyDictionary<string, SettingsSchemaRegistration> _modulesByKey = modules.ToDictionary(
+            module => module.ModuleKey,
+            StringComparer.OrdinalIgnoreCase
+        );
+
+        public IReadOnlyList<SettingsSchemaRegistration> GetModules() => this._modules;
+
+        public IReadOnlyList<HostSettingsModuleDescriptor> GetTransportDescriptors() =>
+            this._modules.Select(module => new HostSettingsModuleDescriptor(module.ModuleKey, module.DefaultRootKey))
+                .ToList();
+
+        public IReadOnlyDictionary<string, SettingsStorageModuleDefinition> GetStorageDefinitions() =>
+            this._modules.ToDictionary(
+                module => module.ModuleKey,
+                module => SettingsStorageModuleDefinition.CreateSingleRoot(
+                    module.DefaultRootKey,
+                    module.StorageOptions
+                ),
+                StringComparer.OrdinalIgnoreCase
+            );
+
+        public Pe.Host.Contracts.SettingsWorkspacesData GetWorkspaces() => new([]);
+
+        public bool TryGetModule(string moduleKey, out SettingsSchemaRegistration module) =>
+            this._modulesByKey.TryGetValue(moduleKey, out module!);
     }
 }

@@ -1,44 +1,48 @@
 using NJsonSchema;
+using Pe.StorageRuntime.Capabilities;
+using Pe.StorageRuntime.Context;
 using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Json.SchemaProviders;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
 namespace Pe.StorageRuntime.Revit.Core.Json;
 
 public static class RevitJsonSchemaFactory {
     public static JsonSchema BuildAuthoringSchema(
         Type type,
-        SettingsProviderContext context,
-        bool resolveExamples = true
+        SettingsRuntimeCapabilities capabilities,
+        ISettingsDocumentContextAccessor? documentContextAccessor = null,
+        bool resolveFieldOptionSamples = true
     ) => JsonSchemaFactory.BuildAuthoringSchema(
         type,
-        CreateOptions(context, resolveExamples)
+        CreateOptions(capabilities, documentContextAccessor, resolveFieldOptionSamples)
     );
 
     public static JsonSchema BuildFragmentSchema(
         Type itemType,
-        SettingsProviderContext context,
-        bool resolveExamples = true
+        SettingsRuntimeCapabilities capabilities,
+        ISettingsDocumentContextAccessor? documentContextAccessor = null,
+        bool resolveFieldOptionSamples = true
     ) => JsonSchemaFactory.BuildFragmentSchema(
         itemType,
-        CreateOptions(context, resolveExamples)
+        CreateOptions(capabilities, documentContextAccessor, resolveFieldOptionSamples)
     );
 
 
 
     public static JsonSchemaData CreateEditorSchemaData(
         Type type,
-        SettingsProviderContext context,
-        bool resolveExamples = false
+        SettingsRuntimeCapabilities capabilities,
+        ISettingsDocumentContextAccessor? documentContextAccessor = null,
+        bool resolveFieldOptionSamples = false
     ) => JsonSchemaFactory.CreateEditorSchemaData(
         type,
-        CreateOptions(context, resolveExamples)
+        CreateOptions(capabilities, documentContextAccessor, resolveFieldOptionSamples)
     );
 
     private static JsonSchemaBuildOptions CreateOptions(
-        SettingsProviderContext context,
-        bool resolveExamples
-    ) => new(context) {
-        ResolveExamples = resolveExamples
+        SettingsRuntimeCapabilities capabilities,
+        ISettingsDocumentContextAccessor? documentContextAccessor,
+        bool resolveFieldOptionSamples
+    ) => new(capabilities, documentContextAccessor) {
+        ResolveFieldOptionSamples = resolveFieldOptionSamples
     };
 }

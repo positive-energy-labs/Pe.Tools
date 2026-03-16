@@ -12,8 +12,8 @@ public class RequiredAwareContractResolver : RegisteredTypeContractResolver {
     private readonly Dictionary<Type, object> _defaultInstanceCache = new();
     private readonly HashSet<Type> _defaultInstanceCreationFailures = [];
 
-    public RequiredAwareContractResolver(JsonTypeRegistrationLookup? registrationLookup = null)
-        : base(registrationLookup) {
+    public RequiredAwareContractResolver(JsonTypeSchemaBindingRegistry? bindingRegistry = null)
+        : base(bindingRegistry) {
     }
 
     protected override JsonProperty CreateProperty(MemberInfo member, MemberSerialization memberSerialization) {

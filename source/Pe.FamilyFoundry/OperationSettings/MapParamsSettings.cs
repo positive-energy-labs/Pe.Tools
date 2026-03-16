@@ -1,10 +1,7 @@
 using Pe.Extensions.FamDocument.SetValue;
 using Pe.Extensions.FamManager;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Json.SchemaProcessors;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
@@ -106,16 +103,13 @@ public class MapParamsSettings : IOperationSettings {
 public class MappingData {
     [Description("Current parameter names to map from (ordered by priority)")]
     [Required]
-    [SchemaExamples(typeof(FamilyParameterNamesProvider))]
     public List<string> CurrNames { get; set; } = [];
 
     [Description("New parameter name to map to")]
     [Required]
-    [SchemaExamples(typeof(SharedParameterNamesProvider))]
     public required string NewName { get; init; }
 
     [Description(
         "Coercion strategy to use for the remapping. CoerceByStorageType will be used when none is specified.")]
-    // [SchemaExamples(typeof(ParamCoercionStrategyProvider))]
     public string MappingStrategy { get; init; } = nameof(BuiltInCoercionStrategy.CoerceByStorageType);
 }

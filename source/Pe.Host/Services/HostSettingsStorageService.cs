@@ -18,35 +18,33 @@ namespace Pe.Host.Services;
 ///     Host-side entry point for the shared local-disk storage backend.
 /// </summary>
 public sealed class HostSettingsStorageService {
-    private readonly SettingsCapabilityTier _availableCapabilityTier;
+    private readonly SettingsRuntimeCapabilities _availableCapabilities;
     private readonly string _basePath;
     private readonly IHostSettingsModuleCatalog _moduleCatalog;
 
     public HostSettingsStorageService(IHostSettingsModuleCatalog moduleCatalog)
-        : this(moduleCatalog, null, SettingsCapabilityTier.RevitAssembly) { }
+        : this(moduleCatalog, null, SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly) { }
 
     public HostSettingsStorageService(
         IHostSettingsModuleCatalog moduleCatalog,
         IHostBridgeCapabilityService bridgeCapabilityService
-    ) : this(moduleCatalog, bridgeCapabilityService, null, SettingsCapabilityTier.RevitAssembly) { }
+    ) : this(moduleCatalog, bridgeCapabilityService, null, SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly) { }
 
     public HostSettingsStorageService(
         IHostSettingsModuleCatalog moduleCatalog,
         string? basePath = null,
-        SettingsCapabilityTier availableCapabilityTier = SettingsCapabilityTier.RevitAssembly
-    ) : this(moduleCatalog, null, basePath, availableCapabilityTier) { }
+        SettingsRuntimeCapabilities? availableCapabilities = null
+    ) : this(moduleCatalog, null, basePath, availableCapabilities ?? SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly) { }
 
     public HostSettingsStorageService(
         IHostSettingsModuleCatalog moduleCatalog,
         IHostBridgeCapabilityService? bridgeCapabilityService,
         string? basePath = null,
-        SettingsCapabilityTier availableCapabilityTier = SettingsCapabilityTier.RevitAssembly
+        SettingsRuntimeCapabilities? availableCapabilities = null
     ) {
         this._moduleCatalog = moduleCatalog;
         this._basePath = basePath ?? SettingsStorageLocations.GetDefaultBasePath();
-        this._availableCapabilityTier = availableCapabilityTier < SettingsCapabilityTier.RevitAssembly
-            ? SettingsCapabilityTier.RevitAssembly
-            : availableCapabilityTier;
+        this._availableCapabilities = availableCapabilities ?? SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly;
     }
 
     public async Task<HostDiscoveryResult> DiscoverAsync(
@@ -92,7 +90,7 @@ public sealed class HostSettingsStorageService {
     private ISettingsStorageBackend CreateBackend() =>
         new LocalDiskSettingsStorageBackend(
             this._basePath,
-            this._availableCapabilityTier,
+            this._availableCapabilities,
             this._moduleCatalog.GetStorageDefinitions()
         );
 }

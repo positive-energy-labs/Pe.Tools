@@ -9,7 +9,7 @@ namespace Pe.SettingsCatalog.Revit;
 
 public static class KnownSettingsSchemas {
     private static SettingsStorageModuleOptions SharedStorageOptions { get; } = new(
-        SettingsDirectiveRootCatalog.GlobalIncludeRoots,
+        ["_shared", .. SettingsDirectiveRootCatalog.GlobalIncludeRoots],
         SettingsDirectiveRootCatalog.GlobalPresetRoots
     );
 

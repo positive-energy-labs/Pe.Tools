@@ -6,7 +6,7 @@ namespace Pe.SettingsCatalog.Revit;
 public sealed class CatalogSettingsModule<TSettings> : SettingsModuleBase<TSettings>
     where TSettings : class {
     public CatalogSettingsModule(SettingsSchemaRegistration schema)
-        : base(schema.ModuleKey, schema.DefaultRootKey) {
+        : base(schema.ModuleKey, schema.DefaultRootKey, schema.StorageOptions) {
         if (schema.SettingsType != typeof(TSettings)) {
             throw new InvalidOperationException(
                 $"Schema '{schema.ModuleKey}' is registered for '{schema.SettingsType.FullName}', not '{typeof(TSettings).FullName}'."
@@ -16,7 +16,7 @@ public sealed class CatalogSettingsModule<TSettings> : SettingsModuleBase<TSetti
 
     public override SharedModuleSettingsStorage SharedStorage() => new(
         this,
-        SettingsCapabilityTier.RevitAssembly,
-        KnownSettingsStorageDefinitions.Create(SettingsCapabilityTier.RevitAssembly)
+        SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly,
+        KnownSettingsStorageDefinitions.Create(SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly)
     );
 }
