@@ -1,17 +1,17 @@
 using Newtonsoft.Json.Linq;
-using Pe.Host.Contracts;
-using Pe.Global.Services.Storage.Core.Json;
-using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
-using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
+using Pe.StorageRuntime.Json;
+using Pe.StorageRuntime.Capabilities;
+using Pe.StorageRuntime.Json.SchemaProcessors;
+using Pe.StorageRuntime.Revit.Core.Json;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
 namespace Pe.Tools.Tests;
 
-public sealed class RenderSchemaPipelineTests : RevitTestBase
-{
+public sealed class RenderSchemaPipelineTests : RevitTestBase {
     [Test]
-    public async Task CreateRenderSchema_removes_examples_for_provider_backed_fields()
-    {
-        var schemaJson = JsonSchemaFactory.CreateRenderSchemaJson(typeof(RenderSchemaTestSettings), out _);
+    public async Task CreateRenderSchema_removes_examples_for_provider_backed_fields() {
+        var schemaJson = JsonSchemaFactory.CreateEditorSchemaJson(typeof(RenderSchemaTestSettings), CreateOptions());
         var root = JObject.Parse(schemaJson);
         var providerBacked = root["properties"]?["ProviderBacked"] as JObject;
 
@@ -21,9 +21,8 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase
     }
 
     [Test]
-    public async Task CreateRenderSchema_emits_single_field_options_descriptor()
-    {
-        var schemaJson = JsonSchemaFactory.CreateRenderSchemaJson(typeof(RenderSchemaTestSettings), out _);
+    public async Task CreateRenderSchema_emits_single_field_options_descriptor() {
+        var schemaJson = JsonSchemaFactory.CreateEditorSchemaJson(typeof(RenderSchemaTestSettings), CreateOptions());
         var root = JObject.Parse(schemaJson);
         var providerBacked = root["properties"]?["ProviderBacked"] as JObject;
         var source = providerBacked?["x-options"] as JObject;
@@ -32,13 +31,13 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase
         await Assert.That(source).IsNotNull();
         await Assert.That(source!["key"]?.Value<string>()).IsEqualTo(nameof(TestOptionsProvider));
         await Assert.That(source["resolver"]?.Value<string>()).IsEqualTo("Remote");
-        await Assert.That(source["dataset"]).IsNull();
+        await Assert.That(source["dataset"]?.Value<string>()).IsNull();
     }
 
     [Test]
-    public async Task CreateRenderSchema_emits_dataset_hint_for_dataset_backed_provider()
-    {
-        var schemaJson = JsonSchemaFactory.CreateRenderSchemaJson(typeof(RenderSchemaDatasetTestSettings), out _);
+    public async Task CreateRenderSchema_emits_dataset_hint_for_dataset_backed_provider() {
+        var schemaJson =
+            JsonSchemaFactory.CreateEditorSchemaJson(typeof(RenderSchemaDatasetTestSettings), CreateOptions());
         var root = JObject.Parse(schemaJson);
         var providerBacked = root["properties"]?["ProviderBacked"] as JObject;
         var source = providerBacked?["x-options"] as JObject;
@@ -51,9 +50,8 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase
     }
 
     [Test]
-    public async Task CreateRenderSchema_preserves_includable_item_union_for_frontend_schema_engines()
-    {
-        var schemaJson = JsonSchemaFactory.CreateRenderSchemaJson(typeof(RenderSchemaTestSettings), out _);
+    public async Task CreateRenderSchema_preserves_includable_item_union_for_frontend_schema_engines() {
+        var schemaJson = JsonSchemaFactory.CreateEditorSchemaJson(typeof(RenderSchemaTestSettings), CreateOptions());
         var root = JObject.Parse(schemaJson);
         var itemsSchema = root["properties"]?["Items"]?["items"] as JObject;
 
@@ -62,9 +60,8 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase
     }
 
     [Test]
-    public async Task CreateRenderSchema_injects_defaults_from_default_instance_values()
-    {
-        var schemaJson = JsonSchemaFactory.CreateRenderSchemaJson(typeof(RenderSchemaTestSettings), out _);
+    public async Task CreateRenderSchema_injects_defaults_from_default_instance_values() {
+        var schemaJson = JsonSchemaFactory.CreateEditorSchemaJson(typeof(RenderSchemaTestSettings), CreateOptions());
         var root = JObject.Parse(schemaJson);
         var enabledSchema = root["properties"]?["Enabled"] as JObject;
         var providerBackedSchema = root["properties"]?["ProviderBacked"] as JObject;
@@ -79,14 +76,12 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase
     }
 
     [Test]
-    public async Task Lightweight_render_schema_skips_provider_example_resolution_but_keeps_field_option_metadata()
-    {
+    public async Task Lightweight_render_schema_skips_provider_example_resolution_but_keeps_field_option_metadata() {
         CountingOptionsProvider.ExampleCallCount = 0;
 
-        var schemaJson = JsonSchemaFactory.CreateRenderSchemaJson(
+        var schemaJson = JsonSchemaFactory.CreateEditorSchemaJson(
             typeof(LightweightRenderSchemaTestSettings),
-            out _,
-            resolveExamples: false
+            CreateOptions(false)
         );
         var root = JObject.Parse(schemaJson);
         var providerBacked = root["properties"]?["ProviderBacked"] as JObject;
@@ -97,12 +92,10 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase
     }
 
     [Test]
-    public async Task CreateFragmentSchema_can_be_finalized_and_transformed_for_rendering()
-    {
-        var fragmentSchema = JsonSchemaFactory.CreateFragmentSchema(typeof(RenderSchemaTestSettings), out var processor);
-        processor.Finalize(fragmentSchema);
+    public async Task CreateFragmentSchema_can_be_finalized_and_transformed_for_rendering() {
+        var fragmentSchema = JsonSchemaFactory.BuildFragmentSchema(typeof(RenderSchemaTestSettings), CreateOptions());
 
-        var json = RenderSchemaTransformer.TransformFragmentToJson(fragmentSchema, typeof(RenderSchemaTestSettings));
+        var json = EditorSchemaTransformer.TransformFragmentToEditorJson(fragmentSchema);
         var root = JObject.Parse(json);
         var itemsSchema = root["properties"]?["Items"] as JObject;
 
@@ -112,9 +105,9 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase
     }
 
     [Test]
-    public async Task CreateRenderSchema_AllowsPresetProperty_ForPresettableObjects()
-    {
-        var schemaJson = JsonSchemaFactory.CreateRenderSchemaJson(typeof(RenderPresetSchemaTestSettings), out _);
+    public async Task CreateRenderSchema_AllowsPresetProperty_ForPresettableObjects() {
+        var schemaJson =
+            JsonSchemaFactory.CreateEditorSchemaJson(typeof(RenderPresetSchemaTestSettings), CreateOptions());
         var root = JObject.Parse(schemaJson);
         var modelSchema = root["properties"]?["Model"] as JObject;
         var oneOf = modelSchema?["oneOf"] as JArray;
@@ -129,8 +122,7 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase
         await Assert.That(presetBranch?["required"]?.Values<string>() ?? []).Contains("$preset");
     }
 
-    private sealed class RenderSchemaTestSettings
-    {
+    private sealed class RenderSchemaTestSettings {
         [SchemaExamples(typeof(TestOptionsProvider))]
         public string ProviderBacked { get; init; } = string.Empty;
 
@@ -140,49 +132,45 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase
         public bool Enabled { get; init; }
     }
 
-    private sealed class TestOptionsProvider : IOptionsProvider
-    {
-        public IEnumerable<string> GetExamples() => ["A", "B"];
+    private sealed class TestOptionsProvider : IOptionsProvider {
+        public IEnumerable<string> GetExamples(SettingsProviderContext context) => ["A", "B"];
     }
 
-    private sealed class RenderSchemaDatasetTestSettings
-    {
+    private sealed class RenderSchemaDatasetTestSettings {
         [SchemaExamples(typeof(TestDatasetOptionsProvider))]
         public string ProviderBacked { get; init; } = string.Empty;
     }
 
-    private sealed class LightweightRenderSchemaTestSettings
-    {
+    private sealed class LightweightRenderSchemaTestSettings {
         [SchemaExamples(typeof(CountingOptionsProvider))]
         public string ProviderBacked { get; init; } = string.Empty;
     }
 
-    private sealed class TestDatasetOptionsProvider : IOptionsProvider, IFieldOptionsClientHintProvider
-    {
-        public FieldOptionsResolverKind Resolver => FieldOptionsResolverKind.Dataset;
-        public FieldOptionsDatasetKind? Dataset => FieldOptionsDatasetKind.ParameterCatalog;
-        public IEnumerable<string> GetExamples() => ["A", "B"];
+    private sealed class TestDatasetOptionsProvider : IOptionsProvider, IFieldOptionsClientHintProvider {
+        public SettingsOptionsResolverKind Resolver => SettingsOptionsResolverKind.Dataset;
+        public SettingsOptionsDatasetKind? Dataset => SettingsOptionsDatasetKind.ParameterCatalog;
+        public IEnumerable<string> GetExamples(SettingsProviderContext context) => ["A", "B"];
     }
 
-    private sealed class CountingOptionsProvider : IOptionsProvider
-    {
+    private sealed class CountingOptionsProvider : IOptionsProvider {
         public static int ExampleCallCount { get; set; }
 
-        public IEnumerable<string> GetExamples()
-        {
+        public IEnumerable<string> GetExamples(SettingsProviderContext context) {
             ExampleCallCount++;
             return ["A", "B"];
         }
     }
 
-    private sealed class RenderPresetSchemaTestSettings
-    {
-        [Presettable("preset-model")]
-        public RenderPresetModel Model { get; init; } = new();
+    private sealed class RenderPresetSchemaTestSettings {
+        [Presettable("preset-model")] public RenderPresetModel Model { get; init; } = new();
     }
 
-    private sealed class RenderPresetModel
-    {
+    private sealed class RenderPresetModel {
         public bool Enabled { get; init; } = true;
     }
+
+    private static JsonSchemaBuildOptions CreateOptions(bool resolveExamples = false) =>
+        new(new SettingsProviderContext(SettingsCapabilityTier.LiveRevitDocument)) {
+            ResolveExamples = resolveExamples
+        };
 }

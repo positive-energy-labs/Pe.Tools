@@ -3,9 +3,14 @@ using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Global.Services.AutoTag;
-using Pe.Global.Services.AutoTag.Core;
-using Pe.Global.Services.Storage;
-using Pe.Global.Services.Storage.Core.Json;
+using Pe.SettingsCatalog.Revit.AutoTag;
+using Pe.StorageRuntime.Capabilities;
+using Pe.StorageRuntime.Json;
+using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime.Revit.AutoTag;
+using Pe.StorageRuntime.Revit.Core.Json;
+using Pe.StorageRuntime.Revit.Core.Json.ContractResolvers;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Serilog;
 using System.IO;
 using System.Text;
@@ -22,6 +27,7 @@ public class CmdAutoTag : IExternalCommand {
     private static readonly JsonSerializerSettings JsonSettings = new() {
         Formatting = Formatting.Indented,
         NullValueHandling = NullValueHandling.Ignore,
+        ContractResolver = new RevitTypeContractResolver(),
         Converters = { new StringEnumConverter() }
     };
 
@@ -125,7 +131,7 @@ public class CmdAutoTag : IExternalCommand {
             _ = sb.AppendLine();
             _ = sb.AppendLine("Active categories:");
             foreach (var config in status.Configurations.Where(c => c.Enabled).Take(5))
-                _ = sb.AppendLine($"  • {config.CategoryName}");
+                _ = sb.AppendLine($"  • {GetCategoryLabel(config.BuiltInCategory)}");
 
             if (status.EnabledConfigurationCount > 5)
                 _ = sb.AppendLine($"  ... and {status.EnabledConfigurationCount - 5} more");
@@ -144,7 +150,7 @@ public class CmdAutoTag : IExternalCommand {
         _ = sb.AppendLine();
 
         foreach (var config in settings.Configurations) {
-            _ = sb.AppendLine($"Category: {config.CategoryName}");
+            _ = sb.AppendLine($"Category: {GetCategoryLabel(config.BuiltInCategory)}");
             _ = sb.AppendLine($"  Enabled: {config.Enabled}");
             _ = sb.AppendLine($"  Tag: {config.TagFamilyName} - {config.TagTypeName}");
             _ = sb.AppendLine($"  Leader: {config.AddLeader}");
@@ -174,7 +180,7 @@ public class CmdAutoTag : IExternalCommand {
                 Enabled = enabled,
                 Configurations = [
                     new AutoTagConfiguration {
-                        CategoryName = "Mechanical Equipment",
+                        BuiltInCategory = BuiltInCategory.OST_MechanicalEquipment,
                         TagFamilyName = "M_Mechanical Equipment Tag",
                         TagTypeName = "Standard",
                         Enabled = true,
@@ -239,7 +245,7 @@ public class CmdAutoTag : IExternalCommand {
         var confirmDialog = new TaskDialog("AutoTag Catch-Up") {
             MainInstruction = "Tag all untagged elements?",
             MainContent = $"This will tag elements for {activeConfigs.Count} active configuration(s):\n\n" +
-                          string.Join("\n", activeConfigs.Select(c => $"  • {c.CategoryName}")),
+                          string.Join("\n", activeConfigs.Select(c => $"  • {GetCategoryLabel(c.BuiltInCategory)}")),
             CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No
         };
 
@@ -255,7 +261,11 @@ public class CmdAutoTag : IExternalCommand {
             foreach (var config in activeConfigs) {
                 var tagged = CatchUpTagCategory(doc, uiDoc, config);
                 totalTagged += tagged;
-                Log.Information("AutoTag Catch-Up: Tagged {Count} {Category} elements", tagged, config.CategoryName);
+                Log.Information(
+                    "AutoTag Catch-Up: Tagged {Count} {Category} elements",
+                    tagged,
+                    GetCategoryLabel(config.BuiltInCategory)
+                );
             }
 
             _ = tx.Commit();
@@ -272,7 +282,7 @@ public class CmdAutoTag : IExternalCommand {
     }
 
     private static int CatchUpTagCategory(Document doc, UIDocument uiDoc, AutoTagConfiguration config) {
-        var builtInCategory = CategoryTagMapping.GetBuiltInCategoryFromName(doc, config.CategoryName);
+        var builtInCategory = config.BuiltInCategory;
         if (builtInCategory == BuiltInCategory.INVALID) return 0;
 
         // Get all elements of this category
@@ -305,7 +315,7 @@ public class CmdAutoTag : IExternalCommand {
 
         if (tagSymbol == null) {
             Log.Warning("AutoTag: Tag family '{Family}:{Type}' not found for {Category}",
-                config.TagFamilyName, config.TagTypeName, config.CategoryName);
+                config.TagFamilyName, config.TagTypeName, GetCategoryLabel(config.BuiltInCategory));
             return 0;
         }
 
@@ -350,6 +360,9 @@ public class CmdAutoTag : IExternalCommand {
 
         return taggedCount;
     }
+
+    private static string GetCategoryLabel(BuiltInCategory category) =>
+        CategoryNamesProvider.GetLabelForBuiltInCategory(category);
 
     private static bool IsElementTagged(Document doc, Element element, View view) {
         var tags = new FilteredElementCollector(doc, view.Id)
@@ -465,8 +478,10 @@ public class CmdAutoTag : IExternalCommand {
             _ = Directory.CreateDirectory(dir);
 
         // Generate schema with examples
-        var schema = JsonSchemaFactory.CreateAuthoringSchema<AutoTagSettings>(out var examplesProcessor);
-        examplesProcessor.Finalize(schema);
+        var schema = RevitJsonSchemaFactory.BuildAuthoringSchema(
+            typeof(AutoTagSettings),
+            new SettingsProviderContext(SettingsCapabilityTier.LiveRevitDocument)
+        );
         File.WriteAllText(schemaFilePath, schema.ToJson());
 
         // Serialize with $schema reference

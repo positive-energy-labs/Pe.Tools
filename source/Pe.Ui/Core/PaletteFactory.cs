@@ -1,3 +1,4 @@
+using Pe.StorageRuntime.Revit;
 using Pe.Ui.Components;
 using Pe.Ui.Core.Services;
 using Pe.Ui.ViewModels;
@@ -27,7 +28,8 @@ public sealed class TabDefinition<TItem> where TItem : class, IPaletteListItem {
         string name,
         Func<IEnumerable<TItem>> itemProvider,
         params PaletteAction<TItem>[] actions
-    ) : this(name, itemProvider, (IEnumerable<PaletteAction<TItem>>)actions) { }
+    ) : this(name, itemProvider, (IEnumerable<PaletteAction<TItem>>)actions) {
+    }
 
     /// <summary>
     ///     Display name for the tab.
@@ -88,19 +90,22 @@ public sealed class TabDefinition<TItem> where TItem : class, IPaletteListItem {
 ///             Persistence = (storage, item => item.Schedule.Id.ToString()),
 ///             SearchConfig = SearchConfig.PrimaryAndSecondary(),
 ///             Tabs = [
-///                 new TabDefinition<SchedulePaletteItem>(
-///                     "All",
-///                     () => CollectSchedules(doc),
-///                     new PaletteAction<SchedulePaletteItem> {
-///                         Name = "Open",
-///                         Execute = async item => OpenSchedule(item)
-///                     }
-///                 ) {
-///                     FilterKeySelector = item => item.TextPill
+///                 new TabDefinition<SchedulePaletteItem>
+///             (
+///             "All",
+///             () => CollectSchedules(doc),
+///             new PaletteAction
+///             <SchedulePaletteItem>
+///                 {
+///                 Name = "Open",
+///                 Execute = async item => OpenSchedule(item)
 ///                 }
-///             ]
-///         });
-///             window.Show();
+///                 ) {
+///                 FilterKeySelector = item => item.TextPill
+///                 }
+///                 ]
+///                 });
+///                 window.Show();
 ///     </code>
 /// </example>
 /// <example>
@@ -109,14 +114,17 @@ public sealed class TabDefinition<TItem> where TItem : class, IPaletteListItem {
 ///     var window = PaletteFactory.Create("My Palette",
 ///         new PaletteOptions&lt;MyItem&gt; {
 ///             Tabs = [
-///                 new TabDefinition<MyItem>(
-///                     "All",
-///                     () => GetItems(),
-///                     new PaletteAction<MyItem> { Name = "Execute", Execute = async item => DoAction(item) }
+///                 new TabDefinition<MyItem>
+///             (
+///             "All",
+///             () => GetItems(),
+///             new PaletteAction
+///             <MyItem>
+///                 { Name = "Execute", Execute = async item => DoAction(item) }
 ///                 )
-///             ]
-///         });
-///     window.Show();
+///                 ]
+///                 });
+///                 window.Show();
 ///     </code>
 /// </example>
 public static class PaletteFactory {
@@ -132,9 +140,10 @@ public static class PaletteFactory {
         PaletteOptions<TItem> options
     ) where TItem : class, IPaletteListItem {
         // Validation: tabs are required
-        if (options.Tabs == null || options.Tabs.Count == 0)
+        if (options.Tabs == null || options.Tabs.Count == 0) {
             throw new InvalidOperationException(
                 "Tabs are required. Each tab must define ItemProvider and Actions.");
+        }
 
         // Validation: all tabs must have actions
         var tabsWithoutActions = options.Tabs.Where(t => t.Actions == null || t.Actions.Count == 0).ToList();
@@ -149,9 +158,8 @@ public static class PaletteFactory {
         if (options.Persistence != null) {
             var (storage, key) = options.Persistence.Value;
             searchService = new SearchFilterService<TItem>(options.SearchConfig, storage, key);
-        } else {
+        } else
             searchService = new SearchFilterService<TItem>(options.SearchConfig);
-        }
 
         // Create view model with tabs (lazy loading via ItemProvider)
         var viewModel = new PaletteViewModel<TItem>(
@@ -187,10 +195,7 @@ public static class PaletteFactory {
         // Wire up SidebarPanel if provided
         PaletteSidebar? sidebar = null;
         if (options.SidebarPanel != null) {
-            sidebar = new PaletteSidebar {
-                Content = options.SidebarPanel.Content,
-                Width = new GridLength(450)
-            };
+            sidebar = new PaletteSidebar { Content = options.SidebarPanel.Content, Width = new GridLength(450) };
 
             // Track cancellation for async loading - cancelled on each selection change
             CancellationTokenSource? updateCts = null;
@@ -286,7 +291,7 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     /// <example>
     ///     <code>Storage = new Storage(nameof(MyCmdClass))</code>
     /// </example>
-    public (Global.Services.Storage.Storage Storage, Func<TItem, string> PersistenceKey)? Persistence { get; init; }
+    public (StorageClient Storage, Func<TItem, string> PersistenceKey)? Persistence { get; init; }
 
     /// <summary>
     ///     Search configuration controlling which fields to search and scoring weights.

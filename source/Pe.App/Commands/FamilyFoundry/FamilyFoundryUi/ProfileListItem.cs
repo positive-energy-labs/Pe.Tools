@@ -1,4 +1,5 @@
-using Pe.Global.Services.Storage.Core;
+using Pe.StorageRuntime;
+using Pe.StorageRuntime.Revit.Modules;
 using Pe.Ui.Core;
 using System.IO;
 using System.Windows.Media.Imaging;
@@ -48,23 +49,27 @@ public class ProfileListItem : IPaletteListItem {
     public BitmapImage Icon => null;
     public WpfColor? ItemColor => null;
 
-    /// <summary>
-    ///     Discovers all profile JSON files in a directory, excluding schema files.
-    ///     If using a SettingsSubDir with recursive discovery, will find files in nested subdirectories.
-    /// </summary>
-    public static List<ProfileListItem> DiscoverProfiles(SettingsManager subDir) {
-        if (!Directory.Exists(subDir.DirectoryPath))
-            return [];
+    public static List<ProfileListItem> DiscoverProfiles(
+        SharedModuleSettingsStorage storage,
+        string? rootKey = null
+    ) {
+        var discovered = storage
+            .DiscoverAsync(
+                new SettingsDiscoveryOptions(
+                    Recursive: true,
+                    IncludeFragments: false,
+                    IncludeSchemas: false
+                ),
+                rootKey
+            )
+            .GetAwaiter()
+            .GetResult();
 
-        var discovered = subDir.Discover(new SettingsDiscoveryOptions(
-            Recursive: true,
-            IncludeFragments: false,
-            IncludeSchemas: false
-        ));
         return discovered.Files
             .Select(file => new ProfileListItem(
-                Path.Combine(subDir.DirectoryPath, file.RelativePath),
-                file.RelativePath))
+                storage.ResolveDocumentPath(file.RelativePath, rootKey),
+                file.RelativePath
+            ))
             .OrderByDescending(p => p.LastModified)
             .ToList();
     }

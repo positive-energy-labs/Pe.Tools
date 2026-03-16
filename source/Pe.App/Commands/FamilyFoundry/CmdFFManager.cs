@@ -8,10 +8,11 @@ using Pe.FamilyFoundry.Snapshots;
 using Pe.Global;
 using Pe.Global.Revit.Lib;
 using Pe.Global.Revit.Ui;
-using Pe.Global.Services.Storage.Core.Json;
 using Pe.Global.Utils.Files;
+using Pe.SettingsCatalog.Revit;
+using Pe.SettingsCatalog.Revit.FamilyFoundry;
+using Pe.StorageRuntime.Revit.Modules;
 using Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
-using Pe.Tools.Commands.FamilyFoundry.Modules;
 using Serilog;
 using Serilog.Events;
 using System.ComponentModel;
@@ -25,7 +26,7 @@ namespace Pe.Tools.Commands.FamilyFoundry;
 public class CmdFFManager : IExternalCommand {
     public const string AddinKey = nameof(CmdFFManager);
     public const string DisplayName = "FF Manager";
-    private static readonly FFManagerSettingsModule SettingsModule = new();
+    private static readonly CatalogSettingsModule<ProfileFamilyManager> SettingsModule = KnownSettingsRevitModules.FFManager;
 
     public Result Execute(
         ExternalCommandData commandData,
@@ -59,9 +60,7 @@ public class CmdFFManager : IExternalCommand {
         }
 
         // Load profile fresh for execution
-        var profile = SettingsModule.SettingsDir()
-            .JsonByRelativePath<ProfileFamilyManager>(ctx.SelectedProfile.TextPrimary)
-            .Read();
+        var profile = ctx.SharedStorage.ReadRequired<ProfileFamilyManager>(ctx.SelectedProfile.TextPrimary);
 
         // Get raw APS parameter models and convert with fresh TempSharedParamFile
         var apsParamModels = profile.GetFilteredApsParamModels();
@@ -184,18 +183,4 @@ public class CmdFFManager : IExternalCommand {
             Parameters = dimLabelParamSettings
         };
     }
-}
-
-public class ProfileFamilyManager : BaseProfileSettings {
-    [Description("Settings for making reference planes and dimensions")]
-    [Required]
-    public MakeRefPlaneAndDimsSettings MakeRefPlaneAndDims { get; init; } = new();
-
-    [Description("Settings for setting parameter values and adding family parameters.")]
-    [Required]
-    public AddAndSetParamsSettings AddAndSetParams { get; init; } = new();
-
-    [Description("Settings for creating constrained extrusions from canonical reference-plane specs.")]
-    [Required]
-    public MakeConstrainedExtrusionsSettings MakeConstrainedExtrusions { get; init; } = new();
 }

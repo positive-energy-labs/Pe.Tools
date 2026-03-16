@@ -1,6 +1,6 @@
 using Autodesk.Revit.Attributes;
-using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using Newtonsoft.Json;
 using Pe.App.Commands.Palette.FamilyPalette;
 using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.OperationGroups;
@@ -10,12 +10,11 @@ using Pe.FamilyFoundry.Snapshots;
 using Pe.Global;
 using Pe.Global.Revit.Lib;
 using Pe.Global.Revit.Ui;
-using Pe.Global.Services.Host;
-using Pe.Global.Services.Storage;
-using Pe.Global.Services.Storage.Core;
-using Pe.Global.Services.Storage.Core.Json;
 using Pe.Global.Utils.Files;
-using Pe.Tools.Commands.FamilyFoundry.Modules;
+using Pe.SettingsCatalog.Revit;
+using Pe.SettingsCatalog.Revit.FamilyFoundry;
+using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime.Revit.Modules;
 using Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 using Pe.Tools.SettingsEditor;
 using Serilog.Events;
@@ -23,7 +22,6 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.IO;
-using Newtonsoft.Json;
 
 namespace Pe.Tools.Commands.FamilyFoundry;
 
@@ -31,7 +29,7 @@ namespace Pe.Tools.Commands.FamilyFoundry;
 public class CmdFFMigrator : IExternalCommand {
     public const string AddinKey = nameof(CmdFFMigrator);
     public const string DisplayName = "FF Migrator";
-    private static readonly FFMigratorSettingsModule SettingsModule = new();
+    private static readonly CatalogSettingsModule<ProfileRemap> SettingsModule = KnownSettingsRevitModules.FFMigrator;
 
     public Result Execute(
         ExternalCommandData commandData,
@@ -42,7 +40,6 @@ public class CmdFFMigrator : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-
             var window = new FoundryPaletteBuilder<ProfileRemap>(DisplayName, SettingsModule, doc, uiDoc)
                 .WithAction("Open Settings Editor", this.HandleOpenSettingsEditor)
                 .WithAction("Open Profile File", this.HandleOpenFile,
@@ -120,17 +117,22 @@ public class CmdFFMigrator : IExternalCommand {
             ? $"Processed {runResult.FamilyCount} families in {runResult.TotalMs:F0}ms."
             : runResult.Error ?? "Processing failed.";
         new Ballogger().Add(level, new StackFrame(), message).Show();
-        if (runResult.ProcessedFamilyNames.Count > 0)
+        if (runResult.ProcessedFamilyNames.Count > 0) {
             FamilyPlacementHelper.PromptAndPlaceFamilies(
                 ctx.UiDoc.Application,
                 runResult.ProcessedFamilyNames,
                 DisplayName
             );
+        }
     }
 
     private void HandleOpenSettingsEditor(FoundryContext<ProfileRemap> context) {
         var selectedProfileName = context.SelectedProfile?.TextPrimary;
-        var launched = SettingsEditorBrowser.TryLaunch(SettingsModule.ModuleKey, selectedProfileName);
+        var launched = SettingsEditorBrowser.TryLaunch(
+            SettingsModule.ModuleKey,
+            SettingsModule.DefaultSubDirectory,
+            selectedProfileName
+        );
         if (launched) {
             new Ballogger()
                 .Add(
@@ -162,13 +164,14 @@ public class CmdFFMigrator : IExternalCommand {
                 .Where(name => !string.IsNullOrWhiteSpace(name))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            if (familyNames.Count == 0)
+            if (familyNames.Count == 0) {
                 return new FFMigratorPlaceFamiliesActionResult(
                     false,
                     "No families matched the current profile settings.",
                     [],
                     0
                 );
+            }
 
             FamilyPlacementHelper.PromptAndPlaceFamilies(uiApp, familyNames, DisplayName);
             return new FFMigratorPlaceFamiliesActionResult(true, null, familyNames, familyNames.Count);
@@ -185,7 +188,7 @@ public class CmdFFMigrator : IExternalCommand {
     ) {
         var uiDoc = uiApp.ActiveUIDocument;
         var doc = uiDoc?.Document;
-        if (doc == null || uiDoc == null)
+        if (doc == null || uiDoc == null) {
             return new FFMigratorProcessFamiliesActionResult(
                 false,
                 "No active document.",
@@ -194,8 +197,9 @@ public class CmdFFMigrator : IExternalCommand {
                 0,
                 0
             );
+        }
 
-        var storage = new Storage(AddinKey);
+        var storage = new StorageClient(AddinKey);
 
         try {
             using var tempFile = new TempSharedParamFile(doc);
@@ -208,9 +212,7 @@ public class CmdFFMigrator : IExternalCommand {
             var collectorQueue = new CollectorQueue()
                 .Add(new ParamSectionCollector())
                 .Add(new RefPlaneSectionCollector());
-            var finishSettings = onFinishSettings ?? new LoadAndSaveOptions {
-                OpenOutputFilesOnCommandFinish = false
-            };
+            var finishSettings = onFinishSettings ?? new LoadAndSaveOptions { OpenOutputFilesOnCommandFinish = false };
 
             var resultBuilder = new ProcessingResultBuilder(storage)
                 .WithProfile(profile, profileName)
@@ -326,20 +328,13 @@ public class CmdFFMigrator : IExternalCommand {
         ];
     }
 
-    internal static string ResolveProfileFilePath(string relativePath, string? subDirectory = null) {
-        var settingsDir = ResolveSettingsManager(subDirectory);
-        return settingsDir.ResolveSafeRelativeJsonPath(relativePath);
-    }
+    internal static string ResolveProfileFilePath(string relativePath, string? subDirectory = null) =>
+        ResolveSharedStorage().ResolveDocumentPath(relativePath, ResolveRootKey(subDirectory));
 
     internal static ProfileRemap ReadProfile(
         string relativePath,
         string? subDirectory = null
-    ) {
-        var settingsManager = ResolveSettingsManager(subDirectory);
-        return settingsManager
-            .JsonByRelativePath<ProfileRemap>(relativePath)
-            .Read();
-    }
+    ) => ResolveSharedStorage().ReadRequired<ProfileRemap>(relativePath, ResolveRootKey(subDirectory));
 
     internal static FFMigratorOpenProfileFileActionResult OpenProfileInDefaultApp(
         string relativePath,
@@ -347,13 +342,14 @@ public class CmdFFMigrator : IExternalCommand {
     ) {
         try {
             var filePath = ResolveProfileFilePath(relativePath, subDirectory);
-            if (!File.Exists(filePath))
+            if (!File.Exists(filePath)) {
                 return new FFMigratorOpenProfileFileActionResult(
                     false,
                     $"Profile file not found: {Path.GetFileName(filePath)}",
                     filePath,
                     false
                 );
+            }
 
             FileUtils.OpenInDefaultApp(filePath);
             return new FFMigratorOpenProfileFileActionResult(true, null, filePath, true);
@@ -362,35 +358,12 @@ public class CmdFFMigrator : IExternalCommand {
         }
     }
 
-    private static SettingsManager ResolveSettingsManager(string? subDirectory) {
-        var root = SettingsModule.SettingsRoot();
-        var targetSubDir = string.IsNullOrWhiteSpace(subDirectory)
+    private static SharedModuleSettingsStorage ResolveSharedStorage() => SettingsModule.SharedStorage();
+
+    private static string ResolveRootKey(string? subDirectory) =>
+        string.IsNullOrWhiteSpace(subDirectory)
             ? SettingsModule.DefaultSubDirectory
             : subDirectory;
-        return root.SubDir(targetSubDir);
-    }
-}
-
-public class ProfileRemap : BaseProfileSettings {
-    [Description("Settings for cleaning the family document")]
-    [Required]
-    public CleanFamilyDocumentSettings CleanFamilyDocument { get; init; } = new();
-
-    [Description("Settings for parameter mapping (add/replace and remap)")]
-    [Required]
-    public MapParamsSettings AddAndMapSharedParams { get; init; } = new();
-
-    [Description("Settings for setting parameter values and adding family parameters.")]
-    [Required]
-    public AddAndSetParamsSettings AddAndSetParams { get; init; } = new();
-
-    [Description("Settings for hydrating electrical connectors")]
-    [Required]
-    public MakeElecConnectorSettings MakeElectricalConnector { get; init; } = new();
-
-    [Description("Settings for sorting parameters within each property group.")]
-    [Required]
-    public SortParamsSettings SortParams { get; init; } = new();
 }
 
 internal record FFMigratorProcessFamiliesActionResult(

@@ -1,17 +1,24 @@
 using Microsoft.AspNetCore.SignalR;
 using Pe.Host.Contracts;
+using Pe.Host.Services;
 
 namespace Pe.Host.Hubs;
 
 public class BridgeHub : Hub {
     private readonly BridgeServer _bridgeServer;
+    private readonly HostSettingsEditorService _editorService;
     private readonly ILogger<BridgeHub> _logger;
+    private readonly HostSettingsRuntimeStateService _runtimeStateService;
 
     public BridgeHub(
         BridgeServer bridgeServer,
+        HostSettingsEditorService editorService,
+        HostSettingsRuntimeStateService runtimeStateService,
         ILogger<BridgeHub> logger
     ) {
         this._bridgeServer = bridgeServer;
+        this._editorService = editorService;
+        this._runtimeStateService = runtimeStateService;
         this._logger = logger;
     }
 
@@ -26,71 +33,66 @@ public class BridgeHub : Hub {
     }
 
     public Task<HostStatusEnvelopeResponse> GetHostStatusEnvelope() {
-        var snapshot = this._bridgeServer.GetSnapshot();
+        var runtimeState = this._runtimeStateService.GetState();
+        var snapshot = runtimeState.BridgeSnapshot;
         return Task.FromResult(new HostStatusEnvelopeResponse(
-            Ok: true,
-            Code: EnvelopeCode.Ok,
-            Message: BuildConnectionMessage(snapshot),
-            Issues: [],
-            Data: new HostStatusData(
-                HostIsRunning: true,
-                BridgeIsConnected: snapshot.BridgeIsConnected,
-                HasActiveDocument: snapshot.HasActiveDocument,
-                ActiveDocumentTitle: snapshot.ActiveDocumentTitle,
-                RevitVersion: snapshot.RevitVersion,
-                RuntimeFramework: snapshot.RuntimeFramework,
-                HostContractVersion: HostProtocol.ContractVersion,
-                HostTransport: HostProtocol.Transport,
-                ServerVersion: typeof(BridgeServer).Assembly.GetName().Version?.ToString(),
-                BridgeContractVersion: snapshot.BridgeContractVersion,
-                BridgeTransport: snapshot.BridgeTransport,
-                AvailableModules: snapshot.AvailableModules,
-                DisconnectReason: snapshot.DisconnectReason
+            true,
+            EnvelopeCode.Ok,
+            BuildConnectionMessage(snapshot),
+            [],
+            new HostStatusData(
+                true,
+                snapshot.BridgeIsConnected,
+                runtimeState.ProviderMode,
+                snapshot.HasActiveDocument,
+                snapshot.ActiveDocumentTitle,
+                snapshot.RevitVersion,
+                snapshot.RuntimeFramework,
+                HostProtocol.ContractVersion,
+                HostProtocol.Transport,
+                typeof(BridgeServer).Assembly.GetName().Version?.ToString(),
+                snapshot.BridgeContractVersion,
+                snapshot.BridgeTransport,
+                [.. runtimeState.AvailableModules],
+                snapshot.DisconnectReason
             )
         ));
     }
 
     public Task<SettingsCatalogEnvelopeResponse> GetSettingsCatalogEnvelope(SettingsCatalogRequest request) {
-        var snapshot = this._bridgeServer.GetSnapshot();
-        var targets = snapshot.AvailableModules
+        var runtimeState = this._runtimeStateService.GetState();
+        var snapshot = runtimeState.BridgeSnapshot;
+        var targets = runtimeState.AvailableModules
             .Where(module =>
                 string.IsNullOrWhiteSpace(request.ModuleKey) ||
                 module.ModuleKey.Equals(request.ModuleKey, StringComparison.OrdinalIgnoreCase))
             .Select(module => new SettingsCatalogItem(
                 module.ModuleKey,
-                $"{module.ModuleKey} / {module.SettingsTypeName} / {module.DefaultSubDirectory}",
+                $"{module.ModuleKey} / {module.DefaultRootKey}",
                 module.ModuleKey,
-                module.DefaultSubDirectory
+                module.DefaultRootKey
             ))
             .ToList();
 
         return Task.FromResult(new SettingsCatalogEnvelopeResponse(
-            Ok: true,
-            Code: EnvelopeCode.Ok,
-            Message: snapshot.BridgeIsConnected
+            true,
+            EnvelopeCode.Ok,
+            snapshot.BridgeIsConnected
                 ? $"Found {targets.Count} settings targets."
                 : BuildConnectionMessage(snapshot),
-            Issues: [],
-            Data: new SettingsCatalogData(targets)
+            [],
+            new SettingsCatalogData(targets)
         ));
     }
 
     public Task<SchemaEnvelopeResponse> GetSchemaEnvelope(SchemaRequest request) =>
-        this.ProxyAsync(
-            HubMethodNames.GetSchemaEnvelope,
-            request,
-            () => new SchemaEnvelopeResponse(false, EnvelopeCode.Failed, "No Revit agent connected.", [], null),
-            ex => new SchemaEnvelopeResponse(
-                false,
-                EnvelopeCode.Failed,
-                ex.Message,
-                [new ValidationIssue("$", null, "BridgeException", "error", ex.Message, "Reconnect the Revit bridge and retry.")],
-                null
-            )
-        );
+        Task.FromResult(this._editorService.GetSchemaEnvelope(request));
 
-    public Task<FieldOptionsEnvelopeResponse> GetFieldOptionsEnvelope(FieldOptionsRequest request) =>
-        this.ProxyAsync(
+    public Task<FieldOptionsEnvelopeResponse> GetFieldOptionsEnvelope(FieldOptionsRequest request) {
+        if (this._editorService.TryGetFieldOptionsEnvelopeLocally(request, out var localResponse))
+            return Task.FromResult(localResponse);
+
+        return this.ProxyBridgeAsync(
             HubMethodNames.GetFieldOptionsEnvelope,
             request,
             () => new FieldOptionsEnvelopeResponse(
@@ -104,60 +106,58 @@ public class BridgeHub : Hub {
                 false,
                 EnvelopeCode.Failed,
                 ex.Message,
-                [new ValidationIssue("$", null, "BridgeException", "error", ex.Message, "Reconnect the Revit bridge and retry.")],
+                [
+                    new ValidationIssue("$", null, "BridgeException", "error", ex.Message,
+                        "Reconnect the Revit bridge and retry.")
+                ],
                 new FieldOptionsData(request.SourceKey, FieldOptionsMode.Suggestion, true, [])
             )
         );
+    }
 
     public Task<ValidationEnvelopeResponse> ValidateSettingsEnvelope(ValidateSettingsRequest request) =>
-        this.ProxyAsync(
-            HubMethodNames.ValidateSettingsEnvelope,
-            request,
-            () => new ValidationEnvelopeResponse(
-                false,
-                EnvelopeCode.Failed,
-                "No Revit agent connected.",
-                [],
-                new ValidationData(false, [])
-            ),
-            ex => new ValidationEnvelopeResponse(
-                false,
-                EnvelopeCode.Failed,
-                ex.Message,
-                [new ValidationIssue("$", null, "BridgeException", "error", ex.Message, "Reconnect the Revit bridge and retry.")],
-                new ValidationData(false, [new ValidationIssue("$", null, "BridgeException", "error", ex.Message, "Reconnect the Revit bridge and retry.")])
-            )
-        );
+        Task.FromResult(this._editorService.ValidateSettingsEnvelope(request));
 
     public Task<ParameterCatalogEnvelopeResponse> GetParameterCatalogEnvelope(ParameterCatalogRequest request) =>
-        this.ProxyAsync(
+        this.ProxyBridgeAsync(
             HubMethodNames.GetParameterCatalogEnvelope,
             request,
-            () => new ParameterCatalogEnvelopeResponse(false, EnvelopeCode.Failed, "No Revit agent connected.", [], null),
+            () => new ParameterCatalogEnvelopeResponse(false, EnvelopeCode.Failed, "No Revit agent connected.", [],
+                null),
             ex => new ParameterCatalogEnvelopeResponse(
                 false,
                 EnvelopeCode.Failed,
                 ex.Message,
-                [new ValidationIssue("$", null, "BridgeException", "error", ex.Message, "Reconnect the Revit bridge and retry.")],
+                [
+                    new ValidationIssue("$", null, "BridgeException", "error", ex.Message,
+                        "Reconnect the Revit bridge and retry.")
+                ],
                 null
             )
         );
 
-    private async Task<TResponse> ProxyAsync<TRequest, TResponse>(
+    private async Task<TResponse> ProxyBridgeAsync<TRequest, TResponse>(
         string method,
         TRequest request,
         Func<TResponse> disconnectedFactory,
         Func<Exception, TResponse> exceptionFactory
     ) {
-        this._logger.LogInformation("BridgeHub proxy starting: ConnectionId={ConnectionId}, Method={Method}, BridgeConnected={BridgeConnected}", this.Context.ConnectionId, method, this._bridgeServer.IsConnected);
+        this._logger.LogInformation(
+            "BridgeHub proxy starting: ConnectionId={ConnectionId}, Method={Method}, BridgeConnected={BridgeConnected}",
+            this.Context.ConnectionId, method, this._bridgeServer.IsConnected);
         if (!this._bridgeServer.IsConnected) {
-            this._logger.LogWarning("BridgeHub rejected request because no Revit bridge is connected: ConnectionId={ConnectionId}, Method={Method}", this.Context.ConnectionId, method);
+            this._logger.LogWarning(
+                "BridgeHub rejected request because no Revit bridge is connected: ConnectionId={ConnectionId}, Method={Method}",
+                this.Context.ConnectionId, method);
             return disconnectedFactory();
         }
 
         try {
-            var response = await this._bridgeServer.InvokeAsync<TRequest, TResponse>(method, request, this.Context.ConnectionAborted);
-            this._logger.LogInformation("BridgeHub proxy completed: ConnectionId={ConnectionId}, Method={Method}", this.Context.ConnectionId, method);
+            var response =
+                await this._bridgeServer.InvokeAsync<TRequest, TResponse>(method, request,
+                    this.Context.ConnectionAborted);
+            this._logger.LogInformation("BridgeHub proxy completed: ConnectionId={ConnectionId}, Method={Method}",
+                this.Context.ConnectionId, method);
             return response;
         } catch (Exception ex) {
             this._logger.LogWarning(ex, "Bridge proxy failed for method {Method}", method);

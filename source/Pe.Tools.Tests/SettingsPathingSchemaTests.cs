@@ -1,12 +1,10 @@
-using Pe.Global.Services.Storage.Core;
+using Pe.StorageRuntime;
 
 namespace Pe.Tools.Tests;
 
-public sealed class SettingsPathingSchemaTests : RevitTestBase
-{
+public sealed class SettingsPathingSchemaTests : RevitTestBase {
     [Test]
-    public async Task ResolveCentralizedProfileSchemaPath_UsesAddinScopedGlobalSchemaDirectory()
-    {
+    public async Task ResolveCentralizedProfileSchemaPath_UsesAddinScopedGlobalSchemaDirectory() {
         var profilesRoot = Path.Combine("C:\\tmp", "CmdFFMigrator", "settings", "profiles");
 
         var schemaPath = SettingsPathing.ResolveCentralizedProfileSchemaPath(
@@ -23,8 +21,7 @@ public sealed class SettingsPathingSchemaTests : RevitTestBase
     }
 
     [Test]
-    public async Task ResolveCentralizedProfileSchemaPath_UsesReadableKey_ForClosedGenericTypes()
-    {
+    public async Task ResolveCentralizedProfileSchemaPath_UsesReadableKey_ForClosedGenericTypes() {
         var profilesRoot = Path.Combine("C:\\tmp", "CmdFFMigrator", "settings", "profiles");
 
         var schemaPath = SettingsPathing.ResolveCentralizedProfileSchemaPath(
@@ -35,22 +32,23 @@ public sealed class SettingsPathingSchemaTests : RevitTestBase
         await Assert.That(schemaPath)
             .StartsWith(Path.Combine("C:\\tmp", "Global", "schemas", "cmdffmigrator", "profiles"))
             .WithComparison(StringComparison.OrdinalIgnoreCase);
-        await Assert.That(schemaPath).Contains("genericprofileschematype").WithComparison(StringComparison.OrdinalIgnoreCase);
+        await Assert.That(schemaPath).Contains("genericprofileschematype")
+            .WithComparison(StringComparison.OrdinalIgnoreCase);
         await Assert.That(schemaPath).Contains("nestedprofiletype").WithComparison(StringComparison.OrdinalIgnoreCase);
         await Assert.That(schemaPath).DoesNotContain("version=").WithComparison(StringComparison.OrdinalIgnoreCase);
-        await Assert.That(schemaPath).DoesNotContain("publickeytoken").WithComparison(StringComparison.OrdinalIgnoreCase);
+        await Assert.That(schemaPath).DoesNotContain("publickeytoken")
+            .WithComparison(StringComparison.OrdinalIgnoreCase);
     }
 
     [Test]
-    public async Task ResolveCentralizedFragmentSchemaPath_UsesDeterministicNestedKey_ForLocalDirectives()
-    {
+    public async Task ResolveCentralizedFragmentSchemaPath_UsesDeterministicNestedKey_ForLocalDirectives() {
         var profilesRoot = Path.Combine("C:\\tmp", "CmdFFMigrator", "settings", "profiles");
 
         var schemaPath = SettingsPathing.ResolveCentralizedFragmentSchemaPath(
             profilesRoot,
             SettingsPathing.DirectiveScope.Local,
-            isPresetDirective: false,
-            rootSegment: "_mapping-data"
+            false,
+            "_mapping-data"
         );
 
         await Assert.That(schemaPath).IsEqualTo(
@@ -66,15 +64,14 @@ public sealed class SettingsPathingSchemaTests : RevitTestBase
     }
 
     [Test]
-    public async Task ResolveCentralizedFragmentSchemaPath_UsesGlobalNamespace_ForGlobalDirectives()
-    {
+    public async Task ResolveCentralizedFragmentSchemaPath_UsesGlobalNamespace_ForGlobalDirectives() {
         var profilesRoot = Path.Combine("C:\\tmp", "CmdFFMigrator", "settings", "profiles");
 
         var schemaPath = SettingsPathing.ResolveCentralizedFragmentSchemaPath(
             profilesRoot,
             SettingsPathing.DirectiveScope.Global,
-            isPresetDirective: true,
-            rootSegment: "_mapping-data"
+            true,
+            "_mapping-data"
         );
 
         await Assert.That(schemaPath).IsEqualTo(
@@ -89,15 +86,12 @@ public sealed class SettingsPathingSchemaTests : RevitTestBase
                 "_mapping-data.schema.json"));
     }
 
-    private sealed class ProfileSchemaType
-    {
+    private sealed class ProfileSchemaType {
     }
 
-    private sealed class GenericProfileSchemaType<TValue>
-    {
+    private sealed class GenericProfileSchemaType<TValue> {
     }
 
-    private sealed class NestedProfileType
-    {
+    private sealed class NestedProfileType {
     }
 }

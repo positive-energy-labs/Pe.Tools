@@ -3,16 +3,13 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.FamilyFoundry;
 using Pe.Global;
-using Pe.Global.Services.Storage;
-using Pe.Global.Services.Storage.Core;
-using Pe.Global.Services.Storage.Core.Json;
-using Pe.Global.Services.Storage.Core.Json.ContractResolvers;
-using Pe.Global.Services.Storage.Modules;
 using Pe.Global.Utils.Files;
+using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime.Revit.Core.Json;
+using Pe.StorageRuntime.Revit.Core.Json.ContractResolvers;
+using Pe.StorageRuntime.Revit.Modules;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 
@@ -24,14 +21,11 @@ namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 /// <typeparam name="TProfile">The profile type (must inherit from BaseProfileSettings)</typeparam>
 public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSettings, new() {
     private readonly List<FoundryAction<TProfile>> _actions = [];
-    private readonly object _profileReaderGate = new();
-    private readonly Dictionary<string, JsonReader<TProfile>> _profileReadersByRelativePath =
-        new(StringComparer.OrdinalIgnoreCase);
     private readonly string _commandName;
-    private readonly ISettingsModule<TProfile> _settingsModule;
     private readonly Document _doc;
+
+    private readonly ISettingsModule<TProfile> _settingsModule;
     private readonly UIDocument _uiDoc;
-    private SettingsManager? _profilesSettingsManager;
     private Action<FoundryContext<TProfile>, List<string>> _postProcess;
     private Func<TProfile, List<SharedParameterDefinition>, OperationQueue> _queueBuilder;
 
@@ -92,17 +86,16 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
             throw new InvalidOperationException("Queue builder must be set via WithQueueBuilder()");
 
         // Setup storage and settings
-        var storage = new Storage(this._settingsModule.ModuleKey);
-        var settingsManager = this._settingsModule.SettingsRoot();
-        var settings = settingsManager.Json<BaseSettings<TProfile>>().Read();
-        var profilesSubDir = this.ResolveProfilesSettingsManager();
-        this._profilesSettingsManager = profilesSubDir;
+        var storage = new StorageClient(this._settingsModule.ModuleKey);
+        var sharedStorage = this._settingsModule.SharedStorage();
+        var settings = storage.StateDir().Json<BaseSettings<TProfile>>("settings").Read();
+        var profilesRootDirectory = sharedStorage.ResolveRootDirectory();
 
         // Discover profiles
-        var profiles = ProfileListItem.DiscoverProfiles(profilesSubDir);
+        var profiles = ProfileListItem.DiscoverProfiles(sharedStorage);
         if (profiles.Count == 0) {
             throw new InvalidOperationException(
-                $"No profiles found in {profilesSubDir.DirectoryPath}. Create a profile JSON file to continue.");
+                $"No profiles found in {profilesRootDirectory}. Create a profile JSON file to continue.");
         }
 
         // Create context
@@ -110,7 +103,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
             Doc = this._doc,
             UiDoc = this._uiDoc,
             Storage = storage,
-            SettingsManager = settingsManager,
+            SharedStorage = sharedStorage,
             OnFinishSettings = settings.OnProcessingFinish
         };
 
@@ -144,9 +137,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
                         "All",
                         () => profiles,
                         paletteActions
-                    ) {
-                        FilterKeySelector = _ => "Profiles"
-                    }
+                    ) { FilterKeySelector = _ => "Profiles" }
                 ]
             });
 
@@ -186,7 +177,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         if (ct.IsCancellationRequested) return null;
 
         // Load the profile
-        var profile = this.GetProfileReader(profileItem.TextPrimary).Read();
+        var profile = context.SharedStorage.ReadRequired<TProfile>(profileItem.TextPrimary);
 
         if (ct.IsCancellationRequested) return null;
 
@@ -302,64 +293,56 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
     private static List<string> BuildGenericErrorMessages(Exception ex) {
         if (ex is InvalidOperationException invalidOp &&
             invalidOp.Message.StartsWith("Duplicate parameter names in AddAndSetParams.Parameters:",
-                StringComparison.Ordinal))
+                StringComparison.Ordinal)) {
             return new List<string> {
                 invalidOp.Message,
                 "Fix: keep exactly one entry per parameter name under AddAndSetParams.Parameters.",
                 "Tip: if you define _FOUNDRY LAST PROCESSED AT in the profile, remove duplicate definitions."
             };
+        }
 
         if (ex is InvalidOperationException invalidOpSplitModel &&
-            invalidOpSplitModel.Message.Contains("missing value source", StringComparison.OrdinalIgnoreCase))
+            invalidOpSplitModel.Message.Contains("missing value source", StringComparison.OrdinalIgnoreCase)) {
             return new List<string> {
                 invalidOpSplitModel.Message,
                 "Fix: for each AddAndSetParams.Parameters item, choose one source:",
                 " - ValueOrFormula for global value/formula, OR",
                 " - a matching AddAndSetParams.PerTypeValuesTable row where Parameter == Name."
             };
+        }
 
         if (ex is InvalidOperationException invalidOpConflict &&
             invalidOpConflict.Message.Contains("cannot define both ValueOrFormula and PerTypeValuesTable values",
-                StringComparison.OrdinalIgnoreCase))
+                StringComparison.OrdinalIgnoreCase)) {
             return new List<string> {
                 invalidOpConflict.Message,
                 "Fix: remove one source so each parameter uses only one value source.",
                 "Use ValueOrFormula for global assignment, or PerTypeValuesTable for per-type assignment."
             };
+        }
 
         if (ex is InvalidOperationException invalidOpUnknownTableRow &&
             invalidOpUnknownTableRow.Message.Contains("PerTypeValuesTable contains row(s) for unknown parameter(s)",
-                StringComparison.OrdinalIgnoreCase))
+                StringComparison.OrdinalIgnoreCase)) {
             return new List<string> {
                 invalidOpUnknownTableRow.Message,
                 "Fix: every PerTypeValuesTable row must reference an existing parameter name.",
                 "Set row.Parameter to exactly match a Name in AddAndSetParams.Parameters."
             };
+        }
 
         if (ex is ArgumentException arg &&
-            arg.Message.Contains("same key has already been added", StringComparison.OrdinalIgnoreCase))
+            arg.Message.Contains("same key has already been added", StringComparison.OrdinalIgnoreCase)) {
             return new List<string> {
                 $"{arg.GetType().Name}: {arg.Message}",
                 "Likely cause: duplicate keys in profile collections (commonly AddAndSetParams parameter names).",
                 "Fix: ensure parameter names are unique per profile."
             };
+        }
 
         return new List<string> { $"{ex.GetType().Name}: {ex.Message}" };
     }
 
-    private SettingsManager ResolveProfilesSettingsManager() => this._profilesSettingsManager ??= this._settingsModule.SettingsDir();
-
-    private JsonReader<TProfile> GetProfileReader(string relativePath) {
-        lock (this._profileReaderGate) {
-            if (this._profileReadersByRelativePath.TryGetValue(relativePath, out var reader))
-                return reader;
-
-            var profilesManager = this.ResolveProfilesSettingsManager();
-            var createdReader = profilesManager.JsonByRelativePath<TProfile>(relativePath);
-            this._profileReadersByRelativePath[relativePath] = createdReader;
-            return createdReader;
-        }
-    }
 }
 
 /// <summary>

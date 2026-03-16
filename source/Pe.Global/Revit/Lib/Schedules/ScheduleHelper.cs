@@ -5,6 +5,7 @@ using Pe.Global.Revit.Lib.Schedules.HeaderGroups;
 using Pe.Global.Revit.Lib.Schedules.SortGroup;
 using Pe.Global.Revit.Lib.Schedules.TitleStyle;
 using Pe.Global.Revit.Lib.Schedules.ViewTemplate;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
 namespace Pe.Global.Revit.Lib.Schedules;
 
@@ -15,11 +16,10 @@ public static class ScheduleHelper {
     public static ScheduleSpec SerializeSchedule(ViewSchedule schedule) {
         var def = schedule.Definition;
         var category = Category.GetCategory(schedule.Document, def.CategoryId);
-        var categoryName = category?.Name ?? string.Empty;
 
         var spec = new ScheduleSpec {
             Name = schedule.Name,
-            CategoryName = categoryName,
+            CategoryName = category?.BuiltInCategory ?? BuiltInCategory.INVALID,
             IsItemized = def.IsItemized,
             FilterBySheet = def.IsFilteredBySheet,
             Fields = [],
@@ -64,10 +64,10 @@ public static class ScheduleHelper {
     ///     Creates a schedule from a ScheduleSpec.
     /// </summary>
     public static ScheduleCreationResult CreateSchedule(Document doc, ScheduleSpec spec) {
-        // Find category by name
-        var categoryId = FindCategoryByName(doc, spec.CategoryName);
+        var categoryId = FindCategoryId(doc, spec.CategoryName);
         if (categoryId == ElementId.InvalidElementId)
-            throw new ArgumentException($"Category '{spec.CategoryName}' not found in document");
+            throw new ArgumentException(
+                $"Category '{GetCategoryDisplayName(spec.CategoryName)}' not found in document");
 
         // Create schedule
         var schedule = ViewSchedule.CreateSchedule(doc, categoryId);
@@ -76,7 +76,7 @@ public static class ScheduleHelper {
         var result = new ScheduleCreationResult {
             Schedule = schedule,
             ScheduleName = schedule.Name,
-            CategoryName = spec.CategoryName,
+            CategoryName = GetCategoryDisplayName(spec.CategoryName),
             IsItemized = spec.IsItemized
         };
 
@@ -97,7 +97,7 @@ public static class ScheduleHelper {
                 }
             } else {
                 result.FilterBySheetSkipped =
-                    $"Category '{spec.CategoryName}' does not support filter-by-sheet";
+                    $"Category '{GetCategoryDisplayName(spec.CategoryName)}' does not support filter-by-sheet";
             }
         }
 
@@ -176,10 +176,10 @@ public static class ScheduleHelper {
     public static List<string> GetFamiliesMatchingFilters(Document doc,
         ScheduleSpec spec,
         IEnumerable<Family>? families = null) {
-        // Get category
-        var categoryId = FindCategoryByName(doc, spec.CategoryName);
+        var categoryId = FindCategoryId(doc, spec.CategoryName);
         if (categoryId == ElementId.InvalidElementId)
-            throw new ArgumentException($"Category '{spec.CategoryName}' not found in document");
+            throw new ArgumentException(
+                $"Category '{GetCategoryDisplayName(spec.CategoryName)}' not found in document");
 
         // Get families to test
         var familiesToTest = families?.ToList() ?? new FilteredElementCollector(doc)
@@ -266,15 +266,11 @@ public static class ScheduleHelper {
 
     #region Common Helpers
 
-    internal static ElementId FindCategoryByName(Document doc, string categoryName) {
-        var categories = doc.Settings.Categories;
-        foreach (Category cat in categories) {
-            if (cat.Name.Equals(categoryName, StringComparison.OrdinalIgnoreCase))
-                return cat.Id;
-        }
+    internal static ElementId FindCategoryId(Document doc, BuiltInCategory categoryName) =>
+        Category.GetCategory(doc, categoryName)?.Id ?? ElementId.InvalidElementId;
 
-        return ElementId.InvalidElementId;
-    }
+    internal static string GetCategoryDisplayName(BuiltInCategory categoryName) =>
+        CategoryNamesProvider.GetLabelForBuiltInCategory(categoryName);
 
     internal static string GetUniqueScheduleName(Document doc, string baseName) {
         var existingNames = new FilteredElementCollector(doc)

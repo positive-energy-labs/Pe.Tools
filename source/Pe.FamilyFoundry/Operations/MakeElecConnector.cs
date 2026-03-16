@@ -1,7 +1,7 @@
 using Autodesk.Revit.DB.Electrical;
 using Pe.Extensions.FamDocument;
-using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
-using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
 using System.ComponentModel.DataAnnotations;
 
 namespace Pe.FamilyFoundry.Operations;
@@ -39,7 +39,8 @@ public class MakeElecConnector(MakeElecConnectorSettings settings) : DocOperatio
             .ToList();
 
         if (!connectorElements.Any()) {
-            if (!TryMakeElectricalConnector(doc, out var connectorElement, out var failureMessage) || connectorElement == null) {
+            if (!TryMakeElectricalConnector(doc, out var connectorElement, out var failureMessage) ||
+                connectorElement == null) {
                 logs.Add(new LogEntry("Create connector").Error(failureMessage));
                 return new OperationLog(this.Name, logs);
             }
@@ -122,8 +123,6 @@ public class MakeElecConnector(MakeElecConnectorSettings settings) : DocOperatio
         return false;
     }
 
-    private sealed record ConnectorHostCandidate(Reference HostReference, Edge? Edge, string Source);
-
     private static bool TryCreateConnectorForCandidate(
         FamilyDocument doc,
         ConnectorHostCandidate candidate,
@@ -171,11 +170,7 @@ public class MakeElecConnector(MakeElecConnectorSettings settings) : DocOperatio
             yield break;
 
         var preferredNames = new[] {
-            "Center (Left/Right)",
-            "CenterLR",
-            "Center (Front/Back)",
-            "CenterFB",
-            "Reference Plane"
+            "Center (Left/Right)", "CenterLR", "Center (Front/Back)", "CenterFB", "Reference Plane"
         };
 
         var preferredSet = new HashSet<string>(preferredNames, StringComparer.OrdinalIgnoreCase);
@@ -197,6 +192,7 @@ public class MakeElecConnector(MakeElecConnectorSettings settings) : DocOperatio
                 // Let downstream attempt reporting handle this in a consistent way.
                 continue;
             }
+
             yield return new ConnectorHostCandidate(planeReference, null, $"'{referencePlane.Name}'");
         }
     }
@@ -204,9 +200,7 @@ public class MakeElecConnector(MakeElecConnectorSettings settings) : DocOperatio
     private static IEnumerable<ConnectorHostCandidate> GetPlanarFaceHostCandidates(FamilyDocument doc) {
         var revitDoc = doc.Document;
         var options = new Options {
-            ComputeReferences = true,
-            IncludeNonVisibleObjects = true,
-            DetailLevel = ViewDetailLevel.Fine
+            ComputeReferences = true, IncludeNonVisibleObjects = true, DetailLevel = ViewDetailLevel.Fine
         };
 
         var candidates = new List<(ConnectorHostCandidate Candidate, double Area)>();
@@ -260,27 +254,30 @@ public class MakeElecConnector(MakeElecConnectorSettings settings) : DocOperatio
     ) {
         foreach (var obj in geometry) {
             switch (obj) {
-                case Solid solid when solid.Faces.Size > 0:
-                    foreach (Face face in solid.Faces) {
-                        if (face is PlanarFace planarFace)
-                            yield return (planarFace, $"{sourcePrefix}/SolidFace");
-                    }
-                    break;
+            case Solid solid when solid.Faces.Size > 0:
+                foreach (Face face in solid.Faces) {
+                    if (face is PlanarFace planarFace)
+                        yield return (planarFace, $"{sourcePrefix}/SolidFace");
+                }
 
-                case GeometryInstance instance:
-                    GeometryElement instanceGeometry;
-                    try {
-                        instanceGeometry = instance.GetInstanceGeometry();
-                    } catch {
-                        continue;
-                    }
+                break;
 
-                    foreach (var nested in EnumeratePlanarFaces(instanceGeometry, $"{sourcePrefix}/Instance"))
-                        yield return nested;
-                    break;
+            case GeometryInstance instance:
+                GeometryElement instanceGeometry;
+                try {
+                    instanceGeometry = instance.GetInstanceGeometry();
+                } catch {
+                    continue;
+                }
+
+                foreach (var nested in EnumeratePlanarFaces(instanceGeometry, $"{sourcePrefix}/Instance"))
+                    yield return nested;
+                break;
             }
         }
     }
+
+    private sealed record ConnectorHostCandidate(Reference HostReference, Edge? Edge, string Source);
 }
 
 public class MakeElecConnectorSettings : IOperationSettings {
