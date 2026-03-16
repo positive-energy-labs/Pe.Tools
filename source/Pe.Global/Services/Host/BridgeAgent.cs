@@ -1,4 +1,6 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Serialization;
 using Pe.Global.Services.Document;
 using Pe.Host.Contracts;
 using Pe.StorageRuntime.Revit.Modules;
@@ -17,7 +19,11 @@ internal sealed class BridgeAgent : IDisposable {
     private readonly StreamReader _reader;
     private readonly Task _readLoop;
     private readonly RequestService _requestService;
-    private readonly JsonSerializerSettings _serializerSettings = BridgeJson.CreateSerializerSettings();
+    private readonly JsonSerializerSettings _serializerSettings = new JsonSerializerSettings {
+        NullValueHandling = NullValueHandling.Ignore,
+        ContractResolver = new CamelCasePropertyNamesContractResolver(),
+        Converters = [new StringEnumConverter()]
+    };
     private readonly CancellationTokenSource _shutdown = new();
     private readonly ThrottleGate _throttleGate = new();
     private readonly SemaphoreSlim _writeLock = new(1, 1);
@@ -256,7 +262,7 @@ internal sealed class BridgeAgent : IDisposable {
         var payloadJson = JsonConvert.SerializeObject(payload, this._serializerSettings);
         var frame = new BridgeFrame(
             BridgeFrameKind.Event,
-            Event: new BridgeEvent(HubClientEventNames.DocumentChanged, payloadJson)
+            Event: new BridgeEvent(SettingsHostEventNames.DocumentChanged, payloadJson)
         );
         await this.WriteFrameAsync(frame, this._shutdown.Token).ConfigureAwait(false);
     }

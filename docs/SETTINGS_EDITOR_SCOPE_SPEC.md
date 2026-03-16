@@ -8,106 +8,91 @@ settings-editor integration so future work in this repo stays aligned.
 ## Core Decisions
 
 - **Settings classes are the contract surface**
-  - Settings shape + metadata originate on backend settings types.
+  - Settings shape and metadata originate on backend settings types.
 - **Schema-driven field generation, not page autogeneration**
-  - Schema drives fields/options/constraints; layout/workflow remains
+  - Schema drives fields, options, and constraints. Layout and workflow remain
     intentional.
 - **Server-authoritative validation**
   - Client feedback is immediate; server remains source of truth.
 - **Render-schema delivery for frontend**
-  - SignalR schema payloads are render-oriented and pre-resolved for UI
+  - Host schema payloads are render-oriented and pre-resolved for UI
     generation.
-  - Authoring schemas remain backend/local-tooling assets for JSON file
+  - Authoring schemas remain backend and local-tooling assets for JSON file
     intellisense.
 - **Module-first backend registration**
   - Settings modules are registered by module instead of ad-hoc startup wiring.
-  - Module metadata is the source of truth for schema/validation identity and
-    default storage conventions (`ModuleKey`, `SettingsTypeName`,
-    `DefaultSubDirectory`).
-- **Typed envelope contract for hub responses**
-  - Hub responses use a typed envelope (`ok`, typed `code`, `message`, `issues`,
-    `data`) so frontend branching is stable and machine-readable.
+  - Module metadata is the source of truth for schema, validation identity, and
+    default storage conventions.
 - **Backend-owned transport constants**
-  - Hub routes, hub method names, DTOs, enums, and event names are defined in
-    this repo and exported for the external frontend.
+  - HTTP routes, named-pipe bridge method names, DTOs, enums, and event names
+    are defined in this repo and exported for the external frontend.
 - **Filesystem as source of truth for settings files**
   - In this repo, settings listing, reads, writes, composition, and validation
-    are host-owned filesystem concerns, not SignalR concerns.
+    are host-owned filesystem concerns.
 
 ## Current Implemented Architecture
 
 ### Backend In This Repo
 
-- External SignalR host: `Pe.Host`.
-- Revit-side bridge runtime: `Pe.Global.Services.Host.HostRuntime`.
-- Shared transport/contracts project: `Pe.Host.Contracts`.
-- Module registration: `SettingsModuleRegistry` + `ISettingsModule<TSettings>`.
-- Structured validation contract: `ValidationIssue` from
-  `SettingsEditorHub.ValidateSettingsEnvelope`.
+- External host: `Pe.Host`
+- Revit-side bridge runtime: `Pe.Global.Services.Host.HostRuntime`
+- Shared transport and contracts project: `Pe.Host.Contracts`
+- Module registration: `SettingsModuleRegistry` + `ISettingsModule<TSettings>`
 - Dynamic options via providers: `IOptionsProvider` /
-  `IDependentOptionsProvider`.
-- Client event contract names are centralized via `HubClientEventNames` (for
-  example `DocumentChanged`) to reduce string drift.
-- Local settings discovery uses `SettingsManager.Discover(...)`.
-- Host-backed storage uses `LocalDiskSettingsStorageBackend`.
-- Shared file composition uses `JsonCompositionPipeline`.
+  `IDependentOptionsProvider`
+- Client event names are centralized via `SettingsHostEventNames`
+- Local settings discovery uses `SettingsManager.Discover(...)`
+- Host-backed storage uses `LocalDiskSettingsStorageBackend`
+- Shared file composition uses `JsonCompositionPipeline`
 
 ### Frontend Paths
 
-The frontend lives in a separate TypeScript repository. This repo should only
+The frontend lives in a separate TypeScript repository. This repo should
 document the contract and backend responsibilities it exposes to that frontend,
 not frontend implementation details.
 
 ### Cross-layer Contract
 
-- Typed envelope response model:
-  - `ok`, typed `code`, `message`, `issues`, `data`.
-- Settings catalog response model:
-  - module target metadata for frontend target selection.
-- JSON Schema + targeted metadata:
+- JSON schema plus targeted metadata:
   - `x-depends-on`
   - `x-provider`
-  - optional `x-field` hints (label/order/group/placeholder).
-  - render payloads avoid provider-backed `examples` duplication when
-    `x-provider` is present.
-- Structured validation payload:
-  - `path`, `code`, `severity`, `message`, `suggestion`.
+  - optional `x-field` hints
+- Structured validation payloads remain machine-readable.
 - Type generation:
-  - Backend message/enums are exported with TypeGen and consumed as frontend
-    source-of-truth types.
+  - backend messages and enums are exported with TypeGen and consumed as
+    frontend source-of-truth types
 - Internal schema pipelines:
-  - authoring pipeline: rich schema for local files/VS Code intellisense.
-  - render pipeline: pre-resolved schema for frontend field rendering.
+  - authoring pipeline for local files and editor tooling
+  - render pipeline for frontend field rendering
 - Local storage pipelines:
-  - HTTP-backed filesystem discovery for settings files/directories.
-  - host-backed composition for `$include` and `$preset` expansion.
-  - host-backed validation on open/save/validate.
+  - HTTP-backed filesystem discovery for settings files and directories
+  - host-backed composition for `$include` and `$preset` expansion
+  - host-backed validation on open, save, and explicit validate
 
 ### Runtime Interaction Model
 
 - Frontend/backend boundary:
-  - external frontend connects to the single settings-editor hub hosted outside
-    Revit.
-  - frontend consumes host HTTP endpoints for document IO and SignalR for
-    Revit-derived capabilities.
+  - external frontend talks to the single settings-editor host hosted outside
+    Revit
+  - frontend consumes HTTP for all request/response workflows
+  - frontend consumes SSE only for invalidation
 - Host/add-in boundary:
   - Revit connects to the external host over named pipes only when the user
-    explicitly enables the bridge.
-  - the bridge is expected to be disconnected by default for Revit performance.
+    explicitly enables the bridge
+  - the bridge is expected to be disconnected by default for Revit performance
 - Invalidation:
   - document-change notifications are emitted by the Revit bridge agent and
-    forwarded by the external host to browser clients.
+    forwarded by the external host to browser clients over SSE
 
 ### Data Loading Strategy
 
 - Default:
-  - host HTTP is the public entry point for storage CRUD.
-- SignalR path:
-  - server-filtered options/providers, validation, schema generation, and
-    document-aware parameter catalogs remain the SignalR use cases.
-- Constraint:
-  - preserve simple attribute/provider authoring on backend while keeping file
-    storage concerns out of the hub surface.
+  - host HTTP is the public entry point for browser reads and mutations
+- Event path:
+  - SSE is the public entry point for invalidation-only push events
+- Internal bridge path:
+  - named-pipe RPC is still used between `Pe.Host` and the Revit add-in for
+    document-aware provider work
 
 ## Key Locations
 
@@ -123,44 +108,36 @@ not frontend implementation details.
 
 ### External Frontend
 
-- Not in this repository.
-- Consume the hub contract documented in `docs/SETTINGS_EDITOR_SIGNALR_CONTRACT.md`.
-- Do not assume this repo contains the authoritative frontend runtime or file IO
-  behavior.
+- Not in this repository
+- Consume the host contract documented in
+  `docs/SETTINGS_EDITOR_HOST_CONTRACT.md`
 
 ## Implementation Principles
 
 - Favor type-safe APIs and compile-time checks.
 - Keep execution flow linear and debuggable.
-- Keep metadata minimal; avoid early DSL over-abstraction.
+- Keep metadata minimal and avoid early DSL over-abstraction.
 - Coordinate backend and external frontend design together.
-- Aarchitect metadata to integrate easily into TanStack Form and Query
-- Preserve clear user feedback (status, progress, field-level errors).
-- Maximally reduce the surface area of generated code.
-- While still in POC'ing and MVP'ing stage, the biggest risk is backend-frontend
-  integration fragility. Stability here should be prioritized over all else,
-  even if it means refactoring core logic.
+- Architect metadata to integrate easily into TanStack Form and Query.
+- Preserve clear user feedback for status, progress, and field-level errors.
+- Reduce the surface area of generated code wherever practical.
 
 ## Success Criteria
 
 - New settings modules onboard via module registration, not startup surgery.
-- Field rendering/validation patterns are consistent across modules.
+- Field rendering and validation patterns are consistent across modules.
 - Validation and options remain responsive and deterministic.
 - Schema walking remains explicit while runtime behavior is standardized.
 
-## Remaining SignalR Use Case Examples
+## Remaining Revit-Aware Use Case Examples
 
 - Get family type name based on a family name.
 - Get shared parameters in document, from parameters-service-cache, or from a
   specific list of families' documents.
-- Get families in a document filtered by a category
-- Get tag families in a document which are bound to a category
-- Provide user feedback on parameter mappings based on parameter datatypes. like
-  maybe a preview of how it'd be coercion or a message about it.
-  (AddAndMapShareParamsSettings.MappingData)
-- Specify mandatory uniqueness by key of objects in a list
-  (AddAndMapShareParamsSettings.MappingData.NewName)
-- Provide validation feedback
-- Get all Schedules of a certain category
-- Get scheduleable parameters for a certain category
+- Get families in a document filtered by a category.
+- Get tag families in a document which are bound to a category.
+- Provide user feedback on parameter mappings based on parameter datatypes.
+- Specify mandatory uniqueness by key of objects in a list.
+- Get all schedules of a certain category.
+- Get scheduleable parameters for a certain category.
 - Display formatting options for a schedule or in project units.

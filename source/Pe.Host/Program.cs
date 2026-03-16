@@ -1,6 +1,7 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Pe.Host;
 using Pe.Host.Contracts;
-using Pe.Host.Hubs;
 using Pe.Host.Services;
 
 HostRevitAssemblyResolver.EnsureRegistered();
@@ -10,6 +11,8 @@ var options = BridgeHostOptions.FromEnvironment();
 
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton<BridgeServer>();
+builder.Services.AddSingleton<HostEventStreamService>();
+builder.Services.AddSingleton<HostBrowserApiService>();
 builder.Services.AddSingleton<IHostBridgeCapabilityService, HostBridgeCapabilityService>();
 builder.Services.AddSingleton<IHostSettingsModuleCatalog>(sp =>
     new HostSettingsModuleCatalog(sp.GetRequiredService<IHostBridgeCapabilityService>()));
@@ -19,19 +22,11 @@ builder.Services.AddSingleton(sp => new HostSettingsStorageService(
     sp.GetRequiredService<IHostSettingsModuleCatalog>(),
     sp.GetRequiredService<IHostBridgeCapabilityService>()));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BridgeServer>());
-
-builder.Services
-    .AddSignalR(signalROptions => {
-        signalROptions.EnableDetailedErrors = true;
-        signalROptions.MaximumReceiveMessageSize = 1024 * 1024;
-    })
-    .AddNewtonsoftJsonProtocol(protocolOptions => {
-        var settings = HostJson.CreateSerializerSettings();
-        protocolOptions.PayloadSerializerSettings.NullValueHandling = settings.NullValueHandling;
-        protocolOptions.PayloadSerializerSettings.ContractResolver = settings.ContractResolver;
-        foreach (var converter in settings.Converters)
-            protocolOptions.PayloadSerializerSettings.Converters.Add(converter);
-    });
+builder.Services.ConfigureHttpJsonOptions(jsonOptions => {
+    jsonOptions.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    jsonOptions.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+    jsonOptions.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
 
 builder.Services.AddCors(corsOptions => corsOptions.AddDefaultPolicy(policy => policy
     .WithOrigins(options.AllowedOrigins.ToArray())
@@ -42,6 +37,13 @@ builder.Services.AddCors(corsOptions => corsOptions.AddDefaultPolicy(policy => p
 var app = builder.Build();
 
 app.UseCors();
+app.MapGet(HttpRoutes.HostStatus, (
+    HostBrowserApiService browserApiService
+) => browserApiService.GetHostStatus());
+app.MapGet(HttpRoutes.Schema, (
+    string moduleKey,
+    HostBrowserApiService browserApiService
+) => ExecuteBrowserRequest(() => browserApiService.GetSchema(moduleKey)));
 app.MapGet(HttpRoutes.Workspaces, (
     HostSettingsStorageService storageService
 ) => storageService.GetWorkspaces());
@@ -65,6 +67,20 @@ app.MapGet(HttpRoutes.Tree, async (
     },
     cancellationToken
 ));
+app.MapPost(HttpRoutes.FieldOptions, async (
+    FieldOptionsRequest request,
+    HostBrowserApiService browserApiService,
+    CancellationToken cancellationToken
+) => await ExecuteBrowserRequestAsync(
+    async () => await browserApiService.GetFieldOptionsAsync(request, cancellationToken)
+));
+app.MapPost(HttpRoutes.ParameterCatalog, async (
+    ParameterCatalogRequest request,
+    HostBrowserApiService browserApiService,
+    CancellationToken cancellationToken
+) => await ExecuteBrowserRequestAsync(
+    async () => await browserApiService.GetParameterCatalogAsync(request, cancellationToken)
+));
 app.MapPost(HttpRoutes.OpenDocument, async (
     OpenSettingsDocumentRequest request,
     HostSettingsStorageService storageService,
@@ -85,12 +101,62 @@ app.MapPost(HttpRoutes.SaveDocument, async (
     HostSettingsStorageService storageService,
     CancellationToken cancellationToken
 ) => await storageService.SaveAsync(request, cancellationToken));
-app.MapHub<BridgeHub>(HubRoutes.Default);
+app.MapGet(HttpRoutes.Events, async (
+    HttpContext httpContext,
+    HostEventStreamService eventStreamService,
+    CancellationToken cancellationToken
+) => {
+    httpContext.Response.Headers.CacheControl = "no-cache";
+    httpContext.Response.Headers.Connection = "keep-alive";
+    httpContext.Response.ContentType = "text/event-stream";
+
+    var reader = eventStreamService.Subscribe(cancellationToken);
+    while (!cancellationToken.IsCancellationRequested) {
+        try {
+            var hasData = await reader.WaitToReadAsync(cancellationToken)
+                .AsTask()
+                .WaitAsync(TimeSpan.FromSeconds(15), cancellationToken);
+
+            if (!hasData)
+                break;
+        } catch (TimeoutException) {
+            await httpContext.Response.WriteAsync(": ping\n\n", cancellationToken);
+            await httpContext.Response.Body.FlushAsync(cancellationToken);
+            continue;
+        }
+
+        while (reader.TryRead(out var hostEvent)) {
+            await httpContext.Response.WriteAsync($"event: {hostEvent.EventName}\n", cancellationToken);
+            await httpContext.Response.WriteAsync($"data: {hostEvent.PayloadJson}\n\n", cancellationToken);
+            await httpContext.Response.Body.FlushAsync(cancellationToken);
+        }
+    }
+});
 
 app.Logger.LogInformation(
     "Host listening on {BaseUrl} using pipe {PipeName}",
-    options.SignalRBaseUrl,
+    options.HostBaseUrl,
     options.PipeName
 );
 
-app.Run(options.SignalRBaseUrl);
+app.Run(options.HostBaseUrl);
+
+static IResult ExecuteBrowserRequest<TResponse>(Func<TResponse> action) {
+    try {
+        return Results.Ok(action());
+    } catch (InvalidOperationException ex) {
+        return Results.Problem(statusCode: StatusCodes.Status409Conflict, detail: ex.Message);
+    } catch (Exception ex) {
+        return Results.Problem(statusCode: StatusCodes.Status500InternalServerError, detail: ex.Message);
+    }
+}
+
+static async Task<IResult> ExecuteBrowserRequestAsync<TResponse>(Func<Task<TResponse>> action) {
+    try {
+        return Results.Ok(await action());
+    } catch (InvalidOperationException ex) {
+        return Results.Problem(statusCode: StatusCodes.Status409Conflict, detail: ex.Message);
+    } catch (Exception ex) {
+        return Results.Problem(statusCode: StatusCodes.Status500InternalServerError, detail: ex.Message);
+    }
+}

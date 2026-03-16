@@ -4,6 +4,7 @@ using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Json;
+using Pe.StorageRuntime.Json.ContractResolvers;
 using Pe.StorageRuntime.Modules;
 using Pe.StorageRuntime.Revit.Core.Json.ContractResolvers;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
@@ -38,7 +39,7 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
     private readonly JsonSerializerSettings _serialSettings = new() {
         Formatting = Formatting.Indented,
         Converters = [new StringEnumConverter()],
-        ContractResolver = new RequiredAwareContractResolver(),
+        ContractResolver = new RequiredAwareContractResolver(RevitTypeRegistry.TryGet),
         NullValueHandling = NullValueHandling.Ignore
     };
 

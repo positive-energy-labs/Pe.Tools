@@ -79,7 +79,7 @@ public class CmdSettingsEditor : IExternalCommand {
                     "Settings Editor",
                     launched
                         ? "Opened the external settings editor in your default browser."
-                        : "Could not open the external settings editor. Check PE_SETTINGS_EDITOR_BASE_URL and PE_SETTINGS_EDITOR_SIGNALR_BASE_URL."
+                        : "Could not open the external settings editor. Check PE_SETTINGS_EDITOR_BASE_URL."
                 );
                 break;
             }

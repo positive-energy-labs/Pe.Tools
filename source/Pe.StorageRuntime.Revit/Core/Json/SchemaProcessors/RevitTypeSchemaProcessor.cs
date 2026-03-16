@@ -2,6 +2,7 @@ using Newtonsoft.Json;
 using NJsonSchema;
 using NJsonSchema.Generation;
 using Pe.StorageRuntime.Capabilities;
+using Pe.StorageRuntime.Json;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using System.Reflection;
 
@@ -55,7 +56,7 @@ public class RevitTypeSchemaProcessor(
             }
             // If no discriminator, but has a provider selector, call it with null
             else if (registration is { ProviderSelector: { } defaultProviderSelector })
-                providerType = defaultProviderSelector(null!);
+                providerType = defaultProviderSelector(null);
 
             if (providerType == null)
                 continue;
@@ -65,7 +66,7 @@ public class RevitTypeSchemaProcessor(
         }
     }
 
-    private void ConvertPropertySchema(JsonSchema propertySchema, TypeRegistration registration) {
+    private void ConvertPropertySchema(JsonSchema propertySchema, JsonTypeRegistration registration) {
         if (propertySchema.HasReference)
             propertySchema.Reference = null;
 

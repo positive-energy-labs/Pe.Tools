@@ -8,10 +8,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.AspNetCore.SignalR.Protocols.NewtonsoftJson" Version="8.0.0"/>
-    </ItemGroup>
-
-    <ItemGroup>
         <ProjectReference Include="..\Pe.Host.Contracts\Pe.Host.Contracts.csproj"/>
         <ProjectReference Include="..\Pe.SettingsCatalog.Revit\Pe.SettingsCatalog.Revit.csproj"/>
         <ProjectReference Include="..\Pe.SettingsCatalog\Pe.SettingsCatalog.csproj"/>
