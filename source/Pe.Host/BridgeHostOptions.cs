@@ -21,7 +21,7 @@ public sealed record BridgeHostOptions(
     }
 
     private static IReadOnlyList<string> BuildAllowedOrigins(string frontendBaseUrl) =>
-        new[] {
+        [.. new[] {
             frontendBaseUrl,
             DefaultFrontendBaseUrl,
             "http://localhost:5173",
@@ -30,8 +30,7 @@ public sealed record BridgeHostOptions(
             "http://127.0.0.1:5173",
             "http://127.0.0.1:3000"
         }
-        .Distinct(StringComparer.OrdinalIgnoreCase)
-        .ToArray();
+        .Distinct(StringComparer.OrdinalIgnoreCase)];
 
     private static string GetValueOrDefault(string variableName, string defaultValue) {
         var value = Environment.GetEnvironmentVariable(variableName);

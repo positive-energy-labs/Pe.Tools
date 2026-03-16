@@ -3,7 +3,7 @@ using NJsonSchema;
 using NJsonSchema.Generation;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.StorageRuntime.Json.SchemaProviders;
 using System.Reflection;
 
 namespace Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
@@ -19,12 +19,10 @@ namespace Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
 ///     5. Apply enum values from selected provider
 /// </summary>
 [SettingsCapabilityTier(SettingsCapabilityTier.RevitAssembly)]
-public class RevitTypeSchemaProcessor(
-    SettingsCapabilityTier availableCapabilityTier = SettingsCapabilityTier.LiveRevitDocument,
-    SettingsProviderContext? providerContext = null)
-    : ISchemaProcessor {
+public class RevitTypeSchemaProcessor(SettingsProviderContext providerContext) : ISchemaProcessor {
     private readonly Dictionary<Type, IOptionsProvider> _providerCache = new();
-    private readonly SettingsProviderContext _providerContext = providerContext ?? new(availableCapabilityTier);
+    private readonly SettingsProviderContext _providerContext =
+        providerContext ?? throw new ArgumentNullException(nameof(providerContext));
 
     public void Process(SchemaProcessorContext context) {
         if (!context.ContextualType.Type.IsClass)
@@ -45,7 +43,6 @@ public class RevitTypeSchemaProcessor(
 
             Type? providerType = null;
 
-            // Check for discriminator-based selection first
             if (registration is { DiscriminatorType: { } discriminatorType, ProviderSelector: { } providerSelector }) {
                 var discriminatorAttr = property.GetCustomAttribute(discriminatorType);
                 if (discriminatorAttr != null) {
@@ -53,9 +50,7 @@ public class RevitTypeSchemaProcessor(
                     if (selectedProvider != null)
                         providerType = selectedProvider;
                 }
-            }
-            // If no discriminator, but has a provider selector, call it with null
-            else if (registration is { ProviderSelector: { } defaultProviderSelector })
+            } else if (registration is { ProviderSelector: { } defaultProviderSelector })
                 providerType = defaultProviderSelector(null);
 
             if (providerType == null)
@@ -82,7 +77,7 @@ public class RevitTypeSchemaProcessor(
     }
 
     private void ApplyProviderEnums(JsonSchema propertySchema, Type providerType) {
-        if (!SettingsCapabilityResolver.IsSupported(providerType, availableCapabilityTier))
+        if (!SettingsCapabilityResolver.IsSupported(providerType, this._providerContext.AvailableCapabilityTier))
             return;
 
         try {

@@ -4,6 +4,7 @@ using Newtonsoft.Json.Linq;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Pe.StorageRuntime.Json;
+using Pe.StorageRuntime.Json.SchemaProcessors;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;

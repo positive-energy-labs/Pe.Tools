@@ -10,24 +10,17 @@ namespace Pe.StorageRuntime.Documents;
 /// <summary>
 ///     Minimal shared filesystem backend over the existing Pe.App settings layout.
 /// </summary>
-public sealed class LocalDiskSettingsStorageBackend : ISettingsStorageBackend {
-    private readonly SettingsCapabilityTier _availableCapabilityTier;
-    private readonly string _basePath;
-    private readonly IReadOnlyDictionary<string, SettingsStorageModuleDefinition> _moduleDefinitionsByModuleKey;
-
-    public LocalDiskSettingsStorageBackend(
-        string? basePath = null,
-        SettingsCapabilityTier availableCapabilityTier = SettingsCapabilityTier.RevitAssembly,
-        IReadOnlyDictionary<string, SettingsStorageModuleDefinition>? moduleDefinitionsByModuleKey = null
-    ) {
-        this._basePath = string.IsNullOrWhiteSpace(basePath)
+public sealed class LocalDiskSettingsStorageBackend(
+    string? basePath = null,
+    SettingsCapabilityTier availableCapabilityTier = SettingsCapabilityTier.RevitAssembly,
+    IReadOnlyDictionary<string, SettingsStorageModuleDefinition>? moduleDefinitionsByModuleKey = null
+    ) : ISettingsStorageBackend {
+    private readonly string _basePath = string.IsNullOrWhiteSpace(basePath)
             ? SettingsStorageLocations.GetDefaultBasePath()
             : Path.GetFullPath(basePath);
-        this._availableCapabilityTier = availableCapabilityTier;
-        this._moduleDefinitionsByModuleKey =
+    private readonly IReadOnlyDictionary<string, SettingsStorageModuleDefinition> _moduleDefinitionsByModuleKey =
             moduleDefinitionsByModuleKey ??
             new Dictionary<string, SettingsStorageModuleDefinition>(StringComparer.OrdinalIgnoreCase);
-    }
 
     public Task<SettingsDiscoveryResult> DiscoverAsync(
         string moduleKey,
@@ -132,7 +125,7 @@ public sealed class LocalDiskSettingsStorageBackend : ISettingsStorageBackend {
         if (!string.IsNullOrWhiteSpace(directory) && !Directory.Exists(directory))
             _ = Directory.CreateDirectory(directory);
 
-        File.WriteAllText(documentPath, EnsureTrailingNewline(request.RawContent));
+        File.WriteAllText(documentPath, JsonFormatting.NormalizeTrailingNewline(request.RawContent));
 
         return Task.FromResult(new SaveSettingsDocumentResult(
             this.BuildMetadata(request.DocumentId, documentPath),
@@ -234,7 +227,7 @@ public sealed class LocalDiskSettingsStorageBackend : ISettingsStorageBackend {
                     artifact => dependencies.Add(this.CreateDependency(documentId, artifact, SettingsDocumentDependencyKind.Preset))
                 );
                 if (includeComposedOutput)
-                    composedContent = EnsureTrailingNewline(composedObject.ToString(Formatting.Indented));
+                    composedContent = JsonFormatting.NormalizeTrailingNewline(composedObject.ToString(Formatting.Indented));
             }
         } catch (JsonCompositionException ex) {
             issues.Add(new SettingsValidationIssue(
@@ -258,7 +251,7 @@ public sealed class LocalDiskSettingsStorageBackend : ISettingsStorageBackend {
             var validatorResult = moduleDefinition.Validator.Validate(
                 documentId,
                 rawContent,
-                composedObject == null ? null : EnsureTrailingNewline(composedObject.ToString(Formatting.Indented))
+                composedObject == null ? null : JsonFormatting.NormalizeTrailingNewline(composedObject.ToString(Formatting.Indented))
             );
             issues.AddRange(validatorResult.Issues);
         }
@@ -416,7 +409,7 @@ public sealed class LocalDiskSettingsStorageBackend : ISettingsStorageBackend {
         SettingsStorageModuleDefinition moduleDefinition
     ) => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
         ["backend"] = "local-disk",
-        ["availableCapabilityTier"] = this._availableCapabilityTier.ToString(),
+        ["availableCapabilityTier"] = availableCapabilityTier.ToString(),
         ["schemaValidation"] = moduleDefinition.Validator == null ? "not-configured" : "configured",
         ["compositionPolicy"] = includeComposedContent ? "module-scoped" : "not-requested",
         ["dependencyScopes"] = "local,global"
@@ -447,10 +440,7 @@ public sealed class LocalDiskSettingsStorageBackend : ISettingsStorageBackend {
         return new SettingsValidationResult(!hasErrors, issues);
     }
 
-    private static string EnsureTrailingNewline(string content) =>
-        content.EndsWith(Environment.NewLine, StringComparison.Ordinal)
-            ? content
-            : content + Environment.NewLine;
+
 
     private sealed record MaterializedDocument(
         string? ComposedContent,

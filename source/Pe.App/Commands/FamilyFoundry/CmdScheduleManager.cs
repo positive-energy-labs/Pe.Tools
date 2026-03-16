@@ -38,7 +38,10 @@ public class CmdScheduleManager : IExternalCommand {
 
             // Context for Schedule tabs
             var context = new ScheduleManagerContext {
-                Doc = doc, UiDoc = uiDoc, Storage = storage, ProfilesStorage = profilesStorage
+                Doc = doc,
+                UiDoc = uiDoc,
+                Storage = storage,
+                ProfilesStorage = profilesStorage
             };
 
             // Collect items for both tabs
@@ -164,10 +167,8 @@ public class CmdScheduleManager : IExternalCommand {
         // Serialize profile to JSON
         var profileJson = JsonConvert.SerializeObject(
             profile,
-            Formatting.Indented,
-            new JsonSerializerSettings {
-                NullValueHandling = NullValueHandling.Ignore, ContractResolver = new RevitTypeContractResolver()
-            });
+            RevitJsonFormatting.CreateRevitIndentedSettings()
+        );
 
         return new SchedulePreviewData {
             ProfileName = profileItem.TextPrimary,

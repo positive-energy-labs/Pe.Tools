@@ -4,10 +4,10 @@ using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using NJsonSchema.Generation;
 using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.StorageRuntime.Json.SchemaProviders;
 using System.Reflection;
 
-namespace Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
+namespace Pe.StorageRuntime.Json.SchemaProcessors;
 
 [AttributeUsage(AttributeTargets.Property)]
 public class SchemaExamplesAttribute : Attribute {
@@ -31,7 +31,6 @@ public class SchemaExamplesProcessor : ISchemaProcessor {
 
     public SettingsProviderContext ProviderContext { get; init; } = new(SettingsCapabilityTier.RevitAssembly);
     public bool ResolveExamples { get; init; } = true;
-    public SettingsCapabilityTier AvailableCapabilityTier { get; init; } = SettingsCapabilityTier.LiveRevitDocument;
 
     public void Process(SchemaProcessorContext context) {
         if (!context.ContextualType.Type.IsClass)
@@ -58,7 +57,7 @@ public class SchemaExamplesProcessor : ISchemaProcessor {
                 var providerCapabilityTier = SettingsCapabilityResolver.GetRequiredTier(attr.ProviderType);
                 var canExecuteProvider = SettingsCapabilityResolver.IsSupported(
                     attr.ProviderType,
-                    this.AvailableCapabilityTier
+                    this.ProviderContext.AvailableCapabilityTier
                 );
 
                 if (provider is IDependentOptionsProvider dependentProvider)

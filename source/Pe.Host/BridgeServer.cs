@@ -80,7 +80,7 @@ public sealed class BridgeServer(
                 response.Metrics.ResponseBytes
             );
 
-            return Newtonsoft.Json.JsonConvert.DeserializeObject<TResponse>(response.PayloadJson, this._serializerSettings)
+            return JsonConvert.DeserializeObject<TResponse>(response.PayloadJson, this._serializerSettings)
                    ?? throw new InvalidOperationException($"Failed to deserialize bridge response for '{method}'.");
         } finally {
             _ = this._pending.TryRemove(requestId, out _);

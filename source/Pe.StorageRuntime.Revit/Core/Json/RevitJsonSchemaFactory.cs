@@ -1,5 +1,6 @@
 using NJsonSchema;
 using Pe.StorageRuntime.Json;
+using Pe.StorageRuntime.Json.SchemaProviders;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
 namespace Pe.StorageRuntime.Revit.Core.Json;
@@ -23,21 +24,14 @@ public static class RevitJsonSchemaFactory {
         CreateOptions(context, resolveExamples)
     );
 
-    public static string CreateEditorSchemaJson(
+
+
+    public static JsonSchemaData CreateEditorSchemaData(
         Type type,
         SettingsProviderContext context,
         bool resolveExamples = false
-    ) => JsonSchemaFactory.CreateEditorSchemaJson(
+    ) => JsonSchemaFactory.CreateEditorSchemaData(
         type,
-        CreateOptions(context, resolveExamples)
-    );
-
-    public static string CreateEditorFragmentSchemaJson(
-        Type itemType,
-        SettingsProviderContext context,
-        bool resolveExamples = false
-    ) => JsonSchemaFactory.CreateEditorFragmentSchemaJson(
-        itemType,
         CreateOptions(context, resolveExamples)
     );
 

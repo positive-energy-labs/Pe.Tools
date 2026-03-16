@@ -1,15 +1,11 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
-using Pe.StorageRuntime.Json;
 using System.Reflection;
 
 namespace Pe.StorageRuntime.Json.ContractResolvers;
 
-public class RegisteredTypeContractResolver : OrderedContractResolver {
-    private readonly JsonTypeRegistrationLookup? _registrationLookup;
-
-    public RegisteredTypeContractResolver(JsonTypeRegistrationLookup? registrationLookup = null) =>
-        this._registrationLookup = registrationLookup;
+public class RegisteredTypeContractResolver(JsonTypeRegistrationLookup? registrationLookup = null) : OrderedContractResolver {
+    private readonly JsonTypeRegistrationLookup? _registrationLookup = registrationLookup;
 
     protected override JsonProperty CreateProperty(MemberInfo member, MemberSerialization memberSerialization) {
         var property = base.CreateProperty(member, memberSerialization);
@@ -55,8 +51,11 @@ public class RegisteredTypeContractResolver : OrderedContractResolver {
             genericTypeDefinition != typeof(ICollection<>) &&
             genericTypeDefinition != typeof(IEnumerable<>) &&
             genericTypeDefinition != typeof(IReadOnlyList<>) &&
-            genericTypeDefinition != typeof(IReadOnlyCollection<>))
+            genericTypeDefinition != typeof(IReadOnlyCollection<>)) {
+
             return unwrappedType;
+        }
+
 
         return unwrappedType.GetGenericArguments()[0];
     }
@@ -84,8 +83,10 @@ public class RegisteredTypeContractResolver : OrderedContractResolver {
             var discriminatorAttribute = propertyInfo.GetCustomAttribute(discriminatorType);
             if (discriminatorAttribute != null)
                 converterType = converterSelector(discriminatorAttribute);
-        } else if (registration.ConverterSelector is { } defaultConverterSelector)
+        } else if (registration.ConverterSelector is { } defaultConverterSelector) {
             converterType = defaultConverterSelector(null);
+        }
+
 
         if (converterType == null)
             return null;

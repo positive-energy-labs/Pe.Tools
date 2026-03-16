@@ -1,6 +1,7 @@
 using NJsonSchema;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Json;
+using Pe.StorageRuntime.Json.SchemaProviders;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
 namespace Pe.StorageRuntime.Revit.Core.Json;
@@ -37,13 +38,13 @@ internal sealed class JsonCompositionSchemaSynchronizer(
             this._fragmentSchemasByRoot[artifact.ResolvedDirective.RootSegment] = fragmentSchema;
         }
 
-        var updatedContent = JsonSchemaFactory.WriteAndInjectSchema(
+        var updatedContent = JsonSchemaDocumentService.WriteSchemaAndInjectReference(
             fragmentSchema,
             fragmentContent,
             artifact.SourceFilePath,
             fragmentSchemaPath
         );
-        updatedContent = EnsureTrailingNewline(updatedContent);
+        updatedContent = JsonFormatting.NormalizeTrailingNewline(updatedContent);
         if (!string.Equals(fragmentContent, updatedContent, StringComparison.Ordinal))
             File.WriteAllText(artifact.SourceFilePath, updatedContent);
     }
@@ -68,17 +69,14 @@ internal sealed class JsonCompositionSchemaSynchronizer(
             this._presetSchemasByRoot[artifact.ResolvedDirective.RootSegment] = presetSchema;
         }
 
-        var updatedContent = JsonSchemaFactory.WriteAndInjectSchema(
+        var updatedContent = JsonSchemaDocumentService.WriteSchemaAndInjectReference(
             presetSchema,
             presetContent,
             artifact.SourceFilePath,
             presetSchemaPath
         );
-        updatedContent = EnsureTrailingNewline(updatedContent);
+        updatedContent = JsonFormatting.NormalizeTrailingNewline(updatedContent);
         if (!string.Equals(presetContent, updatedContent, StringComparison.Ordinal))
             File.WriteAllText(artifact.SourceFilePath, updatedContent);
     }
-
-    private static string EnsureTrailingNewline(string jsonContent) =>
-        jsonContent.TrimEnd('\r', '\n') + Environment.NewLine;
 }

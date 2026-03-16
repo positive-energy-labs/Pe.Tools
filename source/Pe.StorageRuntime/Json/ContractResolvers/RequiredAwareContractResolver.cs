@@ -78,9 +78,7 @@ public class RequiredAwareContractResolver : RegisteredTypeContractResolver {
     private static void ApplyRequiredSerialization(JsonProperty property, RequiredPropertyKind requirement) {
         property.DefaultValueHandling = DefaultValueHandling.Include;
         property.NullValueHandling = NullValueHandling.Include;
-        property.Required = requirement == RequiredPropertyKind.ValidationRequired
-            ? Required.Always
-            : Required.AllowNull;
+        property.Required = Required.AllowNull;
     }
 
     private object? GetOrCreateDefaultInstance(Type type) {
