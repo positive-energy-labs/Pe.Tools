@@ -1,4 +1,6 @@
-namespace Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.StorageRuntime.Json.SchemaProviders;
+
+namespace Pe.StorageRuntime.Json.SchemaProviders;
 
 public interface IDependentOptionsProvider : IOptionsProvider {
     IReadOnlyList<string> DependsOn { get; }

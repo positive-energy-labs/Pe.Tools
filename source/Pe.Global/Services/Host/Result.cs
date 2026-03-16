@@ -43,7 +43,4 @@ internal static class ResultEnvelopeExtensions {
 
     public static ParameterCatalogEnvelopeResponse ToParameterCatalogEnvelope(this Result<ParameterCatalogData> result) =>
         new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
-
-    public static SettingsCatalogEnvelopeResponse ToSettingsCatalogEnvelope(this Result<SettingsCatalogData> result) =>
-        new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
 }

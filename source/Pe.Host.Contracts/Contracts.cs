@@ -10,7 +10,6 @@ public static class HubMethodNames {
     public const string GetFieldOptionsEnvelope = nameof(GetFieldOptionsEnvelope);
     public const string ValidateSettingsEnvelope = nameof(ValidateSettingsEnvelope);
     public const string GetParameterCatalogEnvelope = nameof(GetParameterCatalogEnvelope);
-    public const string GetSettingsCatalogEnvelope = nameof(GetSettingsCatalogEnvelope);
 }
 
 [ExportTsClass]
@@ -255,30 +254,6 @@ public record FieldOptionsRequest(
 );
 
 [ExportTsInterface]
-public record FieldOptionsDependencySchema(
-    string Key,
-    FieldOptionsDependencyScope Scope
-);
-
-[ExportTsInterface]
-public record FieldOptionsSourceSchema(
-    string Key,
-    FieldOptionsResolverKind Resolver,
-    FieldOptionsDatasetKind? Dataset,
-    FieldOptionsMode Mode,
-    bool AllowsCustomValue,
-    List<FieldOptionsDependencySchema> DependsOn
-);
-
-[ExportTsInterface]
-public record SettingsCatalogItem(
-    string Id,
-    string Label,
-    string ModuleKey,
-    string DefaultRootKey
-);
-
-[ExportTsInterface]
 public record SettingsModuleDescriptor(
     string ModuleKey,
     string DefaultRootKey
@@ -300,11 +275,6 @@ public record HostStatusData(
     string BridgeTransport,
     List<SettingsModuleDescriptor> AvailableModules,
     string? DisconnectReason
-);
-
-[ExportTsInterface]
-public record SettingsCatalogRequest(
-    string? ModuleKey = null
 );
 
 [ExportTsInterface]
@@ -360,29 +330,9 @@ public enum EnvelopeCode {
 
 [JsonConverter(typeof(StringEnumConverter))]
 [ExportTsEnum]
-public enum FieldOptionsDependencyScope {
-    Sibling,
-    Context
-}
-
-[JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
 public enum FieldOptionsMode {
     Suggestion,
     Constraint
-}
-
-[JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
-public enum FieldOptionsResolverKind {
-    Remote,
-    Dataset
-}
-
-[JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
-public enum FieldOptionsDatasetKind {
-    ParameterCatalog
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
@@ -448,15 +398,6 @@ public record ValidationEnvelopeResponse(
 );
 
 [ExportTsInterface]
-public record HostStatusEnvelopeResponse(
-    bool Ok,
-    EnvelopeCode Code,
-    string Message,
-    List<ValidationIssue> Issues,
-    HostStatusData? Data
-);
-
-[ExportTsInterface]
 public record ParameterCatalogRequest(
     string ModuleKey,
     Dictionary<string, string>? ContextValues
@@ -491,20 +432,6 @@ public record ParameterCatalogEnvelopeResponse(
     string Message,
     List<ValidationIssue> Issues,
     ParameterCatalogData? Data
-);
-
-[ExportTsInterface]
-public record SettingsCatalogData(
-    List<SettingsCatalogItem> Targets
-);
-
-[ExportTsInterface]
-public record SettingsCatalogEnvelopeResponse(
-    bool Ok,
-    EnvelopeCode Code,
-    string Message,
-    List<ValidationIssue> Issues,
-    SettingsCatalogData? Data
 );
 
 public record BridgeHandshake(

@@ -1,15 +1,14 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
 using Pe.Global.Services.AutoTag;
 using Pe.SettingsCatalog.Revit.AutoTag;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Json;
+using Pe.StorageRuntime.Json.SchemaProviders;
 using Pe.StorageRuntime.Revit;
 using Pe.StorageRuntime.Revit.AutoTag;
 using Pe.StorageRuntime.Revit.Core.Json;
-using Pe.StorageRuntime.Revit.Core.Json.ContractResolvers;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Serilog;
 using System.IO;
@@ -24,12 +23,7 @@ namespace Pe.Tools.Commands.AutoTag;
 /// </summary>
 [Transaction(TransactionMode.Manual)]
 public class CmdAutoTag : IExternalCommand {
-    private static readonly JsonSerializerSettings JsonSettings = new() {
-        Formatting = Formatting.Indented,
-        NullValueHandling = NullValueHandling.Ignore,
-        ContractResolver = new RevitTypeContractResolver(),
-        Converters = { new StringEnumConverter() }
-    };
+    private static readonly JsonSerializerSettings JsonSettings = RevitJsonFormatting.CreateRevitIndentedSettings();
 
     public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements) {
         var uiDoc = commandData.Application.ActiveUIDocument;
@@ -482,12 +476,15 @@ public class CmdAutoTag : IExternalCommand {
             typeof(AutoTagSettings),
             new SettingsProviderContext(SettingsCapabilityTier.LiveRevitDocument)
         );
-        File.WriteAllText(schemaFilePath, schema.ToJson());
 
         // Serialize with $schema reference
         var json = JsonConvert.SerializeObject(settings, JsonSettings);
-        var relativeSchemaPath = Path.GetFileName(schemaFilePath);
-        var jsonWithSchema = json.Insert(1, $"\n  \"$schema\": \"{relativeSchemaPath}\",");
+        var jsonWithSchema = JsonSchemaDocumentService.WriteSchemaAndInjectReference(
+            schema,
+            json,
+            settingsFilePath,
+            schemaFilePath
+        );
         File.WriteAllText(settingsFilePath, jsonWithSchema);
 
         FileUtils.OpenInDefaultApp(settingsFilePath);

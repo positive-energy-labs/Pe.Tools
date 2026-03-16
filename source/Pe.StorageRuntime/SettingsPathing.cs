@@ -100,15 +100,12 @@ public static class SettingsPathing {
     }
 
     public static string NormalizeRelativePath(string? input, string paramName) {
-        if (string.IsNullOrWhiteSpace(input))
-            return string.Empty;
-
-        var normalized = input.Replace('\\', '/').Trim('/');
+        var normalized = input?.Replace('\\', '/').Trim('/');
         if (string.IsNullOrWhiteSpace(normalized))
             return string.Empty;
 
-        var segments = normalized.SplitAndTrim('/', StringSplitOptions.RemoveEmptyEntries);
-        if (segments.Length == 0)
+        var segments = normalized?.SplitAndTrim('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments == null || segments.Length == 0)
             return string.Empty;
 
         var invalidSegment = segments.FirstOrDefault(segment =>

@@ -2,6 +2,8 @@ using Pe.Host.Contracts;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Documents;
 using Pe.StorageRuntime.Json;
+using Pe.StorageRuntime.Json.SchemaProcessors;
+using Pe.StorageRuntime.Json.SchemaProviders;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Pe.StorageRuntime.Revit.Validation;
@@ -190,8 +192,16 @@ public sealed class HostSettingsEditorService(IHostSettingsModuleCatalog moduleC
         }
     }
 
-    private static SchemaData CreateSchemaData(Type settingsType) =>
-        HostJsonSchemaFactory.CreateSchemaData(settingsType);
+    private static SchemaData CreateSchemaData(Type settingsType) {
+        var schemaData = JsonSchemaFactory.CreateEditorSchemaData(
+            settingsType,
+            new JsonSchemaBuildOptions(new SettingsProviderContext(SettingsCapabilityTier.RevitAssembly)) {
+                ResolveExamples = false
+            }
+        );
+
+        return new SchemaData(schemaData.SchemaJson, schemaData.FragmentSchemaJson);
+    }
 
     private static FieldOptionsEnvelopeResponse CreateFieldOptionsSuccess(
         string sourceKey,

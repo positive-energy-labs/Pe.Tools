@@ -1,12 +1,10 @@
 using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Json.ContractResolvers;
+using Pe.StorageRuntime.Json.SchemaProviders;
 using Pe.StorageRuntime.Modules;
-using Pe.StorageRuntime.Revit.Core.Json.ContractResolvers;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using System.Reflection;
 
@@ -22,12 +20,7 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
     private readonly JsonCompositionPipeline _compositionPipeline;
     private readonly JsonSerializer _deserializer;
 
-    private readonly JsonSerializerSettings _deserialSettings = new() {
-        Formatting = Formatting.Indented,
-        Converters = [new StringEnumConverter()],
-        ContractResolver = new RevitTypeContractResolver(),
-        NullValueHandling = NullValueHandling.Ignore
-    };
+    private readonly JsonSerializerSettings _deserialSettings = RevitJsonFormatting.CreateRevitIndentedSettings();
 
     private readonly IReadOnlyDictionary<string, Type> _fragmentItemTypesByRoot;
     private readonly IReadOnlyCollection<string> _knownIncludeRoots;
@@ -36,12 +29,8 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
     private readonly string _profileSchemaPath;
     private readonly string _schemaDirectory;
 
-    private readonly JsonSerializerSettings _serialSettings = new() {
-        Formatting = Formatting.Indented,
-        Converters = [new StringEnumConverter()],
-        ContractResolver = new RequiredAwareContractResolver(RevitTypeRegistry.TryGet),
-        NullValueHandling = NullValueHandling.Ignore
-    };
+    private readonly JsonSerializerSettings _serialSettings =
+        RevitJsonFormatting.CreateRequiredAwareRevitIndentedSettings(RevitTypeRegistry.TryGet);
 
     private T? _cachedData;
     private DateTimeOffset _cachedModifiedUtc;
@@ -56,7 +45,7 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
         this._presetObjectTypesByRoot = metadata.PresetObjectTypesByRoot;
         this._knownIncludeRoots = metadata.KnownIncludeRoots;
         this._knownPresetRoots = metadata.KnownPresetRoots;
-        this._deserializer = JsonSerializer.Create(this._deserialSettings);
+        this._deserializer = JsonFormatting.CreateSerializer(this._deserialSettings);
         this._profileSchemaPath =
             SettingsPathing.ResolveCentralizedProfileSchemaPath(this._schemaDirectory, typeof(T));
         this._compositionPipeline = new JsonCompositionPipeline(
@@ -159,15 +148,19 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
 
         if (this._behavior != JsonBehavior.Output) {
             var schema = authoringSchema ?? CreateAuthoringSchema();
-            jsonContent =
-                JsonSchemaFactory.WriteAndInjectSchema(schema, jsonContent, this.FilePath, this._profileSchemaPath);
+            jsonContent = JsonSchemaDocumentService.WriteSchemaAndInjectReference(
+                schema,
+                jsonContent,
+                this.FilePath,
+                this._profileSchemaPath
+            );
         }
 
         var directory = Path.GetDirectoryName(this.FilePath);
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
             _ = Directory.CreateDirectory(directory);
 
-        jsonContent = EnsureTrailingNewline(jsonContent);
+        jsonContent = JsonFormatting.NormalizeTrailingNewline(jsonContent);
         File.WriteAllText(this.FilePath, jsonContent);
         return jsonContent;
     }
@@ -176,15 +169,19 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
         var jsonContent = data.ToString(Formatting.Indented);
         if (this._behavior != JsonBehavior.Output) {
             var schema = authoringSchema ?? CreateAuthoringSchema();
-            jsonContent =
-                JsonSchemaFactory.WriteAndInjectSchema(schema, jsonContent, this.FilePath, this._profileSchemaPath);
+            jsonContent = JsonSchemaDocumentService.WriteSchemaAndInjectReference(
+                schema,
+                jsonContent,
+                this.FilePath,
+                this._profileSchemaPath
+            );
         }
 
         var directory = Path.GetDirectoryName(this.FilePath);
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
             _ = Directory.CreateDirectory(directory);
 
-        jsonContent = EnsureTrailingNewline(jsonContent);
+        jsonContent = JsonFormatting.NormalizeTrailingNewline(jsonContent);
         File.WriteAllText(this.FilePath, jsonContent);
         return jsonContent;
     }
@@ -372,8 +369,7 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
                string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string EnsureTrailingNewline(string jsonContent) =>
-        jsonContent.TrimEnd('\r', '\n') + Environment.NewLine;
+
 
     private static bool ContainsDirectiveMetadata(JToken token) {
         if (token is JObject obj) {

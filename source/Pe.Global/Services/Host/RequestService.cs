@@ -3,6 +3,8 @@ using Pe.Global.Services.Document;
 using Pe.Host.Contracts;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Documents;
+using Pe.StorageRuntime.Json.SchemaProcessors;
+using Pe.StorageRuntime.Json.SchemaProviders;
 using Pe.StorageRuntime.Revit.Core.Json;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
@@ -352,21 +354,20 @@ public class RequestService {
 
         var type = module.SettingsType;
         var providerContext = this.CreateProviderContext();
-        var targetSchemaJson = RevitJsonSchemaFactory.CreateEditorSchemaJson(type, providerContext);
+        var generatedSchemaData = RevitJsonSchemaFactory.CreateEditorSchemaData(type, providerContext);
 
-        string? fragmentSchemaJson = null;
-        try {
-            fragmentSchemaJson = RevitJsonSchemaFactory.CreateEditorFragmentSchemaJson(type, providerContext);
-        } catch (Exception ex) {
+        if (generatedSchemaData.FragmentSchemaJson == null) {
             Log.Warning(
-                ex,
                 "Fragment schema generation failed: ModuleKey={ModuleKey}, SettingsType={SettingsType}",
                 module.ModuleKey,
                 type.FullName ?? type.Name
             );
         }
 
-        var generatedSchema = new SchemaData(targetSchemaJson, fragmentSchemaJson);
+        var generatedSchema = new SchemaData(
+            generatedSchemaData.SchemaJson,
+            generatedSchemaData.FragmentSchemaJson
+        );
         _ = this._schemaCache.TryAdd(module.ModuleKey, generatedSchema);
         return generatedSchema;
     }

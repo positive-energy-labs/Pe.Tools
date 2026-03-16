@@ -40,9 +40,6 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
 
     [Test]
     public async Task Hub_requests_do_not_expose_subdirectory() {
-        await Assert.That(typeof(SettingsCatalogRequest).GetProperties())
-            .DoesNotContain(property =>
-                string.Equals(property.Name, "SubDirectory", StringComparison.OrdinalIgnoreCase));
         await Assert.That(typeof(ValidateSettingsRequest).GetProperties())
             .DoesNotContain(property =>
                 string.Equals(property.Name, "SubDirectory", StringComparison.OrdinalIgnoreCase));
@@ -76,32 +73,26 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
 
     [Test]
     public async Task Json_serializes_contracts_as_camel_case_and_omits_nulls() {
-        var payload = new HostStatusEnvelopeResponse(
+        var payload = new HostStatusData(
             true,
-            EnvelopeCode.Ok,
-            "ready",
-            [],
-            new HostStatusData(
-                true,
-                true,
-                ProviderMode.BridgeEnhanced,
-                true,
-                "Test Model",
-                "2025",
-                ".NET 8.0",
-                HostProtocol.ContractVersion,
-                HostProtocol.Transport,
-                null,
-                BridgeProtocol.ContractVersion,
-                BridgeProtocol.Transport,
-                [
-                    new HostSettingsModuleDescriptor(
-                        "FFMigrator",
-                        "profiles"
-                    )
-                ],
-                null
-            )
+            true,
+            ProviderMode.BridgeEnhanced,
+            true,
+            "Test Model",
+            "2025",
+            ".NET 8.0",
+            HostProtocol.ContractVersion,
+            HostProtocol.Transport,
+            null,
+            BridgeProtocol.ContractVersion,
+            BridgeProtocol.Transport,
+            [
+                new HostSettingsModuleDescriptor(
+                    "FFMigrator",
+                    "profiles"
+                )
+            ],
+            null
         );
 
         var json = JsonConvert.SerializeObject(payload, CreateSerializerSettings());
@@ -158,33 +149,27 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
     }
 
     [Test]
-    public async Task HostStatusEnvelopeResponse_serializes_machine_readable_state() {
-        var payload = new HostStatusEnvelopeResponse(
+    public async Task HostStatusData_serializes_machine_readable_state() {
+        var payload = new HostStatusData(
             true,
-            EnvelopeCode.Ok,
-            "connected",
-            [],
-            new HostStatusData(
-                true,
-                true,
-                ProviderMode.BridgeEnhanced,
-                true,
-                "Active Model",
-                "2025",
-                ".NET 8.0",
-                HostProtocol.ContractVersion,
-                HostProtocol.Transport,
-                "1.2.3",
-                BridgeProtocol.ContractVersion,
-                BridgeProtocol.Transport,
-                [
-                    new HostSettingsModuleDescriptor(
-                        "FFMigrator",
-                        "profiles"
-                    )
-                ],
-                null
-            )
+            true,
+            ProviderMode.BridgeEnhanced,
+            true,
+            "Active Model",
+            "2025",
+            ".NET 8.0",
+            HostProtocol.ContractVersion,
+            HostProtocol.Transport,
+            "1.2.3",
+            BridgeProtocol.ContractVersion,
+            BridgeProtocol.Transport,
+            [
+                new HostSettingsModuleDescriptor(
+                    "FFMigrator",
+                    "profiles"
+                )
+            ],
+            null
         );
 
         var json = JsonConvert.SerializeObject(payload, CreateSerializerSettings());

@@ -62,7 +62,7 @@ break Hot Reloads. Therfore DO NOT build anything unless otherwise asked.
 3. Minimize API surfaces. Library code should balance the tradeoffs of being
    intuitive to use and general purpose.
 4. **If given permmission to build** then use commands that minimize output like
-   `dotnet build -c "Debug.R25" -nologo -clp:NoSummary /p:WarningLevel=0`
+   `dotnet build -c "Debug.R25" /p:WarningLevel=0`
 5. For `Pe.Tools.Tests`, prefer `dotnet run --project source/Pe.Tools.Tests/Pe.Tools.Tests.csproj -c "Debug.R25" -- --disable-logo --no-progress --output Normal`
    over `dotnet test`. This project uses TUnit as an executable test runner, and `dotnet test` can pass unsupported args and leave `Pe.Tools.Tests.exe` processes running.
 6. If `Pe.Tools.Tests.exe` is locked during rebuild, check for lingering `Pe.Tools.Tests` processes and terminate them before retrying. A reliable cleanup path is `Get-CimInstance Win32_Process -Filter "Name = 'Pe.Tools.Tests.exe'" | ForEach-Object { Invoke-CimMethod -InputObject $_ -MethodName Terminate }`.

@@ -5,9 +5,8 @@ using NJsonSchema.Generation;
 using NJsonSchema.NewtonsoftJson.Generation;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Json.SchemaProcessors;
+using Pe.StorageRuntime.Json.SchemaProviders;
 using Pe.StorageRuntime.PolyFill;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProcessors;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
@@ -17,7 +16,6 @@ namespace Pe.StorageRuntime.Json;
 public interface IJsonSchemaCapabilityAugmenter {
     void Configure(
         NewtonsoftJsonSchemaGeneratorSettings settings,
-        SettingsCapabilityTier availableCapabilityTier,
         SettingsProviderContext providerContext
     );
 }
@@ -27,10 +25,13 @@ public sealed class JsonSchemaBuildOptions(SettingsProviderContext providerConte
     public bool ResolveExamples { get; init; } = true;
 }
 
+public sealed record JsonSchemaData(
+    string SchemaJson,
+    string? FragmentSchemaJson
+);
+
 public static class JsonSchemaFactory {
     private static readonly List<IJsonSchemaCapabilityAugmenter> Augmenters = [];
-    private static readonly ConcurrentDictionary<string, string> SchemaHashesByPath =
-        new(StringComparer.OrdinalIgnoreCase);
     private static readonly object SyncRoot = new();
 
     public static void RegisterAugmenter(IJsonSchemaCapabilityAugmenter augmenter) {
@@ -81,34 +82,24 @@ public static class JsonSchemaFactory {
     public static string CreateEditorFragmentSchemaJson(Type itemType, JsonSchemaBuildOptions options) =>
         EditorSchemaTransformer.TransformFragmentToEditorJson(BuildFragmentSchema(itemType, options));
 
-    public static string WriteAndInjectSchema(
-        JsonSchema fullSchema,
-        string jsonContent,
-        string targetFilePath,
-        string schemaFilePath
-    ) {
-        var targetDir = Path.GetDirectoryName(targetFilePath);
-        if (targetDir != null && !Directory.Exists(targetDir))
-            _ = Directory.CreateDirectory(targetDir);
-        var normalizedSchemaFilePath = Path.GetFullPath(schemaFilePath);
-        var schemaDirectory = Path.GetDirectoryName(normalizedSchemaFilePath)
-                              ?? throw new ArgumentException(
-                                  "Schema path must include a directory.",
-                                  nameof(schemaFilePath)
-                              );
-        if (!Directory.Exists(schemaDirectory))
-            _ = Directory.CreateDirectory(schemaDirectory);
+    public static JsonSchemaData CreateEditorSchemaData(Type type, JsonSchemaBuildOptions options) {
+        if (type == null)
+            throw new ArgumentNullException(nameof(type));
+        if (options == null)
+            throw new ArgumentNullException(nameof(options));
 
-        var schemaJson = EnsureTrailingNewline(fullSchema.ToJson());
-        WriteIfChanged(normalizedSchemaFilePath, schemaJson);
+        var schemaJson = CreateEditorSchemaJson(type, options);
+        string? fragmentSchemaJson = null;
 
-        var relativeSchemaPath = BclExtensions.GetRelativePath(targetDir!, normalizedSchemaFilePath);
-        relativeSchemaPath = NormalizeSchemaReference(relativeSchemaPath);
+        try {
+            fragmentSchemaJson = CreateEditorFragmentSchemaJson(type, options);
+        } catch {
+        }
 
-        var jObject = JObject.Parse(jsonContent);
-        jObject["$schema"] = relativeSchemaPath;
-        return JsonConvert.SerializeObject(jObject, Formatting.Indented);
+        return new JsonSchemaData(schemaJson, fragmentSchemaJson);
     }
+
+
 
     private static JsonSchema BuildRawAuthoringSchema(Type type, JsonSchemaBuildOptions options) {
         var settings = CreateGeneratorSettings(
@@ -128,23 +119,80 @@ public static class JsonSchemaFactory {
             FlattenInheritanceHierarchy = true,
             AlwaysAllowAdditionalObjectProperties = false
         };
-        var availableCapabilityTier = providerContext.AvailableCapabilityTier;
 
         lock (SyncRoot) {
             foreach (var augmenter in Augmenters)
-                augmenter.Configure(settings, availableCapabilityTier, providerContext);
+                augmenter.Configure(settings, providerContext);
         }
 
         settings.SchemaProcessors.Add(new SchemaOneOfProcessor());
         settings.SchemaProcessors.Add(new SchemaExamplesProcessor {
             ResolveExamples = resolveExamples,
-            AvailableCapabilityTier = availableCapabilityTier,
             ProviderContext = providerContext
         });
         settings.SchemaProcessors.Add(new SchemaIncludesProcessor());
         settings.SchemaProcessors.Add(new SchemaPresetsProcessor());
 
         return settings;
+    }
+}
+
+public static class JsonSchemaDocumentService {
+    private static readonly ConcurrentDictionary<string, string> SchemaHashesByPath =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    public static void WriteSchemaFile(JsonSchema schema, string schemaFilePath) {
+        if (schema == null)
+            throw new ArgumentNullException(nameof(schema));
+        if (string.IsNullOrWhiteSpace(schemaFilePath))
+            throw new ArgumentException("Schema file path is required.", nameof(schemaFilePath));
+
+        var normalizedSchemaFilePath = Path.GetFullPath(schemaFilePath);
+        var schemaDirectory = Path.GetDirectoryName(normalizedSchemaFilePath)
+                              ?? throw new ArgumentException(
+                                  "Schema path must include a directory.",
+                                  nameof(schemaFilePath)
+                              );
+        if (!Directory.Exists(schemaDirectory))
+            _ = Directory.CreateDirectory(schemaDirectory);
+
+        var schemaJson = JsonFormatting.NormalizeTrailingNewline(schema.ToJson());
+        WriteIfChanged(normalizedSchemaFilePath, schemaJson);
+    }
+
+    public static string InjectSchemaReference(
+        string jsonContent,
+        string targetFilePath,
+        string schemaFilePath
+    ) {
+        if (string.IsNullOrWhiteSpace(jsonContent))
+            throw new ArgumentException("JSON content is required.", nameof(jsonContent));
+        if (string.IsNullOrWhiteSpace(targetFilePath))
+            throw new ArgumentException("Target file path is required.", nameof(targetFilePath));
+        if (string.IsNullOrWhiteSpace(schemaFilePath))
+            throw new ArgumentException("Schema file path is required.", nameof(schemaFilePath));
+
+        var targetDir = Path.GetDirectoryName(targetFilePath);
+        if (targetDir != null && !Directory.Exists(targetDir))
+            _ = Directory.CreateDirectory(targetDir);
+
+        var normalizedSchemaFilePath = Path.GetFullPath(schemaFilePath);
+        var relativeSchemaPath = BclExtensions.GetRelativePath(targetDir!, normalizedSchemaFilePath);
+        relativeSchemaPath = NormalizeSchemaReference(relativeSchemaPath);
+
+        var jObject = JObject.Parse(jsonContent);
+        jObject["$schema"] = relativeSchemaPath;
+        return JsonConvert.SerializeObject(jObject, Formatting.Indented);
+    }
+
+    public static string WriteSchemaAndInjectReference(
+        JsonSchema schema,
+        string jsonContent,
+        string targetFilePath,
+        string schemaFilePath
+    ) {
+        WriteSchemaFile(schema, schemaFilePath);
+        return InjectSchemaReference(jsonContent, targetFilePath, schemaFilePath);
     }
 
     private static void WriteIfChanged(string schemaFilePath, string newContent) {
@@ -180,6 +228,5 @@ public static class JsonSchemaFactory {
         return BitConverter.ToString(bytes).Replace("-", string.Empty);
     }
 
-    private static string EnsureTrailingNewline(string jsonContent) =>
-        jsonContent.TrimEnd('\r', '\n') + Environment.NewLine;
+
 }
