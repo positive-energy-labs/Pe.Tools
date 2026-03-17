@@ -6,14 +6,16 @@ using Pe.StorageRuntime.Json.FieldOptions;
 using Pe.StorageRuntime.Json.SchemaDefinitions;
 using Pe.StorageRuntime.Revit.Validation;
 using System.Collections.Concurrent;
+using FieldOptionItem = Pe.Host.Contracts.FieldOptionItem;
 using RuntimeSettingsDocumentId = Pe.StorageRuntime.Documents.SettingsDocumentId;
 using RuntimeSettingsValidationIssue = Pe.StorageRuntime.Documents.SettingsValidationIssue;
 
 namespace Pe.Host.Services;
 
 public sealed class HostSettingsEditorService(IHostSettingsModuleCatalog moduleCatalog) {
-    private readonly ConcurrentDictionary<string, SchemaData> _schemaCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly IHostSettingsModuleCatalog _moduleCatalog = moduleCatalog;
+    private readonly ConcurrentDictionary<string, SchemaData> _schemaCache = new(StringComparer.OrdinalIgnoreCase);
+
     private readonly ConcurrentDictionary<string, ISettingsDocumentValidator> _validationValidatorCache =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -171,7 +173,7 @@ public sealed class HostSettingsEditorService(IHostSettingsModuleCatalog moduleC
                 request.SourceKey,
                 fieldOptions.Message,
                 fieldOptions.Items
-                    .Select(item => new Pe.Host.Contracts.FieldOptionItem(item.Value, item.Label, item.Description))
+                    .Select(item => new FieldOptionItem(item.Value, item.Label, item.Description))
                     .ToList()
             );
             return true;
@@ -188,9 +190,7 @@ public sealed class HostSettingsEditorService(IHostSettingsModuleCatalog moduleC
     private static SchemaData CreateSchemaData(Type settingsType) {
         var schemaData = JsonSchemaFactory.CreateEditorSchemaData(
             settingsType,
-            new JsonSchemaBuildOptions(SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly) {
-                ResolveFieldOptionSamples = false
-            }
+            new JsonSchemaBuildOptions(SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly)
         );
 
         return new SchemaData(schemaData.SchemaJson, schemaData.FragmentSchemaJson);
@@ -199,7 +199,7 @@ public sealed class HostSettingsEditorService(IHostSettingsModuleCatalog moduleC
     private static FieldOptionsEnvelopeResponse CreateFieldOptionsSuccess(
         string sourceKey,
         string message,
-        List<Pe.Host.Contracts.FieldOptionItem> items
+        List<FieldOptionItem> items
     ) => new(
         true,
         EnvelopeCode.Ok,

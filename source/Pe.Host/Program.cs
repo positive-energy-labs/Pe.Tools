@@ -1,8 +1,8 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Pe.Host;
 using Pe.Host.Contracts;
 using Pe.Host.Services;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 HostRevitAssemblyResolver.EnsureRegistered();
 
@@ -19,8 +19,7 @@ builder.Services.AddSingleton<IHostSettingsModuleCatalog>(sp =>
 builder.Services.AddSingleton<HostSettingsRuntimeStateService>();
 builder.Services.AddSingleton<HostSettingsEditorService>();
 builder.Services.AddSingleton(sp => new HostSettingsStorageService(
-    sp.GetRequiredService<IHostSettingsModuleCatalog>(),
-    sp.GetRequiredService<IHostBridgeCapabilityService>()));
+    sp.GetRequiredService<IHostSettingsModuleCatalog>()));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BridgeServer>());
 builder.Services.ConfigureHttpJsonOptions(jsonOptions => {
     jsonOptions.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
@@ -71,15 +70,15 @@ app.MapPost(HttpRoutes.FieldOptions, async (
     FieldOptionsRequest request,
     HostBrowserApiService browserApiService,
     CancellationToken cancellationToken
-) => await ExecuteBrowserRequestAsync(
-    async () => await browserApiService.GetFieldOptionsAsync(request, cancellationToken)
+) => await ExecuteBrowserRequestAsync(async () =>
+    await browserApiService.GetFieldOptionsAsync(request, cancellationToken)
 ));
 app.MapPost(HttpRoutes.ParameterCatalog, async (
     ParameterCatalogRequest request,
     HostBrowserApiService browserApiService,
     CancellationToken cancellationToken
-) => await ExecuteBrowserRequestAsync(
-    async () => await browserApiService.GetParameterCatalogAsync(request, cancellationToken)
+) => await ExecuteBrowserRequestAsync(async () =>
+    await browserApiService.GetParameterCatalogAsync(request, cancellationToken)
 ));
 app.MapPost(HttpRoutes.OpenDocument, async (
     OpenSettingsDocumentRequest request,

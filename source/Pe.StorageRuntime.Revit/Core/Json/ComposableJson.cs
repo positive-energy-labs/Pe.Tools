@@ -4,6 +4,7 @@ using NJsonSchema;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Json;
 using Pe.StorageRuntime.Modules;
+using Pe.StorageRuntime.Revit.Context;
 using System.Reflection;
 
 namespace Pe.StorageRuntime.Revit.Core.Json;
@@ -55,7 +56,8 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
                 : new JsonCompositionSchemaSynchronizer(
                     this._schemaDirectory,
                     this._fragmentItemTypesByRoot,
-                    this._presetObjectTypesByRoot
+                    this._presetObjectTypesByRoot,
+                    documentContextAccessor: SettingsDocumentContextAccessorRegistry.Current
                 )
         );
         this.EnsureFragmentScaffolding();
@@ -200,12 +202,12 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
             throw new JsonValidationException(this.FilePath, validationErrors);
     }
 
-    private static JsonSchema CreateAuthoringSchema() {
-        return RevitJsonSchemaFactory.BuildAuthoringSchema(
+    private static JsonSchema CreateAuthoringSchema() =>
+        RevitJsonSchemaFactory.BuildAuthoringSchema(
             typeof(T),
-            SettingsRuntimeCapabilityProfiles.LiveDocument
+            SettingsRuntimeCapabilityProfiles.LiveDocument,
+            SettingsDocumentContextAccessorRegistry.Current
         );
-    }
 
     private void EnsureFragmentScaffolding() {
         if (this._fragmentScaffoldingEnsured || this._behavior == JsonBehavior.Output)
@@ -366,7 +368,6 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
                string.Equals(value, "true", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase);
     }
-
 
 
     private static bool ContainsDirectiveMetadata(JToken token) {

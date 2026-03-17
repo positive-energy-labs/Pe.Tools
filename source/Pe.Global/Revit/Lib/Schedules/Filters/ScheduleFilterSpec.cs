@@ -1,7 +1,6 @@
 using Pe.Global.PolyFill;
 using System.ComponentModel;
 using System.Globalization;
-using System.Text.Json.Serialization;
 
 namespace Pe.Global.Revit.Lib.Schedules.Filters;
 
@@ -10,7 +9,7 @@ public class ScheduleFilterSpec {
     public string FieldName { get; init; } = string.Empty;
 
     [Description("The type of comparison to perform (Equal, Contains, GreaterThan, etc.).")]
-    [JsonConverter(typeof(JsonStringEnumConverter))]
+
     public ScheduleFilterType FilterType { get; init; } = ScheduleFilterType.Equal;
 
     [Description(

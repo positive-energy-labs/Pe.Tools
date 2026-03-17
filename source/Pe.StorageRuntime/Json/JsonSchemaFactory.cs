@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using NJsonSchema.Generation;
@@ -108,7 +109,11 @@ public static class JsonSchemaFactory {
     private static NewtonsoftJsonSchemaGeneratorSettings CreateGeneratorSettings(JsonSchemaBuildOptions options) {
         var settings = new NewtonsoftJsonSchemaGeneratorSettings {
             FlattenInheritanceHierarchy = true,
-            AlwaysAllowAdditionalObjectProperties = false
+            AlwaysAllowAdditionalObjectProperties = false,
+            SerializerSettings = new JsonSerializerSettings {
+                NullValueHandling = NullValueHandling.Ignore,
+                Converters = [new StringEnumConverter()]
+            }
         };
 
         foreach (var mapper in JsonTypeSchemaBindingRegistry.Shared.CreateTypeMappers())

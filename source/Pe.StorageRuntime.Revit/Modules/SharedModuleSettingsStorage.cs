@@ -1,4 +1,5 @@
 using Pe.StorageRuntime.Capabilities;
+using Pe.StorageRuntime.Context;
 using Pe.StorageRuntime.Documents;
 using Pe.StorageRuntime.Modules;
 using Pe.StorageRuntime.Revit.Validation;
@@ -9,7 +10,8 @@ public sealed class SharedModuleSettingsStorage(
     ISettingsModule module,
     SettingsRuntimeCapabilities? availableCapabilities = null,
     IReadOnlyDictionary<string, SettingsStorageModuleDefinition>? moduleDefinitionsByModuleKey = null,
-    string? basePath = null) {
+    string? basePath = null,
+    ISettingsDocumentContextAccessor? documentContextAccessor = null) {
     private readonly LocalDiskSettingsStorageBackend _backend = new(
         basePath ?? StorageClient.BasePath,
         availableCapabilities ?? SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly,
@@ -24,6 +26,13 @@ public sealed class SharedModuleSettingsStorage(
 
     public string ModuleKey => module.ModuleKey;
     public string DefaultRootKey => module.DefaultSubDirectory;
+    public Type SettingsType => module.SettingsType;
+    public SettingsStorageModuleOptions StorageOptions => module.StorageOptions;
+
+    public SettingsRuntimeCapabilities AvailableCapabilities { get; } =
+        availableCapabilities ?? SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly;
+
+    public ISettingsDocumentContextAccessor? DocumentContextAccessor { get; } = documentContextAccessor;
 
     public Task<SettingsDiscoveryResult> DiscoverAsync(
         SettingsDiscoveryOptions? options = null,

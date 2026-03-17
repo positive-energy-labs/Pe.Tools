@@ -48,6 +48,7 @@ public static class JsonFormatting {
     private static JsonSerializerSettings CloneSettings(JsonSerializerSettings settings) => new() {
         Binder = settings.Binder,
         CheckAdditionalContent = settings.CheckAdditionalContent,
+        Converters = settings.Converters.ToList(),
         ConstructorHandling = settings.ConstructorHandling,
         Context = settings.Context,
         ContractResolver = settings.ContractResolver,

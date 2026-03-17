@@ -18,6 +18,21 @@ public static class SharedModuleSettingsStorageExtensions {
         string relativePath,
         string? rootKey = null
     ) where TSettings : class, new() {
+        var resolvedRootKey = rootKey ?? storage.DefaultRootKey;
+        var syncService = new SettingsDocumentSchemaSyncService(
+            storage.AvailableCapabilities,
+            storage.DocumentContextAccessor
+        );
+        var documentPath = storage.ResolveDocumentPath(relativePath, resolvedRootKey);
+        var rootDirectory = storage.ResolveRootDirectory(resolvedRootKey);
+
+        syncService.EnsureSynchronized(
+            storage.SettingsType,
+            storage.StorageOptions,
+            documentPath,
+            rootDirectory
+        );
+
         var snapshot = storage.OpenAsync(relativePath, true, rootKey).GetAwaiter().GetResult();
         if (!snapshot.Validation.IsValid) {
             throw new JsonValidationException(

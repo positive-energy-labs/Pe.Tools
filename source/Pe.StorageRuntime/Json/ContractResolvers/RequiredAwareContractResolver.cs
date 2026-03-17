@@ -1,6 +1,5 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
-using Pe.StorageRuntime.Json;
 using Pe.StorageRuntime.Json.Converters;
 using System.Collections;
 using System.ComponentModel.DataAnnotations;
@@ -25,10 +24,8 @@ public class RequiredAwareContractResolver : RegisteredTypeContractResolver {
         ApplyUniformChildKeySerialization(property, propertyInfo);
 
         var requirement = GetRequirementKind(propertyInfo);
-        if (requirement != RequiredPropertyKind.None) {
+        if (requirement != RequiredPropertyKind.None)
             ApplyRequiredSerialization(property, requirement);
-            return property;
-        }
 
         var declaringType = propertyInfo.DeclaringType;
         if (declaringType == null)

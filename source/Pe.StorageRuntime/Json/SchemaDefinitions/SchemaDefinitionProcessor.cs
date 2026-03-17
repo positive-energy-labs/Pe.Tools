@@ -1,3 +1,6 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 using NJsonSchema.Generation;
 using Pe.StorageRuntime.Json.FieldOptions;
 
@@ -34,6 +37,14 @@ public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : 
                 targetSchema.ExtensionData["examples"] = binding.StaticExamples.ToList();
             }
 
+            if (binding.Ui != null) {
+                var resolvedUi = ResolveUiMetadata(binding, this._options);
+                if (resolvedUi != null) {
+                    propertySchema.ExtensionData ??= new Dictionary<string, object?>();
+                    propertySchema.ExtensionData["x-ui"] = CreateUiPayload(resolvedUi);
+                }
+            }
+
             if (binding.FieldOptionsSource == null)
                 continue;
 
@@ -53,5 +64,57 @@ public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : 
 
             FieldOptionsSchemaMetadataWriter.Apply(targetSchema, descriptor, samples);
         }
+    }
+
+    private static SchemaUiMetadata? ResolveUiMetadata(
+        SettingsSchemaPropertyBinding binding,
+        JsonSchemaBuildOptions options
+    ) {
+        if (binding.Ui == null)
+            return null;
+
+        if (binding.UiDynamicColumnOrderSource == null)
+            return binding.Ui;
+
+        var resolvedValues = TryResolveDynamicColumnOrderValues(binding.UiDynamicColumnOrderSource, options);
+        var dynamicColumnOrder = binding.Ui.Behavior?.DynamicColumnOrder;
+        if (dynamicColumnOrder == null)
+            return binding.Ui;
+
+        var mergedValues = resolvedValues.Count == 0
+            ? dynamicColumnOrder.Values
+            : resolvedValues;
+
+        return binding.Ui with {
+            Behavior = binding.Ui.Behavior with {
+                DynamicColumnOrder = dynamicColumnOrder with { Values = mergedValues.ToList() }
+            }
+        };
+    }
+
+    private static IReadOnlyList<string> TryResolveDynamicColumnOrderValues(
+        ISchemaUiDynamicColumnOrderSource source,
+        JsonSchemaBuildOptions options
+    ) {
+        if (!options.Capabilities.Supports(source.RequiredCapabilities))
+            return [];
+
+        try {
+            return source
+                .GetValuesAsync(options.CreateFieldOptionsExecutionContext())
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+        } catch {
+            return [];
+        }
+    }
+
+    private static JObject CreateUiPayload(SchemaUiMetadata metadata) {
+        var serializer = JsonSerializer.CreateDefault(new JsonSerializerSettings {
+            NullValueHandling = NullValueHandling.Ignore,
+            ContractResolver = new CamelCasePropertyNamesContractResolver()
+        });
+        return JObject.FromObject(metadata, serializer);
     }
 }

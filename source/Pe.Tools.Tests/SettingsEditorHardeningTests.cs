@@ -647,6 +647,89 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
     }
 
     [Test]
+    public async Task Host_storage_open_synchronizes_profile_and_fragment_schema_artifacts() {
+        using var sandbox = new TempDir("host-storage-schema-sync-open");
+        var module = new SettingsSchemaRegistration(
+            new SettingsCatalogModule(
+                SharedStorageModuleKey,
+                "profiles",
+                new SettingsStorageModuleOptions(["_shared"], [])
+            ),
+            typeof(SharedStorageSpikeProofSettings)
+        );
+        var hostCatalog = new TestHostSettingsModuleCatalog([module]);
+        var hostStorage = new HostSettingsStorageService(hostCatalog, sandbox.Path);
+        var documentId = new HostSettingsDocumentId(SharedStorageModuleKey, "profiles", "profile-a");
+
+        WriteComposableProfileFixture(
+            sandbox.Path,
+            new RuntimeSettingsDocumentId(SharedStorageModuleKey, "profiles", "profile-a")
+        );
+
+        var opened = await hostStorage.OpenAsync(new HostOpenSettingsDocumentRequest(documentId, true));
+        var profilesRoot = ResolveProfilesRoot(
+            sandbox.Path,
+            new RuntimeSettingsDocumentId(SharedStorageModuleKey, "profiles", "profile-a")
+        );
+        var profilePath = Path.Combine(profilesRoot, "profile-a.json");
+        var fragmentPath = Path.Combine(profilesRoot, "_shared", "item-a.json");
+        var profileSchemaPath = SettingsPathing.ResolveCentralizedProfileSchemaPath(
+            profilesRoot,
+            typeof(SharedStorageSpikeProofSettings)
+        );
+        var fragmentSchemaPath = SettingsPathing.ResolveCentralizedFragmentSchemaPath(
+            profilesRoot,
+            SettingsPathing.DirectiveScope.Local,
+            false,
+            "_shared"
+        );
+
+        await Assert.That(opened.RawContent).Contains("\"$schema\"");
+        await Assert.That(File.ReadAllText(profilePath)).Contains("\"$schema\"");
+        await Assert.That(File.ReadAllText(fragmentPath)).Contains("\"$schema\"");
+        await Assert.That(File.Exists(profileSchemaPath)).IsTrue();
+        await Assert.That(File.Exists(fragmentSchemaPath)).IsTrue();
+    }
+
+    [Test]
+    public async Task Host_storage_save_injects_profile_schema_reference_before_write() {
+        using var sandbox = new TempDir("host-storage-schema-sync-save");
+        var module = new SettingsSchemaRegistration(
+            new SettingsCatalogModule(
+                "SimpleModule",
+                "profiles",
+                SettingsStorageModuleOptions.Empty
+            ),
+            typeof(SimpleNamedSettings)
+        );
+        var hostCatalog = new TestHostSettingsModuleCatalog([module]);
+        var hostStorage = new HostSettingsStorageService(hostCatalog, sandbox.Path);
+        var documentId = new HostSettingsDocumentId("SimpleModule", "profiles", "profile-a");
+        var profilesRoot = ResolveProfilesRoot(
+            sandbox.Path,
+            new RuntimeSettingsDocumentId("SimpleModule", "profiles", "profile-a")
+        );
+        var profilePath = Path.Combine(profilesRoot, "profile-a.json");
+        var schemaPath = SettingsPathing.ResolveCentralizedProfileSchemaPath(
+            profilesRoot,
+            typeof(SimpleNamedSettings)
+        );
+
+        var saveResult = await hostStorage.SaveAsync(new HostSaveSettingsDocumentRequest(
+            documentId,
+            """
+            {
+              "Name": "saved"
+            }
+            """
+        ));
+
+        await Assert.That(saveResult.WriteApplied).IsTrue();
+        await Assert.That(File.ReadAllText(profilePath)).Contains("\"$schema\"");
+        await Assert.That(File.Exists(schemaPath)).IsTrue();
+    }
+
+    [Test]
     public async Task Host_storage_validate_uses_runtime_module_schema_validator() {
         using var sandbox = new TempDir("host-storage-validate");
         var hostCatalog = new HostSettingsModuleCatalog();
@@ -926,6 +1009,10 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
     }
 
     private sealed class SharedStorageSpikeProofItem {
+        public string Name { get; init; } = string.Empty;
+    }
+
+    private sealed class SimpleNamedSettings {
         public string Name { get; init; } = string.Empty;
     }
 

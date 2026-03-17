@@ -5,30 +5,20 @@ namespace Pe.StorageRuntime.Revit.Validation;
 
 internal static class SettingsValidationIssueMapper {
     public static IReadOnlyList<SettingsValidationIssue> ToIssues(IEnumerable<ValidationError> errors) =>
-        errors.SelectMany(ToIssues).ToList();
+        errors
+            .SelectMany(ToIssues)
+            .GroupBy(issue => (issue.Path, issue.Code, issue.Message))
+            .Select(group => group.First())
+            .ToList();
 
     private static IEnumerable<SettingsValidationIssue> ToIssues(ValidationError error) {
-        if (error is MultiTypeValidationError multiTypeValidationError) {
-            foreach (var childError in multiTypeValidationError.Errors.SelectMany(pair => pair.Value))
-                foreach (var issue in ToIssues(childError))
-                    yield return issue;
+        if (TrySelectBestBranchIssues(error, out var branchIssues)) {
+            foreach (var issue in branchIssues)
+                yield return issue;
             yield break;
         }
 
-        if (error is ChildSchemaValidationError childSchemaValidationError && childSchemaValidationError.Errors.Any()) {
-            foreach (var childError in childSchemaValidationError.Errors.SelectMany(pair => pair.Value))
-                foreach (var issue in ToIssues(childError))
-                    yield return issue;
-            yield break;
-        }
-
-        yield return new SettingsValidationIssue(
-            NormalizePath(error.Path),
-            MapValidationCode(error.Kind),
-            "error",
-            BuildMessage(error),
-            BuildSuggestion(error.Kind)
-        );
+        yield return CreateIssue(error);
     }
 
     private static string NormalizePath(string? path) {
@@ -46,9 +36,8 @@ internal static class SettingsValidationIssueMapper {
                 return "$";
 
             var normalized = "$";
-            foreach (var segment in segments) {
+            foreach (var segment in segments)
                 normalized += int.TryParse(segment, out _) ? $"[{segment}]" : $".{segment}";
-            }
 
             return normalized;
         }
@@ -63,9 +52,8 @@ internal static class SettingsValidationIssueMapper {
                 .Select(segment => segment.Replace("~1", "/").Replace("~0", "~"));
 
             var slashNormalized = "$";
-            foreach (var segment in slashSegments) {
+            foreach (var segment in slashSegments)
                 slashNormalized += int.TryParse(segment, out _) ? $"[{segment}]" : $".{segment}";
-            }
 
             return slashNormalized;
         }
@@ -94,6 +82,57 @@ internal static class SettingsValidationIssueMapper {
             _ => kind.ToString()
         };
 
+    private static bool TrySelectBestBranchIssues(
+        ValidationError error,
+        out IReadOnlyList<SettingsValidationIssue> issues
+    ) {
+        var branchErrors = error switch {
+            MultiTypeValidationError multiTypeValidationError when multiTypeValidationError.Errors.Any() =>
+                multiTypeValidationError.Errors.Select(pair => pair.Value.ToList()).ToList(),
+            ChildSchemaValidationError childSchemaValidationError when childSchemaValidationError.Errors.Any() =>
+                childSchemaValidationError.Errors.Select(pair => pair.Value.ToList()).ToList(),
+            _ => null
+        };
+
+        if (branchErrors == null || branchErrors.Count == 0) {
+            issues = [];
+            return false;
+        }
+
+        var branchCandidates = branchErrors
+            .Select(branch => branch.SelectMany(ToIssues).ToList())
+            .Where(branch => branch.Count != 0)
+            .OrderBy(ComputeBranchScore)
+            .ThenBy(branch => branch.Count)
+            .ToList();
+
+        if (branchCandidates.Count == 0) {
+            issues = [];
+            return false;
+        }
+
+        issues = branchCandidates[0];
+        return true;
+    }
+
+    private static int ComputeBranchScore(IReadOnlyCollection<SettingsValidationIssue> issues) =>
+        issues.Sum(ComputeIssueWeight);
+
+    private static int ComputeIssueWeight(SettingsValidationIssue issue) =>
+        issue.Code switch {
+            "NotInEnumeration" => 1,
+            "StringExpected" => 1,
+            "IntegerExpected" => 1,
+            "NumberExpected" => 1,
+            "BooleanExpected" => 1,
+            "ArrayExpected" => 1,
+            "ObjectExpected" => 1,
+            "NoAdditionalPropertiesAllowed" => 4,
+            "PropertyRequired" when issue.Path.EndsWith(".$preset", StringComparison.Ordinal) => 6,
+            "PropertyRequired" => 3,
+            _ => 2
+        };
+
     private static string BuildMessage(ValidationError error) =>
         error.Kind switch {
             ValidationErrorKind.PropertyRequired => $"Missing required property '{error.Property}'.",
@@ -101,8 +140,22 @@ internal static class SettingsValidationIssueMapper {
                 $"Unknown property '{error.Property}' is not allowed.",
             ValidationErrorKind.NotInEnumeration =>
                 $"Value must be one of: {string.Join(", ", error.Schema?.Enumeration ?? [])}.",
+            ValidationErrorKind.StringExpected => "Value must be a string.",
+            ValidationErrorKind.IntegerExpected => "Value must be an integer.",
+            ValidationErrorKind.NumberExpected => "Value must be a number.",
+            ValidationErrorKind.BooleanExpected => "Value must be true or false.",
+            ValidationErrorKind.ArrayExpected => "Value must be an array.",
+            ValidationErrorKind.ObjectExpected => "Value must be an object.",
             _ => error.ToString()
         };
+
+    private static SettingsValidationIssue CreateIssue(ValidationError error) => new(
+        NormalizePath(error.Path),
+        MapValidationCode(error.Kind),
+        "error",
+        BuildMessage(error),
+        BuildSuggestion(error.Kind)
+    );
 
     private static string BuildSuggestion(ValidationErrorKind kind) =>
         kind switch {

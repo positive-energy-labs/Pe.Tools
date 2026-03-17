@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using System.Reflection;
@@ -127,11 +128,15 @@ internal static class SchemaDefaultInjector {
         }
 
         try {
-            token = JToken.FromObject(value);
+            token = JToken.FromObject(value, CreateDefaultValueSerializer());
             return true;
         } catch {
             token = JValue.CreateNull();
             return false;
         }
     }
+
+    private static JsonSerializer CreateDefaultValueSerializer() => JsonSerializer.Create(new JsonSerializerSettings {
+        NullValueHandling = NullValueHandling.Ignore, Converters = [new StringEnumConverter()]
+    });
 }
