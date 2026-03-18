@@ -26,7 +26,7 @@ public class TaggableCategoryNamesProvider : IFieldOptionsSource {
         try {
             var doc = context.GetActiveDocument();
             if (doc == null)
-                return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([]);
+                return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
 
             var items = CategoryTagMapping.GetTaggableCategories()
                 .Select(category => CategoryTagMapping.GetCategoryName(doc, category))
@@ -35,9 +35,9 @@ public class TaggableCategoryNamesProvider : IFieldOptionsSource {
                 .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                 .Select(value => new FieldOptionItem(value, value, null))
                 .ToList();
-            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(items);
+            return new ValueTask<IReadOnlyList<FieldOptionItem>>(items);
         } catch {
-            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([]);
+            return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
         }
     }
 }
@@ -63,7 +63,7 @@ public class MultiCategoryTagProvider : IFieldOptionsSource {
         try {
             var doc = context.GetActiveDocument();
             if (doc == null)
-                return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([]);
+                return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
 
             var items = new FilteredElementCollector(doc)
                 .OfClass(typeof(FamilySymbol))
@@ -74,9 +74,9 @@ public class MultiCategoryTagProvider : IFieldOptionsSource {
                 .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                 .Select(value => new FieldOptionItem(value, value, null))
                 .ToList();
-            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(items);
+            return new ValueTask<IReadOnlyList<FieldOptionItem>>(items);
         } catch {
-            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([]);
+            return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
         }
     }
 }
@@ -169,7 +169,7 @@ public class AnnotationTagFamilyNamesProvider : IFieldOptionsSource {
     ) {
         var doc = context.GetActiveDocument();
         if (doc == null)
-            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([]);
+            return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
 
         var categoryName = context.TryGetContextValue(OptionContextKeys.CategoryName, out var selectedCategoryName)
             ? selectedCategoryName
@@ -179,7 +179,7 @@ public class AnnotationTagFamilyNamesProvider : IFieldOptionsSource {
 
         var elementCategory = CategoryTagMapping.GetBuiltInCategoryFromName(doc, categoryName);
         if (elementCategory == BuiltInCategory.INVALID)
-            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([]);
+            return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
 
         var tagCategory = CategoryTagMapping.GetTagCategory(elementCategory);
         var items = new FilteredElementCollector(doc)
@@ -211,7 +211,7 @@ public class AnnotationTagFamilyNamesProvider : IFieldOptionsSource {
     }
 
     private static ValueTask<IReadOnlyList<FieldOptionItem>> ToItems(IEnumerable<string> values) =>
-        ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(
+        new(
             values.Select(value => new FieldOptionItem(value, value, null)).ToList()
         );
 }
@@ -236,7 +236,7 @@ public class AnnotationTagTypeNamesProvider : IFieldOptionsSource {
     ) {
         var doc = context.GetActiveDocument();
         if (doc == null)
-            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([]);
+            return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
 
         var familyName = context.TryGetContextValue(OptionContextKeys.TagFamilyName, out var selectedFamilyName)
             ? selectedFamilyName
@@ -264,7 +264,7 @@ public class AnnotationTagTypeNamesProvider : IFieldOptionsSource {
     }
 
     private static ValueTask<IReadOnlyList<FieldOptionItem>> ToItems(IEnumerable<string> values) =>
-        ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(
+        new(
             values.Select(value => new FieldOptionItem(value, value, null)).ToList()
         );
 }

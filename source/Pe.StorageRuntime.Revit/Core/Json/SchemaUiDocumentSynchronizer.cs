@@ -7,8 +7,10 @@ namespace Pe.StorageRuntime.Revit.Core.Json;
 
 internal static class SchemaUiDocumentSynchronizer {
     public static void Synchronize(JsonSchema schema, JToken documentToken) {
-        ArgumentNullException.ThrowIfNull(schema);
-        ArgumentNullException.ThrowIfNull(documentToken);
+        if (schema == null)
+            throw new ArgumentNullException(nameof(schema));
+        if (documentToken == null)
+            throw new ArgumentNullException(nameof(documentToken));
 
         SynchronizeNode(schema, documentToken);
     }

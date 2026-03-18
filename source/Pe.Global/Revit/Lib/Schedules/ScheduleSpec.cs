@@ -81,7 +81,7 @@ public class LineStyleNamesProvider : IFieldOptionsSource {
             var doc = context.GetActiveDocument<Autodesk.Revit.DB.Document>();
             if (doc == null || doc.IsFamilyDocument) {
                 // Return common default Revit line styles
-                return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(new[] {
+                return new ValueTask<IReadOnlyList<FieldOptionItem>>(new[] {
                     "Thin Lines",
                     "Medium Lines",
                     "Wide Lines",
@@ -92,7 +92,7 @@ public class LineStyleNamesProvider : IFieldOptionsSource {
 
             var lineCategory = doc.Settings.Categories.get_Item(BuiltInCategory.OST_Lines);
             if (lineCategory == null) {
-                return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(new[] {
+                return new ValueTask<IReadOnlyList<FieldOptionItem>>(new[] {
                     "Thin Lines",
                     "Medium Lines",
                     "Wide Lines",
@@ -106,7 +106,7 @@ public class LineStyleNamesProvider : IFieldOptionsSource {
                     lineStyles.Add(subCategory.Name);
             }
 
-            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(
+            return new ValueTask<IReadOnlyList<FieldOptionItem>>(
                 lineStyles
                     .OrderBy(name => name)
                     .Select(value => new FieldOptionItem(value, value, null))
@@ -114,7 +114,7 @@ public class LineStyleNamesProvider : IFieldOptionsSource {
             );
         } catch {
             // No document available or error - return common defaults
-            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(new[] {
+            return new ValueTask<IReadOnlyList<FieldOptionItem>>(new[] {
                 "Thin Lines",
                 "Medium Lines",
                 "Wide Lines",

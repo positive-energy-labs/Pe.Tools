@@ -17,7 +17,7 @@ public class SpecNamesProvider : IFieldOptionsSource {
     public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
         FieldOptionsExecutionContext context,
         CancellationToken cancellationToken = default
-    ) => ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(
+    ) => new ValueTask<IReadOnlyList<FieldOptionItem>>(
         GetLabelToForgeMap()
             .Keys
             .Select(value => new FieldOptionItem(value, value, null))

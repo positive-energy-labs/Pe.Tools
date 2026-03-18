@@ -144,9 +144,9 @@ public static class ProjectFamilyParameterCollector {
 
         var element = doc.GetElement(elementId);
         if (element != null)
-            return $"{element.Name} [ID:{elementId.Value}]";
+            return $"{element.Name} [ID:{elementId.Value()}]";
 
-        return $"[ID:{elementId.Value}]";
+        return $"[ID:{elementId.Value()}]";
     }
 
     private static ProjectCollectedParameter GetOrCreateCollectedParameter(
@@ -177,7 +177,7 @@ public static class ProjectFamilyParameterCollector {
             StorageType = parameter.StorageType,
             IsBuiltIn = parameter.Id != null &&
                         parameter.Id != ElementId.InvalidElementId &&
-                        parameter.Id.Value < 0,
+                        parameter.Id.Value() < 0,
             IsShared = parameter.IsShared,
             SharedGuid = sharedGuid,
             IsProjectParameter = projectParamNames.Contains(definition.Name),

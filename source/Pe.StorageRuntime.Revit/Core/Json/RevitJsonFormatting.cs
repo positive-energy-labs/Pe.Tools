@@ -24,22 +24,26 @@ public static class RevitJsonFormatting {
     }
 
     public static JsonSerializer CreateSerializer(JsonSerializerSettings settings) {
-        ArgumentNullException.ThrowIfNull(settings);
+        if (settings == null)
+            throw new ArgumentNullException(nameof(settings));
         return JsonFormatting.CreateSerializer(settings);
     }
 
     public static string Serialize(object value, JsonSerializerSettings settings) {
-        ArgumentNullException.ThrowIfNull(settings);
+        if (settings == null)
+            throw new ArgumentNullException(nameof(settings));
         return JsonFormatting.Serialize(value, settings);
     }
 
     public static string SerializeIndented(object value, JsonSerializerSettings settings) {
-        ArgumentNullException.ThrowIfNull(settings);
+        if (settings == null)
+            throw new ArgumentNullException(nameof(settings));
         return JsonFormatting.SerializeIndented(value, settings);
     }
 
     public static string SerializeWithTrailingNewline(object value, JsonSerializerSettings settings) {
-        ArgumentNullException.ThrowIfNull(settings);
+        if (settings == null)
+            throw new ArgumentNullException(nameof(settings));
         return JsonFormatting.SerializeWithTrailingNewline(value, settings);
     }
 

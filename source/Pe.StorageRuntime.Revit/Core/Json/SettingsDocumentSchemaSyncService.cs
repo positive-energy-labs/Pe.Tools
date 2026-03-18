@@ -20,8 +20,10 @@ public sealed class SettingsDocumentSchemaSyncService(
         string documentPath,
         string schemaDirectory
     ) {
-        ArgumentNullException.ThrowIfNull(settingsType);
-        ArgumentNullException.ThrowIfNull(storageOptions);
+        if (settingsType == null)
+            throw new ArgumentNullException(nameof(settingsType));
+        if (storageOptions == null)
+            throw new ArgumentNullException(nameof(storageOptions));
         if (string.IsNullOrWhiteSpace(documentPath))
             throw new ArgumentException("Document path is required.", nameof(documentPath));
         if (string.IsNullOrWhiteSpace(schemaDirectory))
@@ -51,8 +53,10 @@ public sealed class SettingsDocumentSchemaSyncService(
         string documentPath,
         string schemaDirectory
     ) {
-        ArgumentNullException.ThrowIfNull(settingsType);
-        ArgumentNullException.ThrowIfNull(storageOptions);
+        if (settingsType == null)
+            throw new ArgumentNullException(nameof(settingsType));
+        if (storageOptions == null)
+            throw new ArgumentNullException(nameof(storageOptions));
         if (string.IsNullOrWhiteSpace(documentPath))
             throw new ArgumentException("Document path is required.", nameof(documentPath));
         if (string.IsNullOrWhiteSpace(schemaDirectory))
@@ -78,8 +82,10 @@ public sealed class SettingsDocumentSchemaSyncService(
         string documentPath,
         string schemaDirectory
     ) {
-        ArgumentNullException.ThrowIfNull(settingsType);
-        ArgumentNullException.ThrowIfNull(storageOptions);
+        if (settingsType == null)
+            throw new ArgumentNullException(nameof(settingsType));
+        if (storageOptions == null)
+            throw new ArgumentNullException(nameof(storageOptions));
         if (string.IsNullOrWhiteSpace(documentPath))
             throw new ArgumentException("Document path is required.", nameof(documentPath));
         if (string.IsNullOrWhiteSpace(schemaDirectory))

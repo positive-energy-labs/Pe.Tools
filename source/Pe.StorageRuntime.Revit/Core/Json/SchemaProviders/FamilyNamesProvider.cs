@@ -24,7 +24,7 @@ public class FamilyNamesProvider : IFieldOptionsSource {
         try {
             var doc = context.GetActiveDocument();
             if (doc == null)
-                return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([]);
+                return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
 
             var items = new FilteredElementCollector(doc)
                 .OfClass(typeof(Family))
@@ -35,9 +35,9 @@ public class FamilyNamesProvider : IFieldOptionsSource {
                 .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                 .Select(value => new FieldOptionItem(value, value, null))
                 .ToList();
-            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(items);
+            return new ValueTask<IReadOnlyList<FieldOptionItem>>(items);
         } catch {
-            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([]);
+            return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
         }
     }
 }

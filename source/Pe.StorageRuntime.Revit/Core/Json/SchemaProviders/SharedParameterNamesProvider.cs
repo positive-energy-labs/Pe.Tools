@@ -30,7 +30,7 @@ public class SharedParameterNamesProvider : IFieldOptionsSource {
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
             .ToList();
         if (apsNames.Count == 0)
-            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([]);
+            return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
 
         IEnumerable<string> values = apsNames;
 
@@ -52,7 +52,7 @@ public class SharedParameterNamesProvider : IFieldOptionsSource {
             }
         }
 
-        return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(
+        return new ValueTask<IReadOnlyList<FieldOptionItem>>(
             values.Select(value => new FieldOptionItem(value, value, null)).ToList()
         );
     }

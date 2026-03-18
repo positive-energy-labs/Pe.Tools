@@ -18,7 +18,7 @@ public sealed class FamilyManagerTypesSchemaUiDynamicColumnOrderSource : ISchema
     ) {
         var document = context.GetActiveDocument();
         if (document == null || !document.IsFamilyDocument)
-            return ValueTask.FromResult<IReadOnlyList<string>>([]);
+            return new ValueTask<IReadOnlyList<string>>([]);
 
         try {
             var typeNames = document.FamilyManager.Types
@@ -29,9 +29,9 @@ public sealed class FamilyManagerTypesSchemaUiDynamicColumnOrderSource : ISchema
                 .Cast<string>()
                 .ToList();
 
-            return ValueTask.FromResult<IReadOnlyList<string>>(typeNames);
+            return new ValueTask<IReadOnlyList<string>>(typeNames);
         } catch {
-            return ValueTask.FromResult<IReadOnlyList<string>>([]);
+            return new ValueTask<IReadOnlyList<string>>([]);
         }
     }
 }

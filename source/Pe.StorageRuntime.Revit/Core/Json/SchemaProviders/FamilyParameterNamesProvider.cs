@@ -24,13 +24,13 @@ public class FamilyParameterNamesProvider : IFieldOptionsSource {
             : [];
         var doc = context.GetActiveDocument();
         if (doc == null)
-            return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([]);
+            return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
 
         var items = ProjectFamilyParameterCollector.Collect(doc, selectedFamilyNames)
             .Select(item => item.Name)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
-        return ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>(
+        return new ValueTask<IReadOnlyList<FieldOptionItem>>(
             items.Select(value => new FieldOptionItem(value, value, null)).ToList()
         );
     }
