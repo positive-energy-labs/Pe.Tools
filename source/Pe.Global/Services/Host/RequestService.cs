@@ -3,7 +3,9 @@ using Pe.Global.Services.Document;
 using Pe.Host.Contracts;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Json.FieldOptions;
+using Pe.StorageRuntime.Json.SchemaDefinitions;
 using Pe.StorageRuntime.Revit.Context;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Pe.StorageRuntime.Revit.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
@@ -88,7 +90,7 @@ public class RequestService {
         await this.EnqueueAsync(() => {
             try {
                 var providerContext = this.CreateFieldOptionsContext(request.ContextValues);
-                var doc = providerContext.GetActiveDocument();
+                var doc = providerContext.GetActiveDocument<Autodesk.Revit.DB.Document>();
                 if (doc == null) {
                     return HostEnvelopeResults
                         .Failure<ParameterCatalogData>(
