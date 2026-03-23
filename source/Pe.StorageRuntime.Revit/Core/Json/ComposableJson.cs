@@ -51,7 +51,7 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
             this._schemaDirectory,
             this._knownIncludeRoots,
             this._knownPresetRoots,
-            this._behavior == JsonBehavior.Output
+            this._behavior != JsonBehavior.Settings
                 ? null
                 : new JsonCompositionSchemaSynchronizer(
                     this._schemaDirectory,
@@ -73,7 +73,7 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
         var workingObject = JObject.Parse(content);
         JsonSchema? authoringSchema = null;
 
-        if (this._behavior != JsonBehavior.Output) {
+        if (this.IsSchemaBackedBehavior()) {
             authoringSchema = CreateAuthoringSchema();
             var shouldRunPreComposeValidation = StrictPreComposeValidation || ContainsDirectiveMetadata(workingObject);
             if (shouldRunPreComposeValidation) {
@@ -89,16 +89,19 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
         this.ValidateOrThrow(workingObject, authoringSchema);
         var result = this.Deserialize(workingObject);
 
-        _ = this.WriteObjectWithSchema(originalObject, authoringSchema);
+        if (this.IsSchemaBackedBehavior())
+            _ = this.WriteObjectWithSchema(originalObject, authoringSchema);
+        else if (originalObject.Remove("$schema"))
+            _ = this.Write(result);
 
         this.UpdateCache(result);
         return result;
     }
 
     public string Write(T data) {
-        var authoringSchema = this._behavior == JsonBehavior.Output
-            ? null
-            : CreateAuthoringSchema();
+        var authoringSchema = this.IsSchemaBackedBehavior()
+            ? CreateAuthoringSchema()
+            : null;
         _ = this.WriteWithSchema(data, authoringSchema);
         this.UpdateCache(data);
         return this.FilePath;
@@ -127,9 +130,9 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
             return;
 
         var defaultInstance = new T();
-        var authoringSchema = this._behavior == JsonBehavior.Output
-            ? null
-            : CreateAuthoringSchema();
+        var authoringSchema = this.IsSchemaBackedBehavior()
+            ? CreateAuthoringSchema()
+            : null;
         _ = this.WriteWithSchema(defaultInstance, authoringSchema);
 
         if (this._behavior == JsonBehavior.Settings) {
@@ -146,7 +149,7 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
     private string WriteWithSchema(T data, JsonSchema? authoringSchema = null) {
         var jsonContent = this.Serialize(data);
 
-        if (this._behavior != JsonBehavior.Output) {
+        if (this.IsSchemaBackedBehavior()) {
             var schema = authoringSchema ?? CreateAuthoringSchema();
             jsonContent = JsonSchemaDocumentService.WriteSchemaAndInjectReference(
                 schema,
@@ -167,7 +170,7 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
 
     private string WriteObjectWithSchema(JObject data, JsonSchema? authoringSchema = null) {
         var jsonContent = data.ToString(Formatting.Indented);
-        if (this._behavior != JsonBehavior.Output) {
+        if (this.IsSchemaBackedBehavior()) {
             var schema = authoringSchema ?? CreateAuthoringSchema();
             jsonContent = JsonSchemaDocumentService.WriteSchemaAndInjectReference(
                 schema,
@@ -193,7 +196,7 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
         data.ToObject<T>(this._deserializer) ?? new T();
 
     private void ValidateOrThrow(JObject jObject, JsonSchema? authoringSchema) {
-        if (this._behavior == JsonBehavior.Output)
+        if (!this.IsSchemaBackedBehavior())
             return;
 
         var schema = authoringSchema ?? CreateAuthoringSchema();
@@ -210,7 +213,7 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
         );
 
     private void EnsureFragmentScaffolding() {
-        if (this._fragmentScaffoldingEnsured || this._behavior == JsonBehavior.Output)
+        if (this._fragmentScaffoldingEnsured || !this.IsSchemaBackedBehavior())
             return;
 
         var globalFragmentsDirectory =
@@ -392,6 +395,8 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
 
         return false;
     }
+
+    private bool IsSchemaBackedBehavior() => this._behavior == JsonBehavior.Settings;
 
     private void UpdateCache(T data) {
         this._cachedData = data;

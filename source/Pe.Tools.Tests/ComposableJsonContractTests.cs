@@ -114,6 +114,28 @@ public sealed class ComposableJsonContractTests : RevitTestBase {
     }
 
     [Test]
+    public async Task Read_State_IgnoresStaleSchemaValidationAndRewritesWithoutSchema() {
+        using var sandbox = new TempDir();
+        var statePath = Path.Combine(sandbox.Path, "settings.json");
+        File.WriteAllText(
+            statePath,
+            """
+            {
+              "$schema": "./schema.json"
+            }
+            """
+        );
+
+        var json = new ComposableJson<StateContract>(statePath, sandbox.Path, JsonBehavior.State);
+        var result = json.Read();
+
+        await Assert.That(result.RequiredName).IsEqualTo(string.Empty);
+
+        var persisted = JObject.Parse(File.ReadAllText(statePath));
+        await Assert.That(persisted.Property("$schema")).IsNull();
+    }
+
+    [Test]
     public async Task Write_DoesNotRewriteCentralSchema_WhenSchemaIsUnchanged() {
         using var sandbox = new TempDir();
         var profilesRoot = Path.Combine(sandbox.Path, "CmdFFMigrator", "settings", "profiles");
@@ -164,6 +186,10 @@ public sealed class ComposableJsonContractTests : RevitTestBase {
     }
 
     private sealed class PresetModel {
+        [Required] public string RequiredName { get; init; } = string.Empty;
+    }
+
+    private sealed class StateContract {
         [Required] public string RequiredName { get; init; } = string.Empty;
     }
 
