@@ -430,23 +430,23 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
         );
         var service = new HostSchemaService(new TestHostSettingsModuleCatalog([module]));
 
-        var handled = service.TryGetFieldOptionsEnvelopeLocally(
+        var response = await service.GetFieldOptionsEnvelopeLocallyAsync(
             new FieldOptionsRequest(
                 module.ModuleKey,
                 nameof(ThrowingFieldOptionsTestSettings.Value),
                 nameof(ThrowingFieldOptionsSource),
                 null
-            ),
-            out var response
+            )
         );
+        var actual = response!;
 
-        await Assert.That(handled).IsTrue();
-        await Assert.That(response.Ok).IsFalse();
-        await Assert.That(response.Code).IsEqualTo(EnvelopeCode.Failed);
-        await Assert.That(response.Message).IsEqualTo("boom");
-        await Assert.That(response.Issues)
+        await Assert.That(response).IsNotNull();
+        await Assert.That(actual.Ok).IsFalse();
+        await Assert.That(actual.Code).IsEqualTo(EnvelopeCode.Failed);
+        await Assert.That(actual.Message).IsEqualTo("boom");
+        await Assert.That(actual.Issues)
             .Contains(issue => string.Equals(issue.Code, "FieldOptionsException", StringComparison.Ordinal));
-        await Assert.That(response.Data?.Items).IsEmpty();
+        await Assert.That(actual.Data?.Items).IsEmpty();
     }
 
     [Test]

@@ -19,7 +19,7 @@ namespace Pe.Host.Services;
 ///     Host-side entry point for the shared local-disk storage backend.
 /// </summary>
 public sealed class HostSettingsStorageService {
-    private readonly SettingsRuntimeCapabilities _availableCapabilities;
+    private readonly LocalDiskSettingsStorageBackend _backend;
     private readonly string _basePath;
     private readonly IHostSettingsModuleCatalog _moduleCatalog;
     private readonly SettingsDocumentSchemaSyncService _schemaSyncService;
@@ -35,15 +35,20 @@ public sealed class HostSettingsStorageService {
     ) {
         this._moduleCatalog = moduleCatalog;
         this._basePath = basePath ?? SettingsStorageLocations.GetDefaultBasePath();
-        this._availableCapabilities = availableCapabilities ?? SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly;
-        this._schemaSyncService = new SettingsDocumentSchemaSyncService(this._availableCapabilities);
+        var resolvedCapabilities = availableCapabilities ?? SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly;
+        this._schemaSyncService = new SettingsDocumentSchemaSyncService(resolvedCapabilities);
+        this._backend = new LocalDiskSettingsStorageBackend(
+            this._basePath,
+            resolvedCapabilities,
+            this._moduleCatalog.GetStorageDefinitions()
+        );
     }
 
     public async Task<HostDiscoveryResult> DiscoverAsync(
         HostTreeRequest request,
         CancellationToken cancellationToken = default
     ) {
-        var discovery = await this.CreateBackend().DiscoverAsync(
+        var discovery = await this._backend.DiscoverAsync(
             request.ModuleKey,
             request.RootKey,
             new SettingsDiscoveryOptions(
@@ -62,7 +67,7 @@ public sealed class HostSettingsStorageService {
         CancellationToken cancellationToken = default
     ) {
         this.TrySynchronizeDocumentOnDisk(request.DocumentId);
-        return (await this.CreateBackend().OpenAsync(request.ToRuntime(), cancellationToken)).ToContract();
+        return (await this._backend.OpenAsync(request.ToRuntime(), cancellationToken)).ToContract();
     }
 
     public async Task<HostDocumentSnapshot> ComposeAsync(
@@ -70,7 +75,7 @@ public sealed class HostSettingsStorageService {
         CancellationToken cancellationToken = default
     ) {
         this.TrySynchronizeDocumentOnDisk(request.DocumentId);
-        return (await this.CreateBackend().ComposeAsync(request.ToRuntime(), cancellationToken)).ToContract();
+        return (await this._backend.ComposeAsync(request.ToRuntime(), cancellationToken)).ToContract();
     }
 
     public async Task<HostSaveResult> SaveAsync(
@@ -78,13 +83,13 @@ public sealed class HostSettingsStorageService {
         CancellationToken cancellationToken = default
     ) {
         var synchronizedRequest = this.SynchronizeRequestContent(request);
-        return (await this.CreateBackend().SaveAsync(synchronizedRequest.ToRuntime(), cancellationToken)).ToContract();
+        return (await this._backend.SaveAsync(synchronizedRequest.ToRuntime(), cancellationToken)).ToContract();
     }
 
     public async Task<HostValidationResult> ValidateAsync(
         HostValidationRequest request,
         CancellationToken cancellationToken = default
-    ) => (await this.CreateBackend().ValidateAsync(request.ToRuntime(), cancellationToken)).ToContract();
+    ) => (await this._backend.ValidateAsync(request.ToRuntime(), cancellationToken)).ToContract();
 
     public HostWorkspacesData GetWorkspaces() => this._moduleCatalog.GetWorkspaces();
 
@@ -141,11 +146,4 @@ public sealed class HostSettingsStorageService {
             ? request
             : request with { RawContent = synchronizedContent };
     }
-
-    private LocalDiskSettingsStorageBackend CreateBackend() =>
-        new(
-            this._basePath,
-            this._availableCapabilities,
-            this._moduleCatalog.GetStorageDefinitions()
-        );
 }
