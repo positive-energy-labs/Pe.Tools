@@ -31,7 +31,11 @@ internal sealed class HostOperationRegistry {
                 GetFieldOptionsOperationContract.Definition,
                 static async (request, context, cancellationToken) => {
                     var logger = context.LoggerFactory.CreateLogger("HostOperation.GetFieldOptions");
-                    if (context.SchemaService.TryGetFieldOptionsEnvelopeLocally(request, out var localResponse)) {
+                    var localResponse = await context.SchemaService.GetFieldOptionsEnvelopeLocallyAsync(
+                        request,
+                        cancellationToken
+                    );
+                    if (localResponse != null) {
                         logger.LogDebug(
                             "Host operation executed locally: Key={Key}, SourceKey={SourceKey}, PropertyPath={PropertyPath}",
                             GetFieldOptionsOperationContract.Definition.Key,
@@ -70,9 +74,13 @@ internal sealed class HostOperationRegistry {
             ),
             HostOperations.Create<LoadedFamiliesFilterFieldOptionsRequest>(
                 GetLoadedFamiliesFilterFieldOptionsOperationContract.Definition,
-                static (request, context, cancellationToken) => Task.FromResult(
-                    HostOperations.Local(context.SchemaService.GetLoadedFamiliesFilterFieldOptionsEnvelope(request))
-                )
+                static async (request, context, cancellationToken) =>
+                    HostOperations.Local(
+                        await context.SchemaService.GetLoadedFamiliesFilterFieldOptionsEnvelopeAsync(
+                            request,
+                            cancellationToken
+                        )
+                    )
             ),
             HostOperations.Bridge<LoadedFamiliesCatalogRequest, LoadedFamiliesCatalogEnvelopeResponse>(
                 GetLoadedFamiliesCatalogOperationContract.Definition

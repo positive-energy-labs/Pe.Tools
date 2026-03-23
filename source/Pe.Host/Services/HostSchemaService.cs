@@ -78,70 +78,74 @@ public sealed class HostSchemaService(IHostSettingsModuleCatalog moduleCatalog) 
         }
     }
 
-    public bool TryGetFieldOptionsEnvelopeLocally(
+    public async Task<FieldOptionsEnvelopeResponse?> GetFieldOptionsEnvelopeLocallyAsync(
         FieldOptionsRequest request,
-        out FieldOptionsEnvelopeResponse response
+        CancellationToken cancellationToken = default
     ) {
-        response = default!;
-
         try {
             if (!this._moduleCatalog.TryGetModule(request.ModuleKey, out var module)) {
-                response = CreateFieldOptionsFailure(
+                return CreateFieldOptionsFailure(
                     request.SourceKey,
                     $"Module '{request.ModuleKey}' is not registered.",
                     "Choose a registered settings module and retry."
                 );
-                return true;
             }
 
             var property = SettingsPropertyPathResolver.ResolveProperty(module.SettingsType, request.PropertyPath);
-            if (property == null) {
-                response = CreateFieldOptionsSuccess(
+            if (property == null)
+                return CreateFieldOptionsSuccess(
                     request.SourceKey,
                     "Property not found for field options provider.",
                     []
                 );
-                return true;
-            }
 
-            var fieldOptions = GetFieldOptions(module.SettingsType, request.PropertyPath, request.SourceKey,
-                request.ContextValues);
+            var fieldOptions = await GetFieldOptionsAsync(
+                module.SettingsType,
+                request.PropertyPath,
+                request.SourceKey,
+                request.ContextValues,
+                cancellationToken
+            );
             if (fieldOptions.Kind == FieldOptionsResultKind.Unsupported)
-                return false;
+                return null;
 
-            if (fieldOptions.Kind == FieldOptionsResultKind.Failure) {
-                response = CreateFieldOptionsFailure(
+            if (fieldOptions.Kind == FieldOptionsResultKind.Failure)
+                return CreateFieldOptionsFailure(
                     request.SourceKey,
                     fieldOptions.Message,
                     "Check field option source configuration and request path."
                 );
-                return true;
-            }
 
-            response = CreateFieldOptionsSuccess(
+            return CreateFieldOptionsSuccess(
                 request.SourceKey,
                 fieldOptions.Message,
                 fieldOptions.Items
                     .Select(item => new FieldOptionItem(item.Value, item.Label, item.Description))
                     .ToList()
             );
-            return true;
+        } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
+            throw;
         } catch (Exception ex) {
-            response = CreateFieldOptionsFailure(
+            return CreateFieldOptionsFailure(
                 request.SourceKey,
                 ex.Message,
                 "Verify Revit assembly resolution and field-options provider configuration."
             );
-            return true;
         }
     }
 
-    public FieldOptionsEnvelopeResponse GetLoadedFamiliesFilterFieldOptionsEnvelope(
-        LoadedFamiliesFilterFieldOptionsRequest request
+    public async Task<FieldOptionsEnvelopeResponse> GetLoadedFamiliesFilterFieldOptionsEnvelopeAsync(
+        LoadedFamiliesFilterFieldOptionsRequest request,
+        CancellationToken cancellationToken = default
     ) {
         try {
-            var fieldOptions =
-                GetFieldOptions(typeof(LoadedFamiliesFilter), request.PropertyPath, request.SourceKey, request.ContextValues);
+            var fieldOptions = await GetFieldOptionsAsync(
+                typeof(LoadedFamiliesFilter),
+                request.PropertyPath,
+                request.SourceKey,
+                request.ContextValues,
+                cancellationToken
+            );
             if (fieldOptions.Kind is FieldOptionsResultKind.Success or FieldOptionsResultKind.Empty) {
                 return CreateFieldOptionsSuccess(
                     request.SourceKey,
@@ -157,6 +161,8 @@ public sealed class HostSchemaService(IHostSettingsModuleCatalog moduleCatalog) 
                 fieldOptions.Message,
                 "Verify loaded families filter field-options configuration."
             );
+        } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
+            throw;
         } catch (Exception ex) {
             return CreateFieldOptionsFailure(
                 request.SourceKey,
@@ -186,12 +192,13 @@ public sealed class HostSchemaService(IHostSettingsModuleCatalog moduleCatalog) 
         return new SchemaData(schemaData.SchemaJson, schemaData.FragmentSchemaJson);
     }
 
-    private static FieldOptionsResult GetFieldOptions(
+    private static async Task<FieldOptionsResult> GetFieldOptionsAsync(
         Type schemaType,
         string propertyPath,
         string sourceKey,
-        Dictionary<string, string>? contextValues
-    ) => SettingsFieldOptionsService.Shared.GetOptionsAsync(
+        Dictionary<string, string>? contextValues,
+        CancellationToken cancellationToken = default
+    ) => await SettingsFieldOptionsService.Shared.GetOptionsAsync(
             schemaType,
             propertyPath,
             sourceKey,
@@ -199,11 +206,9 @@ public sealed class HostSchemaService(IHostSettingsModuleCatalog moduleCatalog) 
                 SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly,
                 null,
                 contextValues
-            )
-        )
-        .AsTask()
-        .GetAwaiter()
-        .GetResult();
+            ),
+            cancellationToken
+        );
 
     private static string GetSettingsModuleCacheKey(string moduleKey) => $"module:{moduleKey}";
 

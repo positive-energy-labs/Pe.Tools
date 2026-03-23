@@ -27,6 +27,7 @@ public sealed class HostSettingsModuleCatalog : IHostSettingsModuleCatalog {
     private readonly SettingsRuntimeCapabilities _availableCapabilities;
     private readonly IReadOnlyList<SettingsSchemaRegistration> _modules = KnownSettingsSchemas.All;
     private readonly IReadOnlyDictionary<string, SettingsSchemaRegistration> _modulesByModuleKey;
+    private readonly IReadOnlyDictionary<string, SettingsStorageModuleDefinition> _storageDefinitions;
     private readonly IReadOnlyList<HostSettingsModuleDescriptor> _transportDescriptors;
     private readonly HostWorkspacesData _workspaces;
 
@@ -51,6 +52,7 @@ public sealed class HostSettingsModuleCatalog : IHostSettingsModuleCatalog {
                 module.DefaultRootKey
             ))
             .ToList();
+        this._storageDefinitions = KnownSettingsStorageDefinitions.Create(this._availableCapabilities);
         this._workspaces = new HostWorkspacesData([
             new HostWorkspaceDescriptor(
                 "default",
@@ -71,8 +73,7 @@ public sealed class HostSettingsModuleCatalog : IHostSettingsModuleCatalog {
 
     public IReadOnlyList<HostSettingsModuleDescriptor> GetTransportDescriptors() => this._transportDescriptors;
 
-    public IReadOnlyDictionary<string, SettingsStorageModuleDefinition> GetStorageDefinitions() =>
-        KnownSettingsStorageDefinitions.Create(this._availableCapabilities);
+    public IReadOnlyDictionary<string, SettingsStorageModuleDefinition> GetStorageDefinitions() => this._storageDefinitions;
 
     public HostWorkspacesData GetWorkspaces() => this._workspaces;
 

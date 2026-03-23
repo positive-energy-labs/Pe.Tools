@@ -52,7 +52,7 @@ public sealed class HostRevitDataArchitectureTests : RevitTestBase {
     public async Task Loaded_families_filter_field_options_envelope_uses_explicit_request_contract() {
         var service = new HostSchemaService(new HostSettingsModuleCatalog());
 
-        var response = service.GetLoadedFamiliesFilterFieldOptionsEnvelope(
+        var response = await service.GetLoadedFamiliesFilterFieldOptionsEnvelopeAsync(
             new LoadedFamiliesFilterFieldOptionsRequest(
                 nameof(LoadedFamiliesFilter.FamilyNames),
                 SchemaDatasetIds.LoadedFamiliesCatalog,

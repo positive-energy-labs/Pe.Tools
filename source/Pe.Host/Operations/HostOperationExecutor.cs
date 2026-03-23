@@ -31,7 +31,9 @@ internal sealed class HostOperationExecutor(
                 operation.Definition.ResponseType.Name,
                 stopwatch.ElapsedMilliseconds
             );
-            return Results.Ok(payload);
+            return payload.ReturnNoContent
+                ? Results.NoContent()
+                : Results.Ok(payload.Value);
         } catch (InvalidOperationException ex) {
             this._logger.LogWarning(
                 ex,
@@ -57,17 +59,21 @@ internal sealed class HostOperationExecutor(
         }
     }
 
-    private static object? UnwrapHttpPayload(object? response) {
+    private static HttpPayload UnwrapHttpPayload(object? response) {
         if (response is not IHostDataEnvelope envelope)
-            return response;
+            return new HttpPayload(response, false);
 
         if (!envelope.Ok)
             throw new InvalidOperationException(envelope.Message);
 
         var data = envelope.GetData();
         if (data == null)
-            throw new InvalidOperationException(envelope.Message);
+            return HttpPayload.NoContent();
 
-        return data;
+        return new HttpPayload(data, false);
+    }
+
+    private readonly record struct HttpPayload(object? Value, bool ReturnNoContent) {
+        public static HttpPayload NoContent() => new(null, true);
     }
 }
