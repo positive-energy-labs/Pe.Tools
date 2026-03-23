@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Text.Json.Serialization;
 
 namespace Pe.Global.Revit.Lib.Schedules.SortGroup;
 
@@ -8,7 +7,7 @@ public class ScheduleSortGroupSpec {
     public string FieldName { get; init; } = string.Empty;
 
     [Description("Sort direction (Ascending or Descending).")]
-    [JsonConverter(typeof(JsonStringEnumConverter))]
+
     public ScheduleSortOrder SortOrder { get; init; } = ScheduleSortOrder.Ascending;
 
     [Description("Whether to display a header row when this grouping changes.")]

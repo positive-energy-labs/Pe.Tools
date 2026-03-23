@@ -1,16 +1,17 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
+using Newtonsoft.Json;
 using Pe.Global.Revit.Lib.Schedules;
 using Pe.Global.Revit.Lib.Schedules.Fields;
 using Pe.Global.Revit.Lib.Schedules.SortGroup;
 using Pe.Global.Revit.Ui;
-using Pe.Global.Services.Storage;
+using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime.Revit.Core.Json.ContractResolvers;
+using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
 using Pe.Ui.Core;
 using Serilog.Events;
 using System.Diagnostics;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
 
@@ -27,7 +28,7 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var storage = new Storage("Schedule Manager");
+            var storage = new StorageClient("Schedule Manager");
 
             // Collect all schedules in the document
             var serializeItems = new FilteredElementCollector(doc)
@@ -55,11 +56,9 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
                             "All",
                             () => serializeItems,
                             new PaletteAction<ScheduleSerializePaletteItem> {
-                                Name = "Serialize",
-                                Execute = item => this.HandleSerialize(storage, item),                            }
-                        ) {
-                            FilterKeySelector = i => i.TextPill ?? string.Empty
-                        }
+                                Name = "Serialize", Execute = item => this.HandleSerialize(storage, item)
+                            }
+                        ) { FilterKeySelector = i => i.TextPill ?? string.Empty }
                     ]
                 });
             window.Show();
@@ -77,16 +76,16 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
             var spec = ScheduleHelper.SerializeSchedule(serializeItem.Schedule);
 
             // Serialize to JSON exactly as it would be saved
-            var profileJson = JsonSerializer.Serialize(
+            var profileJson = JsonConvert.SerializeObject(
                 spec,
-                new JsonSerializerOptions {
-                    WriteIndented = true,
-                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                Formatting.Indented,
+                new JsonSerializerSettings {
+                    NullValueHandling = NullValueHandling.Ignore, ContractResolver = new RevitTypeContractResolver()
                 });
 
             return new ScheduleSerializePreviewData {
                 ProfileName = spec.Name,
-                CategoryName = spec.CategoryName,
+                CategoryName = CategoryNamesProvider.GetLabelForBuiltInCategory(spec.CategoryName),
                 IsItemized = spec.IsItemized,
                 Fields = spec.Fields,
                 SortGroup = spec.SortGroup,
@@ -103,7 +102,7 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
         }
     }
 
-    private Task HandleSerialize(Storage storage, IPaletteListItem item) {
+    private Task HandleSerialize(StorageClient storage, IPaletteListItem item) {
         var serializeItem = (ScheduleSerializePaletteItem)item;
 
         try {

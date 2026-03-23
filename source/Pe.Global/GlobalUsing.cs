@@ -12,4 +12,5 @@ global using System.Net.Http;
 global using Autodesk.Revit.Attributes;
 global using Autodesk.Revit.DB;
 global using Autodesk.Revit.UI;
+global using Pe.Global.PolyFill;
 global using View = Autodesk.Revit.DB.View;

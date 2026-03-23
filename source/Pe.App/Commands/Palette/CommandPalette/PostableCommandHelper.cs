@@ -1,7 +1,7 @@
 using Pe.Global.Revit.Lib;
 using Pe.Global.Revit.Ui;
-using Pe.Global.Services.Storage;
-using Pe.Global.Services.Storage.Core.Json;
+using Pe.StorageRuntime.Json;
+using Pe.StorageRuntime.Revit;
 using Pe.Ui.Core;
 
 namespace Pe.App.Commands.Palette.CommandPalette;
@@ -9,7 +9,7 @@ namespace Pe.App.Commands.Palette.CommandPalette;
 /// <summary>
 ///     Service for managing PostableCommand enumeration values and metadata
 /// </summary>
-public class PostableCommandHelper(Storage storage) {
+public class PostableCommandHelper(StorageClient storage) {
     private readonly CsvReadWriter<ItemUsageData> _state = storage.StateDir().Csv<ItemUsageData>();
     private List<PostableCommandItem>? _allCommands;
 

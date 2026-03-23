@@ -1,0 +1,16 @@
+{
+  "assemblies": [
+    "bin/Debug.R25/Pe.Global.dll",
+    "bin/Debug.R25/Pe.Host.Contracts.dll",
+    "bin/Debug.R25/Pe.StorageRuntime.dll"
+  ],
+  "outputPath": "C:/Users/kaitp/source/repos/signalir-clientside-demo/v3/src/generated",
+  "createIndexFile": true,
+  "enumStringInitializers": true,
+  "singleQuotes": false,
+  "tabLength": 4,
+  "explicitPublicAccessor": false,
+  "useImportType": true,
+  "camelCasePropertyNames": true,
+  "camelCaseTypeNames": false
+}

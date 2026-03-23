@@ -2,7 +2,7 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.Global.Revit.Ui;
 using Pe.Global.Services.Document;
-using Pe.Global.Services.Storage;
+using Pe.StorageRuntime.Revit;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
 using Serilog;
@@ -67,7 +67,7 @@ public abstract class FamilyPaletteBase : IExternalCommand {
 
             var window = PaletteFactory.Create("Family Palette",
                 new PaletteOptions<UnifiedFamilyItem> {
-                    Persistence = (new Storage(nameof(CmdPltFamilies)), item => item.PersistenceKey),
+                    Persistence = (new StorageClient(nameof(CmdPltFamilies)), item => item.PersistenceKey),
                     SearchConfig = SearchConfig.PrimaryAndSecondary(),
                     Tabs = tabs,
                     DefaultTabIndex = defaultTabIndex,
@@ -84,11 +84,13 @@ public abstract class FamilyPaletteBase : IExternalCommand {
                         // Wire up property change notifications to reload items when options change
                         if (instancesOptions != null) {
                             instancesOptions.PropertyChanged += (sender, e) => {
-                                var shouldRefreshCategories = e.PropertyName is nameof(FamilyInstancesOptions.ShowAnnotationSymbols)
-                                    or nameof(FamilyInstancesOptions.FilterByActiveView);
+                                var shouldRefreshCategories =
+                                    e.PropertyName is nameof(FamilyInstancesOptions.ShowAnnotationSymbols)
+                                        or nameof(FamilyInstancesOptions.FilterByActiveView);
                                 if (shouldRefreshCategories) {
                                     availableCategories.Clear();
-                                    foreach (var category in FamilyActions.CollectFamilyCategories(doc, uidoc, instancesOptions))
+                                    foreach (var category in FamilyActions.CollectFamilyCategories(doc, uidoc,
+                                                 instancesOptions))
                                         availableCategories.Add(category);
                                 }
 

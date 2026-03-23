@@ -1,7 +1,7 @@
 using Autodesk.Revit.DB.ExtensibleStorage;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
-using Pe.Global.Services.Storage.Core.Json.ContractResolvers;
+using Pe.StorageRuntime.Json;
+using Pe.StorageRuntime.Revit.Core.Json;
 using Serilog;
 
 namespace Pe.Global.Services.Storage;
@@ -13,21 +13,12 @@ namespace Pe.Global.Services.Storage;
 /// </summary>
 /// <typeparam name="T">Settings type to store</typeparam>
 public class DocumentSettingsStorage<T> where T : class, new() {
-    private static readonly JsonSerializerSettings JsonSettings;
+    private static readonly JsonSerializerSettings JsonSettings = RevitJsonFormatting.CreateRevitIndentedSettings();
 
     private readonly Guid _schemaGuid;
     private readonly string _schemaName;
     private readonly string _storageElementName;
     private readonly string _vendorId;
-
-    static DocumentSettingsStorage() {
-        JsonSettings = new JsonSerializerSettings {
-            Formatting = Formatting.Indented,
-            ContractResolver = new RevitTypeContractResolver(),
-            NullValueHandling = NullValueHandling.Ignore
-        };
-        JsonSettings.Converters.Add(new StringEnumConverter());
-    }
 
     /// <summary>
     ///     Creates a new document settings storage for the specified type.

@@ -2,9 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
-using Pe.Global.Services.Storage.Core.Json;
-using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
-using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
+using Pe.StorageRuntime.Json;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
@@ -13,9 +11,8 @@ namespace Pe.FamilyFoundry.OperationSettings;
 [JsonConverter(typeof(StringEnumConverter))]
 public enum ParamSettingMode {
     Value,
-    Formula,
+    Formula
 }
-
 
 /// <summary>
 ///     Parameter setting model for parameter metadata plus optional global value/formula.
@@ -63,13 +60,13 @@ public record ParamSettingModel : ParamDefinitionBase {
 ///     Dynamic family type columns are captured by JsonExtensionData and serialized flat.
 /// </summary>
 public record PerTypeValueRow {
-    [SchemaExamples(typeof(SharedParameterNamesProvider))]
     [Description("The parameter name for this per-type value row.")]
     [Required]
     public string Parameter { get; init; } = string.Empty;
 
     [JsonExtensionData]
-    public IDictionary<string, JToken> ValuesByType { get; init; } = new Dictionary<string, JToken>(StringComparer.Ordinal);
+    public IDictionary<string, JToken> ValuesByType { get; init; } =
+        new Dictionary<string, JToken>(StringComparer.Ordinal);
 }
 
 public class AddAndSetParamsSettings : IOperationSettings {
@@ -111,6 +108,7 @@ public class AddAndSetParamsSettings : IOperationSettings {
                 throw new InvalidOperationException(
                     $"Per-type values table row {rowIndex + 1} is missing required '{PerTypeValuesTableParameterColumn}' value.");
             }
+
             var parameterNameKey = parameterName!;
 
             if (!valuesByParameter.TryGetValue(parameterNameKey, out var valuesPerType)) {

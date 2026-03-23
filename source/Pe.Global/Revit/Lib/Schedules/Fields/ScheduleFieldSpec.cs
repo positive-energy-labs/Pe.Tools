@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Text.Json.Serialization;
 
 namespace Pe.Global.Revit.Lib.Schedules.Fields;
 
@@ -19,19 +18,19 @@ public class ScheduleFieldSpec {
     public bool IsHidden { get; set; }
 
     [Description("How to calculate aggregate values for this field (Standard, Totals, MinAndMax, Maximum, Minimum).")]
-    [JsonConverter(typeof(JsonStringEnumConverter))]
+
     public ScheduleFieldDisplayType DisplayType { get; set; } = ScheduleFieldDisplayType.Standard;
 
     [Description("Column width on sheet in feet. Leave empty to use default width.")]
     public double? ColumnWidth { get; set; } = 0.084;
 
     [Description("Horizontal alignment of the column data (Left, Center, Right).")]
-    [JsonConverter(typeof(JsonStringEnumConverter))]
+
     public ScheduleHorizontalAlignment HorizontalAlignment { get; set; } = ScheduleHorizontalAlignment.Center;
 
     [Description(
         "For calculated fields only. Indicates this is a formula or percentage field. Note: Formula strings cannot be read/written via Revit API - calculated fields must be created manually in Revit.")]
-    [JsonConverter(typeof(JsonStringEnumConverter))]
+
     public CalculatedFieldType? CalculatedType { get; set; }
 
     [Description("For Percentage calculated fields only. The name of the field to calculate percentages of.")]

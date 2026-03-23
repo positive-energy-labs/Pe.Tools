@@ -3,6 +3,7 @@ using Pe.App.Commands.Palette;
 using Pe.Tools.Commands;
 using Pe.Tools.Commands.AutoTag;
 using Pe.Tools.Commands.FamilyFoundry;
+using Pe.Tools.Commands.SettingsEditor;
 
 namespace Pe.Tools;
 
@@ -57,13 +58,6 @@ public sealed class ButtonRegistry {
             LargeImage = "Red_32.png",
             ToolTip =
                 "Create Air Terminal variants from an air terminal family by prepopulating the PE_G___TagInstance parameter and setting an existing duct connector's connection settings properly.",
-            Container = new ButtonContainer.Panel("Migration")
-        }),
-        Register<CmdFFParamAggregator>(new ButtonRegistration<CmdFFParamAggregator> {
-            Text = "FF Param Aggregator",
-            SmallImage = "Red_16.png",
-            LargeImage = "Red_32.png",
-            ToolTip = "Aggregate parameter metadata across families in a category and output to CSV.",
             Container = new ButtonContainer.Panel("Migration")
         }),
         Register<CmdPltCommands>(new ButtonRegistration<CmdPltCommands> {
@@ -211,6 +205,21 @@ public sealed class ButtonRegistry {
                               Settings are stored in the document using Extensible Storage.
                               """,
             Container = new ButtonContainer.PullDown("General", "Manage")
+        }),
+        Register<CmdSettingsEditor>(new ButtonRegistration<CmdSettingsEditor> {
+            Text = "Settings Editor",
+            SmallImage = "monitor-down16.png",
+            LargeImage = "monitor-down32.png",
+            ToolTip = "Manually connect or disconnect this Revit session from the external settings editor host.",
+            LongDescription = """
+                              The external settings editor runs out of process.
+
+                              Use this command to:
+                              - connect this Revit session to the manually launched host
+                              - disconnect when you want zero bridge activity
+                              - open the browser-based settings editor
+                              """,
+            Container = new ButtonContainer.PullDown("General", "Manage")
         })
     };
 
@@ -288,12 +297,12 @@ public sealed class ButtonRegistry {
     ///     Strongly-typed button registration that includes command type, display metadata, and container.
     /// </summary>
     private sealed record ButtonRegistration<TCommand> : IButtonRegistration where TCommand : IExternalCommand, new() {
-        public string Text { get; init; }
-        public string SmallImage { get; init; }
-        public string LargeImage { get; init; }
-        public string ToolTip { get; init; }
+        public string Text { get; init; } = string.Empty;
+        public string SmallImage { get; init; } = string.Empty;
+        public string LargeImage { get; init; } = string.Empty;
+        public string ToolTip { get; init; } = string.Empty;
         public string? LongDescription { get; init; }
-        public ButtonContainer Container { get; init; }
+        public ButtonContainer Container { get; init; } = new ButtonContainer.Panel(string.Empty);
 
         public PushButton CreateButton(
             UIControlledApplication app,

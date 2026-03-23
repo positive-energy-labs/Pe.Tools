@@ -5,6 +5,8 @@ namespace Pe.Global.PolyFill;
 ///     These methods abstract framework-specific differences in the Base Class Library.
 /// </summary>
 public static class BclExtensions {
+    private const int TrimEntriesFlag = 2;
+
     /// <summary>
     ///     Gets a relative path from one path to another.
     ///     Polyfill for Path.GetRelativePath (added in .NET Core 2.0).
@@ -19,7 +21,6 @@ public static class BclExtensions {
 
         var commonLength = 0;
         var minLength = Math.Min(relativeToSegments.Length, pathSegments.Length);
-
         for (var i = 0; i < minLength; i++) {
             if (!string.Equals(relativeToSegments[i], pathSegments[i], StringComparison.OrdinalIgnoreCase))
                 break;
@@ -114,8 +115,9 @@ public static class BclExtensions {
     ///     Polyfill for StringSplitOptions.TrimEntries (added in .NET 5).
     /// </summary>
     public static string[] SplitAndTrim(this string value, char separator, StringSplitOptions options = StringSplitOptions.None) {
-        var parts = value.Split(new[] { separator }, options);
-        return TrimIfRequested(parts, options);
+        var frameworkOptions = NormalizeSplitOptions(options);
+        var parts = value.Split(new[] { separator }, frameworkOptions);
+        return FinalizeSplitParts(parts, options);
     }
 
     /// <summary>
@@ -123,8 +125,9 @@ public static class BclExtensions {
     ///     Polyfill for StringSplitOptions.TrimEntries (added in .NET 5).
     /// </summary>
     public static string[] SplitAndTrim(this string value, char[] separators, StringSplitOptions options = StringSplitOptions.None) {
-        var parts = value.Split(separators, options);
-        return TrimIfRequested(parts, options);
+        var frameworkOptions = NormalizeSplitOptions(options);
+        var parts = value.Split(separators, frameworkOptions);
+        return FinalizeSplitParts(parts, options);
     }
 
     /// <summary>
@@ -143,15 +146,18 @@ public static class BclExtensions {
         return string.Join(separator, values);
     }
 
-    private static string[] TrimIfRequested(string[] parts, StringSplitOptions options) {
-        const int TrimEntriesFlag = 2;
+    private static StringSplitOptions NormalizeSplitOptions(StringSplitOptions options) =>
+        (StringSplitOptions)((int)options & ~TrimEntriesFlag);
+
+    private static string[] FinalizeSplitParts(string[] parts, StringSplitOptions options) {
         var shouldTrim = ((int)options & TrimEntriesFlag) == TrimEntriesFlag;
+        if (shouldTrim) {
+            for (var i = 0; i < parts.Length; i++)
+                parts[i] = parts[i].Trim();
+        }
 
-        if (!shouldTrim)
-            return parts;
-
-        for (var i = 0; i < parts.Length; i++)
-            parts[i] = parts[i].Trim();
+        if ((options & StringSplitOptions.RemoveEmptyEntries) != 0)
+            return parts.Where(part => !string.IsNullOrEmpty(part)).ToArray();
 
         return parts;
     }

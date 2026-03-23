@@ -1,7 +1,7 @@
 using Autodesk.Revit.UI;
 using Pe.FamilyFoundry;
-using Pe.Global.Services.Storage;
-using Pe.Global.Services.Storage.Core;
+using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime.Revit.Modules;
 
 namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 
@@ -13,8 +13,8 @@ namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 public class FoundryContext<TProfile> where TProfile : BaseProfileSettings {
     public Document Doc { get; init; }
     public UIDocument UiDoc { get; init; }
-    public Storage Storage { get; init; }
-    public SettingsManager SettingsManager { get; init; }
+    public StorageClient Storage { get; init; }
+    public SharedModuleSettingsStorage SharedStorage { get; init; }
     public OnProcessingFinishSettings OnFinishSettings { get; init; }
 
     // UI state: what's currently selected and displayed
