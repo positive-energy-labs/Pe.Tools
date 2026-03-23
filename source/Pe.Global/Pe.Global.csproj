@@ -52,10 +52,6 @@
         <Compile Remove="Services\Host\**\*.Net48.cs"/>
     </ItemGroup>
 
-    <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
-        <Compile Remove="Services\SettingsEditor\**\*.Net48.cs" />
-    </ItemGroup>
-
     <ItemGroup>
         <ProjectReference Include="..\Pe.RevitData\Pe.RevitData.csproj"/>
         <ProjectReference Include="..\Pe.StorageRuntime.Revit\Pe.StorageRuntime.Revit.csproj"/>
