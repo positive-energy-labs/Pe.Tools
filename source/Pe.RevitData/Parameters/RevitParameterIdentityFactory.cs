@@ -111,6 +111,10 @@ public static class RevitParameterIdentityFactory {
         Guid? sharedGuid,
         long? parameterElementId
     ) {
+        // Identity strength order:
+        // SharedGuid > BuiltInParameter > ParameterElement > NameFallback.
+        // This is an observation/join identity only. Do not assume every
+        // identity kind is safe for cross-document authority resolution.
         if (sharedGuid.HasValue && sharedGuid.Value != Guid.Empty) {
             return new RevitParameterIdentity(
                 $"shared:{sharedGuid.Value:D}",

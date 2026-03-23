@@ -80,8 +80,18 @@ public static class RevitParameterAuthorityResolver {
         if (familyParameter == null)
             throw new ArgumentNullException(nameof(familyParameter));
 
+        // Critical invariant:
+        // Shared GUID is the only strong family/project match across documents.
+        // Do not use ParameterElementId or built-in id here. Those identities are
+        // useful within a single document pipeline, but they are not a stable
+        // cross-document family-authority surface. Non-shared family matching is
+        // therefore restricted to true NameFallback observations only.
+        if (SameSharedGuid(observed.Identity, familyParameter.Identity))
+            return true;
         if (observed.Identity.SharedGuid.HasValue || familyParameter.Identity.SharedGuid.HasValue)
-            return SameSharedGuid(observed.Identity, familyParameter.Identity);
+            return false;
+        if (observed.Identity.Kind != RevitParameterIdentityKind.NameFallback)
+            return false;
 
         return string.Equals(observed.Identity.Name, familyParameter.Identity.Name, StringComparison.Ordinal) &&
                observed.IsInstance == familyParameter.IsInstance;
@@ -125,6 +135,9 @@ public static class RevitParameterAuthorityResolver {
         if (!CategoryMatches(observed.CategoryName, projectBinding))
             return false;
 
+        // Project bindings live in the same project document as the observed
+        // parameter, so ParameterElementId is safe to use here. This does not
+        // imply it is safe for cross-document family matching.
         if (SameSharedGuid(observed.Identity, projectBinding.Identity))
             return observed.IsInstance == projectBinding.IsInstance;
 
