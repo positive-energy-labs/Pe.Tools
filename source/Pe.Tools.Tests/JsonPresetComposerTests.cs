@@ -1,14 +1,14 @@
 using Newtonsoft.Json.Linq;
-using Pe.Global.Services.Storage.Core.Json;
+using Pe.StorageRuntime.Json;
+using Pe.StorageRuntime.Revit.Core.Json;
 using System.ComponentModel.DataAnnotations;
+using RuntimeJsonValidationException = Pe.StorageRuntime.Revit.Core.Json.JsonValidationException;
 
 namespace Pe.Tools.Tests;
 
-public sealed class JsonPresetComposerTests : RevitTestBase
-{
+public sealed class JsonPresetComposerTests : RevitTestBase {
     [Test]
-    public async Task ExpandPresets_RejectsInlineOverridesWhenPresetIsPresent()
-    {
+    public async Task ExpandPresets_RejectsInlineOverridesWhenPresetIsPresent() {
         using var sandbox = new TempDir();
         var presetsDir = Path.Combine(sandbox.Path, "_filter-aps-params");
         _ = Directory.CreateDirectory(presetsDir);
@@ -42,7 +42,8 @@ public sealed class JsonPresetComposerTests : RevitTestBase
             """
         );
 
-        var exception = (await Assert.That(() => JsonPresetComposer.ExpandPresets(root, sandbox.Path, ["_filter-aps-params"]))
+        var exception = (await Assert
+            .That(() => JsonPresetComposer.ExpandPresets(root, sandbox.Path, ["_filter-aps-params"]))
             .Throws<JsonCompositionException>())!;
         await Assert.That(exception.Message)
             .Contains("Preset composition does not support inline overrides")
@@ -50,8 +51,7 @@ public sealed class JsonPresetComposerTests : RevitTestBase
     }
 
     [Test]
-    public async Task ExpandPresets_ReplacesEntireObject_WhenPresetOnlyIsUsed()
-    {
+    public async Task ExpandPresets_ReplacesEntireObject_WhenPresetOnlyIsUsed() {
         using var sandbox = new TempDir();
         var presetsDir = Path.Combine(sandbox.Path, "_filter-aps-params");
         _ = Directory.CreateDirectory(presetsDir);
@@ -90,8 +90,7 @@ public sealed class JsonPresetComposerTests : RevitTestBase
     }
 
     [Test]
-    public async Task ExpandPresets_RejectsBareLocalPath()
-    {
+    public async Task ExpandPresets_RejectsBareLocalPath() {
         using var sandbox = new TempDir();
         var root = JObject.Parse(
             """
@@ -103,14 +102,15 @@ public sealed class JsonPresetComposerTests : RevitTestBase
             """
         );
 
-        var exception = (await Assert.That(() => JsonPresetComposer.ExpandPresets(root, sandbox.Path, ["_filter-aps-params"]))
+        var exception = (await Assert
+            .That(() => JsonPresetComposer.ExpandPresets(root, sandbox.Path, ["_filter-aps-params"]))
             .Throws<JsonCompositionException>())!;
-        await Assert.That(exception.Message).Contains("Invalid '$preset' path").WithComparison(StringComparison.Ordinal);
+        await Assert.That(exception.Message).Contains("Invalid '$preset' path")
+            .WithComparison(StringComparison.Ordinal);
     }
 
     [Test]
-    public async Task ExpandPresets_DetectsCircularPresetIncludes()
-    {
+    public async Task ExpandPresets_DetectsCircularPresetIncludes() {
         using var sandbox = new TempDir();
         var presetsDir = Path.Combine(sandbox.Path, "_filter-aps-params");
         _ = Directory.CreateDirectory(presetsDir);
@@ -142,7 +142,8 @@ public sealed class JsonPresetComposerTests : RevitTestBase
             """
         );
 
-        var exception = (await Assert.That(() => JsonPresetComposer.ExpandPresets(root, sandbox.Path, ["_filter-aps-params"]))
+        var exception = (await Assert
+            .That(() => JsonPresetComposer.ExpandPresets(root, sandbox.Path, ["_filter-aps-params"]))
             .Throws<JsonCompositionException>())!;
         await Assert.That(exception.Message)
             .Contains("Circular preset include detected")
@@ -150,8 +151,7 @@ public sealed class JsonPresetComposerTests : RevitTestBase
     }
 
     [Test]
-    public async Task ComposableJson_ValidatesRequiredFieldsAfterPresetExpansion()
-    {
+    public async Task ComposableJson_ValidatesRequiredFieldsAfterPresetExpansion() {
         using var sandbox = new TempDir();
         var settingsPath = Path.Combine(sandbox.Path, "settings.json");
         var presetsDir = Path.Combine(sandbox.Path, "_preset-model");
@@ -177,41 +177,34 @@ public sealed class JsonPresetComposerTests : RevitTestBase
         );
 
         var json = new ComposableJson<PresetContainer>(settingsPath, sandbox.Path, JsonBehavior.Settings);
-        _ = await Assert.That(json.Read).Throws<JsonValidationException>();
+        _ = await Assert.That(json.Read).Throws<RuntimeJsonValidationException>();
     }
 
-    private sealed class PresetContainer
-    {
+    private sealed class PresetContainer {
         [Required]
         [Presettable("preset-model")]
         public PresetModel Model { get; init; } = new();
     }
 
-    private sealed class PresetModel
-    {
-        [Required]
-        public string RequiredName { get; init; } = string.Empty;
+    private sealed class PresetModel {
+        [Required] public string RequiredName { get; init; } = string.Empty;
+
         public bool Enabled { get; init; } = true;
     }
 
-    private sealed class TempDir : IDisposable
-    {
-        public TempDir()
-        {
-            this.Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"preset-composer-test-{Guid.NewGuid():N}");
+    private sealed class TempDir : IDisposable {
+        public TempDir() {
+            this.Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                $"preset-composer-test-{Guid.NewGuid():N}");
             _ = Directory.CreateDirectory(this.Path);
         }
 
         public string Path { get; }
 
-        public void Dispose()
-        {
-            try
-            {
-                Directory.Delete(this.Path, recursive: true);
-            }
-            catch
-            {
+        public void Dispose() {
+            try {
+                Directory.Delete(this.Path, true);
+            } catch {
                 // ignore cleanup failures in tests
             }
         }

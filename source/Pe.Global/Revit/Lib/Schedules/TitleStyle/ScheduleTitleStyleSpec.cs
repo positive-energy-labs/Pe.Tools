@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Text.Json.Serialization;
 
 namespace Pe.Global.Revit.Lib.Schedules.TitleStyle;
 
@@ -8,7 +7,7 @@ namespace Pe.Global.Revit.Lib.Schedules.TitleStyle;
 /// </summary>
 public class ScheduleTitleStyleSpec {
     [Description("Horizontal alignment of the title text (Left, Center, Right).")]
-    [JsonConverter(typeof(JsonStringEnumConverter))]
+
     public TitleHorizontalAlignment HorizontalAlignment { get; set; } = TitleHorizontalAlignment.Left;
 
     [Description("Border style configuration for the title cell. Leave null to skip border styling.")]

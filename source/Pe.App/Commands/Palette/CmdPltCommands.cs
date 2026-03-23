@@ -1,7 +1,7 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.CommandPalette;
-using Pe.Global.Services.Storage;
+using Pe.StorageRuntime.Revit;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
 using Serilog;
@@ -19,7 +19,7 @@ public class CmdPltCommands : IExternalCommand {
     ) {
         try {
             var uiapp = commandData.Application;
-            var persistence = new Storage(nameof(CmdPltCommands));
+            var persistence = new StorageClient(nameof(CmdPltCommands));
 
             // Load commands using existing helper
             var commandHelper = new PostableCommandHelper(persistence);

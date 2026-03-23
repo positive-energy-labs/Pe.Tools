@@ -1,10 +1,7 @@
 using Pe.FamilyFoundry.OperationSettings;
-using Pe.Global.Services.Storage.Core.Json.RevitTypes;
-using Pe.Global.Services.Storage.Core.Json.SchemaProcessors;
-using Pe.Global.Services.Storage.Core.Json.SchemaProviders;
+using Pe.StorageRuntime.Revit.Core.Json.RevitTypes;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using System.Linq;
 
 namespace Pe.FamilyFoundry.Aggregators.Snapshots;
 
@@ -14,7 +11,6 @@ namespace Pe.FamilyFoundry.Aggregators.Snapshots;
 ///     Contains the minimum information needed to identify or create a parameter.
 /// </summary>
 public record ParamDefinitionBase {
-    [SchemaExamples(typeof(SharedParameterNamesProvider))]
     [Description("The name of the parameter")]
     [Required]
     public string Name { get; init; }
@@ -53,12 +49,6 @@ public record ParamSnapshot : ParamDefinitionBase {
     public StorageType StorageType { get; init; }
 
     /// <summary>
-    ///     Indicates if this is a project parameter (exists in Document.ParameterBindings).
-    ///     Only populated when collecting from project document. Always false for family doc collection.
-    /// </summary>
-    public bool IsProjectParameter { get; init; } = false;
-
-    /// <summary>
     ///     Settings-compatible value field.
     ///     - Formula when formula exists.
     ///     - Uniform value when all non-empty type values are the same.
@@ -73,7 +63,8 @@ public record ParamSnapshot : ParamDefinitionBase {
     ///     Settings-compatible assignment mode.
     ///     True only when this snapshot represents a formula.
     /// </summary>
-    public ParamSettingMode SetAs => !string.IsNullOrWhiteSpace(this.Formula) ? ParamSettingMode.Formula : ParamSettingMode.Value;
+    public ParamSettingMode SetAs =>
+        !string.IsNullOrWhiteSpace(this.Formula) ? ParamSettingMode.Formula : ParamSettingMode.Value;
 
     /// <summary>Checks if a parameter has a (non-empty) value for all family types.</summary>
     public bool HasValueForAllTypes() {
@@ -110,9 +101,7 @@ public record ParamSnapshot : ParamDefinitionBase {
         if (nonNullValues.Count == 0) return null;
         if (nonNullValues.Values.Distinct(StringComparer.Ordinal).Count() == 1) return null;
 
-        var row = new PerTypeValueRow {
-            Parameter = this.Name
-        };
+        var row = new PerTypeValueRow { Parameter = this.Name };
         foreach (var kv in nonNullValues)
             row.ValuesByType[kv.Key] = kv.Value;
         return row;

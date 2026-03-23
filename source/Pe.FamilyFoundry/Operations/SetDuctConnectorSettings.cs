@@ -94,7 +94,4 @@ public class DuctConnectorConfigurator {
             new JsonSerializerSettings {
                 Formatting = Formatting.Indented, Converters = new List<JsonConverter> { new StringEnumConverter() }
             });
-
-    public string ToStringUnConverted() =>
-        JsonConvert.SerializeObject(this, new JsonSerializerSettings { Formatting = Formatting.Indented });
 }

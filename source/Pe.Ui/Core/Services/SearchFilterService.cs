@@ -1,7 +1,7 @@
 using F23.StringSimilarity;
 using Pe.Global.PolyFill;
-using Pe.Global.Services.Storage;
-using Pe.Global.Services.Storage.Core.Json;
+using Pe.StorageRuntime.Json;
+using Pe.StorageRuntime.Revit;
 
 namespace Pe.Ui.Core.Services;
 
@@ -16,15 +16,15 @@ public class SearchFilterService<TItem> where TItem : class, IPaletteListItem {
     private readonly Func<TItem, string>? _keyGenerator;
     private readonly SearchConfig _searchConfig;
     private readonly CsvReadWriter<ItemUsageData>? _state;
-    private Dictionary<string, ItemUsageData> _usageCache = new();
     private readonly object _usageLock = new();
+    private Dictionary<string, ItemUsageData> _usageCache = new();
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="SearchFilterService{TItem}" /> class.
     /// </summary>
     public SearchFilterService(
         SearchConfig? searchConfig = null,
-        Storage? storage = null,
+        StorageClient? storage = null,
         Func<TItem, string>? keyGenerator = null
     ) {
         this._searchConfig = searchConfig ?? SearchConfig.Default();
@@ -309,5 +309,4 @@ public class SearchFilterService<TItem> where TItem : class, IPaletteListItem {
         var charBefore = text[index - 1];
         return charBefore is ' ' or '-' or '_';
     }
-
 }

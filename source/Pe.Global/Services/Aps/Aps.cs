@@ -26,5 +26,5 @@ public class Aps(TokenProviders.IAuth authTokenProvider) {
     public interface IParametersTokenProvider : TokenProviders.IParameters;
 
 
-    // public Models.OAuth ApsBaseSettings(): SettingsManager.BaseSettings => new();
+    // public Models.OAuth ApsBaseSettings(): Global settings model placeholder => new();
 }

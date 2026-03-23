@@ -1,6 +1,8 @@
 bin/
 obj/
 /packages/
+artifacts/
+.tmphostbuild/
 riderModule.iml
 /_ReSharper.Caches/
 *.log

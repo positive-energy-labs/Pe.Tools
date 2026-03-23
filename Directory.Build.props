@@ -1,0 +1,6 @@
+<Project>
+    <PropertyGroup Condition="'$(Configuration)' != ''">
+        <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
+        <MSBuildProjectExtensionsPath>obj\$(Configuration)\</MSBuildProjectExtensionsPath>
+    </PropertyGroup>
+</Project>

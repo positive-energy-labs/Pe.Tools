@@ -1,7 +1,7 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.Global.Revit.Ui;
-using Pe.Global.Services.Storage;
+using Pe.StorageRuntime.Revit;
 using Pe.Ui.Core;
 using Serilog.Events;
 using System.Diagnostics;
@@ -40,7 +40,7 @@ public abstract class ViewPaletteBase : IExternalCommand {
 
             var window = PaletteFactory.Create("View Palette",
                 new PaletteOptions<UnifiedViewItem> {
-                    Persistence = (new Storage(nameof(CmdPltViews)), item => item.View.Id.ToString()),
+                    Persistence = (new StorageClient(nameof(CmdPltViews)), item => item.View.Id.ToString()),
                     Tabs = tabs,
                     DefaultTabIndex = this.DefaultTabIndex,
                     SidebarPanel = previewPanel

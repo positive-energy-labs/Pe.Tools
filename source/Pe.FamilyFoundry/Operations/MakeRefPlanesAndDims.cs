@@ -1,7 +1,6 @@
 using Pe.Extensions.FamDocument;
 using Pe.FamilyFoundry.Helpers;
 using Pe.FamilyFoundry.OperationSettings;
-using System.Text.Json.Serialization;
 
 namespace Pe.FamilyFoundry.Operations;
 
@@ -31,7 +30,6 @@ public class MakeRefPlanesAndDims(
 /// <summary>
 ///     Caches ReferencePlane lookups by name for performance.
 /// </summary>
-[JsonConverter(typeof(JsonStringEnumConverter))]
 public class PlaneQuery(Document doc) {
     private readonly Dictionary<string, ReferencePlane?> _cache = new();
 
