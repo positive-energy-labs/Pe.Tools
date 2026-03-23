@@ -24,7 +24,7 @@ settings-editor integration so future work in this repo stays aligned.
   - Module metadata is the source of truth for schema, validation identity, and
     default storage conventions.
 - **Backend-owned transport constants**
-  - HTTP routes, named-pipe bridge method names, DTOs, enums, and event names
+  - HTTP routes, operation definitions/keys, DTOs, enums, and event names
     are defined in this repo and exported for the external frontend.
 - **Filesystem as source of truth for settings files**
   - In this repo, settings listing, reads, writes, composition, and validation

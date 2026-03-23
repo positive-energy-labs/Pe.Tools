@@ -2,20 +2,12 @@ using Pe.Global.Revit.Lib.Parameters;
 using Pe.Global.Services.Document;
 using Pe.Host.Contracts;
 using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Documents;
 using Pe.StorageRuntime.Json.FieldOptions;
-using Pe.StorageRuntime.Json.SchemaDefinitions;
 using Pe.StorageRuntime.Revit.Context;
-using Pe.StorageRuntime.Revit.Core.Json;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Pe.StorageRuntime.Revit.Modules;
-using Pe.StorageRuntime.Revit.Validation;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
-using System.Collections.Concurrent;
 using FieldOptionItem = Pe.Host.Contracts.FieldOptionItem;
-using RuntimeSettingsDocumentId = Pe.StorageRuntime.Documents.SettingsDocumentId;
-using RuntimeSettingsValidationIssue = Pe.StorageRuntime.Documents.SettingsValidationIssue;
 
 namespace Pe.Global.Services.Host;
 
@@ -29,11 +21,7 @@ public class RequestService {
     private readonly SettingsModuleRegistry _moduleRegistry;
     private readonly IRevitContextAccessor _revitContextAccessor = new DocumentManagerRevitContextAccessor();
     private readonly RevitTaskService _revitTaskService;
-    private readonly ConcurrentDictionary<string, SchemaData> _schemaCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ThrottleGate _throttleGate;
-
-    private readonly ConcurrentDictionary<string, ISettingsDocumentValidator> _validationValidatorCache =
-        new(StringComparer.OrdinalIgnoreCase);
 
     public RequestService(
         RevitTaskService revitTaskService,
@@ -43,22 +31,6 @@ public class RequestService {
         this._revitTaskService = revitTaskService;
         this._moduleRegistry = moduleRegistry;
         this._throttleGate = throttleGate;
-    }
-
-    public async Task<SchemaEnvelopeResponse> GetSchemaEnvelopeAsync(SchemaRequest request) {
-        var stopwatch = Stopwatch.StartNew();
-        Log.Information("Settings editor request starting: Method={Method}, ModuleKey={ModuleKey}",
-            nameof(this.GetSchemaEnvelopeAsync), request.ModuleKey);
-        var result = await this.GetSchemaCore(request);
-        Log.Information(
-            "Settings editor request completed: Method={Method}, ModuleKey={ModuleKey}, Ok={Ok}, Code={Code}, ElapsedMs={ElapsedMs}",
-            nameof(this.GetSchemaEnvelopeAsync),
-            request.ModuleKey,
-            result.Ok,
-            result.Code,
-            stopwatch.ElapsedMilliseconds
-        );
-        return result.ToSchemaEnvelope();
     }
 
     public async Task<FieldOptionsEnvelopeResponse> GetFieldOptionsEnvelopeAsync(
@@ -90,23 +62,6 @@ public class RequestService {
         LogThrottleDecision(nameof(this.GetFieldOptionsEnvelopeAsync), decision, request.ModuleKey,
             request.PropertyPath);
         return response;
-    }
-
-    public async Task<ValidationEnvelopeResponse> ValidateSettingsEnvelopeAsync(ValidateSettingsRequest request) {
-        var stopwatch = Stopwatch.StartNew();
-        Log.Information(
-            "Settings editor request starting: Method={Method}, ModuleKey={ModuleKey}, PayloadLength={PayloadLength}",
-            nameof(this.ValidateSettingsEnvelopeAsync), request.ModuleKey, request.SettingsJson?.Length ?? 0);
-        var result = await this.ValidateSettingsCore(request);
-        Log.Information(
-            "Settings editor request completed: Method={Method}, ModuleKey={ModuleKey}, Ok={Ok}, Code={Code}, ElapsedMs={ElapsedMs}",
-            nameof(this.ValidateSettingsEnvelopeAsync),
-            request.ModuleKey,
-            result.Ok,
-            result.Code,
-            stopwatch.ElapsedMilliseconds
-        );
-        return result.ToValidationEnvelope();
     }
 
     public async Task<ParameterCatalogEnvelopeResponse> GetParameterCatalogEnvelopeAsync(
@@ -184,70 +139,6 @@ public class RequestService {
                     .ToParameterCatalogEnvelope();
             }
         });
-
-    private async Task<HostEnvelopeResult<SchemaData>> GetSchemaCore(SchemaRequest request) {
-        try {
-            var module = this._moduleRegistry.ResolveByModuleKey(request.ModuleKey);
-            if (this._schemaCache.TryGetValue(module.ModuleKey, out var cachedSchema))
-                return HostEnvelopeResults.Success(cachedSchema, EnvelopeCode.Ok, "Schema loaded from cache.");
-
-            var schemaData = await this.EnqueueAsync(() => this.GetOrCreateSchemaData(module));
-            return HostEnvelopeResults.Success(schemaData, EnvelopeCode.Ok, "Schema generated.");
-        } catch (Exception ex) {
-            return HostEnvelopeResults.Failure<SchemaData>(
-                EnvelopeCode.Failed,
-                ex.Message,
-                [
-                    HostEnvelopeResults.ExceptionIssue(
-                        "SchemaException",
-                        ex,
-                        "Ensure module registration, schema definitions, and type bindings are valid."
-                    )
-                ]
-            );
-        }
-    }
-
-    private async Task<HostEnvelopeResult<ValidationData>> ValidateSettingsCore(ValidateSettingsRequest request) {
-        try {
-            var module = this._moduleRegistry.ResolveByModuleKey(request.ModuleKey);
-            var validator = this._validationValidatorCache.TryGetValue(module.ModuleKey, out var cachedValidator)
-                ? cachedValidator
-                : await this.EnqueueAsync(() => this.GetOrCreateValidationValidator(module));
-            var validation = await Task.Run(() => validator.Validate(
-                new RuntimeSettingsDocumentId(module.ModuleKey, module.DefaultSubDirectory, "__bridge_validation__"),
-                request.SettingsJson,
-                null
-            ));
-            var issues = validation.Issues.Select(ToHostValidationIssue).ToList();
-            var issueCount = issues.Count;
-
-            return HostEnvelopeResults.Success(
-                new ValidationData(validation.IsValid, issues),
-                EnvelopeCode.Ok,
-                issueCount == 0 ? "Validation passed." : "Validation returned issues.",
-                issues
-            );
-        } catch (Exception ex) {
-            var issues = new List<ValidationIssue> {
-                new(
-                    "$",
-                    null,
-                    "ValidationException",
-                    "error",
-                    ex.Message,
-                    "Ensure moduleKey is registered and settingsJson is valid JSON."
-                )
-            };
-            return HostEnvelopeResults.Failure<ValidationData>(
-                EnvelopeCode.Failed,
-                ex.Message,
-                issues
-            ) with {
-                Data = new ValidationData(false, issues)
-            };
-        }
-    }
 
     private async Task<HostEnvelopeResult<FieldOptionsData>> GetFieldOptionsCore(FieldOptionsRequest request) =>
         await this.EnqueueAsync(() => {
@@ -365,45 +256,6 @@ public class RequestService {
             message
         );
 
-    private SchemaData GetOrCreateSchemaData(ISettingsModule module) {
-        if (this._schemaCache.TryGetValue(module.ModuleKey, out var cachedSchema))
-            return cachedSchema;
-
-        var type = module.SettingsType;
-        var generatedSchemaData = RevitJsonSchemaFactory.CreateEditorSchemaData(
-            type,
-            SettingsRuntimeCapabilityProfiles.LiveDocument,
-            this._revitContextAccessor
-        );
-
-        if (generatedSchemaData.FragmentSchemaJson == null) {
-            Log.Warning(
-                "Fragment schema generation failed: ModuleKey={ModuleKey}, SettingsType={SettingsType}",
-                module.ModuleKey,
-                type.FullName ?? type.Name
-            );
-        }
-
-        var generatedSchema = new SchemaData(
-            generatedSchemaData.SchemaJson,
-            generatedSchemaData.FragmentSchemaJson
-        );
-        _ = this._schemaCache.TryAdd(module.ModuleKey, generatedSchema);
-        return generatedSchema;
-    }
-
-    private ISettingsDocumentValidator GetOrCreateValidationValidator(ISettingsModule module) {
-        if (this._validationValidatorCache.TryGetValue(module.ModuleKey, out var cachedValidator))
-            return cachedValidator;
-
-        var validator = new SchemaBackedSettingsDocumentValidator(
-            module.SettingsType,
-            SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly
-        );
-        _ = this._validationValidatorCache.TryAdd(module.ModuleKey, validator);
-        return validator;
-    }
-
     private static FieldOptionsData EmptyFieldOptionsData(string sourceKey) =>
         new(
             sourceKey,
@@ -438,16 +290,6 @@ public class RequestService {
         item.Label,
         item.Description
     );
-
-    private static ValidationIssue ToHostValidationIssue(RuntimeSettingsValidationIssue issue) =>
-        new(
-            issue.Path,
-            null,
-            issue.Code,
-            issue.Severity,
-            issue.Message,
-            issue.Suggestion
-        );
 
     private static string BuildThrottleKey(
         string? connectionId,

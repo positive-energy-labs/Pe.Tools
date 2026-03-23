@@ -16,6 +16,7 @@ using Pe.StorageRuntime.Json.SchemaDefinitions;
 using Pe.StorageRuntime.Modules;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Pe.StorageRuntime.Revit.Modules;
+using System.Reflection;
 using HostSettingsModuleDescriptor = Pe.Host.Contracts.SettingsModuleDescriptor;
 using HostOpenSettingsDocumentRequest = Pe.Host.Contracts.OpenSettingsDocumentRequest;
 using HostSaveSettingsDocumentRequest = Pe.Host.Contracts.SaveSettingsDocumentRequest;
@@ -58,19 +59,43 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
     }
 
     [Test]
-    public async Task Hub_method_names_drop_storage_crud_and_keep_bridge_contract() {
-        var methods = typeof(HubMethodNames).GetFields()
-            .Where(field => field.IsLiteral)
-            .Select(field => field.GetRawConstantValue()?.ToString())
-            .Where(value => !string.IsNullOrWhiteSpace(value))
+    public async Task Host_operation_definitions_centralize_http_and_bridge_metadata() {
+        var operations = GetHostOperationDefinitions()
+            .OrderBy(definition => definition.Key, StringComparer.Ordinal)
+            .ToList();
+        var keys = operations.Select(operation => operation.Key).ToList();
+        var routes = operations.Select(operation => operation.Route).ToList();
+
+        await Assert.That(keys).Contains(GetHostStatusOperationContract.Definition.Key);
+        await Assert.That(keys).Contains(GetLoadedFamiliesCatalogOperationContract.Definition.Key);
+        await Assert.That(keys).Contains(GetProjectParameterBindingsOperationContract.Definition.Key);
+        await Assert.That(keys).Contains(GetFieldOptionsOperationContract.Definition.Key);
+        await Assert.That(keys.Distinct(StringComparer.Ordinal).Count()).IsEqualTo(keys.Count);
+        await Assert.That(routes.Distinct(StringComparer.Ordinal).Count()).IsEqualTo(routes.Count);
+        await Assert.That(keys).DoesNotContain("DiscoverSettingsDocuments");
+        await Assert.That(keys).DoesNotContain("OpenSettingsDocument");
+        await Assert.That(keys).DoesNotContain("ComposeSettingsDocument");
+        await Assert.That(keys).DoesNotContain("SaveSettingsDocument");
+    }
+
+    [Test]
+    public async Task Bridge_registry_contains_unique_supported_bridge_operations() {
+        var registry = CreateInternalInstance(
+            typeof(RequestService).Assembly,
+            "Pe.Global.Services.Host.Operations.BridgeOperationRegistry"
+        );
+        var operationDefinitions = ReadOperationDefinitions(registry);
+        var keys = operationDefinitions.Select(definition => definition.Key).OrderBy(key => key, StringComparer.Ordinal)
             .ToList();
 
-        await Assert.That(methods).Contains(nameof(HubMethodNames.GetHostStatusEnvelope));
-        await Assert.That(methods).DoesNotContain(nameof(HubMethodNames.GetType));
-        await Assert.That(methods).DoesNotContain("DiscoverSettingsDocuments");
-        await Assert.That(methods).DoesNotContain("OpenSettingsDocument");
-        await Assert.That(methods).DoesNotContain("ComposeSettingsDocument");
-        await Assert.That(methods).DoesNotContain("SaveSettingsDocument");
+        await Assert.That(keys).IsEquivalentTo(new[] {
+            GetFieldOptionsOperationContract.Definition.Key,
+            GetParameterCatalogOperationContract.Definition.Key,
+            GetScheduleCatalogOperationContract.Definition.Key,
+            GetLoadedFamiliesCatalogOperationContract.Definition.Key,
+            GetLoadedFamiliesMatrixOperationContract.Definition.Key,
+            GetProjectParameterBindingsOperationContract.Definition.Key
+        }.OrderBy(key => key, StringComparer.Ordinal));
     }
 
     [Test]
@@ -975,6 +1000,33 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
 
     private static string ReadRepoFile(string relativePath) =>
         File.ReadAllText(Path.Combine(GetRepoRoot(), relativePath.Replace('/', Path.DirectorySeparatorChar)));
+
+    private static IEnumerable<HostOperationDefinition> GetHostOperationDefinitions() =>
+        typeof(GetHostStatusOperationContract).Assembly
+            .GetTypes()
+            .Where(type => type.IsAbstract && type.IsSealed && type.Name.EndsWith("OperationContract", StringComparison.Ordinal))
+            .Select(type => type.GetField("Definition", BindingFlags.Public | BindingFlags.Static)?.GetValue(null))
+            .OfType<HostOperationDefinition>();
+
+    private static object CreateInternalInstance(Assembly assembly, string typeName) {
+        var type = assembly.GetType(typeName)
+                   ?? throw new InvalidOperationException($"Type '{typeName}' was not found.");
+        return Activator.CreateInstance(type, nonPublic: true)
+               ?? throw new InvalidOperationException($"Type '{typeName}' could not be constructed.");
+    }
+
+    private static IReadOnlyList<HostOperationDefinition> ReadOperationDefinitions(object registry) {
+        var operationsProperty = registry.GetType().GetProperty("Operations", BindingFlags.Public | BindingFlags.Instance)
+                                 ?? throw new InvalidOperationException("Operations property was not found.");
+        var operations = ((IEnumerable<object>?)operationsProperty.GetValue(registry))?.ToList()
+                         ?? throw new InvalidOperationException("Operations collection was null.");
+
+        return operations
+            .Select(operation =>
+                operation.GetType().GetProperty("Definition", BindingFlags.Public | BindingFlags.Instance)?.GetValue(operation))
+            .OfType<HostOperationDefinition>()
+            .ToList();
+    }
 
     private static IEnumerable<string> EnumerateRepoSourceFiles(params string[] relativeDirectories) =>
         relativeDirectories

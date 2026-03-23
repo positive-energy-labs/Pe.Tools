@@ -72,4 +72,6 @@ public record ParameterCatalogEnvelopeResponse(
     string Message,
     List<ValidationIssue> Issues,
     ParameterCatalogData? Data
-);
+) : IHostDataEnvelope<ParameterCatalogData> {
+    public object? GetData() => this.Data;
+}

@@ -142,6 +142,25 @@ public sealed class HostRevitDataArchitectureTests : RevitTestBase {
     }
 
     [Test]
+    public async Task Repo_uses_operation_registries_instead_of_legacy_hub_method_constants_or_switch_dispatch() {
+        var sourceFiles = EnumerateRepoSourceFiles(
+                "source/Pe.Global",
+                "source/Pe.Host",
+                "source/Pe.Host.Contracts"
+            )
+            .Select(path => new { path, content = File.ReadAllText(path) })
+            .ToList();
+
+        await Assert.That(sourceFiles)
+            .DoesNotContain(file => file.content.Contains("HubMethodNames", StringComparison.Ordinal));
+
+        var bridgeAgentFile = sourceFiles.Single(file =>
+            file.path.EndsWith(Path.Combine("source", "Pe.Global", "Services", "Host", "BridgeAgent.cs"),
+                StringComparison.OrdinalIgnoreCase));
+        await Assert.That(bridgeAgentFile.content).DoesNotContain("request.Method switch");
+    }
+
+    [Test]
     public async Task Revit_data_cache_stale_inflight_completion_does_not_recache_after_invalidation() {
         var cache = new RevitDataCacheProbe();
         var invoked = 0;
@@ -388,4 +407,5 @@ public sealed class HostRevitDataArchitectureTests : RevitTestBase {
         public void Invalidate(params HostInvalidationDomain[] domains) =>
             _ = this._invalidateMethod.Invoke(this._instance, [domains]);
     }
+
 }
