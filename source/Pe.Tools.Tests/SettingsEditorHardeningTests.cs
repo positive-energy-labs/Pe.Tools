@@ -107,20 +107,22 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
     }
 
     [Test]
-    public async Task DocumentInvalidationEvent_exposes_machine_readable_reason_and_flags() {
+    public async Task DocumentInvalidationEvent_exposes_machine_readable_reason_and_domains() {
         var payload = new DocumentInvalidationEvent(
             DocumentInvalidationReason.Changed,
             "Test Model",
             true,
-            true,
-            true,
-            false
+            [
+                HostInvalidationDomain.SettingsFieldOptions,
+                HostInvalidationDomain.LoadedFamiliesCatalog,
+                HostInvalidationDomain.ProjectParameterBindings
+            ]
         );
 
         await Assert.That(payload.Reason).IsEqualTo(DocumentInvalidationReason.Changed);
-        await Assert.That(payload.InvalidateFieldOptions).IsTrue();
-        await Assert.That(payload.InvalidateCatalogs).IsTrue();
-        await Assert.That(payload.InvalidateSchema).IsFalse();
+        await Assert.That(payload.InvalidatedDomains).Contains(HostInvalidationDomain.SettingsFieldOptions);
+        await Assert.That(payload.InvalidatedDomains).Contains(HostInvalidationDomain.LoadedFamiliesCatalog);
+        await Assert.That(payload.InvalidatedDomains).Contains(HostInvalidationDomain.ProjectParameterBindings);
     }
 
     [Test]
@@ -401,7 +403,7 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
             ),
             typeof(ThrowingFieldOptionsTestSettings)
         );
-        var service = new HostSettingsEditorService(new TestHostSettingsModuleCatalog([module]));
+        var service = new HostSchemaService(new TestHostSettingsModuleCatalog([module]));
 
         var handled = service.TryGetFieldOptionsEnvelopeLocally(
             new FieldOptionsRequest(
@@ -1031,7 +1033,6 @@ public sealed class SettingsEditorHardeningTests : RevitTestBase {
         public FieldOptionsDescriptor Describe() => new(
             nameof(ThrowingFieldOptionsSource),
             SettingsOptionsResolverKind.Remote,
-            null,
             SettingsOptionsMode.Suggestion,
             true,
             [],

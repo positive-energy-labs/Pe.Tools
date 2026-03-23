@@ -1,4 +1,5 @@
-using Pe.StorageRuntime.Capabilities;
+using Pe.RevitData.Families;
+using Pe.RevitData.Parameters;
 using Pe.StorageRuntime.Json.FieldOptions;
 using Pe.StorageRuntime.Json.SchemaProviders;
 
@@ -11,7 +12,7 @@ public static class ParameterCatalogOptionFactory {
             return [];
 
         var selectedFamilyNames = context.TryGetContextValue(OptionContextKeys.SelectedFamilyNames, out var rawNames)
-            ? ProjectFamilyParameterCollector.ParseDelimitedFamilyNames(rawNames)
+            ? ParseDelimitedFamilyNames(rawNames)
             : [];
         var apsGuids = ApsParameterCacheReader.ReadEntries()
             .Select(entry => entry.SharedGuid)
@@ -19,34 +20,35 @@ public static class ParameterCatalogOptionFactory {
             .Select(guid => guid!.Value)
             .ToHashSet();
 
-        return ProjectFamilyParameterCollector.Collect(doc, selectedFamilyNames)
+        return ProjectParameterCatalogCollector.Collect(doc, selectedFamilyNames)
             .Select(entry => new ParameterCatalogOption(
-                entry.Name,
+                entry.Identity,
                 entry.StorageType.ToString(),
                 entry.DataType.TypeId,
-                entry.IsShared,
                 entry.IsInstance,
-                entry.IsBuiltIn,
-                entry.IsProjectParameter,
-                entry.IsShared && entry.SharedGuid.HasValue && apsGuids.Contains(entry.SharedGuid.Value),
-                entry.SharedGuid?.ToString(),
+                entry.Identity.SharedGuid.HasValue && apsGuids.Contains(entry.Identity.SharedGuid.Value),
                 entry.FamilyNames.OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToList(),
                 entry.ValuesPerType.Keys.OrderBy(name => name, StringComparer.Ordinal).ToList()
             ))
             .ToList();
     }
+
+    private static HashSet<string> ParseDelimitedFamilyNames(string rawNames) =>
+        rawNames
+            .Trim()
+            .Trim('[', ']')
+            .Split([',', ';', '|'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(name => name.Trim().Trim('"'))
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 }
 
 public sealed record ParameterCatalogOption(
-    string Name,
+    RevitParameterIdentity Identity,
     string StorageType,
     string? DataType,
-    bool IsShared,
     bool IsInstance,
-    bool IsBuiltIn,
-    bool IsProjectParameter,
     bool IsParamService,
-    string? SharedGuid,
     List<string> FamilyNames,
     List<string> TypeNames
 );

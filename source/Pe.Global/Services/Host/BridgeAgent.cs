@@ -19,11 +19,19 @@ internal sealed class BridgeAgent : IDisposable {
     private readonly StreamReader _reader;
     private readonly Task _readLoop;
     private readonly RequestService _requestService;
-    private readonly JsonSerializerSettings _serializerSettings = new JsonSerializerSettings {
+    private readonly RevitDataCache _revitDataCache;
+    private readonly RevitDataRequestService _revitDataRequestService;
+
+    private readonly JsonSerializerSettings _serializerSettings = new() {
         NullValueHandling = NullValueHandling.Ignore,
-        ContractResolver = new CamelCasePropertyNamesContractResolver(),
+        ContractResolver = new DefaultContractResolver {
+            NamingStrategy = new CamelCaseNamingStrategy {
+                ProcessDictionaryKeys = false, OverrideSpecifiedNames = false
+            }
+        },
         Converters = [new StringEnumConverter()]
     };
+
     private readonly CancellationTokenSource _shutdown = new();
     private readonly ThrottleGate _throttleGate = new();
     private readonly SemaphoreSlim _writeLock = new(1, 1);
@@ -47,6 +55,8 @@ internal sealed class BridgeAgent : IDisposable {
             moduleRegistry.GetModules().Count()
         );
         this._requestService = new RequestService(revitTaskService, this._moduleRegistry, this._throttleGate);
+        this._revitDataCache = new RevitDataCache();
+        this._revitDataRequestService = new RevitDataRequestService(revitTaskService, this._revitDataCache);
 
         this._pipeClient =
             new NamedPipeClientStream(".", hostOptions.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
@@ -57,7 +67,10 @@ internal sealed class BridgeAgent : IDisposable {
             connectStopwatch.ElapsedMilliseconds);
         this._reader = new StreamReader(this._pipeClient, Encoding.UTF8, false, 4096, true);
         this._writer = new StreamWriter(this._pipeClient, new UTF8Encoding(false), 4096, true) { AutoFlush = true };
-        this._documentNotifier = new BridgeDocumentNotifier(this.PublishDocumentInvalidationAsync);
+        this._documentNotifier = new BridgeDocumentNotifier(
+            this.PublishDocumentInvalidationAsync,
+            domains => this._revitDataCache.Invalidate(domains.ToArray())
+        );
         Log.Information("Settings editor bridge agent created document notifier.");
 
         var handshakeStopwatch = Stopwatch.StartNew();
@@ -121,9 +134,10 @@ internal sealed class BridgeAgent : IDisposable {
 
         if (this._readLoop.IsCompleted)
             Log.Information("Settings editor bridge read loop already exited during dispose.");
-        else
+        else {
             Log.Information(
                 "Settings editor bridge dispose is not waiting on read loop completion to avoid blocking the Revit UI thread.");
+        }
 
         this.SafeDispose("write lock", this._writeLock.Dispose);
         this.SafeDispose("shutdown token", this._shutdown.Dispose);
@@ -197,6 +211,22 @@ internal sealed class BridgeAgent : IDisposable {
                 nameof(HubMethodNames.GetParameterCatalogEnvelope) =>
                     await this._requestService.GetParameterCatalogEnvelopeAsync(
                         this.DeserializePayload<ParameterCatalogRequest>(request.PayloadJson)
+                    ).ConfigureAwait(false),
+                nameof(HubMethodNames.GetScheduleCatalogEnvelope) =>
+                    await this._revitDataRequestService.GetScheduleCatalogEnvelopeAsync(
+                        this.DeserializePayload<ScheduleCatalogRequest>(request.PayloadJson)
+                    ).ConfigureAwait(false),
+                nameof(HubMethodNames.GetLoadedFamiliesCatalogEnvelope) =>
+                    await this._revitDataRequestService.GetLoadedFamiliesCatalogEnvelopeAsync(
+                        this.DeserializePayload<LoadedFamiliesCatalogRequest>(request.PayloadJson)
+                    ).ConfigureAwait(false),
+                nameof(HubMethodNames.GetLoadedFamiliesMatrixEnvelope) =>
+                    await this._revitDataRequestService.GetLoadedFamiliesMatrixEnvelopeAsync(
+                        this.DeserializePayload<LoadedFamiliesMatrixRequest>(request.PayloadJson)
+                    ).ConfigureAwait(false),
+                nameof(HubMethodNames.GetProjectParameterBindingsEnvelope) =>
+                    await this._revitDataRequestService.GetProjectParameterBindingsEnvelopeAsync(
+                        this.DeserializePayload<ProjectParameterBindingsRequest>(request.PayloadJson)
                     ).ConfigureAwait(false),
                 _ => throw new InvalidOperationException($"Unsupported bridge method '{request.Method}'.")
             };

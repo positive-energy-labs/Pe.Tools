@@ -10,7 +10,6 @@ public class FamilyNamesProvider : IFieldOptionsSource {
     public FieldOptionsDescriptor Describe() => new(
         nameof(FamilyNamesProvider),
         SettingsOptionsResolverKind.Remote,
-        null,
         SettingsOptionsMode.Suggestion,
         true,
         [],

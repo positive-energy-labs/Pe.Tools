@@ -53,6 +53,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\Pe.RevitData\Pe.RevitData.csproj"/>
         <ProjectReference Include="..\Pe.StorageRuntime.Revit\Pe.StorageRuntime.Revit.csproj"/>
         <ProjectReference Include="..\Pe.StorageRuntime\Pe.StorageRuntime.csproj"/>
         <ProjectReference Include="..\Pe.Host.Contracts\Pe.Host.Contracts.csproj"/>

@@ -4,12 +4,12 @@ namespace Pe.Host.Services;
 
 public sealed class HostBrowserApiService(
     BridgeServer bridgeServer,
-    HostSettingsEditorService editorService,
+    HostSchemaService schemaService,
     HostSettingsRuntimeStateService runtimeStateService
 ) {
     private readonly BridgeServer _bridgeServer = bridgeServer;
-    private readonly HostSettingsEditorService _editorService = editorService;
     private readonly HostSettingsRuntimeStateService _runtimeStateService = runtimeStateService;
+    private readonly HostSchemaService _schemaService = schemaService;
 
     public HostStatusData GetHostStatus() {
         var runtimeState = this._runtimeStateService.GetState();
@@ -34,7 +34,7 @@ public sealed class HostBrowserApiService(
     }
 
     public SchemaData GetSchema(string moduleKey) {
-        var response = this._editorService.GetSchemaEnvelope(new SchemaRequest(moduleKey));
+        var response = this._schemaService.GetSchemaEnvelope(new SchemaRequest(moduleKey));
         return RequireData(response.Ok, response.Message, response.Data);
     }
 
@@ -42,7 +42,7 @@ public sealed class HostBrowserApiService(
         FieldOptionsRequest request,
         CancellationToken cancellationToken = default
     ) {
-        if (this._editorService.TryGetFieldOptionsEnvelopeLocally(request, out var localResponse))
+        if (this._schemaService.TryGetFieldOptionsEnvelopeLocally(request, out var localResponse))
             return RequireData(localResponse.Ok, localResponse.Message, localResponse.Data);
 
         if (!this._bridgeServer.IsConnected)

@@ -1,3 +1,4 @@
+using Pe.RevitData.Parameters;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Json.FieldOptions;
 
@@ -12,7 +13,6 @@ public class CategoryNamesProvider : IFieldOptionsSource {
     public FieldOptionsDescriptor Describe() => new(
         nameof(CategoryNamesProvider),
         SettingsOptionsResolverKind.Remote,
-        null,
         SettingsOptionsMode.Suggestion,
         true,
         [],
@@ -22,40 +22,19 @@ public class CategoryNamesProvider : IFieldOptionsSource {
     public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
         FieldOptionsExecutionContext context,
         CancellationToken cancellationToken = default
-    ) => new ValueTask<IReadOnlyList<FieldOptionItem>>(
-        GetLabelToBuiltInCategoryMap()
+    ) => new(
+        RevitTypeLabelCatalog.GetLabelToBuiltInCategoryMap()
             .Keys
             .Select(value => new FieldOptionItem(value, value, null))
             .ToList()
     );
 
-    public static Dictionary<string, BuiltInCategory> GetLabelToBuiltInCategoryMap() {
-        var labelMap = new Dictionary<string, BuiltInCategory>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (BuiltInCategory bic in Enum.GetValues(typeof(BuiltInCategory))) {
-            try {
-                // Use LabelUtils to get user-visible name (document-independent)
-                var label = LabelUtils.GetLabelFor(bic);
-                if (!string.IsNullOrWhiteSpace(label)) {
-                    // Use TryAdd to handle potential duplicates (keep first occurrence)
-                    _ = labelMap.TryAdd(label, bic);
-                }
-            } catch {
-                // Some BuiltInCategory values may not have valid labels
-            }
-        }
-
-        return labelMap;
-    }
+    public static Dictionary<string, BuiltInCategory> GetLabelToBuiltInCategoryMap() =>
+        RevitTypeLabelCatalog.GetLabelToBuiltInCategoryMap();
 
     public static Dictionary<BuiltInCategory, string> GetBuiltInCategoryToLabelMap() =>
-        GetLabelToBuiltInCategoryMap().ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
+        RevitTypeLabelCatalog.GetBuiltInCategoryToLabelMap();
 
-    public static string GetLabelForBuiltInCategory(BuiltInCategory bic) {
-        try {
-            return LabelUtils.GetLabelFor(bic);
-        } catch {
-            return bic.ToString();
-        }
-    }
+    public static string GetLabelForBuiltInCategory(BuiltInCategory bic) =>
+        RevitTypeLabelCatalog.GetLabelForBuiltInCategory(bic);
 }

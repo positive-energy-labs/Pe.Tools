@@ -24,6 +24,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\Pe.RevitData\Pe.RevitData.csproj"/>
         <ProjectReference Include="..\Pe.StorageRuntime\Pe.StorageRuntime.csproj"/>
     </ItemGroup>
 

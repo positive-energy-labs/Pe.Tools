@@ -1,3 +1,4 @@
+using Pe.RevitData.Families;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Json.FieldOptions;
 using Pe.StorageRuntime.Json.SchemaProviders;
@@ -11,7 +12,6 @@ public class SharedParameterNamesProvider : IFieldOptionsSource {
     public FieldOptionsDescriptor Describe() => new(
         nameof(SharedParameterNamesProvider),
         SettingsOptionsResolverKind.Remote,
-        null,
         SettingsOptionsMode.Suggestion,
         true,
         [new FieldOptionsDependency(OptionContextKeys.SelectedFamilyNames, SettingsOptionsDependencyScope.Context)],
@@ -35,12 +35,12 @@ public class SharedParameterNamesProvider : IFieldOptionsSource {
         IEnumerable<string> values = apsNames;
 
         if (context.TryGetContextValue(OptionContextKeys.SelectedFamilyNames, out var rawFamilyNames)) {
-            var selectedFamilyNames = ProjectFamilyParameterCollector.ParseDelimitedFamilyNames(rawFamilyNames);
+            var selectedFamilyNames = ParseDelimitedFamilyNames(rawFamilyNames);
             if (selectedFamilyNames.Count != 0) {
                 var doc = context.GetActiveDocument();
                 if (doc != null) {
-                    var familyParameterNames = ProjectFamilyParameterCollector.Collect(doc, selectedFamilyNames)
-                        .Select(item => item.Name)
+                    var familyParameterNames = ProjectParameterCatalogCollector.Collect(doc, selectedFamilyNames)
+                        .Select(item => item.Identity.Name)
                         .ToHashSet(StringComparer.OrdinalIgnoreCase);
                     if (familyParameterNames.Count != 0) {
                         values = apsNames
@@ -56,4 +56,13 @@ public class SharedParameterNamesProvider : IFieldOptionsSource {
             values.Select(value => new FieldOptionItem(value, value, null)).ToList()
         );
     }
+
+    private static HashSet<string> ParseDelimitedFamilyNames(string rawNames) =>
+        rawNames
+            .Trim()
+            .Trim('[', ']')
+            .Split([',', ';', '|'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(name => name.Trim().Trim('"'))
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 }

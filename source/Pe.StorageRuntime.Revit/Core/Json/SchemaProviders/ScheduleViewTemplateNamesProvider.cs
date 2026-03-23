@@ -10,7 +10,6 @@ public class ScheduleViewTemplateNamesProvider : IFieldOptionsSource {
     public FieldOptionsDescriptor Describe() => new(
         nameof(ScheduleViewTemplateNamesProvider),
         SettingsOptionsResolverKind.Remote,
-        null,
         SettingsOptionsMode.Suggestion,
         true,
         [],

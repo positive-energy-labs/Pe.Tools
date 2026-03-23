@@ -3,14 +3,16 @@ using Pe.Extensions.FamDocument.GetValue;
 using Pe.Extensions.FamManager;
 using Pe.Extensions.FamParameter;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
+using Pe.Global.Revit.Lib.Families.LoadedFamilies.Models;
 
 namespace Pe.FamilyFoundry.Snapshots;
 
 /// <summary>
 ///     Collects parameter snapshots with strategy-based source selection.
-///     Prefers project document (faster - no type cycling), uses family document to supplement with formulas.
-///     Family doc collection runs if: no data exists, data is empty, or data is partial (missing formulas).
+///     Prefers the project document path, which now runs the fast temp-instance value pass and then a
+///     formula-only family-doc pass without iterating family types. Family-doc collection still exists as the
+///     fallback when only a family document is available or when the project path remains partial.
 /// </summary>
 public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
     // IFamilyDocCollector implementation (supplements or provides full collection)
@@ -23,27 +25,25 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
     void IFamilyDocCollector.Collect(FamilySnapshot snapshot, FamilyDocument famDoc) {
         // Check if we have project data to supplement - explicit null checks for flow analysis
         if (snapshot.Parameters?.Data is { Count: > 0 } data) {
-            // Filter out project parameters (which don't have a counterpart in the family, this is an unusual-ish case)
+            // Keep only parameters that still have a family-doc counterpart before supplementing formulas.
             snapshot.Parameters.Data =
                 [.. data.Where(s => famDoc.FamilyManager.FindParameter(s.Name) != null)];
             SupplementWithFormulas(snapshot, famDoc);
-        } else {
+        } else
             snapshot.Parameters = this.CollectFromFamilyDoc(famDoc);
-        }
     }
 
     // IProjectCollector implementation (preferred - runs first)
-    bool IProjectCollector.ShouldCollect(FamilySnapshot snapshot) => 
+    bool IProjectCollector.ShouldCollect(FamilySnapshot snapshot) =>
         snapshot.Parameters?.Data?.Count == 0 || snapshot.Parameters == null;
 
     public void Collect(FamilySnapshot snapshot, Document projectDoc, Family family) =>
         snapshot.Parameters = CollectFromProject(projectDoc, family);
 
     /// <summary>
-    ///     Supplements existing project-collected data with formulas from family document.
-    ///     ValuesPerType already exist from project collection, we just add Formula field.
-    ///     The collected shape is later serialized into split settings-compatible form
-    ///     (Parameters + PerTypeValuesTable) by snapshot output builders.
+    ///     Supplements partially-collected project data with formulas from the already-open family document.
+    ///     The primary project path already tries this through the loaded-families collector stack, but this
+    ///     fallback keeps the snapshot pipeline resilient when formula lookup stayed partial.
     /// </summary>
     private static void SupplementWithFormulas(FamilySnapshot snapshot, FamilyDocument famDoc) {
         if (snapshot.Parameters?.Data == null || snapshot.Parameters.Data.Count == 0)
@@ -76,27 +76,54 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
     }
 
     private static SnapshotSection<ParamSnapshot> CollectFromProject(Document doc, Family family) {
-        var selectedFamilyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { family.Name };
-        var collected = ProjectFamilyParameterCollector.Collect(doc, selectedFamilyNames);
+        var seededFamily = new CollectedLoadedFamilyRecord {
+            FamilyId = family.Id.Value(),
+            FamilyUniqueId = family.UniqueId,
+            FamilyName = family.Name,
+            CategoryName = family.FamilyCategory?.Name,
+            Types = family.GetFamilySymbolIds()
+                .Select(id => family.Document.GetElement(id) as FamilySymbol)
+                .Where(symbol => symbol != null)
+                .Select(symbol => new CollectedLoadedFamilyTypeRecord(symbol!.Name))
+                .OrderBy(type => type.TypeName, StringComparer.Ordinal)
+                .ToList()
+        };
+        var collectedFamily = LoadedFamiliesProjectValueCollector.Collect(
+                                      doc,
+                                      new List<CollectedLoadedFamilyRecord> { seededFamily }
+                                  )
+                                  .SingleOrDefault()
+                              ?? seededFamily;
+        var supplementedFamily = LoadedFamiliesFormulaCollector.Supplement(
+                                         doc,
+                                         new List<CollectedLoadedFamilyRecord> { collectedFamily }
+                                     )
+                                     .SingleOrDefault()
+                                 ?? collectedFamily;
+        var isPartial = supplementedFamily.Issues.Any(issue =>
+            string.Equals(issue.Code, "FamilyFormulaCollectionFailed", StringComparison.Ordinal) ||
+            string.Equals(issue.Code, "FamilyParameterFormulaReadFailed", StringComparison.Ordinal));
 
-        // Always mark as partial - project collection cannot get formulas.
-        // Family doc collector will supplement with formulas.
         return new SnapshotSection<ParamSnapshot> {
             Source = SnapshotSource.Project,
-            IsPartial = true,
+            IsPartial = isPartial,
             Data = [
-                .. collected.Select(item => new ParamSnapshot {
-                    Name = item.Name,
-                    IsInstance = item.IsInstance,
-                    PropertiesGroup = item.PropertiesGroup,
-                    DataType = item.DataType,
-                    Formula = null,
-                    ValuesPerType = item.ValuesPerType,
-                    IsBuiltIn = item.IsBuiltIn,
-                    SharedGuid = item.SharedGuid,
-                    StorageType = item.StorageType,
-                    IsProjectParameter = item.IsProjectParameter
-                })
+                .. supplementedFamily.Parameters
+                    .Where(item =>
+                        item.Kind is CollectedParameterKind.FamilyParameter or CollectedParameterKind.SharedParameter)
+                    .Select(item => new ParamSnapshot {
+                        Name = item.Name,
+                        IsInstance = item.IsInstance,
+                        PropertiesGroup = new ForgeTypeId(item.GroupTypeId ?? string.Empty),
+                        DataType = new ForgeTypeId(item.DataTypeId ?? string.Empty),
+                        Formula = item.Formula,
+                        ValuesPerType = new Dictionary<string, string?>(item.ValuesByType, StringComparer.Ordinal),
+                        IsBuiltIn = item.IsBuiltIn,
+                        SharedGuid = Guid.TryParse(item.SharedGuid, out var sharedGuid) ? sharedGuid : null,
+                        StorageType = Enum.TryParse<StorageType>(item.StorageType, out var storageType)
+                            ? storageType
+                            : StorageType.None
+                    })
             ]
         };
     }

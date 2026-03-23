@@ -18,6 +18,9 @@ public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : 
         if (actualSchema == null)
             return;
 
+        if (context.ContextualType.Type == definition.SettingsType && definition.Datasets.Count != 0)
+            SchemaMetadataWriter.ApplyRootData(actualSchema, definition.Datasets);
+
         foreach (var binding in definition.Bindings.Values) {
             if (!actualSchema.Properties.TryGetValue(binding.JsonPropertyName, out var propertySchema))
                 continue;
@@ -45,6 +48,12 @@ public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : 
                 }
             }
 
+            if (binding.DatasetOptions != null) {
+                ValidateDatasetOptions(definition, binding);
+                SchemaMetadataWriter.ApplyDatasetOptions(targetSchema, binding.DatasetOptions);
+                continue;
+            }
+
             if (binding.FieldOptionsSource == null)
                 continue;
 
@@ -62,8 +71,45 @@ public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : 
                 }
             }
 
-            FieldOptionsSchemaMetadataWriter.Apply(targetSchema, descriptor, samples);
+            SchemaMetadataWriter.ApplyFieldOptions(targetSchema, descriptor, samples);
         }
+    }
+
+    private static void ValidateDatasetOptions(
+        SettingsSchemaDefinitionDescriptor definition,
+        SettingsSchemaPropertyBinding binding
+    ) {
+        var datasetOptions = binding.DatasetOptions
+                             ?? throw new InvalidOperationException("Dataset options binding is required.");
+        if (!TryResolveDatasetBinding(definition, datasetOptions.DatasetRef, out var datasetBinding)) {
+            throw new InvalidOperationException(
+                $"Property '{binding.JsonPropertyName}' references unknown dataset '{datasetOptions.DatasetRef}'."
+            );
+        }
+
+        if (!datasetBinding.SupportedProjections.Contains(datasetOptions.Projection,
+                StringComparer.OrdinalIgnoreCase)) {
+            throw new InvalidOperationException(
+                $"Property '{binding.JsonPropertyName}' references unsupported projection '{datasetOptions.Projection}' on dataset '{datasetOptions.DatasetRef}'."
+            );
+        }
+
+        if (string.IsNullOrWhiteSpace(datasetOptions.Key)) {
+            throw new InvalidOperationException(
+                $"Property '{binding.JsonPropertyName}' dataset options must define a key."
+            );
+        }
+    }
+
+    private static bool TryResolveDatasetBinding(
+        SettingsSchemaDefinitionDescriptor definition,
+        string datasetRef,
+        out SettingsSchemaDatasetBinding datasetBinding
+    ) {
+        if (definition.Datasets.TryGetValue(datasetRef, out datasetBinding!))
+            return true;
+
+        return SettingsSchemaDefinitionRegistry.Shared.TryResolveDatasetBinding(datasetRef, out datasetBinding);
     }
 
     private static SchemaUiMetadata? ResolveUiMetadata(

@@ -12,7 +12,7 @@ using RuntimeSettingsValidationIssue = Pe.StorageRuntime.Documents.SettingsValid
 
 namespace Pe.Host.Services;
 
-public sealed class HostSettingsEditorService(IHostSettingsModuleCatalog moduleCatalog) {
+public sealed class HostSchemaService(IHostSettingsModuleCatalog moduleCatalog) {
     private readonly IHostSettingsModuleCatalog _moduleCatalog = moduleCatalog;
     private readonly ConcurrentDictionary<string, SchemaData> _schemaCache = new(StringComparer.OrdinalIgnoreCase);
 
@@ -31,7 +31,11 @@ public sealed class HostSettingsEditorService(IHostSettingsModuleCatalog moduleC
                 );
             }
 
-            var schemaData = this._schemaCache.GetOrAdd(module.ModuleKey, _ => CreateSchemaData(module.SettingsType));
+            var schemaData = this.GetOrCreateSchemaData(
+                GetSettingsModuleCacheKey(module.ModuleKey),
+                module.SettingsType,
+                true
+            );
             return new SchemaEnvelopeResponse(true, EnvelopeCode.Ok, "Schema generated.", [], schemaData);
         } catch (Exception ex) {
             return new SchemaEnvelopeResponse(
@@ -51,6 +55,44 @@ public sealed class HostSettingsEditorService(IHostSettingsModuleCatalog moduleC
                 null
             );
         }
+    }
+
+    public SchemaData GetLoadedFamiliesFilterSchema() {
+        var response = this.GetLoadedFamiliesFilterSchemaEnvelope();
+        return RequireData(response.Ok, response.Message, response.Data);
+    }
+
+    public SchemaEnvelopeResponse GetLoadedFamiliesFilterSchemaEnvelope() {
+        try {
+            var schemaData = this.GetOrCreateSchemaData(
+                GetLoadedFamiliesFilterCacheKey(),
+                typeof(LoadedFamiliesFilter),
+                false
+            );
+            return new SchemaEnvelopeResponse(true, EnvelopeCode.Ok, "Loaded families filter schema generated.", [], schemaData);
+        } catch (Exception ex) {
+            return new SchemaEnvelopeResponse(
+                false,
+                EnvelopeCode.Failed,
+                ex.Message,
+                [
+                    new ValidationIssue(
+                        "$",
+                        null,
+                        "LoadedFamiliesFilterSchemaException",
+                        "error",
+                        ex.Message,
+                        "Verify loaded families filter schema registration and configuration."
+                    )
+                ],
+                null
+            );
+        }
+    }
+
+    public FieldOptionsData GetLoadedFamiliesFilterFieldOptions(LoadedFamiliesFilterFieldOptionsRequest request) {
+        var response = this.GetLoadedFamiliesFilterFieldOptionsEnvelope(request);
+        return RequireData(response.Ok, response.Message, response.Data);
     }
 
     public ValidationEnvelopeResponse ValidateSettingsEnvelope(ValidateSettingsRequest request) {
@@ -143,20 +185,8 @@ public sealed class HostSettingsEditorService(IHostSettingsModuleCatalog moduleC
                 return true;
             }
 
-            var fieldOptions = SettingsFieldOptionsService.Shared.GetOptionsAsync(
-                    module.SettingsType,
-                    request.PropertyPath,
-                    request.SourceKey,
-                    new FieldOptionsExecutionContext(
-                        SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly,
-                        null,
-                        request.ContextValues
-                    )
-                )
-                .AsTask()
-                .GetAwaiter()
-                .GetResult();
-
+            var fieldOptions = GetFieldOptions(module.SettingsType, request.PropertyPath, request.SourceKey,
+                request.ContextValues);
             if (fieldOptions.Kind == FieldOptionsResultKind.Unsupported)
                 return false;
 
@@ -187,14 +217,78 @@ public sealed class HostSettingsEditorService(IHostSettingsModuleCatalog moduleC
         }
     }
 
-    private static SchemaData CreateSchemaData(Type settingsType) {
+    public FieldOptionsEnvelopeResponse GetLoadedFamiliesFilterFieldOptionsEnvelope(
+        LoadedFamiliesFilterFieldOptionsRequest request
+    ) {
+        try {
+            var fieldOptions =
+                GetFieldOptions(typeof(LoadedFamiliesFilter), request.PropertyPath, request.SourceKey, request.ContextValues);
+            if (fieldOptions.Kind is FieldOptionsResultKind.Success or FieldOptionsResultKind.Empty) {
+                return CreateFieldOptionsSuccess(
+                    request.SourceKey,
+                    fieldOptions.Message,
+                    fieldOptions.Items
+                        .Select(item => new FieldOptionItem(item.Value, item.Label, item.Description))
+                        .ToList()
+                );
+            }
+
+            return CreateFieldOptionsFailure(
+                request.SourceKey,
+                fieldOptions.Message,
+                "Verify loaded families filter field-options configuration."
+            );
+        } catch (Exception ex) {
+            return CreateFieldOptionsFailure(
+                request.SourceKey,
+                ex.Message,
+                "Verify loaded families filter field-options configuration."
+            );
+        }
+    }
+
+    private SchemaData GetOrCreateSchemaData(
+        string cacheKey,
+        Type schemaType,
+        bool resolveFieldOptionSamples
+    ) => this._schemaCache.GetOrAdd(
+        cacheKey,
+        _ => CreateSchemaData(schemaType, resolveFieldOptionSamples)
+    );
+
+    private static SchemaData CreateSchemaData(Type settingsType, bool resolveFieldOptionSamples) {
         var schemaData = JsonSchemaFactory.CreateEditorSchemaData(
             settingsType,
-            new JsonSchemaBuildOptions(SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly)
+            new JsonSchemaBuildOptions(SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly) {
+                ResolveFieldOptionSamples = resolveFieldOptionSamples
+            }
         );
 
         return new SchemaData(schemaData.SchemaJson, schemaData.FragmentSchemaJson);
     }
+
+    private static FieldOptionsResult GetFieldOptions(
+        Type schemaType,
+        string propertyPath,
+        string sourceKey,
+        Dictionary<string, string>? contextValues
+    ) => SettingsFieldOptionsService.Shared.GetOptionsAsync(
+            schemaType,
+            propertyPath,
+            sourceKey,
+            new FieldOptionsExecutionContext(
+                SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly,
+                null,
+                contextValues
+            )
+        )
+        .AsTask()
+        .GetAwaiter()
+        .GetResult();
+
+    private static string GetSettingsModuleCacheKey(string moduleKey) => $"module:{moduleKey}";
+
+    private static string GetLoadedFamiliesFilterCacheKey() => "revit-data:loaded-families-filter";
 
     private static FieldOptionsEnvelopeResponse CreateFieldOptionsSuccess(
         string sourceKey,
@@ -241,5 +335,12 @@ public sealed class HostSettingsEditorService(IHostSettingsModuleCatalog moduleC
         }
 
         return string.Join(" --> ", messages.Distinct(StringComparer.Ordinal));
+    }
+
+    private static TData RequireData<TData>(bool ok, string message, TData? data) where TData : class {
+        if (!ok || data == null)
+            throw new InvalidOperationException(message);
+
+        return data;
     }
 }

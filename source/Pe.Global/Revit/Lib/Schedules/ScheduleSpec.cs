@@ -3,10 +3,8 @@ using Pe.Global.Revit.Lib.Schedules.Filters;
 using Pe.Global.Revit.Lib.Schedules.SortGroup;
 using Pe.Global.Revit.Lib.Schedules.TitleStyle;
 using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Json.FieldOptions;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Revit.Core.Json;
+using Pe.StorageRuntime.Json.FieldOptions;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
@@ -66,7 +64,6 @@ public class LineStyleNamesProvider : IFieldOptionsSource {
     public FieldOptionsDescriptor Describe() => new(
         nameof(LineStyleNamesProvider),
         SettingsOptionsResolverKind.Remote,
-        null,
         SettingsOptionsMode.Suggestion,
         true,
         [],
@@ -78,26 +75,19 @@ public class LineStyleNamesProvider : IFieldOptionsSource {
         CancellationToken cancellationToken = default
     ) {
         try {
-            var doc = context.GetActiveDocument<Autodesk.Revit.DB.Document>();
+            var doc = context.GetActiveDocument<Document>();
             if (doc == null || doc.IsFamilyDocument) {
                 // Return common default Revit line styles
                 return new ValueTask<IReadOnlyList<FieldOptionItem>>(new[] {
-                    "Thin Lines",
-                    "Medium Lines",
-                    "Wide Lines",
-                    "Heavy Line",
-                    "<Invisible lines>"
+                    "Thin Lines", "Medium Lines", "Wide Lines", "Heavy Line", "<Invisible lines>"
                 }.Select(value => new FieldOptionItem(value, value, null)).ToList());
             }
 
             var lineCategory = doc.Settings.Categories.get_Item(BuiltInCategory.OST_Lines);
             if (lineCategory == null) {
-                return new ValueTask<IReadOnlyList<FieldOptionItem>>(new[] {
-                    "Thin Lines",
-                    "Medium Lines",
-                    "Wide Lines",
-                    "Heavy Line"
-                }.Select(value => new FieldOptionItem(value, value, null)).ToList());
+                return new ValueTask<IReadOnlyList<FieldOptionItem>>(
+                    new[] { "Thin Lines", "Medium Lines", "Wide Lines", "Heavy Line" }
+                        .Select(value => new FieldOptionItem(value, value, null)).ToList());
             }
 
             var lineStyles = new List<string>();
@@ -115,11 +105,7 @@ public class LineStyleNamesProvider : IFieldOptionsSource {
         } catch {
             // No document available or error - return common defaults
             return new ValueTask<IReadOnlyList<FieldOptionItem>>(new[] {
-                "Thin Lines",
-                "Medium Lines",
-                "Wide Lines",
-                "Heavy Line",
-                "<Invisible lines>"
+                "Thin Lines", "Medium Lines", "Wide Lines", "Heavy Line", "<Invisible lines>"
             }.Select(value => new FieldOptionItem(value, value, null)).ToList());
         }
     }

@@ -1,11 +1,12 @@
-using System.Collections.Concurrent;
-using System.Reflection;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using NJsonSchema.Generation;
 using NJsonSchema.Generation.TypeMappers;
 using Pe.StorageRuntime.Json.FieldOptions;
+using Pe.StorageRuntime.Json.SchemaDefinitions;
+using System.Collections.Concurrent;
+using System.Reflection;
 
 namespace Pe.StorageRuntime.Json;
 
@@ -30,8 +31,10 @@ public sealed class JsonTypeSchemaBindingRegistry {
             return true;
 
         var match = this._bindings.Keys.FirstOrDefault(registeredType => registeredType == type ||
-            string.Equals(registeredType.FullName, type.FullName, StringComparison.Ordinal) ||
-            string.Equals(registeredType.Name, type.Name, StringComparison.Ordinal));
+                                                                         string.Equals(registeredType.FullName,
+                                                                             type.FullName, StringComparison.Ordinal) ||
+                                                                         string.Equals(registeredType.Name, type.Name,
+                                                                             StringComparison.Ordinal));
         if (match == null) {
             binding = null!;
             return false;
@@ -73,7 +76,7 @@ public sealed class JsonTypeSchemaBindingRegistry {
             if (!this.TryGet(ResolveTargetType(property.PropertyType), out var binding))
                 continue;
 
-            var propertyName = property.GetCustomAttribute<Newtonsoft.Json.JsonPropertyAttribute>()?.PropertyName ??
+            var propertyName = property.GetCustomAttribute<JsonPropertyAttribute>()?.PropertyName ??
                                property.Name;
             if (!actualSchema.Properties.TryGetValue(propertyName, out var propertySchema))
                 continue;
@@ -100,7 +103,7 @@ public sealed class JsonTypeSchemaBindingRegistry {
                 }
             }
 
-            FieldOptionsSchemaMetadataWriter.Apply(targetSchema, descriptor, samples);
+            SchemaMetadataWriter.ApplyFieldOptions(targetSchema, descriptor, samples);
 
             if (samples == null || samples.Count == 0)
                 continue;
@@ -135,9 +138,8 @@ public sealed class JsonTypeSchemaBindingRegistry {
             genericTypeDefinition != typeof(ICollection<>) &&
             genericTypeDefinition != typeof(IEnumerable<>) &&
             genericTypeDefinition != typeof(IReadOnlyList<>) &&
-            genericTypeDefinition != typeof(IReadOnlyCollection<>)) {
+            genericTypeDefinition != typeof(IReadOnlyCollection<>))
             return unwrappedType;
-        }
 
         return unwrappedType.GetGenericArguments()[0];
     }

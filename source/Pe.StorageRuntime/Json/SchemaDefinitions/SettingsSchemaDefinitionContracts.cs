@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Json.FieldOptions;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -22,19 +23,42 @@ public abstract class SettingsSchemaDefinition<TSettings> : ISettingsSchemaDefin
     public SettingsSchemaDefinitionDescriptor Build() {
         var builder = new SettingsSchemaBuilder<TSettings>();
         this.Configure(builder);
-        return new SettingsSchemaDefinitionDescriptor(this.SettingsType, builder.Build());
+        return builder.Build(this.SettingsType);
     }
 }
 
 public interface ISettingsSchemaBuilder<TSettings> {
+    void Data(
+        string id,
+        Action<ISettingsDataBuilder> configure
+    );
+
     void Property<TValue>(
         Expression<Func<TSettings, TValue>> propertyExpression,
         Action<ISettingsPropertyBuilder<TValue>> configure
     );
 }
 
+public interface ISettingsDataBuilder {
+    void Provider(string provider);
+    void Load(SettingsSchemaDatasetLoadMode loadMode);
+    void StaleOn(params string[] staleOn);
+    void SupportsProjection(params string[] projections);
+}
+
 public interface ISettingsPropertyBuilder<TValue> {
     void UseFieldOptions<TSource>() where TSource : IFieldOptionsSource, new();
+
+    void UseDatasetOptions(
+        string datasetRef,
+        string projection,
+        SettingsOptionsMode mode = SettingsOptionsMode.Suggestion,
+        bool allowsCustomValue = true,
+        string? key = null
+    );
+
+    void DependsOnContext(params string[] keys);
+    void DependsOnSibling(params string[] keys);
     void UseStaticExamples(params string[] values);
     void WithDescription(string description);
     void WithDisplayName(string displayName);
@@ -60,12 +84,37 @@ public interface ISchemaUiBehaviorBuilder {
     void DynamicColumnOrder<TSource>() where TSource : ISchemaUiDynamicColumnOrderSource, new();
 }
 
+public enum SettingsSchemaDatasetLoadMode {
+    Eager,
+    Manual,
+    Visible
+}
+
 public sealed class SettingsSchemaDefinitionDescriptor(
     Type settingsType,
+    IReadOnlyDictionary<string, SettingsSchemaDatasetBinding> datasets,
     IReadOnlyDictionary<string, SettingsSchemaPropertyBinding> bindings
 ) {
     public Type SettingsType { get; } = settingsType;
+    public IReadOnlyDictionary<string, SettingsSchemaDatasetBinding> Datasets { get; } = datasets;
     public IReadOnlyDictionary<string, SettingsSchemaPropertyBinding> Bindings { get; } = bindings;
+}
+
+public sealed class SettingsSchemaDatasetBinding {
+    public string Id { get; init; } = string.Empty;
+    public string Provider { get; init; } = string.Empty;
+    public SettingsSchemaDatasetLoadMode LoadMode { get; init; } = SettingsSchemaDatasetLoadMode.Manual;
+    public IReadOnlyList<string> StaleOn { get; init; } = [];
+    public IReadOnlyList<string> SupportedProjections { get; init; } = [];
+}
+
+public sealed class SettingsSchemaDatasetOptionsBinding {
+    public string Key { get; init; } = string.Empty;
+    public string DatasetRef { get; init; } = string.Empty;
+    public string Projection { get; init; } = string.Empty;
+    public SettingsOptionsMode Mode { get; init; } = SettingsOptionsMode.Suggestion;
+    public bool AllowsCustomValue { get; init; } = true;
+    public IReadOnlyList<FieldOptionsDependency> DependsOn { get; init; } = [];
 }
 
 public sealed class SettingsSchemaPropertyBinding {
@@ -74,6 +123,7 @@ public sealed class SettingsSchemaPropertyBinding {
     public string? Description { get; init; }
     public string? DisplayName { get; init; }
     public IFieldOptionsSource? FieldOptionsSource { get; init; }
+    public SettingsSchemaDatasetOptionsBinding? DatasetOptions { get; init; }
     public SchemaUiMetadata? Ui { get; init; }
     internal ISchemaUiDynamicColumnOrderSource? UiDynamicColumnOrderSource { get; init; }
 }
@@ -81,6 +131,20 @@ public sealed class SettingsSchemaPropertyBinding {
 internal sealed class SettingsSchemaBuilder<TSettings> : ISettingsSchemaBuilder<TSettings> {
     private readonly Dictionary<string, SettingsSchemaPropertyBinding> _bindings =
         new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly Dictionary<string, SettingsSchemaDatasetBinding> _datasets =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    public void Data(string id, Action<ISettingsDataBuilder> configure) {
+        if (string.IsNullOrWhiteSpace(id))
+            throw new ArgumentException("Dataset id is required.", nameof(id));
+        if (configure == null)
+            throw new ArgumentNullException(nameof(configure));
+
+        var builder = new SettingsSchemaDataBindingBuilder(id);
+        configure(builder);
+        this._datasets[id] = builder.Build();
+    }
 
     public void Property<TValue>(
         Expression<Func<TSettings, TValue>> propertyExpression,
@@ -97,20 +161,54 @@ internal sealed class SettingsSchemaBuilder<TSettings> : ISettingsSchemaBuilder<
         this._bindings[propertyInfo.Name] = bindingBuilder.Build();
     }
 
-    public IReadOnlyDictionary<string, SettingsSchemaPropertyBinding> Build() => this._bindings;
+    public SettingsSchemaDefinitionDescriptor Build(Type settingsType) =>
+        new(settingsType, this._datasets, this._bindings);
 }
 
 internal sealed class SettingsPropertyBindingBuilder<TValue>(PropertyInfo propertyInfo)
     : ISettingsPropertyBuilder<TValue> {
+    private readonly List<FieldOptionsDependency> _dependsOn = [];
     private readonly List<string> _staticExamples = [];
+    private SettingsSchemaDatasetOptionsBinding? _datasetOptions;
     private string? _description;
     private string? _displayName;
     private IFieldOptionsSource? _fieldOptionsSource;
     private ISchemaUiDynamicColumnOrderSource? _uiDynamicColumnOrderSource;
     private SchemaUiMetadata? _uiMetadata;
 
-    public void UseFieldOptions<TSource>() where TSource : IFieldOptionsSource, new() =>
+    public void UseFieldOptions<TSource>() where TSource : IFieldOptionsSource, new() {
+        this.ThrowIfOptionsAlreadyConfigured();
         this._fieldOptionsSource = new TSource();
+    }
+
+    public void UseDatasetOptions(
+        string datasetRef,
+        string projection,
+        SettingsOptionsMode mode = SettingsOptionsMode.Suggestion,
+        bool allowsCustomValue = true,
+        string? key = null
+    ) {
+        this.ThrowIfOptionsAlreadyConfigured();
+        if (string.IsNullOrWhiteSpace(datasetRef))
+            throw new ArgumentException("Dataset ref is required.", nameof(datasetRef));
+        if (string.IsNullOrWhiteSpace(projection))
+            throw new ArgumentException("Projection is required.", nameof(projection));
+
+        this._datasetOptions = new SettingsSchemaDatasetOptionsBinding {
+            Key = string.IsNullOrWhiteSpace(key) ? $"{datasetRef}.{projection}" : key,
+            DatasetRef = datasetRef,
+            Projection = projection,
+            Mode = mode,
+            AllowsCustomValue = allowsCustomValue,
+            DependsOn = this._dependsOn.ToList()
+        };
+    }
+
+    public void DependsOnContext(params string[] keys) =>
+        this.AddDependencies(SettingsOptionsDependencyScope.Context, keys);
+
+    public void DependsOnSibling(params string[] keys) =>
+        this.AddDependencies(SettingsOptionsDependencyScope.Sibling, keys);
 
     public void UseStaticExamples(params string[] values) {
         if (values == null)
@@ -135,14 +233,83 @@ internal sealed class SettingsPropertyBindingBuilder<TValue>(PropertyInfo proper
         this._uiDynamicColumnOrderSource = result.DynamicColumnOrderSource;
     }
 
+    private void ThrowIfOptionsAlreadyConfigured() {
+        if (this._fieldOptionsSource != null || this._datasetOptions != null) {
+            throw new InvalidOperationException(
+                $"Property '{propertyInfo.Name}' cannot configure both remote and dataset-backed field options."
+            );
+        }
+    }
+
+    private void AddDependencies(SettingsOptionsDependencyScope scope, params string[] keys) {
+        if (keys == null)
+            return;
+
+        foreach (var key in keys.Where(value => !string.IsNullOrWhiteSpace(value))) {
+            if (!this._dependsOn.Any(item =>
+                    string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase) &&
+                    item.Scope == scope))
+                this._dependsOn.Add(new FieldOptionsDependency(key, scope));
+        }
+    }
+
     public SettingsSchemaPropertyBinding Build() => new() {
         JsonPropertyName = propertyInfo.GetCustomAttribute<JsonPropertyAttribute>()?.PropertyName ?? propertyInfo.Name,
         StaticExamples = this._staticExamples.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
         Description = this._description,
         DisplayName = this._displayName,
         FieldOptionsSource = this._fieldOptionsSource,
+        DatasetOptions = this._datasetOptions == null
+            ? null
+            : new SettingsSchemaDatasetOptionsBinding {
+                Key = this._datasetOptions.Key,
+                DatasetRef = this._datasetOptions.DatasetRef,
+                Projection = this._datasetOptions.Projection,
+                Mode = this._datasetOptions.Mode,
+                AllowsCustomValue = this._datasetOptions.AllowsCustomValue,
+                DependsOn = this._dependsOn.ToList()
+            },
         Ui = this._uiMetadata,
         UiDynamicColumnOrderSource = this._uiDynamicColumnOrderSource
+    };
+}
+
+internal sealed class SettingsSchemaDataBindingBuilder(string id) : ISettingsDataBuilder {
+    private readonly List<string> _staleOn = [];
+    private readonly List<string> _supportedProjections = [];
+    private SettingsSchemaDatasetLoadMode _loadMode = SettingsSchemaDatasetLoadMode.Manual;
+    private string? _provider;
+
+    public void Provider(string provider) => this._provider = string.IsNullOrWhiteSpace(provider) ? null : provider;
+
+    public void Load(SettingsSchemaDatasetLoadMode loadMode) => this._loadMode = loadMode;
+
+    public void StaleOn(params string[] staleOn) {
+        if (staleOn == null)
+            return;
+
+        foreach (var value in staleOn.Where(value => !string.IsNullOrWhiteSpace(value))) {
+            if (!this._staleOn.Contains(value, StringComparer.OrdinalIgnoreCase))
+                this._staleOn.Add(value);
+        }
+    }
+
+    public void SupportsProjection(params string[] projections) {
+        if (projections == null)
+            return;
+
+        foreach (var projection in projections.Where(value => !string.IsNullOrWhiteSpace(value))) {
+            if (!this._supportedProjections.Contains(projection, StringComparer.OrdinalIgnoreCase))
+                this._supportedProjections.Add(projection);
+        }
+    }
+
+    public SettingsSchemaDatasetBinding Build() => new() {
+        Id = id,
+        Provider = this._provider ?? throw new InvalidOperationException($"Dataset '{id}' must declare a provider."),
+        LoadMode = this._loadMode,
+        StaleOn = this._staleOn.ToList(),
+        SupportedProjections = this._supportedProjections.ToList()
     };
 }
 

@@ -5,10 +5,6 @@ public enum SettingsOptionsResolverKind {
     Dataset
 }
 
-public enum SettingsOptionsDatasetKind {
-    ParameterCatalog
-}
-
 public enum SettingsOptionsMode {
     Suggestion,
     Constraint
