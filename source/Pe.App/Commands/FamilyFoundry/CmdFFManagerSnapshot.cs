@@ -149,9 +149,6 @@ public class CmdFFManagerSnapshot : IExternalCommand {
             // Skip built-in parameters (cannot be created/managed by profile)
             if (snap.IsBuiltIn) continue;
 
-            // Skip project parameters (not family parameters)
-            if (snap.IsProjectParameter) continue;
-
             var perTypeRow = snap.ToPerTypeValuesTableRow();
             var hasGlobalValueOrFormula = !string.IsNullOrWhiteSpace(snap.ValueOrFormula);
             // Skip params that have no replayable assignment source.

@@ -8,7 +8,11 @@ internal static class HostJson {
     public static JsonSerializerSettings CreateSerializerSettings() {
         var settings = new JsonSerializerSettings {
             NullValueHandling = NullValueHandling.Ignore,
-            ContractResolver = new CamelCasePropertyNamesContractResolver()
+            ContractResolver = new DefaultContractResolver {
+                NamingStrategy = new CamelCaseNamingStrategy {
+                    ProcessDictionaryKeys = false, OverrideSpecifiedNames = false
+                }
+            }
         };
         settings.Converters.Add(new StringEnumConverter());
         return settings;

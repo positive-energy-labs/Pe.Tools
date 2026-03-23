@@ -17,7 +17,6 @@ public sealed record FieldOptionItem(
 public sealed record FieldOptionsDescriptor(
     string Key,
     SettingsOptionsResolverKind Resolver,
-    SettingsOptionsDatasetKind? Dataset,
     SettingsOptionsMode Mode,
     bool AllowsCustomValue,
     IReadOnlyList<FieldOptionsDependency> DependsOn,

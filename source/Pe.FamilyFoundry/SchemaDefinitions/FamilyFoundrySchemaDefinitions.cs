@@ -2,6 +2,7 @@ using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.FamilyFoundry.Operations;
 using Pe.FamilyFoundry.OperationSettings;
 using Pe.StorageRuntime.Json.SchemaDefinitions;
+using Pe.StorageRuntime.Json.SchemaProviders;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using System.Runtime.CompilerServices;
 
@@ -9,7 +10,13 @@ namespace Pe.FamilyFoundry.SchemaDefinitions;
 
 internal sealed class MappingDataSchemaDefinition : SettingsSchemaDefinition<MappingData> {
     public override void Configure(ISettingsSchemaBuilder<MappingData> builder) {
-        builder.Property(item => item.CurrNames, property => property.UseFieldOptions<FamilyParameterNamesProvider>());
+        builder.Property(item => item.CurrNames, property => {
+            property.DependsOnContext(OptionContextKeys.SelectedFamilyNames);
+            property.UseDatasetOptions(
+                SchemaDatasetIds.ParameterCatalog,
+                SchemaProjectionKeys.FamilyParameterNames
+            );
+        });
         builder.Property(item => item.NewName, property => property.UseFieldOptions<SharedParameterNamesProvider>());
     }
 }

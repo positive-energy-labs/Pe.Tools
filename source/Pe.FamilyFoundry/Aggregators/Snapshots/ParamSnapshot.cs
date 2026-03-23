@@ -49,12 +49,6 @@ public record ParamSnapshot : ParamDefinitionBase {
     public StorageType StorageType { get; init; }
 
     /// <summary>
-    ///     Indicates if this is a project parameter (exists in Document.ParameterBindings).
-    ///     Only populated when collecting from project document. Always false for family doc collection.
-    /// </summary>
-    public bool IsProjectParameter { get; init; } = false;
-
-    /// <summary>
     ///     Settings-compatible value field.
     ///     - Formula when formula exists.
     ///     - Uniform value when all non-empty type values are the same.

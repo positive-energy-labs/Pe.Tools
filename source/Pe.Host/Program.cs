@@ -13,11 +13,12 @@ builder.Services.AddSingleton(options);
 builder.Services.AddSingleton<BridgeServer>();
 builder.Services.AddSingleton<HostEventStreamService>();
 builder.Services.AddSingleton<HostBrowserApiService>();
+builder.Services.AddSingleton<HostRevitDataService>();
 builder.Services.AddSingleton<IHostBridgeCapabilityService, HostBridgeCapabilityService>();
 builder.Services.AddSingleton<IHostSettingsModuleCatalog>(sp =>
     new HostSettingsModuleCatalog(sp.GetRequiredService<IHostBridgeCapabilityService>()));
 builder.Services.AddSingleton<HostSettingsRuntimeStateService>();
-builder.Services.AddSingleton<HostSettingsEditorService>();
+builder.Services.AddSingleton<HostSchemaService>();
 builder.Services.AddSingleton(sp => new HostSettingsStorageService(
     sp.GetRequiredService<IHostSettingsModuleCatalog>()));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BridgeServer>());
@@ -79,6 +80,41 @@ app.MapPost(HttpRoutes.ParameterCatalog, async (
     CancellationToken cancellationToken
 ) => await ExecuteBrowserRequestAsync(async () =>
     await browserApiService.GetParameterCatalogAsync(request, cancellationToken)
+));
+app.MapPost(HttpRoutes.ScheduleCatalog, async (
+    ScheduleCatalogRequest request,
+    HostRevitDataService revitDataService,
+    CancellationToken cancellationToken
+) => await ExecuteBrowserRequestAsync(async () =>
+    await revitDataService.GetScheduleCatalogAsync(request, cancellationToken)
+));
+app.MapGet(HttpRoutes.LoadedFamiliesFilterSchema, (
+    HostSchemaService schemaService
+) => ExecuteBrowserRequest(() => schemaService.GetLoadedFamiliesFilterSchema()));
+app.MapPost(HttpRoutes.LoadedFamiliesFilterFieldOptions, (
+    LoadedFamiliesFilterFieldOptionsRequest request,
+    HostSchemaService schemaService
+) => ExecuteBrowserRequest(() => schemaService.GetLoadedFamiliesFilterFieldOptions(request)));
+app.MapPost(HttpRoutes.LoadedFamiliesCatalog, async (
+    LoadedFamiliesCatalogRequest request,
+    HostRevitDataService revitDataService,
+    CancellationToken cancellationToken
+) => await ExecuteBrowserRequestAsync(async () =>
+    await revitDataService.GetLoadedFamiliesCatalogAsync(request, cancellationToken)
+));
+app.MapPost(HttpRoutes.LoadedFamiliesMatrix, async (
+    LoadedFamiliesMatrixRequest request,
+    HostRevitDataService revitDataService,
+    CancellationToken cancellationToken
+) => await ExecuteBrowserRequestAsync(async () =>
+    await revitDataService.GetLoadedFamiliesMatrixAsync(request, cancellationToken)
+));
+app.MapPost(HttpRoutes.ProjectParameterBindings, async (
+    ProjectParameterBindingsRequest request,
+    HostRevitDataService revitDataService,
+    CancellationToken cancellationToken
+) => await ExecuteBrowserRequestAsync(async () =>
+    await revitDataService.GetProjectParameterBindingsAsync(request, cancellationToken)
 ));
 app.MapPost(HttpRoutes.OpenDocument, async (
     OpenSettingsDocumentRequest request,

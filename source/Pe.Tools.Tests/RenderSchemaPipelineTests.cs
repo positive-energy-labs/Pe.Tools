@@ -48,12 +48,21 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase {
         var root = JObject.Parse(schemaJson);
         var providerBacked = root["properties"]?["ProviderBacked"] as JObject;
         var source = providerBacked?["x-options"] as JObject;
+        var rootData = root["x-data"] as JObject;
+        var datasets = rootData?["datasets"] as JObject;
+        var dataset = datasets?["testDataset"] as JObject;
 
         await Assert.That(providerBacked).IsNotNull();
         await Assert.That(source).IsNotNull();
-        await Assert.That(source!["key"]?.Value<string>()).IsEqualTo(nameof(TestDatasetOptionsProvider));
+        await Assert.That(rootData).IsNotNull();
+        await Assert.That(dataset).IsNotNull();
+        await Assert.That(dataset!["provider"]?.Value<string>()).IsEqualTo("testDatasetProvider");
+        await Assert.That(dataset["load"]?.Value<string>()).IsEqualTo("Eager");
+        await Assert.That(source!["key"]?.Value<string>()).IsEqualTo("testDataset.values");
         await Assert.That(source["resolver"]?.Value<string>()).IsEqualTo("Dataset");
-        await Assert.That(source["dataset"]?.Value<string>()).IsEqualTo("ParameterCatalog");
+        await Assert.That(source["datasetRef"]?.Value<string>()).IsEqualTo("testDataset");
+        await Assert.That(source["projection"]?.Value<string>()).IsEqualTo("values");
+        await Assert.That(source["dataset"]?.Value<string>()).IsNull();
     }
 
     [Test]
@@ -131,6 +140,21 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase {
     }
 
     [Test]
+    public async Task CreateFragmentSchema_propagates_root_dataset_metadata_from_item_schema() {
+        var fragmentSchema =
+            JsonSchemaFactory.BuildFragmentSchema(typeof(RenderSchemaDatasetTestSettings), CreateOptions());
+
+        var json = EditorSchemaTransformer.TransformFragmentToEditorJson(fragmentSchema);
+        var root = JObject.Parse(json);
+        var rootData = root["x-data"] as JObject;
+        var dataset = rootData?["datasets"]?["testDataset"] as JObject;
+
+        await Assert.That(rootData).IsNotNull();
+        await Assert.That(dataset).IsNotNull();
+        await Assert.That(dataset!["provider"]?.Value<string>()).IsEqualTo("testDatasetProvider");
+    }
+
+    [Test]
     public async Task CreateRenderSchema_AllowsPresetProperty_ForPresettableObjects() {
         var schemaJson =
             JsonSchemaFactory.CreateEditorSchemaJson(typeof(RenderPresetSchemaTestSettings), CreateOptions());
@@ -175,7 +199,12 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase {
 
     [Test]
     public async Task RequiredAware_serializer_omits_required_properties_when_they_match_defaults() {
-        var settings = new RequiredDefaultsRootSettings();
+        var settings = new RequiredDefaultsRootSettings {
+            Filter = new RequiredDefaultsFilterSettings {
+                Equaling = [],
+                Containing = []
+            }
+        };
         var json = RevitJsonFormatting.SerializeIndented(
             settings,
             RevitJsonFormatting.CreateRequiredAwareRevitIndentedSettings()
@@ -336,7 +365,13 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase {
     private sealed class RenderSchemaDatasetTestSettingsDefinition
         : SettingsSchemaDefinition<RenderSchemaDatasetTestSettings> {
         public override void Configure(ISettingsSchemaBuilder<RenderSchemaDatasetTestSettings> builder) {
-            builder.Property(item => item.ProviderBacked, property => property.UseFieldOptions<TestDatasetOptionsProvider>());
+            builder.Data("testDataset", data => {
+                data.Provider("testDatasetProvider");
+                data.Load(SettingsSchemaDatasetLoadMode.Eager);
+                data.StaleOn("documentChanged");
+                data.SupportsProjection("values");
+            });
+            builder.Property(item => item.ProviderBacked, property => property.UseDatasetOptions("testDataset", "values"));
         }
     }
 
@@ -351,27 +386,6 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase {
         public FieldOptionsDescriptor Describe() => new(
             nameof(TestOptionsProvider),
             SettingsOptionsResolverKind.Remote,
-            null,
-            SettingsOptionsMode.Suggestion,
-            true,
-            [],
-            SettingsRuntimeCapabilityProfiles.LiveDocument
-        );
-
-        public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
-            FieldOptionsExecutionContext context,
-            CancellationToken cancellationToken = default
-        ) => ValueTask.FromResult<IReadOnlyList<FieldOptionItem>>([
-            new("A", "A", null),
-            new("B", "B", null)
-        ]);
-    }
-
-    private sealed class TestDatasetOptionsProvider : IFieldOptionsSource {
-        public FieldOptionsDescriptor Describe() => new(
-            nameof(TestDatasetOptionsProvider),
-            SettingsOptionsResolverKind.Dataset,
-            SettingsOptionsDatasetKind.ParameterCatalog,
             SettingsOptionsMode.Suggestion,
             true,
             [],
@@ -393,7 +407,6 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase {
         public FieldOptionsDescriptor Describe() => new(
             nameof(CountingOptionsProvider),
             SettingsOptionsResolverKind.Remote,
-            null,
             SettingsOptionsMode.Suggestion,
             true,
             [],
@@ -429,7 +442,10 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase {
     }
 
     private sealed class RequiredDefaultsRootSettings {
-        public required RequiredDefaultsFilterSettings Filter { get; init; } = new();
+        public required RequiredDefaultsFilterSettings Filter { get; init; } = new() {
+            Equaling = [],
+            Containing = []
+        };
     }
 
     private sealed class RequiredDefaultsFilterSettings {
@@ -469,7 +485,7 @@ public sealed class RenderSchemaPipelineTests : RevitTestBase {
     }
 
     private sealed class ProfileWithFilterFamiliesSettings {
-        public Pe.FamilyFoundry.FilterFamiliesSettings FilterFamilies { get; init; } = new();
+        public Pe.FamilyFoundry.BaseProfileSettings.FilterFamiliesSettings FilterFamilies { get; init; } = new();
     }
 
     private static JsonSchemaBuildOptions CreateOptions(bool resolveExamples = true) {

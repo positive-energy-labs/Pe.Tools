@@ -12,7 +12,6 @@ public class TaggableCategoryNamesProvider : IFieldOptionsSource {
     public FieldOptionsDescriptor Describe() => new(
         nameof(TaggableCategoryNamesProvider),
         SettingsOptionsResolverKind.Remote,
-        null,
         SettingsOptionsMode.Suggestion,
         true,
         [],
@@ -49,7 +48,6 @@ public class MultiCategoryTagProvider : IFieldOptionsSource {
     public FieldOptionsDescriptor Describe() => new(
         nameof(MultiCategoryTagProvider),
         SettingsOptionsResolverKind.Remote,
-        null,
         SettingsOptionsMode.Suggestion,
         true,
         [],
@@ -156,7 +154,6 @@ public class AnnotationTagFamilyNamesProvider : IFieldOptionsSource {
     public FieldOptionsDescriptor Describe() => new(
         nameof(AnnotationTagFamilyNamesProvider),
         SettingsOptionsResolverKind.Remote,
-        null,
         SettingsOptionsMode.Suggestion,
         true,
         [new FieldOptionsDependency(OptionContextKeys.CategoryName, SettingsOptionsDependencyScope.Sibling)],
@@ -192,7 +189,7 @@ public class AnnotationTagFamilyNamesProvider : IFieldOptionsSource {
         return ToItems(items);
     }
 
-    private static IEnumerable<string> GetAllTagFamilyNames(Autodesk.Revit.DB.Document doc) {
+    private static IEnumerable<string> GetAllTagFamilyNames(Document doc) {
         var familyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var category in TagCategories) {
             try {
@@ -223,7 +220,6 @@ public class AnnotationTagTypeNamesProvider : IFieldOptionsSource {
     public FieldOptionsDescriptor Describe() => new(
         nameof(AnnotationTagTypeNamesProvider),
         SettingsOptionsResolverKind.Remote,
-        null,
         SettingsOptionsMode.Suggestion,
         true,
         [new FieldOptionsDependency(OptionContextKeys.TagFamilyName, SettingsOptionsDependencyScope.Sibling)],

@@ -1,18 +1,19 @@
-using Pe.StorageRuntime.Json;
+using Pe.Global.Revit.Lib.Parameters;
 using Pe.Global.Services.Document;
 using Pe.Host.Contracts;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Documents;
 using Pe.StorageRuntime.Json.FieldOptions;
 using Pe.StorageRuntime.Json.SchemaDefinitions;
+using Pe.StorageRuntime.Revit.Context;
 using Pe.StorageRuntime.Revit.Core.Json;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
-using Pe.StorageRuntime.Revit.Context;
 using Pe.StorageRuntime.Revit.Modules;
 using Pe.StorageRuntime.Revit.Validation;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
 using System.Collections.Concurrent;
+using FieldOptionItem = Pe.Host.Contracts.FieldOptionItem;
 using RuntimeSettingsDocumentId = Pe.StorageRuntime.Documents.SettingsDocumentId;
 using RuntimeSettingsValidationIssue = Pe.StorageRuntime.Documents.SettingsValidationIssue;
 
@@ -134,7 +135,7 @@ public class RequestService {
                 var providerContext = this.CreateFieldOptionsContext(request.ContextValues);
                 var doc = providerContext.GetActiveDocument();
                 if (doc == null) {
-                    return Result
+                    return HostEnvelopeResults
                         .Failure<ParameterCatalogData>(
                             EnvelopeCode.NoDocument,
                             "No active document.",
@@ -160,7 +161,7 @@ public class RequestService {
                     .Count();
                 var typeCount = entries.SelectMany(e => e.TypeNames).Distinct(StringComparer.Ordinal).Count();
 
-                return Result
+                return HostEnvelopeResults
                     .Success(
                         new ParameterCatalogData(entries, familyCount, typeCount),
                         EnvelopeCode.Ok,
@@ -168,12 +169,12 @@ public class RequestService {
                     )
                     .ToParameterCatalogEnvelope();
             } catch (Exception ex) {
-                return Result
+                return HostEnvelopeResults
                     .Failure<ParameterCatalogData>(
                         EnvelopeCode.Failed,
                         ex.Message,
                         [
-                            Result.ExceptionIssue(
+                            HostEnvelopeResults.ExceptionIssue(
                                 "ParameterCatalogException",
                                 ex,
                                 "Verify selected families and active document state."
@@ -184,20 +185,20 @@ public class RequestService {
             }
         });
 
-    private async Task<Result<SchemaData>> GetSchemaCore(SchemaRequest request) {
+    private async Task<HostEnvelopeResult<SchemaData>> GetSchemaCore(SchemaRequest request) {
         try {
             var module = this._moduleRegistry.ResolveByModuleKey(request.ModuleKey);
             if (this._schemaCache.TryGetValue(module.ModuleKey, out var cachedSchema))
-                return Result.Success(cachedSchema, EnvelopeCode.Ok, "Schema loaded from cache.");
+                return HostEnvelopeResults.Success(cachedSchema, EnvelopeCode.Ok, "Schema loaded from cache.");
 
             var schemaData = await this.EnqueueAsync(() => this.GetOrCreateSchemaData(module));
-            return Result.Success(schemaData, EnvelopeCode.Ok, "Schema generated.");
+            return HostEnvelopeResults.Success(schemaData, EnvelopeCode.Ok, "Schema generated.");
         } catch (Exception ex) {
-            return Result.Failure<SchemaData>(
+            return HostEnvelopeResults.Failure<SchemaData>(
                 EnvelopeCode.Failed,
                 ex.Message,
                 [
-                    Result.ExceptionIssue(
+                    HostEnvelopeResults.ExceptionIssue(
                         "SchemaException",
                         ex,
                         "Ensure module registration, schema definitions, and type bindings are valid."
@@ -207,7 +208,7 @@ public class RequestService {
         }
     }
 
-    private async Task<Result<ValidationData>> ValidateSettingsCore(ValidateSettingsRequest request) {
+    private async Task<HostEnvelopeResult<ValidationData>> ValidateSettingsCore(ValidateSettingsRequest request) {
         try {
             var module = this._moduleRegistry.ResolveByModuleKey(request.ModuleKey);
             var validator = this._validationValidatorCache.TryGetValue(module.ModuleKey, out var cachedValidator)
@@ -221,7 +222,7 @@ public class RequestService {
             var issues = validation.Issues.Select(ToHostValidationIssue).ToList();
             var issueCount = issues.Count;
 
-            return Result.Success(
+            return HostEnvelopeResults.Success(
                 new ValidationData(validation.IsValid, issues),
                 EnvelopeCode.Ok,
                 issueCount == 0 ? "Validation passed." : "Validation returned issues.",
@@ -238,7 +239,7 @@ public class RequestService {
                     "Ensure moduleKey is registered and settingsJson is valid JSON."
                 )
             };
-            return Result.Failure<ValidationData>(
+            return HostEnvelopeResults.Failure<ValidationData>(
                 EnvelopeCode.Failed,
                 ex.Message,
                 issues
@@ -248,7 +249,7 @@ public class RequestService {
         }
     }
 
-    private async Task<Result<FieldOptionsData>> GetFieldOptionsCore(FieldOptionsRequest request) =>
+    private async Task<HostEnvelopeResult<FieldOptionsData>> GetFieldOptionsCore(FieldOptionsRequest request) =>
         await this.EnqueueAsync(() => {
             try {
                 var type = this._moduleRegistry.ResolveByModuleKey(request.ModuleKey).SettingsType;
@@ -271,7 +272,7 @@ public class RequestService {
                     return EmptyFieldOptions(request.SourceKey, fieldOptions.Message);
 
                 if (fieldOptions.Kind == FieldOptionsResultKind.Unsupported) {
-                    return Result.Failure<FieldOptionsData>(
+                    return HostEnvelopeResults.Failure<FieldOptionsData>(
                         EnvelopeCode.Failed,
                         fieldOptions.Message,
                         [
@@ -290,7 +291,7 @@ public class RequestService {
                 }
 
                 if (fieldOptions.Kind == FieldOptionsResultKind.Failure) {
-                    return Result.Failure<FieldOptionsData>(
+                    return HostEnvelopeResults.Failure<FieldOptionsData>(
                         EnvelopeCode.Failed,
                         fieldOptions.Message,
                         [
@@ -308,7 +309,7 @@ public class RequestService {
                     };
                 }
 
-                return Result.Success(
+                return HostEnvelopeResults.Success(
                     new FieldOptionsData(
                         request.SourceKey,
                         FieldOptionsMode.Suggestion,
@@ -320,11 +321,11 @@ public class RequestService {
                 );
             } catch (Exception ex) {
                 Log.Error(ex, "GetFieldOptions failed for property '{PropertyPath}'", request.PropertyPath);
-                return Result.Failure<FieldOptionsData>(
+                return HostEnvelopeResults.Failure<FieldOptionsData>(
                     EnvelopeCode.Failed,
                     ex.Message,
                     [
-                        Result.ExceptionIssue(
+                        HostEnvelopeResults.ExceptionIssue(
                             "FieldOptionsException",
                             ex,
                             "Check provider configuration and request path."
@@ -357,8 +358,8 @@ public class RequestService {
         return result!;
     }
 
-    private static Result<FieldOptionsData> EmptyFieldOptions(string sourceKey, string message) =>
-        Result.Success(
+    private static HostEnvelopeResult<FieldOptionsData> EmptyFieldOptions(string sourceKey, string message) =>
+        HostEnvelopeResults.Success(
             EmptyFieldOptionsData(sourceKey),
             EnvelopeCode.Ok,
             message
@@ -421,26 +422,22 @@ public class RequestService {
 
     private static ParameterCatalogEntry ToHostParameterCatalogEntry(ParameterCatalogOption entry) =>
         new(
-            entry.Name,
+            ParameterIdentityEngine.FromCanonical(entry.Identity),
             entry.StorageType,
             entry.DataType,
-            entry.IsShared,
             entry.IsInstance,
-            entry.IsBuiltIn,
-            entry.IsProjectParameter,
             entry.IsParamService,
-            entry.SharedGuid,
             entry.FamilyNames,
             entry.TypeNames
         );
 
-    private static Pe.Host.Contracts.FieldOptionItem ToFieldOptionItem(
-        Pe.StorageRuntime.Json.FieldOptions.FieldOptionItem item
+    private static FieldOptionItem ToFieldOptionItem(
+        StorageRuntime.Json.FieldOptions.FieldOptionItem item
     ) => new(
-            item.Value,
-            item.Label,
-            item.Description
-        );
+        item.Value,
+        item.Label,
+        item.Description
+    );
 
     private static ValidationIssue ToHostValidationIssue(RuntimeSettingsValidationIssue issue) =>
         new(

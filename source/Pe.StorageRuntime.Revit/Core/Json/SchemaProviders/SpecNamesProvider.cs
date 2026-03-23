@@ -1,3 +1,4 @@
+using Pe.RevitData.Parameters;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Json.FieldOptions;
 
@@ -7,7 +8,6 @@ public class SpecNamesProvider : IFieldOptionsSource {
     public FieldOptionsDescriptor Describe() => new(
         nameof(SpecNamesProvider),
         SettingsOptionsResolverKind.Remote,
-        null,
         SettingsOptionsMode.Suggestion,
         true,
         [],
@@ -17,41 +17,19 @@ public class SpecNamesProvider : IFieldOptionsSource {
     public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
         FieldOptionsExecutionContext context,
         CancellationToken cancellationToken = default
-    ) => new ValueTask<IReadOnlyList<FieldOptionItem>>(
-        GetLabelToForgeMap()
+    ) => new(
+        RevitTypeLabelCatalog.GetLabelToSpecMap()
             .Keys
             .Select(value => new FieldOptionItem(value, value, null))
             .ToList()
     );
 
-    public static Dictionary<string, ForgeTypeId> GetLabelToForgeMap() {
-        var labelMap = new Dictionary<string, ForgeTypeId>();
-
-        foreach (var spec in SpecUtils.GetAllSpecs()) {
-            var label = FormatSpecWithDiscipline(spec);
-            _ = labelMap.TryAdd(label, spec);
-        }
-
-        return labelMap;
-    }
+    public static Dictionary<string, ForgeTypeId> GetLabelToForgeMap() =>
+        RevitTypeLabelCatalog.GetLabelToSpecMap();
 
     public static Dictionary<ForgeTypeId, string> GetForgeToLabelMap() =>
-        GetLabelToForgeMap().ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
+        RevitTypeLabelCatalog.GetSpecToLabelMap();
 
     public static string GetLabelForForge(ForgeTypeId forge) =>
-        GetForgeToLabelMap().TryGetValue(forge, out var label) ? label : forge.TypeId;
-
-    private static string FormatSpecWithDiscipline(ForgeTypeId spec) {
-        var label = spec.ToLabel();
-        var discipline = GetParentheticDiscipline(spec);
-        return $"{label}{discipline}";
-    }
-
-    private static string GetParentheticDiscipline(ForgeTypeId spec) {
-        if (!UnitUtils.IsMeasurableSpec(spec))
-            return string.Empty;
-        var disciplineId = UnitUtils.GetDiscipline(spec);
-        var disciplineLabel = LabelUtils.GetLabelForDiscipline(disciplineId);
-        return !string.IsNullOrEmpty(disciplineLabel) ? $" ({disciplineLabel})" : string.Empty;
-    }
+        RevitTypeLabelCatalog.GetLabelForSpec(forge);
 }

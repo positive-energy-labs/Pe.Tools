@@ -63,12 +63,11 @@ public static class JsonSchemaFactory {
         SchemaMetadataProcessor.AllowSchemaProperty(fragmentSchema);
 
         var itemsProperty = new JsonSchemaProperty {
-            Type = JsonObjectType.Array,
-            Item = itemSchema,
-            IsRequired = true
+            Type = JsonObjectType.Array, Item = itemSchema, IsRequired = true
         };
         fragmentSchema.Properties["Items"] = itemsProperty;
         fragmentSchema.RequiredProperties.Add("Items");
+        CopyRootDatasetMetadata(itemSchema, fragmentSchema);
 
         fragmentSchema = SchemaExampleDefinitionConsolidator.Consolidate(fragmentSchema);
         return SchemaDefaultInjector.ApplyFragmentDefaults(fragmentSchema, itemType);
@@ -98,7 +97,6 @@ public static class JsonSchemaFactory {
     }
 
 
-
     private static JsonSchema BuildRawAuthoringSchema(Type type, JsonSchemaBuildOptions options) {
         var settings = CreateGeneratorSettings(options);
         var schema = new JsonSchemaGenerator(settings).Generate(type);
@@ -111,8 +109,7 @@ public static class JsonSchemaFactory {
             FlattenInheritanceHierarchy = true,
             AlwaysAllowAdditionalObjectProperties = false,
             SerializerSettings = new JsonSerializerSettings {
-                NullValueHandling = NullValueHandling.Ignore,
-                Converters = [new StringEnumConverter()]
+                NullValueHandling = NullValueHandling.Ignore, Converters = [new StringEnumConverter()]
             }
         };
 
@@ -126,6 +123,16 @@ public static class JsonSchemaFactory {
         settings.SchemaProcessors.Add(new SchemaDefinitionProcessor(options));
 
         return settings;
+    }
+
+    private static void CopyRootDatasetMetadata(JsonSchema sourceSchema, JsonSchema targetSchema) {
+        var actualSourceSchema = sourceSchema.HasReference ? sourceSchema.Reference : sourceSchema;
+        if (actualSourceSchema?.ExtensionData == null ||
+            !actualSourceSchema.ExtensionData.TryGetValue("x-data", out var rawRootData))
+            return;
+
+        targetSchema.ExtensionData ??= new Dictionary<string, object?>();
+        targetSchema.ExtensionData["x-data"] = rawRootData;
     }
 }
 
@@ -219,6 +226,4 @@ public static class JsonSchemaDocumentService {
         var bytes = hashAlgorithm.ComputeHash(Encoding.UTF8.GetBytes(content));
         return BitConverter.ToString(bytes).Replace("-", string.Empty);
     }
-
-
 }

@@ -60,13 +60,6 @@ public sealed class ButtonRegistry {
                 "Create Air Terminal variants from an air terminal family by prepopulating the PE_G___TagInstance parameter and setting an existing duct connector's connection settings properly.",
             Container = new ButtonContainer.Panel("Migration")
         }),
-        Register<CmdFFParamAggregator>(new ButtonRegistration<CmdFFParamAggregator> {
-            Text = "FF Param Aggregator",
-            SmallImage = "Red_16.png",
-            LargeImage = "Red_32.png",
-            ToolTip = "Aggregate parameter metadata across families in a category and output to CSV.",
-            Container = new ButtonContainer.Panel("Migration")
-        }),
         Register<CmdPltCommands>(new ButtonRegistration<CmdPltCommands> {
             Text = "Command Palette",
             SmallImage = "square-terminal16.png",
