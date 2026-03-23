@@ -164,14 +164,23 @@ public static class LoadedFamiliesFormulaCollector {
         List<CollectedIssue> issues
     ) {
         var observed = CreateObservedProjectParameterMetadata(parameter);
-        var familyParameter = FindFamilyParameter(parameter, observed, familyParameterLookup);
+        // Resolution order is intentional:
+        // 1. Let a concrete project binding claim the observed row first.
+        // 2. Only if no project binding matches do we allow non-shared
+        //    family name/scope fallback.
+        // This prevents PP/FP same-name collisions from being reclassified as
+        // family-owned while still allowing true family-only observations.
+        var projectObservedBinding = FindProjectOnlyBinding(observed, projectBindingLookup);
+        var familyParameter = FindFamilyParameter(
+            parameter,
+            observed,
+            familyParameterLookup,
+            allowNameScopeFallback: projectObservedBinding == null
+        );
         var mergedProjectBinding = familyParameter?.Metadata.IsShared == true
             ? FindMergedProjectBinding(parameter.CategoryName, familyParameter.Metadata, projectBindingLookup)
             : null;
-        var projectOnlyBinding = familyParameter == null
-            ? FindProjectOnlyBinding(observed, projectBindingLookup)
-            : null;
-        var effectiveProjectBinding = mergedProjectBinding ?? projectOnlyBinding;
+        var effectiveProjectBinding = mergedProjectBinding ?? projectObservedBinding;
         var resolved = RevitParameterAuthorityResolver.Resolve(
             observed,
             familyParameter?.Metadata,
@@ -269,7 +278,8 @@ public static class LoadedFamiliesFormulaCollector {
     private static FamilyParameterLookupEntry? FindFamilyParameter(
         CollectedFamilyParameterRecord parameter,
         RevitObservedProjectParameterMetadata observed,
-        FamilyParameterLookup familyParameterLookup
+        FamilyParameterLookup familyParameterLookup,
+        bool allowNameScopeFallback
     ) {
         if (observed.Identity.SharedGuid.HasValue) {
             return familyParameterLookup.SharedByGuid.TryGetValue(
@@ -280,8 +290,18 @@ public static class LoadedFamiliesFormulaCollector {
                 : null;
         }
 
+        // Critical invariant:
+        // Cross-document family lookup intentionally uses shared GUID only.
+        // Non-shared lookup is allowed solely for true NameFallback observations
+        // after project binding authority has already had a chance to claim the row.
+        if (!allowNameScopeFallback || observed.Identity.Kind != RevitParameterIdentityKind.NameFallback)
+            return null;
+
         var key = LoadedFamiliesCollectorSupport.GetParameterKey(parameter.Name, parameter.IsInstance);
-        return familyParameterLookup.ByNameAndScope.TryGetValue(key, out var familyEntry)
+        if (!familyParameterLookup.ByNameAndScope.TryGetValue(key, out var familyEntry))
+            return null;
+
+        return RevitParameterAuthorityResolver.MatchesFamilyParameter(observed, familyEntry.Metadata)
             ? familyEntry
             : null;
     }

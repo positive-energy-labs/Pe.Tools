@@ -56,6 +56,117 @@ public sealed class RevitParameterAuthorityResolverTests {
     }
 
     [Test]
+    public async Task Family_match_does_not_fallback_to_name_for_parameter_element_identity() {
+        var observed = new RevitObservedProjectParameterMetadata {
+            Identity = ParameterElementIdentity("Project Notes", 42),
+            CategoryName = "Mechanical Equipment",
+            IsInstance = false
+        };
+        var family = new RevitFamilyParameterMetadata {
+            Identity = NameIdentity("Project Notes"),
+            IsInstance = false
+        };
+
+        var matches = RevitParameterAuthorityResolver.MatchesFamilyParameter(observed, family);
+
+        await Assert.That(matches).IsFalse();
+    }
+
+    [Test]
+    public async Task Family_match_allows_true_name_fallback_against_family_parameter_identity() {
+        var observed = new RevitObservedProjectParameterMetadata {
+            Identity = NameIdentity("Project Notes"),
+            CategoryName = "Mechanical Equipment",
+            IsInstance = false
+        };
+        var family = new RevitFamilyParameterMetadata {
+            Identity = ParameterElementIdentity("Project Notes", 42),
+            IsInstance = false
+        };
+
+        var matches = RevitParameterAuthorityResolver.MatchesFamilyParameter(observed, family);
+
+        await Assert.That(matches).IsTrue();
+    }
+
+    [Test]
+    public async Task Family_match_does_not_treat_built_in_identity_as_authored_family_authority() {
+        var observed = new RevitObservedProjectParameterMetadata {
+            Identity = BuiltInIdentity("Comments", (int)BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS),
+            CategoryName = "Mechanical Equipment",
+            IsInstance = true
+        };
+        var family = new RevitFamilyParameterMetadata {
+            Identity = NameIdentity("Comments"),
+            IsInstance = true
+        };
+
+        var matches = RevitParameterAuthorityResolver.MatchesFamilyParameter(observed, family);
+
+        await Assert.That(matches).IsFalse();
+    }
+
+    [Test]
+    public async Task Family_only_non_shared_parameter_resolves_as_family_authority() {
+        var observed = new RevitObservedProjectParameterMetadata {
+            Identity = NameIdentity("Family Notes"),
+            CategoryName = "Mechanical Equipment",
+            IsInstance = false,
+            PropertiesGroup = new ForgeTypeId("group.live"),
+            DataType = new ForgeTypeId("spec.live")
+        };
+        var family = new RevitFamilyParameterMetadata {
+            Identity = NameIdentity("Family Notes"),
+            IsInstance = false,
+            PropertiesGroup = new ForgeTypeId("group.family"),
+            DataType = new ForgeTypeId("spec.family")
+        };
+
+        var resolution = RevitParameterAuthorityResolver.Resolve(observed, family, null);
+
+        await Assert.That(resolution.HasFamilyParameter).IsTrue();
+        await Assert.That(resolution.HasProjectBinding).IsFalse();
+        await Assert.That(resolution.IsInstance).IsFalse();
+        await Assert.That(resolution.PropertiesGroup.TypeId).IsEqualTo("group.family");
+        await Assert.That(resolution.DataType.TypeId).IsEqualTo("spec.family");
+    }
+
+    [Test]
+    public async Task Project_binding_takes_authority_over_same_name_non_shared_observation() {
+        var observed = new RevitObservedProjectParameterMetadata {
+            Identity = ParameterElementIdentity("Project Notes", 42),
+            CategoryName = "Mechanical Equipment",
+            IsInstance = false,
+            PropertiesGroup = new ForgeTypeId("group.live"),
+            DataType = new ForgeTypeId("spec.live")
+        };
+        var family = new RevitFamilyParameterMetadata {
+            Identity = NameIdentity("Project Notes"),
+            IsInstance = false,
+            PropertiesGroup = new ForgeTypeId("group.family"),
+            DataType = new ForgeTypeId("spec.family")
+        };
+        var projectBinding = new RevitProjectBindingMetadata {
+            Identity = ParameterElementIdentity("Project Notes", 42),
+            IsInstance = false,
+            PropertiesGroup = new ForgeTypeId("group.project"),
+            DataType = new ForgeTypeId("spec.project"),
+            CategoryNames = ["Mechanical Equipment"]
+        };
+
+        var familyMatch = RevitParameterAuthorityResolver.MatchesFamilyParameter(observed, family);
+        var projectMatch = RevitParameterAuthorityResolver.MatchesProjectOnlyBinding(observed, projectBinding);
+        var resolution = RevitParameterAuthorityResolver.Resolve(observed, null, projectBinding);
+
+        await Assert.That(familyMatch).IsFalse();
+        await Assert.That(projectMatch).IsTrue();
+        await Assert.That(resolution.HasFamilyParameter).IsFalse();
+        await Assert.That(resolution.HasProjectBinding).IsTrue();
+        await Assert.That(resolution.PropertiesGroup.TypeId).IsEqualTo("group.project");
+        await Assert.That(resolution.DataType.TypeId).IsEqualTo("spec.project");
+    }
+
+    [Test]
     public async Task Project_shared_merge_ignores_binding_scope_for_guid_match() {
         var sharedGuid = Guid.Parse("33333333-3333-3333-3333-333333333333");
         var family = new RevitFamilyParameterMetadata {
@@ -151,5 +262,15 @@ public sealed class RevitParameterAuthorityResolverTests {
             null,
             null,
             parameterElementId
+        );
+
+    private static RevitParameterIdentity BuiltInIdentity(string name, int builtInParameterId) =>
+        new(
+            $"builtin:{builtInParameterId}",
+            RevitParameterIdentityKind.BuiltInParameter,
+            name,
+            builtInParameterId,
+            null,
+            null
         );
 }
