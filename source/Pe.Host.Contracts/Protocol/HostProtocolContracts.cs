@@ -4,18 +4,6 @@ using TypeGen.Core.TypeAnnotations;
 
 namespace Pe.Host.Contracts;
 
-public static class HubMethodNames {
-    public const string GetHostStatusEnvelope = nameof(GetHostStatusEnvelope);
-    public const string GetSchemaEnvelope = nameof(GetSchemaEnvelope);
-    public const string GetFieldOptionsEnvelope = nameof(GetFieldOptionsEnvelope);
-    public const string ValidateSettingsEnvelope = nameof(ValidateSettingsEnvelope);
-    public const string GetParameterCatalogEnvelope = nameof(GetParameterCatalogEnvelope);
-    public const string GetScheduleCatalogEnvelope = nameof(GetScheduleCatalogEnvelope);
-    public const string GetLoadedFamiliesCatalogEnvelope = nameof(GetLoadedFamiliesCatalogEnvelope);
-    public const string GetLoadedFamiliesMatrixEnvelope = nameof(GetLoadedFamiliesMatrixEnvelope);
-    public const string GetProjectParameterBindingsEnvelope = nameof(GetProjectParameterBindingsEnvelope);
-}
-
 [ExportTsClass]
 public static class SettingsHostEventNames {
     public const string DocumentChanged = "document-changed";
@@ -25,25 +13,26 @@ public static class SettingsHostEventNames {
 [ExportTsClass]
 public static class HttpRoutes {
     public const string SettingsBase = "/api/settings";
-    public const string HostStatus = SettingsBase + "/host-status";
-    public const string Schema = SettingsBase + "/schema";
-    public const string Workspaces = SettingsBase + "/workspaces";
-    public const string Tree = SettingsBase + "/tree";
-    public const string FieldOptions = SettingsBase + "/field-options";
-    public const string ParameterCatalog = SettingsBase + "/parameter-catalog";
-    public const string OpenDocument = SettingsBase + "/document/open";
-    public const string ComposeDocument = SettingsBase + "/document/compose";
-    public const string ValidateDocument = SettingsBase + "/document/validate";
-    public const string SaveDocument = SettingsBase + "/document/save";
-    public const string Events = SettingsBase + "/events";
+    public static readonly string HostStatus = GetHostStatusOperationContract.Definition.Route;
+    public static readonly string Schema = GetSchemaOperationContract.Definition.Route;
+    public static readonly string Workspaces = GetWorkspacesOperationContract.Definition.Route;
+    public static readonly string Tree = DiscoverSettingsTreeOperationContract.Definition.Route;
+    public static readonly string FieldOptions = GetFieldOptionsOperationContract.Definition.Route;
+    public static readonly string ParameterCatalog = GetParameterCatalogOperationContract.Definition.Route;
+    public static readonly string OpenDocument = OpenSettingsDocumentOperationContract.Definition.Route;
+    public static readonly string ComposeDocument = ComposeSettingsDocumentOperationContract.Definition.Route;
+    public static readonly string ValidateDocument = ValidateSettingsDocumentOperationContract.Definition.Route;
+    public static readonly string SaveDocument = SaveSettingsDocumentOperationContract.Definition.Route;
+    public static readonly string Events = SettingsBase + "/events";
 
     public const string RevitDataBase = "/api/revit-data";
-    public const string LoadedFamiliesFilterSchema = RevitDataBase + "/loaded-families/filter/schema";
-    public const string LoadedFamiliesFilterFieldOptions = RevitDataBase + "/loaded-families/filter/field-options";
-    public const string ScheduleCatalog = RevitDataBase + "/schedules/catalog";
-    public const string LoadedFamiliesCatalog = RevitDataBase + "/loaded-families/catalog";
-    public const string LoadedFamiliesMatrix = RevitDataBase + "/loaded-families/matrix";
-    public const string ProjectParameterBindings = RevitDataBase + "/project-parameter-bindings";
+    public static readonly string LoadedFamiliesFilterSchema = GetLoadedFamiliesFilterSchemaOperationContract.Definition.Route;
+    public static readonly string LoadedFamiliesFilterFieldOptions =
+        GetLoadedFamiliesFilterFieldOptionsOperationContract.Definition.Route;
+    public static readonly string ScheduleCatalog = GetScheduleCatalogOperationContract.Definition.Route;
+    public static readonly string LoadedFamiliesCatalog = GetLoadedFamiliesCatalogOperationContract.Definition.Route;
+    public static readonly string LoadedFamiliesMatrix = GetLoadedFamiliesMatrixOperationContract.Definition.Route;
+    public static readonly string ProjectParameterBindings = GetProjectParameterBindingsOperationContract.Definition.Route;
 }
 
 [ExportTsClass]

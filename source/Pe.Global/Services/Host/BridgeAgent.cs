@@ -3,6 +3,7 @@ using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
 using Pe.Global.Services.Document;
 using Pe.Host.Contracts;
+using Pe.Global.Services.Host.Operations;
 using Pe.StorageRuntime.Revit.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
@@ -10,6 +11,43 @@ using System.IO.Pipes;
 using System.Runtime.InteropServices;
 
 namespace Pe.Global.Services.Host;
+
+internal sealed class BridgeOperationContext(
+    RequestService requestService,
+    RevitDataRequestService revitDataRequestService
+) {
+    public RequestService RequestService { get; } = requestService;
+    public RevitDataRequestService RevitDataRequestService { get; } = revitDataRequestService;
+}
+
+internal sealed class BridgeRequestDispatcher(
+    BridgeOperationRegistry registry,
+    JsonSerializerSettings serializerSettings
+) {
+    private readonly BridgeOperationRegistry _registry = registry;
+    private readonly JsonSerializerSettings _serializerSettings = serializerSettings;
+
+    public async Task<object?> DispatchAsync(
+        string operationKey,
+        string payloadJson,
+        BridgeOperationContext context,
+        CancellationToken cancellationToken
+    ) {
+        if (!this._registry.TryGet(operationKey, out var operation))
+            throw new InvalidOperationException($"Unsupported bridge operation '{operationKey}'.");
+
+        var request = JsonConvert.DeserializeObject(
+                          payloadJson,
+                          operation.Definition.RequestType,
+                          this._serializerSettings
+                      )
+                      ?? throw new InvalidOperationException(
+                          $"Failed to deserialize bridge payload '{operation.Definition.RequestType.Name}' for '{operationKey}'."
+                      );
+
+        return await operation.ExecuteAsync(request, context, cancellationToken);
+    }
+}
 
 internal sealed class BridgeAgent : IDisposable {
     private readonly BridgeDocumentNotifier _documentNotifier;
@@ -19,6 +57,9 @@ internal sealed class BridgeAgent : IDisposable {
     private readonly StreamReader _reader;
     private readonly Task _readLoop;
     private readonly RequestService _requestService;
+    private readonly BridgeOperationContext _bridgeOperationContext;
+    private readonly BridgeRequestDispatcher _bridgeRequestDispatcher;
+    private readonly BridgeOperationRegistry _bridgeOperationRegistry;
     private readonly RevitDataCache _revitDataCache;
     private readonly RevitDataRequestService _revitDataRequestService;
 
@@ -26,7 +67,8 @@ internal sealed class BridgeAgent : IDisposable {
         NullValueHandling = NullValueHandling.Ignore,
         ContractResolver = new DefaultContractResolver {
             NamingStrategy = new CamelCaseNamingStrategy {
-                ProcessDictionaryKeys = false, OverrideSpecifiedNames = false
+                ProcessDictionaryKeys = false,
+                OverrideSpecifiedNames = false
             }
         },
         Converters = [new StringEnumConverter()]
@@ -57,6 +99,9 @@ internal sealed class BridgeAgent : IDisposable {
         this._requestService = new RequestService(revitTaskService, this._moduleRegistry, this._throttleGate);
         this._revitDataCache = new RevitDataCache();
         this._revitDataRequestService = new RevitDataRequestService(revitTaskService, this._revitDataCache);
+        this._bridgeOperationRegistry = new BridgeOperationRegistry();
+        this._bridgeOperationContext = new BridgeOperationContext(this._requestService, this._revitDataRequestService);
+        this._bridgeRequestDispatcher = new BridgeRequestDispatcher(this._bridgeOperationRegistry, this._serializerSettings);
 
         this._pipeClient =
             new NamedPipeClientStream(".", hostOptions.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
@@ -195,41 +240,12 @@ internal sealed class BridgeAgent : IDisposable {
         var sentAt = DateTimeOffset.FromUnixTimeMilliseconds(request.SentAtUnixMs);
 
         try {
-            object responseEnvelope = request.Method switch {
-                nameof(HubMethodNames.GetSchemaEnvelope) =>
-                    await this._requestService.GetSchemaEnvelopeAsync(
-                        this.DeserializePayload<SchemaRequest>(request.PayloadJson)
-                    ).ConfigureAwait(false),
-                nameof(HubMethodNames.ValidateSettingsEnvelope) =>
-                    await this._requestService.ValidateSettingsEnvelopeAsync(
-                        this.DeserializePayload<ValidateSettingsRequest>(request.PayloadJson)
-                    ).ConfigureAwait(false),
-                nameof(HubMethodNames.GetFieldOptionsEnvelope) =>
-                    await this._requestService.GetFieldOptionsEnvelopeAsync(
-                        this.DeserializePayload<FieldOptionsRequest>(request.PayloadJson)
-                    ).ConfigureAwait(false),
-                nameof(HubMethodNames.GetParameterCatalogEnvelope) =>
-                    await this._requestService.GetParameterCatalogEnvelopeAsync(
-                        this.DeserializePayload<ParameterCatalogRequest>(request.PayloadJson)
-                    ).ConfigureAwait(false),
-                nameof(HubMethodNames.GetScheduleCatalogEnvelope) =>
-                    await this._revitDataRequestService.GetScheduleCatalogEnvelopeAsync(
-                        this.DeserializePayload<ScheduleCatalogRequest>(request.PayloadJson)
-                    ).ConfigureAwait(false),
-                nameof(HubMethodNames.GetLoadedFamiliesCatalogEnvelope) =>
-                    await this._revitDataRequestService.GetLoadedFamiliesCatalogEnvelopeAsync(
-                        this.DeserializePayload<LoadedFamiliesCatalogRequest>(request.PayloadJson)
-                    ).ConfigureAwait(false),
-                nameof(HubMethodNames.GetLoadedFamiliesMatrixEnvelope) =>
-                    await this._revitDataRequestService.GetLoadedFamiliesMatrixEnvelopeAsync(
-                        this.DeserializePayload<LoadedFamiliesMatrixRequest>(request.PayloadJson)
-                    ).ConfigureAwait(false),
-                nameof(HubMethodNames.GetProjectParameterBindingsEnvelope) =>
-                    await this._revitDataRequestService.GetProjectParameterBindingsEnvelopeAsync(
-                        this.DeserializePayload<ProjectParameterBindingsRequest>(request.PayloadJson)
-                    ).ConfigureAwait(false),
-                _ => throw new InvalidOperationException($"Unsupported bridge method '{request.Method}'.")
-            };
+            var responseEnvelope = await this._bridgeRequestDispatcher.DispatchAsync(
+                request.Method,
+                request.PayloadJson,
+                this._bridgeOperationContext,
+                cancellationToken
+            ).ConfigureAwait(false);
 
             var beforeSerialize = Stopwatch.GetTimestamp();
             var payloadJson = JsonConvert.SerializeObject(responseEnvelope, this._serializerSettings);
@@ -344,10 +360,6 @@ internal sealed class BridgeAgent : IDisposable {
             _ = this._writeLock.Release();
         }
     }
-
-    private TPayload DeserializePayload<TPayload>(string payloadJson) =>
-        JsonConvert.DeserializeObject<TPayload>(payloadJson, this._serializerSettings)
-        ?? throw new InvalidOperationException($"Failed to deserialize bridge payload '{typeof(TPayload).Name}'.");
 
     private static long GetElapsedMilliseconds(long startedTimestamp) {
         var elapsedTicks = Stopwatch.GetTimestamp() - startedTimestamp;

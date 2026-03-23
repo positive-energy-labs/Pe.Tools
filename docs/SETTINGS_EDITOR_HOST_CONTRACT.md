@@ -102,7 +102,7 @@ Recommended frontend behavior:
 ## Backend-Owned Transport Constants
 
 - HTTP route constants: `HttpRoutes.*`
-- named-pipe bridge method names: `HubMethodNames.*`
+- operation definitions and keys: `*OperationContract.Definition`
 - SSE event names: `SettingsHostEventNames.*`
 - protocol metadata: `HostProtocol.*`
 

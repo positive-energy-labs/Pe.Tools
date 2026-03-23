@@ -147,7 +147,9 @@ public record LoadedFamiliesCatalogEnvelopeResponse(
     string Message,
     List<ValidationIssue> Issues,
     LoadedFamiliesCatalogData? Data
-);
+) : IHostDataEnvelope<LoadedFamiliesCatalogData> {
+    public object? GetData() => this.Data;
+}
 
 [ExportTsInterface]
 public record LoadedFamiliesMatrixEnvelopeResponse(
@@ -156,4 +158,6 @@ public record LoadedFamiliesMatrixEnvelopeResponse(
     string Message,
     List<ValidationIssue> Issues,
     LoadedFamiliesMatrixData? Data
-);
+) : IHostDataEnvelope<LoadedFamiliesMatrixData> {
+    public object? GetData() => this.Data;
+}

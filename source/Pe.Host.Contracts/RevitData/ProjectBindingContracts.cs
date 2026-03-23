@@ -40,4 +40,6 @@ public record ProjectParameterBindingsEnvelopeResponse(
     string Message,
     List<ValidationIssue> Issues,
     ProjectParameterBindingsData? Data
-);
+) : IHostDataEnvelope<ProjectParameterBindingsData> {
+    public object? GetData() => this.Data;
+}

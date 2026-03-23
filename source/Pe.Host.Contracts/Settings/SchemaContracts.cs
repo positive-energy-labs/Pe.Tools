@@ -60,7 +60,9 @@ public record SchemaEnvelopeResponse(
     string Message,
     List<ValidationIssue> Issues,
     SchemaData? Data
-);
+) : IHostDataEnvelope<SchemaData> {
+    public object? GetData() => this.Data;
+}
 
 [ExportTsInterface]
 public record FieldOptionItem(
@@ -84,7 +86,9 @@ public record FieldOptionsEnvelopeResponse(
     string Message,
     List<ValidationIssue> Issues,
     FieldOptionsData? Data
-);
+) : IHostDataEnvelope<FieldOptionsData> {
+    public object? GetData() => this.Data;
+}
 
 [ExportTsInterface]
 public record ValidationData(
@@ -99,4 +103,6 @@ public record ValidationEnvelopeResponse(
     string Message,
     List<ValidationIssue> Issues,
     ValidationData? Data
-);
+) : IHostDataEnvelope<ValidationData> {
+    public object? GetData() => this.Data;
+}

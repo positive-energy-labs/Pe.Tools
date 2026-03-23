@@ -135,4 +135,6 @@ public record ScheduleCatalogEnvelopeResponse(
     string Message,
     List<ValidationIssue> Issues,
     ScheduleCatalogData? Data
-);
+) : IHostDataEnvelope<ScheduleCatalogData> {
+    public object? GetData() => this.Data;
+}

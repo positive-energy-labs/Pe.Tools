@@ -1,23 +1,16 @@
 using Pe.Host.Contracts;
 using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Documents;
 using Pe.StorageRuntime.Json;
 using Pe.StorageRuntime.Json.FieldOptions;
 using Pe.StorageRuntime.Json.SchemaDefinitions;
-using Pe.StorageRuntime.Revit.Validation;
 using System.Collections.Concurrent;
 using FieldOptionItem = Pe.Host.Contracts.FieldOptionItem;
-using RuntimeSettingsDocumentId = Pe.StorageRuntime.Documents.SettingsDocumentId;
-using RuntimeSettingsValidationIssue = Pe.StorageRuntime.Documents.SettingsValidationIssue;
 
 namespace Pe.Host.Services;
 
 public sealed class HostSchemaService(IHostSettingsModuleCatalog moduleCatalog) {
     private readonly IHostSettingsModuleCatalog _moduleCatalog = moduleCatalog;
     private readonly ConcurrentDictionary<string, SchemaData> _schemaCache = new(StringComparer.OrdinalIgnoreCase);
-
-    private readonly ConcurrentDictionary<string, ISettingsDocumentValidator> _validationValidatorCache =
-        new(StringComparer.OrdinalIgnoreCase);
 
     public SchemaEnvelopeResponse GetSchemaEnvelope(SchemaRequest request) {
         try {
@@ -57,11 +50,6 @@ public sealed class HostSchemaService(IHostSettingsModuleCatalog moduleCatalog) 
         }
     }
 
-    public SchemaData GetLoadedFamiliesFilterSchema() {
-        var response = this.GetLoadedFamiliesFilterSchemaEnvelope();
-        return RequireData(response.Ok, response.Message, response.Data);
-    }
-
     public SchemaEnvelopeResponse GetLoadedFamiliesFilterSchemaEnvelope() {
         try {
             var schemaData = this.GetOrCreateSchemaData(
@@ -86,75 +74,6 @@ public sealed class HostSchemaService(IHostSettingsModuleCatalog moduleCatalog) 
                     )
                 ],
                 null
-            );
-        }
-    }
-
-    public FieldOptionsData GetLoadedFamiliesFilterFieldOptions(LoadedFamiliesFilterFieldOptionsRequest request) {
-        var response = this.GetLoadedFamiliesFilterFieldOptionsEnvelope(request);
-        return RequireData(response.Ok, response.Message, response.Data);
-    }
-
-    public ValidationEnvelopeResponse ValidateSettingsEnvelope(ValidateSettingsRequest request) {
-        try {
-            if (!this._moduleCatalog.TryGetModule(request.ModuleKey, out var module)) {
-                var missingModuleIssues = new List<ValidationIssue> {
-                    new(
-                        "$",
-                        null,
-                        "UnknownModule",
-                        "error",
-                        $"Module '{request.ModuleKey}' is not registered.",
-                        "Choose a registered settings module and retry."
-                    )
-                };
-                return new ValidationEnvelopeResponse(
-                    false,
-                    EnvelopeCode.Failed,
-                    $"Module '{request.ModuleKey}' is not registered.",
-                    missingModuleIssues,
-                    new ValidationData(false, missingModuleIssues)
-                );
-            }
-
-            var validator = this._validationValidatorCache.GetOrAdd(
-                module.ModuleKey,
-                _ => new SchemaBackedSettingsDocumentValidator(
-                    module.SettingsType,
-                    SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly
-                )
-            );
-            var validation = validator.Validate(
-                new RuntimeSettingsDocumentId(module.ModuleKey, module.DefaultRootKey, "__host_validation__"),
-                request.SettingsJson,
-                null
-            );
-            var issues = validation.Issues.Select(ToHostValidationIssue).ToList();
-
-            return new ValidationEnvelopeResponse(
-                true,
-                EnvelopeCode.Ok,
-                issues.Count == 0 ? "Validation passed." : "Validation returned issues.",
-                issues,
-                new ValidationData(validation.IsValid, issues)
-            );
-        } catch (Exception ex) {
-            var issues = new List<ValidationIssue> {
-                new(
-                    "$",
-                    null,
-                    "ValidationException",
-                    "error",
-                    ex.Message,
-                    "Verify Revit assembly resolution and settings JSON."
-                )
-            };
-            return new ValidationEnvelopeResponse(
-                false,
-                EnvelopeCode.Failed,
-                GetPrimaryExceptionMessage(ex),
-                issues,
-                new ValidationData(false, issues)
             );
         }
     }
@@ -314,16 +233,6 @@ public sealed class HostSchemaService(IHostSettingsModuleCatalog moduleCatalog) 
         new FieldOptionsData(sourceKey, FieldOptionsMode.Suggestion, true, [])
     );
 
-    private static ValidationIssue ToHostValidationIssue(RuntimeSettingsValidationIssue issue) =>
-        new(
-            issue.Path,
-            null,
-            issue.Code,
-            issue.Severity,
-            issue.Message,
-            issue.Suggestion
-        );
-
     private static string GetPrimaryExceptionMessage(Exception ex) =>
         ex.GetBaseException().Message;
 
@@ -335,12 +244,5 @@ public sealed class HostSchemaService(IHostSettingsModuleCatalog moduleCatalog) 
         }
 
         return string.Join(" --> ", messages.Distinct(StringComparer.Ordinal));
-    }
-
-    private static TData RequireData<TData>(bool ok, string message, TData? data) where TData : class {
-        if (!ok || data == null)
-            throw new InvalidOperationException(message);
-
-        return data;
     }
 }
