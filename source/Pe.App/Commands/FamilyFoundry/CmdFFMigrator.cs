@@ -6,6 +6,7 @@ using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.OperationGroups;
 using Pe.FamilyFoundry.Operations;
 using Pe.FamilyFoundry.OperationSettings;
+using Pe.FamilyFoundry.Resolution;
 using Pe.FamilyFoundry.Snapshots;
 using Pe.Global;
 using Pe.Global.Revit.Lib;
@@ -264,18 +265,25 @@ public class CmdFFMigrator : IExternalCommand {
             .SelectMany(m => m.CurrNames)
             .Concat(apsParamNames);
         var internalParams = BuildInternalParams(pClone)
-            .Where(internalParam => pClone.AddAndSetParams.Parameters.All(existing =>
+            .Where(internalParam => pClone.AddFamilyParams.Parameters.All(existing =>
                 !string.Equals(existing.Name, internalParam.Name, StringComparison.OrdinalIgnoreCase)))
             .ToList();
-        pClone.AddAndSetParams.AddParameters(internalParams);
+        pClone.AddFamilyParams.AddParameters(internalParams);
+        var additionalReferences = KnownParamPlanBuilder.CollectReferencedParameterNames(pClone.MakeElectricalConnector);
+        var knownParamPlan = KnownParamPlanBuilder.Compile(
+            pClone.AddFamilyParams,
+            pClone.SetKnownParams,
+            apsParamData,
+            additionalReferences);
         var apsAndAddedParamNames = apsParamNames
-            .Concat(pClone.AddAndSetParams.Parameters.Select(p => p.Name))
+            .Concat(knownParamPlan.ResolvedFamilyParams.Parameters.Select(p => p.Name))
             .ToList();
 
         return new OperationQueue()
             .Add(new CleanFamilyDocument(pClone.CleanFamilyDocument, mappingDataAllNames))
             .Add(new AddAndMapSharedParams(pClone.AddAndMapSharedParams, apsParamData))
-            .Add(new AddAndSetParams(pClone.AddAndSetParams))
+            .Add(new AddFamilyParams(knownParamPlan.ResolvedFamilyParams))
+            .Add(new SetKnownParams(knownParamPlan.ResolvedAssignments, knownParamPlan.Catalog))
             .Add(new MakeElecConnector(pClone.MakeElectricalConnector))
             .Add(new PurgeParams(pClone.CleanFamilyDocument.ResolvedPurgeParamsSettings, apsAndAddedParamNames))
             .Add(new SortParams(pClone.SortParams));
@@ -292,17 +300,24 @@ public class CmdFFMigrator : IExternalCommand {
         return clone ?? throw new InvalidOperationException("Failed to clone ProfileRemap settings.");
     }
 
-    private static List<ParamSettingModel> BuildInternalParams(ProfileRemap profile) {
-        List<ParamSettingModel> paramList = [
+    private static List<FamilyParamDefinitionModel> BuildInternalParams(ProfileRemap profile) {
+        List<FamilyParamDefinitionModel> paramList = [
             new() {
                 Name = "_FOUNDRY LAST PROCESSED AT",
                 PropertiesGroup = new ForgeTypeId(""),
                 DataType = SpecTypeId.String.Text,
-                IsInstance = false,
-                ValueOrFormula = $"\"{DateTime.Now:yyyy_MM_dd HH:mm:ss}\"",
-                SetAs = ParamSettingMode.Formula
+                IsInstance = false
             }
         ];
+
+        if (profile.SetKnownParams.GlobalAssignments.All(existing =>
+                !string.Equals(existing.Parameter, "_FOUNDRY LAST PROCESSED AT", StringComparison.OrdinalIgnoreCase))) {
+            profile.SetKnownParams.GlobalAssignments.Add(new GlobalParamAssignment {
+                Parameter = "_FOUNDRY LAST PROCESSED AT",
+                Kind = ParamAssignmentKind.Formula,
+                Value = $"\"{DateTime.Now:yyyy_MM_dd HH:mm:ss}\""
+            });
+        }
 
         if (!profile.MakeElectricalConnector.Enabled)
             return paramList;
@@ -312,20 +327,31 @@ public class CmdFFMigrator : IExternalCommand {
         var apparentPowerName = profile.MakeElectricalConnector.SourceParameterNames.ApparentPower;
         var mcaName = profile.MakeElectricalConnector.SourceParameterNames.MinimumCircuitAmpacity;
 
-        return [
-            new ParamSettingModel {
-                Name = numberOfPolesName,
-                ValueOrFormula =
-                    $"if({voltageName} = 120, 1, if({voltageName} = 208, 2, (if({voltageName} = 240, 2, 1))))",
-                SetAs = ParamSettingMode.Formula
-            },
-            new ParamSettingModel {
-                Name = apparentPowerName,
-                ValueOrFormula = $"{voltageName} * {mcaName} * 0.8 * if({numberOfPolesName} = 3, sqrt(3), 1)",
-                SetAs = ParamSettingMode.Formula
-            },
-            .. paramList
-        ];
+        if (profile.SetKnownParams.GlobalAssignments.All(existing =>
+                !string.Equals(existing.Parameter, numberOfPolesName, StringComparison.OrdinalIgnoreCase))) {
+            profile.SetKnownParams.GlobalAssignments.Add(new GlobalParamAssignment {
+                Parameter = numberOfPolesName,
+                Kind = ParamAssignmentKind.Formula,
+                Value = $"if({voltageName} = 120, 1, if({voltageName} = 208, 2, (if({voltageName} = 240, 2, 1))))"
+            });
+        }
+
+        if (profile.SetKnownParams.GlobalAssignments.All(existing =>
+                !string.Equals(existing.Parameter, apparentPowerName, StringComparison.OrdinalIgnoreCase))) {
+            profile.SetKnownParams.GlobalAssignments.Add(new GlobalParamAssignment {
+                Parameter = apparentPowerName,
+                Kind = ParamAssignmentKind.Formula,
+                Value = $"{voltageName} * {mcaName} * 0.8 * if({numberOfPolesName} = 3, sqrt(3), 1)"
+            });
+        }
+
+        if (!KnownParamResolver.IsPeParameterName(numberOfPolesName))
+            paramList.Insert(0, new FamilyParamDefinitionModel { Name = numberOfPolesName });
+
+        if (!KnownParamResolver.IsPeParameterName(apparentPowerName))
+            paramList.Insert(0, new FamilyParamDefinitionModel { Name = apparentPowerName });
+
+        return paramList;
     }
 
     internal static string ResolveProfileFilePath(string relativePath, string? subDirectory = null) =>

@@ -6,15 +6,13 @@ using Pe.FamilyFoundry.OperationSettings;
 namespace Pe.FamilyFoundry.Operations;
 
 /// <summary>
-///     Creates missing family parameters from AddAndSetParamsSettings and sets tooltips.
-///     Uses the PropertiesGroup/DataType/IsInstance from ParamSettingModel.
+///     Creates missing family parameters from AddFamilyParamsSettings and sets tooltips.
 ///     Sets tooltips for family parameters (skips shared/built-in parameters).
-///     Only used when CreateIfMissing=true in the settings.
 /// </summary>
-public class AddFamilyParams(AddAndSetParamsSettings settings)
-    : DocOperation<AddAndSetParamsSettings>(settings) {
+public class AddFamilyParams(AddFamilyParamsSettings settings)
+    : DocOperation<AddFamilyParamsSettings>(settings) {
     public override string Description =>
-        "Create missing family parameters and set tooltips from AddAndSetParams settings.";
+        "Create missing family parameters and set tooltips from AddFamilyParams settings.";
 
     public override OperationLog Execute(FamilyDocument doc,
         FamilyProcessingContext processingContext,
@@ -22,7 +20,6 @@ public class AddFamilyParams(AddAndSetParamsSettings settings)
         var logs = new List<LogEntry>();
         var fm = doc.FamilyManager;
 
-        // Process each parameter setting
         foreach (var p in this.Settings.Parameters) {
             var existingParam = fm.FindParameter(p.Name);
 

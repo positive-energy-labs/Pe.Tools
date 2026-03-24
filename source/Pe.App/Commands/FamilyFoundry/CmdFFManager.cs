@@ -4,6 +4,7 @@ using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.OperationGroups;
 using Pe.FamilyFoundry.Operations;
 using Pe.FamilyFoundry.OperationSettings;
+using Pe.FamilyFoundry.Resolution;
 using Pe.FamilyFoundry.Snapshots;
 using Pe.Global;
 using Pe.Global.Revit.Lib;
@@ -13,10 +14,7 @@ using Pe.SettingsCatalog.Revit;
 using Pe.SettingsCatalog.Revit.FamilyFoundry;
 using Pe.StorageRuntime.Revit.Modules;
 using Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
-using Serilog;
 using Serilog.Events;
-using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 
 namespace Pe.Tools.Commands.FamilyFoundry;
@@ -120,67 +118,44 @@ public class CmdFFManager : IExternalCommand {
             new() { Strength = RpStrength.CenterFB, Name = "Center", Color = new Color(115, 0, 253) }
         };
 
-        var hasProcessedAtParam = profile.AddAndSetParams.Parameters.Any(p =>
+        var hasProcessedAtParam = profile.AddFamilyParams.Parameters.Any(p =>
             string.Equals(p.Name, "_FOUNDRY LAST PROCESSED AT", StringComparison.OrdinalIgnoreCase));
+        var hasProcessedAtAssignment = profile.SetKnownParams.GlobalAssignments.Any(assignment =>
+            string.Equals(assignment.Parameter, "_FOUNDRY LAST PROCESSED AT", StringComparison.OrdinalIgnoreCase));
 
         if (!hasProcessedAtParam) {
-            profile.AddAndSetParams.AddParameters([
-                new ParamSettingModel {
+            profile.AddFamilyParams.AddParameters([
+                new FamilyParamDefinitionModel {
                     Name = "_FOUNDRY LAST PROCESSED AT",
-                    DataType = SpecTypeId.String.Text,
-                    ValueOrFormula = $"\"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\"",
-                    SetAs = ParamSettingMode.Formula                }
+                    DataType = SpecTypeId.String.Text
+                }
             ]);
         }
 
-        // Extract parameters needed for dimension labeling from RefPlane specs
-        var dimLabelParamsSettings = ExtractDimLabelParams(profile);
+        if (!hasProcessedAtAssignment) {
+            profile.SetKnownParams.GlobalAssignments.Add(new GlobalParamAssignment {
+                Parameter = "_FOUNDRY LAST PROCESSED AT",
+                Kind = ParamAssignmentKind.Formula,
+                Value = $"\"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\""
+            });
+        }
+
+        var additionalReferences = KnownParamPlanBuilder.CollectReferencedParameterNames(profile.MakeRefPlaneAndDims)
+            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(profile.MakeConstrainedExtrusions))
+            .ToList();
+        var knownParamPlan = KnownParamPlanBuilder.Compile(
+            profile.AddFamilyParams,
+            profile.SetKnownParams,
+            apsParamData,
+            additionalReferences);
 
         return new OperationQueue()
             .Add(new AddSharedParams(apsParamData))
-            .Add(new AddFamilyParams(dimLabelParamsSettings))  // Create dimension label params FIRST (no values)
+            .Add(new AddFamilyParams(knownParamPlan.ResolvedFamilyParams))
             .Add(new MakeRefPlanesAndDims(profile.MakeRefPlaneAndDims))
             .Add(new MakeConstrainedExtrusions(profile.MakeConstrainedExtrusions))
-            .Add(new AddAndSetParams(profile.AddAndSetParams, true))
+            .Add(new SetKnownParams(knownParamPlan.ResolvedAssignments, knownParamPlan.Catalog, true))
             .Add(new MakeRefPlaneSubcategories(specs))
             .Add(new SortParams(new SortParamsSettings()));
-    }
-
-    /// <summary>
-    ///     Extracts parameter names from MirrorSpecs and OffsetSpecs and finds their settings
-    ///     in AddAndSetParams. These parameters are needed before dimension labeling.
-    /// </summary>
-    private static AddAndSetParamsSettings ExtractDimLabelParams(ProfileFamilyManager profile) {
-        // Collect all parameter names referenced in RefPlane specs
-        var paramNames = new List<string>();
-        paramNames.AddRange(profile.MakeRefPlaneAndDims.MirrorSpecs
-            .Where(s => !string.IsNullOrEmpty(s.Parameter))
-            .Select(s => s.Parameter));
-        paramNames.AddRange(profile.MakeRefPlaneAndDims.OffsetSpecs
-            .Where(s => !string.IsNullOrEmpty(s.Parameter))
-            .Select(s => s.Parameter));
-
-        var distinctParamNames = paramNames.Distinct().ToList();
-
-        Log.Debug(
-            "[ExtractDimLabelParams] Found {ParamCount} dimension label params: {ParamNames}",
-            distinctParamNames.Count,
-            string.Join(", ", distinctParamNames));
-
-        // Find the corresponding parameter settings from AddAndSetParams
-        var dimLabelParamSettings = profile.AddAndSetParams.Parameters
-            .Where(p => distinctParamNames.Contains(p.Name))
-            .ToList();
-
-        Log.Debug(
-            "[ExtractDimLabelParams] Extracted {SettingCount} param settings for dimension labeling",
-            dimLabelParamSettings.Count);
-
-        return new AddAndSetParamsSettings {
-            Enabled = dimLabelParamSettings.Count > 0,
-            CreateFamParamIfMissing = true,
-            OverrideExistingValues = false,  // Don't set values yet, just create params
-            Parameters = dimLabelParamSettings
-        };
     }
 }

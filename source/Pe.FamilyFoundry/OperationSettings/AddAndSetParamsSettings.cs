@@ -9,58 +9,44 @@ using System.ComponentModel.DataAnnotations;
 namespace Pe.FamilyFoundry.OperationSettings;
 
 [JsonConverter(typeof(StringEnumConverter))]
-public enum ParamSettingMode {
+public enum ParamAssignmentKind {
     Value,
     Formula
 }
 
 /// <summary>
-///     Parameter setting model for parameter metadata plus optional global value/formula.
-///     Inherits parameter definition properties from ParamDefinitionBase.
+///     Family parameter definition metadata used for parameter creation and tooltip configuration.
+///     PE_ parameters are not valid family parameter definitions.
 /// </summary>
-public record ParamSettingModel : ParamDefinitionBase {
-    // Note: Name, IsInstance, PropertiesGroup, DataType inherited from ParamDefinitionBase
-
-    /// <summary>
-    ///     Global value or formula to apply to all family types.
-    ///     If null, this parameter may still receive per-type values from AddAndSetParamsSettings.PerTypeValuesTable.
-    /// </summary>
-    [Description(
-        "Global value or formula to apply to all family types. " +
-        "Unit-formatted strings (e.g., \"10'\", \"120V\", \"35 SF\") are fully supported. " +
-        "By default, this is set as a formula (even if it contains no parameter references). " +
-        "Set SetAs=false to set as a value instead. " +
-        "If null, per-type values can be supplied through AddAndSetParamsSettings.PerTypeValuesTable.")]
-    public string? ValueOrFormula { get; init; } = null;
-
-    /// <summary>
-    ///     Whether ValueOrFormula should be set as a formula (true) or a value (false).
-    ///     Only applicable when ValueOrFormula is set. Ignored when parameter values come from PerTypeValuesTable.
-    /// </summary>
-    [Description(
-        "Whether ValueOrFormula should be set as a formula or a value (default is formula)." +
-        "Note that like you can set a value (e.g. \"120V\") as a formula" +
-        "you can also set a formula as a value (e.g \"length1 + length2\")." +
-        "Under the hood this sets then unsets the formula, which results with every " +
-        "family type containing the would-be results of the formula. " +
-        "\n Of course you can still set a value as a value and a formula as a formula")]
-    [Required]
-    public ParamSettingMode SetAs { get; init; } = ParamSettingMode.Formula;
-
-    /// <summary>
-    ///     Tooltip/description shown in Revit UI. Only applies to family parameters (not shared/built-in).
-    /// </summary>
+public sealed record FamilyParamDefinitionModel : ParamDefinitionBase {
     [Description(
         "Tooltip/description shown in Revit UI and properties palette. Only applies to family parameters (not shared or built-in parameters).")]
-    public string? Tooltip { get; init; } = null;
+    public string? Tooltip { get; init; }
+}
+
+/// <summary>
+///     Uniform assignment applied to all family types.
+/// </summary>
+public sealed record GlobalParamAssignment {
+    [Description("The parameter name receiving the global assignment.")]
+    [Required]
+    public string Parameter { get; init; } = string.Empty;
+
+    [Description("Whether the assignment should be set as a literal value or a formula.")]
+    [Required]
+    public ParamAssignmentKind Kind { get; init; } = ParamAssignmentKind.Formula;
+
+    [Description(
+        "The value or formula to assign to the parameter. Unit-formatted strings are supported.")]
+    [Required]
+    public string Value { get; init; } = string.Empty;
 }
 
 /// <summary>
 ///     Per-type table row with a strongly-typed parameter name and dynamic type columns.
-///     Dynamic family type columns are captured by JsonExtensionData and serialized flat.
 /// </summary>
-public record PerTypeValueRow {
-    [Description("The parameter name for this per-type value row.")]
+public sealed record PerTypeAssignmentRow {
+    [Description("The parameter name for this per-type assignment row.")]
     [Required]
     public string Parameter { get; init; } = string.Empty;
 
@@ -69,61 +55,81 @@ public record PerTypeValueRow {
         new Dictionary<string, JToken>(StringComparer.Ordinal);
 }
 
-public class AddAndSetParamsSettings : IOperationSettings {
-    public const string PerTypeValuesTableParameterColumn = "Parameter";
-
-    [Description("Overwrite a family's existing parameter value/s if they already exist.")]
-    public bool OverrideExistingValues { get; init; } = true;
-
-    [Description("Create a family parameter if it is missing.")]
-    public bool CreateFamParamIfMissing { get; init; } = true;
-
+public sealed class AddFamilyParamsSettings : IOperationSettings {
     [Description(
-        "List of parameters to create and/or set. " +
-        "Use ValueOrFormula for global value/formula behavior, or leave it null and provide values in PerTypeValuesTable.")]
-    public List<ParamSettingModel> Parameters { get; init; } = [];
-
-    [Description(
-        "Optional table of per-type values. " +
-        $"Each row must include a '{PerTypeValuesTableParameterColumn}' column containing the parameter name. " +
-        "All other columns are treated as family type names and their cell values are set as per-type values." +
-        "Unit-formatted strings (e.g., \"10'\", \"120V\", \"Yes\", \"No\") are fully supported. " +
-        "Values are always set as values (not formulas). " +
-        "Mutually exclusive with ValueOrFormula.")]
-    [UniformChildKeys]
-    public List<PerTypeValueRow> PerTypeValuesTable { get; init; } = [];
+        "Definition metadata for family parameters to create and/or configure. " +
+        "PE_ parameters are invalid here because they must come from APS/shared parameter provisioning.")]
+    public List<FamilyParamDefinitionModel> Parameters { get; init; } = [];
 
     public bool Enabled { get; init; } = true;
 
-    public void AddParameters(List<ParamSettingModel> parameters) => this.Parameters.AddRange(parameters);
+    public void AddParameters(List<FamilyParamDefinitionModel> parameters) => this.Parameters.AddRange(parameters);
+}
 
-    public Dictionary<string, Dictionary<string, string>> GetPerTypeValuesByParameter() {
+public sealed class SetKnownParamsSettings : IOperationSettings {
+    public const string PerTypeAssignmentsTableParameterColumn = "Parameter";
+
+    [Description("Overwrite a family's existing parameter value(s) if they already exist.")]
+    public bool OverrideExistingValues { get; init; } = true;
+
+    [Description(
+        "Optional global assignments applied uniformly to all family types. " +
+        "Assignments can be set as values or formulas.")]
+    public List<GlobalParamAssignment> GlobalAssignments { get; init; } = [];
+
+    [Description(
+        "Optional table of per-type values. " +
+        $"Each row must include a '{PerTypeAssignmentsTableParameterColumn}' column containing the parameter name. " +
+        "All other columns are treated as family type names and their cell values are set as per-type values. " +
+        "Values are always set as values, never formulas.")]
+    [UniformChildKeys]
+    public List<PerTypeAssignmentRow> PerTypeAssignmentsTable { get; init; } = [];
+
+    public bool Enabled { get; init; } = true;
+
+    public Dictionary<string, GlobalParamAssignment> GetGlobalAssignmentsByParameter() {
+        var assignments = new Dictionary<string, GlobalParamAssignment>(StringComparer.Ordinal);
+
+        foreach (var assignment in this.GlobalAssignments) {
+            var parameterName = assignment.Parameter?.Trim();
+            if (string.IsNullOrWhiteSpace(parameterName)) {
+                throw new InvalidOperationException("Global assignment is missing required parameter name.");
+            }
+
+            if (!assignments.TryAdd(parameterName, assignment with { Parameter = parameterName })) {
+                throw new InvalidOperationException(
+                    $"Duplicate global assignment for parameter '{parameterName}'.");
+            }
+        }
+
+        return assignments;
+    }
+
+    public Dictionary<string, Dictionary<string, string>> GetPerTypeAssignmentsByParameter() {
         var valuesByParameter = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
-        if (this.PerTypeValuesTable.Count == 0) return valuesByParameter;
+        if (this.PerTypeAssignmentsTable.Count == 0) return valuesByParameter;
 
-        for (var rowIndex = 0; rowIndex < this.PerTypeValuesTable.Count; rowIndex++) {
-            var row = this.PerTypeValuesTable[rowIndex];
+        for (var rowIndex = 0; rowIndex < this.PerTypeAssignmentsTable.Count; rowIndex++) {
+            var row = this.PerTypeAssignmentsTable[rowIndex];
             var parameterName = row.Parameter?.Trim();
             if (string.IsNullOrWhiteSpace(parameterName)) {
                 throw new InvalidOperationException(
-                    $"Per-type values table row {rowIndex + 1} is missing required '{PerTypeValuesTableParameterColumn}' value.");
+                    $"Per-type assignments table row {rowIndex + 1} is missing required '{PerTypeAssignmentsTableParameterColumn}' value.");
             }
 
-            var parameterNameKey = parameterName!;
-
-            if (!valuesByParameter.TryGetValue(parameterNameKey, out var valuesPerType)) {
+            if (!valuesByParameter.TryGetValue(parameterName, out var valuesPerType)) {
                 valuesPerType = new Dictionary<string, string>(StringComparer.Ordinal);
-                valuesByParameter[parameterNameKey] = valuesPerType;
+                valuesByParameter[parameterName] = valuesPerType;
             }
 
             foreach (var kvp in row.ValuesByType) {
-                var typeName = kvp.Key;
+                var typeName = kvp.Key?.Trim();
                 var value = kvp.Value?.ToString();
                 if (string.IsNullOrWhiteSpace(typeName) || string.IsNullOrWhiteSpace(value))
                     continue;
                 if (valuesPerType.ContainsKey(typeName)) {
                     throw new InvalidOperationException(
-                        $"Duplicate per-type value for parameter '{parameterName}' and type '{typeName}'.");
+                        $"Duplicate per-type assignment for parameter '{parameterName}' and type '{typeName}'.");
                 }
 
                 valuesPerType[typeName] = value;
@@ -135,14 +141,23 @@ public class AddAndSetParamsSettings : IOperationSettings {
 
     public HashSet<string> GetReferencedFamilyTypeNames() {
         var typeNames = new HashSet<string>(StringComparer.Ordinal);
-        var valuesByParameter = this.GetPerTypeValuesByParameter();
+        var valuesByParameter = this.GetPerTypeAssignmentsByParameter();
 
-        foreach (var kvp in valuesByParameter) {
-            var valuesPerType = kvp.Value;
+        foreach (var valuesPerType in valuesByParameter.Values) {
             foreach (var typeName in valuesPerType.Keys)
                 _ = typeNames.Add(typeName);
         }
 
         return typeNames;
+    }
+
+    public HashSet<string> GetAllReferencedParameterNames() {
+        var parameterNames = this.GetGlobalAssignmentsByParameter().Keys
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var parameterName in this.GetPerTypeAssignmentsByParameter().Keys)
+            _ = parameterNames.Add(parameterName);
+
+        return parameterNames;
     }
 }

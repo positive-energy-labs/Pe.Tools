@@ -4,6 +4,8 @@ using Pe.Extensions.FamDocument;
 using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.FamilyFoundry.OperationSettings;
+using Pe.FamilyFoundry.Resolution;
+using Pe.FamilyFoundry.Serialization;
 using Pe.FamilyFoundry.Snapshots;
 using Pe.Global.Revit.Ui;
 using Pe.SettingsCatalog.Revit.FamilyFoundry;
@@ -99,13 +101,31 @@ public class CmdFFManagerSnapshot : IExternalCommand {
     ///     Converts a FamilySnapshot to a ProfileFamilyManager that can be used by CmdFFManager.
     /// </summary>
     private static ProfileFamilyManager ConvertSnapshotToProfile(FamilySnapshot snapshot) {
-        var (paramSettings, perTypeValuesTable) = ConvertParamsToSettings(snapshot.Parameters?.Data ?? []);
+        var paramSnapshots = snapshot.Parameters?.Data ?? [];
+        var exportedParams = FamilyParamProfileAdapter.CreateFromSnapshots(paramSnapshots);
         var mirrorSpecs = snapshot.RefPlanesAndDims?.MirrorSpecs ?? [];
         var offsetSpecs = snapshot.RefPlanesAndDims?.OffsetSpecs ?? [];
         var rectangleExtrusions = snapshot.Extrusions?.Rectangles ?? [];
         var circleExtrusions = snapshot.Extrusions?.Circles ?? [];
         var hasRefPlaneSpecs = mirrorSpecs.Count > 0 || offsetSpecs.Count > 0;
         var hasConstrainedExtrusions = rectangleExtrusions.Count > 0 || circleExtrusions.Count > 0;
+        var additionalReferences = KnownParamPlanBuilder.CollectReferencedParameterNames(
+                new MakeRefPlaneAndDimsSettings { MirrorSpecs = mirrorSpecs, OffsetSpecs = offsetSpecs })
+            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(
+                new MakeConstrainedExtrusionsSettings { Rectangles = rectangleExtrusions, Circles = circleExtrusions }))
+            .ToList();
+        var referencedSnapshotDefinitions = KnownParamPlanBuilder.BuildFamilyDefinitionsFromSnapshots(
+            paramSnapshots,
+            additionalReferences);
+        var resolvedFamilyParams = KnownParamPlanBuilder.MergeFamilyParamDefinitions(
+            exportedParams.AddFamilyParams,
+            referencedSnapshotDefinitions);
+        var requiredApsParameterNames = exportedParams.SetKnownParams.GetAllReferencedParameterNames()
+            .Concat(additionalReferences)
+            .Where(KnownParamResolver.IsPeParameterName)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
 
         return new ProfileFamilyManager {
             ExecutionOptions = new ExecutionOptions { SingleTransaction = false, OptimizeTypeOperations = true },
@@ -116,57 +136,18 @@ public class CmdFFManagerSnapshot : IExternalCommand {
                 ExcludeNames = new ExcludeFamilies()
             },
             FilterApsParams = new BaseProfileSettings.FilterApsParamsSettings {
-                // Empty - snapshot captures exact parameters, no APS filtering needed
-                IncludeNames = new IncludeSharedParameter(), ExcludeNames = new ExcludeSharedParameter()
+                IncludeNames = new IncludeSharedParameter { Equaling = requiredApsParameterNames },
+                ExcludeNames = new ExcludeSharedParameter()
             },
             MakeRefPlaneAndDims =
                 new MakeRefPlaneAndDimsSettings {
                     Enabled = hasRefPlaneSpecs, MirrorSpecs = mirrorSpecs, OffsetSpecs = offsetSpecs
                 },
-            AddAndSetParams = new AddAndSetParamsSettings {
-                Enabled = paramSettings.Count > 0,
-                CreateFamParamIfMissing = true,
-                OverrideExistingValues = true,
-                Parameters = paramSettings,
-                PerTypeValuesTable = perTypeValuesTable
-            },
+            AddFamilyParams = resolvedFamilyParams,
+            SetKnownParams = exportedParams.SetKnownParams,
             MakeConstrainedExtrusions = new MakeConstrainedExtrusionsSettings {
                 Enabled = hasConstrainedExtrusions, Rectangles = rectangleExtrusions, Circles = circleExtrusions
             }
         };
-    }
-
-    /// <summary>
-    ///     Converts ParamSnapshots to ParamSettingModels for the profile.
-    ///     Returns both parameter models and a transposed per-type values table.
-    /// </summary>
-    private static (List<ParamSettingModel> Parameters, List<PerTypeValueRow> PerTypeValuesTable)
-        ConvertParamsToSettings(List<ParamSnapshot> snapshots) {
-        var parameters = new List<ParamSettingModel>();
-        var perTypeValuesTable = new List<PerTypeValueRow>();
-
-        foreach (var snap in snapshots) {
-            // Skip built-in parameters (cannot be created/managed by profile)
-            if (snap.IsBuiltIn) continue;
-
-            var perTypeRow = snap.ToPerTypeValuesTableRow();
-            var hasGlobalValueOrFormula = !string.IsNullOrWhiteSpace(snap.ValueOrFormula);
-            // Skip params that have no replayable assignment source.
-            if (!hasGlobalValueOrFormula && perTypeRow == null) continue;
-
-            parameters.Add(new ParamSettingModel {
-                Name = snap.Name,
-                IsInstance = snap.IsInstance,
-                PropertiesGroup = snap.PropertiesGroup,
-                DataType = snap.DataType,
-                ValueOrFormula = snap.ValueOrFormula,
-                SetAs = snap.SetAs
-            });
-
-            if (perTypeRow != null)
-                perTypeValuesTable.Add(perTypeRow);
-        }
-
-        return (parameters, perTypeValuesTable);
     }
 }

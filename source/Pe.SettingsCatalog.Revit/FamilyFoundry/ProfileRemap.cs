@@ -16,9 +16,13 @@ public class ProfileRemap : BaseProfileSettings {
     [Required]
     public MapParamsSettings AddAndMapSharedParams { get; init; } = new();
 
-    [Description("Settings for setting parameter values and adding family parameters.")]
+    [Description("Settings for explicit family parameter definitions.")]
     [Required]
-    public AddAndSetParamsSettings AddAndSetParams { get; init; } = new();
+    public AddFamilyParamsSettings AddFamilyParams { get; init; } = new();
+
+    [Description("Settings for setting values/formulas on already-known parameters.")]
+    [Required]
+    public SetKnownParamsSettings SetKnownParams { get; init; } = new();
 
     [Description("Settings for hydrating electrical connectors")]
     [Required]

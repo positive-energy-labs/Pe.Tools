@@ -1,5 +1,6 @@
 using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.FamilyFoundry.OperationSettings;
+using Pe.FamilyFoundry.Serialization;
 using Pe.Global;
 using Pe.Global.PolyFill;
 using Pe.StorageRuntime.Revit;
@@ -306,7 +307,8 @@ public class ProcessingResultBuilder(StorageClient storage) {
     private static void SerializeSnapshotSections(FamilySnapshot snapshot, OutputManager output, string prefix) {
         if (snapshot.Parameters?.Data != null && snapshot.Parameters.Data.Count > 0) {
             var paramsData = snapshot.Parameters.Data;
-            _ = output.Json($"snapshot-parameters-{prefix}.json").Write(ToSettingsCompatibleSnapshot(paramsData));
+            _ = output.Json($"snapshot-parameters-{prefix}.json").Write(
+                FamilyParamProfileAdapter.CreateFromSnapshots(paramsData));
         }
 
         if (snapshot.RefPlanesAndDims != null) {
@@ -322,44 +324,6 @@ public class ProcessingResultBuilder(StorageClient storage) {
             if (hasExtrusions)
                 _ = output.Json($"snapshot-extrusions-{prefix}.json").Write(snapshot.Extrusions);
         }
-    }
-
-    public static List<ParamSnapshot> SortAndOrder(List<ParamSnapshot> snapshots) {
-        snapshots ??= [];
-        return snapshots.Select(s => s with {
-            ValuesPerType = s.ValuesPerType
-                .OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.Ordinal)
-        }).ToList();
-    }
-
-    private static AddAndSetParamsSettings ToSettingsCompatibleSnapshot(List<ParamSnapshot> snapshots) {
-        var ordered = SortAndOrder(snapshots);
-
-        var parameters = ordered
-            .Select(s => new ParamSettingModel {
-                Name = s.Name,
-                IsInstance = s.IsInstance,
-                PropertiesGroup = s.PropertiesGroup,
-                DataType = s.DataType,
-                ValueOrFormula = s.ValueOrFormula,
-                SetAs = s.SetAs
-            })
-            .ToList();
-
-        var perTypeValuesTable = ordered
-            .Select(s => s.ToPerTypeValuesTableRow())
-            .Where(r => r != null)
-            .Select(r => r!)
-            .ToList();
-
-        return new AddAndSetParamsSettings {
-            Enabled = parameters.Count > 0,
-            CreateFamParamIfMissing = true,
-            OverrideExistingValues = true,
-            Parameters = parameters,
-            PerTypeValuesTable = perTypeValuesTable
-        };
     }
 
     private static string SanitizeDirName(string name) {

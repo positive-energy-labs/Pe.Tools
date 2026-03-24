@@ -4,13 +4,13 @@ using Pe.FamilyFoundry.OperationSettings;
 namespace Pe.FamilyFoundry.Operations;
 
 /// <summary>
-///     Creates missing family types referenced in AddAndSetParamsSettings.PerTypeValuesTable columns.
+///     Creates missing family types referenced in SetKnownParamsSettings.PerTypeAssignmentsTable columns.
 ///     Runs as a DocOperation (once per family) to create all missing types upfront.
 /// </summary>
-public class CreateFamilyTypes(AddAndSetParamsSettings settings)
-    : DocOperation<AddAndSetParamsSettings>(settings) {
+public class CreateFamilyTypes(SetKnownParamsSettings settings)
+    : DocOperation<SetKnownParamsSettings>(settings) {
     public override string Description =>
-        "Create missing family types that are referenced in PerTypeValuesTable columns.";
+        "Create missing family types that are referenced in PerTypeAssignmentsTable columns.";
 
     public override OperationLog Execute(
         FamilyDocument famDoc,
@@ -23,7 +23,7 @@ public class CreateFamilyTypes(AddAndSetParamsSettings settings)
 
         if (referencedTypeNames.Count == 0) {
             return new OperationLog(this.Name, [
-                new LogEntry("No types referenced").Skip("No PerTypeValuesTable type columns found")
+                new LogEntry("No types referenced").Skip("No PerTypeAssignmentsTable type columns found")
             ]);
         }
 

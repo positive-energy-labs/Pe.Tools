@@ -6,44 +6,37 @@ using Pe.FamilyFoundry.OperationSettings;
 namespace Pe.FamilyFoundry.Operations;
 
 /// <summary>
-///     Sets parameter values or formulas based on SetAs property.
-///     - If SetAs is true (default) → SetFormula (applies to all types, "locks" the parameter)
-///     - If SetAs is false → SetGlobalValue (fast path for all types at once)
-///     On SetGlobalValue failure, defers to SetParamValuesPerType via GroupContext.
+///     Sets parameter values or formulas from SetKnownParams.GlobalAssignments.
+///     - Formula assignments use SetFormula
+///     - Value assignments use TrySetUnsetFormula as the fast global-value path
+///     Value failures defer to SetParamValuesPerType for per-type fallback.
 /// </summary>
-public class SetParamValues(AddAndSetParamsSettings settings)
-    : DocOperation<AddAndSetParamsSettings>(settings) {
+public class SetParamValues(SetKnownParamsSettings settings)
+    : DocOperation<SetKnownParamsSettings>(settings) {
     public override string Description =>
-        "Set parameter values or formulas based on SetAs property.";
+        "Set parameter values or formulas from SetKnownParams.GlobalAssignments.";
 
-    public override OperationLog Execute(FamilyDocument doc,
+    public override OperationLog Execute(
+        FamilyDocument doc,
         FamilyProcessingContext processingContext,
-        OperationContext groupContext) {
-        if (groupContext is null) { 
+        OperationContext groupContext
+    ) {
+        if (groupContext is null) {
             throw new InvalidOperationException(
                 $"{this.Name} requires a GroupContext (must be used within an OperationGroup)");
         }
 
         var fm = doc.FamilyManager;
-        var paramModelByName = this.Settings.Parameters
-            .Where(p => !string.IsNullOrWhiteSpace(p.Name))
-            .ToDictionary(p => p.Name, StringComparer.Ordinal);
-
+        var assignmentsByName = this.Settings.GetGlobalAssignmentsByParameter();
         var incomplete = groupContext.GetAllInComplete();
-        var data = incomplete.Select(e => {
-            var paramModel = paramModelByName.TryGetValue(e.Key, out var configuredParam)
-                ? configuredParam
-                : new ParamSettingModel { Name = e.Key };
-            return (paramModel, e.Value);
-        });
 
-        foreach (var (p, log) in data) {
-            // Skip when no global value/formula is provided (handled by SetParamValuesPerType via table data)
-            if (string.IsNullOrWhiteSpace(p.ValueOrFormula)) continue;
+        foreach (var (parameterName, log) in incomplete) {
+            if (!assignmentsByName.TryGetValue(parameterName, out var assignment))
+                continue;
 
-            var parameter = fm.FindParameter(p.Name);
+            var parameter = fm.FindParameter(parameterName);
             if (parameter is null) {
-                _ = log.Error($"Parameter '{p.Name}' not found");
+                _ = log.Error($"Parameter '{parameterName}' not found");
                 continue;
             }
 
@@ -52,17 +45,18 @@ public class SetParamValues(AddAndSetParamsSettings settings)
                 continue;
             }
 
-            if (p.SetAs == ParamSettingMode.Formula) {
-                var success = doc.TrySetFormula(parameter, p.ValueOrFormula, out var errMsg);
+            if (assignment.Kind == ParamAssignmentKind.Formula) {
+                var success = doc.TrySetFormula(parameter, assignment.Value, out var errMsg);
                 _ = success
                     ? log.Success("Set formula")
                     : log.Error($"Error setting formula: {errMsg}");
-            } else {
-                var success = doc.TrySetUnsetFormula(parameter, p.ValueOrFormula, out var errMsg);
-                _ = success
-                    ? log.Success("Set global value")
-                    : log.Defer($"Needs per-type fallback, error setting global value: {errMsg}");
+                continue;
             }
+
+            var setValueSuccess = doc.TrySetUnsetFormula(parameter, assignment.Value, out var valueErrMsg);
+            _ = setValueSuccess
+                ? log.Success("Set global value")
+                : log.Defer($"Needs per-type fallback, error setting global value: {valueErrMsg}");
         }
 
         return new OperationLog(this.Name, groupContext.TakeSnapshot());

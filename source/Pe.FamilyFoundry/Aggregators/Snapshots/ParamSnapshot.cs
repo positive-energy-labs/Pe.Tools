@@ -7,7 +7,7 @@ namespace Pe.FamilyFoundry.Aggregators.Snapshots;
 
 /// <summary>
 ///     Base definition for parameter identity and creation metadata.
-///     Shared between ParamSnapshot (audit/replay) and ParamSettingModel (settings).
+///     Shared between ParamSnapshot (audit/replay) and FamilyParamDefinitionModel (settings).
 ///     Contains the minimum information needed to identify or create a parameter.
 /// </summary>
 public record ParamDefinitionBase {
@@ -48,23 +48,10 @@ public record ParamSnapshot : ParamDefinitionBase {
     public Guid? SharedGuid { get; init; } = null;
     public StorageType StorageType { get; init; }
 
-    /// <summary>
-    ///     Settings-compatible value field.
-    ///     - Formula when formula exists.
-    ///     - Uniform value when all non-empty type values are the same.
-    ///     - Null when values vary by type (use PerTypeValuesTable row).
-    /// </summary>
-    public string? ValueOrFormula =>
+    public string? TryGetUniformValueOrFormula() =>
         !string.IsNullOrWhiteSpace(this.Formula)
             ? this.Formula
             : this.TryGetUniformNonEmptyValue();
-
-    /// <summary>
-    ///     Settings-compatible assignment mode.
-    ///     True only when this snapshot represents a formula.
-    /// </summary>
-    public ParamSettingMode SetAs =>
-        !string.IsNullOrWhiteSpace(this.Formula) ? ParamSettingMode.Formula : ParamSettingMode.Value;
 
     /// <summary>Checks if a parameter has a (non-empty) value for all family types.</summary>
     public bool HasValueForAllTypes() {
@@ -89,9 +76,9 @@ public record ParamSnapshot : ParamDefinitionBase {
 
     /// <summary>
     ///     Builds a settings-compatible per-type table row when values are not representable
-    ///     by ValueOrFormula (non-uniform values with no formula).
+    ///     by a uniform global assignment.
     /// </summary>
-    public PerTypeValueRow? ToPerTypeValuesTableRow() {
+    public PerTypeAssignmentRow? ToPerTypeAssignmentRow() {
         if (!string.IsNullOrWhiteSpace(this.Formula)) return null;
 
         var nonNullValues = this.ValuesPerType
@@ -101,10 +88,22 @@ public record ParamSnapshot : ParamDefinitionBase {
         if (nonNullValues.Count == 0) return null;
         if (nonNullValues.Values.Distinct(StringComparer.Ordinal).Count() == 1) return null;
 
-        var row = new PerTypeValueRow { Parameter = this.Name };
+        var row = new PerTypeAssignmentRow { Parameter = this.Name };
         foreach (var kv in nonNullValues)
             row.ValuesByType[kv.Key] = kv.Value;
         return row;
+    }
+
+    public GlobalParamAssignment? ToGlobalAssignment() {
+        var valueOrFormula = this.TryGetUniformValueOrFormula();
+        if (string.IsNullOrWhiteSpace(valueOrFormula))
+            return null;
+
+        return new GlobalParamAssignment {
+            Parameter = this.Name,
+            Kind = !string.IsNullOrWhiteSpace(this.Formula) ? ParamAssignmentKind.Formula : ParamAssignmentKind.Value,
+            Value = valueOrFormula
+        };
     }
 
     private string? TryGetUniformNonEmptyValue() {

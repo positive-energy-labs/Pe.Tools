@@ -292,42 +292,62 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
 
     private static List<string> BuildGenericErrorMessages(Exception ex) {
         if (ex is InvalidOperationException invalidOp &&
-            invalidOp.Message.StartsWith("Duplicate parameter names in AddAndSetParams.Parameters:",
+            invalidOp.Message.StartsWith("Duplicate parameter names in AddFamilyParams.Parameters:",
                 StringComparison.Ordinal)) {
             return new List<string> {
                 invalidOp.Message,
-                "Fix: keep exactly one entry per parameter name under AddAndSetParams.Parameters.",
+                "Fix: keep exactly one entry per parameter name under AddFamilyParams.Parameters.",
                 "Tip: if you define _FOUNDRY LAST PROCESSED AT in the profile, remove duplicate definitions."
             };
         }
 
-        if (ex is InvalidOperationException invalidOpSplitModel &&
-            invalidOpSplitModel.Message.Contains("missing value source", StringComparison.OrdinalIgnoreCase)) {
-            return new List<string> {
-                invalidOpSplitModel.Message,
-                "Fix: for each AddAndSetParams.Parameters item, choose one source:",
-                " - ValueOrFormula for global value/formula, OR",
-                " - a matching AddAndSetParams.PerTypeValuesTable row where Parameter == Name."
-            };
-        }
-
         if (ex is InvalidOperationException invalidOpConflict &&
-            invalidOpConflict.Message.Contains("cannot define both ValueOrFormula and PerTypeValuesTable values",
+            invalidOpConflict.Message.Contains("cannot define both GlobalAssignments and PerTypeAssignmentsTable values",
                 StringComparison.OrdinalIgnoreCase)) {
             return new List<string> {
                 invalidOpConflict.Message,
                 "Fix: remove one source so each parameter uses only one value source.",
-                "Use ValueOrFormula for global assignment, or PerTypeValuesTable for per-type assignment."
+                "Use SetKnownParams.GlobalAssignments for uniform assignments, or SetKnownParams.PerTypeAssignmentsTable for per-type assignment."
             };
         }
 
-        if (ex is InvalidOperationException invalidOpUnknownTableRow &&
-            invalidOpUnknownTableRow.Message.Contains("PerTypeValuesTable contains row(s) for unknown parameter(s)",
+        if (ex is InvalidOperationException invalidOpBlankGlobal &&
+            invalidOpBlankGlobal.Message.Contains("GlobalAssignments contains a blank value",
                 StringComparison.OrdinalIgnoreCase)) {
             return new List<string> {
-                invalidOpUnknownTableRow.Message,
-                "Fix: every PerTypeValuesTable row must reference an existing parameter name.",
-                "Set row.Parameter to exactly match a Name in AddAndSetParams.Parameters."
+                invalidOpBlankGlobal.Message,
+                "Fix: every SetKnownParams.GlobalAssignments row must include a non-empty Value.",
+                "Use SetKnownParams.PerTypeAssignmentsTable when values vary by family type."
+            };
+        }
+
+        if (ex is InvalidOperationException invalidPeFamilyParam &&
+            invalidPeFamilyParam.Message.Contains("invalid family parameter definitions", StringComparison.OrdinalIgnoreCase)) {
+            return new List<string> {
+                invalidPeFamilyParam.Message,
+                "Fix: remove PE_ parameters from AddFamilyParams.Parameters.",
+                "PE_ parameters must be provided by FilterApsParams and assigned through SetKnownParams."
+            };
+        }
+
+        if (ex is InvalidOperationException invalidUnresolved &&
+            invalidUnresolved.Message.Contains("SetKnownParams references", StringComparison.OrdinalIgnoreCase)) {
+            return new List<string> {
+                invalidUnresolved.Message,
+                "Fix: non-PE assignment targets must be defined in AddFamilyParams.Parameters.",
+                "Fix: PE_ assignment targets must be included by FilterApsParams."
+            };
+        }
+
+        if (ex is InvalidOperationException invalidReferenced &&
+            (invalidReferenced.Message.Contains("must be defined in AddFamilyParams.Parameters before it can be used",
+                 StringComparison.OrdinalIgnoreCase) ||
+             invalidReferenced.Message.Contains("is a PE_ parameter but is not available from FilterApsParams",
+                 StringComparison.OrdinalIgnoreCase))) {
+            return new List<string> {
+                invalidReferenced.Message,
+                "Fix: if the referenced parameter is non-PE, add it to AddFamilyParams.Parameters.",
+                "Fix: if the referenced parameter is PE_, include it in FilterApsParams."
             };
         }
 
@@ -335,7 +355,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
             arg.Message.Contains("same key has already been added", StringComparison.OrdinalIgnoreCase)) {
             return new List<string> {
                 $"{arg.GetType().Name}: {arg.Message}",
-                "Likely cause: duplicate keys in profile collections (commonly AddAndSetParams parameter names).",
+                "Likely cause: duplicate keys in profile collections (commonly AddFamilyParams or SetKnownParams parameter names).",
                 "Fix: ensure parameter names are unique per profile."
             };
         }

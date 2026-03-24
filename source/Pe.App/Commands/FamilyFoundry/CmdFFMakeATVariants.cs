@@ -4,6 +4,7 @@ using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.OperationGroups;
 using Pe.FamilyFoundry.Operations;
 using Pe.FamilyFoundry.OperationSettings;
+using Pe.FamilyFoundry.Resolution;
 using Pe.FamilyFoundry.Snapshots;
 using Pe.Global.Revit.Ui;
 using Pe.StorageRuntime.Revit;
@@ -58,7 +59,7 @@ public class CmdFFMakeATVariants : IExternalCommand {
                     var variantSettings = new {
                         VariantName = variantSpec.Name.Trim(),
                         BaseATSettings = new { settings.SecondLetterDict },
-                        SyntheticAddAndSetParamsSettings = ((ATVariantSettings)variantSpec.Profile).SyntheticTag
+                        SyntheticSetKnownParamsSettings = ((ATVariantSettings)variantSpec.Profile).SyntheticTag
                     };
 
                     // Update builder with variant-specific settings and metadata
@@ -129,23 +130,23 @@ public class ATVariantQueueFactory {
         var perTypeValues = this._baseSettings.SecondLetterDict
             .ToDictionary(kv => kv.Key, kv => descriptor.SystemLetter + kv.Value + "X-#", StringComparer.Ordinal);
 
-        // Create the parameter settings for PE_G___TagInstance
-        var paramSettings = new ParamSettingModel { Name = "PE_G___TagInstance", SetAs = ParamSettingMode.Value };
-
-        var perTypeRow = new PerTypeValueRow { Parameter = paramSettings.Name };
+        var perTypeRow = new PerTypeAssignmentRow { Parameter = "PE_G___TagInstance" };
 
         foreach (var (typeName, value) in perTypeValues)
             perTypeRow.ValuesByType[typeName] = value;
 
         // Build synthetic settings that will be logged
-        var syntheticSettings = new AddAndSetParamsSettings {
-            Parameters = [paramSettings], PerTypeValuesTable = [perTypeRow]
+        var syntheticSettings = new SetKnownParamsSettings {
+            PerTypeAssignmentsTable = [perTypeRow]
         };
+        var knownParamCatalog = new KnownParamCatalog(
+            new Dictionary<string, FamilyParamDefinitionModel>(StringComparer.Ordinal),
+            new HashSet<string>(["PE_G___TagInstance"], StringComparer.Ordinal));
 
         // Build operation queue
         var queue = new OperationQueue()
             .Add(new SetDuctConnectorSettings(descriptor.ConnectorConfig))
-            .Add(new AddAndSetParams(syntheticSettings));
+            .Add(new SetKnownParams(syntheticSettings, knownParamCatalog));
 
         // Create profile with synthetic settings
         var profile = this._baseSettings.WithSynthesizedTag(syntheticSettings);
@@ -166,9 +167,9 @@ public class ATVariantSettings : BaseProfileSettings {
         { "Nozzle", 'N' }
     };
 
-    public AddAndSetParamsSettings? SyntheticTag { get; set; }
+    public SetKnownParamsSettings? SyntheticTag { get; set; }
 
-    public ATVariantSettings WithSynthesizedTag(AddAndSetParamsSettings settings) {
+    public ATVariantSettings WithSynthesizedTag(SetKnownParamsSettings settings) {
         this.SyntheticTag = settings;
         return this;
     }

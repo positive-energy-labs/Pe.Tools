@@ -55,23 +55,13 @@ internal sealed class ExcludeSharedParameterSchemaDefinition : SettingsSchemaDef
     }
 }
 
-internal sealed class ParamDefinitionBaseSchemaDefinition : SettingsSchemaDefinition<ParamDefinitionBase> {
-    public override void Configure(ISettingsSchemaBuilder<ParamDefinitionBase> builder) =>
-        builder.Property(item => item.Name, property => property.UseFieldOptions<SharedParameterNamesProvider>());
-}
-
-internal sealed class PerTypeValueRowSchemaDefinition : SettingsSchemaDefinition<PerTypeValueRow> {
-    public override void Configure(ISettingsSchemaBuilder<PerTypeValueRow> builder) =>
-        builder.Property(item => item.Parameter, property => property.UseFieldOptions<SharedParameterNamesProvider>());
-}
-
-internal sealed class AddAndSetParamsSettingsSchemaDefinition : SettingsSchemaDefinition<AddAndSetParamsSettings> {
-    public override void Configure(ISettingsSchemaBuilder<AddAndSetParamsSettings> builder) =>
-        builder.Property(item => item.PerTypeValuesTable, property => property.Ui(ui => {
+internal sealed class SetKnownParamsSettingsSchemaDefinition : SettingsSchemaDefinition<SetKnownParamsSettings> {
+    public override void Configure(ISettingsSchemaBuilder<SetKnownParamsSettings> builder) =>
+        builder.Property(item => item.PerTypeAssignmentsTable, property => property.Ui(ui => {
             ui.Renderer(SchemaUiRendererKeys.Table);
             ui.Layout(layout => layout.Section("Parameters"));
             ui.Behavior(behavior => {
-                behavior.FixedColumns<PerTypeValueRow>(row => row.Parameter);
+                behavior.FixedColumns<PerTypeAssignmentRow>(row => row.Parameter);
                 behavior.DynamicColumnsFromAdditionalProperties();
                 behavior.MissingValue(string.Empty);
                 behavior.DynamicColumnOrder<FamilyManagerTypesSchemaUiDynamicColumnOrderSource>();
@@ -100,9 +90,7 @@ internal static class FamilyFoundrySchemaDefinitionBootstrapper {
         SettingsSchemaDefinitionRegistry.Shared.Register(new ExcludeFamiliesSchemaDefinition());
         SettingsSchemaDefinitionRegistry.Shared.Register(new IncludeSharedParameterSchemaDefinition());
         SettingsSchemaDefinitionRegistry.Shared.Register(new ExcludeSharedParameterSchemaDefinition());
-        SettingsSchemaDefinitionRegistry.Shared.Register(new ParamDefinitionBaseSchemaDefinition());
-        SettingsSchemaDefinitionRegistry.Shared.Register(new PerTypeValueRowSchemaDefinition());
-        SettingsSchemaDefinitionRegistry.Shared.Register(new AddAndSetParamsSettingsSchemaDefinition());
+        SettingsSchemaDefinitionRegistry.Shared.Register(new SetKnownParamsSettingsSchemaDefinition());
         SettingsSchemaDefinitionRegistry.Shared.Register(new MakeElecConnectorParametersSchemaDefinition());
     }
 }
