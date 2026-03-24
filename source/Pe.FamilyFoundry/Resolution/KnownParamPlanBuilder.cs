@@ -1,3 +1,4 @@
+using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Operations;
 using Pe.FamilyFoundry.Snapshots;

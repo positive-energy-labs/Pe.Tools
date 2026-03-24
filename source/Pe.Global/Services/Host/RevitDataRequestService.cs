@@ -16,14 +16,17 @@ internal sealed class RevitDataRequestService {
     private static readonly TimeSpan BindingsCacheWindow = TimeSpan.FromSeconds(10);
 
     private readonly RevitDataCache _cache;
+    private readonly Action<string>? _notificationSink;
     private readonly RevitTaskService _revitTaskService;
 
     public RevitDataRequestService(
         RevitTaskService revitTaskService,
-        RevitDataCache cache
+        RevitDataCache cache,
+        Action<string>? notificationSink = null
     ) {
         this._revitTaskService = revitTaskService;
         this._cache = cache;
+        this._notificationSink = notificationSink;
     }
 
     public Task<LoadedFamiliesCatalogEnvelopeResponse> GetLoadedFamiliesCatalogEnvelopeAsync(
@@ -133,7 +136,11 @@ internal sealed class RevitDataRequestService {
             return documentResult.ToMatrixFailureEnvelope();
 
         try {
-            var data = LoadedFamiliesMatrixCollector.Collect(documentResult.Data!, filterValidation.Data);
+            var data = LoadedFamiliesMatrixCollector.Collect(
+                documentResult.Data!,
+                filterValidation.Data,
+                this.PublishLoadedFamilyMatrixProgress
+            );
             return HostEnvelopeResults.Success(
                 data,
                 EnvelopeCode.Ok,
@@ -221,6 +228,12 @@ internal sealed class RevitDataRequestService {
             await Task.CompletedTask;
         });
         return result!;
+    }
+
+    private void PublishLoadedFamilyMatrixProgress(string familyName, TimeSpan elapsed) {
+        this._notificationSink?.Invoke(
+            $"Family matrix collected '{familyName}' in {elapsed.TotalMilliseconds:F0} ms."
+        );
     }
 
     private static HostEnvelopeResult<RevitDocument> GetActiveProjectDocument() {

@@ -5,7 +5,7 @@ namespace Pe.FamilyFoundry.Resolution;
 
 public sealed record KnownParamCatalog(
     IReadOnlyDictionary<string, FamilyParamDefinitionModel> FamilyDefinitions,
-    IReadOnlySet<string> SharedParameterNames
+    HashSet<string> SharedParameterNames
 );
 
 public static class KnownParamResolver {

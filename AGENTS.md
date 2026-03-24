@@ -29,14 +29,25 @@ best practices should be followed:
 
 ## Sandbox: Testing & POC'ing & Exploring
 
-The easiest way to test is to write a "Task" for the Task Palette. This lets us
-run oneoff code to test and verify soltuions before fully implementing. Common
-use cases are:
+The easiest way to test is by writing test scripts into
+C:\Users\kaitp\OneDrive\Documents\ArchSmarter\Launchpad VS
+Code\LaunchpadScripts. This is a sandbox env that allows us to run arbitrary
+code, see C:\Users\kaitp\OneDrive\Documents\ArchSmarter\Launchpad VS
+Code\.cursor\rules\launchpad-development.mdc for reference on usage.
+
+Usually when you want to test something in this project, you have to make a
+whole new IExternalCommand, this sucks. The sandbox env allows us to not pollute
+our main project codebase with test code if for example you want to
 
 - compare the performance of different approaches to a problem
 - use reflection to print all members of a class or enum
 - POC/MVP a core library method
 - verify/debug that a Revit API method behaves as expected
+- or anything adjacent to this
+
+In the event that a test needs deep access to Pe.App internals, and Launchpad is not working, resort to writing a "Task" for the Task Palette. avoid this path though because it pollutes our repo.
+
+
 
 ## Environment
 
