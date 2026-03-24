@@ -98,7 +98,11 @@ internal sealed class BridgeAgent : IDisposable {
         );
         this._requestService = new RequestService(revitTaskService, this._moduleRegistry, this._throttleGate);
         this._revitDataCache = new RevitDataCache();
-        this._revitDataRequestService = new RevitDataRequestService(revitTaskService, this._revitDataCache);
+        this._revitDataRequestService = new RevitDataRequestService(
+            revitTaskService,
+            this._revitDataCache,
+            this.PublishNotification
+        );
         this._bridgeOperationRegistry = new BridgeOperationRegistry();
         this._bridgeOperationContext = new BridgeOperationContext(this._requestService, this._revitDataRequestService);
         this._bridgeRequestDispatcher = new BridgeRequestDispatcher(this._bridgeOperationRegistry, this._serializerSettings);
@@ -309,6 +313,28 @@ internal sealed class BridgeAgent : IDisposable {
         var frame = new BridgeFrame(
             BridgeFrameKind.Event,
             Event: new BridgeEvent(SettingsHostEventNames.DocumentChanged, payloadJson)
+        );
+        await this.WriteFrameAsync(frame, this._shutdown.Token).ConfigureAwait(false);
+    }
+
+    private void PublishNotification(string message) {
+        if (!this.IsConnected || string.IsNullOrWhiteSpace(message))
+            return;
+
+        _ = Task.Run(async () => {
+            try {
+                await this.PublishNotificationAsync(message).ConfigureAwait(false);
+            } catch (Exception ex) {
+                Log.Debug(ex, "Settings editor bridge notification publish failed.");
+            }
+        });
+    }
+
+    private async Task PublishNotificationAsync(string message) {
+        var payloadJson = JsonConvert.SerializeObject(message, this._serializerSettings);
+        var frame = new BridgeFrame(
+            BridgeFrameKind.Event,
+            Event: new BridgeEvent(HostRuntimeEventNames.Notification, payloadJson)
         );
         await this.WriteFrameAsync(frame, this._shutdown.Token).ConfigureAwait(false);
     }

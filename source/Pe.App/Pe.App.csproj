@@ -74,5 +74,20 @@
         <Exec Command="powershell.exe -ExecutionPolicy Bypass -NoProfile -File &quot;$(MSBuildProjectDirectory)\PostBuildActions.ps1&quot; -ScriptDirectory &quot;$(MSBuildProjectDirectory)&quot;"/>
     </Target>
 
+    <Target Name="CleanAddinPublishAndDeployDirectories"
+            BeforeTargets="PublishAddin"
+            Condition="'$(PublishAddin)' == 'true'">
+        <!-- PublishAddin/DeployAddin only copy files. Clearing both roots avoids stale assemblies surviving refactors. -->
+        <RemoveDir Directories="$(AddinPublishDir)\$(AssemblyName)"
+                   Condition="Exists('$(AddinPublishDir)\$(AssemblyName)')"/>
+        <Delete Files="$(AddinPublishDir)\$(AssemblyName).addin"
+                Condition="Exists('$(AddinPublishDir)\$(AssemblyName).addin')"/>
+
+        <RemoveDir Directories="$(AddinDeployDir)\$(AssemblyName)"
+                   Condition="'$(DeployAddin)' == 'true' and Exists('$(AddinDeployDir)\$(AssemblyName)')"/>
+        <Delete Files="$(AddinDeployDir)\$(AssemblyName).addin"
+                Condition="'$(DeployAddin)' == 'true' and Exists('$(AddinDeployDir)\$(AssemblyName).addin')"/>
+    </Target>
+
 
 </Project>

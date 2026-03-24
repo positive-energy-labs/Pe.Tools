@@ -7,10 +7,11 @@ namespace Pe.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 public static class LoadedFamiliesMatrixCollector {
     public static LoadedFamiliesMatrixData Collect(
         Document doc,
-        LoadedFamiliesFilter? filter = null
+        LoadedFamiliesFilter? filter = null,
+        Action<string, TimeSpan>? onFamilyCollected = null
     ) {
         var catalogFamilies = LoadedFamiliesCatalogCollector.CollectCanonical(doc, filter);
-        var projectValueFamilies = LoadedFamiliesProjectValueCollector.Collect(doc, catalogFamilies);
+        var projectValueFamilies = LoadedFamiliesProjectValueCollector.Collect(doc, catalogFamilies, onFamilyCollected);
         var supplementedFamilies = LoadedFamiliesFormulaCollector.Supplement(doc, projectValueFamilies);
         var scheduleFamilies = LoadedFamiliesScheduleCollector.Supplement(doc, supplementedFamilies);
 

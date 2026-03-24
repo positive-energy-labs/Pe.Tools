@@ -10,6 +10,10 @@ public static class SettingsHostEventNames {
     public const string HostStatusChanged = "host-status-changed";
 }
 
+public static class HostRuntimeEventNames {
+    public const string Notification = "notification";
+}
+
 [ExportTsClass]
 public static class HttpRoutes {
     public const string SettingsBase = "/api/settings";

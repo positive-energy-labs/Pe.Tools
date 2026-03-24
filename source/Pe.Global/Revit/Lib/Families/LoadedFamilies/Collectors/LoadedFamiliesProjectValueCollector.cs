@@ -6,7 +6,8 @@ namespace Pe.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 public static class LoadedFamiliesProjectValueCollector {
     public static List<CollectedLoadedFamilyRecord> Collect(
         Document doc,
-        IReadOnlyList<CollectedLoadedFamilyRecord> catalogFamilies
+        IReadOnlyList<CollectedLoadedFamilyRecord> catalogFamilies,
+        Action<string, TimeSpan>? onFamilyCollected = null
     ) {
         if (catalogFamilies.Count == 0)
             return [];
@@ -17,7 +18,8 @@ public static class LoadedFamiliesProjectValueCollector {
         var collectedFamilies = ProjectLoadedFamilyCollector.Collect(
             doc,
             new HashSet<string>(StringComparer.OrdinalIgnoreCase),
-            selectedFamilyIds
+            selectedFamilyIds,
+            (familyRecord, elapsed) => onFamilyCollected?.Invoke(familyRecord.FamilyName, elapsed)
         );
         var mappedFamilies = collectedFamilies
             .Select(LoadedFamiliesCollectorSupport.MapProjectFamily)
