@@ -63,31 +63,37 @@ break Hot Reloads. Therfore DO NOT build anything unless otherwise asked.
    intuitive to use and general purpose.
 4. **If given permmission to build** then use commands that minimize output like
    `dotnet build -c "Debug.R25" /p:WarningLevel=0`
-5. For `Pe.Tools.Tests`, prefer `dotnet run --project source/Pe.Tools.Tests/Pe.Tools.Tests.csproj -c "Debug.R25" -- --disable-logo --no-progress --output Normal`
-   over `dotnet test`. This project uses TUnit as an executable test runner, and `dotnet test` can pass unsupported args and leave `Pe.Tools.Tests.exe` processes running.
-6. If `Pe.Tools.Tests.exe` is locked during rebuild, check for lingering `Pe.Tools.Tests` processes and terminate them before retrying. A reliable cleanup path is `Get-CimInstance Win32_Process -Filter "Name = 'Pe.Tools.Tests.exe'" | ForEach-Object { Invoke-CimMethod -InputObject $_ -MethodName Terminate }`.
-7. Exceptions should generally be avoided, prefer the `Result<TValue>` or
+5. This repo currently has two separate Revit-backed test lanes:
+   - `source/Pe.Tools.Tests`: TUnit on Microsoft.Testing.Platform
+   - `source/Pe.Tools.RevitTest.Tests`: `ricaun.RevitTest` on VSTest / NUnit
+   Keep runner-specific commands, filters, and workflow details scoped to the
+   local `AGENTS.md` in each test project.
+6. For Revit-backed test work, prefer the `.Tests` configurations such as `Debug.R25.Tests`. They isolate build outputs into `.artifacts/tests` and are the safe default when you need to avoid disturbing an active Rider/Revit debug session.
+7. Revit-backed test runners may attach to or interact with an already-running Revit instance. If behavior does not match freshly built source, suspect stale in-process assemblies before assuming the code change failed.
+8. Be careful with live Rider/Revit debug sessions. Rebuilding runtime projects such as `Pe.App`, `Pe.Extensions`, or `Pe.FamilyFoundry` can break hot reload or leave the running Revit session executing stale assemblies.
+9. Revit-backed test runners can leave `Revit.exe` or runner processes alive after a timeout or interrupted run. If later builds or deploys start failing on file locks, clean up the lingering process before retrying.
+10. Exceptions should generally be avoided, prefer the `Result<TValue>` or
    `Try...` patterns, particularly if it's part of the public API surface and/or
    may be exposed to users. using the `Result<TValue` type allows us to _return_
    errors rather than throw, which is better for perf. For both DX posterity,
    record common footguns/suggestions in error messages, for example: special
    transaction needs for RVT API methods, a method (eg.
    FamilyManager.SetFormula) throw unhelpful error messages, etc.
-8. Reduce nesting in written code and stacktraces. Use method extraction or
+11. Reduce nesting in written code and stacktraces. Use method extraction or
    condition inversion to avoid nesting in written code. Prefer sequential
    execution flow with early `return`/`break`/`continue`/`throw` over nesting.
-9. Type-safety do's: label/handle nullables correctly, use generics, use
+12. Type-safety do's: label/handle nullables correctly, use generics, use
    `nameof()`, us ``is` and pattern matching,
-10. Use LINQ and Fluent APIs when possible.
-11. Use extension methods to get commonly used finicky code out of sight.
-12. Research the breath of a problem and attempt to prove it before trying to
+13. Use LINQ and Fluent APIs when possible.
+14. Use extension methods to get commonly used finicky code out of sight.
+15. Research the breath of a problem and attempt to prove it before trying to
     solve it.
-13. Use Serilogs Log.<Level> rather than Console.WriteLine or Debug.WriteLine.
-14. Weigh the addition of new code against the cost of maintenance and DX.
-15. Apply project standards to all code. If existing code doesn't follow the
+16. Use Serilogs Log.<Level> rather than Console.WriteLine or Debug.WriteLine.
+17. Weigh the addition of new code against the cost of maintenance and DX.
+18. Apply project standards to all code. If existing code doesn't follow the
     standards, refactor it to do so. Pay close attention to nullability and
     type-safety.
-16. Centralize comments into blocks rather than sprinkling them throughout.
+19. Centralize comments into blocks rather than sprinkling them throughout.
 
 ### Don'ts 👎👎👎
 

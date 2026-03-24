@@ -1,0 +1,115 @@
+{
+  "ExecutionOptions": {
+    "SingleTransaction": false,
+    "OptimizeTypeOperations": false
+  },
+  "FilterFamilies": {
+    "IncludeCategoriesEqualing": [],
+    "IncludeByCondition": {
+      "FieldName": "",
+      "Value": ""
+    },
+    "IncludeNames": {
+      "Equaling": [
+        "__CURRENT_FAMILY__"
+      ],
+      "Containing": [],
+      "StartingWith": []
+    },
+    "ExcludeNames": {
+      "Equaling": [],
+      "Containing": [],
+      "StartingWith": []
+    }
+  },
+  "FilterApsParams": {
+    "IncludeNames": {
+      "Equaling": [
+        "PE_G_Dim_Height1",
+        "PE_G_Dim_Length1",
+        "PE_G_Dim_Width1"
+      ],
+      "Containing": [],
+      "StartingWith": []
+    },
+    "ExcludeNames": {
+      "Equaling": [],
+      "Containing": [],
+      "StartingWith": []
+    }
+  },
+  "MakeRefPlaneAndDims": {
+    "MirrorSpecs": [
+      {
+        "Name": "side",
+        "CenterAnchor": "Center (Left/Right)",
+        "Parameter": "PE_G_Dim_Width1",
+        "Strength": "StrongRef"
+      },
+      {
+        "Name": "side",
+        "CenterAnchor": "Center (Front/Back)",
+        "Parameter": "PE_G_Dim_Length1",
+        "Strength": "StrongRef"
+      }
+    ],
+    "OffsetSpecs": [
+      {
+        "Name": "top",
+        "AnchorName": "Reference Plane",
+        "Direction": "Positive",
+        "Parameter": "PE_G_Dim_Height1",
+        "Strength": "StrongRef"
+      }
+    ],
+    "Enabled": true
+  },
+  "AddFamilyParams": {
+    "Parameters": [],
+    "Enabled": true
+  },
+  "SetKnownParams": {
+    "OverrideExistingValues": true,
+    "GlobalAssignments": [
+      {
+        "Parameter": "PE_G_Dim_Width1",
+        "Kind": "Formula",
+        "Value": "4'"
+      },
+      {
+        "Parameter": "PE_G_Dim_Length1",
+        "Kind": "Formula",
+        "Value": "6'"
+      },
+      {
+        "Parameter": "PE_G_Dim_Height1",
+        "Kind": "Formula",
+        "Value": "3'"
+      }
+    ],
+    "PerTypeAssignmentsTable": [],
+    "Enabled": true
+  },
+  "MakeConstrainedExtrusions": {
+    "Rectangles": [
+      {
+        "Name": "MagicBox",
+        "IsSolid": true,
+        "StartOffset": 0.0,
+        "EndOffset": 1.0,
+        "SketchPlaneName": "Ref. Level",
+        "PairAPlane1": "Width1 (Left)",
+        "PairAPlane2": "Width1 (Right)",
+        "PairAParameter": "PE_G_Dim_Width1",
+        "PairBPlane1": "Length1 (Back)",
+        "PairBPlane2": "Length1 (Front)",
+        "PairBParameter": "PE_G_Dim_Length1",
+        "HeightPlaneBottom": "Reference Plane",
+        "HeightPlaneTop": "Height1 (Top)",
+        "HeightParameter": "PE_G_Dim_Height1"
+      }
+    ],
+    "Circles": [],
+    "Enabled": true
+  }
+}
