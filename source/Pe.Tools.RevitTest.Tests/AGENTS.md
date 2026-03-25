@@ -133,6 +133,10 @@ dotnet vstest .artifacts/tests/bin/Debug.R25.Tests/net8.0-windows/Pe.Tools.Revit
     Revit.
   - The post-build script can still help by opening changed runtime files in
     Rider and triggering Rider hot reload automatically.
+  - The AutoHotkey trigger now shows a topmost warning/countdown before it
+    focuses Rider and sends keys. Default is 3 seconds.
+  - `PrepareRiderHotReload.ps1` accepts `-WarningSeconds <n>` to tune that
+    delay and `-SkipWarning` to suppress it for unattended runs.
   - Tests execute against the live code currently loaded in the Rider-launched
     Revit session.
   - If a `Pe.App` / `Pe.FamilyFoundry` file is hot reloaded in Rider, the

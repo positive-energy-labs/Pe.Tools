@@ -3,9 +3,11 @@ param(
     [string]$FilesText = "",
     [string]$ProjectPath = "C:\Users\kaitp\source\repos\Pe.Tools",
     [string]$RiderBinDirectory = "C:\Program Files\JetBrains\JetBrains Rider 2025.2\bin",
+    [int]$WarningSeconds = 3,
     [switch]$SkipOpen,
     [switch]$SkipFormat,
     [switch]$SkipHotReload,
+    [switch]$SkipWarning,
     [switch]$DryRun
 )
 
@@ -120,7 +122,8 @@ function Invoke-HotReload {
 
     if ((Test-Path $autoHotkeyExe) -and (Test-Path $hotReloadAhkScript)) {
         $fileListArtifact = Write-FileListArtifact -ResolvedFiles $ResolvedFiles
-        & $autoHotkeyExe $hotReloadAhkScript $fileListArtifact
+        $skipWarningArg = if ($SkipWarning) { "1" } else { "0" }
+        & $autoHotkeyExe $hotReloadAhkScript $fileListArtifact $WarningSeconds $skipWarningArg
         return
     }
 
