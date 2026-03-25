@@ -13,6 +13,7 @@ namespace Pe.FamilyFoundry.Operations;
 public class MakeConstrainedExtrusions(MakeConstrainedExtrusionsSettings settings)
     : DocOperation<MakeConstrainedExtrusionsSettings>(settings) {
     private const double PlaneTolerance = 1e-6;
+    private const double DefaultSeedDiameter = 1.0;
 
     public override string Description => "Create canonical reference-plane-constrained extrusions";
 
@@ -122,12 +123,10 @@ public class MakeConstrainedExtrusions(MakeConstrainedExtrusionsSettings setting
     ) {
         var key = $"Circle extrusion: {spec.Name}";
 
-        var rpA1 = GetReferencePlane(doc, spec.PairAPlane1);
-        var rpA2 = GetReferencePlane(doc, spec.PairAPlane2);
-        var rpB1 = GetReferencePlane(doc, spec.PairBPlane1);
-        var rpB2 = GetReferencePlane(doc, spec.PairBPlane2);
-        if (rpA1 == null || rpA2 == null || rpB1 == null || rpB2 == null) {
-            logs.Add(new LogEntry(key).Error("One or more required reference planes were not found."));
+        var centerLeftRightPlane = GetReferencePlane(doc, spec.CenterLeftRightPlane);
+        var centerFrontBackPlane = GetReferencePlane(doc, spec.CenterFrontBackPlane);
+        if (centerLeftRightPlane == null || centerFrontBackPlane == null) {
+            logs.Add(new LogEntry(key).Error("One or more required cylinder center planes were not found."));
             return;
         }
 
@@ -138,49 +137,35 @@ public class MakeConstrainedExtrusions(MakeConstrainedExtrusionsSettings setting
         }
 
         var sketchGeomPlane = sketchPlane.GetPlane();
-        if (!TryIntersect3Planes(rpA1, rpB1, sketchGeomPlane, out var p00) ||
-            !TryIntersect3Planes(rpA1, rpB2, sketchGeomPlane, out var p01) ||
-            !TryIntersect3Planes(rpA2, rpB2, sketchGeomPlane, out var p11) ||
-            !TryIntersect3Planes(rpA2, rpB1, sketchGeomPlane, out var p10)) {
-            logs.Add(new LogEntry(key).Error("Could not resolve cylinder diameter intersections from reference planes."));
+        if (!TryIntersect2PlanesAndSketchPlane(centerLeftRightPlane, centerFrontBackPlane, sketchGeomPlane, out var center)) {
+            logs.Add(new LogEntry(key).Error("Could not resolve cylinder center from the sketch plane and center planes."));
             return;
         }
 
-        var center = new XYZ(
-            (p00.X + p01.X + p11.X + p10.X) / 4.0,
-            (p00.Y + p01.Y + p11.Y + p10.Y) / 4.0,
-            (p00.Z + p01.Z + p11.Z + p10.Z) / 4.0);
-        var diameterA = p00.DistanceTo(p10);
-        var diameterB = p00.DistanceTo(p01);
-        var radius = Math.Min(diameterA, diameterB) / 2.0;
+        var diameter = TryGetCurrentDiameter(doc, spec.DiameterParameter, out var resolvedDiameter) &&
+                       resolvedDiameter > PlaneTolerance
+            ? resolvedDiameter
+            : DefaultSeedDiameter;
+
+        var radius = diameter / 2.0;
         Log.Debug(
-            "[MakeConstrainedExtrusions] Circle {CircleName} using planes {PairA1}, {PairA2}, {PairB1}, {PairB2} on sketch {SketchPlane}. Computed center {Center}, diameterA {DiameterA}, diameterB {DiameterB}, radius {Radius}.",
+            "[MakeConstrainedExtrusions] Circle {CircleName} using center planes {CenterLeftRightPlane}, {CenterFrontBackPlane} on sketch {SketchPlane}. Computed center {Center}, diameter {Diameter}, radius {Radius}.",
             spec.Name,
-            spec.PairAPlane1,
-            spec.PairAPlane2,
-            spec.PairBPlane1,
-            spec.PairBPlane2,
+            spec.CenterLeftRightPlane,
+            spec.CenterFrontBackPlane,
             spec.SketchPlaneName,
             center,
-            diameterA,
-            diameterB,
+            diameter,
             radius);
         if (radius <= PlaneTolerance) {
             logs.Add(new LogEntry(key).Error("Resolved cylinder radius was zero or negative."));
             return;
         }
 
-        var (xVec, yVec) = BuildStablePlaneAxes(sketchGeomPlane.Normal.Normalize());
-        var right = center + (xVec * radius);
-        var left = center - (xVec * radius);
-        var top = center + (yVec * radius);
-        var bottom = center - (yVec * radius);
-        var arc1 = Arc.Create(left, right, top);
-        var arc2 = Arc.Create(right, left, bottom);
-
         var loop = new CurveArray();
-        loop.Append(arc1);
-        loop.Append(arc2);
+        var (xVec, yVec) = BuildStablePlaneAxes(sketchGeomPlane.Normal.Normalize());
+        var circle = Ellipse.CreateCurve(center, radius, radius, xVec, yVec, -Math.PI, Math.PI);
+        loop.Append(circle);
 
         var profile = new CurveArrArray();
         profile.Append(loop);
@@ -209,6 +194,8 @@ public class MakeConstrainedExtrusions(MakeConstrainedExtrusionsSettings setting
         try {
             var extrusion = doc.FamilyCreate.NewExtrusion(spec.IsSolid, profile, sketchPlane, endOffset);
             extrusion.StartOffset = startOffset;
+            TryLabelCircleDiameter(doc, extrusion, spec, logs, key);
+            TryAlignCircleCenterToPlanes(doc, extrusion, centerLeftRightPlane, centerFrontBackPlane, logs, key);
             if (hasHeightPair && bottomHeightPlane != null && topHeightPlane != null) {
                 TryAlignExtrusionCapsToHeightPlanes(
                     doc,
@@ -223,6 +210,84 @@ public class MakeConstrainedExtrusions(MakeConstrainedExtrusionsSettings setting
             logs.Add(new LogEntry(key).Success("Created from ParamDrivenSolids circle plan."));
         } catch (Exception ex) {
             logs.Add(new LogEntry(key).Error(ex));
+        }
+    }
+
+    private static void TryLabelCircleDiameter(
+        Document doc,
+        Extrusion extrusion,
+        ConstrainedCircleExtrusionSpec spec,
+        List<LogEntry> logs,
+        string key
+    ) {
+        if (string.IsNullOrWhiteSpace(spec.DiameterParameter)) {
+            logs.Add(new LogEntry(key).Error("Created extrusion, but diameter parameter names were missing."));
+            return;
+        }
+
+        var diameterParameter = doc.FamilyManager.get_Parameter(spec.DiameterParameter);
+        if (diameterParameter == null) {
+            logs.Add(new LogEntry(key).Error(
+                $"Created extrusion, but diameter parameter '{spec.DiameterParameter}' was not found."));
+            return;
+        }
+
+        var diameterView = GetWorkingView(doc);
+        if (diameterView == null) {
+            logs.Add(new LogEntry(key).Error(
+                "Created extrusion, but no valid view was available for diameter dimension creation."));
+            return;
+        }
+
+        var modelArc = extrusion.Sketch.GetAllElements()
+            .Select(id => doc.GetElement(id))
+            .OfType<ModelArc>()
+            .FirstOrDefault();
+        if (modelArc?.GeometryCurve is not Arc arc || arc.Reference == null) {
+            logs.Add(new LogEntry(key).Error(
+                "Created extrusion, but could not resolve a sketch arc reference for the diameter dimension."));
+            return;
+        }
+
+        try {
+            var origin = arc.Center + (arc.XDirection.Normalize() * (arc.Radius * 0.5));
+            var dimension = doc.FamilyCreate.NewDiameterDimension(diameterView, arc.Reference, origin);
+            dimension.FamilyLabel = diameterParameter;
+        } catch (Exception ex) {
+            logs.Add(new LogEntry(key).Error($"Created extrusion, but failed diameter dimension labeling: {ex.Message}"));
+        }
+    }
+
+    private static void TryAlignCircleCenterToPlanes(
+        Document doc,
+        Extrusion extrusion,
+        ReferencePlane centerLeftRightPlane,
+        ReferencePlane centerFrontBackPlane,
+        List<LogEntry> logs,
+        string key
+    ) {
+        try {
+            var alignmentView = GetWorkingView(doc);
+            if (alignmentView == null) {
+                logs.Add(new LogEntry(key).Error(
+                    "Created extrusion, but no valid view was available for circle-center alignment."));
+                return;
+            }
+
+            var modelArc = extrusion.Sketch.GetAllElements()
+                .Select(id => doc.GetElement(id))
+                .OfType<CurveElement>()
+                .FirstOrDefault(curve => curve.CenterPointReference != null);
+            if (modelArc?.CenterPointReference == null) {
+                logs.Add(new LogEntry(key).Error(
+                    "Created extrusion, but could not resolve the circle center reference."));
+                return;
+            }
+
+            TryCreateAlignment(doc, alignmentView, centerLeftRightPlane.GetReference(), modelArc.CenterPointReference);
+            TryCreateAlignment(doc, alignmentView, centerFrontBackPlane.GetReference(), modelArc.CenterPointReference);
+        } catch (Exception ex) {
+            logs.Add(new LogEntry(key).Error($"Created extrusion, but failed center-plane alignment: {ex.Message}"));
         }
     }
 
@@ -479,6 +544,30 @@ public class MakeConstrainedExtrusions(MakeConstrainedExtrusionsSettings setting
         }
 
         intersection = (n2xn3 * d1 + n3xn1 * d2 + n1xn2 * d3) * (1.0 / denominator);
+        return true;
+    }
+
+    private static bool TryIntersect2PlanesAndSketchPlane(
+        ReferencePlane planeA,
+        ReferencePlane planeB,
+        Plane sketchPlane,
+        out XYZ intersection
+    ) => TryIntersect3Planes(planeA, planeB, sketchPlane, out intersection);
+
+    private static bool TryGetCurrentDiameter(Document doc, string parameterName, out double value) {
+        value = 0.0;
+        if (string.IsNullOrWhiteSpace(parameterName))
+            return false;
+
+        var parameter = doc.FamilyManager.get_Parameter(parameterName);
+        if (parameter == null)
+            return false;
+
+        var currentType = doc.FamilyManager.CurrentType;
+        if (currentType == null || !currentType.HasValue(parameter))
+            return false;
+
+        value = currentType.AsDouble(parameter) ?? 0.0;
         return true;
     }
 }

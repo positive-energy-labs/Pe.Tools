@@ -1,4 +1,4 @@
-namespace Pe.FamilyFoundry.Snapshots;
+﻿namespace Pe.FamilyFoundry.Snapshots;
 
 /// <summary>
 ///     Snapshot data for constrained extrusions.
@@ -41,7 +41,8 @@ public class ConstrainedRectangleExtrusionSpec {
 
 /// <summary>
 ///     Canonical constrained circle extrusion:
-///     two orthogonal reference-plane pairs define a constrained circular profile.
+///     the profile center is locked to two center-anchor reference planes and the size is driven by
+///     a sketch-owned diameter dimension label.
 /// </summary>
 public class ConstrainedCircleExtrusionSpec {
     public string Name { get; init; } = string.Empty;
@@ -50,13 +51,9 @@ public class ConstrainedCircleExtrusionSpec {
     public double EndOffset { get; init; }
     public string SketchPlaneName { get; init; } = string.Empty;
 
-    public string PairAPlane1 { get; init; } = string.Empty;
-    public string PairAPlane2 { get; init; } = string.Empty;
-    public string PairAParameter { get; init; } = string.Empty;
-
-    public string PairBPlane1 { get; init; } = string.Empty;
-    public string PairBPlane2 { get; init; } = string.Empty;
-    public string PairBParameter { get; init; } = string.Empty;
+    public string CenterLeftRightPlane { get; init; } = string.Empty;
+    public string CenterFrontBackPlane { get; init; } = string.Empty;
+    public string DiameterParameter { get; init; } = string.Empty;
 
     public string? HeightPlaneBottom { get; init; }
     public string? HeightPlaneTop { get; init; }

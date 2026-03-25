@@ -1,4 +1,4 @@
-using Pe.FamilyFoundry.Aggregators.Snapshots;
+﻿using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Operations;
 using Pe.FamilyFoundry.Snapshots;
@@ -77,7 +77,7 @@ public static class KnownParamPlanBuilder {
         MakeConstrainedExtrusionsSettings settings
     ) => settings.Rectangles
         .SelectMany(spec => new[] { spec.PairAParameter, spec.PairBParameter, spec.HeightParameter })
-        .Concat(settings.Circles.SelectMany(spec => new[] { spec.PairAParameter, spec.PairBParameter }))
+        .Concat(settings.Circles.SelectMany(spec => new[] { spec.DiameterParameter, spec.HeightParameter }))
         .Where(name => !string.IsNullOrWhiteSpace(name))
         .Select(name => name.Trim())
         .Distinct(StringComparer.Ordinal)
