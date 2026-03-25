@@ -123,6 +123,21 @@ public class OutputManager : BaseLocalManager {
     private OutputManager(string parentPath, string subDirName) : base(parentPath, subDirName) { }
     public override string Name { get; init; } = "output";
 
+    public static OutputManager ExactDir(string directoryPath) {
+        if (string.IsNullOrWhiteSpace(directoryPath))
+            throw new ArgumentException("Directory path cannot be null, empty, or whitespace.", nameof(directoryPath));
+
+        var fullPath = Path.GetFullPath(directoryPath);
+        var parentPath = Path.GetDirectoryName(fullPath);
+        var directoryName = Path.GetFileName(fullPath);
+
+        if (string.IsNullOrWhiteSpace(parentPath) || string.IsNullOrWhiteSpace(directoryName))
+            throw new ArgumentException($"Directory path '{directoryPath}' must include a parent directory and folder name.",
+                nameof(directoryPath));
+
+        return new OutputManager(parentPath, directoryName);
+    }
+
     public JsonWriter<object> Json(string filename) =>
         new ComposableJson<object>(this.GetJsonPath(filename), this.DirectoryPath, JsonBehavior.Output);
 

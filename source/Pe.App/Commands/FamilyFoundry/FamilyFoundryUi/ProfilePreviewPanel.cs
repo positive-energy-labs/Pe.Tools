@@ -63,7 +63,8 @@ public class ProfilePreviewPanel : PaletteSidebarPanel<ProfileListItem, PreviewD
             .AddHeader(data.ProfileName);
 
         // Validation Status Section (if there are fixes or errors)
-        if (!data.IsValid || data.AppliedFixes.Any() || data.RemainingErrors.Any()) AddValidationSection(doc, data);
+        if (!data.IsValid || data.AppliedFixes.Any() || data.RemainingErrors.Any() || data.Warnings.Any())
+            AddValidationSection(doc, data);
 
         // Only show operations/params/families if profile is valid
         if (data.IsValid) {
@@ -216,6 +217,23 @@ public class ProfilePreviewPanel : PaletteSidebarPanel<ProfileListItem, PreviewD
 
             doc.Blocks.Add(errorsList);
         }
+
+        if (data.Warnings.Any()) {
+            var warningsHeader = new Paragraph(new Run("Warnings") { FontWeight = FontWeights.SemiBold }) {
+                Margin = new Thickness(0, 8, 0, 4)
+            };
+            warningsHeader.SetResourceReference(Paragraph.ForegroundProperty, "SystemFillColorCautionBrush");
+            doc.Blocks.Add(warningsHeader);
+
+            var warningsList = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
+            foreach (var warning in data.Warnings) {
+                var para = new Paragraph(new Run(warning));
+                para.SetResourceReference(Paragraph.ForegroundProperty, "SystemFillColorCautionBrush");
+                warningsList.ListItems.Add(new ListItem(para));
+            }
+
+            doc.Blocks.Add(warningsList);
+        }
     }
 }
 
@@ -244,6 +262,7 @@ public class PreviewData {
     public bool IsValid { get; init; } = true;
     public List<string> AppliedFixes { get; init; } = [];
     public List<string> RemainingErrors { get; init; } = [];
+    public List<string> Warnings { get; init; } = [];
 }
 
 /// <summary>

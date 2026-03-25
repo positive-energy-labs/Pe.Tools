@@ -25,10 +25,8 @@ public class MakeConstrainedExtrusions(MakeConstrainedExtrusionsSettings setting
         foreach (var spec in this.Settings.Rectangles)
             CreateRectangle(doc.Document, spec, logs);
 
-        foreach (var circle in this.Settings.Circles) {
-            logs.Add(new LogEntry($"Circle extrusion: {circle.Name}").Skip(
-                "Circle recreation is deferred in v1 to enforce one canonical constraint method."));
-        }
+        foreach (var circle in this.Settings.Circles)
+            CreateCircle(doc.Document, circle, logs);
 
         return new OperationLog(this.Name, logs);
     }
@@ -116,6 +114,102 @@ public class MakeConstrainedExtrusions(MakeConstrainedExtrusionsSettings setting
         logs.Add(new LogEntry(key).Success("Created and constrained to reference planes."));
     }
 
+    private static void CreateCircle(
+        Document doc,
+        ConstrainedCircleExtrusionSpec spec,
+        List<LogEntry> logs
+    ) {
+        var key = $"Circle extrusion: {spec.Name}";
+
+        var rpA1 = GetReferencePlane(doc, spec.PairAPlane1);
+        var rpA2 = GetReferencePlane(doc, spec.PairAPlane2);
+        var rpB1 = GetReferencePlane(doc, spec.PairBPlane1);
+        var rpB2 = GetReferencePlane(doc, spec.PairBPlane2);
+        if (rpA1 == null || rpA2 == null || rpB1 == null || rpB2 == null) {
+            logs.Add(new LogEntry(key).Error("One or more required reference planes were not found."));
+            return;
+        }
+
+        var sketchPlane = GetSketchPlane(doc, spec.SketchPlaneName);
+        if (sketchPlane == null) {
+            logs.Add(new LogEntry(key).Error($"Sketch plane '{spec.SketchPlaneName}' was not found."));
+            return;
+        }
+
+        var sketchGeomPlane = sketchPlane.GetPlane();
+        if (!TryIntersect3Planes(rpA1, rpB1, sketchGeomPlane, out var p00) ||
+            !TryIntersect3Planes(rpA1, rpB2, sketchGeomPlane, out var p01) ||
+            !TryIntersect3Planes(rpA2, rpB2, sketchGeomPlane, out var p11) ||
+            !TryIntersect3Planes(rpA2, rpB1, sketchGeomPlane, out var p10)) {
+            logs.Add(new LogEntry(key).Error("Could not resolve cylinder diameter intersections from reference planes."));
+            return;
+        }
+
+        var center = new XYZ(
+            (p00.X + p01.X + p11.X + p10.X) / 4.0,
+            (p00.Y + p01.Y + p11.Y + p10.Y) / 4.0,
+            (p00.Z + p01.Z + p11.Z + p10.Z) / 4.0);
+        var diameterA = p00.DistanceTo(p10);
+        var diameterB = p00.DistanceTo(p01);
+        var radius = Math.Min(diameterA, diameterB) / 2.0;
+        if (radius <= PlaneTolerance) {
+            logs.Add(new LogEntry(key).Error("Resolved cylinder radius was zero or negative."));
+            return;
+        }
+
+        var xVec = sketchGeomPlane.XVec.Normalize();
+        var yVec = sketchGeomPlane.YVec.Normalize();
+        var arc1 = Arc.Create(center, radius, 0, Math.PI, xVec, yVec);
+        var arc2 = Arc.Create(center, radius, Math.PI, Math.PI * 2.0, xVec, yVec);
+
+        var loop = new CurveArray();
+        loop.Append(arc1);
+        loop.Append(arc2);
+
+        var profile = new CurveArrArray();
+        profile.Append(loop);
+
+        var startOffset = spec.StartOffset;
+        var endOffset = spec.EndOffset;
+        ReferencePlane? bottomHeightPlane = null;
+        ReferencePlane? topHeightPlane = null;
+        var hasHeightPair = !string.IsNullOrWhiteSpace(spec.HeightPlaneBottom) &&
+                            !string.IsNullOrWhiteSpace(spec.HeightPlaneTop);
+        if (hasHeightPair) {
+            bottomHeightPlane = GetReferencePlane(doc, spec.HeightPlaneBottom!);
+            topHeightPlane = GetReferencePlane(doc, spec.HeightPlaneTop!);
+            if (bottomHeightPlane == null || topHeightPlane == null) {
+                logs.Add(new LogEntry(key).Error("Height constraint planes were configured but could not be found."));
+                return;
+            }
+
+            var sketchNormal = sketchGeomPlane.Normal.Normalize();
+            var dBottom = SignedDistanceToPlaneAlongNormal(bottomHeightPlane.BubbleEnd, sketchGeomPlane.Origin, sketchNormal);
+            var dTop = SignedDistanceToPlaneAlongNormal(topHeightPlane.BubbleEnd, sketchGeomPlane.Origin, sketchNormal);
+            startOffset = Math.Min(dBottom, dTop);
+            endOffset = Math.Max(dBottom, dTop);
+        }
+
+        try {
+            var extrusion = doc.FamilyCreate.NewExtrusion(spec.IsSolid, profile, sketchPlane, endOffset);
+            extrusion.StartOffset = startOffset;
+            if (hasHeightPair && bottomHeightPlane != null && topHeightPlane != null) {
+                TryAlignExtrusionCapsToHeightPlanes(
+                    doc,
+                    extrusion,
+                    sketchGeomPlane.Normal.Normalize(),
+                    bottomHeightPlane,
+                    topHeightPlane,
+                    logs,
+                    key);
+            }
+
+            logs.Add(new LogEntry(key).Success("Created from ParamDrivenSolids circle plan."));
+        } catch (Exception ex) {
+            logs.Add(new LogEntry(key).Error(ex));
+        }
+    }
+
     private static void TryAlignExtrusionCapsToHeightPlanes(
         Document doc,
         Extrusion extrusion,
@@ -173,11 +267,23 @@ public class MakeConstrainedExtrusions(MakeConstrainedExtrusionsSettings setting
         }
     }
 
-    private static View GetBestAlignmentView(Document doc, ReferencePlane p1, ReferencePlane p2) {
+    private static View? GetWorkingView(Document doc) {
+        if (doc.ActiveView != null && !doc.ActiveView.IsTemplate)
+            return doc.ActiveView;
+
+        return new FilteredElementCollector(doc)
+            .OfClass(typeof(View))
+            .Cast<View>()
+            .FirstOrDefault(view =>
+                !view.IsTemplate &&
+                view.ViewType is ViewType.FloorPlan or ViewType.CeilingPlan or ViewType.EngineeringPlan or ViewType.AreaPlan);
+    }
+
+    private static View? GetBestAlignmentView(Document doc, ReferencePlane p1, ReferencePlane p2) {
         var isHeightLike = Math.Abs(p1.Normal.Normalize().Z) > 0.95 &&
                            Math.Abs(p2.Normal.Normalize().Z) > 0.95;
         if (!isHeightLike)
-            return doc.ActiveView;
+            return GetWorkingView(doc);
 
         var elevation = new FilteredElementCollector(doc)
             .OfClass(typeof(View))
@@ -186,7 +292,7 @@ public class MakeConstrainedExtrusions(MakeConstrainedExtrusionsSettings setting
                 !v.IsTemplate &&
                 (v.ViewType == ViewType.Elevation || v.ViewType == ViewType.Section));
 
-        return elevation ?? doc.ActiveView;
+        return elevation ?? GetWorkingView(doc);
     }
 
     private static void TryAlignSketchLinesToPlanes(
@@ -197,6 +303,12 @@ public class MakeConstrainedExtrusions(MakeConstrainedExtrusionsSettings setting
         string key
     ) {
         try {
+            var alignmentView = GetWorkingView(doc);
+            if (alignmentView == null) {
+                logs.Add(new LogEntry(key).Error("Created extrusion, but no valid view was available for sketch alignment."));
+                return;
+            }
+
             var modelLines = extrusion.Sketch.GetAllElements()
                 .Select(id => doc.GetElement(id))
                 .OfType<ModelCurve>()
@@ -209,7 +321,7 @@ public class MakeConstrainedExtrusions(MakeConstrainedExtrusionsSettings setting
                 if (matchingLine == null)
                     continue;
 
-                _ = doc.FamilyCreate.NewAlignment(doc.ActiveView, matchingLine.GeometryCurve.Reference, plane.GetReference());
+                _ = doc.FamilyCreate.NewAlignment(alignmentView, matchingLine.GeometryCurve.Reference, plane.GetReference());
             }
         } catch (Exception ex) {
             logs.Add(new LogEntry(key).Error($"Created extrusion, but failed to apply one or more alignments: {ex.Message}"));

@@ -105,14 +105,14 @@ public class CmdFFManagerSnapshot : IExternalCommand {
         var exportedParams = FamilyParamProfileAdapter.CreateFromSnapshots(paramSnapshots);
         var mirrorSpecs = snapshot.RefPlanesAndDims?.MirrorSpecs ?? [];
         var offsetSpecs = snapshot.RefPlanesAndDims?.OffsetSpecs ?? [];
-        var rectangleExtrusions = snapshot.Extrusions?.Rectangles ?? [];
-        var circleExtrusions = snapshot.Extrusions?.Circles ?? [];
+        var paramDrivenRectangles = snapshot.ParamDrivenSolids?.Rectangles ?? [];
+        var paramDrivenCylinders = snapshot.ParamDrivenSolids?.Cylinders ?? [];
         var hasRefPlaneSpecs = mirrorSpecs.Count > 0 || offsetSpecs.Count > 0;
-        var hasConstrainedExtrusions = rectangleExtrusions.Count > 0 || circleExtrusions.Count > 0;
+        var hasParamDrivenSolids = paramDrivenRectangles.Count > 0 || paramDrivenCylinders.Count > 0;
         var additionalReferences = KnownParamPlanBuilder.CollectReferencedParameterNames(
                 new MakeRefPlaneAndDimsSettings { MirrorSpecs = mirrorSpecs, OffsetSpecs = offsetSpecs })
             .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(
-                new MakeConstrainedExtrusionsSettings { Rectangles = rectangleExtrusions, Circles = circleExtrusions }))
+                new ParamDrivenSolidsSettings { Rectangles = paramDrivenRectangles, Cylinders = paramDrivenCylinders }))
             .ToList();
         var referencedSnapshotDefinitions = KnownParamPlanBuilder.BuildFamilyDefinitionsFromSnapshots(
             paramSnapshots,
@@ -145,8 +145,10 @@ public class CmdFFManagerSnapshot : IExternalCommand {
                 },
             AddFamilyParams = resolvedFamilyParams,
             SetKnownParams = exportedParams.SetKnownParams,
-            MakeConstrainedExtrusions = new MakeConstrainedExtrusionsSettings {
-                Enabled = hasConstrainedExtrusions, Rectangles = rectangleExtrusions, Circles = circleExtrusions
+            ParamDrivenSolids = new ParamDrivenSolidsSettings {
+                Enabled = hasParamDrivenSolids,
+                Rectangles = paramDrivenRectangles,
+                Cylinders = paramDrivenCylinders
             }
         };
     }
