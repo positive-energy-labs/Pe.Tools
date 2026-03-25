@@ -2,6 +2,7 @@
 using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.FamilyFoundry.Resolution;
 using Serilog;
+using Pe.FamilyFoundry.Operations;
 
 namespace Pe.FamilyFoundry.Snapshots;
 
@@ -16,7 +17,9 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
 
     public bool ShouldCollect(FamilySnapshot snapshot) =>
         snapshot.ParamDrivenSolids == null ||
-        (snapshot.ParamDrivenSolids.Rectangles.Count == 0 && snapshot.ParamDrivenSolids.Cylinders.Count == 0);
+        (snapshot.ParamDrivenSolids.Rectangles.Count == 0 &&
+         snapshot.ParamDrivenSolids.Cylinders.Count == 0 &&
+         snapshot.ParamDrivenSolids.Connectors.Count == 0);
 
     public void Collect(FamilySnapshot snapshot, FamilyDocument famDoc) {
         var legacy = CollectLegacyFromFamilyDoc(famDoc.Document, snapshot.RefPlanesAndDims);
@@ -41,6 +44,9 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
 
         foreach (var extrusion in extrusions) {
             try {
+                if (MakeParamDrivenConnectors.TryReadStoredMetadata(extrusion)?.Spec != null)
+                    continue;
+
                 if (TryBuildRectangleSpec(extrusion, doc, out var rectangle)) {
                     result.Rectangles.Add(rectangle);
                     continue;
@@ -62,6 +68,7 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
         RefPlaneSnapshot? refPlanesAndDims
     ) {
         var result = new ParamDrivenSolidsSnapshot { Source = SnapshotSource.FamilyDoc };
+        _ = CollectStoredConnectorSpecs(doc, result);
 
         foreach (var rectangle in legacy.Rectangles) {
             var semantic = TryBuildSemanticRectangle(doc, rectangle, refPlanesAndDims);
@@ -78,6 +85,42 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
         return result;
     }
 
+    private static HashSet<string> CollectStoredConnectorSpecs(Document doc, ParamDrivenSolidsSnapshot result) {
+        var stubNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var connectors = new FilteredElementCollector(doc)
+            .OfClass(typeof(ConnectorElement))
+            .Cast<ConnectorElement>()
+            .ToList();
+
+        foreach (var connector in connectors) {
+            var metadata = MakeParamDrivenConnectors.TryReadStoredMetadata(connector);
+            if (metadata?.Spec == null)
+                continue;
+
+            result.Connectors.Add(metadata.Spec);
+            if (!string.IsNullOrWhiteSpace(metadata.StubSolidName))
+                stubNames.Add(metadata.StubSolidName.Trim());
+        }
+
+        var extrusionElements = new FilteredElementCollector(doc)
+            .OfClass(typeof(Extrusion))
+            .Cast<Extrusion>();
+
+        foreach (var extrusion in extrusionElements) {
+            var metadata = MakeParamDrivenConnectors.TryReadStoredMetadata(extrusion);
+            if (metadata?.Spec == null)
+                continue;
+
+            if (result.Connectors.All(existing => !string.Equals(existing.Name, metadata.Spec.Name, StringComparison.Ordinal)))
+                result.Connectors.Add(metadata.Spec);
+
+            if (!string.IsNullOrWhiteSpace(metadata.StubSolidName))
+                stubNames.Add(metadata.StubSolidName.Trim());
+        }
+
+        return stubNames;
+    }
+
     private static RefPlaneSnapshot? RemoveSemanticInternalConstraints(
         RefPlaneSnapshot? refPlaneSnapshot,
         ParamDrivenSolidsSnapshot semanticSnapshot
@@ -85,12 +128,15 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
         if (refPlaneSnapshot == null)
             return null;
 
-        if (semanticSnapshot.Rectangles.Count == 0 && semanticSnapshot.Cylinders.Count == 0)
+        if (semanticSnapshot.Rectangles.Count == 0 &&
+            semanticSnapshot.Cylinders.Count == 0 &&
+            semanticSnapshot.Connectors.Count == 0)
             return refPlaneSnapshot;
 
         var compiledSemantics = ParamDrivenSolidsCompiler.Compile(new ParamDrivenSolidsSettings {
             Rectangles = semanticSnapshot.Rectangles,
-            Cylinders = semanticSnapshot.Cylinders
+            Cylinders = semanticSnapshot.Cylinders,
+            Connectors = semanticSnapshot.Connectors
         });
         if (!compiledSemantics.CanExecute)
             return refPlaneSnapshot;

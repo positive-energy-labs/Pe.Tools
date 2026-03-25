@@ -1,4 +1,4 @@
-using Pe.FamilyFoundry.Operations;
+﻿using Pe.FamilyFoundry.Operations;
 using Pe.FamilyFoundry.Snapshots;
 
 namespace Pe.FamilyFoundry.Helpers;
@@ -223,7 +223,8 @@ public class RefPlaneDimCreator(
             .FirstOrDefault(rp =>
                 !string.IsNullOrWhiteSpace(rp.Name) &&
                 rp.Name.IndexOf("level", StringComparison.OrdinalIgnoreCase) >= 0 &&
-                Math.Abs(rp.Normal.Normalize().Z) > 0.95);
+                Math.Abs(rp.Normal.Normalize().Z) > 0.95)
+            ?? this.TryCreateReferencePlaneFromSketchPlane(requestedName);
     }
 
     private static IEnumerable<string> GetAnchorAliases(string requestedName) {
@@ -237,6 +238,61 @@ public class RefPlaneDimCreator(
             "Lower Reference Level",
             "Level"
         ];
+    }
+
+    private ReferencePlane? TryCreateReferencePlaneFromSketchPlane(string requestedName) {
+        var sketchPlane = this.ResolveSketchPlane(requestedName);
+        if (sketchPlane == null)
+            return null;
+
+        try {
+            var workingView = this.GetWorkingView();
+            if (workingView == null)
+                return null;
+
+            var plane = sketchPlane.GetPlane();
+            var normal = plane.Normal.Normalize();
+            var direction = BuildStableDirection(normal);
+            var cutVec = normal.CrossProduct(direction).Normalize();
+            var t = direction * PlaneExtent;
+            var referencePlane = doc.FamilyCreate.NewReferencePlane(plane.Origin + t, plane.Origin - t, cutVec, workingView);
+            referencePlane.Name = requestedName;
+            _ = query.ReCache(requestedName);
+            logs.Add(new LogEntry($"Sketch plane anchor: {requestedName}").Success("Created companion reference plane from sketch plane."));
+            return referencePlane;
+        } catch (Exception ex) {
+            logs.Add(new LogEntry($"Sketch plane anchor: {requestedName}").Error(ex));
+            return null;
+        }
+    }
+
+    private SketchPlane? ResolveSketchPlane(string requestedName) {
+        var sketchPlanes = new FilteredElementCollector(doc)
+            .OfClass(typeof(SketchPlane))
+            .Cast<SketchPlane>()
+            .ToList();
+
+        var exact = sketchPlanes.FirstOrDefault(sp => sp.Name == requestedName);
+        if (exact != null)
+            return exact;
+
+        foreach (var alias in GetAnchorAliases(requestedName)) {
+            var aliasMatch = sketchPlanes.FirstOrDefault(sp => sp.Name == alias);
+            if (aliasMatch != null)
+                return aliasMatch;
+        }
+
+        if (requestedName.IndexOf("level", StringComparison.OrdinalIgnoreCase) < 0)
+            return null;
+
+        return sketchPlanes.FirstOrDefault(sp =>
+            !string.IsNullOrWhiteSpace(sp.Name) &&
+            sp.Name.IndexOf("level", StringComparison.OrdinalIgnoreCase) >= 0);
+    }
+
+    private static XYZ BuildStableDirection(XYZ normal) {
+        var seed = Math.Abs(normal.Z) > 0.9 ? XYZ.BasisX : XYZ.BasisZ;
+        return seed.CrossProduct(normal).Normalize();
     }
 
     #endregion

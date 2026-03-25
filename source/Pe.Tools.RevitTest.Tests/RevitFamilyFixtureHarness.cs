@@ -1,5 +1,6 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using Pe.Extensions.FamDocument;
 using Pe.SettingsCatalog.Revit.FamilyFoundry;
 using Pe.StorageRuntime.Revit.Core.Json;
 
@@ -16,6 +17,8 @@ internal static class RevitFamilyFixtureHarness {
         Path.Combine("Family Templates", "English_I"),
         Path.Combine("Family Templates", "English")
     ];
+
+    internal sealed record FamilyTypeState(string Name, IReadOnlyDictionary<string, double> LengthValues);
 
     public static string ResolveGenericModelTemplatePath(
         Autodesk.Revit.ApplicationServices.Application application
@@ -70,6 +73,7 @@ internal static class RevitFamilyFixtureHarness {
             Guid.NewGuid().ToString("N")[..8]);
 
         Directory.CreateDirectory(outputDirectory);
+        Console.WriteLine($"[PE_FF_TEST_OUTPUT_DIRECTORY] {outputDirectory}");
         return outputDirectory;
     }
 
@@ -142,6 +146,153 @@ internal static class RevitFamilyFixtureHarness {
             return;
 
         _ = document.Close(false);
+    }
+
+    public static IReadOnlyList<(string TypeName, T Result)> EvaluateLengthDrivenStates<T>(
+        Document familyDocument,
+        IReadOnlyList<FamilyTypeState> states,
+        Func<Document, T> evaluator
+    ) {
+        if (familyDocument == null)
+            throw new ArgumentNullException(nameof(familyDocument));
+        if (!familyDocument.IsFamilyDocument)
+            throw new InvalidOperationException("Expected a family document.");
+        if (states.Count == 0)
+            return [];
+
+        var familyManager = familyDocument.FamilyManager;
+        var results = new List<(string TypeName, T Result)>();
+
+        using var transaction = new Transaction(familyDocument, "Evaluate family type states");
+        _ = transaction.Start();
+
+        try {
+            foreach (var state in states) {
+                var familyType = familyManager.Types
+                    .Cast<FamilyType>()
+                    .FirstOrDefault(type => string.Equals(type.Name, state.Name, StringComparison.Ordinal))
+                    ?? familyManager.NewType(state.Name);
+
+                familyManager.CurrentType = familyType;
+
+                foreach (var (parameterName, value) in state.LengthValues) {
+                    var parameter = familyManager.get_Parameter(parameterName)
+                        ?? throw new InvalidOperationException($"Family parameter '{parameterName}' was not found.");
+
+                    if (!string.IsNullOrWhiteSpace(parameter.Formula)) {
+                        var familyDoc = new FamilyDocument(familyDocument);
+                        if (!familyDoc.UnsetFormula(parameter))
+                            throw new InvalidOperationException($"Family parameter '{parameterName}' formula could not be cleared for state evaluation.");
+                    }
+
+                    familyManager.Set(parameter, value);
+                }
+
+                familyDocument.Regenerate();
+                results.Add((state.Name, evaluator(familyDocument)));
+            }
+        } finally {
+            _ = transaction.RollBack();
+        }
+
+        return results;
+    }
+
+    public static double MeasureFirstRoundExtrusionDiameter(Document familyDocument) {
+        var extrusion = new FilteredElementCollector(familyDocument)
+            .OfClass(typeof(Extrusion))
+            .Cast<Extrusion>()
+            .FirstOrDefault(IsRoundExtrusion)
+            ?? throw new InvalidOperationException("No round extrusion was found.");
+
+        var arc = extrusion.Sketch?.Profile
+            ?.Cast<CurveArray>()
+            .SelectMany(loop => loop.Cast<Curve>())
+            .OfType<Arc>()
+            .FirstOrDefault();
+        if (arc != null)
+            return arc.Radius * 2.0;
+
+        var bbox = extrusion.get_BoundingBox(null)
+            ?? throw new InvalidOperationException("Round extrusion had no bounding box.");
+        var x = bbox.Max.X - bbox.Min.X;
+        var y = bbox.Max.Y - bbox.Min.Y;
+        return (x + y) / 2.0;
+    }
+
+    public static double MeasureFirstRoundConnectorDiameter(Document familyDocument) {
+        var connector = new FilteredElementCollector(familyDocument)
+            .OfClass(typeof(ConnectorElement))
+            .Cast<ConnectorElement>()
+            .FirstOrDefault()
+            ?? throw new InvalidOperationException("No connector was found.");
+
+        var diameter = connector.get_Parameter(BuiltInParameter.CONNECTOR_DIAMETER)?.AsDouble();
+        if (diameter is > 0.0)
+            return diameter.Value;
+
+        var radius = connector.get_Parameter(BuiltInParameter.CONNECTOR_RADIUS)?.AsDouble();
+        if (radius is > 0.0)
+            return radius.Value * 2.0;
+
+        throw new InvalidOperationException("Round connector diameter parameters were not available.");
+    }
+
+    public static double MeasureFirstExtrusionDepth(Document familyDocument) {
+        var extrusion = new FilteredElementCollector(familyDocument)
+            .OfClass(typeof(Extrusion))
+            .Cast<Extrusion>()
+            .FirstOrDefault()
+            ?? throw new InvalidOperationException("No extrusion was found.");
+
+        return Math.Abs(extrusion.EndOffset - extrusion.StartOffset);
+    }
+
+    public static (double Width, double Length) MeasureFirstRectangularExtrusionPlanExtents(Document familyDocument) {
+        var extrusion = new FilteredElementCollector(familyDocument)
+            .OfClass(typeof(Extrusion))
+            .Cast<Extrusion>()
+            .FirstOrDefault(IsRectangularExtrusion)
+            ?? throw new InvalidOperationException("No rectangular extrusion was found.");
+
+        var bbox = extrusion.get_BoundingBox(null)
+            ?? throw new InvalidOperationException("Rectangular extrusion had no bounding box.");
+        var x = bbox.Max.X - bbox.Min.X;
+        var y = bbox.Max.Y - bbox.Min.Y;
+        return (Math.Min(x, y), Math.Max(x, y));
+    }
+
+    public static (double Width, double Length) MeasureFirstRectangularConnectorSize(Document familyDocument) {
+        var connector = new FilteredElementCollector(familyDocument)
+            .OfClass(typeof(ConnectorElement))
+            .Cast<ConnectorElement>()
+            .FirstOrDefault()
+            ?? throw new InvalidOperationException("No connector was found.");
+
+        var width = connector.get_Parameter(BuiltInParameter.CONNECTOR_WIDTH)?.AsDouble();
+        var height = connector.get_Parameter(BuiltInParameter.CONNECTOR_HEIGHT)?.AsDouble();
+        if (width is not > 0.0 || height is not > 0.0)
+            throw new InvalidOperationException("Rectangular connector width/height parameters were not available.");
+
+        return (Math.Min(width.Value, height.Value), Math.Max(width.Value, height.Value));
+    }
+
+    private static bool IsRoundExtrusion(Extrusion extrusion) {
+        var profile = extrusion.Sketch?.Profile;
+        if (profile == null || profile.Size != 1)
+            return false;
+
+        var loop = profile.get_Item(0);
+        return loop != null && loop.Size > 0 && loop.Cast<Curve>().All(curve => curve is Arc);
+    }
+
+    private static bool IsRectangularExtrusion(Extrusion extrusion) {
+        var profile = extrusion.Sketch?.Profile;
+        if (profile == null || profile.Size != 1)
+            return false;
+
+        var loop = profile.get_Item(0);
+        return loop != null && loop.Size == 4 && loop.Cast<Curve>().All(curve => curve is Line);
     }
 
     private static string SanitizePathSegment(string value) {

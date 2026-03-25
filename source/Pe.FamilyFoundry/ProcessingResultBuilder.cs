@@ -1,4 +1,4 @@
-using Pe.FamilyFoundry.Aggregators.Snapshots;
+﻿using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Serialization;
 using Pe.Global;
@@ -324,7 +324,8 @@ public class ProcessingResultBuilder {
 
         if (snapshot.ParamDrivenSolids != null) {
             var hasSolids = snapshot.ParamDrivenSolids.Rectangles.Count > 0 ||
-                            snapshot.ParamDrivenSolids.Cylinders.Count > 0;
+                            snapshot.ParamDrivenSolids.Cylinders.Count > 0 ||
+                            snapshot.ParamDrivenSolids.Connectors.Count > 0;
             if (hasSolids)
                 _ = output.Json($"snapshot-paramdrivensolids-{prefix}.json").Write(snapshot.ParamDrivenSolids);
         }

@@ -1,6 +1,7 @@
 using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.Resolution;
 using Pe.FamilyFoundry.Snapshots;
+using Autodesk.Revit.DB.Mechanical;
 
 namespace Pe.Tools.RevitTest.Tests;
 
@@ -242,5 +243,128 @@ public sealed class ParamDrivenSolidsCompilerTests {
         Assert.That(result.Diagnostics.Any(diagnostic =>
             diagnostic.Severity == ParamDrivenDiagnosticSeverity.Error &&
             diagnostic.Message.Contains("Ambiguous", StringComparison.OrdinalIgnoreCase)), Is.True);
+    }
+
+    [Test]
+    public void Compile_round_duct_connector_generates_connector_plan() {
+        var settings = new ParamDrivenSolidsSettings {
+            Connectors = [
+                new ParamDrivenConnectorSpec {
+                    Name = "SupplyConn",
+                    Domain = ParamDrivenConnectorDomain.Duct,
+                    Host = new ConnectorHostSpec {
+                        SketchPlane = "Ref. Level",
+                        Depth = new AxisConstraintSpec {
+                            Mode = AxisConstraintMode.Offset,
+                            Parameter = "Depth",
+                            Anchor = "Ref. Level",
+                            Direction = OffsetDirection.Positive,
+                            PlaneNameBase = "conn face",
+                            Strength = RpStrength.StrongRef
+                        }
+                    },
+                    Geometry = new ConnectorStubGeometrySpec {
+                        Profile = ParamDrivenConnectorProfile.Round,
+                        CenterLeftRightPlane = "Center (Left/Right)",
+                        CenterFrontBackPlane = "Center (Front/Back)",
+                        Diameter = new AxisConstraintSpec {
+                            Mode = AxisConstraintMode.Mirror,
+                            Parameter = "Diameter"
+                        }
+                    },
+                    Config = new ConnectorDomainConfigSpec {
+                        Duct = new DuctConnectorConfigSpec { SystemType = DuctSystemType.SupplyAir }
+                    }
+                }
+            ]
+        };
+
+        var result = ParamDrivenSolidsCompiler.Compile(settings);
+
+        Assert.That(result.CanExecute, Is.True);
+        Assert.That(result.Connectors.Connectors, Has.Count.EqualTo(1));
+        Assert.That(result.Connectors.Connectors[0].RoundStub, Is.Not.Null);
+        Assert.That(result.SemanticAliases["SupplyConn.HostFace"], Is.EqualTo("SupplyConn HostFace"));
+    }
+
+    [Test]
+    public void Compile_blocks_rectangular_pipe_connector() {
+        var settings = new ParamDrivenSolidsSettings {
+            Connectors = [
+                new ParamDrivenConnectorSpec {
+                    Name = "BadPipe",
+                    Domain = ParamDrivenConnectorDomain.Pipe,
+                    Host = new ConnectorHostSpec {
+                        SketchPlane = "Ref. Level",
+                        Depth = new AxisConstraintSpec {
+                            Mode = AxisConstraintMode.Offset,
+                            Parameter = "Depth",
+                            Anchor = "Ref. Level"
+                        }
+                    },
+                    Geometry = new ConnectorStubGeometrySpec {
+                        Profile = ParamDrivenConnectorProfile.Rectangular,
+                        Width = new AxisConstraintSpec {
+                            Mode = AxisConstraintMode.Mirror,
+                            Parameter = "Width",
+                            CenterAnchor = "Center (Front/Back)"
+                        },
+                        Length = new AxisConstraintSpec {
+                            Mode = AxisConstraintMode.Mirror,
+                            Parameter = "Length",
+                            CenterAnchor = "Center (Left/Right)"
+                        }
+                    },
+                    Config = new ConnectorDomainConfigSpec {
+                        Pipe = new PipeConnectorConfigSpec()
+                    }
+                }
+            ]
+        };
+
+        var result = ParamDrivenSolidsCompiler.Compile(settings);
+
+        Assert.That(result.CanExecute, Is.False);
+        Assert.That(result.Diagnostics.Any(diagnostic =>
+            diagnostic.Path.Contains("Geometry.Profile", StringComparison.Ordinal) &&
+            diagnostic.Message.Contains("Pipe", StringComparison.OrdinalIgnoreCase)), Is.True);
+    }
+
+    [Test]
+    public void Compile_blocks_connector_when_required_parameter_name_is_missing() {
+        var settings = new ParamDrivenSolidsSettings {
+            Connectors = [
+                new ParamDrivenConnectorSpec {
+                    Name = "BadConn",
+                    Domain = ParamDrivenConnectorDomain.Duct,
+                    Host = new ConnectorHostSpec {
+                        SketchPlane = "Ref. Level",
+                        Depth = new AxisConstraintSpec {
+                            Mode = AxisConstraintMode.Offset,
+                            Parameter = "Depth",
+                            Anchor = "Ref. Level"
+                        }
+                    },
+                    Geometry = new ConnectorStubGeometrySpec {
+                        Profile = ParamDrivenConnectorProfile.Round,
+                        CenterLeftRightPlane = "Center (Left/Right)",
+                        CenterFrontBackPlane = "Center (Front/Back)",
+                        Diameter = new AxisConstraintSpec {
+                            Mode = AxisConstraintMode.Mirror
+                        }
+                    },
+                    Config = new ConnectorDomainConfigSpec {
+                        Duct = new DuctConnectorConfigSpec { SystemType = DuctSystemType.SupplyAir }
+                    }
+                }
+            ]
+        };
+
+        var result = ParamDrivenSolidsCompiler.Compile(settings);
+
+        Assert.That(result.CanExecute, Is.False);
+        Assert.That(result.Diagnostics.Any(diagnostic =>
+            diagnostic.Path.Contains("Geometry.Diameter.Parameter", StringComparison.Ordinal) &&
+            diagnostic.Message.Contains("driving", StringComparison.OrdinalIgnoreCase)), Is.True);
     }
 }
