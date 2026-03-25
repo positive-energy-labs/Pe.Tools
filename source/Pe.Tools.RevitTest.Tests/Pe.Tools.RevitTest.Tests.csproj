@@ -50,4 +50,8 @@
             <_Parameter2>20</_Parameter2>
         </AssemblyAttribute>
     </ItemGroup>
+
+    <Target Name="PostBuildPrepareRiderHotReload" AfterTargets="Build" Condition="'$(BuildingByReSharper)' == 'true'">
+        <Exec Command="powershell.exe -ExecutionPolicy Bypass -NoProfile -File &quot;$(MSBuildProjectDirectory)\PostBuildHotReload.ps1&quot; -ScriptDirectory &quot;$(MSBuildProjectDirectory)&quot;"/>
+    </Target>
 </Project>
