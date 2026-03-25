@@ -1,3 +1,4 @@
+using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Operations;
 using Pe.FamilyFoundry.Snapshots;
@@ -77,6 +78,21 @@ public static class KnownParamPlanBuilder {
     ) => settings.Rectangles
         .SelectMany(spec => new[] { spec.PairAParameter, spec.PairBParameter, spec.HeightParameter })
         .Concat(settings.Circles.SelectMany(spec => new[] { spec.PairAParameter, spec.PairBParameter }))
+        .Where(name => !string.IsNullOrWhiteSpace(name))
+        .Select(name => name.Trim())
+        .Distinct(StringComparer.Ordinal)
+        .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    public static IReadOnlyList<string> CollectReferencedParameterNames(
+        ParamDrivenSolidsSettings settings
+    ) => settings.Rectangles
+        .SelectMany(spec => new[] {
+            spec.Width.Parameter, spec.Length.Parameter, spec.Height.Parameter
+        })
+        .Concat(settings.Cylinders.SelectMany(spec => new[] {
+            spec.Diameter.Parameter, spec.Height.Parameter
+        }))
         .Where(name => !string.IsNullOrWhiteSpace(name))
         .Select(name => name.Trim())
         .Distinct(StringComparer.Ordinal)

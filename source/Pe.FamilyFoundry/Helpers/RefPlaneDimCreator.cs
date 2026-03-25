@@ -84,6 +84,18 @@ public class RefPlaneDimCreator(
         return Line.CreateBound(p1, p2);
     }
 
+    private View? GetWorkingView() {
+        if (doc.ActiveView != null && !doc.ActiveView.IsTemplate)
+            return doc.ActiveView;
+
+        return new FilteredElementCollector(doc)
+            .OfClass(typeof(View))
+            .Cast<View>()
+            .FirstOrDefault(view =>
+                !view.IsTemplate &&
+                view.ViewType is ViewType.FloorPlan or ViewType.CeilingPlan or ViewType.EngineeringPlan or ViewType.AreaPlan);
+    }
+
     #region Plane Creation (First Operation)
 
     /// <summary>
@@ -168,7 +180,13 @@ public class RefPlaneDimCreator(
 
         try {
             Console.WriteLine($"[CreatePlane] Creating: {name}");
-            var rp = doc.FamilyCreate.NewReferencePlane(origin + t, origin - t, cutVec, doc.ActiveView);
+            var workingView = this.GetWorkingView();
+            if (workingView == null) {
+                logs.Add(new LogEntry($"RefPlane: {name}").Error("No valid non-template plan view was available."));
+                return false;
+            }
+
+            var rp = doc.FamilyCreate.NewReferencePlane(origin + t, origin - t, cutVec, workingView);
             rp.Name = name;
             _ = rp.get_Parameter(BuiltInParameter.ELEM_REFERENCE_NAME).Set((int)strength);
             _ = query.ReCache(name);
@@ -260,14 +278,21 @@ public class RefPlaneDimCreator(
             logs.Add(new LogEntry($"Mirror param dim: {spec.Name} @ {spec.CenterAnchor}").Skip("Already exists"));
         } else {
             try {
+                var dimView = this.GetBestDimensionView(leftPlane, rightPlane);
+                if (dimView == null) {
+                    logs.Add(new LogEntry($"Mirror param dim: {spec.Name} @ {spec.CenterAnchor}").Error(
+                        "No valid view was available for parameter dimension creation."));
+                    return;
+                }
+
                 var paramRefArray = new ReferenceArray();
                 paramRefArray.Append(leftPlane.GetReference());
                 paramRefArray.Append(rightPlane.GetReference());
 
-                var paramDimLine = CreateDimensionLine(leftPlane, rightPlane, dimOffset);
+                var paramDimLine = CreateDimensionLine(leftPlane, rightPlane, dimOffset, dimView);
                 Console.WriteLine($"[CreateMirrorDimensions] Param dim line length: {paramDimLine.Length:F6}");
 
-                var paramDim = doc.FamilyCreate.NewLinearDimension(doc.ActiveView, paramDimLine, paramRefArray);
+                var paramDim = doc.FamilyCreate.NewLinearDimension(dimView, paramDimLine, paramRefArray);
 
                 if (!string.IsNullOrEmpty(spec.Parameter)) {
                     var param = doc.FamilyManager.get_Parameter(spec.Parameter);
@@ -294,15 +319,22 @@ public class RefPlaneDimCreator(
             logs.Add(new LogEntry($"Mirror EQ dim: {spec.Name} @ {spec.CenterAnchor}").Skip("Already exists"));
         } else {
             try {
+                var eqDimView = this.GetBestDimensionView(leftPlane, rightPlane);
+                if (eqDimView == null) {
+                    logs.Add(new LogEntry($"Mirror EQ dim: {spec.Name} @ {spec.CenterAnchor}").Error(
+                        "No valid view was available for EQ dimension creation."));
+                    return;
+                }
+
                 var eqRefArray = new ReferenceArray();
                 eqRefArray.Append(leftPlane.GetReference());
                 eqRefArray.Append(center.GetReference());
                 eqRefArray.Append(rightPlane.GetReference());
 
-                var eqDimLine = CreateDimensionLine(leftPlane, rightPlane, dimOffset - DimStaggerStep);
+                var eqDimLine = CreateDimensionLine(leftPlane, rightPlane, dimOffset - DimStaggerStep, eqDimView);
                 Console.WriteLine($"[CreateMirrorDimensions] EQ dim line length: {eqDimLine.Length:F6}");
 
-                var eqDim = doc.FamilyCreate.NewLinearDimension(doc.ActiveView, eqDimLine, eqRefArray);
+                var eqDim = doc.FamilyCreate.NewLinearDimension(eqDimView, eqDimLine, eqRefArray);
                 eqDim.AreSegmentsEqual = true;
                 logs.Add(new LogEntry($"Mirror EQ dim: {spec.Name} @ {spec.CenterAnchor}").Success("Created"));
             } catch (Exception ex) {
@@ -363,11 +395,11 @@ public class RefPlaneDimCreator(
         }
     }
 
-    private View GetBestDimensionView(ReferencePlane anchor, ReferencePlane target) {
+    private View? GetBestDimensionView(ReferencePlane anchor, ReferencePlane target) {
         var isHeightLike = Math.Abs(anchor.Normal.Normalize().Z) > 0.95 &&
                            Math.Abs(target.Normal.Normalize().Z) > 0.95;
         if (!isHeightLike)
-            return doc.ActiveView;
+            return this.GetWorkingView();
 
         var elevation = new FilteredElementCollector(doc)
             .OfClass(typeof(View))
@@ -376,7 +408,7 @@ public class RefPlaneDimCreator(
                 !v.IsTemplate &&
                 (v.ViewType == ViewType.Elevation || v.ViewType == ViewType.Section));
 
-        return elevation ?? doc.ActiveView;
+        return elevation ?? this.GetWorkingView();
     }
 
     #endregion

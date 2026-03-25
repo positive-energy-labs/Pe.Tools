@@ -12,12 +12,20 @@ namespace Pe.FamilyFoundry;
 /// <summary>
 ///     Fluent builder for generating processing result output files.
 /// </summary>
-public class ProcessingResultBuilder(StorageClient storage) {
+public class ProcessingResultBuilder {
     private readonly List<FamilyProcessingContext> _familyContexts = [];
-    private readonly OutputManager _runOutput = storage.OutputDir().TimestampedSubDir();
+    private readonly OutputManager _runOutput;
     private List<(string Name, string Description, string Type, string IsMerged)> _operationMetadata = [];
     private string _profileName;
     private object _profileSettings;
+
+    public ProcessingResultBuilder(StorageClient storage) : this(storage.OutputDir().TimestampedSubDir()) { }
+
+    public ProcessingResultBuilder(OutputManager runOutput) {
+        this._runOutput = runOutput ?? throw new ArgumentNullException(nameof(runOutput));
+    }
+
+    public string RunOutputPath => this._runOutput.DirectoryPath;
 
     private static string GetDescription(ParamSnapshot param) =>
         $"{GetInstTypeStr(param)}: {param.Name} ({GetDataTypeLabel(param)})";
@@ -54,10 +62,7 @@ public class ProcessingResultBuilder(StorageClient storage) {
     ///     Writes output for a single family context as it completes.
     ///     Outputs to a subdirectory named after the family within the run directory.
     /// </summary>
-    public void WriteSingleFamilyOutput(FamilyProcessingContext ctx, bool openOnFinish = false) {
-        if (this._runOutput == null)
-            throw new InvalidOperationException("Must call InitializeRun() before WriteSingleFamilyOutput()");
-
+    public string WriteSingleFamilyOutput(FamilyProcessingContext ctx, bool openOnFinish = false) {
         // Track contexts for summary
         this._familyContexts.Add(ctx);
 
@@ -83,6 +88,8 @@ public class ProcessingResultBuilder(StorageClient storage) {
         _ = familyOutput.Json(paramDiffName).Write(BuildParameterDiff(ctx));
 
         if (openOnFinish) FileUtils.OpenInDefaultApp(detailedPath);
+
+        return detailedPath;
     }
 
     /// <summary>
@@ -90,9 +97,6 @@ public class ProcessingResultBuilder(StorageClient storage) {
     ///     Should be called after all families have been processed.
     /// </summary>
     public void WriteMultiFamilySummary(double totalMs, bool openOnFinish = false) {
-        if (this._runOutput == null)
-            throw new InvalidOperationException("Must call InitializeRun() before WriteMultiFamilySummary()");
-
         if (!this._familyContexts.Any()) return;
 
         // Count unique errors by grouping on (Name, Message) to match how errors are displayed
@@ -318,11 +322,11 @@ public class ProcessingResultBuilder(StorageClient storage) {
                 _ = output.Json($"snapshot-refplanesanddims-{prefix}.json").Write(snapshot.RefPlanesAndDims);
         }
 
-        if (snapshot.Extrusions != null) {
-            var hasExtrusions = snapshot.Extrusions.Rectangles.Count > 0 ||
-                                snapshot.Extrusions.Circles.Count > 0;
-            if (hasExtrusions)
-                _ = output.Json($"snapshot-extrusions-{prefix}.json").Write(snapshot.Extrusions);
+        if (snapshot.ParamDrivenSolids != null) {
+            var hasSolids = snapshot.ParamDrivenSolids.Rectangles.Count > 0 ||
+                            snapshot.ParamDrivenSolids.Cylinders.Count > 0;
+            if (hasSolids)
+                _ = output.Json($"snapshot-paramdrivensolids-{prefix}.json").Write(snapshot.ParamDrivenSolids);
         }
     }
 

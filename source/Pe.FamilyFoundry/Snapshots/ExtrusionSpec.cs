@@ -57,4 +57,8 @@ public class ConstrainedCircleExtrusionSpec {
     public string PairBPlane1 { get; init; } = string.Empty;
     public string PairBPlane2 { get; init; } = string.Empty;
     public string PairBParameter { get; init; } = string.Empty;
+
+    public string? HeightPlaneBottom { get; init; }
+    public string? HeightPlaneTop { get; init; }
+    public string? HeightParameter { get; init; }
 }

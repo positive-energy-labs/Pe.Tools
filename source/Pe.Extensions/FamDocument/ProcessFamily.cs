@@ -82,7 +82,7 @@ public static class FamilyDocumentProcessFamily {
         out List<TOutput> result
     ) {
         var originalFamPath = famDoc.PathName;
-        var originalFamilyName = famDoc.Document.Title;
+        var originalFamilyName = Path.GetFileNameWithoutExtension(famDoc.Document.Title);
         var createdFamPath = Path.Combine(outputDirectory, $"{originalFamilyName}{suffix}.rfa");
 
         // First Assimilate the transaction group to "close" transaction-related stuff
@@ -98,25 +98,31 @@ public static class FamilyDocumentProcessFamily {
         // Undo the transaction group to revert to old file state
         QuickAccessToolBarService.performMultipleUndoRedoOperations(true, 1);
 
-        // make the current document the original document again
-        famDoc.SaveAs(originalFamPath, new SaveAsOptions { OverwriteExistingFile = true, Compact = true });
+        // Restore the original document path only when the family started from a real file.
+        if (!string.IsNullOrWhiteSpace(originalFamPath))
+            famDoc.SaveAs(originalFamPath, new SaveAsOptions { OverwriteExistingFile = true, Compact = true });
+
         return famDoc;
     }
 
 
-    public static FamilyDocument SaveToLocations(
+    public static FamilyDocument SaveToPaths(
         this FamilyDocument famDoc,
-        Func<FamilyDocument, List<string>> getSaveLocations
+        Func<FamilyDocument, List<string>> getSavePaths
     ) {
-        var saveLocations = getSaveLocations(famDoc);
-        if (saveLocations.Count == 0 || saveLocations.Count(l => l == null) > 0) return famDoc;
-        foreach (var location in saveLocations) {
-            if (location == null) continue;
-            if (!Directory.Exists(location)) _ = Directory.CreateDirectory(location);
+        var savePaths = getSavePaths(famDoc)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (savePaths.Count == 0) return famDoc;
 
-            var family = famDoc.OwnerFamily;
-            var familyFileName = $"{family.Name}.rfa";
-            var fullSavePath = Path.Combine(location, familyFileName);
+        foreach (var fullSavePath in savePaths) {
+            var saveDirectory = Path.GetDirectoryName(fullSavePath);
+            if (string.IsNullOrWhiteSpace(saveDirectory))
+                throw new InvalidOperationException($"Save path '{fullSavePath}' does not contain a valid directory.");
+
+            if (!Directory.Exists(saveDirectory))
+                _ = Directory.CreateDirectory(saveDirectory);
 
             var saveOptions = new SaveAsOptions { OverwriteExistingFile = true, Compact = true, MaximumBackups = 1 };
             famDoc.SaveAs(fullSavePath, saveOptions);

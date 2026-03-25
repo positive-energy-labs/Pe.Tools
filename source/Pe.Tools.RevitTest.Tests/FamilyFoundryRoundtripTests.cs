@@ -127,7 +127,10 @@ public sealed class FamilyFoundryRoundtripTests {
         Assert.That(heightParam.Formula, Is.EqualTo("3'"));
         Assert.That(snapshot.RefPlanesAndDims.MirrorSpecs, Has.Count.EqualTo(2));
         Assert.That(snapshot.RefPlanesAndDims.OffsetSpecs, Has.Count.EqualTo(1));
-        Assert.That(snapshot.Extrusions.Rectangles, Has.Count.EqualTo(1));
-        Assert.That(snapshot.Extrusions.Rectangles[0].Name, Is.EqualTo("MagicBox"));
+        Assert.That(snapshot.ParamDrivenSolids, Is.Not.Null);
+        Assert.That(snapshot.ParamDrivenSolids.Rectangles, Has.Count.EqualTo(1));
+        Assert.That(snapshot.ParamDrivenSolids.Rectangles[0].Width.Parameter, Is.EqualTo("PE_G_Dim_Width1"));
+        Assert.That(snapshot.ParamDrivenSolids.Rectangles[0].Length.Parameter, Is.EqualTo("PE_G_Dim_Length1"));
+        Assert.That(snapshot.ParamDrivenSolids.Rectangles[0].Height.Parameter, Is.EqualTo("PE_G_Dim_Height1"));
     }
 }
