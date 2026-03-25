@@ -2,11 +2,12 @@ using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.Resolution;
 using Pe.FamilyFoundry.Snapshots;
 
-namespace Pe.Tools.Tests;
+namespace Pe.Tools.RevitTest.Tests;
 
-public sealed class ParamDrivenSolidsCompilerTests : RevitTestBase {
+[TestFixture]
+public sealed class ParamDrivenSolidsCompilerTests {
     [Test]
-    public async Task Compile_rectangle_generates_internal_ref_planes_and_extrusion() {
+    public void Compile_rectangle_generates_internal_ref_planes_and_extrusion() {
         var settings = new ParamDrivenSolidsSettings {
             Rectangles = [
                 new ParamDrivenRectangleSpec {
@@ -40,17 +41,17 @@ public sealed class ParamDrivenSolidsCompilerTests : RevitTestBase {
 
         var result = ParamDrivenSolidsCompiler.Compile(settings);
 
-        await Assert.That(result.CanExecute).IsTrue();
-        await Assert.That(result.RefPlanesAndDims.MirrorSpecs.Count).IsEqualTo(2);
-        await Assert.That(result.RefPlanesAndDims.OffsetSpecs.Count).IsEqualTo(1);
-        await Assert.That(result.InternalExtrusions.Rectangles.Count).IsEqualTo(1);
-        await Assert.That(result.InternalExtrusions.Rectangles[0].PairAPlane1).IsEqualTo("width (Back)");
-        await Assert.That(result.InternalExtrusions.Rectangles[0].PairBPlane2).IsEqualTo("length (Right)");
-        await Assert.That(result.InternalExtrusions.Rectangles[0].HeightPlaneTop).IsEqualTo("top");
+        Assert.That(result.CanExecute, Is.True);
+        Assert.That(result.RefPlanesAndDims.MirrorSpecs, Has.Count.EqualTo(2));
+        Assert.That(result.RefPlanesAndDims.OffsetSpecs, Has.Count.EqualTo(1));
+        Assert.That(result.InternalExtrusions.Rectangles, Has.Count.EqualTo(1));
+        Assert.That(result.InternalExtrusions.Rectangles[0].PairAPlane1, Is.EqualTo("width (Back)"));
+        Assert.That(result.InternalExtrusions.Rectangles[0].PairBPlane2, Is.EqualTo("length (Right)"));
+        Assert.That(result.InternalExtrusions.Rectangles[0].HeightPlaneTop, Is.EqualTo("top"));
     }
 
     [Test]
-    public async Task Compile_blocks_ambiguous_inference() {
+    public void Compile_blocks_ambiguous_inference() {
         var settings = new ParamDrivenSolidsSettings {
             Rectangles = [
                 new ParamDrivenRectangleSpec {
@@ -81,14 +82,14 @@ public sealed class ParamDrivenSolidsCompilerTests : RevitTestBase {
 
         var result = ParamDrivenSolidsCompiler.Compile(settings);
 
-        await Assert.That(result.CanExecute).IsFalse();
-        await Assert.That(result.Diagnostics.Any(diagnostic =>
+        Assert.That(result.CanExecute, Is.False);
+        Assert.That(result.Diagnostics.Any(diagnostic =>
             diagnostic.Severity == ParamDrivenDiagnosticSeverity.Error &&
-            diagnostic.Message.Contains("Ambiguous", StringComparison.OrdinalIgnoreCase))).IsTrue();
+            diagnostic.Message.Contains("Ambiguous", StringComparison.OrdinalIgnoreCase)), Is.True);
     }
 
     [Test]
-    public async Task Compile_dedupes_exact_shared_constraints() {
+    public void Compile_dedupes_exact_shared_constraints() {
         var sharedWidth = new AxisConstraintSpec {
             Mode = AxisConstraintMode.Mirror,
             Parameter = "Width",
@@ -137,8 +138,8 @@ public sealed class ParamDrivenSolidsCompilerTests : RevitTestBase {
 
         var result = ParamDrivenSolidsCompiler.Compile(settings);
 
-        await Assert.That(result.CanExecute).IsTrue();
-        await Assert.That(result.RefPlanesAndDims.MirrorSpecs.Count).IsEqualTo(2);
-        await Assert.That(result.InternalExtrusions.Rectangles.Count).IsEqualTo(2);
+        Assert.That(result.CanExecute, Is.True);
+        Assert.That(result.RefPlanesAndDims.MirrorSpecs, Has.Count.EqualTo(2));
+        Assert.That(result.InternalExtrusions.Rectangles, Has.Count.EqualTo(2));
     }
 }
