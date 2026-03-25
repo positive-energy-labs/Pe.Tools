@@ -1,6 +1,7 @@
-using Pe.Extensions.FamDocument;
+﻿using Pe.Extensions.FamDocument;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
-using Pe.Global.PolyFill;
+using Pe.FamilyFoundry.Resolution;
+using Serilog;
 
 namespace Pe.FamilyFoundry.Snapshots;
 
@@ -18,15 +19,18 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
         (snapshot.ParamDrivenSolids.Rectangles.Count == 0 && snapshot.ParamDrivenSolids.Cylinders.Count == 0);
 
     public void Collect(FamilySnapshot snapshot, FamilyDocument famDoc) {
-        var legacy = CollectLegacyFromFamilyDoc(famDoc.Document);
+        var legacy = CollectLegacyFromFamilyDoc(famDoc.Document, snapshot.RefPlanesAndDims);
         snapshot.Extrusions = legacy;
         snapshot.ParamDrivenSolids = CollectSemanticSnapshot(
             famDoc.Document,
             legacy,
             snapshot.RefPlanesAndDims);
+        snapshot.RefPlanesAndDims = RemoveSemanticInternalConstraints(
+            snapshot.RefPlanesAndDims,
+            snapshot.ParamDrivenSolids);
     }
 
-    private static ExtrusionSnapshot CollectLegacyFromFamilyDoc(Document doc) {
+    private static ExtrusionSnapshot CollectLegacyFromFamilyDoc(Document doc, RefPlaneSnapshot? refPlanesAndDims) {
         var result = new ExtrusionSnapshot { Source = SnapshotSource.FamilyDoc };
 
         var extrusions = new FilteredElementCollector(doc)
@@ -42,7 +46,7 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
                     continue;
                 }
 
-                if (TryBuildCircleSpec(extrusion, doc, out var circle))
+                if (TryBuildCircleSpec(extrusion, doc, refPlanesAndDims, out var circle))
                     result.Circles.Add(circle);
             } catch {
                 // Never fail the full pipeline due to one problematic extrusion.
@@ -72,6 +76,41 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
         }
 
         return result;
+    }
+
+    private static RefPlaneSnapshot? RemoveSemanticInternalConstraints(
+        RefPlaneSnapshot? refPlaneSnapshot,
+        ParamDrivenSolidsSnapshot semanticSnapshot
+    ) {
+        if (refPlaneSnapshot == null)
+            return null;
+
+        if (semanticSnapshot.Rectangles.Count == 0 && semanticSnapshot.Cylinders.Count == 0)
+            return refPlaneSnapshot;
+
+        var compiledSemantics = ParamDrivenSolidsCompiler.Compile(new ParamDrivenSolidsSettings {
+            Rectangles = semanticSnapshot.Rectangles,
+            Cylinders = semanticSnapshot.Cylinders
+        });
+        if (!compiledSemantics.CanExecute)
+            return refPlaneSnapshot;
+
+        var internalMirrorKeys = compiledSemantics.RefPlanesAndDims.MirrorSpecs
+            .Select(BuildMirrorKey)
+            .ToHashSet(StringComparer.Ordinal);
+        var internalOffsetKeys = compiledSemantics.RefPlanesAndDims.OffsetSpecs
+            .Select(BuildOffsetKey)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return new RefPlaneSnapshot {
+            Source = refPlaneSnapshot.Source,
+            MirrorSpecs = refPlaneSnapshot.MirrorSpecs
+                .Where(spec => !internalMirrorKeys.Contains(BuildMirrorKey(spec)))
+                .ToList(),
+            OffsetSpecs = refPlaneSnapshot.OffsetSpecs
+                .Where(spec => !internalOffsetKeys.Contains(BuildOffsetKey(spec)))
+                .ToList()
+        };
     }
 
     private static ParamDrivenRectangleSpec? TryBuildSemanticRectangle(
@@ -378,11 +417,17 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
         out ConstrainedRectangleExtrusionSpec spec
     ) {
         spec = null!;
-        if (!IsRectangleProfile(extrusion.Sketch.Profile))
+        if (!IsRectangleProfile(extrusion.Sketch.Profile)) {
+            Log.Debug("[ExtrusionSectionCollector] Extrusion {ExtrusionId} was not recognized as a rectangle profile.", extrusion.Id.Value());
             return false;
+        }
 
-        if (!TryGetProfilePlanePairs(doc, extrusion, out var pairA, out var pairB))
+        if (!TryGetProfilePlanePairs(doc, extrusion, out var pairA, out var pairB)) {
+            Log.Debug(
+                "[ExtrusionSectionCollector] Rectangle extrusion {ExtrusionId} could not resolve profile plane pairs.",
+                extrusion.Id.Value());
             return false;
+        }
 
         var height = TryGetHeightConstraintPair(doc, extrusion, out var heightPair) ? heightPair : default;
 
@@ -408,14 +453,22 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
     private static bool TryBuildCircleSpec(
         Extrusion extrusion,
         Document doc,
+        RefPlaneSnapshot? refPlanesAndDims,
         out ConstrainedCircleExtrusionSpec spec
     ) {
         spec = null!;
-        if (!IsCircleProfile(extrusion.Sketch.Profile))
+        if (!IsCircleProfile(extrusion.Sketch.Profile)) {
+            Log.Debug("[ExtrusionSectionCollector] Extrusion {ExtrusionId} was not recognized as a circle profile.", extrusion.Id.Value());
             return false;
+        }
 
-        if (!TryGetProfilePlanePairs(doc, extrusion, out var pairA, out var pairB))
+        if (!TryGetProfilePlanePairs(doc, extrusion, out var pairA, out var pairB) &&
+            !TryGetCirclePlanePairsFromRefPlaneSnapshot(doc, extrusion, refPlanesAndDims, out pairA, out pairB)) {
+            Log.Debug(
+                "[ExtrusionSectionCollector] Circle extrusion {ExtrusionId} could not resolve profile plane pairs.",
+                extrusion.Id.Value());
             return false;
+        }
 
         var height = TryGetHeightConstraintPair(doc, extrusion, out var heightPair) ? heightPair : default;
 
@@ -438,6 +491,190 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
         return true;
     }
 
+    private static bool TryGetCirclePlanePairsFromRefPlaneSnapshot(
+        Document doc,
+        Extrusion extrusion,
+        RefPlaneSnapshot? refPlanesAndDims,
+        out DimConstraint pairA,
+        out DimConstraint pairB
+    ) {
+        pairA = default;
+        pairB = default;
+
+        if (refPlanesAndDims == null) {
+            Log.Debug(
+                "[ExtrusionSectionCollector] Circle extrusion {ExtrusionId} had no RefPlaneSnapshot available for fallback.",
+                extrusion.Id.Value());
+            return false;
+        }
+
+        var sketchPlane = extrusion.Sketch.SketchPlane?.GetPlane();
+        if (sketchPlane == null) {
+            Log.Debug(
+                "[ExtrusionSectionCollector] Circle extrusion {ExtrusionId} had no sketch plane for fallback.",
+                extrusion.Id.Value());
+            return false;
+        }
+
+        var arcs = extrusion.Sketch.Profile
+            .Cast<CurveArray>()
+            .SelectMany(loop => loop.Cast<Curve>())
+            .OfType<Arc>()
+            .ToList();
+        if (arcs.Count == 0) {
+            Log.Debug(
+                "[ExtrusionSectionCollector] Circle extrusion {ExtrusionId} had no arcs in sketch profile for fallback.",
+                extrusion.Id.Value());
+            return false;
+        }
+
+        var center = arcs[0].Center;
+        var radius = arcs[0].Radius;
+        var sketchNormal = sketchPlane.Normal.Normalize();
+        Log.Debug(
+            "[ExtrusionSectionCollector] Circle extrusion {ExtrusionId} fallback evaluating {MirrorSpecCount} mirror specs at center {Center} radius {Radius}.",
+            extrusion.Id.Value(),
+            refPlanesAndDims.MirrorSpecs.Count,
+            center,
+            radius);
+        var candidates = refPlanesAndDims.MirrorSpecs
+            .Select(spec => TryBuildCircleMirrorPairCandidate(doc, spec, center, radius, sketchNormal))
+            .Where(candidate => candidate != null)
+            .Select(candidate => candidate!)
+            .GroupBy(candidate => candidate.GroupKey, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .ToList();
+
+        Log.Debug(
+            "[ExtrusionSectionCollector] Circle extrusion {ExtrusionId} fallback produced {CandidateCount} candidate plane pairs.",
+            extrusion.Id.Value(),
+            candidates.Count);
+
+        if (candidates.Count < 2) {
+            var topologicalCandidates = refPlanesAndDims.MirrorSpecs
+                .Select(spec => TryBuildCircleMirrorTopologyCandidate(doc, spec, sketchNormal))
+                .Where(candidate => candidate != null)
+                .Select(candidate => candidate!)
+                .ToList();
+
+            var exactParameterMatch = topologicalCandidates
+                .Where(candidate => !string.IsNullOrWhiteSpace(candidate.Pair.ParameterName))
+                .GroupBy(candidate => candidate.Pair.ParameterName!, StringComparer.Ordinal)
+                .Select(group => new {
+                    Parameter = group.Key,
+                    Candidates = group
+                        .GroupBy(candidate => candidate.GroupKey, StringComparer.Ordinal)
+                        .Select(grouped => grouped.First())
+                        .ToList()
+                })
+                .Where(group => group.Candidates.Count >= 2)
+                .OrderByDescending(group => group.Candidates.Count(candidate =>
+                    candidate.Spec.Name.Contains("diameter", StringComparison.OrdinalIgnoreCase)))
+                .ThenBy(group => group.Parameter, StringComparer.Ordinal)
+                .FirstOrDefault();
+
+            if (exactParameterMatch != null) {
+                Log.Debug(
+                    "[ExtrusionSectionCollector] Circle extrusion {ExtrusionId} fallback recovered plane pairs topologically from parameter {Parameter}.",
+                    extrusion.Id.Value(),
+                    exactParameterMatch.Parameter);
+                pairA = exactParameterMatch.Candidates[0].Pair;
+                pairB = exactParameterMatch.Candidates[1].Pair;
+                return true;
+            }
+
+            return false;
+        }
+
+        pairA = candidates[0].Pair;
+        pairB = candidates[1].Pair;
+        return true;
+    }
+
+    private static CircleMirrorPairCandidate? TryBuildCircleMirrorPairCandidate(
+        Document doc,
+        MirrorSpec spec,
+        XYZ center,
+        double radius,
+        XYZ sketchNormal
+    ) {
+        var centerPlane = ResolveReferencePlane(doc, spec.CenterAnchor);
+        if (centerPlane == null) {
+            Log.Debug(
+                "[ExtrusionSectionCollector] Circle fallback rejected mirror spec {MirrorSpecName}: center anchor {CenterAnchor} missing.",
+                spec.Name,
+                spec.CenterAnchor);
+            return null;
+        }
+
+        var centerNormal = centerPlane.Normal.Normalize();
+        if (Math.Abs(centerNormal.DotProduct(sketchNormal)) > DotOrthoTolerance) {
+            Log.Debug(
+                "[ExtrusionSectionCollector] Circle fallback rejected mirror spec {MirrorSpecName}: center normal {CenterNormal} not orthogonal to sketch normal {SketchNormal}.",
+                spec.Name,
+                centerNormal,
+                sketchNormal);
+            return null;
+        }
+
+        var plane1 = ResolveReferencePlane(doc, spec.GetLeftName(centerNormal));
+        var plane2 = ResolveReferencePlane(doc, spec.GetRightName(centerNormal));
+        if (plane1 == null || plane2 == null) {
+            Log.Debug(
+                "[ExtrusionSectionCollector] Circle fallback rejected mirror spec {MirrorSpecName}: side planes {Plane1Name} / {Plane2Name} missing.",
+                spec.Name,
+                spec.GetLeftName(centerNormal),
+                spec.GetRightName(centerNormal));
+            return null;
+        }
+
+        var distance1 = Math.Abs((center - plane1.BubbleEnd).DotProduct(plane1.Normal.Normalize()));
+        var distance2 = Math.Abs((center - plane2.BubbleEnd).DotProduct(plane2.Normal.Normalize()));
+        if (Math.Abs(distance1 - radius) > 1e-3 || Math.Abs(distance2 - radius) > 1e-3) {
+            Log.Debug(
+                "[ExtrusionSectionCollector] Circle fallback rejected mirror spec {MirrorSpecName}: distances {Distance1}, {Distance2} did not match radius {Radius}.",
+                spec.Name,
+                distance1,
+                distance2,
+                radius);
+            return null;
+        }
+
+        return new CircleMirrorPairCandidate(
+            GetParallelPlaneGroupKey(centerNormal),
+            new DimConstraint(
+                plane1,
+                plane2,
+                string.IsNullOrWhiteSpace(spec.Parameter) ? FindDimensionLabel(doc, plane1, plane2) : spec.Parameter));
+    }
+
+    private static CircleMirrorTopologyCandidate? TryBuildCircleMirrorTopologyCandidate(
+        Document doc,
+        MirrorSpec spec,
+        XYZ sketchNormal
+    ) {
+        var centerPlane = ResolveReferencePlane(doc, spec.CenterAnchor);
+        if (centerPlane == null)
+            return null;
+
+        var centerNormal = centerPlane.Normal.Normalize();
+        if (Math.Abs(centerNormal.DotProduct(sketchNormal)) > DotOrthoTolerance)
+            return null;
+
+        var plane1 = ResolveReferencePlane(doc, spec.GetLeftName(centerNormal));
+        var plane2 = ResolveReferencePlane(doc, spec.GetRightName(centerNormal));
+        if (plane1 == null || plane2 == null)
+            return null;
+
+        return new CircleMirrorTopologyCandidate(
+            spec,
+            GetParallelPlaneGroupKey(centerNormal),
+            new DimConstraint(
+                plane1,
+                plane2,
+                string.IsNullOrWhiteSpace(spec.Parameter) ? FindDimensionLabel(doc, plane1, plane2) : spec.Parameter));
+    }
+
     private static bool TryGetProfilePlanePairs(
         Document doc,
         Extrusion extrusion,
@@ -448,16 +685,30 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
         pairB = default;
 
         var profilePlanes = GetProfileReferencePlanes(doc, extrusion);
-        if (profilePlanes.Count < 4)
+        if (profilePlanes.Count < 4) {
+            Log.Debug(
+                "[ExtrusionSectionCollector] Extrusion {ExtrusionId} found only {PlaneCount} profile planes: {PlaneNames}",
+                extrusion.Id.Value(),
+                profilePlanes.Count,
+                profilePlanes.Select(plane => plane.Name).ToList());
             return false;
+        }
 
         var grouped = profilePlanes
             .GroupBy(plane => GetParallelPlaneGroupKey(plane.Normal.Normalize()))
             .Where(group => group.Count() >= 2)
             .Take(2)
             .ToList();
-        if (grouped.Count < 2)
+        if (grouped.Count < 2) {
+            Log.Debug(
+                "[ExtrusionSectionCollector] Extrusion {ExtrusionId} profile planes could not form two parallel groups. Planes: {PlaneInfo}",
+                extrusion.Id.Value(),
+                profilePlanes.Select(plane => new {
+                    plane.Name,
+                    Normal = $"{Math.Round(plane.Normal.X, 4)},{Math.Round(plane.Normal.Y, 4)},{Math.Round(plane.Normal.Z, 4)}"
+                }).ToList());
             return false;
+        }
 
         var groupA = grouped[0].Take(2).ToList();
         var groupB = grouped[1].Take(2).ToList();
@@ -548,7 +799,42 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
             }
         }
 
-        return matched.Values.ToList();
+        if (matched.Count >= 4)
+            return matched.Values.ToList();
+
+        foreach (var elementId in extrusion.Sketch.GetAllElements()) {
+            if (doc.GetElement(elementId) is not ModelCurve modelCurve)
+                continue;
+
+            var alignmentDimensions = modelCurve.GetDependentElements(new ElementClassFilter(typeof(Dimension)))
+                .Select(doc.GetElement)
+                .OfType<Dimension>()
+                .Where(dimension => dimension is not SpotDimension)
+                .ToList();
+
+            foreach (var dimension in alignmentDimensions) {
+                for (var i = 0; i < dimension.References.Size; i++) {
+                    if (doc.GetElement(dimension.References.get_Item(i)) is not ReferencePlane plane)
+                        continue;
+
+                    if (string.IsNullOrWhiteSpace(plane.Name))
+                        continue;
+
+                    matched[plane.Id] = plane;
+                }
+            }
+        }
+
+        var matchedPlanes = matched.Values.ToList();
+        if (matchedPlanes.Count > 0) {
+            Log.Debug(
+                "[ExtrusionSectionCollector] Extrusion {ExtrusionId} matched {PlaneCount} profile planes after fallback: {PlaneNames}",
+                extrusion.Id.Value(),
+                matchedPlanes.Count,
+                matchedPlanes.Select(plane => plane.Name).ToList());
+        }
+
+        return matchedPlanes;
     }
 
     private static string FindDimensionLabel(Document doc, ReferencePlane plane1, ReferencePlane plane2) {
@@ -627,6 +913,12 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
             ? $"Extrusion_{extrusion.Id.Value()}"
             : extrusion.Name;
 
+    private static string BuildMirrorKey(MirrorSpec spec) =>
+        $"M|{spec.Name}|{spec.CenterAnchor}|{spec.Parameter}|{spec.Strength}";
+
+    private static string BuildOffsetKey(OffsetSpec spec) =>
+        $"O|{spec.Name}|{spec.AnchorName}|{spec.Direction}|{spec.Parameter}|{spec.Strength}";
+
     private static string GetParallelPlaneGroupKey(XYZ normal) {
         var normalized = normal.Normalize();
         if (normalized.Z < 0 ||
@@ -655,6 +947,9 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
     private readonly record struct NamedPlanePair(string? Plane1, string? Plane2, string? Parameter) {
         public bool IsEmpty => string.IsNullOrWhiteSpace(this.Plane1) || string.IsNullOrWhiteSpace(this.Plane2);
     }
+
+    private sealed record CircleMirrorPairCandidate(string GroupKey, DimConstraint Pair);
+    private sealed record CircleMirrorTopologyCandidate(MirrorSpec Spec, string GroupKey, DimConstraint Pair);
 
     private enum AxisSemanticRole {
         Width,

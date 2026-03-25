@@ -7,6 +7,15 @@ namespace Pe.Tools.RevitTest.Tests;
 
 internal static class RevitFamilyFixtureHarness {
     private const string GenericModelTemplateName = "Generic Model.rft";
+    private static readonly string[] TemplateSubdirectories = [
+        string.Empty,
+        "English-Imperial",
+        "English_I",
+        "English",
+        Path.Combine("Family Templates", "English-Imperial"),
+        Path.Combine("Family Templates", "English_I"),
+        Path.Combine("Family Templates", "English")
+    ];
 
     public static string ResolveGenericModelTemplatePath(
         Autodesk.Revit.ApplicationServices.Application application
@@ -15,14 +24,19 @@ internal static class RevitFamilyFixtureHarness {
             throw new ArgumentNullException(nameof(application));
 
         var templateRoot = application.FamilyTemplatePath;
-        var templatePath = Path.Combine(templateRoot, GenericModelTemplateName);
+        var candidates = TemplateSubdirectories
+            .Select(subdirectory => string.IsNullOrWhiteSpace(subdirectory)
+                ? Path.Combine(templateRoot, GenericModelTemplateName)
+                : Path.Combine(templateRoot, subdirectory, GenericModelTemplateName))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
-        if (!File.Exists(templatePath)) {
-            throw new FileNotFoundException(
-                $"Family template not found at '{templatePath}'. This harness uses Revit's installed family template path via Application.FamilyTemplatePath.");
-        }
+        var resolved = candidates.FirstOrDefault(File.Exists);
+        if (!string.IsNullOrWhiteSpace(resolved))
+            return resolved;
 
-        return templatePath;
+        throw new FileNotFoundException(
+            $"Family template not found. Application.FamilyTemplatePath='{templateRoot}'. Tried: {string.Join("; ", candidates)}");
     }
 
     public static Document CreateFamilyDocument(

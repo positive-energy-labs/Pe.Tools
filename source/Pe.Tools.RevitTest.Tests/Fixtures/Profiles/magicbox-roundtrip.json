@@ -39,30 +39,9 @@
     }
   },
   "MakeRefPlaneAndDims": {
-    "MirrorSpecs": [
-      {
-        "Name": "side",
-        "CenterAnchor": "Center (Left/Right)",
-        "Parameter": "PE_G_Dim_Width1",
-        "Strength": "StrongRef"
-      },
-      {
-        "Name": "side",
-        "CenterAnchor": "Center (Front/Back)",
-        "Parameter": "PE_G_Dim_Length1",
-        "Strength": "StrongRef"
-      }
-    ],
-    "OffsetSpecs": [
-      {
-        "Name": "top",
-        "AnchorName": "Reference Plane",
-        "Direction": "Positive",
-        "Parameter": "PE_G_Dim_Height1",
-        "Strength": "StrongRef"
-      }
-    ],
-    "Enabled": true
+    "MirrorSpecs": [],
+    "OffsetSpecs": [],
+    "Enabled": false
   },
   "AddFamilyParams": {
     "Parameters": [],
