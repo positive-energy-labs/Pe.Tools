@@ -178,8 +178,8 @@ public sealed class ParamDrivenSolidsCompilerTests {
                 new ParamDrivenCylinderSpec {
                     Name = "TopCylinder",
                     Sketch = new SketchTargetSpec { Plane = "Box.Height.Top" },
-                    CenterLeftRightAnchor = "Center (Left/Right)",
-                    CenterFrontBackAnchor = "Center (Front/Back)",
+                    CenterLeftRightPlane = "Center (Left/Right)",
+                    CenterFrontBackPlane = "Center (Front/Back)",
                     Diameter = new AxisConstraintSpec {
                         Mode = AxisConstraintMode.Mirror,
                         Parameter = "Diameter",
@@ -203,6 +203,9 @@ public sealed class ParamDrivenSolidsCompilerTests {
         Assert.That(result.CanExecute, Is.True);
         Assert.That(result.InternalExtrusions.Circles, Has.Count.EqualTo(1));
         Assert.That(result.InternalExtrusions.Circles[0].SketchPlaneName, Is.EqualTo("box top"));
+        Assert.That(result.InternalExtrusions.Circles[0].CenterLeftRightPlane, Is.EqualTo("Center (Left/Right)"));
+        Assert.That(result.InternalExtrusions.Circles[0].CenterFrontBackPlane, Is.EqualTo("Center (Front/Back)"));
+        Assert.That(result.InternalExtrusions.Circles[0].DiameterParameter, Is.EqualTo("Diameter"));
         Assert.That(result.InternalExtrusions.Circles[0].HeightPlaneBottom, Is.EqualTo("box top"));
         Assert.That(result.InternalExtrusions.Circles[0].HeightPlaneTop, Is.EqualTo("cylinder top"));
     }
@@ -214,8 +217,8 @@ public sealed class ParamDrivenSolidsCompilerTests {
                 new ParamDrivenCylinderSpec {
                     Name = "BadCylinder",
                     Sketch = new SketchTargetSpec { Plane = "Ref. Level" },
-                    CenterLeftRightAnchor = "Center (Left/Right)",
-                    CenterFrontBackAnchor = "Center (Front/Back)",
+                    CenterLeftRightPlane = "Center (Left/Right)",
+                    CenterFrontBackPlane = "Center (Front/Back)",
                     Diameter = new AxisConstraintSpec {
                         Mode = AxisConstraintMode.Mirror,
                         Parameter = "Diameter",

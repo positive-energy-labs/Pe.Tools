@@ -140,52 +140,20 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
         ConstrainedCircleExtrusionSpec spec,
         RefPlaneSnapshot? refPlanesAndDims
     ) {
-        var pairA = new NamedPlanePair(spec.PairAPlane1, spec.PairAPlane2, spec.PairAParameter);
-        var pairB = new NamedPlanePair(spec.PairBPlane1, spec.PairBPlane2, spec.PairBParameter);
-
-        var diameterA = BuildAxisConstraint(doc, pairA, refPlanesAndDims, AxisSemanticRole.Length, spec.Name, "Diameter");
-        var diameterB = BuildAxisConstraint(doc, pairB, refPlanesAndDims, AxisSemanticRole.Width, spec.Name, "Diameter");
         var height = BuildHeightConstraint(doc, spec, refPlanesAndDims);
-
-        var centerLeftRightAnchor = diameterA.Mode == AxisConstraintMode.Mirror
-            ? diameterA.CenterAnchor
-            : string.Empty;
-        var centerFrontBackAnchor = diameterB.Mode == AxisConstraintMode.Mirror
-            ? diameterB.CenterAnchor
-            : string.Empty;
-
-        var diameterWarnings = new List<string>();
-        var diameterStatus = InferenceStatus.Exact;
-
-        if (!string.Equals(diameterA.Parameter, diameterB.Parameter, StringComparison.Ordinal)) {
-            diameterWarnings.Add("Diameter parameters differed across the two in-plane circle constraints.");
-            diameterStatus = InferenceStatus.Ambiguous;
-        }
-
-        if (diameterA.Mode != AxisConstraintMode.Mirror || diameterB.Mode != AxisConstraintMode.Mirror) {
-            diameterWarnings.Add("Cylinder diameter was inferred from non-mirror constraints.");
-            diameterStatus = InferenceStatus.Ambiguous;
-        }
 
         var diameter = new AxisConstraintSpec {
             Mode = AxisConstraintMode.Mirror,
-            Parameter = string.Equals(diameterA.Parameter, diameterB.Parameter, StringComparison.Ordinal)
-                ? diameterA.Parameter
-                : diameterA.Parameter,
-            PlaneNameBase = ExtractSharedDiameterBase(diameterA.PlaneNameBase, diameterB.PlaneNameBase),
-            Strength = diameterA.Strength,
-            Inference = new InferenceInfo {
-                Status = diameterWarnings.Count == 0 ? InferenceStatus.Exact : diameterStatus,
-                Warnings = diameterWarnings
-            }
+            Parameter = spec.DiameterParameter,
+            Inference = new InferenceInfo { Status = InferenceStatus.Exact }
         };
 
         return new ParamDrivenCylinderSpec {
             Name = spec.Name,
             IsSolid = spec.IsSolid,
             Sketch = new SketchTargetSpec { Kind = SketchTargetKind.ReferencePlane, Plane = spec.SketchPlaneName },
-            CenterLeftRightAnchor = centerLeftRightAnchor,
-            CenterFrontBackAnchor = centerFrontBackAnchor,
+            CenterLeftRightPlane = spec.CenterLeftRightPlane,
+            CenterFrontBackPlane = spec.CenterFrontBackPlane,
             Diameter = diameter,
             Height = height
         };
@@ -387,14 +355,6 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
             .FirstOrDefault(plane => string.Equals(plane.Name, planeName, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static string ExtractSharedDiameterBase(string baseA, string baseB) {
-        var cleanedA = baseA.Replace(" lr", string.Empty, StringComparison.OrdinalIgnoreCase).Trim();
-        var cleanedB = baseB.Replace(" fb", string.Empty, StringComparison.OrdinalIgnoreCase).Trim();
-        return string.Equals(cleanedA, cleanedB, StringComparison.OrdinalIgnoreCase)
-            ? cleanedA
-            : cleanedA;
-    }
-
     private static string SynthesizePlaneNameBase(AxisSemanticRole role) =>
         role switch {
             AxisSemanticRole.Width => "width",
@@ -462,10 +422,16 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
             return false;
         }
 
-        if (!TryGetProfilePlanePairs(doc, extrusion, out var pairA, out var pairB) &&
-            !TryGetCirclePlanePairsFromRefPlaneSnapshot(doc, extrusion, refPlanesAndDims, out pairA, out pairB)) {
+        if (!TryGetCircleCenterPlanes(doc, extrusion, out var centerLeftRightPlane, out var centerFrontBackPlane)) {
             Log.Debug(
-                "[ExtrusionSectionCollector] Circle extrusion {ExtrusionId} could not resolve profile plane pairs.",
+                "[ExtrusionSectionCollector] Circle extrusion {ExtrusionId} could not resolve center planes.",
+                extrusion.Id.Value());
+            return false;
+        }
+
+        if (!TryGetCircleDiameterParameter(extrusion, doc, out var diameterParameter)) {
+            Log.Debug(
+                "[ExtrusionSectionCollector] Circle extrusion {ExtrusionId} could not resolve a labeled diameter parameter.",
                 extrusion.Id.Value());
             return false;
         }
@@ -478,17 +444,65 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
             StartOffset = extrusion.StartOffset,
             EndOffset = extrusion.EndOffset,
             SketchPlaneName = extrusion.Sketch.SketchPlane?.Name ?? string.Empty,
-            PairAPlane1 = pairA.Plane1.Name,
-            PairAPlane2 = pairA.Plane2.Name,
-            PairAParameter = pairA.ParameterName,
-            PairBPlane1 = pairB.Plane1.Name,
-            PairBPlane2 = pairB.Plane2.Name,
-            PairBParameter = pairB.ParameterName,
+            CenterLeftRightPlane = centerLeftRightPlane.Name,
+            CenterFrontBackPlane = centerFrontBackPlane.Name,
+            DiameterParameter = diameterParameter,
             HeightPlaneBottom = height.Plane1?.Name,
             HeightPlaneTop = height.Plane2?.Name,
             HeightParameter = height.ParameterName
         };
         return true;
+    }
+
+    private static bool TryGetCircleCenterPlanes(
+        Document doc,
+        Extrusion extrusion,
+        out ReferencePlane centerLeftRightPlane,
+        out ReferencePlane centerFrontBackPlane
+    ) {
+        centerLeftRightPlane = null!;
+        centerFrontBackPlane = null!;
+
+        foreach (var dimension in extrusion.Sketch.GetAllElements()
+                     .Select(id => doc.GetElement(id))
+                     .OfType<Dimension>()) {
+            for (var i = 0; i < dimension.References.Size; i++) {
+                if (doc.GetElement(dimension.References.get_Item(i)) is not ReferencePlane plane)
+                    continue;
+
+                var normal = plane.Normal.Normalize();
+                if (Math.Abs(normal.X) >= Math.Abs(normal.Y) && Math.Abs(normal.X) > Math.Abs(normal.Z))
+                    centerLeftRightPlane = plane;
+                else if (Math.Abs(normal.Y) > Math.Abs(normal.X) && Math.Abs(normal.Y) > Math.Abs(normal.Z))
+                    centerFrontBackPlane = plane;
+            }
+        }
+
+        return centerLeftRightPlane != null && centerFrontBackPlane != null;
+    }
+
+    private static bool TryGetCircleDiameterParameter(
+        Extrusion extrusion,
+        Document doc,
+        out string parameterName
+    ) {
+        parameterName = string.Empty;
+
+        foreach (var dimension in extrusion.Sketch.GetAllElements()
+                     .Select(id => doc.GetElement(id))
+                     .OfType<Dimension>()) {
+            try {
+                if (dimension.FamilyLabel?.Definition?.Name is not { Length: > 0 } labelName)
+                    continue;
+
+                parameterName = labelName;
+                return true;
+            } catch {
+                // Some sketch dimensions are not labelable; ignore them.
+            }
+        }
+
+        return false;
     }
 
     private static bool TryGetCirclePlanePairsFromRefPlaneSnapshot(

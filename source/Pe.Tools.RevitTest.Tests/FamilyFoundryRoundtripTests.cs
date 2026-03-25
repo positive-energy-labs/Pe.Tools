@@ -140,8 +140,8 @@ public sealed class FamilyFoundryRoundtripTests {
                     new ParamDrivenCylinderSpec {
                         Name = "Cylinder",
                         Sketch = new SketchTargetSpec { Plane = "Ref. Level" },
-                        CenterLeftRightAnchor = "Center (Left/Right)",
-                        CenterFrontBackAnchor = "Center (Front/Back)",
+                        CenterLeftRightPlane = "Center (Left/Right)",
+                        CenterFrontBackPlane = "Center (Front/Back)",
                         Diameter = new AxisConstraintSpec {
                             Mode = AxisConstraintMode.Mirror,
                             Parameter = "Diameter",
@@ -163,6 +163,9 @@ public sealed class FamilyFoundryRoundtripTests {
 
             Assert.That(result.Success, Is.True, result.Error);
             AssertCylinderSnapshot(result.Contexts[0].PostProcessSnapshot!);
+            AssertSavedFamilyHasSketchDiameterLabel(
+                RevitFamilyFixtureHarness.GetExpectedSavedFamilyPath(result.OutputFolderPath!, familyDocument),
+                "Diameter");
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(familyDocument);
         }
@@ -306,8 +309,8 @@ public sealed class FamilyFoundryRoundtripTests {
                     new ParamDrivenCylinderSpec {
                         Name = "TopCylinder",
                         Sketch = new SketchTargetSpec { Plane = "Box.Height.Top" },
-                        CenterLeftRightAnchor = "Center (Left/Right)",
-                        CenterFrontBackAnchor = "Center (Front/Back)",
+                        CenterLeftRightPlane = "Center (Left/Right)",
+                        CenterFrontBackPlane = "Center (Front/Back)",
                         Diameter = new AxisConstraintSpec {
                             Mode = AxisConstraintMode.Mirror,
                             Parameter = "Diameter",
@@ -332,6 +335,9 @@ public sealed class FamilyFoundryRoundtripTests {
             TestContext.Progress.WriteLine(
                 $"[PE_FF_SNAPSHOT_COUNTS] rectangles={result.Contexts[0].PostProcessSnapshot!.ParamDrivenSolids?.Rectangles.Count ?? -1}; cylinders={result.Contexts[0].PostProcessSnapshot!.ParamDrivenSolids?.Cylinders.Count ?? -1}; legacyCircles={result.Contexts[0].PostProcessSnapshot!.Extrusions?.Circles.Count ?? -1}");
             AssertBoxWithCylinderSnapshot(result.Contexts[0].PostProcessSnapshot!);
+            AssertSavedFamilyHasSketchDiameterLabel(
+                RevitFamilyFixtureHarness.GetExpectedSavedFamilyPath(result.OutputFolderPath!, familyDocument),
+                "Diameter");
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(familyDocument);
         }
@@ -425,8 +431,8 @@ public sealed class FamilyFoundryRoundtripTests {
         Assert.That(snapshot.ParamDrivenSolids.Cylinders, Has.Count.EqualTo(1));
 
         var cylinder = snapshot.ParamDrivenSolids.Cylinders[0];
-        Assert.That(cylinder.CenterLeftRightAnchor, Is.EqualTo("Center (Left/Right)"));
-        Assert.That(cylinder.CenterFrontBackAnchor, Is.EqualTo("Center (Front/Back)"));
+        Assert.That(cylinder.CenterLeftRightPlane, Is.EqualTo("Center (Left/Right)"));
+        Assert.That(cylinder.CenterFrontBackPlane, Is.EqualTo("Center (Front/Back)"));
         Assert.That(cylinder.Diameter.Parameter, Is.EqualTo("Diameter"));
         Assert.That(cylinder.Height.Parameter, Is.EqualTo("Height"));
         Assert.That(cylinder.Diameter.Inference?.Status ?? InferenceStatus.Exact, Is.EqualTo(InferenceStatus.Exact));
@@ -461,11 +467,45 @@ public sealed class FamilyFoundryRoundtripTests {
         Assert.That(box.Length.Parameter, Is.EqualTo("Length"));
         Assert.That(box.Height.Parameter, Is.EqualTo("BoxHeight"));
         Assert.That(cylinder.Sketch.Plane, Is.EqualTo("box top"));
-        Assert.That(cylinder.CenterLeftRightAnchor, Is.EqualTo("Center (Left/Right)"));
-        Assert.That(cylinder.CenterFrontBackAnchor, Is.EqualTo("Center (Front/Back)"));
+        Assert.That(cylinder.CenterLeftRightPlane, Is.EqualTo("Center (Left/Right)"));
+        Assert.That(cylinder.CenterFrontBackPlane, Is.EqualTo("Center (Front/Back)"));
         Assert.That(cylinder.Diameter.Parameter, Is.EqualTo("Diameter"));
         Assert.That(cylinder.Height.Anchor, Is.EqualTo("box top"));
         Assert.That(cylinder.Height.Parameter, Is.EqualTo("CylinderHeight"));
+    }
+
+    private void AssertSavedFamilyHasSketchDiameterLabel(string savedFamilyPath, string parameterName) {
+        Document? savedDocument = null;
+
+        try {
+            savedDocument = _dbApplication.OpenDocumentFile(savedFamilyPath);
+            Assert.That(savedDocument, Is.Not.Null);
+
+            var labeledSketchDimensions = new FilteredElementCollector(savedDocument!)
+                .OfClass(typeof(Extrusion))
+                .Cast<Extrusion>()
+                .Where(extrusion => extrusion.Sketch != null)
+                .SelectMany(extrusion => extrusion.Sketch.GetAllElements()
+                    .Select(id => savedDocument.GetElement(id))
+                    .OfType<Dimension>())
+                .Where(dimension => string.Equals(
+                    TryGetFamilyLabelName(dimension),
+                    parameterName,
+                    StringComparison.Ordinal))
+                .ToList();
+
+            Assert.That(labeledSketchDimensions, Has.Count.EqualTo(1));
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(savedDocument);
+        }
+    }
+
+    private static string? TryGetFamilyLabelName(Dimension dimension) {
+        try {
+            return dimension.FamilyLabel?.Definition?.Name;
+        } catch {
+            return null;
+        }
     }
 
     private static FFManagerProcessFamiliesActionResult RunRoundtrip(

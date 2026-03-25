@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.FamilyFoundry.Snapshots;
 using System.ComponentModel;
@@ -35,11 +35,11 @@ public sealed class ParamDrivenRectangleSpec : ParamDrivenSolidSpec {
 }
 
 public sealed class ParamDrivenCylinderSpec : ParamDrivenSolidSpec {
-    [Description("Center anchor for the cylinder in the family left/right axis.")]
-    public string CenterLeftRightAnchor { get; init; } = string.Empty;
+    [Description("Reference plane that constrains the cylinder center in the family left/right axis.")]
+    public string CenterLeftRightPlane { get; init; } = string.Empty;
 
-    [Description("Center anchor for the cylinder in the family front/back axis.")]
-    public string CenterFrontBackAnchor { get; init; } = string.Empty;
+    [Description("Reference plane that constrains the cylinder center in the family front/back axis.")]
+    public string CenterFrontBackPlane { get; init; } = string.Empty;
 
     public AxisConstraintSpec Diameter { get; init; } = new();
     public AxisConstraintSpec Height { get; init; } = new();

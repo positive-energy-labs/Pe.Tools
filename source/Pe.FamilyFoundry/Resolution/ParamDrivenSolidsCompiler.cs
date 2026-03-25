@@ -1,4 +1,4 @@
-using Pe.FamilyFoundry.OperationSettings;
+﻿using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Snapshots;
 
 namespace Pe.FamilyFoundry.Resolution;
@@ -192,13 +192,19 @@ public static class ParamDrivenSolidsCompiler {
             return resolvedSketch.Outcome;
         }
 
-        if (string.IsNullOrWhiteSpace(spec.CenterLeftRightAnchor) ||
-            string.IsNullOrWhiteSpace(spec.CenterFrontBackAnchor)) {
+        var resolvedCenterLeftRight = ResolvePlaneReference(spec.CenterLeftRightPlane, aliasMap);
+        var resolvedCenterFrontBack = ResolvePlaneReference(spec.CenterFrontBackPlane, aliasMap);
+        if (resolvedCenterLeftRight.Outcome == CompileOutcome.Deferred ||
+            resolvedCenterFrontBack.Outcome == CompileOutcome.Deferred)
+            return CompileOutcome.Deferred;
+
+        if (resolvedCenterLeftRight.Outcome != CompileOutcome.Compiled ||
+            resolvedCenterFrontBack.Outcome != CompileOutcome.Compiled) {
             diagnostics.Add(new ParamDrivenSolidsDiagnostic(
                 ParamDrivenDiagnosticSeverity.Error,
                 spec.Name,
                 keyBase,
-                "Cylinders require CenterLeftRightAnchor and CenterFrontBackAnchor."));
+                "Cylinders require CenterLeftRightPlane and CenterFrontBackPlane."));
             return CompileOutcome.Invalid;
         }
 
@@ -214,41 +220,6 @@ public static class ParamDrivenSolidsCompiler {
         if (!CollectInferenceDiagnostics(spec.Name, $"{keyBase}.Diameter", spec.Diameter.Inference, diagnostics))
             return CompileOutcome.Invalid;
 
-        var lrDiameter = new AxisConstraintSpec {
-            Mode = spec.Diameter.Mode,
-            Parameter = spec.Diameter.Parameter,
-            CenterAnchor = spec.CenterLeftRightAnchor,
-            PlaneNameBase = SynthesizeDiameterPlaneNameBase(spec.Diameter.PlaneNameBase, "lr"),
-            Strength = spec.Diameter.Strength,
-            Inference = spec.Diameter.Inference
-        };
-        var fbDiameter = new AxisConstraintSpec {
-            Mode = spec.Diameter.Mode,
-            Parameter = spec.Diameter.Parameter,
-            CenterAnchor = spec.CenterFrontBackAnchor,
-            PlaneNameBase = SynthesizeDiameterPlaneNameBase(spec.Diameter.PlaneNameBase, "fb"),
-            Strength = spec.Diameter.Strength,
-            Inference = spec.Diameter.Inference
-        };
-
-        var pairA = CompileAxis(
-            spec.Name,
-            "Diameter.LeftRight",
-            lrDiameter,
-            AxisSemanticRole.Length,
-            aliasMap,
-            mirrorSpecs,
-            offsetSpecs,
-            diagnostics);
-        var pairB = CompileAxis(
-            spec.Name,
-            "Diameter.FrontBack",
-            fbDiameter,
-            AxisSemanticRole.Width,
-            aliasMap,
-            mirrorSpecs,
-            offsetSpecs,
-            diagnostics);
         var height = CompileAxis(
             spec.Name,
             "Height",
@@ -259,14 +230,10 @@ public static class ParamDrivenSolidsCompiler {
             offsetSpecs,
             diagnostics);
 
-        if (pairA.Outcome == CompileOutcome.Deferred ||
-            pairB.Outcome == CompileOutcome.Deferred ||
-            height.Outcome == CompileOutcome.Deferred)
+        if (height.Outcome == CompileOutcome.Deferred)
             return CompileOutcome.Deferred;
 
-        if (pairA.Outcome == CompileOutcome.Invalid ||
-            pairB.Outcome == CompileOutcome.Invalid ||
-            height.Outcome == CompileOutcome.Invalid)
+        if (height.Outcome == CompileOutcome.Invalid)
             return CompileOutcome.Invalid;
 
         circles.Add(new ConstrainedCircleExtrusionSpec {
@@ -275,12 +242,9 @@ public static class ParamDrivenSolidsCompiler {
             StartOffset = 0.0,
             EndOffset = 1.0,
             SketchPlaneName = resolvedSketch.Value!,
-            PairAPlane1 = pairA.NegativePlaneName!,
-            PairAPlane2 = pairA.PositivePlaneName!,
-            PairAParameter = spec.Diameter.Parameter,
-            PairBPlane1 = pairB.NegativePlaneName!,
-            PairBPlane2 = pairB.PositivePlaneName!,
-            PairBParameter = spec.Diameter.Parameter,
+            CenterLeftRightPlane = resolvedCenterLeftRight.Value!,
+            CenterFrontBackPlane = resolvedCenterFrontBack.Value!,
+            DiameterParameter = spec.Diameter.Parameter,
             HeightPlaneBottom = height.NegativePlaneName,
             HeightPlaneTop = height.PositivePlaneName,
             HeightParameter = spec.Height.Parameter
@@ -542,13 +506,6 @@ public static class ParamDrivenSolidsCompiler {
             AxisSemanticRole.Height => "height",
             _ => "plane"
         };
-
-    private static string SynthesizeDiameterPlaneNameBase(string configuredBase, string suffix) {
-        var baseName = string.IsNullOrWhiteSpace(configuredBase)
-            ? "diameter"
-            : configuredBase.Trim();
-        return $"{baseName} {suffix}";
-    }
 
     private static (string Negative, string Positive) GetRoleLabels(AxisSemanticRole role) =>
         role switch {
