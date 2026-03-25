@@ -1,7 +1,8 @@
-using Autodesk.Revit.DB;
+﻿using Autodesk.Revit.DB;
 using Pe.Extensions.FamDocument;
 using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Snapshots;
+using Serilog;
 
 namespace Pe.FamilyFoundry.Operations;
 
@@ -152,15 +153,30 @@ public class MakeConstrainedExtrusions(MakeConstrainedExtrusionsSettings setting
         var diameterA = p00.DistanceTo(p10);
         var diameterB = p00.DistanceTo(p01);
         var radius = Math.Min(diameterA, diameterB) / 2.0;
+        Log.Debug(
+            "[MakeConstrainedExtrusions] Circle {CircleName} using planes {PairA1}, {PairA2}, {PairB1}, {PairB2} on sketch {SketchPlane}. Computed center {Center}, diameterA {DiameterA}, diameterB {DiameterB}, radius {Radius}.",
+            spec.Name,
+            spec.PairAPlane1,
+            spec.PairAPlane2,
+            spec.PairBPlane1,
+            spec.PairBPlane2,
+            spec.SketchPlaneName,
+            center,
+            diameterA,
+            diameterB,
+            radius);
         if (radius <= PlaneTolerance) {
             logs.Add(new LogEntry(key).Error("Resolved cylinder radius was zero or negative."));
             return;
         }
 
-        var xVec = sketchGeomPlane.XVec.Normalize();
-        var yVec = sketchGeomPlane.YVec.Normalize();
-        var arc1 = Arc.Create(center, radius, 0, Math.PI, xVec, yVec);
-        var arc2 = Arc.Create(center, radius, Math.PI, Math.PI * 2.0, xVec, yVec);
+        var (xVec, yVec) = BuildStablePlaneAxes(sketchGeomPlane.Normal.Normalize());
+        var right = center + (xVec * radius);
+        var left = center - (xVec * radius);
+        var top = center + (yVec * radius);
+        var bottom = center - (yVec * radius);
+        var arc1 = Arc.Create(left, right, top);
+        var arc2 = Arc.Create(right, left, bottom);
 
         var loop = new CurveArray();
         loop.Append(arc1);
@@ -346,6 +362,13 @@ public class MakeConstrainedExtrusions(MakeConstrainedExtrusionsSettings setting
 
     private static double SignedDistanceToPlaneAlongNormal(XYZ point, XYZ planeOrigin, XYZ normalizedPlaneNormal) =>
         (point - planeOrigin).DotProduct(normalizedPlaneNormal);
+
+    private static (XYZ XVec, XYZ YVec) BuildStablePlaneAxes(XYZ normal) {
+        var seed = Math.Abs(normal.Z) > 0.9 ? XYZ.BasisX : XYZ.BasisZ;
+        var xVec = seed.CrossProduct(normal).Normalize();
+        var yVec = normal.CrossProduct(xVec).Normalize();
+        return (xVec, yVec);
+    }
 
     private static ReferencePlane? GetReferencePlane(Document doc, string name) =>
         ResolveReferencePlane(doc, name);

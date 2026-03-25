@@ -14,10 +14,28 @@ integration tests against `Pe.App`. This project will mainly house document-requ
 - The code actually executed in Revit comes from the addin-loaded assemblies in
   `%AppData%\Autodesk\Revit\Addins\2025\Pe.App`, not from `.artifacts/tests`,
   except for the test assembly itself.
+- Building this test project in a `.Tests` config is safe during a live
+  Rider/Revit debug session and is the preferred way to prep `ricaun` runs.
+  That build updates the test assembly and runs the post-build Rider hot-reload
+  helper, but it does not by itself guarantee that Revit loaded fresh runtime
+  code.
 - `ricaun` filter support is limited to `FullyQualifiedName` and `Name`.
 - `RICAUN_REVITTEST_TESTADAPTER_*` env vars exist for adapter settings, but this
   project intentionally does not depend on custom in-test env vars for fixture
   or template discovery. Reused Revit processes make that contract unreliable.
+
+## Preferred loop
+
+1. Launch Revit from Rider using the existing `Pe.App` runtime debug config for
+   the target Revit year.
+2. Build `source/Pe.Tools.RevitTest.Tests/Pe.Tools.RevitTest.Tests.csproj` in
+   the matching `.Tests` config, usually `Debug.R25.Tests`.
+3. Let the post-build helper open changed runtime `.cs` files in Rider and try
+   to apply hot reload automatically.
+4. Run focused `dotnet vstest` commands from terminal.
+5. If logs do not reflect the new code, assume runtime staleness first, then
+   verify hot reload actually applied or redeploy/restart the runtime lane if
+   needed.
 
 ## Commands
 
@@ -26,6 +44,12 @@ Build:
 ```powershell
 dotnet build source/Pe.Tools.RevitTest.Tests/Pe.Tools.RevitTest.Tests.csproj -c "Debug.R25.Tests" /p:WarningLevel=0
 ```
+
+- This build is expected to print:
+  - `Running Rider hot reload prep...`
+  - `Running add-in auto-approval watcher...`
+- Those post-build helpers are convenience steps for the live debug workflow.
+  They do not replace checking that Revit actually picked up the runtime edit.
 
 Run one test:
 
@@ -82,9 +106,14 @@ dotnet vstest .artifacts/tests/bin/Debug.R25.Tests/net8.0-windows/Pe.Tools.Revit
 - If you change `Pe.App`, `Pe.FamilyFoundry`, `Pe.Global`, `Pe.SettingsCatalog`,
   etc., rebuilding only this test project does not update the code already loaded
   in Revit.
-- To test changed runtime behavior, the deployed addin binaries may need to be
-  rebuilt into `%AppData%\Autodesk\Revit\Addins\2025\Pe.App` and Revit restarted.
-- This is the main workflow impediment for hot reload experiments.
+- Hot reload can patch many runtime edits into the live Rider/Revit session, but
+  not every change is hot-reloadable. If a new log line or behavior is missing,
+  suspect that the runtime patch did not apply.
+- To test changed runtime behavior after a failed or unsupported hot reload, the
+  deployed addin binaries may need to be rebuilt into
+  `%AppData%\Autodesk\Revit\Addins\2025\Pe.App` and Revit restarted.
+- This is the main workflow impediment for hot reload experiments, not the
+  `.Tests` build itself.
 
 ## Hot reload experiment status
 
@@ -100,7 +129,10 @@ dotnet vstest .artifacts/tests/bin/Debug.R25.Tests/net8.0-windows/Pe.Tools.Revit
 - Verified behavior:
   - Building `Pe.Tools.RevitTest.Tests` in `Debug.R25.Tests` is safe while the
     user is debugging `Pe.App` in `Debug.R25`.
-  - That build does **not** update the runtime code already loaded in Revit.
+  - That build does **not** directly update the runtime code already loaded in
+    Revit.
+  - The post-build script can still help by opening changed runtime files in
+    Rider and triggering Rider hot reload automatically.
   - Tests execute against the live code currently loaded in the Rider-launched
     Revit session.
   - If a `Pe.App` / `Pe.FamilyFoundry` file is hot reloaded in Rider, the
@@ -108,10 +140,12 @@ dotnet vstest .artifacts/tests/bin/Debug.R25.Tests/net8.0-windows/Pe.Tools.Revit
 - Practical workflow:
   1. Launch Revit from Rider using `Pe.App` in `Debug.R25`.
   2. Do not rebuild `Pe.App` after that if you want to preserve hot reload.
-  3. Build test-only changes in `Debug.R25.Tests` if needed.
-  4. Make runtime code edits in `Pe.App` / `Pe.FamilyFoundry`.
-  5. Apply Hot Reload in Rider.
-  6. Run focused `ricaun` tests from terminal with `dotnet vstest`.
+  3. Make test and/or runtime code edits.
+  4. Build `Pe.Tools.RevitTest.Tests` in `Debug.R25.Tests`.
+  5. Let the post-build helper attempt Rider hot reload for changed runtime
+     files.
+  6. If needed, manually confirm Rider reports successful hot reload.
+  7. Run focused `ricaun` tests from terminal with `dotnet vstest`.
 - This is the preferred iteration loop.
 
 ## Dead ends / do not do this
@@ -130,6 +164,9 @@ dotnet vstest .artifacts/tests/bin/Debug.R25.Tests/net8.0-windows/Pe.Tools.Revit
   hangs/crashes and was inferior to `ricaun` for this use case.
 - Do not infer real source breakage from giant transient Rider hot reload
   CS0234/CS0246 cascades if LSP is otherwise clean.
+- Do not infer real source breakage from an old log stream. If newly-added debug
+  messages do not appear, the runtime lane is probably stale or the hot reload
+  patch failed.
 - Do not create/open new family documents from `.rft` through the old
   Nice3point/TUnit lane. That was host-problematic. The `ricaun` lane works.
 - Do not assume `doc.ActiveView` is valid in blank family documents created from
@@ -142,13 +179,15 @@ dotnet vstest .artifacts/tests/bin/Debug.R25.Tests/net8.0-windows/Pe.Tools.Revit
 
 - Template-based FF roundtrip now gets through parameter, ref plane, and
   dimension creation after adding view fallback logic.
-- Remaining `ricaun` FF failure is still in extrusion snapshot recognition, not
-  in family save/output path handling.
-- The snapshot collector originally only recognized sketch-owned
-  dimension-constrained extrusions, while the writer produces alignment-based
-  constrained extrusions.
-- Code was patched to move recognition toward the authored model and to preserve
-  extrusion names, but this has not yet been retested.
+- The `ParamDrivenSolids` spike now has passing `ricaun` coverage for:
+  rectangle roundtrip, cylinder roundtrip, stacked shared constraints,
+  box-plus-cylinder-on-face-equivalent-plane, and ambiguity-blocks-execution.
+- A major source of confusion during this spike was stale runtime behavior. The
+  reliable signal was whether newly-added debug logs from `Pe.FamilyFoundry`
+  appeared during `ricaun` runs.
+- The snapshot collector now has more robust fallback logic for alignment-based
+  and semantically recoverable circle/cylinder cases. Future failures in this
+  area should be investigated with runtime logs before changing the public model.
 
 ## Files of interest
 
@@ -167,4 +206,7 @@ dotnet vstest .artifacts/tests/bin/Debug.R25.Tests/net8.0-windows/Pe.Tools.Revit
 - Be extremely careful not to rebuild `Pe.App` while the user is in a Rider
   Revit debug session unless they explicitly want to give up future hot reload.
 - If behavior does not match source edits, suspect stale deployed addin
-  assemblies first.
+  assemblies or a failed hot reload first.
+- The fastest sanity check is to add a targeted `Log.Debug(...)` in the runtime
+  path you changed and confirm that exact message appears in the next `ricaun`
+  run.

@@ -51,7 +51,13 @@
         </AssemblyAttribute>
     </ItemGroup>
 
-    <Target Name="PostBuildPrepareRiderHotReload" AfterTargets="Build" Condition="'$(BuildingByReSharper)' == 'true'">
-        <Exec Command="powershell.exe -ExecutionPolicy Bypass -NoProfile -File &quot;$(MSBuildProjectDirectory)\PostBuildHotReload.ps1&quot; -ScriptDirectory &quot;$(MSBuildProjectDirectory)&quot;"/>
+    <!--
+      `.Tests` builds are the safe Revit-backed test lane. This post-build hook
+      only helps the live Rider/Revit workflow by preparing/triggering Rider hot
+      reload for changed runtime files and auto-approving add-in dialogs. The
+      actual runtime code still comes from the addin-loaded assemblies in Revit.
+    -->
+    <Target Name="PostBuildPrepareRiderHotReload" AfterTargets="Build" Condition="$([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'">
+        <Exec Command="powershell.exe -ExecutionPolicy Bypass -NoProfile -File &quot;$(MSBuildProjectDirectory)\PostBuildHotReload.ps1&quot; -ScriptDirectory &quot;$(MSBuildProjectDirectory)&quot; -RevitYear $(RevitVersion)"/>
     </Target>
 </Project>

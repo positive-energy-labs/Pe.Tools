@@ -13,6 +13,9 @@ $rider64 = Join-Path $RiderBinDirectory "rider64.exe"
 $hotReloadAhkScript = Join-Path $PSScriptRoot "AutoApplyRiderHotReload.ahk"
 $autoHotkeyExe = "C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe"
 
+# This helper is intentionally scoped to runtime `.cs` files that are likely to
+# matter for the live Rider/Revit session. Test project files are excluded
+# because rebuilding the `.Tests` lane already updates the test assembly on disk.
 function Write-Step {
     param([string]$Message)
     Write-Host "[PrepareRiderHotReload] $Message"

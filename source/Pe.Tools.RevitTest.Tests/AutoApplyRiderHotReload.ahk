@@ -75,14 +75,14 @@ RunRiderAction(actionName) {
     savedClipboard := A_Clipboard
     SendEvent "{Esc}"
     Sleep 250
-    SendEvent "^p"
-    Sleep 700
+    SendEvent "^+a"
+    Sleep 1200
     A_Clipboard := actionName
     Sleep 100
     SendEvent "^v"
-    Sleep 350
+    Sleep 900
     SendEvent "{Enter}"
-    Sleep 250
+    Sleep 400
     A_Clipboard := savedClipboard
 }
 

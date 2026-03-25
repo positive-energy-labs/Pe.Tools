@@ -1,39 +1,49 @@
 param(
-    [string]$ScriptDirectory
+    [string]$ScriptDirectory,
+    [int]$RevitYear = 2025
 )
 
 $prepareScript = Join-Path $ScriptDirectory "PrepareRiderHotReload.ps1"
+$autoApproveScript = Join-Path $ScriptDirectory "AutoApproveAddin.ps1"
 
+# This script is a convenience wrapper for the `.Tests` build lane.
+# It prepares Rider hot reload for changed runtime files and watches for
+# unsigned add-in approval dialogs, but it does not itself prove that Revit is
+# running the freshly-edited runtime code.
 if (Test-Path $prepareScript)
 {
-    Write-Host "Launching Rider hot reload prep in background..."
+    Write-Host "Running Rider hot reload prep..."
 
     try
     {
-        $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = "powershell.exe"
-        $psi.Arguments = "-ExecutionPolicy Bypass -WindowStyle Minimized -NoProfile -File `"$prepareScript`""
-        $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
-        $psi.UseShellExecute = $true
-        $psi.CreateNoWindow = $false
-
-        $process = [System.Diagnostics.Process]::Start($psi)
-
-        if ($null -ne $process)
-        {
-            Write-Host "Rider hot reload prep started (PID: $($process.Id))"
-        }
-        else
-        {
-            Write-Host "ERROR: Failed to start Rider hot reload prep"
-        }
+        & powershell.exe -ExecutionPolicy Bypass -WindowStyle Minimized -NoProfile -File $prepareScript
+        Write-Host "Rider hot reload prep finished"
     }
     catch
     {
-        Write-Host "ERROR launching Rider hot reload prep: $($_.Exception.Message)"
+        Write-Host "ERROR running Rider hot reload prep: $($_.Exception.Message)"
     }
 }
 else
 {
     Write-Host "WARNING: PrepareRiderHotReload.ps1 not found at: $prepareScript"
+}
+
+if (Test-Path $autoApproveScript)
+{
+    Write-Host "Running add-in auto-approval watcher..."
+
+    try
+    {
+        & powershell.exe -ExecutionPolicy Bypass -WindowStyle Minimized -NoProfile -File $autoApproveScript -TimeoutSeconds 60 -RevitYear $RevitYear -ScriptDirectory $ScriptDirectory
+        Write-Host "Add-in auto-approval watcher finished"
+    }
+    catch
+    {
+        Write-Host "ERROR running add-in auto-approval watcher: $($_.Exception.Message)"
+    }
+}
+else
+{
+    Write-Host "WARNING: AutoApproveAddin.ps1 not found at: $autoApproveScript"
 }

@@ -72,28 +72,30 @@ break Hot Reloads. Therfore DO NOT build anything unless otherwise asked.
 7. Revit-backed test runners may attach to or interact with an already-running Revit instance. If behavior does not match freshly built source, suspect stale in-process assemblies before assuming the code change failed.
 8. Be careful with live Rider/Revit debug sessions. Rebuilding runtime projects such as `Pe.App`, `Pe.Extensions`, or `Pe.FamilyFoundry` can break hot reload or leave the running Revit session executing stale assemblies.
 9. Revit-backed test runners can leave `Revit.exe` or runner processes alive after a timeout or interrupted run. If later builds or deploys start failing on file locks, clean up the lingering process before retrying.
-10. Exceptions should generally be avoided, prefer the `Result<TValue>` or
+10. The current safe Revit-backed loop is: launch Revit from Rider with the normal runtime config, build `source/Pe.Tools.RevitTest.Tests` in `Debug.R25.Tests`, let the post-build Rider hot-reload helper try to patch currently edited runtime files, then run focused `dotnet vstest` commands against the `.artifacts/tests` assembly. Treat the `.Tests` build as test-lane prep, not as proof that Revit loaded fresh runtime assemblies.
+11. Exceptions should generally be avoided, prefer the `Result<TValue>` or
    `Try...` patterns, particularly if it's part of the public API surface and/or
    may be exposed to users. using the `Result<TValue` type allows us to _return_
    errors rather than throw, which is better for perf. For both DX posterity,
    record common footguns/suggestions in error messages, for example: special
    transaction needs for RVT API methods, a method (eg.
    FamilyManager.SetFormula) throw unhelpful error messages, etc.
-11. Reduce nesting in written code and stacktraces. Use method extraction or
+12. If a runtime fix appears not to take effect, verify whether the new debug logging is appearing before concluding the logic is wrong. The common failure modes are: the old addin is still loaded in Revit, the hot reload patch did not apply, or the test assembly was rebuilt but the runtime assembly in Revit was not updated.
+13. Reduce nesting in written code and stacktraces. Use method extraction or
    condition inversion to avoid nesting in written code. Prefer sequential
    execution flow with early `return`/`break`/`continue`/`throw` over nesting.
-12. Type-safety do's: label/handle nullables correctly, use generics, use
+14. Type-safety do's: label/handle nullables correctly, use generics, use
    `nameof()`, us ``is` and pattern matching,
-13. Use LINQ and Fluent APIs when possible.
-14. Use extension methods to get commonly used finicky code out of sight.
-15. Research the breath of a problem and attempt to prove it before trying to
+15. Use LINQ and Fluent APIs when possible.
+16. Use extension methods to get commonly used finicky code out of sight.
+17. Research the breath of a problem and attempt to prove it before trying to
     solve it.
-16. Use Serilogs Log.<Level> rather than Console.WriteLine or Debug.WriteLine.
-17. Weigh the addition of new code against the cost of maintenance and DX.
-18. Apply project standards to all code. If existing code doesn't follow the
+18. Use Serilogs Log.<Level> rather than Console.WriteLine or Debug.WriteLine.
+19. Weigh the addition of new code against the cost of maintenance and DX.
+20. Apply project standards to all code. If existing code doesn't follow the
     standards, refactor it to do so. Pay close attention to nullability and
     type-safety.
-19. Centralize comments into blocks rather than sprinkling them throughout.
+21. Centralize comments into blocks rather than sprinkling them throughout.
 
 ### Don'ts 👎👎👎
 
