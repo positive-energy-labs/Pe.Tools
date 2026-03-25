@@ -1,4 +1,4 @@
-using Autodesk.Revit.Attributes;
+﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.Extensions.FamDocument;
 using Pe.FamilyFoundry;
@@ -107,12 +107,17 @@ public class CmdFFManagerSnapshot : IExternalCommand {
         var offsetSpecs = snapshot.RefPlanesAndDims?.OffsetSpecs ?? [];
         var paramDrivenRectangles = snapshot.ParamDrivenSolids?.Rectangles ?? [];
         var paramDrivenCylinders = snapshot.ParamDrivenSolids?.Cylinders ?? [];
+        var paramDrivenConnectors = snapshot.ParamDrivenSolids?.Connectors ?? [];
         var hasRefPlaneSpecs = mirrorSpecs.Count > 0 || offsetSpecs.Count > 0;
-        var hasParamDrivenSolids = paramDrivenRectangles.Count > 0 || paramDrivenCylinders.Count > 0;
+        var hasParamDrivenSolids = paramDrivenRectangles.Count > 0 || paramDrivenCylinders.Count > 0 || paramDrivenConnectors.Count > 0;
         var additionalReferences = KnownParamPlanBuilder.CollectReferencedParameterNames(
                 new MakeRefPlaneAndDimsSettings { MirrorSpecs = mirrorSpecs, OffsetSpecs = offsetSpecs })
             .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(
-                new ParamDrivenSolidsSettings { Rectangles = paramDrivenRectangles, Cylinders = paramDrivenCylinders }))
+                new ParamDrivenSolidsSettings {
+                    Rectangles = paramDrivenRectangles,
+                    Cylinders = paramDrivenCylinders,
+                    Connectors = paramDrivenConnectors
+                }))
             .ToList();
         var referencedSnapshotDefinitions = KnownParamPlanBuilder.BuildFamilyDefinitionsFromSnapshots(
             paramSnapshots,
@@ -148,7 +153,8 @@ public class CmdFFManagerSnapshot : IExternalCommand {
             ParamDrivenSolids = new ParamDrivenSolidsSettings {
                 Enabled = hasParamDrivenSolids,
                 Rectangles = paramDrivenRectangles,
-                Cylinders = paramDrivenCylinders
+                Cylinders = paramDrivenCylinders,
+                Connectors = paramDrivenConnectors
             }
         };
     }

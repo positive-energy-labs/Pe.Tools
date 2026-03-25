@@ -1,4 +1,4 @@
-using Autodesk.Revit.Attributes;
+﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.OperationGroups;
@@ -241,6 +241,7 @@ public class CmdFFManager : IExternalCommand {
             .Add(new MakeRefPlanesAndDims(compiledSolids.RefPlanesAndDims))
             .Add(new MakeConstrainedExtrusions(compiledSolids.InternalExtrusions))
             .Add(new SetKnownParams(knownParamPlan.ResolvedAssignments, knownParamPlan.Catalog, true))
+            .Add(new MakeParamDrivenConnectors(compiledSolids.Connectors))
             .Add(new MakeRefPlaneSubcategories(specs))
             .Add(new SortParams(new SortParamsSettings()));
     }

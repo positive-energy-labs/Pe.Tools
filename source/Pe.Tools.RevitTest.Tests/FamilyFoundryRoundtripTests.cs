@@ -4,6 +4,7 @@ using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Snapshots;
 using Pe.SettingsCatalog.Revit.FamilyFoundry;
 using Pe.Tools.Commands.FamilyFoundry;
+using Autodesk.Revit.DB.Mechanical;
 
 namespace Pe.Tools.RevitTest.Tests;
 
@@ -13,9 +14,11 @@ public sealed class FamilyFoundryRoundtripTests {
     private const BuiltInCategory TestFamilyCategory = BuiltInCategory.OST_GenericModel;
     private const string BlankFamilyName = "FF-Test-BlankFamily";
     private const string RoundtripFamilyName = "FF-Test-MagicBox";
+    private const string RectangleFamilyName = "FF-Test-Rectangle";
     private const string CylinderFamilyName = "FF-Test-Cylinder";
     private const string StackedBoxesFamilyName = "FF-Test-StackedBoxes";
     private const string BoxWithCylinderFamilyName = "FF-Test-BoxWithCylinder";
+    private const string RoundDuctConnectorFamilyName = "FF-Test-RoundDuctConnector";
     private const string AmbiguousFamilyName = "FF-Test-Ambiguous";
     private const string MagicBoxProfileFixture = "magicbox-roundtrip.json";
 
@@ -163,9 +166,159 @@ public sealed class FamilyFoundryRoundtripTests {
 
             Assert.That(result.Success, Is.True, result.Error);
             AssertCylinderSnapshot(result.Contexts[0].PostProcessSnapshot!);
-            AssertSavedFamilyHasSketchDiameterLabel(
-                RevitFamilyFixtureHarness.GetExpectedSavedFamilyPath(result.OutputFolderPath!, familyDocument),
-                "Diameter");
+            var savedFamilyPath = RevitFamilyFixtureHarness.GetExpectedSavedFamilyPath(result.OutputFolderPath!, familyDocument);
+            AssertSavedFamilyHasSketchDiameterLabel(savedFamilyPath, "Diameter");
+            AssertRoundExtrusionResizesAcrossTypes(savedFamilyPath, "Diameter", [
+                new RevitFamilyFixtureHarness.FamilyTypeState("D1", new Dictionary<string, double> { ["Diameter"] = 1.0 }),
+                new RevitFamilyFixtureHarness.FamilyTypeState("D2", new Dictionary<string, double> { ["Diameter"] = 2.0 }),
+                new RevitFamilyFixtureHarness.FamilyTypeState("D3", new Dictionary<string, double> { ["Diameter"] = 3.0 })
+            ]);
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(familyDocument);
+        }
+    }
+
+    [Test]
+    public void FFManager_param_driven_rectangle_resizes_across_types() {
+        Document? familyDocument = null;
+
+        try {
+            familyDocument = RevitFamilyFixtureHarness.CreateFamilyDocument(
+                _dbApplication,
+                TestFamilyCategory,
+                RectangleFamilyName);
+
+            var tempOutputRoot = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
+                nameof(FFManager_param_driven_rectangle_resizes_across_types));
+            var profile = CreateParamDrivenProfile(
+                ["Width", "Length", "Height"],
+                [
+                    new GlobalParamAssignment { Parameter = "Width", Kind = ParamAssignmentKind.Formula, Value = "2'" },
+                    new GlobalParamAssignment { Parameter = "Length", Kind = ParamAssignmentKind.Formula, Value = "4'" },
+                    new GlobalParamAssignment { Parameter = "Height", Kind = ParamAssignmentKind.Formula, Value = "3'" }
+                ],
+                rectangles: [
+                    new ParamDrivenRectangleSpec {
+                        Name = "Box",
+                        Sketch = new SketchTargetSpec { Plane = "Ref. Level" },
+                        Width = new AxisConstraintSpec {
+                            Mode = AxisConstraintMode.Mirror,
+                            Parameter = "Width",
+                            CenterAnchor = "Center (Front/Back)",
+                            PlaneNameBase = "box width",
+                            Strength = RpStrength.StrongRef
+                        },
+                        Length = new AxisConstraintSpec {
+                            Mode = AxisConstraintMode.Mirror,
+                            Parameter = "Length",
+                            CenterAnchor = "Center (Left/Right)",
+                            PlaneNameBase = "box length",
+                            Strength = RpStrength.StrongRef
+                        },
+                        Height = new AxisConstraintSpec {
+                            Mode = AxisConstraintMode.Offset,
+                            Parameter = "Height",
+                            Anchor = "Reference Plane",
+                            Direction = OffsetDirection.Positive,
+                            PlaneNameBase = "box top",
+                            Strength = RpStrength.StrongRef
+                        }
+                    }
+                ]);
+
+            var result = RunRoundtrip(familyDocument, profile, nameof(FFManager_param_driven_rectangle_resizes_across_types), tempOutputRoot);
+
+            Assert.That(result.Success, Is.True, result.Error);
+            var savedFamilyPath = RevitFamilyFixtureHarness.GetExpectedSavedFamilyPath(result.OutputFolderPath!, familyDocument);
+            AssertRectangularExtrusionResizesAcrossTypes(savedFamilyPath, "Width", "Length", [
+                new RevitFamilyFixtureHarness.FamilyTypeState("R1", new Dictionary<string, double> { ["Width"] = 1.0, ["Length"] = 2.0 }),
+                new RevitFamilyFixtureHarness.FamilyTypeState("R2", new Dictionary<string, double> { ["Width"] = 2.0, ["Length"] = 4.0 }),
+                new RevitFamilyFixtureHarness.FamilyTypeState("R3", new Dictionary<string, double> { ["Width"] = 3.0, ["Length"] = 5.0 })
+            ]);
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(familyDocument);
+        }
+    }
+
+    [Test]
+    public void FFManager_round_duct_connector_roundtrips_and_stub_resizes_across_types() {
+        Document? familyDocument = null;
+
+        try {
+            familyDocument = RevitFamilyFixtureHarness.CreateFamilyDocument(
+                _dbApplication,
+                TestFamilyCategory,
+                RoundDuctConnectorFamilyName);
+
+            var tempOutputRoot = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
+                nameof(FFManager_round_duct_connector_roundtrips_and_stub_resizes_across_types));
+            var profile = CreateParamDrivenProfile(
+                ["ConnectorDiameter", "ConnectorDepth"],
+                [
+                    new GlobalParamAssignment { Parameter = "ConnectorDepth", Kind = ParamAssignmentKind.Formula, Value = "1'" },
+                    new GlobalParamAssignment { Parameter = "ConnectorDiameter", Kind = ParamAssignmentKind.Formula, Value = "1'" }
+                ],
+                connectors: [
+                    new ParamDrivenConnectorSpec {
+                        Name = "SupplyConn",
+                        Domain = ParamDrivenConnectorDomain.Duct,
+                        Host = new ConnectorHostSpec {
+                            SketchPlane = "Ref. Level",
+                            Depth = new AxisConstraintSpec {
+                                Mode = AxisConstraintMode.Offset,
+                                Parameter = "ConnectorDepth",
+                                Anchor = "Ref. Level",
+                                Direction = OffsetDirection.Positive,
+                                PlaneNameBase = "connector face",
+                                Strength = RpStrength.StrongRef
+                            }
+                        },
+                        Geometry = new ConnectorStubGeometrySpec {
+                            Profile = ParamDrivenConnectorProfile.Round,
+                            CenterLeftRightPlane = "Center (Left/Right)",
+                            CenterFrontBackPlane = "Center (Front/Back)",
+                            Diameter = new AxisConstraintSpec {
+                                Mode = AxisConstraintMode.Mirror,
+                                Parameter = "ConnectorDiameter",
+                                CenterAnchor = "Center (Front/Back)",
+                                PlaneNameBase = "connector diameter",
+                                Strength = RpStrength.StrongRef
+                            }
+                        },
+                        Config = new ConnectorDomainConfigSpec {
+                            Duct = new DuctConnectorConfigSpec {
+                                SystemType = DuctSystemType.SupplyAir,
+                                FlowConfiguration = DuctFlowConfigurationType.Preset,
+                                FlowDirection = FlowDirectionType.Out,
+                                LossMethod = DuctLossMethodType.NotDefined
+                            }
+                        }
+                    }
+                ]);
+
+            var result = RunRoundtrip(familyDocument, profile, nameof(FFManager_round_duct_connector_roundtrips_and_stub_resizes_across_types), tempOutputRoot);
+
+            Assert.That(result.Success, Is.True, result.Error);
+            Assert.That(result.Contexts[0].PostProcessSnapshot!.ParamDrivenSolids.Connectors, Has.Count.EqualTo(1));
+            var savedFamilyPath = RevitFamilyFixtureHarness.GetExpectedSavedFamilyPath(result.OutputFolderPath!, familyDocument);
+            var states = new[] {
+                new RevitFamilyFixtureHarness.FamilyTypeState("C1", new Dictionary<string, double> {
+                    ["ConnectorDiameter"] = 1.0,
+                    ["ConnectorDepth"] = 0.5
+                }),
+                new RevitFamilyFixtureHarness.FamilyTypeState("C2", new Dictionary<string, double> {
+                    ["ConnectorDiameter"] = 2.0,
+                    ["ConnectorDepth"] = 1.0
+                }),
+                new RevitFamilyFixtureHarness.FamilyTypeState("C3", new Dictionary<string, double> {
+                    ["ConnectorDiameter"] = 3.0,
+                    ["ConnectorDepth"] = 1.5
+                })
+            };
+            AssertRoundExtrusionResizesAcrossTypes(savedFamilyPath, "ConnectorDiameter", states);
+            AssertExtrusionDepthResizesAcrossTypes(savedFamilyPath, "ConnectorDepth", states);
+            AssertConnectorBuiltInsAreAssociated(savedFamilyPath, "ConnectorDiameter", "ConnectorDepth");
+            AssertRoundConnectorResizesAcrossTypes(savedFamilyPath, "ConnectorDiameter", states);
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(familyDocument);
         }
@@ -508,6 +661,149 @@ public sealed class FamilyFoundryRoundtripTests {
         }
     }
 
+    private void AssertRoundExtrusionResizesAcrossTypes(
+        string savedFamilyPath,
+        string parameterName,
+        IReadOnlyList<RevitFamilyFixtureHarness.FamilyTypeState> states
+    ) {
+        Document? savedDocument = null;
+
+        try {
+            savedDocument = _dbApplication.OpenDocumentFile(savedFamilyPath);
+            Assert.That(savedDocument, Is.Not.Null);
+
+            var results = RevitFamilyFixtureHarness.EvaluateLengthDrivenStates(
+                savedDocument!,
+                states,
+                document => RevitFamilyFixtureHarness.MeasureFirstRoundExtrusionDiameter(document));
+
+            foreach (var (typeName, result) in results) {
+                var expected = states.Single(state => state.Name == typeName).LengthValues[parameterName];
+                Assert.That(result, Is.EqualTo(expected).Within(1e-4), $"Type '{typeName}' did not resize to '{expected}'.");
+            }
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(savedDocument);
+        }
+    }
+
+    private void AssertRoundConnectorResizesAcrossTypes(
+        string savedFamilyPath,
+        string parameterName,
+        IReadOnlyList<RevitFamilyFixtureHarness.FamilyTypeState> states
+    ) {
+        Document? savedDocument = null;
+
+        try {
+            savedDocument = _dbApplication.OpenDocumentFile(savedFamilyPath);
+            Assert.That(savedDocument, Is.Not.Null);
+
+            var results = RevitFamilyFixtureHarness.EvaluateLengthDrivenStates(
+                savedDocument!,
+                states,
+                document => RevitFamilyFixtureHarness.MeasureFirstRoundConnectorDiameter(document));
+
+            foreach (var (typeName, result) in results) {
+                var expected = states.Single(state => state.Name == typeName).LengthValues[parameterName];
+                Assert.That(result, Is.EqualTo(expected).Within(1e-4), $"Connector in type '{typeName}' did not resize to '{expected}'.");
+            }
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(savedDocument);
+        }
+    }
+
+    private void AssertExtrusionDepthResizesAcrossTypes(
+        string savedFamilyPath,
+        string parameterName,
+        IReadOnlyList<RevitFamilyFixtureHarness.FamilyTypeState> states
+    ) {
+        Document? savedDocument = null;
+
+        try {
+            savedDocument = _dbApplication.OpenDocumentFile(savedFamilyPath);
+            Assert.That(savedDocument, Is.Not.Null);
+
+            var results = RevitFamilyFixtureHarness.EvaluateLengthDrivenStates(
+                savedDocument!,
+                states,
+                document => RevitFamilyFixtureHarness.MeasureFirstExtrusionDepth(document));
+
+            foreach (var (typeName, result) in results) {
+                var expected = states.Single(state => state.Name == typeName).LengthValues[parameterName];
+                Assert.That(result, Is.EqualTo(expected).Within(1e-4), $"Extrusion depth in type '{typeName}' did not resize to '{expected}'.");
+            }
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(savedDocument);
+        }
+    }
+
+    private void AssertConnectorBuiltInsAreAssociated(
+        string savedFamilyPath,
+        string diameterParameterName,
+        string depthParameterName
+    ) {
+        Document? savedDocument = null;
+
+        try {
+            savedDocument = _dbApplication.OpenDocumentFile(savedFamilyPath);
+            Assert.That(savedDocument, Is.Not.Null);
+
+            var connector = new FilteredElementCollector(savedDocument!)
+                .OfClass(typeof(ConnectorElement))
+                .Cast<ConnectorElement>()
+                .FirstOrDefault()
+                ?? throw new InvalidOperationException("No connector was found.");
+            var extrusion = new FilteredElementCollector(savedDocument)
+                .OfClass(typeof(Extrusion))
+                .Cast<Extrusion>()
+                .FirstOrDefault()
+                ?? throw new InvalidOperationException("No extrusion was found.");
+
+            var connectorDiameter = connector.get_Parameter(BuiltInParameter.CONNECTOR_DIAMETER)
+                ?? throw new InvalidOperationException("Connector diameter built-in parameter was not found.");
+            var extrusionEnd = extrusion.get_Parameter(BuiltInParameter.EXTRUSION_END_PARAM)
+                ?? throw new InvalidOperationException("Extrusion end built-in parameter was not found.");
+
+            var associatedConnectorDiameter = savedDocument.FamilyManager.GetAssociatedFamilyParameter(connectorDiameter);
+            var associatedExtrusionEnd = savedDocument.FamilyManager.GetAssociatedFamilyParameter(extrusionEnd);
+
+            Assert.That(associatedConnectorDiameter?.Definition?.Name, Is.EqualTo(diameterParameterName));
+            Assert.That(associatedExtrusionEnd?.Definition?.Name, Is.EqualTo(depthParameterName));
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(savedDocument);
+        }
+    }
+
+    private void AssertRectangularExtrusionResizesAcrossTypes(
+        string savedFamilyPath,
+        string widthParameterName,
+        string lengthParameterName,
+        IReadOnlyList<RevitFamilyFixtureHarness.FamilyTypeState> states
+    ) {
+        Document? savedDocument = null;
+
+        try {
+            savedDocument = _dbApplication.OpenDocumentFile(savedFamilyPath);
+            Assert.That(savedDocument, Is.Not.Null);
+
+            var results = RevitFamilyFixtureHarness.EvaluateLengthDrivenStates(
+                savedDocument!,
+                states,
+                document => RevitFamilyFixtureHarness.MeasureFirstRectangularExtrusionPlanExtents(document));
+
+            foreach (var (typeName, result) in results) {
+                var expectedState = states.Single(state => state.Name == typeName);
+                var expectedWidth = expectedState.LengthValues[widthParameterName];
+                var expectedLength = expectedState.LengthValues[lengthParameterName];
+                Assert.That(result.Width, Is.EqualTo(Math.Min(expectedWidth, expectedLength)).Within(1e-4),
+                    $"Rectangular extrusion width in type '{typeName}' did not resize correctly.");
+                Assert.That(result.Length, Is.EqualTo(Math.Max(expectedWidth, expectedLength)).Within(1e-4),
+                    $"Rectangular extrusion length in type '{typeName}' did not resize correctly.");
+            }
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(savedDocument);
+        }
+    }
+
     private static FFManagerProcessFamiliesActionResult RunRoundtrip(
         Document familyDocument,
         ProfileFamilyManager profile,
@@ -538,10 +834,12 @@ public sealed class FamilyFoundryRoundtripTests {
         IReadOnlyList<string> lengthParameters,
         IReadOnlyList<GlobalParamAssignment> assignments,
         IReadOnlyList<ParamDrivenRectangleSpec>? rectangles = null,
-        IReadOnlyList<ParamDrivenCylinderSpec>? cylinders = null
+        IReadOnlyList<ParamDrivenCylinderSpec>? cylinders = null,
+        IReadOnlyList<ParamDrivenConnectorSpec>? connectors = null
     ) {
         var rectangleSpecs = rectangles?.ToList() ?? [];
         var cylinderSpecs = cylinders?.ToList() ?? [];
+        var connectorSpecs = connectors?.ToList() ?? [];
 
         return new ProfileFamilyManager {
             ExecutionOptions = new ExecutionOptions { SingleTransaction = false, OptimizeTypeOperations = false },
@@ -574,9 +872,10 @@ public sealed class FamilyFoundryRoundtripTests {
                 PerTypeAssignmentsTable = []
             },
             ParamDrivenSolids = new ParamDrivenSolidsSettings {
-                Enabled = rectangleSpecs.Count > 0 || cylinderSpecs.Count > 0,
+                Enabled = rectangleSpecs.Count > 0 || cylinderSpecs.Count > 0 || connectorSpecs.Count > 0,
                 Rectangles = rectangleSpecs,
-                Cylinders = cylinderSpecs
+                Cylinders = cylinderSpecs,
+                Connectors = connectorSpecs
             }
         };
     }

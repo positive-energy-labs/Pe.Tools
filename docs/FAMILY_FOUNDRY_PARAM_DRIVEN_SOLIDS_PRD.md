@@ -112,3 +112,60 @@ The lower-level reference-plane/dimension operation remains valuable as an indep
 - This refactor is intended to improve both authoring ergonomics and serialization usefulness. If the serializer cannot produce a trustworthy authoring seed for arbitrary families, the design loses much of its value.
 - The public model should stay semantic and approachable for hand-authored JSON, while the internals are free to grow richer to support compilation, diagnostics, and decompilation.
 - The next design step should define the concrete `ParamDrivenSolids` schema, including unresolved inference markers, rectangle and cylinder shape contracts, and the reusable axis-constraint structure.
+
+## Connector Addendum
+
+### Problem Additions
+
+- Family Foundry currently lacks a semantic model for authored MEP connectors.
+- Connector creation has been split across ad hoc creation and post-pass mutation, which makes connector intent drift away from geometry intent.
+- For duct and pipe workflows, best practice is to host the connector on a same-size extrusion. The public authoring model should capture that unit directly.
+
+### Solution Additions
+
+- `ParamDrivenSolids` now includes semantic connector authoring in addition to rectangles and cylinders.
+- Connectors are authored as their own semantic units in a `Connectors` collection.
+- Each connector spec owns its own stub geometry.
+- V1 connector placement is intentionally narrow:
+  - the connector is centered on the terminal face normal to the stub extrusion direction,
+  - no authored XY offsets are supported,
+  - no authored manual rotation is supported.
+- Roundtrip serialization should emit the same public connector shape for compiler-owned families.
+- Dirty third-party-family connector inference remains deferred; unresolved or ambiguous semantics must be explicit and execution must reject ambiguous specs.
+
+### New User Stories
+
+1. As a Family Foundry author, I want to author a duct, pipe, or electrical connector as one semantic unit with its host geometry, so the geometry and connector behavior cannot drift apart.
+2. As a Family Foundry author, I want duct and pipe connectors to be hosted on same-size stub geometry by default, so authored families follow Revit best practice.
+3. As a Family Foundry author, I want connectors to be centered on their host face automatically, so I do not need to author low-level placement details.
+4. As a Family Foundry author, I want connector parameter associations to be declarative, so office standards can be applied without one-off make-connector operations.
+5. As a Family Foundry author, I want serialized connector output to be a usable authoring seed rather than a low-level Revit dump.
+
+### Connector Decisions
+
+- `ParamDrivenSolids` gains a public `Connectors` collection.
+- Connectors are their own semantic units and are not nested under rectangle or cylinder specs.
+- Every V1 connector spec includes stub geometry.
+- Host references use string aliases consistent with the existing `Box.Height.Top` alias pattern.
+- Electrical connectors also use stub geometry in V1 for consistency; plane-only electrical hosting is deferred.
+- Round connector stubs must declare their center planes explicitly, the same way semantic cylinders do, so their diameter constraint can be reconstructed and roundtripped.
+- Company-specific formulas or parameter defaults must stay in app/profile orchestration and not be pushed into Family Foundry internals.
+- Post-pass connector mutation is not the primary authoring model for the new API.
+
+### Connector Testing Additions
+
+- Compiler tests should cover connector schema validation, alias resolution, domain-specific compile output, and rejection of ambiguous connector semantics.
+- Execution tests should prove that connector stub geometry and hosted connectors are created together and that declared associations are applied.
+- Revit-backed constraint tests should exercise multiple parameter states for any non-trivial constraint. One static assertion is not sufficient proof for:
+  - cylinder diameter,
+  - connector stub diameter,
+  - rectangular connector stub width and length,
+  - any connector behavior that only reveals mistakes when switching family types.
+- The test harness should support iterating the same family through multiple type states or parameter values and measuring the resulting geometry or connector-driven values.
+
+### Connector Out Of Scope Additions
+
+- Arbitrary connector XY placement or freeform manual positioning.
+- Connector authoring without stub geometry.
+- Full dirty third-party-family connector semantic inference.
+- Office-specific electrical formulas inside core Family Foundry library code.
