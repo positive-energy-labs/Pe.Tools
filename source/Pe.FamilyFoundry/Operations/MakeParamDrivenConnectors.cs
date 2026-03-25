@@ -63,9 +63,15 @@ public sealed class MakeParamDrivenConnectors(MakeParamDrivenConnectorsSettings 
         var key = $"Connector: {spec.Name}";
         var stubKey = $"{key} stub";
         var executableSpec = BuildExecutableStubSpec(doc.Document, spec);
+        var hostingPlan = ResolveStubHostingPlan(doc.Document, spec);
         var stubResult = spec.Profile == ParamDrivenConnectorProfile.Rectangular
-            ? ConstrainedExtrusionFactory.CreateRectangle(doc.Document, executableSpec.RectangularStub!, logs, stubKey)
-            : ConstrainedExtrusionFactory.CreateCircle(doc.Document, executableSpec.RoundStub!, logs, stubKey);
+            ? ConstrainedExtrusionFactory.CreateRectangle(doc.Document, executableSpec.RectangularStub!, logs, stubKey, hostingPlan.SketchPlaneOverride)
+            : ConstrainedExtrusionFactory.CreateCircle(
+                doc.Document,
+                executableSpec.RoundStub!,
+                logs,
+                stubKey,
+                hostingPlan.SketchPlaneOverride);
         if (!stubResult.Created || stubResult.Extrusion == null || stubResult.TerminalFace?.Reference == null) {
             logs.Add(new LogEntry(key).Error("Failed to create connector stub geometry."));
             return;
@@ -168,7 +174,47 @@ public sealed class MakeParamDrivenConnectors(MakeParamDrivenConnectorsSettings 
             ? currentType.AsDouble(parameter) ?? 0.0
             : 0.0;
 
-        return currentValue > 1e-6 ? currentValue : DefaultStubDepth;
+        var magnitude = Math.Abs(currentValue);
+        return magnitude > 1e-6 ? magnitude : DefaultStubDepth;
+    }
+
+    private static ConnectorStubHostingPlan ResolveStubHostingPlan(Document doc, CompiledParamDrivenConnectorSpec spec) {
+        if (ResolveStubDepthDirection(spec) != ConnectorStubDepthDirection.NegativeAlongHostNormal)
+            return ConnectorStubHostingPlan.Default;
+
+        var hostPlane = ResolveHostPlane(doc, spec.HostPlaneName);
+        if (hostPlane == null)
+            return ConnectorStubHostingPlan.Default;
+
+        var flippedPlane = Plane.CreateByNormalAndOrigin(
+            hostPlane.Normal.Negate(),
+            hostPlane.Origin);
+        return new ConnectorStubHostingPlan(SketchPlane.Create(doc, flippedPlane));
+    }
+
+    private static ConnectorStubDepthDirection ResolveStubDepthDirection(CompiledParamDrivenConnectorSpec spec) =>
+        spec.AuthoredSpec.Host.Depth.Direction == OffsetDirection.Negative
+            ? ConnectorStubDepthDirection.NegativeAlongHostNormal
+            : ConnectorStubDepthDirection.PositiveAlongHostNormal;
+
+    private static Plane? ResolveHostPlane(Document doc, string planeName) {
+        if (string.IsNullOrWhiteSpace(planeName))
+            return null;
+
+        var referencePlane = new FilteredElementCollector(doc)
+            .OfClass(typeof(ReferencePlane))
+            .Cast<ReferencePlane>()
+            .FirstOrDefault(plane => string.Equals(plane.Name, planeName, StringComparison.OrdinalIgnoreCase));
+        if (referencePlane != null)
+            return Plane.CreateByNormalAndOrigin(
+                referencePlane.Normal.Normalize(),
+                (referencePlane.BubbleEnd + referencePlane.FreeEnd) * 0.5);
+
+        return new FilteredElementCollector(doc)
+            .OfClass(typeof(SketchPlane))
+            .Cast<SketchPlane>()
+            .FirstOrDefault(plane => string.Equals(plane.Name, planeName, StringComparison.OrdinalIgnoreCase))
+            ?.GetPlane();
     }
 
     private static ConnectorElement CreateConnectorElement(
@@ -287,6 +333,9 @@ public sealed class MakeParamDrivenConnectors(MakeParamDrivenConnectorsSettings 
         List<LogEntry> logs,
         string key
     ) {
+        if (spec.Domain == ParamDrivenConnectorDomain.Electrical)
+            return;
+
         if (spec.Profile == ParamDrivenConnectorProfile.Round && spec.RoundStub != null) {
             _ = AssociateBuiltInParameter(
                 doc,
@@ -305,7 +354,7 @@ public sealed class MakeParamDrivenConnectors(MakeParamDrivenConnectorsSettings 
         _ = AssociateBuiltInParameter(
             doc,
             connector.get_Parameter(BuiltInParameter.CONNECTOR_WIDTH),
-            spec.RectangularStub.PairAParameter,
+            spec.RectangularStub.PairBParameter,
             key,
             "connector width",
             logs,
@@ -313,9 +362,9 @@ public sealed class MakeParamDrivenConnectors(MakeParamDrivenConnectorsSettings 
         _ = AssociateBuiltInParameter(
             doc,
             connector.get_Parameter(BuiltInParameter.CONNECTOR_HEIGHT),
-            spec.RectangularStub.PairBParameter,
+            spec.RectangularStub.PairAParameter,
             key,
-            "connector length",
+            "connector height",
             logs,
             required: true);
     }
@@ -421,5 +470,14 @@ public sealed class MakeParamDrivenConnectors(MakeParamDrivenConnectorsSettings 
         _ = builder.AddSimpleField("Version", typeof(int));
         _ = builder.AddSimpleField("JsonData", typeof(string));
         return builder.Finish();
+    }
+
+    private enum ConnectorStubDepthDirection {
+        PositiveAlongHostNormal,
+        NegativeAlongHostNormal
+    }
+
+    private readonly record struct ConnectorStubHostingPlan(SketchPlane? SketchPlaneOverride) {
+        public static ConnectorStubHostingPlan Default => new(null);
     }
 }

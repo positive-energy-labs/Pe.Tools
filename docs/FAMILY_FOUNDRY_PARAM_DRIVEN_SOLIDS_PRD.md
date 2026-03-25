@@ -148,6 +148,8 @@ The lower-level reference-plane/dimension operation remains valuable as an indep
 - Every V1 connector spec includes stub geometry.
 - Host references use string aliases consistent with the existing `Box.Height.Top` alias pattern.
 - Electrical connectors also use stub geometry in V1 for consistency; plane-only electrical hosting is deferred.
+- Compiler-owned connector units may persist internal metadata to support exact roundtrip reconstruction, but that metadata is an internal implementation detail, not the public model.
+- Internal connector metadata must not become the only serialization strategy. Third-party and non-generated families still need best-effort semantic inference when that later scope is implemented.
 - Round connector stubs must declare their center planes explicitly, the same way semantic cylinders do, so their diameter constraint can be reconstructed and roundtripped.
 - Company-specific formulas or parameter defaults must stay in app/profile orchestration and not be pushed into Family Foundry internals.
 - Post-pass connector mutation is not the primary authoring model for the new API.

@@ -238,11 +238,6 @@ public static class ParamDrivenSolidsCompiler {
             return CompileOutcome.Invalid;
         }
 
-        if (spec.Host.Depth.Direction != OffsetDirection.Positive) {
-            diagnostics.Add(new ParamDrivenSolidsDiagnostic(ParamDrivenDiagnosticSeverity.Error, spec.Name, $"{keyBase}.Host.Depth.Direction", "Connector depth currently supports only Positive direction because it is driven by Extrusion End."));
-            return CompileOutcome.Invalid;
-        }
-
         if (!CollectInferenceDiagnostics(spec.Name, $"{keyBase}.Host.Depth", spec.Host.Depth.Inference, diagnostics))
             return CompileOutcome.Invalid;
 

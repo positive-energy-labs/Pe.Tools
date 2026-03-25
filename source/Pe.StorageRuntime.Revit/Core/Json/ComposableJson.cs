@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using Pe.StorageRuntime.Capabilities;
@@ -28,17 +28,18 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
     private readonly string _profileSchemaPath;
     private readonly string _schemaDirectory;
 
-    private readonly JsonSerializerSettings _serialSettings =
-        RevitJsonFormatting.CreateRequiredAwareRevitIndentedSettings();
+    private readonly JsonSerializerSettings _serialSettings;
 
     private T? _cachedData;
     private DateTimeOffset _cachedModifiedUtc;
     private bool _fragmentScaffoldingEnsured;
 
     public ComposableJson(string filePath, string schemaDirectory, JsonBehavior behavior) {
+        
         this.FilePath = filePath;
         this._schemaDirectory = schemaDirectory;
         this._behavior = behavior;
+        this._serialSettings = CreateSerializerSettings(behavior);
         var metadata = CachedTypeMetadata.Value;
         this._fragmentItemTypesByRoot = metadata.FragmentItemTypesByRoot;
         this._presetObjectTypesByRoot = metadata.PresetObjectTypesByRoot;
@@ -191,6 +192,11 @@ public sealed class ComposableJson<T> : JsonReadWriter<T> where T : class, new()
 
     private string Serialize(T data) =>
         JsonConvert.SerializeObject(data, this._serialSettings);
+
+    private static JsonSerializerSettings CreateSerializerSettings(JsonBehavior behavior) =>
+        behavior == JsonBehavior.Settings
+            ? RevitJsonFormatting.CreateRequiredAwareRevitIndentedSettings()
+            : RevitJsonFormatting.CreateRevitIndentedSettings();
 
     private T Deserialize(JObject data) =>
         data.ToObject<T>(this._deserializer) ?? new T();

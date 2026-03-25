@@ -2,6 +2,7 @@ using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.Resolution;
 using Pe.FamilyFoundry.Snapshots;
 using Autodesk.Revit.DB.Mechanical;
+using Autodesk.Revit.DB.Plumbing;
 
 namespace Pe.Tools.RevitTest.Tests;
 
@@ -285,6 +286,47 @@ public sealed class ParamDrivenSolidsCompilerTests {
         Assert.That(result.Connectors.Connectors, Has.Count.EqualTo(1));
         Assert.That(result.Connectors.Connectors[0].RoundStub, Is.Not.Null);
         Assert.That(result.SemanticAliases["SupplyConn.HostFace"], Is.EqualTo("SupplyConn HostFace"));
+    }
+
+    [Test]
+    public void Compile_allows_negative_connector_depth_direction() {
+        var settings = new ParamDrivenSolidsSettings {
+            Connectors = [
+                new ParamDrivenConnectorSpec {
+                    Name = "BackConn",
+                    Domain = ParamDrivenConnectorDomain.Pipe,
+                    Host = new ConnectorHostSpec {
+                        SketchPlane = "Ref. Level",
+                        Depth = new AxisConstraintSpec {
+                            Mode = AxisConstraintMode.Offset,
+                            Parameter = "Depth",
+                            Anchor = "Ref. Level",
+                            Direction = OffsetDirection.Negative,
+                            PlaneNameBase = "back conn face",
+                            Strength = RpStrength.StrongRef
+                        }
+                    },
+                    Geometry = new ConnectorStubGeometrySpec {
+                        Profile = ParamDrivenConnectorProfile.Round,
+                        CenterLeftRightPlane = "Center (Left/Right)",
+                        CenterFrontBackPlane = "Center (Front/Back)",
+                        Diameter = new AxisConstraintSpec {
+                            Mode = AxisConstraintMode.Mirror,
+                            Parameter = "Diameter"
+                        }
+                    },
+                    Config = new ConnectorDomainConfigSpec {
+                        Pipe = new PipeConnectorConfigSpec { SystemType = PipeSystemType.ReturnHydronic }
+                    }
+                }
+            ]
+        };
+
+        var result = ParamDrivenSolidsCompiler.Compile(settings);
+
+        Assert.That(result.CanExecute, Is.True);
+        Assert.That(result.Connectors.Connectors, Has.Count.EqualTo(1));
+        Assert.That(result.Connectors.Connectors[0].RoundStub, Is.Not.Null);
     }
 
     [Test]

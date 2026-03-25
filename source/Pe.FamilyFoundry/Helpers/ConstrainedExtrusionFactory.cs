@@ -13,7 +13,8 @@ internal static class ConstrainedExtrusionFactory {
         Document doc,
         ConstrainedRectangleExtrusionSpec spec,
         List<LogEntry> logs,
-        string key
+        string key,
+        SketchPlane? sketchPlaneOverride = null
     ) {
         var rpA1 = GetReferencePlane(doc, spec.PairAPlane1);
         var rpA2 = GetReferencePlane(doc, spec.PairAPlane2);
@@ -24,7 +25,7 @@ internal static class ConstrainedExtrusionFactory {
             return ExtrusionCreationResult.Failed;
         }
 
-        var sketchPlane = GetSketchPlane(doc, spec.SketchPlaneName);
+        var sketchPlane = sketchPlaneOverride ?? GetSketchPlane(doc, spec.SketchPlaneName);
         if (sketchPlane == null) {
             logs.Add(new LogEntry(key).Error($"Sketch plane '{spec.SketchPlaneName}' was not found."));
             return ExtrusionCreationResult.Failed;
@@ -97,8 +98,11 @@ internal static class ConstrainedExtrusionFactory {
         Document doc,
         ConstrainedCircleExtrusionSpec spec,
         List<LogEntry> logs,
-        string key
+        string key,
+        SketchPlane? sketchPlaneOverride = null,
+        CircleExtrusionCreationOptions? options = null
     ) {
+        var effectiveOptions = options ?? new CircleExtrusionCreationOptions();
         var centerLeftRightPlane = GetReferencePlane(doc, spec.CenterLeftRightPlane);
         var centerFrontBackPlane = GetReferencePlane(doc, spec.CenterFrontBackPlane);
         if (centerLeftRightPlane == null || centerFrontBackPlane == null) {
@@ -106,7 +110,7 @@ internal static class ConstrainedExtrusionFactory {
             return ExtrusionCreationResult.Failed;
         }
 
-        var sketchPlane = GetSketchPlane(doc, spec.SketchPlaneName);
+        var sketchPlane = sketchPlaneOverride ?? GetSketchPlane(doc, spec.SketchPlaneName);
         if (sketchPlane == null) {
             logs.Add(new LogEntry(key).Error($"Sketch plane '{spec.SketchPlaneName}' was not found."));
             return ExtrusionCreationResult.Failed;
@@ -171,8 +175,10 @@ internal static class ConstrainedExtrusionFactory {
         try {
             var extrusion = doc.FamilyCreate.NewExtrusion(spec.IsSolid, profile, sketchPlane, endOffset);
             extrusion.StartOffset = startOffset;
-            TryLabelCircleDiameter(doc, extrusion, spec, logs, key);
-            TryAlignCircleCenterToPlanes(doc, extrusion, centerLeftRightPlane, centerFrontBackPlane, logs, key);
+            if (effectiveOptions.CreateDiameterLabel)
+                TryLabelCircleDiameter(doc, extrusion, spec, logs, key);
+            if (effectiveOptions.AlignCenterToPlanes)
+                TryAlignCircleCenterToPlanes(doc, extrusion, centerLeftRightPlane, centerFrontBackPlane, logs, key);
             if (hasHeightPair && bottomHeightPlane != null && topHeightPlane != null) {
                 TryAlignExtrusionCapsToHeightPlanes(
                     doc,
@@ -240,7 +246,7 @@ internal static class ConstrainedExtrusionFactory {
             return;
         }
 
-        var diameterView = GetWorkingView(doc);
+        var diameterView = GetBestCircleAuthoringView(doc, extrusion);
         if (diameterView == null) {
             logs.Add(new LogEntry(key).Error(
                 "Created extrusion, but no valid view was available for diameter dimension creation."));
@@ -275,7 +281,7 @@ internal static class ConstrainedExtrusionFactory {
         string key
     ) {
         try {
-            var alignmentView = GetWorkingView(doc);
+            var alignmentView = GetBestCircleAuthoringView(doc, extrusion);
             if (alignmentView == null) {
                 logs.Add(new LogEntry(key).Error(
                     "Created extrusion, but no valid view was available for circle-center alignment."));
@@ -367,21 +373,33 @@ internal static class ConstrainedExtrusionFactory {
                 view.ViewType is ViewType.FloorPlan or ViewType.CeilingPlan or ViewType.EngineeringPlan or ViewType.AreaPlan);
     }
 
+    private static View? GetBestCircleAuthoringView(Document doc, Extrusion extrusion) {
+        var sketchPlane = extrusion.Sketch?.SketchPlane;
+        var sketchNormal = sketchPlane?.GetPlane().Normal.Normalize();
+        if (sketchNormal == null)
+            return GetWorkingView(doc);
+
+        return Math.Abs(sketchNormal.Z) > 0.95
+            ? GetWorkingView(doc)
+            : GetFirstNonTemplateView(doc, ViewType.Elevation, ViewType.Section) ?? GetWorkingView(doc);
+    }
+
     private static View? GetBestAlignmentView(Document doc, ReferencePlane p1, ReferencePlane p2) {
         var isHeightLike = Math.Abs(p1.Normal.Normalize().Z) > 0.95 &&
                            Math.Abs(p2.Normal.Normalize().Z) > 0.95;
         if (!isHeightLike)
             return GetWorkingView(doc);
 
-        var elevation = new FilteredElementCollector(doc)
+        return GetFirstNonTemplateView(doc, ViewType.Elevation, ViewType.Section) ?? GetWorkingView(doc);
+    }
+
+    private static View? GetFirstNonTemplateView(Document doc, params ViewType[] viewTypes) =>
+        new FilteredElementCollector(doc)
             .OfClass(typeof(View))
             .Cast<View>()
-            .FirstOrDefault(v =>
-                !v.IsTemplate &&
-                (v.ViewType == ViewType.Elevation || v.ViewType == ViewType.Section));
-
-        return elevation ?? GetWorkingView(doc);
-    }
+            .FirstOrDefault(view =>
+                !view.IsTemplate &&
+                viewTypes.Contains(view.ViewType));
 
     private static void TryAlignSketchLinesToPlanes(
         Document doc,
@@ -575,6 +593,11 @@ internal static class ConstrainedExtrusionFactory {
         value = currentType.AsDouble(parameter) ?? 0.0;
         return true;
     }
+}
+
+internal sealed class CircleExtrusionCreationOptions {
+    public bool CreateDiameterLabel { get; init; } = true;
+    public bool AlignCenterToPlanes { get; init; } = true;
 }
 
 internal sealed record ExtrusionCreationResult(
