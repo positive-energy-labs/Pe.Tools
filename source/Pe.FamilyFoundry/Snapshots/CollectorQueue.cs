@@ -1,4 +1,4 @@
-using Pe.Extensions.FamDocument;
+﻿using Pe.Extensions.FamDocument;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
 
 namespace Pe.FamilyFoundry.Snapshots;
@@ -7,7 +7,7 @@ namespace Pe.FamilyFoundry.Snapshots;
 ///     Fluent queue that batches collectors for snapshot collection.
 /// </summary>
 public class CollectorQueue {
-    private readonly List<object> _collectors = new();
+    private readonly List<object> _collectors = [];
 
     /// <summary>
     ///     Gets all collectors in the queue for inspection.

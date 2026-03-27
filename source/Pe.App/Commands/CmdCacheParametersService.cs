@@ -1,10 +1,11 @@
-using Autodesk.Revit.Attributes;
+﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.Global.Services.Aps;
 using Pe.Global.Services.Aps.Models;
 using Pe.StorageRuntime.Revit;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using Toon;
@@ -237,7 +238,11 @@ public class EnrichedParameterData {
                 .Value as ParametersApi.Parameters.ParametersResult.ParameterDownloadOpts.MetadataBinding;
 
             this.GroupId = groupId?.Id;
-            this.GroupLabel = new ForgeTypeId(this.GroupId).ToLabel();
+            try {
+                this.GroupLabel = new ForgeTypeId(this.GroupId).ToLabel();
+            } catch {
+                Debug.WriteLine($"GroupLabel derivation failed: GroupId: {this.GroupId}");
+            }
 
             var categories = param.Metadata
                 .FirstOrDefault(m => m.Id == "categories")?

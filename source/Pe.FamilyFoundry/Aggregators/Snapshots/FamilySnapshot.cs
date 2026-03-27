@@ -1,3 +1,4 @@
+using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.Snapshots;
 
 namespace Pe.FamilyFoundry.Aggregators.Snapshots;
@@ -17,6 +18,9 @@ public class FamilySnapshot {
 
     /// <summary>Constrained extrusion specs with source tracking</summary>
     public ExtrusionSnapshot Extrusions { get; set; }
+
+    /// <summary>Semantic solid snapshot used for authoring roundtrips.</summary>
+    public ParamDrivenSolidsSnapshot ParamDrivenSolids { get; set; }
 
     // Future sections: Connectors, etc.
 }

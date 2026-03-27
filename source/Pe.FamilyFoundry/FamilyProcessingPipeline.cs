@@ -59,7 +59,7 @@ public static class FamilyProcessingPipelineExtensions {
         if (projectDoc == null) throw new ArgumentNullException(nameof(projectDoc));
         if (configure == null) throw new ArgumentNullException(nameof(configure));
 
-        context = new FamilyProcessingContext { FamilyName = famDoc.Document.Title };
+        context = new FamilyProcessingContext { FamilyName = ResolveFamilyName(famDoc) };
 
         var sw = Stopwatch.StartNew();
 
@@ -95,7 +95,7 @@ public static class FamilyProcessingPipelineExtensions {
     ) {
         if (configure == null) throw new ArgumentNullException(nameof(configure));
 
-        context = new FamilyProcessingContext { FamilyName = famDoc.Document.Title };
+        context = new FamilyProcessingContext { FamilyName = ResolveFamilyName(famDoc) };
 
         var sw = Stopwatch.StartNew();
 
@@ -168,12 +168,21 @@ public static class FamilyProcessingPipelineExtensions {
     }
 
     /// <summary>Save family to directories returned by getSaveLocations. Empty list = no-op.</summary>
-    public static FamilyProcessingPipeline SaveToLocations(
+    public static FamilyProcessingPipeline SaveToPaths(
         this FamilyProcessingPipeline pipeline,
-        Func<FamilyDocument, List<string>> getSaveLocations
+        Func<FamilyDocument, List<string>> getSavePaths
     ) {
-        _ = pipeline.FamDoc.SaveToLocations(getSaveLocations);
+        _ = pipeline.FamDoc.SaveToPaths(getSavePaths);
         return pipeline;
+    }
+
+    private static string ResolveFamilyName(FamilyDocument famDoc) {
+        var familyName = famDoc.OwnerFamily?.Name;
+        if (string.IsNullOrWhiteSpace(familyName))
+            familyName = Path.GetFileNameWithoutExtension(famDoc.Document.Title);
+        if (string.IsNullOrWhiteSpace(familyName))
+            familyName = famDoc.Document.Title;
+        return string.IsNullOrWhiteSpace(familyName) ? "Family" : familyName;
     }
 
     /// <summary>
