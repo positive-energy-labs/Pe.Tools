@@ -1,0 +1,108 @@
+{
+  "ExecutionOptions": {
+    "SingleTransaction": false,
+    "OptimizeTypeOperations": false
+  },
+  "FilterFamilies": {
+    "IncludeCategoriesEqualing": [],
+    "IncludeByCondition": {
+      "FieldName": "",
+      "Value": ""
+    },
+    "IncludeNames": {
+      "Equaling": [
+        "__CURRENT_FAMILY__"
+      ],
+      "Containing": [],
+      "StartingWith": []
+    },
+    "ExcludeNames": {
+      "Equaling": [],
+      "Containing": [],
+      "StartingWith": []
+    }
+  },
+  "FilterApsParams": {
+    "IncludeNames": {
+      "Equaling": [
+        "PE_G_Dim_Height1",
+        "PE_G_Dim_Length1",
+        "PE_G_Dim_Width1"
+      ],
+      "Containing": [],
+      "StartingWith": []
+    },
+    "ExcludeNames": {
+      "Equaling": [],
+      "Containing": [],
+      "StartingWith": []
+    }
+  },
+  "MakeRefPlaneAndDims": {
+    "MirrorSpecs": [],
+    "OffsetSpecs": [],
+    "Enabled": false
+  },
+  "AddFamilyParams": {
+    "Parameters": [],
+    "Enabled": true
+  },
+  "SetKnownParams": {
+    "OverrideExistingValues": true,
+    "GlobalAssignments": [
+      {
+        "Parameter": "PE_G_Dim_Width1",
+        "Kind": "Formula",
+        "Value": "4'"
+      },
+      {
+        "Parameter": "PE_G_Dim_Length1",
+        "Kind": "Formula",
+        "Value": "6'"
+      },
+      {
+        "Parameter": "PE_G_Dim_Height1",
+        "Kind": "Formula",
+        "Value": "3'"
+      }
+    ],
+    "PerTypeAssignmentsTable": [],
+    "Enabled": true
+  },
+  "ParamDrivenSolids": {
+    "Rectangles": [
+      {
+        "Name": "MagicBox",
+        "IsSolid": true,
+        "Sketch": {
+          "Kind": "ReferencePlane",
+          "Plane": "Ref. Level"
+        },
+        "Width": {
+          "Mode": "Mirror",
+          "Parameter": "PE_G_Dim_Width1",
+          "CenterAnchor": "Center (Front/Back)",
+          "PlaneNameBase": "width",
+          "Strength": "StrongRef"
+        },
+        "Length": {
+          "Mode": "Mirror",
+          "Parameter": "PE_G_Dim_Length1",
+          "CenterAnchor": "Center (Left/Right)",
+          "PlaneNameBase": "length",
+          "Strength": "StrongRef"
+        },
+        "Height": {
+          "Mode": "Offset",
+          "Parameter": "PE_G_Dim_Height1",
+          "Anchor": "Reference Plane",
+          "Direction": "Positive",
+          "PlaneNameBase": "top",
+          "Strength": "StrongRef"
+        }
+      }
+    ],
+    "Cylinders": [],
+    "Enabled": true
+  }
+}

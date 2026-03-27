@@ -71,7 +71,7 @@ public class OperationProcessor(
         if (!this._exOpts.EnableCollectors) collectorQueue = null;
 
         var contexts = this.OpenDoc.IsFamilyDocument
-            ? this.ProcessFamilyDocument(queue, collectorQueue)
+            ? this.ProcessFamilyDocument(queue, collectorQueue, loadAndSaveOptions, outputFolderPath)
             : this.ProcessNormalDocument(queue, collectorQueue, loadAndSaveOptions, outputFolderPath);
 
         totalSw.Stop();
@@ -90,7 +90,7 @@ public class OperationProcessor(
         if (!this._exOpts.EnableCollectors) collectorQueue = null;
 
         var contexts = this.OpenDoc.IsFamilyDocument
-            ? this.ProcessFamilyDocument(queue, collectorQueue)
+            ? this.ProcessFamilyDocument(queue, collectorQueue, loadAndSaveOptions, outputFolderPath)
             : this.ProcessNormalDocument(queue, collectorQueue, loadAndSaveOptions, outputFolderPath);
 
         var errors = contexts
@@ -139,7 +139,7 @@ public class OperationProcessor(
                         pipeline
                             .CollectPreSnapshot(collectorQueue)
                             .Process(familyFuncs)
-                            .SaveToLocations(d => GetSaveLocations(d, saveOpts, outputFolderPath))
+                            .SaveToPaths(d => GetSavePaths(d, saveOpts, outputFolderPath))
                             .Load()
                             .CollectPostSnapshot(collectorQueue),
                     out var context);
@@ -154,10 +154,20 @@ public class OperationProcessor(
     }
 
     private List<FamilyProcessingContext> ProcessFamilyDocument(OperationQueue queue, CollectorQueue? collectorQueue) {
+        return this.ProcessFamilyDocument(queue, collectorQueue, null, null);
+    }
+
+    private List<FamilyProcessingContext> ProcessFamilyDocument(
+        OperationQueue queue,
+        CollectorQueue? collectorQueue,
+        LoadAndSaveOptions? loadAndSaveOptions,
+        string? outputFolderPath
+    ) {
         queue.ResetAllGroupContexts();
         var familyFuncs = queue.ToFuncs(
             this._exOpts.OptimizeTypeOperations,
             this._exOpts.SingleTransaction);
+        var saveOpts = loadAndSaveOptions ?? new LoadAndSaveOptions();
 
         _ = this.OpenDoc
             .GetFamilyDocument()
@@ -166,6 +176,7 @@ public class OperationProcessor(
                     pipeline
                         .CollectPreSnapshot(collectorQueue)
                         .Process(familyFuncs)
+                        .SaveToPaths(d => GetSavePaths(d, saveOpts, outputFolderPath))
                         .CollectPostSnapshot(collectorQueue),
                 out var context);
         // Note: No Close() call - we don't close the active family document
@@ -281,19 +292,43 @@ public class OperationProcessor(
         return contexts;
     }
 
-    private static List<string> GetSaveLocations(FamilyDocument famDoc,
+    private static List<string> GetSavePaths(
+        FamilyDocument famDoc,
         LoadAndSaveOptions options,
-        string? outputFolderPath) {
-        var saveLocations = new List<string>();
-        if ((options?.SaveFamilyToInternalPath ?? false)
-            && !string.IsNullOrEmpty(outputFolderPath))
-            saveLocations.Add(outputFolderPath);
+        string? outputFolderPath
+    ) {
+        var savePaths = new List<string>();
+        var familyFileName = GetFamilyFileName(famDoc);
 
-        if (!(options?.SaveFamilyToOutputDir ?? false)) return saveLocations;
-        var saveLocation = famDoc.PathName;
-        saveLocations.Add(saveLocation);
+        if ((options?.SaveFamilyToInternalPath ?? false) && !string.IsNullOrWhiteSpace(famDoc.PathName))
+            savePaths.Add(famDoc.PathName);
 
-        return saveLocations;
+        if ((options?.SaveFamilyToOutputDir ?? false) && !string.IsNullOrWhiteSpace(outputFolderPath)) {
+            var familyOutputDirectory = Path.Combine(outputFolderPath, GetFamilyDirectoryName(famDoc));
+            savePaths.Add(Path.Combine(familyOutputDirectory, familyFileName));
+        }
+
+        return savePaths;
+    }
+
+    private static string GetFamilyFileName(FamilyDocument famDoc) => $"{GetSanitizedFamilyStem(famDoc)}.rfa";
+
+    private static string GetFamilyDirectoryName(FamilyDocument famDoc) => GetSanitizedFamilyStem(famDoc);
+
+    private static string GetSanitizedFamilyStem(FamilyDocument famDoc) {
+        var familyName = famDoc.OwnerFamily?.Name;
+        if (string.IsNullOrWhiteSpace(familyName))
+            familyName = Path.GetFileNameWithoutExtension(famDoc.Document.Title);
+        if (string.IsNullOrWhiteSpace(familyName))
+            familyName = "Family";
+
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var sanitized = new string(familyName
+            .Select(ch => invalidChars.Contains(ch) ? '_' : ch)
+            .ToArray())
+            .Trim();
+
+        return string.IsNullOrWhiteSpace(sanitized) ? "Family" : sanitized;
     }
 }
 
@@ -323,11 +358,11 @@ public class LoadAndSaveOptions {
     [Required]
     public bool LoadFamily { get; set; } = true;
 
-    [Description("Save processed family(ies) to the internal path of the family document on your computer")]
+    [Description("Save processed family(ies) back to the family document's real file path when one exists")]
     [Required]
     public bool SaveFamilyToInternalPath { get; set; } = false;
 
-    [Description("Save processed family(ies) to the output directory of the command")]
+    [Description("Save processed family(ies) as copies inside the command output directory")]
     [Required]
     public bool SaveFamilyToOutputDir { get; set; } = false;
 }

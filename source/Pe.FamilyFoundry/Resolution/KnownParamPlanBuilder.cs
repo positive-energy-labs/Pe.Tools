@@ -77,12 +77,42 @@ public static class KnownParamPlanBuilder {
         MakeConstrainedExtrusionsSettings settings
     ) => settings.Rectangles
         .SelectMany(spec => new[] { spec.PairAParameter, spec.PairBParameter, spec.HeightParameter })
-        .Concat(settings.Circles.SelectMany(spec => new[] { spec.PairAParameter, spec.PairBParameter }))
+        .Concat(settings.Circles.SelectMany(spec => new[] { spec.DiameterParameter, spec.HeightParameter }))
         .Where(name => !string.IsNullOrWhiteSpace(name))
         .Select(name => name.Trim())
         .Distinct(StringComparer.Ordinal)
         .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
         .ToList();
+
+    public static IReadOnlyList<string> CollectReferencedParameterNames(
+        ParamDrivenSolidsSettings settings
+    ) => settings.Rectangles
+        .SelectMany(spec => new[] {
+            spec.Width.Parameter, spec.Length.Parameter, spec.Height.Parameter
+        })
+        .Concat(settings.Cylinders.SelectMany(spec => new[] {
+            spec.Diameter.Parameter, spec.Height.Parameter
+        }))
+        .Concat(settings.Connectors.SelectMany(spec => GetConnectorReferencedParameterNames(spec)))
+        .Where(name => !string.IsNullOrWhiteSpace(name))
+        .Select(name => name.Trim())
+        .Distinct(StringComparer.Ordinal)
+        .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    private static IEnumerable<string?> GetConnectorReferencedParameterNames(ParamDrivenConnectorSpec spec) {
+        yield return spec.Host.Depth.Parameter;
+
+        if (spec.Geometry.Profile == ParamDrivenConnectorProfile.Rectangular) {
+            yield return spec.Geometry.Width.Parameter;
+            yield return spec.Geometry.Length.Parameter;
+        } else {
+            yield return spec.Geometry.Diameter.Parameter;
+        }
+
+        foreach (var binding in spec.Bindings.Parameters)
+            yield return binding.SourceParameter;
+    }
 
     public static IReadOnlyList<string> CollectReferencedParameterNames(
         MakeElecConnectorSettings settings

@@ -1,10 +1,14 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 using NJsonSchema;
+using NJsonSchema.Annotations;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Documents;
 using Pe.StorageRuntime.Json;
 using Pe.StorageRuntime.Revit.Core.Json;
+using Pe.StorageRuntime.Revit.Core.Json.ContractResolvers;
+using System.Reflection;
 
 namespace Pe.StorageRuntime.Revit.Validation;
 
@@ -65,6 +69,7 @@ public sealed class SchemaBackedSettingsDocumentValidator(
                 return candidateContent;
 
             var serializerSettings = RevitJsonFormatting.CreateRevitIndentedSettings();
+            serializerSettings.ContractResolver = DefaultMaterializationContractResolver.Instance;
             var defaultToken = JToken.Parse(
                 RevitJsonFormatting.SerializeIndented(defaultInstance, serializerSettings)
             );
@@ -88,6 +93,28 @@ public sealed class SchemaBackedSettingsDocumentValidator(
             }
 
             ApplyMissingDefaults(candidateValue, defaultProperty.Value);
+        }
+    }
+
+    private sealed class DefaultMaterializationContractResolver : RevitTypeContractResolver {
+        public static DefaultMaterializationContractResolver Instance { get; } = new();
+
+        protected override JsonProperty CreateProperty(MemberInfo member, MemberSerialization memberSerialization) {
+            var property = base.CreateProperty(member, memberSerialization);
+            if (member is not PropertyInfo propertyInfo)
+                return property;
+
+            if (propertyInfo.GetCustomAttribute<JsonSchemaIgnoreAttribute>() != null) {
+                property.Ignored = true;
+                return property;
+            }
+
+            if (propertyInfo.SetMethod == null) {
+                property.Ignored = true;
+                return property;
+            }
+
+            return property;
         }
     }
 }

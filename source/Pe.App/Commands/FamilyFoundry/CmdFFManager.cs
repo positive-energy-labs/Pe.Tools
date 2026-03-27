@@ -1,4 +1,4 @@
-using Autodesk.Revit.Attributes;
+﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.OperationGroups;
@@ -12,6 +12,8 @@ using Pe.Global.Revit.Ui;
 using Pe.Global.Utils.Files;
 using Pe.SettingsCatalog.Revit;
 using Pe.SettingsCatalog.Revit.FamilyFoundry;
+using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime.Revit.Core;
 using Pe.StorageRuntime.Revit.Modules;
 using Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 using Serilog.Events;
@@ -68,30 +70,19 @@ public class CmdFFManager : IExternalCommand {
             apsParamModels, tempFile);
 
         var queue = BuildQueue(profile, apsParamData);
+        var processResult = ProcessFamiliesCore(
+            ctx.Doc,
+            profile,
+            ctx.SelectedProfile.TextPrimary,
+            ctx.OnFinishSettings,
+            ctx.Storage.OutputDir().DirectoryPath);
 
-        var outputFolderPath = ctx.Storage.OutputDir().DirectoryPath;
-
-        // Force this to never be single transaction
-        var executionOptions = new ExecutionOptions { SingleTransaction = false, OptimizeTypeOperations = false };
-
-        // Request both parameter and ref-plane snapshots
-        var collectorQueue = new CollectorQueue()
-            .Add(new ParamSectionCollector())
-            .Add(new RefPlaneSectionCollector())
-            .Add(new ExtrusionSectionCollector());
-
-        using var processor = new OperationProcessor(ctx.Doc, executionOptions);
-        var logs = processor
-            .SelectFamilies(() => ctx.Doc.IsFamilyDocument ? null : Pickers.GetSelectedFamilies(ctx.UiDoc))
-            .ProcessQueue(queue, collectorQueue, outputFolderPath, ctx.OnFinishSettings);
-
-        new ProcessingResultBuilder(ctx.Storage)
-            .WithProfile(profile, ctx.SelectedProfile.TextPrimary)
-            .WithOperationMetadata(queue)
-            .WriteSingleFamilyOutput(logs.contexts[0], ctx.OnFinishSettings.OpenOutputFilesOnCommandFinish);
+        if (!processResult.Success) {
+            throw new InvalidOperationException(processResult.Error ?? "FF Manager processing failed.");
+        }
 
         var balloon = new Ballogger();
-        foreach (var logCtx in logs.contexts) {
+        foreach (var logCtx in processResult.Contexts) {
             _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
                 $"Processed {logCtx.FamilyName} in {logCtx.TotalMs}ms");
         }
@@ -99,6 +90,87 @@ public class CmdFFManager : IExternalCommand {
         balloon.Show();
 
         // No post-processing for Manager - it's for family documents only
+    }
+
+    public static FFManagerProcessFamiliesActionResult ProcessFamiliesCore(
+        Document doc,
+        ProfileFamilyManager profile,
+        string profileName,
+        LoadAndSaveOptions? onFinishSettings = null,
+        string? outputFolderPath = null
+    ) {
+        if (doc == null) {
+            return new FFManagerProcessFamiliesActionResult(
+                false,
+                "No document provided.",
+                [],
+                0,
+                null);
+        }
+
+        OutputManager? runOutput = null;
+
+        try {
+            var apsParamModels = profile.GetFilteredApsParamModels();
+
+            using var tempFile = new TempSharedParamFile(doc);
+            var apsParamData = BaseProfileSettings.ConvertToSharedParameterDefinitions(
+                apsParamModels,
+                tempFile);
+
+            var queue = BuildQueue(profile, apsParamData);
+            var finishSettings = onFinishSettings ?? new LoadAndSaveOptions {
+                OpenOutputFilesOnCommandFinish = false,
+                LoadFamily = false,
+                SaveFamilyToInternalPath = false,
+                SaveFamilyToOutputDir = false
+            };
+
+            var executionOptions = new ExecutionOptions { SingleTransaction = false, OptimizeTypeOperations = false };
+            var collectorQueue = new CollectorQueue()
+                .Add(new ParamSectionCollector())
+                .Add(new RefPlaneSectionCollector())
+                .Add(new ExtrusionSectionCollector());
+
+            if (!string.IsNullOrWhiteSpace(outputFolderPath))
+                runOutput = OutputManager.ExactDir(outputFolderPath).TimestampedSubDir("ff");
+
+            using var processor = new OperationProcessor(doc, executionOptions);
+            var logs = processor
+                .SelectFamilies(() => null)
+                .ProcessQueue(queue, collectorQueue, runOutput?.DirectoryPath, finishSettings);
+
+            if (runOutput != null) {
+                var resultBuilder = new ProcessingResultBuilder(runOutput)
+                    .WithProfile(profile, profileName)
+                    .WithOperationMetadata(queue);
+
+                foreach (var context in logs.contexts)
+                    _ = resultBuilder.WriteSingleFamilyOutput(context, finishSettings.OpenOutputFilesOnCommandFinish);
+
+                if (logs.contexts.Count > 1)
+                    resultBuilder.WriteMultiFamilySummary(logs.totalMs, finishSettings.OpenOutputFilesOnCommandFinish);
+            }
+
+            var errors = logs.contexts
+                .Select(context => context.OperationLogs.AsTuple().error)
+                .Where(error => error != null)
+                .ToList();
+
+            return new FFManagerProcessFamiliesActionResult(
+                errors.Count == 0,
+                errors.FirstOrDefault()?.Message,
+                logs.contexts,
+                logs.totalMs,
+                runOutput?.DirectoryPath);
+        } catch (Exception ex) {
+            return new FFManagerProcessFamiliesActionResult(
+                false,
+                ex.Message,
+                [],
+                0,
+                runOutput?.DirectoryPath);
+        }
     }
 
     /// <summary>
@@ -111,7 +183,6 @@ public class CmdFFManager : IExternalCommand {
     ) {
         // Hardcoded reference plane subcategory specs
         var specs = new List<RefPlaneSubcategorySpec> {
-            new() { Strength = RpStrength.NotARef, Name = "NotARef", Color = new Color(211, 211, 211) },
             new() { Strength = RpStrength.WeakRef, Name = "WeakRef", Color = new Color(217, 124, 0) },
             new() { Strength = RpStrength.StrongRef, Name = "StrongRef", Color = new Color(255, 0, 0) },
             new() { Strength = RpStrength.CenterLR, Name = "Center", Color = new Color(115, 0, 253) },
@@ -140,8 +211,14 @@ public class CmdFFManager : IExternalCommand {
             });
         }
 
+        var compiledSolids = ParamDrivenSolidsCompiler.Compile(profile.ParamDrivenSolids);
+        if (!compiledSolids.CanExecute) {
+            throw new InvalidOperationException(
+                string.Join(Environment.NewLine, ParamDrivenSolidsCompiler.ToDisplayMessages(compiledSolids.Diagnostics)));
+        }
+
         var additionalReferences = KnownParamPlanBuilder.CollectReferencedParameterNames(profile.MakeRefPlaneAndDims)
-            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(profile.MakeConstrainedExtrusions))
+            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(profile.ParamDrivenSolids))
             .ToList();
         var knownParamPlan = KnownParamPlanBuilder.Compile(
             profile.AddFamilyParams,
@@ -149,13 +226,31 @@ public class CmdFFManager : IExternalCommand {
             apsParamData,
             additionalReferences);
 
+        var compilerMessages = compiledSolids.Diagnostics
+            .Where(diagnostic => diagnostic.Severity == ParamDrivenDiagnosticSeverity.Warning)
+            .Select(diagnostic => diagnostic.ToDisplayMessage())
+            .ToList();
+
         return new OperationQueue()
             .Add(new AddSharedParams(apsParamData))
             .Add(new AddFamilyParams(knownParamPlan.ResolvedFamilyParams))
             .Add(new MakeRefPlanesAndDims(profile.MakeRefPlaneAndDims))
-            .Add(new MakeConstrainedExtrusions(profile.MakeConstrainedExtrusions))
+            .Add(new EmitParamDrivenSolidsDiagnostics(new EmitParamDrivenSolidsDiagnosticsSettings {
+                Enabled = compilerMessages.Count > 0, Messages = compilerMessages
+            }))
+            .Add(new MakeRefPlanesAndDims(compiledSolids.RefPlanesAndDims))
+            .Add(new MakeConstrainedExtrusions(compiledSolids.InternalExtrusions))
             .Add(new SetKnownParams(knownParamPlan.ResolvedAssignments, knownParamPlan.Catalog, true))
+            .Add(new MakeParamDrivenConnectors(compiledSolids.Connectors))
             .Add(new MakeRefPlaneSubcategories(specs))
             .Add(new SortParams(new SortParamsSettings()));
     }
 }
+
+public record FFManagerProcessFamiliesActionResult(
+    bool Success,
+    string? Error,
+    List<FamilyProcessingContext> Contexts,
+    double TotalMs,
+    string? OutputFolderPath
+);

@@ -2,12 +2,14 @@ using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.FamilyFoundry;
+using Pe.FamilyFoundry.Resolution;
 using Pe.Global;
 using Pe.Global.Utils.Files;
 using Pe.StorageRuntime.Json.ContractResolvers;
 using Pe.StorageRuntime.Revit;
 using Pe.StorageRuntime.Revit.Core.Json;
 using Pe.StorageRuntime.Revit.Modules;
+using Pe.SettingsCatalog.Revit.FamilyFoundry;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
 
@@ -178,8 +180,22 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
 
         // Load the profile
         var profile = context.SharedStorage.ReadRequired<TProfile>(profileItem.TextPrimary);
+        var semanticWarnings = new List<string>();
+        var semanticErrors = new List<string>();
 
         if (ct.IsCancellationRequested) return null;
+
+        if (profile is ProfileFamilyManager familyProfile) {
+            var compileResult = ParamDrivenSolidsCompiler.Compile(familyProfile.ParamDrivenSolids);
+            semanticWarnings = compileResult.Diagnostics
+                .Where(diagnostic => diagnostic.Severity == ParamDrivenDiagnosticSeverity.Warning)
+                .Select(diagnostic => diagnostic.ToDisplayMessage())
+                .ToList();
+            semanticErrors = compileResult.Diagnostics
+                .Where(diagnostic => diagnostic.Severity == ParamDrivenDiagnosticSeverity.Error)
+                .Select(diagnostic => diagnostic.ToDisplayMessage())
+                .ToList();
+        }
 
         // Get raw APS parameter models (no Revit API dependencies, safe to store)
         var apsParamModels = profile.GetFilteredApsParamModels();
@@ -193,6 +209,29 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         }, ct);
 
         if (ct.IsCancellationRequested || previewApsParamData == null) return null;
+
+        var profileJson = JsonConvert.SerializeObject(
+            profile,
+            Formatting.Indented,
+            new JsonSerializerSettings {
+                Converters = [new StringEnumConverter()],
+                ContractResolver = new RequiredAwareContractResolver(),
+                NullValueHandling = NullValueHandling.Ignore
+            });
+
+        if (semanticErrors.Count > 0) {
+            return new PreviewData {
+                ProfileName = profileItem.TextPrimary,
+                FilePath = profileItem.FilePath,
+                CreatedDate = profileItem._fileInfo.CreationTime,
+                ModifiedDate = profileItem._fileInfo.LastWriteTime,
+                LineCount = profileItem.LineCount,
+                ProfileJson = profileJson,
+                IsValid = false,
+                RemainingErrors = semanticErrors,
+                Warnings = semanticWarnings
+            };
+        }
 
         var queue = this._queueBuilder(profile, previewApsParamData);
         var operationMetadata = queue.GetExecutableMetadata();
@@ -217,18 +256,6 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
             f.Name,
             f.FamilyCategory?.Name ?? "Unknown"
         )).ToList();
-
-        if (ct.IsCancellationRequested) return null;
-
-        // Serialize profile to JSON
-        var profileJson = JsonConvert.SerializeObject(
-            profile,
-            Formatting.Indented,
-            new JsonSerializerSettings {
-                Converters = [new StringEnumConverter()],
-                ContractResolver = new RequiredAwareContractResolver(),
-                NullValueHandling = NullValueHandling.Ignore
-            });
 
         if (ct.IsCancellationRequested) return null;
 
@@ -261,7 +288,8 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
             AddAndSetParameters = addAndSetParameters,
             Families = familyInfos,
             ProfileJson = profileJson,
-            IsValid = true
+            IsValid = true,
+            Warnings = semanticWarnings
         };
     }
 

@@ -18,7 +18,7 @@ public class ProfileFamilyManager : BaseProfileSettings {
     [Required]
     public SetKnownParamsSettings SetKnownParams { get; init; } = new();
 
-    [Description("Settings for creating constrained extrusions from canonical reference-plane specs.")]
+    [Description("Semantic solid authoring and serialization settings.")]
     [Required]
-    public MakeConstrainedExtrusionsSettings MakeConstrainedExtrusions { get; init; } = new();
+    public ParamDrivenSolidsSettings ParamDrivenSolids { get; init; } = new();
 }

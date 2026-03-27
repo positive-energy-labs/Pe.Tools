@@ -1,6 +1,13 @@
 <Project>
     <PropertyGroup Condition="'$(Configuration)' != ''">
         <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Configuration)' != '' and $([System.String]::Copy('$(Configuration)').Contains('.R')) == 'True'">
         <MSBuildProjectExtensionsPath>obj\$(Configuration)\</MSBuildProjectExtensionsPath>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Configuration)' != '' and $([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'">
+        <BaseOutputPath>$(MSBuildThisFileDirectory).artifacts\tests\bin\</BaseOutputPath>
     </PropertyGroup>
 </Project>
