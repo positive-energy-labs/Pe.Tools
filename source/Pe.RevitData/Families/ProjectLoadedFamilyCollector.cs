@@ -22,27 +22,40 @@ public static class ProjectLoadedFamilyCollector {
         if (families.Count == 0)
             return [];
 
-        var placedInstanceCounts = GetPlacedInstanceCounts(doc);
-        var records = families.ToDictionary(
+        using var context = LoadedFamiliesTempPlacementEngine.CreateEvaluationContext(
+            doc,
+            families.Select(family => family.Id.Value()).ToHashSet()
+        );
+        context.BeginTransaction("Collect Loaded Family Parameter Values");
+
+        try {
+            LoadedFamiliesTempPlacementEngine.PlaceOneTempInstancePerPlaceableSymbol(context);
+            return CollectFromPlacedInstances(context, onFamilyCollected);
+        } finally {
+            context.RollBackTransaction();
+        }
+    }
+
+    public static IReadOnlyList<ProjectLoadedFamilyRecord> CollectFromPlacedInstances(
+        LoadedFamiliesMatrixEvaluationContext context,
+        Action<ProjectLoadedFamilyRecord, TimeSpan>? onFamilyCollected = null
+    ) {
+        if (context == null)
+            throw new ArgumentNullException(nameof(context));
+
+        var placedInstanceCounts = GetPlacedInstanceCounts(context.ProjectDocument);
+        var records = context.Families.ToDictionary(
             family => family.Id.Value(),
             family => CreateFamilyRecord(family, placedInstanceCounts)
         );
 
-        using var transaction = new Transaction(doc, "Collect Loaded Family Parameter Values");
-        _ = transaction.Start();
+        foreach (var family in context.Families) {
+            if (!records.TryGetValue(family.Id.Value(), out var familyRecord))
+                continue;
 
-        try {
-            foreach (var family in families) {
-                if (!records.TryGetValue(family.Id.Value(), out var familyRecord))
-                    continue;
-
-                var stopwatch = Stopwatch.StartNew();
-                CollectFamilyValues(doc, family, familyRecord);
-                onFamilyCollected?.Invoke(familyRecord, stopwatch.Elapsed);
-            }
-        } finally {
-            if (transaction.HasStarted())
-                _ = transaction.RollBack();
+            var stopwatch = Stopwatch.StartNew();
+            CollectFamilyValuesFromContext(context, family, familyRecord);
+            onFamilyCollected?.Invoke(familyRecord, stopwatch.Elapsed);
         }
 
         return records.Values
@@ -130,6 +143,36 @@ public static class ProjectLoadedFamilyCollector {
             if (tempInstanceResult.Instance != null)
                 CollectInstanceParameters(tempInstanceResult.Instance, familyRecord, familyTypeNames);
         }
+
+        familyRecord.Parameters = familyRecord.Parameters
+            .OrderBy(parameter => parameter.Identity.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenByDescending(parameter => parameter.IsInstance)
+            .ToList();
+    }
+
+    private static void CollectFamilyValuesFromContext(
+        LoadedFamiliesMatrixEvaluationContext context,
+        Family family,
+        ProjectLoadedFamilyRecord familyRecord
+    ) {
+        var familyTypeNames = familyRecord.Types
+            .Select(type => type.TypeName)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (context.SymbolsByFamilyId.TryGetValue(family.Id.Value(), out var symbols)) {
+            foreach (var symbol in symbols) {
+                CollectTypeParameters(symbol, familyRecord, familyTypeNames);
+
+                if (!context.TempPlacementsBySymbolId.TryGetValue(symbol.Id.Value(), out var placement))
+                    continue;
+
+                CollectInstanceParameters(placement.Instance, familyRecord, familyTypeNames);
+            }
+        }
+
+        if (context.IssuesByFamilyId.TryGetValue(family.Id.Value(), out var issues))
+            familyRecord.Issues.AddRange(issues);
 
         familyRecord.Parameters = familyRecord.Parameters
             .OrderBy(parameter => parameter.Identity.Name, StringComparer.OrdinalIgnoreCase)

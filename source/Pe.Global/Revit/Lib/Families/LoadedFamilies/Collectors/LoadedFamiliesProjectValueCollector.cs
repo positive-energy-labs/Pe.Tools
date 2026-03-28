@@ -29,7 +29,7 @@ public static class LoadedFamiliesProjectValueCollector {
         return MergeCatalogMetadata(catalogFamilies, mappedFamilies);
     }
 
-    private static List<CollectedLoadedFamilyRecord> MergeCatalogMetadata(
+    internal static List<CollectedLoadedFamilyRecord> MergeCatalogMetadata(
         IReadOnlyList<CollectedLoadedFamilyRecord> catalogFamilies,
         IReadOnlyList<CollectedLoadedFamilyRecord> valueFamilies
     ) {

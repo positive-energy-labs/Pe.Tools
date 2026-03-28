@@ -5,7 +5,9 @@ using Pe.Global.Revit.Lib.Schedules.HeaderGroups;
 using Pe.Global.Revit.Lib.Schedules.SortGroup;
 using Pe.Global.Revit.Lib.Schedules.TitleStyle;
 using Pe.Global.Revit.Lib.Schedules.ViewTemplate;
+using Pe.RevitData.Families;
 using Pe.RevitData.Parameters;
+using Serilog;
 
 namespace Pe.Global.Revit.Lib.Schedules;
 
@@ -198,6 +200,27 @@ public static class ScheduleHelper {
             .Distinct()
             .ToList();
 
+    internal static List<long> GetFamilyIdsMatchingFiltersAnyType(
+        Document doc,
+        ScheduleSpec spec,
+        IReadOnlyList<TempPlacedSymbolRecord> placements
+    ) {
+        if (placements.Count == 0)
+            return [];
+
+        if (spec.Filters.Count == 0)
+            return placements
+                .Select(placement => placement.FamilyId)
+                .Distinct()
+                .ToList();
+
+        var schedule = CreateMinimalFilterEvaluationSchedule(doc, spec);
+        doc.Regenerate();
+
+        var matchingInstanceIds = CollectMatchingPlacedInstanceIds(doc, schedule.Id, placements);
+        return MapMatchingInstancesToFamilyIds(placements, matchingInstanceIds);
+    }
+
     private static List<Family> GetMatchingFamiliesByFilter(
         Document doc,
         ScheduleSpec spec,
@@ -223,48 +246,117 @@ public static class ScheduleHelper {
         if (spec.Filters.Count == 0)
             return familiesToTest;
 
-        using var tx = new Transaction(doc, "Temp Filter Evaluation");
-        _ = tx.Start();
+        using var context = LoadedFamiliesTempPlacementEngine.CreateEvaluationContext(
+            doc,
+            familiesToTest.Select(family => family.Id.Value()).ToHashSet()
+        );
+        context.BeginTransaction("Temp Filter Evaluation");
 
         try {
-            // Create temporary schedule with filters
-            var tempSpec = new ScheduleSpec {
-                Name = $"_TempFilterEval_{Guid.NewGuid():N}",
-                CategoryName = spec.CategoryName,
-                IsItemized = true,
-                Fields = spec.Fields,
-                Filters = spec.Filters,
-                SortGroup = [] // No sorting needed for filter evaluation
-            };
-
-            var scheduleResult = CreateSchedule(doc, tempSpec);
-            var schedule = scheduleResult.Schedule;
-
-            foreach (var family in familiesToTest) {
-                PlaceTempInstancesForFilterEvaluation(doc, family, evaluateAllTypes);
-            }
-
-            doc.Regenerate();
-
-            // Use FilteredElementCollector with schedule to get filtered elements
-            var filteredInstances = new FilteredElementCollector(doc, schedule.Id)
-                .OfClass(typeof(FamilyInstance))
-                .Cast<FamilyInstance>()
-                .ToList();
-
-            var matchingFamilyIds = filteredInstances
-                .Where(instance => instance.Symbol?.Family != null)
-                .Select(instance => instance.Symbol.Family.Id.Value())
+            LoadedFamiliesTempPlacementEngine.PlaceOneTempInstancePerPlaceableSymbol(context);
+            var placements = evaluateAllTypes
+                ? context.GetPlacedInstancesForCategory(categoryId).ToList()
+                : familiesToTest
+                    .Select(family => context.GetPlacedInstancesForFamily(family.Id.Value()).FirstOrDefault())
+                    .Where(placement => placement != null)
+                    .Cast<TempPlacedSymbolRecord>()
+                    .ToList();
+            var matchingFamilyIds = GetFamilyIdsMatchingFiltersAnyType(doc, spec, placements)
                 .ToHashSet();
 
             return familiesToTest
                 .Where(family => matchingFamilyIds.Contains(family.Id.Value()))
                 .ToList();
         } finally {
-            // Always rollback - we only wanted to query, not make permanent changes
-            if (tx.HasStarted())
-                _ = tx.RollBack();
+            context.RollBackTransaction();
         }
+    }
+
+    internal static ViewSchedule CreateMinimalFilterEvaluationSchedule(Document doc, ScheduleSpec sourceSpec) {
+        var categoryId = FindCategoryId(doc, sourceSpec.CategoryName);
+        if (categoryId == ElementId.InvalidElementId)
+            throw new ArgumentException(
+                $"Category '{GetCategoryDisplayName(sourceSpec.CategoryName)}' not found in document");
+
+        var schedule = ViewSchedule.CreateSchedule(doc, categoryId);
+        schedule.Name = $"_TempFilterEval_{Guid.NewGuid():N}";
+        schedule.Definition.IsItemized = true;
+
+        ApplyFilterFieldsAndFilters(schedule, sourceSpec);
+        return schedule;
+    }
+
+    internal static void ApplyFilterFieldsAndFilters(ViewSchedule schedule, ScheduleSpec sourceSpec) {
+        var def = schedule.Definition;
+        def.ClearFields();
+        def.ClearFilters();
+
+        foreach (var fieldName in sourceSpec.Filters
+                     .Select(filter => filter.FieldName)
+                     .Where(fieldName => !string.IsNullOrWhiteSpace(fieldName))
+                     .Distinct(StringComparer.OrdinalIgnoreCase)) {
+            if (TryAddFilterField(def, schedule.Document, fieldName))
+                continue;
+
+            Log.Warning(
+                "Schedule filter evaluation could not add field '{FieldName}' for temp schedule '{ScheduleName}'.",
+                fieldName,
+                sourceSpec.Name
+            );
+        }
+
+        foreach (var filterSpec in sourceSpec.Filters.Take(8)) {
+            var (_, skipped, warning) = filterSpec.ApplyTo(def);
+            if (skipped != null) {
+                Log.Warning(
+                    "Schedule filter evaluation skipped filter '{FieldName}' on temp schedule '{ScheduleName}': {Reason}",
+                    filterSpec.FieldName,
+                    sourceSpec.Name,
+                    skipped
+                );
+            }
+
+            if (warning != null) {
+                Log.Warning(
+                    "Schedule filter evaluation warning for filter '{FieldName}' on temp schedule '{ScheduleName}': {Warning}",
+                    filterSpec.FieldName,
+                    sourceSpec.Name,
+                    warning
+                );
+            }
+        }
+    }
+
+    internal static List<ElementId> CollectMatchingPlacedInstanceIds(
+        Document doc,
+        ElementId scheduleId,
+        IEnumerable<TempPlacedSymbolRecord> placements
+    ) {
+        var placementIds = placements
+            .Select(placement => placement.InstanceId.Value())
+            .ToHashSet();
+
+        return new FilteredElementCollector(doc, scheduleId)
+            .OfClass(typeof(FamilyInstance))
+            .Cast<FamilyInstance>()
+            .Where(instance => placementIds.Contains(instance.Id.Value()))
+            .Select(instance => instance.Id)
+            .ToList();
+    }
+
+    internal static List<long> MapMatchingInstancesToFamilyIds(
+        IEnumerable<TempPlacedSymbolRecord> placements,
+        IEnumerable<ElementId> visibleInstanceIds
+    ) {
+        var visibleIds = visibleInstanceIds
+            .Select(id => id.Value())
+            .ToHashSet();
+
+        return placements
+            .Where(placement => visibleIds.Contains(placement.InstanceId.Value()))
+            .Select(placement => placement.FamilyId)
+            .Distinct()
+            .ToList();
     }
 
     private static void PlaceTempInstancesForFilterEvaluation(
@@ -305,6 +397,25 @@ public static class ScheduleHelper {
             // Some families may not be placeable in a generic project context.
             return false;
         }
+    }
+
+    private static bool TryAddFilterField(
+        ScheduleDefinition def,
+        Document doc,
+        string fieldName
+    ) {
+        for (var i = 0; i < def.GetFieldCount(); i++) {
+            var existingField = def.GetField(i);
+            if (existingField.GetName().Equals(fieldName, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        var schedulableField = FindSchedulableField(def, doc, fieldName);
+        if (schedulableField == null)
+            return false;
+
+        _ = def.AddField(schedulableField);
+        return true;
     }
 
     #region Common Helpers

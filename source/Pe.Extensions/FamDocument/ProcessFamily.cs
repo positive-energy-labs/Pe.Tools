@@ -1,3 +1,5 @@
+using Autodesk.Revit.DB.Events;
+using Serilog;
 using UIFrameworkServices;
 
 namespace Pe.Extensions.FamDocument;
@@ -50,8 +52,41 @@ public static class FamilyDocumentProcessFamily {
         foreach (var callback in callbacks) {
             using var trans = new Transaction(famDoc, "Execute Operations");
             _ = trans.Start();
-            results.AddRange(callback(famDoc, context));
-            _ = trans.Commit();
+
+            EventHandler<FailuresProcessingEventArgs>? failureHandler = null;
+            failureHandler = (_, args) => {
+                var accessor = args.GetFailuresAccessor();
+                if (accessor == null || accessor.GetDocument()?.Equals(famDoc.Document) != true)
+                    return;
+
+                var suppressedCount = 0;
+                foreach (var failureMessage in accessor.GetFailureMessages()) {
+                    if (failureMessage.GetFailureDefinitionId() != BuiltInFailures.ExtrusionFailures.ExtrusionTooThin)
+                        continue;
+
+                    accessor.DeleteWarning(failureMessage);
+                    suppressedCount++;
+                }
+
+                if (suppressedCount == 0)
+                    return;
+
+                Log.Warning(
+                    "FamilyDocument.Process suppressed {SuppressedCount} '{FailureId}' warning(s) while committing transaction '{TransactionName}' for family '{FamilyTitle}'.",
+                    suppressedCount,
+                    nameof(BuiltInFailures.ExtrusionFailures.ExtrusionTooThin),
+                    accessor.GetTransactionName(),
+                    famDoc.Document.Title);
+                args.SetProcessingResult(FailureProcessingResult.Continue);
+            };
+
+            famDoc.Document.Application.FailuresProcessing += failureHandler;
+            try {
+                results.AddRange(callback(famDoc, context));
+                _ = trans.Commit();
+            } finally {
+                famDoc.Document.Application.FailuresProcessing -= failureHandler;
+            }
         }
 
         return famDoc;

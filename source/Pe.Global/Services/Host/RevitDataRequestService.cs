@@ -230,11 +230,8 @@ internal sealed class RevitDataRequestService {
         return result!;
     }
 
-    private void PublishLoadedFamilyMatrixProgress(string familyName, TimeSpan elapsed) {
-        this._notificationSink?.Invoke(
-            $"Family matrix collected '{familyName}' in {elapsed.TotalMilliseconds:F0} ms."
-        );
-    }
+    private void PublishLoadedFamilyMatrixProgress(string message) =>
+        this._notificationSink?.Invoke(message);
 
     private static HostEnvelopeResult<RevitDocument> GetActiveProjectDocument() {
         var document = DocumentManager.uiapp.ActiveUIDocument?.Document;

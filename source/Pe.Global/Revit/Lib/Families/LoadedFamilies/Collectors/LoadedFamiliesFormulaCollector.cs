@@ -2,17 +2,24 @@ using Pe.Global.Revit.Lib.Families.LoadedFamilies.Models;
 using Pe.Global.Services.Document;
 using Pe.RevitData.Families;
 using Pe.RevitData.Parameters;
+using System.Diagnostics;
 
 namespace Pe.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 
 public static class LoadedFamiliesFormulaCollector {
     public static List<CollectedLoadedFamilyRecord> Supplement(
         Document projectDocument,
-        IReadOnlyList<CollectedLoadedFamilyRecord> families
+        IReadOnlyList<CollectedLoadedFamilyRecord> families,
+        Action<string, TimeSpan>? onFamilySupplemented = null
     ) {
         var projectBindingLookup = BuildProjectBindingLookup(projectDocument, families);
         return families
-            .Select(family => SupplementFamily(projectDocument, family, projectBindingLookup))
+            .Select(family => {
+                var stopwatch = Stopwatch.StartNew();
+                var supplementedFamily = SupplementFamily(projectDocument, family, projectBindingLookup);
+                onFamilySupplemented?.Invoke(supplementedFamily.FamilyName, stopwatch.Elapsed);
+                return supplementedFamily;
+            })
             .OrderBy(family => family.FamilyName, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -164,6 +171,7 @@ public static class LoadedFamiliesFormulaCollector {
         List<CollectedIssue> issues
     ) {
         var observed = CreateObservedProjectParameterMetadata(parameter);
+        var familyLookupObserved = CreateFamilyLookupObservedProjectParameterMetadata(observed);
         // Resolution order is intentional:
         // 1. Let a concrete project binding claim the observed row first.
         // 2. Only if no project binding matches do we allow non-shared
@@ -173,7 +181,7 @@ public static class LoadedFamiliesFormulaCollector {
         var projectObservedBinding = FindProjectOnlyBinding(observed, projectBindingLookup);
         var familyParameter = FindFamilyParameter(
             parameter,
-            observed,
+            familyLookupObserved,
             familyParameterLookup,
             allowNameScopeFallback: projectObservedBinding == null
         );
@@ -233,7 +241,7 @@ public static class LoadedFamiliesFormulaCollector {
         issues.Add(new CollectedIssue(
             "FamilyParameterFormulaLookupMiss",
             CollectedIssueSeverity.Warning,
-            $"Could not find family or project parameter authority for '{parameter.Name}'.",
+            $"Could not resolve parameter authority for '{parameter.Name}'.",
             familyName,
             null,
             parameter.Name
@@ -403,6 +411,25 @@ public static class LoadedFamiliesFormulaCollector {
             ? new ForgeTypeId("")
             : new ForgeTypeId(parameter.DataTypeId)
     };
+
+    private static RevitObservedProjectParameterMetadata CreateFamilyLookupObservedProjectParameterMetadata(
+        RevitObservedProjectParameterMetadata observed
+    ) {
+        // ParameterElementId is only meaningful inside the project document.
+        // Once no project binding has claimed the observation, cross-document
+        // family lookup must degrade to name/scope for non-shared family params.
+        if (observed.Identity.Kind != RevitParameterIdentityKind.ParameterElement)
+            return observed;
+
+        return observed with {
+            Identity = RevitParameterIdentityFactory.FromRaw(
+                observed.Identity.Name,
+                null,
+                null,
+                null
+            )
+        };
+    }
 
     private static CollectedFamilyParameterRecord ApplyResolvedMetadata(
         CollectedFamilyParameterRecord parameter,
