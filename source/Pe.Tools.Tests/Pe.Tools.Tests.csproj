@@ -1,13 +1,6 @@
 <Project Sdk="Nice3point.Revit.Sdk/6.0.2">
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <Configurations>Debug.R23;Debug.R24;Debug.R25;Debug.R26</Configurations>
-        <Configurations>$(Configurations);Debug.R23.Tests;Debug.R24.Tests;Debug.R25.Tests;Debug.R26.Tests</Configurations>
-        <Configurations>$(Configurations);Release.R23;Release.R24;Release.R25;Release.R26</Configurations>
-        <Configurations>$(Configurations);Release.R23.Tests;Release.R24.Tests;Release.R25.Tests;Release.R26.Tests</Configurations>
-        <_IsNoRevitConfig Condition="'$(RevitVersion)' == '' Or '$(RevitVersion)' == '-1'">true</_IsNoRevitConfig>
-        <RevitVersion Condition="'$(_IsNoRevitConfig)' == 'true'">2025</RevitVersion>
-        <TargetFramework Condition="'$(_IsNoRevitConfig)' == 'true'">net8.0-windows</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
     </PropertyGroup>

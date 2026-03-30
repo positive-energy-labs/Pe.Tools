@@ -1,15 +1,5 @@
 <Project Sdk="Nice3point.Revit.Sdk/6.0.2">
   <PropertyGroup>
-    <Configurations>Debug.R23;Debug.R24;Debug.R25;Debug.R26</Configurations>
-    <Configurations>$(Configurations);Release.R23;Release.R24;Release.R25;Release.R26</Configurations>
-    <IsRepackable Condition="$(Configuration.Contains('Release'))">false</IsRepackable>
-    <IsRepackable Condition="$(Configuration.Contains('Debug'))">false</IsRepackable>
-
-    <!-- SDK maps config suffix automatically (R23→2023, etc.) and sets RevitVersion=-1 when no R-suffix found -->
-    <!-- Only override when there's no config (e.g. Cursor LSP with plain "Debug"/"Release") -->
-    <_IsNoRevitConfig Condition="'$(RevitVersion)' == '' Or '$(RevitVersion)' == '-1'">true</_IsNoRevitConfig>
-    <RevitVersion Condition="'$(_IsNoRevitConfig)' == 'true'">2025</RevitVersion>
-    <TargetFramework Condition="'$(_IsNoRevitConfig)' == 'true'">net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>

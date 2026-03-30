@@ -4,93 +4,108 @@
         <UseWPF>true</UseWPF>
         <DeployAddin>true</DeployAddin>
         <LaunchRevit>true</LaunchRevit>
-        <DeployAddin Condition="$([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'">false</DeployAddin>
-        <LaunchRevit Condition="$([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'">false</LaunchRevit>
-        <IsRepackable Condition="$(Configuration.Contains('Release'))">true</IsRepackable>
-        <IsRepackable Condition="$(Configuration.Contains('Debug'))">false</IsRepackable>
+        <EnableRevitTestConfigurations>true</EnableRevitTestConfigurations>
+        <DeployAddin
+            Condition="$([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'"
+        >false</DeployAddin>
+        <LaunchRevit
+            Condition="$([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'"
+        >false</LaunchRevit>
         <EnableDynamicLoading>true</EnableDynamicLoading>
-        <Configurations>Debug.R23;Debug.R24;Debug.R25;Debug.R26</Configurations>
-        <Configurations>$(Configurations);Debug.R23.Tests;Debug.R24.Tests;Debug.R25.Tests;Debug.R26.Tests</Configurations>
-        <Configurations>$(Configurations);Release.R23;Release.R24;Release.R25;Release.R26</Configurations>
-        <Configurations>$(Configurations);Release.R23.Tests;Release.R24.Tests;Release.R25.Tests;Release.R26.Tests</Configurations>
+    </PropertyGroup>
 
-        <!-- SDK maps config suffix automatically (R23→2023, etc.) and sets RevitVersion=-1 when no R-suffix found -->
-        <!-- Only override when there's no config (e.g. Cursor LSP with plain "Debug"/"Release") -->
-        <_IsNoRevitConfig Condition="'$(RevitVersion)' == '' Or '$(RevitVersion)' == '-1'">true</_IsNoRevitConfig>
-        <RevitVersion Condition="'$(_IsNoRevitConfig)' == 'true'">2025</RevitVersion>
-        <TargetFramework Condition="'$(_IsNoRevitConfig)' == 'true'">net8.0-windows</TargetFramework>
+    <PropertyGroup Condition="'$(Configuration)' != '' and $(Configuration.Contains('Release'))">
+        <IsRepackable>true</IsRepackable>
     </PropertyGroup>
 
     <ItemGroup>
         <!-- Revit Platform -->
-        <PackageReference Include="Nice3point.Revit.Toolkit" Version="$(RevitVersion).*"/>
-        <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*"/>
-        <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*"/>
-        <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*"/>
+        <PackageReference Include="Nice3point.Revit.Toolkit" Version="$(RevitVersion).*" />
+        <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*" />
+        <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*" />
+        <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*" />
 
         <!-- RevitDBExplorer - uses Revit version-specific package -->
-        <PackageReference Include="RevitDBExplorer.Embedded" Version="$(RevitVersion).*"/>
+        <PackageReference Include="RevitDBExplorer.Embedded" Version="$(RevitVersion).*" />
 
-        <PackageReference Include="ricaun.Revit.UI.Tasks" Version="1.*"/>
+        <PackageReference Include="ricaun.Revit.UI.Tasks" Version="1.*" />
 
         <!-- TypeScript Type Generation -->
-        <PackageReference Include="TypeGen" Version="5.0.0"/>
+        <PackageReference Include="TypeGen" Version="5.0.0" />
 
         <!-- Build -->
         <PackageReference Include="ILRepack" Version="2.0.44">
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <IncludeAssets
+            >runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <IncludeAssets
+            >runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
     </ItemGroup>
 
     <ItemGroup>
-        <Resource Include="Resources\Icons\RibbonIcon16.png"/>
-        <Resource Include="Resources\Icons\RibbonIcon32.png"/>
-        <Resource Include="Resources\id-card16.png"/>
-        <Resource Include="Resources\id-card32.png"/>
-        <Resource Include="Resources\key-round16.png"/>
-        <Resource Include="Resources\key-round32.png"/>
-        <Resource Include="Resources\key-square16.png"/>
-        <Resource Include="Resources\key-square32.png"/>
-        <Resource Include="Resources\monitor-down16.png"/>
-        <Resource Include="Resources\monitor-down32.png"/>
-        <Resource Include="Resources\Red_16.png"/>
-        <Resource Include="Resources\Red_32.png"/>
-        <Resource Include="Resources\square-terminal16.png"/>
-        <Resource Include="Resources\square-terminal32.png"/>
+        <Resource Include="Resources\Icons\RibbonIcon16.png" />
+        <Resource Include="Resources\Icons\RibbonIcon32.png" />
+        <Resource Include="Resources\id-card16.png" />
+        <Resource Include="Resources\id-card32.png" />
+        <Resource Include="Resources\key-round16.png" />
+        <Resource Include="Resources\key-round32.png" />
+        <Resource Include="Resources\key-square16.png" />
+        <Resource Include="Resources\key-square32.png" />
+        <Resource Include="Resources\monitor-down16.png" />
+        <Resource Include="Resources\monitor-down32.png" />
+        <Resource Include="Resources\Red_16.png" />
+        <Resource Include="Resources\Red_32.png" />
+        <Resource Include="Resources\square-terminal16.png" />
+        <Resource Include="Resources\square-terminal32.png" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Pe.Extensions\Pe.Extensions.csproj"/>
-        <ProjectReference Include="..\Pe.FamilyFoundry\Pe.FamilyFoundry.csproj"/>
-        <ProjectReference Include="..\Pe.Global\Pe.Global.csproj"/>
-        <ProjectReference Include="..\Pe.SettingsCatalog.Revit\Pe.SettingsCatalog.Revit.csproj"/>
-        <ProjectReference Include="..\Pe.SettingsCatalog\Pe.SettingsCatalog.csproj"/>
-        <ProjectReference Include="..\Pe.Ui\Pe.Ui.csproj"/>
+        <ProjectReference Include="..\Pe.Extensions\Pe.Extensions.csproj" />
+        <ProjectReference Include="..\Pe.FamilyFoundry\Pe.FamilyFoundry.csproj" />
+        <ProjectReference Include="..\Pe.Global\Pe.Global.csproj" />
+        <ProjectReference Include="..\Pe.SettingsCatalog.Revit\Pe.SettingsCatalog.Revit.csproj" />
+        <ProjectReference Include="..\Pe.SettingsCatalog\Pe.SettingsCatalog.csproj" />
+        <ProjectReference Include="..\Pe.Ui\Pe.Ui.csproj" />
     </ItemGroup>
 
     <!-- Only run auto-approve script when launching from IDE, not during regular builds -->
     <!-- This will only run when building from Rider/Visual Studio, not from command line -->
     <!-- The wrapper script launches AutoApproveAddin.ps1 in a separate process to prevent build hangs -->
-    <Target Name="PostBuildAutoApprove" AfterTargets="Build" Condition="'$(BuildingByReSharper)' == 'true'">
-        <Exec Command="powershell.exe -ExecutionPolicy Bypass -NoProfile -File &quot;$(MSBuildProjectDirectory)\PostBuildActions.ps1&quot; -ScriptDirectory &quot;$(MSBuildProjectDirectory)&quot;"/>
+    <Target
+        Name="PostBuildAutoApprove"
+        AfterTargets="Build"
+        Condition="'$(BuildingByReSharper)' == 'true'"
+    >
+        <Exec
+            Command="powershell.exe -ExecutionPolicy Bypass -NoProfile -File &quot;$(MSBuildProjectDirectory)\PostBuildActions.ps1&quot; -ScriptDirectory &quot;$(MSBuildProjectDirectory)&quot;"
+        />
     </Target>
 
-    <Target Name="CleanAddinPublishAndDeployDirectories"
-            BeforeTargets="PublishAddin"
-            Condition="'$(PublishAddin)' == 'true'">
+    <Target
+        Name="CleanAddinPublishAndDeployDirectories"
+        BeforeTargets="PublishAddin"
+        Condition="'$(PublishAddin)' == 'true'"
+    >
         <!-- PublishAddin/DeployAddin only copy files. Clearing both roots avoids stale assemblies surviving refactors. -->
-        <RemoveDir Directories="$(AddinPublishDir)\$(AssemblyName)"
-                   Condition="Exists('$(AddinPublishDir)\$(AssemblyName)')"/>
-        <Delete Files="$(AddinPublishDir)\$(AssemblyName).addin"
-                Condition="Exists('$(AddinPublishDir)\$(AssemblyName).addin')"/>
+        <RemoveDir
+            Directories="$(AddinPublishDir)\$(AssemblyName)"
+            Condition="Exists('$(AddinPublishDir)\$(AssemblyName)')"
+        />
+        <Delete
+            Files="$(AddinPublishDir)\$(AssemblyName).addin"
+            Condition="Exists('$(AddinPublishDir)\$(AssemblyName).addin')"
+        />
 
-        <RemoveDir Directories="$(AddinDeployDir)\$(AssemblyName)"
-                   Condition="'$(DeployAddin)' == 'true' and Exists('$(AddinDeployDir)\$(AssemblyName)')"/>
-        <Delete Files="$(AddinDeployDir)\$(AssemblyName).addin"
-                Condition="'$(DeployAddin)' == 'true' and Exists('$(AddinDeployDir)\$(AssemblyName).addin')"/>
+        <RemoveDir
+            Directories="$(AddinDeployDir)\$(AssemblyName)"
+            Condition="'$(DeployAddin)' == 'true' and Exists('$(AddinDeployDir)\$(AssemblyName)')"
+        />
+        <Delete
+            Files="$(AddinDeployDir)\$(AssemblyName).addin"
+            Condition="'$(DeployAddin)' == 'true' and Exists('$(AddinDeployDir)\$(AssemblyName).addin')"
+        />
     </Target>
 
 
