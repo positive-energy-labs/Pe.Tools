@@ -26,7 +26,7 @@
     </PropertyGroup>
 
     <PropertyGroup
-        Condition="'$(MSBuildProjectName)' != 'Build' and '$(MSBuildProjectName)' != 'Installer' and '$(Configuration)' != ''
+        Condition="'$(MSBuildProjectName)' != 'Build' and '$(MSBuildProjectName)' != 'Installer' and '$(Configuration)' != ''"
     >
         <IsRepackable>false</IsRepackable>
     </PropertyGroup>

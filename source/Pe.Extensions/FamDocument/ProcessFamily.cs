@@ -1,5 +1,4 @@
-using Autodesk.Revit.DB.Events;
-using Serilog;
+﻿using Autodesk.Revit.DB.Events;
 using UIFrameworkServices;
 
 namespace Pe.Extensions.FamDocument;
@@ -46,47 +45,48 @@ public static class FamilyDocumentProcessFamily {
         this FamilyDocument famDoc,
         TContext context,
         Func<FamilyDocument, TContext, List<TOutput>>[] callbacks,
-        out List<TOutput> results
+        out List<TOutput> results,
+        IReadOnlyList<string>? transactionNames = null,
+        Action<string, IReadOnlyList<(bool IsError, string Message)>>? onCommitDiagnostics = null
     ) {
         results = new List<TOutput>();
-        foreach (var callback in callbacks) {
-            using var trans = new Transaction(famDoc, "Execute Operations");
+        for (var callbackIndex = 0; callbackIndex < callbacks.Length; callbackIndex++) {
+            var callback = callbacks[callbackIndex];
+            var transactionName = callbackIndex < (transactionNames?.Count ?? 0)
+                ? transactionNames![callbackIndex]
+                : "Execute Operations";
+            using var trans = new Transaction(famDoc, transactionName);
             _ = trans.Start();
+            var commitDiagnostics = new List<(bool IsError, string Message)>();
 
-            EventHandler<FailuresProcessingEventArgs>? failureHandler = null;
-            failureHandler = (_, args) => {
+            void OnFailuresProcessing(object? _, FailuresProcessingEventArgs args) {
                 var accessor = args.GetFailuresAccessor();
                 if (accessor == null || accessor.GetDocument()?.Equals(famDoc.Document) != true)
                     return;
 
-                var suppressedCount = 0;
                 foreach (var failureMessage in accessor.GetFailureMessages()) {
-                    if (failureMessage.GetFailureDefinitionId() != BuiltInFailures.ExtrusionFailures.ExtrusionTooThin)
-                        continue;
-
-                    accessor.DeleteWarning(failureMessage);
-                    suppressedCount++;
+                    var severity = failureMessage.GetSeverity();
+                    var description = failureMessage.GetDescriptionText();
+                    if (string.IsNullOrWhiteSpace(description))
+                        description = failureMessage.GetFailureDefinitionId().Guid.ToString();
+                    commitDiagnostics.Add((severity != FailureSeverity.Warning, description));
                 }
+            }
 
-                if (suppressedCount == 0)
-                    return;
-
-                Log.Warning(
-                    "FamilyDocument.Process suppressed {SuppressedCount} '{FailureId}' warning(s) while committing transaction '{TransactionName}' for family '{FamilyTitle}'.",
-                    suppressedCount,
-                    nameof(BuiltInFailures.ExtrusionFailures.ExtrusionTooThin),
-                    accessor.GetTransactionName(),
-                    famDoc.Document.Title);
-                args.SetProcessingResult(FailureProcessingResult.Continue);
-            };
-
-            famDoc.Document.Application.FailuresProcessing += failureHandler;
+            famDoc.Document.Application.FailuresProcessing += OnFailuresProcessing;
             try {
                 results.AddRange(callback(famDoc, context));
                 _ = trans.Commit();
             } finally {
-                famDoc.Document.Application.FailuresProcessing -= failureHandler;
+                famDoc.Document.Application.FailuresProcessing -= OnFailuresProcessing;
             }
+
+            if (commitDiagnostics.Count == 0)
+                continue;
+
+            onCommitDiagnostics?.Invoke(
+                transactionName,
+                commitDiagnostics);
         }
 
         return famDoc;

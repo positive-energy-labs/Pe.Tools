@@ -1,4 +1,4 @@
-using Pe.Extensions.FamDocument;
+﻿using Pe.Extensions.FamDocument;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.FamilyFoundry.Snapshots;
 using System.ComponentModel;
@@ -128,9 +128,13 @@ public class OperationProcessor(
             // Reset GroupContexts for each family processing cycle
             queue.ResetAllGroupContexts();
 
-            var familyFuncs = queue.ToFuncs(
+            var namedFamilyFuncs = queue.ToNamedFuncs(
                 this._exOpts.OptimizeTypeOperations,
                 this._exOpts.SingleTransaction);
+            var familyFuncs = namedFamilyFuncs.Select(item => item.Callback).ToArray();
+            var transactionNames = this._exOpts.SingleTransaction
+                ? null
+                : namedFamilyFuncs.Select(item => item.Name).ToArray();
 
             var famDoc = this.OpenDoc
                 .GetFamilyDocument(family)
@@ -138,7 +142,7 @@ public class OperationProcessor(
                 .StartPipeline(this.OpenDoc, family, pipeline =>
                         pipeline
                             .CollectPreSnapshot(collectorQueue)
-                            .Process(familyFuncs)
+                            .Process(familyFuncs, transactionNames)
                             .SaveToPaths(d => GetSavePaths(d, saveOpts, outputFolderPath))
                             .Load()
                             .CollectPostSnapshot(collectorQueue),
@@ -164,9 +168,13 @@ public class OperationProcessor(
         string? outputFolderPath
     ) {
         queue.ResetAllGroupContexts();
-        var familyFuncs = queue.ToFuncs(
+        var namedFamilyFuncs = queue.ToNamedFuncs(
             this._exOpts.OptimizeTypeOperations,
             this._exOpts.SingleTransaction);
+        var familyFuncs = namedFamilyFuncs.Select(item => item.Callback).ToArray();
+        var transactionNames = this._exOpts.SingleTransaction
+            ? null
+            : namedFamilyFuncs.Select(item => item.Name).ToArray();
         var saveOpts = loadAndSaveOptions ?? new LoadAndSaveOptions();
 
         _ = this.OpenDoc
@@ -175,7 +183,7 @@ public class OperationProcessor(
             .StartPipeline(pipeline =>
                     pipeline
                         .CollectPreSnapshot(collectorQueue)
-                        .Process(familyFuncs)
+                        .Process(familyFuncs, transactionNames)
                         .SaveToPaths(d => GetSavePaths(d, saveOpts, outputFolderPath))
                         .CollectPostSnapshot(collectorQueue),
                 out var context);
@@ -217,7 +225,9 @@ public class OperationProcessor(
 
             foreach (var variant in variants) {
                 variant.Queue.ResetAllGroupContexts();
-                var variantFuncs = variant.Queue.ToFuncs(false, false);
+                var namedVariantFuncs = variant.Queue.ToNamedFuncs(false, false);
+                var variantFuncs = namedVariantFuncs.Select(item => item.Callback).ToArray();
+                var variantTransactionNames = namedVariantFuncs.Select(item => item.Name).ToArray();
                 var variantSw = Stopwatch.StartNew();
 
                 var context = new FamilyProcessingContext {
@@ -250,7 +260,7 @@ public class OperationProcessor(
 
                             // Process operations
                             var opSw = Stopwatch.StartNew();
-                            _ = famDoc.Process(context, variantFuncs, out var logs);
+                            _ = famDoc.Process(context, variantFuncs, out var logs, variantTransactionNames);
                             opSw.Stop();
                             context.OperationsMs = opSw.Elapsed.TotalMilliseconds;
 
