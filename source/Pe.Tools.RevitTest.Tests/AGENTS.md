@@ -49,12 +49,26 @@ dotnet vstest .artifacts/tests/bin/Debug.R25.Tests/net8.0-windows/Pe.Tools.Revit
 
 - If behavior does not match source edits, suspect stale in-process assemblies
   before assuming the change failed.
+- Apply the correct code fix first; do not narrow the implementation just to
+  stay hot-reload-safe.
 - Hot reload is not trustworthy after runtime member-shape changes such as:
   added or removed members, method signature changes, constructor changes,
   enum shape changes, record shape changes, or new nested/private runtime types.
 - When those changes happen, treat the Rider/Revit session as restart-required.
 - If a fix appears missing, verify a new targeted runtime log line or output
   artifact before concluding the logic is wrong.
+
+## FF triage ladder
+
+When a Family Foundry test fails, identify the failing layer first:
+
+1. semantic/compiler validation
+2. authored profile layout/orientation
+3. operation-time logic
+4. transaction commit warning/failure processing
+5. snapshot / reverse-inference diagnostics
+
+This avoids masking profile issues as runtime API bugs and vice versa.
 
 ## Test guidance
 

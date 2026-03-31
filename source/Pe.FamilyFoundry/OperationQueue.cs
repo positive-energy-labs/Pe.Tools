@@ -1,4 +1,4 @@
-using Pe.Extensions.FamDocument;
+﻿using Pe.Extensions.FamDocument;
 
 namespace Pe.FamilyFoundry;
 
@@ -113,15 +113,26 @@ public class OperationQueue {
         bool optimizeTypeOperations = true,
         bool singleTransaction = true
     ) {
+        var named = this.ToNamedFuncs(optimizeTypeOperations, singleTransaction);
+        return named.Select(item => item.Callback).ToArray();
+    }
+
+    public (string Name, Func<FamilyDocument, FamilyProcessingContext, List<OperationLog>> Callback)[] ToNamedFuncs(
+        bool optimizeTypeOperations = true,
+        bool singleTransaction = true
+    ) {
         var executableOps = optimizeTypeOperations
             ? this.ToTypeOptimizedExecutableList()
             : this.ToExecutableList();
-        // Pass context when creating funcs
-        var funcs = executableOps.Select(pair => pair.Executable.ToFunc(pair.Ctx)).ToArray();
+        var namedFuncs = executableOps
+            .Select(pair => (
+                Name: GetExecutableName(pair.Executable),
+                Callback: pair.Executable.ToFunc(pair.Ctx)))
+            .ToArray();
 
         return singleTransaction
-            ? this.BundleFuncs(funcs)
-            : [.. funcs];
+            ? this.BundleFuncs(namedFuncs)
+            : namedFuncs;
     }
 
     private List<(IExecutable Executable, OperationContext Ctx)> ToExecutableList() =>
@@ -172,18 +183,25 @@ public class OperationQueue {
     ///     Bundles all family actions into a single action to replicate single-transaction behavior.
     ///     When ProcessFamily receives this single action, it will run all operations within one transaction.
     /// </summary>
-    private Func<FamilyDocument, FamilyProcessingContext, List<OperationLog>>[] BundleFuncs(
-        Func<FamilyDocument, FamilyProcessingContext, List<OperationLog>>[] actions
+    private static string GetExecutableName(IExecutable executable) =>
+        executable switch {
+            MergedTypeOperation merged => string.Join(" + ", merged.Operations.Select(operation => operation.Op.Name)),
+            IOperation operation => operation.Name,
+            _ => executable.GetType().Name
+        };
+
+    private (string Name, Func<FamilyDocument, FamilyProcessingContext, List<OperationLog>> Callback)[] BundleFuncs(
+        (string Name, Func<FamilyDocument, FamilyProcessingContext, List<OperationLog>> Callback)[] actions
     ) {
         if (actions.Length == 0) return actions;
 
         // Create a single action that executes all actions sequentially and collects logs
         List<OperationLog> BundleActions(FamilyDocument famDoc, FamilyProcessingContext context) {
             var allLogs = new List<OperationLog>();
-            foreach (var action in actions) allLogs.AddRange(action(famDoc, context));
+            foreach (var action in actions) allLogs.AddRange(action.Callback(famDoc, context));
             return allLogs;
         }
 
-        return [BundleActions];
+        return [(string.Join(" + ", actions.Select(action => action.Name)), BundleActions)];
     }
 }

@@ -1,4 +1,4 @@
-using Pe.Extensions.FamDocument;
+﻿using Pe.Extensions.FamDocument;
 using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.FamilyFoundry.Snapshots;
@@ -151,17 +151,31 @@ public static class FamilyProcessingPipelineExtensions {
     /// </summary>
     public static FamilyProcessingPipeline Process<TContext>(
         this FamilyProcessingPipeline pipeline,
-        Func<FamilyDocument, TContext, List<OperationLog>>[] callbacks
+        Func<FamilyDocument, TContext, List<OperationLog>>[] callbacks,
+        IReadOnlyList<string>? transactionNames = null
     ) {
         if (pipeline.Context == null)
             throw new InvalidOperationException("Context must be set before calling Process()");
 
         var sw = Stopwatch.StartNew();
+        var commitLogs = new List<OperationLog>();
         _ = pipeline.FamDoc.Process((TContext)(object)pipeline.Context, callbacks,
-            out var results);
+            out var results,
+            transactionNames,
+            (transactionName, diagnostics) => {
+                if (diagnostics.Count == 0)
+                    return;
+
+                var entries = diagnostics
+                    .Select((diagnostic, index) => diagnostic.IsError
+                        ? new LogEntry($"Commit diagnostic {index + 1}").Error(diagnostic.Message)
+                        : new LogEntry($"Commit diagnostic {index + 1}").Skip(diagnostic.Message))
+                    .ToList();
+                commitLogs.Add(new OperationLog($"{transactionName}: Commit", entries));
+            });
         sw.Stop();
 
-        pipeline.Context.OperationLogs = results;
+        pipeline.Context.OperationLogs = results.Concat(commitLogs).ToList();
         pipeline.Context.OperationsMs = sw.Elapsed.TotalMilliseconds;
 
         return pipeline;

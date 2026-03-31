@@ -63,6 +63,42 @@ not build anything unless otherwise asked. When the user does ask for
 Revit-backed testing, the safe default is to build the relevant `.Tests`
 project/configuration and run focused tests against that lane.
 
+### Live debug / hot reload guidance
+
+- Hot reload concerns must not change the intended scope of the code fix. Apply
+  the correct fix first, then communicate whether Rider/Revit likely needs hot
+  reload or a restart.
+- Always assume stale assemblies are possible during live Revit work.
+- Prefer adding a new targeted log line or output artifact when validating a
+  runtime fix so stale assembly issues are easier to detect.
+- Do not do build-related steps that risk breaking hot reload unless the user
+  explicitly asked for a build/test run.
+
+### Family Foundry debugging ladder
+
+When diagnosing FF failures, classify the problem before changing code:
+
+1. semantic/compiler validation issue
+2. authored profile/layout issue
+3. operation-time API/logic issue
+4. transaction-commit warning or failure-processing issue
+5. snapshot / reverse-inference / diagnostics issue
+
+Do not skip ahead to suppression or heuristics until the failing rung is clear.
+
+### MEP orientation / connector concepts
+
+- Explicitly state the assumed family orientation before authoring connector
+  faces when the equipment docs are ambiguous.
+- Distinguish air-path faces from service-connection faces and verify both
+  against submittal/CAD views.
+- For refrigeration equipment:
+  - liquid line typically leaves the condenser and enters the evaporator
+  - suction line typically leaves the evaporator and enters the condenser
+  - condensate leaves the indoor unit only
+- Prefer tests and docs that encode these patterns before introducing stronger
+  abstractions in runtime code.
+
 ---
 
 ## LIVING MEMORY (update as needed to avoid common mistakes and bad assumptions)
