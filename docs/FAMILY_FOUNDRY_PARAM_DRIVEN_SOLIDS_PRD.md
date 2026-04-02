@@ -1,3 +1,9 @@
+## Status
+
+- The compact authored `ParamDrivenSolids` shape is now the canonical contract for profiles, snapshots, tests, and compiler input.
+- Reverse inference should emit authored planes, spans, prisms, cylinders, and connectors directly.
+- The only non-authored shape left in the runtime stack should be the compiled execution plan.
+
 ## Problem Statement
 
 Family Foundry extrusion authoring is currently split across separate reference-plane/dimension settings and constrained-extrusion settings. That split makes geometry intent hard to author, easy to drift, and difficult to serialize back into a useful authoring seed. The current shape also leaks low-level Revit implementation details such as specific plane names into authored JSON, which makes roundtripping brittle and increases the chance of silent mismatch between constraints and created solids.

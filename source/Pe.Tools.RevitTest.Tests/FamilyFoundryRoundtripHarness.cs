@@ -1,6 +1,7 @@
 using Pe.Extensions.FamDocument;
 using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
+using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Resolution;
 using Pe.FamilyFoundry.Serialization;
 using Pe.FamilyFoundry.Snapshots;
@@ -11,7 +12,7 @@ namespace Pe.Tools.RevitTest.Tests;
 
 internal static class FamilyFoundryRoundtripHarness {
     public static RoundtripArtifact RunProfileFixtureRoundtrip(
-        Application application,
+        Autodesk.Revit.ApplicationServices.Application application,
         string fixtureFileName,
         BuiltInCategory familyCategory,
         string familyName,
@@ -23,13 +24,16 @@ internal static class FamilyFoundryRoundtripHarness {
             var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(testName);
             var result = RunRoundtrip(familyDocument, profile, testName, outputDirectory);
             var savedFamilyPath = RevitFamilyFixtureHarness.GetExpectedSavedFamilyPath(result.OutputFolderPath!, familyDocument);
-            var savedDocument = application.OpenDocumentFile(savedFamilyPath)
-                ?? throw new InvalidOperationException($"Failed to open saved family '{savedFamilyPath}'.");
+            var compiled = AuthoredParamDrivenSolidsCompiler.Compile(profile.ParamDrivenSolids ?? new AuthoredParamDrivenSolidsSettings());
 
+            RevitFamilyFixtureHarness.CloseDocument(familyDocument);
+            familyDocument = null!;
+
+            var savedDocument = OpenSavedFamilyDocument(application, savedFamilyPath);
             return new RoundtripArtifact(
                 profile,
                 profile.ParamDrivenSolids ?? new AuthoredParamDrivenSolidsSettings(),
-                AuthoredParamDrivenSolidsCompiler.Compile(profile.ParamDrivenSolids ?? new AuthoredParamDrivenSolidsSettings()),
+                compiled,
                 result.Contexts[0],
                 savedFamilyPath,
                 null,
@@ -40,7 +44,7 @@ internal static class FamilyFoundryRoundtripHarness {
     }
 
     public static RoundtripArtifact RunSnapshotReplayRoundtrip(
-        Application application,
+        Autodesk.Revit.ApplicationServices.Application application,
         string familyFixtureFileName,
         string replayFamilyName,
         string testName
@@ -61,13 +65,16 @@ internal static class FamilyFoundryRoundtripHarness {
                 var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(testName);
                 var result = RunRoundtrip(replayDocument, profile, testName, outputDirectory);
                 var savedFamilyPath = RevitFamilyFixtureHarness.GetExpectedSavedFamilyPath(result.OutputFolderPath!, replayDocument);
-                var savedDocument = application.OpenDocumentFile(savedFamilyPath)
-                    ?? throw new InvalidOperationException($"Failed to open saved family '{savedFamilyPath}'.");
+                var compiled = AuthoredParamDrivenSolidsCompiler.Compile(authored);
 
+                RevitFamilyFixtureHarness.CloseDocument(replayDocument);
+                replayDocument = null!;
+
+                var savedDocument = OpenSavedFamilyDocument(application, savedFamilyPath);
                 return new RoundtripArtifact(
                     profile,
                     authored,
-                    AuthoredParamDrivenSolidsCompiler.Compile(authored),
+                    compiled,
                     result.Contexts[0],
                     savedFamilyPath,
                     sourceDocument,
@@ -188,4 +195,11 @@ internal static class FamilyFoundryRoundtripHarness {
         Assert.That(result.Contexts[0].PostProcessSnapshot, Is.Not.Null);
         return result;
     }
+
+    private static Document OpenSavedFamilyDocument(
+        Autodesk.Revit.ApplicationServices.Application application,
+        string savedFamilyPath
+    ) =>
+        application.OpenDocumentFile(savedFamilyPath)
+        ?? throw new InvalidOperationException($"Failed to open saved family '{savedFamilyPath}'.");
 }

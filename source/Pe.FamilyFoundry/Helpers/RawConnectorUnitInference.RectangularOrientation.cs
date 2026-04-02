@@ -43,6 +43,61 @@ internal static partial class RawConnectorUnitInference {
                TryResolvePlaneNormal(doc, lengthPlaneName1, lengthPlaneName2, out lengthAxis);
     }
 
+    public static bool TryResolveRectangularConnectorFrame(
+        Document doc,
+        string widthPlaneName1,
+        string widthPlaneName2,
+        string lengthPlaneName1,
+        string lengthPlaneName2,
+        XYZ faceNormal,
+        out XYZ widthAxis,
+        out XYZ lengthAxis
+    ) {
+        widthAxis = XYZ.Zero;
+        lengthAxis = XYZ.Zero;
+
+        if (!TryResolveRectangularConnectorAxes(
+                doc,
+                widthPlaneName1,
+                widthPlaneName2,
+                lengthPlaneName1,
+                lengthPlaneName2,
+                out var rawWidthAxis,
+                out var rawLengthAxis)) {
+            return false;
+        }
+
+        var normalizedFace = NormalizeOrZero(faceNormal);
+        var normalizedWidth = NormalizeOrZero(rawWidthAxis);
+        var normalizedLength = NormalizeOrZero(rawLengthAxis);
+        if (normalizedFace.GetLength() <= VectorMagnitudeTolerance ||
+            normalizedWidth.GetLength() <= VectorMagnitudeTolerance ||
+            normalizedLength.GetLength() <= VectorMagnitudeTolerance) {
+            return false;
+        }
+
+        var candidateWidth = normalizedWidth;
+        var candidateLength = NormalizeOrZero(normalizedFace.CrossProduct(candidateWidth));
+        if (candidateLength.GetLength() <= VectorMagnitudeTolerance)
+            return false;
+
+        var flippedWidth = candidateWidth.Negate();
+        var flippedLength = NormalizeOrZero(normalizedFace.CrossProduct(flippedWidth));
+        if (flippedLength.GetLength() <= VectorMagnitudeTolerance)
+            return false;
+
+        var directScore = candidateLength.DotProduct(normalizedLength);
+        var flippedScore = flippedLength.DotProduct(normalizedLength);
+        if (flippedScore > directScore) {
+            candidateWidth = flippedWidth;
+            candidateLength = flippedLength;
+        }
+
+        widthAxis = candidateWidth;
+        lengthAxis = candidateLength;
+        return true;
+    }
+
     public static bool TryConnectorWidthUsesPrimaryDirection(
         ConnectorElement connector,
         RawConnectorStubMatch stubMatch,
@@ -91,6 +146,17 @@ internal static partial class RawConnectorUnitInference {
         }
 
         return 1.0 - Math.Abs(normalizedActual.DotProduct(normalizedExpected));
+    }
+
+    public static double ComputeSignedVectorMisalignment(XYZ actual, XYZ expected) {
+        var normalizedActual = NormalizeOrZero(actual);
+        var normalizedExpected = NormalizeOrZero(expected);
+        if (normalizedActual.GetLength() <= VectorMagnitudeTolerance ||
+            normalizedExpected.GetLength() <= VectorMagnitudeTolerance) {
+            return 2.0;
+        }
+
+        return 1.0 - normalizedActual.DotProduct(normalizedExpected);
     }
 
     public static bool TryGetRectangularProfileFrame(Extrusion extrusion, out RectangularProfileFrame frame) {

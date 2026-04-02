@@ -192,7 +192,7 @@ internal static class FamilyFoundryRoundtripAssertions {
                 var center = GetCenter(match.Min, match.Max);
                 AssertPointMatchesPlaneCoordinate(center, GetPlane(state, spec.CenterPlane1), typeName, $"Cylinder '{spec.Name}' center plane 1");
                 AssertPointMatchesPlaneCoordinate(center, GetPlane(state, spec.CenterPlane2), typeName, $"Cylinder '{spec.Name}' center plane 2");
-                AssertHeightExtents(match.Min, match.Max, spec.SketchPlaneName, spec.HeightControlMode, spec.StartOffset, spec.EndOffset, spec.HeightPlaneBottom, spec.HeightPlaneTop, state, typeName, $"Cylinder '{spec.Name}'");
+                AssertHeightExtents(match.Min, match.Max, spec.SketchPlaneName, spec.HeightControlMode, spec.StartOffset, spec.EndOffset, spec.HeightDriver, spec.HeightParameter, spec.HeightPlaneBottom, spec.HeightPlaneTop, state, typeName, $"Cylinder '{spec.Name}'");
             }
         }
     }
@@ -224,7 +224,6 @@ internal static class FamilyFoundryRoundtripAssertions {
                     ComputeUnsignedAlignment(connector!.FaceNormal, facePlane.Normal),
                     Is.GreaterThan(0.99),
                     $"Connector '{expectation.Name}' face normal drifted away from face plane '{expectation.FacePlaneName}' in type '{typeName}'.");
-                AssertPointMatchesPlaneCoordinate(connector.Origin, facePlane, typeName, $"Connector '{expectation.Name}' face offset", expectation.DepthParameter, allowDepthOffset: true, state: state);
 
                 if (!string.IsNullOrWhiteSpace(expectation.CenterPlane1))
                     AssertPointMatchesPlaneCoordinate(connector.Origin, GetPlane(state, expectation.CenterPlane1!), typeName, $"Connector '{expectation.Name}' center plane 1");
@@ -245,10 +244,20 @@ internal static class FamilyFoundryRoundtripAssertions {
                     unmatchedCylinders.Remove(stub!);
                     AssertStubCylinder(stub!, expectation, connector, facePlane, state, typeName);
                 } else {
+                    var (expectedWidthAxis, expectedLengthAxis) = ResolveExpectedRectangularFrame(expectation, state, facePlane.Normal);
+                    Assert.That(
+                        ComputeSignedAlignment(connector.WidthAxis, expectedWidthAxis),
+                        Is.GreaterThan(0.99),
+                        $"Connector '{expectation.Name}' width axis drifted away from the authored frame in type '{typeName}'.");
+                    Assert.That(
+                        ComputeSignedAlignment(connector.LengthAxis, expectedLengthAxis),
+                        Is.GreaterThan(0.99),
+                        $"Connector '{expectation.Name}' length axis drifted away from the authored frame in type '{typeName}'.");
+
                     var expectedWidth = ResolveParameterValue(expectation.SizeParameter1, state);
                     var expectedLength = ResolveParameterValue(expectation.SizeParameter2, state);
-                    Assert.That(connector.Width, Is.EqualTo(expectedWidth).Within(GeometryTolerance));
-                    Assert.That(connector.Length, Is.EqualTo(expectedLength).Within(GeometryTolerance));
+                    Assert.That(connector.Width, Is.EqualTo(expectedWidth).Within(GeometryTolerance), $"Connector '{expectation.Name}' width did not track its driver in type '{typeName}'.");
+                    Assert.That(connector.Length, Is.EqualTo(expectedLength).Within(GeometryTolerance), $"Connector '{expectation.Name}' length did not track its driver in type '{typeName}'.");
 
                     var stub = unmatchedPrisms
                         .OrderBy(candidate => ScoreStubPrismCandidate(candidate, expectation, connector, facePlane, expectedWidth, expectedLength, state))
@@ -392,6 +401,16 @@ internal static class FamilyFoundryRoundtripAssertions {
         return ResolveParameterValue(parameterName, state);
     }
 
+    private static double ResolveSignedDriverValue(
+        LengthDriverSpec driver,
+        string? fallbackParameter,
+        double signedSeedOffset,
+        RuntimeStateProbe state
+    ) {
+        var magnitude = ResolveDriverValue(driver, fallbackParameter, state);
+        return signedSeedOffset < 0.0 ? -magnitude : magnitude;
+    }
+
     private static double ResolveParameterValue(string? parameterName, RuntimeStateProbe state) {
         if (string.IsNullOrWhiteSpace(parameterName))
             throw new AssertionException($"No parameter name was available in type '{state.TypeName}'.");
@@ -409,7 +428,7 @@ internal static class FamilyFoundryRoundtripAssertions {
     ) {
         var pairAScore = ScorePairAlignment(candidate.Min, candidate.Max, GetPlane(state, spec.PairAPlane1), GetPlane(state, spec.PairAPlane2));
         var pairBScore = ScorePairAlignment(candidate.Min, candidate.Max, GetPlane(state, spec.PairBPlane1), GetPlane(state, spec.PairBPlane2));
-        var heightScore = ScoreHeightAlignment(candidate.Min, candidate.Max, spec.SketchPlaneName, spec.HeightControlMode, spec.StartOffset, spec.EndOffset, spec.HeightPlaneBottom, spec.HeightPlaneTop, state);
+        var heightScore = ScoreHeightAlignment(candidate.Min, candidate.Max, spec.SketchPlaneName, spec.HeightControlMode, spec.StartOffset, spec.EndOffset, spec.HeightDriver, spec.HeightParameter, spec.HeightPlaneBottom, spec.HeightPlaneTop, state);
         var sketchPenalty = string.Equals(candidate.SketchPlaneName, spec.SketchPlaneName, StringComparison.Ordinal) ? 0.0 : 100.0;
         return pairAScore + pairBScore + heightScore + sketchPenalty;
     }
@@ -422,7 +441,7 @@ internal static class FamilyFoundryRoundtripAssertions {
     ) {
         AssertPairAlignment(candidate.Min, candidate.Max, GetPlane(state, spec.PairAPlane1), GetPlane(state, spec.PairAPlane2), typeName, $"{spec.Name} pair A");
         AssertPairAlignment(candidate.Min, candidate.Max, GetPlane(state, spec.PairBPlane1), GetPlane(state, spec.PairBPlane2), typeName, $"{spec.Name} pair B");
-        AssertHeightExtents(candidate.Min, candidate.Max, spec.SketchPlaneName, spec.HeightControlMode, spec.StartOffset, spec.EndOffset, spec.HeightPlaneBottom, spec.HeightPlaneTop, state, typeName, $"Prism '{spec.Name}'");
+        AssertHeightExtents(candidate.Min, candidate.Max, spec.SketchPlaneName, spec.HeightControlMode, spec.StartOffset, spec.EndOffset, spec.HeightDriver, spec.HeightParameter, spec.HeightPlaneBottom, spec.HeightPlaneTop, state, typeName, $"Prism '{spec.Name}'");
     }
 
     private static double ScoreCircleCandidate(
@@ -435,7 +454,7 @@ internal static class FamilyFoundryRoundtripAssertions {
         var centerPoint = GetCenter(candidate.Min, candidate.Max);
         var centerScore = ScorePointToPlaneCoordinate(centerPoint, GetPlane(state, spec.CenterPlane1)) +
                           ScorePointToPlaneCoordinate(centerPoint, GetPlane(state, spec.CenterPlane2));
-        var heightScore = ScoreHeightAlignment(candidate.Min, candidate.Max, spec.SketchPlaneName, spec.HeightControlMode, spec.StartOffset, spec.EndOffset, spec.HeightPlaneBottom, spec.HeightPlaneTop, state);
+        var heightScore = ScoreHeightAlignment(candidate.Min, candidate.Max, spec.SketchPlaneName, spec.HeightControlMode, spec.StartOffset, spec.EndOffset, spec.HeightDriver, spec.HeightParameter, spec.HeightPlaneBottom, spec.HeightPlaneTop, state);
         return sizeScore + centerScore + heightScore;
     }
 
@@ -447,11 +466,11 @@ internal static class FamilyFoundryRoundtripAssertions {
         string typeName,
         string label
     ) {
-        var axis = plane1.Normal;
-        var actualMin = ProjectBounds(min, max, axis, takeMax: false);
-        var actualMax = ProjectBounds(min, max, axis, takeMax: true);
-        var expectedMin = Math.Min(GetPlaneCoordinate(plane1), GetPlaneCoordinate(plane2));
-        var expectedMax = Math.Max(GetPlaneCoordinate(plane1), GetPlaneCoordinate(plane2));
+        var axisIndex = GetDominantAxisIndex(plane1.Normal);
+        var actualMin = ProjectBounds(min, max, axisIndex, takeMax: false);
+        var actualMax = ProjectBounds(min, max, axisIndex, takeMax: true);
+        var expectedMin = Math.Min(GetCanonicalPlaneCoordinate(plane1), GetCanonicalPlaneCoordinate(plane2));
+        var expectedMax = Math.Max(GetCanonicalPlaneCoordinate(plane1), GetCanonicalPlaneCoordinate(plane2));
 
         Assert.That(actualMin, Is.EqualTo(expectedMin).Within(GeometryTolerance), $"{label} minimum drifted in type '{typeName}'.");
         Assert.That(actualMax, Is.EqualTo(expectedMax).Within(GeometryTolerance), $"{label} maximum drifted in type '{typeName}'.");
@@ -463,11 +482,11 @@ internal static class FamilyFoundryRoundtripAssertions {
         RuntimePlaneProbe plane1,
         RuntimePlaneProbe plane2
     ) {
-        var axis = plane1.Normal;
-        var actualMin = ProjectBounds(min, max, axis, takeMax: false);
-        var actualMax = ProjectBounds(min, max, axis, takeMax: true);
-        var expectedMin = Math.Min(GetPlaneCoordinate(plane1), GetPlaneCoordinate(plane2));
-        var expectedMax = Math.Max(GetPlaneCoordinate(plane1), GetPlaneCoordinate(plane2));
+        var axisIndex = GetDominantAxisIndex(plane1.Normal);
+        var actualMin = ProjectBounds(min, max, axisIndex, takeMax: false);
+        var actualMax = ProjectBounds(min, max, axisIndex, takeMax: true);
+        var expectedMin = Math.Min(GetCanonicalPlaneCoordinate(plane1), GetCanonicalPlaneCoordinate(plane2));
+        var expectedMax = Math.Max(GetCanonicalPlaneCoordinate(plane1), GetCanonicalPlaneCoordinate(plane2));
         return Math.Abs(actualMin - expectedMin) + Math.Abs(actualMax - expectedMax);
     }
 
@@ -478,13 +497,15 @@ internal static class FamilyFoundryRoundtripAssertions {
         ExtrusionHeightControlMode heightControlMode,
         double startOffset,
         double endOffset,
+        LengthDriverSpec heightDriver,
+        string? heightParameter,
         string? heightPlaneBottom,
         string? heightPlaneTop,
         RuntimeStateProbe state,
         string typeName,
         string label
     ) {
-        var (axis, expectedMin, expectedMax) = ResolveHeightExpectation(sketchPlaneName, heightControlMode, startOffset, endOffset, heightPlaneBottom, heightPlaneTop, state);
+        var (axis, expectedMin, expectedMax) = ResolveHeightExpectation(sketchPlaneName, heightControlMode, startOffset, endOffset, heightDriver, heightParameter, heightPlaneBottom, heightPlaneTop, state);
         var actualMin = ProjectBounds(min, max, axis, takeMax: false);
         var actualMax = ProjectBounds(min, max, axis, takeMax: true);
 
@@ -499,11 +520,13 @@ internal static class FamilyFoundryRoundtripAssertions {
         ExtrusionHeightControlMode heightControlMode,
         double startOffset,
         double endOffset,
+        LengthDriverSpec heightDriver,
+        string? heightParameter,
         string? heightPlaneBottom,
         string? heightPlaneTop,
         RuntimeStateProbe state
     ) {
-        var (axis, expectedMin, expectedMax) = ResolveHeightExpectation(sketchPlaneName, heightControlMode, startOffset, endOffset, heightPlaneBottom, heightPlaneTop, state);
+        var (axis, expectedMin, expectedMax) = ResolveHeightExpectation(sketchPlaneName, heightControlMode, startOffset, endOffset, heightDriver, heightParameter, heightPlaneBottom, heightPlaneTop, state);
         var actualMin = ProjectBounds(min, max, axis, takeMax: false);
         var actualMax = ProjectBounds(min, max, axis, takeMax: true);
         return Math.Abs(actualMin - expectedMin) + Math.Abs(actualMax - expectedMax);
@@ -514,6 +537,8 @@ internal static class FamilyFoundryRoundtripAssertions {
         ExtrusionHeightControlMode heightControlMode,
         double startOffset,
         double endOffset,
+        LengthDriverSpec heightDriver,
+        string? heightParameter,
         string? heightPlaneBottom,
         string? heightPlaneTop,
         RuntimeStateProbe state
@@ -523,23 +548,46 @@ internal static class FamilyFoundryRoundtripAssertions {
             !string.IsNullOrWhiteSpace(heightPlaneTop)) {
             var bottom = GetPlane(state, heightPlaneBottom!);
             var top = GetPlane(state, heightPlaneTop!);
-            var axis = bottom.Normal;
-            return (axis, Math.Min(GetPlaneCoordinate(bottom), GetPlaneCoordinate(top)), Math.Max(GetPlaneCoordinate(bottom), GetPlaneCoordinate(top)));
+            var heightAxisIndex = GetDominantAxisIndex(bottom.Normal);
+            return (
+                GetCanonicalAxis(heightAxisIndex),
+                Math.Min(GetCanonicalPlaneCoordinate(bottom), GetCanonicalPlaneCoordinate(top)),
+                Math.Max(GetCanonicalPlaneCoordinate(bottom), GetCanonicalPlaneCoordinate(top)));
         }
 
         var sketchPlane = GetPlane(state, sketchPlaneName);
-        var sketchCoordinate = GetPlaneCoordinate(sketchPlane);
+        var axisIndex = GetDominantAxisIndex(sketchPlane.Normal);
+        var sketchCoordinate = GetCanonicalPlaneCoordinate(sketchPlane);
         var start = sketchCoordinate + startOffset;
-        var end = sketchCoordinate + endOffset;
-        return (sketchPlane.Normal, Math.Min(start, end), Math.Max(start, end));
+        var resolvedEndOffset = heightControlMode == ExtrusionHeightControlMode.EndOffset
+            ? ResolveSignedDriverValue(heightDriver, heightParameter, endOffset, state)
+            : endOffset;
+        var end = sketchCoordinate + resolvedEndOffset;
+        return (GetCanonicalAxis(axisIndex), Math.Min(start, end), Math.Max(start, end));
     }
 
     private static double GetPlaneCoordinate(RuntimePlaneProbe plane) =>
         plane.Midpoint.DotProduct(plane.Normal);
 
+    private static double GetCanonicalPlaneCoordinate(RuntimePlaneProbe plane) {
+        var axisIndex = GetDominantAxisIndex(plane.Normal);
+        double axisSign = Math.Sign(GetAxisComponent(plane.Normal, axisIndex));
+        if (axisSign == 0.0)
+            axisSign = 1.0;
+
+        return GetPlaneCoordinate(plane) * axisSign;
+    }
+
     private static double ProjectBounds(XYZ min, XYZ max, XYZ axis, bool takeMax) {
         var values = BuildBoundingCorners(min, max)
             .Select(corner => corner.DotProduct(axis))
+            .ToList();
+        return takeMax ? values.Max() : values.Min();
+    }
+
+    private static double ProjectBounds(XYZ min, XYZ max, int axisIndex, bool takeMax) {
+        var values = BuildBoundingCorners(min, max)
+            .Select(corner => GetCoordinate(corner, axisIndex))
             .ToList();
         return takeMax ? values.Max() : values.Min();
     }
@@ -562,6 +610,12 @@ internal static class FamilyFoundryRoundtripAssertions {
         var centerPlane2 = spec.Profile == ParamDrivenConnectorProfile.Round
             ? spec.RoundStub?.CenterPlane2
             : spec.RectangularStub?.PairBPlane1;
+        var widthAxisPlaneName = spec.Profile == ParamDrivenConnectorProfile.Rectangular
+            ? spec.RectangularStub?.PairAPlane1
+            : null;
+        var lengthAxisPlaneName = spec.Profile == ParamDrivenConnectorProfile.Rectangular
+            ? spec.RectangularStub?.PairBPlane1
+            : null;
         var sizeParameter1 = spec.Profile == ParamDrivenConnectorProfile.Round
             ? GetDriverParameterName(spec.RoundStub?.DiameterDriver) ?? spec.RoundStub?.DiameterParameter
             : GetDriverParameterName(spec.RectangularStub?.PairADriver) ?? spec.RectangularStub?.PairAParameter;
@@ -576,6 +630,8 @@ internal static class FamilyFoundryRoundtripAssertions {
             spec.Profile,
             centerPlane1,
             centerPlane2,
+            widthAxisPlaneName,
+            lengthAxisPlaneName,
             sizeParameter1,
             sizeParameter2,
             GetDriverParameterName(spec.DepthDriver),
@@ -658,7 +714,29 @@ internal static class FamilyFoundryRoundtripAssertions {
 
     private static void ApplyPlaneCoordinate(RuntimePlaneProbe plane, double[] coordinates) {
         var axisIndex = GetDominantAxisIndex(plane.Normal);
-        coordinates[axisIndex] = GetPlaneCoordinate(plane) * Math.Sign(GetAxisComponent(plane.Normal, axisIndex));
+        coordinates[axisIndex] = GetCanonicalPlaneCoordinate(plane);
+    }
+
+    private static (XYZ WidthAxis, XYZ LengthAxis) ResolveExpectedRectangularFrame(
+        ConnectorExpectation expectation,
+        RuntimeStateProbe state,
+        XYZ faceNormal
+    ) {
+        if (string.IsNullOrWhiteSpace(expectation.WidthAxisPlaneName) ||
+            string.IsNullOrWhiteSpace(expectation.LengthAxisPlaneName)) {
+            throw new AssertionException($"Connector '{expectation.Name}' did not carry rectangular frame plane names.");
+        }
+
+        var normalizedFace = FamilyFoundryRuntimeProbe.NormalizeOrThrow(faceNormal, $"connector '{expectation.Name}' face normal");
+        var rawWidthAxis = FamilyFoundryRuntimeProbe.NormalizeOrThrow(GetPlane(state, expectation.WidthAxisPlaneName!).Normal, $"{expectation.Name} width axis plane");
+        var rawLengthAxis = FamilyFoundryRuntimeProbe.NormalizeOrThrow(GetPlane(state, expectation.LengthAxisPlaneName!).Normal, $"{expectation.Name} length axis plane");
+
+        var directLengthAxis = FamilyFoundryRuntimeProbe.NormalizeOrThrow(normalizedFace.CrossProduct(rawWidthAxis), $"{expectation.Name} direct length axis");
+        var flippedWidthAxis = rawWidthAxis.Negate();
+        var flippedLengthAxis = FamilyFoundryRuntimeProbe.NormalizeOrThrow(normalizedFace.CrossProduct(flippedWidthAxis), $"{expectation.Name} flipped length axis");
+        return directLengthAxis.DotProduct(rawLengthAxis) >= flippedLengthAxis.DotProduct(rawLengthAxis)
+            ? (rawWidthAxis, directLengthAxis)
+            : (flippedWidthAxis, flippedLengthAxis);
     }
 
     private static int GetDominantAxisIndex(XYZ normal) {
@@ -674,8 +752,15 @@ internal static class FamilyFoundryRoundtripAssertions {
             _ => vector.Z
         };
 
+    private static XYZ GetCanonicalAxis(int axisIndex) =>
+        axisIndex switch {
+            0 => XYZ.BasisX,
+            1 => XYZ.BasisY,
+            _ => XYZ.BasisZ
+        };
+
     private static IReadOnlyList<int> IgnoreAxis(int axisIndex) =>
-        [0, 1, 2].Where(index => index != axisIndex).ToList();
+        new[] { 0, 1, 2 }.Where(index => index != axisIndex).ToList();
 
     private static double GetPointAxisDifference(XYZ actual, XYZ expected, IReadOnlyList<int> axes) =>
         axes.Sum(axis => Math.Abs(GetCoordinate(actual, axis) - GetCoordinate(expected, axis)));
@@ -712,15 +797,15 @@ internal static class FamilyFoundryRoundtripAssertions {
         RuntimeStateProbe state,
         string typeName
     ) {
-        var faceAxis = facePlane.Normal;
-        var actualMin = ProjectBounds(candidate.Min, candidate.Max, faceAxis, takeMax: false);
-        var actualMax = ProjectBounds(candidate.Min, candidate.Max, faceAxis, takeMax: true);
-        var faceCoordinate = GetPlaneCoordinate(facePlane);
+        var faceAxisIndex = GetDominantAxisIndex(facePlane.Normal);
+        var actualMin = ProjectBounds(candidate.Min, candidate.Max, faceAxisIndex, takeMax: false);
+        var actualMax = ProjectBounds(candidate.Min, candidate.Max, faceAxisIndex, takeMax: true);
+        var connectorCoordinate = GetCoordinate(connector.Origin, faceAxisIndex);
         var expectedDepth = ResolveParameterValue(expectation.DepthParameter, state);
 
-        Assert.That(Math.Min(Math.Abs(actualMin - faceCoordinate), Math.Abs(actualMax - faceCoordinate)), Is.LessThanOrEqualTo(GeometryTolerance), $"Round stub for connector '{expectation.Name}' drifted away from face plane '{expectation.FacePlaneName}' in type '{typeName}'.");
+        Assert.That(Math.Min(Math.Abs(actualMin - connectorCoordinate), Math.Abs(actualMax - connectorCoordinate)), Is.LessThanOrEqualTo(GeometryTolerance), $"Round stub for connector '{expectation.Name}' drifted away from its connector origin in type '{typeName}'.");
         Assert.That(Math.Abs(actualMax - actualMin), Is.EqualTo(expectedDepth).Within(GeometryTolerance), $"Round stub for connector '{expectation.Name}' did not track depth in type '{typeName}'.");
-        Assert.That(GetPointAxisDifference(GetCenter(candidate.Min, candidate.Max), connector.Origin, IgnoreAxis(GetDominantAxisIndex(faceAxis))), Is.LessThanOrEqualTo(GeometryTolerance), $"Round stub for connector '{expectation.Name}' drifted away from its connector center in type '{typeName}'.");
+        Assert.That(GetPointAxisDifference(GetCenter(candidate.Min, candidate.Max), connector.Origin, IgnoreAxis(faceAxisIndex)), Is.LessThanOrEqualTo(GeometryTolerance), $"Round stub for connector '{expectation.Name}' drifted away from its connector center in type '{typeName}'.");
     }
 
     private static double ScoreStubPrismCandidate(
@@ -747,15 +832,15 @@ internal static class FamilyFoundryRoundtripAssertions {
         RuntimeStateProbe state,
         string typeName
     ) {
-        var faceAxis = facePlane.Normal;
-        var actualMin = ProjectBounds(candidate.Min, candidate.Max, faceAxis, takeMax: false);
-        var actualMax = ProjectBounds(candidate.Min, candidate.Max, faceAxis, takeMax: true);
-        var faceCoordinate = GetPlaneCoordinate(facePlane);
+        var faceAxisIndex = GetDominantAxisIndex(facePlane.Normal);
+        var actualMin = ProjectBounds(candidate.Min, candidate.Max, faceAxisIndex, takeMax: false);
+        var actualMax = ProjectBounds(candidate.Min, candidate.Max, faceAxisIndex, takeMax: true);
+        var connectorCoordinate = GetCoordinate(connector.Origin, faceAxisIndex);
         var expectedDepth = ResolveParameterValue(expectation.DepthParameter, state);
 
-        Assert.That(Math.Min(Math.Abs(actualMin - faceCoordinate), Math.Abs(actualMax - faceCoordinate)), Is.LessThanOrEqualTo(GeometryTolerance), $"Rectangular stub for connector '{expectation.Name}' drifted away from face plane '{expectation.FacePlaneName}' in type '{typeName}'.");
+        Assert.That(Math.Min(Math.Abs(actualMin - connectorCoordinate), Math.Abs(actualMax - connectorCoordinate)), Is.LessThanOrEqualTo(GeometryTolerance), $"Rectangular stub for connector '{expectation.Name}' drifted away from its connector origin in type '{typeName}'.");
         Assert.That(Math.Abs(actualMax - actualMin), Is.EqualTo(expectedDepth).Within(GeometryTolerance), $"Rectangular stub for connector '{expectation.Name}' did not track depth in type '{typeName}'.");
-        Assert.That(GetPointAxisDifference(GetCenter(candidate.Min, candidate.Max), connector.Origin, IgnoreAxis(GetDominantAxisIndex(faceAxis))), Is.LessThanOrEqualTo(GeometryTolerance), $"Rectangular stub for connector '{expectation.Name}' drifted away from its connector center in type '{typeName}'.");
+        Assert.That(GetPointAxisDifference(GetCenter(candidate.Min, candidate.Max), connector.Origin, IgnoreAxis(faceAxisIndex)), Is.LessThanOrEqualTo(GeometryTolerance), $"Rectangular stub for connector '{expectation.Name}' drifted away from its connector center in type '{typeName}'.");
     }
 
     private static double GetExtrusionDepth(XYZ min, XYZ max, XYZ axis) =>
@@ -844,4 +929,7 @@ internal static class FamilyFoundryRoundtripAssertions {
 
     private static double ComputeUnsignedAlignment(XYZ left, XYZ right) =>
         Math.Abs(FamilyFoundryRuntimeProbe.NormalizeOrThrow(left, nameof(left)).DotProduct(FamilyFoundryRuntimeProbe.NormalizeOrThrow(right, nameof(right))));
+
+    private static double ComputeSignedAlignment(XYZ left, XYZ right) =>
+        FamilyFoundryRuntimeProbe.NormalizeOrThrow(left, nameof(left)).DotProduct(FamilyFoundryRuntimeProbe.NormalizeOrThrow(right, nameof(right)));
 }

@@ -61,7 +61,7 @@ internal static class FamilyFoundryRuntimeProbe {
                 plane => new RuntimePlaneProbe(
                     plane.Name.Trim(),
                     NormalizeOrThrow(plane.Normal, $"reference plane '{plane.Name}' normal"),
-                    (plane.BubbleEnd + plane.FreeEnd) * 0.5),
+                    plane.GetPlane().Origin),
                 StringComparer.Ordinal);
 
     private static IReadOnlyList<RuntimeDimensionProbe> CollectDimensions(
@@ -155,19 +155,32 @@ internal static class FamilyFoundryRuntimeProbe {
         new FilteredElementCollector(familyDocument)
             .OfClass(typeof(ConnectorElement))
             .Cast<ConnectorElement>()
-            .Select(connector => new RuntimeConnectorProbe(
-                connector.Id,
-                connector.Domain,
-                connector.Shape,
-                TryGetSystemClassification(connector),
-                TryGetFlowDirection(connector),
-                connector.Origin,
-                connector.CoordinateSystem == null
+            .Select(connector => {
+                var coordinateSystem = connector.CoordinateSystem;
+                var widthAxis = coordinateSystem == null
                     ? XYZ.Zero
-                    : NormalizeOrThrow(connector.CoordinateSystem.BasisZ, $"connector '{connector.Id.IntegerValue}' face normal"),
-                connector.Shape == ConnectorProfileType.Round ? GetRoundConnectorDiameter(connector) : null,
-                connector.Shape == ConnectorProfileType.Rectangular ? Math.Min(connector.Width, connector.Height) : null,
-                connector.Shape == ConnectorProfileType.Rectangular ? Math.Max(connector.Width, connector.Height) : null))
+                    : NormalizeOrThrow(coordinateSystem.BasisX, $"connector '{connector.Id.IntegerValue}' width axis");
+                var lengthAxis = coordinateSystem == null
+                    ? XYZ.Zero
+                    : NormalizeOrThrow(coordinateSystem.BasisY, $"connector '{connector.Id.IntegerValue}' length axis");
+                var faceNormal = coordinateSystem == null
+                    ? XYZ.Zero
+                    : NormalizeOrThrow(coordinateSystem.BasisZ, $"connector '{connector.Id.IntegerValue}' face normal");
+
+                return new RuntimeConnectorProbe(
+                    connector.Id,
+                    connector.Domain,
+                    connector.Shape,
+                    TryGetSystemClassification(connector),
+                    TryGetFlowDirection(connector),
+                    connector.Origin,
+                    widthAxis,
+                    lengthAxis,
+                    faceNormal,
+                    connector.Shape == ConnectorProfileType.Round ? GetRoundConnectorDiameter(connector) : null,
+                    connector.Shape == ConnectorProfileType.Rectangular ? connector.Width : null,
+                    connector.Shape == ConnectorProfileType.Rectangular ? connector.Height : null);
+            })
             .ToList();
 
     private static MEPSystemClassification? TryGetSystemClassification(ConnectorElement connector) {
