@@ -19,7 +19,7 @@ public sealed class MakeParamDrivenConnectors(MakeParamDrivenConnectorsSettings 
         "Category", "System Type", "Power Factor State", "Design Option", "Family Name", "Type Name"
     ];
 
-    public override string Description => "Create semantic ParamDrivenSolids connectors with stub geometry";
+    public override string Description => "Create authored ParamDrivenSolids connectors with stub geometry";
 
     public override OperationLog Execute(
         FamilyDocument doc,
@@ -458,103 +458,36 @@ public sealed class MakeParamDrivenConnectors(MakeParamDrivenConnectorsSettings 
             .SelectMany(loop => loop.Cast<Edge>())
             .ToList();
 
-        if (!TryGetExpectedRectangularConnectorSize(doc, spec, out var expectedWidth, out var expectedHeight)) {
-            var firstEdge = candidateEdges.FirstOrDefault();
-            return firstEdge == null
-                ? ConnectorElement.CreateDuctConnector(
-                    doc,
-                    spec.Config.Duct!.SystemType,
-                    ConnectorProfileType.Rectangular,
-                    hostFace.Reference)
-                : ConnectorElement.CreateDuctConnector(
-                    doc,
-                    spec.Config.Duct!.SystemType,
-                    ConnectorProfileType.Rectangular,
-                    hostFace.Reference,
-                    firstEdge);
-        }
-
-        var hasExpectedOrientation = TryResolveExpectedRectangularConnectorAxes(
-            doc,
-            spec,
-            out var expectedWidthAxis,
-            out var expectedLengthAxis);
-        var candidates = new List<(ConnectorElement Connector, double Score)>();
-        var expectedWidthAxisLog = hasExpectedOrientation ? FormatVector(expectedWidthAxis) : null;
-        var expectedLengthAxisLog = hasExpectedOrientation ? FormatVector(expectedLengthAxis) : null;
-        var defaultConnector = ConnectorElement.CreateDuctConnector(
+        var connector = ConnectorElement.CreateDuctConnector(
             doc,
             spec.Config.Duct!.SystemType,
             ConnectorProfileType.Rectangular,
             hostFace.Reference);
-        PrimeRectangularConnectorCandidate(defaultConnector, expectedWidth, expectedHeight);
-        doc.Regenerate();
-        var defaultScore = ScoreRectangularConnector(
-            defaultConnector,
-            expectedWidth,
-            expectedHeight,
-            hasExpectedOrientation,
-            expectedWidthAxis,
-            expectedLengthAxis);
-        Log.Debug(
-            "[MakeParamDrivenConnectors] Rectangular connector candidate {ConnectorName} default scored {Score}. ExpectedWidth={ExpectedWidth}, ExpectedHeight={ExpectedHeight}, ExpectedWidthAxis={ExpectedWidthAxis}, ExpectedLengthAxis={ExpectedLengthAxis}, ActualWidth={ActualWidth}, ActualHeight={ActualHeight}.",
-            spec.Name,
-            defaultScore,
-            expectedWidth,
-            expectedHeight,
-            expectedWidthAxisLog,
-            expectedLengthAxisLog,
-            defaultConnector.get_Parameter(BuiltInParameter.CONNECTOR_WIDTH)?.AsDouble(),
-            defaultConnector.get_Parameter(BuiltInParameter.CONNECTOR_HEIGHT)?.AsDouble());
-        candidates.Add((defaultConnector, defaultScore));
 
-        for (var edgeIndex = 0; edgeIndex < candidateEdges.Count; edgeIndex++) {
-            var edge = candidateEdges[edgeIndex];
-            try {
-                var connector = ConnectorElement.CreateDuctConnector(
-                    doc,
-                    spec.Config.Duct!.SystemType,
-                    ConnectorProfileType.Rectangular,
-                    hostFace.Reference,
-                    edge);
-                PrimeRectangularConnectorCandidate(connector, expectedWidth, expectedHeight);
+        if (TryGetExpectedRectangularConnectorSize(doc, spec, out var expectedWidth, out var expectedHeight)) {
+            PrimeRectangularConnectorCandidate(connector, expectedWidth, expectedHeight);
+            doc.Regenerate();
+        }
+
+        if (!AlignRectangularConnectorFrame(doc, connector, spec, hostFace.FaceNormal)) {
+            var firstEdge = candidateEdges.FirstOrDefault();
+            if (firstEdge != null) {
+                connector.ChangeHostReference(hostFace.Reference, firstEdge);
                 doc.Regenerate();
-                var score = ScoreRectangularConnector(
-                    connector,
-                    expectedWidth,
-                    expectedHeight,
-                    hasExpectedOrientation,
-                    expectedWidthAxis,
-                    expectedLengthAxis);
-                Log.Debug(
-                    "[MakeParamDrivenConnectors] Rectangular connector candidate {ConnectorName} edge {EdgeIndex} scored {Score}. ExpectedWidth={ExpectedWidth}, ExpectedHeight={ExpectedHeight}, ExpectedWidthAxis={ExpectedWidthAxis}, ExpectedLengthAxis={ExpectedLengthAxis}, ActualWidth={ActualWidth}, ActualHeight={ActualHeight}.",
-                    spec.Name,
-                    edgeIndex,
-                    score,
-                    expectedWidth,
-                    expectedHeight,
-                    expectedWidthAxisLog,
-                    expectedLengthAxisLog,
-                    connector.get_Parameter(BuiltInParameter.CONNECTOR_WIDTH)?.AsDouble(),
-                    connector.get_Parameter(BuiltInParameter.CONNECTOR_HEIGHT)?.AsDouble());
-                candidates.Add((connector, score));
-            } catch (Exception ex) {
-                Log.Debug(
-                    ex,
-                    "[MakeParamDrivenConnectors] Rectangular connector candidate {ConnectorName} edge {EdgeIndex} failed.",
-                    spec.Name,
-                    edgeIndex);
+                _ = AlignRectangularConnectorFrame(doc, connector, spec, hostFace.FaceNormal);
             }
         }
 
-        var best = candidates
-            .OrderBy(candidate => candidate.Score)
-            .First();
+        Log.Debug(
+            "[MakeParamDrivenConnectors] Rectangular connector {ConnectorName} created with Width={Width}, Height={Height}, BasisX={BasisX}, BasisY={BasisY}, BasisZ={BasisZ}.",
+            spec.Name,
+            connector.get_Parameter(BuiltInParameter.CONNECTOR_WIDTH)?.AsDouble(),
+            connector.get_Parameter(BuiltInParameter.CONNECTOR_HEIGHT)?.AsDouble(),
+            connector.CoordinateSystem?.BasisX,
+            connector.CoordinateSystem?.BasisY,
+            connector.CoordinateSystem?.BasisZ);
 
-        foreach (var candidate in candidates.Where(candidate => candidate.Connector.Id != best.Connector.Id))
-            _ = doc.Delete(candidate.Connector.Id);
-
-        return best.Connector;
+        return connector;
     }
 
     private static void PrimeRectangularConnectorCandidate(
@@ -592,58 +525,82 @@ public sealed class MakeParamDrivenConnectors(MakeParamDrivenConnectorsSettings 
         return width > 1e-6 && height > 1e-6;
     }
 
-    private static bool TryResolveExpectedRectangularConnectorAxes(
+    private static bool AlignRectangularConnectorFrame(
         Document doc,
+        ConnectorElement connector,
         CompiledParamDrivenConnectorSpec spec,
-        out XYZ widthAxis,
-        out XYZ lengthAxis
+        XYZ hostFaceNormal
     ) {
-        widthAxis = XYZ.Zero;
-        lengthAxis = XYZ.Zero;
         if (spec.RectangularStub == null)
             return false;
 
-        return RawConnectorUnitInference.TryResolveRectangularConnectorAxes(
+        var expectedFaceNormal = NormalizeOrThrow(hostFaceNormal);
+        if (!RawConnectorUnitInference.TryResolveRectangularConnectorFrame(
+                doc,
+                spec.RectangularStub.PairAPlane1,
+                spec.RectangularStub.PairAPlane2,
+                spec.RectangularStub.PairBPlane1,
+                spec.RectangularStub.PairBPlane2,
+                expectedFaceNormal,
+                out var expectedWidthAxis,
+                out var expectedLengthAxis)) {
+            return false;
+        }
+
+        if (!RawConnectorUnitInference.TryGetRectangularConnectorAxes(connector, out var actualWidthAxis, out var actualLengthAxis, out var actualFaceNormal))
+            return false;
+
+        if (actualFaceNormal.DotProduct(expectedFaceNormal) < 0.0) {
+            connector.FlipDirection();
+            doc.Regenerate();
+            if (!RawConnectorUnitInference.TryGetRectangularConnectorAxes(connector, out actualWidthAxis, out actualLengthAxis, out actualFaceNormal))
+                return false;
+        }
+
+        var rotationAxis = NormalizeOrThrow(actualFaceNormal);
+        var rotationAngle = Enumerable.Range(0, 4)
+            .Select(index => index * (Math.PI / 2.0))
+            .OrderBy(angle => ScoreRectangularConnectorFrame(
+                actualWidthAxis,
+                actualLengthAxis,
+                rotationAxis,
+                angle,
+                expectedWidthAxis,
+                expectedLengthAxis))
+            .First();
+        if (Math.Abs(rotationAngle) <= 1e-9)
+            return true;
+
+        ElementTransformUtils.RotateElement(
             doc,
-            spec.RectangularStub.PairAPlane1,
-            spec.RectangularStub.PairAPlane2,
-            spec.RectangularStub.PairBPlane1,
-            spec.RectangularStub.PairBPlane2,
-            out widthAxis,
-            out lengthAxis);
+            connector.Id,
+            Line.CreateBound(connector.Origin, connector.Origin + rotationAxis),
+            rotationAngle);
+        doc.Regenerate();
+        return true;
     }
 
-    private static double ScoreRectangularConnector(
-        ConnectorElement connector,
-        double expectedWidth,
-        double expectedHeight,
-        bool hasExpectedOrientation,
+    private static double ScoreRectangularConnectorFrame(
+        XYZ actualWidthAxis,
+        XYZ actualLengthAxis,
+        XYZ rotationAxis,
+        double angle,
         XYZ expectedWidthAxis,
         XYZ expectedLengthAxis
     ) {
-        var actualWidth = connector.get_Parameter(BuiltInParameter.CONNECTOR_WIDTH)?.AsDouble() ?? 0.0;
-        var actualHeight = connector.get_Parameter(BuiltInParameter.CONNECTOR_HEIGHT)?.AsDouble() ?? 0.0;
-        var sizeScore = actualWidth <= 1e-6 || actualHeight <= 1e-6
-            ? 0.0
-            : RawConnectorUnitInference.ScoreOrderedRectangularConnectorCandidate(
-                actualWidth,
-                actualHeight,
-                expectedWidth,
-                expectedHeight);
-        if (!hasExpectedOrientation)
-            return sizeScore;
-
-        if (!RawConnectorUnitInference.TryGetRectangularConnectorAxes(connector, out var actualWidthAxis, out var actualLengthAxis, out _))
-            return sizeScore + 1000.0;
-
-        var orientationScore =
-            RawConnectorUnitInference.ComputeUnsignedVectorMisalignment(actualWidthAxis, expectedWidthAxis) +
-            RawConnectorUnitInference.ComputeUnsignedVectorMisalignment(actualLengthAxis, expectedLengthAxis);
-        return sizeScore + (orientationScore * 1000.0);
+        var rotation = Transform.CreateRotationAtPoint(rotationAxis, angle, XYZ.Zero);
+        var rotatedWidth = NormalizeOrThrow(rotation.OfVector(actualWidthAxis));
+        var rotatedLength = NormalizeOrThrow(rotation.OfVector(actualLengthAxis));
+        return RawConnectorUnitInference.ComputeSignedVectorMisalignment(rotatedWidth, expectedWidthAxis) +
+               RawConnectorUnitInference.ComputeSignedVectorMisalignment(rotatedLength, expectedLengthAxis);
     }
 
-    private static string FormatVector(XYZ vector) =>
-        $"({vector.X:F6}, {vector.Y:F6}, {vector.Z:F6})";
+    private static XYZ NormalizeOrThrow(XYZ vector) {
+        if (vector.GetLength() <= 1e-9)
+            throw new InvalidOperationException("Expected a non-zero vector.");
+
+        return vector.Normalize();
+    }
 
     private static ConnectorProfileType ToConnectorProfileType(ParamDrivenConnectorProfile profile) =>
         profile switch {

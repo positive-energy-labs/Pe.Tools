@@ -11,7 +11,7 @@ public sealed class AuthoredProfileRoundtripFixtureTests {
     private const string WineGuardianOutdoorProfileFixture = "wineguardian-ds050-outdoor.json";
     private const string PeGrdSupplyFamilyFixture = "pe-grd-supply.rfa";
 
-    private Application _dbApplication = null!;
+    private Autodesk.Revit.ApplicationServices.Application _dbApplication = null!;
 
     [OneTimeSetUp]
     public void SetUp(UIApplication uiApplication) {
@@ -50,7 +50,7 @@ public sealed class AuthoredProfileRoundtripFixtureTests {
                     ],
                     ["Cabinet"],
                     [],
-                    ["CondensateDrain", "LiquidLine", "ReturnAir", "SupplyAir", "SuctionLine"]));
+                    ["CondensateDrain", "LiquidLine", "ReturnAir", "SuctionLine", "SupplyAir"]));
             FamilyFoundryRoundtripAssertions.AssertCompiledPlanMatchesAuthored(artifact);
             FamilyFoundryRoundtripAssertions.AssertSavedFamilyHasOnlyTypes(artifact.SavedDocument, "DS050");
 

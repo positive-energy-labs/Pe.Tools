@@ -25,7 +25,6 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
 
     public static ParamDrivenSolidsCompileResult Compile(AuthoredParamDrivenSolidsSettings settings) {
         var diagnostics = new List<ParamDrivenSolidsDiagnostic>();
-        var aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var planes = new Dictionary<string, PublishedPlane>(StringComparer.OrdinalIgnoreCase);
         var spans = new Dictionary<string, PublishedSpan>(StringComparer.OrdinalIgnoreCase);
         var symmetricPairs = new Dictionary<string, SymmetricPlanePairSpec>(StringComparer.Ordinal);
@@ -34,7 +33,7 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         var circles = new List<ConstrainedCircleExtrusionSpec>();
         var connectors = new List<CompiledParamDrivenConnectorSpec>();
 
-        SeedBuiltInPlanes(settings.Frame, planes, aliases, diagnostics);
+        SeedBuiltInPlanes(settings.Frame, planes, diagnostics);
         ValidateTopLevelPlaneNameCollisions(settings, diagnostics);
 
         var pending = BuildWorkItems(settings).ToList();
@@ -46,11 +45,11 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
 
             foreach (var item in pending) {
                 var outcome = item.Kind switch {
-                    PendingWorkKind.Plane => TryCompilePlane(item.Name, item.Plane!, planes, aliases, offsetConstraints, diagnostics),
-                    PendingWorkKind.Span => TryCompileSpan(item.Span!, spans, planes, aliases, symmetricPairs, diagnostics),
-                    PendingWorkKind.Prism => TryCompilePrism(item.Prism!, spans, planes, aliases, symmetricPairs, offsetConstraints, rectangles, diagnostics),
-                    PendingWorkKind.Cylinder => TryCompileCylinder(item.Cylinder!, planes, aliases, offsetConstraints, circles, diagnostics),
-                    PendingWorkKind.Connector => TryCompileConnector(item.Connector!, spans, planes, aliases, symmetricPairs, offsetConstraints, connectors, diagnostics),
+                    PendingWorkKind.Plane => TryCompilePlane(item.Name, item.Plane!, planes, offsetConstraints, diagnostics),
+                    PendingWorkKind.Span => TryCompileSpan(item.Span!, spans, planes, symmetricPairs, diagnostics),
+                    PendingWorkKind.Prism => TryCompilePrism(item.Prism!, spans, planes, symmetricPairs, offsetConstraints, rectangles, diagnostics),
+                    PendingWorkKind.Cylinder => TryCompileCylinder(item.Cylinder!, planes, offsetConstraints, circles, diagnostics),
+                    PendingWorkKind.Connector => TryCompileConnector(item.Connector!, spans, planes, symmetricPairs, offsetConstraints, connectors, diagnostics),
                     _ => CompileOutcome.Invalid
                 };
 
@@ -168,8 +167,7 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
                 Enabled = connectors.Count > 0,
                 Connectors = connectors
             },
-            diagnostics,
-            aliases
+            diagnostics
         );
     }
 
@@ -193,7 +191,6 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
     private static void SeedBuiltInPlanes(
         ParamDrivenFamilyFrameKind frame,
         IDictionary<string, PublishedPlane> planes,
-        IDictionary<string, string> aliases,
         IList<ParamDrivenSolidsDiagnostic> diagnostics
     ) {
         if (frame != ParamDrivenFamilyFrameKind.NonHosted) {
@@ -207,8 +204,6 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
 
         foreach (var (token, planeName) in BuiltInPlaneNames) {
             planes[planeName] = new PublishedPlane(planeName, LengthDriverSpec.None);
-            aliases[token] = planeName;
-            aliases[planeName] = planeName;
         }
     }
 
@@ -235,7 +230,6 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         string name,
         AuthoredPlaneSpec spec,
         IDictionary<string, PublishedPlane> planes,
-        IDictionary<string, string> aliases,
         IDictionary<string, OffsetPlaneConstraintSpec> offsets,
         IList<ParamDrivenSolidsDiagnostic> diagnostics
     ) {
@@ -285,7 +279,6 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         };
         offsets.TryAdd(BuildOffsetKey(offset), offset);
         planes[normalizedName] = new PublishedPlane(normalizedName, driver);
-        aliases[normalizedName] = normalizedName;
         return CompileOutcome.Compiled;
     }
 
@@ -293,7 +286,6 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         AuthoredSpanSpec span,
         IDictionary<string, PublishedSpan> spans,
         IDictionary<string, PublishedPlane> planes,
-        IDictionary<string, string> aliases,
         IDictionary<string, SymmetricPlanePairSpec> symmetricPairs,
         IList<ParamDrivenSolidsDiagnostic> diagnostics
     ) {
@@ -339,8 +331,6 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         spans[BuildPairKey(negative, positive)] = new PublishedSpan(negative, positive, driver);
         planes[negative] = new PublishedPlane(negative, driver);
         planes[positive] = new PublishedPlane(positive, driver);
-        aliases[negative] = negative;
-        aliases[positive] = positive;
         return CompileOutcome.Compiled;
     }
 
@@ -348,7 +338,6 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         AuthoredPrismSpec prism,
         IDictionary<string, PublishedSpan> spans,
         IDictionary<string, PublishedPlane> planes,
-        IDictionary<string, string> aliases,
         IDictionary<string, SymmetricPlanePairSpec> symmetricPairs,
         IDictionary<string, OffsetPlaneConstraintSpec> offsets,
         ICollection<ConstrainedRectangleExtrusionSpec> rectangles,
@@ -367,15 +356,15 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         if (sketch.Outcome != CompileOutcome.Compiled)
             return sketch.Outcome;
 
-        var width = ResolvePairOrInlineSpan(prism.Name, "Width", prism.Width, spans, planes, aliases, symmetricPairs, diagnostics);
+        var width = ResolvePairOrInlineSpan(prism.Name, "Width", prism.Width, spans, planes, symmetricPairs, diagnostics);
         if (width.Outcome != CompileOutcome.Compiled)
             return width.Outcome;
 
-        var length = ResolvePairOrInlineSpan(prism.Name, "Length", prism.Length, spans, planes, aliases, symmetricPairs, diagnostics);
+        var length = ResolvePairOrInlineSpan(prism.Name, "Length", prism.Length, spans, planes, symmetricPairs, diagnostics);
         if (length.Outcome != CompileOutcome.Compiled)
             return length.Outcome;
 
-        var height = ResolveHeightSpec(prism.Name, prism.Height, planes, aliases, offsets, diagnostics);
+        var height = ResolveHeightSpec(prism.Name, prism.Height, planes, offsets, diagnostics);
         if (height.Outcome != CompileOutcome.Compiled)
             return height.Outcome;
 
@@ -406,7 +395,6 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
     private static CompileOutcome TryCompileCylinder(
         AuthoredCylinderSpec cylinder,
         IDictionary<string, PublishedPlane> planes,
-        IDictionary<string, string> aliases,
         IDictionary<string, OffsetPlaneConstraintSpec> offsets,
         ICollection<ConstrainedCircleExtrusionSpec> circles,
         IList<ParamDrivenSolidsDiagnostic> diagnostics
@@ -443,7 +431,7 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         if (!TryParseLengthDriver(cylinder.Diameter.By, cylinder.Name, "$.ParamDrivenSolids.Cylinders.Diameter", diagnostics, out var diameterDriver))
             return CompileOutcome.Invalid;
 
-        var height = ResolveHeightSpec(cylinder.Name, cylinder.Height, planes, aliases, offsets, diagnostics);
+        var height = ResolveHeightSpec(cylinder.Name, cylinder.Height, planes, offsets, diagnostics);
         if (height.Outcome != CompileOutcome.Compiled)
             return height.Outcome;
 
@@ -471,7 +459,6 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         AuthoredConnectorSpec connector,
         IDictionary<string, PublishedSpan> spans,
         IDictionary<string, PublishedPlane> planes,
-        IDictionary<string, string> aliases,
         IDictionary<string, SymmetricPlanePairSpec> symmetricPairs,
         IDictionary<string, OffsetPlaneConstraintSpec> offsets,
         ICollection<CompiledParamDrivenConnectorSpec> connectors,
@@ -513,11 +500,6 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
                 : $"L:{(hostOffsetSpec.Driver.LiteralValue ?? 0.0).ToString("R", CultureInfo.InvariantCulture)}";
             hostFaceName = $"__OFFSET__|{host.PlaneName!}|{hostOffsetSign}|{hostOffsetValue}";
         }
-
-        aliases[$"{connector.Name}.HostFace"] = hostFaceName;
-        aliases[$"{connector.Name}.HostPlane"] = host.PlaneName!;
-        aliases[$"{connector.Name}.Depth.Start"] = host.PlaneName!;
-        aliases[$"{connector.Name}.Depth.End"] = host.PlaneName!;
 
         if (connector.Round != null && connector.Rect != null) {
             diagnostics.Add(new ParamDrivenSolidsDiagnostic(

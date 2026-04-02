@@ -1,4 +1,4 @@
-using Pe.FamilyFoundry.OperationSettings;
+﻿using Pe.FamilyFoundry.OperationSettings;
 
 namespace Pe.FamilyFoundry.Resolution;
 
@@ -6,8 +6,7 @@ public sealed record ParamDrivenSolidsCompileResult(
     MakeParamDrivenPlanesAndDimsSettings RefPlanesAndDims,
     MakeConstrainedExtrusionsSettings InternalExtrusions,
     MakeParamDrivenConnectorsSettings Connectors,
-    IReadOnlyList<ParamDrivenSolidsDiagnostic> Diagnostics,
-    IReadOnlyDictionary<string, string> SemanticAliases
+    IReadOnlyList<ParamDrivenSolidsDiagnostic> Diagnostics
 ) {
     public bool CanExecute => this.Diagnostics.All(diagnostic => diagnostic.Severity != ParamDrivenDiagnosticSeverity.Error);
 }

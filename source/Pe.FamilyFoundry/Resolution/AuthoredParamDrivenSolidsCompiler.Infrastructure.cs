@@ -49,7 +49,6 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         PlanePairOrInlineSpanSpec spec,
         IDictionary<string, PublishedSpan> spans,
         IDictionary<string, PublishedPlane> planes,
-        IDictionary<string, string> aliases,
         IDictionary<string, SymmetricPlanePairSpec> symmetricPairs,
         IList<ParamDrivenSolidsDiagnostic> diagnostics
     ) {
@@ -93,7 +92,7 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         if (spans.TryGetValue(key, out var published))
             return PairResolution.Compiled(published.NegativePlaneName, published.PositivePlaneName, published.Driver);
 
-        var outcome = TryCompileSpan(inline, spans, planes, aliases, symmetricPairs, diagnostics);
+        var outcome = TryCompileSpan(inline, spans, planes, symmetricPairs, diagnostics);
         if (outcome != CompileOutcome.Compiled)
             return PairResolution.FromOutcome(outcome);
 
@@ -106,7 +105,6 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         string axisName,
         PlaneRefOrInlinePlaneSpec spec,
         IDictionary<string, PublishedPlane> planes,
-        IDictionary<string, string> aliases,
         IDictionary<string, OffsetPlaneConstraintSpec> offsets,
         IList<ParamDrivenSolidsDiagnostic> diagnostics
     ) {
@@ -135,7 +133,7 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         if (planes.TryGetValue(normalizedName, out var existing))
             return PlaneResolution.Compiled(existing.Name, existing.Driver);
 
-        var outcome = TryCompilePlane(normalizedName, inline, planes, aliases, offsets, diagnostics);
+        var outcome = TryCompilePlane(normalizedName, inline, planes, offsets, diagnostics);
         if (outcome != CompileOutcome.Compiled)
             return PlaneResolution.FromOutcome(outcome);
 
@@ -147,7 +145,6 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         string ownerName,
         PlaneRefOrInlinePlaneSpec spec,
         IDictionary<string, PublishedPlane> planes,
-        IDictionary<string, string> aliases,
         IDictionary<string, OffsetPlaneConstraintSpec> offsets,
         IList<ParamDrivenSolidsDiagnostic> diagnostics
     ) {
@@ -168,7 +165,7 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
             return HeightResolution.FromEndOffset(endOffset, driver);
         }
 
-        var plane = ResolvePlaneOrInlinePlane(ownerName, "Height", spec, planes, aliases, offsets, diagnostics);
+        var plane = ResolvePlaneOrInlinePlane(ownerName, "Height", spec, planes, offsets, diagnostics);
         return plane.Outcome != CompileOutcome.Compiled
             ? HeightResolution.FromOutcome(plane.Outcome)
             : HeightResolution.ReferencePlane(plane.PlaneName!, plane.Driver);

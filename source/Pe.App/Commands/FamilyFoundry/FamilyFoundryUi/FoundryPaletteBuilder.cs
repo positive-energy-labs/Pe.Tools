@@ -180,18 +180,18 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
 
         // Load the profile
         var profile = context.SharedStorage.ReadRequired<TProfile>(profileItem.TextPrimary);
-        var semanticWarnings = new List<string>();
-        var semanticErrors = new List<string>();
+        var authoredWarnings = new List<string>();
+        var authoredErrors = new List<string>();
 
         if (ct.IsCancellationRequested) return null;
 
         if (profile is ProfileFamilyManager familyProfile) {
             var compileResult = AuthoredParamDrivenSolidsCompiler.Compile(familyProfile.ParamDrivenSolids);
-            semanticWarnings = compileResult.Diagnostics
+            authoredWarnings = compileResult.Diagnostics
                 .Where(diagnostic => diagnostic.Severity == ParamDrivenDiagnosticSeverity.Warning)
                 .Select(diagnostic => diagnostic.ToDisplayMessage())
                 .ToList();
-            semanticErrors = compileResult.Diagnostics
+            authoredErrors = compileResult.Diagnostics
                 .Where(diagnostic => diagnostic.Severity == ParamDrivenDiagnosticSeverity.Error)
                 .Select(diagnostic => diagnostic.ToDisplayMessage())
                 .ToList();
@@ -219,7 +219,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
                 NullValueHandling = NullValueHandling.Ignore
             });
 
-        if (semanticErrors.Count > 0) {
+        if (authoredErrors.Count > 0) {
             return new PreviewData {
                 ProfileName = profileItem.TextPrimary,
                 FilePath = profileItem.FilePath,
@@ -228,8 +228,8 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
                 LineCount = profileItem.LineCount,
                 ProfileJson = profileJson,
                 IsValid = false,
-                RemainingErrors = semanticErrors,
-                Warnings = semanticWarnings
+                RemainingErrors = authoredErrors,
+                Warnings = authoredWarnings
             };
         }
 
@@ -289,7 +289,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
             Families = familyInfos,
             ProfileJson = profileJson,
             IsValid = true,
-            Warnings = semanticWarnings
+            Warnings = authoredWarnings
         };
     }
 

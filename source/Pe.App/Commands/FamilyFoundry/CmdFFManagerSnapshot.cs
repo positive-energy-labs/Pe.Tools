@@ -6,6 +6,7 @@ using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Resolution;
+using Pe.FamilyFoundry.Serialization;
 using Pe.FamilyFoundry.Snapshots;
 using Pe.Global.Revit.Ui;
 using Pe.SettingsCatalog.Revit.FamilyFoundry;

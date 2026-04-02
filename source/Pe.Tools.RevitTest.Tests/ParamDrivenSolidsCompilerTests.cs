@@ -114,7 +114,7 @@ public sealed class ParamDrivenSolidsCompilerTests {
     }
 
     [Test]
-    public void Compile_negative_depth_connector_publishes_depth_aliases_in_host_normal_order() {
+    public void Compile_negative_depth_connector_keeps_host_plane_data_on_compiled_connector() {
         var settings = new AuthoredParamDrivenSolidsSettings {
             Connectors = [
                 new AuthoredConnectorSpec {
@@ -143,9 +143,9 @@ public sealed class ParamDrivenSolidsCompilerTests {
 
         Assert.That(result.CanExecute, Is.True);
         Assert.That(result.RefPlanesAndDims.Offsets, Is.Empty);
-        Assert.That(result.SemanticAliases["BackConn.HostFace"], Is.EqualTo("Reference Plane"));
-        Assert.That(result.SemanticAliases["BackConn.Depth.Start"], Is.EqualTo("Reference Plane"));
-        Assert.That(result.SemanticAliases["BackConn.Depth.End"], Is.EqualTo("Reference Plane"));
+        Assert.That(result.Connectors.Connectors, Has.Count.EqualTo(1));
+        Assert.That(result.Connectors.Connectors[0].HostPlaneName, Is.EqualTo("Reference Plane"));
+        Assert.That(result.Connectors.Connectors[0].HostFacePlaneName, Is.EqualTo("Reference Plane"));
     }
 
     [Test]
