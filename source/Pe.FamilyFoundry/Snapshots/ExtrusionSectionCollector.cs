@@ -1,33 +1,39 @@
 ﻿using Pe.Extensions.FamDocument;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
+using Pe.FamilyFoundry.Helpers;
 using Pe.FamilyFoundry.Resolution;
 using Serilog;
 using Pe.FamilyFoundry.Operations;
+using System.Text.RegularExpressions;
+using Autodesk.Revit.DB.Electrical;
+using Autodesk.Revit.DB.Mechanical;
+using Autodesk.Revit.DB.Plumbing;
+
+using Pe.FamilyFoundry.OperationSettings;
 
 namespace Pe.FamilyFoundry.Snapshots;
 
 /// <summary>
-///     Collects both the legacy constrained extrusion snapshot and the new semantic ParamDrivenSolids snapshot.
-///     The legacy shape remains useful as an internal decompilation bridge during the first ParamDrivenSolids spike.
+///     Collects authored ParamDrivenSolids snapshots.
+///     Legacy decompilation helpers remain private to this collector only.
 /// </summary>
-public class ExtrusionSectionCollector : IFamilyDocCollector {
+public partial class ExtrusionSectionCollector : IFamilyDocCollector {
     private const double DotOrthoTolerance = 0.15;
     private const double PlaneTolerance = 1e-6;
     private const double DistanceTolerance = 1e-4;
 
     public bool ShouldCollect(FamilySnapshot snapshot) =>
-        snapshot.ParamDrivenSolids == null ||
-        (snapshot.ParamDrivenSolids.Rectangles.Count == 0 &&
-         snapshot.ParamDrivenSolids.Cylinders.Count == 0 &&
-         snapshot.ParamDrivenSolids.Connectors.Count == 0);
+        snapshot.ParamDrivenSolids == null || !snapshot.ParamDrivenSolids.HasContent;
 
     public void Collect(FamilySnapshot snapshot, FamilyDocument famDoc) {
         var legacy = CollectLegacyFromFamilyDoc(famDoc.Document, snapshot.RefPlanesAndDims);
-        snapshot.Extrusions = legacy;
-        snapshot.ParamDrivenSolids = CollectSemanticSnapshot(
+        var semanticSnapshot = CollectSemanticSnapshot(
             famDoc.Document,
             legacy,
             snapshot.RefPlanesAndDims);
+        var authoredSnapshot = BuildAuthoredSolids(semanticSnapshot, legacy);
+        AddInferredRawConnectors(famDoc.Document, authoredSnapshot);
+        snapshot.ParamDrivenSolids = authoredSnapshot;
         snapshot.RefPlanesAndDims = RemoveSemanticInternalConstraints(
             snapshot.RefPlanesAndDims,
             snapshot.ParamDrivenSolids);
@@ -35,6 +41,10 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
 
     private static ExtrusionSnapshot CollectLegacyFromFamilyDoc(Document doc, RefPlaneSnapshot? refPlanesAndDims) {
         var result = new ExtrusionSnapshot { Source = SnapshotSource.FamilyDoc };
+        var ownedStubIds = RawConnectorUnitInference.MatchOwnedStubs(doc)
+            .Values
+            .Select(match => match.Extrusion.Id)
+            .ToHashSet();
 
         var extrusions = new FilteredElementCollector(doc)
             .OfClass(typeof(Extrusion))
@@ -44,7 +54,7 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
 
         foreach (var extrusion in extrusions) {
             try {
-                if (MakeParamDrivenConnectors.TryReadStoredMetadata(extrusion)?.Spec != null)
+                if (ownedStubIds.Contains(extrusion.Id))
                     continue;
 
                 if (TryBuildRectangleSpec(extrusion, doc, out var rectangle)) {
@@ -67,84 +77,57 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
         ExtrusionSnapshot legacy,
         RefPlaneSnapshot? refPlanesAndDims
     ) {
-        var result = new ParamDrivenSolidsSnapshot { Source = SnapshotSource.FamilyDoc };
-        _ = CollectStoredConnectorSpecs(doc, result);
+        var result = new ParamDrivenSolidsSnapshot {
+            Source = SnapshotSource.FamilyDoc,
+            Frame = ParamDrivenFamilyFrameKind.NonHosted
+        };
 
         foreach (var rectangle in legacy.Rectangles) {
-            var semantic = TryBuildSemanticRectangle(doc, rectangle, refPlanesAndDims);
+            var planeRegistry = SemanticPlaneRegistry.Create(result.Rectangles, result.Cylinders, result.SemanticPlanes);
+            var semantic = TryBuildSemanticRectangle(doc, rectangle, refPlanesAndDims, planeRegistry);
             if (semantic != null)
                 result.Rectangles.Add(semantic);
         }
 
         foreach (var circle in legacy.Circles) {
-            var semantic = TryBuildSemanticCylinder(doc, circle, refPlanesAndDims);
+            var planeRegistry = SemanticPlaneRegistry.Create(result.Rectangles, result.Cylinders, result.SemanticPlanes);
+            var semantic = TryBuildSemanticCylinder(doc, circle, refPlanesAndDims, planeRegistry);
             if (semantic != null)
                 result.Cylinders.Add(semantic);
         }
 
+        AddRawSemanticConnectors(
+            doc,
+            result,
+            SemanticPlaneRegistry.Create(result.Rectangles, result.Cylinders, result.SemanticPlanes, true));
+
+        var residual = RemoveSemanticInternalConstraints(refPlanesAndDims, BuildAuthoredSolids(result, legacy));
+        PromoteResidualSemanticPlanes(result, residual, SemanticPlaneRegistry.Create(result.Rectangles, result.Cylinders, result.SemanticPlanes));
+        NormalizeDerivedPlaneTargets(
+            result,
+            SemanticPlaneRegistry.Create(result.Rectangles, result.Cylinders, result.SemanticPlanes, true));
+
         return result;
-    }
-
-    private static HashSet<string> CollectStoredConnectorSpecs(Document doc, ParamDrivenSolidsSnapshot result) {
-        var stubNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var connectors = new FilteredElementCollector(doc)
-            .OfClass(typeof(ConnectorElement))
-            .Cast<ConnectorElement>()
-            .ToList();
-
-        foreach (var connector in connectors) {
-            var metadata = MakeParamDrivenConnectors.TryReadStoredMetadata(connector);
-            if (metadata?.Spec == null)
-                continue;
-
-            result.Connectors.Add(metadata.Spec);
-            if (!string.IsNullOrWhiteSpace(metadata.StubSolidName))
-                stubNames.Add(metadata.StubSolidName.Trim());
-        }
-
-        var extrusionElements = new FilteredElementCollector(doc)
-            .OfClass(typeof(Extrusion))
-            .Cast<Extrusion>();
-
-        foreach (var extrusion in extrusionElements) {
-            var metadata = MakeParamDrivenConnectors.TryReadStoredMetadata(extrusion);
-            if (metadata?.Spec == null)
-                continue;
-
-            if (result.Connectors.All(existing => !string.Equals(existing.Name, metadata.Spec.Name, StringComparison.Ordinal)))
-                result.Connectors.Add(metadata.Spec);
-
-            if (!string.IsNullOrWhiteSpace(metadata.StubSolidName))
-                stubNames.Add(metadata.StubSolidName.Trim());
-        }
-
-        return stubNames;
     }
 
     private static RefPlaneSnapshot? RemoveSemanticInternalConstraints(
         RefPlaneSnapshot? refPlaneSnapshot,
-        ParamDrivenSolidsSnapshot semanticSnapshot
+        AuthoredParamDrivenSolidsSettings authoredSnapshot
     ) {
         if (refPlaneSnapshot == null)
             return null;
 
-        if (semanticSnapshot.Rectangles.Count == 0 &&
-            semanticSnapshot.Cylinders.Count == 0 &&
-            semanticSnapshot.Connectors.Count == 0)
+        if (!authoredSnapshot.HasContent)
             return refPlaneSnapshot;
 
-        var compiledSemantics = ParamDrivenSolidsCompiler.Compile(new ParamDrivenSolidsSettings {
-            Rectangles = semanticSnapshot.Rectangles,
-            Cylinders = semanticSnapshot.Cylinders,
-            Connectors = semanticSnapshot.Connectors
-        });
+        var compiledSemantics = AuthoredParamDrivenSolidsCompiler.Compile(authoredSnapshot);
         if (!compiledSemantics.CanExecute)
             return refPlaneSnapshot;
 
-        var internalMirrorKeys = compiledSemantics.RefPlanesAndDims.MirrorSpecs
-            .Select(BuildMirrorKey)
+        var internalMirrorKeys = compiledSemantics.RefPlanesAndDims.SymmetricPairs
+            .Select(BuildSymmetricKey)
             .ToHashSet(StringComparer.Ordinal);
-        var internalOffsetKeys = compiledSemantics.RefPlanesAndDims.OffsetSpecs
+        var internalOffsetKeys = compiledSemantics.RefPlanesAndDims.Offsets
             .Select(BuildOffsetKey)
             .ToHashSet(StringComparer.Ordinal);
 
@@ -159,22 +142,182 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
         };
     }
 
+    private static void PromoteResidualSemanticPlanes(
+        ParamDrivenSolidsSnapshot semanticSnapshot,
+        RefPlaneSnapshot? refPlaneSnapshot,
+        SemanticPlaneRegistry planeRegistry
+    ) {
+        if (refPlaneSnapshot == null)
+            return;
+
+        var usedNames = semanticSnapshot.SemanticPlanes
+            .Where(spec => !string.IsNullOrWhiteSpace(spec.Name))
+            .Select(spec => spec.Name.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var spec in refPlaneSnapshot.OffsetSpecs) {
+            var semanticName = BuildResidualSemanticPlaneName(spec, usedNames);
+            if (string.IsNullOrWhiteSpace(semanticName))
+                semanticName = $"Semantic Plane {semanticSnapshot.SemanticPlanes.Count + 1}";
+
+            _ = usedNames.Add(semanticName);
+
+            semanticSnapshot.SemanticPlanes.Add(new SemanticPlaneSpec {
+                Name = semanticName,
+                Constraint = new AxisConstraintSpec {
+                    Mode = AxisConstraintMode.Offset,
+                    Parameter = spec.Parameter ?? string.Empty,
+                    Anchor = planeRegistry.BuildPlaneTarget(spec.AnchorName),
+                    Direction = spec.Direction,
+                    PlaneNameBase = semanticName,
+                    Strength = spec.Strength,
+                    Inference = new InferenceInfo { Status = InferenceStatus.Exact }
+                }
+            });
+        }
+    }
+
+    private static string BuildResidualSemanticPlaneName(OffsetSpec spec, ISet<string> usedNames) {
+        var preferredName = IsLowValuePlaneName(spec.Name)
+            ? HumanizeIdentifier(spec.Parameter)
+            : spec.Name?.Trim();
+
+        if (string.IsNullOrWhiteSpace(preferredName))
+            preferredName = HumanizeIdentifier(spec.Name);
+
+        if (string.IsNullOrWhiteSpace(preferredName))
+            preferredName = spec.Name?.Trim();
+
+        if (string.IsNullOrWhiteSpace(preferredName))
+            return string.Empty;
+
+        if (!usedNames.Contains(preferredName))
+            return preferredName;
+
+        for (var suffix = 2; suffix < 1000; suffix++) {
+            var candidate = $"{preferredName} {suffix}";
+            if (!usedNames.Contains(candidate))
+                return candidate;
+        }
+
+        return preferredName;
+    }
+
+    private static bool IsLowValuePlaneName(string? planeName) {
+        if (string.IsNullOrWhiteSpace(planeName))
+            return true;
+
+        var trimmed = planeName.Trim();
+        if (trimmed.Equals("Reference Plane", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("Ref. Level", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("Center (Left/Right)", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("Center (Front/Back)", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return Regex.IsMatch(trimmed, @"^Reference Plane(?: \d+)?$", RegexOptions.IgnoreCase) ||
+               Regex.IsMatch(trimmed, @"^Ref\. Level(?: \d+)?$", RegexOptions.IgnoreCase) ||
+               Regex.IsMatch(trimmed, @"^Center \((Left/Right|Front/Back)\)(?: \d+)?$", RegexOptions.IgnoreCase);
+    }
+
+    private static string? HumanizeIdentifier(string? value) {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value.Trim();
+        var expanded = Regex.Replace(trimmed, @"(?<=[a-z0-9])(?=[A-Z])", " ");
+        expanded = expanded.Replace('_', ' ').Replace('-', ' ');
+        expanded = Regex.Replace(expanded, @"\s+", " ").Trim();
+        return string.IsNullOrWhiteSpace(expanded)
+            ? null
+            : char.ToUpperInvariant(expanded[0]) + expanded[1..];
+    }
+
+    private static void NormalizeDerivedPlaneTargets(
+        ParamDrivenSolidsSnapshot semanticSnapshot,
+        SemanticPlaneRegistry planeRegistry
+    ) {
+        semanticSnapshot.Rectangles = semanticSnapshot.Rectangles
+            .Select(rectangle => new ParamDrivenRectangleSpec {
+                Name = rectangle.Name,
+                IsSolid = rectangle.IsSolid,
+                Sketch = planeRegistry.NormalizePlaneTarget(rectangle.Sketch),
+                Width = CloneAxisConstraint(rectangle.Width, planeRegistry),
+                Length = CloneAxisConstraint(rectangle.Length, planeRegistry),
+                Height = CloneAxisConstraint(rectangle.Height, planeRegistry),
+                Offsets = rectangle.Offsets
+                    .Select(offset => new LocalSemanticPlaneSpec {
+                        Name = offset.Name,
+                        Constraint = CloneAxisConstraint(offset.Constraint, planeRegistry)
+                    })
+                    .ToList(),
+                Inference = rectangle.Inference
+            })
+            .ToList();
+
+        semanticSnapshot.Connectors = semanticSnapshot.Connectors
+            .Select(connector => new ParamDrivenConnectorSpec {
+                Name = connector.Name,
+                Domain = connector.Domain,
+                Placement = new ConnectorPlacementSpec {
+                    Face = planeRegistry.NormalizePlaneTarget(connector.Placement.Face),
+                    Depth = CloneAxisConstraint(connector.Placement.Depth, planeRegistry)
+                },
+                Geometry = new ConnectorStubGeometrySpec {
+                    IsSolid = connector.Geometry.IsSolid,
+                    Rectangular = connector.Geometry.Rectangular == null
+                        ? null
+                        : new RectangularConnectorGeometrySpec {
+                            Width = CloneAxisConstraint(connector.Geometry.Rectangular.Width, planeRegistry),
+                            Length = CloneAxisConstraint(connector.Geometry.Rectangular.Length, planeRegistry)
+                        },
+                    Round = connector.Geometry.Round == null
+                        ? null
+                        : new RoundConnectorGeometrySpec {
+                            Center = new PlaneIntersectionSpec {
+                                Plane1 = planeRegistry.NormalizePlaneTarget(connector.Geometry.Round.Center.Plane1),
+                                Plane2 = planeRegistry.NormalizePlaneTarget(connector.Geometry.Round.Center.Plane2)
+                            },
+                            Diameter = CloneAxisConstraint(connector.Geometry.Round.Diameter, planeRegistry)
+                        }
+                },
+                Bindings = connector.Bindings,
+                Config = connector.Config,
+                Inference = connector.Inference
+            })
+            .ToList();
+    }
+
+    private static AxisConstraintSpec CloneAxisConstraint(
+        AxisConstraintSpec constraint,
+        SemanticPlaneRegistry planeRegistry
+    ) => new() {
+        Mode = constraint.Mode,
+        Parameter = constraint.Parameter,
+        CenterAnchor = planeRegistry.NormalizePlaneTarget(constraint.CenterAnchor),
+        Anchor = planeRegistry.NormalizePlaneTarget(constraint.Anchor),
+        Direction = constraint.Direction,
+        PlaneNameBase = constraint.PlaneNameBase,
+        Strength = constraint.Strength,
+        Inference = constraint.Inference
+    };
+
     private static ParamDrivenRectangleSpec? TryBuildSemanticRectangle(
         Document doc,
         ConstrainedRectangleExtrusionSpec spec,
-        RefPlaneSnapshot? refPlanesAndDims
+        RefPlaneSnapshot? refPlanesAndDims,
+        SemanticPlaneRegistry planeRegistry
     ) {
         if (!TryClassifyRectanglePairs(doc, spec, out var widthPair, out var lengthPair))
             return null;
 
-        var width = BuildAxisConstraint(doc, widthPair, refPlanesAndDims, AxisSemanticRole.Width, spec.Name, "Width");
-        var length = BuildAxisConstraint(doc, lengthPair, refPlanesAndDims, AxisSemanticRole.Length, spec.Name, "Length");
-        var height = BuildHeightConstraint(doc, spec, refPlanesAndDims);
+        var width = BuildAxisConstraint(doc, widthPair, refPlanesAndDims, planeRegistry, AxisSemanticRole.Width, spec.Name, "Width");
+        var length = BuildAxisConstraint(doc, lengthPair, refPlanesAndDims, planeRegistry, AxisSemanticRole.Length, spec.Name, "Length");
+        var height = BuildHeightConstraint(doc, spec, refPlanesAndDims, planeRegistry);
 
         return new ParamDrivenRectangleSpec {
             Name = spec.Name,
             IsSolid = spec.IsSolid,
-            Sketch = new SketchTargetSpec { Kind = SketchTargetKind.ReferencePlane, Plane = spec.SketchPlaneName },
+            Sketch = planeRegistry.BuildPlaneTarget(spec.SketchPlaneName),
             Width = width,
             Length = length,
             Height = height
@@ -184,9 +327,10 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
     private static ParamDrivenCylinderSpec? TryBuildSemanticCylinder(
         Document doc,
         ConstrainedCircleExtrusionSpec spec,
-        RefPlaneSnapshot? refPlanesAndDims
+        RefPlaneSnapshot? refPlanesAndDims,
+        SemanticPlaneRegistry planeRegistry
     ) {
-        var height = BuildHeightConstraint(doc, spec, refPlanesAndDims);
+        var height = BuildHeightConstraint(doc, spec, refPlanesAndDims, planeRegistry);
 
         var diameter = new AxisConstraintSpec {
             Mode = AxisConstraintMode.Mirror,
@@ -197,9 +341,11 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
         return new ParamDrivenCylinderSpec {
             Name = spec.Name,
             IsSolid = spec.IsSolid,
-            Sketch = new SketchTargetSpec { Kind = SketchTargetKind.ReferencePlane, Plane = spec.SketchPlaneName },
-            CenterLeftRightPlane = spec.CenterLeftRightPlane,
-            CenterFrontBackPlane = spec.CenterFrontBackPlane,
+            Sketch = planeRegistry.BuildPlaneTarget(spec.SketchPlaneName),
+            Center = new PlaneIntersectionSpec {
+                Plane1 = planeRegistry.BuildPlaneTarget(spec.CenterPlane1),
+                Plane2 = planeRegistry.BuildPlaneTarget(spec.CenterPlane2)
+            },
             Diameter = diameter,
             Height = height
         };
@@ -208,28 +354,32 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
     private static AxisConstraintSpec BuildHeightConstraint(
         Document doc,
         ConstrainedRectangleExtrusionSpec spec,
-        RefPlaneSnapshot? refPlanesAndDims
+        RefPlaneSnapshot? refPlanesAndDims,
+        SemanticPlaneRegistry planeRegistry
     ) {
         var pair = new NamedPlanePair(spec.HeightPlaneBottom, spec.HeightPlaneTop, spec.HeightParameter);
-        return BuildAxisConstraint(doc, pair, refPlanesAndDims, AxisSemanticRole.Height, spec.Name, "Height");
+        return BuildAxisConstraint(doc, pair, refPlanesAndDims, planeRegistry, AxisSemanticRole.Height, spec.Name, "Height", spec.SketchPlaneName);
     }
 
     private static AxisConstraintSpec BuildHeightConstraint(
         Document doc,
         ConstrainedCircleExtrusionSpec spec,
-        RefPlaneSnapshot? refPlanesAndDims
+        RefPlaneSnapshot? refPlanesAndDims,
+        SemanticPlaneRegistry planeRegistry
     ) {
         var pair = new NamedPlanePair(spec.HeightPlaneBottom, spec.HeightPlaneTop, spec.HeightParameter);
-        return BuildAxisConstraint(doc, pair, refPlanesAndDims, AxisSemanticRole.Height, spec.Name, "Height");
+        return BuildAxisConstraint(doc, pair, refPlanesAndDims, planeRegistry, AxisSemanticRole.Height, spec.Name, "Height", spec.SketchPlaneName);
     }
 
     private static AxisConstraintSpec BuildAxisConstraint(
         Document doc,
         NamedPlanePair pair,
         RefPlaneSnapshot? refPlanesAndDims,
+        SemanticPlaneRegistry planeRegistry,
         AxisSemanticRole role,
         string solidName,
-        string axisName
+        string axisName,
+        string? preferredAnchorPlaneName = null
     ) {
         if (pair.IsEmpty) {
             return new AxisConstraintSpec {
@@ -247,7 +397,7 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
             return new AxisConstraintSpec {
                 Mode = AxisConstraintMode.Mirror,
                 Parameter = pair.Parameter,
-                CenterAnchor = mirrorMatch.CenterAnchor,
+                CenterAnchor = planeRegistry.BuildPlaneTarget(mirrorMatch.CenterAnchor),
                 PlaneNameBase = mirrorMatch.Name,
                 Strength = mirrorMatch.Strength,
                 Inference = new InferenceInfo { Status = InferenceStatus.Exact }
@@ -259,7 +409,7 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
             return new AxisConstraintSpec {
                 Mode = AxisConstraintMode.Offset,
                 Parameter = pair.Parameter,
-                Anchor = offsetMatch.AnchorName,
+                Anchor = planeRegistry.BuildPlaneTarget(offsetMatch.AnchorName),
                 Direction = offsetMatch.Direction,
                 PlaneNameBase = offsetMatch.Name,
                 Strength = offsetMatch.Strength,
@@ -272,10 +422,14 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
             $"Exact {axisName} semantics could not be reconstructed from RefPlanesAndDims."
         };
 
+        var resolvedPreferredAnchor = planeRegistry.BuildPlaneTarget(preferredAnchorPlaneName);
+        var resolvedPairAnchor = planeRegistry.BuildPlaneTarget(pair.Plane1);
+        var inferredAnchor = TrySelectPreferredAnchor(resolvedPreferredAnchor, resolvedPairAnchor);
+
         return new AxisConstraintSpec {
             Mode = AxisConstraintMode.Offset,
             Parameter = pair.Parameter,
-            Anchor = pair.Plane1 ?? string.Empty,
+            Anchor = inferredAnchor,
             Direction = OffsetDirection.Positive,
             PlaneNameBase = pair.Plane2 ?? SynthesizePlaneNameBase(role),
             Strength = InferStrength(doc, pair.Plane2) ?? RpStrength.NotARef,
@@ -442,6 +596,9 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
             IsSolid = extrusion.IsSolid,
             StartOffset = extrusion.StartOffset,
             EndOffset = extrusion.EndOffset,
+            HeightControlMode = height.Plane1 == null || height.Plane2 == null
+                ? ExtrusionHeightControlMode.EndOffset
+                : ExtrusionHeightControlMode.ReferencePlane,
             SketchPlaneName = extrusion.Sketch.SketchPlane?.Name ?? string.Empty,
             PairAPlane1 = pairA.Plane1.Name,
             PairAPlane2 = pairA.Plane2.Name,
@@ -489,9 +646,12 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
             IsSolid = extrusion.IsSolid,
             StartOffset = extrusion.StartOffset,
             EndOffset = extrusion.EndOffset,
+            HeightControlMode = height.Plane1 == null || height.Plane2 == null
+                ? ExtrusionHeightControlMode.EndOffset
+                : ExtrusionHeightControlMode.ReferencePlane,
             SketchPlaneName = extrusion.Sketch.SketchPlane?.Name ?? string.Empty,
-            CenterLeftRightPlane = centerLeftRightPlane.Name,
-            CenterFrontBackPlane = centerFrontBackPlane.Name,
+            CenterPlane1 = centerLeftRightPlane.Name,
+            CenterPlane2 = centerFrontBackPlane.Name,
             DiameterParameter = diameterParameter,
             HeightPlaneBottom = height.Plane1?.Name,
             HeightPlaneTop = height.Plane2?.Name,
@@ -973,8 +1133,14 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
             ? $"Extrusion_{extrusion.Id.Value()}"
             : extrusion.Name;
 
+    private static string BuildSymmetricKey(SymmetricPlanePairSpec spec) =>
+        $"M|{spec.PlaneNameBase}|{spec.CenterPlaneName}|{spec.Parameter}|{spec.Strength}";
+
     private static string BuildMirrorKey(MirrorSpec spec) =>
         $"M|{spec.Name}|{spec.CenterAnchor}|{spec.Parameter}|{spec.Strength}";
+
+    private static string BuildOffsetKey(OffsetPlaneConstraintSpec spec) =>
+        $"O|{spec.PlaneName}|{spec.AnchorPlaneName}|{spec.Direction}|{spec.Parameter}|{spec.Strength}";
 
     private static string BuildOffsetKey(OffsetSpec spec) =>
         $"O|{spec.Name}|{spec.AnchorName}|{spec.Direction}|{spec.Parameter}|{spec.Strength}";
@@ -1011,9 +1177,178 @@ public class ExtrusionSectionCollector : IFamilyDocCollector {
     private sealed record CircleMirrorPairCandidate(string GroupKey, DimConstraint Pair);
     private sealed record CircleMirrorTopologyCandidate(MirrorSpec Spec, string GroupKey, DimConstraint Pair);
 
+    private static PlaneTargetSpec TrySelectPreferredAnchor(
+        PlaneTargetSpec preferred,
+        PlaneTargetSpec fallback
+    ) {
+        if (!IsEmptyAnchor(preferred))
+            return preferred;
+
+        return fallback;
+    }
+
+    private static bool IsEmptyAnchor(PlaneTargetSpec anchor) =>
+        anchor.Frame == null &&
+        anchor.Derived == null &&
+        anchor.Semantic == null;
+
     private enum AxisSemanticRole {
         Width,
         Length,
         Height
+    }
+
+    private sealed class SemanticPlaneRegistry {
+        private readonly Dictionary<string, PlaneTargetSpec> _anchors;
+
+        private SemanticPlaneRegistry(Dictionary<string, PlaneTargetSpec> anchors) {
+            _anchors = anchors;
+        }
+
+        public static SemanticPlaneRegistry Create(
+            IReadOnlyList<ParamDrivenRectangleSpec> rectangles,
+            IReadOnlyList<ParamDrivenCylinderSpec> cylinders,
+            IReadOnlyList<SemanticPlaneSpec> semanticPlanes,
+            bool includeCylinderDerivedAliases = false
+        ) {
+            var anchors = new Dictionary<string, PlaneTargetSpec>(StringComparer.OrdinalIgnoreCase) {
+                ["Reference Plane"] = new PlaneTargetSpec { Frame = new FramePlaneTargetSpec { Plane = ParamDrivenFramePlane.Bottom } },
+                ["Ref. Level"] = new PlaneTargetSpec { Frame = new FramePlaneTargetSpec { Plane = ParamDrivenFramePlane.Bottom } },
+                ["Center (Left/Right)"] = new PlaneTargetSpec { Frame = new FramePlaneTargetSpec { Plane = ParamDrivenFramePlane.CenterLR } },
+                ["Center (Front/Back)"] = new PlaneTargetSpec { Frame = new FramePlaneTargetSpec { Plane = ParamDrivenFramePlane.CenterFB } }
+            };
+
+            foreach (var rectangle in rectangles) {
+                AddIfPresent(anchors, rectangle.Height.PlaneNameBase, rectangle.Name, ParamDrivenDerivedPlaneKind.Top);
+                AddIfPresent(anchors, $"{rectangle.Width.PlaneNameBase} (Back)", rectangle.Name, ParamDrivenDerivedPlaneKind.Back);
+                AddIfPresent(anchors, $"{rectangle.Width.PlaneNameBase} (Front)", rectangle.Name, ParamDrivenDerivedPlaneKind.Front);
+                AddIfPresent(anchors, $"{rectangle.Length.PlaneNameBase} (Left)", rectangle.Name, ParamDrivenDerivedPlaneKind.Left);
+                AddIfPresent(anchors, $"{rectangle.Length.PlaneNameBase} (Right)", rectangle.Name, ParamDrivenDerivedPlaneKind.Right);
+            }
+
+            foreach (var semanticPlane in semanticPlanes.Where(spec => !string.IsNullOrWhiteSpace(spec.Name))) {
+                anchors[semanticPlane.Name.Trim()] = new PlaneTargetSpec {
+                    Semantic = new SemanticPlaneTargetSpec { Name = semanticPlane.Name.Trim() }
+                };
+            }
+
+            var registry = new SemanticPlaneRegistry(anchors);
+
+            if (includeCylinderDerivedAliases)
+                foreach (var cylinder in cylinders) {
+                    AddIfPresent(anchors, cylinder.Height.PlaneNameBase, cylinder.Name, ParamDrivenDerivedPlaneKind.Top);
+                    registry.AddCylinderCenterAlias(cylinder, cylinder.Center.Plane1);
+                    registry.AddCylinderCenterAlias(cylinder, cylinder.Center.Plane2);
+                }
+
+            return registry;
+        }
+
+        public PlaneTargetSpec BuildPlaneTarget(string? planeName) {
+            if (string.IsNullOrWhiteSpace(planeName))
+                return new PlaneTargetSpec();
+
+            var trimmed = planeName.Trim();
+            if (_anchors.TryGetValue(trimmed, out var anchor))
+                return anchor;
+
+            return new PlaneTargetSpec {
+                Semantic = new SemanticPlaneTargetSpec { Name = trimmed }
+            };
+        }
+
+        public PlaneTargetSpec NormalizePlaneTarget(PlaneTargetSpec target) {
+            var planeName = this.ResolvePlaneName(target);
+            return string.IsNullOrWhiteSpace(planeName)
+                ? target
+                : this.BuildPlaneTarget(planeName);
+        }
+
+        private static void AddIfPresent(
+            Dictionary<string, PlaneTargetSpec> anchors,
+            string? planeName,
+            string solidName,
+            ParamDrivenDerivedPlaneKind plane
+        ) {
+            if (string.IsNullOrWhiteSpace(planeName))
+                return;
+
+            anchors[planeName.Trim()] = new PlaneTargetSpec {
+                Derived = new DerivedPlaneTargetSpec {
+                    Solid = solidName,
+                    Plane = plane
+                }
+            };
+        }
+
+        private void AddCylinderCenterAlias(ParamDrivenCylinderSpec cylinder, PlaneTargetSpec centerTarget) {
+            var planeName = this.ResolvePlaneName(centerTarget);
+            var planeKind = TryInferCylinderCenterKind(centerTarget, planeName);
+            if (string.IsNullOrWhiteSpace(planeName) || planeKind == null)
+                return;
+
+            _anchors[planeName] = new PlaneTargetSpec {
+                Derived = new DerivedPlaneTargetSpec {
+                    Solid = cylinder.Name,
+                    Plane = planeKind.Value
+                }
+            };
+        }
+
+        private string? ResolvePlaneName(PlaneTargetSpec target) {
+            if (target.Frame?.Plane != null)
+                return target.Frame.Plane switch {
+                    ParamDrivenFramePlane.Bottom => "Reference Plane",
+                    ParamDrivenFramePlane.CenterLR => "Center (Left/Right)",
+                    ParamDrivenFramePlane.CenterFB => "Center (Front/Back)",
+                    _ => null
+                };
+
+            if (target.Semantic != null)
+                return target.Semantic.Name?.Trim();
+
+            foreach (var (planeName, planeTarget) in _anchors) {
+                if (PlaneTargetsEqual(planeTarget, target))
+                    return planeName;
+            }
+
+            return null;
+        }
+
+        private static bool PlaneTargetsEqual(PlaneTargetSpec left, PlaneTargetSpec right) {
+            if (left.Frame?.Plane != null || right.Frame?.Plane != null)
+                return left.Frame?.Plane == right.Frame?.Plane;
+
+            if (left.Semantic != null || right.Semantic != null)
+                return string.Equals(left.Semantic?.Name, right.Semantic?.Name, StringComparison.OrdinalIgnoreCase);
+
+            return left.Derived?.Solid == right.Derived?.Solid &&
+                   left.Derived?.Plane == right.Derived?.Plane;
+        }
+
+        private static ParamDrivenDerivedPlaneKind? TryInferCylinderCenterKind(PlaneTargetSpec target, string? planeName) {
+            if (target.Frame?.Plane == ParamDrivenFramePlane.CenterLR)
+                return ParamDrivenDerivedPlaneKind.CenterLR;
+            if (target.Frame?.Plane == ParamDrivenFramePlane.CenterFB)
+                return ParamDrivenDerivedPlaneKind.CenterFB;
+
+            if (target.Derived?.Plane is ParamDrivenDerivedPlaneKind.Left or ParamDrivenDerivedPlaneKind.Right or ParamDrivenDerivedPlaneKind.CenterLR)
+                return ParamDrivenDerivedPlaneKind.CenterLR;
+            if (target.Derived?.Plane is ParamDrivenDerivedPlaneKind.Front or ParamDrivenDerivedPlaneKind.Back or ParamDrivenDerivedPlaneKind.CenterFB)
+                return ParamDrivenDerivedPlaneKind.CenterFB;
+
+            if (string.IsNullOrWhiteSpace(planeName))
+                return null;
+
+            if (planeName.Contains("Left", StringComparison.OrdinalIgnoreCase) ||
+                planeName.Contains("Right", StringComparison.OrdinalIgnoreCase))
+                return ParamDrivenDerivedPlaneKind.CenterLR;
+
+            if (planeName.Contains("Front", StringComparison.OrdinalIgnoreCase) ||
+                planeName.Contains("Back", StringComparison.OrdinalIgnoreCase))
+                return ParamDrivenDerivedPlaneKind.CenterFB;
+
+            return null;
+        }
     }
 }

@@ -1,4 +1,4 @@
-using Pe.FamilyFoundry.OperationSettings;
+﻿using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Operations;
 using Pe.FamilyFoundry.Resolution;
 
@@ -31,15 +31,18 @@ public class SetKnownParams(
         bool createMissingFamilyTypes
     ) {
         KnownParamResolver.ValidateAssignments(settings, knownParamCatalog);
+        var sharedState = new KnownParamsSharedState();
 
         var ops = new List<IOperation>();
         if (!settings.Enabled) return ops;
 
         if (createMissingFamilyTypes)
-            ops.Add(new CreateFamilyTypes(settings));
+            ops.Add(new CreateFamilyTypes(settings, sharedState));
 
         ops.Add(new SetParamValues(settings));
         ops.Add(new SetParamValuesPerType(settings));
+        if (createMissingFamilyTypes)
+            ops.Add(new FinalizeFamilyTypes(settings, sharedState));
 
         return ops;
     }
@@ -54,4 +57,8 @@ public class SetKnownParams(
 
         return keys;
     }
+}
+
+internal sealed class KnownParamsSharedState {
+    public bool CreatedDefaultPlaceholderType { get; set; }
 }

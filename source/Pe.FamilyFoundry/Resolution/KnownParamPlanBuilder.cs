@@ -1,4 +1,4 @@
-using Pe.FamilyFoundry.Aggregators.Snapshots;
+﻿using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Operations;
 using Pe.FamilyFoundry.Snapshots;
@@ -62,13 +62,24 @@ public static class KnownParamPlanBuilder {
     }
 
     public static IReadOnlyList<string> CollectReferencedParameterNames(
-        MakeRefPlaneAndDimsSettings settings
-    ) => settings.MirrorSpecs
-        .Where(spec => !string.IsNullOrWhiteSpace(spec.Parameter))
-        .Select(spec => spec.Parameter.Trim())
-        .Concat(settings.OffsetSpecs
-            .Where(spec => !string.IsNullOrWhiteSpace(spec.Parameter))
-            .Select(spec => spec.Parameter.Trim()))
+        MakeParamDrivenPlanesAndDimsSettings settings
+    ) => settings.SymmetricPairs
+        .Select(spec => spec.Driver.TryGetParameterName() ?? spec.Parameter)
+        .Concat(settings.Offsets
+            .Select(spec => spec.Driver.TryGetParameterName() ?? spec.Parameter))
+        .Distinct(StringComparer.Ordinal)
+        .Where(name => !string.IsNullOrWhiteSpace(name))
+        .Select(name => name.Trim())
+        .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    public static IReadOnlyList<string> CollectReferencedParameterNames(
+        MakeParamDrivenConnectorsSettings settings
+    ) => settings.Connectors
+        .SelectMany(spec => GetLengthDrivenParameterNames(spec))
+        .Concat(settings.Connectors.SelectMany(spec => spec.Bindings.Parameters.Select(binding => binding.SourceParameter)))
+        .Where(name => !string.IsNullOrWhiteSpace(name))
+        .Select(name => name.Trim())
         .Distinct(StringComparer.Ordinal)
         .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
         .ToList();
@@ -76,42 +87,34 @@ public static class KnownParamPlanBuilder {
     public static IReadOnlyList<string> CollectReferencedParameterNames(
         MakeConstrainedExtrusionsSettings settings
     ) => settings.Rectangles
-        .SelectMany(spec => new[] { spec.PairAParameter, spec.PairBParameter, spec.HeightParameter })
-        .Concat(settings.Circles.SelectMany(spec => new[] { spec.DiameterParameter, spec.HeightParameter }))
-        .Where(name => !string.IsNullOrWhiteSpace(name))
-        .Select(name => name.Trim())
-        .Distinct(StringComparer.Ordinal)
-        .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-        .ToList();
-
-    public static IReadOnlyList<string> CollectReferencedParameterNames(
-        ParamDrivenSolidsSettings settings
-    ) => settings.Rectangles
         .SelectMany(spec => new[] {
-            spec.Width.Parameter, spec.Length.Parameter, spec.Height.Parameter
+            spec.PairADriver.TryGetParameterName() ?? spec.PairAParameter,
+            spec.PairBDriver.TryGetParameterName() ?? spec.PairBParameter,
+            spec.HeightDriver.TryGetParameterName() ?? spec.HeightParameter
         })
-        .Concat(settings.Cylinders.SelectMany(spec => new[] {
-            spec.Diameter.Parameter, spec.Height.Parameter
+        .Concat(settings.Circles.SelectMany(spec => new[] {
+            spec.DiameterDriver.TryGetParameterName() ?? spec.DiameterParameter,
+            spec.HeightDriver.TryGetParameterName() ?? spec.HeightParameter
         }))
-        .Concat(settings.Connectors.SelectMany(spec => GetConnectorReferencedParameterNames(spec)))
         .Where(name => !string.IsNullOrWhiteSpace(name))
         .Select(name => name.Trim())
         .Distinct(StringComparer.Ordinal)
         .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
         .ToList();
 
-    private static IEnumerable<string?> GetConnectorReferencedParameterNames(ParamDrivenConnectorSpec spec) {
-        yield return spec.Host.Depth.Parameter;
+    private static IEnumerable<string?> GetLengthDrivenParameterNames(
+        CompiledParamDrivenConnectorSpec spec
+    ) {
+        yield return spec.DepthDriver.TryGetParameterName();
 
-        if (spec.Geometry.Profile == ParamDrivenConnectorProfile.Rectangular) {
-            yield return spec.Geometry.Width.Parameter;
-            yield return spec.Geometry.Length.Parameter;
-        } else {
-            yield return spec.Geometry.Diameter.Parameter;
+        if (spec.Profile == ParamDrivenConnectorProfile.Round) {
+            yield return spec.RoundStub?.DiameterDriver.TryGetParameterName() ?? spec.RoundStub?.DiameterParameter;
+            yield break;
         }
 
-        foreach (var binding in spec.Bindings.Parameters)
-            yield return binding.SourceParameter;
+        yield return spec.RectangularStub?.PairADriver.TryGetParameterName() ?? spec.RectangularStub?.PairAParameter;
+        yield return spec.RectangularStub?.PairBDriver.TryGetParameterName() ?? spec.RectangularStub?.PairBParameter;
+        yield return spec.RectangularStub?.HeightDriver.TryGetParameterName() ?? spec.RectangularStub?.HeightParameter;
     }
 
     public static IReadOnlyList<string> CollectReferencedParameterNames(

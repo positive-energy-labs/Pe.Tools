@@ -19,15 +19,20 @@ public class ConstrainedRectangleExtrusionSpec {
     public bool IsSolid { get; init; }
     public double StartOffset { get; init; }
     public double EndOffset { get; init; }
+    public ExtrusionHeightControlMode HeightControlMode { get; init; } = ExtrusionHeightControlMode.ReferencePlane;
     public string SketchPlaneName { get; init; } = string.Empty;
 
     public string PairAPlane1 { get; init; } = string.Empty;
     public string PairAPlane2 { get; init; } = string.Empty;
     public string PairAParameter { get; init; } = string.Empty;
+    [Newtonsoft.Json.JsonIgnore]
+    public LengthDriverSpec PairADriver { get; init; } = LengthDriverSpec.None;
 
     public string PairBPlane1 { get; init; } = string.Empty;
     public string PairBPlane2 { get; init; } = string.Empty;
     public string PairBParameter { get; init; } = string.Empty;
+    [Newtonsoft.Json.JsonIgnore]
+    public LengthDriverSpec PairBDriver { get; init; } = LengthDriverSpec.None;
 
     /// <summary>
     ///     Optional canonical height constraint pair.
@@ -37,6 +42,8 @@ public class ConstrainedRectangleExtrusionSpec {
     public string? HeightPlaneBottom { get; init; }
     public string? HeightPlaneTop { get; init; }
     public string? HeightParameter { get; init; }
+    [Newtonsoft.Json.JsonIgnore]
+    public LengthDriverSpec HeightDriver { get; init; } = LengthDriverSpec.None;
 }
 
 /// <summary>
@@ -49,13 +56,23 @@ public class ConstrainedCircleExtrusionSpec {
     public bool IsSolid { get; init; }
     public double StartOffset { get; init; }
     public double EndOffset { get; init; }
+    public ExtrusionHeightControlMode HeightControlMode { get; init; } = ExtrusionHeightControlMode.ReferencePlane;
     public string SketchPlaneName { get; init; } = string.Empty;
 
-    public string CenterLeftRightPlane { get; init; } = string.Empty;
-    public string CenterFrontBackPlane { get; init; } = string.Empty;
+    public string CenterPlane1 { get; init; } = string.Empty;
+    public string CenterPlane2 { get; init; } = string.Empty;
     public string DiameterParameter { get; init; } = string.Empty;
+    [Newtonsoft.Json.JsonIgnore]
+    public LengthDriverSpec DiameterDriver { get; init; } = LengthDriverSpec.None;
 
     public string? HeightPlaneBottom { get; init; }
     public string? HeightPlaneTop { get; init; }
     public string? HeightParameter { get; init; }
+    [Newtonsoft.Json.JsonIgnore]
+    public LengthDriverSpec HeightDriver { get; init; } = LengthDriverSpec.None;
+}
+
+public enum ExtrusionHeightControlMode {
+    ReferencePlane,
+    EndOffset
 }

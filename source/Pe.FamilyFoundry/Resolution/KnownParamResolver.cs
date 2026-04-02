@@ -1,11 +1,13 @@
-using Pe.FamilyFoundry.OperationSettings;
+﻿using Pe.FamilyFoundry.OperationSettings;
 using Pe.Global;
+using System.Text.RegularExpressions;
 
 namespace Pe.FamilyFoundry.Resolution;
 
 public sealed record KnownParamCatalog(
     IReadOnlyDictionary<string, FamilyParamDefinitionModel> FamilyDefinitions,
-    HashSet<string> SharedParameterNames
+    HashSet<string> SharedParameterNames,
+    IReadOnlyDictionary<string, ForgeTypeId> SharedDefinitions
 );
 
 public static class KnownParamResolver {
@@ -22,8 +24,15 @@ public static class KnownParamResolver {
             .Select(sharedParam => sharedParam.ExternalDefinition.Name)
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .ToHashSet(StringComparer.Ordinal);
+        var sharedDefinitions = sharedParams
+            .Where(sharedParam => !string.IsNullOrWhiteSpace(sharedParam.ExternalDefinition.Name))
+            .GroupBy(sharedParam => sharedParam.ExternalDefinition.Name.Trim(), StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.First().ExternalDefinition.GetDataType(),
+                StringComparer.Ordinal);
 
-        return new KnownParamCatalog(familyDefinitions, sharedParameterNames);
+        return new KnownParamCatalog(familyDefinitions, sharedParameterNames, sharedDefinitions);
     }
 
     public static void ValidateFamilyDefinitions(AddFamilyParamsSettings familyParams) {
@@ -66,6 +75,7 @@ public static class KnownParamResolver {
     ) {
         ValidateGlobalAssignments(assignments.GlobalAssignments);
         ValidatePerTypeRows(assignments.PerTypeAssignmentsTable);
+        ValidatePerTypeLengthValues(assignments.PerTypeAssignmentsTable, catalog);
 
         var globalAssignmentsByParameter = assignments.GetGlobalAssignmentsByParameter();
         var perTypeAssignmentsByParameter = assignments.GetPerTypeAssignmentsByParameter();
@@ -200,5 +210,76 @@ public static class KnownParamResolver {
             throw new InvalidOperationException(
                 $"SetKnownParams.PerTypeAssignmentsTable row {rowIndex + 1} is missing required parameter name.");
         }
+    }
+
+    private static void ValidatePerTypeLengthValues(
+        List<PerTypeAssignmentRow> rows,
+        KnownParamCatalog catalog
+    ) {
+        var zeroLengthErrors = new List<string>();
+
+        foreach (var row in rows) {
+            var parameterName = row.Parameter?.Trim();
+            if (string.IsNullOrWhiteSpace(parameterName))
+                continue;
+
+            var dataType = ResolveDataType(parameterName, catalog);
+            if (!IsLengthLikeDataType(dataType))
+                continue;
+
+            foreach (var (typeNameRaw, valueToken) in row.ValuesByType) {
+                var typeName = typeNameRaw?.Trim();
+                var value = valueToken?.ToString();
+                if (string.IsNullOrWhiteSpace(typeName) || string.IsNullOrWhiteSpace(value))
+                    continue;
+
+                if (!IsAuthoredZeroLengthValue(value))
+                    continue;
+
+                zeroLengthErrors.Add($"[{typeName}] {parameterName} = {value}");
+            }
+        }
+
+        if (zeroLengthErrors.Count == 0)
+            return;
+
+        throw new InvalidOperationException(
+            "SetKnownParams.PerTypeAssignmentsTable contains zero-length authored values for length-like parameters. " +
+            "This often produces invalid or too-thin family geometry. Fix the profile values instead of relying on runtime heuristics. " +
+            $"Offending assignments: {string.Join("; ", zeroLengthErrors)}.");
+    }
+
+    private static ForgeTypeId? ResolveDataType(string parameterName, KnownParamCatalog catalog) {
+        if (catalog.FamilyDefinitions.TryGetValue(parameterName, out var familyDefinition))
+            return familyDefinition.DataType;
+
+        return catalog.SharedDefinitions.TryGetValue(parameterName, out var sharedDataType)
+            ? sharedDataType
+            : null;
+    }
+
+    private static bool IsLengthLikeDataType(ForgeTypeId? dataType) {
+        if (dataType == null)
+            return false;
+
+        return dataType == SpecTypeId.Length
+               || dataType == SpecTypeId.PipeSize
+               || dataType == SpecTypeId.PipeDimension
+               || dataType == SpecTypeId.DuctSize
+               || dataType == SpecTypeId.CableTraySize
+               || dataType == SpecTypeId.ConduitSize
+               || dataType == SpecTypeId.SectionDimension
+               || dataType == SpecTypeId.BarDiameter;
+    }
+
+    private static bool IsAuthoredZeroLengthValue(string value) {
+        var normalized = value.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+            return false;
+
+        return Regex.IsMatch(
+            normalized,
+            @"^\(?\s*[+-]?0+(?:\.0+)?\s*(?:""|''|'|ft|feet|in|inch|inches|mm|cm|m)?\s*\)?$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 }

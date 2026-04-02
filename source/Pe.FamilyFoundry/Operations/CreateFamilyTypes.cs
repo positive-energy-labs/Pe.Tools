@@ -1,4 +1,5 @@
-using Pe.Extensions.FamDocument;
+﻿using Pe.Extensions.FamDocument;
+using Pe.FamilyFoundry.OperationGroups;
 using Pe.FamilyFoundry.OperationSettings;
 
 namespace Pe.FamilyFoundry.Operations;
@@ -7,7 +8,7 @@ namespace Pe.FamilyFoundry.Operations;
 ///     Creates missing family types referenced in SetKnownParamsSettings.PerTypeAssignmentsTable columns.
 ///     Runs as a DocOperation (once per family) to create all missing types upfront.
 /// </summary>
-public class CreateFamilyTypes(SetKnownParamsSettings settings)
+internal class CreateFamilyTypes(SetKnownParamsSettings settings, KnownParamsSharedState sharedState)
     : DocOperation<SetKnownParamsSettings>(settings) {
     public override string Description =>
         "Create missing family types that are referenced in PerTypeAssignmentsTable columns.";
@@ -39,6 +40,10 @@ public class CreateFamilyTypes(SetKnownParamsSettings settings)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
 
+        sharedState.CreatedDefaultPlaceholderType = HasOnlyImplicitDefaultPlaceholder(
+            fm,
+            referencedTypeNames);
+
         if (missingTypeNames.Count == 0) {
             return new OperationLog(this.Name, [
                 new LogEntry("All types exist").Skip("All referenced types already exist")
@@ -60,5 +65,24 @@ public class CreateFamilyTypes(SetKnownParamsSettings settings)
         }
 
         return new OperationLog(this.Name, logs);
+    }
+
+    private static bool HasOnlyImplicitDefaultPlaceholder(
+        FamilyManager fm,
+        IReadOnlyCollection<string> referencedTypeNames
+    ) {
+        if (fm.Types.Size == 0)
+            return true;
+
+        var familyTypes = fm.Types.Cast<FamilyType>().ToList();
+        if (familyTypes.Count != 1)
+            return false;
+
+        var soleType = familyTypes[0];
+        if (string.IsNullOrWhiteSpace(soleType.Name))
+            return true;
+
+        return string.Equals(soleType.Name, "Default", StringComparison.Ordinal)
+               && !referencedTypeNames.Contains("Default");
     }
 }

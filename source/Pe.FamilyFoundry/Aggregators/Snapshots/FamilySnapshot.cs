@@ -16,11 +16,8 @@ public class FamilySnapshot {
     /// <summary>Reference plane and dimension specs with source tracking</summary>
     public RefPlaneSnapshot RefPlanesAndDims { get; set; }
 
-    /// <summary>Constrained extrusion specs with source tracking</summary>
-    public ExtrusionSnapshot Extrusions { get; set; }
-
-    /// <summary>Semantic solid snapshot used for authoring roundtrips.</summary>
-    public ParamDrivenSolidsSnapshot ParamDrivenSolids { get; set; }
+    /// <summary>Authored solid snapshot used for authoring roundtrips.</summary>
+    public AuthoredParamDrivenSolidsSettings ParamDrivenSolids { get; set; }
 
     // Future sections: Connectors, etc.
 }

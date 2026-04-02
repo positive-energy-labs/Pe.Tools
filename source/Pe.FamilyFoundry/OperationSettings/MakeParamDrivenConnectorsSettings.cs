@@ -17,14 +17,12 @@ public sealed class CompiledParamDrivenConnectorSpec {
     public ParamDrivenConnectorProfile Profile { get; init; }
     public string HostPlaneName { get; init; } = string.Empty;
     public string HostFacePlaneName { get; init; } = string.Empty;
+    public OffsetDirection DepthDirection { get; init; } = OffsetDirection.Positive;
+    [Newtonsoft.Json.JsonIgnore]
+    public LengthDriverSpec DepthDriver { get; init; } = LengthDriverSpec.None;
     public ConstrainedRectangleExtrusionSpec? RectangularStub { get; init; }
     public ConstrainedCircleExtrusionSpec? RoundStub { get; init; }
-    public ConnectorParameterBindingsSpec Bindings { get; init; } = new();
+    public ConnectorBindingsSpec Bindings { get; init; } = new();
     public ConnectorDomainConfigSpec Config { get; init; } = new();
-    public ParamDrivenConnectorSpec AuthoredSpec { get; init; } = new();
-}
-
-public sealed class StoredParamDrivenConnectorMetadata {
-    public string StubSolidName { get; init; } = string.Empty;
-    public ParamDrivenConnectorSpec Spec { get; init; } = new();
+    public AuthoredConnectorSpec AuthoredSpec { get; init; } = new();
 }

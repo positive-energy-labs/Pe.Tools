@@ -70,39 +70,35 @@
     "Enabled": true
   },
   "ParamDrivenSolids": {
-    "Rectangles": [
+    "Frame": "NonHosted",
+    "Planes": {},
+    "Spans": [],
+    "Prisms": [
       {
         "Name": "MagicBox",
         "IsSolid": true,
-        "Sketch": {
-          "Kind": "ReferencePlane",
-          "Plane": "Ref. Level"
-        },
+        "On": "@Bottom",
         "Width": {
-          "Mode": "Mirror",
-          "Parameter": "PE_G_Dim_Width1",
-          "CenterAnchor": "Center (Front/Back)",
-          "PlaneNameBase": "width",
-          "Strength": "StrongRef"
+          "About": "@CenterFB",
+          "By": "param:PE_G_Dim_Width1",
+          "Negative": "MagicBox Back",
+          "Positive": "MagicBox Front"
         },
         "Length": {
-          "Mode": "Mirror",
-          "Parameter": "PE_G_Dim_Length1",
-          "CenterAnchor": "Center (Left/Right)",
-          "PlaneNameBase": "length",
-          "Strength": "StrongRef"
+          "About": "@CenterLR",
+          "By": "param:PE_G_Dim_Length1",
+          "Negative": "MagicBox Left",
+          "Positive": "MagicBox Right"
         },
         "Height": {
-          "Mode": "Offset",
-          "Parameter": "PE_G_Dim_Height1",
-          "Anchor": "Reference Plane",
-          "Direction": "Positive",
-          "PlaneNameBase": "top",
-          "Strength": "StrongRef"
+          "Name": "MagicBox Top",
+          "From": "@Bottom",
+          "By": "param:PE_G_Dim_Height1",
+          "Dir": "out"
         }
       }
     ],
     "Cylinders": [],
-    "Enabled": true
+    "Connectors": []
   }
 }

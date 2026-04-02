@@ -133,7 +133,7 @@ public class CmdFFManager : IExternalCommand {
                 .Add(new ExtrusionSectionCollector());
 
             if (!string.IsNullOrWhiteSpace(outputFolderPath))
-                runOutput = OutputManager.ExactDir(outputFolderPath).TimestampedSubDir("ff");
+                runOutput = OutputManager.ExactDir(outputFolderPath);
 
             using var processor = new OperationProcessor(doc, executionOptions);
             var logs = processor
@@ -211,14 +211,15 @@ public class CmdFFManager : IExternalCommand {
             });
         }
 
-        var compiledSolids = ParamDrivenSolidsCompiler.Compile(profile.ParamDrivenSolids);
+        var compiledSolids = AuthoredParamDrivenSolidsCompiler.Compile(profile.ParamDrivenSolids);
         if (!compiledSolids.CanExecute) {
             throw new InvalidOperationException(
-                string.Join(Environment.NewLine, ParamDrivenSolidsCompiler.ToDisplayMessages(compiledSolids.Diagnostics)));
+                string.Join(Environment.NewLine, ParamDrivenSolidsDiagnosticFormatter.ToDisplayMessages(compiledSolids.Diagnostics)));
         }
 
-        var additionalReferences = KnownParamPlanBuilder.CollectReferencedParameterNames(profile.MakeRefPlaneAndDims)
-            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(profile.ParamDrivenSolids))
+        var additionalReferences = KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.RefPlanesAndDims)
+            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.InternalExtrusions))
+            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.Connectors))
             .ToList();
         var knownParamPlan = KnownParamPlanBuilder.Compile(
             profile.AddFamilyParams,
@@ -231,20 +232,43 @@ public class CmdFFManager : IExternalCommand {
             .Select(diagnostic => diagnostic.ToDisplayMessage())
             .ToList();
 
+        var valueFirstAssignments = BuildValueFirstAssignments(knownParamPlan.ResolvedAssignments);
+        var formulaOnlyAssignments = BuildFormulaOnlyAssignments(knownParamPlan.ResolvedAssignments);
+
         return new OperationQueue()
             .Add(new AddSharedParams(apsParamData))
             .Add(new AddFamilyParams(knownParamPlan.ResolvedFamilyParams))
-            .Add(new MakeRefPlanesAndDims(profile.MakeRefPlaneAndDims))
+            .Add(new SetKnownParams(valueFirstAssignments, knownParamPlan.Catalog, true))
             .Add(new EmitParamDrivenSolidsDiagnostics(new EmitParamDrivenSolidsDiagnosticsSettings {
                 Enabled = compilerMessages.Count > 0, Messages = compilerMessages
             }))
-            .Add(new MakeRefPlanesAndDims(compiledSolids.RefPlanesAndDims))
+            .Add(new MakeParamDrivenPlanesAndDims(compiledSolids.RefPlanesAndDims))
+            .Add(new SetKnownParams(formulaOnlyAssignments, knownParamPlan.Catalog))
             .Add(new MakeConstrainedExtrusions(compiledSolids.InternalExtrusions))
-            .Add(new SetKnownParams(knownParamPlan.ResolvedAssignments, knownParamPlan.Catalog, true))
             .Add(new MakeParamDrivenConnectors(compiledSolids.Connectors))
             .Add(new MakeRefPlaneSubcategories(specs))
             .Add(new SortParams(new SortParamsSettings()));
     }
+
+    private static SetKnownParamsSettings BuildValueFirstAssignments(SetKnownParamsSettings settings) =>
+        new() {
+            Enabled = settings.Enabled,
+            OverrideExistingValues = settings.OverrideExistingValues,
+            GlobalAssignments = settings.GlobalAssignments
+                .Where(assignment => assignment.Kind == ParamAssignmentKind.Value)
+                .ToList(),
+            PerTypeAssignmentsTable = settings.PerTypeAssignmentsTable
+        };
+
+    private static SetKnownParamsSettings BuildFormulaOnlyAssignments(SetKnownParamsSettings settings) =>
+        new() {
+            Enabled = settings.Enabled,
+            OverrideExistingValues = settings.OverrideExistingValues,
+            GlobalAssignments = settings.GlobalAssignments
+                .Where(assignment => assignment.Kind == ParamAssignmentKind.Formula)
+                .ToList(),
+            PerTypeAssignmentsTable = []
+        };
 }
 
 public record FFManagerProcessFamiliesActionResult(

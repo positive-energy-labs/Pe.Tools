@@ -25,6 +25,7 @@
 
     <ItemGroup>
         <None Include="Fixtures\Profiles\**\*.json" CopyToOutputDirectory="PreserveNewest"/>
+        <None Include="Fixtures\Families\**\*.rfa" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 
     <ItemGroup>
