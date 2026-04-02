@@ -1,0 +1,144 @@
+{
+  "ExecutionOptions": {
+    "SingleTransaction": false,
+    "OptimizeTypeOperations": false
+  },
+  "FilterFamilies": {
+    "IncludeNames": {
+      "Equaling": ["FF-Test-WineGuardianDS050Outdoor.rfa"]
+    }
+  },
+  "FilterApsParams": {
+    "IncludeNames": {
+      "Equaling": ["PE_G_Dim_Height1", "PE_G_Dim_Length1", "PE_G_Dim_Width1"]
+    }
+  },
+  "AddFamilyParams": {
+    "Parameters": [
+      {
+        "Name": "LiquidLineDiameter",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "SuctionLineDiameter",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "ServiceLineDepth",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "ServicePanelOffset",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "ServiceLineHalfSpacing",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "LiquidLineCenterOffset",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "SuctionLineCenterOffset",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "ServiceLineElevation",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      }
+    ]
+  },
+  "SetKnownParams": {
+    "OverrideExistingValues": true,
+    "GlobalAssignments": [
+      {
+        "Parameter": "LiquidLineCenterOffset",
+        "Kind": "Formula",
+        "Value": "ServicePanelOffset - ServiceLineHalfSpacing"
+      },
+      {
+        "Parameter": "SuctionLineCenterOffset",
+        "Kind": "Formula",
+        "Value": "ServicePanelOffset + ServiceLineHalfSpacing"
+      }
+    ],
+    "PerTypeAssignmentsTable": [
+      { "Parameter": "PE_G_Dim_Length1", "DS050 Cond": "34\"" },
+      { "Parameter": "PE_G_Dim_Width1", "DS050 Cond": "12.30\"" },
+      { "Parameter": "PE_G_Dim_Height1", "DS050 Cond": "26.07\"" },
+      { "Parameter": "LiquidLineDiameter", "DS050 Cond": "0.25\"" },
+      { "Parameter": "SuctionLineDiameter", "DS050 Cond": "0.50\"" },
+      { "Parameter": "ServiceLineDepth", "DS050 Cond": "2\"" },
+      { "Parameter": "ServicePanelOffset", "DS050 Cond": "4\"" },
+      { "Parameter": "ServiceLineHalfSpacing", "DS050 Cond": "0.75\"" },
+      { "Parameter": "ServiceLineElevation", "DS050 Cond": "14.50\"" }
+    ]
+  },
+  "ParamDrivenSolids": {
+    "Frame": "NonHosted",
+    "Planes": {
+      "Service Panel Center": { "From": "@CenterFB", "By": "param:ServicePanelOffset", "Dir": "out" },
+      "Service Line Elevation": { "From": "@Bottom", "By": "param:ServiceLineElevation", "Dir": "out" },
+      "Liquid Line Center": { "From": "@CenterFB", "By": "param:LiquidLineCenterOffset", "Dir": "out" },
+      "Suction Line Center": { "From": "@CenterFB", "By": "param:SuctionLineCenterOffset", "Dir": "out" }
+    },
+    "Spans": [],
+    "Prisms": [
+      {
+        "Name": "Cabinet",
+        "IsSolid": true,
+        "On": "@Bottom",
+        "Width": {
+          "About": "@CenterFB",
+          "By": "param:PE_G_Dim_Width1",
+          "Negative": "Cabinet Back",
+          "Positive": "Cabinet Front"
+        },
+        "Length": {
+          "About": "@CenterLR",
+          "By": "param:PE_G_Dim_Length1",
+          "Negative": "Cabinet Left",
+          "Positive": "Cabinet Right"
+        },
+        "Height": {
+          "Name": "Cabinet Top",
+          "From": "@Bottom",
+          "By": "param:PE_G_Dim_Height1",
+          "Dir": "out"
+        }
+      }
+    ],
+    "Cylinders": [],
+    "Connectors": [
+      {
+        "Name": "LiquidLine",
+        "Domain": "Pipe",
+        "Face": "plane:Cabinet Left",
+        "Depth": { "By": "param:ServiceLineDepth", "Dir": "in" },
+        "Round": {
+          "Center": ["plane:Liquid Line Center", "plane:Service Line Elevation"],
+          "Diameter": { "By": "param:LiquidLineDiameter" }
+        },
+        "Config": {
+          "SystemType": "OtherPipe",
+          "FlowDirection": "Out"
+        }
+      },
+      {
+        "Name": "SuctionLine",
+        "Domain": "Pipe",
+        "Face": "plane:Cabinet Left",
+        "Depth": { "By": "param:ServiceLineDepth", "Dir": "in" },
+        "Round": {
+          "Center": ["plane:Suction Line Center", "plane:Service Line Elevation"],
+          "Diameter": { "By": "param:SuctionLineDiameter" }
+        },
+        "Config": {
+          "SystemType": "OtherPipe",
+          "FlowDirection": "In"
+        }
+      }
+    ]
+  }
+}

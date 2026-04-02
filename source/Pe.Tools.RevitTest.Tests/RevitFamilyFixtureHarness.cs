@@ -108,6 +108,31 @@ internal static class RevitFamilyFixtureHarness {
         return fixturePath;
     }
 
+    public static string GetFamilyFixturePath(string fixtureFileName) {
+        if (string.IsNullOrWhiteSpace(fixtureFileName))
+            throw new ArgumentException("Fixture file name is required.", nameof(fixtureFileName));
+
+        var assemblyDirectory = Path.GetDirectoryName(typeof(RevitFamilyFixtureHarness).Assembly.Location)
+                                ?? throw new InvalidOperationException("Could not resolve the test assembly directory.");
+        var fixturePath = Path.Combine(assemblyDirectory, "Fixtures", "Families", fixtureFileName);
+        if (!File.Exists(fixturePath))
+            throw new FileNotFoundException($"Family fixture not found at '{fixturePath}'.", fixturePath);
+
+        return fixturePath;
+    }
+
+    public static Document OpenFamilyFixture(
+        Autodesk.Revit.ApplicationServices.Application application,
+        string fixtureFileName
+    ) {
+        if (application == null)
+            throw new ArgumentNullException(nameof(application));
+
+        var fixturePath = GetFamilyFixturePath(fixtureFileName);
+        return application.OpenDocumentFile(fixturePath)
+               ?? throw new InvalidOperationException($"Failed to open family fixture '{fixturePath}'.");
+    }
+
     public static ProfileFamilyManager LoadProfileFixture(string fixtureFileName) {
         var fixturePath = GetProfileFixturePath(fixtureFileName);
         var json = File.ReadAllText(fixturePath);
@@ -189,7 +214,11 @@ internal static class RevitFamilyFixtureHarness {
                 }
 
                 familyDocument.Regenerate();
-                results.Add((state.Name, evaluator(familyDocument)));
+                try {
+                    results.Add((state.Name, evaluator(familyDocument)));
+                } catch (Exception ex) {
+                    throw new InvalidOperationException($"State '{state.Name}' evaluation failed: {ex.Message}", ex);
+                }
             }
         } finally {
             _ = transaction.RollBack();

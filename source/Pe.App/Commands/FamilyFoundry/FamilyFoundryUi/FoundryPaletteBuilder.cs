@@ -1,4 +1,4 @@
-using Autodesk.Revit.UI;
+﻿using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.FamilyFoundry;
@@ -186,7 +186,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         if (ct.IsCancellationRequested) return null;
 
         if (profile is ProfileFamilyManager familyProfile) {
-            var compileResult = ParamDrivenSolidsCompiler.Compile(familyProfile.ParamDrivenSolids);
+            var compileResult = AuthoredParamDrivenSolidsCompiler.Compile(familyProfile.ParamDrivenSolids);
             semanticWarnings = compileResult.Diagnostics
                 .Where(diagnostic => diagnostic.Severity == ParamDrivenDiagnosticSeverity.Warning)
                 .Select(diagnostic => diagnostic.ToDisplayMessage())

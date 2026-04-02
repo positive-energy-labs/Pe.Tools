@@ -1,11 +1,11 @@
 ﻿using Autodesk.Revit.Attributes;
+using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Pe.Extensions.FamDocument;
 using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Resolution;
-using Pe.FamilyFoundry.Serialization;
 using Pe.FamilyFoundry.Snapshots;
 using Pe.Global.Revit.Ui;
 using Pe.SettingsCatalog.Revit.FamilyFoundry;
@@ -28,12 +28,12 @@ public class CmdFFManagerSnapshot : IExternalCommand {
         ElementSet elementSetf
     ) {
         var uiDoc = commandData.Application.ActiveUIDocument;
+        var uiApp = commandData.Application;
         var doc = uiDoc.Document;
 
         try {
             var storage = new StorageClient(CmdFFManager.AddinKey);
 
-            // Collect snapshot data from the family
             var snapshot = CollectFamilySnapshot(doc);
             if (snapshot == null) {
                 new Ballogger()
@@ -42,20 +42,20 @@ public class CmdFFManagerSnapshot : IExternalCommand {
                 return Result.Cancelled;
             }
 
-            // Convert snapshot to ProfileFamilyManager format
-            var profile = ConvertSnapshotToProfile(snapshot);
-
-            // Write profile to output folder
+            var profile = ConvertSnapshotToProfile(doc, snapshot);
             var outputDir = storage.OutputDir().TimestampedSubDir();
             var profileName = $"{snapshot.FamilyName}-snapshot.json";
             var outputPath = outputDir.Json(profileName).Write(profile);
+            var replayFamilyPath = CreateReplayFamily(uiApp, doc, snapshot, profile, outputDir.DirectoryPath);
 
             new Ballogger()
                 .Add(LogEventLevel.Information, new StackFrame(),
                     $"Created snapshot profile for {snapshot.FamilyName}")
                 .Show();
 
-            if (outputPath != null)
+            if (!string.IsNullOrWhiteSpace(replayFamilyPath))
+                _ = uiApp.OpenAndActivateDocument(replayFamilyPath);
+            else if (outputPath != null)
                 FileUtils.OpenInDefaultApp(outputPath);
 
             return Result.Succeeded;
@@ -65,9 +65,6 @@ public class CmdFFManagerSnapshot : IExternalCommand {
         }
     }
 
-    /// <summary>
-    ///     Collects the family snapshot using the same collectors as CmdFFManager.
-    /// </summary>
     private static FamilySnapshot CollectFamilySnapshot(Document doc) {
         if (!doc.IsFamilyDocument)
             return null;
@@ -79,17 +76,14 @@ public class CmdFFManagerSnapshot : IExternalCommand {
 
         var snapshot = new FamilySnapshot { FamilyName = familyName };
 
-        // Collect parameters
         var paramCollector = new ParamSectionCollector();
         if (((IFamilyDocCollector)paramCollector).ShouldCollect(snapshot))
             ((IFamilyDocCollector)paramCollector).Collect(snapshot, famDoc);
 
-        // Collect ref planes and dims
         var refPlaneCollector = new RefPlaneSectionCollector();
         if (refPlaneCollector.ShouldCollect(snapshot))
             refPlaneCollector.Collect(snapshot, famDoc);
 
-        // Collect constrained extrusions
         var extrusionCollector = new ExtrusionSectionCollector();
         if (extrusionCollector.ShouldCollect(snapshot))
             extrusionCollector.Collect(snapshot, famDoc);
@@ -97,27 +91,14 @@ public class CmdFFManagerSnapshot : IExternalCommand {
         return snapshot;
     }
 
-    /// <summary>
-    ///     Converts a FamilySnapshot to a ProfileFamilyManager that can be used by CmdFFManager.
-    /// </summary>
-    private static ProfileFamilyManager ConvertSnapshotToProfile(FamilySnapshot snapshot) {
+    private static ProfileFamilyManager ConvertSnapshotToProfile(Document doc, FamilySnapshot snapshot) {
         var paramSnapshots = snapshot.Parameters?.Data ?? [];
         var exportedParams = FamilyParamProfileAdapter.CreateFromSnapshots(paramSnapshots);
-        var mirrorSpecs = snapshot.RefPlanesAndDims?.MirrorSpecs ?? [];
-        var offsetSpecs = snapshot.RefPlanesAndDims?.OffsetSpecs ?? [];
-        var paramDrivenRectangles = snapshot.ParamDrivenSolids?.Rectangles ?? [];
-        var paramDrivenCylinders = snapshot.ParamDrivenSolids?.Cylinders ?? [];
-        var paramDrivenConnectors = snapshot.ParamDrivenSolids?.Connectors ?? [];
-        var hasRefPlaneSpecs = mirrorSpecs.Count > 0 || offsetSpecs.Count > 0;
-        var hasParamDrivenSolids = paramDrivenRectangles.Count > 0 || paramDrivenCylinders.Count > 0 || paramDrivenConnectors.Count > 0;
-        var additionalReferences = KnownParamPlanBuilder.CollectReferencedParameterNames(
-                new MakeRefPlaneAndDimsSettings { MirrorSpecs = mirrorSpecs, OffsetSpecs = offsetSpecs })
-            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(
-                new ParamDrivenSolidsSettings {
-                    Rectangles = paramDrivenRectangles,
-                    Cylinders = paramDrivenCylinders,
-                    Connectors = paramDrivenConnectors
-                }))
+        var authoredSolids = snapshot.ParamDrivenSolids ?? new AuthoredParamDrivenSolidsSettings();
+        var compiledSolids = AuthoredParamDrivenSolidsCompiler.Compile(authoredSolids);
+        var additionalReferences = KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.RefPlanesAndDims)
+            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.InternalExtrusions))
+            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.Connectors))
             .ToList();
         var referencedSnapshotDefinitions = KnownParamPlanBuilder.BuildFamilyDefinitionsFromSnapshots(
             paramSnapshots,
@@ -144,18 +125,151 @@ public class CmdFFManagerSnapshot : IExternalCommand {
                 IncludeNames = new IncludeSharedParameter { Equaling = requiredApsParameterNames },
                 ExcludeNames = new ExcludeSharedParameter()
             },
-            MakeRefPlaneAndDims =
-                new MakeRefPlaneAndDimsSettings {
-                    Enabled = hasRefPlaneSpecs, MirrorSpecs = mirrorSpecs, OffsetSpecs = offsetSpecs
-                },
             AddFamilyParams = resolvedFamilyParams,
             SetKnownParams = exportedParams.SetKnownParams,
-            ParamDrivenSolids = new ParamDrivenSolidsSettings {
-                Enabled = hasParamDrivenSolids,
-                Rectangles = paramDrivenRectangles,
-                Cylinders = paramDrivenCylinders,
-                Connectors = paramDrivenConnectors
-            }
+            ParamDrivenSolids = authoredSolids
         };
+    }
+
+    private static string? CreateReplayFamily(
+        UIApplication uiApp,
+        Document sourceDoc,
+        FamilySnapshot snapshot,
+        ProfileFamilyManager profile,
+        string outputDirectory
+    ) {
+        var replayDoc = CreateReplayFamilyDocument(uiApp, sourceDoc, $"{snapshot.FamilyName} Snapshot");
+        if (replayDoc == null)
+            return null;
+
+        try {
+            var result = CmdFFManager.ProcessFamiliesCore(
+                replayDoc,
+                profile,
+                $"{snapshot.FamilyName}-snapshot-replay",
+                new LoadAndSaveOptions {
+                    OpenOutputFilesOnCommandFinish = false,
+                    LoadFamily = false,
+                    SaveFamilyToInternalPath = false,
+                    SaveFamilyToOutputDir = true
+                },
+                outputDirectory);
+
+            if (!result.Success || string.IsNullOrWhiteSpace(result.OutputFolderPath))
+                throw new InvalidOperationException(result.Error ?? "Snapshot replay family processing failed.");
+
+            return GetReplaySavedFamilyPath(result.OutputFolderPath, replayDoc);
+        } finally {
+            if (replayDoc.IsValidObject)
+                _ = replayDoc.Close(false);
+        }
+    }
+
+    private static Document? CreateReplayFamilyDocument(
+        UIApplication uiApp,
+        Document sourceDoc,
+        string replayFamilyName
+    ) {
+        var templatePath = ResolveReplayTemplatePath(uiApp.Application, sourceDoc);
+        if (string.IsNullOrWhiteSpace(templatePath) || !File.Exists(templatePath))
+            return null;
+
+        var replayDoc = uiApp.Application.NewFamilyDocument(templatePath);
+        if (replayDoc == null)
+            return null;
+
+        using var transaction = new Transaction(replayDoc, "Configure replay family");
+        _ = transaction.Start();
+        replayDoc.OwnerFamily.Name = replayFamilyName.Trim();
+
+        var sourceCategory = sourceDoc.OwnerFamily?.FamilyCategory;
+        if (sourceCategory != null) {
+            var replayCategory = Category.GetCategory(replayDoc, sourceCategory.Id);
+            if (replayCategory != null)
+                replayDoc.OwnerFamily.FamilyCategory = replayCategory;
+        }
+
+        _ = transaction.Commit();
+        return replayDoc;
+    }
+
+    private static string? ResolveReplayTemplatePath(
+        Autodesk.Revit.ApplicationServices.Application application,
+        Document sourceDoc
+    ) {
+        var templateRoot = application.FamilyTemplatePath;
+        if (string.IsNullOrWhiteSpace(templateRoot) || !Directory.Exists(templateRoot))
+            return null;
+
+        var templates = Directory.GetFiles(templateRoot, "*.rft", SearchOption.AllDirectories).ToList();
+        if (templates.Count == 0)
+            return null;
+
+        var preferredTemplateNames = GetPreferredTemplateNames(sourceDoc.OwnerFamily?.FamilyCategory?.Name);
+        foreach (var templateName in preferredTemplateNames) {
+            var match = templates.FirstOrDefault(path =>
+                string.Equals(Path.GetFileName(path), templateName, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(match))
+                return match;
+        }
+
+        return templates.FirstOrDefault();
+    }
+
+    private static IReadOnlyList<string> GetPreferredTemplateNames(string? categoryName) {
+        var normalized = categoryName?.Trim() ?? string.Empty;
+        if (normalized.Contains("Electrical", StringComparison.OrdinalIgnoreCase)) {
+            return [
+                "Electrical Equipment.rft",
+                "Metric Electrical Equipment.rft",
+                "Generic Model.rft",
+                "Metric Generic Model.rft"
+            ];
+        }
+
+        if (normalized.Contains("Mechanical", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("Air", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("Terminal", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("Duct", StringComparison.OrdinalIgnoreCase)) {
+            return [
+                "Mechanical Equipment.rft",
+                "Metric Mechanical Equipment.rft",
+                "Generic Model.rft",
+                "Metric Generic Model.rft"
+            ];
+        }
+
+        if (normalized.Contains("Specialty", StringComparison.OrdinalIgnoreCase)) {
+            return [
+                "Specialty Equipment.rft",
+                "Metric Specialty Equipment.rft",
+                "Generic Model.rft",
+                "Metric Generic Model.rft"
+            ];
+        }
+
+        return [
+            "Generic Model.rft",
+            "Metric Generic Model.rft",
+            "Mechanical Equipment.rft",
+            "Metric Mechanical Equipment.rft"
+        ];
+    }
+
+    private static string GetReplaySavedFamilyPath(string outputDirectory, Document replayDoc) {
+        var familyName = replayDoc.OwnerFamily?.Name;
+        if (string.IsNullOrWhiteSpace(familyName))
+            familyName = Path.GetFileNameWithoutExtension(replayDoc.Title);
+        if (string.IsNullOrWhiteSpace(familyName))
+            familyName = "Family";
+
+        var safeFamilyName = SanitizePathSegment(familyName);
+        return Path.Combine(outputDirectory, safeFamilyName, $"{safeFamilyName}.rfa");
+    }
+
+    private static string SanitizePathSegment(string value) {
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var sanitized = new string(value.Select(ch => invalidChars.Contains(ch) ? '_' : ch).ToArray()).Trim();
+        return string.IsNullOrWhiteSpace(sanitized) ? "Family" : sanitized;
     }
 }

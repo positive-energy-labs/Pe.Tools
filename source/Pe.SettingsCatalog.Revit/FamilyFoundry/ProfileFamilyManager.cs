@@ -1,4 +1,4 @@
-using Pe.FamilyFoundry;
+﻿using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.OperationSettings;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
@@ -6,10 +6,6 @@ using System.ComponentModel.DataAnnotations;
 namespace Pe.SettingsCatalog.Revit.FamilyFoundry;
 
 public class ProfileFamilyManager : BaseProfileSettings {
-    [Description("Settings for making reference planes and dimensions")]
-    [Required]
-    public MakeRefPlaneAndDimsSettings MakeRefPlaneAndDims { get; init; } = new();
-
     [Description("Settings for explicit family parameter definitions.")]
     [Required]
     public AddFamilyParamsSettings AddFamilyParams { get; init; } = new();
@@ -20,5 +16,5 @@ public class ProfileFamilyManager : BaseProfileSettings {
 
     [Description("Semantic solid authoring and serialization settings.")]
     [Required]
-    public ParamDrivenSolidsSettings ParamDrivenSolids { get; init; } = new();
+    public AuthoredParamDrivenSolidsSettings ParamDrivenSolids { get; init; } = new();
 }

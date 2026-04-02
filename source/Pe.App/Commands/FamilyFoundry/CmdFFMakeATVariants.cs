@@ -1,4 +1,4 @@
-using Autodesk.Revit.Attributes;
+﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.OperationGroups;
@@ -141,7 +141,8 @@ public class ATVariantQueueFactory {
         };
         var knownParamCatalog = new KnownParamCatalog(
             new Dictionary<string, FamilyParamDefinitionModel>(StringComparer.Ordinal),
-            new HashSet<string>(["PE_G___TagInstance"], StringComparer.Ordinal));
+            new HashSet<string>(["PE_G___TagInstance"], StringComparer.Ordinal),
+            new Dictionary<string, ForgeTypeId>(StringComparer.Ordinal));
 
         // Build operation queue
         var queue = new OperationQueue()

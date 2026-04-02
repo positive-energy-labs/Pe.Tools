@@ -1,412 +1,320 @@
-using Pe.FamilyFoundry;
-using Pe.FamilyFoundry.Resolution;
-using Pe.FamilyFoundry.Snapshots;
 using Autodesk.Revit.DB.Mechanical;
 using Autodesk.Revit.DB.Plumbing;
+using Pe.FamilyFoundry;
+using Pe.FamilyFoundry.Resolution;
 
 namespace Pe.Tools.RevitTest.Tests;
 
 [TestFixture]
 public sealed class ParamDrivenSolidsCompilerTests {
     [Test]
-    public void Compile_rectangle_generates_internal_ref_planes_and_extrusion() {
-        var settings = new ParamDrivenSolidsSettings {
-            Rectangles = [
-                new ParamDrivenRectangleSpec {
-                    Name = "MagicBox",
-                    Sketch = new SketchTargetSpec { Plane = "Ref. Level" },
-                    Width = new AxisConstraintSpec {
-                        Mode = AxisConstraintMode.Mirror,
-                        Parameter = "Width",
-                        CenterAnchor = "Center (Front/Back)",
-                        PlaneNameBase = "width",
-                        Strength = RpStrength.StrongRef
-                    },
-                    Length = new AxisConstraintSpec {
-                        Mode = AxisConstraintMode.Mirror,
-                        Parameter = "Length",
-                        CenterAnchor = "Center (Left/Right)",
-                        PlaneNameBase = "length",
-                        Strength = RpStrength.StrongRef
-                    },
-                    Height = new AxisConstraintSpec {
-                        Mode = AxisConstraintMode.Offset,
-                        Parameter = "Height",
-                        Anchor = "Reference Plane",
-                        Direction = OffsetDirection.Positive,
-                        PlaneNameBase = "top",
-                        Strength = RpStrength.StrongRef
-                    }
+    public void Compile_top_level_named_planes_without_solids() {
+        var settings = new AuthoredParamDrivenSolidsSettings {
+            Planes = new Dictionary<string, AuthoredPlaneSpec> {
+                ["Pipe Elevation"] = new() {
+                    From = "@Bottom",
+                    By = "param:PipeElevation",
+                    Dir = "out"
                 }
-            ]
+            }
         };
 
-        var result = ParamDrivenSolidsCompiler.Compile(settings);
+        var result = AuthoredParamDrivenSolidsCompiler.Compile(settings);
 
         Assert.That(result.CanExecute, Is.True);
-        Assert.That(result.RefPlanesAndDims.MirrorSpecs, Has.Count.EqualTo(2));
-        Assert.That(result.RefPlanesAndDims.OffsetSpecs, Has.Count.EqualTo(1));
-        Assert.That(result.InternalExtrusions.Rectangles, Has.Count.EqualTo(1));
-        Assert.That(result.InternalExtrusions.Rectangles[0].PairAPlane1, Is.EqualTo("width (Back)"));
-        Assert.That(result.InternalExtrusions.Rectangles[0].PairBPlane2, Is.EqualTo("length (Right)"));
-        Assert.That(result.InternalExtrusions.Rectangles[0].HeightPlaneTop, Is.EqualTo("top"));
+        Assert.That(result.RefPlanesAndDims.Offsets, Has.Count.EqualTo(1));
+        Assert.That(result.RefPlanesAndDims.Offsets[0].PlaneName, Is.EqualTo("Pipe Elevation"));
     }
 
     [Test]
-    public void Compile_blocks_ambiguous_inference() {
-        var settings = new ParamDrivenSolidsSettings {
-            Rectangles = [
-                new ParamDrivenRectangleSpec {
-                    Name = "BadBox",
-                    Sketch = new SketchTargetSpec { Plane = "Ref. Level" },
-                    Width = new AxisConstraintSpec {
-                        Mode = AxisConstraintMode.Mirror,
-                        Parameter = "Width",
-                        CenterAnchor = "Center (Front/Back)",
-                        Inference = new InferenceInfo {
-                            Status = InferenceStatus.Ambiguous,
-                            Warnings = ["Needs manual review."]
-                        }
-                    },
-                    Length = new AxisConstraintSpec {
-                        Mode = AxisConstraintMode.Mirror,
-                        Parameter = "Length",
-                        CenterAnchor = "Center (Left/Right)"
-                    },
-                    Height = new AxisConstraintSpec {
-                        Mode = AxisConstraintMode.Offset,
-                        Parameter = "Height",
-                        Anchor = "Reference Plane"
-                    }
+    public void Compile_blocks_top_level_plane_without_direction() {
+        var settings = new AuthoredParamDrivenSolidsSettings {
+            Planes = new Dictionary<string, AuthoredPlaneSpec> {
+                ["Pipe Elevation"] = new() {
+                    From = "@Bottom",
+                    By = "param:PipeElevation"
                 }
-            ]
+            }
         };
 
-        var result = ParamDrivenSolidsCompiler.Compile(settings);
+        var result = AuthoredParamDrivenSolidsCompiler.Compile(settings);
 
         Assert.That(result.CanExecute, Is.False);
-        Assert.That(result.Diagnostics.Any(diagnostic =>
-            diagnostic.Severity == ParamDrivenDiagnosticSeverity.Error &&
-            diagnostic.Message.Contains("Ambiguous", StringComparison.OrdinalIgnoreCase)), Is.True);
+        Assert.That(result.Diagnostics.Any(diagnostic => diagnostic.Message.Contains("Dir", StringComparison.OrdinalIgnoreCase)), Is.True);
     }
 
     [Test]
-    public void Compile_dedupes_exact_shared_constraints() {
-        var sharedWidth = new AxisConstraintSpec {
-            Mode = AxisConstraintMode.Mirror,
-            Parameter = "Width",
-            CenterAnchor = "Center (Front/Back)",
-            PlaneNameBase = "width",
-            Strength = RpStrength.StrongRef
-        };
-        var sharedLength = new AxisConstraintSpec {
-            Mode = AxisConstraintMode.Mirror,
-            Parameter = "Length",
-            CenterAnchor = "Center (Left/Right)",
-            PlaneNameBase = "length",
-            Strength = RpStrength.StrongRef
-        };
-
-        var settings = new ParamDrivenSolidsSettings {
-            Rectangles = [
-                new ParamDrivenRectangleSpec {
-                    Name = "Lower",
-                    Sketch = new SketchTargetSpec { Plane = "Ref. Level" },
-                    Width = sharedWidth,
-                    Length = sharedLength,
-                    Height = new AxisConstraintSpec {
-                        Mode = AxisConstraintMode.Offset,
-                        Parameter = "LowerHeight",
-                        Anchor = "Reference Plane",
-                        Direction = OffsetDirection.Positive,
-                        PlaneNameBase = "lower top"
-                    }
-                },
-                new ParamDrivenRectangleSpec {
-                    Name = "Upper",
-                    Sketch = new SketchTargetSpec { Plane = "Lower.Height.Top" },
-                    Width = sharedWidth,
-                    Length = sharedLength,
-                    Height = new AxisConstraintSpec {
-                        Mode = AxisConstraintMode.Offset,
-                        Parameter = "UpperHeight",
-                        Anchor = "Lower.Height.Top",
-                        Direction = OffsetDirection.Positive,
-                        PlaneNameBase = "upper top"
-                    }
-                }
-            ]
-        };
-
-        var result = ParamDrivenSolidsCompiler.Compile(settings);
-
-        Assert.That(result.CanExecute, Is.True);
-        Assert.That(result.RefPlanesAndDims.MirrorSpecs, Has.Count.EqualTo(2));
-        Assert.That(result.InternalExtrusions.Rectangles, Has.Count.EqualTo(2));
-    }
-
-    [Test]
-    public void Compile_cylinder_can_target_rectangle_top_plane_alias() {
-        var settings = new ParamDrivenSolidsSettings {
-            Rectangles = [
-                new ParamDrivenRectangleSpec {
-                    Name = "Box",
-                    Sketch = new SketchTargetSpec { Plane = "Ref. Level" },
-                    Width = new AxisConstraintSpec {
-                        Mode = AxisConstraintMode.Mirror,
-                        Parameter = "Width",
-                        CenterAnchor = "Center (Front/Back)",
-                        PlaneNameBase = "width",
-                        Strength = RpStrength.StrongRef
+    public void Compile_prism_with_inline_named_height_allows_downstream_connector_face_ref() {
+        var settings = new AuthoredParamDrivenSolidsSettings {
+            Prisms = [
+                new AuthoredPrismSpec {
+                    Name = "Cabinet",
+                    On = "@Bottom",
+                    Width = new PlanePairOrInlineSpanSpec {
+                        InlineSpan = new AuthoredSpanSpec {
+                            About = "@CenterFB",
+                            By = "param:Width",
+                            Negative = "Cabinet Back",
+                            Positive = "Cabinet Front"
+                        }
                     },
-                    Length = new AxisConstraintSpec {
-                        Mode = AxisConstraintMode.Mirror,
-                        Parameter = "Length",
-                        CenterAnchor = "Center (Left/Right)",
-                        PlaneNameBase = "length",
-                        Strength = RpStrength.StrongRef
+                    Length = new PlanePairOrInlineSpanSpec {
+                        InlineSpan = new AuthoredSpanSpec {
+                            About = "@CenterLR",
+                            By = "param:Length",
+                            Negative = "Cabinet Left",
+                            Positive = "Cabinet Right"
+                        }
                     },
-                    Height = new AxisConstraintSpec {
-                        Mode = AxisConstraintMode.Offset,
-                        Parameter = "BoxHeight",
-                        Anchor = "Reference Plane",
-                        Direction = OffsetDirection.Positive,
-                        PlaneNameBase = "box top",
-                        Strength = RpStrength.StrongRef
+                    Height = new PlaneRefOrInlinePlaneSpec {
+                        InlinePlane = new AuthoredNamedPlaneSpec {
+                            Name = "Cabinet Top",
+                            From = "@Bottom",
+                            By = "param:Height",
+                            Dir = "out"
+                        }
                     }
                 }
             ],
-            Cylinders = [
-                new ParamDrivenCylinderSpec {
-                    Name = "TopCylinder",
-                    Sketch = new SketchTargetSpec { Plane = "Box.Height.Top" },
-                    CenterLeftRightPlane = "Center (Left/Right)",
-                    CenterFrontBackPlane = "Center (Front/Back)",
-                    Diameter = new AxisConstraintSpec {
-                        Mode = AxisConstraintMode.Mirror,
-                        Parameter = "Diameter",
-                        PlaneNameBase = "diameter",
-                        Strength = RpStrength.StrongRef
+            Connectors = [
+                new AuthoredConnectorSpec {
+                    Name = "SupplyAir",
+                    Domain = ParamDrivenConnectorDomain.Duct,
+                    Face = "plane:Cabinet Top",
+                    Depth = new AuthoredDepthSpec {
+                        By = "param:Depth",
+                        Dir = "out"
                     },
-                    Height = new AxisConstraintSpec {
-                        Mode = AxisConstraintMode.Offset,
-                        Parameter = "CylinderHeight",
-                        Anchor = "Box.Height.Top",
-                        Direction = OffsetDirection.Positive,
-                        PlaneNameBase = "cylinder top",
-                        Strength = RpStrength.StrongRef
+                    Round = new AuthoredRoundConnectorGeometrySpec {
+                        Center = ["@CenterLR", "@CenterFB"],
+                        Diameter = new AuthoredMeasureSpec {
+                            By = "param:Diameter"
+                        }
+                    },
+                    Config = new AuthoredConnectorConfigSpec {
+                        SystemType = DuctSystemType.SupplyAir.ToString(),
+                        FlowConfiguration = DuctFlowConfigurationType.Preset.ToString(),
+                        FlowDirection = FlowDirectionType.Out.ToString(),
+                        LossMethod = DuctLossMethodType.NotDefined.ToString()
                     }
                 }
             ]
         };
 
-        var result = ParamDrivenSolidsCompiler.Compile(settings);
+        var result = AuthoredParamDrivenSolidsCompiler.Compile(settings);
+
+        Assert.That(result.CanExecute, Is.True);
+        Assert.That(result.Connectors.Connectors, Has.Count.EqualTo(1));
+        Assert.That(result.Connectors.Connectors[0].HostPlaneName, Is.EqualTo("Reference Plane"));
+        Assert.That(result.Connectors.Connectors[0].HostFacePlaneName, Is.EqualTo("__OFFSET__|Cabinet Top|+|P:Height"));
+        Assert.That(
+            result.RefPlanesAndDims.Offsets.Any(offset => string.Equals(offset.PlaneName, "Cabinet Top", StringComparison.Ordinal)),
+            Is.True,
+            "Inline height planes that are also referenced by connectors must still be emitted as real offset planes.");
+    }
+
+    [Test]
+    public void Compile_negative_depth_connector_publishes_depth_aliases_in_host_normal_order() {
+        var settings = new AuthoredParamDrivenSolidsSettings {
+            Connectors = [
+                new AuthoredConnectorSpec {
+                    Name = "BackConn",
+                    Domain = ParamDrivenConnectorDomain.Pipe,
+                    Face = "@Bottom",
+                    Depth = new AuthoredDepthSpec {
+                        By = "param:Depth",
+                        Dir = "in"
+                    },
+                    Round = new AuthoredRoundConnectorGeometrySpec {
+                        Center = ["@CenterLR", "@CenterFB"],
+                        Diameter = new AuthoredMeasureSpec {
+                            By = "param:Diameter"
+                        }
+                    },
+                    Config = new AuthoredConnectorConfigSpec {
+                        SystemType = PipeSystemType.ReturnHydronic.ToString(),
+                        FlowDirection = FlowDirectionType.In.ToString()
+                    }
+                }
+            ]
+        };
+
+        var result = AuthoredParamDrivenSolidsCompiler.Compile(settings);
+
+        Assert.That(result.CanExecute, Is.True);
+        Assert.That(result.RefPlanesAndDims.Offsets, Is.Empty);
+        Assert.That(result.SemanticAliases["BackConn.HostFace"], Is.EqualTo("Reference Plane"));
+        Assert.That(result.SemanticAliases["BackConn.Depth.Start"], Is.EqualTo("Reference Plane"));
+        Assert.That(result.SemanticAliases["BackConn.Depth.End"], Is.EqualTo("Reference Plane"));
+    }
+
+    [Test]
+    public void Compile_cylinder_and_prism_can_share_named_plane_refs() {
+        var settings = new AuthoredParamDrivenSolidsSettings {
+            Planes = new Dictionary<string, AuthoredPlaneSpec> {
+                ["Core Top"] = new() {
+                    From = "@Bottom",
+                    By = "param:CoreHeight",
+                    Dir = "out"
+                }
+            },
+            Cylinders = [
+                new AuthoredCylinderSpec {
+                    Name = "Core",
+                    On = "@Bottom",
+                    Center = ["@CenterLR", "@CenterFB"],
+                    Diameter = new AuthoredMeasureSpec {
+                        By = "param:CoreDiameter"
+                    },
+                    Height = new PlaneRefOrInlinePlaneSpec {
+                        PlaneRef = "plane:Core Top"
+                    }
+                }
+            ],
+            Prisms = [
+                new AuthoredPrismSpec {
+                    Name = "Cap",
+                    On = "plane:Core Top",
+                    Width = new PlanePairOrInlineSpanSpec {
+                        InlineSpan = new AuthoredSpanSpec {
+                            About = "@CenterFB",
+                            By = "param:CapWidth",
+                            Negative = "Cap Back",
+                            Positive = "Cap Front"
+                        }
+                    },
+                    Length = new PlanePairOrInlineSpanSpec {
+                        InlineSpan = new AuthoredSpanSpec {
+                            About = "@CenterLR",
+                            By = "param:CapLength",
+                            Negative = "Cap Left",
+                            Positive = "Cap Right"
+                        }
+                    },
+                    Height = new PlaneRefOrInlinePlaneSpec {
+                        InlinePlane = new AuthoredNamedPlaneSpec {
+                            Name = "Cap Top",
+                            From = "plane:Core Top",
+                            By = "param:CapHeight",
+                            Dir = "out"
+                        }
+                    }
+                }
+            ]
+        };
+
+        var result = AuthoredParamDrivenSolidsCompiler.Compile(settings);
 
         Assert.That(result.CanExecute, Is.True);
         Assert.That(result.InternalExtrusions.Circles, Has.Count.EqualTo(1));
-        Assert.That(result.InternalExtrusions.Circles[0].SketchPlaneName, Is.EqualTo("box top"));
-        Assert.That(result.InternalExtrusions.Circles[0].CenterLeftRightPlane, Is.EqualTo("Center (Left/Right)"));
-        Assert.That(result.InternalExtrusions.Circles[0].CenterFrontBackPlane, Is.EqualTo("Center (Front/Back)"));
-        Assert.That(result.InternalExtrusions.Circles[0].DiameterParameter, Is.EqualTo("Diameter"));
-        Assert.That(result.InternalExtrusions.Circles[0].HeightPlaneBottom, Is.EqualTo("box top"));
-        Assert.That(result.InternalExtrusions.Circles[0].HeightPlaneTop, Is.EqualTo("cylinder top"));
+        Assert.That(result.InternalExtrusions.Rectangles, Has.Count.EqualTo(1));
+        Assert.That(result.InternalExtrusions.Rectangles[0].SketchPlaneName, Is.EqualTo("Core Top"));
     }
 
     [Test]
-    public void Compile_blocks_ambiguous_cylinder_inference() {
-        var settings = new ParamDrivenSolidsSettings {
-            Cylinders = [
-                new ParamDrivenCylinderSpec {
-                    Name = "BadCylinder",
-                    Sketch = new SketchTargetSpec { Plane = "Ref. Level" },
-                    CenterLeftRightPlane = "Center (Left/Right)",
-                    CenterFrontBackPlane = "Center (Front/Back)",
-                    Diameter = new AxisConstraintSpec {
-                        Mode = AxisConstraintMode.Mirror,
-                        Parameter = "Diameter",
-                        Inference = new InferenceInfo {
-                            Status = InferenceStatus.Ambiguous,
-                            Warnings = ["Diameter semantics are ambiguous."]
-                        }
-                    },
-                    Height = new AxisConstraintSpec {
-                        Mode = AxisConstraintMode.Offset,
-                        Parameter = "Height",
-                        Anchor = "Reference Plane"
-                    }
+    public void Compile_blocks_duplicate_top_level_plane_names() {
+        var settings = new AuthoredParamDrivenSolidsSettings {
+            Planes = new Dictionary<string, AuthoredPlaneSpec> {
+                ["Pipe Elevation"] = new() { From = "@Bottom", By = "param:PipeElevation", Dir = "out" }
+            },
+            Spans = [
+                new AuthoredSpanSpec {
+                    About = "@CenterFB",
+                    By = "param:Width",
+                    Negative = "Pipe Elevation",
+                    Positive = "Other Plane"
                 }
             ]
         };
 
-        var result = ParamDrivenSolidsCompiler.Compile(settings);
+        var result = AuthoredParamDrivenSolidsCompiler.Compile(settings);
 
         Assert.That(result.CanExecute, Is.False);
-        Assert.That(result.Diagnostics.Any(diagnostic =>
-            diagnostic.Severity == ParamDrivenDiagnosticSeverity.Error &&
-            diagnostic.Message.Contains("Ambiguous", StringComparison.OrdinalIgnoreCase)), Is.True);
+        Assert.That(result.Diagnostics.Any(diagnostic => diagnostic.Message.Contains("duplicated", StringComparison.OrdinalIgnoreCase)), Is.True);
     }
 
     [Test]
-    public void Compile_round_duct_connector_generates_connector_plan() {
-        var settings = new ParamDrivenSolidsSettings {
+    public void Compile_blocks_unresolved_named_plane_reference() {
+        var settings = new AuthoredParamDrivenSolidsSettings {
             Connectors = [
-                new ParamDrivenConnectorSpec {
-                    Name = "SupplyConn",
-                    Domain = ParamDrivenConnectorDomain.Duct,
-                    Host = new ConnectorHostSpec {
-                        SketchPlane = "Ref. Level",
-                        Depth = new AxisConstraintSpec {
-                            Mode = AxisConstraintMode.Offset,
-                            Parameter = "Depth",
-                            Anchor = "Ref. Level",
-                            Direction = OffsetDirection.Positive,
-                            PlaneNameBase = "conn face",
-                            Strength = RpStrength.StrongRef
-                        }
-                    },
-                    Geometry = new ConnectorStubGeometrySpec {
-                        Profile = ParamDrivenConnectorProfile.Round,
-                        CenterLeftRightPlane = "Center (Left/Right)",
-                        CenterFrontBackPlane = "Center (Front/Back)",
-                        Diameter = new AxisConstraintSpec {
-                            Mode = AxisConstraintMode.Mirror,
-                            Parameter = "Diameter"
-                        }
-                    },
-                    Config = new ConnectorDomainConfigSpec {
-                        Duct = new DuctConnectorConfigSpec { SystemType = DuctSystemType.SupplyAir }
-                    }
-                }
-            ]
-        };
-
-        var result = ParamDrivenSolidsCompiler.Compile(settings);
-
-        Assert.That(result.CanExecute, Is.True);
-        Assert.That(result.Connectors.Connectors, Has.Count.EqualTo(1));
-        Assert.That(result.Connectors.Connectors[0].RoundStub, Is.Not.Null);
-        Assert.That(result.SemanticAliases["SupplyConn.HostFace"], Is.EqualTo("SupplyConn HostFace"));
-    }
-
-    [Test]
-    public void Compile_allows_negative_connector_depth_direction() {
-        var settings = new ParamDrivenSolidsSettings {
-            Connectors = [
-                new ParamDrivenConnectorSpec {
-                    Name = "BackConn",
+                new AuthoredConnectorSpec {
+                    Name = "SupplyWater",
                     Domain = ParamDrivenConnectorDomain.Pipe,
-                    Host = new ConnectorHostSpec {
-                        SketchPlane = "Ref. Level",
-                        Depth = new AxisConstraintSpec {
-                            Mode = AxisConstraintMode.Offset,
-                            Parameter = "Depth",
-                            Anchor = "Ref. Level",
-                            Direction = OffsetDirection.Negative,
-                            PlaneNameBase = "back conn face",
-                            Strength = RpStrength.StrongRef
+                    Face = "@Bottom",
+                    Depth = new AuthoredDepthSpec {
+                        By = "param:PipeDepth",
+                        Dir = "in"
+                    },
+                    Round = new AuthoredRoundConnectorGeometrySpec {
+                        Center = ["@CenterLR", "plane:Missing Plane"],
+                        Diameter = new AuthoredMeasureSpec {
+                            By = "param:PipeDiameter"
                         }
                     },
-                    Geometry = new ConnectorStubGeometrySpec {
-                        Profile = ParamDrivenConnectorProfile.Round,
-                        CenterLeftRightPlane = "Center (Left/Right)",
-                        CenterFrontBackPlane = "Center (Front/Back)",
-                        Diameter = new AxisConstraintSpec {
-                            Mode = AxisConstraintMode.Mirror,
-                            Parameter = "Diameter"
-                        }
-                    },
-                    Config = new ConnectorDomainConfigSpec {
-                        Pipe = new PipeConnectorConfigSpec { SystemType = PipeSystemType.ReturnHydronic }
+                    Config = new AuthoredConnectorConfigSpec {
+                        SystemType = PipeSystemType.ReturnHydronic.ToString(),
+                        FlowDirection = FlowDirectionType.In.ToString()
                     }
                 }
             ]
         };
 
-        var result = ParamDrivenSolidsCompiler.Compile(settings);
+        var result = AuthoredParamDrivenSolidsCompiler.Compile(settings);
 
-        Assert.That(result.CanExecute, Is.True);
-        Assert.That(result.Connectors.Connectors, Has.Count.EqualTo(1));
-        Assert.That(result.Connectors.Connectors[0].RoundStub, Is.Not.Null);
+        Assert.That(result.CanExecute, Is.False);
     }
 
     [Test]
-    public void Compile_blocks_rectangular_pipe_connector() {
-        var settings = new ParamDrivenSolidsSettings {
-            Connectors = [
-                new ParamDrivenConnectorSpec {
-                    Name = "BadPipe",
-                    Domain = ParamDrivenConnectorDomain.Pipe,
-                    Host = new ConnectorHostSpec {
-                        SketchPlane = "Ref. Level",
-                        Depth = new AxisConstraintSpec {
-                            Mode = AxisConstraintMode.Offset,
-                            Parameter = "Depth",
-                            Anchor = "Ref. Level"
+    public void CollectReferencedParameterNames_includes_top_level_planes_and_inline_spans() {
+        var settings = new AuthoredParamDrivenSolidsSettings {
+            Planes = new Dictionary<string, AuthoredPlaneSpec> {
+                ["Pipe Elevation"] = new() {
+                    From = "@Bottom",
+                    By = "param:PipeElevation",
+                    Dir = "out"
+                }
+            },
+            Prisms = [
+                new AuthoredPrismSpec {
+                    Name = "Cabinet",
+                    On = "@Bottom",
+                    Width = new PlanePairOrInlineSpanSpec {
+                        InlineSpan = new AuthoredSpanSpec {
+                            About = "@CenterFB",
+                            By = "param:Width",
+                            Negative = "Cabinet Back",
+                            Positive = "Cabinet Front"
                         }
                     },
-                    Geometry = new ConnectorStubGeometrySpec {
-                        Profile = ParamDrivenConnectorProfile.Rectangular,
-                        Width = new AxisConstraintSpec {
-                            Mode = AxisConstraintMode.Mirror,
-                            Parameter = "Width",
-                            CenterAnchor = "Center (Front/Back)"
-                        },
-                        Length = new AxisConstraintSpec {
-                            Mode = AxisConstraintMode.Mirror,
-                            Parameter = "Length",
-                            CenterAnchor = "Center (Left/Right)"
+                    Length = new PlanePairOrInlineSpanSpec {
+                        InlineSpan = new AuthoredSpanSpec {
+                            About = "@CenterLR",
+                            By = "param:Length",
+                            Negative = "Cabinet Left",
+                            Positive = "Cabinet Right"
                         }
                     },
-                    Config = new ConnectorDomainConfigSpec {
-                        Pipe = new PipeConnectorConfigSpec()
+                    Height = new PlaneRefOrInlinePlaneSpec {
+                        InlinePlane = new AuthoredNamedPlaneSpec {
+                            Name = "Cabinet Top",
+                            From = "@Bottom",
+                            By = "param:Height",
+                            Dir = "out"
+                        }
                     }
                 }
             ]
         };
 
-        var result = ParamDrivenSolidsCompiler.Compile(settings);
+        var compiled = AuthoredParamDrivenSolidsCompiler.Compile(settings);
+        var parameters = KnownParamPlanBuilder.CollectReferencedParameterNames(compiled.RefPlanesAndDims)
+            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(compiled.InternalExtrusions))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
 
-        Assert.That(result.CanExecute, Is.False);
-        Assert.That(result.Diagnostics.Any(diagnostic =>
-            diagnostic.Path.Contains("Geometry.Profile", StringComparison.Ordinal) &&
-            diagnostic.Message.Contains("Pipe", StringComparison.OrdinalIgnoreCase)), Is.True);
-    }
-
-    [Test]
-    public void Compile_blocks_connector_when_required_parameter_name_is_missing() {
-        var settings = new ParamDrivenSolidsSettings {
-            Connectors = [
-                new ParamDrivenConnectorSpec {
-                    Name = "BadConn",
-                    Domain = ParamDrivenConnectorDomain.Duct,
-                    Host = new ConnectorHostSpec {
-                        SketchPlane = "Ref. Level",
-                        Depth = new AxisConstraintSpec {
-                            Mode = AxisConstraintMode.Offset,
-                            Parameter = "Depth",
-                            Anchor = "Ref. Level"
-                        }
-                    },
-                    Geometry = new ConnectorStubGeometrySpec {
-                        Profile = ParamDrivenConnectorProfile.Round,
-                        CenterLeftRightPlane = "Center (Left/Right)",
-                        CenterFrontBackPlane = "Center (Front/Back)",
-                        Diameter = new AxisConstraintSpec {
-                            Mode = AxisConstraintMode.Mirror
-                        }
-                    },
-                    Config = new ConnectorDomainConfigSpec {
-                        Duct = new DuctConnectorConfigSpec { SystemType = DuctSystemType.SupplyAir }
-                    }
-                }
-            ]
-        };
-
-        var result = ParamDrivenSolidsCompiler.Compile(settings);
-
-        Assert.That(result.CanExecute, Is.False);
-        Assert.That(result.Diagnostics.Any(diagnostic =>
-            diagnostic.Path.Contains("Geometry.Diameter.Parameter", StringComparison.Ordinal) &&
-            diagnostic.Message.Contains("driving", StringComparison.OrdinalIgnoreCase)), Is.True);
+        Assert.That(parameters, Does.Contain("PipeElevation"));
+        Assert.That(parameters, Does.Contain("Width"));
+        Assert.That(parameters, Does.Contain("Length"));
+        Assert.That(parameters, Does.Contain("Height"));
     }
 }

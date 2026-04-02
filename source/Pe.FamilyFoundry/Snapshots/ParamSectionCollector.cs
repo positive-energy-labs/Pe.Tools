@@ -1,4 +1,4 @@
-using Pe.Extensions.FamDocument;
+﻿using Pe.Extensions.FamDocument;
 using Pe.Extensions.FamDocument.GetValue;
 using Pe.Extensions.FamManager;
 using Pe.Extensions.FamParameter;
@@ -111,6 +111,7 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
                 .. supplementedFamily.Parameters
                     .Where(item =>
                         item.Kind is CollectedParameterKind.FamilyParameter or CollectedParameterKind.SharedParameter)
+                    .Where(item => !IsInternalHelperParameter(item.Name))
                     .Select(item => new ParamSnapshot {
                         Name = item.Name,
                         IsInstance = item.IsInstance,
@@ -138,6 +139,9 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
         var snapshots = new Dictionary<string, ParamSnapshot>(StringComparer.Ordinal);
 
         foreach (var p in familyParameters) {
+            if (IsInternalHelperParameter(p.Definition.Name))
+                continue;
+
             var key = GetKey(p.Definition.Name, p.IsInstance);
 
             var isBuiltIn = p.IsBuiltInParameter();
@@ -216,4 +220,8 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
     }
 
     private static string GetKey(string name, bool isInstance) => $"{name}|{isInstance}";
+
+    private static bool IsInternalHelperParameter(string? parameterName) =>
+        !string.IsNullOrWhiteSpace(parameterName) &&
+        parameterName.StartsWith("FF_Internal_", StringComparison.Ordinal);
 }

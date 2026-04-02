@@ -63,12 +63,23 @@ not build anything unless otherwise asked. When the user does ask for
 Revit-backed testing, the safe default is to build the relevant `.Tests`
 project/configuration and run focused tests against that lane.
 
+If the user says they restarted Revit from Rider by launching the normal
+`Pe.App` debug configuration, treat the deployed addin lane as fresh by
+default. Do not keep arguing from stale-assembly assumptions unless source and
+runtime behavior concretely diverge again.
+
 ### Live debug / hot reload guidance
 
 - Hot reload concerns must not change the intended scope of the code fix. Apply
   the correct fix first, then communicate whether Rider/Revit likely needs hot
   reload or a restart.
 - Always assume stale assemblies are possible during live Revit work.
+- A `.Tests` build updates the test lane but does not redeploy
+  `%APPDATA%\Autodesk\Revit\Addins\{RevitVersion}\Pe.App` while Revit is
+  running.
+- If the deployed addin needs to be refreshed, that must happen before Revit is
+  launched or after the user restarts the Rider debug session. A live Revit
+  process may lock the deployed addin directory and make `Pe.App` rebuilds fail.
 - Prefer adding a new targeted log line or output artifact when validating a
   runtime fix so stale assembly issues are easier to detect.
 - Do not do build-related steps that risk breaking hot reload unless the user
@@ -123,48 +134,51 @@ Do not skip ahead to suppression or heuristics until the failing rung is clear.
    build the relevant `.Tests` project, let the post-build helper attempt Rider
    hot reload, then run focused tests. Treat the `.Tests` build as test-lane
    prep, not as proof that Revit loaded fresh runtime assemblies.
-7. Revit-backed test runners may attach to an already-running Revit instance.
+7. If the user explicitly says they restarted Revit by building/running the
+   normal Rider `Pe.App` debug configuration, assume the deployed runtime addin
+   is fresh unless current behavior proves otherwise.
+8. Revit-backed test runners may attach to an already-running Revit instance.
    If behavior does not match source, suspect stale in-process assemblies before
    assuming the code change failed.
-8. Hot reload is not trustworthy after runtime member-shape changes. Treat
+9. Hot reload is not trustworthy after runtime member-shape changes. Treat
    these as restart-required: added/removed members, method signature changes,
    constructor changes, new or deleted fields/properties, enum shape changes,
    record shape changes, and new nested types used by runtime code.
-9. Be careful with live Rider/Revit debug sessions. Rebuilding runtime projects
+10. Be careful with live Rider/Revit debug sessions. Rebuilding runtime projects
    such as `Pe.App`, `Pe.Extensions`, or `Pe.FamilyFoundry` can break hot
    reload or leave the running Revit session executing stale assemblies.
-10. Revit-backed test runners can leave `Revit.exe` or runner processes alive
+11. Revit-backed test runners can leave `Revit.exe` or runner processes alive
     after a timeout or interrupted run. If later builds or deploys start
     failing on file locks, clean up the lingering process before retrying.
-11. When validating param-driven family geometry, constraints, or connector
+12. When validating param-driven family geometry, constraints, or connector
     behavior, prefer assertions across multiple family types or parameter
     states. Single-state checks can miss broken associations.
-12. Exceptions should generally be avoided, prefer the `Result<TValue>` or
+13. Exceptions should generally be avoided, prefer the `Result<TValue>` or
     `Try...` patterns, particularly if it's part of the public API surface
     and/or may be exposed to users. using the `Result<TValue` type allows us
     to _return_ errors rather than throw, which is better for perf. For both DX
     posterity, record common footguns/suggestions in error messages, for
     example: special transaction needs for RVT API methods, a method (eg.
     `FamilyManager.SetFormula`) throw unhelpful error messages, etc.
-13. If a runtime fix appears not to take effect, verify the new debug log line
+14. If a runtime fix appears not to take effect, verify the new debug log line
     or output artifact before concluding the logic is wrong. Common failure
     modes are: the old addin is still loaded in Revit, the hot reload patch did
     not apply, or only the test assembly was rebuilt.
-14. Reduce nesting in written code and stacktraces. Use method extraction or
+15. Reduce nesting in written code and stacktraces. Use method extraction or
    condition inversion to avoid nesting in written code. Prefer sequential
    execution flow with early `return`/`break`/`continue`/`throw` over nesting.
-15. Type-safety do's: label/handle nullables correctly, use generics, use
+16. Type-safety do's: label/handle nullables correctly, use generics, use
    `nameof()`, us ``is` and pattern matching,
-16. Use LINQ and Fluent APIs when possible.
-17. Use extension methods to get commonly used finicky code out of sight.
-18. Research the breath of a problem and attempt to prove it before trying to
+17. Use LINQ and Fluent APIs when possible.
+18. Use extension methods to get commonly used finicky code out of sight.
+19. Research the breath of a problem and attempt to prove it before trying to
     solve it.
-19. Use Serilogs Log.<Level> rather than Console.WriteLine or Debug.WriteLine.
-20. Weigh the addition of new code against the cost of maintenance and DX.
-21. Apply project standards to all code. If existing code doesn't follow the
+20. Use Serilogs Log.<Level> rather than Console.WriteLine or Debug.WriteLine.
+21. Weigh the addition of new code against the cost of maintenance and DX.
+22. Apply project standards to all code. If existing code doesn't follow the
     standards, refactor it to do so. Pay close attention to nullability and
     type-safety.
-22. Centralize comments into blocks rather than sprinkling them throughout.
+23. Centralize comments into blocks rather than sprinkling them throughout.
 
 ### Don'ts 👎👎👎
 
