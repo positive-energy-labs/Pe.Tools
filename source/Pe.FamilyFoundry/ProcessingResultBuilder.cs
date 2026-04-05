@@ -103,7 +103,9 @@ public class ProcessingResultBuilder {
         var totalErrors = this._familyContexts
             .SelectMany(ctx => {
                 var (logs, err) = ctx.OperationLogs;
-                if (err != null) return [];
+                if (err != null)
+                    return [new LogEntry(ctx.FamilyName).Error(err.Message)];
+
                 return logs?.SelectMany(log => log.Entries.Where(e => e.Status == LogStatus.Error))
                        ?? [];
             })

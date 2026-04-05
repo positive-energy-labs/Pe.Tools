@@ -117,6 +117,8 @@ public class CmdFFMigrator : IExternalCommand {
         var message = runResult.Success
             ? $"Processed {runResult.FamilyCount} families in {runResult.TotalMs:F0}ms."
             : runResult.Error ?? "Processing failed.";
+        if (!string.IsNullOrWhiteSpace(runResult.OutputFolderPath))
+            message += $"\nOutput: {runResult.OutputFolderPath}";
         new Ballogger().Add(level, new StackFrame(), message).Show();
         if (runResult.ProcessedFamilyNames.Count > 0) {
             FamilyPlacementHelper.PromptAndPlaceFamilies(
@@ -209,7 +211,6 @@ public class CmdFFMigrator : IExternalCommand {
                 tempFile
             );
             var queue = BuildQueueCore(profile, apsParamData);
-            var outputFolderPath = storage.OutputDir().DirectoryPath;
             var collectorQueue = new CollectorQueue()
                 .Add(new ParamSectionCollector())
                 .Add(new RefPlaneSectionCollector());
@@ -218,14 +219,16 @@ public class CmdFFMigrator : IExternalCommand {
             var resultBuilder = new ProcessingResultBuilder(storage)
                 .WithProfile(profile, profileName)
                 .WithOperationMetadata(queue);
+            var outputFolderPath = resultBuilder.RunOutputPath;
             using var processor = new OperationProcessor(doc, profile.ExecutionOptions);
             var logs = processor
                 .SelectFamilies(() => {
                     var picked = Pickers.GetSelectedFamilies(uiDoc);
                     return picked.Any() ? picked : profile.GetFamilies(doc);
                 })
-                .WithPerFamilyCallback(familyCtx => resultBuilder.WriteSingleFamilyOutput(familyCtx))
                 .ProcessQueue(queue, collectorQueue, outputFolderPath, finishSettings);
+            foreach (var familyCtx in logs.contexts)
+                _ = resultBuilder.WriteSingleFamilyOutput(familyCtx);
 
             resultBuilder.WriteMultiFamilySummary(logs.totalMs, finishSettings.OpenOutputFilesOnCommandFinish);
             var processedFamilyNames = logs.contexts
@@ -233,14 +236,19 @@ public class CmdFFMigrator : IExternalCommand {
                 .Where(name => !string.IsNullOrWhiteSpace(name) &&
                                !string.Equals(name, "ERROR", StringComparison.OrdinalIgnoreCase))
                 .ToList();
-            var hasErrors = logs.contexts.Any(ctx => {
-                var (_, error) = ctx.OperationLogs;
-                return error != null;
-            });
+            var errors = logs.contexts
+                .Select(ctx => {
+                    var (_, error) = ctx.OperationLogs;
+                    return error;
+                })
+                .Where(error => error != null)
+                .ToList();
+            var hasErrors = errors.Count > 0;
+            var errorMessage = errors.FirstOrDefault()?.Message;
 
             return new FFMigratorProcessFamiliesActionResult(
                 !hasErrors,
-                hasErrors ? "Processing completed with errors. Review generated logs." : null,
+                hasErrors ? errorMessage ?? "Processing completed with errors. Review generated logs." : null,
                 outputFolderPath,
                 processedFamilyNames,
                 logs.totalMs,
@@ -269,7 +277,9 @@ public class CmdFFMigrator : IExternalCommand {
                 !string.Equals(existing.Name, internalParam.Name, StringComparison.OrdinalIgnoreCase)))
             .ToList();
         pClone.AddFamilyParams.AddParameters(internalParams);
-        var additionalReferences = KnownParamPlanBuilder.CollectReferencedParameterNames(pClone.MakeElectricalConnector);
+        var additionalReferences = pClone.MakeElectricalConnector.Enabled
+            ? KnownParamPlanBuilder.CollectReferencedParameterNames(pClone.MakeElectricalConnector)
+            : [];
         var knownParamPlan = KnownParamPlanBuilder.Compile(
             pClone.AddFamilyParams,
             pClone.SetKnownParams,
@@ -309,48 +319,12 @@ public class CmdFFMigrator : IExternalCommand {
                 IsInstance = false
             }
         ];
-
-        if (profile.SetKnownParams.GlobalAssignments.All(existing =>
-                !string.Equals(existing.Parameter, "_FOUNDRY LAST PROCESSED AT", StringComparison.OrdinalIgnoreCase))) {
-            profile.SetKnownParams.GlobalAssignments.Add(new GlobalParamAssignment {
-                Parameter = "_FOUNDRY LAST PROCESSED AT",
-                Kind = ParamAssignmentKind.Formula,
-                Value = $"\"{DateTime.Now:yyyy_MM_dd HH:mm:ss}\""
-            });
-        }
-
-        if (!profile.MakeElectricalConnector.Enabled)
-            return paramList;
-
-        var voltageName = profile.MakeElectricalConnector.SourceParameterNames.Voltage;
-        var numberOfPolesName = profile.MakeElectricalConnector.SourceParameterNames.NumberOfPoles;
-        var apparentPowerName = profile.MakeElectricalConnector.SourceParameterNames.ApparentPower;
-        var mcaName = profile.MakeElectricalConnector.SourceParameterNames.MinimumCircuitAmpacity;
-
-        if (profile.SetKnownParams.GlobalAssignments.All(existing =>
-                !string.Equals(existing.Parameter, numberOfPolesName, StringComparison.OrdinalIgnoreCase))) {
-            profile.SetKnownParams.GlobalAssignments.Add(new GlobalParamAssignment {
-                Parameter = numberOfPolesName,
-                Kind = ParamAssignmentKind.Formula,
-                Value = $"if({voltageName} = 120, 1, if({voltageName} = 208, 2, (if({voltageName} = 240, 2, 1))))"
-            });
-        }
-
-        if (profile.SetKnownParams.GlobalAssignments.All(existing =>
-                !string.Equals(existing.Parameter, apparentPowerName, StringComparison.OrdinalIgnoreCase))) {
-            profile.SetKnownParams.GlobalAssignments.Add(new GlobalParamAssignment {
-                Parameter = apparentPowerName,
-                Kind = ParamAssignmentKind.Formula,
-                Value = $"{voltageName} * {mcaName} * 0.8 * if({numberOfPolesName} = 3, sqrt(3), 1)"
-            });
-        }
-
-        if (!KnownParamResolver.IsPeParameterName(numberOfPolesName))
-            paramList.Insert(0, new FamilyParamDefinitionModel { Name = numberOfPolesName });
-
-        if (!KnownParamResolver.IsPeParameterName(apparentPowerName))
-            paramList.Insert(0, new FamilyParamDefinitionModel { Name = apparentPowerName });
-
+        profile.SetKnownParams.GlobalAssignments.Add(new GlobalParamAssignment {
+            Parameter = "_FOUNDRY LAST PROCESSED AT",
+            Kind = ParamAssignmentKind.Formula,
+            Value = $"\"{DateTime.Now:yyyy_MM_dd HH:mm:ss}\""
+        });
+        
         return paramList;
     }
 
