@@ -34,7 +34,7 @@ public class CmdScheduleManager : IExternalCommand {
         try {
             var storage = new StorageClient("Schedule Manager");
             var profilesStorage = ScheduleManagerProfilesModule.Instance.SharedStorage();
-            var batchSubDir = storage.StateDir().SubDir("batch");
+            var batchStorage = ScheduleManagerBatchModule.Instance.SharedStorage();
 
             // Context for Schedule tabs
             var context = new ScheduleManagerContext {
@@ -46,7 +46,7 @@ public class CmdScheduleManager : IExternalCommand {
 
             // Collect items for both tabs
             var createItems = ScheduleListItem.DiscoverProfiles(profilesStorage);
-            var batchItems = BatchScheduleListItem.DiscoverProfiles(batchSubDir);
+            var batchItems = BatchScheduleListItem.DiscoverProfiles(batchStorage);
 
             // Create preview panel with injected preview building logic
             var previewPanel = new SchedulePreviewPanel(async (item, ct) => {
@@ -429,7 +429,7 @@ public class CmdScheduleManager : IExternalCommand {
                     var scheduleFilePath = context.ProfilesStorage.ResolveDocumentPath(scheduleFile);
                     if (!File.Exists(scheduleFilePath)) {
                         results.Add((scheduleFile, false, "File not found"));
-                        _ = this.WriteErrorOutput(context, scheduleFile, "File not found");
+                        _ = this.WriteErrorOutput(context, scheduleFile, "File not found", null, "batch");
                         continue;
                     }
 
@@ -445,10 +445,10 @@ public class CmdScheduleManager : IExternalCommand {
                     createdSchedules.Add(result.ScheduleName);
 
                     // Write output for this schedule
-                    _ = this.WriteCreationOutput(context, result, scheduleFile);
+                    _ = this.WriteCreationOutput(context, result, scheduleFile, "batch");
                 } catch (Exception ex) {
                     results.Add((scheduleFile, false, ex.Message));
-                    _ = this.WriteErrorOutput(context, scheduleFile, ex.Message, ex);
+                    _ = this.WriteErrorOutput(context, scheduleFile, ex.Message, ex, "batch");
                 }
             }
 
@@ -480,9 +480,10 @@ public class CmdScheduleManager : IExternalCommand {
 
     private string WriteCreationOutput(ScheduleManagerContext ctx,
         ScheduleCreationResult result,
-        string profileName = null) {
+        string profileName = null,
+        string outputSubDirectory = "create") {
         try {
-            var createOutputDir = ctx.Storage.OutputDir().SubDir("create");
+            var createOutputDir = ctx.Storage.OutputDir().SubDir(outputSubDirectory);
 
             var outputData = new {
                 result.ScheduleName,
@@ -550,9 +551,10 @@ public class CmdScheduleManager : IExternalCommand {
     private string WriteErrorOutput(ScheduleManagerContext ctx,
         string profileName,
         string errorMessage,
-        Exception ex = null) {
+        Exception ex = null,
+        string outputSubDirectory = "create") {
         try {
-            var createOutputDir = ctx.Storage.OutputDir().SubDir("create");
+            var createOutputDir = ctx.Storage.OutputDir().SubDir(outputSubDirectory);
 
             var outputData = new {
                 ProfileName = profileName,
@@ -590,6 +592,12 @@ internal sealed class ScheduleManagerProfilesModule : SettingsModuleBase<Schedul
     public static ScheduleManagerProfilesModule Instance { get; } = new();
 
     private ScheduleManagerProfilesModule() : base("Schedule Manager", "schedules") { }
+}
+
+internal sealed class ScheduleManagerBatchModule : SettingsModuleBase<BatchScheduleSettings> {
+    public static ScheduleManagerBatchModule Instance { get; } = new();
+
+    private ScheduleManagerBatchModule() : base("Schedule Manager", "batch") { }
 }
 
 public enum ScheduleTabType {

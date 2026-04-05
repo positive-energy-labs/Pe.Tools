@@ -1,6 +1,6 @@
 using Newtonsoft.Json.Linq;
 using Pe.StorageRuntime;
-using Pe.StorageRuntime.Revit.Core;
+using Pe.StorageRuntime.Revit.Modules;
 using Pe.Ui.Core;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
@@ -25,15 +25,19 @@ public class BatchScheduleSettings {
 ///     Palette list item representing a batch schedule configuration.
 /// </summary>
 public class BatchScheduleListItem : IPaletteListItem {
-    private readonly StateManager _batchSubDir;
     private readonly FileInfo _fileInfo;
     private readonly string _relativePath;
+    private readonly SharedModuleSettingsStorage _storage;
 
-    public BatchScheduleListItem(string filePath, string relativePath, StateManager batchSubDir) {
+    public BatchScheduleListItem(
+        string filePath,
+        string relativePath,
+        SharedModuleSettingsStorage storage
+    ) {
         this.FilePath = filePath;
         this._fileInfo = new FileInfo(filePath);
         this._relativePath = relativePath;
-        this._batchSubDir = batchSubDir;
+        this._storage = storage;
         this.ScheduleCount = ExtractScheduleCount(filePath);
     }
 
@@ -69,26 +73,28 @@ public class BatchScheduleListItem : IPaletteListItem {
     ///     Loads the batch settings from the file.
     /// </summary>
     public BatchScheduleSettings LoadBatchSettings() =>
-        this._batchSubDir.JsonByRelativePath<BatchScheduleSettings>(this._relativePath).Read();
+        this._storage.ReadRequired<BatchScheduleSettings>(this._relativePath);
 
     /// <summary>
     ///     Discovers all batch configuration JSON files in a directory.
     /// </summary>
-    public static List<BatchScheduleListItem> DiscoverProfiles(StateManager subDir) {
-        if (!Directory.Exists(subDir.DirectoryPath))
-            return [];
-
-        var discovered = subDir.Discover(new SettingsDiscoveryOptions(
-            Recursive: true,
-            IncludeFragments: false,
-            IncludeSchemas: false
-        ));
+    public static List<BatchScheduleListItem> DiscoverProfiles(SharedModuleSettingsStorage storage) {
+        var discovered = storage
+            .DiscoverAsync(
+                new SettingsDiscoveryOptions(
+                    Recursive: true,
+                    IncludeFragments: false,
+                    IncludeSchemas: false
+                )
+            )
+            .GetAwaiter()
+            .GetResult();
 
         return discovered.Files
             .Select(file => new BatchScheduleListItem(
-                Path.Combine(subDir.DirectoryPath, file.RelativePath),
+                storage.ResolveDocumentPath(file.RelativePath),
                 file.RelativePath,
-                subDir))
+                storage))
             .OrderByDescending(p => p.LastModified)
             .ToList();
     }
