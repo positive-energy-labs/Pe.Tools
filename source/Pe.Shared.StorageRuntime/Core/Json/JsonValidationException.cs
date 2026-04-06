@@ -1,6 +1,6 @@
 using ValidationError = NJsonSchema.Validation.ValidationError;
 
-namespace Pe.Shared.StorageRuntime.Revit.Core.Json;
+namespace Pe.Shared.StorageRuntime.Core.Json;
 
 public class JsonValidationException : Exception {
     public JsonValidationException(string message) : base(message) {

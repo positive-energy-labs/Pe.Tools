@@ -24,7 +24,8 @@ using HostSettingsStorage = Pe.Shared.HostContracts.SettingsStorage;
 
 namespace Pe.Host.Services;
 
-internal static class SettingsTransportMapper {
+internal static class SettingsTransportMapper
+{
     public static HostSettingsStorage.SettingsDiscoveryResult ToContract(this RuntimeDiscoveryResult result) =>
         new(
             result.Files.Select(ToContract).ToList(),
@@ -161,7 +162,8 @@ internal static class SettingsTransportMapper {
         );
 
     private static HostSettingsStorage.SettingsFileKind ToContract(this RuntimeFileKind kind) =>
-        kind switch {
+        kind switch
+        {
             RuntimeFileKind.Profile => HostSettingsStorage.SettingsFileKind.Profile,
             RuntimeFileKind.Fragment => HostSettingsStorage.SettingsFileKind.Fragment,
             RuntimeFileKind.Schema => HostSettingsStorage.SettingsFileKind.Schema,
@@ -170,7 +172,7 @@ internal static class SettingsTransportMapper {
 
     private static HostSettingsStorage.SettingsDirectiveScope ToContract(this RuntimeDirectiveScope scope) =>
         scope == RuntimeDirectiveScope.Global
-            ? HostSettingsStorage.SettingsDirectiveScope.Global
+        ? HostSettingsStorage.SettingsDirectiveScope.Global
             : HostSettingsStorage.SettingsDirectiveScope.Local;
 
     private static HostSettingsStorage.SettingsDocumentDependencyKind ToContract(

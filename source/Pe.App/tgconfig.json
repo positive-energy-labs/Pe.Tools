@@ -1,7 +1,7 @@
 {
   "assemblies": [
-    "bin/Debug.R25/Pe.Global.dll",
-    "bin/Debug.R25/Pe.Host.Contracts.dll",
+    "bin/Debug.R25/Pe.Revit.Global.dll",
+    "bin/Debug.R25/Pe.Shared.HostContracts.dll",
     "bin/Debug.R25/Pe.Shared.StorageRuntime.dll"
   ],
   "outputPath": "C:/Users/kaitp/source/repos/signalir-clientside-demo/v3/src/generated",

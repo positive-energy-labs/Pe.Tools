@@ -18,14 +18,14 @@ A suite of Revit add-ins and supporting libraries.
 
 Libraries rapid fire quick reference:
 
-- The Family Foundry (Pe.FamilyFoundry namespace), a library for bulk processing
+- The Family Foundry (Pe.Revit.FamilyFoundry namespace), a library for bulk processing
   families, batteries (storage) not included.
-- Palette (in Pe.Ui namespace), a library for creating searchable palettes. Used
+- Palette (in Pe.Revit.Ui namespace), a library for creating searchable palettes. Used
   for creating command palettes or UI's to pick between options.
-- Storage (Pe.Global.Services.Storage namespace), a service for standardizing
+- Storage (Pe.Revit.Global.Services.Storage namespace), a service for standardizing
   file system interaction and a good json experience (lsp, schema examples, less
   verbose writes, etc.).
-- Extensions (Pe.Extensions namespace), a library of extension methods,
+- Extensions (Pe.Revit.Extensions namespace), a library of extension methods,
   primarily related to Revit families and parameters. These help unify the
   family document/FamilyManager APIs and also wrap for easier use.
 

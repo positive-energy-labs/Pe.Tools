@@ -53,7 +53,7 @@
 
 - Split by capability seam, not by command/addin project.
 - Domain assemblies keep domain-owned settings types and rules.
-  - Example: `ProfileRemap` / `ProfileFamilyManager` should stay in `Pe.FamilyFoundry`.
+  - Example: `ProfileRemap` / `ProfileFamilyManager` should stay in `Pe.Revit.FamilyFoundry`.
 - Shared provider implementations should live in shared capability packs, not per-addin.
 - Central settings catalog should remain, but only as an exposure/selection layer for host/frontend, not as the place that owns all real schema/provider logic.
 - Aim for one clear fidelity model:
@@ -81,7 +81,7 @@
   - `source/Pe.Host/Operations/HostOperationRegistry.cs`
   - `source/Pe.Host/Services/HostSettingsStorageService.cs`
   - `source/Pe.Shared.StorageRuntime/Documents/LocalDiskSettingsStorageBackend.cs`
-  - `source/Pe.Shared.StorageRuntime.Revit/Modules/SharedModuleSettingsStorage.cs`
+  - `source/Pe.Shared.StorageRuntime/Modules/SharedModuleSettingsStorage.cs`
   - `source/Pe.App/Commands/FamilyFoundry/FamilyFoundryUi/FoundryPaletteBuilder.cs`
 
 ## Design Bias
@@ -97,4 +97,4 @@
 - Delete `LocalManagers` and `GlobalManager` by moving their surviving responsibilities into:
   - module-bound shared storage
   - small non-settings utility types for output/state if still needed
-- Re-evaluate `Pe.Shared.StorageRuntime` vs `Pe.Shared.StorageRuntime.Revit` only after the legacy storage surfaces above are gone.
+- Re-evaluate `Pe.Shared.StorageRuntime` vs `Pe.Shared.StorageRuntime` only after the legacy storage surfaces above are gone.

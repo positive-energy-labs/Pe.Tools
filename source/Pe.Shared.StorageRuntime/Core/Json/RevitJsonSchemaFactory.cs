@@ -3,7 +3,7 @@ using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Context;
 using Pe.Shared.StorageRuntime.Json;
 
-namespace Pe.Shared.StorageRuntime.Revit.Core.Json;
+namespace Pe.Shared.StorageRuntime.Core.Json;
 
 public static class RevitJsonSchemaFactory {
     public static JsonSchema BuildAuthoringSchema(

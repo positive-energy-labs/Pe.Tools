@@ -6,11 +6,11 @@ using NJsonSchema.Annotations;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Documents;
 using Pe.Shared.StorageRuntime.Json;
-using Pe.Shared.StorageRuntime.Revit.Core.Json;
-using Pe.Shared.StorageRuntime.Revit.Core.Json.ContractResolvers;
+using Pe.Shared.StorageRuntime.Core.Json;
+using Pe.Shared.StorageRuntime.Core.Json.ContractResolvers;
 using System.Reflection;
 
-namespace Pe.Shared.StorageRuntime.Revit.Validation;
+namespace Pe.Shared.StorageRuntime.Validation;
 
 public sealed class SchemaBackedSettingsDocumentValidator(
     Type settingsType,

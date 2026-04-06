@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Pe.Shared.StorageRuntime.Revit;
+namespace Pe.Shared.StorageRuntime;
 
 public static class FileUtils {
     public static string ComputeFileHashFromPath(string filePath) {

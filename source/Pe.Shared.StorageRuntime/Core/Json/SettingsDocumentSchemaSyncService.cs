@@ -5,7 +5,7 @@ using Pe.Shared.StorageRuntime.Context;
 using Pe.Shared.StorageRuntime.Json;
 using Pe.Shared.StorageRuntime.Modules;
 
-namespace Pe.Shared.StorageRuntime.Revit.Core.Json;
+namespace Pe.Shared.StorageRuntime.Core.Json;
 
 public sealed class SettingsDocumentSchemaSyncService(
     SettingsRuntimeMode runtimeMode = SettingsRuntimeMode.HostOnly,

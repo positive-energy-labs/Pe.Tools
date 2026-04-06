@@ -1,9 +1,9 @@
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Json.FieldOptions;
 using Pe.Shared.StorageRuntime.Json.SchemaProviders;
-using Pe.Shared.StorageRuntime.Revit.AutoTag;
+using Pe.Shared.StorageRuntime.AutoTag;
 
-namespace Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
+namespace Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
 
 /// <summary>
 ///     Provides category names that can be auto-tagged.

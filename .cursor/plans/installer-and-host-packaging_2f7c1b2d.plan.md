@@ -139,7 +139,7 @@ void BuildSingleUserMsi() {
 ### 5. Add runtime path/config support for installed host location
 
 - Today the browser launcher in
-  `[source/Pe.Global/Services/SettingsEditor/SettingsEditorLauncher.cs](c:\Users\kaitp\source\repos\Pe.Tools\source\Pe.Global\Services\SettingsEditor\SettingsEditorLauncher.cs)`
+  `[source/Pe.Revit.Global/Services/SettingsEditor/SettingsEditorLauncher.cs](c:\Users\kaitp\source\repos\Pe.Tools\source\Pe.Revit.Global\Services\SettingsEditor\SettingsEditorLauncher.cs)`
   only opens the frontend URL.
 - Add a clear config/path story for where the installed host lives and how users
   or future automation start it.

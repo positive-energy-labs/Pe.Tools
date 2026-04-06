@@ -3,11 +3,11 @@ using Newtonsoft.Json;
 using NJsonSchema;
 using Pe.Shared.StorageRuntime.Json;
 using Pe.Shared.StorageRuntime.Json.FieldOptions;
-using Pe.Shared.StorageRuntime.Revit.Core.Json.Converters;
-using Pe.Shared.StorageRuntime.Revit.Core.Json.RevitTypes;
-using Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.Shared.StorageRuntime.Core.Json.Converters;
+using Pe.Shared.StorageRuntime.Core.Json.RevitTypes;
+using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
 
-namespace Pe.Shared.StorageRuntime.Revit.Core.Json;
+namespace Pe.Shared.StorageRuntime.Core.Json;
 
 public static class RevitTypeRegistry {
     private static readonly object SyncRoot = new();

@@ -1,5 +1,5 @@
 using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
-using Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
 using System.Runtime.CompilerServices;
 
 namespace Pe.Shared.SettingsCatalog.Manifests.AutoTag;

@@ -2,7 +2,7 @@ using Pe.Shared.RevitData.Parameters;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Json.FieldOptions;
 
-namespace Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
+namespace Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
 
 /// <summary>
 ///     Provides category names from BuiltInCategory enum for JSON schema examples.

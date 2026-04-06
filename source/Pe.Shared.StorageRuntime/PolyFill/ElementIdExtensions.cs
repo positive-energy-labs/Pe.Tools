@@ -1,4 +1,4 @@
-namespace Pe.Shared.StorageRuntime.Revit.PolyFill;
+namespace Pe.Shared.StorageRuntime.PolyFill;
 
 public static class ElementIdExtensions {
     public static long Value(this ElementId elementId) =>

@@ -3,7 +3,7 @@
     <PropertyGroup>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <RootNamespace>Pe.RevitData</RootNamespace>
+        <RootNamespace>Pe.Shared.RevitData</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>

@@ -1,5 +1,5 @@
 ---
-globs: source/Pe.FamilyFoundry/*
+globs: source/Pe.Revit.FamilyFoundry/*
 alwaysApply: false
 ---
 

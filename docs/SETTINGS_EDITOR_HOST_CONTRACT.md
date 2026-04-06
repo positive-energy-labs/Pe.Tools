@@ -24,10 +24,10 @@ The browser transport is split by responsibility:
   - `source/Pe.Host/`
   - owns Kestrel, CORS, HTTP endpoints, and SSE fan-out
 - Shared contract:
-  - `source/Pe.Host.Contracts/`
+  - `source/Pe.Shared.HostContracts/`
   - owns DTOs, HTTP route constants, event names, and protocol constants
 - Revit add-in bridge:
-  - `source/Pe.Global/Services/Host/`
+  - `source/Pe.Revit.Global/Services/Host/`
   - connects to the host over named pipes only when explicitly enabled
 
 ## Scope

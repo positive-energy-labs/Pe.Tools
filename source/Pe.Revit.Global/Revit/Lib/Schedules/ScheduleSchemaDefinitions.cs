@@ -1,6 +1,6 @@
 using Pe.Revit.Global.Revit.Lib.Schedules.TitleStyle;
 using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
-using Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
 using System.Runtime.CompilerServices;
 
 namespace Pe.Revit.Global.Revit.Lib.Schedules;

@@ -3,7 +3,7 @@ using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 
-namespace Pe.Shared.StorageRuntime.Revit.Core.Json;
+namespace Pe.Shared.StorageRuntime.Core.Json;
 
 internal static class SchemaUiDocumentSynchronizer {
     public static void Synchronize(JsonSchema schema, JToken documentToken) {

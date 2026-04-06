@@ -1,4 +1,4 @@
-# Pe.Tools.RevitTest.Tests
+# Pe.Revit.Tests
 
 This project runs real Revit-backed integration tests through
 `ricaun.RevitTest` and NUnit. Treat it as the preferred lane for document-heavy
@@ -37,19 +37,19 @@ family tests.
 Build:
 
 ```powershell
-dotnet build source/Pe.Tools.RevitTest.Tests/Pe.Tools.RevitTest.Tests.csproj -c "Debug.R25.Tests" /p:WarningLevel=0
+dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c "Debug.R25.Tests" /p:WarningLevel=0
 ```
 
 Run one test:
 
 ```powershell
-dotnet vstest .artifacts/tests/bin/Debug.R25.Tests/net8.0-windows/Pe.Tools.RevitTest.Tests.dll /Tests:Can_create_generic_model_family_document_from_rft
+dotnet vstest .artifacts/tests/bin/Debug.R25.Tests/net8.0-windows/Pe.Revit.Tests.dll /Tests:Can_create_generic_model_family_document_from_rft
 ```
 
 Run one test and print artifact paths:
 
 ```powershell
-dotnet vstest .artifacts/tests/bin/Debug.R25.Tests/net8.0-windows/Pe.Tools.RevitTest.Tests.dll /Tests:FFManager_round_duct_connector_roundtrips_and_stub_resizes_across_types /logger:"console;verbosity=detailed"
+dotnet vstest .artifacts/tests/bin/Debug.R25.Tests/net8.0-windows/Pe.Revit.Tests.dll /Tests:FFManager_round_duct_connector_roundtrips_and_stub_resizes_across_types /logger:"console;verbosity=detailed"
 ```
 
 ## Runtime staleness

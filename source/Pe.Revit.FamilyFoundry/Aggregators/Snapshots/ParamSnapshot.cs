@@ -1,5 +1,5 @@
 using Pe.Revit.FamilyFoundry.OperationSettings;
-using Pe.Shared.StorageRuntime.Revit.Core.Json.RevitTypes;
+using Pe.Shared.StorageRuntime.Core.Json.RevitTypes;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 

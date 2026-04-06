@@ -34,8 +34,8 @@ settings-editor integration so future work in this repo stays aligned.
 ### Backend In This Repo
 
 - External host: `Pe.Host`
-- Revit-side bridge runtime: `Pe.Global.Services.Host.HostRuntime`
-- Shared transport and contracts project: `Pe.Host.Contracts`
+- Revit-side bridge runtime: `Pe.Revit.Global.Services.Host.HostRuntime`
+- Shared transport and contracts project: `Pe.Shared.HostContracts`
 - Module registration: `SettingsModuleRegistry` + `ISettingsModule<TSettings>`
 - Dynamic field metadata and runtime options: explicit schema definitions +
   `IFieldOptionsSource`
@@ -100,10 +100,10 @@ not frontend implementation details.
 
 - `source/Pe.App/`
 - `source/Pe.Host/`
-- `source/Pe.Host.Contracts/`
-- `source/Pe.Global/Services/Host/`
+- `source/Pe.Shared.HostContracts/`
+- `source/Pe.Revit.Global/Services/Host/`
 - `source/Pe.Shared.StorageRuntime/`
-- `source/Pe.Shared.StorageRuntime.Revit/`
+- `source/Pe.Shared.StorageRuntime/`
 
 ### External Frontend
 

@@ -1,4 +1,4 @@
-namespace Pe.Shared.StorageRuntime.Revit.Core.Json.RevitTypes;
+namespace Pe.Shared.StorageRuntime.Core.Json.RevitTypes;
 
 public enum ForgeKind {
     Spec,

@@ -125,7 +125,7 @@ Do not skip ahead to suppression or heuristics until the failing rung is clear.
 4. **If given permmission to build** then use commands that minimize output like
    `dotnet build -c "Debug.R25" /p:WarningLevel=0`
 5. This repo currently has two separate Revit-backed test lanes:
-   - `source/Pe.Tools.RevitTest.Tests`: `ricaun.RevitTest` on VSTest / NUnit
+   - `source/Pe.Revit.Tests`: `ricaun.RevitTest` on VSTest / NUnit
    Keep runner-specific commands, filters, and workflow details scoped to the
    local `AGENTS.md` in each test project.
 6. For live Rider/Revit work, prefer the `.Tests` configurations such as
@@ -144,7 +144,7 @@ Do not skip ahead to suppression or heuristics until the failing rung is clear.
    constructor changes, new or deleted fields/properties, enum shape changes,
    record shape changes, and new nested types used by runtime code.
 10. Be careful with live Rider/Revit debug sessions. Rebuilding runtime projects
-   such as `Pe.App`, `Pe.Extensions`, or `Pe.FamilyFoundry` can break hot
+   such as `Pe.App`, `Pe.Revit.Extensions`, or `Pe.Revit.FamilyFoundry` can break hot
    reload or leave the running Revit session executing stale assemblies.
 11. Revit-backed test runners can leave `Revit.exe` or runner processes alive
     after a timeout or interrupted run. If later builds or deploys start

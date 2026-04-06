@@ -2,7 +2,7 @@ using Newtonsoft.Json.Linq;
 using Pe.Shared.StorageRuntime.Json;
 using Pe.Shared.StorageRuntime;
 
-namespace Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
+namespace Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
 
 public static class ApsParameterCacheReader {
     private const string CacheFilename = "parameters-service-cache";

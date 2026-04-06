@@ -1,5 +1,5 @@
 ---
-globs: source/Pe.FamilyFoundry/*
+globs: source/Pe.Revit.FamilyFoundry/*
 alwaysApply: false
 ---
 
@@ -212,12 +212,12 @@ to `MakeRefPlanesAndDims`.
 | What                    | Where                                           |
 | ----------------------- | ----------------------------------------------- |
 | Queue building          | `CmdFF{Manager,Migrator}.BuildQueue()`          |
-| Operation logic         | `Pe.FamilyFoundry/Operations/{Name}.cs`         |
-| Operation groups        | `Pe.FamilyFoundry/OperationGroups/{Name}.cs`    |
-| Settings models         | `Pe.FamilyFoundry/OperationSettings/{Name}.cs`  |
-| Snapshot collectors     | `Pe.FamilyFoundry/Snapshots/{Name}Collector.cs` |
-| Result/log writing      | `Pe.FamilyFoundry/ProcessingResultBuilder.cs`   |
-| Low-level Revit helpers | `Pe.FamilyFoundry/Helpers/*.cs`                 |
+| Operation logic         | `Pe.Revit.FamilyFoundry/Operations/{Name}.cs`         |
+| Operation groups        | `Pe.Revit.FamilyFoundry/OperationGroups/{Name}.cs`    |
+| Settings models         | `Pe.Revit.FamilyFoundry/OperationSettings/{Name}.cs`  |
+| Snapshot collectors     | `Pe.Revit.FamilyFoundry/Snapshots/{Name}Collector.cs` |
+| Result/log writing      | `Pe.Revit.FamilyFoundry/ProcessingResultBuilder.cs`   |
+| Low-level Revit helpers | `Pe.Revit.FamilyFoundry/Helpers/*.cs`                 |
 
 ## Idempotency
 

@@ -4,7 +4,7 @@ using Pe.Shared.SettingsCatalog.Manifests;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Documents;
 using Pe.Shared.StorageRuntime.Modules;
-using Pe.Shared.StorageRuntime.Revit.Core.Json;
+using Pe.Shared.StorageRuntime.Core.Json;
 using HostOpenRequest = Pe.Shared.HostContracts.SettingsStorage.OpenSettingsDocumentRequest;
 using HostSaveRequest = Pe.Shared.HostContracts.SettingsStorage.SaveSettingsDocumentRequest;
 using HostSaveResult = Pe.Shared.HostContracts.SettingsStorage.SaveSettingsDocumentResult;

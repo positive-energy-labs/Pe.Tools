@@ -2,7 +2,7 @@ using Pe.Shared.StorageRuntime.Json;
 using Pe.Shared.StorageRuntime.Modules;
 using System.Reflection;
 
-namespace Pe.Shared.StorageRuntime.Revit.Core.Json;
+namespace Pe.Shared.StorageRuntime.Core.Json;
 
 internal sealed class SettingsSchemaSyncMetadata(
     IReadOnlyDictionary<string, Type> fragmentItemTypesByRoot,

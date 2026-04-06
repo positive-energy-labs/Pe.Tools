@@ -77,7 +77,7 @@ never needs to change.
 
 ### 1. Create DocumentSettingsStorage Service
 
-**New file**: `source/Pe.Global/Services/Storage/DocumentSettingsStorage.cs`
+**New file**: `source/Pe.Revit.Global/Services/Storage/DocumentSettingsStorage.cs`
 
 A generic service for storing any settings type in a Revit document via
 DataStorage + Extensible Storage.
@@ -102,7 +102,7 @@ Key implementation details:
 
 ### 2. Modify AutoTagService
 
-**File**: `source/Pe.Global/Services/AutoTag/AutoTagService.cs`
+**File**: `source/Pe.Revit.Global/Services/AutoTag/AutoTagService.cs`
 
 Changes:
 
@@ -197,8 +197,8 @@ This is low-effort since you're just watching for changes, not syncing.
 
 | File                                                           | Change                                           |
 | -------------------------------------------------------------- | ------------------------------------------------ |
-| `source/Pe.Global/Services/Storage/DocumentSettingsStorage.cs` | **NEW** - Generic ES-based document storage      |
-| `source/Pe.Global/Services/AutoTag/AutoTagService.cs`          | Modify to use document storage, per-doc tracking |
+| `source/Pe.Revit.Global/Services/Storage/DocumentSettingsStorage.cs` | **NEW** - Generic ES-based document storage      |
+| `source/Pe.Revit.Global/Services/AutoTag/AutoTagService.cs`          | Modify to use document storage, per-doc tracking |
 | `source/Pe.App/Commands/AutoTag/CmdAutoTagInit.cs`             | **NEW** - Initialize/configure settings command  |
 | `source/Pe.App/Commands/AutoTag/CmdAutoTagCatchUp.cs`          | **NEW** - Tag all untagged elements command      |
 | `source/Pe.App/App.cs`                                         | Register new commands in ribbon                  |
