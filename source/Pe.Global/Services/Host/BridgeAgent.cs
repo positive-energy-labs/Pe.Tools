@@ -2,9 +2,9 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
 using Pe.Global.Services.Document;
-using Pe.Host.Contracts;
 using Pe.Global.Services.Host.Operations;
-using Pe.StorageRuntime.Revit.Modules;
+using Pe.Host.Contracts.Protocol;
+using Pe.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
 using System.IO.Pipes;
@@ -50,6 +50,9 @@ internal sealed class BridgeRequestDispatcher(
 }
 
 internal sealed class BridgeAgent : IDisposable {
+    private readonly BridgeOperationContext _bridgeOperationContext;
+    private readonly BridgeOperationRegistry _bridgeOperationRegistry;
+    private readonly BridgeRequestDispatcher _bridgeRequestDispatcher;
     private readonly BridgeDocumentNotifier _documentNotifier;
     private readonly HostConnectionOptions _hostOptions;
     private readonly SettingsModuleRegistry _moduleRegistry;
@@ -57,9 +60,6 @@ internal sealed class BridgeAgent : IDisposable {
     private readonly StreamReader _reader;
     private readonly Task _readLoop;
     private readonly RequestService _requestService;
-    private readonly BridgeOperationContext _bridgeOperationContext;
-    private readonly BridgeRequestDispatcher _bridgeRequestDispatcher;
-    private readonly BridgeOperationRegistry _bridgeOperationRegistry;
     private readonly RevitDataCache _revitDataCache;
     private readonly RevitDataRequestService _revitDataRequestService;
 
@@ -67,8 +67,7 @@ internal sealed class BridgeAgent : IDisposable {
         NullValueHandling = NullValueHandling.Ignore,
         ContractResolver = new DefaultContractResolver {
             NamingStrategy = new CamelCaseNamingStrategy {
-                ProcessDictionaryKeys = false,
-                OverrideSpecifiedNames = false
+                ProcessDictionaryKeys = false, OverrideSpecifiedNames = false
             }
         },
         Converters = [new StringEnumConverter()]
@@ -105,7 +104,8 @@ internal sealed class BridgeAgent : IDisposable {
         );
         this._bridgeOperationRegistry = new BridgeOperationRegistry();
         this._bridgeOperationContext = new BridgeOperationContext(this._requestService, this._revitDataRequestService);
-        this._bridgeRequestDispatcher = new BridgeRequestDispatcher(this._bridgeOperationRegistry, this._serializerSettings);
+        this._bridgeRequestDispatcher =
+            new BridgeRequestDispatcher(this._bridgeOperationRegistry, this._serializerSettings);
 
         this._pipeClient =
             new NamedPipeClientStream(".", hostOptions.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
@@ -349,9 +349,9 @@ internal sealed class BridgeAgent : IDisposable {
             DocumentManager.GetActiveDocument()?.Title,
             this._moduleRegistry.GetModules()
                 .OrderBy(module => module.ModuleKey, StringComparer.OrdinalIgnoreCase)
-                .Select(module => new SettingsModuleDescriptor(
+                .Select(module => new HostModuleDescriptor(
                     module.ModuleKey,
-                    module.DefaultSubDirectory
+                    module.DefaultRootKey
                 ))
                 .ToList()
         );

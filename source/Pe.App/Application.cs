@@ -7,7 +7,7 @@ using Pe.App.Tasks;
 using Pe.Global.Services.AutoTag;
 using Pe.Global.Services.Document;
 using Pe.Global.Services.Host;
-using Pe.SettingsCatalog.Revit;
+using Pe.SettingsCatalog;
 using Pe.Ui.Core;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
@@ -43,7 +43,7 @@ public class Application : ExternalApplication {
 
         // Initialize the settings editor bridge metadata, but keep the bridge disconnected
         // until the user explicitly connects from the Revit UI.
-        HostRuntime.Initialize(revitTaskService, KnownSettingsRevitModules.RegisterKnownSettingsModules);
+        HostRuntime.Initialize(revitTaskService, KnownSettingsRegistry.RegisterRevitModules);
 
         CreateLogger();
         this.CreateRibbon();

@@ -20,17 +20,18 @@ using RuntimeSaveRequest = Pe.StorageRuntime.Documents.SaveSettingsDocumentReque
 using RuntimeVersionToken = Pe.StorageRuntime.Documents.SettingsVersionToken;
 using RuntimeWorkspaceDescriptor = Pe.StorageRuntime.Documents.SettingsWorkspaceDescriptor;
 using RuntimeWorkspacesData = Pe.StorageRuntime.Documents.SettingsWorkspacesData;
+using HostSettingsStorage = Pe.Host.Contracts.SettingsStorage;
 
 namespace Pe.Host.Services;
 
 internal static class SettingsTransportMapper {
-    public static Pe.Host.Contracts.SettingsDiscoveryResult ToContract(this RuntimeDiscoveryResult result) =>
+    public static HostSettingsStorage.SettingsDiscoveryResult ToContract(this RuntimeDiscoveryResult result) =>
         new(
             result.Files.Select(ToContract).ToList(),
             result.Root.ToContract()
         );
 
-    public static Pe.Host.Contracts.SettingsDocumentSnapshot ToContract(this RuntimeDocumentSnapshot snapshot) =>
+    public static HostSettingsStorage.SettingsDocumentSnapshot ToContract(this RuntimeDocumentSnapshot snapshot) =>
         new(
             snapshot.Metadata.ToContract(),
             snapshot.RawContent,
@@ -44,7 +45,7 @@ internal static class SettingsTransportMapper {
             )
         );
 
-    public static Pe.Host.Contracts.SaveSettingsDocumentResult ToContract(this RuntimeSaveResult result) =>
+    public static HostSettingsStorage.SaveSettingsDocumentResult ToContract(this RuntimeSaveResult result) =>
         new(
             result.Metadata.ToContract(),
             result.WriteApplied,
@@ -53,33 +54,34 @@ internal static class SettingsTransportMapper {
             result.Validation.ToContract()
         );
 
-    public static Pe.Host.Contracts.SettingsValidationResult ToContract(this RuntimeValidationResult result) =>
+    public static HostSettingsStorage.SettingsValidationResult ToContract(this RuntimeValidationResult result) =>
         new(
             result.IsValid,
             result.Issues.Select(ToContract).ToList()
         );
 
-    public static Pe.Host.Contracts.SettingsWorkspacesData ToContract(this RuntimeWorkspacesData data) =>
+    public static HostSettingsStorage.SettingsWorkspacesData ToContract(this RuntimeWorkspacesData data) =>
         new(data.Workspaces.Select(ToContract).ToList());
 
-    public static RuntimeOpenRequest ToRuntime(this Pe.Host.Contracts.OpenSettingsDocumentRequest request) =>
+    public static RuntimeOpenRequest ToRuntime(this HostSettingsStorage.OpenSettingsDocumentRequest request) =>
         new(request.DocumentId.ToRuntime(), request.IncludeComposedContent);
 
-    public static RuntimeSaveRequest ToRuntime(this Pe.Host.Contracts.SaveSettingsDocumentRequest request) =>
+    public static RuntimeSaveRequest ToRuntime(this HostSettingsStorage.SaveSettingsDocumentRequest request) =>
         new(
             request.DocumentId.ToRuntime(),
             request.RawContent,
             request.ExpectedVersionToken?.ToRuntime()
         );
 
-    public static RuntimeValidateRequest ToRuntime(this Pe.Host.Contracts.ValidateSettingsDocumentRequest request) =>
+    public static RuntimeValidateRequest ToRuntime(this HostSettingsStorage.ValidateSettingsDocumentRequest request) =>
         new(request.DocumentId.ToRuntime(), request.RawContent);
 
-    private static Pe.Host.Contracts.SettingsWorkspacesData ToContract(
+    private static HostSettingsStorage.SettingsWorkspacesData ToContract(
         this IReadOnlyList<RuntimeWorkspaceDescriptor> workspaces
     ) => new(workspaces.Select(ToContract).ToList());
 
-    private static Pe.Host.Contracts.SettingsWorkspaceDescriptor ToContract(this RuntimeWorkspaceDescriptor descriptor) =>
+    private static HostSettingsStorage.SettingsWorkspaceDescriptor ToContract(
+        this RuntimeWorkspaceDescriptor descriptor) =>
         new(
             descriptor.WorkspaceKey,
             descriptor.DisplayName,
@@ -87,7 +89,7 @@ internal static class SettingsTransportMapper {
             descriptor.Modules.Select(ToContract).ToList()
         );
 
-    private static Pe.Host.Contracts.SettingsModuleWorkspaceDescriptor ToContract(
+    private static HostSettingsStorage.SettingsModuleWorkspaceDescriptor ToContract(
         this RuntimeSettingsModuleWorkspaceDescriptor descriptor
     ) => new(
         descriptor.ModuleKey,
@@ -95,10 +97,10 @@ internal static class SettingsTransportMapper {
         descriptor.Roots.Select(ToContract).ToList()
     );
 
-    private static Pe.Host.Contracts.SettingsRootDescriptor ToContract(this RuntimeRootDescriptor descriptor) =>
+    private static HostSettingsStorage.SettingsRootDescriptor ToContract(this RuntimeRootDescriptor descriptor) =>
         new(descriptor.RootKey, descriptor.DisplayName);
 
-    private static Pe.Host.Contracts.SettingsDocumentMetadata ToContract(this RuntimeDocumentMetadata metadata) =>
+    private static HostSettingsStorage.SettingsDocumentMetadata ToContract(this RuntimeDocumentMetadata metadata) =>
         new(
             metadata.DocumentId.ToContract(),
             metadata.Kind.ToContract(),
@@ -106,7 +108,8 @@ internal static class SettingsTransportMapper {
             metadata.VersionToken?.ToContract()
         );
 
-    private static Pe.Host.Contracts.SettingsDocumentDependency ToContract(this RuntimeDocumentDependency dependency) =>
+    private static HostSettingsStorage.SettingsDocumentDependency
+        ToContract(this RuntimeDocumentDependency dependency) =>
         new(
             dependency.DocumentId.ToContract(),
             dependency.DirectivePath,
@@ -114,16 +117,16 @@ internal static class SettingsTransportMapper {
             dependency.Kind.ToContract()
         );
 
-    private static Pe.Host.Contracts.SettingsDocumentId ToContract(this RuntimeDocumentId documentId) =>
+    private static HostSettingsStorage.SettingsDocumentId ToContract(this RuntimeDocumentId documentId) =>
         new(documentId.ModuleKey, documentId.RootKey, documentId.RelativePath);
 
-    private static Pe.Host.Contracts.SettingsVersionToken ToContract(this RuntimeVersionToken token) =>
+    private static HostSettingsStorage.SettingsVersionToken ToContract(this RuntimeVersionToken token) =>
         new(token.Value);
 
-    private static Pe.Host.Contracts.SettingsValidationIssue ToContract(this RuntimeValidationIssue issue) =>
+    private static HostSettingsStorage.SettingsValidationIssue ToContract(this RuntimeValidationIssue issue) =>
         new(issue.Path, issue.Code, issue.Severity, issue.Message, issue.Suggestion);
 
-    private static Pe.Host.Contracts.SettingsFileEntry ToContract(this RuntimeFileEntry entry) =>
+    private static HostSettingsStorage.SettingsFileEntry ToContract(this RuntimeFileEntry entry) =>
         new(
             entry.Path,
             entry.RelativePath,
@@ -137,7 +140,7 @@ internal static class SettingsTransportMapper {
             entry.IsSchema
         );
 
-    private static Pe.Host.Contracts.SettingsDirectoryNode ToContract(this RuntimeDirectoryNode node) =>
+    private static HostSettingsStorage.SettingsDirectoryNode ToContract(this RuntimeDirectoryNode node) =>
         new(
             node.Name,
             node.RelativePath,
@@ -145,7 +148,7 @@ internal static class SettingsTransportMapper {
             node.Files.Select(ToContract).ToList()
         );
 
-    private static Pe.Host.Contracts.SettingsFileNode ToContract(this RuntimeFileNode node) =>
+    private static HostSettingsStorage.SettingsFileNode ToContract(this RuntimeFileNode node) =>
         new(
             node.Name,
             node.RelativePath,
@@ -157,29 +160,29 @@ internal static class SettingsTransportMapper {
             node.IsSchema
         );
 
-    private static Pe.Host.Contracts.SettingsFileKind ToContract(this RuntimeFileKind kind) =>
+    private static HostSettingsStorage.SettingsFileKind ToContract(this RuntimeFileKind kind) =>
         kind switch {
-            RuntimeFileKind.Profile => Pe.Host.Contracts.SettingsFileKind.Profile,
-            RuntimeFileKind.Fragment => Pe.Host.Contracts.SettingsFileKind.Fragment,
-            RuntimeFileKind.Schema => Pe.Host.Contracts.SettingsFileKind.Schema,
-            _ => Pe.Host.Contracts.SettingsFileKind.Other
+            RuntimeFileKind.Profile => HostSettingsStorage.SettingsFileKind.Profile,
+            RuntimeFileKind.Fragment => HostSettingsStorage.SettingsFileKind.Fragment,
+            RuntimeFileKind.Schema => HostSettingsStorage.SettingsFileKind.Schema,
+            _ => HostSettingsStorage.SettingsFileKind.Other
         };
 
-    private static Pe.Host.Contracts.SettingsDirectiveScope ToContract(this RuntimeDirectiveScope scope) =>
+    private static HostSettingsStorage.SettingsDirectiveScope ToContract(this RuntimeDirectiveScope scope) =>
         scope == RuntimeDirectiveScope.Global
-            ? Pe.Host.Contracts.SettingsDirectiveScope.Global
-            : Pe.Host.Contracts.SettingsDirectiveScope.Local;
+            ? HostSettingsStorage.SettingsDirectiveScope.Global
+            : HostSettingsStorage.SettingsDirectiveScope.Local;
 
-    private static Pe.Host.Contracts.SettingsDocumentDependencyKind ToContract(
+    private static HostSettingsStorage.SettingsDocumentDependencyKind ToContract(
         this RuntimeDocumentDependencyKind kind
     ) =>
         kind == RuntimeDocumentDependencyKind.Preset
-            ? Pe.Host.Contracts.SettingsDocumentDependencyKind.Preset
-            : Pe.Host.Contracts.SettingsDocumentDependencyKind.Include;
+            ? HostSettingsStorage.SettingsDocumentDependencyKind.Preset
+            : HostSettingsStorage.SettingsDocumentDependencyKind.Include;
 
-    private static RuntimeDocumentId ToRuntime(this Pe.Host.Contracts.SettingsDocumentId documentId) =>
+    private static RuntimeDocumentId ToRuntime(this HostSettingsStorage.SettingsDocumentId documentId) =>
         new(documentId.ModuleKey, documentId.RootKey, documentId.RelativePath);
 
-    private static RuntimeVersionToken ToRuntime(this Pe.Host.Contracts.SettingsVersionToken token) =>
+    private static RuntimeVersionToken ToRuntime(this HostSettingsStorage.SettingsVersionToken token) =>
         new(token.Value);
 }

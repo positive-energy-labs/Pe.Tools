@@ -1,47 +1,35 @@
-using Pe.SettingsCatalog.Revit;
-using Pe.Host.Contracts;
+using Pe.SettingsCatalog;
 using Pe.StorageRuntime;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Modules;
-using HostSettingsModuleDescriptor = Pe.Host.Contracts.SettingsModuleDescriptor;
-using HostRootDescriptor = Pe.Host.Contracts.SettingsRootDescriptor;
-using HostSettingsModuleWorkspaceDescriptor = Pe.Host.Contracts.SettingsModuleWorkspaceDescriptor;
-using HostWorkspaceDescriptor = Pe.Host.Contracts.SettingsWorkspaceDescriptor;
-using HostWorkspacesData = Pe.Host.Contracts.SettingsWorkspacesData;
+using HostSettingsModuleDescriptor = Pe.Host.Contracts.Protocol.HostModuleDescriptor;
+using HostRootDescriptor = Pe.Host.Contracts.SettingsStorage.SettingsRootDescriptor;
+using HostSettingsModuleWorkspaceDescriptor = Pe.Host.Contracts.SettingsStorage.SettingsModuleWorkspaceDescriptor;
+using HostWorkspaceDescriptor = Pe.Host.Contracts.SettingsStorage.SettingsWorkspaceDescriptor;
+using HostWorkspacesData = Pe.Host.Contracts.SettingsStorage.SettingsWorkspacesData;
 
 namespace Pe.Host.Services;
 
 public interface IHostSettingsModuleCatalog {
-    IReadOnlyList<SettingsSchemaRegistration> GetModules();
-
+    IReadOnlyList<ISettingsModuleManifest> GetModules();
     IReadOnlyList<HostSettingsModuleDescriptor> GetTransportDescriptors();
-
-    IReadOnlyDictionary<string, SettingsStorageModuleDefinition> GetStorageDefinitions();
-
     HostWorkspacesData GetWorkspaces();
-
-    bool TryGetModule(string moduleKey, out SettingsSchemaRegistration module);
+    bool TryGetModule(string moduleKey, out ISettingsModuleManifest module);
 }
 
 public sealed class HostSettingsModuleCatalog : IHostSettingsModuleCatalog {
-    private readonly SettingsRuntimeCapabilities _availableCapabilities;
-    private readonly IReadOnlyList<SettingsSchemaRegistration> _modules = KnownSettingsSchemas.All;
-    private readonly IReadOnlyDictionary<string, SettingsSchemaRegistration> _modulesByModuleKey;
-    private readonly IReadOnlyDictionary<string, SettingsStorageModuleDefinition> _storageDefinitions;
+    private readonly SettingsRuntimeMode _runtimeMode;
+    private readonly IReadOnlyList<ISettingsModuleManifest> _modules = KnownSettingsRegistry.All;
+    private readonly IReadOnlyDictionary<string, ISettingsModuleManifest> _modulesByModuleKey;
     private readonly IReadOnlyList<HostSettingsModuleDescriptor> _transportDescriptors;
     private readonly HostWorkspacesData _workspaces;
 
     public HostSettingsModuleCatalog()
-        : this(null, SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly) { }
+        : this(SettingsRuntimeMode.HostOnly) {
+    }
 
-    public HostSettingsModuleCatalog(IHostBridgeCapabilityService bridgeCapabilityService)
-        : this(bridgeCapabilityService, SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly) { }
-
-    public HostSettingsModuleCatalog(
-        IHostBridgeCapabilityService? bridgeCapabilityService,
-        SettingsRuntimeCapabilities availableCapabilities
-    ) {
-        this._availableCapabilities = availableCapabilities;
+    public HostSettingsModuleCatalog(SettingsRuntimeMode runtimeMode) {
+        this._runtimeMode = runtimeMode;
         this._modulesByModuleKey = this._modules.ToDictionary(
             module => module.ModuleKey,
             StringComparer.OrdinalIgnoreCase
@@ -52,7 +40,6 @@ public sealed class HostSettingsModuleCatalog : IHostSettingsModuleCatalog {
                 module.DefaultRootKey
             ))
             .ToList();
-        this._storageDefinitions = KnownSettingsStorageDefinitions.Create(this._availableCapabilities);
         this._workspaces = new HostWorkspacesData([
             new HostWorkspaceDescriptor(
                 "default",
@@ -69,14 +56,10 @@ public sealed class HostSettingsModuleCatalog : IHostSettingsModuleCatalog {
         ]);
     }
 
-    public IReadOnlyList<SettingsSchemaRegistration> GetModules() => this._modules;
-
+    public IReadOnlyList<ISettingsModuleManifest> GetModules() => this._modules;
     public IReadOnlyList<HostSettingsModuleDescriptor> GetTransportDescriptors() => this._transportDescriptors;
-
-    public IReadOnlyDictionary<string, SettingsStorageModuleDefinition> GetStorageDefinitions() => this._storageDefinitions;
-
     public HostWorkspacesData GetWorkspaces() => this._workspaces;
 
-    public bool TryGetModule(string moduleKey, out SettingsSchemaRegistration module) =>
+    public bool TryGetModule(string moduleKey, out ISettingsModuleManifest module) =>
         this._modulesByModuleKey.TryGetValue(moduleKey, out module!);
 }

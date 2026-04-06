@@ -1,4 +1,6 @@
-using Pe.Host.Contracts;
+using Pe.Host.Contracts.RevitData;
+using Pe.Host.Contracts.Operations;
+using Pe.Host.Contracts.SettingsStorage;
 
 namespace Pe.Global.Services.Host.Operations;
 
@@ -16,6 +18,11 @@ internal sealed class BridgeOperationRegistry {
                 GetParameterCatalogOperationContract.Definition,
                 static (request, context, cancellationToken) =>
                     context.RequestService.GetParameterCatalogEnvelopeAsync(request)
+            ),
+            BridgeOperations.Create<LoadedFamiliesFilterFieldOptionsRequest, FieldOptionsEnvelopeResponse>(
+                GetLoadedFamiliesFilterFieldOptionsOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RequestService.GetLoadedFamiliesFilterFieldOptionsEnvelopeAsync(request)
             ),
             BridgeOperations.Create<ScheduleCatalogRequest, ScheduleCatalogEnvelopeResponse>(
                 GetScheduleCatalogOperationContract.Definition,
@@ -44,10 +51,11 @@ internal sealed class BridgeOperationRegistry {
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
             .ToList();
-        if (duplicateKeys.Count != 0)
+        if (duplicateKeys.Count != 0) {
             throw new InvalidOperationException(
                 $"Duplicate bridge operation keys detected: {string.Join(", ", duplicateKeys)}"
             );
+        }
 
         this._operationsByKey = this.Operations.ToDictionary(
             operation => operation.Definition.Key,

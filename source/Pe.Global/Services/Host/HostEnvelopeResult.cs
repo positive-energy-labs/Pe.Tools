@@ -1,4 +1,5 @@
-using Pe.Host.Contracts;
+using Pe.Host.Contracts.RevitData;
+using Pe.Host.Contracts.SettingsStorage;
 
 namespace Pe.Global.Services.Host;
 
@@ -35,7 +36,8 @@ internal static class HostEnvelopeResultExtensions {
     public static SchemaEnvelopeResponse ToSchemaEnvelope(this HostEnvelopeResult<SchemaData> result) =>
         new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
 
-    public static FieldOptionsEnvelopeResponse ToFieldOptionsEnvelope(this HostEnvelopeResult<FieldOptionsData> result) =>
+    public static FieldOptionsEnvelopeResponse
+        ToFieldOptionsEnvelope(this HostEnvelopeResult<FieldOptionsData> result) =>
         new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
 
     public static ValidationEnvelopeResponse ToValidationEnvelope(this HostEnvelopeResult<ValidationData> result) =>

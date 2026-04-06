@@ -1,7 +1,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
-namespace Pe.Host.Contracts;
+namespace Pe.Host.Contracts.Protocol;
 
 public static class BridgeProtocol {
     public const string Transport = "named-pipes";
@@ -25,7 +25,7 @@ public record BridgeHandshake(
     string RuntimeFramework,
     bool HasActiveDocument,
     string? ActiveDocumentTitle,
-    List<SettingsModuleDescriptor> AvailableModules
+    List<HostModuleDescriptor> AvailableModules
 );
 
 public record BridgeRequest(

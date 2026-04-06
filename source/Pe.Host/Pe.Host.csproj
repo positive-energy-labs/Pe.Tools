@@ -9,7 +9,6 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Pe.Host.Contracts\Pe.Host.Contracts.csproj"/>
-        <ProjectReference Include="..\Pe.SettingsCatalog.Revit\Pe.SettingsCatalog.Revit.csproj"/>
         <ProjectReference Include="..\Pe.SettingsCatalog\Pe.SettingsCatalog.csproj"/>
         <ProjectReference Include="..\Pe.StorageRuntime\Pe.StorageRuntime.csproj"/>
     </ItemGroup>

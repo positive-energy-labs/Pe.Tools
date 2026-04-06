@@ -1,5 +1,5 @@
 using Newtonsoft.Json;
-using Pe.Host.Contracts;
+using Pe.Host.Contracts.Protocol;
 using Pe.Host.Services;
 using System.Collections.Concurrent;
 using System.IO.Pipes;
@@ -8,19 +8,22 @@ using System.Text;
 namespace Pe.Host;
 
 public sealed class BridgeServer(
-        HostEventStreamService eventStreamService,
-        ILogger<BridgeServer> logger,
-        BridgeHostOptions options
-    ) : BackgroundService {
+    HostEventStreamService eventStreamService,
+    ILogger<BridgeServer> logger,
+    BridgeHostOptions options
+) : BackgroundService {
     private readonly HostEventStreamService _eventStreamService = eventStreamService;
     private readonly ILogger<BridgeServer> _logger = logger;
-    private readonly JsonSerializerSettings _serializerSettings = HostJson.CreateSerializerSettings();
     private readonly BridgeHostOptions _options = options;
-    private readonly ConcurrentDictionary<string, TaskCompletionSource<BridgeResponse>> _pending = new(StringComparer.Ordinal);
-    private readonly object _snapshotSync = new();
+
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<BridgeResponse>> _pending =
+        new(StringComparer.Ordinal);
+
+    private readonly JsonSerializerSettings _serializerSettings = HostJson.CreateSerializerSettings();
     private readonly object _sessionSync = new();
-    private BridgeSnapshot _snapshot = BridgeSnapshot.Disconnected();
+    private readonly object _snapshotSync = new();
     private BridgeSession? _session;
+    private BridgeSnapshot _snapshot = BridgeSnapshot.Disconnected();
 
     public bool IsConnected => this.GetSnapshot().BridgeIsConnected;
 
@@ -36,16 +39,16 @@ public sealed class BridgeServer(
     ) {
         var session = this.GetSessionOrThrow();
         var requestId = Guid.NewGuid().ToString("N");
-        var payloadJson = Newtonsoft.Json.JsonConvert.SerializeObject(request, this._serializerSettings);
+        var payloadJson = JsonConvert.SerializeObject(request, this._serializerSettings);
         var payloadBytes = Encoding.UTF8.GetByteCount(payloadJson);
         var requestFrame = new BridgeFrame(
-            Kind: BridgeFrameKind.Request,
+            BridgeFrameKind.Request,
             Request: new BridgeRequest(
-                RequestId: requestId,
-                Method: method,
-                PayloadJson: payloadJson,
-                SentAtUnixMs: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                PayloadBytes: payloadBytes
+                requestId,
+                method,
+                payloadJson,
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                payloadBytes
             )
         );
 
@@ -98,7 +101,8 @@ public sealed class BridgeServer(
                     PipeOptions.Asynchronous
                 );
 
-                this._logger.LogInformation("Waiting for Revit bridge client on pipe '{PipeName}'", this._options.PipeName);
+                this._logger.LogInformation("Waiting for Revit bridge client on pipe '{PipeName}'",
+                    this._options.PipeName);
                 await stream.WaitForConnectionAsync(stoppingToken);
                 await this.RunSessionAsync(stream, stoppingToken);
             } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
@@ -165,6 +169,7 @@ public sealed class BridgeServer(
                         );
                         this._logger.LogInformation("Revit bridge handshake refreshed.");
                     }
+
                     break;
                 case BridgeFrameKind.Disconnect:
                     this._logger.LogInformation("Revit bridge requested disconnect: {Reason}", frame.DisconnectReason);
@@ -184,14 +189,17 @@ public sealed class BridgeServer(
             return;
 
         if (string.Equals(bridgeEvent.EventName, SettingsHostEventNames.DocumentChanged, StringComparison.Ordinal)) {
-            var payload = Newtonsoft.Json.JsonConvert.DeserializeObject<DocumentInvalidationEvent>(bridgeEvent.PayloadJson, this._serializerSettings);
+            var payload =
+                JsonConvert.DeserializeObject<DocumentInvalidationEvent>(bridgeEvent.PayloadJson,
+                    this._serializerSettings);
             if (payload != null) {
                 var previousSnapshot = this.GetSnapshot();
                 this.UpdateDocumentState(payload);
                 await this._eventStreamService.PublishDocumentChangedAsync(payload, cancellationToken);
 
                 if (previousSnapshot.HasActiveDocument != payload.HasActiveDocument ||
-                    !string.Equals(previousSnapshot.ActiveDocumentTitle, payload.DocumentTitle, StringComparison.Ordinal)) {
+                    !string.Equals(previousSnapshot.ActiveDocumentTitle, payload.DocumentTitle,
+                        StringComparison.Ordinal)) {
                     await this.PublishHostStatusChangedAsync(
                         HostStatusChangedReason.ActiveDocumentChanged,
                         payload.HasActiveDocument,
@@ -200,11 +208,12 @@ public sealed class BridgeServer(
                     );
                 }
             }
+
             return;
         }
 
         if (string.Equals(bridgeEvent.EventName, HostRuntimeEventNames.Notification, StringComparison.Ordinal)) {
-            var message = Newtonsoft.Json.JsonConvert.DeserializeObject<string>(
+            var message = JsonConvert.DeserializeObject<string>(
                 bridgeEvent.PayloadJson,
                 this._serializerSettings
             );
@@ -236,7 +245,8 @@ public sealed class BridgeServer(
             this._session = null;
         }
 
-        this._logger.LogInformation("Bridge server resetting session: Reason={Reason}, PendingRequests={PendingCount}", reason, pendingCount);
+        this._logger.LogInformation("Bridge server resetting session: Reason={Reason}, PendingRequests={PendingCount}",
+            reason, pendingCount);
         session?.Dispose();
         this.ClearConnection(reason);
         _ = this.PublishHostStatusChangedAsync(
@@ -246,23 +256,24 @@ public sealed class BridgeServer(
             CancellationToken.None
         );
 
-        foreach (var pending in this._pending.ToArray())
+        foreach (var pending in this._pending.ToArray()) {
             if (this._pending.TryRemove(pending.Key, out var completion))
                 _ = completion.TrySetException(new InvalidOperationException($"Revit bridge disconnected: {reason}"));
+        }
     }
 
     private void UpdateHandshake(BridgeHandshake handshake) {
         lock (this._snapshotSync) {
             this._snapshot = new BridgeSnapshot(
-                BridgeIsConnected: true,
-                HasActiveDocument: handshake.HasActiveDocument,
-                ActiveDocumentTitle: handshake.ActiveDocumentTitle,
-                RevitVersion: handshake.RevitVersion,
-                RuntimeFramework: handshake.RuntimeFramework,
-                BridgeContractVersion: handshake.ContractVersion,
-                BridgeTransport: handshake.Transport,
-                AvailableModules: [.. handshake.AvailableModules],
-                DisconnectReason: null
+                true,
+                handshake.HasActiveDocument,
+                handshake.ActiveDocumentTitle,
+                handshake.RevitVersion,
+                handshake.RuntimeFramework,
+                handshake.ContractVersion,
+                handshake.Transport,
+                [.. handshake.AvailableModules],
+                null
             );
         }
     }
@@ -270,8 +281,7 @@ public sealed class BridgeServer(
     private void UpdateDocumentState(DocumentInvalidationEvent payload) {
         lock (this._snapshotSync) {
             this._snapshot = this._snapshot with {
-                HasActiveDocument = payload.HasActiveDocument,
-                ActiveDocumentTitle = payload.DocumentTitle
+                HasActiveDocument = payload.HasActiveDocument, ActiveDocumentTitle = payload.DocumentTitle
             };
         }
     }
@@ -292,21 +302,23 @@ public sealed class BridgeServer(
     );
 
     private static void ValidateHandshake(BridgeHandshake handshake) {
-        if (!string.Equals(handshake.Transport, BridgeProtocol.Transport, StringComparison.Ordinal))
+        if (!string.Equals(handshake.Transport, BridgeProtocol.Transport, StringComparison.Ordinal)) {
             throw new InvalidOperationException(
                 $"Unsupported bridge transport '{handshake.Transport}'. Expected '{BridgeProtocol.Transport}'.");
+        }
 
-        if (handshake.ContractVersion != BridgeProtocol.ContractVersion)
+        if (handshake.ContractVersion != BridgeProtocol.ContractVersion) {
             throw new InvalidOperationException(
                 $"Unsupported bridge contract version '{handshake.ContractVersion}'. Expected '{BridgeProtocol.ContractVersion}'.");
+        }
     }
 
     private sealed class BridgeSession : IDisposable {
+        private readonly ILogger _logger;
         private readonly StreamReader _reader;
         private readonly JsonSerializerSettings _serializerSettings;
-        private readonly ILogger _logger;
-        private readonly StreamWriter _writer;
         private readonly SemaphoreSlim _writeLock = new(1, 1);
+        private readonly StreamWriter _writer;
 
         public BridgeSession(Stream stream, JsonSerializerSettings serializerSettings, ILogger logger) {
             this._serializerSettings = serializerSettings;
@@ -315,28 +327,28 @@ public sealed class BridgeServer(
             this._writer = new StreamWriter(stream, new UTF8Encoding(false), 4096, true) { AutoFlush = true };
         }
 
+        public void Dispose() {
+            this._writeLock.Dispose();
+            this._reader.Dispose();
+            this._writer.Dispose();
+        }
+
         public async Task<BridgeFrame?> ReadAsync(CancellationToken cancellationToken) {
             var line = await this._reader.ReadLineAsync(cancellationToken);
             if (line == null)
                 return null;
 
-            return Newtonsoft.Json.JsonConvert.DeserializeObject<BridgeFrame>(line, this._serializerSettings);
+            return JsonConvert.DeserializeObject<BridgeFrame>(line, this._serializerSettings);
         }
 
         public async Task WriteAsync(BridgeFrame frame, CancellationToken cancellationToken) {
-            var json = Newtonsoft.Json.JsonConvert.SerializeObject(frame, this._serializerSettings);
+            var json = JsonConvert.SerializeObject(frame, this._serializerSettings);
             await this._writeLock.WaitAsync(cancellationToken);
             try {
                 await this._writer.WriteLineAsync(json);
             } finally {
                 _ = this._writeLock.Release();
             }
-        }
-
-        public void Dispose() {
-            this._writeLock.Dispose();
-            this._reader.Dispose();
-            this._writer.Dispose();
         }
     }
 }
@@ -349,19 +361,19 @@ public sealed record BridgeSnapshot(
     string? RuntimeFramework,
     int BridgeContractVersion,
     string BridgeTransport,
-    List<SettingsModuleDescriptor> AvailableModules,
+    List<HostModuleDescriptor> AvailableModules,
     string? DisconnectReason
 ) {
     public static BridgeSnapshot Disconnected(string? disconnectReason = null) =>
         new(
-            BridgeIsConnected: false,
-            HasActiveDocument: false,
-            ActiveDocumentTitle: null,
-            RevitVersion: null,
-            RuntimeFramework: null,
-            BridgeContractVersion: BridgeProtocol.ContractVersion,
-            BridgeTransport: BridgeProtocol.Transport,
-            AvailableModules: [],
-            DisconnectReason: disconnectReason
+            false,
+            false,
+            null,
+            null,
+            null,
+            BridgeProtocol.ContractVersion,
+            BridgeProtocol.Transport,
+            [],
+            disconnectReason
         );
 }

@@ -1,5 +1,5 @@
 using Pe.Host;
-using Pe.Host.Contracts;
+using Pe.Host.Contracts.Protocol;
 using Pe.Host.Operations;
 using Pe.Host.Services;
 using System.Text.Json;
@@ -16,8 +16,7 @@ builder.Services.AddSingleton<HostEventStreamService>();
 builder.Services.AddSingleton<HostOperationRegistry>();
 builder.Services.AddSingleton<HostOperationExecutor>();
 builder.Services.AddSingleton<IHostBridgeCapabilityService, HostBridgeCapabilityService>();
-builder.Services.AddSingleton<IHostSettingsModuleCatalog>(sp =>
-    new HostSettingsModuleCatalog(sp.GetRequiredService<IHostBridgeCapabilityService>()));
+builder.Services.AddSingleton<IHostSettingsModuleCatalog>(_ => new HostSettingsModuleCatalog());
 builder.Services.AddSingleton<HostSettingsRuntimeStateService>();
 builder.Services.AddSingleton<HostSchemaService>();
 builder.Services.AddSingleton(sp => new HostSettingsStorageService(

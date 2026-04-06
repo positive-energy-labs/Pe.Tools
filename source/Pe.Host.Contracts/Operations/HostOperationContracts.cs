@@ -1,9 +1,8 @@
-namespace Pe.Host.Contracts;
+namespace Pe.Host.Contracts.Operations;
 
 public enum HostExecutionMode {
     Local,
-    Bridge,
-    Hybrid
+    Bridge
 }
 
 public enum HostHttpVerb {

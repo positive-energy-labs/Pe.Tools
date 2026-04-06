@@ -1,12 +1,12 @@
-using Pe.Host.Contracts;
+using Pe.Host.Contracts.Protocol;
 using System.Collections.Concurrent;
 
 namespace Pe.Global.Services.Host;
 
 internal sealed class RevitDataCache {
     private readonly ConcurrentDictionary<CacheKey, CacheEntry> _entries = new();
-    private readonly ConcurrentDictionary<CacheKey, Lazy<Task<object>>> _inflight = new();
     private readonly ConcurrentDictionary<HostInvalidationDomain, long> _generations = new();
+    private readonly ConcurrentDictionary<CacheKey, Lazy<Task<object>>> _inflight = new();
 
     public async Task<TValue> GetOrCreateAsync<TValue>(
         HostInvalidationDomain domain,

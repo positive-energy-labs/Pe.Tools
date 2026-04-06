@@ -1,15 +1,16 @@
 using Pe.Global.Revit.Lib.Parameters;
 using Pe.Global.Services.Document;
-using Pe.Host.Contracts;
+using Pe.Host.Contracts.RevitData;
+using Pe.Host.Contracts.SettingsStorage;
 using Pe.StorageRuntime.Capabilities;
+using Pe.StorageRuntime.Context;
 using Pe.StorageRuntime.Json.FieldOptions;
 using Pe.StorageRuntime.Json.SchemaDefinitions;
-using Pe.StorageRuntime.Revit.Context;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
-using Pe.StorageRuntime.Revit.Modules;
+using Pe.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
-using FieldOptionItem = Pe.Host.Contracts.FieldOptionItem;
+using FieldOptionItem = Pe.Host.Contracts.SettingsStorage.FieldOptionItem;
 
 namespace Pe.Global.Services.Host;
 
@@ -21,7 +22,7 @@ public class RequestService {
     private static readonly TimeSpan ParameterCatalogThrottleWindow = TimeSpan.FromMilliseconds(750);
 
     private readonly SettingsModuleRegistry _moduleRegistry;
-    private readonly IRevitContextAccessor _revitContextAccessor = new DocumentManagerRevitContextAccessor();
+    private readonly ISettingsDocumentContextAccessor _documentContextAccessor = new DocumentManagerRevitContextAccessor();
     private readonly RevitTaskService _revitTaskService;
     private readonly ThrottleGate _throttleGate;
 
@@ -86,6 +87,35 @@ public class RequestService {
         return response;
     }
 
+    public async Task<FieldOptionsEnvelopeResponse> GetLoadedFamiliesFilterFieldOptionsEnvelopeAsync(
+        LoadedFamiliesFilterFieldOptionsRequest request,
+        string? connectionId = null
+    ) {
+        var key = BuildThrottleKey(
+            connectionId,
+            "loaded-families-filter-field-options",
+            nameof(LoadedFamiliesFilter),
+            $"{request.PropertyPath}:{request.SourceKey}",
+            request.ContextValues
+        );
+
+        var (response, decision) = await this._throttleGate.ExecuteAsync(
+            key,
+            FieldOptionsThrottleWindow,
+            async () => {
+                var result = await this.GetLoadedFamiliesFilterFieldOptionsCore(request);
+                return result.ToFieldOptionsEnvelope();
+            }
+        );
+        LogThrottleDecision(
+            nameof(this.GetLoadedFamiliesFilterFieldOptionsEnvelopeAsync),
+            decision,
+            nameof(LoadedFamiliesFilter),
+            request.PropertyPath
+        );
+        return response;
+    }
+
     private async Task<ParameterCatalogEnvelopeResponse> GetParameterCatalogCore(ParameterCatalogRequest request) =>
         await this.EnqueueAsync(() => {
             try {
@@ -141,6 +171,93 @@ public class RequestService {
                     .ToParameterCatalogEnvelope();
             }
         });
+
+    private async Task<HostEnvelopeResult<FieldOptionsData>> GetLoadedFamiliesFilterFieldOptionsCore(
+        LoadedFamiliesFilterFieldOptionsRequest request
+    ) => await this.EnqueueAsync(() => {
+        try {
+            var fieldOptions = SettingsFieldOptionsService.Shared.GetOptionsAsync(
+                    typeof(LoadedFamiliesFilter),
+                    request.PropertyPath,
+                    request.SourceKey,
+                    this.CreateFieldOptionsContext(request.ContextValues)
+                )
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+
+            if (fieldOptions.Kind == FieldOptionsResultKind.Empty)
+                return EmptyFieldOptions(request.SourceKey, fieldOptions.Message);
+
+            if (fieldOptions.Kind == FieldOptionsResultKind.Unsupported) {
+                return HostEnvelopeResults.Failure<FieldOptionsData>(
+                    EnvelopeCode.Failed,
+                    fieldOptions.Message,
+                    [
+                        new ValidationIssue(
+                            "$",
+                            null,
+                            "FieldOptionsUnsupported",
+                            "error",
+                            fieldOptions.Message,
+                            "Check active document state and runtime capability availability."
+                        )
+                    ]
+                ) with {
+                    Data = EmptyFieldOptionsData(request.SourceKey)
+                };
+            }
+
+            if (fieldOptions.Kind == FieldOptionsResultKind.Failure) {
+                return HostEnvelopeResults.Failure<FieldOptionsData>(
+                    EnvelopeCode.Failed,
+                    fieldOptions.Message,
+                    [
+                        new ValidationIssue(
+                            "$",
+                            null,
+                            "FieldOptionsException",
+                            "error",
+                            fieldOptions.Message,
+                            "Check field option source configuration and request path."
+                        )
+                    ]
+                ) with {
+                    Data = EmptyFieldOptionsData(request.SourceKey)
+                };
+            }
+
+            return HostEnvelopeResults.Success(
+                new FieldOptionsData(
+                    request.SourceKey,
+                    FieldOptionsMode.Suggestion,
+                    true,
+                    fieldOptions.Items.Select(ToFieldOptionItem).ToList()
+                ),
+                EnvelopeCode.Ok,
+                fieldOptions.Message
+            );
+        } catch (Exception ex) {
+            Log.Error(
+                ex,
+                "GetLoadedFamiliesFilterFieldOptions failed for property '{PropertyPath}'",
+                request.PropertyPath
+            );
+            return HostEnvelopeResults.Failure<FieldOptionsData>(
+                EnvelopeCode.Failed,
+                ex.Message,
+                [
+                    HostEnvelopeResults.ExceptionIssue(
+                        "FieldOptionsException",
+                        ex,
+                        "Check provider configuration and request path."
+                    )
+                ]
+            ) with {
+                Data = EmptyFieldOptionsData(request.SourceKey)
+            };
+        }
+    });
 
     private async Task<HostEnvelopeResult<FieldOptionsData>> GetFieldOptionsCore(FieldOptionsRequest request) =>
         await this.EnqueueAsync(() => {
@@ -269,8 +386,8 @@ public class RequestService {
     private FieldOptionsExecutionContext CreateFieldOptionsContext(
         IReadOnlyDictionary<string, string>? contextValues = null
     ) => new(
-        SettingsRuntimeCapabilityProfiles.LiveDocument,
-        this._revitContextAccessor,
+        SettingsRuntimeMode.LiveDocument,
+        this._documentContextAccessor,
         contextValues
     );
 

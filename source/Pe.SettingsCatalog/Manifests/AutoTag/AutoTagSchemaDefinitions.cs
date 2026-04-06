@@ -2,7 +2,7 @@ using Pe.StorageRuntime.Json.SchemaDefinitions;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using System.Runtime.CompilerServices;
 
-namespace Pe.SettingsCatalog.Revit.AutoTag;
+namespace Pe.SettingsCatalog.Manifests.AutoTag;
 
 internal sealed class AutoTagConfigurationSchemaDefinition : SettingsSchemaDefinition<AutoTagConfiguration> {
     public override void Configure(ISettingsSchemaBuilder<AutoTagConfiguration> builder) {

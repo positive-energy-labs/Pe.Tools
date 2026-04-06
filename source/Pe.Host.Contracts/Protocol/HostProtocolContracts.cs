@@ -1,8 +1,9 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using Pe.Host.Contracts.Operations;
 using TypeGen.Core.TypeAnnotations;
 
-namespace Pe.Host.Contracts;
+namespace Pe.Host.Contracts.Protocol;
 
 [ExportTsClass]
 public static class SettingsHostEventNames {
@@ -17,6 +18,8 @@ public static class HostRuntimeEventNames {
 [ExportTsClass]
 public static class HttpRoutes {
     public const string SettingsBase = "/api/settings";
+
+    public const string RevitDataBase = "/api/revit-data";
     public static readonly string HostStatus = GetHostStatusOperationContract.Definition.Route;
     public static readonly string Schema = GetSchemaOperationContract.Definition.Route;
     public static readonly string Workspaces = GetWorkspacesOperationContract.Definition.Route;
@@ -24,32 +27,28 @@ public static class HttpRoutes {
     public static readonly string FieldOptions = GetFieldOptionsOperationContract.Definition.Route;
     public static readonly string ParameterCatalog = GetParameterCatalogOperationContract.Definition.Route;
     public static readonly string OpenDocument = OpenSettingsDocumentOperationContract.Definition.Route;
-    public static readonly string ComposeDocument = ComposeSettingsDocumentOperationContract.Definition.Route;
     public static readonly string ValidateDocument = ValidateSettingsDocumentOperationContract.Definition.Route;
     public static readonly string SaveDocument = SaveSettingsDocumentOperationContract.Definition.Route;
     public static readonly string Events = SettingsBase + "/events";
 
-    public const string RevitDataBase = "/api/revit-data";
-    public static readonly string LoadedFamiliesFilterSchema = GetLoadedFamiliesFilterSchemaOperationContract.Definition.Route;
+    public static readonly string LoadedFamiliesFilterSchema =
+        GetLoadedFamiliesFilterSchemaOperationContract.Definition.Route;
+
     public static readonly string LoadedFamiliesFilterFieldOptions =
         GetLoadedFamiliesFilterFieldOptionsOperationContract.Definition.Route;
+
     public static readonly string ScheduleCatalog = GetScheduleCatalogOperationContract.Definition.Route;
     public static readonly string LoadedFamiliesCatalog = GetLoadedFamiliesCatalogOperationContract.Definition.Route;
     public static readonly string LoadedFamiliesMatrix = GetLoadedFamiliesMatrixOperationContract.Definition.Route;
-    public static readonly string ProjectParameterBindings = GetProjectParameterBindingsOperationContract.Definition.Route;
+
+    public static readonly string ProjectParameterBindings =
+        GetProjectParameterBindingsOperationContract.Definition.Route;
 }
 
 [ExportTsClass]
 public static class HostProtocol {
     public const string Transport = "http+sse";
-    public const int ContractVersion = 15;
-}
-
-[JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
-public enum ProviderMode {
-    HostOnly,
-    BridgeEnhanced
+    public const int ContractVersion = 17;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
@@ -82,7 +81,7 @@ public enum DocumentInvalidationReason {
 }
 
 [ExportTsInterface]
-public record SettingsModuleDescriptor(
+public record HostModuleDescriptor(
     string ModuleKey,
     string DefaultRootKey
 );
@@ -91,7 +90,6 @@ public record SettingsModuleDescriptor(
 public record HostStatusData(
     bool HostIsRunning,
     bool BridgeIsConnected,
-    ProviderMode ProviderMode,
     bool HasActiveDocument,
     string? ActiveDocumentTitle,
     string? RevitVersion,
@@ -101,7 +99,7 @@ public record HostStatusData(
     string? ServerVersion,
     int BridgeContractVersion,
     string BridgeTransport,
-    List<SettingsModuleDescriptor> AvailableModules,
+    List<HostModuleDescriptor> AvailableModules,
     string? DisconnectReason
 );
 

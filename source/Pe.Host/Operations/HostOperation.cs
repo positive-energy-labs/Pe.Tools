@@ -1,4 +1,4 @@
-using Pe.Host.Contracts;
+using Pe.Host.Contracts.Operations;
 
 namespace Pe.Host.Operations;
 
@@ -21,7 +21,8 @@ internal sealed class DelegatingHostOperation<TRequest>(
     HostOperationDefinition definition,
     Func<TRequest, HostOperationContext, CancellationToken, Task<HostOperationResult>> handler
 ) : IHostOperation {
-    private readonly Func<TRequest, HostOperationContext, CancellationToken, Task<HostOperationResult>> _handler = handler;
+    private readonly Func<TRequest, HostOperationContext, CancellationToken, Task<HostOperationResult>> _handler =
+        handler;
 
     public HostOperationDefinition Definition { get; } = definition;
 

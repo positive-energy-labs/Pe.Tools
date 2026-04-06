@@ -5,7 +5,7 @@ using Pe.FamilyFoundry.Operations;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
-namespace Pe.SettingsCatalog.Revit.FamilyFoundry;
+namespace Pe.SettingsCatalog.Manifests.FamilyFoundry;
 
 public class ProfileRemap : BaseProfileSettings {
     [Description("Settings for cleaning the family document")]

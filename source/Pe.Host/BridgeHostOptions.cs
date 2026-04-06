@@ -1,3 +1,5 @@
+using Pe.Host.Contracts.Protocol;
+
 namespace Pe.Host;
 
 public sealed record BridgeHostOptions(
@@ -13,24 +15,20 @@ public sealed record BridgeHostOptions(
 
     public static BridgeHostOptions FromEnvironment() {
         var frontendBaseUrl = GetValueOrDefault(FrontendBaseUrlVariable, DefaultFrontendBaseUrl);
-        return new(
+        return new BridgeHostOptions(
             GetValueOrDefault(HostBaseUrlVariable, DefaultHostBaseUrl),
-            GetValueOrDefault(PipeNameVariable, Pe.Host.Contracts.BridgeProtocol.DefaultPipeName),
+            GetValueOrDefault(PipeNameVariable, BridgeProtocol.DefaultPipeName),
             BuildAllowedOrigins(frontendBaseUrl)
         );
     }
 
-    private static IReadOnlyList<string> BuildAllowedOrigins(string frontendBaseUrl) =>
-        [.. new[] {
-            frontendBaseUrl,
-            DefaultFrontendBaseUrl,
-            "http://localhost:5173",
-            "http://localhost:3000",
-            "http://127.0.0.1:5150",
-            "http://127.0.0.1:5173",
-            "http://127.0.0.1:3000"
-        }
-        .Distinct(StringComparer.OrdinalIgnoreCase)];
+    private static IReadOnlyList<string> BuildAllowedOrigins(string frontendBaseUrl) => [
+        .. new[] {
+                frontendBaseUrl, DefaultFrontendBaseUrl, "http://localhost:5173", "http://localhost:3000",
+                "http://127.0.0.1:5150", "http://127.0.0.1:5173", "http://127.0.0.1:3000"
+            }
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+    ];
 
     private static string GetValueOrDefault(string variableName, string defaultValue) {
         var value = Environment.GetEnvironmentVariable(variableName);

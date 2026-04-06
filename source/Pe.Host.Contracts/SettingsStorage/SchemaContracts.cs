@@ -1,8 +1,9 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using Pe.Host.Contracts.Operations;
 using TypeGen.Core.TypeAnnotations;
 
-namespace Pe.Host.Contracts;
+namespace Pe.Host.Contracts.SettingsStorage;
 
 [ExportTsInterface]
 public record SchemaRequest(string ModuleKey);

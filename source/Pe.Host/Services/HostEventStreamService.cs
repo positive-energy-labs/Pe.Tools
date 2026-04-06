@@ -1,19 +1,18 @@
 using Newtonsoft.Json;
+using Pe.Host.Contracts.Protocol;
 using System.Collections.Concurrent;
 using System.Threading.Channels;
-using Pe.Host.Contracts;
 
 namespace Pe.Host.Services;
 
 public sealed class HostEventStreamService {
-    private readonly ConcurrentDictionary<Guid, Channel<HostEventStreamMessage>> _subscribers = new();
     private readonly JsonSerializerSettings _serializerSettings = HostJson.CreateSerializerSettings();
+    private readonly ConcurrentDictionary<Guid, Channel<HostEventStreamMessage>> _subscribers = new();
 
     public ChannelReader<HostEventStreamMessage> Subscribe(CancellationToken cancellationToken) {
         var subscriberId = Guid.NewGuid();
         var channel = Channel.CreateUnbounded<HostEventStreamMessage>(new UnboundedChannelOptions {
-            SingleReader = true,
-            SingleWriter = false
+            SingleReader = true, SingleWriter = false
         });
 
         this._subscribers[subscriberId] = channel;

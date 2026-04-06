@@ -1,17 +1,20 @@
 using Pe.StorageRuntime;
+using Pe.SettingsCatalog;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Documents;
+using Pe.StorageRuntime.Modules;
 using Pe.StorageRuntime.Revit.Core.Json;
-using HostOpenRequest = Pe.Host.Contracts.OpenSettingsDocumentRequest;
-using HostSaveRequest = Pe.Host.Contracts.SaveSettingsDocumentRequest;
-using HostSaveResult = Pe.Host.Contracts.SaveSettingsDocumentResult;
-using HostTreeRequest = Pe.Host.Contracts.SettingsTreeRequest;
-using HostDiscoveryResult = Pe.Host.Contracts.SettingsDiscoveryResult;
-using HostDocumentSnapshot = Pe.Host.Contracts.SettingsDocumentSnapshot;
-using HostValidationRequest = Pe.Host.Contracts.ValidateSettingsDocumentRequest;
-using HostValidationResult = Pe.Host.Contracts.SettingsValidationResult;
-using HostWorkspacesData = Pe.Host.Contracts.SettingsWorkspacesData;
-using SettingsDocumentId = Pe.Host.Contracts.SettingsDocumentId;
+using HostOpenRequest = Pe.Host.Contracts.SettingsStorage.OpenSettingsDocumentRequest;
+using HostSaveRequest = Pe.Host.Contracts.SettingsStorage.SaveSettingsDocumentRequest;
+using HostSaveResult = Pe.Host.Contracts.SettingsStorage.SaveSettingsDocumentResult;
+using HostTreeRequest = Pe.Host.Contracts.SettingsStorage.SettingsTreeRequest;
+using HostDiscoveryResult = Pe.Host.Contracts.SettingsStorage.SettingsDiscoveryResult;
+using HostDocumentSnapshot = Pe.Host.Contracts.SettingsStorage.SettingsDocumentSnapshot;
+using HostValidationRequest = Pe.Host.Contracts.SettingsStorage.ValidateSettingsDocumentRequest;
+using HostValidationResult = Pe.Host.Contracts.SettingsStorage.SettingsValidationResult;
+using HostWorkspacesData = Pe.Host.Contracts.SettingsStorage.SettingsWorkspacesData;
+using SettingsDocumentId = Pe.Host.Contracts.SettingsStorage.SettingsDocumentId;
+using RuntimeSettingsVersionToken = Pe.StorageRuntime.Documents.SettingsVersionToken;
 
 namespace Pe.Host.Services;
 
@@ -19,44 +22,39 @@ namespace Pe.Host.Services;
 ///     Host-side entry point for the shared local-disk storage backend.
 /// </summary>
 public sealed class HostSettingsStorageService {
-    private readonly LocalDiskSettingsStorageBackend _backend;
     private readonly string _basePath;
     private readonly IHostSettingsModuleCatalog _moduleCatalog;
+    private readonly SettingsRuntimeMode _runtimeMode;
     private readonly SettingsDocumentSchemaSyncService _schemaSyncService;
 
     public HostSettingsStorageService(IHostSettingsModuleCatalog moduleCatalog)
-        : this(moduleCatalog, null, SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly) {
+        : this(moduleCatalog, null, SettingsRuntimeMode.HostOnly) {
     }
 
     public HostSettingsStorageService(
         IHostSettingsModuleCatalog moduleCatalog,
         string? basePath = null,
-        SettingsRuntimeCapabilities? availableCapabilities = null
+        SettingsRuntimeMode runtimeMode = SettingsRuntimeMode.HostOnly
     ) {
         this._moduleCatalog = moduleCatalog;
         this._basePath = basePath ?? SettingsStorageLocations.GetDefaultBasePath();
-        var resolvedCapabilities = availableCapabilities ?? SettingsRuntimeCapabilityProfiles.RevitAssemblyOnly;
-        this._schemaSyncService = new SettingsDocumentSchemaSyncService(resolvedCapabilities);
-        this._backend = new LocalDiskSettingsStorageBackend(
-            this._basePath,
-            resolvedCapabilities,
-            this._moduleCatalog.GetStorageDefinitions()
-        );
+        this._runtimeMode = runtimeMode;
+        this._schemaSyncService = new SettingsDocumentSchemaSyncService(runtimeMode);
     }
 
     public async Task<HostDiscoveryResult> DiscoverAsync(
         HostTreeRequest request,
         CancellationToken cancellationToken = default
     ) {
-        var discovery = await this._backend.DiscoverAsync(
-            request.ModuleKey,
-            request.RootKey,
+        var module = this.ResolveModule(request.ModuleKey);
+        var discovery = await this.CreateDocuments(module).DiscoverAsync(
             new SettingsDiscoveryOptions(
                 request.SubDirectory,
                 request.Recursive,
                 request.IncludeFragments,
                 request.IncludeSchemas
             ),
+            request.RootKey,
             cancellationToken
         );
         return discovery.ToContract();
@@ -67,15 +65,13 @@ public sealed class HostSettingsStorageService {
         CancellationToken cancellationToken = default
     ) {
         this.TrySynchronizeDocumentOnDisk(request.DocumentId);
-        return (await this._backend.OpenAsync(request.ToRuntime(), cancellationToken)).ToContract();
-    }
-
-    public async Task<HostDocumentSnapshot> ComposeAsync(
-        HostOpenRequest request,
-        CancellationToken cancellationToken = default
-    ) {
-        this.TrySynchronizeDocumentOnDisk(request.DocumentId);
-        return (await this._backend.ComposeAsync(request.ToRuntime(), cancellationToken)).ToContract();
+        var documents = this.CreateDocuments(this.ResolveModule(request.DocumentId.ModuleKey));
+        return (await documents.OpenAsync(
+            request.DocumentId.RelativePath,
+            request.IncludeComposedContent,
+            request.DocumentId.RootKey,
+            cancellationToken
+        )).ToContract();
     }
 
     public async Task<HostSaveResult> SaveAsync(
@@ -83,15 +79,50 @@ public sealed class HostSettingsStorageService {
         CancellationToken cancellationToken = default
     ) {
         var synchronizedRequest = this.SynchronizeRequestContent(request);
-        return (await this._backend.SaveAsync(synchronizedRequest.ToRuntime(), cancellationToken)).ToContract();
+        var documents = this.CreateDocuments(this.ResolveModule(synchronizedRequest.DocumentId.ModuleKey));
+        return (await documents.SaveAsync(
+            synchronizedRequest.DocumentId.RelativePath,
+            synchronizedRequest.RawContent,
+            synchronizedRequest.ExpectedVersionToken is null
+                ? null
+                : new RuntimeSettingsVersionToken(synchronizedRequest.ExpectedVersionToken.Value),
+            synchronizedRequest.DocumentId.RootKey,
+            cancellationToken
+        )).ToContract();
     }
 
     public async Task<HostValidationResult> ValidateAsync(
         HostValidationRequest request,
         CancellationToken cancellationToken = default
-    ) => (await this._backend.ValidateAsync(request.ToRuntime(), cancellationToken)).ToContract();
+    ) {
+        var documents = this.CreateDocuments(this.ResolveModule(request.DocumentId.ModuleKey));
+        return (await documents.ValidateAsync(
+            request.DocumentId.RelativePath,
+            request.RawContent,
+            request.DocumentId.RootKey,
+            cancellationToken
+        )).ToContract();
+    }
 
     public HostWorkspacesData GetWorkspaces() => this._moduleCatalog.GetWorkspaces();
+
+    private ISettingsModuleManifest ResolveModule(string moduleKey) =>
+        this._moduleCatalog.TryGetModule(moduleKey, out var module)
+            ? module
+            : throw new InvalidOperationException($"Unknown settings module '{moduleKey}'.");
+
+    private ModuleDocumentStorage CreateDocuments(ISettingsModuleManifest module) =>
+        new(
+            module.ModuleKey,
+            module.DefaultRootKey,
+            module.StorageOptions,
+            module.SettingsType,
+            this._runtimeMode,
+            this._basePath,
+            new Dictionary<string, SettingsStorageModuleDefinition>(StringComparer.OrdinalIgnoreCase) {
+                [module.ModuleKey] = module.CreateStorageDefinition(this._runtimeMode)
+            }
+        );
 
     private void TrySynchronizeDocumentOnDisk(SettingsDocumentId documentId) {
         if (!this._moduleCatalog.TryGetModule(documentId.ModuleKey, out var module) ||

@@ -1,8 +1,10 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using Pe.Host.Contracts.Operations;
+using Pe.Host.Contracts.SettingsStorage;
 using TypeGen.Core.TypeAnnotations;
 
-namespace Pe.Host.Contracts;
+namespace Pe.Host.Contracts.RevitData;
 
 [ExportTsInterface]
 public record ScheduleCatalogRequest {

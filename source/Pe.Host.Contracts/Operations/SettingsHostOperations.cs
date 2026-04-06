@@ -1,63 +1,71 @@
-namespace Pe.Host.Contracts;
+using Pe.Host.Contracts.Protocol;
+using Pe.Host.Contracts.SettingsStorage;
+using Pe.Host.Contracts.RevitData;
+namespace Pe.Host.Contracts.Operations;
 
 public static class GetHostStatusOperationContract {
-    public static readonly HostOperationDefinition Definition = HostOperationDefinition.Create<NoRequest, HostStatusData>(
-        key: "settings.host-status",
-        verb: HostHttpVerb.Get,
-        route: "/api/settings/host-status",
-        executionMode: HostExecutionMode.Local,
-        displayName: "Get Host Status"
-    );
+    public static readonly HostOperationDefinition Definition =
+        HostOperationDefinition.Create<NoRequest, HostStatusData>(
+            "settings.host-status",
+            HostHttpVerb.Get,
+            "/api/settings/host-status",
+            HostExecutionMode.Local,
+            "Get Host Status"
+        );
 }
 
 public static class GetSchemaOperationContract {
-    public static readonly HostOperationDefinition Definition = HostOperationDefinition.Create<SchemaRequest, SchemaEnvelopeResponse>(
-        key: "settings.schema",
-        verb: HostHttpVerb.Get,
-        route: "/api/settings/schema",
-        executionMode: HostExecutionMode.Local,
-        displayName: "Get Schema"
-    );
+    public static readonly HostOperationDefinition Definition =
+        HostOperationDefinition.Create<SchemaRequest, SchemaEnvelopeResponse>(
+            "settings.schema",
+            HostHttpVerb.Get,
+            "/api/settings/schema",
+            HostExecutionMode.Local,
+            "Get Schema"
+        );
 }
 
 public static class GetWorkspacesOperationContract {
-    public static readonly HostOperationDefinition Definition = HostOperationDefinition.Create<NoRequest, SettingsWorkspacesData>(
-        key: "settings.workspaces",
-        verb: HostHttpVerb.Get,
-        route: "/api/settings/workspaces",
-        executionMode: HostExecutionMode.Local,
-        displayName: "Get Workspaces"
-    );
+    public static readonly HostOperationDefinition Definition =
+        HostOperationDefinition.Create<NoRequest, SettingsWorkspacesData>(
+            "settings.workspaces",
+            HostHttpVerb.Get,
+            "/api/settings/workspaces",
+            HostExecutionMode.Local,
+            "Get Workspaces"
+        );
 }
 
 public static class DiscoverSettingsTreeOperationContract {
-    public static readonly HostOperationDefinition Definition = HostOperationDefinition.Create<SettingsTreeRequest, SettingsDiscoveryResult>(
-        key: "settings.tree",
-        verb: HostHttpVerb.Get,
-        route: "/api/settings/tree",
-        executionMode: HostExecutionMode.Local,
-        displayName: "Discover Settings Tree"
-    );
+    public static readonly HostOperationDefinition Definition =
+        HostOperationDefinition.Create<SettingsTreeRequest, SettingsDiscoveryResult>(
+            "settings.tree",
+            HostHttpVerb.Get,
+            "/api/settings/tree",
+            HostExecutionMode.Local,
+            "Discover Settings Tree"
+        );
 }
 
 public static class GetFieldOptionsOperationContract {
-    public static readonly HostOperationDefinition Definition = HostOperationDefinition.Create<FieldOptionsRequest, FieldOptionsEnvelopeResponse>(
-        key: "settings.field-options",
-        verb: HostHttpVerb.Post,
-        route: "/api/settings/field-options",
-        executionMode: HostExecutionMode.Hybrid,
-        displayName: "Get Field Options"
-    );
+    public static readonly HostOperationDefinition Definition =
+        HostOperationDefinition.Create<FieldOptionsRequest, FieldOptionsEnvelopeResponse>(
+            "settings.field-options",
+            HostHttpVerb.Post,
+            "/api/settings/field-options",
+            HostExecutionMode.Bridge,
+            "Get Field Options"
+        );
 }
 
 public static class GetParameterCatalogOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<ParameterCatalogRequest, ParameterCatalogEnvelopeResponse>(
-            key: "settings.parameter-catalog",
-            verb: HostHttpVerb.Post,
-            route: "/api/settings/parameter-catalog",
-            executionMode: HostExecutionMode.Bridge,
-            displayName: "Get Parameter Catalog",
-            cachePolicy: new HostCachePolicy("parameter-catalog", 300)
+            "settings.parameter-catalog",
+            HostHttpVerb.Post,
+            "/api/settings/parameter-catalog",
+            HostExecutionMode.Bridge,
+            "Get Parameter Catalog",
+            new HostCachePolicy("parameter-catalog", 300)
         );
 }

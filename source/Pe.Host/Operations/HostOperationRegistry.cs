@@ -1,4 +1,7 @@
-using Pe.Host.Contracts;
+using Pe.Host.Contracts.RevitData;
+using Pe.Host.Contracts.Operations;
+using Pe.Host.Contracts.Protocol;
+using Pe.Host.Contracts.SettingsStorage;
 
 namespace Pe.Host.Operations;
 
@@ -27,39 +30,8 @@ internal sealed class HostOperationRegistry {
                 static async (request, context, cancellationToken) =>
                     HostOperations.Local(await context.StorageService.DiscoverAsync(request, cancellationToken))
             ),
-            HostOperations.Create<FieldOptionsRequest>(
-                GetFieldOptionsOperationContract.Definition,
-                static async (request, context, cancellationToken) => {
-                    var logger = context.LoggerFactory.CreateLogger("HostOperation.GetFieldOptions");
-                    var localResponse = await context.SchemaService.GetFieldOptionsEnvelopeLocallyAsync(
-                        request,
-                        cancellationToken
-                    );
-                    if (localResponse != null) {
-                        logger.LogDebug(
-                            "Host operation executed locally: Key={Key}, SourceKey={SourceKey}, PropertyPath={PropertyPath}",
-                            GetFieldOptionsOperationContract.Definition.Key,
-                            request.SourceKey,
-                            request.PropertyPath
-                        );
-                        return HostOperations.Path(localResponse, "hybrid-local");
-                    }
-
-                    logger.LogDebug(
-                        "Host operation falling back to bridge: Key={Key}, SourceKey={SourceKey}, PropertyPath={PropertyPath}",
-                        GetFieldOptionsOperationContract.Definition.Key,
-                        request.SourceKey,
-                        request.PropertyPath
-                    );
-                    return HostOperations.Path(
-                        await context.BridgeServer.InvokeAsync<FieldOptionsRequest, FieldOptionsEnvelopeResponse>(
-                            GetFieldOptionsOperationContract.Definition.Key,
-                            request,
-                            cancellationToken
-                        ),
-                        "hybrid-bridge"
-                    );
-                }
+            HostOperations.Bridge<FieldOptionsRequest, FieldOptionsEnvelopeResponse>(
+                GetFieldOptionsOperationContract.Definition
             ),
             HostOperations.Bridge<ParameterCatalogRequest, ParameterCatalogEnvelopeResponse>(
                 GetParameterCatalogOperationContract.Definition
@@ -72,15 +44,8 @@ internal sealed class HostOperationRegistry {
                 static (request, context, cancellationToken) =>
                     Task.FromResult(HostOperations.Local(context.SchemaService.GetLoadedFamiliesFilterSchemaEnvelope()))
             ),
-            HostOperations.Create<LoadedFamiliesFilterFieldOptionsRequest>(
-                GetLoadedFamiliesFilterFieldOptionsOperationContract.Definition,
-                static async (request, context, cancellationToken) =>
-                    HostOperations.Local(
-                        await context.SchemaService.GetLoadedFamiliesFilterFieldOptionsEnvelopeAsync(
-                            request,
-                            cancellationToken
-                        )
-                    )
+            HostOperations.Bridge<LoadedFamiliesFilterFieldOptionsRequest, FieldOptionsEnvelopeResponse>(
+                GetLoadedFamiliesFilterFieldOptionsOperationContract.Definition
             ),
             HostOperations.Bridge<LoadedFamiliesCatalogRequest, LoadedFamiliesCatalogEnvelopeResponse>(
                 GetLoadedFamiliesCatalogOperationContract.Definition
@@ -95,11 +60,6 @@ internal sealed class HostOperationRegistry {
                 OpenSettingsDocumentOperationContract.Definition,
                 static async (request, context, cancellationToken) =>
                     HostOperations.Local(await context.StorageService.OpenAsync(request, cancellationToken))
-            ),
-            HostOperations.Create<OpenSettingsDocumentRequest>(
-                ComposeSettingsDocumentOperationContract.Definition,
-                static async (request, context, cancellationToken) =>
-                    HostOperations.Local(await context.StorageService.ComposeAsync(request, cancellationToken))
             ),
             HostOperations.Create<ValidateSettingsDocumentRequest>(
                 ValidateSettingsDocumentOperationContract.Definition,
@@ -131,20 +91,22 @@ internal sealed class HostOperationRegistry {
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
             .ToList();
-        if (duplicateKeys.Count != 0)
+        if (duplicateKeys.Count != 0) {
             throw new InvalidOperationException(
                 $"Duplicate host operation keys detected: {string.Join(", ", duplicateKeys)}"
             );
+        }
 
         var duplicateRoutes = operations
             .GroupBy(operation => $"{operation.Definition.Verb}:{operation.Definition.Route}", StringComparer.Ordinal)
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
             .ToList();
-        if (duplicateRoutes.Count != 0)
+        if (duplicateRoutes.Count != 0) {
             throw new InvalidOperationException(
                 $"Duplicate host operation routes detected: {string.Join(", ", duplicateRoutes)}"
             );
+        }
     }
 
     private static HostStatusData CreateHostStatusData(HostOperationContext context) {
@@ -154,7 +116,6 @@ internal sealed class HostOperationRegistry {
         return new HostStatusData(
             true,
             snapshot.BridgeIsConnected,
-            runtimeState.ProviderMode,
             snapshot.HasActiveDocument,
             snapshot.ActiveDocumentTitle,
             snapshot.RevitVersion,

@@ -2,7 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using TypeGen.Core.TypeAnnotations;
 
-namespace Pe.SettingsCatalog.Revit.AutoTag;
+namespace Pe.SettingsCatalog.Manifests.AutoTag;
 
 [ExportTsInterface]
 public class AutoTagSettings {

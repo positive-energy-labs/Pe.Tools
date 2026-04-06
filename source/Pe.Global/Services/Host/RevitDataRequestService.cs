@@ -2,7 +2,9 @@ using Newtonsoft.Json;
 using Pe.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 using Pe.Global.Revit.Lib.Schedules;
 using Pe.Global.Services.Document;
-using Pe.Host.Contracts;
+using Pe.Host.Contracts.RevitData;
+using Pe.Host.Contracts.Protocol;
+using Pe.Host.Contracts.SettingsStorage;
 using ricaun.Revit.UI.Tasks;
 using RevitDocument = Autodesk.Revit.DB.Document;
 
@@ -277,13 +279,16 @@ internal sealed class RevitDataRequestService {
 }
 
 internal static class RevitDataRequestResultExtensions {
-    public static ScheduleCatalogEnvelopeResponse ToScheduleCatalogFailureEnvelope(this HostEnvelopeResult<RevitDocument> result) =>
+    public static ScheduleCatalogEnvelopeResponse ToScheduleCatalogFailureEnvelope(
+        this HostEnvelopeResult<RevitDocument> result) =>
         new(result.Ok, result.Code, result.Message, result.Issues, null);
 
-    public static LoadedFamiliesCatalogEnvelopeResponse ToCatalogFailureEnvelope(this HostEnvelopeResult<RevitDocument> result) =>
+    public static LoadedFamiliesCatalogEnvelopeResponse ToCatalogFailureEnvelope(
+        this HostEnvelopeResult<RevitDocument> result) =>
         new(result.Ok, result.Code, result.Message, result.Issues, null);
 
-    public static LoadedFamiliesMatrixEnvelopeResponse ToMatrixFailureEnvelope(this HostEnvelopeResult<RevitDocument> result) =>
+    public static LoadedFamiliesMatrixEnvelopeResponse ToMatrixFailureEnvelope(
+        this HostEnvelopeResult<RevitDocument> result) =>
         new(result.Ok, result.Code, result.Message, result.Issues, null);
 
     public static ProjectParameterBindingsEnvelopeResponse ToProjectBindingsFailureEnvelope(

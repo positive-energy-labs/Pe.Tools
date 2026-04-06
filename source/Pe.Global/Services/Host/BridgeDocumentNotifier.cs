@@ -1,6 +1,6 @@
 using Autodesk.Revit.DB.Events;
 using Pe.Global.Services.Document;
-using Pe.Host.Contracts;
+using Pe.Host.Contracts.Protocol;
 using Serilog;
 
 namespace Pe.Global.Services.Host;

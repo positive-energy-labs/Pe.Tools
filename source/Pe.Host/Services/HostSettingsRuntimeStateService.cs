@@ -1,11 +1,10 @@
-using Pe.Host.Contracts;
+using Pe.Host.Contracts.Protocol;
 
 namespace Pe.Host.Services;
 
 public sealed record HostSettingsRuntimeState(
-    ProviderMode ProviderMode,
     BridgeSnapshot BridgeSnapshot,
-    IReadOnlyList<SettingsModuleDescriptor> AvailableModules
+    IReadOnlyList<HostModuleDescriptor> AvailableModules
 );
 
 public sealed class HostSettingsRuntimeStateService(
@@ -17,7 +16,6 @@ public sealed class HostSettingsRuntimeStateService(
 
     public HostSettingsRuntimeState GetState() =>
         new(
-            this._bridgeCapabilityService.GetProviderMode(),
             this._bridgeCapabilityService.GetSnapshot(),
             this._moduleCatalog.GetTransportDescriptors()
         );

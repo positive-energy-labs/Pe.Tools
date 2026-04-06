@@ -2,10 +2,17 @@
 
     <PropertyGroup>
         <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all" Condition="'$(TargetFramework)' == 'net48'"/>
+        <ProjectReference Include="..\Pe.FamilyFoundry\Pe.FamilyFoundry.csproj"/>
         <ProjectReference Include="..\Pe.StorageRuntime\Pe.StorageRuntime.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Manifests\" />
     </ItemGroup>
 
 </Project>
