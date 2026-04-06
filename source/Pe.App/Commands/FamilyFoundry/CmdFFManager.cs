@@ -26,7 +26,7 @@ namespace Pe.Tools.Commands.FamilyFoundry;
 public class CmdFFManager : IExternalCommand {
     public const string AddinKey = nameof(CmdFFManager);
     public const string DisplayName = "FF Manager";
-    private static readonly SettingsModuleManifest<ProfileFamilyManager> SettingsModule = ProfileFamilyManagerSettingsManifest.Module;
+    private static readonly SettingsModuleManifest<FFManagerSettings> SettingsModule = FFManagerManifest.Module;
 
     public Result Execute(
         ExternalCommandData commandData,
@@ -37,7 +37,7 @@ public class CmdFFManager : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var window = new FoundryPaletteBuilder<ProfileFamilyManager>(DisplayName, SettingsModule, doc, uiDoc)
+            var window = new FoundryPaletteBuilder<FFManagerSettings>(DisplayName, SettingsModule, doc, uiDoc)
                 .WithAction("Apply Profile", this.HandleApplyProfile,
                     ctx => ctx.PreviewData?.IsValid == true)
                 .WithQueueBuilder(BuildQueue)
@@ -51,7 +51,7 @@ public class CmdFFManager : IExternalCommand {
         }
     }
 
-    private void HandleApplyProfile(FoundryContext<ProfileFamilyManager> ctx) {
+    private void HandleApplyProfile(FoundryContext<FFManagerSettings> ctx) {
         if (!ctx.PreviewData.IsValid) {
             new Ballogger()
                 .Add(LogEventLevel.Error, new StackFrame(), "Cannot apply profile - profile has validation errors")
@@ -94,7 +94,7 @@ public class CmdFFManager : IExternalCommand {
 
     public static FFManagerProcessFamiliesActionResult ProcessFamiliesCore(
         Document doc,
-        ProfileFamilyManager profile,
+        FFManagerSettings profile,
         string profileName,
         LoadAndSaveOptions? onFinishSettings = null,
         string? outputFolderPath = null
@@ -178,7 +178,7 @@ public class CmdFFManager : IExternalCommand {
     ///     Manager-specific: includes RefPlane operations and subcategories.
     /// </summary>
     private static OperationQueue BuildQueue(
-        ProfileFamilyManager profile,
+        FFManagerSettings profile,
         List<SharedParameterDefinition> apsParamData
     ) {
         // Hardcoded reference plane subcategory specs
