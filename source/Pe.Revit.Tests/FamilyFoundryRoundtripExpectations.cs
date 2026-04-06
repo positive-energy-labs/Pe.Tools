@@ -7,7 +7,7 @@ using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 namespace Pe.Revit.Tests;
 
 internal sealed record RoundtripArtifact(
-    ProfileFamilyManager Profile,
+    FFManagerSettings Profile,
     AuthoredParamDrivenSolidsSettings Authored,
     ParamDrivenSolidsCompileResult Compiled,
     FamilyProcessingContext Context,
