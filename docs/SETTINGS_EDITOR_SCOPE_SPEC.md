@@ -15,8 +15,7 @@ settings-editor integration so future work in this repo stays aligned.
 - **Server-authoritative validation**
   - Client feedback is immediate; server remains source of truth.
 - **Render-schema delivery for frontend**
-  - Host schema payloads are render-oriented and pre-resolved for UI
-    generation.
+  - Host schema payloads are render-oriented and structural-only.
   - Authoring schemas remain backend and local-tooling assets for JSON file
     intellisense.
 - **Module-first backend registration**
@@ -93,7 +92,7 @@ not frontend implementation details.
   - SSE is the public entry point for invalidation-only push events
 - Internal bridge path:
   - named-pipe RPC is still used between `Pe.Host` and the Revit add-in for
-    document-aware field-option source execution
+    all live Revit-backed queries
 
 ## Key Locations
 

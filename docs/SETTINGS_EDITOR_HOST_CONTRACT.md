@@ -45,9 +45,13 @@ The browser transport is split by responsibility:
   - host status
   - schema
   - workspace and tree discovery
-  - document open/compose/validate/save
+  - document open/validate/save
+  - structural schema payloads
+- Bridge-backed HTTP endpoints are the source of truth for:
   - field options
   - parameter catalog queries
+  - loaded families filter field options
+  - schedule / loaded-families / project-parameter live data
 - SSE is used only for:
   - document invalidation events
   - host-status change invalidation
@@ -58,6 +62,7 @@ The browser transport is split by responsibility:
   - Returns `HostStatusData`.
 - `GET /api/settings/schema?moduleKey=...`
   - Returns `SchemaData`.
+  - Structural only. Does not execute live Revit providers locally.
 - `GET /api/settings/workspaces`
   - Returns `SettingsWorkspacesData`.
 - `GET /api/settings/tree`
@@ -66,13 +71,12 @@ The browser transport is split by responsibility:
 - `POST /api/settings/field-options`
   - Request: `FieldOptionsRequest`
   - Returns `FieldOptionsData`.
+  - Bridge required.
 - `POST /api/settings/parameter-catalog`
   - Request: `ParameterCatalogRequest`
   - Returns `ParameterCatalogData`.
+  - Bridge required.
 - `POST /api/settings/document/open`
-  - Request: `OpenSettingsDocumentRequest`
-  - Returns `SettingsDocumentSnapshot`.
-- `POST /api/settings/document/compose`
   - Request: `OpenSettingsDocumentRequest`
   - Returns `SettingsDocumentSnapshot`.
 - `POST /api/settings/document/validate`
@@ -81,6 +85,18 @@ The browser transport is split by responsibility:
 - `POST /api/settings/document/save`
   - Request: `SaveSettingsDocumentRequest`
   - Returns `SaveSettingsDocumentResult`.
+- `POST /api/revit-data/loaded-families/filter/field-options`
+  - Request: `LoadedFamiliesFilterFieldOptionsRequest`
+  - Returns `FieldOptionsData`.
+  - Bridge required.
+- `POST /api/revit-data/schedules/catalog`
+  - Bridge required.
+- `POST /api/revit-data/loaded-families/catalog`
+  - Bridge required.
+- `POST /api/revit-data/loaded-families/matrix`
+  - Bridge required.
+- `POST /api/revit-data/project-parameter-bindings`
+  - Bridge required.
 
 ## SSE Events
 
@@ -116,7 +132,8 @@ Recommended frontend behavior:
 5. Call `POST /api/settings/document/validate` and
    `POST /api/settings/document/save` during authoring.
 6. Call `POST /api/settings/field-options` and
-   `POST /api/settings/parameter-catalog` when the rendered form needs them.
+   `POST /api/settings/parameter-catalog` only when the bridge is connected and
+   the rendered form needs live Revit data.
 7. Subscribe to `/api/settings/events` and invalidate dependent queries when
    events arrive.
 

@@ -1,6 +1,6 @@
 using Autodesk.Internal.InfoCenter;
 using Autodesk.Windows;
-using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime;
 using Serilog.Events;
 using System.Windows;
 
@@ -83,7 +83,7 @@ public class Ballogger {
         if (this._messages.Count == 0) _ = this.Add(LogEventLevel.Warning, null, "No messages to display");
 
         foreach (var message in this._messages) {
-            StorageClient.GlobalDir().LogTxt(message);
+            StorageClient.Default.Global().Log().Append(message);
 #if RELEASE
             if (message.StartsWith("DEBUG")) continue;
 #endif
@@ -109,7 +109,7 @@ public class Ballogger {
         if (this._messages.Count == 0) _ = this.Add(LogEventLevel.Warning, null, "No messages to display");
 
         foreach (var message in this._messages) {
-            StorageClient.GlobalDir().LogTxt(message);
+            StorageClient.Default.Global().Log().Append(message);
 #if RELEASE
             if (message.StartsWith("DEBUG")) continue;
 #endif

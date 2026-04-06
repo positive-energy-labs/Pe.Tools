@@ -125,7 +125,6 @@ Do not skip ahead to suppression or heuristics until the failing rung is clear.
 4. **If given permmission to build** then use commands that minimize output like
    `dotnet build -c "Debug.R25" /p:WarningLevel=0`
 5. This repo currently has two separate Revit-backed test lanes:
-   - `source/Pe.Tools.Tests`: TUnit on Microsoft.Testing.Platform
    - `source/Pe.Tools.RevitTest.Tests`: `ricaun.RevitTest` on VSTest / NUnit
    Keep runner-specific commands, filters, and workflow details scoped to the
    local `AGENTS.md` in each test project.
