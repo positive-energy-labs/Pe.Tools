@@ -1,12 +1,10 @@
 using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.OperationSettings;
-using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
-using Pe.Shared.StorageRuntime.Json.SchemaProviders;
+using Pe.Revit.Global.Revit.Lib.Schedules.Filters;
 using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
 using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 using Pe.Shared.StorageRuntime.Json.SchemaProviders;
-using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
 using System.Runtime.CompilerServices;
 
 namespace Pe.Revit.FamilyFoundry.SchemaDefinitions;
@@ -58,8 +56,37 @@ internal sealed class ExcludeSharedParameterSchemaDefinition : SettingsSchemaDef
     }
 }
 
+internal sealed class FilterFamiliesSettingsSchemaDefinition : SettingsSchemaDefinition<BaseProfileSettings.FilterFamiliesSettings> {
+    public override void Configure(ISettingsSchemaBuilder<BaseProfileSettings.FilterFamiliesSettings> builder) =>
+        builder.Property(item => item.IncludeByCondition,
+            property => property.WithDescription(
+                "Optional conditional filter based on family parameter values. Uses schedule filter logic to evaluate parameter conditions. Leave FieldName empty to disable this filter."));
+}
+
+internal sealed class ScheduleFilterSpecFamilyFoundrySchemaDefinition : SettingsSchemaDefinition<ScheduleFilterSpec> {
+    public override void Configure(ISettingsSchemaBuilder<ScheduleFilterSpec> builder) =>
+        builder.Property(item => item.FieldName, property => {
+            property.DependsOnSibling(OptionContextKeys.CategoryName);
+            property.UseFieldOptions<ScheduleFieldNamesProvider>();
+        });
+}
+
+internal sealed class GlobalParamAssignmentSchemaDefinition : SettingsSchemaDefinition<GlobalParamAssignment> {
+    public override void Configure(ISettingsSchemaBuilder<GlobalParamAssignment> builder) =>
+        builder.Property(item => item.Parameter,
+            property => property.UseFieldOptions<SharedParameterNamesProvider>());
+}
+
+internal sealed class PerTypeAssignmentRowSchemaDefinition : SettingsSchemaDefinition<PerTypeAssignmentRow> {
+    public override void Configure(ISettingsSchemaBuilder<PerTypeAssignmentRow> builder) =>
+        builder.Property(item => item.Parameter,
+            property => property.UseFieldOptions<SharedParameterNamesProvider>());
+}
+
 internal sealed class SetKnownParamsSettingsSchemaDefinition : SettingsSchemaDefinition<SetKnownParamsSettings> {
-    public override void Configure(ISettingsSchemaBuilder<SetKnownParamsSettings> builder) =>
+    public override void Configure(ISettingsSchemaBuilder<SetKnownParamsSettings> builder) {
+        builder.Property(item => item.GlobalAssignments,
+            property => property.WithDisplayName("Global Assignments"));
         builder.Property(item => item.PerTypeAssignmentsTable, property => property.Ui(ui => {
             ui.Renderer(SchemaUiRendererKeys.Table);
             ui.Layout(layout => layout.Section("Parameters"));
@@ -70,6 +97,7 @@ internal sealed class SetKnownParamsSettingsSchemaDefinition : SettingsSchemaDef
                 behavior.DynamicColumnOrder<FamilyManagerTypesSchemaUiDynamicColumnOrderSource>();
             });
         }));
+    }
 }
 
 internal sealed class MakeElecConnectorParametersSchemaDefinition
@@ -93,6 +121,10 @@ internal static class FamilyFoundrySchemaDefinitionBootstrapper {
         SettingsSchemaDefinitionRegistry.Shared.Register(new ExcludeFamiliesSchemaDefinition());
         SettingsSchemaDefinitionRegistry.Shared.Register(new IncludeSharedParameterSchemaDefinition());
         SettingsSchemaDefinitionRegistry.Shared.Register(new ExcludeSharedParameterSchemaDefinition());
+        SettingsSchemaDefinitionRegistry.Shared.Register(new FilterFamiliesSettingsSchemaDefinition());
+        SettingsSchemaDefinitionRegistry.Shared.Register(new ScheduleFilterSpecFamilyFoundrySchemaDefinition());
+        SettingsSchemaDefinitionRegistry.Shared.Register(new GlobalParamAssignmentSchemaDefinition());
+        SettingsSchemaDefinitionRegistry.Shared.Register(new PerTypeAssignmentRowSchemaDefinition());
         SettingsSchemaDefinitionRegistry.Shared.Register(new SetKnownParamsSettingsSchemaDefinition());
         SettingsSchemaDefinitionRegistry.Shared.Register(new MakeElecConnectorParametersSchemaDefinition());
     }

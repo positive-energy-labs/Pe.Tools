@@ -12,37 +12,46 @@ namespace Pe.Shared.SettingsCatalog.Manifests.Schedules;
 internal sealed class ScheduleSpecRootSchemaDefinition : SettingsSchemaDefinition<ScheduleSpec> {
     public override void Configure(ISettingsSchemaBuilder<ScheduleSpec> builder) {
         builder.Property(item => item.CategoryName, property => property.UseFieldOptions<CategoryNamesProvider>());
-        builder.Property(item => item.ViewTemplateName,
-            property => property.UseFieldOptions<ScheduleViewTemplateNamesProvider>());
+        builder.Property(item => item.ViewTemplateName, property => property.UseFieldOptions<ScheduleViewTemplateNamesProvider>());
         builder.Property(item => item.Fields, property => property.WithDisplayName("Fields"));
     }
 }
 
 internal sealed class ScheduleFieldSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleFieldSpec> {
     public override void Configure(ISettingsSchemaBuilder<ScheduleFieldSpec> builder) {
-        builder.Property(item => item.ParameterName,
-            property => property.UseFieldOptions<ScheduleFieldNamesProvider>());
-        builder.Property(item => item.PercentageOfField,
-            property => property.UseFieldOptions<ScheduleFieldNamesProvider>());
+        builder.Property(item => item.ParameterName, property => {
+            property.DependsOnSibling(OptionContextKeys.CategoryName);
+            property.UseFieldOptions<ScheduleFieldNamesProvider>();
+        });
+        builder.Property(item => item.PercentageOfField, property => {
+            property.DependsOnSibling(OptionContextKeys.CategoryName);
+            property.UseFieldOptions<ScheduleFieldNamesProvider>();
+        });
     }
 }
 
 internal sealed class CombinedParameterSpecSchemaDefinition : SettingsSchemaDefinition<CombinedParameterSpec> {
     public override void Configure(ISettingsSchemaBuilder<CombinedParameterSpec> builder) =>
-        builder.Property(item => item.ParameterName,
-            property => property.UseFieldOptions<ScheduleFieldNamesProvider>());
+        builder.Property(item => item.ParameterName, property => {
+            property.DependsOnSibling(OptionContextKeys.CategoryName);
+            property.UseFieldOptions<ScheduleFieldNamesProvider>();
+        });
 }
 
 internal sealed class ScheduleFilterSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleFilterSpec> {
     public override void Configure(ISettingsSchemaBuilder<ScheduleFilterSpec> builder) =>
-        builder.Property(item => item.FieldName,
-            property => property.UseFieldOptions<ScheduleFieldNamesProvider>());
+        builder.Property(item => item.FieldName, property => {
+            property.DependsOnSibling(OptionContextKeys.CategoryName);
+            property.UseFieldOptions<ScheduleFieldNamesProvider>();
+        });
 }
 
 internal sealed class ScheduleSortGroupSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleSortGroupSpec> {
     public override void Configure(ISettingsSchemaBuilder<ScheduleSortGroupSpec> builder) =>
-        builder.Property(item => item.FieldName,
-            property => property.UseFieldOptions<ScheduleFieldNamesProvider>());
+        builder.Property(item => item.FieldName, property => {
+            property.DependsOnSibling(OptionContextKeys.CategoryName);
+            property.UseFieldOptions<ScheduleFieldNamesProvider>();
+        });
 }
 
 internal static class ScheduleManagerSchemaDefinitionBootstrapper {

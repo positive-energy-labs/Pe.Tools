@@ -35,7 +35,7 @@ namespace Pe.Tools.Commands.FamilyFoundry;
 public class CmdFFMigrator : IExternalCommand {
     public const string AddinKey = nameof(CmdFFMigrator);
     public const string DisplayName = "FF Migrator";
-    private static readonly SettingsModuleManifest<ProfileRemap> SettingsModule = ProfileRemapSettingsManifest.Module;
+    private static readonly SettingsModuleManifest<FFMigratorSettings> SettingsModule = FFMigratorManifest.Module;
 
     public Result Execute(
         ExternalCommandData commandData,
@@ -46,7 +46,7 @@ public class CmdFFMigrator : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var window = new FoundryPaletteBuilder<ProfileRemap>(DisplayName, SettingsModule, doc, uiDoc)
+            var window = new FoundryPaletteBuilder<FFMigratorSettings>(DisplayName, SettingsModule, doc, uiDoc)
                 .WithAction("Open Settings Editor", this.HandleOpenSettingsEditor)
                 .WithAction("Open Profile File", this.HandleOpenFile,
                     ctx => ctx.SelectedProfile != null)
@@ -67,7 +67,7 @@ public class CmdFFMigrator : IExternalCommand {
         }
     }
 
-    private void HandlePlaceFamilies(FoundryContext<ProfileRemap> context) {
+    private void HandlePlaceFamilies(FoundryContext<FFMigratorSettings> context) {
         if (context.SelectedProfile == null) return;
 
         try {
@@ -86,7 +86,7 @@ public class CmdFFMigrator : IExternalCommand {
         }
     }
 
-    private void HandleOpenFile(FoundryContext<ProfileRemap> context) {
+    private void HandleOpenFile(FoundryContext<FFMigratorSettings> context) {
         if (context.SelectedProfile == null) return;
         var result = OpenProfileInDefaultApp(
             context.SelectedProfile.TextPrimary,
@@ -99,7 +99,7 @@ public class CmdFFMigrator : IExternalCommand {
         new Ballogger().Add(level, new StackFrame(), message).Show();
     }
 
-    private void HandleProcessFamilies(FoundryContext<ProfileRemap> ctx) {
+    private void HandleProcessFamilies(FoundryContext<FFMigratorSettings> ctx) {
         if (ctx.SelectedProfile == null) return;
         if (!ctx.PreviewData.IsValid) {
             new Ballogger()
@@ -134,7 +134,7 @@ public class CmdFFMigrator : IExternalCommand {
         }
     }
 
-    private void HandleOpenSettingsEditor(FoundryContext<ProfileRemap> context) {
+    private void HandleOpenSettingsEditor(FoundryContext<FFMigratorSettings> context) {
         var selectedProfileName = context.SelectedProfile?.TextPrimary;
         var launched = SettingsEditorBrowser.TryLaunch(
             SettingsModule.ModuleKey,
@@ -161,7 +161,7 @@ public class CmdFFMigrator : IExternalCommand {
             .Show();
     }
 
-    internal static FFMigratorPlaceFamiliesActionResult PlaceFamiliesCore(UIApplication uiApp, ProfileRemap profile) {
+    internal static FFMigratorPlaceFamiliesActionResult PlaceFamiliesCore(UIApplication uiApp, FFMigratorSettings profile) {
         var doc = uiApp.ActiveUIDocument?.Document;
         if (doc == null)
             return new FFMigratorPlaceFamiliesActionResult(false, "No active document.", [], 0);
@@ -190,7 +190,7 @@ public class CmdFFMigrator : IExternalCommand {
 
     internal static FFMigratorProcessFamiliesActionResult ProcessFamiliesCore(
         UIApplication uiApp,
-        ProfileRemap profile,
+        FFMigratorSettings profile,
         string profileName,
         LoadAndSaveOptions? onFinishSettings = null
     ) {
@@ -271,7 +271,7 @@ public class CmdFFMigrator : IExternalCommand {
         }
     }
 
-    internal static OperationQueue BuildQueueCore(ProfileRemap profile, List<SharedParameterDefinition> apsParamData) {
+    internal static OperationQueue BuildQueueCore(FFMigratorSettings profile, List<SharedParameterDefinition> apsParamData) {
         var pClone = DeepCloneProfile(profile);
         var apsParamNames = apsParamData.Select(p => p.ExternalDefinition.Name).ToList();
         var mappingDataAllNames = pClone.AddAndMapSharedParams.MappingData
@@ -304,18 +304,18 @@ public class CmdFFMigrator : IExternalCommand {
             .Add(new SortParams(pClone.SortParams));
     }
 
-    private static ProfileRemap DeepCloneProfile(ProfileRemap profile) {
+    private static FFMigratorSettings DeepCloneProfile(FFMigratorSettings profile) {
         var settings = new JsonSerializerSettings {
             ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
             PreserveReferencesHandling = PreserveReferencesHandling.None,
             MaxDepth = 128
         };
         var json = JsonConvert.SerializeObject(profile, Formatting.None, settings);
-        var clone = JsonConvert.DeserializeObject<ProfileRemap>(json, settings);
+        var clone = JsonConvert.DeserializeObject<FFMigratorSettings>(json, settings);
         return clone ?? throw new InvalidOperationException("Failed to clone ProfileRemap settings.");
     }
 
-    private static List<FamilyParamDefinitionModel> BuildInternalParams(ProfileRemap profile) {
+    private static List<FamilyParamDefinitionModel> BuildInternalParams(FFMigratorSettings profile) {
         List<FamilyParamDefinitionModel> paramList = [
             new() {
                 Name = "_FOUNDRY LAST PROCESSED AT",
@@ -336,7 +336,7 @@ public class CmdFFMigrator : IExternalCommand {
     internal static string ResolveProfileFilePath(string relativePath, string? subDirectory = null) =>
         ResolveStorage().Documents().ResolveDocumentPath(relativePath, ResolveRootKey(subDirectory));
 
-    internal static ProfileRemap ReadProfile(
+    internal static FFMigratorSettings ReadProfile(
         string relativePath,
         string? subDirectory = null
     ) => ResolveStorage().Settings().ReadRequired(relativePath, ResolveRootKey(subDirectory));
@@ -363,7 +363,7 @@ public class CmdFFMigrator : IExternalCommand {
         }
     }
 
-    private static ModuleStorage<ProfileRemap> ResolveStorage() => RuntimeStorageClient.Default.Module(SettingsModule);
+    private static ModuleStorage<FFMigratorSettings> ResolveStorage() => RuntimeStorageClient.Default.Module(SettingsModule);
 
     private static string ResolveRootKey(string? subDirectory) =>
         string.IsNullOrWhiteSpace(subDirectory)

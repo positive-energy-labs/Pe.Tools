@@ -190,7 +190,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
 
         if (ct.IsCancellationRequested) return null;
 
-        if (profile is ProfileFamilyManager familyProfile) {
+        if (profile is FFManagerSettings familyProfile) {
             var compileResult = AuthoredParamDrivenSolidsCompiler.Compile(familyProfile.ParamDrivenSolids);
             authoredWarnings = compileResult.Diagnostics
                 .Where(diagnostic => diagnostic.Severity == ParamDrivenDiagnosticSeverity.Warning)

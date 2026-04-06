@@ -94,7 +94,7 @@ public class CmdFFManagerSnapshot : IExternalCommand {
         return snapshot;
     }
 
-    private static ProfileFamilyManager ConvertSnapshotToProfile(Document doc, FamilySnapshot snapshot) {
+    private static FFManagerSettings ConvertSnapshotToProfile(Document doc, FamilySnapshot snapshot) {
         var paramSnapshots = snapshot.Parameters?.Data ?? [];
         var exportedParams = FamilyParamProfileAdapter.CreateFromSnapshots(paramSnapshots);
         var authoredSolids = snapshot.ParamDrivenSolids ?? new AuthoredParamDrivenSolidsSettings();
@@ -116,7 +116,7 @@ public class CmdFFManagerSnapshot : IExternalCommand {
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
 
-        return new ProfileFamilyManager {
+        return new FFManagerSettings {
             ExecutionOptions = new ExecutionOptions { SingleTransaction = false, OptimizeTypeOperations = true },
             FilterFamilies = new BaseProfileSettings.FilterFamiliesSettings {
                 IncludeUnusedFamilies = true,
@@ -138,7 +138,7 @@ public class CmdFFManagerSnapshot : IExternalCommand {
         UIApplication uiApp,
         Document sourceDoc,
         FamilySnapshot snapshot,
-        ProfileFamilyManager profile,
+        FFManagerSettings profile,
         string outputDirectory
     ) {
         var replayDoc = CreateReplayFamilyDocument(uiApp, sourceDoc, $"{snapshot.FamilyName} Snapshot");
