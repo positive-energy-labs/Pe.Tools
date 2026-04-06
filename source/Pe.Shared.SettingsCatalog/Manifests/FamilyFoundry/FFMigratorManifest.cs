@@ -4,8 +4,8 @@ using Pe.Shared.StorageRuntime.Validation;
 
 namespace Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 
-public static class ProfileRemapSettingsManifest {
-    public static SettingsModuleManifest<ProfileRemap> Module { get; } = new(
+public static class FFMigratorManifest {
+    public static SettingsModuleManifest<FFMigratorSettings> Module { get; } = new(
         "CmdFFMigrator",
         "profiles",
         SettingsCatalogStorageProfiles.SharedAuthoring,

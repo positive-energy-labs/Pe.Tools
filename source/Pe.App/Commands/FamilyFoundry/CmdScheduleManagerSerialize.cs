@@ -5,6 +5,7 @@ using Pe.Revit.Global.Revit.Lib.Schedules;
 using Pe.Revit.Global.Revit.Lib.Schedules.Fields;
 using Pe.Revit.Global.Revit.Lib.Schedules.SortGroup;
 using Pe.Revit.Global.Revit.Ui;
+using Pe.Shared.SettingsCatalog.Manifests.Schedules;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Core.Json.ContractResolvers;
 using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
@@ -33,7 +34,7 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var storage = RuntimeStorageClient.Default.Module("Schedule Manager");
+            var storage = RuntimeStorageClient.Default.Module(ScheduleManagerSettingsManifest.ModuleKey);
 
             // Collect all schedules in the document
             var serializeItems = new FilteredElementCollector(doc)

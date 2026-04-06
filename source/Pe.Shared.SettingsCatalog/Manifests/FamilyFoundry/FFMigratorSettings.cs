@@ -7,7 +7,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 
-public class ProfileRemap : BaseProfileSettings {
+public class FFMigratorSettings : BaseProfileSettings {
     [Description("Settings for cleaning the family document")]
     [Required]
     public CleanFamilyDocumentSettings CleanFamilyDocument { get; init; } = new();

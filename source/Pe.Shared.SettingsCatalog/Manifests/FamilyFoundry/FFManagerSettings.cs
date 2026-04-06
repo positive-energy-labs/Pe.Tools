@@ -5,7 +5,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 
-public class ProfileFamilyManager : BaseProfileSettings {
+public class FFManagerSettings : BaseProfileSettings {
     [Description("Settings for explicit family parameter definitions.")]
     [Required]
     public AddFamilyParamsSettings AddFamilyParams { get; init; } = new();

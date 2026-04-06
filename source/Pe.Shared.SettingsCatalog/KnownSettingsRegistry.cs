@@ -1,6 +1,7 @@
 using Pe.Shared.SettingsCatalog.Manifests;
 using Pe.Shared.SettingsCatalog.Manifests.AutoTag;
 using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
+using Pe.Shared.SettingsCatalog.Manifests.Schedules;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Documents;
 using Pe.Shared.StorageRuntime.Modules;
@@ -17,8 +18,9 @@ public static class KnownSettingsRegistry {
 
     public static IReadOnlyList<ISettingsModuleManifest> All { get; } = [
         AutoTagSettingsManifest.Module,
-        ProfileFamilyManagerSettingsManifest.Module,
-        ProfileRemapSettingsManifest.Module,
+        FFManagerManifest.Module,
+        FFMigratorManifest.Module,
+        ScheduleManagerSettingsManifest.Profiles,
         GlobalFragments
     ];
 

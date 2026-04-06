@@ -4,6 +4,7 @@ using Newtonsoft.Json;
 using Pe.App.Commands.Palette.FamilyPalette;
 using Pe.Revit.Global.Revit.Lib.Schedules;
 using Pe.Revit.Global.Revit.Ui;
+using Pe.Shared.SettingsCatalog.Manifests.Schedules;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Core.Json;
 using Pe.Shared.StorageRuntime.Core.Json.ContractResolvers;
@@ -39,9 +40,9 @@ public class CmdScheduleManager : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var storage = RuntimeStorageClient.Default.Module("Schedule Manager");
-            var profilesStorage = RuntimeStorageClient.Default.Module(ScheduleManagerProfilesModule.Instance);
-            var batchStorage = RuntimeStorageClient.Default.Module(ScheduleManagerBatchModule.Instance);
+            var storage = RuntimeStorageClient.Default.Module(ScheduleManagerSettingsManifest.ModuleKey);
+            var profilesStorage = RuntimeStorageClient.Default.Module(ScheduleManagerSettingsManifest.Profiles);
+            var batchStorage = RuntimeStorageClient.Default.Module(ScheduleManagerSettingsManifest.Batch);
 
             // Context for Schedule tabs
             var context = new ScheduleManagerContext {
@@ -595,18 +596,6 @@ public class ScheduleManagerContext {
     // UI state: what's currently selected and displayed
     public ScheduleListItem SelectedProfile { get; set; }
     public SchedulePreviewData PreviewData { get; set; }
-}
-
-internal sealed class ScheduleManagerProfilesModule : BaseSettingsModule<ScheduleSpec> {
-    public static ScheduleManagerProfilesModule Instance { get; } = new();
-
-    private ScheduleManagerProfilesModule() : base("Schedule Manager", "schedules") { }
-}
-
-internal sealed class ScheduleManagerBatchModule : BaseSettingsModule<BatchScheduleSettings> {
-    public static ScheduleManagerBatchModule Instance { get; } = new();
-
-    private ScheduleManagerBatchModule() : base("Schedule Manager", "batch") { }
 }
 
 public enum ScheduleTabType {

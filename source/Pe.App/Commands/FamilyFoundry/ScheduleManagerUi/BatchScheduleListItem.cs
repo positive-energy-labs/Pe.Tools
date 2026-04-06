@@ -1,27 +1,13 @@
 using Newtonsoft.Json.Linq;
-using Pe.Shared.StorageRuntime.Modules;
-using Pe.Shared.StorageRuntime.Modules;
 using Pe.Revit.Ui.Core;
+using Pe.Shared.SettingsCatalog.Manifests.Schedules;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Modules;
-using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
 using System.IO;
 using System.Windows.Media.Imaging;
 using WpfColor = System.Windows.Media.Color;
 
 namespace Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
-
-/// <summary>
-///     Settings for batch schedule creation.
-///     Contains a simple array of schedule profile file paths to run.
-/// </summary>
-public class BatchScheduleSettings {
-    [Description(
-        "List of schedule profile JSON files to create in batch. Paths are relative to the schedules/ directory.")]
-    [Required]
-    public List<string> ScheduleFiles { get; set; } = [];
-}
 
 /// <summary>
 ///     Palette list item representing a batch schedule configuration.
