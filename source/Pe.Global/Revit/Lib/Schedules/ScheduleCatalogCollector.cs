@@ -3,8 +3,8 @@ using Pe.Global.Revit.Lib.Schedules.Fields;
 using Pe.Global.Revit.Lib.Schedules.Filters;
 using Pe.Global.Revit.Lib.Schedules.SortGroup;
 using Pe.Global.Revit.Lib.Schedules.TitleStyle;
-using Pe.Host.Contracts;
-using ContractScheduleDefinition = Pe.Host.Contracts.ScheduleDefinition;
+using Pe.Host.Contracts.RevitData;
+using ContractScheduleDefinition = Pe.Host.Contracts.RevitData.ScheduleDefinition;
 
 namespace Pe.Global.Revit.Lib.Schedules;
 

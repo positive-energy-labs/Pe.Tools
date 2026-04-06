@@ -67,7 +67,7 @@ public class LineStyleNamesProvider : IFieldOptionsSource {
         SettingsOptionsMode.Suggestion,
         true,
         [],
-        SettingsRuntimeCapabilityProfiles.LiveDocument
+        SettingsRuntimeMode.LiveDocument
     );
 
     public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(

@@ -65,7 +65,6 @@
         <ProjectReference Include="..\Pe.Extensions\Pe.Extensions.csproj" />
         <ProjectReference Include="..\Pe.FamilyFoundry\Pe.FamilyFoundry.csproj" />
         <ProjectReference Include="..\Pe.Global\Pe.Global.csproj" />
-        <ProjectReference Include="..\Pe.SettingsCatalog.Revit\Pe.SettingsCatalog.Revit.csproj" />
         <ProjectReference Include="..\Pe.SettingsCatalog\Pe.SettingsCatalog.csproj" />
         <ProjectReference Include="..\Pe.Ui\Pe.Ui.csproj" />
     </ItemGroup>

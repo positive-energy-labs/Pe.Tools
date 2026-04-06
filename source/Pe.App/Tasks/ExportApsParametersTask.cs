@@ -1,7 +1,7 @@
 using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.TaskPalette;
 using Pe.Global.Services.Aps.Models;
-using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime;
 using System.IO;
 
 namespace Pe.App.Tasks;
@@ -22,8 +22,9 @@ public sealed class ExportApsParametersTask : ITask {
         try {
             // Load cached APS parameters
             const string cacheFilename = "parameters-service-cache";
-            var apsParamsCache = StorageClient.GlobalDir().StateJson<ParametersApi.Parameters>(cacheFilename);
-            var cacheFilePath = Path.Combine(StorageClient.GlobalDir().DirectoryPath, $"{cacheFilename}.json");
+            var globalState = StorageClient.Default.Global().State();
+            var apsParamsCache = globalState.Json<ParametersApi.Parameters>(cacheFilename);
+            var cacheFilePath = globalState.ResolveSafeRelativeJsonPath(cacheFilename);
 
             if (!File.Exists(cacheFilePath)) {
                 Console.WriteLine(

@@ -3,8 +3,8 @@ using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Serialization;
 using Pe.Global;
 using Pe.Global.PolyFill;
+using Pe.StorageRuntime;
 using Pe.StorageRuntime.Revit;
-using Pe.StorageRuntime.Revit.Core;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
 namespace Pe.FamilyFoundry;
@@ -14,14 +14,14 @@ namespace Pe.FamilyFoundry;
 /// </summary>
 public class ProcessingResultBuilder {
     private readonly List<FamilyProcessingContext> _familyContexts = [];
-    private readonly OutputManager _runOutput;
+    private readonly OutputStorage _runOutput;
     private List<(string Name, string Description, string Type, string IsMerged)> _operationMetadata = [];
     private string _profileName;
     private object _profileSettings;
 
-    public ProcessingResultBuilder(StorageClient storage) : this(storage.OutputDir().TimestampedSubDir()) { }
+    public ProcessingResultBuilder(ModuleStorage storage) : this(storage.Output().TimestampedSubDir()) { }
 
-    public ProcessingResultBuilder(OutputManager runOutput) {
+    public ProcessingResultBuilder(OutputStorage runOutput) {
         this._runOutput = runOutput ?? throw new ArgumentNullException(nameof(runOutput));
     }
 
@@ -310,7 +310,7 @@ public class ProcessingResultBuilder {
     }
 
 
-    private static void SerializeSnapshotSections(FamilySnapshot snapshot, OutputManager output, string prefix) {
+    private static void SerializeSnapshotSections(FamilySnapshot snapshot, OutputStorage output, string prefix) {
         if (snapshot.Parameters?.Data != null && snapshot.Parameters.Data.Count > 0) {
             var paramsData = snapshot.Parameters.Data;
             _ = output.Json($"snapshot-parameters-{prefix}.json").Write(
@@ -347,8 +347,8 @@ public class ProcessingResultBuilder {
 /// <summary>
 ///     Builder for dry-run output.
 /// </summary>
-public class DryRunResultBuilder(StorageClient storage) {
-    private readonly StorageClient _storage = storage;
+public class DryRunResultBuilder(ModuleStorage storage) {
+    private readonly ModuleStorage _storage = storage;
     private List<SharedParameterDefinition> _apsParams = [];
     private List<Family> _families = [];
     private List<(string Name, string Description, string Type, string IsMerged)> _operationMetadata = [];

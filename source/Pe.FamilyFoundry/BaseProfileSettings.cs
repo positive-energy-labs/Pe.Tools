@@ -4,7 +4,7 @@ using Pe.Global.Revit.Lib.Schedules;
 using Pe.Global.Revit.Lib.Schedules.Filters;
 using Pe.Global.Utils.Files;
 using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using ParamModelRes = Pe.Global.Services.Aps.Models.ParametersApi.Parameters.ParametersResult;
@@ -36,7 +36,7 @@ public class BaseProfileSettings {
     ///     These can be safely cached and converted to SharedParameterDefinitions later.
     /// </summary>
     public List<ParamModelRes> GetFilteredApsParamModels() {
-        var apsParams = StorageClient.GlobalDir().StateJson<ParamModel>("parameters-service-cache").Read();
+        var apsParams = StorageClient.Default.Global().State().Json<ParamModel>("parameters-service-cache").Read();
         if (apsParams.Results != null) {
             return apsParams.Results
                 .Where(this.FilterApsParams.Filter)

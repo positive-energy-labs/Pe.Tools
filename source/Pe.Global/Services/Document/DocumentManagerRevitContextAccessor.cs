@@ -1,10 +1,7 @@
-using Pe.StorageRuntime.Revit.Context;
+using Pe.StorageRuntime.Context;
 
 namespace Pe.Global.Services.Document;
 
-public sealed class DocumentManagerRevitContextAccessor : IRevitContextAccessor {
-    public Autodesk.Revit.DB.Document? GetActiveDocument() => DocumentManager.GetActiveDocument();
-
-    object? Pe.StorageRuntime.Context.ISettingsDocumentContextAccessor.GetActiveDocument() =>
-        this.GetActiveDocument();
+public sealed class DocumentManagerRevitContextAccessor : ISettingsDocumentContextAccessor {
+    public object? GetActiveDocument() => DocumentManager.GetActiveDocument();
 }
