@@ -22,7 +22,7 @@ internal static class FamilyFoundryRoundtripHarness {
         try {
             var profile = RevitFamilyFixtureHarness.LoadProfileFixture(fixtureFileName);
             var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(testName);
-            var result = RunRoundtrip(familyDocument, profile, testName, outputDirectory);
+            var result = ProcessRoundtrip(familyDocument, profile, testName, outputDirectory);
             var savedFamilyPath = RevitFamilyFixtureHarness.GetExpectedSavedFamilyPath(result.OutputFolderPath!, familyDocument);
             var compiled = AuthoredParamDrivenSolidsCompiler.Compile(profile.ParamDrivenSolids ?? new AuthoredParamDrivenSolidsSettings());
 
@@ -63,7 +63,7 @@ internal static class FamilyFoundryRoundtripHarness {
 
             try {
                 var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(testName);
-                var result = RunRoundtrip(replayDocument, profile, testName, outputDirectory);
+                var result = ProcessRoundtrip(replayDocument, profile, testName, outputDirectory);
                 var savedFamilyPath = RevitFamilyFixtureHarness.GetExpectedSavedFamilyPath(result.OutputFolderPath!, replayDocument);
                 var compiled = AuthoredParamDrivenSolidsCompiler.Compile(authored);
 
@@ -114,7 +114,7 @@ internal static class FamilyFoundryRoundtripHarness {
         return snapshot;
     }
 
-    public static ProfileFamilyManager CreateSnapshotReplayProfile(
+    public static FFManagerSettings CreateSnapshotReplayProfile(
         AuthoredParamDrivenSolidsSettings authored,
         IReadOnlyList<ParamSnapshot> paramSnapshots
     ) {
@@ -137,7 +137,7 @@ internal static class FamilyFoundryRoundtripHarness {
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
 
-        return new ProfileFamilyManager {
+        return new FFManagerSettings {
             ExecutionOptions = new ExecutionOptions { SingleTransaction = false, OptimizeTypeOperations = true },
             FilterFamilies = new BaseProfileSettings.FilterFamiliesSettings {
                 IncludeUnusedFamilies = true,
@@ -171,9 +171,9 @@ internal static class FamilyFoundryRoundtripHarness {
                 new Dictionary<string, double>(StringComparer.Ordinal)))
             .ToList();
 
-    private static FFManagerProcessFamiliesActionResult RunRoundtrip(
+    public static FFManagerProcessFamiliesActionResult ProcessRoundtrip(
         Document familyDocument,
-        ProfileFamilyManager profile,
+        FFManagerSettings profile,
         string profileName,
         string outputDirectory
     ) {

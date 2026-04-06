@@ -38,7 +38,7 @@ public sealed class AssemblyLoadDiagnosticsTests {
         var anchorAssemblies = new[] {
             typeof(AssemblyLoadDiagnosticsTests).Assembly,
             typeof(CmdFFManager).Assembly,
-            typeof(ProfileFamilyManager).Assembly
+            typeof(FFManagerSettings).Assembly
         };
 
         return currentDomainAssemblies
