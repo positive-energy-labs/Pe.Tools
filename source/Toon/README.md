@@ -34,6 +34,8 @@ Standalone JSON<->TOON transpiler with verification focused on Family Foundry-st
 
 ## Verification methodology
 
+> OUT OF DATE AS OF apr/5/2026: Pe.Tools.Tests was hard deleted with little to no port. reimplment again when necessary
+
 Verification is implemented in `source/Pe.Tools.Tests` using a Revit-backed TUnit host (`Nice3point.TUnit.Revit`) with:
 
 - Deterministic unit tests for parser/encoder behavior.
@@ -70,4 +72,3 @@ Deferred follow-up for `CmdFFManager`:
 - Resolve TOON-authored fragment content to JSON before normal `ComposableJson<T>` loading.
 - Keep behind an explicit feature toggle.
 - Do not introduce global filename-based auto-resolution until this path is stable.
-

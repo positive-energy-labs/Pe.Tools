@@ -11,8 +11,4 @@
         <ProjectReference Include="..\Pe.StorageRuntime\Pe.StorageRuntime.csproj"/>
     </ItemGroup>
 
-    <ItemGroup>
-      <Folder Include="Manifests\" />
-    </ItemGroup>
-
 </Project>

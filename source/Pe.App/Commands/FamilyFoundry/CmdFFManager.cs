@@ -11,6 +11,7 @@ using Pe.Global.Revit.Lib;
 using Pe.Global.Revit.Ui;
 using Pe.Global.Utils.Files;
 using Pe.SettingsCatalog;
+using Pe.SettingsCatalog.Manifests;
 using Pe.SettingsCatalog.Manifests.FamilyFoundry;
 using Pe.StorageRuntime;
 using Pe.StorageRuntime.Modules;

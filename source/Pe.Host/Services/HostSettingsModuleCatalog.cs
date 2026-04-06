@@ -1,4 +1,5 @@
 using Pe.SettingsCatalog;
+using Pe.SettingsCatalog.Manifests;
 using Pe.StorageRuntime;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Modules;

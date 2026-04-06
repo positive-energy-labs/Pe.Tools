@@ -3,7 +3,7 @@ using Pe.StorageRuntime.Documents;
 using Pe.StorageRuntime.Json;
 using Pe.StorageRuntime.Modules;
 
-namespace Pe.SettingsCatalog;
+namespace Pe.SettingsCatalog.Manifests;
 
 public interface ISettingsModuleManifest : ISettingsModule {
     string DefaultRootKey { get; }

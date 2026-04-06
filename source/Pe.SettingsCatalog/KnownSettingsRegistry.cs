@@ -1,3 +1,4 @@
+using Pe.SettingsCatalog.Manifests;
 using Pe.SettingsCatalog.Manifests.AutoTag;
 using Pe.SettingsCatalog.Manifests.FamilyFoundry;
 using Pe.StorageRuntime.Capabilities;
