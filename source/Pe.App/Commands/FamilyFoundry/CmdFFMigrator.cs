@@ -12,9 +12,11 @@ using Pe.Global;
 using Pe.Global.Revit.Lib;
 using Pe.Global.Revit.Ui;
 using Pe.Global.Utils.Files;
-using Pe.SettingsCatalog.Revit;
-using Pe.SettingsCatalog.Revit.FamilyFoundry;
+using Pe.SettingsCatalog;
+using Pe.SettingsCatalog.Manifests.FamilyFoundry;
+using Pe.StorageRuntime;
 using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime.Modules;
 using Pe.StorageRuntime.Revit.Modules;
 using Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 using Pe.Tools.SettingsEditor;
@@ -23,6 +25,7 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.IO;
+using RuntimeStorageClient = Pe.StorageRuntime.StorageClient;
 
 namespace Pe.Tools.Commands.FamilyFoundry;
 
@@ -30,7 +33,7 @@ namespace Pe.Tools.Commands.FamilyFoundry;
 public class CmdFFMigrator : IExternalCommand {
     public const string AddinKey = nameof(CmdFFMigrator);
     public const string DisplayName = "FF Migrator";
-    private static readonly CatalogSettingsModule<ProfileRemap> SettingsModule = KnownSettingsRevitModules.FFMigrator;
+    private static readonly SettingsModuleManifest<ProfileRemap> SettingsModule = ProfileRemapSettingsManifest.Module;
 
     public Result Execute(
         ExternalCommandData commandData,
@@ -68,7 +71,7 @@ public class CmdFFMigrator : IExternalCommand {
         try {
             var profile = ReadProfile(
                 context.SelectedProfile.TextPrimary,
-                SettingsModule.DefaultSubDirectory
+                SettingsModule.DefaultRootKey
             );
             var placeResult = PlaceFamiliesCore(context.UiDoc.Application, profile);
             var level = placeResult.Success ? LogEventLevel.Information : LogEventLevel.Error;
@@ -85,7 +88,7 @@ public class CmdFFMigrator : IExternalCommand {
         if (context.SelectedProfile == null) return;
         var result = OpenProfileInDefaultApp(
             context.SelectedProfile.TextPrimary,
-            SettingsModule.DefaultSubDirectory
+            SettingsModule.DefaultRootKey
         );
         var level = result.Success ? LogEventLevel.Information : LogEventLevel.Warning;
         var message = result.Success
@@ -105,7 +108,7 @@ public class CmdFFMigrator : IExternalCommand {
 
         var profile = ReadProfile(
             ctx.SelectedProfile.TextPrimary,
-            SettingsModule.DefaultSubDirectory
+            SettingsModule.DefaultRootKey
         );
         var runResult = ProcessFamiliesCore(
             ctx.UiDoc.Application,
@@ -133,7 +136,7 @@ public class CmdFFMigrator : IExternalCommand {
         var selectedProfileName = context.SelectedProfile?.TextPrimary;
         var launched = SettingsEditorBrowser.TryLaunch(
             SettingsModule.ModuleKey,
-            SettingsModule.DefaultSubDirectory,
+            SettingsModule.DefaultRootKey,
             selectedProfileName
         );
         if (launched) {
@@ -202,7 +205,7 @@ public class CmdFFMigrator : IExternalCommand {
             );
         }
 
-        var storage = new StorageClient(AddinKey);
+        var storage = RuntimeStorageClient.Default.Module(AddinKey);
 
         try {
             using var tempFile = new TempSharedParamFile(doc);
@@ -324,17 +327,17 @@ public class CmdFFMigrator : IExternalCommand {
             Kind = ParamAssignmentKind.Formula,
             Value = $"\"{DateTime.Now:yyyy_MM_dd HH:mm:ss}\""
         });
-        
+
         return paramList;
     }
 
     internal static string ResolveProfileFilePath(string relativePath, string? subDirectory = null) =>
-        ResolveSharedStorage().ResolveDocumentPath(relativePath, ResolveRootKey(subDirectory));
+        ResolveStorage().Documents().ResolveDocumentPath(relativePath, ResolveRootKey(subDirectory));
 
     internal static ProfileRemap ReadProfile(
         string relativePath,
         string? subDirectory = null
-    ) => ResolveSharedStorage().ReadRequired<ProfileRemap>(relativePath, ResolveRootKey(subDirectory));
+    ) => ResolveStorage().Settings().ReadRequired(relativePath, ResolveRootKey(subDirectory));
 
     internal static FFMigratorOpenProfileFileActionResult OpenProfileInDefaultApp(
         string relativePath,
@@ -358,11 +361,11 @@ public class CmdFFMigrator : IExternalCommand {
         }
     }
 
-    private static SharedModuleSettingsStorage ResolveSharedStorage() => SettingsModule.SharedStorage();
+    private static ModuleStorage<ProfileRemap> ResolveStorage() => RuntimeStorageClient.Default.Module(SettingsModule);
 
     private static string ResolveRootKey(string? subDirectory) =>
         string.IsNullOrWhiteSpace(subDirectory)
-            ? SettingsModule.DefaultSubDirectory
+            ? SettingsModule.DefaultRootKey
             : subDirectory;
 }
 

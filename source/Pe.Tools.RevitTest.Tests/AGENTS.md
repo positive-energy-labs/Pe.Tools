@@ -7,7 +7,7 @@ family tests.
 ## Core model
 
 - Tests run inside real Revit, not a fake host.
-- This project is VSTest-based, not TUnit-based.
+- This project is VSTest-based.
 - In this repo, `dotnet test` is awkward here because `global.json` forces
   Microsoft Testing Platform. Prefer `dotnet build` plus `dotnet vstest`.
 - The test assembly comes from `.artifacts/tests`, but runtime code still comes

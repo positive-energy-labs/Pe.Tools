@@ -5,6 +5,7 @@ using Pe.Global.Revit.Lib.Schedules;
 using Pe.Global.Revit.Lib.Schedules.Fields;
 using Pe.Global.Revit.Lib.Schedules.SortGroup;
 using Pe.Global.Revit.Ui;
+using Pe.StorageRuntime;
 using Pe.StorageRuntime.Revit;
 using Pe.StorageRuntime.Revit.Core.Json.ContractResolvers;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
@@ -14,6 +15,7 @@ using Serilog.Events;
 using System.Diagnostics;
 using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
+using RuntimeStorageClient = Pe.StorageRuntime.StorageClient;
 
 namespace Pe.Tools.Commands.FamilyFoundry;
 
@@ -28,7 +30,7 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var storage = new StorageClient("Schedule Manager");
+            var storage = RuntimeStorageClient.Default.Module("Schedule Manager");
 
             // Collect all schedules in the document
             var serializeItems = new FilteredElementCollector(doc)
@@ -102,11 +104,11 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
         }
     }
 
-    private Task HandleSerialize(StorageClient storage, IPaletteListItem item) {
+    private Task HandleSerialize(ModuleStorage storage, IPaletteListItem item) {
         var serializeItem = (ScheduleSerializePaletteItem)item;
 
         try {
-            var serializeOutputDir = storage.OutputDir().SubDir("serialize");
+            var serializeOutputDir = storage.Output().SubDir("serialize");
             var spec = ScheduleHelper.SerializeSchedule(serializeItem.Schedule);
 
             // Prepend timestamp to filename

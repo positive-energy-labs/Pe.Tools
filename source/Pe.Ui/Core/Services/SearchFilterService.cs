@@ -1,7 +1,7 @@
 using F23.StringSimilarity;
 using Pe.Global.PolyFill;
 using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime;
 
 namespace Pe.Ui.Core.Services;
 
@@ -24,12 +24,12 @@ public class SearchFilterService<TItem> where TItem : class, IPaletteListItem {
     /// </summary>
     public SearchFilterService(
         SearchConfig? searchConfig = null,
-        StorageClient? storage = null,
+        ModuleStorage? storage = null,
         Func<TItem, string>? keyGenerator = null
     ) {
         this._searchConfig = searchConfig ?? SearchConfig.Default();
         this._keyGenerator = keyGenerator;
-        this._state = storage?.StateDir().Csv<ItemUsageData>();
+        this._state = storage?.State().Csv<ItemUsageData>();
     }
 
     private bool IsStorageDisabled => this._state is null || this._keyGenerator is null;

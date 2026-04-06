@@ -20,7 +20,6 @@
         <ProjectReference Include="..\Pe.FamilyFoundry\Pe.FamilyFoundry.csproj"/>
         <ProjectReference Include="..\Pe.Global\Pe.Global.csproj"/>
         <ProjectReference Include="..\Pe.SettingsCatalog\Pe.SettingsCatalog.csproj"/>
-        <ProjectReference Include="..\Pe.SettingsCatalog.Revit\Pe.SettingsCatalog.Revit.csproj"/>
     </ItemGroup>
 
     <ItemGroup>

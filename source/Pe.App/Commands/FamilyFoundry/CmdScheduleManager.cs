@@ -4,11 +4,12 @@ using Newtonsoft.Json;
 using Pe.App.Commands.Palette.FamilyPalette;
 using Pe.Global.Revit.Lib.Schedules;
 using Pe.Global.Revit.Ui;
+using Pe.StorageRuntime;
 using Pe.StorageRuntime.Revit;
-using Pe.StorageRuntime.Revit.Core;
 using Pe.StorageRuntime.Revit.Core.Json;
 using Pe.StorageRuntime.Revit.Core.Json.ContractResolvers;
 using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.StorageRuntime.Modules;
 using Pe.StorageRuntime.Revit.Modules;
 using Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
 using Pe.Ui.Core;
@@ -18,6 +19,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
+using RuntimeStorageClient = Pe.StorageRuntime.StorageClient;
 
 namespace Pe.Tools.Commands.FamilyFoundry;
 
@@ -32,21 +34,22 @@ public class CmdScheduleManager : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var storage = new StorageClient("Schedule Manager");
-            var profilesStorage = ScheduleManagerProfilesModule.Instance.SharedStorage();
-            var batchStorage = ScheduleManagerBatchModule.Instance.SharedStorage();
+            var storage = RuntimeStorageClient.Default.Module("Schedule Manager");
+            var profilesStorage = RuntimeStorageClient.Default.Module(ScheduleManagerProfilesModule.Instance);
+            var batchStorage = RuntimeStorageClient.Default.Module(ScheduleManagerBatchModule.Instance);
 
             // Context for Schedule tabs
             var context = new ScheduleManagerContext {
                 Doc = doc,
                 UiDoc = uiDoc,
                 Storage = storage,
-                ProfilesStorage = profilesStorage
+                ProfilesStorage = profilesStorage.Settings(),
+                ProfilesDocuments = profilesStorage.Documents()
             };
 
             // Collect items for both tabs
-            var createItems = ScheduleListItem.DiscoverProfiles(profilesStorage);
-            var batchItems = BatchScheduleListItem.DiscoverProfiles(batchStorage);
+            var createItems = ScheduleListItem.DiscoverProfiles(profilesStorage.Documents());
+            var batchItems = BatchScheduleListItem.DiscoverProfiles(batchStorage.Settings());
 
             // Create preview panel with injected preview building logic
             var previewPanel = new SchedulePreviewPanel(async (item, ct) => {
@@ -147,7 +150,7 @@ public class CmdScheduleManager : IExternalCommand {
 
     private SchedulePreviewData TryLoadPreviewData(
         ScheduleListItem profileItem,
-        SharedModuleSettingsStorage profilesStorage
+        ModuleSettingsStorage<ScheduleSpec> profilesStorage
     ) {
         try {
             return this.LoadValidPreviewData(profileItem, profilesStorage);
@@ -160,9 +163,9 @@ public class CmdScheduleManager : IExternalCommand {
 
     private SchedulePreviewData LoadValidPreviewData(
         ScheduleListItem profileItem,
-        SharedModuleSettingsStorage profilesStorage
+        ModuleSettingsStorage<ScheduleSpec> profilesStorage
     ) {
-        var profile = profilesStorage.ReadRequired<ScheduleSpec>(profileItem.TextPrimary);
+        var profile = profilesStorage.ReadRequired(profileItem.TextPrimary);
 
         // Serialize profile to JSON
         var profileJson = JsonConvert.SerializeObject(
@@ -257,7 +260,7 @@ public class CmdScheduleManager : IExternalCommand {
         // Load profile fresh for execution
         ScheduleSpec scheduleSpec;
         try {
-            scheduleSpec = ctx.ProfilesStorage.ReadRequired<ScheduleSpec>(ctx.SelectedProfile.TextPrimary);
+            scheduleSpec = ctx.ProfilesStorage.ReadRequired(ctx.SelectedProfile.TextPrimary);
         } catch (Exception ex) {
             new Ballogger()
                 .Add(LogEventLevel.Error, new StackFrame(), ex, true)
@@ -356,7 +359,7 @@ public class CmdScheduleManager : IExternalCommand {
         // Update context with selected profile
         this.BuildPreviewData(profileItem, context);
 
-        var profile = context.ProfilesStorage.ReadRequired<ScheduleSpec>(context.SelectedProfile.TextPrimary);
+        var profile = context.ProfilesStorage.ReadRequired(context.SelectedProfile.TextPrimary);
 
         // Get families of the schedule's category
         var category = Category.GetCategory(context.Doc, profile.CategoryName);
@@ -426,14 +429,14 @@ public class CmdScheduleManager : IExternalCommand {
             foreach (var scheduleFile in batchSettings.ScheduleFiles) {
                 try {
                     // Load the schedule spec
-                    var scheduleFilePath = context.ProfilesStorage.ResolveDocumentPath(scheduleFile);
+                    var scheduleFilePath = context.ProfilesDocuments.ResolveDocumentPath(scheduleFile);
                     if (!File.Exists(scheduleFilePath)) {
                         results.Add((scheduleFile, false, "File not found"));
                         _ = this.WriteErrorOutput(context, scheduleFile, "File not found", null, "batch");
                         continue;
                     }
 
-                    var scheduleSpec = context.ProfilesStorage.ReadRequired<ScheduleSpec>(scheduleFile);
+                    var scheduleSpec = context.ProfilesStorage.ReadRequired(scheduleFile);
 
                     // Create the schedule
                     using var trans = new Transaction(context.Doc, $"Create Schedule: {scheduleSpec.Name}");
@@ -471,7 +474,7 @@ public class CmdScheduleManager : IExternalCommand {
                     $"Failed schedules:\n{string.Join("\n", failures.Select(f => $"  • {f.profileName}: {f.errorMessage}"))}");
             }
 
-            var outputPath = context.Storage.OutputDir().SubDir("batch").DirectoryPath;
+            var outputPath = context.Storage.Output().SubDir("batch").DirectoryPath;
             balloon.Show(() => FileUtils.OpenInDefaultApp(outputPath), "Open Output Folder");
         } catch (Exception ex) {
             new Ballogger().Add(LogEventLevel.Error, new StackFrame(), ex, true).Show();
@@ -483,7 +486,7 @@ public class CmdScheduleManager : IExternalCommand {
         string profileName = null,
         string outputSubDirectory = "create") {
         try {
-            var createOutputDir = ctx.Storage.OutputDir().SubDir(outputSubDirectory);
+            var createOutputDir = ctx.Storage.Output().SubDir(outputSubDirectory);
 
             var outputData = new {
                 result.ScheduleName,
@@ -554,7 +557,7 @@ public class CmdScheduleManager : IExternalCommand {
         Exception ex = null,
         string outputSubDirectory = "create") {
         try {
-            var createOutputDir = ctx.Storage.OutputDir().SubDir(outputSubDirectory);
+            var createOutputDir = ctx.Storage.Output().SubDir(outputSubDirectory);
 
             var outputData = new {
                 ProfileName = profileName,
@@ -580,21 +583,22 @@ public class CmdScheduleManager : IExternalCommand {
 public class ScheduleManagerContext {
     public Document Doc { get; init; }
     public UIDocument UiDoc { get; init; }
-    public StorageClient Storage { get; init; }
-    public SharedModuleSettingsStorage ProfilesStorage { get; init; }
+    public ModuleStorage Storage { get; init; }
+    public ModuleSettingsStorage<ScheduleSpec> ProfilesStorage { get; init; }
+    public ModuleDocumentStorage ProfilesDocuments { get; init; }
 
     // UI state: what's currently selected and displayed
     public ScheduleListItem SelectedProfile { get; set; }
     public SchedulePreviewData PreviewData { get; set; }
 }
 
-internal sealed class ScheduleManagerProfilesModule : SettingsModuleBase<ScheduleSpec> {
+internal sealed class ScheduleManagerProfilesModule : BaseSettingsModule<ScheduleSpec> {
     public static ScheduleManagerProfilesModule Instance { get; } = new();
 
     private ScheduleManagerProfilesModule() : base("Schedule Manager", "schedules") { }
 }
 
-internal sealed class ScheduleManagerBatchModule : SettingsModuleBase<BatchScheduleSettings> {
+internal sealed class ScheduleManagerBatchModule : BaseSettingsModule<BatchScheduleSettings> {
     public static ScheduleManagerBatchModule Instance { get; } = new();
 
     private ScheduleManagerBatchModule() : base("Schedule Manager", "batch") { }

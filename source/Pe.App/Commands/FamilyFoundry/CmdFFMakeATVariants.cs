@@ -7,7 +7,7 @@ using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Resolution;
 using Pe.FamilyFoundry.Snapshots;
 using Pe.Global.Revit.Ui;
-using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime;
 using Serilog.Events;
 using System.Diagnostics;
 
@@ -23,9 +23,9 @@ public class CmdFFMakeATVariants : IExternalCommand {
         var doc = commandData.Application.ActiveUIDocument.Document;
 
         try {
-            var storage = new StorageClient("FF AT Variants");
-            var settings = storage.StateDir().Json<ATVariantSettings>("settings").Read();
-            var outputFolderPath = storage.OutputDir().DirectoryPath;
+            var storage = StorageClient.Default.Module("FF AT Variants");
+            var settings = storage.State().Json<ATVariantSettings>("settings").Read();
+            var outputFolderPath = storage.Output().DirectoryPath;
 
             // Define variants declaratively
             var variantDescriptors = new[] {

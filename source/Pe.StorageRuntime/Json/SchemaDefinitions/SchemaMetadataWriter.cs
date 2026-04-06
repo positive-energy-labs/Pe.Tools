@@ -40,7 +40,7 @@ internal static class SchemaMetadataWriter {
             descriptor.DependsOn
         );
         targetSchema.ExtensionData["x-runtime-capabilities"] = CreateRuntimeCapabilitiesPayload(
-            descriptor.RequiredCapabilities
+            descriptor.RequiredRuntimeMode
         );
 
         if (samples == null || samples.Count == 0)
@@ -105,9 +105,8 @@ internal static class SchemaMetadataWriter {
         };
     }
 
-    private static JObject CreateRuntimeCapabilitiesPayload(
-        SettingsRuntimeCapabilities capabilities
-    ) => JObject.FromObject(capabilities.ToMetadata());
+    private static JObject CreateRuntimeCapabilitiesPayload(SettingsRuntimeMode runtimeMode) =>
+        JObject.FromObject(runtimeMode.ToMetadata());
 
     private static JObject CreateRootDataPayload(
         IReadOnlyDictionary<string, SettingsSchemaDatasetBinding> datasets

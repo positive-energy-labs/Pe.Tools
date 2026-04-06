@@ -1,4 +1,4 @@
-using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime;
 using Pe.Ui.Components;
 using Pe.Ui.Core.Services;
 using Pe.Ui.ViewModels;
@@ -291,7 +291,7 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     /// <example>
     ///     <code>Storage = new Storage(nameof(MyCmdClass))</code>
     /// </example>
-    public (StorageClient Storage, Func<TItem, string> PersistenceKey)? Persistence { get; init; }
+    public (ModuleStorage Storage, Func<TItem, string> PersistenceKey)? Persistence { get; init; }
 
     /// <summary>
     ///     Search configuration controlling which fields to search and scoring weights.

@@ -17,11 +17,10 @@ using System.Text;
 namespace Pe.StorageRuntime.Json;
 
 public sealed class JsonSchemaBuildOptions(
-    SettingsRuntimeCapabilities capabilities,
+    SettingsRuntimeMode runtimeMode,
     ISettingsDocumentContextAccessor? documentContextAccessor = null
 ) {
-    public SettingsRuntimeCapabilities Capabilities { get; } =
-        capabilities ?? throw new ArgumentNullException(nameof(capabilities));
+    public SettingsRuntimeMode RuntimeMode { get; } = runtimeMode;
 
     public ISettingsDocumentContextAccessor? DocumentContextAccessor { get; } = documentContextAccessor;
     public bool ResolveFieldOptionSamples { get; init; } = true;
@@ -29,7 +28,7 @@ public sealed class JsonSchemaBuildOptions(
     public FieldOptionsExecutionContext CreateFieldOptionsExecutionContext(
         IReadOnlyDictionary<string, string>? fieldValues = null
     ) => new(
-        this.Capabilities,
+        this.RuntimeMode,
         this.DocumentContextAccessor,
         fieldValues
     );

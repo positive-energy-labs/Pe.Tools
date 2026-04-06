@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using NJsonSchema.Generation;
 using NJsonSchema.Generation.TypeMappers;
+using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Json.FieldOptions;
 using Pe.StorageRuntime.Json.SchemaDefinitions;
 using System.Collections.Concurrent;
@@ -93,7 +94,7 @@ public sealed class JsonTypeSchemaBindingRegistry {
             var descriptor = source.Describe();
             IReadOnlyList<FieldOptionItem>? samples = null;
             if (options.ResolveFieldOptionSamples &&
-                options.Capabilities.Supports(descriptor.RequiredCapabilities)) {
+                options.RuntimeMode.Supports(descriptor.RequiredRuntimeMode)) {
                 try {
                     samples = source.GetOptionsAsync(options.CreateFieldOptionsExecutionContext())
                         .AsTask()

@@ -1,4 +1,4 @@
-﻿using Autodesk.Revit.UI;
+using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.FamilyFoundry;
@@ -6,12 +6,14 @@ using Pe.FamilyFoundry.Resolution;
 using Pe.Global;
 using Pe.Global.Utils.Files;
 using Pe.StorageRuntime.Json.ContractResolvers;
-using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime;
 using Pe.StorageRuntime.Revit.Core.Json;
+using Pe.StorageRuntime.Modules;
 using Pe.StorageRuntime.Revit.Modules;
-using Pe.SettingsCatalog.Revit.FamilyFoundry;
+using Pe.SettingsCatalog.Manifests.FamilyFoundry;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
+using RuntimeStorageClient = Pe.StorageRuntime.StorageClient;
 
 namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 
@@ -88,13 +90,14 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
             throw new InvalidOperationException("Queue builder must be set via WithQueueBuilder()");
 
         // Setup storage and settings
-        var storage = new StorageClient(this._settingsModule.ModuleKey);
-        var sharedStorage = this._settingsModule.SharedStorage();
-        var settings = storage.StateDir().Json<BaseSettings<TProfile>>("settings").Read();
-        var profilesRootDirectory = sharedStorage.ResolveRootDirectory();
+        var storage = RuntimeStorageClient.Default.Module(this._settingsModule);
+        var persistence = RuntimeStorageClient.Default.Module(((ISettingsModule)this._settingsModule).ModuleKey);
+        var documents = storage.Documents();
+        var settings = storage.State().Json<BaseSettings<TProfile>>("settings").Read();
+        var profilesRootDirectory = documents.ResolveRootDirectory();
 
         // Discover profiles
-        var profiles = ProfileListItem.DiscoverProfiles(sharedStorage);
+        var profiles = ProfileListItem.DiscoverProfiles(documents);
         if (profiles.Count == 0) {
             throw new InvalidOperationException(
                 $"No profiles found in {profilesRootDirectory}. Create a profile JSON file to continue.");
@@ -105,7 +108,8 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
             Doc = this._doc,
             UiDoc = this._uiDoc,
             Storage = storage,
-            SharedStorage = sharedStorage,
+            Settings = storage.Settings(),
+            Documents = documents,
             OnFinishSettings = settings.OnProcessingFinish
         };
 
@@ -131,7 +135,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         window = PaletteFactory.Create(
             $"{this._commandName} - Select Profile",
             new PaletteOptions<ProfileListItem> {
-                Persistence = (storage, item => item.TextPrimary),
+                Persistence = (persistence, item => item.TextPrimary),
                 SearchConfig = SearchConfig.PrimaryAndSecondary(),
                 SidebarPanel = previewPanel,
                 Tabs = [
@@ -179,7 +183,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         if (ct.IsCancellationRequested) return null;
 
         // Load the profile
-        var profile = context.SharedStorage.ReadRequired<TProfile>(profileItem.TextPrimary);
+        var profile = context.Settings.ReadRequired(profileItem.TextPrimary);
         var authoredWarnings = new List<string>();
         var authoredErrors = new List<string>();
 
@@ -396,7 +400,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
 /// <summary>
 ///     Represents an action in the Foundry palette.
 /// </summary>
-internal class FoundryAction<TProfile> where TProfile : BaseProfileSettings {
+internal class FoundryAction<TProfile> where TProfile : BaseProfileSettings, new() {
     public string Name { get; init; }
     public Action<FoundryContext<TProfile>> Handler { get; init; }
     public Func<FoundryContext<TProfile>, bool> CanExecute { get; init; }

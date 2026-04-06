@@ -2,7 +2,7 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.TaskPalette;
 using Pe.App.Tasks;
-using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
 using Serilog;
@@ -18,7 +18,7 @@ public class CmdPltTasks : IExternalCommand {
     ) {
         try {
             var uiapp = commandData.Application;
-            var persistence = new StorageClient(nameof(CmdPltTasks));
+            var persistence = StorageClient.Default.Module(nameof(CmdPltTasks));
 
             // Refresh task registry on every palette open to support hot-reload
             Log.Information("Refreshing task registry...");

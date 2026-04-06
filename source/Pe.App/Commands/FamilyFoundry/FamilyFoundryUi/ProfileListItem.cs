@@ -1,5 +1,4 @@
 using Pe.StorageRuntime;
-using Pe.StorageRuntime.Revit.Modules;
 using Pe.Ui.Core;
 using System.IO;
 using System.Windows.Media.Imaging;
@@ -50,7 +49,7 @@ public class ProfileListItem : IPaletteListItem {
     public WpfColor? ItemColor => null;
 
     public static List<ProfileListItem> DiscoverProfiles(
-        SharedModuleSettingsStorage storage,
+        ModuleDocumentStorage storage,
         string? rootKey = null
     ) {
         var discovered = storage

@@ -21,20 +21,3 @@ public sealed record SettingsStorageModuleDefinition(
         ISettingsDocumentValidator? validator = null
     ) => new(defaultRootKey, [defaultRootKey], storageOptions, validator);
 }
-
-public interface ISettingsModuleDescriptor {
-    string ModuleKey { get; }
-
-    string DefaultSubDirectory { get; }
-
-    Type SettingsType { get; }
-
-    SettingsStorageModuleOptions StorageOptions { get; }
-}
-
-public record SettingsModuleDescriptor(
-    string ModuleKey,
-    string DefaultSubDirectory,
-    Type SettingsType,
-    SettingsStorageModuleOptions StorageOptions
-) : ISettingsModuleDescriptor;

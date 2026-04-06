@@ -1,7 +1,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Extensions.FamDocument;
-using Pe.SettingsCatalog.Revit.FamilyFoundry;
+using Pe.SettingsCatalog.Manifests.FamilyFoundry;
 using Pe.StorageRuntime.Revit.Core.Json;
 
 namespace Pe.Tools.RevitTest.Tests;

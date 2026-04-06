@@ -1,5 +1,6 @@
 using Newtonsoft.Json.Linq;
 using Pe.StorageRuntime;
+using Pe.StorageRuntime.Modules;
 using Pe.StorageRuntime.Revit.Modules;
 using Pe.Ui.Core;
 using System.ComponentModel;
@@ -27,17 +28,19 @@ public class BatchScheduleSettings {
 public class BatchScheduleListItem : IPaletteListItem {
     private readonly FileInfo _fileInfo;
     private readonly string _relativePath;
-    private readonly SharedModuleSettingsStorage _storage;
+    private readonly ModuleSettingsStorage<BatchScheduleSettings> _settings;
+    private readonly ModuleDocumentStorage _documents;
 
     public BatchScheduleListItem(
         string filePath,
         string relativePath,
-        SharedModuleSettingsStorage storage
+        ModuleSettingsStorage<BatchScheduleSettings> settings
     ) {
         this.FilePath = filePath;
         this._fileInfo = new FileInfo(filePath);
         this._relativePath = relativePath;
-        this._storage = storage;
+        this._settings = settings;
+        this._documents = settings.Documents();
         this.ScheduleCount = ExtractScheduleCount(filePath);
     }
 
@@ -73,13 +76,14 @@ public class BatchScheduleListItem : IPaletteListItem {
     ///     Loads the batch settings from the file.
     /// </summary>
     public BatchScheduleSettings LoadBatchSettings() =>
-        this._storage.ReadRequired<BatchScheduleSettings>(this._relativePath);
+        this._settings.ReadRequired(this._relativePath);
 
     /// <summary>
     ///     Discovers all batch configuration JSON files in a directory.
     /// </summary>
-    public static List<BatchScheduleListItem> DiscoverProfiles(SharedModuleSettingsStorage storage) {
-        var discovered = storage
+    public static List<BatchScheduleListItem> DiscoverProfiles(ModuleSettingsStorage<BatchScheduleSettings> settings) {
+        var documents = settings.Documents();
+        var discovered = documents
             .DiscoverAsync(
                 new SettingsDiscoveryOptions(
                     Recursive: true,
@@ -92,9 +96,9 @@ public class BatchScheduleListItem : IPaletteListItem {
 
         return discovered.Files
             .Select(file => new BatchScheduleListItem(
-                storage.ResolveDocumentPath(file.RelativePath),
+                documents.ResolveDocumentPath(file.RelativePath),
                 file.RelativePath,
-                storage))
+                settings))
             .OrderByDescending(p => p.LastModified)
             .ToList();
     }

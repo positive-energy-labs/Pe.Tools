@@ -1,4 +1,5 @@
 using System.Reflection;
+using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Json.SchemaDefinitions;
 
 namespace Pe.StorageRuntime.Json.FieldOptions;
@@ -50,7 +51,7 @@ public sealed class SettingsFieldOptionsService : ISettingsFieldOptionsService {
             );
         }
 
-        if (!context.Capabilities.Supports(descriptor.RequiredCapabilities)) {
+        if (!context.RuntimeMode.Supports(descriptor.RequiredRuntimeMode)) {
             return new FieldOptionsResult(
                 FieldOptionsResultKind.Unsupported,
                 "Field options source is not supported in the current runtime.",
