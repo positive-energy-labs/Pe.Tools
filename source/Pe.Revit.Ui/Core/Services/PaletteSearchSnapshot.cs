@@ -1,4 +1,4 @@
-namespace Pe.Ui.Core.Services;
+namespace Pe.Revit.Ui.Core.Services;
 
 /// <summary>
 ///     Immutable snapshot of searchable fields for a palette item.

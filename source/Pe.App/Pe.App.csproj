@@ -62,11 +62,11 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Pe.Extensions\Pe.Extensions.csproj" />
-        <ProjectReference Include="..\Pe.FamilyFoundry\Pe.FamilyFoundry.csproj" />
-        <ProjectReference Include="..\Pe.Global\Pe.Global.csproj" />
-        <ProjectReference Include="..\Pe.SettingsCatalog\Pe.SettingsCatalog.csproj" />
-        <ProjectReference Include="..\Pe.Ui\Pe.Ui.csproj" />
+        <ProjectReference Include="..\Pe.Revit.Extensions\Pe.Revit.Extensions.csproj" />
+        <ProjectReference Include="..\Pe.Revit.FamilyFoundry\Pe.Revit.FamilyFoundry.csproj" />
+        <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj" />
+        <ProjectReference Include="..\Pe.Shared.SettingsCatalog\Pe.Shared.SettingsCatalog.csproj" />
+        <ProjectReference Include="..\Pe.Revit.Ui\Pe.Revit.Ui.csproj" />
     </ItemGroup>
 
     <!-- Only run auto-approve script when launching from IDE, not during regular builds -->

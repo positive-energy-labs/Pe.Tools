@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace Pe.Global.Services.Host;
+namespace Pe.Revit.Global.Services.Host;
 
 public enum ThrottleDecision {
     Executed,

@@ -1,16 +1,16 @@
-<core:RevitHostedUserControl x:Class="Pe.Ui.Components.Palette"
+<core:RevitHostedUserControl x:Class="Pe.Revit.Ui.Components.Palette"
                              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-                             xmlns:local="clr-namespace:Pe.Ui.Components"
-                             xmlns:controls="clr-namespace:Pe.Ui.Controls"
-                             xmlns:core="clr-namespace:Pe.Ui.Core"
+                             xmlns:local="clr-namespace:Pe.Revit.Ui.Components"
+                             xmlns:controls="clr-namespace:Pe.Revit.Ui.Controls"
+                             xmlns:core="clr-namespace:Pe.Revit.Ui.Core"
                              VerticalAlignment="Top">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <!-- Inherit WpfUiResources which includes TextBox styles -->
-                <ResourceDictionary Source="pack://application:,,,/Pe.Ui;component/Core/WpfUiResources.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/Pe.Revit.Ui;component/Core/WpfUiResources.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </UserControl.Resources>

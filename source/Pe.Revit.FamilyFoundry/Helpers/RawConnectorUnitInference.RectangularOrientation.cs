@@ -1,7 +1,7 @@
 ﻿using Autodesk.Revit.DB;
 using System.Diagnostics.CodeAnalysis;
 
-namespace Pe.FamilyFoundry.Helpers;
+namespace Pe.Revit.FamilyFoundry.Helpers;
 
 internal static partial class RawConnectorUnitInference {
     private const double DirectionEqualityTolerance = 0.999;

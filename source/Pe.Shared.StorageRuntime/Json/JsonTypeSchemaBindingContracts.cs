@@ -2,9 +2,9 @@ using System.Reflection;
 using Newtonsoft.Json;
 using NJsonSchema;
 using NJsonSchema.Generation.TypeMappers;
-using Pe.StorageRuntime.Json.FieldOptions;
+using Pe.Shared.StorageRuntime.Json.FieldOptions;
 
-namespace Pe.StorageRuntime.Json;
+namespace Pe.Shared.StorageRuntime.Json;
 
 public interface IJsonTypeSchemaBinding {
     JsonObjectType SchemaType { get; }

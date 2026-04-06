@@ -1,6 +1,6 @@
 using Newtonsoft.Json.Linq;
 
-namespace Pe.StorageRuntime.Json;
+namespace Pe.Shared.StorageRuntime.Json;
 
 /// <summary>
 ///     Expands $include directives in JSON arrays by resolving fragment files.

@@ -1,8 +1,8 @@
-using Pe.Extensions.FamManager;
-using Pe.Global;
-using ParamModelRes = Pe.Global.Services.Aps.Models.ParametersApi.Parameters.ParametersResult;
+using Pe.Revit.Extensions.FamManager;
+using Pe.Revit.Global;
+using ParamModelRes = Pe.Revit.Global.Services.Aps.Models.ParametersApi.Parameters.ParametersResult;
 
-namespace Pe.Extensions.FamDocument;
+namespace Pe.Revit.Extensions.FamDocument;
 
 public static class FamilyDocumentAddParameter {
     /// <summary>

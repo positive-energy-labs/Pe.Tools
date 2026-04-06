@@ -2,10 +2,10 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using NJsonSchema;
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Json.FieldOptions;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Json.FieldOptions;
 
-namespace Pe.StorageRuntime.Json.SchemaDefinitions;
+namespace Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 
 internal static class SchemaMetadataWriter {
     public static void ApplyRootData(

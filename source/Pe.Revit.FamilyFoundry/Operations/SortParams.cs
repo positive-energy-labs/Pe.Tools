@@ -3,7 +3,7 @@ using Newtonsoft.Json.Converters;
 using Pe.Revit.Extensions.FamDocument;
 using System.ComponentModel;
 
-namespace Pe.FamilyFoundry.Operations;
+namespace Pe.Revit.FamilyFoundry.Operations;
 
 public class SortParams(SortParamsSettings settings) : DocOperation<SortParamsSettings>(settings) {
     public override string Description =>

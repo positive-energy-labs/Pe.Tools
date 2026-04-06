@@ -1,7 +1,7 @@
-using Pe.FamilyFoundry;
-using Pe.FamilyFoundry.Snapshots;
+using Pe.Revit.FamilyFoundry;
+using Pe.Revit.FamilyFoundry.Snapshots;
 
-namespace Pe.FamilyFoundry.Aggregators.Snapshots;
+namespace Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
 
 /// <summary>
 ///     Container for all snapshot data collected from a family.

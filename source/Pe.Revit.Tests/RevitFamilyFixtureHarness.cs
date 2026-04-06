@@ -1,10 +1,10 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Pe.Extensions.FamDocument;
+using Pe.Revit.Extensions.FamDocument;
 using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
-using Pe.StorageRuntime.Revit.Core.Json;
+using Pe.Shared.StorageRuntime.Revit.Core.Json;
 
-namespace Pe.Tools.RevitTest.Tests;
+namespace Pe.Revit.Tests;
 
 internal static class RevitFamilyFixtureHarness {
     private const string GenericModelTemplateName = "Generic Model.rft";

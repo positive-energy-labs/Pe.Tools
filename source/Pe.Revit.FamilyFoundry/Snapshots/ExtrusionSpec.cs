@@ -1,4 +1,4 @@
-﻿namespace Pe.FamilyFoundry.Snapshots;
+﻿namespace Pe.Revit.FamilyFoundry.Snapshots;
 
 /// <summary>
 ///     Snapshot data for constrained extrusions.

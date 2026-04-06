@@ -1,4 +1,4 @@
-namespace Pe.StorageRuntime;
+namespace Pe.Shared.StorageRuntime;
 
 /// <summary>
 ///     Settings file classification used by discovery results.

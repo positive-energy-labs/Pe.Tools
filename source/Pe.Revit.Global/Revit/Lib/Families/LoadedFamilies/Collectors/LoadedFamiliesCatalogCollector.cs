@@ -1,7 +1,7 @@
-using Pe.Global.Revit.Lib.Families.LoadedFamilies.Models;
-using Pe.Host.Contracts.RevitData;
+using Pe.Shared.HostContracts.RevitData;
+using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
 
-namespace Pe.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
+namespace Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 
 public static class LoadedFamiliesCatalogCollector {
     public static List<CollectedLoadedFamilyRecord> CollectCanonical(

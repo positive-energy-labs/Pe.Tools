@@ -2,7 +2,7 @@
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 
-namespace Pe.FamilyFoundry;
+namespace Pe.Revit.FamilyFoundry;
 
 public sealed class AuthoredParamDrivenSolidsSettings : IOperationSettings {
     [JsonConverter(typeof(StringEnumConverter))]

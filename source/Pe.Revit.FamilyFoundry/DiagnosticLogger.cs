@@ -2,7 +2,7 @@ using Autodesk.Revit.ApplicationServices;
 using System.Diagnostics;
 using System.Text;
 
-namespace Pe.FamilyFoundry;
+namespace Pe.Revit.FamilyFoundry;
 
 /// <summary>
 ///     Diagnostic logger for debugging parameter creation issues.

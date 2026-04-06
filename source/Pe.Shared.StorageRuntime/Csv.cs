@@ -1,6 +1,6 @@
-using Pe.StorageRuntime.Json;
+using Pe.Shared.StorageRuntime.Json;
 
-namespace Pe.StorageRuntime;
+namespace Pe.Shared.StorageRuntime;
 
 public sealed class Csv<T>(string filePath) : CsvReadWriter<T> where T : class, new() {
     public string FilePath { get; } = Initialize(filePath);

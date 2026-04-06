@@ -1,8 +1,8 @@
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Modules;
-using Pe.StorageRuntime.Revit.Validation;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Modules;
+using Pe.Shared.StorageRuntime.Revit.Validation;
 
-namespace Pe.SettingsCatalog.Manifests.AutoTag;
+namespace Pe.Shared.SettingsCatalog.Manifests.AutoTag;
 
 public static class AutoTagSettingsManifest {
     public static SettingsModuleManifest<AutoTagSettings> Module { get; } = new(

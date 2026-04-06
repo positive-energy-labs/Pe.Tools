@@ -7,7 +7,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Binding = System.Windows.Data.Binding;
 
-namespace Pe.Ui.Controls;
+namespace Pe.Revit.Ui.Controls;
 
 /// <summary>
 ///     Sortable data table with horizontal scrolling, cell truncation with tooltips,

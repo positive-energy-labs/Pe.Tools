@@ -1,10 +1,10 @@
 using Autodesk.Revit.DB.ExtensibleStorage;
 using Newtonsoft.Json;
-using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Revit.Core.Json;
+using Pe.Shared.StorageRuntime.Json;
+using Pe.Shared.StorageRuntime.Revit.Core.Json;
 using Serilog;
 
-namespace Pe.Global.Services.Storage;
+namespace Pe.Revit.Global.Services.Storage;
 
 /// <summary>
 ///     Generic service for storing settings in a Revit document using Extensible Storage.

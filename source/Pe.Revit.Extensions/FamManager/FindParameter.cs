@@ -1,4 +1,4 @@
-namespace Pe.Extensions.FamManager;
+namespace Pe.Revit.Extensions.FamManager;
 
 public static class FamilyManagerFindParameter {
     /// <summary>

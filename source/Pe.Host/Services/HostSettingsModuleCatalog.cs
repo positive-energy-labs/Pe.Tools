@@ -1,13 +1,13 @@
-using Pe.SettingsCatalog;
-using Pe.SettingsCatalog.Manifests;
-using Pe.StorageRuntime;
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Modules;
-using HostSettingsModuleDescriptor = Pe.Host.Contracts.Protocol.HostModuleDescriptor;
-using HostRootDescriptor = Pe.Host.Contracts.SettingsStorage.SettingsRootDescriptor;
-using HostSettingsModuleWorkspaceDescriptor = Pe.Host.Contracts.SettingsStorage.SettingsModuleWorkspaceDescriptor;
-using HostWorkspaceDescriptor = Pe.Host.Contracts.SettingsStorage.SettingsWorkspaceDescriptor;
-using HostWorkspacesData = Pe.Host.Contracts.SettingsStorage.SettingsWorkspacesData;
+using Pe.Shared.SettingsCatalog;
+using Pe.Shared.SettingsCatalog.Manifests;
+using Pe.Shared.StorageRuntime;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Modules;
+using HostSettingsModuleDescriptor = Pe.Shared.HostContracts.Protocol.HostModuleDescriptor;
+using HostRootDescriptor = Pe.Shared.HostContracts.SettingsStorage.SettingsRootDescriptor;
+using HostSettingsModuleWorkspaceDescriptor = Pe.Shared.HostContracts.SettingsStorage.SettingsModuleWorkspaceDescriptor;
+using HostWorkspaceDescriptor = Pe.Shared.HostContracts.SettingsStorage.SettingsWorkspaceDescriptor;
+using HostWorkspacesData = Pe.Shared.HostContracts.SettingsStorage.SettingsWorkspacesData;
 
 namespace Pe.Host.Services;
 

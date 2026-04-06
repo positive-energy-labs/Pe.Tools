@@ -1,4 +1,4 @@
-using Pe.Host.Contracts.Operations;
+using Pe.Shared.HostContracts.Operations;
 
 namespace Pe.Host.Operations;
 

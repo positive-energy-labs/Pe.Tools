@@ -3,7 +3,7 @@ using System.Xml.Linq;
 using UIFramework;
 using UIFrameworkServices;
 
-namespace Pe.Global.Revit.Ui;
+namespace Pe.Revit.Global.Revit.Ui;
 
 /// <summary>
 ///     Unified service for reading and writing Revit keyboard shortcuts.

@@ -3,7 +3,7 @@ using System.Windows.Data;
 using System.Windows.Media.Imaging;
 using Visibility = System.Windows.Visibility;
 
-namespace Pe.Ui.Core.Converters;
+namespace Pe.Revit.Ui.Core.Converters;
 
 /// <summary> Coerce value to a display state </summary>
 public class VisibilityConverter : IValueConverter {

@@ -1,7 +1,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
-namespace Pe.Shared.Host.Contracts.Protocol;
+namespace Pe.Shared.HostContracts.Protocol;
 
 public static class BridgeProtocol {
     public const string Transport = "named-pipes";

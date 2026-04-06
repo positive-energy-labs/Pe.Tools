@@ -1,11 +1,10 @@
 using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI;
-using Pe.Global.Services.Storage;
-using Pe.Global.Services.AutoTag.Core;
-using Pe.SettingsCatalog.Manifests.AutoTag;
+using Pe.Revit.Global.Services.Storage;
+using Pe.Shared.SettingsCatalog.Manifests.AutoTag;
 using Serilog;
 
-namespace Pe.Global.Services.AutoTag;
+namespace Pe.App.Services.AutoTag;
 
 /// <summary>
 ///     Singleton service that manages the AutoTag feature.

@@ -3,7 +3,7 @@ using Pe.Revit.FamilyFoundry.OperationSettings;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
-namespace Pe.SettingsCatalog.Manifests.FamilyFoundry;
+namespace Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 
 public class ProfileFamilyManager : BaseProfileSettings {
     [Description("Settings for explicit family parameter definitions.")]

@@ -1,8 +1,8 @@
-using Pe.Global.PolyFill;
+using Pe.Revit.Global.PolyFill;
 using System.ComponentModel;
 using System.Globalization;
 
-namespace Pe.Global.Revit.Lib.Schedules.Filters;
+namespace Pe.Revit.Global.Revit.Lib.Schedules.Filters;
 
 public class ScheduleFilterSpec {
     [Description("The field name to filter on.")]

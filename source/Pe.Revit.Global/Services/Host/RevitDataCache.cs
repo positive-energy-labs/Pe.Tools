@@ -1,7 +1,7 @@
-using Pe.Host.Contracts.Protocol;
+using Pe.Shared.HostContracts.Protocol;
 using System.Collections.Concurrent;
 
-namespace Pe.Global.Services.Host;
+namespace Pe.Revit.Global.Services.Host;
 
 internal sealed class RevitDataCache {
     private readonly ConcurrentDictionary<CacheKey, CacheEntry> _entries = new();

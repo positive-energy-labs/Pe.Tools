@@ -1,9 +1,8 @@
 using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.Extensions.FamDocument;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using System.ComponentModel.DataAnnotations;
 
-namespace Pe.FamilyFoundry.Operations;
+namespace Pe.Revit.FamilyFoundry.Operations;
 
 public class MakeElecConnector(MakeElecConnectorSettings settings) : DocOperation<MakeElecConnectorSettings>(settings) {
     /// <summary>Attempting to associate these will throw a "This parameter cannot be associated" exception.</summary>

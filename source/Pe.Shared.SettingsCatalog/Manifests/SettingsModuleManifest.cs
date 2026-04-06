@@ -1,9 +1,9 @@
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Documents;
-using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Modules;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Documents;
+using Pe.Shared.StorageRuntime.Json;
+using Pe.Shared.StorageRuntime.Modules;
 
-namespace Pe.SettingsCatalog.Manifests;
+namespace Pe.Shared.SettingsCatalog.Manifests;
 
 public interface ISettingsModuleManifest : ISettingsModule {
     string DefaultRootKey { get; }

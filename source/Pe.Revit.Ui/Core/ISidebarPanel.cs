@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace Pe.Ui.Core;
+namespace Pe.Revit.Ui.Core;
 
 /// <summary>
 ///     Contract for sidebar panels that can be automatically wired to palette selection.

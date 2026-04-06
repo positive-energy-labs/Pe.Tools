@@ -1,4 +1,4 @@
-namespace Pe.Global.Revit.Lib;
+namespace Pe.Revit.Global.Revit.Lib;
 
 /// <summary>
 ///     Resolves a SpecTypeId (ForgeTypeId) to its corresponding StorageType.

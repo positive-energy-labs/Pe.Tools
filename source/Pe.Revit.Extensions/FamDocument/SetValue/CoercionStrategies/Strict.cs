@@ -1,4 +1,4 @@
-namespace Pe.Extensions.FamDocument.SetValue.CoercionStrategies;
+namespace Pe.Revit.Extensions.FamDocument.SetValue.CoercionStrategies;
 
 /// <summary>
 ///     Strict coercion strategy - only allows mapping when source and target storage types match exactly.

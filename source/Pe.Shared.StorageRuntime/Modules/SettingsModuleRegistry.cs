@@ -1,4 +1,4 @@
-namespace Pe.StorageRuntime.Modules;
+namespace Pe.Shared.StorageRuntime.Modules;
 
 public class SettingsModuleRegistry {
     private readonly Dictionary<string, ISettingsModule> _modules = new(StringComparer.OrdinalIgnoreCase);

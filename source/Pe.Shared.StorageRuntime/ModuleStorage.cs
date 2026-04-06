@@ -1,7 +1,7 @@
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Modules;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Modules;
 
-namespace Pe.StorageRuntime;
+namespace Pe.Shared.StorageRuntime;
 
 public interface IStorageModule<TSettings> where TSettings : class {
     string ModuleKey { get; }

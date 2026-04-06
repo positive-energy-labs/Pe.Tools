@@ -2,7 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Collections;
 
-namespace Pe.StorageRuntime.Json.Converters;
+namespace Pe.Shared.StorageRuntime.Json.Converters;
 
 public class UniformChildKeysListConverter(string missingValue = "") : JsonConverter {
     public override bool CanRead => false;

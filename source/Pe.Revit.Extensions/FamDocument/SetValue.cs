@@ -1,9 +1,9 @@
-using Pe.Extensions.FamDocument.SetValue;
+using Pe.Revit.Extensions.FamDocument.SetValue;
 using System.Diagnostics;
 using System.Globalization;
-using BCS = Pe.Extensions.FamDocument.SetValue.BuiltInCoercionStrategy;
+using BCS = Pe.Revit.Extensions.FamDocument.SetValue.BuiltInCoercionStrategy;
 
-namespace Pe.Extensions.FamDocument;
+namespace Pe.Revit.Extensions.FamDocument;
 
 public static class FamilyDocumentSetValue {
     /// <summary>
@@ -92,7 +92,7 @@ public static class FamilyDocumentSetValue {
         this FamilyDocument famDoc,
         FamilyParameter targetParam,
         FamilyParameter sourceParam,
-        string strategyName = nameof(BCS.Strict)
+        string strategyName = nameof(BuiltInCoercionStrategy.Strict)
     ) {
         var context = CoercionContext.FromParam(famDoc, sourceParam, targetParam);
         if (context.SourceValue == null) return null;
@@ -141,7 +141,7 @@ public static class FamilyDocumentSetValue {
         this FamilyDocument famDoc,
         FamilyParameter targetParam,
         object? sourceValue,
-        string strategyName = nameof(BCS.Strict)
+        string strategyName = nameof(BuiltInCoercionStrategy.Strict)
     ) {
         var context = CoercionContext.FromValue(famDoc, sourceValue, targetParam);
         if (context.SourceValue == null) return null;

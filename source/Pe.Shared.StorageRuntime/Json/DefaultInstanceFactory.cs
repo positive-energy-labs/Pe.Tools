@@ -1,6 +1,6 @@
 using System.Reflection;
 
-namespace Pe.StorageRuntime.Json;
+namespace Pe.Shared.StorageRuntime.Json;
 
 public static class DefaultInstanceFactory {
     public static object? TryCreateDefaultInstance(Type type) {

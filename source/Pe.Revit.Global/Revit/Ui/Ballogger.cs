@@ -1,10 +1,10 @@
 using Autodesk.Internal.InfoCenter;
 using Autodesk.Windows;
-using Pe.StorageRuntime;
+using Pe.Shared.StorageRuntime;
 using Serilog.Events;
 using System.Windows;
 
-namespace Pe.Global.Revit.Ui;
+namespace Pe.Revit.Global.Revit.Ui;
 
 /// <summary>Message collector for accumulating messages, then showing all at once</summary>
 public class Ballogger {

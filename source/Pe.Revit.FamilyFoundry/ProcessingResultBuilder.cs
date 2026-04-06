@@ -1,13 +1,15 @@
-﻿using Pe.FamilyFoundry.Aggregators.Snapshots;
-using Pe.FamilyFoundry.OperationSettings;
-using Pe.FamilyFoundry.Serialization;
+﻿using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.FamilyFoundry.Serialization;
 using Pe.Revit.Global;
 using Pe.Revit.Global.PolyFill;
-using Pe.StorageRuntime;
-using Pe.StorageRuntime.Revit;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.Shared.StorageRuntime;
+using Pe.Shared.StorageRuntime.Revit;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.Shared.StorageRuntime.Revit;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
-namespace Pe.FamilyFoundry;
+namespace Pe.Revit.FamilyFoundry;
 
 /// <summary>
 ///     Fluent builder for generating processing result output files.

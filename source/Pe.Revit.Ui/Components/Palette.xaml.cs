@@ -1,5 +1,5 @@
-using Pe.Ui.Core;
-using Pe.Ui.ViewModels;
+using Pe.Revit.Ui.Core;
+using Pe.Revit.Ui.ViewModels;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -9,12 +9,13 @@ using Wpf.Ui.Controls;
 using Visibility = System.Windows.Visibility;
 using Grid = System.Windows.Controls.Grid;
 using Button = Wpf.Ui.Controls.Button;
-using AnimatedScrollViewer = Pe.Ui.Controls.AnimatedScrollViewer;
+using AnimatedScrollViewer = Pe.Revit.Ui.Controls.AnimatedScrollViewer;
 using Color = System.Windows.Media.Color;
+using Controls_AnimatedScrollViewer = Pe.Revit.Ui.Controls.AnimatedScrollViewer;
 using Point = System.Windows.Point;
 
 
-namespace Pe.Ui.Components;
+namespace Pe.Revit.Ui.Components;
 
 /// <summary>
 ///     Attached property holder and common close behavior for Palette.
@@ -819,7 +820,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
 
         target = Math.Max(0, Math.Min(this.TabScrollViewer.ScrollableWidth, target));
 
-        if (this.TabScrollViewer is AnimatedScrollViewer animated)
+        if (this.TabScrollViewer is Controls_AnimatedScrollViewer animated)
             animated.TargetHorizontalOffset = target;
         else
             this.TabScrollViewer.ScrollToHorizontalOffset(target);
@@ -833,7 +834,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         var target = this.TabScrollViewer.HorizontalOffset + scrollAmount;
         target = Math.Max(0, Math.Min(this.TabScrollViewer.ScrollableWidth, target));
 
-        if (this.TabScrollViewer is AnimatedScrollViewer animated)
+        if (this.TabScrollViewer is Controls_AnimatedScrollViewer animated)
             animated.TargetHorizontalOffset = target;
         else
             this.TabScrollViewer.ScrollToHorizontalOffset(target);

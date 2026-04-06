@@ -1,6 +1,6 @@
-using Pe.Host.Contracts.Operations;
+using Pe.Shared.HostContracts.Operations;
 
-namespace Pe.Global.Services.Host.Operations;
+namespace Pe.Revit.Global.Services.Host.Operations;
 
 internal interface IBridgeOperation {
     HostOperationDefinition Definition { get; }

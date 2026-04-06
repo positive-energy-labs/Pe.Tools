@@ -1,4 +1,4 @@
-namespace Pe.StorageRuntime.PolyFill;
+namespace Pe.Shared.StorageRuntime.PolyFill;
 
 /// <summary>
 ///     Polyfill extension methods to provide modern BCL APIs across .NET Framework and .NET versions.

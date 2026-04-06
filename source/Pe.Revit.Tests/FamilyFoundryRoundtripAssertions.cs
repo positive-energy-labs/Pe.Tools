@@ -5,7 +5,7 @@ using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.FamilyFoundry.Snapshots;
 
-namespace Pe.Tools.RevitTest.Tests;
+namespace Pe.Revit.Tests;
 
 internal static class FamilyFoundryRoundtripAssertions {
     private const double GeometryTolerance = 1e-4;

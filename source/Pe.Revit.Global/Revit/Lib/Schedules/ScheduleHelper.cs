@@ -1,15 +1,15 @@
 using Autodesk.Revit.DB.Structure;
-using Pe.Global.Revit.Lib.Schedules.Fields;
-using Pe.Global.Revit.Lib.Schedules.Filters;
-using Pe.Global.Revit.Lib.Schedules.HeaderGroups;
-using Pe.Global.Revit.Lib.Schedules.SortGroup;
-using Pe.Global.Revit.Lib.Schedules.TitleStyle;
-using Pe.Global.Revit.Lib.Schedules.ViewTemplate;
-using Pe.RevitData.Families;
-using Pe.RevitData.Parameters;
+using Pe.Revit.Global.Revit.Lib.Schedules.Fields;
+using Pe.Revit.Global.Revit.Lib.Schedules.Filters;
+using Pe.Revit.Global.Revit.Lib.Schedules.HeaderGroups;
+using Pe.Revit.Global.Revit.Lib.Schedules.SortGroup;
+using Pe.Revit.Global.Revit.Lib.Schedules.TitleStyle;
+using Pe.Revit.Global.Revit.Lib.Schedules.ViewTemplate;
+using Pe.Shared.RevitData.Families;
+using Pe.Shared.RevitData.Parameters;
 using Serilog;
 
-namespace Pe.Global.Revit.Lib.Schedules;
+namespace Pe.Revit.Global.Revit.Lib.Schedules;
 
 public static class ScheduleHelper {
     /// <summary>

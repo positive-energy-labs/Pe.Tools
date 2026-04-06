@@ -1,4 +1,4 @@
-namespace Pe.Global;
+namespace Pe.Revit.Global;
 
 public record SharedParameterDefinition(
     ExternalDefinition ExternalDefinition,

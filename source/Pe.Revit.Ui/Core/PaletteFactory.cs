@@ -1,11 +1,11 @@
-using Pe.StorageRuntime;
-using Pe.Ui.Components;
-using Pe.Ui.Core.Services;
-using Pe.Ui.ViewModels;
+using Pe.Revit.Ui.Components;
+using Pe.Revit.Ui.Core.Services;
+using Pe.Revit.Ui.ViewModels;
+using Pe.Shared.StorageRuntime;
 using System.Windows;
 using System.Windows.Threading;
 
-namespace Pe.Ui.Core;
+namespace Pe.Revit.Ui.Core;
 
 /// <summary>
 ///     Defines a single tab in a tabbed palette.
@@ -55,7 +55,7 @@ public sealed class TabDefinition<TItem> where TItem : class, IPaletteListItem {
     ///     <code>
     ///     // Filter by view type:
     ///     FilterKeySelector = item => item.View.ViewType.ToString()
-    ///     
+    ///
     ///     // Filter by category:
     ///     FilterKeySelector = item => item.TextPill
     ///     </code>
@@ -302,7 +302,7 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     ///     <code>
     ///     // Search both name and description:
     ///     SearchConfig = SearchConfig.PrimaryAndSecondary()
-    ///     
+    ///
     ///     // Disable search entirely:
     ///     SearchConfig = null
     ///     </code>
@@ -393,12 +393,12 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     ///     <code>
     ///     // Minimal - only the default ephemerality toggle:
     ///     // No Tray property needed, it's automatic
-    ///     
+    ///
     ///     // With custom content below the default toggle:
     ///     Tray = new PaletteTray { Content = optionsPanel }
-    ///     
+    ///
     ///     // Custom max height:
-    ///     Tray = new PaletteTray { 
+    ///     Tray = new PaletteTray {
     ///         Content = optionsPanel,
     ///         MaxHeight = 300
     ///     }

@@ -1,4 +1,4 @@
-namespace Pe.RevitData.Families;
+namespace Pe.Shared.RevitData.Families;
 
 public static class ProjectParameterCatalogCollector {
     public static IReadOnlyList<ProjectParameterCatalogEntry> Collect(

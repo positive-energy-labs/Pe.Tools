@@ -1,4 +1,4 @@
-namespace Pe.StorageRuntime.Json;
+namespace Pe.Shared.StorageRuntime.Json;
 
 public interface JsonReader<out T> {
     string FilePath { get; }

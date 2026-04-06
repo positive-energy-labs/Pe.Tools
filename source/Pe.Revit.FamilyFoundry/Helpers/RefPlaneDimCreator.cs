@@ -1,9 +1,8 @@
-﻿using Pe.FamilyFoundry.Operations;
-using Pe.FamilyFoundry.Snapshots;
+﻿using Pe.Revit.FamilyFoundry.Operations;
+using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Snapshots;
 
-using Pe.FamilyFoundry.OperationSettings;
-
-namespace Pe.FamilyFoundry.Helpers;
+namespace Pe.Revit.FamilyFoundry.Helpers;
 
 /// <summary>
 ///     Creates reference planes and dimensions from MirrorSpec and OffsetSpec.

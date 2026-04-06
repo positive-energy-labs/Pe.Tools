@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace Pe.Global.Revit.Lib.Schedules.TitleStyle;
+namespace Pe.Revit.Global.Revit.Lib.Schedules.TitleStyle;
 
 /// <summary>
 ///     Specification for individual border edges on a schedule title cell.

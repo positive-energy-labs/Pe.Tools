@@ -1,4 +1,4 @@
-namespace Pe.StorageRuntime.Revit.AutoTag;
+namespace Pe.Shared.StorageRuntime.Revit.AutoTag;
 
 /// <summary>
 ///     Maps element categories to their corresponding tag categories.

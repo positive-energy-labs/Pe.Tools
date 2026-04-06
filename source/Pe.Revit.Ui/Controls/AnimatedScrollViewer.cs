@@ -4,7 +4,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media.Animation;
 
-namespace Pe.Ui.Controls;
+namespace Pe.Revit.Ui.Controls;
 
 /// <summary>
 ///     ScrollViewer with smooth animated scrolling. Based on Matthias Shapiro's implementation.

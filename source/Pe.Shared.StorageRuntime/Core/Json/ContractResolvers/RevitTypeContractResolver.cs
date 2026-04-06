@@ -1,7 +1,7 @@
-using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Json.ContractResolvers;
+using Pe.Shared.StorageRuntime.Json;
+using Pe.Shared.StorageRuntime.Json.ContractResolvers;
 
-namespace Pe.StorageRuntime.Revit.Core.Json.ContractResolvers;
+namespace Pe.Shared.StorageRuntime.Revit.Core.Json.ContractResolvers;
 
 public class RevitTypeContractResolver : RegisteredTypeContractResolver {
     public RevitTypeContractResolver()

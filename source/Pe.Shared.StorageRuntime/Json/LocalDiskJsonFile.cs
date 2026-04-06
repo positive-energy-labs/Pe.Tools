@@ -1,7 +1,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
-namespace Pe.StorageRuntime.Json;
+namespace Pe.Shared.StorageRuntime.Json;
 
 public sealed class LocalDiskJsonFile<T>(string filePath) : JsonReadWriter<T> where T : class, new() {
     private static readonly JsonSerializerSettings SerializerSettings = new() {

@@ -1,11 +1,12 @@
 using Pe.Revit.Extensions.FamDocument.SetValue;
 using Pe.Revit.Extensions.FamManager;
-using Pe.FamilyFoundry.Aggregators.Snapshots;
-using Pe.StorageRuntime.Json;
+using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Shared.StorageRuntime.Json;
+using Pe.Shared.StorageRuntime.Json;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
-namespace Pe.FamilyFoundry.OperationSettings;
+namespace Pe.Revit.FamilyFoundry.OperationSettings;
 
 public class MapParamsSettings : IOperationSettings {
     [Description("List of parameter remapping rules")]
@@ -72,7 +73,7 @@ public class MapParamsSettings : IOperationSettings {
         var enumerable = deduplicated.ToList();
         if (enumerable.Count == 0) return [];
 
-        // 4. Order by quality (most types with values first). exclude 
+        // 4. Order by quality (most types with values first). exclude
         return [
             .. enumerable
                 .Select(x => (n: x.Name, c: x.GetTypesWithValue().Count))

@@ -1,9 +1,9 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Pe.Shared.Host.Contracts.Operations;
+using Pe.Shared.HostContracts.Operations;
 using TypeGen.Core.TypeAnnotations;
 
-namespace Pe.Shared.Host.Contracts.Protocol;
+namespace Pe.Shared.HostContracts.Protocol;
 
 [ExportTsClass]
 public static class SettingsHostEventNames {

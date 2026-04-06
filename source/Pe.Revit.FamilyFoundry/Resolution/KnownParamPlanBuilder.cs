@@ -1,11 +1,11 @@
-﻿using Pe.FamilyFoundry.Aggregators.Snapshots;
-using Pe.FamilyFoundry.OperationSettings;
-using Pe.FamilyFoundry.Operations;
-using Pe.FamilyFoundry.Snapshots;
+﻿using Pe.Revit.FamilyFoundry.Snapshots;
+using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.FamilyFoundry.Operations;
+using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.Global;
 using Serilog;
 
-namespace Pe.FamilyFoundry.Resolution;
+namespace Pe.Revit.FamilyFoundry.Resolution;
 
 public sealed record KnownParamPlan(
     AddFamilyParamsSettings ResolvedFamilyParams,

@@ -1,9 +1,9 @@
 using NJsonSchema;
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Context;
-using Pe.StorageRuntime.Json;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Context;
+using Pe.Shared.StorageRuntime.Json;
 
-namespace Pe.StorageRuntime.Revit.Core.Json;
+namespace Pe.Shared.StorageRuntime.Revit.Core.Json;
 
 public static class RevitJsonSchemaFactory {
     public static JsonSchema BuildAuthoringSchema(

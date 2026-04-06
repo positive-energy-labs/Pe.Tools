@@ -1,6 +1,6 @@
 using Newtonsoft.Json.Linq;
 
-namespace Pe.StorageRuntime.Json;
+namespace Pe.Shared.StorageRuntime.Json;
 
 public static class JsonDiff {
     public static JObject CreatePatch(JObject baseObj, JObject editedObj) {

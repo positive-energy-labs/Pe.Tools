@@ -1,7 +1,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
-namespace Pe.FamilyFoundry;
+namespace Pe.Revit.FamilyFoundry;
 
 public sealed class ConnectorBindingsSpec {
     public List<ConnectorBindingSpec> Parameters { get; init; } = [];

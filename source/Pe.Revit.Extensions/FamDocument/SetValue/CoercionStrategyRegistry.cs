@@ -1,6 +1,6 @@
-using Pe.Extensions.FamDocument.SetValue.CoercionStrategies;
+using Pe.Revit.Extensions.FamDocument.SetValue.CoercionStrategies;
 
-namespace Pe.Extensions.FamDocument.SetValue;
+namespace Pe.Revit.Extensions.FamDocument.SetValue;
 
 public enum BuiltInCoercionStrategy {
     Strict,

@@ -1,6 +1,6 @@
 using Newtonsoft.Json.Linq;
 
-namespace Pe.StorageRuntime.Json;
+namespace Pe.Shared.StorageRuntime.Json;
 
 public readonly record struct SettingsCompositionArtifact(
     string SourceFilePath,

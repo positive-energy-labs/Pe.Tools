@@ -3,7 +3,7 @@ using System.Windows.Data;
 using Visibility = System.Windows.Visibility;
 using WpfColor = System.Windows.Media.Color;
 
-namespace Pe.Ui.Core.Converters;
+namespace Pe.Revit.Ui.Core.Converters;
 
 /// <summary>
 ///     Converts a nullable WPF Color to Visibility (Visible if color has value, Collapsed if null)

@@ -1,7 +1,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
-namespace Pe.FamilyFoundry.Snapshots;
+namespace Pe.Revit.FamilyFoundry.Snapshots;
 
 /// <summary>
 ///     Mirror spec: creates two planes symmetrically around a center anchor.

@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace Pe.Global.Revit.Lib.Schedules.Fields;
+namespace Pe.Revit.Global.Revit.Lib.Schedules.Fields;
 
 public class ScheduleFieldSpec {
     [Description(

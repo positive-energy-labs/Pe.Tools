@@ -1,12 +1,13 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
-using Pe.FamilyFoundry.Aggregators.Snapshots;
-using Pe.StorageRuntime.Json;
+using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Shared.StorageRuntime.Json;
+using Pe.Shared.StorageRuntime.Json;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
-namespace Pe.FamilyFoundry.OperationSettings;
+namespace Pe.Revit.FamilyFoundry.OperationSettings;
 
 [JsonConverter(typeof(StringEnumConverter))]
 public enum ParamAssignmentKind {

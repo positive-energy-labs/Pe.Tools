@@ -1,5 +1,5 @@
 
-namespace Pe.Extensions.ProjectDocument;
+namespace Pe.Revit.Extensions.ProjectDocument;
 
 public static class ProjectDocumentDefinitions {
     /// <summary>

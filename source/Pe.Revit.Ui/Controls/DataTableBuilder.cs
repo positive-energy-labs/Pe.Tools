@@ -1,10 +1,11 @@
+using Pe.Revit.Ui.Core;
 using System.Windows;
 
-namespace Pe.Ui.Controls;
+namespace Pe.Revit.Ui.Controls;
 
 /// <summary>
 ///     Fluent builder for creating <see cref="SortableDataTable" /> instances.
-///     Modeled after <see cref="Pe.Ui.Core.FlowDocumentBuilder" /> for consistent API style.
+///     Modeled after <see cref="FlowDocumentBuilder" /> for consistent API style.
 /// </summary>
 /// <example>
 ///     Basic usage with typed data:

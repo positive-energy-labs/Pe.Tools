@@ -1,11 +1,11 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamManager;
 using Pe.Revit.Extensions.FamParameter;
-using Pe.FamilyFoundry.Operations;
-using Pe.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Operations;
+using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.Global;
 
-namespace Pe.FamilyFoundry.OperationGroups;
+namespace Pe.Revit.FamilyFoundry.OperationGroups;
 
 public class AddAndMapSharedParams(
     MapParamsSettings settings,

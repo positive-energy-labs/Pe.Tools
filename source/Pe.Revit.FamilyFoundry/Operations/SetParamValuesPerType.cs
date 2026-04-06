@@ -3,9 +3,9 @@ using Pe.Revit.Extensions.FamDocument.GetValue;
 using Pe.Revit.Extensions.FamDocument.SetValue;
 using Pe.Revit.Extensions.FamManager;
 using Pe.Revit.Extensions.FamParameter.Formula;
-using Pe.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.OperationSettings;
 
-namespace Pe.FamilyFoundry.Operations;
+namespace Pe.Revit.FamilyFoundry.Operations;
 
 /// <summary>
 ///     Sets parameter values on a per-type basis.

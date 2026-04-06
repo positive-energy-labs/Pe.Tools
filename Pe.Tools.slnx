@@ -1,38 +1,38 @@
 <Solution>
     <Configurations>
-        <BuildType Name="Debug.R23"/>
-        <BuildType Name="Debug.R24"/>
-        <BuildType Name="Debug.R25"/>
-        <BuildType Name="Debug.R26"/>
-        <BuildType Name="Debug.R23.Tests"/>
-        <BuildType Name="Debug.R24.Tests"/>
-        <BuildType Name="Debug.R25.Tests"/>
-        <BuildType Name="Debug.R26.Tests"/>
-        <BuildType Name="Release.R23"/>
-        <BuildType Name="Release.R24"/>
-        <BuildType Name="Release.R25"/>
-        <BuildType Name="Release.R26"/>
+        <BuildType Name="Debug.R23" />
+        <BuildType Name="Debug.R24" />
+        <BuildType Name="Debug.R25" />
+        <BuildType Name="Debug.R26" />
+        <BuildType Name="Debug.R23.Tests" />
+        <BuildType Name="Debug.R24.Tests" />
+        <BuildType Name="Debug.R25.Tests" />
+        <BuildType Name="Debug.R26.Tests" />
+        <BuildType Name="Release.R23" />
+        <BuildType Name="Release.R24" />
+        <BuildType Name="Release.R25" />
+        <BuildType Name="Release.R26" />
     </Configurations>
     <Folder Name="/Automation/">
-        <Project Path="build/Build.csproj" Type="832f14a8-b248-4dd8-8004-3df028dbb372"/>
-        <Project Path="install/Installer.csproj" Type="832f14a8-b248-4dd8-8004-3df028dbb372"/>
+        <Project Path="build/Build.csproj" Type="832f14a8-b248-4dd8-8004-3df028dbb372" />
+        <Project Path="install/Installer.csproj" Type="832f14a8-b248-4dd8-8004-3df028dbb372" />
     </Folder>
     <Folder Name="/Solution Items/">
-        <File Path=".gitignore"/>
-        <File Path="build/appsettings.json"/>
-        <File Path="Changelog.md"/>
-        <File Path="Readme.md"/>
+        <File Path=".gitignore" />
+        <File Path="build/appsettings.json" />
+        <File Path="Changelog.md" />
+        <File Path="Readme.md" />
     </Folder>
-    <Project Path="source/Pe.App/Pe.App.csproj"/>
-    <Project Path="source/Pe.Extensions/Pe.Extensions.csproj"/>
-    <Project Path="source/Pe.FamilyFoundry/Pe.FamilyFoundry.csproj"/>
-    <Project Path="source/Pe.Global/Pe.Global.csproj"/>
-    <Project Path="source/Pe.RevitData/Pe.RevitData.csproj"/>
-    <Project Path="source/Pe.Host.Contracts/Pe.Host.Contracts.csproj"/>
-    <Project Path="source/Pe.Host/Pe.Host.csproj"/>
-    <Project Path="source/Pe.SettingsCatalog/Pe.SettingsCatalog.csproj"/>
-    <Project Path="source/Pe.Ui/Pe.Ui.csproj"/>
-    <Project Path="source/Toon/Toon.csproj"/>
-    <Project Path="source/Pe.StorageRuntime/Pe.StorageRuntime.csproj"/>
-    <Project Path="source/Pe.Tools.RevitTest.Tests/Pe.Tools.RevitTest.Tests.csproj"/>
+    <Project Path="source/Pe.App/Pe.App.csproj" />
+    <Project Path="source/Pe.Revit.Extensions/Pe.Revit.Extensions.csproj" />
+    <Project Path="source/Pe.Revit.FamilyFoundry/Pe.Revit.FamilyFoundry.csproj" />
+    <Project Path="source/Pe.Revit.Global/Pe.Revit.Global.csproj" />
+    <Project Path="source/Pe.Host/Pe.Host.csproj" />
+    <Project Path="source/Toon/Toon.csproj" />
+    <Project Path="source/Pe.Revit.Tests/Pe.Revit.Tests.csproj" />
+    <Project Path="source/Pe.Revit.Ui/Pe.Revit.Ui.csproj" />
+    <Project Path="source/Pe.Shared.HostContracts/Pe.Shared.HostContracts.csproj" />
+    <Project Path="source/Pe.Shared.RevitData/Pe.Shared.RevitData.csproj" />
+    <Project Path="source/Pe.Shared.SettingsCatalog/Pe.Shared.SettingsCatalog.csproj" />
+    <Project Path="source/Pe.Shared.StorageRuntime/Pe.Shared.StorageRuntime.csproj" />
 </Solution>

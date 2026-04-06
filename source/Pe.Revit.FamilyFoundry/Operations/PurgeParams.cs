@@ -1,11 +1,11 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Extensions.FamParameter.Formula;
-using Pe.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.OperationSettings;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
-namespace Pe.FamilyFoundry.Operations;
+namespace Pe.Revit.FamilyFoundry.Operations;
 
 public class PurgeParams : DocOperation<PurgeParamsSettings> {
     public PurgeParams(PurgeParamsSettings settings, IEnumerable<string> ExcludeNamesEqualing) :

@@ -1,9 +1,9 @@
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData.Parameters;
-using Pe.StorageRuntime.Json.FieldOptions;
-using Pe.StorageRuntime.Json.SchemaProviders;
+using Pe.Shared.StorageRuntime.Json.FieldOptions;
+using Pe.Shared.StorageRuntime.Json.SchemaProviders;
 
-namespace Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+namespace Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
 public static class ParameterCatalogOptionFactory {
     public static List<ParameterCatalogOption> Build(FieldOptionsExecutionContext context) {

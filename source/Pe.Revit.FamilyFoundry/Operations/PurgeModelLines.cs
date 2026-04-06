@@ -1,7 +1,7 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Global.PolyFill;
 
-namespace Pe.FamilyFoundry.Operations;
+namespace Pe.Revit.FamilyFoundry.Operations;
 
 public class PurgeModelLines(DefaultOperationSettings settings) : DocOperation<DefaultOperationSettings>(settings) {
     public override string Description => "Delete unused model lines from the family";

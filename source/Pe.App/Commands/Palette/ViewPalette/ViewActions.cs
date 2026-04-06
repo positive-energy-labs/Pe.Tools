@@ -1,6 +1,6 @@
 using Autodesk.Revit.UI;
 using Pe.App.Services;
-using Pe.Extensions.UiApplication;
+using Pe.Revit.Extensions.UiApplication;
 
 namespace Pe.App.Commands.Palette.ViewPalette;
 

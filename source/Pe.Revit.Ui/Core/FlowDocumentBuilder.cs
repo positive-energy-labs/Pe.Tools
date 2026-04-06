@@ -1,9 +1,9 @@
-using Pe.Ui.Controls;
+using Pe.Revit.Ui.Controls;
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Media;
 
-namespace Pe.Ui.Core;
+namespace Pe.Revit.Ui.Core;
 
 /// <summary>
 ///     Fluent helpers for creating FlowDocument content with consistent styling.

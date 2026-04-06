@@ -3,7 +3,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Revit.Extensions.FamDocument;
 
-namespace Pe.FamilyFoundry.Operations;
+namespace Pe.Revit.FamilyFoundry.Operations;
 
 public class SetDuctConnectorSettings(DuctConnectorConfigurator settings)
     : DocOperation<DefaultOperationSettings>(new DefaultOperationSettings()) {

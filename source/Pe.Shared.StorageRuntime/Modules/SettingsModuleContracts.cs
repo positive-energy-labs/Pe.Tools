@@ -1,6 +1,6 @@
-using Pe.StorageRuntime.Documents;
+using Pe.Shared.StorageRuntime.Documents;
 
-namespace Pe.StorageRuntime.Modules;
+namespace Pe.Shared.StorageRuntime.Modules;
 
 public sealed record SettingsStorageModuleOptions(
     IReadOnlyCollection<string> IncludeRoots,

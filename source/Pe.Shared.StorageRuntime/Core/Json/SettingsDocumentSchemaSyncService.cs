@@ -1,11 +1,11 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Context;
-using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Modules;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Context;
+using Pe.Shared.StorageRuntime.Json;
+using Pe.Shared.StorageRuntime.Modules;
 
-namespace Pe.StorageRuntime.Revit.Core.Json;
+namespace Pe.Shared.StorageRuntime.Revit.Core.Json;
 
 public sealed class SettingsDocumentSchemaSyncService(
     SettingsRuntimeMode runtimeMode = SettingsRuntimeMode.HostOnly,

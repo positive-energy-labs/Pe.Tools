@@ -2,7 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 
-namespace Pe.Ui.Core;
+namespace Pe.Revit.Ui.Core;
 
 /// <summary>
 ///     Centralized threading helpers for palette pipelines.

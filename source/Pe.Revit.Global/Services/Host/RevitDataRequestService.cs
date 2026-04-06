@@ -1,14 +1,14 @@
 using Newtonsoft.Json;
-using Pe.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
-using Pe.Global.Revit.Lib.Schedules;
-using Pe.Global.Services.Document;
-using Pe.Host.Contracts.RevitData;
-using Pe.Host.Contracts.Protocol;
-using Pe.Host.Contracts.SettingsStorage;
+using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.HostContracts.Protocol;
+using Pe.Shared.HostContracts.SettingsStorage;
+using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
+using Pe.Revit.Global.Revit.Lib.Schedules;
+using Pe.Revit.Global.Services.Document;
 using ricaun.Revit.UI.Tasks;
 using RevitDocument = Autodesk.Revit.DB.Document;
 
-namespace Pe.Global.Services.Host;
+namespace Pe.Revit.Global.Services.Host;
 
 /// <summary>
 ///     Bridge-backed read-only Revit data requests for browser routes.

@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace Pe.StorageRuntime.Json.SchemaDefinitions;
+namespace Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 
 public interface ISettingsSchemaDefinitionRegistry {
     bool TryGet(Type settingsType, out SettingsSchemaDefinitionDescriptor definition);

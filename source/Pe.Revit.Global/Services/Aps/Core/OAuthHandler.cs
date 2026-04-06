@@ -1,11 +1,11 @@
 using Newtonsoft.Json;
-using Pe.Global.PolyFill;
-using Pe.Global.Services.Aps.Models;
+using Pe.Revit.Global.PolyFill;
+using Pe.Revit.Global.Services.Aps.Models;
 using Serilog;
 using System.Net;
 using System.Net.Sockets;
 
-namespace Pe.Global.Services.Aps.Core;
+namespace Pe.Revit.Global.Services.Aps.Core;
 
 /// <summary>
 ///     Handles OAuth 2.0 authentication flow using direct REST API calls.

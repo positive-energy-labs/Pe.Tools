@@ -1,4 +1,4 @@
-using Pe.Extensions.FamDocument;
+using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
 using Pe.Revit.FamilyFoundry.OperationSettings;
@@ -8,7 +8,7 @@ using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 using Pe.Tools.Commands.FamilyFoundry;
 
-namespace Pe.Tools.RevitTest.Tests;
+namespace Pe.Revit.Tests;
 
 internal static class FamilyFoundryRoundtripHarness {
     public static RoundtripArtifact RunProfileFixtureRoundtrip(

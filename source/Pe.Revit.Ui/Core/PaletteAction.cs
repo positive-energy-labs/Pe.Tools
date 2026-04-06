@@ -1,6 +1,6 @@
 using System.Windows.Input;
 
-namespace Pe.Ui.Core;
+namespace Pe.Revit.Ui.Core;
 
 public enum PaletteActionExecutionLane {
     Revit,

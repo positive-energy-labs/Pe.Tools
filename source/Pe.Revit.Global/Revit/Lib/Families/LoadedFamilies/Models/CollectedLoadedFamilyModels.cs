@@ -1,6 +1,6 @@
-using Pe.RevitData.Parameters;
+using Pe.Shared.RevitData.Parameters;
 
-namespace Pe.Global.Revit.Lib.Families.LoadedFamilies.Models;
+namespace Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
 
 public sealed record CollectedLoadedFamilyTypeRecord(
     string TypeName

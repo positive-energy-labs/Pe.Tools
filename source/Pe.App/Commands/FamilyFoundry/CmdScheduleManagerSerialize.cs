@@ -1,21 +1,24 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
-using Pe.Global.Revit.Lib.Schedules;
-using Pe.Global.Revit.Lib.Schedules.Fields;
-using Pe.Global.Revit.Lib.Schedules.SortGroup;
-using Pe.Global.Revit.Ui;
-using Pe.StorageRuntime;
-using Pe.StorageRuntime.Revit;
-using Pe.StorageRuntime.Revit.Core.Json.ContractResolvers;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.Revit.Global.Revit.Lib.Schedules;
+using Pe.Revit.Global.Revit.Lib.Schedules.Fields;
+using Pe.Revit.Global.Revit.Lib.Schedules.SortGroup;
+using Pe.Revit.Global.Revit.Ui;
+using Pe.Shared.StorageRuntime.Revit;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.ContractResolvers;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Pe.Tools.Commands.FamilyFoundry.ScheduleManagerUi;
-using Pe.Ui.Core;
+using Pe.Revit.Ui.Core;
+using Pe.Shared.StorageRuntime;
+using Pe.Shared.StorageRuntime.Revit;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.ContractResolvers;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Serilog.Events;
 using System.Diagnostics;
 using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
-using RuntimeStorageClient = Pe.StorageRuntime.StorageClient;
+using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
 
 namespace Pe.Tools.Commands.FamilyFoundry;
 
@@ -82,7 +85,8 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
                 spec,
                 Formatting.Indented,
                 new JsonSerializerSettings {
-                    NullValueHandling = NullValueHandling.Ignore, ContractResolver = new RevitTypeContractResolver()
+                    NullValueHandling = NullValueHandling.Ignore,
+                    ContractResolver = new RevitTypeContractResolver()
                 });
 
             return new ScheduleSerializePreviewData {

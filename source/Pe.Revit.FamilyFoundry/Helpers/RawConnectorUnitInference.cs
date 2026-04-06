@@ -1,5 +1,5 @@
 ﻿using Autodesk.Revit.DB;
-namespace Pe.FamilyFoundry.Helpers;
+namespace Pe.Revit.FamilyFoundry.Helpers;
 
 internal static partial class RawConnectorUnitInference {
     private const double AxisAlignmentTolerance = 0.95;

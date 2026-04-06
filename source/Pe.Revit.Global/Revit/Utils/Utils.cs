@@ -2,7 +2,7 @@
 
 using Serilog;
 
-namespace Pe.Global.Revit.Utils;
+namespace Pe.Revit.Global.Revit.Utils;
 
 public class Utils {
     // Helper method to get current Revit version

@@ -1,4 +1,4 @@
-namespace Pe.Ui.Core;
+namespace Pe.Revit.Ui.Core;
 
 /// <summary>
 ///     Record representing item usage data for storage

@@ -1,6 +1,6 @@
-﻿using Pe.FamilyFoundry.OperationSettings;
+﻿using Pe.Revit.FamilyFoundry.OperationSettings;
 
-namespace Pe.FamilyFoundry.Resolution;
+namespace Pe.Revit.FamilyFoundry.Resolution;
 
 public sealed record ParamDrivenSolidsCompileResult(
     MakeParamDrivenPlanesAndDimsSettings RefPlanesAndDims,

@@ -1,8 +1,8 @@
-using Pe.Global.Services.Aps.Core;
-using Pe.Global.Services.Aps.Models;
+using Pe.Revit.Global.Services.Aps.Core;
+using Pe.Revit.Global.Services.Aps.Models;
 using System.Net.Http.Headers;
 
-namespace Pe.Global.Services.Aps;
+namespace Pe.Revit.Global.Services.Aps;
 
 public class Aps(TokenProviders.IAuth authTokenProvider) {
     private readonly OAuth _oAuth = new(authTokenProvider);

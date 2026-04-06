@@ -1,9 +1,9 @@
 ﻿using Autodesk.Revit.DB;
 using Pe.Revit.Extensions.FamDocument;
-using Pe.FamilyFoundry.Snapshots;
+using Pe.Revit.FamilyFoundry.Snapshots;
 using Serilog;
 
-namespace Pe.FamilyFoundry.Helpers;
+namespace Pe.Revit.FamilyFoundry.Helpers;
 
 internal static class ConstrainedExtrusionFactory {
     private const double PlaneTolerance = 1e-6;

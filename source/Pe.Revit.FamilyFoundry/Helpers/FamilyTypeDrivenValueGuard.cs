@@ -2,7 +2,7 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamManager;
 
-namespace Pe.FamilyFoundry.Helpers;
+namespace Pe.Revit.FamilyFoundry.Helpers;
 
 internal static class FamilyTypeDrivenValueGuard {
     private const double ZeroTolerance = 1e-6;

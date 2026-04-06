@@ -2,11 +2,11 @@
 using Pe.Revit.Extensions.FamDocument.GetValue;
 using Pe.Revit.Extensions.FamManager;
 using Pe.Revit.Extensions.FamParameter;
-using Pe.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
 using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
 
-namespace Pe.FamilyFoundry.Snapshots;
+namespace Pe.Revit.FamilyFoundry.Snapshots;
 
 /// <summary>
 ///     Collects parameter snapshots with strategy-based source selection.

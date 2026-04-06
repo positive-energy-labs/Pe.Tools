@@ -2,10 +2,10 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using NJsonSchema.Generation;
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Json.FieldOptions;
+using Pe.Shared.StorageRuntime.Json.FieldOptions;
+using Pe.Shared.StorageRuntime.Capabilities;
 
-namespace Pe.StorageRuntime.Json.SchemaDefinitions;
+namespace Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 
 public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : ISchemaProcessor {
     private readonly JsonSchemaBuildOptions _options =

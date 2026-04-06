@@ -1,7 +1,7 @@
 using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.CommandPalette;
-using Pe.Extensions.FamParameter;
-using Pe.Ui.Core;
+using Pe.Revit.Extensions.FamParameter;
+using Pe.Revit.Ui.Core;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;

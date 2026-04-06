@@ -2,7 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using System.Reflection;
 
-namespace Pe.StorageRuntime.Json.ContractResolvers;
+namespace Pe.Shared.StorageRuntime.Json.ContractResolvers;
 
 public class OrderedContractResolver : DefaultContractResolver {
     protected override IList<JsonProperty> CreateProperties(Type type, MemberSerialization memberSerialization) {

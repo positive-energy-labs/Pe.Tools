@@ -1,6 +1,6 @@
-using Pe.Extensions.FamDocument.SetValue.Utils;
+using Pe.Revit.Extensions.FamDocument.SetValue.Utils;
 
-namespace Pe.Extensions.FamDocument.SetValue.CoercionStrategies;
+namespace Pe.Revit.Extensions.FamDocument.SetValue.CoercionStrategies;
 
 /// <summary>
 ///     Electrical coercion strategy - converts numeric/string values to electrical parameters with unit conversion.

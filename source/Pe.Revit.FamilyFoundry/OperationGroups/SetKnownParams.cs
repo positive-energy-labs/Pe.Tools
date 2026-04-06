@@ -1,8 +1,8 @@
-﻿using Pe.FamilyFoundry.OperationSettings;
-using Pe.FamilyFoundry.Operations;
-using Pe.FamilyFoundry.Resolution;
+﻿using Pe.Revit.FamilyFoundry.Operations;
+using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Resolution;
 
-namespace Pe.FamilyFoundry.OperationGroups;
+namespace Pe.Revit.FamilyFoundry.OperationGroups;
 
 /// <summary>
 ///     Operation group that optionally creates missing family types, then sets parameter values/formulas.

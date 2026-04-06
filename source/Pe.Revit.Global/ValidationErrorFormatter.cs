@@ -1,9 +1,9 @@
 using NJsonSchema;
-using Pe.Global.PolyFill;
+using Pe.Revit.Global.PolyFill;
 using NJsonSchema.Validation;
 using ValidationError = NJsonSchema.Validation.ValidationError;
 
-namespace Pe.Global;
+namespace Pe.Revit.Global;
 
 /// <summary>
 ///     Formats NJsonSchema validation errors into human-readable messages.

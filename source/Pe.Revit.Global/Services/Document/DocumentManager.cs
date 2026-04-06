@@ -1,9 +1,9 @@
 using Autodesk.Revit.UI.Events;
-using Pe.Global.PolyFill;
-using Pe.Global.Services.Document.Core;
+using Pe.Revit.Global.PolyFill;
+using Pe.Revit.Global.Services.Document.Core;
 using Color = System.Windows.Media.Color;
 
-namespace Pe.Global.Services.Document;
+namespace Pe.Revit.Global.Services.Document;
 
 /// <summary>
 ///     Singleton service for managing documents and tracking view activation history (MRU).

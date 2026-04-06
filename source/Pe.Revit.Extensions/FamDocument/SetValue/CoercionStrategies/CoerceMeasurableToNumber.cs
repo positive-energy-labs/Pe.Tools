@@ -1,4 +1,4 @@
-namespace Pe.Extensions.FamDocument.SetValue.CoercionStrategies;
+namespace Pe.Revit.Extensions.FamDocument.SetValue.CoercionStrategies;
 
 /// <summary>
 ///     Coercion strategy for converting measurable parameters (Mass, Length, Volume, etc.) to unitless Number parameters.

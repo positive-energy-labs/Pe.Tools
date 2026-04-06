@@ -1,7 +1,7 @@
 using Autodesk.Revit.DB.Mechanical;
 using Autodesk.Revit.DB.Plumbing;
 
-namespace Pe.Tools.RevitTest.Tests;
+namespace Pe.Revit.Tests;
 
 internal static class FamilyFoundryRuntimeProbe {
     public static RuntimeStateProbe Collect(Document familyDocument) {

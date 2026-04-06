@@ -1,4 +1,4 @@
-namespace Pe.StorageRuntime.Json;
+namespace Pe.Shared.StorageRuntime.Json;
 
 public enum IncludableFragmentRoot {
     FamilyNames,

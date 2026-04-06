@@ -1,7 +1,7 @@
-using Pe.FamilyFoundry.Snapshots;
+using Pe.Revit.FamilyFoundry.Snapshots;
 using System.ComponentModel;
 
-namespace Pe.FamilyFoundry.OperationSettings;
+namespace Pe.Revit.FamilyFoundry.OperationSettings;
 
 public class MakeConstrainedExtrusionsSettings : IOperationSettings {
     [Description("Constrained rectangle extrusions to create.")]

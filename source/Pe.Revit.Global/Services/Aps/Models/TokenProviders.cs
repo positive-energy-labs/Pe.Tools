@@ -1,4 +1,4 @@
-namespace Pe.Global.Services.Aps.Models;
+namespace Pe.Revit.Global.Services.Aps.Models;
 
 public class TokenProviders {
     /// <summary>Interface for providing APS authentication credentials to the OAuth class</summary>

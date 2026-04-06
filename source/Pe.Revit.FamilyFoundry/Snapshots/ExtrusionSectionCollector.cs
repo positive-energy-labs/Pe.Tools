@@ -1,17 +1,16 @@
 ﻿using Pe.Revit.Extensions.FamDocument;
-using Pe.FamilyFoundry.Aggregators.Snapshots;
-using Pe.FamilyFoundry.Helpers;
-using Pe.FamilyFoundry.Resolution;
 using Serilog;
-using Pe.FamilyFoundry.Operations;
+using Pe.Revit.FamilyFoundry.Operations;
 using System.Text.RegularExpressions;
 using Autodesk.Revit.DB.Electrical;
 using Autodesk.Revit.DB.Mechanical;
 using Autodesk.Revit.DB.Plumbing;
+using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.FamilyFoundry.Helpers;
+using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Resolution;
 
-using Pe.FamilyFoundry.OperationSettings;
-
-namespace Pe.FamilyFoundry.Snapshots;
+namespace Pe.Revit.FamilyFoundry.Snapshots;
 
 /// <summary>
 ///     Collects authored ParamDrivenSolids snapshots.

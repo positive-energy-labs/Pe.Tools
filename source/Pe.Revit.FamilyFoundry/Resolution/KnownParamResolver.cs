@@ -1,8 +1,8 @@
-﻿using Pe.FamilyFoundry.OperationSettings;
+﻿using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.Global;
 using System.Text.RegularExpressions;
 
-namespace Pe.FamilyFoundry.Resolution;
+namespace Pe.Revit.FamilyFoundry.Resolution;
 
 public sealed record KnownParamCatalog(
     IReadOnlyDictionary<string, FamilyParamDefinitionModel> FamilyDefinitions,

@@ -1,6 +1,6 @@
 ﻿using Pe.Revit.Extensions.FamDocument;
 
-namespace Pe.FamilyFoundry.Operations;
+namespace Pe.Revit.FamilyFoundry.Operations;
 
 public sealed class EmitParamDrivenSolidsDiagnostics(EmitParamDrivenSolidsDiagnosticsSettings settings)
     : DocOperation<EmitParamDrivenSolidsDiagnosticsSettings>(settings) {

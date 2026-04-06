@@ -1,8 +1,8 @@
-using Pe.Shared.Host.Contracts.Protocol;
-using Pe.Shared.Host.Contracts.RevitData;
-using Pe.Shared.Host.Contracts.SettingsStorage;
+using Pe.Shared.HostContracts.Protocol;
+using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.HostContracts.SettingsStorage;
 
-namespace Pe.Shared.Host.Contracts.Operations;
+namespace Pe.Shared.HostContracts.Operations;
 
 public static class GetHostStatusOperationContract {
     public static readonly HostOperationDefinition Definition =

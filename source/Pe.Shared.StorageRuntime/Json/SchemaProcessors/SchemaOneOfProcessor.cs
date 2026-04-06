@@ -1,7 +1,7 @@
 using NJsonSchema;
 using NJsonSchema.Generation;
 
-namespace Pe.StorageRuntime.Json.SchemaProcessors;
+namespace Pe.Shared.StorageRuntime.Json.SchemaProcessors;
 
 public class SchemaOneOfProcessor : ISchemaProcessor {
     public void Process(SchemaProcessorContext context) {

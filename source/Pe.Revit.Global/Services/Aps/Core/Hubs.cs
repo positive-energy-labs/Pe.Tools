@@ -1,7 +1,7 @@
 using Newtonsoft.Json;
-using Pe.Global.Services.Aps.Models;
+using Pe.Revit.Global.Services.Aps.Models;
 
-namespace Pe.Global.Services.Aps.Core;
+namespace Pe.Revit.Global.Services.Aps.Core;
 
 public class Hubs(HttpClient httpClient) {
     private static async Task<T?> DeserializeToType<T>(HttpResponseMessage res) =>

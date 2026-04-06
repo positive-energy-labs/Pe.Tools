@@ -1,11 +1,11 @@
-using Pe.Ui.Core;
+using Pe.Revit.Ui.Core;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Wpf.Ui.Controls;
 using Button = Wpf.Ui.Controls.Button;
 
-namespace Pe.Ui.Components;
+namespace Pe.Revit.Ui.Components;
 
 /// <summary>
 ///     A horizontal row of action buttons with keyboard navigation.

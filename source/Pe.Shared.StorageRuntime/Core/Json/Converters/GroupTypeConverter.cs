@@ -1,7 +1,7 @@
 using Newtonsoft.Json;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
-namespace Pe.StorageRuntime.Revit.Core.Json.Converters;
+namespace Pe.Shared.StorageRuntime.Revit.Core.Json.Converters;
 
 public class GroupTypeConverter : JsonConverter<ForgeTypeId> {
     private static readonly Lazy<Dictionary<string, ForgeTypeId>> LabelMap =

@@ -3,7 +3,7 @@ using System.Windows.Data;
 using System.Windows.Media;
 using WpfColor = System.Windows.Media.Color;
 
-namespace Pe.Ui.Core.Converters;
+namespace Pe.Revit.Ui.Core.Converters;
 
 /// <summary>
 ///     Converts a nullable WPF Color to a SolidColorBrush for UI binding

@@ -1,4 +1,4 @@
-namespace Pe.FamilyFoundry.Snapshots;
+namespace Pe.Revit.FamilyFoundry.Snapshots;
 
 /// <summary>
 ///     Indicates where snapshot data was collected from.

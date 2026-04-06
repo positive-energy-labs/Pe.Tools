@@ -1,5 +1,5 @@
-using Pe.Host.Contracts.RevitData;
-using Pe.StorageRuntime.Json.SchemaDefinitions;
+using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 using System.Runtime.CompilerServices;
 
 namespace Pe.Host.Services;

@@ -1,6 +1,6 @@
 using TypeGen.Core.TypeAnnotations;
 
-namespace Pe.StorageRuntime.Json.SchemaDefinitions;
+namespace Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 
 [ExportTsClass]
 public static class SchemaDatasetIds {

@@ -1,6 +1,6 @@
-using Pe.StorageRuntime.PolyFill;
+using Pe.Shared.StorageRuntime.PolyFill;
 
-namespace Pe.StorageRuntime;
+namespace Pe.Shared.StorageRuntime;
 
 /// <summary>
 ///     Shared helpers for safe settings path resolution and settings discovery projections.

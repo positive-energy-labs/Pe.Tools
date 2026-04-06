@@ -2,7 +2,7 @@
 // using Autodesk.Revit.UI.Events;
 // using UIFramework;
 //
-// namespace Pe.Extensions.UiApplication;
+// namespace Pe.Revit.Extensions.UiApplication;
 // //TODO: Look into these members later too!!!!!!!!!!!!!!!!!
 // // UIFrameworkServices.ManageViewsService.ActivateFrame();
 // // UIFrameworkServices.ViewSwitchingService.outputViewSwitchingOrder();

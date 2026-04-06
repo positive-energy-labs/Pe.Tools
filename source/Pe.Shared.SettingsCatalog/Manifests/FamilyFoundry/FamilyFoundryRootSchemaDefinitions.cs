@@ -1,7 +1,7 @@
-using Pe.StorageRuntime.Json.SchemaDefinitions;
+using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 using System.Runtime.CompilerServices;
 
-namespace Pe.SettingsCatalog.Manifests.FamilyFoundry;
+namespace Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 
 internal sealed class ProfileFamilyManagerSchemaDefinition : SettingsSchemaDefinition<ProfileFamilyManager> {
     public override void Configure(ISettingsSchemaBuilder<ProfileFamilyManager> builder) =>

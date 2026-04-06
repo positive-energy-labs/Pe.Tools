@@ -1,4 +1,4 @@
-namespace Pe.StorageRuntime;
+namespace Pe.Shared.StorageRuntime;
 
 public sealed class GlobalLogStorage(string directoryPath) {
     private const string DateTimeFormat = "yyyy-MM-dd HH:mm:ss";

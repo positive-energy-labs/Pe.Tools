@@ -1,4 +1,4 @@
-namespace Pe.StorageRuntime;
+namespace Pe.Shared.StorageRuntime;
 
 /// <summary>
 ///     Shared storage layout helpers for on-disk settings roots.

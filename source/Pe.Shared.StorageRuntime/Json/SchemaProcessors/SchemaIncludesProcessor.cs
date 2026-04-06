@@ -3,7 +3,7 @@ using NJsonSchema;
 using NJsonSchema.Generation;
 using System.Reflection;
 
-namespace Pe.StorageRuntime.Json.SchemaProcessors;
+namespace Pe.Shared.StorageRuntime.Json.SchemaProcessors;
 
 public class SchemaIncludesProcessor : ISchemaProcessor {
     public void Process(SchemaProcessorContext context) {

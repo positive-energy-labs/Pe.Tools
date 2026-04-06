@@ -15,7 +15,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Pe.Global\Pe.Global.csproj" />
+        <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj" />
     </ItemGroup>
 
     <ItemGroup>

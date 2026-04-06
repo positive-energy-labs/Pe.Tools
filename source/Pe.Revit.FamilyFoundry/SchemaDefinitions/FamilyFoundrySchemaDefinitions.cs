@@ -1,12 +1,15 @@
-using Pe.FamilyFoundry.Aggregators.Snapshots;
-using Pe.FamilyFoundry.Operations;
-using Pe.FamilyFoundry.OperationSettings;
-using Pe.StorageRuntime.Json.SchemaDefinitions;
-using Pe.StorageRuntime.Json.SchemaProviders;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.FamilyFoundry.Operations;
+using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
+using Pe.Shared.StorageRuntime.Json.SchemaProviders;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
+using Pe.Shared.StorageRuntime.Json.SchemaProviders;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using System.Runtime.CompilerServices;
 
-namespace Pe.FamilyFoundry.SchemaDefinitions;
+namespace Pe.Revit.FamilyFoundry.SchemaDefinitions;
 
 internal sealed class MappingDataSchemaDefinition : SettingsSchemaDefinition<MappingData> {
     public override void Configure(ISettingsSchemaBuilder<MappingData> builder) {

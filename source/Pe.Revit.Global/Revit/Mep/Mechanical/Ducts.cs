@@ -1,8 +1,8 @@
 ﻿using Autodesk.Revit.DB.Mechanical;
-using Pe.Global.Revit.Ui;
+using Pe.Revit.Global.Revit.Ui;
 using Serilog.Events;
 
-namespace Pe.Global.Revit.Mep.Mechanical;
+namespace Pe.Revit.Global.Revit.Mep.Mechanical;
 
 public class Ducts {
     /// <summary>

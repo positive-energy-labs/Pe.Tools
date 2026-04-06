@@ -1,6 +1,6 @@
 using Newtonsoft.Json;
 
-namespace Pe.Global.Services.Aps.Models;
+namespace Pe.Revit.Global.Services.Aps.Models;
 
 /// <summary>
 ///     Response model for Autodesk OAuth token endpoints.

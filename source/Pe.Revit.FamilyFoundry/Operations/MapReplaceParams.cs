@@ -1,11 +1,11 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Extensions.FamParameter.Formula;
-using Pe.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.Global;
 using BCS = Pe.Revit.Extensions.FamDocument.SetValue.BuiltInCoercionStrategy;
 
-namespace Pe.FamilyFoundry.Operations;
+namespace Pe.Revit.FamilyFoundry.Operations;
 
 public class MapReplaceParams : DocOperation<MapParamsSettings> {
     private readonly Dictionary<string, SharedParameterDefinition> _sharedParamsDict;

@@ -1,8 +1,8 @@
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Documents;
-using Pe.StorageRuntime.Modules;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Documents;
+using Pe.Shared.StorageRuntime.Modules;
 
-namespace Pe.StorageRuntime;
+namespace Pe.Shared.StorageRuntime;
 
 public sealed class ModuleDocumentStorage {
     private readonly LocalDiskSettingsStorageBackend _backend;

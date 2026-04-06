@@ -1,4 +1,4 @@
-namespace Pe.Ui.Core.Services;
+namespace Pe.Revit.Ui.Core.Services;
 
 /// <summary>
 ///     Searchable metadata for palette items. Built on-demand per snapshot.

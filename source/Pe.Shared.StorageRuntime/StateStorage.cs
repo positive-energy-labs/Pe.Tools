@@ -1,6 +1,6 @@
-using Pe.StorageRuntime.Json;
+using Pe.Shared.StorageRuntime.Json;
 
-namespace Pe.StorageRuntime;
+namespace Pe.Shared.StorageRuntime;
 
 public sealed class StateStorage {
     private const string DefaultName = "state";

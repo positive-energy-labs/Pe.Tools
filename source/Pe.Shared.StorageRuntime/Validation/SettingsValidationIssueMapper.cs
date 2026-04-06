@@ -1,7 +1,7 @@
 using NJsonSchema.Validation;
-using Pe.StorageRuntime.Documents;
+using Pe.Shared.StorageRuntime.Documents;
 
-namespace Pe.StorageRuntime.Revit.Validation;
+namespace Pe.Shared.StorageRuntime.Revit.Validation;
 
 internal static class SettingsValidationIssueMapper {
     public static IReadOnlyList<SettingsValidationIssue> ToIssues(IEnumerable<ValidationError> errors) =>

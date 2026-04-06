@@ -1,9 +1,9 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.CommandPalette;
-using Pe.StorageRuntime;
-using Pe.Ui.Core;
-using Pe.Ui.Core.Services;
+using Pe.Revit.Ui.Core;
+using Pe.Revit.Ui.Core.Services;
+using Pe.Shared.StorageRuntime;
 using Serilog;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
@@ -39,11 +39,11 @@ public class CmdPltCommands : IExternalCommand {
                             new PaletteAction<PostableCommandItem> {
                                 Name = "Execute",
                                 Execute = async item => {
-                                    var (success, error) = Global.Revit.Lib.Commands.Execute(uiapp, item.Command);
+                                    var (success, error) = Revit.Global.Revit.Lib.Commands.Execute(uiapp, item.Command);
                                     if (error is not null) Log.Error("Error: " + error.Message + error.StackTrace);
                                     if (success) commandHelper.UpdateCommandUsage(item.Command);
                                 },
-                                CanExecute = item => Global.Revit.Lib.Commands.IsAvailable(uiapp, item.Command)
+                                CanExecute = item => Revit.Global.Revit.Lib.Commands.IsAvailable(uiapp, item.Command)
                             }
                         )
                     ]

@@ -1,7 +1,7 @@
-using Pe.Host.Contracts.RevitData;
-using Pe.RevitData.Parameters;
+using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.RevitData.Parameters;
 
-namespace Pe.Global.Revit.Lib.Parameters;
+namespace Pe.Revit.Global.Revit.Lib.Parameters;
 
 public static class ParameterIdentityEngine {
     public static ParameterIdentity FromCanonical(RevitParameterIdentity parameter) =>

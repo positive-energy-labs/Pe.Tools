@@ -1,10 +1,10 @@
-using Pe.Global.Revit.Lib.Families.LoadedFamilies.Models;
-using Pe.Global.Revit.Lib.Parameters;
-using Pe.Global.Services.Document;
-using Pe.Host.Contracts.RevitData;
-using Pe.RevitData.Parameters;
+using Pe.Shared.HostContracts.RevitData;
+using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
+using Pe.Revit.Global.Revit.Lib.Parameters;
+using Pe.Revit.Global.Services.Document;
+using Pe.Shared.RevitData.Parameters;
 
-namespace Pe.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
+namespace Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 
 public static class ProjectParameterBindingsCollector {
     public static ProjectParameterBindingsData Collect(

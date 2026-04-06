@@ -1,7 +1,7 @@
 ﻿using Autodesk.Revit.DB;
 using Newtonsoft.Json;
 
-namespace Pe.FamilyFoundry;
+namespace Pe.Revit.FamilyFoundry;
 
 public sealed class LengthDriverSpec {
     public static LengthDriverSpec None { get; } = new();

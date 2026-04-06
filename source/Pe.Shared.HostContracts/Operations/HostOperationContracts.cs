@@ -1,4 +1,4 @@
-namespace Pe.Shared.Host.Contracts.Operations;
+namespace Pe.Shared.HostContracts.Operations;
 
 public enum HostExecutionMode {
     Local,

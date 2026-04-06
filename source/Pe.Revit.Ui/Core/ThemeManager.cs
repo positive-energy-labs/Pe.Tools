@@ -1,7 +1,7 @@
 using System.Windows;
 using System.Windows.Media;
 
-namespace Pe.Ui.Core;
+namespace Pe.Revit.Ui.Core;
 
 /// <summary>
 ///     UI size constants for consistent spacing and sizing across components.
@@ -52,7 +52,7 @@ public static class Theme {
     /// </summary>
     public static ResourceDictionary WpfUiResources =>
         _wpfUiResources ??= new ResourceDictionary {
-            Source = new Uri("pack://application:,,,/Pe.Ui;component/Core/WpfUiResources.xaml",
+            Source = new Uri("pack://application:,,,/Pe.Revit.Ui;component/Core/WpfUiResources.xaml",
                 UriKind.Absolute)
         };
 

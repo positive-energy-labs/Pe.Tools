@@ -1,6 +1,6 @@
 using Pe.Revit.FamilyFoundry;
 
-namespace Pe.Tools.RevitTest.Tests;
+namespace Pe.Revit.Tests;
 
 [TestFixture]
 public sealed class AuthoredProfileRoundtripFixtureTests {

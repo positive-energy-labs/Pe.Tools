@@ -1,7 +1,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
 
-namespace Pe.StorageRuntime.Json.SchemaDefinitions;
+namespace Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 
 public static class SettingsPropertyPathResolver {
     public static PropertyInfo ResolveProperty<TSettings, TValue>(

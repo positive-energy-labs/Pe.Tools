@@ -1,9 +1,9 @@
-using Pe.FamilyFoundry.OperationSettings;
-using Pe.StorageRuntime.Revit.Core.Json.RevitTypes;
+using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.RevitTypes;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
-namespace Pe.FamilyFoundry.Aggregators.Snapshots;
+namespace Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
 
 /// <summary>
 ///     Base definition for parameter identity and creation metadata.

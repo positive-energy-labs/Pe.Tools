@@ -102,8 +102,8 @@ not frontend implementation details.
 - `source/Pe.Host/`
 - `source/Pe.Host.Contracts/`
 - `source/Pe.Global/Services/Host/`
-- `source/Pe.StorageRuntime/`
-- `source/Pe.StorageRuntime.Revit/`
+- `source/Pe.Shared.StorageRuntime/`
+- `source/Pe.Shared.StorageRuntime.Revit/`
 
 ### External Frontend
 

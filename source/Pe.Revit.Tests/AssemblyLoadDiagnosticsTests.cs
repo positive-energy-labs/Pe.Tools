@@ -4,7 +4,7 @@ using Pe.Revit.FamilyFoundry;
 using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 using Pe.Tools.Commands.FamilyFoundry;
 
-namespace Pe.Tools.RevitTest.Tests;
+namespace Pe.Revit.Tests;
 
 [TestFixture]
 public sealed class AssemblyLoadDiagnosticsTests {

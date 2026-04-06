@@ -1,7 +1,7 @@
-using Pe.StorageRuntime.Json;
+using Pe.Shared.StorageRuntime.Json;
 using System.Reflection;
 
-namespace Pe.StorageRuntime.Modules;
+namespace Pe.Shared.StorageRuntime.Modules;
 
 public static class SettingsModulePolicyResolver {
     public static SettingsStorageModuleOptions CreateStorageOptions(Type settingsType) {

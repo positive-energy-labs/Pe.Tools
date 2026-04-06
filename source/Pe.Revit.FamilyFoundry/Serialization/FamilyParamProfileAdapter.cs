@@ -1,8 +1,8 @@
-using Pe.FamilyFoundry.Aggregators.Snapshots;
-using Pe.FamilyFoundry.OperationSettings;
-using Pe.FamilyFoundry.Resolution;
+using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Resolution;
 
-namespace Pe.FamilyFoundry.Serialization;
+namespace Pe.Revit.FamilyFoundry.Serialization;
 
 public sealed record FamilyParamProfileExportOptions {
     public bool IncludeDefinitionOnlyParameters { get; init; }

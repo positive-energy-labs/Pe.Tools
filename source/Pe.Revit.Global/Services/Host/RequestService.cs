@@ -1,18 +1,18 @@
-using Pe.Global.Revit.Lib.Parameters;
-using Pe.Global.Services.Document;
-using Pe.Host.Contracts.RevitData;
-using Pe.Host.Contracts.SettingsStorage;
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Context;
-using Pe.StorageRuntime.Json.FieldOptions;
-using Pe.StorageRuntime.Json.SchemaDefinitions;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
-using Pe.StorageRuntime.Modules;
+using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.HostContracts.SettingsStorage;
+using Pe.Revit.Global.Revit.Lib.Parameters;
+using Pe.Revit.Global.Services.Document;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Context;
+using Pe.Shared.StorageRuntime.Json.FieldOptions;
+using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
-using FieldOptionItem = Pe.Host.Contracts.SettingsStorage.FieldOptionItem;
+using FieldOptionItem = Pe.Shared.HostContracts.SettingsStorage.FieldOptionItem;
 
-namespace Pe.Global.Services.Host;
+namespace Pe.Revit.Global.Services.Host;
 
 /// <summary>
 ///     Revit-aware host operations served through the bridge.
@@ -403,7 +403,7 @@ public class RequestService {
         );
 
     private static FieldOptionItem ToFieldOptionItem(
-        StorageRuntime.Json.FieldOptions.FieldOptionItem item
+        Shared.StorageRuntime.Json.FieldOptions.FieldOptionItem item
     ) => new(
         item.Value,
         item.Label,

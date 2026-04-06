@@ -2,7 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using TypeGen.Core.TypeAnnotations;
 
-namespace Pe.Shared.Host.Contracts.SettingsStorage;
+namespace Pe.Shared.HostContracts.SettingsStorage;
 
 [JsonConverter(typeof(StringEnumConverter))]
 [ExportTsEnum]

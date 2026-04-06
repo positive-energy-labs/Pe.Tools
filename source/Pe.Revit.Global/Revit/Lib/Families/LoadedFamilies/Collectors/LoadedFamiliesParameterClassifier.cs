@@ -1,6 +1,6 @@
-using Pe.Global.Revit.Lib.Families.LoadedFamilies.Models;
+using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
 
-namespace Pe.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
+namespace Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 
 internal static class LoadedFamiliesParameterClassifier {
     public static ClassificationResult Resolve(

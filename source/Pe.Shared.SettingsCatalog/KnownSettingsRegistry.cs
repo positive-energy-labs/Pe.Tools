@@ -1,11 +1,11 @@
-using Pe.SettingsCatalog.Manifests;
-using Pe.SettingsCatalog.Manifests.AutoTag;
-using Pe.SettingsCatalog.Manifests.FamilyFoundry;
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Documents;
-using Pe.StorageRuntime.Modules;
+using Pe.Shared.SettingsCatalog.Manifests;
+using Pe.Shared.SettingsCatalog.Manifests.AutoTag;
+using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Documents;
+using Pe.Shared.StorageRuntime.Modules;
 
-namespace Pe.SettingsCatalog;
+namespace Pe.Shared.SettingsCatalog;
 
 public static class KnownSettingsRegistry {
     public static SettingsModuleManifest<object> GlobalFragments { get; } = new(

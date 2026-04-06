@@ -1,6 +1,6 @@
 using NJsonSchema.Generation;
 
-namespace Pe.StorageRuntime.Json;
+namespace Pe.Shared.StorageRuntime.Json;
 
 public sealed class JsonTypeSchemaBindingProcessor(JsonSchemaBuildOptions options) : ISchemaProcessor {
     private readonly JsonSchemaBuildOptions _options =

@@ -1,7 +1,7 @@
 using Pe.Revit.Extensions.FamDocument;
 using System.Diagnostics;
 
-namespace Pe.FamilyFoundry;
+namespace Pe.Revit.FamilyFoundry;
 
 /// <summary>
 ///     Creates an abort operation exception with a message explaining why the operation was aborted.

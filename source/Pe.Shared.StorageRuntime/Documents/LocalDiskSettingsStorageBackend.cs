@@ -1,11 +1,11 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Modules;
-using Pe.StorageRuntime.PolyFill;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Json;
+using Pe.Shared.StorageRuntime.Modules;
+using Pe.Shared.StorageRuntime.PolyFill;
 
-namespace Pe.StorageRuntime.Documents;
+namespace Pe.Shared.StorageRuntime.Documents;
 
 /// <summary>
 ///     Minimal shared filesystem backend over the existing Pe.App settings layout.

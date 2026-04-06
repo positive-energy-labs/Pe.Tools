@@ -1,8 +1,8 @@
-using Pe.Host.Contracts.RevitData;
-using Pe.Host.Contracts.Operations;
-using Pe.Host.Contracts.SettingsStorage;
+using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.HostContracts.Operations;
+using Pe.Shared.HostContracts.SettingsStorage;
 
-namespace Pe.Global.Services.Host.Operations;
+namespace Pe.Revit.Global.Services.Host.Operations;
 
 internal sealed class BridgeOperationRegistry {
     private readonly IReadOnlyDictionary<string, IBridgeOperation> _operationsByKey;

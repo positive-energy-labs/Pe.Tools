@@ -1,3 +1,3 @@
 using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("Pe.Tools.RevitTest.Tests")]
+[assembly: InternalsVisibleTo("Pe.Revit.Tests")]

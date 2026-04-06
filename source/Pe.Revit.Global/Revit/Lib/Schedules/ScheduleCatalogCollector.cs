@@ -1,12 +1,12 @@
-using Pe.Global.Revit.Lib.Parameters;
-using Pe.Global.Revit.Lib.Schedules.Fields;
-using Pe.Global.Revit.Lib.Schedules.Filters;
-using Pe.Global.Revit.Lib.Schedules.SortGroup;
-using Pe.Global.Revit.Lib.Schedules.TitleStyle;
-using Pe.Host.Contracts.RevitData;
-using ContractScheduleDefinition = Pe.Host.Contracts.RevitData.ScheduleDefinition;
+using Pe.Shared.HostContracts.RevitData;
+using Pe.Revit.Global.Revit.Lib.Parameters;
+using Pe.Revit.Global.Revit.Lib.Schedules.Fields;
+using Pe.Revit.Global.Revit.Lib.Schedules.Filters;
+using Pe.Revit.Global.Revit.Lib.Schedules.SortGroup;
+using Pe.Revit.Global.Revit.Lib.Schedules.TitleStyle;
+using ContractScheduleDefinition = Pe.Shared.HostContracts.RevitData.ScheduleDefinition;
 
-namespace Pe.Global.Revit.Lib.Schedules;
+namespace Pe.Revit.Global.Revit.Lib.Schedules;
 
 public static class ScheduleCatalogCollector {
     public static ScheduleCatalogData Collect(

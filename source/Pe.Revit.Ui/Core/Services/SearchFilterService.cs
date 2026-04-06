@@ -1,9 +1,9 @@
 using F23.StringSimilarity;
 using Pe.Revit.Global.PolyFill;
-using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime;
+using Pe.Shared.StorageRuntime;
+using Pe.Shared.StorageRuntime.Json;
 
-namespace Pe.Ui.Core.Services;
+namespace Pe.Revit.Ui.Core.Services;
 
 /// <summary>
 ///     Standard implementation of search/filter service with fuzzy matching and persistence

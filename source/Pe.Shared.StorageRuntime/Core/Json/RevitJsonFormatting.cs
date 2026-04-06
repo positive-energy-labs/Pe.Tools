@@ -1,10 +1,10 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Json.ContractResolvers;
-using Pe.StorageRuntime.Revit.Core.Json.ContractResolvers;
+using Pe.Shared.StorageRuntime.Json;
+using Pe.Shared.StorageRuntime.Json.ContractResolvers;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.ContractResolvers;
 
-namespace Pe.StorageRuntime.Revit.Core.Json;
+namespace Pe.Shared.StorageRuntime.Revit.Core.Json;
 
 public static class RevitJsonFormatting {
     public static JsonSerializerSettings CreateRevitIndentedSettings() {

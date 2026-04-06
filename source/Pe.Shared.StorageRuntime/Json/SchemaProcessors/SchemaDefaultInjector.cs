@@ -4,7 +4,7 @@ using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using System.Reflection;
 
-namespace Pe.StorageRuntime.Json.SchemaProcessors;
+namespace Pe.Shared.StorageRuntime.Json.SchemaProcessors;
 
 internal static class SchemaDefaultInjector {
     public static JsonSchema ApplyDefaults(JsonSchema schema, Type type) {

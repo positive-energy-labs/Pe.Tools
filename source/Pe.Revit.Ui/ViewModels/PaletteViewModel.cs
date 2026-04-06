@@ -1,11 +1,11 @@
-using Pe.Ui.Core;
 using Pe.Revit.Global.PolyFill;
-using Pe.Ui.Core.Services;
+using Pe.Revit.Ui.Core;
+using Pe.Revit.Ui.Core.Services;
 using System.Collections.ObjectModel;
 using System.Threading;
 using System.Windows.Threading;
 
-namespace Pe.Ui.ViewModels;
+namespace Pe.Revit.Ui.ViewModels;
 
 /// <summary>
 ///     Non-generic interface for type-erased access in Palette component

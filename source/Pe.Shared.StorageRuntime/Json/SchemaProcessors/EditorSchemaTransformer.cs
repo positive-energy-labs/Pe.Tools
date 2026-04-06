@@ -2,7 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NJsonSchema;
 
-namespace Pe.StorageRuntime.Json.SchemaProcessors;
+namespace Pe.Shared.StorageRuntime.Json.SchemaProcessors;
 
 public static class EditorSchemaTransformer {
     public static string TransformToEditorJson(JsonSchema schema) =>

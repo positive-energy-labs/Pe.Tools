@@ -1,21 +1,21 @@
 ﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using Pe.Extensions.FamDocument;
-using Pe.FamilyFoundry;
-using Pe.FamilyFoundry.Aggregators.Snapshots;
-using Pe.FamilyFoundry.OperationSettings;
-using Pe.FamilyFoundry.Resolution;
-using Pe.FamilyFoundry.Serialization;
-using Pe.FamilyFoundry.Snapshots;
-using Pe.Global.Revit.Ui;
-using Pe.SettingsCatalog.Manifests.FamilyFoundry;
-using Pe.StorageRuntime;
-using Pe.StorageRuntime.Revit;
+using Pe.Revit.Extensions.FamDocument;
+using Pe.Revit.FamilyFoundry;
+using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Resolution;
+using Pe.Revit.FamilyFoundry.Serialization;
+using Pe.Revit.FamilyFoundry.Snapshots;
+using Pe.Revit.Global.Revit.Ui;
+using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
+using Pe.Shared.StorageRuntime.Revit;
+using Pe.Shared.StorageRuntime.Revit;
 using Serilog.Events;
 using System.Diagnostics;
 using System.IO;
-using RuntimeStorageClient = Pe.StorageRuntime.StorageClient;
+using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
 
 namespace Pe.Tools.Commands.FamilyFoundry;
 

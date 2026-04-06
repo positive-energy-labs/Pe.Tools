@@ -1,7 +1,7 @@
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Context;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Context;
 
-namespace Pe.StorageRuntime.Json.FieldOptions;
+namespace Pe.Shared.StorageRuntime.Json.FieldOptions;
 
 public sealed record FieldOptionsDependency(
     string Key,

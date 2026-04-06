@@ -1,8 +1,8 @@
 using Newtonsoft.Json;
-using Pe.Global.Services.Aps.Models;
-using Pe.StorageRuntime.Json;
+using Pe.Revit.Global.Services.Aps.Models;
+using Pe.Shared.StorageRuntime.Json;
 
-namespace Pe.Global.Services.Aps.Core;
+namespace Pe.Revit.Global.Services.Aps.Core;
 
 public class Parameters(HttpClient httpClient, TokenProviders.IParameters tokenProvider) {
     private const string Suffix = "parameters/v1/accounts/";

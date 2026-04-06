@@ -1,6 +1,6 @@
-using Pe.Extensions.FamDocument.SetValue.Utils;
+using Pe.Revit.Extensions.FamDocument.SetValue.Utils;
 
-namespace Pe.Extensions.FamDocument.SetValue.CoercionStrategies;
+namespace Pe.Revit.Extensions.FamDocument.SetValue.CoercionStrategies;
 
 /// <summary>
 ///     Storage type coercion strategy - handles cases where storage types differ but data types are compatible.

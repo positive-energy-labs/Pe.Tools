@@ -1,6 +1,6 @@
-using Pe.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
 
-namespace Pe.FamilyFoundry;
+namespace Pe.Revit.FamilyFoundry;
 
 /// <summary>
 ///     Inter-operation state container for coordinating log entries across operations within an OperationGroup.

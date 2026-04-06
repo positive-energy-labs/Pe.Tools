@@ -10,7 +10,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 
-namespace Pe.Ui.Core;
+namespace Pe.Revit.Ui.Core;
 
 /// <summary>
 ///     Wrapper window that handles all ephemeral window lifecycle management:

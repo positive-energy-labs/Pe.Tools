@@ -1,4 +1,4 @@
-namespace Pe.Extensions.FamDocument;
+namespace Pe.Revit.Extensions.FamDocument;
 
 public static class FamilyDocumentFindParameter {
     /// <summary>

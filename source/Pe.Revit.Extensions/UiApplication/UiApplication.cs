@@ -1,9 +1,9 @@
 using Autodesk.Revit.Exceptions;
 using Autodesk.Revit.UI;
-using Pe.Global.Services.Document;
+using Pe.Revit.Global.Services.Document;
 using System.Diagnostics;
 
-namespace Pe.Extensions.UiApplication;
+namespace Pe.Revit.Extensions.UiApplication;
 
 public static class OpenDocumentExtensions {
     /// <summary>

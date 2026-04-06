@@ -4,17 +4,17 @@ using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using NJsonSchema.Generation;
 using NJsonSchema.NewtonsoftJson.Generation;
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Context;
-using Pe.StorageRuntime.Json.FieldOptions;
-using Pe.StorageRuntime.Json.SchemaDefinitions;
-using Pe.StorageRuntime.Json.SchemaProcessors;
-using Pe.StorageRuntime.PolyFill;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Context;
+using Pe.Shared.StorageRuntime.Json.FieldOptions;
+using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
+using Pe.Shared.StorageRuntime.Json.SchemaProcessors;
+using Pe.Shared.StorageRuntime.PolyFill;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Pe.StorageRuntime.Json;
+namespace Pe.Shared.StorageRuntime.Json;
 
 public sealed class JsonSchemaBuildOptions(
     SettingsRuntimeMode runtimeMode,

@@ -2,7 +2,7 @@ using Autodesk.Windows;
 using System.ComponentModel;
 using System.Windows.Media;
 
-namespace Pe.Global.Revit.Ui;
+namespace Pe.Revit.Global.Revit.Ui;
 
 public class Ribbon {
     /// <summary>

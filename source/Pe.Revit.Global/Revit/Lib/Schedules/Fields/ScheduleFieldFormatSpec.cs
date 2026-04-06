@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace Pe.Global.Revit.Lib.Schedules.Fields;
+namespace Pe.Revit.Global.Revit.Lib.Schedules.Fields;
 
 /// <summary>
 ///     Formatting options for a schedule field. Controls how numeric values are displayed.

@@ -1,6 +1,6 @@
 using System.Windows.Controls;
 
-namespace Pe.Ui.Core;
+namespace Pe.Revit.Ui.Core;
 
 /// <summary>
 ///     Base class for all UserControls in the Revit-hosted WPF environment.

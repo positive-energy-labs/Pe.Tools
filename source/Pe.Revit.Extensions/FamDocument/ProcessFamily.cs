@@ -1,7 +1,7 @@
 ﻿using Autodesk.Revit.DB.Events;
 using UIFrameworkServices;
 
-namespace Pe.Extensions.FamDocument;
+namespace Pe.Revit.Extensions.FamDocument;
 
 public static class FamilyDocumentProcessFamily {
     public static FamilyDocument GetFamilyDocument(this Document doc) {

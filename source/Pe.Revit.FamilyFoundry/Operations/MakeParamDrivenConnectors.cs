@@ -3,14 +3,14 @@ using Autodesk.Revit.DB.Electrical;
 using Autodesk.Revit.DB.Mechanical;
 using Autodesk.Revit.DB.Plumbing;
 using Pe.Revit.Extensions.FamDocument;
-using Pe.FamilyFoundry.Helpers;
-using Pe.FamilyFoundry.OperationSettings;
-using Pe.FamilyFoundry.Resolution;
-using Pe.FamilyFoundry.Snapshots;
+using Pe.Revit.FamilyFoundry.Resolution;
+using Pe.Revit.FamilyFoundry.Helpers;
+using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Snapshots;
 using Serilog;
 using System.Globalization;
 
-namespace Pe.FamilyFoundry.Operations;
+namespace Pe.Revit.FamilyFoundry.Operations;
 
 public sealed class MakeParamDrivenConnectors(MakeParamDrivenConnectorsSettings settings)
     : DocOperation<MakeParamDrivenConnectorsSettings>(settings) {

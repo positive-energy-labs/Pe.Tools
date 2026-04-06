@@ -3,13 +3,13 @@ using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using NJsonSchema.Generation;
 using NJsonSchema.Generation.TypeMappers;
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Json.FieldOptions;
-using Pe.StorageRuntime.Json.SchemaDefinitions;
+using Pe.Shared.StorageRuntime.Json.FieldOptions;
+using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
+using Pe.Shared.StorageRuntime.Capabilities;
 using System.Collections.Concurrent;
 using System.Reflection;
 
-namespace Pe.StorageRuntime.Json;
+namespace Pe.Shared.StorageRuntime.Json;
 
 public sealed class JsonTypeSchemaBindingRegistry {
     private readonly ConcurrentDictionary<Type, IJsonTypeSchemaBinding> _bindings = new();

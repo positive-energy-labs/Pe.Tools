@@ -1,14 +1,14 @@
-using Pe.Global.Revit.Lib.Schedules.Fields;
-using Pe.Global.Revit.Lib.Schedules.Filters;
-using Pe.Global.Revit.Lib.Schedules.SortGroup;
-using Pe.Global.Revit.Lib.Schedules.TitleStyle;
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Json.FieldOptions;
+using Pe.Revit.Global.Revit.Lib.Schedules.Fields;
+using Pe.Revit.Global.Revit.Lib.Schedules.Filters;
+using Pe.Revit.Global.Revit.Lib.Schedules.SortGroup;
+using Pe.Revit.Global.Revit.Lib.Schedules.TitleStyle;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Json;
+using Pe.Shared.StorageRuntime.Json.FieldOptions;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
-namespace Pe.Global.Revit.Lib.Schedules;
+namespace Pe.Revit.Global.Revit.Lib.Schedules;
 
 public class OnFinishSettings {
     [Description("Automatically open the schedule when the command completes")]

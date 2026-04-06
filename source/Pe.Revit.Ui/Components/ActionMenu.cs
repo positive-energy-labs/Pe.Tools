@@ -1,4 +1,4 @@
-using Pe.Ui.Core;
+using Pe.Revit.Ui.Core;
 using System.Collections;
 using System.Windows;
 using System.Windows.Controls;
@@ -8,7 +8,7 @@ using System.Windows.Threading;
 using ContextMenu = System.Windows.Controls.ContextMenu;
 using MenuItem = Wpf.Ui.Controls.MenuItem;
 
-namespace Pe.Ui.Components;
+namespace Pe.Revit.Ui.Components;
 
 /// <summary>
 ///     Non-generic base class for ActionMenu

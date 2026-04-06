@@ -1,5 +1,5 @@
-using Pe.Ui.Core;
-using Pe.Ui.Core.Converters;
+using Pe.Revit.Ui.Core;
+using Pe.Revit.Ui.Core.Converters;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -9,7 +9,7 @@ using Image = System.Windows.Controls.Image;
 using TextBlock = System.Windows.Controls.TextBlock;
 using Visibility = System.Windows.Visibility;
 
-namespace Pe.Ui.Components;
+namespace Pe.Revit.Ui.Components;
 
 /// <summary>
 ///     List item control for ListView with XAML structure.

@@ -4,7 +4,7 @@ using Autodesk.Revit.DB.Plumbing;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
-namespace Pe.FamilyFoundry;
+namespace Pe.Revit.FamilyFoundry;
 
 public sealed class ConnectorDomainConfigSpec {
     public DuctConnectorConfigSpec? Duct { get; init; }

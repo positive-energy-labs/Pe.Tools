@@ -1,4 +1,4 @@
-namespace Pe.Extensions.FamDocument.SetValue.CoercionStrategies;
+namespace Pe.Revit.Extensions.FamDocument.SetValue.CoercionStrategies;
 
 /// <summary>
 ///     Composite coercion strategy that tries multiple strategies in sequence.

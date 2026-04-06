@@ -1,4 +1,4 @@
-namespace Pe.StorageRuntime.Json;
+namespace Pe.Shared.StorageRuntime.Json;
 
 [AttributeUsage(AttributeTargets.Property)]
 public sealed class PresettableAttribute : Attribute {

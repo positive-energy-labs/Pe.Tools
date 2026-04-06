@@ -1,7 +1,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
-namespace Pe.FamilyFoundry;
+namespace Pe.Revit.FamilyFoundry;
 
 [JsonConverter(typeof(StringEnumConverter))]
 public enum ParamDrivenFamilyFrameKind {

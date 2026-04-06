@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Pe.Extensions.FamParameter.Formula;
+namespace Pe.Revit.Extensions.FamParameter.Formula;
 
 /// <summary>
 ///     Low-level formula tokenization utilities.

@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
-namespace Pe.StorageRuntime;
+namespace Pe.Shared.StorageRuntime;
 
 public sealed class GlobalSettings {
     [Description(

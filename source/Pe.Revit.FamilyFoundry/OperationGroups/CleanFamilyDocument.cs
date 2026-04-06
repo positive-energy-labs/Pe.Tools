@@ -1,10 +1,10 @@
 using NJsonSchema.Annotations;
-using Pe.FamilyFoundry.Aggregators.Snapshots;
-using Pe.FamilyFoundry.Operations;
-using Pe.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Operations;
 using System.ComponentModel;
 
-namespace Pe.FamilyFoundry.OperationGroups;
+namespace Pe.Revit.FamilyFoundry.OperationGroups;
 
 public class CleanFamilyDocumentSettings : IOperationSettings {
     public bool Enabled { get; init; } = true;

@@ -1,7 +1,7 @@
-using Pe.Host.Contracts.RevitData;
-using Pe.Host.Contracts.SettingsStorage;
+using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.HostContracts.SettingsStorage;
 
-namespace Pe.Global.Services.Host;
+namespace Pe.Revit.Global.Services.Host;
 
 internal readonly record struct HostEnvelopeResult<TData>(
     bool Ok,

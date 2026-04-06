@@ -1,4 +1,4 @@
-namespace Pe.Extensions.FamParameter.Formula;
+namespace Pe.Revit.Extensions.FamParameter.Formula;
 
 /// <summary>
 ///     Extension methods for analyzing and classifying formulas.

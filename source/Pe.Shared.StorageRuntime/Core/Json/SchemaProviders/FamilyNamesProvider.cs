@@ -1,7 +1,7 @@
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Json.FieldOptions;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Json.FieldOptions;
 
-namespace Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+namespace Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
 /// <summary>
 ///     Provides family names from the active Revit document.

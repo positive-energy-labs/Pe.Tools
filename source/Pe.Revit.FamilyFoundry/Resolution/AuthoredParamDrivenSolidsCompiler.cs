@@ -1,9 +1,9 @@
-﻿using Pe.FamilyFoundry.OperationSettings;
-using Pe.FamilyFoundry.Snapshots;
+﻿using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Snapshots;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
-namespace Pe.FamilyFoundry.Resolution;
+namespace Pe.Revit.FamilyFoundry.Resolution;
 
 public static partial class AuthoredParamDrivenSolidsCompiler {
     private const double ConnectorStubSeedDepth = 0.5 / 12.0;

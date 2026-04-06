@@ -1,9 +1,9 @@
 using Pe.Shared.RevitData.Families;
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Json.FieldOptions;
-using Pe.StorageRuntime.Json.SchemaProviders;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Json.FieldOptions;
+using Pe.Shared.StorageRuntime.Json.SchemaProviders;
 
-namespace Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+namespace Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
 /// <summary>
 ///     Provides shared parameter names from the APS cache.

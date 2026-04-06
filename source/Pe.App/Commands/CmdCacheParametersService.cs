@@ -2,9 +2,9 @@
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Pe.Global.Services.Aps;
-using Pe.Global.Services.Aps.Models;
-using Pe.StorageRuntime;
+using Pe.Revit.Global.Services.Aps;
+using Pe.Revit.Global.Services.Aps.Models;
+using Pe.Shared.StorageRuntime;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -78,17 +78,17 @@ public class CmdCacheParametersService : IExternalCommand {
         if (data.Count == 0) return;
 
         var abridgedData = data.Select(p => new {
-                p.Id,
-                p.Name,
-                p.Description,
-                p.IsInstance,
-                p.ValueTypeId,
-                p.SpecId,
-                p.SpecLabel,
-                p.GroupId,
-                p.GroupLabel,
-                p.CategoryIds
-            }
+            p.Id,
+            p.Name,
+            p.Description,
+            p.IsInstance,
+            p.ValueTypeId,
+            p.SpecId,
+            p.SpecLabel,
+            p.GroupId,
+            p.GroupLabel,
+            p.CategoryIds
+        }
         ).ToList();
 
         var json = JsonConvert.SerializeObject(abridgedData, Formatting.Indented);

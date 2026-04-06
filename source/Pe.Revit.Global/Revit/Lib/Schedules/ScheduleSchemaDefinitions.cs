@@ -1,9 +1,9 @@
-using Pe.Global.Revit.Lib.Schedules.TitleStyle;
-using Pe.StorageRuntime.Json.SchemaDefinitions;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.Revit.Global.Revit.Lib.Schedules.TitleStyle;
+using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using System.Runtime.CompilerServices;
 
-namespace Pe.Global.Revit.Lib.Schedules;
+namespace Pe.Revit.Global.Revit.Lib.Schedules;
 
 internal sealed class ScheduleSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleSpec> {
     public override void Configure(ISettingsSchemaBuilder<ScheduleSpec> builder) {

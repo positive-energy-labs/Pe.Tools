@@ -1,4 +1,4 @@
-using Pe.Ui.Core;
+using Pe.Revit.Ui.Core;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -8,7 +8,7 @@ using System.Windows.Threading;
 using Wpf.Ui.Markup;
 using WpfUiRichTextBox = Wpf.Ui.Controls.RichTextBox;
 
-namespace Pe.Ui.Components;
+namespace Pe.Revit.Ui.Components;
 
 /// <summary>
 ///     Selectable text display component with keyboard navigation

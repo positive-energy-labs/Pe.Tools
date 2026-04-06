@@ -1,4 +1,4 @@
-namespace Pe.StorageRuntime;
+namespace Pe.Shared.StorageRuntime;
 
 internal static class StorageFileUtils {
     public static string EnsureExtension(string filename, string expectedExtension) {

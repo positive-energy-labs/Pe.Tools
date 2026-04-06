@@ -3,14 +3,14 @@ using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using NJsonSchema;
 using NJsonSchema.Annotations;
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Documents;
-using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Revit.Core.Json;
-using Pe.StorageRuntime.Revit.Core.Json.ContractResolvers;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Documents;
+using Pe.Shared.StorageRuntime.Json;
+using Pe.Shared.StorageRuntime.Revit.Core.Json;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.ContractResolvers;
 using System.Reflection;
 
-namespace Pe.StorageRuntime.Revit.Validation;
+namespace Pe.Shared.StorageRuntime.Revit.Validation;
 
 public sealed class SchemaBackedSettingsDocumentValidator(
     Type settingsType,

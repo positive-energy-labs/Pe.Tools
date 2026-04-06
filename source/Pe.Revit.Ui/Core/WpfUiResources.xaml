@@ -9,9 +9,9 @@
         <ui:ThemesDictionary Theme="Dark" />
         <ui:ControlsDictionary />
         <ResourceDictionary
-            Source="pack://application:,,,/Pe.Ui;component/Core/WpfOverrides/TextBox.xaml" />
+            Source="pack://application:,,,/Pe.Revit.Ui;component/Core/WpfOverrides/TextBox.xaml" />
         <ResourceDictionary
-            Source="pack://application:,,,/Pe.Ui;component/Themes/AnimatedScrollViewer.xaml" />
+            Source="pack://application:,,,/Pe.Revit.Ui;component/Themes/AnimatedScrollViewer.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
     <!-- Override WPF.UI's focus visual style to be invisible -->

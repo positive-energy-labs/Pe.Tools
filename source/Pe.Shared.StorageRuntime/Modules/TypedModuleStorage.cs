@@ -1,10 +1,10 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Pe.StorageRuntime.Context;
-using Pe.StorageRuntime.Revit.Core.Json;
-using Pe.StorageRuntime.Revit.Core.Json.ContractResolvers;
+using Pe.Shared.StorageRuntime.Context;
+using Pe.Shared.StorageRuntime.Revit.Core.Json;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.ContractResolvers;
 
-namespace Pe.StorageRuntime.Revit.Modules;
+namespace Pe.Shared.StorageRuntime.Revit.Modules;
 
 public static class TypedModuleStorageExtensions {
     public static ModuleSettingsStorage<TSettings> Settings<TSettings>(

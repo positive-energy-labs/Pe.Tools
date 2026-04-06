@@ -1,7 +1,7 @@
-﻿using Pe.FamilyFoundry.Snapshots;
+﻿using Pe.Revit.FamilyFoundry.Snapshots;
 using System.ComponentModel;
 
-namespace Pe.FamilyFoundry.OperationSettings;
+namespace Pe.Revit.FamilyFoundry.OperationSettings;
 
 public class MakeParamDrivenConnectorsSettings : IOperationSettings {
     [Description("Compiled connector plans to create with owned stub geometry.")]

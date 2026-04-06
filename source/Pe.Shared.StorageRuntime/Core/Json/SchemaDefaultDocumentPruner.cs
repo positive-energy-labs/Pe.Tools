@@ -1,7 +1,7 @@
 using Newtonsoft.Json.Linq;
 using NJsonSchema;
 
-namespace Pe.StorageRuntime.Revit.Core.Json;
+namespace Pe.Shared.StorageRuntime.Revit.Core.Json;
 
 internal static class SchemaDefaultDocumentPruner {
     public static void Prune(JsonSchema schema, JToken documentToken) {

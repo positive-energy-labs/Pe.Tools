@@ -4,7 +4,7 @@ using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
 using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 
-namespace Pe.Tools.RevitTest.Tests;
+namespace Pe.Revit.Tests;
 
 internal sealed record RoundtripArtifact(
     ProfileFamilyManager Profile,

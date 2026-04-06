@@ -1,4 +1,4 @@
-namespace Pe.Global.Revit.Mep;
+namespace Pe.Revit.Global.Revit.Mep;
 
 public class Connectors {
     /// <summary>Get all connectors on an element, ordered from closest to farthest from the specified location</summary>

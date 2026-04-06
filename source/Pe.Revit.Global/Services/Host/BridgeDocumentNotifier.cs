@@ -1,9 +1,9 @@
 using Autodesk.Revit.DB.Events;
-using Pe.Global.Services.Document;
-using Pe.Host.Contracts.Protocol;
+using Pe.Shared.HostContracts.Protocol;
+using Pe.Revit.Global.Services.Document;
 using Serilog;
 
-namespace Pe.Global.Services.Host;
+namespace Pe.Revit.Global.Services.Host;
 
 /// <summary>
 ///     Publishes document invalidation events only while the external bridge is connected.

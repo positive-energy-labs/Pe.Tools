@@ -42,9 +42,9 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Pe.RevitData\Pe.RevitData.csproj"/>
-        <ProjectReference Include="..\Pe.StorageRuntime\Pe.StorageRuntime.csproj"/>
-        <ProjectReference Include="..\Pe.Host.Contracts\Pe.Host.Contracts.csproj"/>
+        <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj" />
+        <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj" />
+        <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj" />
         <ProjectReference Include="..\Toon\Toon.csproj"/>
     </ItemGroup>
 

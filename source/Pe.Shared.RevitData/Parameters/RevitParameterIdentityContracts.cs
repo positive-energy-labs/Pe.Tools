@@ -1,4 +1,4 @@
-namespace Pe.RevitData.Parameters;
+namespace Pe.Shared.RevitData.Parameters;
 
 public enum RevitParameterIdentityKind {
     SharedGuid,

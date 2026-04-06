@@ -2,7 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NJsonSchema;
 
-namespace Pe.StorageRuntime.Json.SchemaProcessors;
+namespace Pe.Shared.StorageRuntime.Json.SchemaProcessors;
 
 internal static class SchemaExampleDefinitionConsolidator {
     public static JsonSchema Consolidate(JsonSchema schema) {

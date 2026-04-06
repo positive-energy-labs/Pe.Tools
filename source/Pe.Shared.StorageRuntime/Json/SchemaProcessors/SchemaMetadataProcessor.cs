@@ -1,6 +1,6 @@
 using NJsonSchema;
 
-namespace Pe.StorageRuntime.Json.SchemaProcessors;
+namespace Pe.Shared.StorageRuntime.Json.SchemaProcessors;
 
 public static class SchemaMetadataProcessor {
     public static void AllowSchemaProperty(JsonSchema schema) =>

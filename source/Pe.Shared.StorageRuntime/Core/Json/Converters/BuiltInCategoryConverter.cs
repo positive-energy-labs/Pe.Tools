@@ -1,7 +1,7 @@
 using Newtonsoft.Json;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
-namespace Pe.StorageRuntime.Revit.Core.Json.Converters;
+namespace Pe.Shared.StorageRuntime.Revit.Core.Json.Converters;
 
 /// <summary>
 ///     JSON converter for BuiltInCategory that serializes to/from user-visible category labels.

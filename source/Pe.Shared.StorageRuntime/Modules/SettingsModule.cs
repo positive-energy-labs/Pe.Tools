@@ -1,6 +1,6 @@
-using Pe.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Capabilities;
 
-namespace Pe.StorageRuntime.Modules;
+namespace Pe.Shared.StorageRuntime.Modules;
 
 public interface ISettingsModule {
     string ModuleKey { get; }

@@ -1,10 +1,10 @@
-<core:RevitHostedUserControl x:Class="Pe.Ui.Components.ListView"
+<core:RevitHostedUserControl x:Class="Pe.Revit.Ui.Components.ListView"
                              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-                             xmlns:local="clr-namespace:Pe.Ui.Components"
-                             xmlns:core="clr-namespace:Pe.Ui.Core"
-                             xmlns:controls="clr-namespace:Pe.Ui.Controls"
+                             xmlns:local="clr-namespace:Pe.Revit.Ui.Components"
+                             xmlns:core="clr-namespace:Pe.Revit.Ui.Core"
+                             xmlns:controls="clr-namespace:Pe.Revit.Ui.Controls"
                              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
                              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="d">
     <UserControl.Resources>

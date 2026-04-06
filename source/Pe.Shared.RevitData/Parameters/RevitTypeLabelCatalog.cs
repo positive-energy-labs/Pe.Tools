@@ -1,6 +1,6 @@
 using System.Reflection;
 
-namespace Pe.RevitData.Parameters;
+namespace Pe.Shared.RevitData.Parameters;
 
 public static class RevitTypeLabelCatalog {
     private static readonly Lazy<Dictionary<string, BuiltInCategory>> CategoryLabelMap = new(BuildCategoryLabelMap);

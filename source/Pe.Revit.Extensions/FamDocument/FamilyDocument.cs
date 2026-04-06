@@ -1,4 +1,4 @@
-namespace Pe.Extensions.FamDocument;
+namespace Pe.Revit.Extensions.FamDocument;
 
 /// <summary>
 ///     A type-safe wrapper around a Revit Document that is guaranteed to be a valid family document.

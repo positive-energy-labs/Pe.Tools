@@ -1,6 +1,6 @@
-using Pe.StorageRuntime.Json.SchemaProviders;
+using Pe.Shared.StorageRuntime.Json.SchemaProviders;
 
-namespace Pe.StorageRuntime.Json.SchemaProviders;
+namespace Pe.Shared.StorageRuntime.Json.SchemaProviders;
 
 public static class OptionContextKeys {
     public const string SelectedFamilyNames = "SelectedFamilyNames";

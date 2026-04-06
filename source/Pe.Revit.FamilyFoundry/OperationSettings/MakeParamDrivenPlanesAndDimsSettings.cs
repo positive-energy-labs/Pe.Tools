@@ -1,7 +1,7 @@
-﻿using Pe.FamilyFoundry.Snapshots;
+﻿using Pe.Revit.FamilyFoundry.Snapshots;
 using System.ComponentModel;
 
-namespace Pe.FamilyFoundry.OperationSettings;
+namespace Pe.Revit.FamilyFoundry.OperationSettings;
 
 public sealed class MakeParamDrivenPlanesAndDimsSettings : IOperationSettings {
     [Description("Resolved symmetric plane-pair constraints derived from ParamDrivenSolids.")]

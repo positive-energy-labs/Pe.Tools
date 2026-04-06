@@ -1,16 +1,16 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
-using Pe.Global.Services.Document;
-using Pe.Global.Services.Host.Operations;
-using Pe.Host.Contracts.Protocol;
-using Pe.StorageRuntime.Modules;
+using Pe.Shared.HostContracts.Protocol;
+using Pe.Revit.Global.Services.Document;
+using Pe.Revit.Global.Services.Host.Operations;
+using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
 
-namespace Pe.Global.Services.Host;
+namespace Pe.Revit.Global.Services.Host;
 
 internal sealed class BridgeOperationContext(
     RequestService requestService,

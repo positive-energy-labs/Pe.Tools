@@ -1,3 +1,3 @@
-namespace Pe.Global.Services.Document;
+namespace Pe.Revit.Global.Services.Document;
 
 internal static class StorageRuntimeRevitContextBootstrapper;

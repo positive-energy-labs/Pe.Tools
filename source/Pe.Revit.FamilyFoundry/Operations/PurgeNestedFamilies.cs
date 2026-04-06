@@ -1,7 +1,7 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Global.PolyFill;
 
-namespace Pe.FamilyFoundry.Operations;
+namespace Pe.Revit.FamilyFoundry.Operations;
 
 public class PurgeNestedFamilies : DocOperation<DefaultOperationSettings> {
     public PurgeNestedFamilies(DefaultOperationSettings settings) : base(settings) {

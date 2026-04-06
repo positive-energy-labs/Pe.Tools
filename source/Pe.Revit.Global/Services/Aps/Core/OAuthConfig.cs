@@ -1,4 +1,4 @@
-namespace Pe.Global.Services.Aps.Core;
+namespace Pe.Revit.Global.Services.Aps.Core;
 
 /// <summary>
 ///     Centralized OAuth configuration.

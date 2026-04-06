@@ -1,13 +1,13 @@
 using System.Reflection;
 using Newtonsoft.Json;
 using NJsonSchema;
-using Pe.StorageRuntime.Json;
-using Pe.StorageRuntime.Json.FieldOptions;
-using Pe.StorageRuntime.Revit.Core.Json.Converters;
-using Pe.StorageRuntime.Revit.Core.Json.RevitTypes;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.Shared.StorageRuntime.Json;
+using Pe.Shared.StorageRuntime.Json.FieldOptions;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.Converters;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.RevitTypes;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
 
-namespace Pe.StorageRuntime.Revit.Core.Json;
+namespace Pe.Shared.StorageRuntime.Revit.Core.Json;
 
 public static class RevitTypeRegistry {
     private static readonly object SyncRoot = new();

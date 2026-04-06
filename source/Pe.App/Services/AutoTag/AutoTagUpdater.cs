@@ -1,11 +1,11 @@
-using Pe.Global.Revit.Ui;
-using Pe.SettingsCatalog.Manifests.AutoTag;
-using Pe.StorageRuntime.Revit.AutoTag;
-using Pe.StorageRuntime.Revit.Core.Json.SchemaProviders;
+using Pe.Revit.Global.Revit.Ui;
+using Pe.Shared.SettingsCatalog.Manifests.AutoTag;
+using Pe.Shared.StorageRuntime.Revit.AutoTag;
+using Pe.Shared.StorageRuntime.Revit.Core.Json.SchemaProviders;
 using Serilog;
 using Serilog.Events;
 
-namespace Pe.Global.Services.AutoTag.Core;
+namespace Pe.App.Services.AutoTag;
 
 /// <summary>
 ///     Dynamic Model Updater that automatically tags elements when they are placed in the model.

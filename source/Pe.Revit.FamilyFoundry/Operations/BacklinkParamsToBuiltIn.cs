@@ -1,9 +1,9 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamManager;
 using Pe.Revit.Extensions.FamParameter;
-using Pe.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.OperationSettings;
 
-namespace Pe.FamilyFoundry.Operations;
+namespace Pe.Revit.FamilyFoundry.Operations;
 
 /// <summary>
 ///     Creates backlinks from built-in parameters to their mapped shared parameter targets.

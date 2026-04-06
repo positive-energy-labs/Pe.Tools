@@ -1,7 +1,7 @@
 using Pe.Revit.Extensions.FamDocument;
-using Pe.FamilyFoundry.Snapshots;
+using Pe.Revit.FamilyFoundry.Snapshots;
 
-namespace Pe.FamilyFoundry.Operations;
+namespace Pe.Revit.FamilyFoundry.Operations;
 
 // var specs = new List<RefPlaneSubcategorySpec> {
 //     new RefPlaneSubcategorySpec {

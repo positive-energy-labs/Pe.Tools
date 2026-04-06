@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
-using Pe.Host.Contracts.Operations;
+using Pe.Shared.HostContracts.Operations;
 using System.Globalization;
 using System.Reflection;
 using System.Text.Json;

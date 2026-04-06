@@ -1,10 +1,10 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Pe.Shared.Host.Contracts.Operations;
-using Pe.Shared.Host.Contracts.SettingsStorage;
+using Pe.Shared.HostContracts.Operations;
+using Pe.Shared.HostContracts.SettingsStorage;
 using TypeGen.Core.TypeAnnotations;
 
-namespace Pe.Shared.Host.Contracts.RevitData;
+namespace Pe.Shared.HostContracts.RevitData;
 
 [JsonConverter(typeof(StringEnumConverter))]
 [ExportTsEnum]

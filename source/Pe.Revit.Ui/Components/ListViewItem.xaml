@@ -1,8 +1,8 @@
-<Border x:Class="Pe.Ui.Components.ListViewItem"
+<Border x:Class="Pe.Revit.Ui.Components.ListViewItem"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-        xmlns:local="clr-namespace:Pe.Ui.Components"
+        xmlns:local="clr-namespace:Pe.Revit.Ui.Components"
         Background="Transparent">
     <Grid x:Name="ContentGrid">
         <Grid.ColumnDefinitions>

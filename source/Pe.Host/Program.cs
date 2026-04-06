@@ -1,5 +1,5 @@
 using Pe.Host;
-using Pe.Host.Contracts.Protocol;
+using Pe.Shared.HostContracts.Protocol;
 using Pe.Host.Operations;
 using Pe.Host.Services;
 using System.Text.Json;

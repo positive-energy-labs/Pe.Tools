@@ -2,7 +2,7 @@ using Pe.Revit.Extensions.FamDocument;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
-namespace Pe.FamilyFoundry.Operations;
+namespace Pe.Revit.FamilyFoundry.Operations;
 
 public class PurgeReferencePlanes : DocOperation<PurgeReferencePlanesSettings> {
     public PurgeReferencePlanes(PurgeReferencePlanesSettings settings) : base(settings) { }

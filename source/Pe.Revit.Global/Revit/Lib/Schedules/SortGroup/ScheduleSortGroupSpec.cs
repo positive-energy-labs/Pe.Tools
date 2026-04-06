@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace Pe.Global.Revit.Lib.Schedules.SortGroup;
+namespace Pe.Revit.Global.Revit.Lib.Schedules.SortGroup;
 
 public class ScheduleSortGroupSpec {
     [Description("The field name to sort/group by.")]

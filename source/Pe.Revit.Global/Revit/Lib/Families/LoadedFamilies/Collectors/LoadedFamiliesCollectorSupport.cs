@@ -1,9 +1,9 @@
-using Pe.Global.Revit.Lib.Families.LoadedFamilies.Models;
-using Pe.Host.Contracts.RevitData;
-using Pe.RevitData.Families;
-using Pe.RevitData.Parameters;
+using Pe.Shared.HostContracts.RevitData;
+using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
+using Pe.Shared.RevitData.Families;
+using Pe.Shared.RevitData.Parameters;
 
-namespace Pe.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
+namespace Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 
 internal static class LoadedFamiliesCollectorSupport {
     public static IEnumerable<CollectedLoadedFamilyRecord> ApplyFilter(

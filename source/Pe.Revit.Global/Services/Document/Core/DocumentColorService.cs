@@ -1,7 +1,7 @@
 using System.Windows.Media;
 using WpfColor = System.Windows.Media.Color;
 
-namespace Pe.Global.Services.Document.Core;
+namespace Pe.Revit.Global.Services.Document.Core;
 
 /// <summary>
 ///     Service that provides color assignments for documents.

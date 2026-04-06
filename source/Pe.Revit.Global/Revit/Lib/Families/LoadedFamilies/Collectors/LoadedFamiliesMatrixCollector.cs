@@ -1,11 +1,11 @@
-using Pe.Global.Revit.Lib.Parameters;
-using Pe.Global.Revit.Lib.Families.LoadedFamilies.Models;
-using Pe.Host.Contracts.RevitData;
-using Pe.RevitData.Families;
+using Pe.Shared.HostContracts.RevitData;
+using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
+using Pe.Revit.Global.Revit.Lib.Parameters;
+using Pe.Shared.RevitData.Families;
 using Serilog;
 using System.Diagnostics;
 
-namespace Pe.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
+namespace Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 
 public static class LoadedFamiliesMatrixCollector {
     public static LoadedFamiliesMatrixData Collect(

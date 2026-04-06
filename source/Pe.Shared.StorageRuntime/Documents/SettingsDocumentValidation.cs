@@ -1,4 +1,4 @@
-namespace Pe.StorageRuntime.Documents;
+namespace Pe.Shared.StorageRuntime.Documents;
 
 public interface ISettingsDocumentValidator {
     SettingsValidationResult Validate(

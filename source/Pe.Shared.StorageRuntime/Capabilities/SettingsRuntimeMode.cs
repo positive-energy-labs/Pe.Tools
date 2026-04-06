@@ -1,4 +1,4 @@
-namespace Pe.StorageRuntime.Capabilities;
+namespace Pe.Shared.StorageRuntime.Capabilities;
 
 public enum SettingsRuntimeMode {
     HostOnly = 0,

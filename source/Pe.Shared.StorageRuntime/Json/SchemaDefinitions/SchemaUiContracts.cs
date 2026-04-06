@@ -1,8 +1,8 @@
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Json.FieldOptions;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Json.FieldOptions;
 using TypeGen.Core.TypeAnnotations;
 
-namespace Pe.StorageRuntime.Json.SchemaDefinitions;
+namespace Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 
 public static class SchemaUiRendererKeys {
     public const string Table = "table";

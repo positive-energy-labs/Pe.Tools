@@ -1,7 +1,7 @@
 using Pe.Revit.Extensions.FamDocument;
-using Pe.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
 
-namespace Pe.FamilyFoundry.Snapshots;
+namespace Pe.Revit.FamilyFoundry.Snapshots;
 
 /// <summary>
 ///     Collects reference planes and dimensions from family document.

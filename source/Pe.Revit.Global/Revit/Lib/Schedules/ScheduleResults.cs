@@ -1,4 +1,4 @@
-namespace Pe.Global.Revit.Lib.Schedules;
+namespace Pe.Revit.Global.Revit.Lib.Schedules;
 
 public class ScheduleCreationResult {
     public ViewSchedule Schedule { get; init; }

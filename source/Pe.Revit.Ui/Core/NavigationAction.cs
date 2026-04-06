@@ -1,6 +1,6 @@
 using System.Windows.Input;
 
-namespace Pe.Ui.Core;
+namespace Pe.Revit.Ui.Core;
 
 /// <summary>
 ///     Navigation actions that can be triggered by keyboard in palettes

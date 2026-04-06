@@ -1,4 +1,4 @@
-using Pe.Ui.Core;
+using Pe.Revit.Ui.Core;
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
@@ -6,7 +6,7 @@ using System.Windows.Input;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 
-namespace Pe.Ui.Components;
+namespace Pe.Revit.Ui.Components;
 
 /// <summary>
 ///     Non-generic base class for FilterBox.xaml

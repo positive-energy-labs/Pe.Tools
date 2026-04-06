@@ -80,8 +80,8 @@
 - Prefer a small number of obvious orchestrator files after refactor. Current files to anchor against:
   - `source/Pe.Host/Operations/HostOperationRegistry.cs`
   - `source/Pe.Host/Services/HostSettingsStorageService.cs`
-  - `source/Pe.StorageRuntime/Documents/LocalDiskSettingsStorageBackend.cs`
-  - `source/Pe.StorageRuntime.Revit/Modules/SharedModuleSettingsStorage.cs`
+  - `source/Pe.Shared.StorageRuntime/Documents/LocalDiskSettingsStorageBackend.cs`
+  - `source/Pe.Shared.StorageRuntime.Revit/Modules/SharedModuleSettingsStorage.cs`
   - `source/Pe.App/Commands/FamilyFoundry/FamilyFoundryUi/FoundryPaletteBuilder.cs`
 
 ## Design Bias
@@ -97,4 +97,4 @@
 - Delete `LocalManagers` and `GlobalManager` by moving their surviving responsibilities into:
   - module-bound shared storage
   - small non-settings utility types for output/state if still needed
-- Re-evaluate `Pe.StorageRuntime` vs `Pe.StorageRuntime.Revit` only after the legacy storage surfaces above are gone.
+- Re-evaluate `Pe.Shared.StorageRuntime` vs `Pe.Shared.StorageRuntime.Revit` only after the legacy storage surfaces above are gone.

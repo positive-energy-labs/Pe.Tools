@@ -1,7 +1,7 @@
-using Pe.FamilyFoundry.Snapshots;
+using Pe.Revit.FamilyFoundry.Snapshots;
 using System.ComponentModel;
 
-namespace Pe.FamilyFoundry.OperationSettings;
+namespace Pe.Revit.FamilyFoundry.OperationSettings;
 
 public class MakeRefPlaneAndDimsSettings : IOperationSettings {
     [Description("Mirror specs: planes symmetric around a center anchor (3 planes, 2 dims each)")]

@@ -1,8 +1,8 @@
+using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 using System.Reflection;
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Json.SchemaDefinitions;
+using Pe.Shared.StorageRuntime.Capabilities;
 
-namespace Pe.StorageRuntime.Json.FieldOptions;
+namespace Pe.Shared.StorageRuntime.Json.FieldOptions;
 
 public interface ISettingsFieldOptionsService {
     ValueTask<FieldOptionsResult> GetOptionsAsync(

@@ -3,7 +3,7 @@ using Autodesk.Revit.DB.Plumbing;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Resolution;
 
-namespace Pe.Tools.RevitTest.Tests;
+namespace Pe.Revit.Tests;
 
 [TestFixture]
 public sealed class ParamDrivenSolidsCompilerTests {

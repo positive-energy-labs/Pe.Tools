@@ -1,8 +1,8 @@
 ﻿using Pe.Revit.Extensions.FamDocument;
-using Pe.FamilyFoundry.OperationGroups;
-using Pe.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.OperationGroups;
+using Pe.Revit.FamilyFoundry.OperationSettings;
 
-namespace Pe.FamilyFoundry.Operations;
+namespace Pe.Revit.FamilyFoundry.Operations;
 
 /// <summary>
 ///     Cleans up placeholder family types introduced only to enable downstream type creation.

@@ -1,8 +1,8 @@
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Modules;
-using Pe.StorageRuntime.Revit.Validation;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Modules;
+using Pe.Shared.StorageRuntime.Revit.Validation;
 
-namespace Pe.SettingsCatalog.Manifests.FamilyFoundry;
+namespace Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 
 public static class ProfileFamilyManagerSettingsManifest {
     public static SettingsModuleManifest<ProfileFamilyManager> Module { get; } = new(

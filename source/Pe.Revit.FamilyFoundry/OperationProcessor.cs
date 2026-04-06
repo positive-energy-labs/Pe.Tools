@@ -1,11 +1,11 @@
 ﻿using Pe.Revit.Extensions.FamDocument;
-using Pe.FamilyFoundry.Aggregators.Snapshots;
-using Pe.FamilyFoundry.Snapshots;
+using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.FamilyFoundry.Snapshots;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 
-namespace Pe.FamilyFoundry;
+namespace Pe.Revit.FamilyFoundry;
 
 /// <summary>
 ///     Processor for executing operations on families.

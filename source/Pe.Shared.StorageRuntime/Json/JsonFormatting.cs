@@ -2,7 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
 
-namespace Pe.StorageRuntime.Json;
+namespace Pe.Shared.StorageRuntime.Json;
 
 public static class JsonFormatting {
     public static string NormalizeTrailingNewline(string content) =>

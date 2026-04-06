@@ -1,4 +1,4 @@
-namespace Pe.StorageRuntime.Json;
+namespace Pe.Shared.StorageRuntime.Json;
 
 public static class PresetFragmentRoots {
     public static string FilterApsParams => IncludableFragmentRoots.NormalizeRoot("filter-aps-params");

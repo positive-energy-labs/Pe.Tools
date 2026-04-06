@@ -1,6 +1,6 @@
 ﻿using Pe.Revit.Extensions.FamDocument;
 
-namespace Pe.FamilyFoundry;
+namespace Pe.Revit.FamilyFoundry;
 
 /// <summary>
 ///     Fluent processor that batches document and type operations for optimal execution.

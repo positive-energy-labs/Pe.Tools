@@ -1,4 +1,4 @@
-namespace Pe.Global.Services.Document.Core;
+namespace Pe.Revit.Global.Services.Document.Core;
 
 /// <summary>
 ///     Represents a reference to a view in a specific document.

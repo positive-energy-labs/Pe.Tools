@@ -1,7 +1,7 @@
-using Pe.Host.Contracts.RevitData;
-using Pe.Host.Contracts.SettingsStorage;
-using Pe.StorageRuntime.Capabilities;
-using Pe.StorageRuntime.Json;
+using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.HostContracts.SettingsStorage;
+using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Json;
 using System.Collections.Concurrent;
 
 namespace Pe.Host.Services;

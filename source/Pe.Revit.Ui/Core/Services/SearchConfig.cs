@@ -1,4 +1,4 @@
-namespace Pe.Ui.Core.Services;
+namespace Pe.Revit.Ui.Core.Services;
 
 /// <summary>
 ///     Flags for specifying which fields to search within palette items

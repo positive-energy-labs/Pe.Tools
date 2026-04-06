@@ -1,6 +1,6 @@
 using System.Windows.Input;
 
-namespace Pe.Ui.Core;
+namespace Pe.Revit.Ui.Core;
 
 /// <summary>
 ///     Non-generic base class for ActionBinding to enable type-erased storage

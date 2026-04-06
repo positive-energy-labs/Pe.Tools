@@ -1,4 +1,4 @@
-using Pe.Ui.Core;
+using Pe.Revit.Ui.Core;
 using System.Collections;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -14,7 +14,7 @@ using System.Windows.Threading;
 using Binding = System.Windows.Data.Binding;
 using Visibility = System.Windows.Visibility;
 
-namespace Pe.Ui.Components;
+namespace Pe.Revit.Ui.Components;
 
 /// <summary>
 ///     Converter for string to visibility (empty/null = Collapsed)

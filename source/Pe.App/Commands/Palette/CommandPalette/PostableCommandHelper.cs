@@ -1,8 +1,9 @@
-using Pe.Global.Revit.Lib;
-using Pe.Global.Revit.Ui;
-using Pe.StorageRuntime;
-using Pe.StorageRuntime.Json;
-using Pe.Ui.Core;
+using Pe.Revit.Global.Revit.Lib;
+using Pe.Revit.Global.Revit.Ui;
+using Pe.Shared.StorageRuntime.Json;
+using Pe.Revit.Ui.Core;
+using Pe.Shared.StorageRuntime;
+using Pe.Shared.StorageRuntime.Json;
 
 namespace Pe.App.Commands.Palette.CommandPalette;
 

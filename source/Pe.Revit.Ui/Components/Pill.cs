@@ -1,4 +1,4 @@
-using Pe.Ui.Core;
+using Pe.Revit.Ui.Core;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -6,7 +6,7 @@ using Binding = System.Windows.Data.Binding;
 using TextBlock = System.Windows.Controls.TextBlock;
 using FontWeight = System.Windows.FontWeight;
 
-namespace Pe.Ui.Components;
+namespace Pe.Revit.Ui.Components;
 
 /// <summary>
 ///     Reusable pill component for displaying badges/labels.

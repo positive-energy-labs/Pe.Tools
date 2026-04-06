@@ -1,7 +1,7 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Global;
 
-namespace Pe.FamilyFoundry.Operations;
+namespace Pe.Revit.FamilyFoundry.Operations;
 
 public class AddSharedParams(
     IEnumerable<SharedParameterDefinition> sharedParams

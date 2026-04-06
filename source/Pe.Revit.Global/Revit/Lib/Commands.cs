@@ -1,7 +1,7 @@
-using Pe.Global.Revit.Ui;
+using Pe.Revit.Global.Revit.Ui;
 using Serilog.Events;
 
-namespace Pe.Global.Revit.Lib;
+namespace Pe.Revit.Global.Revit.Lib;
 
 /// <summary>
 ///     Immutable reference to either an internal PostableCommand or an external command id.

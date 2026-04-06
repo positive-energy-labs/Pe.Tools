@@ -1,11 +1,11 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
-using Pe.StorageRuntime.Json.Converters;
+using Pe.Shared.StorageRuntime.Json.Converters;
 using System.Collections;
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 
-namespace Pe.StorageRuntime.Json.ContractResolvers;
+namespace Pe.Shared.StorageRuntime.Json.ContractResolvers;
 
 public class RequiredAwareContractResolver : RegisteredTypeContractResolver {
     private readonly Dictionary<Type, object> _defaultInstanceCache = new();

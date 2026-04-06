@@ -2,7 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 
-namespace Pe.Ui.Core;
+namespace Pe.Revit.Ui.Core;
 
 /// <summary>
 ///     Base sidebar panel that centralizes threading and cancellation.

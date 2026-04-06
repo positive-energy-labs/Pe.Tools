@@ -1,5 +1,5 @@
 using Newtonsoft.Json;
-using Pe.Host.Contracts.Protocol;
+using Pe.Shared.HostContracts.Protocol;
 using Pe.Host.Services;
 using System.Collections.Concurrent;
 using System.IO.Pipes;

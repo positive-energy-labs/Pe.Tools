@@ -1,6 +1,6 @@
-using Pe.Global.PolyFill;
+using Pe.Revit.Global.PolyFill;
 
-namespace Pe.Global.Services.Document.Core;
+namespace Pe.Revit.Global.Services.Document.Core;
 
 /// <summary>
 ///     Manages the Most Recently Used (MRU) view buffer for tracking view activation history.

@@ -4,7 +4,7 @@ using System.Windows.Media;
 using System.Windows.Media.Effects;
 using Wpf.Ui.Markup;
 
-namespace Pe.Ui.Core;
+namespace Pe.Revit.Ui.Core;
 
 /// <summary>
 ///     Fluent API builder for creating Border controls efficiently.

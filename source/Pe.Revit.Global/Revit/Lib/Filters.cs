@@ -1,7 +1,7 @@
 ﻿using Autodesk.Revit.DB.Mechanical;
-using Pe.Global.Revit.Mep.Mechanical;
+using Pe.Revit.Global.Revit.Mep.Mechanical;
 
-namespace Pe.Global.Revit.Lib;
+namespace Pe.Revit.Global.Revit.Lib;
 
 public class Filters {
     /// <summary>

@@ -1,9 +1,9 @@
 ﻿using Autodesk.Revit.DB.Electrical;
 using Autodesk.Revit.DB.Mechanical;
 using Autodesk.Revit.DB.Plumbing;
-using Pe.FamilyFoundry.Helpers;
+using Pe.Revit.FamilyFoundry.Helpers;
 
-namespace Pe.FamilyFoundry.Snapshots;
+namespace Pe.Revit.FamilyFoundry.Snapshots;
 
 public partial class ExtrusionSectionCollector {
     private const double ConnectorPlaneTolerance = 1e-3;

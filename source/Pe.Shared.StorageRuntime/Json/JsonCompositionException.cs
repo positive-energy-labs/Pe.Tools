@@ -1,4 +1,4 @@
-namespace Pe.StorageRuntime.Json;
+namespace Pe.Shared.StorageRuntime.Json;
 
 /// <summary>
 ///     Exception thrown when JSON composition resolution fails.

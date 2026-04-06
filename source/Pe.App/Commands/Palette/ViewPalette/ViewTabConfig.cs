@@ -1,5 +1,5 @@
 using Autodesk.Revit.UI;
-using Pe.Ui.Core;
+using Pe.Revit.Ui.Core;
 using System.Windows.Input;
 
 namespace Pe.App.Commands.Palette.ViewPalette;

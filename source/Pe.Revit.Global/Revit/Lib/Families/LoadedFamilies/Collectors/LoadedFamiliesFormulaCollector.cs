@@ -1,10 +1,10 @@
-using Pe.Global.Revit.Lib.Families.LoadedFamilies.Models;
-using Pe.Global.Services.Document;
-using Pe.RevitData.Families;
-using Pe.RevitData.Parameters;
+using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
+using Pe.Revit.Global.Services.Document;
+using Pe.Shared.RevitData.Families;
+using Pe.Shared.RevitData.Parameters;
 using System.Diagnostics;
 
-namespace Pe.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
+namespace Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 
 public static class LoadedFamiliesFormulaCollector {
     public static List<CollectedLoadedFamilyRecord> Supplement(

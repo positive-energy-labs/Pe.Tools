@@ -1,7 +1,7 @@
-using Pe.Global.Services.Aps.Models;
+using Pe.Revit.Global.Services.Aps.Models;
 using Serilog;
 
-namespace Pe.Global.Services.Aps.Core;
+namespace Pe.Revit.Global.Services.Aps.Core;
 
 /// <summary>
 ///     Autodesk Platform Services Authentication Handler.

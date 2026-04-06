@@ -1,7 +1,7 @@
-using Pe.Shared.Host.Contracts.RevitData;
-using Pe.Shared.Host.Contracts.SettingsStorage;
+using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.HostContracts.SettingsStorage;
 
-namespace Pe.Shared.Host.Contracts.Operations;
+namespace Pe.Shared.HostContracts.Operations;
 
 public static class GetLoadedFamiliesFilterSchemaOperationContract {
     public static readonly HostOperationDefinition Definition =

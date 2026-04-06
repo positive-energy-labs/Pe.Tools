@@ -1,6 +1,6 @@
 using System.Windows.Input;
 
-namespace Pe.Ui.Core;
+namespace Pe.Revit.Ui.Core;
 
 /// <summary>
 ///     Interface for popovers that can exit and return focus to their parent

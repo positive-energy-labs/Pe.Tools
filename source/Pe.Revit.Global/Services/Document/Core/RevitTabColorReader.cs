@@ -3,9 +3,9 @@ using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
 using WpfColor = System.Windows.Media.Color;
-using Pe.Global.Services.Document;
+using Pe.Revit.Global.Services.Document;
 
-namespace Pe.Global.Services.Document.Core;
+namespace Pe.Revit.Global.Services.Document.Core;
 
 /// <summary>
 ///     Service for reading document colors from Revit's UI (set by pyRevit or other addins).

@@ -1,4 +1,4 @@
-using Pe.Host.Contracts.Protocol;
+using Pe.Shared.HostContracts.Protocol;
 
 namespace Pe.Host;
 

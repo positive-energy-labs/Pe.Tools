@@ -4,7 +4,7 @@ using System.Windows.Automation;
 using Condition = System.Windows.Automation.Condition;
 using Point = System.Windows.Point;
 
-namespace Pe.Global.Utils;
+namespace Pe.Revit.Global.Utils;
 
 // saving for later automations sequences
 public static class Automations {

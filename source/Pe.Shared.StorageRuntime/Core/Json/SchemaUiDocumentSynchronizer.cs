@@ -1,9 +1,9 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NJsonSchema;
-using Pe.StorageRuntime.Json.SchemaDefinitions;
+using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 
-namespace Pe.StorageRuntime.Revit.Core.Json;
+namespace Pe.Shared.StorageRuntime.Revit.Core.Json;
 
 internal static class SchemaUiDocumentSynchronizer {
     public static void Synchronize(JsonSchema schema, JToken documentToken) {
