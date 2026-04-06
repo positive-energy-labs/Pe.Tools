@@ -2,7 +2,7 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.Global.Revit.Ui;
 using Pe.Global.Services.Document;
-using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime;
 using Pe.Ui.Core;
 using Pe.Ui.Core.Services;
 using Serilog;
@@ -67,7 +67,7 @@ public abstract class FamilyPaletteBase : IExternalCommand {
 
             var window = PaletteFactory.Create("Family Palette",
                 new PaletteOptions<UnifiedFamilyItem> {
-                    Persistence = (new StorageClient(nameof(CmdPltFamilies)), item => item.PersistenceKey),
+                    Persistence = (StorageClient.Default.Module(nameof(CmdPltFamilies)), item => item.PersistenceKey),
                     SearchConfig = SearchConfig.PrimaryAndSecondary(),
                     Tabs = tabs,
                     DefaultTabIndex = defaultTabIndex,

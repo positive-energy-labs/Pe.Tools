@@ -109,32 +109,3 @@ public record SettingsWorkspaceDescriptor(
 public record SettingsWorkspacesData(
     IReadOnlyList<SettingsWorkspaceDescriptor> Workspaces
 );
-
-public interface ISettingsStorageBackend {
-    Task<SettingsDiscoveryResult> DiscoverAsync(
-        string moduleKey,
-        string rootKey,
-        SettingsDiscoveryOptions options,
-        CancellationToken cancellationToken = default
-    );
-
-    Task<SettingsDocumentSnapshot> OpenAsync(
-        OpenSettingsDocumentRequest request,
-        CancellationToken cancellationToken = default
-    );
-
-    Task<SettingsDocumentSnapshot> ComposeAsync(
-        OpenSettingsDocumentRequest request,
-        CancellationToken cancellationToken = default
-    );
-
-    Task<SaveSettingsDocumentResult> SaveAsync(
-        SaveSettingsDocumentRequest request,
-        CancellationToken cancellationToken = default
-    );
-
-    Task<SettingsValidationResult> ValidateAsync(
-        ValidateSettingsDocumentRequest request,
-        CancellationToken cancellationToken = default
-    );
-}

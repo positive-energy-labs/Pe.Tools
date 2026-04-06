@@ -1,7 +1,6 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Nice3point.Revit.Sdk/6.0.2">
 
     <PropertyGroup>
-        <TargetFramework>netstandard2.0</TargetFramework>
         <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
@@ -12,7 +11,14 @@
         <PackageReference Include="NJsonSchema.NewtonsoftJson" Version="11.5.2"/>
         <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0"/>
         <PackageReference Include="TypeGen" Version="5.0.0"/>
-        <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all"/>
+        <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*"/>
+        <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*"/>
+        <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*"/>
+        <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all" Condition="'$(TargetFramework)' == 'net48'"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Pe.RevitData\Pe.RevitData.csproj"/>
     </ItemGroup>
 
 </Project>

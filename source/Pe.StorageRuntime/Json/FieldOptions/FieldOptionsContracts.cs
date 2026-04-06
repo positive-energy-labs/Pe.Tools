@@ -20,7 +20,7 @@ public sealed record FieldOptionsDescriptor(
     SettingsOptionsMode Mode,
     bool AllowsCustomValue,
     IReadOnlyList<FieldOptionsDependency> DependsOn,
-    SettingsRuntimeCapabilities RequiredCapabilities
+    SettingsRuntimeMode RequiredRuntimeMode
 );
 
 public sealed record FieldOptionsExecutionContext {
@@ -28,16 +28,16 @@ public sealed record FieldOptionsExecutionContext {
         new Dictionary<string, string>(StringComparer.Ordinal);
 
     public FieldOptionsExecutionContext(
-        SettingsRuntimeCapabilities capabilities,
+        SettingsRuntimeMode runtimeMode,
         ISettingsDocumentContextAccessor? documentContextAccessor = null,
         IReadOnlyDictionary<string, string>? fieldValues = null
     ) {
-        this.Capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
+        this.RuntimeMode = runtimeMode;
         this.DocumentContextAccessor = documentContextAccessor;
         this.FieldValues = fieldValues ?? EmptyFieldValues;
     }
 
-    public SettingsRuntimeCapabilities Capabilities { get; }
+    public SettingsRuntimeMode RuntimeMode { get; }
     public ISettingsDocumentContextAccessor? DocumentContextAccessor { get; }
     public IReadOnlyDictionary<string, string> FieldValues { get; }
 

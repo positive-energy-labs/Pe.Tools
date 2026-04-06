@@ -37,7 +37,7 @@ public sealed record SchemaUiDynamicColumnOrderMetadata {
 
 public interface ISchemaUiDynamicColumnOrderSource {
     string Key { get; }
-    SettingsRuntimeCapabilities RequiredCapabilities { get; }
+    SettingsRuntimeMode RequiredRuntimeMode { get; }
 
     ValueTask<IReadOnlyList<string>> GetValuesAsync(
         FieldOptionsExecutionContext context,

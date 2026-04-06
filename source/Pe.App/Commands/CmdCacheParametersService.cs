@@ -4,7 +4,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.Global.Services.Aps;
 using Pe.Global.Services.Aps.Models;
-using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -19,7 +19,7 @@ public class CmdCacheParametersService : IExternalCommand {
         ref string message,
         ElementSet elements) {
         var cacheFilename = "parameters-service-cache";
-        var apsParamsCache = StorageClient.GlobalDir().StateJson<ParametersApi.Parameters>(cacheFilename);
+        var apsParamsCache = StorageClient.Default.Global().State().Json<ParametersApi.Parameters>(cacheFilename);
 
         var svcAps = new Aps(new CacheParametersService());
         var parameters = Task.Run(async () =>
@@ -35,8 +35,8 @@ public class CmdCacheParametersService : IExternalCommand {
     private static void WriteAdditionalFormats(ParametersApi.Parameters parameters, string baseFilename) {
         if (parameters?.Results == null) return;
 
-        var globalDir = StorageClient.GlobalDir().DirectoryPath;
-        var basePath = Path.Combine(globalDir, baseFilename);
+        var stateDirectoryPath = StorageClient.Default.Global().State().DirectoryPath;
+        var basePath = Path.Combine(stateDirectoryPath, baseFilename);
 
         var enrichedData = parameters.Results
             .Where(p => !p.IsArchived)
@@ -273,13 +273,16 @@ public class EnrichedParameterData {
 
 public class CacheParametersService : Aps.IOAuthTokenProvider, Aps.IParametersTokenProvider {
 #if DEBUG
-    public string GetClientId() => StorageClient.GlobalDir().SettingsJson().Read().ApsWebClientId1;
-    public string GetClientSecret() => StorageClient.GlobalDir().SettingsJson().Read().ApsWebClientSecret1;
+    public string GetClientId() => ReadGlobalSettings().ApsWebClientId1;
+    public string GetClientSecret() => ReadGlobalSettings().ApsWebClientSecret1;
 #else
-    public string GetClientId() => StorageClient.GlobalDir().SettingsJson().Read().ApsDesktopClientId1;
+    public string GetClientId() => ReadGlobalSettings().ApsDesktopClientId1;
     public string GetClientSecret() => null;
 #endif
-    public string GetAccountId() => StorageClient.GlobalDir().SettingsJson().Read().Bim360AccountId;
-    public string GetGroupId() => StorageClient.GlobalDir().SettingsJson().Read().ParamServiceGroupId;
-    public string GetCollectionId() => StorageClient.GlobalDir().SettingsJson().Read().ParamServiceCollectionId;
+    public string GetAccountId() => ReadGlobalSettings().Bim360AccountId;
+    public string GetGroupId() => ReadGlobalSettings().ParamServiceGroupId;
+    public string GetCollectionId() => ReadGlobalSettings().ParamServiceCollectionId;
+
+    private static GlobalSettings ReadGlobalSettings() =>
+        StorageClient.Default.Global().Settings<GlobalSettings>().Read();
 }

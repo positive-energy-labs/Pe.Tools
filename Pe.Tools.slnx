@@ -31,10 +31,8 @@
     <Project Path="source/Pe.Host.Contracts/Pe.Host.Contracts.csproj"/>
     <Project Path="source/Pe.Host/Pe.Host.csproj"/>
     <Project Path="source/Pe.SettingsCatalog/Pe.SettingsCatalog.csproj"/>
-    <Project Path="source/Pe.SettingsCatalog.Revit/Pe.SettingsCatalog.Revit.csproj"/>
     <Project Path="source/Pe.Ui/Pe.Ui.csproj"/>
     <Project Path="source/Toon/Toon.csproj"/>
-    <Project Path="source/Pe.StorageRuntime.Revit/Pe.StorageRuntime.Revit.csproj"/>
     <Project Path="source/Pe.StorageRuntime/Pe.StorageRuntime.csproj"/>
     <Project Path="source/Pe.Tools.RevitTest.Tests/Pe.Tools.RevitTest.Tests.csproj"/>
 </Solution>

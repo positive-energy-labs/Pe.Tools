@@ -5,7 +5,7 @@ using Pe.FamilyFoundry.OperationSettings;
 using Pe.FamilyFoundry.Resolution;
 using Pe.FamilyFoundry.Serialization;
 using Pe.FamilyFoundry.Snapshots;
-using Pe.SettingsCatalog.Revit.FamilyFoundry;
+using Pe.SettingsCatalog.Manifests.FamilyFoundry;
 using Pe.Tools.Commands.FamilyFoundry;
 
 namespace Pe.Tools.RevitTest.Tests;

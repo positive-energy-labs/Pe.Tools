@@ -2,7 +2,7 @@ using Autodesk.Revit.DB.Mechanical;
 using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.Aggregators.Snapshots;
 using Pe.FamilyFoundry.Resolution;
-using Pe.SettingsCatalog.Revit.FamilyFoundry;
+using Pe.SettingsCatalog.Manifests.FamilyFoundry;
 
 namespace Pe.Tools.RevitTest.Tests;
 

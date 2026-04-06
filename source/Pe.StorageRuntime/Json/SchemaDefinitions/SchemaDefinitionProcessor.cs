@@ -2,6 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using NJsonSchema.Generation;
+using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Json.FieldOptions;
 
 namespace Pe.StorageRuntime.Json.SchemaDefinitions;
@@ -60,7 +61,7 @@ public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : 
             var descriptor = binding.FieldOptionsSource.Describe();
             IReadOnlyList<FieldOptionItem>? samples = null;
             if (this._options.ResolveFieldOptionSamples &&
-                this._options.Capabilities.Supports(descriptor.RequiredCapabilities)) {
+                this._options.RuntimeMode.Supports(descriptor.RequiredRuntimeMode)) {
                 try {
                     samples = binding.FieldOptionsSource
                         .GetOptionsAsync(this._options.CreateFieldOptionsExecutionContext())
@@ -142,7 +143,7 @@ public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : 
         ISchemaUiDynamicColumnOrderSource source,
         JsonSchemaBuildOptions options
     ) {
-        if (!options.Capabilities.Supports(source.RequiredCapabilities))
+        if (!options.RuntimeMode.Supports(source.RequiredRuntimeMode))
             return [];
 
         try {

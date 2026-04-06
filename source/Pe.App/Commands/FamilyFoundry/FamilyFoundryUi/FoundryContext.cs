@@ -1,6 +1,7 @@
 using Autodesk.Revit.UI;
 using Pe.FamilyFoundry;
-using Pe.StorageRuntime.Revit;
+using Pe.StorageRuntime;
+using Pe.StorageRuntime.Modules;
 using Pe.StorageRuntime.Revit.Modules;
 
 namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
@@ -10,11 +11,12 @@ namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 ///     Holds document references, storage, settings, and UI state.
 /// </summary>
 /// <typeparam name="TProfile">The profile type (must inherit from BaseProfileSettings)</typeparam>
-public class FoundryContext<TProfile> where TProfile : BaseProfileSettings {
+public class FoundryContext<TProfile> where TProfile : BaseProfileSettings, new() {
     public Document Doc { get; init; }
     public UIDocument UiDoc { get; init; }
-    public StorageClient Storage { get; init; }
-    public SharedModuleSettingsStorage SharedStorage { get; init; }
+    public ModuleStorage<TProfile> Storage { get; init; }
+    public ModuleSettingsStorage<TProfile> Settings { get; init; }
+    public ModuleDocumentStorage Documents { get; init; }
     public OnProcessingFinishSettings OnFinishSettings { get; init; }
 
     // UI state: what's currently selected and displayed

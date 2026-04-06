@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using Pe.FamilyFoundry;
-using Pe.SettingsCatalog.Revit.FamilyFoundry;
+using Pe.SettingsCatalog.Manifests.FamilyFoundry;
 using Pe.Tools.Commands.FamilyFoundry;
 
 namespace Pe.Tools.RevitTest.Tests;

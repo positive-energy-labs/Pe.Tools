@@ -1,6 +1,5 @@
 using Newtonsoft.Json.Linq;
 using Pe.StorageRuntime;
-using Pe.StorageRuntime.Revit.Modules;
 using Pe.Ui.Core;
 using System.IO;
 using System.Windows.Media.Imaging;
@@ -88,7 +87,7 @@ public class ScheduleListItem : IPaletteListItem {
     ///     Discovers all schedule profile JSON files in a directory, excluding schema files.
     ///     If using a SettingsSubDir with recursive discovery, will find files in nested subdirectories.
     /// </summary>
-    public static List<ScheduleListItem> DiscoverProfiles(SharedModuleSettingsStorage storage) {
+    public static List<ScheduleListItem> DiscoverProfiles(ModuleDocumentStorage storage) {
         var discovered = storage.DiscoverAsync(new SettingsDiscoveryOptions(
             Recursive: true,
             IncludeFragments: false,

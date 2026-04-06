@@ -22,19 +22,6 @@ public static class SettingsModulePolicyResolver {
         );
     }
 
-    public static IReadOnlyDictionary<string, SettingsStorageModuleOptions> CreateOptionsLookup(
-        IEnumerable<ISettingsModuleDescriptor> modules
-    ) {
-        if (modules == null)
-            throw new ArgumentNullException(nameof(modules));
-
-        var lookup = new Dictionary<string, SettingsStorageModuleOptions>(StringComparer.OrdinalIgnoreCase);
-        foreach (var module in modules)
-            lookup[module.ModuleKey] = module.StorageOptions;
-
-        return lookup;
-    }
-
     private static void IndexDirectiveRoots(
         Type type,
         HashSet<Type> visitedTypes,

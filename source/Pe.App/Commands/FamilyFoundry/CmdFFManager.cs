@@ -1,4 +1,4 @@
-﻿using Autodesk.Revit.Attributes;
+using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.FamilyFoundry;
 using Pe.FamilyFoundry.OperationGroups;
@@ -10,11 +10,10 @@ using Pe.Global;
 using Pe.Global.Revit.Lib;
 using Pe.Global.Revit.Ui;
 using Pe.Global.Utils.Files;
-using Pe.SettingsCatalog.Revit;
-using Pe.SettingsCatalog.Revit.FamilyFoundry;
-using Pe.StorageRuntime.Revit;
-using Pe.StorageRuntime.Revit.Core;
-using Pe.StorageRuntime.Revit.Modules;
+using Pe.SettingsCatalog;
+using Pe.SettingsCatalog.Manifests.FamilyFoundry;
+using Pe.StorageRuntime;
+using Pe.StorageRuntime.Modules;
 using Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 using Serilog.Events;
 using System.Diagnostics;
@@ -26,7 +25,7 @@ namespace Pe.Tools.Commands.FamilyFoundry;
 public class CmdFFManager : IExternalCommand {
     public const string AddinKey = nameof(CmdFFManager);
     public const string DisplayName = "FF Manager";
-    private static readonly CatalogSettingsModule<ProfileFamilyManager> SettingsModule = KnownSettingsRevitModules.FFManager;
+    private static readonly SettingsModuleManifest<ProfileFamilyManager> SettingsModule = ProfileFamilyManagerSettingsManifest.Module;
 
     public Result Execute(
         ExternalCommandData commandData,
@@ -60,7 +59,7 @@ public class CmdFFManager : IExternalCommand {
         }
 
         // Load profile fresh for execution
-        var profile = ctx.SharedStorage.ReadRequired<ProfileFamilyManager>(ctx.SelectedProfile.TextPrimary);
+        var profile = ctx.Settings.ReadRequired(ctx.SelectedProfile.TextPrimary);
 
         // Get raw APS parameter models and convert with fresh TempSharedParamFile
         var apsParamModels = profile.GetFilteredApsParamModels();
@@ -75,7 +74,7 @@ public class CmdFFManager : IExternalCommand {
             profile,
             ctx.SelectedProfile.TextPrimary,
             ctx.OnFinishSettings,
-            ctx.Storage.OutputDir().DirectoryPath);
+            ctx.Storage.Output().DirectoryPath);
 
         if (!processResult.Success) {
             throw new InvalidOperationException(processResult.Error ?? "FF Manager processing failed.");
@@ -108,7 +107,7 @@ public class CmdFFManager : IExternalCommand {
                 null);
         }
 
-        OutputManager? runOutput = null;
+        OutputStorage? runOutput = null;
 
         try {
             var apsParamModels = profile.GetFilteredApsParamModels();
@@ -133,7 +132,7 @@ public class CmdFFManager : IExternalCommand {
                 .Add(new ExtrusionSectionCollector());
 
             if (!string.IsNullOrWhiteSpace(outputFolderPath))
-                runOutput = OutputManager.ExactDir(outputFolderPath);
+                runOutput = OutputStorage.ExactDir(outputFolderPath);
 
             using var processor = new OperationProcessor(doc, executionOptions);
             var logs = processor
@@ -240,7 +239,8 @@ public class CmdFFManager : IExternalCommand {
             .Add(new AddFamilyParams(knownParamPlan.ResolvedFamilyParams))
             .Add(new SetKnownParams(valueFirstAssignments, knownParamPlan.Catalog, true))
             .Add(new EmitParamDrivenSolidsDiagnostics(new EmitParamDrivenSolidsDiagnosticsSettings {
-                Enabled = compilerMessages.Count > 0, Messages = compilerMessages
+                Enabled = compilerMessages.Count > 0,
+                Messages = compilerMessages
             }))
             .Add(new MakeParamDrivenPlanesAndDims(compiledSolids.RefPlanesAndDims))
             .Add(new SetKnownParams(formulaOnlyAssignments, knownParamPlan.Catalog))

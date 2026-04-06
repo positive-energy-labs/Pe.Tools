@@ -9,11 +9,13 @@ using Pe.FamilyFoundry.Resolution;
 using Pe.FamilyFoundry.Serialization;
 using Pe.FamilyFoundry.Snapshots;
 using Pe.Global.Revit.Ui;
-using Pe.SettingsCatalog.Revit.FamilyFoundry;
+using Pe.SettingsCatalog.Manifests.FamilyFoundry;
+using Pe.StorageRuntime;
 using Pe.StorageRuntime.Revit;
 using Serilog.Events;
 using System.Diagnostics;
 using System.IO;
+using RuntimeStorageClient = Pe.StorageRuntime.StorageClient;
 
 namespace Pe.Tools.Commands.FamilyFoundry;
 
@@ -33,7 +35,7 @@ public class CmdFFManagerSnapshot : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var storage = new StorageClient(CmdFFManager.AddinKey);
+            var storage = RuntimeStorageClient.Default.Module(CmdFFManager.AddinKey);
 
             var snapshot = CollectFamilySnapshot(doc);
             if (snapshot == null) {
@@ -44,7 +46,7 @@ public class CmdFFManagerSnapshot : IExternalCommand {
             }
 
             var profile = ConvertSnapshotToProfile(doc, snapshot);
-            var outputDir = storage.OutputDir().TimestampedSubDir();
+            var outputDir = storage.Output().TimestampedSubDir();
             var profileName = $"{snapshot.FamilyName}-snapshot.json";
             var outputPath = outputDir.Json(profileName).Write(profile);
             var replayFamilyPath = CreateReplayFamily(uiApp, doc, snapshot, profile, outputDir.DirectoryPath);

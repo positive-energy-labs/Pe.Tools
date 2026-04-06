@@ -2,7 +2,7 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Pe.Global.Services.AutoTag;
-using Pe.SettingsCatalog.Revit.AutoTag;
+using Pe.SettingsCatalog.Manifests.AutoTag;
 using Pe.StorageRuntime.Capabilities;
 using Pe.StorageRuntime.Json;
 using Pe.StorageRuntime.Json.SchemaProviders;
@@ -474,7 +474,7 @@ public class CmdAutoTag : IExternalCommand {
         // Generate schema with examples
         var schema = RevitJsonSchemaFactory.BuildAuthoringSchema(
             typeof(AutoTagSettings),
-            SettingsRuntimeCapabilityProfiles.LiveDocument
+            SettingsRuntimeMode.LiveDocument
         );
 
         // Serialize with $schema reference
