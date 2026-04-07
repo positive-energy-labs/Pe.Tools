@@ -5,7 +5,8 @@ namespace Pe.Revit.FamilyFoundry.LookupTables;
 
 internal static class LookupTableCsvCodec {
     public static string Encode(LookupTableDefinition table) {
-        ArgumentNullException.ThrowIfNull(table);
+        if (table == null)
+            throw new ArgumentNullException(nameof(table));
 
         LookupTableValidator.Validate(table);
 
@@ -28,8 +29,10 @@ internal static class LookupTableCsvCodec {
         string csvContent,
         int inferredLookupKeyCount = 0
     ) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
-        ArgumentNullException.ThrowIfNull(csvContent);
+        if (string.IsNullOrWhiteSpace(tableName))
+            throw new ArgumentException("Lookup table name is required.", nameof(tableName));
+        if (csvContent == null)
+            throw new ArgumentNullException(nameof(csvContent));
 
         var rows = ReadCsvRows(csvContent);
         if (rows.Count == 0)
@@ -39,7 +42,7 @@ internal static class LookupTableCsvCodec {
         if (headers.Count == 0)
             throw new InvalidOperationException($"Lookup table '{tableName}' CSV header row is empty.");
 
-        var normalizedLookupKeyCount = Math.Clamp(inferredLookupKeyCount, 0, Math.Max(0, headers.Count - 1));
+        var normalizedLookupKeyCount = BclExtensions.Clamp(inferredLookupKeyCount, 0, Math.Max(0, headers.Count - 1));
         var columns = headers
             .Skip(1)
             .Select((header, index) => DecodeHeader(
@@ -62,7 +65,7 @@ internal static class LookupTableCsvCodec {
     }
 
     private static LookupTableColumn DecodeHeader(string header, LookupTableColumnRole role) {
-        var headerParts = (header ?? string.Empty).Split("##", StringSplitOptions.None);
+        var headerParts = (header ?? string.Empty).SplitAndTrim("##", StringSplitOptions.None);
         var name = headerParts.Length > 0 ? headerParts[0].Trim() : string.Empty;
         var typeToken = headerParts.Length > 1 ? headerParts[1].Trim() : null;
         var unitToken = headerParts.Length > 2

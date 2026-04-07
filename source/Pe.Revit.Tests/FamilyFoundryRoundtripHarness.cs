@@ -58,7 +58,7 @@ internal static class FamilyFoundryRoundtripHarness {
                 ?? throw new InvalidOperationException("Source family category was not available.");
             var replayDocument = RevitFamilyFixtureHarness.CreateFamilyDocument(
                 application,
-                (BuiltInCategory)sourceCategory.Id.IntegerValue,
+                (BuiltInCategory)sourceCategory.Id.Value(),
                 replayFamilyName);
 
             try {

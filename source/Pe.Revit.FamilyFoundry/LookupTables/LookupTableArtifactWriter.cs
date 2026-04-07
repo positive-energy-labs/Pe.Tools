@@ -8,8 +8,10 @@ public static class LookupTableArtifactWriter {
         string rootDirectoryPath,
         string subdirectoryName
     ) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(rootDirectoryPath);
-        ArgumentException.ThrowIfNullOrWhiteSpace(subdirectoryName);
+        if (string.IsNullOrWhiteSpace(rootDirectoryPath))
+            throw new ArgumentException("Root directory path is required.", nameof(rootDirectoryPath));
+        if (string.IsNullOrWhiteSpace(subdirectoryName))
+            throw new ArgumentException("Subdirectory name is required.", nameof(subdirectoryName));
         if (tables == null)
             return;
 

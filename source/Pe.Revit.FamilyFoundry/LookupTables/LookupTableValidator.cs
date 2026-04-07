@@ -4,7 +4,8 @@ namespace Pe.Revit.FamilyFoundry.LookupTables;
 
 internal static class LookupTableValidator {
     public static void Validate(SetLookupTablesSettings settings) {
-        ArgumentNullException.ThrowIfNull(settings);
+        if (settings == null)
+            throw new ArgumentNullException(nameof(settings));
 
         var duplicateNames = settings.Tables
             .Select(table => table.Schema.Name?.Trim())
@@ -24,7 +25,8 @@ internal static class LookupTableValidator {
     }
 
     public static void Validate(LookupTableDefinition table) {
-        ArgumentNullException.ThrowIfNull(table);
+        if (table == null)
+            throw new ArgumentNullException(nameof(table));
 
         var schema = table.Schema ?? throw new InvalidOperationException("Lookup table is missing a schema.");
         var tableName = schema.Name?.Trim();

@@ -891,7 +891,7 @@ internal static class FamilyFoundryRoundtripAssertions {
             .Cast<Extrusion>()
             .Select(extrusion => {
                 var box = extrusion.get_BoundingBox(null)
-                    ?? throw new InvalidOperationException($"Extrusion '{extrusion.Id.IntegerValue}' had no bounding box.");
+                    ?? throw new InvalidOperationException($"Extrusion '{extrusion.Id.Value()}' had no bounding box.");
                 return new ExtrusionVerticalSpan(
                     extrusion.IsSolid,
                     box.Min.Z,
@@ -920,7 +920,7 @@ internal static class FamilyFoundryRoundtripAssertions {
             .Cast<ConnectorElement>()
             .Single(entry => entry.Shape == ConnectorProfileType.Rectangular);
         var coordinateSystem = connector.CoordinateSystem
-            ?? throw new InvalidOperationException($"Rectangular connector '{connector.Id.IntegerValue}' had no coordinate system.");
+            ?? throw new InvalidOperationException($"Rectangular connector '{connector.Id.Value()}' had no coordinate system.");
         return new RectangularConnectorOrientationMeasurement(
             FamilyFoundryRuntimeProbe.NormalizeOrThrow(coordinateSystem.BasisX, "connector width axis"),
             FamilyFoundryRuntimeProbe.NormalizeOrThrow(coordinateSystem.BasisY, "connector length axis"),

@@ -35,7 +35,8 @@ public static class BclExtensions {
         return string.IsNullOrEmpty(relativePath) ? "." : relativePath;
     }
 
-    public static bool TryAdd<TKey, TValue>(this Dictionary<TKey, TValue> dictionary, TKey key, TValue value) {
+    public static bool TryAdd<TKey, TValue>(this Dictionary<TKey, TValue> dictionary, TKey key, TValue value)
+        where TKey : notnull {
 #if NET48
         if (dictionary.ContainsKey(key))
             return false;
@@ -47,7 +48,8 @@ public static class BclExtensions {
 #endif
     }
 
-    public static TValue? GetValueOrDefault<TKey, TValue>(this Dictionary<TKey, TValue> dictionary, TKey key) =>
+    public static TValue? GetValueOrDefault<TKey, TValue>(this Dictionary<TKey, TValue> dictionary, TKey key)
+        where TKey : notnull =>
         dictionary.TryGetValue(key, out var value) ? value : default;
 
     public static void Deconstruct<TKey, TValue>(this KeyValuePair<TKey, TValue> kvp, out TKey key, out TValue value) {

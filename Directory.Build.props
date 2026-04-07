@@ -16,6 +16,15 @@
         Condition="'$(MSBuildProjectName)' != 'Build' and '$(MSBuildProjectName)' != 'Installer'"
     >
         <Configuration Condition="'$(Configuration)' == ''">Debug.R25</Configuration>
+        <_RevitConfigurationVersion
+            Condition="'$(RevitVersion)' == '' Or '$(RevitVersion)' == '-1'"
+        >$([System.Text.RegularExpressions.Regex]::Match('$(Configuration)', '.*\.R(\d{2}|\d{4})(?:\.|$)').Groups[1].Value)</_RevitConfigurationVersion>
+        <RevitVersion
+            Condition="('$(RevitVersion)' == '' Or '$(RevitVersion)' == '-1') and '$(_RevitConfigurationVersion.Length)' == '4'"
+        >$(_RevitConfigurationVersion)</RevitVersion>
+        <RevitVersion
+            Condition="('$(RevitVersion)' == '' Or '$(RevitVersion)' == '-1') and '$(_RevitConfigurationVersion.Length)' == '2'"
+        >20$(_RevitConfigurationVersion)</RevitVersion>
         <_IsNoRevitConfig
             Condition="'$(RevitVersion)' == '' Or '$(RevitVersion)' == '-1'"
         >true</_IsNoRevitConfig>

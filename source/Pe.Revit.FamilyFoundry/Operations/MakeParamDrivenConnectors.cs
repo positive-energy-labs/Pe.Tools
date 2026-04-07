@@ -110,7 +110,7 @@ public sealed class MakeParamDrivenConnectors(MakeParamDrivenConnectorsSettings 
                 return false;
             }
 
-            var parts = sourceSpec.HostFacePlaneName.Split('|', 4);
+            var parts = sourceSpec.HostFacePlaneName.Split(new[] { '|' }, 4);
             if (parts.Length != 4)
                 return false;
 
@@ -264,7 +264,7 @@ public sealed class MakeParamDrivenConnectors(MakeParamDrivenConnectorsSettings 
         var hasEncodedHostOffset = !string.IsNullOrWhiteSpace(spec.HostFacePlaneName) &&
                                    spec.HostFacePlaneName.StartsWith("__OFFSET__|", StringComparison.Ordinal);
         if (hasEncodedHostOffset) {
-            var parts = spec.HostFacePlaneName.Split('|', 4);
+            var parts = spec.HostFacePlaneName.Split(new[] { '|' }, 4);
             if (parts.Length != 4) {
                 logs.Add(new LogEntry(key).Error($"Connector host face payload '{spec.HostFacePlaneName}' is invalid."));
                 return null;
