@@ -13,6 +13,7 @@ This package is the shared backbone for settings authoring and validation. It sh
 - `Modules/SettingsModule.cs` and `Modules/SettingsModuleContracts.cs` — settings module contract surface.
 - `Modules/SettingsModuleRegistry.cs` — central registration and duplicate-key guard.
 - `Json/JsonSchemaFactory.cs` — authoring/editor/fragment schema generation pipeline.
+- `Core/Json/Converters/` — human-readable native Revit type conversion for authored/persisted JSON.
 - `Json/SchemaDefinitions/` — explicit schema-definition augmentation model.
 - `Json/SchemaProviders/` — live/static field-options providers and option-context keys.
 - `Documents/LocalDiskSettingsStorageBackend.cs` — filesystem-backed document IO.
@@ -24,6 +25,7 @@ This package is the shared backbone for settings authoring and validation. It sh
 - Read the owning schema definition and binding registry before adding new metadata; there is already a strong explicit pattern here.
 - Verify whether a change is structural, semantic, or live-document before choosing where to implement it.
 - Keep schema/provider wiring testable through generated schema output when possible, not only through UI behavior.
+- If a native Revit type crosses an authoring/persistence boundary, verify both the JSON converter path and the schema metadata path so the value stays human-readable in files, examples, and options.
 
 ## Shared Language
 
@@ -33,6 +35,7 @@ This package is the shared backbone for settings authoring and validation. It sh
 | **schema definition** | Explicit per-type augmentation registered in `SettingsSchemaDefinitionRegistry` | Avoid describing this as generic attribute reflection |
 | **field options** | Runtime option metadata/items for a specific property | Avoid using `examples` and field options interchangeably |
 | **dataset** | Shared option source identified by dataset/projection metadata | Avoid inventing new per-module provider concepts when dataset wiring fits |
+| **projection** | The named target shape exposed from a dataset or other derived-output flow | Prefer this for option/output shape names instead of vague `view` or `data` wording |
 | **option context** | Sibling/context keys passed to field option resolution | Avoid ad hoc magic strings outside `OptionContextKeys` |
 
 ## Living Memory
@@ -43,3 +46,5 @@ This package is the shared backbone for settings authoring and validation. It sh
 - `SettingsModuleRegistry` is intentionally idempotent only when the module key maps to the same settings type. Reusing a key for a different contract should fail fast.
 - Host structural schemas and live-document field options are different concerns. Keep those seams obvious.
 - When wiring autocomplete/LSP behavior, prefer dataset/projection metadata or existing providers before inventing a new provider.
+- Native Revit types are allowed in specs and snapshots when they help correctness, but they must round-trip through human-readable converters or schema metadata/options/examples so authors never have to work with opaque raw values.
+- The current first-class readability seam is `BuiltInCategoryConverter`, `GroupTypeConverter`, `SpecTypeConverter`, `SchemaDefinitionProcessor`, `SchemaMetadataWriter`, and `JsonTypeSchemaBindingRegistry`; extend that seam before introducing synthetic stand-in types.

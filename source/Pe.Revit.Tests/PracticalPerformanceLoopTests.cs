@@ -195,17 +195,17 @@ public sealed class PracticalPerformanceLoopTests {
                         },
                         0));
 
-                var allStates = RevitFamilyFixtureHarness.CaptureParameterStates(
+                var allSnapshots = RevitFamilyFixtureHarness.CaptureParameterSnapshots(
                     familyDocument,
                     "NominalLength",
                     familyTypes);
-                Assert.That(allStates, Has.Count.EqualTo(familyTypes.Length));
-                Assert.That(allStates.All(state => state.HasValue), Is.True);
+                Assert.That(allSnapshots, Has.Count.EqualTo(familyTypes.Length));
+                Assert.That(allSnapshots.All(snapshot => snapshot.HasValue), Is.True);
 
                 return new ParameterAssignmentBenchmarkResult(
                     fastGlobal,
                     perTypeDirect,
-                    allStates);
+                    allSnapshots);
             });
 
         Assert.That(summary.Iterations, Has.Count.EqualTo(DefaultIterations));
@@ -346,12 +346,12 @@ internal sealed record MigratorStyleBenchmarkResult(
 internal sealed record ParameterAssignmentBenchmarkResult(
     ParameterAssignmentHarness.AssignmentBenchmarkResult GlobalValueFastPath,
     ParameterAssignmentHarness.AssignmentBenchmarkResult PerTypeCoercionPath,
-    IReadOnlyList<RevitFamilyFixtureHarness.ParameterValueState> NominalLengthStates
+    IReadOnlyList<RevitFamilyFixtureHarness.ParameterValueSnapshot> NominalLengthSnapshots
 ) {
     public static string FormatSummary(BenchmarkLoopResult<ParameterAssignmentBenchmarkResult> summary) {
         var globalAvg = summary.Iterations.Average(iteration => iteration.Result.GlobalValueFastPath.IterationActionMs);
         var perTypeAvg = summary.Iterations.Average(iteration => iteration.Result.PerTypeCoercionPath.IterationActionMs);
-        var typeCount = summary.Iterations.First().Result.NominalLengthStates.Count;
+        var typeCount = summary.Iterations.First().Result.NominalLengthSnapshots.Count;
         return $"[{summary.Name}] ParameterAssignment Summary: Iterations={summary.Iterations.Count}, TypeCount={typeCount}, AvgGlobalMs={globalAvg:F1}, AvgPerTypeMs={perTypeAvg:F1}";
     }
 }

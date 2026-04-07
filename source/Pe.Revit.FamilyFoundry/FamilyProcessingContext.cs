@@ -1,4 +1,4 @@
-using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+﻿using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
 
 namespace Pe.Revit.FamilyFoundry;
 
@@ -89,8 +89,8 @@ public class FamilyProcessingContext {
     public object? Tag { get; internal set; }
 
 
-    /// <summary>Finds a parameter in the pre-process snapshot by name.</summary>
-    public ParamSnapshot FindParam(string paramName) {
+    /// <summary>Finds a parameter snapshot in the pre-process snapshot by name.</summary>
+    public ParameterSnapshot FindParameterSnapshot(string paramName) {
         var parameters = this.PreProcessSnapshot?.Parameters?.Data;
         if (parameters is null || parameters.Count == 0)
             return null;
@@ -102,8 +102,8 @@ public class FamilyProcessingContext {
     }
 
     /// <summary>Gets the list of family types that have a value for the specified parameter.</summary>
-    public List<string> GetTypesWithValue(string paramName) => this.FindParam(paramName).GetTypesWithValue();
+    public List<string> GetTypesWithValue(string paramName) => this.FindParameterSnapshot(paramName).GetTypesWithValue();
 
     /// <summary>Checks if a parameter has a (non-empty) value for all family types.</summary>
-    public bool HasValueForAllTypes(string paramName) => this.FindParam(paramName).HasValueForAllTypes();
+    public bool HasValueForAllTypes(string paramName) => this.FindParameterSnapshot(paramName).HasValueForAllTypes();
 }

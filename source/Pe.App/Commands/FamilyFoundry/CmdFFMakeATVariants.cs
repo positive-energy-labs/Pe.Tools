@@ -41,7 +41,8 @@ public class CmdFFMakeATVariants : IExternalCommand {
 
             // Request parameter snapshots
             var collectorQueue = new CollectorQueue()
-                .Add(new ParamSectionCollector());
+                .Add(new ParamSectionCollector())
+                .Add(new LookupTableSectionCollector());
 
             var processor = new OperationProcessor(doc, new ExecutionOptions());
             var outputs = processor.ProcessFamilyDocumentIntoVariants(variants, collectorQueue, outputFolderPath);

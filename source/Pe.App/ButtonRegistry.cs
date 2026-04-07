@@ -1,4 +1,4 @@
-using Autodesk.Revit.UI;
+﻿using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette;
 using Pe.Tools.Commands;
 using Pe.Tools.Commands.AutoTag;
@@ -37,12 +37,12 @@ public sealed class ButtonRegistry {
             ToolTip = "Manage families in a variety of ways from the Family Foundry.",
             Container = new ButtonContainer.Panel("Migration")
         }),
-        Register<CmdFFManagerSnapshot>(new ButtonRegistration<CmdFFManagerSnapshot> {
-            Text = "FF Manager Serializer",
+        Register<CmdFFManagerProjectSnapshot>(new ButtonRegistration<CmdFFManagerProjectSnapshot> {
+            Text = "FF Snapshot Projector",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip =
-                "Running this will output a JSON file with a config the represents the reference planes, dimensions, and family parameters of the currently open family",
+                "Capture the current family state, project it to an FF profile, and optionally apply that projected profile to a fresh family document.",
             Container = new ButtonContainer.Panel("Migration")
         }),
         Register<CmdFFMigrator>(new ButtonRegistration<CmdFFMigrator> {

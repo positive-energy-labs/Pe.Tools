@@ -43,7 +43,7 @@ internal static class FamilyFoundryRoundtripHarness {
         }
     }
 
-    public static RoundtripArtifact RunSnapshotReplayRoundtrip(
+    public static RoundtripArtifact RunSnapshotApplyRoundtrip(
         Autodesk.Revit.ApplicationServices.Application application,
         string familyFixtureFileName,
         string replayFamilyName,
@@ -53,7 +53,7 @@ internal static class FamilyFoundryRoundtripHarness {
         try {
             var sourceSnapshot = CollectFamilySnapshot(sourceDocument);
             var authored = sourceSnapshot.ParamDrivenSolids ?? new AuthoredParamDrivenSolidsSettings();
-            var profile = CreateSnapshotReplayProfile(authored, sourceSnapshot.Parameters?.Data ?? []);
+            var profile = ProjectToProfile(sourceSnapshot);
             var sourceCategory = sourceDocument.OwnerFamily?.FamilyCategory
                 ?? throw new InvalidOperationException("Source family category was not available.");
             var replayDocument = RevitFamilyFixtureHarness.CreateFamilyDocument(
@@ -103,6 +103,10 @@ internal static class FamilyFoundryRoundtripHarness {
         if (((IFamilyDocCollector)paramCollector).ShouldCollect(snapshot))
             ((IFamilyDocCollector)paramCollector).Collect(snapshot, famDoc);
 
+        var lookupCollector = new LookupTableSectionCollector();
+        if (lookupCollector.ShouldCollect(snapshot))
+            lookupCollector.Collect(snapshot, famDoc);
+
         var refPlaneCollector = new RefPlaneSectionCollector();
         if (refPlaneCollector.ShouldCollect(snapshot))
             refPlaneCollector.Collect(snapshot, famDoc);
@@ -114,18 +118,17 @@ internal static class FamilyFoundryRoundtripHarness {
         return snapshot;
     }
 
-    public static FFManagerSettings CreateSnapshotReplayProfile(
-        AuthoredParamDrivenSolidsSettings authored,
-        IReadOnlyList<ParamSnapshot> paramSnapshots
-    ) {
-        var exportedParams = FamilyParamProfileAdapter.CreateFromSnapshots(paramSnapshots);
+    public static FFManagerSettings ProjectToProfile(FamilySnapshot snapshot) {
+        var authored = snapshot.ParamDrivenSolids ?? new AuthoredParamDrivenSolidsSettings();
+        var parameterSnapshots = snapshot.Parameters?.Data ?? [];
+        var exportedParams = FamilyParamProfileAdapter.ProjectSnapshotsToProfile(parameterSnapshots);
         var compiledSolids = AuthoredParamDrivenSolidsCompiler.Compile(authored);
         var additionalReferences = KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.RefPlanesAndDims)
             .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.InternalExtrusions))
             .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.Connectors))
             .ToList();
         var referencedSnapshotDefinitions = KnownParamPlanBuilder.BuildFamilyDefinitionsFromSnapshots(
-            paramSnapshots,
+            parameterSnapshots,
             additionalReferences);
         var resolvedFamilyParams = KnownParamPlanBuilder.MergeFamilyParamDefinitions(
             exportedParams.AddFamilyParams,
@@ -150,10 +153,26 @@ internal static class FamilyFoundryRoundtripHarness {
                 ExcludeNames = new ExcludeSharedParameter()
             },
             AddFamilyParams = resolvedFamilyParams,
+            SetLookupTables = new SetLookupTablesSettings {
+                Tables = snapshot.LookupTables?.Data?.Select(CloneLookupTable).ToList() ?? []
+            },
             SetKnownParams = exportedParams.SetKnownParams,
             ParamDrivenSolids = authored
         };
     }
+
+    private static LookupTableDefinition CloneLookupTable(LookupTableDefinition table) => new() {
+        Schema = table.Schema with {
+            Columns = table.Schema.Columns
+                .Select(column => column with { })
+                .ToList()
+        },
+        Rows = table.Rows
+            .Select(row => row with {
+                ValuesByColumn = new Dictionary<string, string>(row.ValuesByColumn, StringComparer.Ordinal)
+            })
+            .ToList()
+    };
 
     public static IReadOnlyList<(string TypeName, TProbe Result)> EvaluateRoundtripStates<TProbe>(
         Document familyDocument,

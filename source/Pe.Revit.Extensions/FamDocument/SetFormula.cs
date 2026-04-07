@@ -1,49 +1,23 @@
-using Pe.Revit.Extensions.FamParameter;
+﻿using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Extensions.FamParameter.Formula;
 using System.Diagnostics;
+using System.Globalization;
+using System.Text;
 
 namespace Pe.Revit.Extensions.FamDocument;
 
 public static class Formula {
-    /// <summary>
-    ///     Datatypes for which formulas cannot be assigned
-    /// </summary>
-    /// <remarks> Must be a getter, when it is a simple statically initialized property it errors with NullReferences</remarks>
     private static readonly HashSet<ForgeTypeId> _forbiddenDataTypes = [
         SpecTypeId.String.Url,
         SpecTypeId.Reference.LoadClassification,
         SpecTypeId.String.MultilineText
     ];
 
-
-    /// <summary>
-    ///     Unset a formula on a family parameter. The same as calling
-    ///     <see cref="TrySetFormula(FamilyDocument, FamilyParameter, string, out string)" /> with null or empty formula.
-    /// </summary>
-    /// <returns>
-    ///     True if the formula was set successfully. On error, no message is returned nor any exception thrown, only
-    ///     false is returned.
-    /// </returns>
-    /// <exception cref="Autodesk.Revit.Exceptions.InvalidOperationException">
-    ///     Thrown when a type parameter formula references
-    ///     instance parameters
-    /// </exception>
     public static bool UnsetFormula(this FamilyDocument famDoc, FamilyParameter targetParam) {
         var success = famDoc.TrySetFormulaFast(targetParam, null, out _);
         return success;
     }
 
-    /// <summary>
-    ///     Set a formula on a family parameter, validating that type parameter formulas
-    ///     only reference other type parameters. Instance parameter formulas can reference
-    ///     both instance and type parameters.
-    /// </summary>
-    /// <returns>True if the formula was set successfully</returns>
-    /// <exception cref="Autodesk.Revit.Exceptions.InvalidOperationException">
-    ///     Thrown when a type parameter formula references instance parameters,
-    ///     there is no valid family type, the parameter cannot be assigned a formula, or the operation make a circular chain
-    ///     of references among the formulas.
-    /// </exception>
     public static bool TrySetFormula(
         this FamilyDocument famDoc,
         FamilyParameter targetParam,
@@ -57,16 +31,21 @@ public static class Formula {
                 return famDoc.TrySetFormulaFast(targetParam, null, out errorMessage);
 
             var parameters = famDoc.FamilyManager.Parameters;
+            var lookupContext = TryParseSizeLookupFormula(formula);
+            var formulaForReferenceValidation = lookupContext?.FormulaForReferenceValidation ?? formula;
 
-            // Check for tokens that look like invalid parameter references
-            // (tokens that don't start with a digit and aren't known parameters or functions)
-            var invalidParams = parameters.GetInvalidReferences(formula).ToList();
+            if (TryValidateSizeLookupFormula(famDoc, targetParam, formula, lookupContext, out errorMessage))
+                return false;
+
+            var invalidParams = parameters.GetInvalidReferences(formulaForReferenceValidation).ToList();
+            var invalidUnitSuffixes = invalidParams.Where(FormulaUtils.LooksLikeUnitSuffix).ToList();
+            if (lookupContext != null && invalidParams.Count == invalidUnitSuffixes.Count)
+                invalidParams.Clear();
+
             if (invalidParams.Count != 0) {
-                // Check if any invalid tokens look like unit suffixes (short, all letters)
                 var likelyUnitSuffixes = invalidParams.Where(FormulaUtils.LooksLikeUnitSuffix).ToList();
 
                 if (likelyUnitSuffixes.Count > 0) {
-                    // Try to parse as a value - if it works, this is a value masquerading as a formula
                     var dataType = targetParam.Definition.GetDataType();
                     var isParsableAsValue = UnitUtils.IsMeasurableSpec(dataType)
                                             && UnitFormatUtils.TryParse(famDoc.GetUnits(), dataType, formula, out _);
@@ -77,14 +56,12 @@ public static class Formula {
                                        $"Revit formulas don't support unit suffixes like {string.Join(", ", likelyUnitSuffixes.Select(s => $"'{s}'"))}. " +
                                        $"Consider using SetAsFormula: false to set this as a value instead.";
                     } else {
-                        // Looks like unit suffixes but doesn't parse - could be typos or unsupported units
                         errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. " +
                                        $"Found tokens that look like unit suffixes: {string.Join(", ", likelyUnitSuffixes.Select(s => $"'{s}'"))}. " +
                                        $"If this is intended as a literal value, use SetAsFormula: false. " +
                                        $"If it's a formula, these may be misspelled parameter names.";
                     }
                 } else {
-                    // Tokens don't look like unit suffixes - likely missing parameters
                     errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. " +
                                    $"Formula references non-existent parameters: {string.Join(", ", invalidParams.Select(p => $"'{p}'"))}";
                 }
@@ -92,9 +69,8 @@ public static class Formula {
                 return false;
             }
 
-            // Type parameters can only reference other type parameters
             if (!targetParam.IsInstance) {
-                var referencedParams = parameters.GetReferencedIn(formula);
+                var referencedParams = parameters.GetReferencedIn(formulaForReferenceValidation);
                 var instanceParams = referencedParams.Where(p => p.IsInstance).ToList();
 
                 if (instanceParams.Count > 0) {
@@ -105,15 +81,10 @@ public static class Formula {
                 }
             }
 
-            // Collect suspicious tokens before attempting to set the formula.
-            // These are tokens starting with digits that aren't pure numbers or known parameters.
-            // They're likely numeric literals with unit suffixes (e.g., "0'", "12 in"), but could
-            // theoretically be unconventional parameter names. We use these for diagnostics if Revit fails.
-            var suspiciousTokens = parameters.GetSuspiciousTokens(formula).ToList();
+            var suspiciousTokens = parameters.GetSuspiciousTokens(formulaForReferenceValidation).ToList();
 
             var success = famDoc.TrySetFormulaFast(targetParam, formula, out var fastErrorMessage);
             if (!success) {
-                // Provide enhanced error message based on whether suspicious tokens were detected
                 errorMessage = suspiciousTokens.Count > 0
                     ? $"Cannot set formula on parameter '{targetParam.Name()}'. " +
                       $"Revit rejected the formula. Found tokens that may be numeric literals with unrecognized unit formats " +
@@ -131,15 +102,6 @@ public static class Formula {
         }
     }
 
-    /// <summary>
-    ///     Set a formula on a family parameter using the formula of another parameter.
-    /// </summary>
-    /// <exception cref="Autodesk.Revit.Exceptions.InvalidOperationException">
-    ///     Thrown when a type parameter formula references instance parameters,
-    ///     there is no valid family type, the parameter cannot be assigned a formula, or the operation make a circular chain
-    ///     of references among the formulas.
-    /// </exception>
-    /// <returns>True if the formula was set successfully</returns>
     public static bool TrySetFormula(this FamilyDocument famDoc,
         FamilyParameter targetParam,
         FamilyParameter sourceParam,
@@ -161,23 +123,6 @@ public static class Formula {
         return famDoc.TrySetFormula(targetParam, sourceParam.Formula, out errorMessage);
     }
 
-    /// <summary>
-    ///     Set a formula on a family parameter without validation.
-    ///     Use this for batch operations where you trust the input and need performance.
-    ///     Revit will still throw if there's a cycle, but the error will be less descriptive.
-    ///     Thiswill check if the target datatype is settable
-    /// </summary>
-    /// <remarks>
-    ///     <para>
-    ///         <b>When to use:</b> Migrations, imports, or batch operations with known-good formulas.
-    ///     </para>
-    ///     <para>
-    ///         <b>When NOT to use:</b> User-entered formulas, untrusted input, or when you need helpful error messages.
-    ///     </para>
-    /// </remarks>
-    /// <exception cref="Autodesk.Revit.Exceptions.InvalidOperationException">
-    ///     Thrown by Revit if the formula is invalid (cryptic message).
-    /// </exception>
     public static bool TrySetFormulaFast(
         this FamilyDocument famDoc,
         FamilyParameter targetParam,
@@ -200,4 +145,155 @@ public static class Formula {
             return false;
         }
     }
+
+    private static bool TryValidateSizeLookupFormula(
+        FamilyDocument famDoc,
+        FamilyParameter targetParam,
+        string formula,
+        SizeLookupFormulaContext? lookupContext,
+        out string? errorMessage
+    ) {
+        errorMessage = null;
+
+        if (lookupContext == null)
+            return false;
+
+        if (!lookupContext.ParsedSuccessfully) {
+            errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup could not be parsed safely for validation.";
+            return true;
+        }
+
+        if (lookupContext.Arguments.Count < 4) {
+            errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup requires at least 4 arguments: table name, return column, default value, and at least one lookup key.";
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(lookupContext.Arguments[0])) {
+            errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup table-name argument is blank.";
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(lookupContext.Arguments[1])) {
+            errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup return-column argument is blank.";
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(lookupContext.Arguments[2])) {
+            errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup default-value argument is blank.";
+            return true;
+        }
+
+        if (lookupContext.Arguments.Skip(3).Any(string.IsNullOrWhiteSpace)) {
+            errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup contains a blank lookup-key argument.";
+            return true;
+        }
+
+        var dataType = targetParam.Definition.GetDataType();
+        var fallback = lookupContext.Arguments[2];
+        if (UnitUtils.IsMeasurableSpec(dataType)
+            && LooksLikePlainNumberLiteral(fallback)
+            && !UnitFormatUtils.TryParse(famDoc.GetUnits(), dataType, fallback, out _)) {
+            errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup default '{fallback}' is a plain numeric literal, but measurable parameters usually need a unit-typed fallback compatible with '{dataType.TypeId}'. Example patterns from real families are values like '2.38\"' or '0 GPM'.";
+            return true;
+        }
+
+        return false;
+    }
+
+    private static SizeLookupFormulaContext? TryParseSizeLookupFormula(string formula) {
+        var sizeLookupIndex = formula.IndexOf("size_lookup", StringComparison.OrdinalIgnoreCase);
+        if (sizeLookupIndex < 0)
+            return null;
+
+        var openParenIndex = formula.IndexOf('(', sizeLookupIndex);
+        if (openParenIndex < 0)
+            return new SizeLookupFormulaContext([], formula, false);
+
+        if (!TryFindMatchingParen(formula, openParenIndex, out var closeParenIndex))
+            return new SizeLookupFormulaContext([], formula, false);
+
+        var argsText = formula.Substring(openParenIndex + 1, closeParenIndex - openParenIndex - 1);
+        var args = SplitFormulaArguments(argsText);
+        if (args.Count < 3)
+            return new SizeLookupFormulaContext(args, formula, false);
+
+        const string sanitizedTableName = "\"__size_lookup_table__\"";
+        const string sanitizedReturnColumn = "\"__size_lookup_column__\"";
+        const string sanitizedDefault = "0";
+        var rebuiltArgs = args.Select((arg, index) => index switch {
+            0 => sanitizedTableName,
+            1 => sanitizedReturnColumn,
+            2 => sanitizedDefault,
+            _ => arg
+        }).ToArray();
+        var maskedFormula = string.Concat(
+            formula[..(openParenIndex + 1)],
+            string.Join(", ", rebuiltArgs),
+            formula[closeParenIndex..]);
+
+        return new SizeLookupFormulaContext(args, maskedFormula, true);
+    }
+
+    private static bool TryFindMatchingParen(string formula, int openParenIndex, out int closeParenIndex) {
+        var depth = 0;
+        var inString = false;
+        for (var i = openParenIndex; i < formula.Length; i++) {
+            var c = formula[i];
+            if (c == '"')
+                inString = !inString;
+
+            if (inString)
+                continue;
+
+            if (c == '(')
+                depth++;
+            else if (c == ')') {
+                depth--;
+                if (depth == 0) {
+                    closeParenIndex = i;
+                    return true;
+                }
+            }
+        }
+
+        closeParenIndex = -1;
+        return false;
+    }
+
+    private static List<string> SplitFormulaArguments(string argsText) {
+        var args = new List<string>();
+        var current = new StringBuilder();
+        var depth = 0;
+        var inString = false;
+
+        foreach (var c in argsText) {
+            if (c == '"')
+                inString = !inString;
+
+            if (!inString) {
+                if (c == '(')
+                    depth++;
+                else if (c == ')')
+                    depth--;
+                else if (c == ',' && depth == 0) {
+                    args.Add(current.ToString().Trim());
+                    current.Clear();
+                    continue;
+                }
+            }
+
+            current.Append(c);
+        }
+
+        args.Add(current.ToString().Trim());
+        return args;
+    }
+
+    private static bool LooksLikePlainNumberLiteral(string value) => double.TryParse(
+        value,
+        NumberStyles.Float,
+        CultureInfo.InvariantCulture,
+        out _);
+
+    private sealed record SizeLookupFormulaContext(IReadOnlyList<string> Arguments, string FormulaForReferenceValidation, bool ParsedSuccessfully);
 }

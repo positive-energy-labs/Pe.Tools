@@ -1,4 +1,5 @@
-using Pe.Revit.FamilyFoundry;
+﻿using Pe.Revit.FamilyFoundry;
+using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.FamilyFoundry.Snapshots;
 
 namespace Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
@@ -11,7 +12,10 @@ public class FamilySnapshot {
     public string FamilyName { get; init; }
 
     /// <summary>Parameter snapshots with source tracking</summary>
-    public SnapshotSection<ParamSnapshot> Parameters { get; set; }
+    public SnapshotSection<ParameterSnapshot> Parameters { get; set; }
+
+    /// <summary>Embedded family lookup tables captured as portable table definitions.</summary>
+    public SnapshotSection<LookupTableDefinition> LookupTables { get; set; }
 
     /// <summary>Reference plane and dimension specs with source tracking</summary>
     public RefPlaneSnapshot RefPlanesAndDims { get; set; }

@@ -1,4 +1,4 @@
-using Pe.Revit.Extensions.FamDocument.SetValue;
+﻿using Pe.Revit.Extensions.FamDocument.SetValue;
 using Pe.Revit.Extensions.FamManager;
 using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
 using Pe.Shared.StorageRuntime.Json;
@@ -59,7 +59,7 @@ public class MapParamsSettings : IOperationSettings {
         // 2. Group by value signature (all types, including empty)
         // 3. For each unique value set, take first by user priority
         var candidateSnapshots = currNames
-            .Select(processingContext.FindParam)
+            .Select(processingContext.FindParameterSnapshot)
             .Where(x => x != null)
             .Where(x => x.GetTypesWithValue().Count > 0);
 
@@ -91,7 +91,7 @@ public class MapParamsSettings : IOperationSettings {
         ];
     }
 
-    private static string GetValueSignature(ParamSnapshot snapshot) {
+    private static string GetValueSignature(ParameterSnapshot snapshot) {
         if (!string.IsNullOrWhiteSpace(snapshot.Formula)) return $"FORMULA:{snapshot.Formula}";
 
         var sortedValues = snapshot.ValuesPerType

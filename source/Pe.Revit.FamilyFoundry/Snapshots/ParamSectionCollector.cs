@@ -55,7 +55,7 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
         var familyParamLookup = fm.GetParameters()
             .ToDictionary(p => GetKey(p.Definition.Name, p.IsInstance), StringComparer.Ordinal);
 
-        var updatedData = new List<ParamSnapshot>();
+        var updatedData = new List<ParameterSnapshot>();
 
         foreach (var existingSnap in snapshot.Parameters.Data) {
             var key = GetKey(existingSnap.Name, existingSnap.IsInstance);
@@ -75,7 +75,7 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
         snapshot.Parameters.Data = updatedData;
     }
 
-    private static SnapshotSection<ParamSnapshot> CollectFromProject(Document doc, Family family) {
+    private static SnapshotSection<ParameterSnapshot> CollectFromProject(Document doc, Family family) {
         var seededFamily = new CollectedLoadedFamilyRecord {
             FamilyId = family.Id.Value(),
             FamilyUniqueId = family.UniqueId,
@@ -104,7 +104,7 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
             string.Equals(issue.Code, "FamilyFormulaCollectionFailed", StringComparison.Ordinal) ||
             string.Equals(issue.Code, "FamilyParameterFormulaReadFailed", StringComparison.Ordinal));
 
-        return new SnapshotSection<ParamSnapshot> {
+        return new SnapshotSection<ParameterSnapshot> {
             Source = SnapshotSource.Project,
             IsPartial = isPartial,
             Data = [
@@ -112,7 +112,7 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
                     .Where(item =>
                         item.Kind is CollectedParameterKind.FamilyParameter or CollectedParameterKind.SharedParameter)
                     .Where(item => !IsInternalHelperParameter(item.Name))
-                    .Select(item => new ParamSnapshot {
+                    .Select(item => new ParameterSnapshot {
                         Name = item.Name,
                         IsInstance = item.IsInstance,
                         PropertiesGroup = new ForgeTypeId(item.GroupTypeId ?? string.Empty),
@@ -129,14 +129,14 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
         };
     }
 
-    private SnapshotSection<ParamSnapshot> CollectFromFamilyDoc(FamilyDocument famDoc) {
+    private SnapshotSection<ParameterSnapshot> CollectFromFamilyDoc(FamilyDocument famDoc) {
         var fm = famDoc.FamilyManager;
 
         var types = fm.Types.Cast<FamilyType>().ToList();
         var typeNames = types.Select(t => t.Name).Distinct(StringComparer.Ordinal).ToList();
 
         var familyParameters = fm.GetParameters().ToList();
-        var snapshots = new Dictionary<string, ParamSnapshot>(StringComparer.Ordinal);
+        var snapshots = new Dictionary<string, ParameterSnapshot>(StringComparer.Ordinal);
 
         foreach (var p in familyParameters) {
             if (IsInternalHelperParameter(p.Definition.Name))
@@ -152,7 +152,7 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
                 }
             }
 
-            snapshots[key] = new ParamSnapshot {
+            snapshots[key] = new ParameterSnapshot {
                 Name = p.Definition.Name,
                 IsInstance = p.IsInstance,
                 PropertiesGroup = p.Definition.GetGroupTypeId(),
@@ -191,7 +191,7 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
                 _ = tx.RollBack();
         }
 
-        return new SnapshotSection<ParamSnapshot> {
+        return new SnapshotSection<ParameterSnapshot> {
             Source = SnapshotSource.FamilyDoc,
             Data = snapshots.Values
                 .OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase)

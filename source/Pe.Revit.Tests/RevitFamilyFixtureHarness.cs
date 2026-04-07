@@ -23,8 +23,8 @@ internal static class RevitFamilyFixtureHarness {
 
     internal sealed record FamilyTypeState(string Name, IReadOnlyDictionary<string, double> LengthValues);
     internal sealed record ParameterDefinitionSpec(string Name, ForgeTypeId DataType, ForgeTypeId? Group = null, bool IsInstance = true);
-    internal sealed record ParameterTypeState(string TypeName, IReadOnlyDictionary<string, string> ValuesByParameter);
-    internal sealed record ParameterValueState(
+    internal sealed record ParameterTypeSnapshot(string TypeName, IReadOnlyDictionary<string, string> ValuesByParameter);
+    internal sealed record ParameterValueSnapshot(
         string TypeName,
         string? Formula,
         object? RawValue,
@@ -66,6 +66,13 @@ internal static class RevitFamilyFixtureHarness {
         string? GroupTypeId,
         string? DataTypeId,
         string? Formula
+    );
+
+    internal sealed record FamilySizeTableProbe(
+        string TableName,
+        string ExportedCsvPath,
+        IReadOnlyList<string> HeaderColumns,
+        IReadOnlyList<string> Rows
     );
 
     public static string ResolveGenericModelTemplatePath(
@@ -225,6 +232,21 @@ internal static class RevitFamilyFixtureHarness {
         var fixturePath = GetFamilyFixturePath(fixtureFileName);
         return application.OpenDocumentFile(fixturePath)
                ?? throw new InvalidOperationException($"Failed to open family fixture '{fixturePath}'.");
+    }
+
+    public static Document OpenFamilyDocument(
+        Autodesk.Revit.ApplicationServices.Application application,
+        string familyPath
+    ) {
+        if (application == null)
+            throw new ArgumentNullException(nameof(application));
+        if (string.IsNullOrWhiteSpace(familyPath))
+            throw new ArgumentException("Family path is required.", nameof(familyPath));
+        if (!File.Exists(familyPath))
+            throw new FileNotFoundException($"Family file was not found at '{familyPath}'.", familyPath);
+
+        return application.OpenDocumentFile(familyPath)
+               ?? throw new InvalidOperationException($"Failed to open family document '{familyPath}'.");
     }
 
     public static FFManagerSettings LoadProfileFixture(string fixtureFileName) {
@@ -561,6 +583,50 @@ internal static class RevitFamilyFixtureHarness {
             .ToArray();
     }
 
+    public static IReadOnlyList<FamilySizeTableProbe> ExportFamilySizeTables(
+        Document familyDocument,
+        string outputDirectory
+    ) {
+        if (familyDocument == null)
+            throw new ArgumentNullException(nameof(familyDocument));
+        if (!familyDocument.IsFamilyDocument)
+            throw new InvalidOperationException("Expected a family document.");
+        if (string.IsNullOrWhiteSpace(outputDirectory))
+            throw new ArgumentException("Output directory is required.", nameof(outputDirectory));
+
+        Directory.CreateDirectory(outputDirectory);
+
+        using var manager = FamilySizeTableManager.GetFamilySizeTableManager(
+            familyDocument,
+            familyDocument.OwnerFamily.Id);
+
+        if (manager == null || !manager.IsValidObject || manager.NumberOfSizeTables == 0)
+            return [];
+
+        var probes = new List<FamilySizeTableProbe>();
+        foreach (var tableName in manager.GetAllSizeTableNames().OrderBy(name => name, StringComparer.Ordinal)) {
+            var safeTableName = SanitizePathSegment(tableName);
+            var exportPath = Path.Combine(outputDirectory, $"{safeTableName}.csv");
+            var exportSucceeded = manager.ExportSizeTable(tableName, exportPath);
+            if (!exportSucceeded || !File.Exists(exportPath)) {
+                throw new InvalidOperationException($"Failed to export family size table '{tableName}' to '{exportPath}'.");
+            }
+
+            var rows = File.ReadAllLines(exportPath);
+            var headers = rows.Length == 0
+                ? []
+                : rows[0].Split(',').Select(header => header.Trim()).ToArray();
+
+            probes.Add(new FamilySizeTableProbe(
+                tableName,
+                exportPath,
+                headers,
+                rows));
+        }
+
+        return probes;
+    }
+
     public static Document ReopenDocument(
         Autodesk.Revit.ApplicationServices.Application application,
         Document document,
@@ -600,7 +666,7 @@ internal static class RevitFamilyFixtureHarness {
         familyDocument.FamilyManager.CurrentType = familyType;
     }
 
-    public static IReadOnlyList<ParameterValueState> CaptureParameterStates(
+    public static IReadOnlyList<ParameterValueSnapshot> CaptureParameterSnapshots(
         Document familyDocument,
         string parameterName,
         IReadOnlyList<string> typeNames
@@ -616,12 +682,12 @@ internal static class RevitFamilyFixtureHarness {
         var familyManager = familyDocument.FamilyManager;
         var parameter = familyManager.get_Parameter(parameterName)
             ?? throw new InvalidOperationException($"Family parameter '{parameterName}' was not found.");
-        var states = new List<ParameterValueState>(typeNames.Count);
+        var snapshots = new List<ParameterValueSnapshot>(typeNames.Count);
 
         foreach (var typeName in typeNames.Distinct(StringComparer.Ordinal)) {
             SetCurrentType(familyDocument, typeName);
             familyDocument.Regenerate();
-            states.Add(new ParameterValueState(
+            snapshots.Add(new ParameterValueSnapshot(
                 typeName,
                 parameter.Formula,
                 familyDoc.GetValue(parameter),
@@ -631,41 +697,41 @@ internal static class RevitFamilyFixtureHarness {
                 parameter.Definition.GetDataType().TypeId));
         }
 
-        return states;
+        return snapshots;
     }
 
-    public static IReadOnlyList<ParameterValueState> ApplyParameterTypeStates(
+    public static IReadOnlyList<ParameterValueSnapshot> ApplyParameterSnapshots(
         Document familyDocument,
-        IReadOnlyList<ParameterTypeState> states,
-        Func<Document, string, ParameterValueState> evaluator
+        IReadOnlyList<ParameterTypeSnapshot> snapshots,
+        Func<Document, string, ParameterValueSnapshot> evaluator
     ) {
         if (familyDocument == null)
             throw new ArgumentNullException(nameof(familyDocument));
         if (!familyDocument.IsFamilyDocument)
             throw new InvalidOperationException("Expected a family document.");
-        if (states.Count == 0)
+        if (snapshots.Count == 0)
             return [];
         if (evaluator == null)
             throw new ArgumentNullException(nameof(evaluator));
 
         var familyManager = familyDocument.FamilyManager;
         var familyDoc = new FamilyDocument(familyDocument);
-        var results = new List<ParameterValueState>(states.Count);
+        var results = new List<ParameterValueSnapshot>(snapshots.Count);
 
-        using var transaction = new Transaction(familyDocument, "Apply parameter type states");
+        using var transaction = new Transaction(familyDocument, "Apply parameter snapshots");
         _ = transaction.Start();
 
         try {
-            foreach (var state in states) {
-                familyManager.CurrentType = EnsureFamilyType(familyDocument, state.TypeName);
+            foreach (var snapshot in snapshots) {
+                familyManager.CurrentType = EnsureFamilyType(familyDocument, snapshot.TypeName);
 
-                foreach (var (parameterName, value) in state.ValuesByParameter) {
+                foreach (var (parameterName, value) in snapshot.ValuesByParameter) {
                     var parameter = familyManager.get_Parameter(parameterName)
                         ?? throw new InvalidOperationException($"Family parameter '{parameterName}' was not found.");
 
                     if (!string.IsNullOrWhiteSpace(parameter.Formula) && !familyDoc.UnsetFormula(parameter)) {
                         throw new InvalidOperationException(
-                            $"Family parameter '{parameterName}' formula could not be cleared for state evaluation.");
+                            $"Family parameter '{parameterName}' formula could not be cleared for snapshot apply evaluation.");
                     }
 
                     switch (parameter.StorageType) {
@@ -680,12 +746,12 @@ internal static class RevitFamilyFixtureHarness {
                         break;
                     default:
                         throw new InvalidOperationException(
-                            $"State application does not support StorageType.{parameter.StorageType} for '{parameterName}'.");
+                            $"Snapshot apply does not support StorageType.{parameter.StorageType} for '{parameterName}'.");
                     }
                 }
 
                 familyDocument.Regenerate();
-                results.Add(evaluator(familyDocument, state.TypeName));
+                results.Add(evaluator(familyDocument, snapshot.TypeName));
             }
         } finally {
             _ = transaction.RollBack();

@@ -1,4 +1,4 @@
-using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+﻿using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.Global.Revit.Lib.Schedules.Filters;
@@ -100,6 +100,11 @@ internal sealed class SetKnownParamsSettingsSchemaDefinition : SettingsSchemaDef
     }
 }
 
+internal sealed class SetLookupTablesSettingsSchemaDefinition : SettingsSchemaDefinition<SetLookupTablesSettings> {
+    public override void Configure(ISettingsSchemaBuilder<SetLookupTablesSettings> builder) {
+    }
+}
+
 internal sealed class MakeElecConnectorParametersSchemaDefinition
     : SettingsSchemaDefinition<MakeElecConnectorSettings.Parameters> {
     public override void Configure(ISettingsSchemaBuilder<MakeElecConnectorSettings.Parameters> builder) {
@@ -126,6 +131,7 @@ internal static class FamilyFoundrySchemaDefinitionBootstrapper {
         SettingsSchemaDefinitionRegistry.Shared.Register(new GlobalParamAssignmentSchemaDefinition());
         SettingsSchemaDefinitionRegistry.Shared.Register(new PerTypeAssignmentRowSchemaDefinition());
         SettingsSchemaDefinitionRegistry.Shared.Register(new SetKnownParamsSettingsSchemaDefinition());
+        SettingsSchemaDefinitionRegistry.Shared.Register(new SetLookupTablesSettingsSchemaDefinition());
         SettingsSchemaDefinitionRegistry.Shared.Register(new MakeElecConnectorParametersSchemaDefinition());
     }
 }

@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
@@ -19,7 +19,7 @@ public enum ParamAssignmentKind {
 ///     Family parameter definition metadata used for parameter creation and tooltip configuration.
 ///     PE_ parameters are not valid family parameter definitions.
 /// </summary>
-public sealed record FamilyParamDefinitionModel : ParamDefinitionBase {
+public sealed record FamilyParamDefinitionModel : ParameterSpec {
     [Description(
         "Tooltip/description shown in Revit UI and properties palette. Only applies to family parameters (not shared or built-in parameters).")]
     public string? Tooltip { get; init; }

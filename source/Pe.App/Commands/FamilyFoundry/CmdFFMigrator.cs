@@ -1,4 +1,4 @@
-using Autodesk.Revit.Attributes;
+﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Pe.App.Commands.Palette.FamilyPalette;
@@ -218,6 +218,7 @@ public class CmdFFMigrator : IExternalCommand {
             var queue = BuildQueueCore(profile, apsParamData);
             var collectorQueue = new CollectorQueue()
                 .Add(new ParamSectionCollector())
+                .Add(new LookupTableSectionCollector())
                 .Add(new RefPlaneSectionCollector());
             var finishSettings = onFinishSettings ?? new LoadAndSaveOptions { OpenOutputFilesOnCommandFinish = false };
 

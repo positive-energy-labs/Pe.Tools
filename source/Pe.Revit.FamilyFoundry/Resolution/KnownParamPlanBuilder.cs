@@ -132,7 +132,7 @@ public static class KnownParamPlanBuilder {
         .ToList();
 
     public static AddFamilyParamsSettings BuildFamilyDefinitionsFromSnapshots(
-        IEnumerable<ParamSnapshot> snapshots,
+        IEnumerable<ParameterSnapshot> snapshots,
         IEnumerable<string> referencedParameterNames
     ) {
         var snapshotByName = snapshots

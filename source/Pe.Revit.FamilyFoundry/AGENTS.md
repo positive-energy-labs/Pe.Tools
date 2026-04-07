@@ -2,7 +2,7 @@
 
 ## Scope
 
-Owns Family Foundry authored settings, operation queues, runtime operations, compile/replay helpers, snapshots, and Family Foundry-specific schema definitions.
+Owns Family Foundry authored settings, operation queues, runtime operations, compile/apply helpers, snapshots, projections, and Family Foundry-specific schema definitions.
 
 ## Purpose
 
@@ -15,7 +15,7 @@ Owns Family Foundry authored settings, operation queues, runtime operations, com
 - `OperationQueue.cs` and `BaseOperation.cs` — authored execution plan and operation model.
 - `OperationGroups/` and `Operations/` — reusable runtime mutation building blocks.
 - `SchemaDefinitions/FamilyFoundrySchemaDefinitions.cs` — Family Foundry schema/provider wiring.
-- `Aggregators/Snapshots/` and `Snapshots/` — snapshot collection and replay-oriented diagnostics.
+- `Aggregators/Snapshots/` and `Snapshots/` — snapshot capture, portable structure, and apply/proof-oriented diagnostics.
 - `Resolution/AuthoredParamDrivenSolidsCompiler.cs` — authored param-driven solids compile path.
 - `OperationSettings/` — authored settings contracts used by profiles.
 
@@ -30,7 +30,10 @@ Owns Family Foundry authored settings, operation queues, runtime operations, com
 | Term | Meaning | Prefer / Avoid |
 | --- | --- | --- |
 | **profile** | Authored Family Foundry settings document | Avoid using it for collected runtime state |
-| **snapshot** | Collected family/document state used for proof, replay, or diagnostics | Avoid using it as authored input terminology |
+| **spec** | A reusable building block that can appear inside both authored profiles and captured snapshots | Prefer this for canonical portable/authored building blocks instead of vague `Model` or `State` names |
+| **snapshot** | Captured family/document state composed of specs plus source/provenance metadata where needed | Avoid using it as authored input terminology or as the name for every derived output |
+| **projection** | A target-shaped derived output such as a matrix, dataset, csv, or profile fragment | Prefer this for shaped outputs; avoid using it for captured source state |
+| **apply** | Patch/merge-oriented write-back into live Revit from specs, snapshots, or compatible projections | Prefer this over `replay` unless strict sequence fidelity is actually the point |
 | **operation** | One runtime mutation/action unit in the FF queue | Avoid calling whole workflows one operation when the queue/group distinction matters |
 | **queue** | Ordered set of operations/groups passed to `OperationProcessor` | Avoid using it as a synonym for a single command |
 | **param-driven solids** | The canonical authored/serialized semantic solids shape | Avoid referring to old low-level extrusion authoring as an equal peer model |
@@ -45,7 +48,8 @@ Owns Family Foundry authored settings, operation queues, runtime operations, com
   5. snapshot / reverse-inference / diagnostics issue
 - Prefer adding targeted logs, snapshots, or proof artifacts over speculative fixes.
 - Keep operations linear and debuggable. If nesting or orchestration gets hard to inspect, extract helpers or move logic up a level.
-- Preserve the distinction between authored contracts and compiled/runtime execution plans.
+- Preserve the distinction between authored contracts, captured snapshots, derived projections, and compiled/runtime execution plans.
+- Favor specs as the reusable building blocks that authored profiles and captured snapshots compose, rather than duplicating similar shapes under `State`/`Model` names.
 - Schedule/filter/provider wiring belongs in schema definitions unless there is a stronger shared-runtime reason to place it elsewhere.
 - When validating geometry, connectors, or param associations, assert across multiple types/states so broken associations do not hide behind a single happy-path family type.
 - Explicitly state the assumed family orientation before authoring connector faces when docs are ambiguous.

@@ -127,18 +127,18 @@ public sealed class AuthoredProfileRoundtripFixtureTests {
     }
 
     [Test]
-    public void PeGrd_Supply_snapshot_replay_aligns_with_runtime_across_existing_type_matrix() {
+    public void PeGrd_Supply_snapshot_apply_aligns_with_runtime_across_existing_type_matrix() {
         RoundtripArtifact? artifact = null;
 
         try {
-            artifact = FamilyFoundryRoundtripHarness.RunSnapshotReplayRoundtrip(
+            artifact = FamilyFoundryRoundtripHarness.RunSnapshotApplyRoundtrip(
                 _dbApplication,
                 PeGrdSupplyFamilyFixture,
                 "FF-Test-PEGRDSnapshotAuthored",
-                nameof(PeGrd_Supply_snapshot_replay_aligns_with_runtime_across_existing_type_matrix));
+                nameof(PeGrd_Supply_snapshot_apply_aligns_with_runtime_across_existing_type_matrix));
 
             var sourceDocument = artifact.SourceDocument
-                ?? throw new InvalidOperationException("Snapshot replay roundtrip did not return a source document.");
+                ?? throw new InvalidOperationException("Snapshot apply roundtrip did not return a source document.");
             var sourceExpectation = AuthoredGraphExpectation.From(artifact.Authored);
 
             FamilyFoundryRoundtripAssertions.AssertCompiledPlanMatchesAuthored(artifact);

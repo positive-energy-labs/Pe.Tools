@@ -19,6 +19,7 @@ This repo exists to improve Engineering Designer workflows for MEP firms through
 - `source/Pe.Host/Program.cs` — external settings host, HTTP/SSE entrypoint.
 - `source/Pe.Shared.StorageRuntime/` — schema generation, field options, module registration, storage/document validation.
 - `source/Pe.Shared.SettingsCatalog/` — settings manifests and schema-definition registration.
+- `source/Pe.Revit.Extensions` — strong primitives such as FamilyDocument, SetValue w/ coercion context, TrySetFormula/Fast, w/ formula validation, FindParameter & GeValue, etc.
 - `source/Pe.Revit.FamilyFoundry/OperationProcessor.cs` — main FF execution orchestrator.
 - `source/Pe.Revit.Tests/AGENTS.md` — runner-specific Revit test lane workflow.
 - `.cursor/rules/family-foundry-dev.mdc` and `.cursor/rules/family-foundry-architecture.mdc` — dense local FF debugging/architecture guidance.
@@ -46,9 +47,14 @@ This repo exists to improve Engineering Designer workflows for MEP firms through
 | **host** | `Pe.Host`, the out-of-proc HTTP/SSE settings backend | Avoid using `host` for the Revit add-in bridge |
 | **bridge** | The Revit-side named-pipe connection to `Pe.Host` | Avoid calling HTTP endpoints the bridge |
 | **RR debug** | A live Rider/Revit debug session against the deployed runtime lane, and the only normal lane where hot reload is available | Prefer this over vague phrases like `live debug`; avoid implying hot reload exists outside RR debug |
+| **collect** | Gather live Revit data for discovery, catalogs, or broad inspection | Prefer this for collectors and broad read flows; avoid using it for preserved portable state |
+| **capture** | Convert live Revit state into a durable captured form | Prefer this when the output is intended to survive document/session/version boundaries |
+| **spec** | A composable building block of authored intent or normalized portable structure | Prefer this for reusable building blocks that can appear inside profiles and snapshots |
 | **structural validation** | Parse/schema/composition validation that does not require a live Revit document | Avoid implying it covers FF semantic or operation-time rules |
 | **live-document** | Behavior that requires the active Revit document/thread | Prefer this over older capability wording like `RevitAssemblyOnly` |
-| **snapshot** | Captured document/family state used for proof, replay, or diagnostics | Avoid using it as a synonym for authored profile |
+| **snapshot** | Captured point-in-time state composed of reusable specs plus source/provenance metadata where needed | Avoid using it as the umbrella term for every derived output |
+| **projection** | A target-shaped derived output such as a matrix, dataset, csv, profile fragment, or profile-shaped view | Prefer this for derived output shapes; avoid using it for captured source state |
+| **apply** | Write compatible specs, snapshots, or projections back into live Revit | Prefer this over `replay` when the behavior is patch/merge oriented rather than sequential |
 | **profile** | Authored settings input that drives Family Foundry or related commands | Avoid using it as a synonym for snapshot output |
 
 ## Living Memory
@@ -60,6 +66,9 @@ This repo exists to improve Engineering Designer workflows for MEP firms through
 - Delete dead code and rename-era leftovers instead of preserving compatibility shims.
 - Keep docs local and current. Remove stale goals, stale paths, and rename-era references rather than preserving history.
 - For docs reshaping or consolidation work, use the `document-project-docs` skill in `C:\Users\kaitp\.agents\skills\document-project-docs`; repo docs use `AGENTS.md`, `_DEV.md`, and `_GOALS.md` naming.
+- Prefer semantic role names over vague suffixes: `Collector` for live gathering, `Snapshot` for captured portable state, `Projection` for derived target shapes, and `Spec` for reusable authored/portable building blocks.
+- Use verb→noun pairing consistently: `Collect...` returns collections/catalogs, `Capture...` returns snapshots, `ProjectTo...` returns projections, and `Apply...` mutates live Revit from specs/snapshots/projections.
+- Do not strip native Revit types out of specs or snapshots just for portability. Keep them when they materially help correctness, but require human-readable converters and schema metadata/options/examples at authoring and persistence boundaries.
 
 ### Revit runtime / hot reload
 

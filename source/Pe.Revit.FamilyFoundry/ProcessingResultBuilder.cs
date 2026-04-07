@@ -29,15 +29,15 @@ public class ProcessingResultBuilder {
 
     public string RunOutputPath => this._runOutput.DirectoryPath;
 
-    private static string GetDescription(ParamSnapshot param) =>
+    private static string GetDescription(ParameterSnapshot param) =>
         $"{GetInstTypeStr(param)}: {param.Name} ({GetDataTypeLabel(param)})";
 
-    private static string GetDataTypeLabel(ParamSnapshot param) => SpecNamesProvider.GetLabelForForge(param.DataType);
+    private static string GetDataTypeLabel(ParameterSnapshot param) => SpecNamesProvider.GetLabelForForge(param.DataType);
 
-    private static string GetPropGroupLabel(ParamSnapshot param) =>
+    private static string GetPropGroupLabel(ParameterSnapshot param) =>
         PropertyGroupNamesProvider.GetLabelForForge(param.PropertiesGroup);
 
-    private static string GetInstTypeStr(ParamSnapshot param) => param.IsInstance ? "INST" : "TYPE";
+    private static string GetInstTypeStr(ParameterSnapshot param) => param.IsInstance ? "INST" : "TYPE";
 
     public ProcessingResultBuilder WithProfile<T>(T settings, string profileName) where T : BaseProfileSettings {
         this._profileSettings = settings;
@@ -318,7 +318,15 @@ public class ProcessingResultBuilder {
         if (snapshot.Parameters?.Data != null && snapshot.Parameters.Data.Count > 0) {
             var paramsData = snapshot.Parameters.Data;
             _ = output.Json($"snapshot-parameters-{prefix}.json").Write(
-                FamilyParamProfileAdapter.CreateFromSnapshots(paramsData));
+                FamilyParamProfileAdapter.ProjectSnapshotsToProfile(paramsData));
+        }
+
+        if (snapshot.LookupTables?.Data != null && snapshot.LookupTables.Data.Count > 0) {
+            _ = output.Json($"snapshot-lookuptables-{prefix}.json").Write(snapshot.LookupTables.Data);
+            LookupTables.LookupTableArtifactWriter.WriteCsvFiles(
+                snapshot.LookupTables.Data,
+                output.DirectoryPath,
+                $"snapshot-lookuptables-{prefix}");
         }
 
         if (snapshot.RefPlanesAndDims != null) {

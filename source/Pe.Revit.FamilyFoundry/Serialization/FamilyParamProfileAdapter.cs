@@ -1,4 +1,4 @@
-using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+﻿using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
 using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.FamilyFoundry.Resolution;
 
@@ -16,8 +16,8 @@ public sealed record FamilyParamProfileExport(
 );
 
 public static class FamilyParamProfileAdapter {
-    public static FamilyParamProfileExport CreateFromSnapshots(
-        IEnumerable<ParamSnapshot> snapshots,
+    public static FamilyParamProfileExport ProjectSnapshotsToProfile(
+        IEnumerable<ParameterSnapshot> snapshots,
         FamilyParamProfileExportOptions? options = null
     ) {
         options ??= new FamilyParamProfileExportOptions();
@@ -31,8 +31,8 @@ public static class FamilyParamProfileAdapter {
             if (options.OmitBuiltInParameters && snapshot.IsBuiltIn)
                 continue;
 
-            var globalAssignment = snapshot.ToGlobalAssignment();
-            var perTypeAssignment = snapshot.ToPerTypeAssignmentRow();
+            var globalAssignment = snapshot.ProjectToGlobalAssignment();
+            var perTypeAssignment = snapshot.ProjectToPerTypeAssignmentRow();
             var hasReplayableAssignment = globalAssignment is not null || perTypeAssignment is not null;
             var shouldIncludeDefinition = options.IncludeDefinitionOnlyParameters || hasReplayableAssignment;
 
@@ -69,7 +69,7 @@ public static class FamilyParamProfileAdapter {
         );
     }
 
-    public static List<ParamSnapshot> SortAndOrder(List<ParamSnapshot> snapshots) {
+    public static List<ParameterSnapshot> SortAndOrder(List<ParameterSnapshot> snapshots) {
         snapshots ??= [];
         return snapshots.Select(snapshot => snapshot with {
             ValuesPerType = snapshot.ValuesPerType

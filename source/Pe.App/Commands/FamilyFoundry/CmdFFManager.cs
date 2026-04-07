@@ -1,4 +1,4 @@
-using Autodesk.Revit.Attributes;
+﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.OperationGroups;
@@ -129,6 +129,7 @@ public class CmdFFManager : IExternalCommand {
             var executionOptions = new ExecutionOptions { SingleTransaction = false, OptimizeTypeOperations = false };
             var collectorQueue = new CollectorQueue()
                 .Add(new ParamSectionCollector())
+                .Add(new LookupTableSectionCollector())
                 .Add(new RefPlaneSectionCollector())
                 .Add(new ExtrusionSectionCollector());
 
@@ -238,6 +239,7 @@ public class CmdFFManager : IExternalCommand {
         return new OperationQueue()
             .Add(new AddSharedParams(apsParamData))
             .Add(new AddFamilyParams(knownParamPlan.ResolvedFamilyParams))
+            .Add(new SetLookupTables(profile.SetLookupTables))
             .Add(new SetKnownParams(valueFirstAssignments, knownParamPlan.Catalog, true))
             .Add(new EmitParamDrivenSolidsDiagnostics(new EmitParamDrivenSolidsDiagnosticsSettings {
                 Enabled = compilerMessages.Count > 0,
