@@ -340,7 +340,7 @@ public static class FamilyPreviewBuilder {
             DataType = SafeGetLabel(() => def.GetDataType().ToLabel()),
             StorageType = param.StorageType.ToString(),
             Group = SafeGetLabel(() => def.GetGroupTypeId().ToLabel()),
-            IsBuiltIn = param.IsBuiltInParameter(),
+            IsBuiltIn = param.IsBuiltInParameter,
             IsShared = param.IsShared,
             SharedGuid = sharedGuid,
             ValuesPerType = typeNames.ToDictionary(t => t, _ => (string?)null, StringComparer.Ordinal)
