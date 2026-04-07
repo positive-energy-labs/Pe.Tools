@@ -159,13 +159,13 @@ internal static class FamilyFoundryRuntimeProbe {
                 var coordinateSystem = connector.CoordinateSystem;
                 var widthAxis = coordinateSystem == null
                     ? XYZ.Zero
-                    : NormalizeOrThrow(coordinateSystem.BasisX, $"connector '{connector.Id.IntegerValue}' width axis");
+                    : NormalizeOrThrow(coordinateSystem.BasisX, $"connector '{connector.Id.Value()}' width axis");
                 var lengthAxis = coordinateSystem == null
                     ? XYZ.Zero
-                    : NormalizeOrThrow(coordinateSystem.BasisY, $"connector '{connector.Id.IntegerValue}' length axis");
+                    : NormalizeOrThrow(coordinateSystem.BasisY, $"connector '{connector.Id.Value()}' length axis");
                 var faceNormal = coordinateSystem == null
                     ? XYZ.Zero
-                    : NormalizeOrThrow(coordinateSystem.BasisZ, $"connector '{connector.Id.IntegerValue}' face normal");
+                    : NormalizeOrThrow(coordinateSystem.BasisZ, $"connector '{connector.Id.Value()}' face normal");
 
                 return new RuntimeConnectorProbe(
                     connector.Id,
@@ -237,7 +237,7 @@ internal static class FamilyFoundryRuntimeProbe {
 
     private static BoundingBoxXYZ GetBoundingBox(Extrusion extrusion) =>
         extrusion.get_BoundingBox(null)
-        ?? throw new InvalidOperationException($"Extrusion '{extrusion.Id.IntegerValue}' had no bounding box.");
+        ?? throw new InvalidOperationException($"Extrusion '{extrusion.Id.Value()}' had no bounding box.");
 
     private static bool IsRectangularExtrusion(Extrusion extrusion) {
         var profile = extrusion.Sketch?.Profile;

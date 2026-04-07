@@ -5,6 +5,7 @@
         <DeployAddin>true</DeployAddin>
         <LaunchRevit>true</LaunchRevit>
         <EnableRevitTestConfigurations>true</EnableRevitTestConfigurations>
+        <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
         <DeployAddin
             Condition="$([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'"
         >false</DeployAddin>
@@ -32,6 +33,7 @@
 
         <!-- TypeScript Type Generation -->
         <PackageReference Include="TypeGen" Version="5.0.0" />
+        <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all" Condition="'$(TargetFramework)' == 'net48'" />
 
         <!-- Build -->
         <PackageReference Include="ILRepack" Version="2.0.44">

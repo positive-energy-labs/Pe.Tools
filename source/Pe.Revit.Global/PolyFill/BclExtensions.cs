@@ -43,7 +43,8 @@ public static class BclExtensions {
     ///     Attempts to add the specified key and value to the dictionary.
     ///     Polyfill for Dictionary.TryAdd (added in .NET Core 2.0).
     /// </summary>
-    public static bool TryAdd<TKey, TValue>(this Dictionary<TKey, TValue> dictionary, TKey key, TValue value) {
+    public static bool TryAdd<TKey, TValue>(this Dictionary<TKey, TValue> dictionary, TKey key, TValue value)
+        where TKey : notnull {
 #if NET48
         if (dictionary.ContainsKey(key))
             return false;
@@ -56,10 +57,26 @@ public static class BclExtensions {
     }
 
     /// <summary>
+    ///     Attempts to add the specified key and value to the dictionary.
+    ///     Polyfill for IDictionary.TryAdd on older frameworks.
+    /// </summary>
+#if NET48
+    public static bool TryAdd<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, TKey key, TValue value)
+        where TKey : notnull {
+        if (dictionary.ContainsKey(key))
+            return false;
+
+        dictionary[key] = value;
+        return true;
+    }
+#endif
+
+    /// <summary>
     ///     Gets the value associated with the specified key, or a default value if the key is not present.
     ///     Polyfill for Dictionary.GetValueOrDefault (added in .NET Core 2.0).
     /// </summary>
-    public static TValue? GetValueOrDefault<TKey, TValue>(this Dictionary<TKey, TValue> dictionary, TKey key) {
+    public static TValue? GetValueOrDefault<TKey, TValue>(this Dictionary<TKey, TValue> dictionary, TKey key)
+        where TKey : notnull {
 #if NET48
         return dictionary.TryGetValue(key, out var value) ? value : default;
 #else
@@ -125,6 +142,24 @@ public static class BclExtensions {
     ///     Polyfill for StringSplitOptions.TrimEntries (added in .NET 5).
     /// </summary>
     public static string[] SplitAndTrim(this string value, char[] separators, StringSplitOptions options = StringSplitOptions.None) {
+        var frameworkOptions = NormalizeSplitOptions(options);
+        var parts = value.Split(separators, frameworkOptions);
+        return FinalizeSplitParts(parts, options);
+    }
+
+    /// <summary>
+    ///     Splits a string with a string separator and options including TrimEntries support.
+    /// </summary>
+    public static string[] SplitAndTrim(this string value, string separator, StringSplitOptions options = StringSplitOptions.None) {
+        var frameworkOptions = NormalizeSplitOptions(options);
+        var parts = value.Split(new[] { separator }, frameworkOptions);
+        return FinalizeSplitParts(parts, options);
+    }
+
+    /// <summary>
+    ///     Splits a string with string separators and options including TrimEntries support.
+    /// </summary>
+    public static string[] SplitAndTrim(this string value, string[] separators, StringSplitOptions options = StringSplitOptions.None) {
         var frameworkOptions = NormalizeSplitOptions(options);
         var parts = value.Split(separators, frameworkOptions);
         return FinalizeSplitParts(parts, options);
