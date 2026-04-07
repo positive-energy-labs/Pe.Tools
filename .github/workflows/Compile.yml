@@ -3,7 +3,7 @@ name: Compile solution
 on:
   push:
     branches:
-      - '*'
+      - "*"
   pull_request:
 
 jobs:
@@ -11,11 +11,14 @@ jobs:
     name: windows-2025
     runs-on: blacksmith-4vcpu-windows-2025
     steps:
-
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
 
       - name: Cache packages
         uses: actions/cache@v5
