@@ -45,7 +45,7 @@ public sealed class CompileProjectModule : Module {
         string configuration,
         CancellationToken cancellationToken) =>
         await context.DotNet().Build(new DotNetBuildOptions {
-            ProjectSolution = Solutions.Pe_Tools.FullName,
+            ProjectSolution = Projects.Pe_App.FullName,
             Configuration = configuration,
             Properties = [
                 ("VersionPrefix", versioning.VersionPrefix),

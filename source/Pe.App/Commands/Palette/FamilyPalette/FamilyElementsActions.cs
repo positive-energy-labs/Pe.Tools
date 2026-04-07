@@ -95,10 +95,11 @@ internal static class FamilyElementsActions {
     }
 
     /// <summary>
-    ///     Opens RevitLookup to snoop the selected element.
+    ///     Opens RevitDBExplorer to snoop the selected family element.
     /// </summary>
     internal static void HandleSnoop(FamilyElementItem? item) {
         if (item == null) return;
+
         object objectToSnoop = item.ElementType switch {
             FamilyElementType.Parameter => item.FamilyParam!,
             FamilyElementType.Connector => item.Connector!,
@@ -107,6 +108,7 @@ internal static class FamilyElementsActions {
             FamilyElementType.Family => item.FamilyInstance!,
             _ => throw new InvalidOperationException($"Unknown element type: {item.ElementType}")
         };
+
         var doc = DocumentManager.GetActiveDocument();
         _ = RevitDbExplorerService.TrySnoopObject(doc, objectToSnoop, item.TextPrimary);
     }
