@@ -8,6 +8,7 @@ riderSelector := "Pe.Tools ahk_exe rider64.exe"
 fileListPath := ""
 warningSeconds := 3
 skipWarning := false
+mode := "full"
 
 if A_Args.Length >= 1 {
     fileListPath := A_Args[1]
@@ -26,6 +27,22 @@ if A_Args.Length >= 2 {
 
 if A_Args.Length >= 3 {
     skipWarning := Trim(A_Args[3]) = "1"
+}
+
+if A_Args.Length >= 4 {
+    mode := Trim(A_Args[4])
+}
+
+if (mode = "") {
+    mode := "full"
+}
+
+if (mode = "warn") {
+    if !skipWarning {
+        WarnBeforeAutomation(warningSeconds)
+    }
+
+    ExitApp 0
 }
 
 if !WinExist(riderSelector) {
