@@ -6,17 +6,55 @@ param(
 $prepareScript = Join-Path $ScriptDirectory "PrepareRiderHotReload.ps1"
 $autoApproveScript = Join-Path $ScriptDirectory "AutoApproveAddin.ps1"
 
+function Test-MatchingRevitSessionRunning
+{
+    param([int]$TargetYear)
+
+    $revitProcesses = @(Get-Process -Name "Revit" -ErrorAction SilentlyContinue)
+    if ($revitProcesses.Count -eq 0)
+    {
+        Write-Host "Skipping Rider hot reload prep and add-in auto-approval because Revit is not running."
+        return $false
+    }
+
+    $matchingYearProcesses = @(
+        $revitProcesses | Where-Object {
+            try
+            {
+                $_.MainWindowTitle -match [regex]::Escape([string]$TargetYear)
+            }
+            catch
+            {
+                $false
+            }
+        }
+    )
+
+    if ($matchingYearProcesses.Count -gt 0)
+    {
+        return $true
+    }
+
+    Write-Host "Skipping Rider hot reload prep and add-in auto-approval because no Revit $TargetYear session is running."
+    return $false
+}
+
 # This script is a convenience wrapper for the `.Tests` build lane.
 # It prepares Rider hot reload for changed runtime files and watches for
 # unsigned add-in approval dialogs, but it does not itself prove that Revit is
 # running the freshly-edited runtime code.
+if (-not (Test-MatchingRevitSessionRunning -TargetYear $RevitYear))
+{
+    exit 0
+}
+
 if (Test-Path $prepareScript)
 {
     Write-Host "Running Rider hot reload prep..."
 
     try
     {
-        & powershell.exe -ExecutionPolicy Bypass -WindowStyle Minimized -NoProfile -File $prepareScript
+        & powershell.exe -ExecutionPolicy Bypass -WindowStyle Minimized -NoProfile -File $prepareScript -RevitYear $RevitYear
         Write-Host "Rider hot reload prep finished"
     }
     catch
