@@ -47,7 +47,8 @@ public static class FamilyDocumentProcessFamily {
         Func<FamilyDocument, TContext, List<TOutput>>[] callbacks,
         out List<TOutput> results,
         IReadOnlyList<string>? transactionNames = null,
-        Action<string, IReadOnlyList<(bool IsError, string Message)>>? onCommitDiagnostics = null
+        Action<string, IReadOnlyList<(bool IsError, string Message)>>? onCommitDiagnostics = null,
+        bool suppressWarnings = false
     ) {
         results = new List<TOutput>();
         for (var callbackIndex = 0; callbackIndex < callbacks.Length; callbackIndex++) {
@@ -59,6 +60,13 @@ public static class FamilyDocumentProcessFamily {
             _ = trans.Start();
             var commitDiagnostics = new List<(bool IsError, string Message)>();
 
+            if (suppressWarnings) {
+                var failureOptions = trans.GetFailureHandlingOptions();
+                failureOptions.SetFailuresPreprocessor(new WarningSuppressingFailuresPreprocessor(commitDiagnostics));
+                failureOptions.SetForcedModalHandling(false);
+                trans.SetFailureHandlingOptions(failureOptions);
+            }
+
             void OnFailuresProcessing(object? _, FailuresProcessingEventArgs args) {
                 var accessor = args.GetFailuresAccessor();
                 if (accessor == null || accessor.GetDocument()?.Equals(famDoc.Document) != true)
@@ -66,9 +74,10 @@ public static class FamilyDocumentProcessFamily {
 
                 foreach (var failureMessage in accessor.GetFailureMessages()) {
                     var severity = failureMessage.GetSeverity();
-                    var description = failureMessage.GetDescriptionText();
-                    if (string.IsNullOrWhiteSpace(description))
-                        description = failureMessage.GetFailureDefinitionId().Guid.ToString();
+                    if (suppressWarnings && severity == FailureSeverity.Warning)
+                        continue;
+
+                    var description = DescribeFailure(failureMessage);
                     commitDiagnostics.Add((severity != FailureSeverity.Warning, description));
                 }
             }
@@ -90,6 +99,31 @@ public static class FamilyDocumentProcessFamily {
         }
 
         return famDoc;
+    }
+
+    private static string DescribeFailure(FailureMessageAccessor failureMessage) {
+        var description = failureMessage.GetDescriptionText();
+        var failureGuid = failureMessage.GetFailureDefinitionId().Guid;
+        if (string.IsNullOrWhiteSpace(description))
+            return failureGuid.ToString();
+
+        return $"{description} [{failureGuid}]";
+    }
+
+    private sealed class WarningSuppressingFailuresPreprocessor(
+        ICollection<(bool IsError, string Message)> diagnostics
+    ) : IFailuresPreprocessor {
+        public FailureProcessingResult PreprocessFailures(FailuresAccessor failuresAccessor) {
+            foreach (var failureMessage in failuresAccessor.GetFailureMessages()) {
+                if (failureMessage.GetSeverity() != FailureSeverity.Warning)
+                    continue;
+
+                diagnostics.Add((false, $"Suppressed warning: {DescribeFailure(failureMessage)}"));
+                failuresAccessor.DeleteWarning(failureMessage);
+            }
+
+            return FailureProcessingResult.Continue;
+        }
     }
 
     /// <summary>

@@ -49,6 +49,9 @@
         <Resource Include="Resources\square-terminal32.png"/>
     </ItemGroup>
     <ItemGroup>
+        <None Include="..\Pe.Revit.Tests\Fixtures\Profiles\**\*.json" Link="Benchmarks\Profiles\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
+    <ItemGroup>
         <ProjectReference Include="..\Pe.Revit.Extensions\Pe.Revit.Extensions.csproj"/>
         <ProjectReference Include="..\Pe.Revit.FamilyFoundry\Pe.Revit.FamilyFoundry.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj"/>

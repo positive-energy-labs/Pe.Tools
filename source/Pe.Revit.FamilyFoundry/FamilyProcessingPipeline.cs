@@ -152,7 +152,8 @@ public static class FamilyProcessingPipelineExtensions {
     public static FamilyProcessingPipeline Process<TContext>(
         this FamilyProcessingPipeline pipeline,
         Func<FamilyDocument, TContext, List<OperationLog>>[] callbacks,
-        IReadOnlyList<string>? transactionNames = null
+        IReadOnlyList<string>? transactionNames = null,
+        bool suppressWarnings = false
     ) {
         if (pipeline.Context == null)
             throw new InvalidOperationException("Context must be set before calling Process()");
@@ -172,7 +173,8 @@ public static class FamilyProcessingPipelineExtensions {
                         : new LogEntry($"Commit diagnostic {index + 1}").Skip(diagnostic.Message))
                     .ToList();
                 commitLogs.Add(new OperationLog($"{transactionName}: Commit", entries));
-            });
+            },
+            suppressWarnings);
         sw.Stop();
 
         pipeline.Context.OperationLogs = results.Concat(commitLogs).ToList();

@@ -142,7 +142,7 @@ public class OperationProcessor(
                 .StartPipeline(this.OpenDoc, family, pipeline =>
                         pipeline
                             .CollectPreSnapshot(collectorQueue)
-                            .Process(familyFuncs, transactionNames)
+                            .Process(familyFuncs, transactionNames, this._exOpts.SuppressWarnings)
                             .SaveToPaths(d => GetSavePaths(d, saveOpts, outputFolderPath))
                             .Load()
                             .CollectPostSnapshot(collectorQueue),
@@ -183,7 +183,7 @@ public class OperationProcessor(
             .StartPipeline(pipeline =>
                     pipeline
                         .CollectPreSnapshot(collectorQueue)
-                        .Process(familyFuncs, transactionNames)
+                        .Process(familyFuncs, transactionNames, this._exOpts.SuppressWarnings)
                         .SaveToPaths(d => GetSavePaths(d, saveOpts, outputFolderPath))
                         .CollectPostSnapshot(collectorQueue),
                 out var context);
@@ -260,7 +260,12 @@ public class OperationProcessor(
 
                             // Process operations
                             var opSw = Stopwatch.StartNew();
-                            _ = famDoc.Process(context, variantFuncs, out var logs, variantTransactionNames);
+                            _ = famDoc.Process(
+                                context,
+                                variantFuncs,
+                                out var logs,
+                                variantTransactionNames,
+                                suppressWarnings: this._exOpts.SuppressWarnings);
                             opSw.Stop();
                             context.OperationsMs = opSw.Elapsed.TotalMilliseconds;
 
@@ -356,6 +361,9 @@ public class ExecutionOptions {
         "In many cases the same results can be obtained without the collection's data. " +
         "Disabling collectors will reduce processing time, especially for families that are complicated with many family types. + ")]
     public bool EnableCollectors { get; init; } = true;
+
+    [Description("When enabled Revit transaction warnings are auto-suppressed and recorded as commit diagnostics.")]
+    public bool SuppressWarnings { get; init; } = false;
 }
 
 public class LoadAndSaveOptions {

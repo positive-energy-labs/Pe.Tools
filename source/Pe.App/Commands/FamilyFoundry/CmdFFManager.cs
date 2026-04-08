@@ -97,7 +97,8 @@ public class CmdFFManager : IExternalCommand {
         FFManagerSettings profile,
         string profileName,
         LoadAndSaveOptions? onFinishSettings = null,
-        string? outputFolderPath = null
+        string? outputFolderPath = null,
+        ExecutionOptions? executionOptionsOverride = null
     ) {
         if (doc == null) {
             return new FFManagerProcessFamiliesActionResult(
@@ -126,7 +127,10 @@ public class CmdFFManager : IExternalCommand {
                 SaveFamilyToOutputDir = false
             };
 
-            var executionOptions = new ExecutionOptions { SingleTransaction = false, OptimizeTypeOperations = false };
+            var executionOptions = executionOptionsOverride ?? new ExecutionOptions {
+                SingleTransaction = false,
+                OptimizeTypeOperations = false
+            };
             var collectorQueue = new CollectorQueue()
                 .Add(new ParamSectionCollector())
                 .Add(new LookupTableSectionCollector())

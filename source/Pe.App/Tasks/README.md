@@ -199,6 +199,14 @@ The Task Palette automatically tracks:
 This data is used to intelligently sort tasks, showing frequently-used tasks
 first.
 
+## Practical Benchmarks
+
+- Install the matching `Pe.Tools` MSI.
+- Open Revit.
+- Run `Task Palette`.
+- Execute `Run Practical Benchmarks`.
+- Inspect `Documents/Pe.App/CmdPltTasks/output/RunPracticalBenchmarksTask/` for the newest `practical-benchmarks_*` run folder, the per-benchmark JSON files, and `run-summary.txt`.
+
 ## Future: User-Defined Tasks
 
 In a future version, users will be able to:
