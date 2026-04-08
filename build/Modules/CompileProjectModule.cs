@@ -1,15 +1,7 @@
-﻿using Build.Attributes;
-using Build.Options;
-using Microsoft.Extensions.Options;
-using ModularPipelines.Context;
-using ModularPipelines.Git.Extensions;
-using ModularPipelines.Modules;
-using Sourcy.DotNet;
-using ModularPipelines.Attributes;
+﻿using ModularPipelines.Attributes;
 using ModularPipelines.Context;
 using ModularPipelines.DotNet.Extensions;
 using ModularPipelines.DotNet.Options;
-using ModularPipelines.Models;
 using ModularPipelines.Modules;
 using Sourcy.DotNet;
 
@@ -20,36 +12,34 @@ namespace Build.Modules;
 /// </summary>
 [DependsOn<ResolveVersioningModule>]
 [DependsOn<ResolveConfigurationsModule>]
+[DependsOn<CleanProjectModule>(Optional = true)]
 public sealed class CompileProjectModule : Module {
-    protected override async Task<IDictionary<string, object>?> ExecuteAsync(IPipelineContext context,
-        CancellationToken cancellationToken) {
-        var versioningResult = await GetModule<ResolveVersioningModule>();
-        var configurationsResult = await GetModule<ResolveConfigurationsModule>();
-        var versioning = versioningResult.Value!;
-        var configurations = configurationsResult.Value!;
+    protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
+        var versioningResult = await context.GetModule<ResolveVersioningModule>();
+        var configurationsResult = await context.GetModule<ResolveConfigurationsModule>();
+        var versioning = versioningResult.ValueOrDefault!;
+        var configurations = configurationsResult.ValueOrDefault!;
 
         foreach (var configuration in configurations) {
-            await SubModule(configuration,
+            await context.SubModule(configuration,
                 async () => await CompileAsync(context, versioning, configuration, cancellationToken));
         }
-
-        return await NothingAsync();
     }
 
     /// <summary>
     ///     Compile the add-in project for the specified configuration.
     /// </summary>
-    private static async Task<CommandResult> CompileAsync(
-        IPipelineContext context,
+    private static async Task CompileAsync(
+        IModuleContext context,
         ResolveVersioningResult versioning,
         string configuration,
         CancellationToken cancellationToken) =>
         await context.DotNet().Build(new DotNetBuildOptions {
-            ProjectSolution = Solutions.Pe_Tools.FullName,
+            ProjectSolution = Projects.Pe_App.FullName,
             Configuration = configuration,
             Properties = [
                 ("VersionPrefix", versioning.VersionPrefix),
                 ("VersionSuffix", versioning.VersionSuffix!)
             ]
-        }, cancellationToken);
+        }, cancellationToken: cancellationToken);
 }

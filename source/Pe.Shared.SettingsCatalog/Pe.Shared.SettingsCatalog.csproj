@@ -1,4 +1,4 @@
-<Project Sdk="Nice3point.Revit.Sdk/6.0.2">
+<Project Sdk="Nice3point.Revit.Sdk/6.2.1">
 
     <PropertyGroup>
         <ImplicitUsings>enable</ImplicitUsings>
@@ -7,8 +7,8 @@
 
     <ItemGroup>
         <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all" Condition="'$(TargetFramework)' == 'net48'"/>
-        <ProjectReference Include="..\Pe.Revit.FamilyFoundry\Pe.Revit.FamilyFoundry.csproj" />
-        <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj" />
+        <ProjectReference Include="..\Pe.Revit.FamilyFoundry\Pe.Revit.FamilyFoundry.csproj"/>
+        <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj"/>
     </ItemGroup>
 
 </Project>

@@ -2,37 +2,28 @@
 using Build.Options;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using ModularPipelines;
 using ModularPipelines.Extensions;
-using ModularPipelines.Host;
 
-await PipelineHostBuilder.Create()
-    .ConfigureAppConfiguration((context, builder) => {
-        _ = builder.AddJsonFile("appsettings.json")
-            .AddEnvironmentVariables();
-    })
-    .ConfigureServices((context, collection) => {
-        _ = collection.AddOptions<BuildOptions>().Bind(context.Configuration.GetSection("Build")).ValidateDataAnnotations();
+var builder = Pipeline.CreateBuilder();
 
-        collection.AddModule<ResolveConfigurationsModule>();
-        collection.AddModule<ResolveVersioningModule>();
-        collection.AddModule<CleanProjectModule>();
-        collection.AddModule<CompileProjectModule>();
+builder.Configuration.AddJsonFile("appsettings.json");
+builder.Configuration.AddUserSecrets<Program>();
+builder.Configuration.AddEnvironmentVariables();
 
-        if (args.Contains("pack")) {
-            collection.AddOptions<BundleOptions>().Bind(context.Configuration.GetSection("Bundle"))
-                .ValidateDataAnnotations();
+builder.Services.AddOptions<BuildOptions>().Bind(builder.Configuration.GetSection("Build"));
+builder.Services.AddOptions<BundleOptions>().Bind(builder.Configuration.GetSection("Bundle"));
+builder.Services.AddOptions<InstallerOptions>().Bind(builder.Configuration.GetSection("Installer"));
+builder.Services.AddOptions<PublishOptions>().Bind(builder.Configuration.GetSection("Publish"));
 
-            collection.AddModule<CreateBundleModule>();
-            collection.AddModule<CreateInstallerModule>();
-        }
+if (args.Length == 0) builder.Services.AddModule<CompileProjectModule>();
 
-        if (args.Contains("publish")) {
-            collection.AddOptions<PublishOptions>().Bind(context.Configuration.GetSection("Publish"))
-                .ValidateDataAnnotations();
+if (args.Contains("pack")) {
+    builder.Services.AddModule<CleanProjectModule>();
+    builder.Services.AddModule<CreateBundleModule>();
+    builder.Services.AddModule<CreateInstallerModule>();
+}
 
-            collection.AddModule<GenerateChangelogModule>();
-            collection.AddModule<GenerateGitHubChangelogModule>();
-            collection.AddModule<PublishGithubModule>();
-        }
-    })
-    .ExecutePipelineAsync();
+if (args.Contains("publish")) builder.Services.AddModule<PublishGithubModule>();
+
+await builder.Build().RunAsync();

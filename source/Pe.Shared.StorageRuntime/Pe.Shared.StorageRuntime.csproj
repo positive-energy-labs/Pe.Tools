@@ -1,4 +1,4 @@
-<Project Sdk="Nice3point.Revit.Sdk/6.0.2">
+<Project Sdk="Nice3point.Revit.Sdk/6.2.1">
 
     <PropertyGroup>
         <LangVersion>latest</LangVersion>
@@ -18,7 +18,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj" />
+        <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj"/>
     </ItemGroup>
 
 </Project>

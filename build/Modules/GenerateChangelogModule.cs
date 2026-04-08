@@ -1,20 +1,12 @@
-﻿using Build.Attributes;
-using Build.Options;
+﻿using Build.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using ModularPipelines.Context;
-using ModularPipelines.Git.Extensions;
-using ModularPipelines.Modules;
-using Sourcy.DotNet;
 using ModularPipelines.Attributes;
 using ModularPipelines.Context;
-using ModularPipelines.DotNet.Extensions;
-using ModularPipelines.DotNet.Options;
+using ModularPipelines.Git.Extensions;
 using ModularPipelines.GitHub.Extensions;
-using ModularPipelines.Models;
 using ModularPipelines.Modules;
 using Octokit;
-using Sourcy.DotNet;
 using System.Text;
 using File = ModularPipelines.FileSystem.File;
 
@@ -25,9 +17,9 @@ namespace Build.Modules;
 /// </summary>
 [DependsOn<ResolveVersioningModule>]
 public sealed class GenerateChangelogModule(IOptions<PublishOptions> publishOptions) : Module<string> {
-    protected override async Task<string?> ExecuteAsync(IPipelineContext context, CancellationToken cancellationToken) {
-        var versioningResult = await GetModule<ResolveVersioningModule>();
-        var versioning = versioningResult.Value!;
+    protected override async Task<string?> ExecuteAsync(IModuleContext context, CancellationToken cancellationToken) {
+        var versioningResult = await context.GetModule<ResolveVersioningModule>();
+        var versioning = versioningResult.ValueOrDefault!;
 
         if (string.IsNullOrEmpty(publishOptions.Value.ChangelogFile)) {
             context.Logger.LogInformation("Changelog file not specified");
@@ -58,7 +50,7 @@ public sealed class GenerateChangelogModule(IOptions<PublishOptions> publishOpti
         var isChangelogEntryFound = false;
         var changelog = new StringBuilder();
 
-        foreach (var line in await changelogFile.ReadLinesAsync()) {
+        await foreach (var line in changelogFile.ReadLinesAsync()) {
             if (isChangelogEntryFound) {
                 if (line.StartsWith(separator)) break;
 
@@ -93,7 +85,7 @@ public sealed class GenerateChangelogModule(IOptions<PublishOptions> publishOpti
     /// <summary>
     ///     Call the GitHub API to generate release notes for a specific version.
     /// </summary>
-    private static async Task<string?> GenerateReleaseNotesAsync(IPipelineContext context,
+    private static async Task<string?> GenerateReleaseNotesAsync(IModuleContext context,
         ResolveVersioningResult versioning) {
         var repositoryId = long.Parse(context.GitHub().EnvironmentVariables.RepositoryId!);
 

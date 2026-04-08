@@ -1,17 +1,10 @@
 ﻿using Autodesk.PackageBuilder;
-using Build.Attributes;
 using Build.Options;
 using Microsoft.Extensions.Options;
-using ModularPipelines.Context;
-using ModularPipelines.Git.Extensions;
-using ModularPipelines.Modules;
-using Sourcy.DotNet;
 using ModularPipelines.Attributes;
 using ModularPipelines.Context;
-using ModularPipelines.DotNet.Extensions;
-using ModularPipelines.DotNet.Options;
 using ModularPipelines.FileSystem;
-using ModularPipelines.Models;
+using ModularPipelines.Git.Extensions;
 using ModularPipelines.Modules;
 using Shouldly;
 using Sourcy.DotNet;
@@ -26,11 +19,12 @@ namespace Build.Modules;
 /// </summary>
 [DependsOn<ResolveVersioningModule>]
 [DependsOn<CompileProjectModule>]
-public sealed partial class CreateBundleModule(IOptions<BundleOptions> bundleOptions) : Module<CommandResult> {
-    protected override async Task<CommandResult?> ExecuteAsync(IPipelineContext context,
-        CancellationToken cancellationToken) {
-        var versioningResult = await GetModule<ResolveVersioningModule>();
-        var versioning = versioningResult.Value!;
+public sealed partial class CreateBundleModule(
+    IOptions<BuildOptions> buildOptions,
+    IOptions<BundleOptions> bundleOptions) : Module {
+    protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
+        var versioningResult = await context.GetModule<ResolveVersioningModule>();
+        var versioning = versioningResult.ValueOrDefault!;
 
         var bundleTarget = new File(Projects.Pe_App.FullName);
         var targetDirectories = bundleTarget.Folder!
@@ -40,18 +34,19 @@ public sealed partial class CreateBundleModule(IOptions<BundleOptions> bundleOpt
 
         targetDirectories.ShouldNotBeEmpty("No content were found to create a bundle");
 
-        var outputFolder = context.Git().RootDirectory.GetFolder("output");
+        var outputFolder = context.Git().RootDirectory.GetFolder(buildOptions.Value.OutputDirectory);
         var bundleFolder = outputFolder.CreateFolder($"{bundleTarget.NameWithoutExtension}.bundle");
-        var contentFolder = bundleFolder.CreateFolder("Content");
+        var contentFolder = bundleFolder.CreateFolder("Contents");
         var manifestFile = bundleFolder.GetFile("PackageContents.xml");
 
         PackFiles(targetDirectories, contentFolder);
         this.GenerateManifest(bundleTarget, targetDirectories, manifestFile, versioning);
 
-        context.Zip.ZipFolder(bundleFolder, outputFolder.GetFile($"{bundleFolder.Name}.zip").Path);
-        bundleFolder.Delete();
+        var outputFile = outputFolder.GetFile($"{bundleFolder.Name}.zip");
+        context.Files.Zip.ZipFolder(bundleFolder, outputFile.Path);
+        await bundleFolder.DeleteAsync(cancellationToken);
 
-        return await NothingAsync();
+        context.Summary.KeyValue("Artifacts", "Bundle", outputFile.Path);
     }
 
     private static void PackFiles(Folder[] targetDirectories, Folder contentFolder) {

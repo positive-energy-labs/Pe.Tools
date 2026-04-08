@@ -7,3 +7,6 @@ riderModule.iml
 /_ReSharper.Caches/
 *.log
 .idea
+*.sln.DotSettings.user
+install/output
+/output
