@@ -233,22 +233,25 @@ internal static class FamilyActions {
     }
 
     /// <summary>
-    ///     Opens RevitLookup to snoop the selected item.
+    ///     Opens RevitDBExplorer to snoop the selected item.
     /// </summary>
     internal static void HandleSnoop(Document doc, UnifiedFamilyItem item) {
         if (item == null) return;
+
         object objectToSnoop = item.ItemType switch {
             FamilyItemType.Family => item.Family!,
             FamilyItemType.FamilyType => item.FamilySymbol!,
             FamilyItemType.FamilyInstance => item.FamilyInstance!,
             _ => throw new InvalidOperationException()
         };
+
         var title = item.ItemType switch {
             FamilyItemType.Family => $"Family: {item.Family!.Name}",
             FamilyItemType.FamilyType => $"Type: {item.FamilySymbol!.Family.Name}: {item.FamilySymbol.Name}",
             FamilyItemType.FamilyInstance => $"Instance: {item.FamilyInstance!.Symbol.Name} ({item.FamilyInstance.Id})",
             _ => string.Empty
         };
+
         _ = RevitDbExplorerService.TrySnoopObject(doc, objectToSnoop, title);
     }
 
