@@ -1,4 +1,4 @@
-<Project Sdk="Nice3point.Revit.Sdk/6.0.2">
+<Project Sdk="Nice3point.Revit.Sdk/6.2.1">
 
     <PropertyGroup>
         <UseWPF>true</UseWPF>
@@ -10,6 +10,7 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
+        <PackageReference Include="JetBrains.Annotations" Version="2025.2.4"/>
         <PackageReference Include="Mingmoe.Demystifier" Version="0.9.9"/>
         <PackageReference Include="Nice3point.Revit.Api.AdWindows" Version="$(RevitVersion).*"/>
         <PackageReference Include="Nice3point.Revit.Toolkit" Version="$(RevitVersion).*"/>
@@ -42,9 +43,9 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj" />
-        <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj" />
-        <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj" />
+        <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj"/>
+        <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj"/>
+        <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj"/>
         <ProjectReference Include="..\Toon\Toon.csproj"/>
     </ItemGroup>
 

@@ -1,20 +1,9 @@
-﻿using Build.Attributes;
-using Build.Options;
-using Microsoft.Extensions.Options;
-using Microsoft.VisualStudio.SolutionPersistence.Model;
+﻿using Microsoft.VisualStudio.SolutionPersistence.Model;
 using Microsoft.VisualStudio.SolutionPersistence.Serializer;
 using ModularPipelines.Context;
 using ModularPipelines.Git.Extensions;
 using ModularPipelines.Modules;
-using Sourcy.DotNet;
-using ModularPipelines.Attributes;
-using ModularPipelines.Context;
-using ModularPipelines.DotNet.Extensions;
-using ModularPipelines.DotNet.Options;
-using ModularPipelines.Models;
-using ModularPipelines.Modules;
 using Shouldly;
-using Sourcy.DotNet;
 
 namespace Build.Modules;
 
@@ -22,8 +11,7 @@ namespace Build.Modules;
 ///     Resolve solution configurations required to compile the add-in for all supported Revit versions.
 /// </summary>
 public sealed class ResolveConfigurationsModule : Module<string[]> {
-    protected override async Task<string[]?>
-        ExecuteAsync(IPipelineContext context, CancellationToken cancellationToken) {
+    protected override async Task<string[]?> ExecuteAsync(IModuleContext context, CancellationToken cancellationToken) {
         var solutionModel = await LoadSolutionModelAsync(context, cancellationToken);
         var configurations = solutionModel.BuildTypes
             .Where(configuration => configuration.Contains("Release.R", StringComparison.OrdinalIgnoreCase))
@@ -34,15 +22,18 @@ public sealed class ResolveConfigurationsModule : Module<string[]> {
         return configurations;
     }
 
-    private static async Task<SolutionModel> LoadSolutionModelAsync(IPipelineContext context,
+    private static async Task<SolutionModel> LoadSolutionModelAsync(IModuleContext context,
         CancellationToken cancellationToken) {
         var solution = context.Git().RootDirectory.FindFile(file => file.Extension == ".slnx");
-        if (solution is not null)
-            return await SolutionSerializers.SlnXml.OpenAsync(solution.GetStream(), cancellationToken);
+        if (solution is not null) {
+            await using var slnxStream = solution.GetStream();
+            return await SolutionSerializers.SlnXml.OpenAsync(slnxStream, cancellationToken);
+        }
 
         solution = context.Git().RootDirectory.FindFile(file => file.Extension == ".sln");
         solution.ShouldNotBeNull("Solution file not found.");
 
-        return await SolutionSerializers.SlnFileV12.OpenAsync(solution.GetStream(), cancellationToken);
+        await using var slnStream = solution.GetStream();
+        return await SolutionSerializers.SlnFileV12.OpenAsync(slnStream, cancellationToken);
     }
 }

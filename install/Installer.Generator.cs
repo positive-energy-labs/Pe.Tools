@@ -8,7 +8,7 @@ public static partial class Generator {
     /// <summary>
     ///     Generates Wix entities, features and directories for the installer.
     /// </summary>
-    public static WixEntity[] GenerateWixEntities(IEnumerable<string> args) {
+    public static WixEntity[] GenerateWixEntities(string[] args) {
         var versionStorages = new Dictionary<string, List<WixEntity>>();
         var revitFeature = new Feature {
             Name = "Revit Add-in", Description = "Revit add-in installation files", Display = FeatureDisplay.expand

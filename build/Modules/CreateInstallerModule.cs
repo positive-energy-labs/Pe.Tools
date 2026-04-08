@@ -1,17 +1,11 @@
-﻿using Build.Attributes;
-using Build.Options;
+﻿using Build.Options;
 using Microsoft.Extensions.Options;
-using ModularPipelines.Context;
-using ModularPipelines.Git.Extensions;
-using ModularPipelines.Modules;
-using Sourcy.DotNet;
 using ModularPipelines.Attributes;
 using ModularPipelines.Context;
 using ModularPipelines.DotNet.Extensions;
 using ModularPipelines.DotNet.Options;
-using ModularPipelines.Enums;
 using ModularPipelines.FileSystem;
-using ModularPipelines.Models;
+using ModularPipelines.Git.Extensions;
 using ModularPipelines.Modules;
 using ModularPipelines.Options;
 using Shouldly;
@@ -25,23 +19,23 @@ namespace Build.Modules;
 /// </summary>
 [DependsOn<ResolveVersioningModule>]
 [DependsOn<CompileProjectModule>]
-public sealed class CreateInstallerModule : Module<CommandResult> {
-    protected override async Task<CommandResult?> ExecuteAsync(IPipelineContext context,
-        CancellationToken cancellationToken) {
-        var versioningResult = await GetModule<ResolveVersioningModule>();
-        var versioning = versioningResult.Value!;
+public sealed class CreateInstallerModule(
+    IOptions<BuildOptions> buildOptions,
+    IOptions<Build.Options.InstallerOptions> installerOptions) : Module {
+    protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
+        var versioningResult = await context.GetModule<ResolveVersioningModule>();
+        var versioning = versioningResult.ValueOrDefault!;
+        var rootDirectory = context.Git().RootDirectory;
 
         var wixTarget = new File(Projects.Pe_App.FullName);
         var wixInstaller = new File(Projects.Installer.FullName);
         var wixToolFolder = await InstallWixAsync(context, cancellationToken);
 
-        await context.DotNet().Build(new DotNetBuildOptions {
-            ProjectSolution = wixInstaller.Path,
-            Configuration = Configuration.Release,
-            Properties = [
-                ("Version", versioning.Version)
-            ]
-        }, cancellationToken);
+        ValidateInstallerAssets(rootDirectory, installerOptions.Value);
+
+        await context.DotNet()
+            .Build(new DotNetBuildOptions { ProjectSolution = wixInstaller.Path, Configuration = "Release" },
+                cancellationToken: cancellationToken);
 
         var builderFile = wixInstaller.Folder!
             .GetFolder("bin")
@@ -59,32 +53,59 @@ public sealed class CreateInstallerModule : Module<CommandResult> {
 
         targetDirectories.ShouldNotBeEmpty("No content were found to create an installer");
 
-        return await context.Command.ExecuteCommandLineTool(
-            new CommandLineToolOptions(builderFile.Path) {
-                Arguments = targetDirectories,
-                WorkingDirectory = context.Git().RootDirectory,
-                CommandLogging = CommandLogging.Default & ~CommandLogging.Input,
+        await context.Shell.Command.ExecuteCommandLineTool(
+            new GenericCommandLineToolOptions(builderFile.Path) {
+                Arguments = [versioning.Version, ..targetDirectories]
+            },
+            new CommandExecutionOptions {
+                WorkingDirectory = wixInstaller.Folder,
                 EnvironmentVariables =
                     new Dictionary<string, string?> {
                         { "PATH", $"{Environment.GetEnvironmentVariable("PATH")};{wixToolFolder}" }
                     }
             }, cancellationToken);
+
+        var outputFolder = rootDirectory.GetFolder(buildOptions.Value.OutputDirectory);
+        var outputFiles = outputFolder.GetFiles(file => file.Extension == ".msi").ToArray();
+        outputFiles.ShouldNotBeEmpty("Failed to create an installer");
+
+        foreach (var outputFile in outputFiles) context.Summary.KeyValue("Artifacts", "Installer", outputFile.Path);
     }
 
     /// <summary>
     ///     Installs the WiX toolset required for building installers.
     /// </summary>
-    private static async Task<Folder> InstallWixAsync(IPipelineContext context, CancellationToken cancellationToken) {
-        var wixToolFolder = context.FileSystem.CreateTemporaryFolder();
-        await context.Command.ExecuteCommandLineTool(new CommandLineToolOptions("dotnet") {
-            Arguments = [
-                "tool",
-                "install",
-                "--tool-path", wixToolFolder.Path,
-                "wix"
-            ]
-        }, cancellationToken);
+    private static async Task<Folder> InstallWixAsync(IModuleContext context, CancellationToken cancellationToken) {
+        var wixToolFolder = Folder.CreateTemporaryFolder();
+        await context.DotNet().Tool
+            .Execute(
+                new DotNetToolOptions {
+                    Arguments = ["install", "wix", "--version", "7.*", "--tool-path", wixToolFolder.Path]
+                }, cancellationToken: cancellationToken);
+
+        var wixExe = wixToolFolder.GetFile("wix.exe");
+        await context.Shell.Command.ExecuteCommandLineTool(
+            new GenericCommandLineToolOptions(wixExe.Path) { Arguments = ["eula", "accept", "wix7"] },
+            cancellationToken: cancellationToken);
+
+        await context.Shell.Command.ExecuteCommandLineTool(
+            new GenericCommandLineToolOptions(wixExe.Path) {
+                Arguments = ["extension", "add", "-g", "WixToolset.UI.wixext"]
+            }, cancellationToken: cancellationToken);
 
         return wixToolFolder;
+    }
+
+    private static void ValidateInstallerAssets(Folder rootDirectory, Build.Options.InstallerOptions options) {
+        var requiredFiles = new[] { options.BannerImagePath, options.BackgroundImagePath, options.ProductIconPath };
+
+        foreach (var relativeOrAbsolutePath in requiredFiles) {
+            var resolvedPath = Path.IsPathRooted(relativeOrAbsolutePath)
+                ? relativeOrAbsolutePath
+                : Path.Combine(rootDirectory.Path, relativeOrAbsolutePath);
+
+            System.IO.File.Exists(resolvedPath)
+                .ShouldBeTrue($"Installer asset was not found: {resolvedPath}");
+        }
     }
 }

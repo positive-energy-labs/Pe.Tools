@@ -2,25 +2,41 @@
 using WixSharp;
 using WixSharp.CommonTasks;
 using WixSharp.Controls;
-using Assembly = System.Reflection.Assembly;
 
-const string outputName = "Pe.Tools";
-const string projectName = "Pe.Tools";
+if (args.Length < 2) {
+    throw new InvalidOperationException(
+        "Installer requires a version followed by one or more publish directories. " +
+        "Example: dotnet run -c Release -- 1.0.0 ..\\source\\Pe.App\\bin\\Release.R25\\publish");
+}
 
+if (!Versioning.TryCreateFromVersionString(args[0], out var versioning)) {
+    if (args[0].Equals("pack", StringComparison.OrdinalIgnoreCase)) {
+        throw new InvalidOperationException(
+            "Received build pipeline arguments in the installer entrypoint. " +
+            "Run 'dotnet run -c Release -- pack publish' from the build directory, not install.");
+    }
+
+    throw new InvalidOperationException(
+        $"Installer version argument '{args[0]}' is not a valid semantic version. " +
+        "Example: 1.0.0 or 1.0.0-beta.1");
+}
+
+var resolvedVersioning = versioning!;
+var configuration = InstallerConfiguration.Load();
 var project = new Project {
-    OutDir = "output",
-    Name = projectName,
+    OutDir = configuration.OutputDirectory,
+    Name = configuration.ProductName,
     Platform = Platform.x64,
     UI = WUI.WixUI_FeatureTree,
     MajorUpgrade = MajorUpgrade.Default,
-    GUID = new Guid("DA2F1078-D093-4D58-B1DE-85A4402E49FF"),
-    BannerImage = @"install\Resources\Icons\BannerImage.png",
-    BackgroundImage = @"install\Resources\Icons\BackgroundImage.png",
-    Version = Assembly.GetExecutingAssembly().GetName().Version.ClearRevision(),
-    ControlPanelInfo = { Manufacturer = Environment.UserName, ProductIcon = @"install\Resources\Icons\ShellIcon.ico" }
+    GUID = configuration.UpgradeCode,
+    BannerImage = configuration.BannerImagePath,
+    BackgroundImage = configuration.BackgroundImagePath,
+    Version = resolvedVersioning.VersionPrefix,
+    ControlPanelInfo = { Manufacturer = configuration.Manufacturer, ProductIcon = configuration.ProductIconPath }
 };
 
-var wixEntities = Generator.GenerateWixEntities(args);
+var wixEntities = Generator.GenerateWixEntities(args[1..]);
 project.RemoveDialogsBetween(NativeDialogs.WelcomeDlg, NativeDialogs.CustomizeDlg);
 
 BuildSingleUserMsi();
@@ -28,18 +44,21 @@ BuildMultiUserUserMsi();
 
 void BuildSingleUserMsi() {
     project.Scope = InstallScope.perUser;
-    project.OutFileName = $"{outputName}-{project.Version}-SingleUser";
+    project.OutFileName = $"{configuration.ProductName}-{resolvedVersioning.Version}-SingleUser";
     project.Dirs = [
         new InstallDir(@"%AppDataFolder%\Autodesk\Revit\Addins\", wixEntities)
     ];
-    _ = project.BuildMsi();
+    project.BuildMsi();
 }
 
 void BuildMultiUserUserMsi() {
     project.Scope = InstallScope.perMachine;
-    project.OutFileName = $"{outputName}-{project.Version}-MultiUser";
+    project.OutFileName = $"{configuration.ProductName}-{resolvedVersioning.Version}-MultiUser";
     project.Dirs = [
-        new InstallDir(@"%CommonAppDataFolder%\Autodesk\Revit\Addins\", wixEntities)
+        new InstallDir(
+            resolvedVersioning.VersionPrefix.Major >= 2027
+                ? @"%ProgramFiles%\Autodesk\Revit\Addins"
+                : @"%CommonAppDataFolder%\Autodesk\Revit\Addins", wixEntities)
     ];
-    _ = project.BuildMsi();
+    project.BuildMsi();
 }

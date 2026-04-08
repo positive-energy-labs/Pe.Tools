@@ -1,16 +1,16 @@
-<Project Sdk="Nice3point.Revit.Sdk/6.0.2">
-  <PropertyGroup>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <LangVersion>latest</LangVersion>
-  </PropertyGroup>
+<Project Sdk="Nice3point.Revit.Sdk/6.2.1">
+    <PropertyGroup>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="ILRepack" Version="2.0.44">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all" Condition="'$(TargetFramework)' == 'net48'" />
-  </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="ILRepack" Version="2.0.44">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
+        <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all" Condition="'$(TargetFramework)' == 'net48'"/>
+    </ItemGroup>
 </Project>
