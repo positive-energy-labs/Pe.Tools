@@ -80,16 +80,18 @@ internal static class ViewActions {
     }
 
     /// <summary>
-    ///     Opens RevitLookup to snoop the selected view.
+    ///     Opens RevitDBExplorer to snoop the selected view.
     /// </summary>
     internal static void HandleSnoop(Document doc, UnifiedViewItem? item) {
         if (item == null) return;
+
         var title = item.ItemType switch {
             ViewItemType.View => $"View: {item.View.Name}",
             ViewItemType.Schedule => $"Schedule: {item.View.Name}",
             ViewItemType.Sheet => $"Sheet: {item.View.Name}",
             _ => item.View.Name
         };
+
         _ = RevitDbExplorerService.TrySnoopObject(doc, item.View, title);
     }
 }

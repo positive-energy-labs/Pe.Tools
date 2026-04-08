@@ -1,85 +1,143 @@
-using Autodesk.Revit.UI;
-using Pe.Revit.Global.Services.Document;
-using RevitDBExplorer;
-using Serilog;
 using System.Diagnostics;
+using Autodesk.Revit.UI;
 
 namespace Pe.App.Services;
 
 /// <summary>
-///     Centralized wrapper for RevitDBExplorer integration.
-///     Uses the forked RDBE package with embedded support via EmbeddedCommand.
+///     Thin wrapper around the optional RevitDBExplorer.API package.
+///     The full RevitDBExplorer add-in is expected to be installed separately.
 /// </summary>
 public static class RevitDbExplorerService {
-    /// <summary>
-    ///     Opens RevitDBExplorer UI to snoop any objects.
-    ///     Works for FamilyParameter, Family, FamilySymbol, Category, or any other Revit API object.
-    /// </summary>
-    /// <param name="uiApp">The UIApplication instance</param>
-    /// <param name="doc">The document context (can be null for non-document objects)</param>
-    /// <param name="objects">The objects to snoop</param>
-    /// <param name="title">Optional title for the RDBE window</param>
-    public static Result<bool> TrySnoopObjects(
-        UIApplication uiApp,
+    private const string ReleasesUrl = "https://github.com/NeVeSpl/RevitDBExplorer/releases/latest";
+
+    public static bool TrySnoopObjects(
         Document? doc,
-        IEnumerable<object> objects,
-        string? title = null
+        IEnumerable<object?> objects,
+        string? contextLabel = null
     ) {
+        var objectList = objects
+            ?.Where(static candidate => candidate != null)
+            .Cast<object>()
+            .ToArray() ?? [];
+
+        if (objectList.Length == 0)
+            return false;
+
         try {
-            var objectsList = objects?.ToList() ?? [];
-            Log.Debug("TrySnoopObjects called with {ObjectCount} objects", objectsList.Count);
-
-            if (uiApp == null) {
-                Log.Error("UIApplication is null");
-                return new ArgumentNullException(nameof(uiApp));
-            }
-
-            if (objectsList.Count == 0) {
-                Log.Warning("No objects to snoop");
-                _ = TaskDialog.Show("Snoop", "No objects provided to snoop.");
-                return false;
-            }
-
-            // Log sample of objects
-            foreach (var obj in objectsList.Take(3))
-                Log.Debug("  Object: Type={Type}", obj?.GetType()?.Name ?? "NULL");
-
-            if (objectsList.Count > 3)
-                Log.Debug("  ... and {MoreCount} more", objectsList.Count - 3);
-
-            // Use the new direct object Execute overload
-            Log.Debug("Executing RDBE EmbeddedCommand with direct objects...");
-            _ = new EmbeddedCommand().Execute(uiApp, doc, objectsList, title);
-
-            Log.Information("RevitDBExplorer opened successfully");
+            var controller = RevitDBExplorer.API.RevitDBExplorer.CreateController();
+            controller.Snoop(doc, objectList);
             return true;
+        } catch (Exception ex) when (IsKnownUnsupportedSnoopIssue(ex)) {
+            ShowUnsupportedVersionDialog(contextLabel, ex.Message);
+            return false;
+        } catch (Exception ex) when (IsInstallOrUpgradeIssue(ex)) {
+            ShowInstallDialog(contextLabel, ex.Message);
+            return false;
         } catch (Exception ex) {
-            Log.Error(ex, "RevitDBExplorer snoop failed: {Exception}", ex.ToStringDemystified());
-            _ = TaskDialog.Show("Snoop Failed", $"Error: {ex.Message}\n\nCheck logs for details.");
-            return ex;
+            ShowFailureDialog(contextLabel, ex.Message);
+            return false;
         }
     }
 
-
-    /// <summary>
-    ///     Opens RevitDBExplorer UI to snoop a single object.
-    ///     Works for FamilyParameter, Family, FamilySymbol, Category, or any other Revit API object.
-    /// </summary>
-    /// <param name="uiApp">The UIApplication instance</param>
-    /// <param name="doc">The document containing the object</param>
-    /// <param name="obj">The object to snoop</param>
-    /// <param name="title">Optional title for the RDBE window</param>
-    /// <returns>True if the object was snoopable, false otherwise</returns>
-    public static Result<bool> TrySnoopObject(
-        Document doc,
-        object obj,
-        string? title = null
+    public static bool TrySnoopObject(
+        Document? doc,
+        object? obj,
+        string? contextLabel = null
     ) {
-        if (obj == null) {
-            Log.Warning("Object to snoop is null");
+        if (obj == null)
             return false;
-        }
 
-        return TrySnoopObjects(DocumentManager.uiapp, doc, [obj], title);
+        return TrySnoopObjects(doc, [obj], contextLabel);
+    }
+
+    private static bool IsInstallOrUpgradeIssue(Exception ex) {
+        var message = ex.Message ?? string.Empty;
+        return message.Contains("not available", StringComparison.OrdinalIgnoreCase)
+               || message.Contains("old version", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsKnownUnsupportedSnoopIssue(Exception ex) {
+        var message = ex.ToString();
+
+        return message.Contains("APIUIDocumentProxy.cpp", StringComparison.OrdinalIgnoreCase)
+               && message.Contains("Parameter name: document", StringComparison.OrdinalIgnoreCase)
+               && message.Contains("RevitDBExplorer.APIAdapter.Snoop", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void ShowInstallDialog(string? contextLabel, string details) {
+        var dialog = new TaskDialog("RevitDBExplorer Required") {
+            MainInstruction = "Install RevitDBExplorer to use Snoop.",
+            MainContent = BuildDialogContent(
+                contextLabel,
+                "Pe.Tools can snoop exact objects through RevitDBExplorer when the add-in is installed separately.",
+                details
+            ),
+            CommonButtons = TaskDialogCommonButtons.Close,
+            DefaultButton = TaskDialogResult.Close,
+            TitleAutoPrefix = false
+        };
+        dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink1, "Open RevitDBExplorer Releases");
+
+        if (dialog.Show() == TaskDialogResult.CommandLink1)
+            OpenReleasesPage();
+    }
+
+    private static void ShowFailureDialog(string? contextLabel, string details) {
+        var dialog = new TaskDialog("RevitDBExplorer Error") {
+            MainInstruction = "Pe.Tools could not open RevitDBExplorer.",
+            MainContent = BuildDialogContent(
+                contextLabel,
+                "RevitDBExplorer is installed separately, but the handoff failed.",
+                details
+            ),
+            CommonButtons = TaskDialogCommonButtons.Close,
+            DefaultButton = TaskDialogResult.Close,
+            TitleAutoPrefix = false
+        };
+        dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink1, "Open RevitDBExplorer Releases");
+
+        if (dialog.Show() == TaskDialogResult.CommandLink1)
+            OpenReleasesPage();
+    }
+
+    private static void ShowUnsupportedVersionDialog(string? contextLabel, string details) {
+        var dialog = new TaskDialog("RevitDBExplorer Upgrade Required") {
+            MainInstruction = "This RevitDBExplorer version does not support snooping from Pe.Tools.",
+            MainContent = BuildDialogContent(
+                contextLabel,
+                "RevitDBExplorer 2.5.0 and below cannot snoop objects handed off from Pe.Tools. Please install a newer RevitDBExplorer release.",
+                details
+            ),
+            CommonButtons = TaskDialogCommonButtons.Close,
+            DefaultButton = TaskDialogResult.Close,
+            TitleAutoPrefix = false
+        };
+        dialog.AddCommandLink(TaskDialogCommandLinkId.CommandLink1, "Open RevitDBExplorer Releases");
+
+        if (dialog.Show() == TaskDialogResult.CommandLink1)
+            OpenReleasesPage();
+    }
+
+    private static string BuildDialogContent(
+        string? contextLabel,
+        string summary,
+        string details
+    ) {
+        var scopedContext = string.IsNullOrWhiteSpace(contextLabel)
+            ? string.Empty
+            : $"Requested item: {contextLabel}{Environment.NewLine}{Environment.NewLine}";
+
+        return $"{summary}{Environment.NewLine}{Environment.NewLine}"
+               + scopedContext
+               + $"Details: {details}{Environment.NewLine}{Environment.NewLine}"
+               + $"Latest release: {ReleasesUrl}";
+    }
+
+    private static void OpenReleasesPage() {
+        try {
+            _ = Process.Start(new ProcessStartInfo(ReleasesUrl) { UseShellExecute = true });
+        } catch {
+            // If the browser handoff fails, the TaskDialog already shows the release URL.
+        }
     }
 }
