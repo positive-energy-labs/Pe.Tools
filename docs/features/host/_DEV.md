@@ -9,6 +9,13 @@ The browser transport is split by responsibility:
 - SSE owns invalidation-only server-to-client events.
 - Revit participates through the named-pipe bridge only when the user manually
   connects it from the add-in.
+- The host may have multiple connected Revit sessions at once. Request routing is
+  deterministic:
+  - explicit `sessionId` wins
+  - otherwise explicit `revitVersion` wins
+  - otherwise the most recently connected session is the default
+- The installed host may auto-shutdown after idle time when no Revit sessions
+  are connected.
 
 ## Transport
 
@@ -60,6 +67,8 @@ The browser transport is split by responsibility:
 
 - `GET /api/settings/host-status`
   - Returns `HostStatusData`.
+  - Includes `defaultSessionId` plus a `sessions` list for connected Revit
+    sessions.
 - `GET /api/settings/schema?moduleKey=...`
   - Returns `SchemaData`.
   - Structural only. Does not execute live Revit providers locally.
@@ -102,10 +111,13 @@ The browser transport is split by responsibility:
 
 - Event name: `document-changed`
   - Payload: `DocumentInvalidationEvent`
+  - Includes the originating `sessionId` and `revitVersion` when available.
   - Meaning: invalidate document-sensitive queries and mark the open document
     stale when appropriate.
 - Event name: `host-status-changed`
   - Payload: `HostStatusChangedEvent`
+  - Includes the affected `sessionId`, `revitVersion`, and current connected
+    session count.
   - Meaning: invalidate the host-status query after bridge connect, disconnect,
     or active-document changes.
 
@@ -134,6 +146,8 @@ Recommended frontend behavior:
 6. Call `POST /api/settings/field-options` and
    `POST /api/settings/parameter-catalog` only when the bridge is connected and
    the rendered form needs live Revit data.
+   - Bridge-backed requests may include an optional target selector with
+     `sessionId` or `revitVersion`.
 7. Subscribe to `/api/settings/events` and invalidate dependent queries when
    events arrive.
 

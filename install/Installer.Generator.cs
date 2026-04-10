@@ -4,17 +4,22 @@ using WixSharp;
 
 namespace Installer;
 
+public sealed record InstallerLayout(
+    WixEntity[] RevitEntities,
+    WixEntity[] HostEntities
+);
+
 public static partial class Generator {
     /// <summary>
     ///     Generates Wix entities, features and directories for the installer.
     /// </summary>
-    public static WixEntity[] GenerateWixEntities(string[] args) {
+    public static InstallerLayout GenerateWixEntities(string hostPublishDirectory, string[] revitPublishDirectories) {
         var versionStorages = new Dictionary<string, List<WixEntity>>();
         var revitFeature = new Feature {
             Name = "Revit Add-in", Description = "Revit add-in installation files", Display = FeatureDisplay.expand
         };
 
-        foreach (var directory in args) {
+        foreach (var directory in revitPublishDirectories) {
             var directoryInfo = new DirectoryInfo(directory);
             if (!TryParseVersion(directoryInfo.FullName, out var fileVersion))
                 throw new Exception($"Could not parse version from directory name: {directoryInfo.FullName}");
@@ -36,10 +41,24 @@ public static partial class Generator {
             LogFeatureFiles(directory, fileVersion);
         }
 
-        return versionStorages
-            .Select(storage => new Dir(new Id($"INSTALL{storage.Key}"), storage.Key, storage.Value.ToArray()))
-            .Cast<WixEntity>()
-            .ToArray();
+        var hostFeature = new Feature {
+            Name = "Shared Host",
+            Description = "Install the shared external host used by connected Revit sessions."
+        };
+
+        var hostEntities = new WixEntity[] {
+            new Files(hostFeature, $@"{hostPublishDirectory}\*.*")
+        };
+
+        LogFeatureFiles(hostPublishDirectory, "Host");
+
+        return new InstallerLayout(
+            versionStorages
+                .Select(storage => new Dir(new Id($"INSTALL{storage.Key}"), storage.Key, storage.Value.ToArray()))
+                .Cast<WixEntity>()
+                .ToArray(),
+            hostEntities
+        );
     }
 
     /// <summary>

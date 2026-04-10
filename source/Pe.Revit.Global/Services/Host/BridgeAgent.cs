@@ -7,6 +7,7 @@ using Pe.Revit.Global.Services.Host.Operations;
 using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
+using System.Diagnostics;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
 
@@ -199,6 +200,8 @@ internal sealed class BridgeAgent : IDisposable {
             true,
             this.IsConnected,
             this._hostOptions.PipeName,
+            this._hostOptions.SessionId,
+            this._hostOptions.ProcessId,
             DocumentManager.GetActiveDocument() != null,
             DocumentManager.GetActiveDocument()?.Title,
             this._moduleRegistry.GetModules().Count(),
@@ -309,7 +312,13 @@ internal sealed class BridgeAgent : IDisposable {
         if (!this.IsConnected)
             return;
 
-        var payloadJson = JsonConvert.SerializeObject(payload, this._serializerSettings);
+        var payloadJson = JsonConvert.SerializeObject(
+            payload with {
+                SessionId = this._hostOptions.SessionId,
+                RevitVersion = this.RevitVersion
+            },
+            this._serializerSettings
+        );
         var frame = new BridgeFrame(
             BridgeFrameKind.Event,
             Event: new BridgeEvent(SettingsHostEventNames.DocumentChanged, payloadJson)
@@ -343,6 +352,8 @@ internal sealed class BridgeAgent : IDisposable {
         var handshake = new BridgeHandshake(
             BridgeProtocol.ContractVersion,
             BridgeProtocol.Transport,
+            this._hostOptions.SessionId,
+            this._hostOptions.ProcessId,
             Revit.Utils.Utils.GetRevitVersion() ?? "unknown",
             RuntimeInformation.FrameworkDescription,
             DocumentManager.GetActiveDocument() != null,
@@ -417,19 +428,46 @@ internal sealed class BridgeAgent : IDisposable {
 
 internal sealed record HostConnectionOptions(
     string PipeName,
-    int ConnectTimeoutMs
+    string HostBaseUrl,
+    string SessionId,
+    int ProcessId,
+    int ConnectTimeoutMs,
+    int RegistrationTimeoutMs
 ) {
     public static HostConnectionOptions FromEnvironment() =>
         new(
-            GetValueOrDefault("PE_SETTINGS_EDITOR_PIPE_NAME", BridgeProtocol.DefaultPipeName),
-            GetPipeConnectTimeoutMs()
+            GetValueOrDefault(SettingsEditorRuntime.PipeNameVariable, BridgeProtocol.DefaultPipeName),
+            GetValueOrDefault(
+                SettingsEditorRuntime.HostBaseUrlVariable,
+                SettingsEditorRuntime.DefaultHostBaseUrl
+            ),
+            GetSessionId(),
+            Process.GetCurrentProcess().Id,
+            GetPipeConnectTimeoutMs(),
+            GetHostRegistrationTimeoutMs()
         );
 
+    private static string GetSessionId() {
+        var configuredValue = Environment.GetEnvironmentVariable(SettingsEditorRuntime.SessionIdVariable);
+        if (!string.IsNullOrWhiteSpace(configuredValue))
+            return configuredValue;
+
+        using var process = Process.GetCurrentProcess();
+        return $"revit-{process.Id}-{process.StartTime.ToUniversalTime().Ticks}";
+    }
+
     private static int GetPipeConnectTimeoutMs() {
-        var raw = Environment.GetEnvironmentVariable("PE_SETTINGS_EDITOR_PIPE_CONNECT_TIMEOUT_MS");
+        var raw = Environment.GetEnvironmentVariable(SettingsEditorRuntime.PipeConnectTimeoutMsVariable);
         return int.TryParse(raw, out var timeoutMs) && timeoutMs > 0
             ? timeoutMs
-            : 1500;
+            : SettingsEditorRuntime.DefaultPipeConnectTimeoutMs;
+    }
+
+    private static int GetHostRegistrationTimeoutMs() {
+        var raw = Environment.GetEnvironmentVariable(SettingsEditorRuntime.HostRegistrationTimeoutMsVariable);
+        return int.TryParse(raw, out var timeoutMs) && timeoutMs > 0
+            ? timeoutMs
+            : SettingsEditorRuntime.DefaultHostRegistrationTimeoutMs;
     }
 
     private static string GetValueOrDefault(string variableName, string defaultValue) {

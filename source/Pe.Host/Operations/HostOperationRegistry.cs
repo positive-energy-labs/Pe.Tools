@@ -112,21 +112,39 @@ internal sealed class HostOperationRegistry {
     private static HostStatusData CreateHostStatusData(HostOperationContext context) {
         var runtimeState = context.RuntimeStateService.GetState();
         var snapshot = runtimeState.BridgeSnapshot;
+        var defaultSession = snapshot.DefaultSession;
 
         return new HostStatusData(
             true,
             snapshot.BridgeIsConnected,
-            snapshot.HasActiveDocument,
-            snapshot.ActiveDocumentTitle,
-            snapshot.RevitVersion,
-            snapshot.RuntimeFramework,
+            defaultSession?.HasActiveDocument ?? false,
+            defaultSession?.ActiveDocumentTitle,
+            defaultSession?.RevitVersion,
+            defaultSession?.RuntimeFramework,
             HostProtocol.ContractVersion,
             HostProtocol.Transport,
+            SettingsEditorRuntime.RuntimeIdentity,
+            snapshot.PipeName,
             typeof(BridgeServer).Assembly.GetName().Version?.ToString(),
-            snapshot.BridgeContractVersion,
-            snapshot.BridgeTransport,
+            defaultSession?.BridgeContractVersion ?? BridgeProtocol.ContractVersion,
+            defaultSession?.BridgeTransport ?? BridgeProtocol.Transport,
             [.. runtimeState.AvailableModules],
-            snapshot.DisconnectReason
+            snapshot.DisconnectReason,
+            snapshot.DefaultSessionId,
+            snapshot.Sessions
+                .Select(session => new HostSessionData(
+                    session.SessionId,
+                    session.RevitVersion,
+                    session.ProcessId,
+                    session.HasActiveDocument,
+                    session.ActiveDocumentTitle,
+                    session.RuntimeFramework,
+                    session.BridgeContractVersion,
+                    session.BridgeTransport,
+                    [.. session.AvailableModules],
+                    session.ConnectedAtUnixMs
+                ))
+                .ToList()
         );
     }
 }

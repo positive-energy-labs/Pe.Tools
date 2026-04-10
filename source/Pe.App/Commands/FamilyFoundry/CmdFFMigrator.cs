@@ -156,7 +156,7 @@ public class CmdFFMigrator : IExternalCommand {
             .Add(
                 LogEventLevel.Warning,
                 new StackFrame(),
-                "Could not open external settings-editor route. Check PE_SETTINGS_EDITOR_BASE_URL."
+                $"Could not open external settings-editor route. Check {Pe.Shared.HostContracts.Protocol.SettingsEditorRuntime.FrontendBaseUrlVariable}."
             )
             .Show();
     }

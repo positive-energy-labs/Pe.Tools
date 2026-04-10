@@ -1,7 +1,9 @@
 using Pe.Revit.Global.Services.Document;
+using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
+using Newtonsoft.Json;
 using System.Runtime.InteropServices;
 
 namespace Pe.Revit.Global.Services.Host;
@@ -15,6 +17,8 @@ public record RuntimeStatus(
     bool IsInitialized,
     bool IsConnected,
     string PipeName,
+    string SessionId,
+    int ProcessId,
     bool HasActiveDocument,
     string? ActiveDocumentTitle,
     int AvailableModuleCount,
@@ -47,8 +51,9 @@ public static class HostRuntime {
             _revitTaskService = revitTaskService;
             _lastError = null;
             Log.Information(
-                "Settings editor runtime initialized: Pipe={PipeName}, ConnectTimeoutMs={ConnectTimeoutMs}, Modules={ModuleCount}",
+                "Settings editor runtime initialized: Pipe={PipeName}, SessionId={SessionId}, ConnectTimeoutMs={ConnectTimeoutMs}, Modules={ModuleCount}",
                 _connectionOptions.PipeName,
+                _connectionOptions.SessionId,
                 _connectionOptions.ConnectTimeoutMs,
                 registry.GetModules().Count()
             );
@@ -68,8 +73,9 @@ public static class HostRuntime {
 
             var connectStopwatch = Stopwatch.StartNew();
             Log.Information(
-                "Settings editor runtime connect starting: Pipe={PipeName}, ConnectTimeoutMs={ConnectTimeoutMs}, Modules={ModuleCount}, ActiveDocument={ActiveDocumentTitle}",
+                "Settings editor runtime connect starting: Pipe={PipeName}, SessionId={SessionId}, ConnectTimeoutMs={ConnectTimeoutMs}, Modules={ModuleCount}, ActiveDocument={ActiveDocumentTitle}",
                 _connectionOptions.PipeName,
+                _connectionOptions.SessionId,
                 _connectionOptions.ConnectTimeoutMs,
                 _moduleRegistry.GetModules().Count(),
                 DocumentManager.GetActiveDocument()?.Title
@@ -82,8 +88,22 @@ public static class HostRuntime {
             _agent = null;
 
             try {
+                var compatibilityResult = VerifyHostCompatibility();
+                if (!compatibilityResult.Success) {
+                    _lastError = compatibilityResult.Message;
+                    return compatibilityResult;
+                }
+
                 var createStopwatch = Stopwatch.StartNew();
                 _agent = new BridgeAgent(_moduleRegistry, _connectionOptions, _revitTaskService);
+                var registrationResult = WaitForSessionRegistration();
+                if (!registrationResult.Success) {
+                    _lastError = registrationResult.Message;
+                    _agent.Dispose();
+                    _agent = null;
+                    return registrationResult;
+                }
+
                 Log.Information(
                     "Settings editor runtime connect completed in {ElapsedMs} ms. Bridge agent created in {AgentCreateElapsedMs} ms.",
                     connectStopwatch.ElapsedMilliseconds,
@@ -146,6 +166,8 @@ public static class HostRuntime {
                 return _agent.GetStatus() with {
                     IsInitialized = _moduleRegistry != null,
                     PipeName = _connectionOptions.PipeName,
+                    SessionId = _connectionOptions.SessionId,
+                    ProcessId = _connectionOptions.ProcessId,
                     LastError = _lastError ?? _agent.LastError
                 };
             }
@@ -154,6 +176,8 @@ public static class HostRuntime {
                 _moduleRegistry != null,
                 false,
                 _connectionOptions.PipeName,
+                _connectionOptions.SessionId,
+                _connectionOptions.ProcessId,
                 DocumentManager.GetActiveDocument() != null,
                 DocumentManager.GetActiveDocument()?.Title,
                 _moduleRegistry?.GetModules().Count() ?? 0,
@@ -161,6 +185,99 @@ public static class HostRuntime {
                 RuntimeInformation.FrameworkDescription,
                 _lastError
             );
+        }
+    }
+
+    private static RuntimeActionResult VerifyHostCompatibility() {
+        if (!TryGetHostStatus(out var status, out var errorMessage)) {
+            return new RuntimeActionResult(
+                false,
+                errorMessage ?? $"Could not reach the settings editor host at '{_connectionOptions.HostBaseUrl}'."
+            );
+        }
+
+        if (!string.Equals(status.RuntimeIdentity, SettingsEditorRuntime.RuntimeIdentity, StringComparison.Ordinal)) {
+            return new RuntimeActionResult(
+                false,
+                $"The running host on '{_connectionOptions.HostBaseUrl}' is not the expected settings editor runtime."
+            );
+        }
+
+        if (status.HostContractVersion != HostProtocol.ContractVersion) {
+            return new RuntimeActionResult(
+                false,
+                $"Host contract mismatch. Expected {HostProtocol.ContractVersion}, got {status.HostContractVersion}."
+            );
+        }
+
+        if (status.BridgeContractVersion != BridgeProtocol.ContractVersion) {
+            return new RuntimeActionResult(
+                false,
+                $"Bridge contract mismatch. Expected {BridgeProtocol.ContractVersion}, got {status.BridgeContractVersion}."
+            );
+        }
+
+        if (!string.Equals(status.PipeName, _connectionOptions.PipeName, StringComparison.Ordinal)) {
+            return new RuntimeActionResult(
+                false,
+                $"Host pipe mismatch. Expected '{_connectionOptions.PipeName}', got '{status.PipeName}'."
+            );
+        }
+
+        return new RuntimeActionResult(true, "Settings editor host compatibility verified.");
+    }
+
+    private static RuntimeActionResult WaitForSessionRegistration() {
+        var deadlineUtc = DateTime.UtcNow.AddMilliseconds(_connectionOptions.RegistrationTimeoutMs);
+        while (DateTime.UtcNow < deadlineUtc) {
+            if (TryGetHostStatus(out var status, out _)) {
+                var registeredSession = status.Sessions.FirstOrDefault(session =>
+                    string.Equals(session.SessionId, _connectionOptions.SessionId, StringComparison.Ordinal) &&
+                    session.ProcessId == _connectionOptions.ProcessId
+                );
+
+                if (registeredSession != null) {
+                    return new RuntimeActionResult(
+                        true,
+                        $"Connected to host on pipe '{_connectionOptions.PipeName}'."
+                    );
+                }
+            }
+
+            Thread.Sleep(250);
+        }
+
+        return new RuntimeActionResult(
+            false,
+            $"Connected to the host pipe, but session '{_connectionOptions.SessionId}' was not registered within {_connectionOptions.RegistrationTimeoutMs} ms."
+        );
+    }
+
+    private static bool TryGetHostStatus(out HostStatusData status, out string? errorMessage) {
+        errorMessage = null;
+        status = default!;
+
+        try {
+            using var client = new HttpClient { Timeout = TimeSpan.FromMilliseconds(1250) };
+            using var response = client.GetAsync(
+                    $"{_connectionOptions.HostBaseUrl.TrimEnd('/')}{HttpRoutes.HostStatus}"
+                )
+                .GetAwaiter()
+                .GetResult();
+
+            if (!response.IsSuccessStatusCode) {
+                errorMessage =
+                    $"Host status request failed ({(int)response.StatusCode} {response.ReasonPhrase ?? "Unknown"}).";
+                return false;
+            }
+
+            var payloadJson = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            status = JsonConvert.DeserializeObject<HostStatusData>(payloadJson)
+                     ?? throw new InvalidOperationException("Host status response was empty.");
+            return true;
+        } catch (Exception ex) {
+            errorMessage = ex.Message;
+            return false;
         }
     }
 }

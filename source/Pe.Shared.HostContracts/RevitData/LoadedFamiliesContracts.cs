@@ -1,6 +1,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Shared.HostContracts.Operations;
+using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts.SettingsStorage;
 using TypeGen.Core.TypeAnnotations;
 
@@ -60,18 +61,21 @@ public record LoadedFamiliesFilter {
 public record LoadedFamiliesFilterFieldOptionsRequest(
     string PropertyPath,
     string SourceKey,
-    Dictionary<string, string>? ContextValues
-);
+    Dictionary<string, string>? ContextValues,
+    BridgeSessionSelector? Target = null
+) : IBridgeSessionRequest;
 
 [ExportTsInterface]
 public record LoadedFamiliesCatalogRequest(
-    LoadedFamiliesFilter? Filter
-);
+    LoadedFamiliesFilter? Filter,
+    BridgeSessionSelector? Target = null
+) : IBridgeSessionRequest;
 
 [ExportTsInterface]
 public record LoadedFamiliesMatrixRequest(
-    LoadedFamiliesFilter? Filter
-);
+    LoadedFamiliesFilter? Filter,
+    BridgeSessionSelector? Target = null
+) : IBridgeSessionRequest;
 
 [ExportTsInterface]
 public record LoadedFamilyTypeEntry(

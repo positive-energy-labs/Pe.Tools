@@ -13,12 +13,6 @@ namespace Build.Options;
 [Serializable]
 public sealed record BundleOptions {
     /// <summary>
-    ///     The vendor name.
-    /// </summary>
-    [Required]
-    public string? VendorName { get; init; }
-
-    /// <summary>
     ///     The vendor website URL.
     /// </summary>
     public string? VendorUrl { get; init; }

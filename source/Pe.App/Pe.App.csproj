@@ -55,6 +55,7 @@
         <ProjectReference Include="..\Pe.Revit.Extensions\Pe.Revit.Extensions.csproj"/>
         <ProjectReference Include="..\Pe.Revit.FamilyFoundry\Pe.Revit.FamilyFoundry.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj"/>
+        <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj"/>
         <ProjectReference Include="..\Pe.Shared.SettingsCatalog\Pe.Shared.SettingsCatalog.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Ui\Pe.Revit.Ui.csproj"/>
     </ItemGroup>

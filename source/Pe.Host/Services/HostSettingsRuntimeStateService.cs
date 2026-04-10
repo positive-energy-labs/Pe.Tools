@@ -3,7 +3,7 @@ using Pe.Shared.HostContracts.Protocol;
 namespace Pe.Host.Services;
 
 public sealed record HostSettingsRuntimeState(
-    BridgeSnapshot BridgeSnapshot,
+    BridgeRuntimeSnapshot BridgeSnapshot,
     IReadOnlyList<HostModuleDescriptor> AvailableModules
 );
 

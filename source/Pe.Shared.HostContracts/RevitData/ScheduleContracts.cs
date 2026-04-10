@@ -1,16 +1,18 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Shared.HostContracts.Operations;
+using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts.SettingsStorage;
 using TypeGen.Core.TypeAnnotations;
 
 namespace Pe.Shared.HostContracts.RevitData;
 
 [ExportTsInterface]
-public record ScheduleCatalogRequest {
+public record ScheduleCatalogRequest : IBridgeSessionRequest {
     public List<string> CategoryNames { get; init; } = [];
     public List<string> ScheduleNames { get; init; } = [];
     public bool IncludeTemplates { get; init; }
+    public BridgeSessionSelector? Target { get; init; }
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

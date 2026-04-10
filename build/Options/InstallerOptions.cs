@@ -8,12 +8,6 @@ namespace Build.Options;
 [Serializable]
 public sealed record InstallerOptions {
     /// <summary>
-    ///     Product name shown in the installer UI and used as the MSI file prefix.
-    /// </summary>
-    [Required]
-    public string ProductName { get; init; } = null!;
-
-    /// <summary>
     ///     Stable WiX upgrade code for the product.
     /// </summary>
     [Required]

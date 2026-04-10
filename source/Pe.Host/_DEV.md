@@ -12,11 +12,16 @@
 - settings modules come from the registry/catalog, not hardcoded host lists.
 - structural schema/document work stays host-local.
 - live document work crosses the Revit bridge and should stay visibly bridge-backed.
+- the bridge server owns a small session registry so multiple Revit sessions can
+  connect to one host process without sharing transport state.
+- the host may auto-shutdown after idle time, but only when there are no
+  connected Revit sessions and no in-flight non-SSE HTTP requests.
 
 ## Key Flows
 
 - **Structural authoring**: host resolves a registered module, serves schema, opens/saves documents, and returns structural validation results.
-- **Live Revit data**: frontend or tools still call the host; the host forwards live-document work through the bridge when connected.
+- **Live Revit data**: frontend or tools still call the host; the host forwards
+  live-document work through the selected bridge session when connected.
 - **Invalidation**: bridge emits document/host-status changes; host fans them out through SSE so clients invalidate queries and stale state.
 
 ## Open Questions

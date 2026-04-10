@@ -1,6 +1,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Shared.HostContracts.Operations;
+using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts.SettingsStorage;
 using TypeGen.Core.TypeAnnotations;
 
@@ -9,8 +10,9 @@ namespace Pe.Shared.HostContracts.RevitData;
 [ExportTsInterface]
 public record ParameterCatalogRequest(
     string ModuleKey,
-    Dictionary<string, string>? ContextValues
-);
+    Dictionary<string, string>? ContextValues,
+    BridgeSessionSelector? Target = null
+) : IBridgeSessionRequest;
 
 [JsonConverter(typeof(StringEnumConverter))]
 [ExportTsEnum]

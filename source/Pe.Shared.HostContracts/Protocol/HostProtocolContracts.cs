@@ -48,8 +48,18 @@ public static class HttpRoutes {
 [ExportTsClass]
 public static class HostProtocol {
     public const string Transport = "http+sse";
-    public const int ContractVersion = 17;
+    public const int ContractVersion = 18;
 }
+
+public interface IBridgeSessionRequest {
+    BridgeSessionSelector? Target { get; }
+}
+
+[ExportTsInterface]
+public record BridgeSessionSelector(
+    string? SessionId,
+    string? RevitVersion
+);
 
 [JsonConverter(typeof(StringEnumConverter))]
 [ExportTsEnum]
@@ -87,6 +97,20 @@ public record HostModuleDescriptor(
 );
 
 [ExportTsInterface]
+public record HostSessionData(
+    string SessionId,
+    string RevitVersion,
+    int ProcessId,
+    bool HasActiveDocument,
+    string? ActiveDocumentTitle,
+    string? RuntimeFramework,
+    int BridgeContractVersion,
+    string BridgeTransport,
+    List<HostModuleDescriptor> AvailableModules,
+    long ConnectedAtUnixMs
+);
+
+[ExportTsInterface]
 public record HostStatusData(
     bool HostIsRunning,
     bool BridgeIsConnected,
@@ -96,11 +120,15 @@ public record HostStatusData(
     string? RuntimeFramework,
     int HostContractVersion,
     string HostTransport,
+    string RuntimeIdentity,
+    string PipeName,
     string? ServerVersion,
     int BridgeContractVersion,
     string BridgeTransport,
     List<HostModuleDescriptor> AvailableModules,
-    string? DisconnectReason
+    string? DisconnectReason,
+    string? DefaultSessionId,
+    List<HostSessionData> Sessions
 );
 
 [ExportTsInterface]
@@ -108,12 +136,17 @@ public record DocumentInvalidationEvent(
     DocumentInvalidationReason Reason,
     string? DocumentTitle,
     bool HasActiveDocument,
-    List<HostInvalidationDomain> InvalidatedDomains
+    List<HostInvalidationDomain> InvalidatedDomains,
+    string? SessionId = null,
+    string? RevitVersion = null
 );
 
 [ExportTsInterface]
 public record HostStatusChangedEvent(
     HostStatusChangedReason Reason,
     bool HasActiveDocument,
-    string? DocumentTitle
+    string? DocumentTitle,
+    string? SessionId = null,
+    string? RevitVersion = null,
+    int ConnectedSessionCount = 0
 );
