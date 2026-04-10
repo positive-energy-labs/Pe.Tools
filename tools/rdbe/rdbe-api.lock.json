@@ -1,9 +1,0 @@
-{
-    "repositoryUrl":  "https://github.com/NeVeSpl/RevitDBExplorer.git",
-    "ref":  "cb87f3ca53aa245660a8d204bf70df42f58b9dc8",
-    "packageId":  "RevitDBExplorer.API",
-    "projectPath":  "sources/RevitDBExplorer.API/RevitDBExplorer.API.csproj",
-    "consumerProjectPath":  "source/Pe.App/Pe.App.csproj",
-    "packageVersion":  "1.8.1",
-    "resolvedCommit":  "cb87f3ca53aa245660a8d204bf70df42f58b9dc8"
-}

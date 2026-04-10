@@ -24,7 +24,7 @@ public static class RevitDbExplorerService {
             return false;
 
         try {
-            var controller = RevitDBExplorer.API.RevitDBExplorer.CreateController();
+            var controller = RevitExplorer.API.RevitExplorer.CreateController();
             controller.Snoop(doc, objectList);
             return true;
         } catch (Exception ex) when (IsKnownUnsupportedSnoopIssue(ex)) {
