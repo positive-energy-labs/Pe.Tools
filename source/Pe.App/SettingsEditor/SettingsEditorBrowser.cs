@@ -1,21 +1,24 @@
 using System.Diagnostics;
+using Pe.Shared.HostContracts.Protocol;
 
 namespace Pe.Tools.SettingsEditor;
 
 internal static class SettingsEditorBrowser {
-    private const string FrontendBaseUrlVariable = "PE_SETTINGS_EDITOR_BASE_URL";
-    private const string FrontendRouteVariable = "PE_SETTINGS_EDITOR_ROUTE";
-    private const string DefaultFrontendBaseUrl = "http://localhost:5150";
-    private const string DefaultFrontendRoute = "/settings-prototype";
-
     public static bool TryLaunch(
         string? moduleKey = null,
         string? rootKey = null,
-        string? relativePath = null
+        string? relativePath = null,
+        string? sessionId = null
     ) {
         try {
-            var baseUrl = GetValueOrDefault(FrontendBaseUrlVariable, DefaultFrontendBaseUrl);
-            var routePath = NormalizeRoutePath(GetValueOrDefault(FrontendRouteVariable, DefaultFrontendRoute));
+            var baseUrl = GetValueOrDefault(
+                SettingsEditorRuntime.FrontendBaseUrlVariable,
+                SettingsEditorRuntime.DefaultFrontendBaseUrl
+            );
+            var routePath = SettingsEditorRuntime.NormalizeRoutePath(GetValueOrDefault(
+                SettingsEditorRuntime.FrontendRouteVariable,
+                SettingsEditorRuntime.DefaultFrontendRoute
+            ));
             var query = new List<string>();
 
             if (!string.IsNullOrWhiteSpace(moduleKey))
@@ -27,6 +30,9 @@ internal static class SettingsEditorBrowser {
             if (!string.IsNullOrWhiteSpace(relativePath))
                 query.Add($"relativePath={Uri.EscapeDataString(relativePath)}");
 
+            if (!string.IsNullOrWhiteSpace(sessionId))
+                query.Add($"sessionId={Uri.EscapeDataString(sessionId)}");
+
             var targetUrl = query.Count == 0
                 ? $"{baseUrl.TrimEnd('/')}{routePath}"
                 : $"{baseUrl.TrimEnd('/')}{routePath}?{string.Join("&", query)}";
@@ -36,11 +42,6 @@ internal static class SettingsEditorBrowser {
             return false;
         }
     }
-
-    internal static string NormalizeRoutePath(string routePath) =>
-        routePath.StartsWith("/", StringComparison.Ordinal)
-            ? routePath
-            : "/" + routePath;
 
     private static string GetValueOrDefault(string variableName, string defaultValue) {
         var value = Environment.GetEnvironmentVariable(variableName);

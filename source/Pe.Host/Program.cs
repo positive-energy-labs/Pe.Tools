@@ -1,27 +1,39 @@
-using Pe.Host;
+﻿using Pe.Host;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Host.Operations;
 using Pe.Host.Services;
+using Microsoft.AspNetCore.Http.Json;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
 HostRevitAssemblyResolver.EnsureRegistered();
 
-var builder = WebApplication.CreateBuilder(args);
 var options = BridgeHostOptions.FromEnvironment();
+using var singletonHandle = HostSingletonGuard.TryAcquireOrExit(options);
+if (singletonHandle == null)
+    return;
+
+var builder = WebApplication.CreateBuilder(args);
+var hostLogFilePath = HostLogStorage.ResolveFilePath();
+
+builder.Logging.AddProvider(new HostFileLoggerProvider(hostLogFilePath));
 
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton<BridgeServer>();
+builder.Services.AddSingleton<HostActivityService>();
 builder.Services.AddSingleton<HostEventStreamService>();
 builder.Services.AddSingleton<HostOperationRegistry>();
 builder.Services.AddSingleton<HostOperationExecutor>();
 builder.Services.AddSingleton<IHostBridgeCapabilityService, HostBridgeCapabilityService>();
+builder.Services.AddSingleton<IHostScriptingPipeClientService, HostScriptingPipeClientService>();
 builder.Services.AddSingleton<IHostSettingsModuleCatalog>(_ => new HostSettingsModuleCatalog());
 builder.Services.AddSingleton<HostSettingsRuntimeStateService>();
 builder.Services.AddSingleton<HostSchemaService>();
 builder.Services.AddSingleton(sp => new HostSettingsStorageService(
     sp.GetRequiredService<IHostSettingsModuleCatalog>()));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BridgeServer>());
+builder.Services.AddHostedService<HostIdleMonitorService>();
 builder.Services.ConfigureHttpJsonOptions(jsonOptions => {
     jsonOptions.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
     jsonOptions.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
@@ -37,6 +49,16 @@ builder.Services.AddCors(corsOptions => corsOptions.AddDefaultPolicy(policy => p
 var app = builder.Build();
 
 app.UseCors();
+app.Use(async (httpContext, next) => {
+    var activityService = httpContext.RequestServices.GetRequiredService<HostActivityService>();
+    activityService.OnRequestStarted();
+    try {
+        await next();
+    } finally {
+        activityService.OnRequestCompleted();
+    }
+
+});
 HostEndpointMapper.MapOperations(app);
 app.MapGet(HttpRoutes.Events, async (
     HttpContext httpContext,
@@ -69,11 +91,13 @@ app.MapGet(HttpRoutes.Events, async (
         }
     }
 });
-
 app.Logger.LogInformation(
-    "Host listening on {BaseUrl} using pipe {PipeName}",
+    "Host listening on {BaseUrl} using pipe {PipeName}. IdleShutdownEnabled={IdleShutdownEnabled}, IdleShutdownTimeoutMinutes={IdleShutdownTimeoutMinutes}",
     options.HostBaseUrl,
-    options.PipeName
+    options.PipeName,
+    options.IdleShutdownEnabled,
+    options.IdleShutdownTimeout.TotalMinutes
 );
+app.Logger.LogInformation("Host file logging enabled at {LogFilePath}", hostLogFilePath);
 
 app.Run(options.HostBaseUrl);

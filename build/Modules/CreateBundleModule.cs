@@ -6,6 +6,7 @@ using ModularPipelines.Context;
 using ModularPipelines.FileSystem;
 using ModularPipelines.Git.Extensions;
 using ModularPipelines.Modules;
+using Pe.Shared.HostContracts.Protocol;
 using Shouldly;
 using Sourcy.DotNet;
 using System.Diagnostics.CodeAnalysis;
@@ -79,7 +80,7 @@ public sealed partial class CreateBundleModule(
                 .Name(bundleTarget.NameWithoutExtension)
                 .AppVersion(versioning.Version);
 
-            builder.CompanyDetails.Create(bundleOptions.Value.VendorName)
+            builder.CompanyDetails.Create(SettingsEditorRuntime.VendorName)
                 .Email(bundleOptions.Value.VendorEmail)
                 .Url(bundleOptions.Value.VendorUrl);
 

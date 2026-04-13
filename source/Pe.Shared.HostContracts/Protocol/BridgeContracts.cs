@@ -1,12 +1,12 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
 namespace Pe.Shared.HostContracts.Protocol;
 
 public static class BridgeProtocol {
     public const string Transport = "named-pipes";
-    public const int ContractVersion = 10;
-    public const string DefaultPipeName = "Pe.Host.Bridge";
+    public const int ContractVersion = 12;
+    public const string DefaultPipeName = SettingsEditorRuntime.DefaultPipeName;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
@@ -21,6 +21,8 @@ public enum BridgeFrameKind {
 public record BridgeHandshake(
     int ContractVersion,
     string Transport,
+    string SessionId,
+    int ProcessId,
     string RevitVersion,
     string RuntimeFramework,
     bool HasActiveDocument,

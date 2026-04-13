@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Shared.HostContracts.Operations;
 using TypeGen.Core.TypeAnnotations;
@@ -18,8 +18,8 @@ public static class HostRuntimeEventNames {
 [ExportTsClass]
 public static class HttpRoutes {
     public const string SettingsBase = "/api/settings";
-
     public const string RevitDataBase = "/api/revit-data";
+    public const string ScriptingBase = "/api/scripting";
     public static readonly string HostStatus = GetHostStatusOperationContract.Definition.Route;
     public static readonly string Schema = GetSchemaOperationContract.Definition.Route;
     public static readonly string Workspaces = GetWorkspacesOperationContract.Definition.Route;
@@ -43,13 +43,30 @@ public static class HttpRoutes {
 
     public static readonly string ProjectParameterBindings =
         GetProjectParameterBindingsOperationContract.Definition.Route;
+
+    public static readonly string ScriptingWorkspaceBootstrap =
+        GetScriptWorkspaceBootstrapOperationContract.Definition.Route;
+
+    public static readonly string ScriptingExecute =
+        ExecuteRevitScriptOperationContract.Definition.Route;
+
 }
 
 [ExportTsClass]
 public static class HostProtocol {
     public const string Transport = "http+sse";
-    public const int ContractVersion = 17;
+    public const int ContractVersion = 21;
 }
+
+public interface IBridgeSessionRequest {
+    BridgeSessionSelector? Target { get; }
+}
+
+[ExportTsInterface]
+public record BridgeSessionSelector(
+    string? SessionId,
+    string? RevitVersion
+);
 
 [JsonConverter(typeof(StringEnumConverter))]
 [ExportTsEnum]
@@ -87,6 +104,20 @@ public record HostModuleDescriptor(
 );
 
 [ExportTsInterface]
+public record HostSessionData(
+    string SessionId,
+    string RevitVersion,
+    int ProcessId,
+    bool HasActiveDocument,
+    string? ActiveDocumentTitle,
+    string? RuntimeFramework,
+    int BridgeContractVersion,
+    string BridgeTransport,
+    List<HostModuleDescriptor> AvailableModules,
+    long ConnectedAtUnixMs
+);
+
+[ExportTsInterface]
 public record HostStatusData(
     bool HostIsRunning,
     bool BridgeIsConnected,
@@ -96,11 +127,15 @@ public record HostStatusData(
     string? RuntimeFramework,
     int HostContractVersion,
     string HostTransport,
+    string RuntimeIdentity,
+    string PipeName,
     string? ServerVersion,
     int BridgeContractVersion,
     string BridgeTransport,
     List<HostModuleDescriptor> AvailableModules,
-    string? DisconnectReason
+    string? DisconnectReason,
+    string? DefaultSessionId,
+    List<HostSessionData> Sessions
 );
 
 [ExportTsInterface]
@@ -108,12 +143,17 @@ public record DocumentInvalidationEvent(
     DocumentInvalidationReason Reason,
     string? DocumentTitle,
     bool HasActiveDocument,
-    List<HostInvalidationDomain> InvalidatedDomains
+    List<HostInvalidationDomain> InvalidatedDomains,
+    string? SessionId = null,
+    string? RevitVersion = null
 );
 
 [ExportTsInterface]
 public record HostStatusChangedEvent(
     HostStatusChangedReason Reason,
     bool HasActiveDocument,
-    string? DocumentTitle
+    string? DocumentTitle,
+    string? SessionId = null,
+    string? RevitVersion = null,
+    int ConnectedSessionCount = 0
 );

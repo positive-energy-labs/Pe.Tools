@@ -1,6 +1,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Shared.HostContracts.Operations;
+using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts.SettingsStorage;
 using TypeGen.Core.TypeAnnotations;
 
@@ -15,8 +16,9 @@ public enum ProjectParameterBindingKind {
 
 [ExportTsInterface]
 public record ProjectParameterBindingsRequest(
-    LoadedFamiliesFilter? Filter
-);
+    LoadedFamiliesFilter? Filter,
+    BridgeSessionSelector? Target = null
+) : IBridgeSessionRequest;
 
 [ExportTsInterface]
 public record ProjectParameterBindingEntry(

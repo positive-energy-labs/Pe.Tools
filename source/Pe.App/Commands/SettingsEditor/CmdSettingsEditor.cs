@@ -1,4 +1,4 @@
-using Autodesk.Revit.Attributes;
+﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.Revit.Global.Services.Host;
 using Pe.Tools.SettingsEditor;
@@ -14,9 +14,10 @@ public class CmdSettingsEditor : IExternalCommand {
         try {
             var status = HostRuntime.GetStatus();
             Log.Information(
-                "Settings editor command opened: IsConnected={IsConnected}, Pipe={PipeName}, Modules={ModuleCount}, ActiveDocument={ActiveDocumentTitle}",
+                "Settings editor command opened: IsConnected={IsConnected}, Pipe={PipeName}, SessionId={SessionId}, Modules={ModuleCount}, ActiveDocument={ActiveDocumentTitle}",
                 status.IsConnected,
                 status.PipeName,
+                status.SessionId,
                 status.AvailableModuleCount,
                 status.ActiveDocumentTitle
             );
@@ -26,7 +27,7 @@ public class CmdSettingsEditor : IExternalCommand {
                     : "Settings Editor Bridge: Disconnected",
                 MainContent = BuildStatusSummary(status),
                 CommonButtons = TaskDialogCommonButtons.Close,
-                FooterText = "Launch the external settings editor host manually, then connect when you want Revit to participate."
+                FooterText = "Revit can start the external settings editor host automatically when needed."
             };
 
             if (status.IsConnected) {
@@ -61,7 +62,7 @@ public class CmdSettingsEditor : IExternalCommand {
                 Log.Information("Settings editor command selected action: {ActionName}", actionName);
                 var actionResult = status.IsConnected
                     ? HostRuntime.Disconnect()
-                    : HostRuntime.Connect();
+                    : SettingsEditorBridgeConnector.EnsureConnected().RuntimeActionResult;
                 Log.Information(
                     "Settings editor command action completed: {ActionName}, Success={Success}, ElapsedMs={ElapsedMs}, Message={Message}",
                     actionName,
@@ -73,13 +74,26 @@ public class CmdSettingsEditor : IExternalCommand {
                 break;
             case TaskDialogResult.CommandLink2:
                 Log.Information("Settings editor command selected action: Open Settings Editor");
-                var launched = SettingsEditorBrowser.TryLaunch();
+                var browserHostLaunchResult = SettingsEditorHostLauncher.EnsureRunning();
+                Log.Information(
+                    "Settings editor host ensure result before browser launch: Success={Success}, AlreadyRunning={AlreadyRunning}, StartedProcess={StartedProcess}, Message={Message}",
+                    browserHostLaunchResult.Success,
+                    browserHostLaunchResult.AlreadyRunning,
+                    browserHostLaunchResult.StartedProcess,
+                    browserHostLaunchResult.Message
+                );
+                if (!browserHostLaunchResult.Success) {
+                    _ = TaskDialog.Show("Settings Editor", browserHostLaunchResult.Message);
+                    break;
+                }
+
+                var launched = SettingsEditorBrowser.TryLaunch(sessionId: status.SessionId);
                 Log.Information("Settings editor launch result: Success={Success}", launched);
                 _ = TaskDialog.Show(
                     "Settings Editor",
                     launched
                         ? "Opened the external settings editor in your default browser."
-                        : "Could not open the external settings editor. Check PE_SETTINGS_EDITOR_BASE_URL."
+                        : $"Could not open the external settings editor. Check {Pe.Shared.HostContracts.Protocol.SettingsEditorRuntime.FrontendBaseUrlVariable}."
                 );
                 break;
             }
@@ -95,6 +109,8 @@ public class CmdSettingsEditor : IExternalCommand {
     private static string BuildStatusSummary(RuntimeStatus status) {
         var sb = new StringBuilder();
         _ = sb.AppendLine($"Pipe: {status.PipeName}");
+        _ = sb.AppendLine($"Session: {status.SessionId}");
+        _ = sb.AppendLine($"Process: {status.ProcessId}");
         _ = sb.AppendLine($"Modules: {status.AvailableModuleCount}");
         _ = sb.AppendLine($"Revit: {status.RevitVersion ?? "Unknown"}");
         _ = sb.AppendLine($"Runtime: {status.RuntimeFramework ?? "Unknown"}");

@@ -16,4 +16,8 @@
         <PackageReference Include="WixSharp.Msi.Core" Version="2.12.3"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="..\source\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj" />
+    </ItemGroup>
+
 </Project>

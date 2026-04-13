@@ -2,24 +2,30 @@
 
 ## Mental Model
 
-`Pe.Host` is the external orchestration layer for settings authoring, structural document workflows, live Revit-backed queries, and agent-visible document access. It is the browser-facing and tool-facing surface; it is not a second in-process Revit runtime.
+`Pe.Host` is the external transport boundary for browser/tool callers. It owns HTTP, settings SSE, route registration, and the decision about whether work stays local, crosses the Revit bridge, or proxies to another local transport.
 
 ## Architecture
 
-- `Program.cs` boots the HTTP/SSE host.
-- HTTP is the main workflow surface for schema, discovery, open, validate, save, and bridged data requests.
-- SSE is invalidation-only.
-- settings modules come from the registry/catalog, not hardcoded host lists.
-- structural schema/document work stays host-local.
-- live document work crosses the Revit bridge and should stay visibly bridge-backed.
+- `Program.cs` boots the HTTP/SSE host and DI graph.
+- `HostOperationRegistry` is the host contract surface.
+- host-local settings/document work stays in-process.
+- live document queries go through `BridgeServer`.
+- scripting is public through host HTTP, but the implementation currently proxies to `Pe.Scripting.Revit` over a local named pipe.
+- `/api/settings/events` remains invalidation-only and is not part of the scripting lane.
 
 ## Key Flows
 
-- **Structural authoring**: host resolves a registered module, serves schema, opens/saves documents, and returns structural validation results.
-- **Live Revit data**: frontend or tools still call the host; the host forwards live-document work through the bridge when connected.
-- **Invalidation**: bridge emits document/host-status changes; host fans them out through SSE so clients invalidate queries and stale state.
+- structural settings work:
+  - schema, workspaces, tree, open, validate, save
+  - no live Revit dependency
+- bridge-backed live data:
+  - host selects a bridge session and forwards the request into Revit
+- scripting v1:
+  - host requires exactly one connected Revit bridge session
+  - host sends one pipe request to `Pe.Scripting.Revit`
+  - host returns one final result payload
 
 ## Open Questions
 
-- How far the host should go in exposing agent-oriented Revit capabilities beyond transparent read/query access.
-- Which document entities should become first-class host surfaces instead of remaining generic schema-driven shapes.
+- whether scripting should eventually move from host-to-pipe proxying to first-class bridge operations
+- whether a future progressive scripting UX should use polling before SSE

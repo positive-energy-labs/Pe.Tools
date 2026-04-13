@@ -3,11 +3,11 @@ using Pe.Shared.HostContracts.RevitData;
 namespace Pe.Host.Services;
 
 public interface IHostBridgeCapabilityService {
-    BridgeSnapshot GetSnapshot();
+    BridgeRuntimeSnapshot GetSnapshot();
 }
 
 public sealed class HostBridgeCapabilityService(BridgeServer bridgeServer) : IHostBridgeCapabilityService {
     private readonly BridgeServer _bridgeServer = bridgeServer;
 
-    public BridgeSnapshot GetSnapshot() => this._bridgeServer.GetSnapshot();
+    public BridgeRuntimeSnapshot GetSnapshot() => this._bridgeServer.GetSnapshot();
 }

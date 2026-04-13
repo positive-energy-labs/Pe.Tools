@@ -13,7 +13,7 @@ namespace Pe.Revit.FamilyFoundry;
 /// </summary>
 /// <param name="executionOptions">The execution options for the processor. If null, default options will be used.</param>
 /// <param name="doc">The document to process.</param>
-public class OperationProcessor(
+public class OperationProcessor( 
     Document doc,
     ExecutionOptions? executionOptions = null
 ) : IDisposable {

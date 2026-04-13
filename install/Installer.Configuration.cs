@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Pe.Shared.HostContracts.Protocol;
 
 namespace Installer;
 
@@ -12,13 +13,11 @@ public static class InstallerConfiguration {
 
         var buildOptions = configuration.GetRequiredSection("Build").Get<BuildConfiguration>()
             ?? throw new InvalidOperationException("Build configuration could not be loaded.");
-        var bundleOptions = configuration.GetRequiredSection("Bundle").Get<BundleConfiguration>()
-            ?? throw new InvalidOperationException("Bundle configuration could not be loaded.");
         var installerOptions = configuration.GetRequiredSection("Installer").Get<InstallerConfigurationSection>()
             ?? throw new InvalidOperationException("Installer configuration could not be loaded.");
 
         return new ResolvedInstallerConfiguration {
-            ProductName = RequireValue(installerOptions.ProductName, "Installer:ProductName"),
+            ProductName = SettingsEditorRuntime.ProductName,
             UpgradeCode = ParseGuid(installerOptions.UpgradeCode, "Installer:UpgradeCode"),
             OutputDirectory = ResolveRepositoryPath(repositoryRoot,
                 RequireValue(buildOptions.OutputDirectory, "Build:OutputDirectory")),
@@ -28,7 +27,7 @@ public static class InstallerConfiguration {
                 RequireValue(installerOptions.BackgroundImagePath, "Installer:BackgroundImagePath")),
             ProductIconPath = ResolveRepositoryPath(repositoryRoot,
                 RequireValue(installerOptions.ProductIconPath, "Installer:ProductIconPath")),
-            Manufacturer = RequireValue(bundleOptions.VendorName, "Bundle:VendorName")
+            Manufacturer = SettingsEditorRuntime.VendorName
         };
     }
 
@@ -73,18 +72,17 @@ public sealed record ResolvedInstallerConfiguration {
     public required string BackgroundImagePath { get; init; }
     public required string ProductIconPath { get; init; }
     public required string Manufacturer { get; init; }
+
+    public string GetSingleUserHostInstallDirectory() => SettingsEditorRuntime.GetSingleUserHostInstallDirectory();
+
+    public string GetMultiUserHostInstallDirectory() => SettingsEditorRuntime.GetMultiUserHostInstallDirectory();
 }
 
 public sealed record BuildConfiguration {
     public string? OutputDirectory { get; init; }
 }
 
-public sealed record BundleConfiguration {
-    public string? VendorName { get; init; }
-}
-
 public sealed record InstallerConfigurationSection {
-    public string? ProductName { get; init; }
     public string? UpgradeCode { get; init; }
     public string? BannerImagePath { get; init; }
     public string? BackgroundImagePath { get; init; }

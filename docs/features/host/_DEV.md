@@ -1,145 +1,62 @@
 # Settings Editor Host Contract
 
-This document describes the browser-facing contract exposed by this repo for the
-external TypeScript settings-editor frontend.
+This document describes the browser-facing and tool-facing host contract exposed by this repo.
 
-The browser transport is split by responsibility:
+## Mental Model
 
-- HTTP owns every request/response workflow.
-- SSE owns invalidation-only server-to-client events.
-- Revit participates through the named-pipe bridge only when the user manually
-  connects it from the add-in.
+- HTTP owns request/response workflows.
+- `/api/settings/events` stays invalidation-only for settings/document status.
+- Revit-backed data flows through the named-pipe bridge.
+- Revit scripting is also public through host HTTP, but scripting is sync-only in v1 and does not use SSE.
 
-## Transport
+## Public Transport
 
 - Host base URL: `http://localhost:5180`
-- Storage and data API base: `http://localhost:5180/api/settings`
-- Event stream: `GET /api/settings/events`
-- HTTP payload shape: plain JSON DTOs with camelCase members
-- SSE payload shape: `event:` + `data:` frames with JSON payloads
+- JSON payload shape: camelCase DTOs
+- Settings SSE: `GET /api/settings/events`
+- Scripting endpoints:
+  - `POST /api/scripting/workspace/bootstrap`
+  - `POST /api/scripting/execute`
 
-## Runtime Topology
+## Scripting V1
 
-- External host:
-  - `source/Pe.Host/`
-  - owns Kestrel, CORS, HTTP endpoints, and SSE fan-out
-- Shared contract:
-  - `source/Pe.Shared.HostContracts/`
-  - owns DTOs, HTTP route constants, event names, and protocol constants
-- Revit add-in bridge:
-  - `source/Pe.Revit.Global/Services/Host/`
-  - connects to the host over named pipes only when explicitly enabled
+- host scripting requires exactly one connected Revit bridge session
+- the scripting endpoints are synchronous request/response only
+- responses contain final buffered output plus structured diagnostics
+- no scripting event stream exists
+- no async start/poll/cancel contract exists
+- host currently proxies scripting requests to the internal `Pe.Scripting.Revit` named pipe
 
-## Scope
+## Current HTTP Areas
 
-- The frontend lives in a separate repository.
-- This repo owns the browser transport contract:
-  - request DTOs
-  - response DTOs
-  - enums
-  - HTTP route constants
-  - SSE event names
-- The backend module registry is the source of truth for available settings
-  modules.
-- HTTP is the source of truth for:
-  - host status
-  - schema
-  - workspace and tree discovery
-  - document open/validate/save
-  - structural schema payloads
-- Bridge-backed HTTP endpoints are the source of truth for:
-  - field options
-  - parameter catalog queries
-  - loaded families filter field options
-  - schedule / loaded-families / project-parameter live data
-- SSE is used only for:
-  - document invalidation events
-  - host-status change invalidation
+- settings/status/schema/storage:
+  - `GET /api/settings/host-status`
+  - `GET /api/settings/schema`
+  - `GET /api/settings/workspaces`
+  - `GET /api/settings/tree`
+  - `POST /api/settings/document/open`
+  - `POST /api/settings/document/validate`
+  - `POST /api/settings/document/save`
+- bridge-backed settings/revit data:
+  - `POST /api/settings/field-options`
+  - `POST /api/settings/parameter-catalog`
+  - `GET /api/revit-data/loaded-families/filter/schema`
+  - `POST /api/revit-data/loaded-families/filter/field-options`
+  - `POST /api/revit-data/schedules/catalog`
+  - `POST /api/revit-data/loaded-families/catalog`
+  - `POST /api/revit-data/loaded-families/matrix`
+  - `POST /api/revit-data/project-parameter-bindings`
+- scripting:
+  - `POST /api/scripting/workspace/bootstrap`
+  - `POST /api/scripting/execute`
 
-## HTTP Endpoints
+## Failure Posture
 
-- `GET /api/settings/host-status`
-  - Returns `HostStatusData`.
-- `GET /api/settings/schema?moduleKey=...`
-  - Returns `SchemaData`.
-  - Structural only. Does not execute live Revit providers locally.
-- `GET /api/settings/workspaces`
-  - Returns `SettingsWorkspacesData`.
-- `GET /api/settings/tree`
-  - Query: `moduleKey`, `rootKey`, optional discovery flags.
-  - Returns `SettingsDiscoveryResult`.
-- `POST /api/settings/field-options`
-  - Request: `FieldOptionsRequest`
-  - Returns `FieldOptionsData`.
-  - Bridge required.
-- `POST /api/settings/parameter-catalog`
-  - Request: `ParameterCatalogRequest`
-  - Returns `ParameterCatalogData`.
-  - Bridge required.
-- `POST /api/settings/document/open`
-  - Request: `OpenSettingsDocumentRequest`
-  - Returns `SettingsDocumentSnapshot`.
-- `POST /api/settings/document/validate`
-  - Request: `ValidateSettingsDocumentRequest`
-  - Returns `SettingsValidationResult`.
-- `POST /api/settings/document/save`
-  - Request: `SaveSettingsDocumentRequest`
-  - Returns `SaveSettingsDocumentResult`.
-- `POST /api/revit-data/loaded-families/filter/field-options`
-  - Request: `LoadedFamiliesFilterFieldOptionsRequest`
-  - Returns `FieldOptionsData`.
-  - Bridge required.
-- `POST /api/revit-data/schedules/catalog`
-  - Bridge required.
-- `POST /api/revit-data/loaded-families/catalog`
-  - Bridge required.
-- `POST /api/revit-data/loaded-families/matrix`
-  - Bridge required.
-- `POST /api/revit-data/project-parameter-bindings`
-  - Bridge required.
-
-## SSE Events
-
-- Event name: `document-changed`
-  - Payload: `DocumentInvalidationEvent`
-  - Meaning: invalidate document-sensitive queries and mark the open document
-    stale when appropriate.
-- Event name: `host-status-changed`
-  - Payload: `HostStatusChangedEvent`
-  - Meaning: invalidate the host-status query after bridge connect, disconnect,
-    or active-document changes.
-
-Recommended frontend behavior:
-
-1. fetch and mutate through HTTP only
-2. subscribe to `/api/settings/events`
-3. use SSE payloads only to invalidate React Query caches and local stale state
-
-## Backend-Owned Transport Constants
-
-- HTTP route constants: `HttpRoutes.*`
-- operation definitions and keys: `*OperationContract.Definition`
-- SSE event names: `SettingsHostEventNames.*`
-- protocol metadata: `HostProtocol.*`
-
-## Minimal Usage Flow
-
-1. Call `GET /api/settings/host-status` during startup.
-2. Call `GET /api/settings/workspaces` and `GET /api/settings/tree` to discover
-   editable documents.
-3. Call `GET /api/settings/schema` to render a module editor.
-4. Call `POST /api/settings/document/open` to load the active authoring file.
-5. Call `POST /api/settings/document/validate` and
-   `POST /api/settings/document/save` during authoring.
-6. Call `POST /api/settings/field-options` and
-   `POST /api/settings/parameter-catalog` only when the bridge is connected and
-   the rendered form needs live Revit data.
-7. Subscribe to `/api/settings/events` and invalidate dependent queries when
-   events arrive.
-
-## Manual Bridge Workflow
-
-1. Start `Pe.Host`.
-2. In Revit, run the `Settings Editor` command and choose `Connect Bridge`.
-3. Open the external frontend.
-4. When bridge activity is no longer wanted, disconnect from the same command.
+- expected user-actionable scripting failures return `409 Conflict`
+- this includes:
+  - no connected Revit session
+  - more than one connected Revit session
+  - scripting pipe unavailable or timed out
+  - Revit rejected the scripting request
+  - pipe returned success without the expected payload
+- unexpected host/runtime faults return `500`

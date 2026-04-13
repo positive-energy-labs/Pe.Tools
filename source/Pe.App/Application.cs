@@ -1,12 +1,15 @@
-using Autodesk.Revit.DB.Events;
+﻿using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.DB.ExtensibleStorage;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Events;
 using Nice3point.Revit.Toolkit.External;
 using Pe.App.Services.AutoTag;
+using Pe.Tools.SettingsEditor;
 using Pe.App.Tasks;
 using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Global.Services.Host;
+using Pe.Revit.Scripting.Transport;
+using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.SettingsCatalog;
 using Pe.Revit.Ui.Core;
 using ricaun.Revit.UI.Tasks;
@@ -24,6 +27,7 @@ public class Application : ExternalApplication {
     ///     RevitTaskService for executing code in Revit API context from async/WPF contexts.
     /// </summary>
     private static RevitTaskService? _revitTaskService;
+    private static ScriptingPipeServer? _scriptingPipeServer;
 
     public override void OnStartup() {
         // Subscribe to ViewActivated event for MRU tracking
@@ -41,11 +45,17 @@ public class Application : ExternalApplication {
         _revitTaskService = revitTaskService;
         RevitTaskAccessor.RunAsync = async action => await revitTaskService.Run(async () => await action());
 
-        // Initialize the settings editor bridge metadata, but keep the bridge disconnected
-        // until the user explicitly connects from the Revit UI.
-        HostRuntime.Initialize(revitTaskService, KnownSettingsRegistry.RegisterRevitModules);
-
         CreateLogger();
+
+        // Initialize the settings editor bridge metadata. Bridge connection remains manual
+        // unless PE_SETTINGS_BRIDGE_AUTO_CONNECT is explicitly enabled.
+        HostRuntime.Initialize(revitTaskService, KnownSettingsRegistry.RegisterRevitModules);
+        _scriptingPipeServer = new ScriptingPipeServer(new ScriptingPipeMessageHandler(
+            () => DocumentManager.uiapp,
+            message => Log.Information("Revit scripting notification: {Message}", message)
+        ));
+
+        TryAutoConnectBridge();
         this.CreateRibbon();
 
         // Initialize task registry
@@ -65,6 +75,8 @@ public class Application : ExternalApplication {
         AutoTagService.Instance.Shutdown();
 
         HostRuntime.Shutdown();
+        _scriptingPipeServer?.Dispose();
+        _scriptingPipeServer = null;
 
         return Result.Succeeded;
     }
@@ -114,6 +126,29 @@ public class Application : ExternalApplication {
     public override void OnShutdown() => Log.CloseAndFlush();
 
     private void CreateRibbon() => ButtonRegistry.BuildRibbon(this.Application, "PE TOOLS");
+
+    private static void TryAutoConnectBridge() {
+        var configuredValue = Environment.GetEnvironmentVariable(SettingsEditorRuntime.BridgeAutoConnectEnabledVariable);
+        if (!bool.TryParse(configuredValue, out var isEnabled) || !isEnabled)
+            return;
+
+        var hostLaunchResult = SettingsEditorHostLauncher.EnsureRunning();
+        if (!hostLaunchResult.Success) {
+            Log.Warning(
+                "Settings editor bridge auto-connect skipped because host startup failed: {Message}",
+                hostLaunchResult.Message
+            );
+            return;
+        }
+
+        var connectResult = HostRuntime.Connect();
+        if (connectResult.Success) {
+            Log.Information("Settings editor bridge auto-connect succeeded: {Message}", connectResult.Message);
+            return;
+        }
+
+        Log.Warning("Settings editor bridge auto-connect failed: {Message}", connectResult.Message);
+    }
 
     private static void CreateLogger() {
         const string outputTemplate = "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}";
