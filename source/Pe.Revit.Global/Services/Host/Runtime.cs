@@ -1,4 +1,4 @@
-using Pe.Revit.Global.Services.Document;
+﻿using Pe.Revit.Global.Services.Document;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
@@ -258,7 +258,7 @@ public static class HostRuntime {
         status = default!;
 
         try {
-            using var client = new HttpClient { Timeout = TimeSpan.FromMilliseconds(1250) };
+            using var client = new HttpClient { Timeout = TimeSpan.FromMilliseconds(GetHostProbeTimeoutMs()) };
             using var response = client.GetAsync(
                     $"{_connectionOptions.HostBaseUrl.TrimEnd('/')}{HttpRoutes.HostStatus}"
                 )
@@ -279,5 +279,12 @@ public static class HostRuntime {
             errorMessage = ex.Message;
             return false;
         }
+    }
+
+    private static int GetHostProbeTimeoutMs() {
+        var configuredValue = Environment.GetEnvironmentVariable(SettingsEditorRuntime.HostProbeTimeoutVariable);
+        return int.TryParse(configuredValue, out var timeoutMs) && timeoutMs > 0
+            ? timeoutMs
+            : SettingsEditorRuntime.DefaultHostProbeTimeoutMs;
     }
 }

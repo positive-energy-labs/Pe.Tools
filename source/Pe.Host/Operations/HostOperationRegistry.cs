@@ -1,6 +1,7 @@
-using Pe.Shared.HostContracts.RevitData;
+﻿using Pe.Shared.HostContracts.RevitData;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Protocol;
+using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.HostContracts.SettingsStorage;
 
 namespace Pe.Host.Operations;
@@ -70,6 +71,26 @@ internal sealed class HostOperationRegistry {
                 SaveSettingsDocumentOperationContract.Definition,
                 static async (request, context, cancellationToken) =>
                     HostOperations.Local(await context.StorageService.SaveAsync(request, cancellationToken))
+            ),
+            HostOperations.Create<ScriptWorkspaceBootstrapRequest>(
+                GetScriptWorkspaceBootstrapOperationContract.Definition,
+                static async (request, context, cancellationToken) => {
+                    EnsureSingleConnectedScriptingSession(context);
+                    return HostOperations.Path(
+                        await context.ScriptingPipeClientService.BootstrapWorkspaceAsync(request, cancellationToken),
+                        "scripting-pipe"
+                    );
+                }
+            ),
+            HostOperations.Create<ExecuteRevitScriptRequest>(
+                ExecuteRevitScriptOperationContract.Definition,
+                static async (request, context, cancellationToken) => {
+                    EnsureSingleConnectedScriptingSession(context);
+                    return HostOperations.Path(
+                        await context.ScriptingPipeClientService.ExecuteAsync(request, cancellationToken),
+                        "scripting-pipe"
+                    );
+                }
             )
         ];
 
@@ -146,5 +167,20 @@ internal sealed class HostOperationRegistry {
                 ))
                 .ToList()
         );
+    }
+
+    private static void EnsureSingleConnectedScriptingSession(HostOperationContext context) {
+        var sessions = context.RuntimeStateService.GetState().BridgeSnapshot.Sessions;
+        if (sessions.Count == 0) {
+            throw new InvalidOperationException(
+                "Revit scripting requires exactly one connected Revit session. Connect one Revit session to Pe.Host and try again."
+            );
+        }
+
+        if (sessions.Count > 1) {
+            throw new InvalidOperationException(
+                "Revit scripting v1 supports exactly one connected Revit session. Disconnect the extra sessions and try again."
+            );
+        }
     }
 }

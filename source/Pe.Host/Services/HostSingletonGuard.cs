@@ -1,4 +1,4 @@
-using System.Net.Http;
+﻿using System.Net.Http;
 using System.Text.Json;
 using Pe.Shared.HostContracts.Protocol;
 
@@ -50,7 +50,7 @@ internal static class HostSingletonGuard {
 
     private static bool TryGetCompatibleHostStatus(BridgeHostOptions options) {
         try {
-            using var client = new HttpClient { Timeout = TimeSpan.FromMilliseconds(1250) };
+            using var client = new HttpClient { Timeout = TimeSpan.FromMilliseconds(GetHostProbeTimeoutMs()) };
             using var response = client.GetAsync($"{options.HostBaseUrl.TrimEnd('/')}{HttpRoutes.HostStatus}")
                 .GetAwaiter()
                 .GetResult();
@@ -67,5 +67,12 @@ internal static class HostSingletonGuard {
         } catch {
             return false;
         }
+    }
+
+    private static int GetHostProbeTimeoutMs() {
+        var configuredValue = Environment.GetEnvironmentVariable(SettingsEditorRuntime.HostProbeTimeoutVariable);
+        return int.TryParse(configuredValue, out var timeoutMs) && timeoutMs > 0
+            ? timeoutMs
+            : SettingsEditorRuntime.DefaultHostProbeTimeoutMs;
     }
 }

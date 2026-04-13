@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Pe.Host.Services;
 using Pe.Shared.HostContracts.Protocol;
 using System.Collections.Concurrent;

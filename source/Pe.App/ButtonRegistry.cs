@@ -4,6 +4,7 @@ using Pe.App.Commands.Palette;
 using Pe.Tools.Commands;
 using Pe.Tools.Commands.AutoTag;
 using Pe.Tools.Commands.FamilyFoundry;
+using Pe.Tools.Commands.Scripting;
 using Pe.Tools.Commands.SettingsEditor;
 
 namespace Pe.Tools;
@@ -219,6 +220,20 @@ public sealed class ButtonRegistry {
                               - connect this Revit session to the manually launched host
                               - disconnect when you want zero bridge activity
                               - open the browser-based settings editor
+                              """,
+            Container = new ButtonContainer.PullDown("General", "Manage")
+        }),
+        Register<CmdScriptingWorkspace>(new ButtonRegistration<CmdScriptingWorkspace> {
+            Text = "Script Workspace",
+            SmallImage = "square-terminal16.png",
+            LargeImage = "square-terminal32.png",
+            ToolTip = "Bootstrap the default scripting workspace and open it in your default IDE.",
+            LongDescription = """
+                              Bootstrap and open the default Revit scripting workspace.
+
+                              Use this command to:
+                              - generate the default scripting workspace if needed
+                              - open the generated PeScripts.csproj in your default app
                               """,
             Container = new ButtonContainer.PullDown("General", "Manage")
         })

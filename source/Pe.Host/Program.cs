@@ -1,7 +1,9 @@
-using Pe.Host;
+﻿using Pe.Host;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Host.Operations;
 using Pe.Host.Services;
+using Microsoft.AspNetCore.Http.Json;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -13,6 +15,9 @@ if (singletonHandle == null)
     return;
 
 var builder = WebApplication.CreateBuilder(args);
+var hostLogFilePath = HostLogStorage.ResolveFilePath();
+
+builder.Logging.AddProvider(new HostFileLoggerProvider(hostLogFilePath));
 
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton<BridgeServer>();
@@ -21,6 +26,7 @@ builder.Services.AddSingleton<HostEventStreamService>();
 builder.Services.AddSingleton<HostOperationRegistry>();
 builder.Services.AddSingleton<HostOperationExecutor>();
 builder.Services.AddSingleton<IHostBridgeCapabilityService, HostBridgeCapabilityService>();
+builder.Services.AddSingleton<IHostScriptingPipeClientService, HostScriptingPipeClientService>();
 builder.Services.AddSingleton<IHostSettingsModuleCatalog>(_ => new HostSettingsModuleCatalog());
 builder.Services.AddSingleton<HostSettingsRuntimeStateService>();
 builder.Services.AddSingleton<HostSchemaService>();
@@ -85,7 +91,6 @@ app.MapGet(HttpRoutes.Events, async (
         }
     }
 });
-
 app.Logger.LogInformation(
     "Host listening on {BaseUrl} using pipe {PipeName}. IdleShutdownEnabled={IdleShutdownEnabled}, IdleShutdownTimeoutMinutes={IdleShutdownTimeoutMinutes}",
     options.HostBaseUrl,
@@ -93,5 +98,6 @@ app.Logger.LogInformation(
     options.IdleShutdownEnabled,
     options.IdleShutdownTimeout.TotalMinutes
 );
+app.Logger.LogInformation("Host file logging enabled at {LogFilePath}", hostLogFilePath);
 
 app.Run(options.HostBaseUrl);

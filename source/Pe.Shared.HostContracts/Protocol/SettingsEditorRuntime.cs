@@ -1,4 +1,4 @@
-namespace Pe.Shared.HostContracts.Protocol;
+﻿namespace Pe.Shared.HostContracts.Protocol;
 
 public static class SettingsEditorRuntime {
     public const string RuntimeIdentity = "pe.tools.settings-editor";
@@ -13,7 +13,9 @@ public static class SettingsEditorRuntime {
     public const string HostBaseUrlVariable = "PE_SETTINGS_EDITOR_HOST_BASE_URL";
     public const string HostExecutablePathVariable = "PE_SETTINGS_EDITOR_HOST_EXECUTABLE_PATH";
     public const string HostStartupTimeoutVariable = "PE_SETTINGS_EDITOR_HOST_STARTUP_TIMEOUT_MS";
+    public const string HostProbeTimeoutVariable = "PE_SETTINGS_EDITOR_HOST_PROBE_TIMEOUT_MS";
     public const string HostAutoStartEnabledVariable = "PE_TOOLS_HOST_AUTOSTART_ENABLED";
+    public const string BridgeAutoConnectEnabledVariable = "PE_SETTINGS_BRIDGE_AUTO_CONNECT";
     public const string PipeNameVariable = "PE_SETTINGS_EDITOR_PIPE_NAME";
     public const string SessionIdVariable = "PE_SETTINGS_EDITOR_SESSION_ID";
     public const string PipeConnectTimeoutMsVariable = "PE_SETTINGS_EDITOR_PIPE_CONNECT_TIMEOUT_MS";
@@ -27,6 +29,7 @@ public static class SettingsEditorRuntime {
     public const string DefaultHostBaseUrl = "http://localhost:5180";
     public const string DefaultPipeName = "Pe.Host.Bridge";
     public const int DefaultHostStartupTimeoutMs = 8000;
+    public const int DefaultHostProbeTimeoutMs = 5000;
     public const int DefaultPipeConnectTimeoutMs = 1500;
     public const int DefaultHostRegistrationTimeoutMs = 4000;
     public static readonly TimeSpan DefaultIdleShutdownTimeout = TimeSpan.FromMinutes(10);

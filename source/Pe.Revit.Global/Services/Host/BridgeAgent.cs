@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
 using Pe.Shared.HostContracts.Protocol;
@@ -104,7 +104,10 @@ internal sealed class BridgeAgent : IDisposable {
             this.PublishNotification
         );
         this._bridgeOperationRegistry = new BridgeOperationRegistry();
-        this._bridgeOperationContext = new BridgeOperationContext(this._requestService, this._revitDataRequestService);
+        this._bridgeOperationContext = new BridgeOperationContext(
+            this._requestService,
+            this._revitDataRequestService
+        );
         this._bridgeRequestDispatcher =
             new BridgeRequestDispatcher(this._bridgeOperationRegistry, this._serializerSettings);
 
@@ -247,12 +250,22 @@ internal sealed class BridgeAgent : IDisposable {
         var sentAt = DateTimeOffset.FromUnixTimeMilliseconds(request.SentAtUnixMs);
 
         try {
+            Log.Information(
+                "Settings editor bridge dispatch starting: Method={Method}, RequestId={RequestId}",
+                request.Method,
+                request.RequestId
+            );
             var responseEnvelope = await this._bridgeRequestDispatcher.DispatchAsync(
                 request.Method,
                 request.PayloadJson,
                 this._bridgeOperationContext,
                 cancellationToken
             ).ConfigureAwait(false);
+            Log.Information(
+                "Settings editor bridge dispatch completed: Method={Method}, RequestId={RequestId}",
+                request.Method,
+                request.RequestId
+            );
 
             var beforeSerialize = Stopwatch.GetTimestamp();
             var payloadJson = JsonConvert.SerializeObject(responseEnvelope, this._serializerSettings);
@@ -285,7 +298,18 @@ internal sealed class BridgeAgent : IDisposable {
                 request.PayloadBytes,
                 responseBytes
             );
+            Log.Information(
+                "Settings editor bridge writing response frame: Method={Method}, RequestId={RequestId}, ResponseBytes={ResponseBytes}",
+                request.Method,
+                request.RequestId,
+                responseBytes
+            );
             await this.WriteFrameAsync(frame, cancellationToken).ConfigureAwait(false);
+            Log.Information(
+                "Settings editor bridge wrote response frame: Method={Method}, RequestId={RequestId}",
+                request.Method,
+                request.RequestId
+            );
         } catch (Exception ex) {
             var totalMs = (long)(DateTimeOffset.UtcNow - sentAt).TotalMilliseconds;
             var errorFrame = new BridgeFrame(
@@ -303,6 +327,12 @@ internal sealed class BridgeAgent : IDisposable {
                         0
                     )
                 )
+            );
+            Log.Error(
+                ex,
+                "Settings editor bridge request failed: Method={Method}, RequestId={RequestId}",
+                request.Method,
+                request.RequestId
             );
             await this.WriteFrameAsync(errorFrame, cancellationToken).ConfigureAwait(false);
         }

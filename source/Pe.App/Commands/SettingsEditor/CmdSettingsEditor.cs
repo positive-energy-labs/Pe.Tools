@@ -1,4 +1,4 @@
-using Autodesk.Revit.Attributes;
+﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.Revit.Global.Services.Host;
 using Pe.Tools.SettingsEditor;
@@ -60,24 +60,9 @@ public class CmdSettingsEditor : IExternalCommand {
                 var actionName = status.IsConnected ? "Disconnect Bridge" : "Connect Bridge";
                 var actionStopwatch = Stopwatch.StartNew();
                 Log.Information("Settings editor command selected action: {ActionName}", actionName);
-                var hostLaunchResult = status.IsConnected
-                    ? new SettingsEditorHostLaunchResult(true, true, false, "Bridge is connected.")
-                    : SettingsEditorHostLauncher.EnsureRunning();
-                Log.Information(
-                    "Settings editor host ensure result: Success={Success}, AlreadyRunning={AlreadyRunning}, StartedProcess={StartedProcess}, Message={Message}",
-                    hostLaunchResult.Success,
-                    hostLaunchResult.AlreadyRunning,
-                    hostLaunchResult.StartedProcess,
-                    hostLaunchResult.Message
-                );
-                if (!hostLaunchResult.Success) {
-                    _ = TaskDialog.Show("Settings Editor", hostLaunchResult.Message);
-                    break;
-                }
-
                 var actionResult = status.IsConnected
                     ? HostRuntime.Disconnect()
-                    : HostRuntime.Connect();
+                    : SettingsEditorBridgeConnector.EnsureConnected().RuntimeActionResult;
                 Log.Information(
                     "Settings editor command action completed: {ActionName}, Success={Success}, ElapsedMs={ElapsedMs}, Message={Message}",
                     actionName,
