@@ -13,13 +13,10 @@ from pathlib import Path
 from typing import Any
 
 
-WORKSPACE_NAME = "Pe.Host Endpoints"
+WORKSPACE_NAME = "Pe.Host Scripting"
 
 GLOBAL_VARIABLES = [
     ("base_url", "http://localhost:5180"),
-    ("module_key", "AutoTag"),
-    ("root_key", "autotag"),
-    ("route_key", "LoadedFamilies"),
 ]
 
 
@@ -41,157 +38,29 @@ class RequestSpec:
 
 
 FOLDERS = [
-    FolderSpec("Settings", 100.0),
-    FolderSpec("Revit Data", 200.0),
-    FolderSpec("Events", 300.0),
+    FolderSpec("Scripting", 100.0),
 ]
 
 JSON_HEADERS = [{"enabled": True, "name": "Content-Type", "value": "application/json"}]
 
 REQUESTS = [
     RequestSpec(
-        "Settings",
-        "Host Status",
-        "GET",
-        "${[ base_url ]}/api/settings/host-status",
+        "Scripting",
+        "Workspace Bootstrap",
+        "POST",
+        "${[ base_url ]}/api/scripting/workspace/bootstrap",
         100.0,
-        "Returns HostStatusData.",
-        [],
+        "Body: ScriptWorkspaceBootstrapRequest. Requires exactly one connected Revit session.",
+        JSON_HEADERS,
     ),
     RequestSpec(
-        "Settings",
-        "Schema",
-        "GET",
-        "${[ base_url ]}/api/settings/schema?moduleKey=${[ module_key ]}",
+        "Scripting",
+        "Execute Script",
+        "POST",
+        "${[ base_url ]}/api/scripting/execute",
         110.0,
-        "Query: moduleKey. Returns SchemaData.",
-        [],
-    ),
-    RequestSpec(
-        "Settings",
-        "Workspaces",
-        "GET",
-        "${[ base_url ]}/api/settings/workspaces",
-        120.0,
-        "Returns SettingsWorkspacesData.",
-        [],
-    ),
-    RequestSpec(
-        "Settings",
-        "Tree",
-        "GET",
-        "${[ base_url ]}/api/settings/tree?moduleKey=${[ module_key ]}&rootKey=${[ root_key ]}&recursive=true&includeFragments=true&includeSchemas=false",
-        130.0,
-        "Query: moduleKey, rootKey, recursive, includeFragments, includeSchemas. Returns SettingsDiscoveryResult.",
-        [],
-    ),
-    RequestSpec(
-        "Settings",
-        "Field Options",
-        "POST",
-        "${[ base_url ]}/api/settings/field-options",
-        140.0,
-        "Body: FieldOptionsRequest.",
+        "Body: ExecuteRevitScriptRequest. Returns final buffered output and structured diagnostics.",
         JSON_HEADERS,
-    ),
-    RequestSpec(
-        "Settings",
-        "Parameter Catalog",
-        "POST",
-        "${[ base_url ]}/api/settings/parameter-catalog",
-        150.0,
-        "Body: ParameterCatalogRequest.",
-        JSON_HEADERS,
-    ),
-    RequestSpec(
-        "Settings",
-        "Open Document",
-        "POST",
-        "${[ base_url ]}/api/settings/document/open",
-        160.0,
-        "Body: OpenSettingsDocumentRequest.",
-        JSON_HEADERS,
-    ),
-    RequestSpec(
-        "Settings",
-        "Compose Document",
-        "POST",
-        "${[ base_url ]}/api/settings/document/compose",
-        170.0,
-        "Body: OpenSettingsDocumentRequest.",
-        JSON_HEADERS,
-    ),
-    RequestSpec(
-        "Settings",
-        "Validate Document",
-        "POST",
-        "${[ base_url ]}/api/settings/document/validate",
-        180.0,
-        "Body: ValidateSettingsDocumentRequest.",
-        JSON_HEADERS,
-    ),
-    RequestSpec(
-        "Settings",
-        "Save Document",
-        "POST",
-        "${[ base_url ]}/api/settings/document/save",
-        190.0,
-        "Body: SaveSettingsDocumentRequest.",
-        JSON_HEADERS,
-    ),
-    RequestSpec(
-        "Revit Data",
-        "Route Schema",
-        "GET",
-        "${[ base_url ]}/api/revit-data/routes/schema?routeKey=${[ route_key ]}",
-        210.0,
-        "Query: routeKey. Returns schema for a Revit data route.",
-        [],
-    ),
-    RequestSpec(
-        "Revit Data",
-        "Route Field Options",
-        "POST",
-        "${[ base_url ]}/api/revit-data/routes/field-options",
-        220.0,
-        "Body: RouteFieldOptionsRequest.",
-        JSON_HEADERS,
-    ),
-    RequestSpec(
-        "Revit Data",
-        "Loaded Families Catalog",
-        "POST",
-        "${[ base_url ]}/api/revit-data/loaded-families/catalog",
-        230.0,
-        "Body: LoadedFamiliesCatalogRequest.",
-        JSON_HEADERS,
-    ),
-    RequestSpec(
-        "Revit Data",
-        "Loaded Families Matrix",
-        "POST",
-        "${[ base_url ]}/api/revit-data/loaded-families/matrix",
-        240.0,
-        "Body: LoadedFamiliesMatrixRequest.",
-        JSON_HEADERS,
-    ),
-    RequestSpec(
-        "Revit Data",
-        "Project Parameter Bindings",
-        "POST",
-        "${[ base_url ]}/api/revit-data/project-parameter-bindings",
-        250.0,
-        "Body: ProjectParameterBindingsRequest.",
-        JSON_HEADERS,
-    ),
-    RequestSpec(
-        "Events",
-        "Settings Events",
-        "GET",
-        "${[ base_url ]}/api/settings/events",
-        310.0,
-        "SSE stream for document and host-status invalidation events.",
-        [],
     ),
 ]
 
@@ -383,7 +252,7 @@ def ensure_requests(cli: YaakCli, workspace_id: str, folders_by_name: dict[str, 
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Create or update a Yaak workspace for Pe.Host endpoints.")
+    parser = argparse.ArgumentParser(description="Create or update a Yaak workspace for Pe.Host scripting endpoints.")
     parser.add_argument(
         "--data-dir",
         default=None,

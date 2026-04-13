@@ -1,11 +1,11 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
 namespace Pe.Shared.HostContracts.Protocol;
 
 public static class BridgeProtocol {
     public const string Transport = "named-pipes";
-    public const int ContractVersion = 11;
+    public const int ContractVersion = 12;
     public const string DefaultPipeName = SettingsEditorRuntime.DefaultPipeName;
 }
 

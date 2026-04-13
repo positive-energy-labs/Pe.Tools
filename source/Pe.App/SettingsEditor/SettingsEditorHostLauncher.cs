@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using Newtonsoft.Json;
@@ -67,7 +67,7 @@ internal static class SettingsEditorHostLauncher {
     private static bool TryGetCompatibleHostStatus(out HostStatusData? status) {
         status = null;
         try {
-            using var client = new HttpClient { Timeout = TimeSpan.FromMilliseconds(1250) };
+            using var client = new HttpClient { Timeout = TimeSpan.FromMilliseconds(GetHostProbeTimeoutMs()) };
             using var response = client.GetAsync($"{GetHostBaseUrl().TrimEnd('/')}{HttpRoutes.HostStatus}")
                 .GetAwaiter()
                 .GetResult();
@@ -125,7 +125,7 @@ internal static class SettingsEditorHostLauncher {
         );
     }
 
-    private static string GetHostBaseUrl() => GetValueOrDefault(
+    internal static string GetHostBaseUrl() => GetValueOrDefault(
         SettingsEditorRuntime.HostBaseUrlVariable,
         SettingsEditorRuntime.DefaultHostBaseUrl
     );
@@ -140,6 +140,13 @@ internal static class SettingsEditorHostLauncher {
         return int.TryParse(configuredValue, out var timeoutMs) && timeoutMs > 0
             ? timeoutMs
             : SettingsEditorRuntime.DefaultHostStartupTimeoutMs;
+    }
+
+    private static int GetHostProbeTimeoutMs() {
+        var configuredValue = Environment.GetEnvironmentVariable(SettingsEditorRuntime.HostProbeTimeoutVariable);
+        return int.TryParse(configuredValue, out var timeoutMs) && timeoutMs > 0
+            ? timeoutMs
+            : SettingsEditorRuntime.DefaultHostProbeTimeoutMs;
     }
 
     private static bool IsAutoStartEnabled() {

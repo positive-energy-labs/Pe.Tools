@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -86,13 +86,16 @@ public static class FileUtils {
         }
     }
 
-    public static void OpenInDefaultApp(string filePath) {
+    public static bool OpenInDefaultApp(string filePath) {
         try {
-            if (File.Exists(filePath)) {
-                var processStartInfo = new ProcessStartInfo { FileName = filePath, UseShellExecute = true };
-                _ = Process.Start(processStartInfo);
-            }
+            if (!File.Exists(filePath) && !Directory.Exists(filePath))
+                return false;
+
+            var processStartInfo = new ProcessStartInfo { FileName = filePath, UseShellExecute = true };
+            _ = Process.Start(processStartInfo);
+            return true;
         } catch {
+            return false;
         }
     }
 }

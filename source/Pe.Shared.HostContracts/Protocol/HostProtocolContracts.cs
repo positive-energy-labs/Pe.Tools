@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Shared.HostContracts.Operations;
 using TypeGen.Core.TypeAnnotations;
@@ -18,8 +18,8 @@ public static class HostRuntimeEventNames {
 [ExportTsClass]
 public static class HttpRoutes {
     public const string SettingsBase = "/api/settings";
-
     public const string RevitDataBase = "/api/revit-data";
+    public const string ScriptingBase = "/api/scripting";
     public static readonly string HostStatus = GetHostStatusOperationContract.Definition.Route;
     public static readonly string Schema = GetSchemaOperationContract.Definition.Route;
     public static readonly string Workspaces = GetWorkspacesOperationContract.Definition.Route;
@@ -43,12 +43,19 @@ public static class HttpRoutes {
 
     public static readonly string ProjectParameterBindings =
         GetProjectParameterBindingsOperationContract.Definition.Route;
+
+    public static readonly string ScriptingWorkspaceBootstrap =
+        GetScriptWorkspaceBootstrapOperationContract.Definition.Route;
+
+    public static readonly string ScriptingExecute =
+        ExecuteRevitScriptOperationContract.Definition.Route;
+
 }
 
 [ExportTsClass]
 public static class HostProtocol {
     public const string Transport = "http+sse";
-    public const int ContractVersion = 18;
+    public const int ContractVersion = 21;
 }
 
 public interface IBridgeSessionRequest {
