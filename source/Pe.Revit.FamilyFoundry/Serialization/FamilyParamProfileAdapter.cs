@@ -8,6 +8,7 @@ public sealed record FamilyParamProfileExportOptions {
     public bool IncludeDefinitionOnlyParameters { get; init; }
     public bool OmitBuiltInParameters { get; init; } = true;
     public bool EnabledWhenEmpty { get; init; }
+    public Func<string, bool>? IsSharedParameterName { get; init; }
 }
 
 public sealed record FamilyParamProfileExport(
@@ -36,7 +37,7 @@ public static class FamilyParamProfileAdapter {
             var hasReplayableAssignment = globalAssignment is not null || perTypeAssignment is not null;
             var shouldIncludeDefinition = options.IncludeDefinitionOnlyParameters || hasReplayableAssignment;
 
-            if (!KnownParamResolver.IsPeParameterName(snapshot.Name) && shouldIncludeDefinition) {
+            if (!IsSharedParameterName(snapshot.Name, options) && shouldIncludeDefinition) {
                 familyParameters.Add(new FamilyParamDefinitionModel {
                     Name = snapshot.Name,
                     IsInstance = snapshot.IsInstance,
@@ -74,9 +75,17 @@ public static class FamilyParamProfileAdapter {
         return snapshots.Select(snapshot => snapshot with {
             ValuesPerType = snapshot.ValuesPerType
                 .OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.Ordinal)
+            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.Ordinal)
         }).OrderBy(snapshot => snapshot.Name, StringComparer.OrdinalIgnoreCase)
             .ThenByDescending(snapshot => snapshot.IsInstance)
             .ToList();
+    }
+
+    private static bool IsSharedParameterName(string? parameterName, FamilyParamProfileExportOptions options) {
+        if (string.IsNullOrWhiteSpace(parameterName))
+            return false;
+
+        return options.IsSharedParameterName?.Invoke(parameterName.Trim())
+               ?? KnownParamResolver.IsPeParameterName(parameterName);
     }
 }

@@ -133,7 +133,8 @@ public static class KnownParamPlanBuilder {
 
     public static AddFamilyParamsSettings BuildFamilyDefinitionsFromSnapshots(
         IEnumerable<ParameterSnapshot> snapshots,
-        IEnumerable<string> referencedParameterNames
+        IEnumerable<string> referencedParameterNames,
+        Func<string, bool>? isSharedParameterName = null
     ) {
         var snapshotByName = snapshots
             .Where(snapshot => !string.IsNullOrWhiteSpace(snapshot.Name))
@@ -144,7 +145,7 @@ public static class KnownParamPlanBuilder {
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .Select(name => name.Trim())
             .Distinct(StringComparer.Ordinal)
-            .Where(name => !KnownParamResolver.IsPeParameterName(name))
+            .Where(name => !(isSharedParameterName?.Invoke(name) ?? KnownParamResolver.IsPeParameterName(name)))
             .Select(name => snapshotByName.TryGetValue(name, out var snapshot)
                 ? new FamilyParamDefinitionModel {
                     Name = snapshot.Name,

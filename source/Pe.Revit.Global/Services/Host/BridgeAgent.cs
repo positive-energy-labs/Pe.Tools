@@ -52,7 +52,6 @@ internal sealed class BridgeRequestDispatcher(
 
 internal sealed class BridgeAgent : IDisposable {
     private readonly BridgeOperationContext _bridgeOperationContext;
-    private readonly BridgeOperationRegistry _bridgeOperationRegistry;
     private readonly BridgeRequestDispatcher _bridgeRequestDispatcher;
     private readonly BridgeDocumentNotifier _documentNotifier;
     private readonly HostConnectionOptions _hostOptions;
@@ -60,9 +59,6 @@ internal sealed class BridgeAgent : IDisposable {
     private readonly NamedPipeClientStream _pipeClient;
     private readonly StreamReader _reader;
     private readonly Task _readLoop;
-    private readonly RequestService _requestService;
-    private readonly RevitDataCache _revitDataCache;
-    private readonly RevitDataRequestService _revitDataRequestService;
 
     private readonly JsonSerializerSettings _serializerSettings = new() {
         NullValueHandling = NullValueHandling.Ignore,
@@ -96,20 +92,20 @@ internal sealed class BridgeAgent : IDisposable {
             uiapp.ActiveUIDocument?.Document?.Title,
             moduleRegistry.GetModules().Count()
         );
-        this._requestService = new RequestService(revitTaskService, this._moduleRegistry, this._throttleGate);
-        this._revitDataCache = new RevitDataCache();
-        this._revitDataRequestService = new RevitDataRequestService(
+        var requestService = new RequestService(revitTaskService, this._moduleRegistry, this._throttleGate);
+        var revitDataCache = new RevitDataCache();
+        var revitDataRequestService = new RevitDataRequestService(
             revitTaskService,
-            this._revitDataCache,
+            revitDataCache,
             this.PublishNotification
         );
-        this._bridgeOperationRegistry = new BridgeOperationRegistry();
+        var bridgeOperationRegistry = new BridgeOperationRegistry();
         this._bridgeOperationContext = new BridgeOperationContext(
-            this._requestService,
-            this._revitDataRequestService
+            requestService,
+            revitDataRequestService
         );
         this._bridgeRequestDispatcher =
-            new BridgeRequestDispatcher(this._bridgeOperationRegistry, this._serializerSettings);
+            new BridgeRequestDispatcher(bridgeOperationRegistry, this._serializerSettings);
 
         this._pipeClient =
             new NamedPipeClientStream(".", hostOptions.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
@@ -122,7 +118,7 @@ internal sealed class BridgeAgent : IDisposable {
         this._writer = new StreamWriter(this._pipeClient, new UTF8Encoding(false), 4096, true) { AutoFlush = true };
         this._documentNotifier = new BridgeDocumentNotifier(
             this.PublishDocumentInvalidationAsync,
-            domains => this._revitDataCache.Invalidate(domains.ToArray())
+            domains => revitDataCache.Invalidate(domains.ToArray())
         );
         Log.Information("Settings editor bridge agent created document notifier.");
 

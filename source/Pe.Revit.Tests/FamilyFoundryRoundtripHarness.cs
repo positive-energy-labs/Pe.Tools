@@ -23,8 +23,11 @@ internal static class FamilyFoundryRoundtripHarness {
             var profile = RevitFamilyFixtureHarness.LoadProfileFixture(fixtureFileName);
             var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(testName);
             var result = ProcessRoundtrip(familyDocument, profile, testName, outputDirectory);
-            var savedFamilyPath = RevitFamilyFixtureHarness.GetExpectedSavedFamilyPath(result.OutputFolderPath!, familyDocument);
-            var compiled = AuthoredParamDrivenSolidsCompiler.Compile(profile.ParamDrivenSolids ?? new AuthoredParamDrivenSolidsSettings());
+            var savedFamilyPath =
+                RevitFamilyFixtureHarness.GetExpectedSavedFamilyPath(result.OutputFolderPath!, familyDocument);
+            var compiled =
+                AuthoredParamDrivenSolidsCompiler.Compile(profile.ParamDrivenSolids ??
+                                                          new AuthoredParamDrivenSolidsSettings());
 
             RevitFamilyFixtureHarness.CloseDocument(familyDocument);
             familyDocument = null!;
@@ -55,7 +58,7 @@ internal static class FamilyFoundryRoundtripHarness {
             var authored = sourceSnapshot.ParamDrivenSolids ?? new AuthoredParamDrivenSolidsSettings();
             var profile = ProjectToProfile(sourceSnapshot);
             var sourceCategory = sourceDocument.OwnerFamily?.FamilyCategory
-                ?? throw new InvalidOperationException("Source family category was not available.");
+                                 ?? throw new InvalidOperationException("Source family category was not available.");
             var replayDocument = RevitFamilyFixtureHarness.CreateFamilyDocument(
                 application,
                 (BuiltInCategory)sourceCategory.Id.Value(),
@@ -64,7 +67,8 @@ internal static class FamilyFoundryRoundtripHarness {
             try {
                 var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(testName);
                 var result = ProcessRoundtrip(replayDocument, profile, testName, outputDirectory);
-                var savedFamilyPath = RevitFamilyFixtureHarness.GetExpectedSavedFamilyPath(result.OutputFolderPath!, replayDocument);
+                var savedFamilyPath =
+                    RevitFamilyFixtureHarness.GetExpectedSavedFamilyPath(result.OutputFolderPath!, replayDocument);
                 var compiled = AuthoredParamDrivenSolidsCompiler.Compile(authored);
 
                 RevitFamilyFixtureHarness.CloseDocument(replayDocument);
@@ -119,60 +123,20 @@ internal static class FamilyFoundryRoundtripHarness {
     }
 
     public static FFManagerSettings ProjectToProfile(FamilySnapshot snapshot) {
-        var authored = snapshot.ParamDrivenSolids ?? new AuthoredParamDrivenSolidsSettings();
-        var parameterSnapshots = snapshot.Parameters?.Data ?? [];
-        var exportedParams = FamilyParamProfileAdapter.ProjectSnapshotsToProfile(parameterSnapshots);
-        var compiledSolids = AuthoredParamDrivenSolidsCompiler.Compile(authored);
-        var additionalReferences = KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.RefPlanesAndDims)
-            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.InternalExtrusions))
-            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.Connectors))
-            .ToList();
-        var referencedSnapshotDefinitions = KnownParamPlanBuilder.BuildFamilyDefinitionsFromSnapshots(
-            parameterSnapshots,
-            additionalReferences);
-        var resolvedFamilyParams = KnownParamPlanBuilder.MergeFamilyParamDefinitions(
-            exportedParams.AddFamilyParams,
-            referencedSnapshotDefinitions);
-        var requiredApsParameterNames = exportedParams.SetKnownParams.GetAllReferencedParameterNames()
-            .Concat(additionalReferences)
-            .Where(KnownParamResolver.IsPeParameterName)
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(name => name, StringComparer.Ordinal)
-            .ToList();
+        var sharedParameterNames = snapshot.Parameters?.Data?
+                                       .Select(parameter => parameter.SharedGuid.HasValue
+                                           ? parameter.Name?.Trim()
+                                           : null)
+                                       .Where(name => !string.IsNullOrWhiteSpace(name))
+                                       .Select(name => name!)
+                                       .ToHashSet(StringComparer.Ordinal)
+                                   ?? [];
 
-        return new FFManagerSettings {
-            ExecutionOptions = new ExecutionOptions { SingleTransaction = false, OptimizeTypeOperations = true },
-            FilterFamilies = new BaseProfileSettings.FilterFamiliesSettings {
-                IncludeUnusedFamilies = true,
-                IncludeCategoriesEqualing = [],
-                IncludeNames = new IncludeFamilies { Equaling = ["__CURRENT_FAMILY__"] },
-                ExcludeNames = new ExcludeFamilies()
-            },
-            FilterApsParams = new BaseProfileSettings.FilterApsParamsSettings {
-                IncludeNames = new IncludeSharedParameter { Equaling = requiredApsParameterNames },
-                ExcludeNames = new ExcludeSharedParameter()
-            },
-            AddFamilyParams = resolvedFamilyParams,
-            SetLookupTables = new SetLookupTablesSettings {
-                Tables = snapshot.LookupTables?.Data?.Select(CloneLookupTable).ToList() ?? []
-            },
-            SetKnownParams = exportedParams.SetKnownParams,
-            ParamDrivenSolids = authored
-        };
+        return FamilySnapshotProfileProjector.ProjectToProfile(
+            snapshot,
+            "__CURRENT_FAMILY__",
+            name => sharedParameterNames.Contains(name));
     }
-
-    private static LookupTableDefinition CloneLookupTable(LookupTableDefinition table) => new() {
-        Schema = table.Schema with {
-            Columns = table.Schema.Columns
-                .Select(column => column with { })
-                .ToList()
-        },
-        Rows = table.Rows
-            .Select(row => row with {
-                ValuesByColumn = new Dictionary<string, string>(row.ValuesByColumn, StringComparer.Ordinal)
-            })
-            .ToList()
-    };
 
     public static IReadOnlyList<(string TypeName, TProbe Result)> EvaluateRoundtripStates<TProbe>(
         Document familyDocument,
@@ -181,7 +145,8 @@ internal static class FamilyFoundryRoundtripHarness {
     ) =>
         RevitFamilyFixtureHarness.EvaluateLengthDrivenStates(familyDocument, states, probe);
 
-    public static IReadOnlyList<RevitFamilyFixtureHarness.FamilyTypeState> CreateExistingTypeStates(Document familyDocument) =>
+    public static IReadOnlyList<RevitFamilyFixtureHarness.FamilyTypeState> CreateExistingTypeStates(
+        Document familyDocument) =>
         familyDocument.FamilyManager.Types
             .Cast<FamilyType>()
             .OrderBy(type => type.Name, StringComparer.Ordinal)

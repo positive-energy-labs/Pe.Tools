@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using NJsonSchema.Generation;
@@ -38,7 +38,8 @@ public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : 
 
             if (binding.StaticExamples.Count != 0) {
                 targetSchema.ExtensionData ??= new Dictionary<string, object?>();
-                targetSchema.ExtensionData["examples"] = binding.StaticExamples.ToList();
+                targetSchema.ExtensionData["examples"] =
+                    SchemaMetadataWriter.CreateOrderedExampleList(binding.StaticExamples);
             }
 
             if (binding.Ui != null) {

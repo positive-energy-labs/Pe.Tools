@@ -38,11 +38,6 @@
       "StartingWith": []
     }
   },
-  "MakeRefPlaneAndDims": {
-    "MirrorSpecs": [],
-    "OffsetSpecs": [],
-    "Enabled": false
-  },
   "AddFamilyParams": {
     "Parameters": [],
     "Enabled": true

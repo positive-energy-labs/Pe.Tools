@@ -317,8 +317,20 @@ public class ProcessingResultBuilder {
     private static void SerializeSnapshotSections(FamilySnapshot snapshot, OutputStorage output, string prefix) {
         if (snapshot.Parameters?.Data != null && snapshot.Parameters.Data.Count > 0) {
             var paramsData = snapshot.Parameters.Data;
+            var sharedParameterNames = paramsData
+                .Select(parameter => parameter.SharedGuid.HasValue
+                    ? parameter.Name?.Trim()
+                    : null)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name!)
+                .ToHashSet(StringComparer.Ordinal);
             _ = output.Json($"snapshot-parameters-{prefix}.json").Write(
-                FamilyParamProfileAdapter.ProjectSnapshotsToProfile(paramsData));
+                FamilyParamProfileAdapter.ProjectSnapshotsToProfile(
+                    paramsData,
+                    new FamilyParamProfileExportOptions {
+                        IncludeDefinitionOnlyParameters = true,
+                        IsSharedParameterName = name => sharedParameterNames.Contains(name)
+                    }));
         }
 
         if (snapshot.LookupTables?.Data != null && snapshot.LookupTables.Data.Count > 0) {

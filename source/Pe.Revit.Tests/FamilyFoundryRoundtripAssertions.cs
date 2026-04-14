@@ -899,6 +899,7 @@ internal static class FamilyFoundryRoundtripAssertions {
                     (box.Max.X - box.Min.X) * (box.Max.Y - box.Min.Y) * (box.Max.Z - box.Min.Z));
             })
             .OrderBy(span => span.MinZ)
+            .ThenByDescending(span => span.IsSolid)
             .ThenByDescending(span => span.Volume)
             .ToList();
 

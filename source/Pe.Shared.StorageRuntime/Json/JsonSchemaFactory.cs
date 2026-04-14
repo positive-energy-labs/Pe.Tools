@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using NJsonSchema;
@@ -11,6 +11,8 @@ using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 using Pe.Shared.StorageRuntime.Json.SchemaProcessors;
 using Pe.Shared.StorageRuntime.PolyFill;
 using System.Collections.Concurrent;
+using System.Globalization;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -48,7 +50,11 @@ public static class JsonSchemaFactory {
 
         var schema = BuildRawAuthoringSchema(type, options);
         schema = SchemaExampleDefinitionConsolidator.Consolidate(schema);
-        return SchemaDefaultInjector.ApplyDefaults(schema, type);
+        schema = SchemaDefaultInjector.ApplyDefaults(schema, type);
+        ApplyTypeBinding(type, schema, options);
+        JsonTypeSchemaBindingRegistry.Shared.ApplyBindingsToSchema(type, schema, options);
+        SchemaMetadataProcessor.AllowSchemaProperty(schema);
+        return NormalizeCustomUnionWrappers(schema);
     }
 
     public static JsonSchema BuildFragmentSchema(Type itemType, JsonSchemaBuildOptions options) {
@@ -99,6 +105,7 @@ public static class JsonSchemaFactory {
     private static JsonSchema BuildRawAuthoringSchema(Type type, JsonSchemaBuildOptions options) {
         var settings = CreateGeneratorSettings(options);
         var schema = new JsonSchemaGenerator(settings).Generate(type);
+        ApplyTypeBinding(type, schema, options);
         SchemaMetadataProcessor.AllowSchemaProperty(schema);
         return schema;
     }
@@ -124,6 +131,22 @@ public static class JsonSchemaFactory {
         return settings;
     }
 
+    private static void ApplyTypeBinding(Type type, JsonSchema schema, JsonSchemaBuildOptions options) {
+        var targetType = Nullable.GetUnderlyingType(type) ?? type;
+        if (!JsonTypeSchemaBindingRegistry.Shared.TryGet(targetType, out var binding))
+            return;
+
+        var actualSchema = schema.HasReference ? schema.Reference : schema;
+        if (actualSchema == null)
+            return;
+
+        binding.ConfigurePropertySchema(
+            actualSchema,
+            SyntheticPropertyInfo.Create(targetType),
+            options
+        );
+    }
+
     private static void CopyRootDatasetMetadata(JsonSchema sourceSchema, JsonSchema targetSchema) {
         var actualSourceSchema = sourceSchema.HasReference ? sourceSchema.Reference : sourceSchema;
         if (actualSourceSchema?.ExtensionData == null ||
@@ -132,6 +155,88 @@ public static class JsonSchemaFactory {
 
         targetSchema.ExtensionData ??= new Dictionary<string, object?>();
         targetSchema.ExtensionData["x-data"] = rawRootData;
+    }
+
+    private static JsonSchema NormalizeCustomUnionWrappers(JsonSchema schema) {
+        var root = JObject.Parse(schema.ToJson());
+        NormalizeCustomUnionWrappers(root);
+        return JsonSchema.FromJsonAsync(root.ToString(Formatting.None)).GetAwaiter().GetResult();
+    }
+
+    private static void NormalizeCustomUnionWrappers(JToken token) {
+        switch (token) {
+            case JObject obj:
+                if (ShouldRelaxAdditionalProperties(obj)) {
+                    _ = obj.Remove("additionalProperties");
+                }
+
+                foreach (var property in obj.Properties().ToArray())
+                    NormalizeCustomUnionWrappers(property.Value);
+
+                break;
+
+            case JArray array:
+                foreach (var item in array)
+                    NormalizeCustomUnionWrappers(item);
+
+                break;
+        }
+    }
+
+    private static bool ShouldRelaxAdditionalProperties(JObject schemaObject) {
+        if (schemaObject["oneOf"] is not JArray oneOf || oneOf.Count == 0)
+            return false;
+
+        if (schemaObject["additionalProperties"]?.Type != JTokenType.Boolean ||
+            schemaObject["additionalProperties"]!.Value<bool>())
+            return false;
+
+        if (schemaObject["properties"] is JObject properties &&
+            properties.Properties().Any(property => !string.Equals(property.Name, "$schema", StringComparison.Ordinal)))
+            return false;
+
+        return oneOf.All(item =>
+            item is JObject branch &&
+            (branch["type"]?.Value<string>() == "string" ||
+             branch["type"]?.Value<string>() == "object" ||
+             branch["$ref"] != null));
+    }
+
+    private sealed class SyntheticPropertyInfo(Type propertyType) : PropertyInfo {
+        public static SyntheticPropertyInfo Create(Type propertyType) => new(propertyType);
+
+        public override Type PropertyType { get; } = propertyType;
+        public override PropertyAttributes Attributes => PropertyAttributes.None;
+        public override bool CanRead => false;
+        public override bool CanWrite => false;
+        public override string Name => propertyType.Name;
+        public override Type DeclaringType => propertyType;
+        public override Type ReflectedType => propertyType;
+
+        public override MethodInfo[] GetAccessors(bool nonPublic) => [];
+        public override MethodInfo? GetGetMethod(bool nonPublic) => null;
+        public override ParameterInfo[] GetIndexParameters() => [];
+        public override MethodInfo? GetSetMethod(bool nonPublic) => null;
+        public override object[] GetCustomAttributes(bool inherit) => [];
+        public override object[] GetCustomAttributes(Type attributeType, bool inherit) => [];
+        public override bool IsDefined(Type attributeType, bool inherit) => false;
+        public override object? GetValue(object? obj, object?[]? index) => throw new NotSupportedException();
+        public override object? GetValue(
+            object? obj,
+            BindingFlags invokeAttr,
+            Binder? binder,
+            object?[]? index,
+            CultureInfo? culture
+        ) => throw new NotSupportedException();
+        public override void SetValue(object? obj, object? value, object?[]? index) => throw new NotSupportedException();
+        public override void SetValue(
+            object? obj,
+            object? value,
+            BindingFlags invokeAttr,
+            Binder? binder,
+            object?[]? index,
+            CultureInfo? culture
+        ) => throw new NotSupportedException();
     }
 }
 

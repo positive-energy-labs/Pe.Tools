@@ -179,9 +179,6 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
                         continue;
 
                     var value = famDoc.GetValueString(p); // must support this in SetValue.
-                    if (IsDefaultNumericValue(famDoc, p))
-                        value = null;
-
                     snap.ValuesPerType[t.Name] = value;
                 }
             }
@@ -201,23 +198,6 @@ public class ParamSectionCollector : IProjectCollector, IFamilyDocCollector {
     }
 
     // ==================== Helpers ====================
-
-    private static bool IsDefaultNumericValue(FamilyDocument famDoc, FamilyParameter parameter) {
-        var rawValue = famDoc.GetValue(parameter);
-        if (rawValue == null) return true;
-
-        if (parameter.StorageType == StorageType.Double)
-            return rawValue is double doubleValue && Math.Abs(doubleValue) <= 1e-9;
-
-        if (parameter.StorageType != StorageType.Integer)
-            return false;
-
-        // Keep Yes/No values explicit ("No"/"Yes") and only suppress numeric integer zero.
-        if (parameter.Definition.GetDataType() == SpecTypeId.Boolean.YesNo)
-            return false;
-
-        return rawValue is int intValue && intValue == 0;
-    }
 
     private static string GetKey(string name, bool isInstance) => $"{name}|{isInstance}";
 

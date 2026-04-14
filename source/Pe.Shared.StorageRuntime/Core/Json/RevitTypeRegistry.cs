@@ -1,6 +1,7 @@
-using System.Reflection;
+﻿using System.Reflection;
 using Newtonsoft.Json;
 using NJsonSchema;
+using NJsonSchema.Generation.TypeMappers;
 using Pe.Shared.StorageRuntime.Json;
 using Pe.Shared.StorageRuntime.Json.FieldOptions;
 using Pe.Shared.StorageRuntime.Core.Json.Converters;
@@ -70,4 +71,30 @@ internal sealed class RevitJsonTypeSchemaBinding(
 
     public IFieldOptionsSource? CreateFieldOptionsSource(PropertyInfo propertyInfo) =>
         fieldOptionsSourceFactory(propertyInfo);
+
+    public void ConfigureTypeSchema(JsonSchema schema, TypeMapperContext context) {
+        schema.Type = this.SchemaType;
+        schema.OneOf.Clear();
+        schema.AnyOf.Clear();
+        schema.AllOf.Clear();
+        schema.Properties.Clear();
+        schema.Item = null;
+        schema.AdditionalPropertiesSchema = null;
+        schema.AllowAdditionalProperties = false;
+    }
+
+    public void ConfigurePropertySchema(JsonSchema schema, PropertyInfo propertyInfo, JsonSchemaBuildOptions options) {
+        if (schema.HasReference)
+            schema.Reference = null;
+
+        var isNullable = schema.OneOf.Any(candidate => candidate.Type == JsonObjectType.Null);
+        schema.OneOf.Clear();
+        schema.AnyOf.Clear();
+        schema.AllOf.Clear();
+        schema.Type = isNullable ? this.SchemaType | JsonObjectType.Null : this.SchemaType;
+        schema.Properties.Clear();
+        schema.Item = null;
+        schema.AdditionalPropertiesSchema = null;
+        schema.AllowAdditionalProperties = false;
+    }
 }
