@@ -106,7 +106,6 @@ public static class JsonSchemaFactory {
         var settings = CreateGeneratorSettings(options);
         var schema = new JsonSchemaGenerator(settings).Generate(type);
         ApplyTypeBinding(type, schema, options);
-        SchemaMetadataProcessor.AllowSchemaProperty(schema);
         return schema;
     }
 
