@@ -1,5 +1,3 @@
-using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamDocument.GetValue;
 using Pe.Revit.Global.Utils.Files;
@@ -250,15 +248,13 @@ internal static class RevitFamilyFixtureHarness {
     }
 
     public static FFManagerSettings LoadProfileFixture(string fixtureFileName) {
+        return LoadProfileFixtureContract(fixtureFileName).Value;
+    }
+
+    public static SettingsJsonRoundTripResult<FFManagerSettings> LoadProfileFixtureContract(string fixtureFileName) {
         var fixturePath = GetProfileFixturePath(fixtureFileName);
         var json = File.ReadAllText(fixturePath);
-        var settings = RevitJsonFormatting.CreateRevitIndentedSettings();
-
-        if (!settings.Converters.OfType<StringEnumConverter>().Any())
-            settings.Converters.Add(new StringEnumConverter());
-
-        return JsonConvert.DeserializeObject<FFManagerSettings>(json, settings)
-               ?? throw new InvalidOperationException($"Failed to deserialize profile fixture '{fixturePath}'.");
+        return SettingsJsonContract.ValidateAndRoundTrip<FFManagerSettings>(json, fixturePath);
     }
 
     public static void AssertSavedFamilyFileIsOpenable(

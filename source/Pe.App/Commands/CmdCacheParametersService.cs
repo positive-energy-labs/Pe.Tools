@@ -5,6 +5,8 @@ using Newtonsoft.Json.Linq;
 using Pe.Revit.Global.Services.Aps;
 using Pe.Revit.Global.Services.Aps.Models;
 using Pe.Shared.StorageRuntime;
+using Pe.Shared.StorageRuntime.Json;
+using Serilog;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -19,7 +21,9 @@ public class CmdCacheParametersService : IExternalCommand {
         ref string message,
         ElementSet elements) {
         var cacheFilename = "parameters-service-cache";
-        var apsParamsCache = StorageClient.Default.Global().State().Json<ParametersApi.Parameters>(cacheFilename);
+        var globalState = StorageClient.Default.Global().State();
+        var apsParamsCache = globalState.Json<ParametersApi.Parameters>(cacheFilename);
+        var cacheFilePath = ((JsonReader<ParametersApi.Parameters>)apsParamsCache).FilePath;
 
         var svcAps = new Aps(new CacheParametersService());
         var parameters = Task.Run(async () =>
@@ -27,15 +31,22 @@ public class CmdCacheParametersService : IExternalCommand {
                 apsParamsCache, false)
         ).Result;
 
-        WriteAdditionalFormats(parameters, cacheFilename);
+        var additionalFormatPaths = WriteAdditionalFormats(parameters, cacheFilename, globalState.DirectoryPath);
+        Log.Information(
+            "[APS Cache] Wrote {ParameterCount} APS parameters to {JsonPath}. Additional artifacts: {AdditionalFormatPaths}",
+            parameters?.Results?.Count ?? 0,
+            cacheFilePath,
+            additionalFormatPaths);
 
         return Result.Succeeded;
     }
 
-    private static void WriteAdditionalFormats(ParametersApi.Parameters parameters, string baseFilename) {
-        if (parameters?.Results == null) return;
+    private static IReadOnlyList<string> WriteAdditionalFormats(
+        ParametersApi.Parameters parameters,
+        string baseFilename,
+        string stateDirectoryPath) {
+        if (parameters?.Results == null) return [];
 
-        var stateDirectoryPath = StorageClient.Default.Global().State().DirectoryPath;
         var basePath = Path.Combine(stateDirectoryPath, baseFilename);
 
         var enrichedData = parameters.Results
@@ -44,9 +55,19 @@ public class CmdCacheParametersService : IExternalCommand {
             .Select(p => new EnrichedParameterData(p))
             .ToList();
 
-        WriteCsv(enrichedData, $"{basePath}.csv");
-        WriteToon(enrichedData, $"{basePath}.toon");
-        WriteMarkdown(enrichedData, $"{basePath}.md");
+        if (enrichedData.Count == 0)
+            return [];
+
+        var writtenPaths = new List<string> {
+            $"{basePath}.csv",
+            $"{basePath}.toon",
+            $"{basePath}.md"
+        };
+
+        WriteCsv(enrichedData, writtenPaths[0]);
+        WriteToon(enrichedData, writtenPaths[1]);
+        WriteMarkdown(enrichedData, writtenPaths[2]);
+        return writtenPaths;
     }
 
     private static void WriteCsv(List<EnrichedParameterData> data, string filePath) {
@@ -233,23 +254,56 @@ public class EnrichedParameterData {
             this.IsInstance = param.DownloadOptions.IsInstance;
             this.Visible = param.DownloadOptions.Visible;
 
-            var groupId = param.Metadata
-                .FirstOrDefault(m => m.Id == "group")?
-                .Value as ParametersApi.Parameters.ParametersResult.ParameterDownloadOpts.MetadataBinding;
+            this.GroupId = TryGetMetadataBindingId(param.Metadata, "group");
+            this.GroupLabel = TryGetForgeLabel(this.GroupId, param.Name, "group");
 
-            this.GroupId = groupId?.Id;
-            try {
-                this.GroupLabel = new ForgeTypeId(this.GroupId).ToLabel();
-            } catch {
-                Debug.WriteLine($"GroupLabel derivation failed: GroupId: {this.GroupId}");
-            }
+            this.CategoryIds = GetMetadataBindingIds(param.Metadata, "categories");
+            this.CategoryLabels = this.CategoryIds
+                .Select(categoryId => TryGetForgeLabel(categoryId, param.Name, "category"))
+                .Where(label => !string.IsNullOrWhiteSpace(label))
+                .ToList();
+        }
+    }
 
-            var categories = param.Metadata
-                .FirstOrDefault(m => m.Id == "categories")?
-                .Value as List<ParametersApi.Parameters.ParametersResult.ParameterDownloadOpts.MetadataBinding>;
+    private static string? TryGetMetadataBindingId(
+        IEnumerable<ParametersApi.Parameters.ParametersResult.RawMetadataValue> metadata,
+        string metadataId) =>
+        metadata.FirstOrDefault(m => m.Id == metadataId)?.Value switch {
+            ParametersApi.Parameters.ParametersResult.ParameterDownloadOpts.MetadataBinding binding => binding.Id,
+            JObject valueObject => valueObject.Value<string>("id") ?? valueObject.Value<string>("Id"),
+            _ => null
+        };
 
-            this.CategoryIds = categories?.Select(c => c.Id).ToList() ?? [];
-            this.CategoryLabels = categories?.Select(c => new ForgeTypeId(c.Id).ToLabel()).ToList() ?? [];
+    private static List<string> GetMetadataBindingIds(
+        IEnumerable<ParametersApi.Parameters.ParametersResult.RawMetadataValue> metadata,
+        string metadataId) =>
+        metadata.FirstOrDefault(m => m.Id == metadataId)?.Value switch {
+            List<ParametersApi.Parameters.ParametersResult.ParameterDownloadOpts.MetadataBinding> bindings =>
+                bindings.Select(binding => binding.Id).Where(id => !string.IsNullOrWhiteSpace(id)).ToList()!,
+            JArray valueArray => valueArray
+                .OfType<JObject>()
+                .Select(valueObject => valueObject.Value<string>("id") ?? valueObject.Value<string>("Id"))
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Cast<string>()
+                .ToList(),
+            _ => []
+        };
+
+    private static string TryGetForgeLabel(string? forgeTypeId, string? parameterName, string metadataKind) {
+        if (string.IsNullOrWhiteSpace(forgeTypeId))
+            return string.Empty;
+
+        try {
+            return new ForgeTypeId(forgeTypeId).ToLabel();
+        } catch (Exception ex) {
+            Log.Debug(
+                ex,
+                "[APS Cache] Failed to derive {MetadataKind} label for parameter {ParameterName}. ForgeTypeId={ForgeTypeId}",
+                metadataKind,
+                parameterName,
+                forgeTypeId);
+            Debug.WriteLine($"{metadataKind} label derivation failed: ForgeTypeId: {forgeTypeId}");
+            return string.Empty;
         }
     }
 

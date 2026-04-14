@@ -1,0 +1,54 @@
+using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Shared.RevitData.Parameters;
+using Pe.Shared.StorageRuntime.Json;
+
+namespace Pe.Revit.Tests;
+
+[TestFixture]
+public sealed class StorageRuntimeJsonFormattingTests {
+    [Test]
+    public void LocalDiskJsonFile_roundtrips_parameter_snapshot_forge_type_labels() {
+        var filePath = Path.Combine(
+            Path.GetTempPath(),
+            $"storage-runtime-json-formatting-{Guid.NewGuid():N}.json");
+
+        try {
+            var jsonFile = new LocalDiskJsonFile<ParameterSnapshot>(filePath);
+            var snapshot = new ParameterSnapshot {
+                Name = "Width",
+                IsInstance = false,
+                PropertiesGroup = GroupTypeId.IdentityData,
+                DataType = SpecTypeId.Length,
+                ValuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal) {
+                    ["Default"] = "2' - 0\""
+                }
+            };
+
+            jsonFile.Write(snapshot);
+
+            var content = File.ReadAllText(filePath);
+            var expectedGroupLabel = RevitTypeLabelCatalog.GetLabelForPropertyGroup(GroupTypeId.IdentityData);
+            var expectedDataTypeLabel = BuildExpectedSpecLabel(SpecTypeId.Length);
+
+            Assert.Multiple(() => {
+                Assert.That(content, Does.Contain($"\"PropertiesGroup\": \"{expectedGroupLabel}\""));
+                Assert.That(content, Does.Contain($"\"DataType\": \"{expectedDataTypeLabel}\""));
+                Assert.That(content, Does.Not.Contain("\"TypeId\""));
+            });
+
+            var roundtripped = jsonFile.Read();
+
+            Assert.Multiple(() => {
+                Assert.That(roundtripped.PropertiesGroup.TypeId, Is.EqualTo(GroupTypeId.IdentityData.TypeId));
+                Assert.That(roundtripped.DataType.TypeId, Is.EqualTo(SpecTypeId.Length.TypeId));
+                Assert.That(roundtripped.ValuesPerType["Default"], Is.EqualTo("2' - 0\""));
+            });
+        } finally {
+            if (File.Exists(filePath))
+                File.Delete(filePath);
+        }
+    }
+
+    private static string BuildExpectedSpecLabel(ForgeTypeId forgeTypeId) =>
+        RevitTypeLabelCatalog.GetLabelForSpec(forgeTypeId);
+}

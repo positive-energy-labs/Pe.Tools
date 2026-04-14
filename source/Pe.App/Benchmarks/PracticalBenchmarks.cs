@@ -1,7 +1,5 @@
-using Autodesk.Revit.DB;
+﻿using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamDocument.GetValue;
 using Pe.Revit.Extensions.FamDocument.SetValue;
@@ -582,13 +580,7 @@ internal static class PracticalBenchmarks {
             throw new FileNotFoundException($"Profile fixture not found at '{fixturePath}'.", fixturePath);
 
         var json = File.ReadAllText(fixturePath);
-        var settings = RevitJsonFormatting.CreateRevitIndentedSettings();
-
-        if (!settings.Converters.OfType<StringEnumConverter>().Any())
-            settings.Converters.Add(new StringEnumConverter());
-
-        return JsonConvert.DeserializeObject<FFManagerSettings>(json, settings)
-               ?? throw new InvalidOperationException($"Failed to deserialize profile fixture '{fixturePath}'.");
+        return SettingsJsonContract.ValidateAndRoundTrip<FFManagerSettings>(json, fixturePath).Value;
     }
 
     private static void EnsureSavedFamilyFileIsOpenable(

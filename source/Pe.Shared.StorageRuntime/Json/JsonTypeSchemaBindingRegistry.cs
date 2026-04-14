@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using NJsonSchema.Generation;
@@ -30,6 +30,11 @@ public sealed class JsonTypeSchemaBindingRegistry {
 
         if (this._bindings.TryGetValue(type, out binding!))
             return true;
+
+        if (TryCreateAttributedBinding(type, out binding)) {
+            this._bindings[type] = binding;
+            return true;
+        }
 
         var match = this._bindings.Keys.FirstOrDefault(registeredType => registeredType == type ||
                                                                          string.Equals(registeredType.FullName,
@@ -85,7 +90,7 @@ public sealed class JsonTypeSchemaBindingRegistry {
             var targetSchema = usesItemBinding && propertySchema.Item != null
                 ? propertySchema.Item
                 : propertySchema;
-            ConvertPropertySchema(targetSchema, binding.SchemaType);
+            binding.ConfigurePropertySchema(targetSchema, property, options);
 
             var source = binding.CreateFieldOptionsSource(property);
             if (source == null)
@@ -109,21 +114,20 @@ public sealed class JsonTypeSchemaBindingRegistry {
             if (samples == null || samples.Count == 0)
                 continue;
 
+            var orderedSamples = SchemaMetadataWriter.CreateOrderedFieldOptionItems(samples);
             targetSchema.Enumeration.Clear();
-            foreach (var sample in samples)
+            foreach (var sample in orderedSamples)
                 targetSchema.Enumeration.Add(JToken.FromObject(sample.Value));
         }
     }
 
-    private static void ConvertPropertySchema(JsonSchema propertySchema, JsonObjectType schemaType) {
-        if (propertySchema.HasReference)
-            propertySchema.Reference = null;
-
-        var isNullable = propertySchema.OneOf.Any(schema => schema.Type == JsonObjectType.Null);
-        propertySchema.OneOf.Clear();
-        propertySchema.Type = isNullable ? schemaType | JsonObjectType.Null : schemaType;
-        propertySchema.Properties.Clear();
-        propertySchema.AdditionalPropertiesSchema = null;
+    public void ApplyBindingsToSchema(
+        Type rootType,
+        JsonSchema schema,
+        JsonSchemaBuildOptions options
+    ) {
+        var visited = new HashSet<Type>();
+        ApplyBindingsToSchemaCore(rootType, schema, options, visited);
     }
 
     private static Type ResolveTargetType(Type propertyType) {
@@ -159,5 +163,59 @@ public sealed class JsonTypeSchemaBindingRegistry {
                genericTypeDefinition == typeof(IEnumerable<>) ||
                genericTypeDefinition == typeof(IReadOnlyList<>) ||
                genericTypeDefinition == typeof(IReadOnlyCollection<>);
+    }
+
+    private static bool TryCreateAttributedBinding(Type type, out IJsonTypeSchemaBinding binding) {
+        var attribute = type.GetCustomAttribute<JsonTypeSchemaBindingAttribute>();
+        if (attribute?.BindingType == null) {
+            binding = null!;
+            return false;
+        }
+
+        if (!typeof(IJsonTypeSchemaBinding).IsAssignableFrom(attribute.BindingType)) {
+            throw new InvalidOperationException(
+                $"Binding type '{attribute.BindingType.FullName}' does not implement {nameof(IJsonTypeSchemaBinding)}."
+            );
+        }
+
+        binding = (IJsonTypeSchemaBinding)Activator.CreateInstance(attribute.BindingType, nonPublic: true)!;
+        return true;
+    }
+
+    private void ApplyBindingsToSchemaCore(
+        Type currentType,
+        JsonSchema schema,
+        JsonSchemaBuildOptions options,
+        ISet<Type> visited
+    ) {
+        var effectiveType = Nullable.GetUnderlyingType(currentType) ?? currentType;
+        if (!visited.Add(effectiveType))
+            return;
+
+        try {
+            var actualSchema = schema.HasReference ? schema.Reference : schema;
+            if (actualSchema == null)
+                return;
+
+            foreach (var property in effectiveType.GetProperties()) {
+                var propertyName = property.GetCustomAttribute<JsonPropertyAttribute>()?.PropertyName ??
+                                   property.Name;
+                if (!actualSchema.Properties.TryGetValue(propertyName, out var propertySchema))
+                    continue;
+
+                var usesItemBinding = ShouldUseItemBinding(property.PropertyType);
+                var targetSchema = usesItemBinding && propertySchema.Item != null
+                    ? propertySchema.Item
+                    : propertySchema;
+
+                var targetType = ResolveTargetType(property.PropertyType);
+                if (this.TryGet(targetType, out var binding))
+                    binding.ConfigurePropertySchema(targetSchema, property, options);
+
+                ApplyBindingsToSchemaCore(targetType, targetSchema, options, visited);
+            }
+        } finally {
+            _ = visited.Remove(effectiveType);
+        }
     }
 }

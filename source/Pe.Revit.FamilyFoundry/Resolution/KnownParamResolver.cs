@@ -144,20 +144,20 @@ public static class KnownParamResolver {
         && parameterName.StartsWith("PE_", StringComparison.OrdinalIgnoreCase);
 
     private static void ValidateResolvedParameterName(string parameterName, KnownParamCatalog catalog) {
-        if (IsPeParameterName(parameterName)) {
-            if (!catalog.SharedParameterNames.Contains(parameterName)) {
-                throw new InvalidOperationException(
-                    $"SetKnownParams references PE_ parameter '{parameterName}', but FilterApsParams does not provide it. " +
-                    "Add the parameter to the APS/shared parameter filter.");
-            }
-
+        if (catalog.SharedParameterNames.Contains(parameterName))
             return;
+
+        if (catalog.FamilyDefinitions.ContainsKey(parameterName))
+            return;
+
+        if (IsPeParameterName(parameterName)) {
+            throw new InvalidOperationException(
+                $"SetKnownParams references PE_ parameter '{parameterName}', but FilterApsParams does not provide it. " +
+                "Add the parameter to the APS/shared parameter filter.");
         }
 
-        if (!catalog.FamilyDefinitions.ContainsKey(parameterName)) {
-            throw new InvalidOperationException(
-                $"SetKnownParams references non-PE parameter '{parameterName}', but no matching AddFamilyParams.Parameters definition exists.");
-        }
+        throw new InvalidOperationException(
+            $"SetKnownParams references parameter '{parameterName}', but it is available in neither AddFamilyParams.Parameters nor FilterApsParams.");
     }
 
     private static void ValidateGlobalAssignments(List<GlobalParamAssignment> assignments) {
