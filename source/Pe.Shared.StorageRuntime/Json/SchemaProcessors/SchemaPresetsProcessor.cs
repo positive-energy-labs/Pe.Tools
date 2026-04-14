@@ -64,7 +64,6 @@ public sealed class SchemaPresetsProcessor : ISchemaProcessor {
 
         var presetProperty = new JsonSchemaProperty {
             Type = JsonObjectType.String,
-            IsRequired = true,
             Description = "Path to preset file (without .json extension)."
         };
         presetProperty.ExtensionData ??= new Dictionary<string, object?>();
@@ -73,7 +72,8 @@ public sealed class SchemaPresetsProcessor : ISchemaProcessor {
         };
 
         schema.Properties["$preset"] = presetProperty;
-        schema.RequiredProperties.Add("$preset");
+        if (!schema.RequiredProperties.Contains("$preset"))
+            schema.RequiredProperties.Add("$preset");
         return schema;
     }
 }

@@ -56,10 +56,8 @@ internal sealed class PlaneRefOrInlinePlaneSchemaBinding : IJsonTypeSchemaBindin
         schema.Properties.Clear();
         schema.Item = null;
         schema.AllowAdditionalProperties = true;
-        schema.AdditionalPropertiesSchema = JsonSchema.CreateAnySchema();
+        schema.AdditionalPropertiesSchema = null;
         schema.Enumeration.Clear();
-        schema.ExtensionData ??= new Dictionary<string, object?>();
-        schema.ExtensionData["x-pe-union-wrapper"] = true;
     }
 }
 
@@ -98,10 +96,8 @@ internal sealed class PlanePairOrInlineSpanSchemaBinding : IJsonTypeSchemaBindin
         schema.Properties.Clear();
         schema.Item = null;
         schema.AllowAdditionalProperties = true;
-        schema.AdditionalPropertiesSchema = JsonSchema.CreateAnySchema();
+        schema.AdditionalPropertiesSchema = null;
         schema.Enumeration.Clear();
-        schema.ExtensionData ??= new Dictionary<string, object?>();
-        schema.ExtensionData["x-pe-union-wrapper"] = true;
     }
 }
 
@@ -117,10 +113,14 @@ internal static class AuthoredParamDrivenSolidsSchemaFragments {
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
-        if (required.Length == 0)
-            return schema;
-
         var schemaObject = JObject.Parse(schema.ToJson());
+        _ = schemaObject.Remove("$schema");
+        if (schemaObject["properties"] is JObject properties)
+            _ = properties.Remove("$schema");
+
+        if (required.Length == 0)
+            return JsonSchema.FromJsonAsync(schemaObject.ToString(Formatting.None)).GetAwaiter().GetResult();
+
         schemaObject["required"] = new JArray(required);
         return JsonSchema.FromJsonAsync(schemaObject.ToString(Formatting.None)).GetAwaiter().GetResult();
     }

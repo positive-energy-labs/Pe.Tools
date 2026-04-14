@@ -81,6 +81,7 @@ internal static class ConstrainedExtrusionFactory {
             return ExtrusionCreationResult.Failed;
         }
 
+        TryAssociateEndOffsetHeightDriver(doc, extrusion, spec.HeightControlMode, spec.HeightDriver, spec.HeightParameter, logs, key);
         TryAlignSketchLinesToPlanes(doc, extrusion, [rpA1, rpA2, rpB1, rpB2], logs, key);
         if (heightPlan.ShouldAlignCaps)
             TryAlignExtrusionCapsToHeightPlanes(doc, extrusion, sketchGeomPlane.Normal.Normalize(), heightPlan.BottomPlane!, heightPlan.TopPlane!, logs, key);
@@ -167,6 +168,7 @@ internal static class ConstrainedExtrusionFactory {
             var extrusion = doc.FamilyCreate.NewExtrusion(spec.IsSolid, profile, sketchPlane, seedDepth);
             extrusion.EndOffset = heightPlan.EndOffset;
             extrusion.StartOffset = heightPlan.StartOffset;
+            TryAssociateEndOffsetHeightDriver(doc, extrusion, spec.HeightControlMode, spec.HeightDriver, spec.HeightParameter, logs, key);
             if (effectiveOptions.CreateDiameterLabel)
                 TryLabelCircleDiameter(doc, extrusion, spec, logs, key);
             if (effectiveOptions.AlignCenterToPlanes)
@@ -360,6 +362,50 @@ internal static class ConstrainedExtrusionFactory {
         }
     }
 
+    private static void TryAssociateEndOffsetHeightDriver(
+        Document doc,
+        Extrusion extrusion,
+        ExtrusionHeightControlMode heightControlMode,
+        LengthDriverSpec heightDriver,
+        string? heightParameter,
+        List<LogEntry> logs,
+        string key
+    ) {
+        if (heightControlMode != ExtrusionHeightControlMode.EndOffset)
+            return;
+
+        var parameterName = heightDriver.TryGetParameterName() ?? heightParameter;
+        if (string.IsNullOrWhiteSpace(parameterName))
+            return;
+
+        var familyParameter = doc.FamilyManager.get_Parameter(parameterName);
+        if (familyParameter == null) {
+            logs.Add(new LogEntry(key).Error(
+                $"Created extrusion, but height parameter '{parameterName}' was not found for end-offset association."));
+            return;
+        }
+
+        var extrusionEndParameter = extrusion.get_Parameter(BuiltInParameter.EXTRUSION_END_PARAM);
+        if (extrusionEndParameter == null) {
+            logs.Add(new LogEntry(key).Error(
+                "Created extrusion, but the extrusion end-offset parameter was not available for association."));
+            return;
+        }
+
+        try {
+            var existing = doc.FamilyManager.GetAssociatedFamilyParameter(extrusionEndParameter);
+            if (existing?.Id != familyParameter.Id) {
+                if (existing != null)
+                    doc.FamilyManager.AssociateElementParameterToFamilyParameter(extrusionEndParameter, null);
+
+                doc.FamilyManager.AssociateElementParameterToFamilyParameter(extrusionEndParameter, familyParameter);
+            }
+        } catch (Exception ex) {
+            logs.Add(new LogEntry(key).Error(
+                $"Created extrusion, but failed end-offset parameter association: {ex.Message}"));
+        }
+    }
+
     private static View? GetWorkingView(Document doc) {
         if (doc.ActiveView != null && !doc.ActiveView.IsTemplate)
             return doc.ActiveView;
@@ -379,11 +425,17 @@ internal static class ConstrainedExtrusionFactory {
             return GetWorkingView(doc);
 
         return Math.Abs(sketchNormal.Z) > 0.95
-            ? GetWorkingView(doc)
+            ? GetPreferredPlanAuthoringView(doc)
             : GetViewMostAlignedToDirection(doc, sketchNormal, ViewType.Elevation, ViewType.Section)
               ?? GetFirstNonTemplateView(doc, ViewType.Elevation, ViewType.Section)
               ?? GetWorkingView(doc);
     }
+
+    private static View? GetPreferredPlanAuthoringView(Document doc) =>
+        IsPlanAuthoringView(doc.ActiveView)
+            ? doc.ActiveView
+            : GetFirstNonTemplateView(doc, ViewType.FloorPlan, ViewType.CeilingPlan, ViewType.EngineeringPlan, ViewType.AreaPlan)
+              ?? GetWorkingView(doc);
 
     private static View? GetBestAlignmentView(Document doc, ReferencePlane p1, ReferencePlane p2) {
         var isHeightLike = Math.Abs(p1.Normal.Normalize().Z) > 0.95 &&
@@ -401,6 +453,11 @@ internal static class ConstrainedExtrusionFactory {
             .FirstOrDefault(view =>
                 !view.IsTemplate &&
                 viewTypes.Contains(view.ViewType));
+
+    private static bool IsPlanAuthoringView(View? view) =>
+        view != null &&
+        !view.IsTemplate &&
+        view.ViewType is ViewType.FloorPlan or ViewType.CeilingPlan or ViewType.EngineeringPlan or ViewType.AreaPlan;
 
     private static View? GetViewMostAlignedToDirection(
         Document doc,

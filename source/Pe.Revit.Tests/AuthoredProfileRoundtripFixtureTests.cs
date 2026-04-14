@@ -9,6 +9,8 @@ public sealed class AuthoredProfileRoundtripFixtureTests {
     private const string WineGuardianOutdoorFamilyName = "FF-Test-WineGuardianDS050Outdoor";
     private const string WineGuardianIndoorProfileFixture = "wineguardian-ds050-indoor.json";
     private const string WineGuardianOutdoorProfileFixture = "wineguardian-ds050-outdoor.json";
+    private const string GrinderPumpBasinFamilyName = "FF-Test-GrinderPumpBasin";
+    private const string GrinderPumpBasinProfileFixture = "grinder-pump-basin.json";
     private const string PeGrdSupplyFamilyFixture = "pe-grd-supply.rfa";
 
     private Autodesk.Revit.ApplicationServices.Application _dbApplication = null!;
@@ -120,6 +122,60 @@ public sealed class AuthoredProfileRoundtripFixtureTests {
             FamilyFoundryRoundtripAssertions.AssertOffsetPlanesTrackDriversAcrossStates(artifact.Compiled, states);
             FamilyFoundryRoundtripAssertions.AssertSymmetricPairsTrackDriversAcrossStates(artifact.Compiled, states);
             FamilyFoundryRoundtripAssertions.AssertPrismsTrackConstrainingPlanesAcrossStates(artifact.Compiled, states);
+            FamilyFoundryRoundtripAssertions.AssertConnectorsTrackFacesAndDriversAcrossStates(artifact.Compiled, states);
+        } finally {
+            artifact?.CloseDocuments();
+        }
+    }
+
+    [Test]
+    public void GrinderPumpBasin_profile_aligns_with_runtime_across_type_matrix() {
+        RoundtripArtifact? artifact = null;
+
+        try {
+            artifact = FamilyFoundryRoundtripHarness.RunProfileFixtureRoundtrip(
+                _dbApplication,
+                GrinderPumpBasinProfileFixture,
+                TestFamilyCategory,
+                GrinderPumpBasinFamilyName,
+                nameof(GrinderPumpBasin_profile_aligns_with_runtime_across_type_matrix));
+
+            Console.WriteLine($"[PE_FF_TEST_SAVED_FAMILY] {artifact.SavedFamilyPath}");
+
+            FamilyFoundryRoundtripAssertions.AssertAuthoredGraphCounts(
+                artifact.Authored,
+                new AuthoredGraphExpectation(
+                    2,
+                    0,
+                    0,
+                    2,
+                    1,
+                    [
+                        "Basin Right Tangent",
+                        "Discharge Centerline"
+                    ],
+                    [],
+                    [
+                        "Anti-Float Collar",
+                        "Basin Body"
+                    ],
+                    ["Discharge"]));
+            FamilyFoundryRoundtripAssertions.AssertCompiledPlanMatchesAuthored(artifact);
+            FamilyFoundryRoundtripAssertions.AssertSavedFamilyHasOnlyTypes(artifact.SavedDocument, "Default");
+
+            var states = FamilyFoundryRoundtripHarness.EvaluateRoundtripStates(
+                artifact.SavedDocument,
+                CreateGrinderPumpBasinStates(),
+                FamilyFoundryRuntimeProbe.Collect);
+
+            Assert.That(states, Has.Count.EqualTo(4));
+            Assert.That(states[0].Result.ConnectorCount, Is.EqualTo(1));
+            Assert.That(states[0].Result.Prisms, Is.Empty);
+            Assert.That(states[0].Result.Cylinders, Has.Count.EqualTo(3));
+
+            FamilyFoundryRoundtripAssertions.AssertDimensionLabelsMatchCompiledPlan(artifact.Compiled, states);
+            FamilyFoundryRoundtripAssertions.AssertOffsetPlanesTrackDriversAcrossStates(artifact.Compiled, states);
+            FamilyFoundryRoundtripAssertions.AssertCylindersTrackConstrainingPlanesAcrossStates(artifact.Compiled, states);
             FamilyFoundryRoundtripAssertions.AssertConnectorsTrackFacesAndDriversAcrossStates(artifact.Compiled, states);
         } finally {
             artifact?.CloseDocuments();
@@ -256,6 +312,45 @@ public sealed class AuthoredProfileRoundtripFixtureTests {
                 ["PE_G_Dim_Height1"] = Inches(30.0),
                 ["ServiceLineElevation"] = Inches(17.0),
                 ["ServiceLineDepth"] = Inches(2.75)
+            })
+        ];
+    }
+
+    private static IReadOnlyList<RevitFamilyFixtureHarness.FamilyTypeState> CreateGrinderPumpBasinStates() {
+        var baseValues = new Dictionary<string, double>(StringComparer.Ordinal) {
+            ["PE_G_Dim_Width1"] = Inches(36.0),
+            ["PE_G_Dim_Height1"] = Inches(72.0),
+            ["AntiFloatDiameter"] = Inches(42.5),
+            ["AntiFloatThickness"] = Inches(2.0),
+            ["DischargeDiameter"] = Inches(2.0),
+            ["DischargeProjection"] = Inches(6.0),
+            ["DischargeCenterElevation"] = Inches(48.0)
+        };
+
+        return [
+            CreateState("GP-Base", baseValues),
+            CreateState("GP-Wide", baseValues, new Dictionary<string, double>(StringComparer.Ordinal) {
+                ["PE_G_Dim_Width1"] = Inches(42.0),
+                ["AntiFloatDiameter"] = Inches(48.5),
+                ["AntiFloatThickness"] = Inches(3.0),
+                ["DischargeDiameter"] = Inches(3.0),
+                ["DischargeProjection"] = Inches(8.0),
+                ["DischargeCenterElevation"] = Inches(54.0)
+            }),
+            CreateState("GP-Tall", baseValues, new Dictionary<string, double>(StringComparer.Ordinal) {
+                ["PE_G_Dim_Height1"] = Inches(84.0),
+                ["AntiFloatThickness"] = Inches(2.5),
+                ["DischargeProjection"] = Inches(7.0),
+                ["DischargeCenterElevation"] = Inches(58.0)
+            }),
+            CreateState("GP-Compact", baseValues, new Dictionary<string, double>(StringComparer.Ordinal) {
+                ["PE_G_Dim_Width1"] = Inches(30.0),
+                ["PE_G_Dim_Height1"] = Inches(60.0),
+                ["AntiFloatDiameter"] = Inches(36.5),
+                ["AntiFloatThickness"] = Inches(1.5),
+                ["DischargeDiameter"] = Inches(1.5),
+                ["DischargeProjection"] = Inches(5.0),
+                ["DischargeCenterElevation"] = Inches(34.0)
             })
         ];
     }
