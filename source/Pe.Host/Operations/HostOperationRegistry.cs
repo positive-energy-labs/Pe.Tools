@@ -57,14 +57,17 @@ internal sealed class HostOperationRegistry {
             HostOperations.Bridge<ProjectParameterBindingsRequest, ProjectParameterBindingsEnvelopeResponse>(
                 GetProjectParameterBindingsOperationContract.Definition
             ),
-            HostOperations.Bridge<SelectionContextRequest, SelectionContextEnvelopeResponse>(
-                GetSelectionContextOperationContract.Definition
+            HostOperations.Bridge<ElementContextQueryRequest, ElementContextQueryEnvelopeResponse>(
+                GetElementContextQueryOperationContract.Definition
             ),
             HostOperations.Bridge<ElectricalPanelsCatalogRequest, ElectricalPanelsCatalogEnvelopeResponse>(
                 GetElectricalPanelsCatalogOperationContract.Definition
             ),
             HostOperations.Bridge<ElectricalCircuitsCatalogRequest, ElectricalCircuitsCatalogEnvelopeResponse>(
                 GetElectricalCircuitsCatalogOperationContract.Definition
+            ),
+            HostOperations.Bridge<ElectricalPanelSchedulesQueryRequest, ElectricalPanelSchedulesQueryEnvelopeResponse>(
+                GetElectricalPanelSchedulesQueryOperationContract.Definition
             ),
             HostOperations.Bridge<ElectricalLoadClassificationsCatalogRequest, ElectricalLoadClassificationsCatalogEnvelopeResponse>(
                 GetElectricalLoadClassificationsCatalogOperationContract.Definition

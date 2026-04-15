@@ -70,7 +70,8 @@ public static class ElectricalCircuitsCatalogCollector {
                 .Distinct()
                 .OrderBy(role => role.ToString(), StringComparer.Ordinal)
                 .ToList();
-            var primaryConnectedRole = connectedRoles.Count == 1 ? connectedRoles[0] : null;
+            ElectricalInsightRole? primaryConnectedRole =
+                connectedRoles.Count == 1 ? connectedRoles[0] : null;
 
             return new ElectricalCircuitCatalogEntry(
                 circuit.Id.Value(),

@@ -44,10 +44,10 @@ internal sealed class BridgeOperationRegistry {
                 static (request, context, cancellationToken) =>
                     context.RevitDataRequestService.GetProjectParameterBindingsEnvelopeAsync(request)
             ),
-            BridgeOperations.Create<SelectionContextRequest, SelectionContextEnvelopeResponse>(
-                GetSelectionContextOperationContract.Definition,
+            BridgeOperations.Create<ElementContextQueryRequest, ElementContextQueryEnvelopeResponse>(
+                GetElementContextQueryOperationContract.Definition,
                 static (request, context, cancellationToken) =>
-                    context.RevitDataRequestService.GetSelectionContextEnvelopeAsync(request)
+                    context.RevitDataRequestService.GetElementContextQueryEnvelopeAsync(request)
             ),
             BridgeOperations.Create<ElectricalPanelsCatalogRequest, ElectricalPanelsCatalogEnvelopeResponse>(
                 GetElectricalPanelsCatalogOperationContract.Definition,
@@ -58,6 +58,11 @@ internal sealed class BridgeOperationRegistry {
                 GetElectricalCircuitsCatalogOperationContract.Definition,
                 static (request, context, cancellationToken) =>
                     context.RevitDataRequestService.GetElectricalCircuitsCatalogEnvelopeAsync(request)
+            ),
+            BridgeOperations.Create<ElectricalPanelSchedulesQueryRequest, ElectricalPanelSchedulesQueryEnvelopeResponse>(
+                GetElectricalPanelSchedulesQueryOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RevitDataRequestService.GetElectricalPanelSchedulesQueryEnvelopeAsync(request)
             ),
             BridgeOperations.Create<ElectricalLoadClassificationsCatalogRequest, ElectricalLoadClassificationsCatalogEnvelopeResponse>(
                 GetElectricalLoadClassificationsCatalogOperationContract.Definition,

@@ -68,9 +68,9 @@ internal sealed class RevitDataRequestService {
         () => this.EnqueueAsync(() => this.GetProjectParameterBindingsCore(request))
     );
 
-    public Task<SelectionContextEnvelopeResponse> GetSelectionContextEnvelopeAsync(
-        SelectionContextRequest request
-    ) => this.EnqueueAsync(this.GetSelectionContextCore);
+    public Task<ElementContextQueryEnvelopeResponse> GetElementContextQueryEnvelopeAsync(
+        ElementContextQueryRequest request
+    ) => this.EnqueueAsync(() => this.GetElementContextQueryCore(request));
 
     public Task<ElectricalPanelsCatalogEnvelopeResponse> GetElectricalPanelsCatalogEnvelopeAsync(
         ElectricalPanelsCatalogRequest request
@@ -88,6 +88,15 @@ internal sealed class RevitDataRequestService {
         BuildRequestKey("electrical-circuits-catalog", request),
         CatalogCacheWindow,
         () => this.EnqueueAsync(() => this.GetElectricalCircuitsCatalogCore(request))
+    );
+
+    public Task<ElectricalPanelSchedulesQueryEnvelopeResponse> GetElectricalPanelSchedulesQueryEnvelopeAsync(
+        ElectricalPanelSchedulesQueryRequest request
+    ) => this._cache.GetOrCreateAsync(
+        HostInvalidationDomain.ElectricalPanelSchedulesQuery,
+        BuildRequestKey("electrical-panel-schedules-query", request),
+        CatalogCacheWindow,
+        () => this.EnqueueAsync(() => this.GetElectricalPanelSchedulesQueryCore(request))
     );
 
     public Task<ElectricalLoadClassificationsCatalogEnvelopeResponse> GetElectricalLoadClassificationsCatalogEnvelopeAsync(
@@ -225,30 +234,32 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    private SelectionContextEnvelopeResponse GetSelectionContextCore() {
+    private ElementContextQueryEnvelopeResponse GetElementContextQueryCore(
+        ElementContextQueryRequest request
+    ) {
         var documentResult = GetActiveDocument();
         if (!documentResult.Ok)
-            return documentResult.ToSelectionContextFailureEnvelope();
+            return documentResult.ToElementContextQueryFailureEnvelope();
 
         try {
-            var data = SelectionContextCollector.Collect(documentResult.Data!);
+            var data = ElementContextCollector.Collect(documentResult.Data!, request.Query);
             return HostEnvelopeResults.Success(
                 data,
                 EnvelopeCode.Ok,
-                $"Collected {data.Entries.Count} selected element contexts."
-            ).ToSelectionContextEnvelope();
+                $"Collected {data.Entries.Count} element contexts."
+            ).ToElementContextQueryEnvelope();
         } catch (Exception ex) {
-            return HostEnvelopeResults.Failure<SelectionContextData>(
+            return HostEnvelopeResults.Failure<ElementContextQueryData>(
                 EnvelopeCode.Failed,
                 ex.Message,
                 [
                     HostEnvelopeResults.ExceptionIssue(
-                        "SelectionContextException",
+                        "ElementContextQueryException",
                         ex,
                         "Verify a Revit document is active and retry."
                     )
                 ]
-            ).ToSelectionContextEnvelope();
+            ).ToElementContextQueryEnvelope();
         }
     }
 
@@ -307,6 +318,53 @@ internal sealed class RevitDataRequestService {
                     )
                 ]
             ).ToElectricalCircuitsCatalogEnvelope();
+        }
+    }
+
+    private ElectricalPanelSchedulesQueryEnvelopeResponse GetElectricalPanelSchedulesQueryCore(
+        ElectricalPanelSchedulesQueryRequest request
+    ) {
+        var documentResult = GetActiveProjectDocument();
+        if (!documentResult.Ok)
+            return documentResult.ToElectricalPanelSchedulesQueryFailureEnvelope();
+
+        if (request.Query?.Kind == ElectricalPanelSchedulesQueryKind.CurrentActiveView &&
+            DocumentManager.uiapp.ActiveUIDocument?.ActiveView is not Autodesk.Revit.DB.Electrical.PanelScheduleView) {
+            return HostEnvelopeResults.Failure<ElectricalPanelSchedulesQueryData>(
+                EnvelopeCode.Failed,
+                "Active view is not a panel schedule view.",
+                [
+                    new ValidationIssue(
+                        "$.query.kind",
+                        null,
+                        "PanelScheduleActiveViewRequired",
+                        "error",
+                        "Active view is not a panel schedule view.",
+                        "Open a panel schedule view and retry."
+                    )
+                ]
+            ).ToElectricalPanelSchedulesQueryEnvelope();
+        }
+
+        try {
+            var data = ElectricalPanelScheduleQueryCollector.Collect(documentResult.Data!, request.Query);
+            return HostEnvelopeResults.Success(
+                data,
+                EnvelopeCode.Ok,
+                $"Collected {data.Entries.Count} electrical panel schedules."
+            ).ToElectricalPanelSchedulesQueryEnvelope();
+        } catch (Exception ex) {
+            return HostEnvelopeResults.Failure<ElectricalPanelSchedulesQueryData>(
+                EnvelopeCode.Failed,
+                ex.Message,
+                [
+                    HostEnvelopeResults.ExceptionIssue(
+                        "ElectricalPanelSchedulesQueryException",
+                        ex,
+                        "Verify the active document is a project document and retry."
+                    )
+                ]
+            ).ToElectricalPanelSchedulesQueryEnvelope();
         }
     }
 
@@ -414,14 +472,14 @@ internal sealed class RevitDataRequestService {
         if (document.IsFamilyDocument) {
             return HostEnvelopeResults.Failure<RevitDocument>(
                 EnvelopeCode.Failed,
-                "Loaded families routes support project documents only.",
+                "These Revit data routes support project documents only.",
                 [
                     new ValidationIssue(
                         "$",
                         null,
                         "UnsupportedDocumentType",
                         "error",
-                        "Loaded families routes support project documents only.",
+                        "These Revit data routes support project documents only.",
                         "Activate a project document and retry."
                     )
                 ]
@@ -436,12 +494,12 @@ internal sealed class RevitDataRequestService {
 }
 
 internal static class RevitDataRequestResultExtensions {
-    public static SelectionContextEnvelopeResponse ToSelectionContextFailureEnvelope(
+    public static ElementContextQueryEnvelopeResponse ToElementContextQueryFailureEnvelope(
         this HostEnvelopeResult<RevitDocument> result
     ) => new(result.Ok, result.Code, result.Message, result.Issues, null);
 
-    public static SelectionContextEnvelopeResponse ToSelectionContextEnvelope(
-        this HostEnvelopeResult<SelectionContextData> result
+    public static ElementContextQueryEnvelopeResponse ToElementContextQueryEnvelope(
+        this HostEnvelopeResult<ElementContextQueryData> result
     ) => new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
 
     public static ScheduleCatalogEnvelopeResponse ToScheduleCatalogFailureEnvelope(
@@ -465,6 +523,10 @@ internal static class RevitDataRequestResultExtensions {
     ) => new(result.Ok, result.Code, result.Message, result.Issues, null);
 
     public static ElectricalCircuitsCatalogEnvelopeResponse ToElectricalCircuitsFailureEnvelope(
+        this HostEnvelopeResult<RevitDocument> result
+    ) => new(result.Ok, result.Code, result.Message, result.Issues, null);
+
+    public static ElectricalPanelSchedulesQueryEnvelopeResponse ToElectricalPanelSchedulesQueryFailureEnvelope(
         this HostEnvelopeResult<RevitDocument> result
     ) => new(result.Ok, result.Code, result.Message, result.Issues, null);
 

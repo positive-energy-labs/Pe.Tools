@@ -59,7 +59,7 @@ public static class ElectricalPanelsCatalogCollector {
             var occupiedSlotCount = assignedCircuits.Sum(GetOccupiedSlotCount);
             var availableSlotCount = scheduleStats.ConfiguredSlotCount.HasValue
                 ? Math.Max(scheduleStats.ConfiguredSlotCount.Value - occupiedSlotCount, 0)
-                : null;
+                : 0;
 
             var connectedLoadCount = assignedCircuits
                 .SelectMany(system => system.Elements.Cast<Element>())
@@ -70,7 +70,7 @@ public static class ElectricalPanelsCatalogCollector {
             return new ElectricalPanelCatalogEntry(
                 panel.Id.Value(),
                 panel.UniqueId,
-                panel.Name,
+                ElectricalCollectorSupport.GetPanelName(panel) ?? panel.Name,
                 ElectricalCollectorSupport.ReadMark(panel),
                 panel.Category?.Name,
                 ElectricalCollectorSupport.GetFamilyName(panel),
@@ -139,9 +139,11 @@ public static class ElectricalPanelsCatalogCollector {
     }
 
     private static int GetOccupiedSlotCount(ElectricalSystem system) {
-        var waysDisplay = ElectricalCollectorSupport.ReadDisplay(system, "Ways");
-        return int.TryParse(waysDisplay, out var ways) && ways > 0
-            ? ways
+        var occupiedSlotNumbers = system.CircuitNumber
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Length;
+        return occupiedSlotNumbers > 0
+            ? occupiedSlotNumbers
             : Math.Max(system.PolesNumber, 1);
     }
 }

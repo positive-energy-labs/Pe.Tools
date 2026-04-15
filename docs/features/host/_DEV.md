@@ -40,7 +40,7 @@ This document describes the browser-facing and tool-facing host contract exposed
 - bridge-backed settings/revit data:
   - `POST /api/settings/field-options`
   - `POST /api/settings/parameter-catalog`
-  - `POST /api/revit-data/selection/current`
+  - `POST /api/revit-data/element-context/query`
   - `GET /api/revit-data/loaded-families/filter/schema`
   - `POST /api/revit-data/loaded-families/filter/field-options`
   - `POST /api/revit-data/schedules/catalog`
@@ -49,16 +49,23 @@ This document describes the browser-facing and tool-facing host contract exposed
   - `POST /api/revit-data/project-parameter-bindings`
   - `POST /api/revit-data/electrical/panels/catalog`
   - `POST /api/revit-data/electrical/circuits/catalog`
+  - `POST /api/revit-data/electrical/panel-schedules/query`
   - `POST /api/revit-data/electrical/load-classifications/catalog`
 - scripting:
   - `POST /api/scripting/workspace/bootstrap`
   - `POST /api/scripting/execute`
 
-## Selection Current
+## Element Context Query
 
-- `POST /api/revit-data/selection/current` is the general current-selection inspection surface.
-- It is intentionally WIP as a cross-domain contract.
-- Right now it is richest for electrical context because that is where the host is first trying to hide repeated Revit API joins and quirks.
+- `POST /api/revit-data/element-context/query` is the general multi-target inspection surface.
+- The first supported query kinds are `CurrentSelection` and `ElementReferences`.
+- It should stay generic at the route level and attach richer discipline context only when that context is stable enough to trust.
+
+## Electrical Panel Schedules
+
+- `POST /api/revit-data/electrical/panel-schedules/query` is the read-only panel schedule instance projection surface.
+- It is intentionally instance-focused rather than template-focused.
+- The route should preserve `Header`, `Body`, `Summary`, and `Footer` honestly, including blank cells and best-effort source metadata where Revit exposes it.
 
 ## Failure Posture
 

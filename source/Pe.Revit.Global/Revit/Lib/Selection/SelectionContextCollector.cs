@@ -7,34 +7,119 @@ using Pe.Shared.HostContracts.RevitData;
 
 namespace Pe.Revit.Global.Revit.Lib.Selection;
 
-public static class SelectionContextCollector {
-    public static SelectionContextData Collect(Document doc) {
+public static class ElementContextCollector {
+    public static ElementContextQueryData Collect(
+        Document doc,
+        ElementContextQuery? query = null
+    ) {
         var issues = new List<RevitDataIssue>();
-        var selectionIds = DocumentManager.uiapp.ActiveUIDocument?.Selection.GetElementIds().ToList() ?? [];
+        var resolution = ResolveQuery(doc, query, issues);
         var panelScheduleCounts = new FilteredElementCollector(doc)
             .OfClass(typeof(PanelScheduleView))
             .Cast<PanelScheduleView>()
             .GroupBy(schedule => schedule.GetPanel().Value())
             .ToDictionary(group => group.Key, group => group.Count());
 
-        var entries = selectionIds
-            .Select(id => doc.GetElement(id))
-            .Where(element => element != null)
-            .Select(element => TryCollectEntry(doc, element!, panelScheduleCounts, issues))
+        var entries = resolution.Elements
+            .Select(element => TryCollectEntry(doc, element, panelScheduleCounts, issues))
             .Where(entry => entry != null)
-            .Cast<SelectionContextEntry>()
+            .Cast<ElementContextEntry>()
             .ToList();
 
-        return new SelectionContextData(
+        return new ElementContextQueryData(
             doc.Title,
             doc.IsFamilyDocument,
-            selectionIds.Count,
+            resolution.QueryKind,
+            resolution.RequestedElementCount,
+            entries.Count,
             entries,
             issues
         );
     }
 
-    private static SelectionContextEntry? TryCollectEntry(
+    private static QueryResolution ResolveQuery(
+        Document doc,
+        ElementContextQuery? query,
+        List<RevitDataIssue> issues
+    ) {
+        var effectiveQuery = query ?? new ElementContextQuery();
+        return effectiveQuery.Kind switch {
+            ElementContextQueryKind.ElementReferences => ResolveElementReferences(doc, effectiveQuery, issues),
+            _ => ResolveCurrentSelection(doc)
+        };
+    }
+
+    private static QueryResolution ResolveCurrentSelection(Document doc) {
+        var selectionIds = DocumentManager.uiapp.ActiveUIDocument?.Selection.GetElementIds().ToList() ?? [];
+        var elements = selectionIds
+            .Select(doc.GetElement)
+            .Where(element => element != null)
+            .Cast<Element>()
+            .ToList();
+
+        return new QueryResolution(
+            ElementContextQueryKind.CurrentSelection,
+            selectionIds.Count,
+            elements
+        );
+    }
+
+    private static QueryResolution ResolveElementReferences(
+        Document doc,
+        ElementContextQuery query,
+        List<RevitDataIssue> issues
+    ) {
+        var elements = new List<Element>();
+        var seenElementIds = new HashSet<long>();
+        var elementIds = (query.ElementIds ?? [])
+            .Distinct()
+            .ToList();
+        var uniqueIds = (query.ElementUniqueIds ?? [])
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        foreach (var elementId in elementIds) {
+            var element = doc.GetElement(new ElementId(elementId));
+            if (element == null) {
+                issues.Add(new RevitDataIssue(
+                    "ElementContextElementIdNotFound",
+                    RevitDataIssueSeverity.Warning,
+                    $"Could not resolve element id {elementId}.",
+                    TypeName: nameof(ElementId)
+                ));
+                continue;
+            }
+
+            if (seenElementIds.Add(element.Id.Value()))
+                elements.Add(element);
+        }
+
+        foreach (var uniqueId in uniqueIds) {
+            var element = doc.GetElement(uniqueId);
+            if (element == null) {
+                issues.Add(new RevitDataIssue(
+                    "ElementContextUniqueIdNotFound",
+                    RevitDataIssueSeverity.Warning,
+                    $"Could not resolve element unique id '{uniqueId}'.",
+                    TypeName: nameof(Element)
+                ));
+                continue;
+            }
+
+            if (seenElementIds.Add(element.Id.Value()))
+                elements.Add(element);
+        }
+
+        return new QueryResolution(
+            ElementContextQueryKind.ElementReferences,
+            elementIds.Count + uniqueIds.Count,
+            elements
+        );
+    }
+
+    private static ElementContextEntry? TryCollectEntry(
         Document doc,
         Element element,
         IReadOnlyDictionary<long, int> panelScheduleCounts,
@@ -51,7 +136,7 @@ public static class SelectionContextCollector {
             var connectors = TryCollectConnectorSummary(family);
             var electrical = TryCollectElectricalContext(doc, element, family, panelScheduleCount);
 
-            return new SelectionContextEntry(
+            return new ElementContextEntry(
                 element.Id.Value(),
                 element.UniqueId,
                 element.GetType().Name,
@@ -72,7 +157,7 @@ public static class SelectionContextCollector {
             );
         } catch (Exception ex) {
             issues.Add(new RevitDataIssue(
-                "SelectionContextCollectFailed",
+                "ElementContextCollectFailed",
                 RevitDataIssueSeverity.Warning,
                 ex.Message,
                 TypeName: element.GetType().Name
@@ -81,17 +166,17 @@ public static class SelectionContextCollector {
         }
     }
 
-    private static SelectionConnectorSummary? TryCollectConnectorSummary(FamilyInstance? family) {
+    private static ElementContextConnectorSummary? TryCollectConnectorSummary(FamilyInstance? family) {
         var connectors = family?.MEPModel?.ConnectorManager?.Connectors.Cast<Connector>().ToList();
         return connectors == null
             ? null
-            : new SelectionConnectorSummary(
+            : new ElementContextConnectorSummary(
                 connectors.Count,
                 connectors.Count(connector => connector.Domain == Domain.DomainElectrical)
             );
     }
 
-    private static SelectionElectricalContext? TryCollectElectricalContext(
+    private static ElementContextElectricalData? TryCollectElectricalContext(
         Document doc,
         Element element,
         FamilyInstance? family,
@@ -112,10 +197,10 @@ public static class SelectionContextCollector {
         if (role == ElectricalInsightRole.Element && systems.Count == 0)
             return null;
 
-        return new SelectionElectricalContext(role, systems, primarySystem, baseEquipment);
+        return new ElementContextElectricalData(role, systems, primarySystem, baseEquipment);
     }
 
-    private static IEnumerable<SelectionSystemRef> GetSystems(
+    private static IEnumerable<ElementContextSystemRef> GetSystems(
         Document doc,
         Element element,
         FamilyInstance? family
@@ -150,7 +235,7 @@ public static class SelectionContextCollector {
             yield return ToSystemRef(system);
     }
 
-    private static SelectionCircuitContext? TryCollectCircuitContext(Element element) {
+    private static ElementContextCircuitData? TryCollectCircuitContext(Element element) {
         if (element is not ElectricalSystem circuit)
             return null;
 
@@ -161,7 +246,7 @@ public static class SelectionContextCollector {
             .ThenBy(entry => entry.ElementId)
             .ToList();
 
-        return new SelectionCircuitContext(
+        return new ElementContextCircuitData(
             circuit.Id.Value(),
             circuit.UniqueId,
             circuit.CircuitNumber,
@@ -176,7 +261,7 @@ public static class SelectionContextCollector {
         );
     }
 
-    private static SelectionPanelContext? TryCollectPanelContext(FamilyInstance? family, int panelScheduleCount) {
+    private static ElementContextPanelData? TryCollectPanelContext(FamilyInstance? family, int panelScheduleCount) {
         if (family?.MEPModel is not ElectricalEquipment equipment)
             return null;
 
@@ -184,10 +269,10 @@ public static class SelectionContextCollector {
         if (ElectricalCollectorSupport.DeterminePanelRole(equipment, assignedCircuits, panelScheduleCount) != ElectricalInsightRole.Panel)
             return null;
 
-        return new SelectionPanelContext(
+        return new ElementContextPanelData(
             family.Id.Value(),
             family.UniqueId,
-            family.Name,
+            ElectricalCollectorSupport.GetPanelName(family) ?? family.Name,
             family.Symbol?.Family?.Name,
             family.Symbol?.Name,
             ElectricalCollectorSupport.GetDistributionSystemName(equipment),
@@ -195,7 +280,7 @@ public static class SelectionContextCollector {
         );
     }
 
-    private static SelectionWireContext? TryCollectWireContext(Document doc, Element element) {
+    private static ElementContextWireData? TryCollectWireContext(Document doc, Element element) {
         if (element is not Wire wire)
             return null;
 
@@ -220,7 +305,7 @@ public static class SelectionContextCollector {
             .ThenBy(entry => entry.ElementId)
             .ToList();
 
-        return new SelectionWireContext(
+        return new ElementContextWireData(
             wire.Id.Value(),
             wire.UniqueId,
             doc.GetElement(wire.GetTypeId())?.Name,
@@ -233,27 +318,27 @@ public static class SelectionContextCollector {
         );
     }
 
-    private static SelectionPanelScheduleContext? TryCollectPanelScheduleContext(Document doc, Element element) {
+    private static ElementContextPanelScheduleData? TryCollectPanelScheduleContext(Document doc, Element element) {
         if (element is not PanelScheduleView schedule)
             return null;
 
         var panel = doc.GetElement(schedule.GetPanel()) as FamilyInstance;
         var template = doc.GetElement(schedule.GetTemplate()) as PanelScheduleTemplate;
-        return new SelectionPanelScheduleContext(
+        return new ElementContextPanelScheduleData(
             schedule.Id.Value(),
             schedule.UniqueId,
             schedule.Name,
-            panel?.Name,
+            ElectricalCollectorSupport.GetPanelName(panel),
             template?.Name
         );
     }
 
-    private static SelectionLoadClassificationContext? TryCollectLoadClassificationContext(Document doc, Element element) {
+    private static ElementContextLoadClassificationData? TryCollectLoadClassificationContext(Document doc, Element element) {
         if (element is not ElectricalLoadClassification classification)
             return null;
 
         var demandFactor = doc.GetElement(classification.DemandFactorId) as ElectricalDemandFactorDefinition;
-        return new SelectionLoadClassificationContext(
+        return new ElementContextLoadClassificationData(
             classification.Id.Value(),
             classification.UniqueId,
             classification.Name,
@@ -262,7 +347,7 @@ public static class SelectionContextCollector {
         );
     }
 
-    private static SelectionSystemRef ToSystemRef(ElectricalSystem system) =>
+    private static ElementContextSystemRef ToSystemRef(ElectricalSystem system) =>
         new(
             system.Id.Value(),
             system.UniqueId,
@@ -273,7 +358,7 @@ public static class SelectionContextCollector {
             system.LoadName
         );
 
-    private static SelectionElementRef ToElementRef(FamilyInstance? family, Element element) =>
+    private static ElementContextElementRef ToElementRef(FamilyInstance? family, Element element) =>
         new(
             element.Id.Value(),
             element.UniqueId,
@@ -292,4 +377,10 @@ public static class SelectionContextCollector {
 
         return doc.GetElement(levelId)?.Name;
     }
+
+    private sealed record QueryResolution(
+        ElementContextQueryKind QueryKind,
+        int RequestedElementCount,
+        List<Element> Elements
+    );
 }

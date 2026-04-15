@@ -52,6 +52,11 @@ internal static class ElectricalCollectorSupport {
 
     public static string? GetTypeName(FamilyInstance instance) => instance.Symbol?.Name;
 
+    public static string? GetPanelName(FamilyInstance? panel) =>
+        panel == null
+            ? null
+            : NullIfWhiteSpace(ReadString(panel, BuiltInParameter.RBS_ELEC_PANEL_NAME)) ?? NullIfWhiteSpace(panel.Name);
+
     public static string? GetDistributionSystemName(ElectricalEquipment? equipment) =>
         NullIfWhiteSpace(equipment?.DistributionSystem?.Name);
 
