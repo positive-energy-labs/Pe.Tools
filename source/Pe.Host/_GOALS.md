@@ -51,10 +51,10 @@ This should serve both local agents running beside the repo and frontend-exposed
 
 Initial host inspection families:
 
-- `selection.current`
-  - general-purpose current-selection inspection surface
+- `elementContext.query`
+  - general-purpose element inspection surface
   - should expose stable generic element identity first, then attach domain-specific context when applicable
-  - should be the default inspection entrypoint for agents and UI before minting more narrow entity endpoints
+  - should support multiple target modes such as current selection and explicit element references before minting more narrow entity endpoints
 
 Initial specialized electrical contract families:
 
@@ -64,13 +64,15 @@ Initial specialized electrical contract families:
 - `electrical.circuits.*`
   - circuit-centered authored object surface
   - exposes row-like operational data such as circuit number, slotting, load name, load/current, rating, wire data, connected elements, and health
+- `electrical.panelSchedules.*`
+  - read-only panel schedule instance projection
+  - should preserve `Header`, `Body`, `Summary`, and `Footer` as a faithful schedule snapshot rather than flattening the schedule into only circuit rows
 - `electrical.loadClassifications.*`
   - load-summary and demand-math support surface
   - should expose classification and demand-definition context cleanly enough for schedule and circuit reasoning
 
 Future candidates once the shape is proven:
 
-- `electrical.panelSchedules.*`
 - `electrical.panelTemplates.*`
 
 ## Non-Goals
@@ -81,4 +83,4 @@ Future candidates once the shape is proven:
 - Do not pretend generic JSON field rendering is sufficient for every important Revit-backed workflow.
 - Do not treat repeated interest alone as sufficient reason to mint a new endpoint.
 - Do not let electrical specialization sprawl into one endpoint per raw API type.
-- Do not let narrow selection-specific endpoints proliferate by domain when one general current-selection surface can carry the same context.
+- Do not let narrow target-specific endpoints proliferate by domain when one general element-context surface can carry the same context.

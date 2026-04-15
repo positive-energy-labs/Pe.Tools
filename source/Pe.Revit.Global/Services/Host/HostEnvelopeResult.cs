@@ -71,6 +71,10 @@ internal static class HostEnvelopeResultExtensions {
         this HostEnvelopeResult<ElectricalCircuitsCatalogData> result
     ) => new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
 
+    public static ElectricalPanelSchedulesQueryEnvelopeResponse ToElectricalPanelSchedulesQueryEnvelope(
+        this HostEnvelopeResult<ElectricalPanelSchedulesQueryData> result
+    ) => new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
+
     public static ElectricalLoadClassificationsCatalogEnvelopeResponse ToElectricalLoadClassificationsCatalogEnvelope(
         this HostEnvelopeResult<ElectricalLoadClassificationsCatalogData> result
     ) => new(result.Ok, result.Code, result.Message, result.Issues, result.Data);

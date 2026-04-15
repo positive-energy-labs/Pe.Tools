@@ -2,13 +2,13 @@ using Pe.Shared.HostContracts.RevitData;
 
 namespace Pe.Shared.HostContracts.Operations;
 
-public static class GetSelectionContextOperationContract {
+public static class GetElementContextQueryOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<SelectionContextRequest, SelectionContextEnvelopeResponse>(
-            "revit-data.selection.current",
+        HostOperationDefinition.Create<ElementContextQueryRequest, ElementContextQueryEnvelopeResponse>(
+            "revit-data.element-context.query",
             HostHttpVerb.Post,
-            "/api/revit-data/selection/current",
+            "/api/revit-data/element-context/query",
             HostExecutionMode.Bridge,
-            "Get Current Selection Context"
+            "Get Element Context Query"
         );
 }

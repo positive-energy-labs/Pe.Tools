@@ -37,3 +37,15 @@ public static class GetElectricalLoadClassificationsCatalogOperationContract {
             new HostCachePolicy("electrical-load-classifications-catalog", 10)
         );
 }
+
+public static class GetElectricalPanelSchedulesQueryOperationContract {
+    public static readonly HostOperationDefinition Definition =
+        HostOperationDefinition.Create<ElectricalPanelSchedulesQueryRequest, ElectricalPanelSchedulesQueryEnvelopeResponse>(
+            "revit-data.electrical.panel-schedules.query",
+            HostHttpVerb.Post,
+            "/api/revit-data/electrical/panel-schedules/query",
+            HostExecutionMode.Bridge,
+            "Get Electrical Panel Schedules Query",
+            new HostCachePolicy("electrical-panel-schedules-query", 10)
+        );
+}

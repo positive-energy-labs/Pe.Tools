@@ -44,14 +44,17 @@ public static class HttpRoutes {
     public static readonly string ProjectParameterBindings =
         GetProjectParameterBindingsOperationContract.Definition.Route;
 
-    public static readonly string SelectionCurrent =
-        GetSelectionContextOperationContract.Definition.Route;
+    public static readonly string ElementContextQuery =
+        GetElementContextQueryOperationContract.Definition.Route;
 
     public static readonly string ElectricalPanelsCatalog =
         GetElectricalPanelsCatalogOperationContract.Definition.Route;
 
     public static readonly string ElectricalCircuitsCatalog =
         GetElectricalCircuitsCatalogOperationContract.Definition.Route;
+
+    public static readonly string ElectricalPanelSchedulesQuery =
+        GetElectricalPanelSchedulesQueryOperationContract.Definition.Route;
 
     public static readonly string ElectricalLoadClassificationsCatalog =
         GetElectricalLoadClassificationsCatalogOperationContract.Definition.Route;
@@ -67,7 +70,7 @@ public static class HttpRoutes {
 [ExportTsClass]
 public static class HostProtocol {
     public const string Transport = "http+sse";
-    public const int ContractVersion = 23;
+    public const int ContractVersion = 25;
 }
 
 public interface IBridgeSessionRequest {
@@ -90,9 +93,10 @@ public enum HostInvalidationDomain {
     LoadedFamiliesMatrix,
     ProjectParameterBindings,
     LoadedFamiliesFilterFieldOptions,
-    SelectionContext,
+    ElementContextQuery,
     ElectricalPanelsCatalog,
     ElectricalCircuitsCatalog,
+    ElectricalPanelSchedulesQuery,
     ElectricalLoadClassificationsCatalog
 }
 
