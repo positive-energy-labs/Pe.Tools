@@ -45,6 +45,36 @@ Default workspace root:
 5. `RevitScriptExecutionService` resolves refs, compiles, loads, and runs
 6. host returns final buffered output plus structured diagnostics
 
+## First Probe Posture
+
+- Start with `GET /api/settings/host-status`.
+- Confirm `hostRunning=true` and exactly one connected bridge session before debugging script content.
+- Use `POST /api/scripting/execute` first; it is the shortest live-document probe loop.
+- Treat transport/session failures as more likely than compile failures on first contact.
+
+## Execution Shape
+
+- One request executes one non-abstract `PeScriptContainer`.
+- Supported inputs are still just `InlineSnippet` and `WorkspacePath`.
+- Inline snippets are persisted to `.inline\\LastInline.cs` before execution.
+- `RevitScriptExecutionService` owns normalize -> resolve -> compile -> load -> instantiate -> execute.
+- When a live document exists, execution is transaction-backed by the Revit-side runtime.
+
+## Common Failure Modes
+
+- host not running
+- bridge disconnected
+- zero connected bridge sessions
+- more than one connected bridge session
+- internal scripting pipe unavailable
+- script compiled, but the wrong Revit/document context was inspected
+
+## Useful Probe Facts
+
+- The default generated script templates already include `Autodesk.Revit.DB.Electrical`.
+- In R25, `PanelScheduleView.GetPanel()` and `GetTemplate()` return `ElementId`; callers must `doc.GetElement(...)`.
+- A live probe can look wrong because of document/view state, not API failure. Panel-template edit mode was one real example.
+
 ## Current Non-Goals
 
 - no scripting SSE

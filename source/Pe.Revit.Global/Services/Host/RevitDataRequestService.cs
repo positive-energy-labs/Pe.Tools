@@ -1,6 +1,8 @@
 using Newtonsoft.Json;
 using Pe.Shared.HostContracts.RevitData;
 using Pe.Shared.HostContracts.Protocol;
+using Pe.Revit.Global.Revit.Lib.Electrical;
+using Pe.Revit.Global.Revit.Lib.Selection;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 using Pe.Revit.Global.Revit.Lib.Schedules;
@@ -64,6 +66,37 @@ internal sealed class RevitDataRequestService {
         BuildRequestKey("project-parameter-bindings", request),
         BindingsCacheWindow,
         () => this.EnqueueAsync(() => this.GetProjectParameterBindingsCore(request))
+    );
+
+    public Task<SelectionContextEnvelopeResponse> GetSelectionContextEnvelopeAsync(
+        SelectionContextRequest request
+    ) => this.EnqueueAsync(this.GetSelectionContextCore);
+
+    public Task<ElectricalPanelsCatalogEnvelopeResponse> GetElectricalPanelsCatalogEnvelopeAsync(
+        ElectricalPanelsCatalogRequest request
+    ) => this._cache.GetOrCreateAsync(
+        HostInvalidationDomain.ElectricalPanelsCatalog,
+        BuildRequestKey("electrical-panels-catalog", request),
+        CatalogCacheWindow,
+        () => this.EnqueueAsync(() => this.GetElectricalPanelsCatalogCore(request))
+    );
+
+    public Task<ElectricalCircuitsCatalogEnvelopeResponse> GetElectricalCircuitsCatalogEnvelopeAsync(
+        ElectricalCircuitsCatalogRequest request
+    ) => this._cache.GetOrCreateAsync(
+        HostInvalidationDomain.ElectricalCircuitsCatalog,
+        BuildRequestKey("electrical-circuits-catalog", request),
+        CatalogCacheWindow,
+        () => this.EnqueueAsync(() => this.GetElectricalCircuitsCatalogCore(request))
+    );
+
+    public Task<ElectricalLoadClassificationsCatalogEnvelopeResponse> GetElectricalLoadClassificationsCatalogEnvelopeAsync(
+        ElectricalLoadClassificationsCatalogRequest request
+    ) => this._cache.GetOrCreateAsync(
+        HostInvalidationDomain.ElectricalLoadClassificationsCatalog,
+        BuildRequestKey("electrical-load-classifications-catalog", request),
+        CatalogCacheWindow,
+        () => this.EnqueueAsync(() => this.GetElectricalLoadClassificationsCatalogCore(request))
     );
 
     public void Invalidate(params HostInvalidationDomain[] domains) =>
@@ -192,6 +225,120 @@ internal sealed class RevitDataRequestService {
         }
     }
 
+    private SelectionContextEnvelopeResponse GetSelectionContextCore() {
+        var documentResult = GetActiveDocument();
+        if (!documentResult.Ok)
+            return documentResult.ToSelectionContextFailureEnvelope();
+
+        try {
+            var data = SelectionContextCollector.Collect(documentResult.Data!);
+            return HostEnvelopeResults.Success(
+                data,
+                EnvelopeCode.Ok,
+                $"Collected {data.Entries.Count} selected element contexts."
+            ).ToSelectionContextEnvelope();
+        } catch (Exception ex) {
+            return HostEnvelopeResults.Failure<SelectionContextData>(
+                EnvelopeCode.Failed,
+                ex.Message,
+                [
+                    HostEnvelopeResults.ExceptionIssue(
+                        "SelectionContextException",
+                        ex,
+                        "Verify a Revit document is active and retry."
+                    )
+                ]
+            ).ToSelectionContextEnvelope();
+        }
+    }
+
+    private ElectricalPanelsCatalogEnvelopeResponse GetElectricalPanelsCatalogCore(
+        ElectricalPanelsCatalogRequest request
+    ) {
+        var documentResult = GetActiveProjectDocument();
+        if (!documentResult.Ok)
+            return documentResult.ToElectricalPanelsFailureEnvelope();
+
+        try {
+            var data = ElectricalPanelsCatalogCollector.Collect(documentResult.Data!, request);
+            return HostEnvelopeResults.Success(
+                data,
+                EnvelopeCode.Ok,
+                $"Collected {data.Entries.Count} electrical panels."
+            ).ToElectricalPanelsCatalogEnvelope();
+        } catch (Exception ex) {
+            return HostEnvelopeResults.Failure<ElectricalPanelsCatalogData>(
+                EnvelopeCode.Failed,
+                ex.Message,
+                [
+                    HostEnvelopeResults.ExceptionIssue(
+                        "ElectricalPanelsCatalogException",
+                        ex,
+                        "Verify the active document is a project document and retry."
+                    )
+                ]
+            ).ToElectricalPanelsCatalogEnvelope();
+        }
+    }
+
+    private ElectricalCircuitsCatalogEnvelopeResponse GetElectricalCircuitsCatalogCore(
+        ElectricalCircuitsCatalogRequest request
+    ) {
+        var documentResult = GetActiveProjectDocument();
+        if (!documentResult.Ok)
+            return documentResult.ToElectricalCircuitsFailureEnvelope();
+
+        try {
+            var data = ElectricalCircuitsCatalogCollector.Collect(documentResult.Data!, request);
+            return HostEnvelopeResults.Success(
+                data,
+                EnvelopeCode.Ok,
+                $"Collected {data.Entries.Count} electrical circuits."
+            ).ToElectricalCircuitsCatalogEnvelope();
+        } catch (Exception ex) {
+            return HostEnvelopeResults.Failure<ElectricalCircuitsCatalogData>(
+                EnvelopeCode.Failed,
+                ex.Message,
+                [
+                    HostEnvelopeResults.ExceptionIssue(
+                        "ElectricalCircuitsCatalogException",
+                        ex,
+                        "Verify the active document is a project document and retry."
+                    )
+                ]
+            ).ToElectricalCircuitsCatalogEnvelope();
+        }
+    }
+
+    private ElectricalLoadClassificationsCatalogEnvelopeResponse GetElectricalLoadClassificationsCatalogCore(
+        ElectricalLoadClassificationsCatalogRequest request
+    ) {
+        var documentResult = GetActiveProjectDocument();
+        if (!documentResult.Ok)
+            return documentResult.ToElectricalLoadClassificationsFailureEnvelope();
+
+        try {
+            var data = ElectricalLoadClassificationsCatalogCollector.Collect(documentResult.Data!, request);
+            return HostEnvelopeResults.Success(
+                data,
+                EnvelopeCode.Ok,
+                $"Collected {data.Entries.Count} electrical load classifications."
+            ).ToElectricalLoadClassificationsCatalogEnvelope();
+        } catch (Exception ex) {
+            return HostEnvelopeResults.Failure<ElectricalLoadClassificationsCatalogData>(
+                EnvelopeCode.Failed,
+                ex.Message,
+                [
+                    HostEnvelopeResults.ExceptionIssue(
+                        "ElectricalLoadClassificationsCatalogException",
+                        ex,
+                        "Verify the active document is a project document and retry."
+                    )
+                ]
+            ).ToElectricalLoadClassificationsCatalogEnvelope();
+        }
+    }
+
     private static HostEnvelopeResult<LoadedFamiliesFilter> ValidateMatrixFilter(LoadedFamiliesMatrixRequest request) {
         var categoryNames = request.Filter?.CategoryNames
             .Where(name => !string.IsNullOrWhiteSpace(name))
@@ -235,7 +382,7 @@ internal sealed class RevitDataRequestService {
     private void PublishLoadedFamilyMatrixProgress(string message) =>
         this._notificationSink?.Invoke(message);
 
-    private static HostEnvelopeResult<RevitDocument> GetActiveProjectDocument() {
+    private static HostEnvelopeResult<RevitDocument> GetActiveDocument() {
         var document = DocumentManager.uiapp.ActiveUIDocument?.Document;
         if (document == null) {
             return HostEnvelopeResults.Failure<RevitDocument>(
@@ -248,11 +395,21 @@ internal sealed class RevitDataRequestService {
                         "NoActiveDocument",
                         "error",
                         "No active document.",
-                        "Open a Revit project document and retry."
+                        "Open a Revit document and retry."
                     )
                 ]
             );
         }
+
+        return HostEnvelopeResults.Success(document, EnvelopeCode.Ok, "Document is available.");
+    }
+
+    private static HostEnvelopeResult<RevitDocument> GetActiveProjectDocument() {
+        var documentResult = GetActiveDocument();
+        if (!documentResult.Ok)
+            return documentResult;
+
+        var document = documentResult.Data!;
 
         if (document.IsFamilyDocument) {
             return HostEnvelopeResults.Failure<RevitDocument>(
@@ -279,6 +436,14 @@ internal sealed class RevitDataRequestService {
 }
 
 internal static class RevitDataRequestResultExtensions {
+    public static SelectionContextEnvelopeResponse ToSelectionContextFailureEnvelope(
+        this HostEnvelopeResult<RevitDocument> result
+    ) => new(result.Ok, result.Code, result.Message, result.Issues, null);
+
+    public static SelectionContextEnvelopeResponse ToSelectionContextEnvelope(
+        this HostEnvelopeResult<SelectionContextData> result
+    ) => new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
+
     public static ScheduleCatalogEnvelopeResponse ToScheduleCatalogFailureEnvelope(
         this HostEnvelopeResult<RevitDocument> result) =>
         new(result.Ok, result.Code, result.Message, result.Issues, null);
@@ -294,4 +459,16 @@ internal static class RevitDataRequestResultExtensions {
     public static ProjectParameterBindingsEnvelopeResponse ToProjectBindingsFailureEnvelope(
         this HostEnvelopeResult<RevitDocument> result) =>
         new(result.Ok, result.Code, result.Message, result.Issues, null);
+
+    public static ElectricalPanelsCatalogEnvelopeResponse ToElectricalPanelsFailureEnvelope(
+        this HostEnvelopeResult<RevitDocument> result
+    ) => new(result.Ok, result.Code, result.Message, result.Issues, null);
+
+    public static ElectricalCircuitsCatalogEnvelopeResponse ToElectricalCircuitsFailureEnvelope(
+        this HostEnvelopeResult<RevitDocument> result
+    ) => new(result.Ok, result.Code, result.Message, result.Issues, null);
+
+    public static ElectricalLoadClassificationsCatalogEnvelopeResponse ToElectricalLoadClassificationsFailureEnvelope(
+        this HostEnvelopeResult<RevitDocument> result
+    ) => new(result.Ok, result.Code, result.Message, result.Issues, null);
 }

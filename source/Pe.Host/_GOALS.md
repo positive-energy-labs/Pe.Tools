@@ -33,9 +33,52 @@ This should serve both local agents running beside the repo and frontend-exposed
 - Let more document entities become first-class host surfaces over time, especially schedules, parameters, families, categories, and later views.
 - Grow toward richer edit flows such as loaded-family parameter edits, document-wide migration/patch flows, family-instance editing, and schedule-oriented custom experiences.
 
+## Endpoint Shape and Tool Budget
+
+- Treat every new endpoint as part of the effective agent tool budget, even when the endpoint is not yet exposed as a formal tool.
+- Add endpoints sparingly. The bar is not just "is this useful?" but "does this create a stable contract that hides meaningful Revit weirdness better than scripting or an internal helper would?"
+- Prefer endpoints when the shape represents a repeated user/job concept, requires hidden joins or document-context resolution, and meaningfully shrinks prompt/script/context size for callers.
+- Prefer internal Revit-side libraries when the mechanics repeat in scripts but the contract is not yet stable enough to freeze as a public host surface.
+- Prefer ad hoc scripting for exploratory, investigative, one-off, or still-emerging abstractions.
+- Do not add endpoints that merely mirror raw Revit API calls, mostly wrap direct parameter reads/writes, or expose context-specific shapes that are too unstable to trust broadly.
+- Use electrical as the first specialization test: discipline-specific endpoints are justified when the domain object is operationally richer than a generic Revit element and when the host can collapse real API awkwardness behind a small durable contract.
+
+## Electrical Taxonomy
+
+- Organize electrical host surfaces as a hybrid of jobs and entities, not raw Revit classes.
+- Keep the surface small. Prefer a few high-value contract families over one endpoint per electrical type or operation.
+- Treat scripting as the default escape hatch for electrical exploration and long-tail work. Promote only the repeated, stable, Revit-quirk-hiding shapes.
+
+Initial host inspection families:
+
+- `selection.current`
+  - general-purpose current-selection inspection surface
+  - should expose stable generic element identity first, then attach domain-specific context when applicable
+  - should be the default inspection entrypoint for agents and UI before minting more narrow entity endpoints
+
+Initial specialized electrical contract families:
+
+- `electrical.panels.*`
+  - panel-centered inspection surface
+  - resolves the panel as a stable business object rather than leaking the family-instance/electrical-equipment split
+- `electrical.circuits.*`
+  - circuit-centered authored object surface
+  - exposes row-like operational data such as circuit number, slotting, load name, load/current, rating, wire data, connected elements, and health
+- `electrical.loadClassifications.*`
+  - load-summary and demand-math support surface
+  - should expose classification and demand-definition context cleanly enough for schedule and circuit reasoning
+
+Future candidates once the shape is proven:
+
+- `electrical.panelSchedules.*`
+- `electrical.panelTemplates.*`
+
 ## Non-Goals
 
 - Do not turn the host into a second in-process Revit runtime.
 - Do not hide live-document requirements behind misleading offline smartness.
 - Do not force the frontend to hand-maintain backend-owned dependency and metadata logic.
 - Do not pretend generic JSON field rendering is sufficient for every important Revit-backed workflow.
+- Do not treat repeated interest alone as sufficient reason to mint a new endpoint.
+- Do not let electrical specialization sprawl into one endpoint per raw API type.
+- Do not let narrow selection-specific endpoints proliferate by domain when one general current-selection surface can carry the same context.

@@ -41,5 +41,9 @@ Owns the Revit-side scripting runtime: workspace bootstrap, project regeneration
 - Successful compile in `Strict` mode should imply runnable dependency availability. Do not collapse compile assets and runtime assets back into one flat list.
 - `WriteLine(...)` is the preferred output path. `Console.WriteLine(...)` is compatibility only and should stay obviously second-class in docs and samples.
 - Inline snippets should be normalized into `.inline\LastInline.cs` before execution so runtime behavior stays file-backed and debuggable.
+- Each request must resolve to exactly one non-abstract `PeScriptContainer`. If discovery finds none or many, the request shape is wrong before the Revit API is.
+- Live-document execution is transaction-backed here. Debug Revit-side mutation/rollback behavior in this package, not in host callers.
+- Default script templates already include `Autodesk.Revit.DB.Electrical`; do not make first-pass probes add redundant usings unless the template changed.
+- When probing panel schedules in R25, remember `PanelScheduleView.GetPanel()` and `GetTemplate()` return `ElementId`, not the element itself.
 - Keep host concerns out of this package. HTTP routes, session gating, and host process management belong elsewhere.
 - The direct pipe is an internal transport detail. Frontend and CLI callers should go through `Pe.Host`.

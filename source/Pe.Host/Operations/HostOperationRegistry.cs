@@ -57,6 +57,18 @@ internal sealed class HostOperationRegistry {
             HostOperations.Bridge<ProjectParameterBindingsRequest, ProjectParameterBindingsEnvelopeResponse>(
                 GetProjectParameterBindingsOperationContract.Definition
             ),
+            HostOperations.Bridge<SelectionContextRequest, SelectionContextEnvelopeResponse>(
+                GetSelectionContextOperationContract.Definition
+            ),
+            HostOperations.Bridge<ElectricalPanelsCatalogRequest, ElectricalPanelsCatalogEnvelopeResponse>(
+                GetElectricalPanelsCatalogOperationContract.Definition
+            ),
+            HostOperations.Bridge<ElectricalCircuitsCatalogRequest, ElectricalCircuitsCatalogEnvelopeResponse>(
+                GetElectricalCircuitsCatalogOperationContract.Definition
+            ),
+            HostOperations.Bridge<ElectricalLoadClassificationsCatalogRequest, ElectricalLoadClassificationsCatalogEnvelopeResponse>(
+                GetElectricalLoadClassificationsCatalogOperationContract.Definition
+            ),
             HostOperations.Create<OpenSettingsDocumentRequest>(
                 OpenSettingsDocumentOperationContract.Definition,
                 static async (request, context, cancellationToken) =>

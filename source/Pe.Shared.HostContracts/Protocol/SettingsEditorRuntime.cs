@@ -58,8 +58,8 @@ public static class SettingsEditorRuntime {
     ) {
         if (!string.IsNullOrWhiteSpace(configuredPath)) {
             yield return configuredPath;
-            if (configuredPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-                yield return Path.ChangeExtension(configuredPath, ".dll");
+            if (configuredPath != null && configuredPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                yield return Path.ChangeExtension(configuredPath, ".dll")!;
         }
 
         var installRoots = new[] {

@@ -40,15 +40,25 @@ This document describes the browser-facing and tool-facing host contract exposed
 - bridge-backed settings/revit data:
   - `POST /api/settings/field-options`
   - `POST /api/settings/parameter-catalog`
+  - `POST /api/revit-data/selection/current`
   - `GET /api/revit-data/loaded-families/filter/schema`
   - `POST /api/revit-data/loaded-families/filter/field-options`
   - `POST /api/revit-data/schedules/catalog`
   - `POST /api/revit-data/loaded-families/catalog`
   - `POST /api/revit-data/loaded-families/matrix`
   - `POST /api/revit-data/project-parameter-bindings`
+  - `POST /api/revit-data/electrical/panels/catalog`
+  - `POST /api/revit-data/electrical/circuits/catalog`
+  - `POST /api/revit-data/electrical/load-classifications/catalog`
 - scripting:
   - `POST /api/scripting/workspace/bootstrap`
   - `POST /api/scripting/execute`
+
+## Selection Current
+
+- `POST /api/revit-data/selection/current` is the general current-selection inspection surface.
+- It is intentionally WIP as a cross-domain contract.
+- Right now it is richest for electrical context because that is where the host is first trying to hide repeated Revit API joins and quirks.
 
 ## Failure Posture
 

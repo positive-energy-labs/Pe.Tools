@@ -89,7 +89,11 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
             HostInvalidationDomain.LoadedFamiliesCatalog,
             HostInvalidationDomain.LoadedFamiliesMatrix,
             HostInvalidationDomain.ProjectParameterBindings,
-            HostInvalidationDomain.LoadedFamiliesFilterFieldOptions
+            HostInvalidationDomain.LoadedFamiliesFilterFieldOptions,
+            HostInvalidationDomain.SelectionContext,
+            HostInvalidationDomain.ElectricalPanelsCatalog,
+            HostInvalidationDomain.ElectricalCircuitsCatalog,
+            HostInvalidationDomain.ElectricalLoadClassificationsCatalog
         };
         this._invalidateDomains?.Invoke(invalidatedDomains);
         return new DocumentInvalidationEvent(
