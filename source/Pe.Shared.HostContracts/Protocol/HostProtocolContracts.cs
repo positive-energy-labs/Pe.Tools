@@ -44,6 +44,18 @@ public static class HttpRoutes {
     public static readonly string ProjectParameterBindings =
         GetProjectParameterBindingsOperationContract.Definition.Route;
 
+    public static readonly string SelectionCurrent =
+        GetSelectionContextOperationContract.Definition.Route;
+
+    public static readonly string ElectricalPanelsCatalog =
+        GetElectricalPanelsCatalogOperationContract.Definition.Route;
+
+    public static readonly string ElectricalCircuitsCatalog =
+        GetElectricalCircuitsCatalogOperationContract.Definition.Route;
+
+    public static readonly string ElectricalLoadClassificationsCatalog =
+        GetElectricalLoadClassificationsCatalogOperationContract.Definition.Route;
+
     public static readonly string ScriptingWorkspaceBootstrap =
         GetScriptWorkspaceBootstrapOperationContract.Definition.Route;
 
@@ -55,7 +67,7 @@ public static class HttpRoutes {
 [ExportTsClass]
 public static class HostProtocol {
     public const string Transport = "http+sse";
-    public const int ContractVersion = 21;
+    public const int ContractVersion = 23;
 }
 
 public interface IBridgeSessionRequest {
@@ -77,7 +89,11 @@ public enum HostInvalidationDomain {
     LoadedFamiliesCatalog,
     LoadedFamiliesMatrix,
     ProjectParameterBindings,
-    LoadedFamiliesFilterFieldOptions
+    LoadedFamiliesFilterFieldOptions,
+    SelectionContext,
+    ElectricalPanelsCatalog,
+    ElectricalCircuitsCatalog,
+    ElectricalLoadClassificationsCatalog
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

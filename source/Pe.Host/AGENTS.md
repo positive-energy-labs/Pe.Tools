@@ -39,8 +39,16 @@ Owns the external settings host: HTTP endpoints, settings SSE streams, host-side
 - Keep HTTP as the source of truth for request/response workflows.
 - Keep `/api/settings/events` invalidation-only.
 - `Pe.Host` should not grow Revit-side fallback logic. If data needs the active document/thread, route it through the bridge.
+- Every new endpoint is part of the effective agent tool budget. Add host surfaces sparingly and prefer a few durable contracts over one endpoint per raw Revit type or operation.
+- The endpoint bar is not just "is this useful?" but "does this create a stable contract that hides meaningful Revit weirdness better than scripting or an internal helper would?"
+- Prefer internal Revit-side helpers when mechanics repeat but the host contract is not yet stable. Prefer ad hoc scripting for exploratory and one-off live-document work.
+- Prefer one general-purpose current-selection inspection surface over many domain-specific "selected X" endpoints. Specialize only when the stable job concept is broader than selection itself.
+- Electrical is the first good specialization test here because panels, circuits, panel schedules, and panel templates carry richer operational semantics than a generic element lookup.
 - Scripting is public through host HTTP even though execution still uses the internal scripting pipe.
 - Scripting v1 is sync-only and requires exactly one connected Revit bridge session.
+- `GET /api/settings/host-status` is the first health check for scripting. Verify host/bridge/session posture there before reading compile/runtime failures as code problems.
+- First-pass scripting failures are often transport-state failures: host not running, bridge disconnected, zero sessions, multiple sessions, or scripting pipe unavailable.
+- Keep the distinction sharp: scripting uses public host HTTP plus an internal scripting-pipe proxy; it is not a first-class bridge operation.
 - `HostSchemaService` caches by module key. If schema changes appear stale, verify the requested module key and cache behavior before blaming the schema processors.
 - `HostSettingsModuleCatalog` is registry-driven, so new manifests should surface here automatically once registered.
 - When documenting the frontend contract, point to the concrete routes and DTOs this project actually exposes, not older refactor notes.

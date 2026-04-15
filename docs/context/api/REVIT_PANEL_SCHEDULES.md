@@ -1,5 +1,12 @@
 # Revit Electrical Panels, Power Systems, and Panel Schedules
 
+Prefer these compact follow-on notes first:
+
+- `REVIT_PANEL_SCHEDULE_TOPOLOGY.md`
+- `REVIT_PANEL_SCHEDULE_CONTROL_MODEL.md`
+- `REVIT_PANEL_SCHEDULE_DECISION_TREES.md`
+- `REVIT_PANEL_SCHEDULE_API_TOUCHPOINTS.md`
+
 This guide covers both the UI/user mental model and the Revit API surface for:
 
 - electrical panels

@@ -62,4 +62,16 @@ internal static class HostEnvelopeResultExtensions {
     public static ProjectParameterBindingsEnvelopeResponse ToProjectParameterBindingsEnvelope(
         this HostEnvelopeResult<ProjectParameterBindingsData> result
     ) => new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
+
+    public static ElectricalPanelsCatalogEnvelopeResponse ToElectricalPanelsCatalogEnvelope(
+        this HostEnvelopeResult<ElectricalPanelsCatalogData> result
+    ) => new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
+
+    public static ElectricalCircuitsCatalogEnvelopeResponse ToElectricalCircuitsCatalogEnvelope(
+        this HostEnvelopeResult<ElectricalCircuitsCatalogData> result
+    ) => new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
+
+    public static ElectricalLoadClassificationsCatalogEnvelopeResponse ToElectricalLoadClassificationsCatalogEnvelope(
+        this HostEnvelopeResult<ElectricalLoadClassificationsCatalogData> result
+    ) => new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
 }
