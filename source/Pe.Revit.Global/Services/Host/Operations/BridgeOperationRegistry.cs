@@ -78,6 +78,11 @@ internal sealed class BridgeOperationRegistry {
                 GetElectricalLoadClassificationsCatalogOperationContract.Definition,
                 static (request, context, cancellationToken) =>
                     context.RevitDataRequestService.GetElectricalLoadClassificationsCatalogEnvelopeAsync(request)
+            ),
+            BridgeOperations.Create<RevitDocumentContextRequest, RevitDocumentContextEnvelopeResponse>(
+                GetRevitDocumentContextOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RevitDataRequestService.GetRevitDocumentContextEnvelopeAsync(request)
             )
         ];
 

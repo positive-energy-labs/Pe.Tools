@@ -78,6 +78,9 @@ internal sealed class HostOperationRegistry {
             HostOperations.Bridge<ElectricalLoadClassificationsCatalogRequest, ElectricalLoadClassificationsCatalogEnvelopeResponse>(
                 GetElectricalLoadClassificationsCatalogOperationContract.Definition
             ),
+            HostOperations.Bridge<RevitDocumentContextRequest, RevitDocumentContextEnvelopeResponse>(
+                GetRevitDocumentContextOperationContract.Definition
+            ),
             HostOperations.Create<OpenSettingsDocumentRequest>(
                 OpenSettingsDocumentOperationContract.Definition,
                 static async (request, context, cancellationToken) =>
@@ -155,12 +158,23 @@ internal sealed class HostOperationRegistry {
         var runtimeState = context.RuntimeStateService.GetState();
         var snapshot = runtimeState.BridgeSnapshot;
         var defaultSession = snapshot.DefaultSession;
+        var hostObservedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         return new HostStatusData(
             true,
             snapshot.BridgeIsConnected,
             defaultSession?.HasActiveDocument ?? false,
             defaultSession?.ActiveDocumentTitle,
+            defaultSession?.ActiveDocumentKey,
+            defaultSession?.ActiveDocumentPath,
+            defaultSession?.ActiveDocumentIsFamilyDocument ?? false,
+            defaultSession?.ActiveDocumentIsWorkshared ?? false,
+            defaultSession?.ActiveDocumentIsModelInCloud ?? false,
+            defaultSession?.ActiveDocumentCloudProjectGuid,
+            defaultSession?.ActiveDocumentCloudModelGuid,
+            defaultSession?.ActiveDocumentCloudModelUrn,
+            defaultSession?.ActiveDocumentObservedAtUnixMs ?? 0,
+            defaultSession?.OpenDocumentCount ?? 0,
             defaultSession?.RevitVersion,
             defaultSession?.RuntimeFramework,
             HostProtocol.ContractVersion,
@@ -170,9 +184,10 @@ internal sealed class HostOperationRegistry {
             typeof(BridgeServer).Assembly.GetName().Version?.ToString(),
             defaultSession?.BridgeContractVersion ?? BridgeProtocol.ContractVersion,
             defaultSession?.BridgeTransport ?? BridgeProtocol.Transport,
-            [.. runtimeState.AvailableModules],
+            [.. runtimeState.CatalogModules],
             snapshot.DisconnectReason,
             snapshot.DefaultSessionId,
+            hostObservedAtUnixMs,
             snapshot.Sessions
                 .Select(session => new HostSessionData(
                     session.SessionId,
@@ -180,6 +195,16 @@ internal sealed class HostOperationRegistry {
                     session.ProcessId,
                     session.HasActiveDocument,
                     session.ActiveDocumentTitle,
+                    session.ActiveDocumentKey,
+                    session.ActiveDocumentPath,
+                    session.ActiveDocumentIsFamilyDocument,
+                    session.ActiveDocumentIsWorkshared,
+                    session.ActiveDocumentIsModelInCloud,
+                    session.ActiveDocumentCloudProjectGuid,
+                    session.ActiveDocumentCloudModelGuid,
+                    session.ActiveDocumentCloudModelUrn,
+                    session.ActiveDocumentObservedAtUnixMs,
+                    session.OpenDocumentCount,
                     session.RuntimeFramework,
                     session.BridgeContractVersion,
                     session.BridgeTransport,

@@ -74,6 +74,7 @@ internal sealed class BridgeAgent : IDisposable {
     private readonly ThrottleGate _throttleGate = new();
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly StreamWriter _writer;
+    private string? _lastAdvertisedDocumentKey;
     private bool _disposed;
 
     public BridgeAgent(
@@ -83,13 +84,14 @@ internal sealed class BridgeAgent : IDisposable {
     ) {
         var startupStopwatch = Stopwatch.StartNew();
         var uiapp = DocumentManager.uiapp;
+        var activeDocument = uiapp.ActiveUIDocument?.Document;
         this._moduleRegistry = moduleRegistry;
         this._hostOptions = hostOptions;
         Log.Information(
             "Settings editor bridge agent starting: Pipe={PipeName}, ConnectTimeoutMs={ConnectTimeoutMs}, ActiveDocument={ActiveDocumentTitle}, Modules={ModuleCount}",
             hostOptions.PipeName,
             hostOptions.ConnectTimeoutMs,
-            uiapp.ActiveUIDocument?.Document?.Title,
+            activeDocument?.Title,
             moduleRegistry.GetModules().Count()
         );
         var requestService = new RequestService(revitTaskService, this._moduleRegistry, this._throttleGate);
@@ -126,8 +128,8 @@ internal sealed class BridgeAgent : IDisposable {
         Log.Information(
             "Settings editor bridge agent sending handshake: Modules={ModuleCount}, HasActiveDocument={HasActiveDocument}, ActiveDocument={ActiveDocumentTitle}",
             this._moduleRegistry.GetModules().Count(),
-            DocumentManager.GetActiveDocument() != null,
-            DocumentManager.GetActiveDocument()?.Title
+            activeDocument != null,
+            activeDocument?.Title
         );
         this.SendHandshake();
         Log.Information("Settings editor bridge agent sent handshake in {ElapsedMs} ms.",
@@ -201,8 +203,8 @@ internal sealed class BridgeAgent : IDisposable {
             this._hostOptions.PipeName,
             this._hostOptions.SessionId,
             this._hostOptions.ProcessId,
-            DocumentManager.GetActiveDocument() != null,
-            DocumentManager.GetActiveDocument()?.Title,
+            DocumentManager.uiapp.ActiveUIDocument?.Document != null,
+            DocumentManager.uiapp.ActiveUIDocument?.Document?.Title,
             this._moduleRegistry.GetModules().Count(),
             this.RevitVersion,
             this.RuntimeFramework,
@@ -350,6 +352,9 @@ internal sealed class BridgeAgent : IDisposable {
             Event: new BridgeEvent(SettingsHostEventNames.DocumentChanged, payloadJson)
         );
         await this.WriteFrameAsync(frame, this._shutdown.Token).ConfigureAwait(false);
+
+        if (!string.Equals(this._lastAdvertisedDocumentKey, payload.DocumentKey, StringComparison.OrdinalIgnoreCase))
+            this.SendHandshake();
     }
 
     private void PublishNotification(string message) {
@@ -375,6 +380,17 @@ internal sealed class BridgeAgent : IDisposable {
     }
 
     private void SendHandshake() {
+        var activeDocument = DocumentManager.uiapp.ActiveUIDocument?.Document;
+        var availableModules = this._moduleRegistry.GetModules()
+            .Where(module => IsModuleAvailableForDocument(module, activeDocument))
+            .OrderBy(module => module.ModuleKey, StringComparer.OrdinalIgnoreCase)
+            .Select(CreateHostModuleDescriptor)
+            .ToList();
+        Log.Debug(
+            "Settings editor bridge handshake module snapshot: ActiveDocument={ActiveDocumentTitle}, ModuleCount={ModuleCount}",
+            activeDocument?.Title,
+            availableModules.Count
+        );
         var handshake = new BridgeHandshake(
             BridgeProtocol.ContractVersion,
             BridgeProtocol.Transport,
@@ -382,16 +398,21 @@ internal sealed class BridgeAgent : IDisposable {
             this._hostOptions.ProcessId,
             Revit.Utils.Utils.GetRevitVersion() ?? "unknown",
             RuntimeInformation.FrameworkDescription,
-            DocumentManager.GetActiveDocument() != null,
-            DocumentManager.GetActiveDocument()?.Title,
-            this._moduleRegistry.GetModules()
-                .OrderBy(module => module.ModuleKey, StringComparer.OrdinalIgnoreCase)
-                .Select(module => new HostModuleDescriptor(
-                    module.ModuleKey,
-                    module.DefaultRootKey
-                ))
-                .ToList()
+            activeDocument != null,
+            activeDocument?.Title,
+            activeDocument == null ? null : DocumentManager.GetDocumentKey(activeDocument),
+            activeDocument == null ? null : DocumentManager.GetDocumentPath(activeDocument),
+            activeDocument?.IsFamilyDocument ?? false,
+            activeDocument?.IsWorkshared ?? false,
+            activeDocument?.IsModelInCloud ?? false,
+            activeDocument == null ? null : DocumentManager.GetCloudProjectGuid(activeDocument),
+            activeDocument == null ? null : DocumentManager.GetCloudModelGuid(activeDocument),
+            activeDocument == null ? null : DocumentManager.GetCloudModelUrn(activeDocument),
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            DocumentManager.GetOpenDocuments().Count(),
+            availableModules
         );
+        this._lastAdvertisedDocumentKey = handshake.ActiveDocumentKey;
 
         var frame = new BridgeFrame(
             BridgeFrameKind.Handshake,
@@ -401,6 +422,40 @@ internal sealed class BridgeAgent : IDisposable {
         // Startup runs on the Revit UI thread, so avoid sync-over-async during the initial bridge handshake.
         var json = JsonConvert.SerializeObject(frame, this._serializerSettings);
         this._writer.WriteLine(json);
+    }
+
+    private static HostModuleDescriptor CreateHostModuleDescriptor(ISettingsModule module) {
+        return new HostModuleDescriptor(
+            module.ModuleKey,
+            module.DefaultRootKey,
+            module.HostScope switch {
+                SettingsModuleHostScope.Host => HostModuleScope.Host,
+                SettingsModuleHostScope.ActiveDocument => HostModuleScope.ActiveDocument,
+                _ => HostModuleScope.Session
+            },
+            module.ActiveDocumentKind switch {
+                SettingsModuleActiveDocumentKind.ProjectOnly => HostModuleActiveDocumentKind.ProjectOnly,
+                SettingsModuleActiveDocumentKind.FamilyOnly => HostModuleActiveDocumentKind.FamilyOnly,
+                _ => HostModuleActiveDocumentKind.Any
+            }
+        );
+    }
+
+    private static bool IsModuleAvailableForDocument(
+        ISettingsModule module,
+        Autodesk.Revit.DB.Document? activeDocument
+    ) {
+        if (module.HostScope != SettingsModuleHostScope.ActiveDocument)
+            return true;
+
+        if (activeDocument == null)
+            return false;
+
+        return module.ActiveDocumentKind switch {
+            SettingsModuleActiveDocumentKind.ProjectOnly => !activeDocument.IsFamilyDocument,
+            SettingsModuleActiveDocumentKind.FamilyOnly => activeDocument.IsFamilyDocument,
+            _ => true
+        };
     }
 
     private async Task SendDisconnectAsync() {

@@ -61,6 +61,9 @@ public static class HttpRoutes {
     public static readonly string ElectricalLoadClassificationsCatalog =
         GetElectricalLoadClassificationsCatalogOperationContract.Definition.Route;
 
+    public static readonly string DocumentContext =
+        GetRevitDocumentContextOperationContract.Definition.Route;
+
     public static readonly string ScriptingWorkspaceBootstrap =
         GetScriptWorkspaceBootstrapOperationContract.Definition.Route;
 
@@ -72,7 +75,7 @@ public static class HttpRoutes {
 [ExportTsClass]
 public static class HostProtocol {
     public const string Transport = "http+sse";
-    public const int ContractVersion = 26;
+    public const int ContractVersion = 28;
 }
 
 public interface IBridgeSessionRequest {
@@ -121,10 +124,28 @@ public enum DocumentInvalidationReason {
     Changed
 }
 
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum HostModuleScope {
+    Host,
+    Session,
+    ActiveDocument
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum HostModuleActiveDocumentKind {
+    Any,
+    ProjectOnly,
+    FamilyOnly
+}
+
 [ExportTsInterface]
 public record HostModuleDescriptor(
     string ModuleKey,
-    string DefaultRootKey
+    string DefaultRootKey,
+    HostModuleScope Scope,
+    HostModuleActiveDocumentKind ActiveDocumentKind
 );
 
 [ExportTsInterface]
@@ -134,6 +155,16 @@ public record HostSessionData(
     int ProcessId,
     bool HasActiveDocument,
     string? ActiveDocumentTitle,
+    string? ActiveDocumentKey,
+    string? ActiveDocumentPath,
+    bool ActiveDocumentIsFamilyDocument,
+    bool ActiveDocumentIsWorkshared,
+    bool ActiveDocumentIsModelInCloud,
+    string? ActiveDocumentCloudProjectGuid,
+    string? ActiveDocumentCloudModelGuid,
+    string? ActiveDocumentCloudModelUrn,
+    long ActiveDocumentObservedAtUnixMs,
+    int OpenDocumentCount,
     string? RuntimeFramework,
     int BridgeContractVersion,
     string BridgeTransport,
@@ -147,6 +178,16 @@ public record HostStatusData(
     bool BridgeIsConnected,
     bool HasActiveDocument,
     string? ActiveDocumentTitle,
+    string? ActiveDocumentKey,
+    string? ActiveDocumentPath,
+    bool ActiveDocumentIsFamilyDocument,
+    bool ActiveDocumentIsWorkshared,
+    bool ActiveDocumentIsModelInCloud,
+    string? ActiveDocumentCloudProjectGuid,
+    string? ActiveDocumentCloudModelGuid,
+    string? ActiveDocumentCloudModelUrn,
+    long ActiveDocumentObservedAtUnixMs,
+    int OpenDocumentCount,
     string? RevitVersion,
     string? RuntimeFramework,
     int HostContractVersion,
@@ -156,9 +197,10 @@ public record HostStatusData(
     string? ServerVersion,
     int BridgeContractVersion,
     string BridgeTransport,
-    List<HostModuleDescriptor> AvailableModules,
+    List<HostModuleDescriptor> CatalogModules,
     string? DisconnectReason,
     string? DefaultSessionId,
+    long HostObservedAtUnixMs,
     List<HostSessionData> Sessions
 );
 
@@ -166,7 +208,17 @@ public record HostStatusData(
 public record DocumentInvalidationEvent(
     DocumentInvalidationReason Reason,
     string? DocumentTitle,
+    string? DocumentKey,
+    string? DocumentPath,
+    bool DocumentIsFamilyDocument,
+    bool DocumentIsWorkshared,
+    bool DocumentIsModelInCloud,
+    string? DocumentCloudProjectGuid,
+    string? DocumentCloudModelGuid,
+    string? DocumentCloudModelUrn,
     bool HasActiveDocument,
+    int OpenDocumentCount,
+    long DocumentObservedAtUnixMs,
     List<HostInvalidationDomain> InvalidatedDomains,
     string? SessionId = null,
     string? RevitVersion = null
@@ -177,6 +229,16 @@ public record HostStatusChangedEvent(
     HostStatusChangedReason Reason,
     bool HasActiveDocument,
     string? DocumentTitle,
+    string? DocumentKey,
+    string? DocumentPath,
+    bool DocumentIsFamilyDocument,
+    bool DocumentIsWorkshared,
+    bool DocumentIsModelInCloud,
+    string? DocumentCloudProjectGuid,
+    string? DocumentCloudModelGuid,
+    string? DocumentCloudModelUrn,
+    int OpenDocumentCount,
+    long DocumentObservedAtUnixMs,
     string? SessionId = null,
     string? RevitVersion = null,
     int ConnectedSessionCount = 0

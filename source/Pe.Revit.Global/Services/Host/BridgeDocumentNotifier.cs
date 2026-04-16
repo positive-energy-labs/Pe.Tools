@@ -14,7 +14,7 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
     private readonly Action<IReadOnlyList<HostInvalidationDomain>>? _invalidateDomains;
     private readonly Func<DocumentInvalidationEvent, Task> _publishAsync;
     private readonly object _sync = new();
-    private string? _lastActiveDocumentTitle;
+    private string? _lastActiveDocumentKey;
     private bool _lastHasActiveDocument;
     private bool _disposed;
     private bool _isInitialized;
@@ -71,11 +71,11 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
 
     private void OnViewActivated(object? sender, ViewActivatedEventArgs e) {
         var activeDocument = e?.CurrentActiveView?.Document;
-        var currentTitle = activeDocument?.Title;
+        var currentKey = activeDocument == null ? null : DocumentManager.GetDocumentKey(activeDocument);
         var hasActiveDocument = activeDocument != null;
 
         lock (this._sync) {
-            if (string.Equals(this._lastActiveDocumentTitle, currentTitle, StringComparison.Ordinal) &&
+            if (string.Equals(this._lastActiveDocumentKey, currentKey, StringComparison.OrdinalIgnoreCase) &&
                 this._lastHasActiveDocument == hasActiveDocument)
                 return;
         }
@@ -103,6 +103,12 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
 
     private DocumentInvalidationEvent BuildCurrentPayload(DocumentInvalidationReason reason) {
         var activeDocument = DocumentManager.uiapp.ActiveUIDocument?.Document;
+        var activeDocumentKey = activeDocument == null ? null : DocumentManager.GetDocumentKey(activeDocument);
+        var activeDocumentPath = activeDocument == null ? null : DocumentManager.GetDocumentPath(activeDocument);
+        var activeDocumentCloudProjectGuid = activeDocument == null ? null : DocumentManager.GetCloudProjectGuid(activeDocument);
+        var activeDocumentCloudModelGuid = activeDocument == null ? null : DocumentManager.GetCloudModelGuid(activeDocument);
+        var activeDocumentCloudModelUrn = activeDocument == null ? null : DocumentManager.GetCloudModelUrn(activeDocument);
+        var openDocumentCount = DocumentManager.GetOpenDocuments().Count();
         var invalidatedDomains = new List<HostInvalidationDomain> {
             HostInvalidationDomain.SettingsFieldOptions,
             HostInvalidationDomain.SettingsParameterCatalog,
@@ -123,7 +129,17 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
         return new DocumentInvalidationEvent(
             reason,
             activeDocument?.Title,
+            activeDocumentKey,
+            activeDocumentPath,
+            activeDocument?.IsFamilyDocument ?? false,
+            activeDocument?.IsWorkshared ?? false,
+            activeDocument?.IsModelInCloud ?? false,
+            activeDocumentCloudProjectGuid,
+            activeDocumentCloudModelGuid,
+            activeDocumentCloudModelUrn,
             activeDocument != null,
+            openDocumentCount,
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             invalidatedDomains
         );
     }
@@ -131,7 +147,7 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
     private async Task PublishAsync(DocumentInvalidationEvent payload) {
         try {
             lock (this._sync) {
-                this._lastActiveDocumentTitle = payload.DocumentTitle;
+                this._lastActiveDocumentKey = payload.DocumentKey;
                 this._lastHasActiveDocument = payload.HasActiveDocument;
             }
             await this._publishAsync(payload);

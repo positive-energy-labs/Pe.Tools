@@ -13,7 +13,7 @@ namespace Pe.Host.Services;
 
 public interface IHostSettingsModuleCatalog {
     IReadOnlyList<ISettingsModuleManifest> GetModules();
-    IReadOnlyList<HostSettingsModuleDescriptor> GetTransportDescriptors();
+    IReadOnlyList<HostSettingsModuleDescriptor> GetCatalogDescriptors();
     HostWorkspacesData GetWorkspaces();
     bool TryGetModule(string moduleKey, out ISettingsModuleManifest module);
 }
@@ -22,7 +22,7 @@ public sealed class HostSettingsModuleCatalog : IHostSettingsModuleCatalog {
     private readonly SettingsRuntimeMode _runtimeMode;
     private readonly IReadOnlyList<ISettingsModuleManifest> _modules = KnownSettingsRegistry.All;
     private readonly IReadOnlyDictionary<string, ISettingsModuleManifest> _modulesByModuleKey;
-    private readonly IReadOnlyList<HostSettingsModuleDescriptor> _transportDescriptors;
+    private readonly IReadOnlyList<HostSettingsModuleDescriptor> _catalogDescriptors;
     private readonly HostWorkspacesData _workspaces;
 
     public HostSettingsModuleCatalog()
@@ -35,11 +35,8 @@ public sealed class HostSettingsModuleCatalog : IHostSettingsModuleCatalog {
             module => module.ModuleKey,
             StringComparer.OrdinalIgnoreCase
         );
-        this._transportDescriptors = this._modules
-            .Select(module => new HostSettingsModuleDescriptor(
-                module.ModuleKey,
-                module.DefaultRootKey
-            ))
+        this._catalogDescriptors = this._modules
+            .Select(CreateTransportDescriptor)
             .ToList();
         this._workspaces = new HostWorkspacesData([
             new HostWorkspaceDescriptor(
@@ -58,9 +55,25 @@ public sealed class HostSettingsModuleCatalog : IHostSettingsModuleCatalog {
     }
 
     public IReadOnlyList<ISettingsModuleManifest> GetModules() => this._modules;
-    public IReadOnlyList<HostSettingsModuleDescriptor> GetTransportDescriptors() => this._transportDescriptors;
+    public IReadOnlyList<HostSettingsModuleDescriptor> GetCatalogDescriptors() => this._catalogDescriptors;
     public HostWorkspacesData GetWorkspaces() => this._workspaces;
 
     public bool TryGetModule(string moduleKey, out ISettingsModuleManifest module) =>
         this._modulesByModuleKey.TryGetValue(moduleKey, out module!);
+
+    private static HostSettingsModuleDescriptor CreateTransportDescriptor(ISettingsModuleManifest module) =>
+        new(
+            module.ModuleKey,
+            module.DefaultRootKey,
+            module.HostScope switch {
+                SettingsModuleHostScope.Host => Pe.Shared.HostContracts.Protocol.HostModuleScope.Host,
+                SettingsModuleHostScope.ActiveDocument => Pe.Shared.HostContracts.Protocol.HostModuleScope.ActiveDocument,
+                _ => Pe.Shared.HostContracts.Protocol.HostModuleScope.Session
+            },
+            module.ActiveDocumentKind switch {
+                SettingsModuleActiveDocumentKind.ProjectOnly => Pe.Shared.HostContracts.Protocol.HostModuleActiveDocumentKind.ProjectOnly,
+                SettingsModuleActiveDocumentKind.FamilyOnly => Pe.Shared.HostContracts.Protocol.HostModuleActiveDocumentKind.FamilyOnly,
+                _ => Pe.Shared.HostContracts.Protocol.HostModuleActiveDocumentKind.Any
+            }
+        );
 }

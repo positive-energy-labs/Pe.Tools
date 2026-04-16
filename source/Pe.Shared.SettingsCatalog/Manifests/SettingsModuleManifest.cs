@@ -16,12 +16,16 @@ public sealed class SettingsModuleManifest<TSettings>(
     string defaultRootKey,
     SettingsStorageModuleOptions storageOptions,
     IReadOnlyList<SettingsRootDescriptor>? roots = null,
-    Func<SettingsRuntimeMode, SettingsStorageModuleDefinition>? storageDefinitionFactory = null
+    Func<SettingsRuntimeMode, SettingsStorageModuleDefinition>? storageDefinitionFactory = null,
+    SettingsModuleHostScope hostScope = SettingsModuleHostScope.Session,
+    SettingsModuleActiveDocumentKind activeDocumentKind = SettingsModuleActiveDocumentKind.Any
     ) : BaseSettingsModule<TSettings>(moduleKey, defaultRootKey, storageOptions), ISettingsModuleManifest
     where TSettings : class {
     public new string DefaultRootKey => base.DefaultRootKey;
 
     public IReadOnlyList<SettingsRootDescriptor> Roots { get; } = roots ?? [new SettingsRootDescriptor(defaultRootKey, defaultRootKey)];
+    public override SettingsModuleHostScope HostScope { get; } = hostScope;
+    public override SettingsModuleActiveDocumentKind ActiveDocumentKind { get; } = activeDocumentKind;
 
     public override SettingsStorageModuleDefinition CreateStorageDefinition(SettingsRuntimeMode runtimeMode) =>
         storageDefinitionFactory?.Invoke(runtimeMode) ?? new SettingsStorageModuleDefinition(

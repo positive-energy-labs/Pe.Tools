@@ -86,4 +86,8 @@ internal static class HostEnvelopeResultExtensions {
     public static ElectricalLoadClassificationsCatalogEnvelopeResponse ToElectricalLoadClassificationsCatalogEnvelope(
         this HostEnvelopeResult<ElectricalLoadClassificationsCatalogData> result
     ) => new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
+
+    public static RevitDocumentContextEnvelopeResponse ToRevitDocumentContextEnvelope(
+        this HostEnvelopeResult<RevitDocumentContextData> result
+    ) => new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
 }

@@ -13,7 +13,8 @@ public static class KnownSettingsRegistry {
         "Global",
         "fragments",
         SettingsCatalogStorageProfiles.SharedAuthoring,
-        [new SettingsRootDescriptor("fragments", "fragments")]
+        [new SettingsRootDescriptor("fragments", "fragments")],
+        hostScope: SettingsModuleHostScope.Host
     );
 
     public static IReadOnlyList<ISettingsModuleManifest> All { get; } = [
@@ -25,7 +26,8 @@ public static class KnownSettingsRegistry {
     ];
 
     public static void RegisterRevitModules(SettingsModuleRegistry registry) {
-        foreach (var module in All.Where(module => module.SettingsType != typeof(object)))
+        foreach (var module in All.Where(module => module.HostScope != SettingsModuleHostScope.Host &&
+                                                   module.SettingsType != typeof(object)))
             registry.Register(module);
     }
 }

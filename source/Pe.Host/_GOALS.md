@@ -8,6 +8,8 @@ Backend-defined metadata should drive a serious schema-based frontend runtime. F
 
 This should serve both local agents running beside the repo and frontend-exposed agents that use host endpoints as tools, and it should shape which endpoints we create and how we shape them. Longer term, the host should make meaningful agent-driven Revit workflows possible, potentially including carefully controlled code-execution-style capabilities.
 
+`host-status` should become the cheap, poll-friendly freshness contract for bridge posture and active-document truth. Richer document inventory and targeting should exist beside it as explicit document-context surfaces, not be inferred from stale bridge assumptions or ad hoc scripting alone.
+
 ## User Goals
 
 - Let lay users edit local profiles through a good external GUI instead of raw JSON-first workflows.
@@ -22,6 +24,8 @@ This should serve both local agents running beside the repo and frontend-exposed
 - Support backend-declared inter-property relationships, from simple cases like families by selected category to richer document-aware dependency logic.
 - Make backend metadata rich enough to drive a real frontend runtime: defaults, hints, option sources, dependency wiring, and renderer selection should come from the host contract whenever practical.
 - Preserve a clear seam where the host owns structural workflows and the bridge owns live-document behavior.
+- Keep `host-status` small, cheap, and trustworthy enough for frequent agent polling during live work.
+- Expose document targeting explicitly when needed instead of smuggling document identity through whatever happens to be active.
 
 ## Integration Goals
 
@@ -31,6 +35,7 @@ This should serve both local agents running beside the repo and frontend-exposed
 - Allow backend metadata to route frontend rendering toward custom components when generic schema-driven field rendering is not enough.
 - Make live Revit data available through host endpoints for frontends, local agents/LLMs, and other tooling that need transparent access to document state.
 - Let more document entities become first-class host surfaces over time, especially schedules, parameters, families, categories, and later views.
+- Provide a first-class document-context surface for open-document inventory and stable target-document selection.
 - Grow toward richer edit flows such as loaded-family parameter edits, document-wide migration/patch flows, family-instance editing, and schedule-oriented custom experiences.
 
 ## Endpoint Shape and Tool Budget
@@ -41,6 +46,7 @@ This should serve both local agents running beside the repo and frontend-exposed
 - Prefer internal Revit-side libraries when the mechanics repeat in scripts but the contract is not yet stable enough to freeze as a public host surface.
 - Prefer ad hoc scripting for exploratory, investigative, one-off, or still-emerging abstractions.
 - Do not add endpoints that merely mirror raw Revit API calls, mostly wrap direct parameter reads/writes, or expose context-specific shapes that are too unstable to trust broadly.
+- Prefer a small number of durable document contracts such as `host-status` freshness and document-context targeting over one endpoint per raw document-manager capability.
 - Use electrical as the first specialization test: discipline-specific endpoints are justified when the domain object is operationally richer than a generic Revit element and when the host can collapse real API awkwardness behind a small durable contract.
 
 ## Electrical Taxonomy
@@ -84,3 +90,4 @@ Future candidates once the shape is proven:
 - Do not treat repeated interest alone as sufficient reason to mint a new endpoint.
 - Do not let electrical specialization sprawl into one endpoint per raw API type.
 - Do not let narrow target-specific endpoints proliferate by domain when one general element-context surface can carry the same context.
+- Do not overload `host-status` with every open-document detail just because it is polled often; keep freshness there and richer document targeting in a sibling surface.
