@@ -38,6 +38,8 @@ public static class HttpRoutes {
         GetLoadedFamiliesFilterFieldOptionsOperationContract.Definition.Route;
 
     public static readonly string ScheduleCatalog = GetScheduleCatalogOperationContract.Definition.Route;
+    public static readonly string ScheduleSpecsQuery = GetScheduleSpecsQueryOperationContract.Definition.Route;
+    public static readonly string ScheduleQuery = GetScheduleQueryOperationContract.Definition.Route;
     public static readonly string LoadedFamiliesCatalog = GetLoadedFamiliesCatalogOperationContract.Definition.Route;
     public static readonly string LoadedFamiliesMatrix = GetLoadedFamiliesMatrixOperationContract.Definition.Route;
 
@@ -70,7 +72,7 @@ public static class HttpRoutes {
 [ExportTsClass]
 public static class HostProtocol {
     public const string Transport = "http+sse";
-    public const int ContractVersion = 25;
+    public const int ContractVersion = 26;
 }
 
 public interface IBridgeSessionRequest {
@@ -89,6 +91,8 @@ public enum HostInvalidationDomain {
     SettingsFieldOptions,
     SettingsParameterCatalog,
     ScheduleCatalog,
+    ScheduleSpecsQuery,
+    ScheduleQuery,
     LoadedFamiliesCatalog,
     LoadedFamiliesMatrix,
     ProjectParameterBindings,

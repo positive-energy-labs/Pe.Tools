@@ -29,6 +29,16 @@ internal sealed class BridgeOperationRegistry {
                 static (request, context, cancellationToken) =>
                     context.RevitDataRequestService.GetScheduleCatalogEnvelopeAsync(request)
             ),
+            BridgeOperations.Create<ScheduleSpecsQueryRequest, ScheduleSpecsQueryEnvelopeResponse>(
+                GetScheduleSpecsQueryOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RevitDataRequestService.GetScheduleSpecsQueryEnvelopeAsync(request)
+            ),
+            BridgeOperations.Create<ScheduleQueryRequest, ScheduleQueryEnvelopeResponse>(
+                GetScheduleQueryOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RevitDataRequestService.GetScheduleQueryEnvelopeAsync(request)
+            ),
             BridgeOperations.Create<LoadedFamiliesCatalogRequest, LoadedFamiliesCatalogEnvelopeResponse>(
                 GetLoadedFamiliesCatalogOperationContract.Definition,
                 static (request, context, cancellationToken) =>

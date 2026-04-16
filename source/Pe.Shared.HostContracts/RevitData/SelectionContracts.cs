@@ -17,7 +17,8 @@ public record ElementContextQueryRequest(
 public record ElementContextQuery(
     ElementContextQueryKind Kind = ElementContextQueryKind.CurrentSelection,
     List<long>? ElementIds = null,
-    List<string>? ElementUniqueIds = null
+    List<string>? ElementUniqueIds = null,
+    RequestedParameterQuery? ParameterQuery = null
 );
 
 [JsonConverter(typeof(StringEnumConverter))]
@@ -131,7 +132,9 @@ public record ElementContextEntry(
     string? FamilyName,
     string? TypeName,
     string? Mark,
-    string? TagInstance,
+    string? EffectiveIdentity,
+    ElementIdentitySource EffectiveIdentitySource,
+    List<RequestedElementParameterValue>? RequestedParameters,
     string? LevelName,
     ElementContextElectricalData? Electrical,
     ElementContextConnectorSummary? Connectors,

@@ -6,6 +6,8 @@ using Pe.Shared.HostContracts.RevitData;
 namespace Pe.Revit.Global.Revit.Lib.Electrical;
 
 internal static class ElectricalCollectorSupport {
+    private const int DefaultRequestedParameterLimit = 10;
+
     public static HashSet<string> ToFilterSet(IEnumerable<string>? values) =>
         values == null
             ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -46,7 +48,84 @@ internal static class ElectricalCollectorSupport {
 
     public static string? ReadMark(Element element) => ReadString(element, BuiltInParameter.ALL_MODEL_MARK);
 
-    public static string? ReadTagInstance(Element element) => ReadString(element, "PE_G___TagInstance");
+    public static List<string> NormalizeRequestedParameterNames(
+        RequestedParameterQuery? parameterQuery,
+        List<RevitDataIssue> issues,
+        string issueContext
+    ) {
+        var requestedNames = (parameterQuery?.ParameterNames ?? [])
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (requestedNames.Count <= DefaultRequestedParameterLimit)
+            return requestedNames;
+
+        issues.Add(Warning(
+            $"{issueContext}RequestedParameterLimitExceeded",
+            $"Requested parameter count exceeded {DefaultRequestedParameterLimit}; truncating to the first {DefaultRequestedParameterLimit} names."
+        ));
+        return requestedNames.Take(DefaultRequestedParameterLimit).ToList();
+    }
+
+    public static List<RequestedElementParameterValue>? CollectRequestedParameters(
+        Element element,
+        IReadOnlyList<string> requestedParameterNames
+    ) {
+        if (requestedParameterNames.Count == 0)
+            return null;
+
+        return requestedParameterNames
+            .Select(name => ToRequestedParameterValue(element, name))
+            .ToList();
+    }
+
+    public static CollectedElementIdentity CollectElementIdentity(
+        Element element,
+        IReadOnlyList<string> requestedParameterNames
+    ) {
+        var requestedParameters = CollectRequestedParameters(element, requestedParameterNames);
+        var requestedIdentity = requestedParameters?
+            .FirstOrDefault(parameter => parameter.Found && !string.IsNullOrWhiteSpace(parameter.Value))?
+            .Value;
+        if (!string.IsNullOrWhiteSpace(requestedIdentity)) {
+            return new CollectedElementIdentity(
+                requestedIdentity.Trim(),
+                ElementIdentitySource.RequestedParameter,
+                requestedParameters
+            );
+        }
+
+        var mark = NullIfWhiteSpace(ReadMark(element));
+        if (!string.IsNullOrWhiteSpace(mark)) {
+            return new CollectedElementIdentity(
+                mark,
+                ElementIdentitySource.Mark,
+                requestedParameters
+            );
+        }
+
+        return new CollectedElementIdentity(
+            null,
+            ElementIdentitySource.None,
+            requestedParameters
+        );
+    }
+
+    public static XYZ? TryGetElementPoint(Element element) {
+        if (element.Location is LocationPoint locationPoint)
+            return locationPoint.Point;
+
+        if (element.Location is LocationCurve locationCurve)
+            return SafeGet(() => locationCurve.Curve?.Evaluate(0.5, true));
+
+        var boundingBox = SafeGet(() => element.get_BoundingBox(null));
+        if (boundingBox == null)
+            return null;
+
+        return (boundingBox.Min + boundingBox.Max) * 0.5;
+    }
 
     public static string? GetFamilyName(FamilyInstance instance) => instance.Symbol?.Family?.Name;
 
@@ -74,6 +153,16 @@ internal static class ElectricalCollectorSupport {
 
     public static bool HasElectricalConnector(FamilyInstance? family) =>
         CountElectricalConnectors(family) > 0;
+
+    public static bool IsProxyLikeRole(ElectricalInsightRole role) =>
+        role == ElectricalInsightRole.ProxyFixture ||
+        role == ElectricalInsightRole.InlineElectricalEquipment;
+
+    public static bool IsNearbyProxyCandidateRole(ElectricalInsightRole role) =>
+        role == ElectricalInsightRole.ProxyFixture ||
+        role == ElectricalInsightRole.InlineElectricalEquipment ||
+        role == ElectricalInsightRole.LoadFamilyInstance ||
+        role == ElectricalInsightRole.DownstreamPanel;
 
     public static List<ElectricalSystem> GetElectricalSystems(FamilyInstance? family) {
         var directSystems = family?.MEPModel?.GetElectricalSystems()?.OfType<ElectricalSystem>().ToList() ?? [];
@@ -196,7 +285,33 @@ internal static class ElectricalCollectorSupport {
         }
     }
 
+    private static RequestedElementParameterValue ToRequestedParameterValue(Element element, string parameterName) {
+        var parameter = element.LookupParameter(parameterName);
+        return new RequestedElementParameterValue(
+            parameterName,
+            parameter != null,
+            parameter == null ? null : NullIfWhiteSpace(parameter.AsString()) ?? NullIfWhiteSpace(parameter.AsValueString()),
+            parameter == null ? null : NullIfWhiteSpace(parameter.AsValueString()) ?? NullIfWhiteSpace(parameter.AsString()),
+            ToRequestedParameterStorageType(parameter?.StorageType ?? StorageType.None)
+        );
+    }
+
+    private static RequestedParameterStorageType ToRequestedParameterStorageType(StorageType storageType) =>
+        storageType switch {
+            StorageType.String => RequestedParameterStorageType.String,
+            StorageType.Integer => RequestedParameterStorageType.Integer,
+            StorageType.Double => RequestedParameterStorageType.Double,
+            StorageType.ElementId => RequestedParameterStorageType.ElementId,
+            _ => RequestedParameterStorageType.None
+        };
+
     private static bool IsProxyLikeElectricalCategory(FamilyInstance family) =>
         string.Equals(family.Category?.Name, "Electrical Fixtures", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(family.Category?.Name, "Electrical Devices", StringComparison.OrdinalIgnoreCase);
 }
+
+internal sealed record CollectedElementIdentity(
+    string? EffectiveIdentity,
+    ElementIdentitySource EffectiveIdentitySource,
+    List<RequestedElementParameterValue>? RequestedParameters
+);

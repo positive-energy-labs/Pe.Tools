@@ -51,6 +51,14 @@ internal static class HostEnvelopeResultExtensions {
         ToScheduleCatalogEnvelope(this HostEnvelopeResult<ScheduleCatalogData> result) =>
         new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
 
+    public static ScheduleSpecsQueryEnvelopeResponse ToScheduleSpecsQueryEnvelope(
+        this HostEnvelopeResult<ScheduleSpecsQueryData> result
+    ) => new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
+
+    public static ScheduleQueryEnvelopeResponse ToScheduleQueryEnvelope(
+        this HostEnvelopeResult<ScheduleQueryData> result
+    ) => new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
+
     public static LoadedFamiliesCatalogEnvelopeResponse ToLoadedFamiliesCatalogEnvelope(
         this HostEnvelopeResult<LoadedFamiliesCatalogData> result
     ) => new(result.Ok, result.Code, result.Message, result.Issues, result.Data);

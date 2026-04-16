@@ -48,6 +48,15 @@ public record ElectricalLoadClassificationFilter {
 }
 
 [ExportTsInterface]
+public record ElectricalCircuitsCatalogOptions(
+    RequestedParameterQuery? ParameterQuery = null,
+    bool IncludeNearbyProxyContext = false,
+    double NearbyRadiusFeet = 8.0,
+    int MaxNearbyCandidatesPerElement = 4,
+    int MaxNearbyCandidatesPerCircuit = 8
+);
+
+[ExportTsInterface]
 public record ElectricalPanelsCatalogRequest(
     ElectricalPanelFilter? Filter,
     BridgeSessionSelector? Target = null
@@ -56,6 +65,7 @@ public record ElectricalPanelsCatalogRequest(
 [ExportTsInterface]
 public record ElectricalCircuitsCatalogRequest(
     ElectricalCircuitFilter? Filter,
+    ElectricalCircuitsCatalogOptions? Options = null,
     BridgeSessionSelector? Target = null
 ) : IBridgeSessionRequest;
 
@@ -103,10 +113,38 @@ public record ElectricalCircuitConnectedElementEntry(
     string? FamilyName,
     string? TypeName,
     string? Mark,
-    string? TagInstance,
+    string? EffectiveIdentity,
+    ElementIdentitySource EffectiveIdentitySource,
     ElectricalInsightRole Role,
     bool HasElectricalConnector,
-    int ElectricalSystemCount
+    int ElectricalSystemCount,
+    List<RequestedElementParameterValue>? RequestedParameters
+);
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum ElectricalNearbyProxyCandidateMatchReason {
+    NearbyIdentityCandidate,
+    RequestedParameterIdentityMatch,
+    MarkIdentityMatch
+}
+
+[ExportTsInterface]
+public record ElectricalNearbyProxyCandidateEntry(
+    long ElementId,
+    string ElementUniqueId,
+    string ClassName,
+    string? CategoryName,
+    string Name,
+    string? FamilyName,
+    string? TypeName,
+    string? Mark,
+    string? EffectiveIdentity,
+    ElementIdentitySource EffectiveIdentitySource,
+    ElectricalInsightRole Role,
+    double DistanceFeet,
+    ElectricalNearbyProxyCandidateMatchReason MatchReason,
+    List<RequestedElementParameterValue>? RequestedParameters
 );
 
 [ExportTsInterface]
@@ -147,10 +185,14 @@ public record ElectricalCircuitCatalogEntry(
     bool IsMultipleNetwork,
     bool HasCustomCircuitPath,
     bool HasPathOffset,
+    bool HasProxyLikeConnectedElements,
+    int ProxyLikeConnectedElementCount,
+    bool ProxyInferenceRecommended,
     ElectricalInsightRole? PrimaryConnectedRole,
     List<ElectricalInsightRole> ConnectedRoles,
     List<ElectricalCircuitConnectedElementEntry> ConnectedElements,
-    List<ElectricalCircuitWireEntry> Wires
+    List<ElectricalCircuitWireEntry> Wires,
+    List<ElectricalNearbyProxyCandidateEntry>? NearbyProxyCandidates
 );
 
 [ExportTsInterface]
