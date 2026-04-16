@@ -8,18 +8,18 @@ using ContractScheduleFieldFormatSpec = Pe.Shared.HostContracts.RevitData.Schedu
 using ContractScheduleFieldSpec = Pe.Shared.HostContracts.RevitData.ScheduleFieldSpec;
 using ContractScheduleFilterSpec = Pe.Shared.HostContracts.RevitData.ScheduleFilterSpec;
 using ContractScheduleSortGroupSpec = Pe.Shared.HostContracts.RevitData.ScheduleSortGroupSpec;
-using ContractScheduleSpec = Pe.Shared.HostContracts.RevitData.ScheduleSpec;
+using ContractScheduleProfile = Pe.Shared.HostContracts.RevitData.ScheduleProfile;
 using ContractScheduleTitleBorderSpec = Pe.Shared.HostContracts.RevitData.ScheduleTitleBorderSpec;
 using ContractScheduleTitleStyleSpec = Pe.Shared.HostContracts.RevitData.ScheduleTitleStyleSpec;
-using InternalCombinedParameterSpec = Pe.Revit.Global.Revit.Lib.Schedules.Fields.CombinedParameterSpec;
-using InternalScheduleFieldFormatSpec = Pe.Revit.Global.Revit.Lib.Schedules.Fields.ScheduleFieldFormatSpec;
-using InternalScheduleFieldSpec = Pe.Revit.Global.Revit.Lib.Schedules.Fields.ScheduleFieldSpec;
-using InternalScheduleFilterSpec = Pe.Revit.Global.Revit.Lib.Schedules.Filters.ScheduleFilterSpec;
-using InternalScheduleSpec = Pe.Revit.Global.Revit.Lib.Schedules.ScheduleSpec;
-using InternalScheduleSortGroupSpec = Pe.Revit.Global.Revit.Lib.Schedules.SortGroup.ScheduleSortGroupSpec;
-using InternalScheduleTitleStyleSpec = Pe.Revit.Global.Revit.Lib.Schedules.TitleStyle.ScheduleTitleStyleSpec;
+using InternalCombinedParameterSpec = Pe.Revit.Global.Revit.Documents.Schedules.Fields.CombinedParameterSpec;
+using InternalScheduleFieldFormatSpec = Pe.Revit.Global.Revit.Documents.Schedules.Fields.ScheduleFieldFormatSpec;
+using InternalScheduleFieldSpec = Pe.Revit.Global.Revit.Documents.Schedules.Fields.ScheduleFieldSpec;
+using InternalScheduleFilterSpec = Pe.Revit.Global.Revit.Documents.Schedules.Filters.ScheduleFilterSpec;
+using InternalScheduleProfile = Pe.Revit.Global.Revit.Documents.Schedules.ScheduleProfile;
+using InternalScheduleSortGroupSpec = Pe.Revit.Global.Revit.Documents.Schedules.SortGroup.ScheduleSortGroupSpec;
+using InternalScheduleTitleStyleSpec = Pe.Revit.Global.Revit.Documents.Schedules.TitleStyle.ScheduleTitleStyleSpec;
 
-namespace Pe.Revit.Global.Revit.Lib.Schedules;
+namespace Pe.Revit.Global.Revit.Documents.Schedules;
 
 internal static class ScheduleCollectorSupport {
     public static HashSet<string> ToFilterSet(IEnumerable<string>? values) =>
@@ -61,11 +61,11 @@ internal static class ScheduleCollectorSupport {
             ))
             .ToList();
 
-    public static List<string> CollectFieldParameterNames(InternalScheduleSpec spec) {
+    public static List<string> CollectFieldParameterNames(InternalScheduleProfile profile) {
         var orderedNames = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var field in spec.Fields) {
+        foreach (var field in profile.Fields) {
             if (field.CombinedParameters is { Count: > 0 }) {
                 foreach (var combinedParameter in field.CombinedParameters) {
                     AddName(combinedParameter.ParameterName);
@@ -97,18 +97,18 @@ internal static class ScheduleCollectorSupport {
             .Select(ToContractFilter)
             .ToList();
 
-    public static ContractScheduleSpec ToContractSpec(InternalScheduleSpec spec) =>
+    public static ContractScheduleProfile ToContractProfile(InternalScheduleProfile profile) =>
         new(
-            spec.Name,
-            spec.CategoryName.ToString(),
-            spec.ViewTemplateName,
-            ToContractTitleStyle(spec.TitleStyle),
-            spec.IsItemized,
-            spec.FilterBySheet,
-            spec.Fields.Select(ToContractField).ToList(),
-            spec.SortGroup.Select(ToContractSortGroup).ToList(),
-            spec.Filters.Select(ToContractFilter).ToList(),
-            spec.OnFinishSettings == null ? null : new ScheduleOnFinishSettings(spec.OnFinishSettings.OpenScheduleOnFinish)
+            profile.Name,
+            profile.CategoryName.ToString(),
+            profile.ViewTemplateName,
+            ToContractTitleStyle(profile.TitleStyle),
+            profile.IsItemized,
+            profile.FilterBySheet,
+            profile.Fields.Select(ToContractField).ToList(),
+            profile.SortGroup.Select(ToContractSortGroup).ToList(),
+            profile.Filters.Select(ToContractFilter).ToList(),
+            profile.OnFinishSettings == null ? null : new ScheduleOnFinishSettings(profile.OnFinishSettings.OpenScheduleOnFinish)
         );
 
     public static List<ScheduleParameterUsageEntry> CollectParameterUsages(

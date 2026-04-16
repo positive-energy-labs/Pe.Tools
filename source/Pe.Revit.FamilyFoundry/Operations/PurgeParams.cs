@@ -1,7 +1,7 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Extensions.FamParameter.Formula;
-using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Plans;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 

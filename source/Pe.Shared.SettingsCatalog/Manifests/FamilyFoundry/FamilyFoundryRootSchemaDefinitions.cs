@@ -3,8 +3,8 @@ using System.Runtime.CompilerServices;
 
 namespace Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 
-internal sealed class ProfileFamilyManagerSchemaDefinition : SettingsSchemaDefinition<FFManagerSettings> {
-    public override void Configure(ISettingsSchemaBuilder<FFManagerSettings> builder) =>
+internal sealed class ProfileFamilyManagerSchemaDefinition : SettingsSchemaDefinition<FFManagerProfile> {
+    public override void Configure(ISettingsSchemaBuilder<FFManagerProfile> builder) =>
         builder.Data(SchemaDatasetIds.ParameterCatalog, data => {
             data.Provider(SchemaDatasetIds.ParameterCatalog);
             data.Load(SettingsSchemaDatasetLoadMode.Eager);
@@ -13,8 +13,8 @@ internal sealed class ProfileFamilyManagerSchemaDefinition : SettingsSchemaDefin
         });
 }
 
-internal sealed class ProfileRemapSchemaDefinition : SettingsSchemaDefinition<FFMigratorSettings> {
-    public override void Configure(ISettingsSchemaBuilder<FFMigratorSettings> builder) =>
+internal sealed class ProfileRemapSchemaDefinition : SettingsSchemaDefinition<FFMigratorProfile> {
+    public override void Configure(ISettingsSchemaBuilder<FFMigratorProfile> builder) =>
         builder.Data(SchemaDatasetIds.ParameterCatalog, data => {
             data.Provider(SchemaDatasetIds.ParameterCatalog);
             data.Load(SettingsSchemaDatasetLoadMode.Eager);

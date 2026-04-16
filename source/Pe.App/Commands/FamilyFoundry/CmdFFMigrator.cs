@@ -1,13 +1,12 @@
-﻿using Autodesk.Revit.Attributes;
+using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Pe.App.Commands.Palette.FamilyPalette;
 using Pe.Revit.FamilyFoundry;
+using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
-using Pe.Revit.FamilyFoundry.OperationSettings;
-using Pe.Revit.FamilyFoundry.Resolution;
-using Pe.Revit.FamilyFoundry.Snapshots;
+using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.Global;
 using Pe.Revit.Global.Revit.Lib;
 using Pe.Revit.Global.Revit.Ui;
@@ -16,15 +15,10 @@ using Pe.Shared.SettingsCatalog;
 using Pe.Shared.SettingsCatalog.Manifests;
 using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 using Pe.Shared.StorageRuntime;
-using Pe.Shared.StorageRuntime;
-using Pe.Shared.StorageRuntime;
-using Pe.Shared.StorageRuntime.Modules;
 using Pe.Shared.StorageRuntime.Modules;
 using Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 using Pe.Tools.SettingsEditor;
 using Serilog.Events;
-using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.IO;
 using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
@@ -35,7 +29,7 @@ namespace Pe.Tools.Commands.FamilyFoundry;
 public class CmdFFMigrator : IExternalCommand {
     public const string AddinKey = nameof(CmdFFMigrator);
     public const string DisplayName = "FF Migrator";
-    private static readonly SettingsModuleManifest<FFMigratorSettings> SettingsModule = FFMigratorManifest.Module;
+    private static readonly SettingsModuleManifest<FFMigratorProfile> SettingsModule = FFMigratorManifest.Module;
 
     public Result Execute(
         ExternalCommandData commandData,
@@ -46,7 +40,7 @@ public class CmdFFMigrator : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var window = new FoundryPaletteBuilder<FFMigratorSettings>(DisplayName, SettingsModule, doc, uiDoc)
+            var window = new FoundryPaletteBuilder<FFMigratorProfile>(DisplayName, SettingsModule, doc, uiDoc)
                 .WithAction("Open Settings Editor", this.HandleOpenSettingsEditor)
                 .WithAction("Open Profile File", this.HandleOpenFile,
                     ctx => ctx.SelectedProfile != null)
@@ -67,7 +61,7 @@ public class CmdFFMigrator : IExternalCommand {
         }
     }
 
-    private void HandlePlaceFamilies(FoundryContext<FFMigratorSettings> context) {
+    private void HandlePlaceFamilies(FoundryContext<FFMigratorProfile> context) {
         if (context.SelectedProfile == null) return;
 
         try {
@@ -86,7 +80,7 @@ public class CmdFFMigrator : IExternalCommand {
         }
     }
 
-    private void HandleOpenFile(FoundryContext<FFMigratorSettings> context) {
+    private void HandleOpenFile(FoundryContext<FFMigratorProfile> context) {
         if (context.SelectedProfile == null) return;
         var result = OpenProfileInDefaultApp(
             context.SelectedProfile.TextPrimary,
@@ -99,7 +93,7 @@ public class CmdFFMigrator : IExternalCommand {
         new Ballogger().Add(level, new StackFrame(), message).Show();
     }
 
-    private void HandleProcessFamilies(FoundryContext<FFMigratorSettings> ctx) {
+    private void HandleProcessFamilies(FoundryContext<FFMigratorProfile> ctx) {
         if (ctx.SelectedProfile == null) return;
         if (!ctx.PreviewData.IsValid) {
             new Ballogger()
@@ -112,11 +106,14 @@ public class CmdFFMigrator : IExternalCommand {
             ctx.SelectedProfile.TextPrimary,
             SettingsModule.DefaultRootKey
         );
-        var runResult = ProcessFamiliesCore(
-            ctx.UiDoc.Application,
+        var runOutput = RuntimeStorageClient.Default.Module(AddinKey).Output().TimestampedSubDir();
+        var selectedFamilies = Pickers.GetSelectedFamilies(ctx.UiDoc);
+        var runResult = ctx.UiDoc.Document.ApplyFamilyMigrationProfile(
             profile,
             ctx.SelectedProfile.TextPrimary,
-            ctx.OnFinishSettings
+            selectedFamilies,
+            ctx.OnFinishSettings,
+            runOutput
         );
         var level = runResult.Success ? LogEventLevel.Information : LogEventLevel.Error;
         var message = runResult.Success
@@ -134,7 +131,7 @@ public class CmdFFMigrator : IExternalCommand {
         }
     }
 
-    private void HandleOpenSettingsEditor(FoundryContext<FFMigratorSettings> context) {
+    private void HandleOpenSettingsEditor(FoundryContext<FFMigratorProfile> context) {
         var selectedProfileName = context.SelectedProfile?.TextPrimary;
         var launched = SettingsEditorBrowser.TryLaunch(
             SettingsModule.ModuleKey,
@@ -161,7 +158,7 @@ public class CmdFFMigrator : IExternalCommand {
             .Show();
     }
 
-    internal static FFMigratorPlaceFamiliesActionResult PlaceFamiliesCore(UIApplication uiApp, FFMigratorSettings profile) {
+    internal static FFMigratorPlaceFamiliesActionResult PlaceFamiliesCore(UIApplication uiApp, FFMigratorProfile profile) {
         var doc = uiApp.ActiveUIDocument?.Document;
         if (doc == null)
             return new FFMigratorPlaceFamiliesActionResult(false, "No active document.", [], 0);
@@ -188,91 +185,7 @@ public class CmdFFMigrator : IExternalCommand {
         }
     }
 
-    internal static FFMigratorProcessFamiliesActionResult ProcessFamiliesCore(
-        UIApplication uiApp,
-        FFMigratorSettings profile,
-        string profileName,
-        LoadAndSaveOptions? onFinishSettings = null
-    ) {
-        var uiDoc = uiApp.ActiveUIDocument;
-        var doc = uiDoc?.Document;
-        if (doc == null || uiDoc == null) {
-            return new FFMigratorProcessFamiliesActionResult(
-                false,
-                "No active document.",
-                null,
-                [],
-                0,
-                0
-            );
-        }
-
-        var storage = RuntimeStorageClient.Default.Module(AddinKey);
-
-        try {
-            using var tempFile = new TempSharedParamFile(doc);
-            var apsParamData = BaseProfileSettings.ConvertToSharedParameterDefinitions(
-                profile.GetFilteredApsParamModels(),
-                tempFile
-            );
-            var queue = BuildQueueCore(profile, apsParamData);
-            var collectorQueue = new CollectorQueue()
-                .Add(new ParamSectionCollector())
-                .Add(new LookupTableSectionCollector())
-                .Add(new RefPlaneSectionCollector());
-            var finishSettings = onFinishSettings ?? new LoadAndSaveOptions { OpenOutputFilesOnCommandFinish = false };
-
-            var resultBuilder = new ProcessingResultBuilder(storage)
-                .WithProfile(profile, profileName)
-                .WithOperationMetadata(queue);
-            var outputFolderPath = resultBuilder.RunOutputPath;
-            using var processor = new OperationProcessor(doc, profile.ExecutionOptions);
-            var logs = processor
-                .SelectFamilies(() => {
-                    var picked = Pickers.GetSelectedFamilies(uiDoc);
-                    return picked.Any() ? picked : profile.GetFamilies(doc);
-                })
-                .ProcessQueue(queue, collectorQueue, outputFolderPath, finishSettings);
-            foreach (var familyCtx in logs.contexts)
-                _ = resultBuilder.WriteSingleFamilyOutput(familyCtx);
-
-            resultBuilder.WriteMultiFamilySummary(logs.totalMs, finishSettings.OpenOutputFilesOnCommandFinish);
-            var processedFamilyNames = logs.contexts
-                .Select(c => c.FamilyName)
-                .Where(name => !string.IsNullOrWhiteSpace(name) &&
-                               !string.Equals(name, "ERROR", StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            var errors = logs.contexts
-                .Select(ctx => {
-                    var (_, error) = ctx.OperationLogs;
-                    return error;
-                })
-                .Where(error => error != null)
-                .ToList();
-            var hasErrors = errors.Count > 0;
-            var errorMessage = errors.FirstOrDefault()?.Message;
-
-            return new FFMigratorProcessFamiliesActionResult(
-                !hasErrors,
-                hasErrors ? errorMessage ?? "Processing completed with errors. Review generated logs." : null,
-                outputFolderPath,
-                processedFamilyNames,
-                logs.totalMs,
-                logs.contexts.Count
-            );
-        } catch (Exception ex) {
-            return new FFMigratorProcessFamiliesActionResult(
-                false,
-                ex.Message,
-                null,
-                [],
-                0,
-                0
-            );
-        }
-    }
-
-    internal static OperationQueue BuildQueueCore(FFMigratorSettings profile, List<SharedParameterDefinition> apsParamData) {
+    internal static OperationQueue BuildQueueCore(FFMigratorProfile profile, List<SharedParameterDefinition> apsParamData) {
         var pClone = DeepCloneProfile(profile);
         var apsParamNames = apsParamData.Select(p => p.ExternalDefinition.Name).ToList();
         var mappingDataAllNames = pClone.AddAndMapSharedParams.MappingData
@@ -305,18 +218,18 @@ public class CmdFFMigrator : IExternalCommand {
             .Add(new SortParams(pClone.SortParams));
     }
 
-    private static FFMigratorSettings DeepCloneProfile(FFMigratorSettings profile) {
+    private static FFMigratorProfile DeepCloneProfile(FFMigratorProfile profile) {
         var settings = new JsonSerializerSettings {
             ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
             PreserveReferencesHandling = PreserveReferencesHandling.None,
             MaxDepth = 128
         };
         var json = JsonConvert.SerializeObject(profile, Formatting.None, settings);
-        var clone = JsonConvert.DeserializeObject<FFMigratorSettings>(json, settings);
-        return clone ?? throw new InvalidOperationException("Failed to clone ProfileRemap settings.");
+        return JsonConvert.DeserializeObject<FFMigratorProfile>(json, settings)
+               ?? throw new InvalidOperationException("Failed to clone FF migrator profile.");
     }
 
-    private static List<FamilyParamDefinitionModel> BuildInternalParams(FFMigratorSettings profile) {
+    private static List<FamilyParamDefinitionModel> BuildInternalParams(FFMigratorProfile profile) {
         List<FamilyParamDefinitionModel> paramList = [
             new() {
                 Name = "_FOUNDRY LAST PROCESSED AT",
@@ -337,7 +250,7 @@ public class CmdFFMigrator : IExternalCommand {
     internal static string ResolveProfileFilePath(string relativePath, string? subDirectory = null) =>
         ResolveStorage().Documents().ResolveDocumentPath(relativePath, ResolveRootKey(subDirectory));
 
-    internal static FFMigratorSettings ReadProfile(
+    internal static FFMigratorProfile ReadProfile(
         string relativePath,
         string? subDirectory = null
     ) => ResolveStorage().Settings().ReadRequired(relativePath, ResolveRootKey(subDirectory));
@@ -364,22 +277,13 @@ public class CmdFFMigrator : IExternalCommand {
         }
     }
 
-    private static ModuleStorage<FFMigratorSettings> ResolveStorage() => RuntimeStorageClient.Default.Module(SettingsModule);
+    private static ModuleStorage<FFMigratorProfile> ResolveStorage() => RuntimeStorageClient.Default.Module(SettingsModule);
 
     private static string ResolveRootKey(string? subDirectory) =>
         string.IsNullOrWhiteSpace(subDirectory)
             ? SettingsModule.DefaultRootKey
             : subDirectory;
 }
-
-internal record FFMigratorProcessFamiliesActionResult(
-    bool Success,
-    string? Error,
-    string? OutputFolderPath,
-    List<string> ProcessedFamilyNames,
-    double TotalMs,
-    int FamilyCount
-);
 
 internal record FFMigratorPlaceFamiliesActionResult(
     bool Success,

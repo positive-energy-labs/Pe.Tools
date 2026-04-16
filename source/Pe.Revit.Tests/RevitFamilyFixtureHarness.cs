@@ -247,14 +247,14 @@ internal static class RevitFamilyFixtureHarness {
                ?? throw new InvalidOperationException($"Failed to open family document '{familyPath}'.");
     }
 
-    public static FFManagerSettings LoadProfileFixture(string fixtureFileName) {
+    public static FFManagerProfile LoadProfileFixture(string fixtureFileName) {
         return LoadProfileFixtureContract(fixtureFileName).Value;
     }
 
-    public static SettingsJsonRoundTripResult<FFManagerSettings> LoadProfileFixtureContract(string fixtureFileName) {
+    public static SettingsJsonRoundTripResult<FFManagerProfile> LoadProfileFixtureContract(string fixtureFileName) {
         var fixturePath = GetProfileFixturePath(fixtureFileName);
         var json = File.ReadAllText(fixturePath);
-        return SettingsJsonContract.ValidateAndRoundTrip<FFManagerSettings>(json, fixturePath);
+        return SettingsJsonContract.ValidateAndRoundTrip<FFManagerProfile>(json, fixturePath);
     }
 
     public static void AssertSavedFamilyFileIsOpenable(

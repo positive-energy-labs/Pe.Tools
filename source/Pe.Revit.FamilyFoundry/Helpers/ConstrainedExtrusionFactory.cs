@@ -1,4 +1,4 @@
-﻿using Autodesk.Revit.DB;
+using Autodesk.Revit.DB;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.Snapshots;
 using Serilog;
@@ -12,7 +12,7 @@ internal static class ConstrainedExtrusionFactory {
 
     public static ExtrusionCreationResult CreateRectangle(
         Document doc,
-        ConstrainedRectangleExtrusionSpec spec,
+        ConstrainedRectangleExtrusionSnapshot spec,
         List<LogEntry> logs,
         string key,
         SketchPlane? sketchPlaneOverride = null
@@ -93,7 +93,7 @@ internal static class ConstrainedExtrusionFactory {
 
     public static ExtrusionCreationResult CreateCircle(
         Document doc,
-        ConstrainedCircleExtrusionSpec spec,
+        ConstrainedCircleExtrusionSnapshot spec,
         List<LogEntry> logs,
         string key,
         SketchPlane? sketchPlaneOverride = null,
@@ -201,7 +201,7 @@ internal static class ConstrainedExtrusionFactory {
     private static void TryLabelCircleDiameter(
         Document doc,
         Extrusion extrusion,
-        ConstrainedCircleExtrusionSpec spec,
+        ConstrainedCircleExtrusionSnapshot spec,
         List<LogEntry> logs,
         string key
     ) {

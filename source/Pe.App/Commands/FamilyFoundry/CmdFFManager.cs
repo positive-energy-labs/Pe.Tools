@@ -1,20 +1,16 @@
-﻿using Autodesk.Revit.Attributes;
+using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.Revit.FamilyFoundry;
+using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
-using Pe.Revit.FamilyFoundry.OperationSettings;
-using Pe.Revit.FamilyFoundry.Resolution;
-using Pe.Revit.FamilyFoundry.Snapshots;
+using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.Global;
-using Pe.Revit.Global.Revit.Lib;
 using Pe.Revit.Global.Revit.Ui;
-using Pe.Revit.Global.Utils.Files;
 using Pe.Shared.SettingsCatalog;
 using Pe.Shared.SettingsCatalog.Manifests;
 using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 using Pe.Shared.StorageRuntime;
-using Pe.Shared.StorageRuntime.Modules;
 using Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 using Serilog.Events;
 using System.Diagnostics;
@@ -26,7 +22,7 @@ namespace Pe.Tools.Commands.FamilyFoundry;
 public class CmdFFManager : IExternalCommand {
     public const string AddinKey = nameof(CmdFFManager);
     public const string DisplayName = "FF Manager";
-    private static readonly SettingsModuleManifest<FFManagerSettings> SettingsModule = FFManagerManifest.Module;
+    private static readonly SettingsModuleManifest<FFManagerProfile> SettingsModule = FFManagerManifest.Module;
 
     public Result Execute(
         ExternalCommandData commandData,
@@ -37,7 +33,7 @@ public class CmdFFManager : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var window = new FoundryPaletteBuilder<FFManagerSettings>(DisplayName, SettingsModule, doc, uiDoc)
+            var window = new FoundryPaletteBuilder<FFManagerProfile>(DisplayName, SettingsModule, doc, uiDoc)
                 .WithAction("Apply Profile", this.HandleApplyProfile,
                     ctx => ctx.PreviewData?.IsValid == true)
                 .WithQueueBuilder(BuildQueue)
@@ -51,7 +47,7 @@ public class CmdFFManager : IExternalCommand {
         }
     }
 
-    private void HandleApplyProfile(FoundryContext<FFManagerSettings> ctx) {
+    private void HandleApplyProfile(FoundryContext<FFManagerProfile> ctx) {
         if (!ctx.PreviewData.IsValid) {
             new Ballogger()
                 .Add(LogEventLevel.Error, new StackFrame(), "Cannot apply profile - profile has validation errors")
@@ -62,27 +58,19 @@ public class CmdFFManager : IExternalCommand {
         // Load profile fresh for execution
         var profile = ctx.Settings.ReadRequired(ctx.SelectedProfile.TextPrimary);
 
-        // Get raw APS parameter models and convert with fresh TempSharedParamFile
-        var apsParamModels = profile.GetFilteredApsParamModels();
-
-        using var tempFile = new TempSharedParamFile(ctx.Doc);
-        var apsParamData = BaseProfileSettings.ConvertToSharedParameterDefinitions(
-            apsParamModels, tempFile);
-
-        var queue = BuildQueue(profile, apsParamData);
-        var processResult = ProcessFamiliesCore(
-            ctx.Doc,
+        var runOutput = OutputStorage.ExactDir(ctx.Storage.Output().DirectoryPath);
+        var applyResult = ctx.Doc.ApplyFamilyProfile(
             profile,
             ctx.SelectedProfile.TextPrimary,
             ctx.OnFinishSettings,
-            ctx.Storage.Output().DirectoryPath);
+            runOutput);
 
-        if (!processResult.Success) {
-            throw new InvalidOperationException(processResult.Error ?? "FF Manager processing failed.");
+        if (!applyResult.Success) {
+            throw new InvalidOperationException(applyResult.Error ?? "FF Manager processing failed.");
         }
 
         var balloon = new Ballogger();
-        foreach (var logCtx in processResult.Contexts) {
+        foreach (var logCtx in applyResult.Contexts) {
             _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
                 $"Processed {logCtx.FamilyName} in {logCtx.TotalMs}ms");
         }
@@ -92,98 +80,12 @@ public class CmdFFManager : IExternalCommand {
         // No post-processing for Manager - it's for family documents only
     }
 
-    public static FFManagerProcessFamiliesActionResult ProcessFamiliesCore(
-        Document doc,
-        FFManagerSettings profile,
-        string profileName,
-        LoadAndSaveOptions? onFinishSettings = null,
-        string? outputFolderPath = null,
-        ExecutionOptions? executionOptionsOverride = null
-    ) {
-        if (doc == null) {
-            return new FFManagerProcessFamiliesActionResult(
-                false,
-                "No document provided.",
-                [],
-                0,
-                null);
-        }
-
-        OutputStorage? runOutput = null;
-
-        try {
-            var apsParamModels = profile.GetFilteredApsParamModels();
-
-            using var tempFile = new TempSharedParamFile(doc);
-            var apsParamData = BaseProfileSettings.ConvertToSharedParameterDefinitions(
-                apsParamModels,
-                tempFile);
-
-            var queue = BuildQueue(profile, apsParamData);
-            var finishSettings = onFinishSettings ?? new LoadAndSaveOptions {
-                OpenOutputFilesOnCommandFinish = false,
-                LoadFamily = false,
-                SaveFamilyToInternalPath = false,
-                SaveFamilyToOutputDir = false
-            };
-
-            var executionOptions = executionOptionsOverride ?? new ExecutionOptions {
-                SingleTransaction = false,
-                OptimizeTypeOperations = false
-            };
-            var collectorQueue = new CollectorQueue()
-                .Add(new ParamSectionCollector())
-                .Add(new LookupTableSectionCollector())
-                .Add(new RefPlaneSectionCollector())
-                .Add(new ExtrusionSectionCollector());
-
-            if (!string.IsNullOrWhiteSpace(outputFolderPath))
-                runOutput = OutputStorage.ExactDir(outputFolderPath);
-
-            using var processor = new OperationProcessor(doc, executionOptions);
-            var logs = processor
-                .SelectFamilies(() => null)
-                .ProcessQueue(queue, collectorQueue, runOutput?.DirectoryPath, finishSettings);
-
-            if (runOutput != null) {
-                var resultBuilder = new ProcessingResultBuilder(runOutput)
-                    .WithProfile(profile, profileName)
-                    .WithOperationMetadata(queue);
-
-                foreach (var context in logs.contexts)
-                    _ = resultBuilder.WriteSingleFamilyOutput(context, finishSettings.OpenOutputFilesOnCommandFinish);
-
-                if (logs.contexts.Count > 1)
-                    resultBuilder.WriteMultiFamilySummary(logs.totalMs, finishSettings.OpenOutputFilesOnCommandFinish);
-            }
-
-            var errors = logs.contexts
-                .Select(context => context.OperationLogs.AsTuple().error)
-                .Where(error => error != null)
-                .ToList();
-
-            return new FFManagerProcessFamiliesActionResult(
-                errors.Count == 0,
-                errors.FirstOrDefault()?.Message,
-                logs.contexts,
-                logs.totalMs,
-                runOutput?.DirectoryPath);
-        } catch (Exception ex) {
-            return new FFManagerProcessFamiliesActionResult(
-                false,
-                ex.Message,
-                [],
-                0,
-                runOutput?.DirectoryPath);
-        }
-    }
-
     /// <summary>
     ///     Builds the operation queue from profile settings and APS parameter data.
     ///     Manager-specific: includes RefPlane operations and subcategories.
     /// </summary>
     private static OperationQueue BuildQueue(
-        FFManagerSettings profile,
+        FFManagerProfile profile,
         List<SharedParameterDefinition> apsParamData
     ) {
         // Hardcoded reference plane subcategory specs
@@ -277,11 +179,3 @@ public class CmdFFManager : IExternalCommand {
             PerTypeAssignmentsTable = []
         };
 }
-
-public record FFManagerProcessFamiliesActionResult(
-    bool Success,
-    string? Error,
-    List<FamilyProcessingContext> Contexts,
-    double TotalMs,
-    string? OutputFolderPath
-);

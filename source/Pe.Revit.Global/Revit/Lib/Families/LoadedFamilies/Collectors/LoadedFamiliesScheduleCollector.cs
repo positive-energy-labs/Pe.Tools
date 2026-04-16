@@ -1,6 +1,6 @@
 using Autodesk.Revit.DB.Structure;
 using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
-using Pe.Revit.Global.Revit.Lib.Schedules;
+using Pe.Revit.Global.Revit.Documents.Schedules;
 using Pe.Shared.RevitData.Families;
 using Serilog;
 using System.Diagnostics;
@@ -31,14 +31,14 @@ public static class LoadedFamiliesScheduleCollector {
             var categoryPlacements = context.GetPlacedInstancesForCategory(categoryGroup.CategoryId).ToList();
             foreach (var schedule in schedules) {
                 var serializeStopwatch = Stopwatch.StartNew();
-                var spec = ScheduleHelper.SerializeSchedule(schedule);
-                spec.FilterBySheet = false;
+                var profile = schedule.CaptureScheduleProfile();
+                profile.FilterBySheet = false;
                 var serializeElapsed = serializeStopwatch.Elapsed;
 
                 var evaluateStopwatch = Stopwatch.StartNew();
-                var matchingFamilyIds = spec.Filters.Count == 0
+                var matchingFamilyIds = profile.Filters.Count == 0
                     ? categoryGroup.FamilyElements.Select(family => family.Id.Value()).ToList()
-                    : EvaluateScheduleAgainstPlacements(doc, schedule, spec, categoryPlacements);
+                    : EvaluateScheduleAgainstPlacements(doc, schedule, profile, categoryPlacements);
                 var evaluateElapsed = evaluateStopwatch.Elapsed;
 
                 foreach (var familyId in matchingFamilyIds) {
@@ -75,11 +75,10 @@ public static class LoadedFamiliesScheduleCollector {
                 continue;
 
             foreach (var schedule in schedules) {
-                var spec = ScheduleHelper.SerializeSchedule(schedule);
-                spec.FilterBySheet = false;
-                var matchingFamilyIds = ScheduleHelper.GetFamilyIdsMatchingFiltersAnyType(
-                    doc,
-                    spec,
+                var profile = schedule.CaptureScheduleProfile();
+                profile.FilterBySheet = false;
+                var matchingFamilyIds = doc.GetFamilyIdsMatchingScheduleProfileFiltersAnyType(
+                    profile,
                     categoryGroup.FamilyElements
                 );
 
@@ -106,13 +105,13 @@ public static class LoadedFamiliesScheduleCollector {
     private static List<long> EvaluateScheduleAgainstPlacements(
         Document doc,
         ViewSchedule sourceSchedule,
-        ScheduleSpec spec,
+        ScheduleProfile profile,
         IReadOnlyList<TempPlacedSymbolRecord> placements
     ) {
         if (placements.Count == 0)
             return [];
 
-        var matchingFamilyIds = ScheduleHelper.GetFamilyIdsMatchingFiltersAnyType(doc, spec, placements);
+        var matchingFamilyIds = doc.GetFamilyIdsMatchingScheduleProfileFiltersAnyType(profile, placements);
         Log.Debug(
             "Loaded families matrix evaluated schedule '{ScheduleName}' against {PlacementCount} placed symbols. Matches={MatchCount}",
             sourceSchedule.Name,

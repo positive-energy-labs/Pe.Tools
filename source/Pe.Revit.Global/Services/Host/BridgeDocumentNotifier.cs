@@ -1,4 +1,4 @@
-﻿using Autodesk.Revit.DB.Events;
+using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI.Events;
 using Pe.Revit.Global.Revit.Documents;
 using Pe.Shared.HostContracts.Protocol;
@@ -115,7 +115,7 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
             HostInvalidationDomain.SettingsFieldOptions,
             HostInvalidationDomain.SettingsParameterCatalog,
             HostInvalidationDomain.ScheduleCatalog,
-            HostInvalidationDomain.ScheduleSpecsQuery,
+            HostInvalidationDomain.ScheduleProfilesQuery,
             HostInvalidationDomain.ScheduleQuery,
             HostInvalidationDomain.LoadedFamiliesCatalog,
             HostInvalidationDomain.LoadedFamiliesMatrix,

@@ -1,11 +1,11 @@
-﻿using Pe.Revit.FamilyFoundry.Snapshots;
-using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.FamilyFoundry.Snapshots;
+using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.FamilyFoundry.Operations;
-using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.Global;
 using Serilog;
 
-namespace Pe.Revit.FamilyFoundry.Resolution;
+namespace Pe.Revit.FamilyFoundry.Plans;
 
 public sealed record KnownParamPlan(
     AddFamilyParamsSettings ResolvedFamilyParams,
@@ -62,7 +62,7 @@ public static class KnownParamPlanBuilder {
     }
 
     public static IReadOnlyList<string> CollectReferencedParameterNames(
-        MakeParamDrivenPlanesAndDimsSettings settings
+        ParamDrivenPlanesAndDimsPlan settings
     ) => settings.SymmetricPairs
         .Select(spec => spec.Driver.TryGetParameterName() ?? spec.Parameter)
         .Concat(settings.Offsets
@@ -74,7 +74,7 @@ public static class KnownParamPlanBuilder {
         .ToList();
 
     public static IReadOnlyList<string> CollectReferencedParameterNames(
-        MakeParamDrivenConnectorsSettings settings
+        ParamDrivenConnectorsPlan settings
     ) => settings.Connectors
         .SelectMany(spec => GetLengthDrivenParameterNames(spec))
         .Concat(settings.Connectors.SelectMany(spec => spec.Bindings.Parameters.Select(binding => binding.SourceParameter)))
@@ -85,7 +85,7 @@ public static class KnownParamPlanBuilder {
         .ToList();
 
     public static IReadOnlyList<string> CollectReferencedParameterNames(
-        MakeConstrainedExtrusionsSettings settings
+        ConstrainedExtrusionsPlan settings
     ) => settings.Rectangles
         .SelectMany(spec => new[] {
             spec.PairADriver.TryGetParameterName() ?? spec.PairAParameter,

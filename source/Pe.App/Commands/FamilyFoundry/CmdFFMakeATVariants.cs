@@ -1,10 +1,10 @@
-﻿using Autodesk.Revit.Attributes;
+using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
-using Pe.Revit.FamilyFoundry.OperationSettings;
-using Pe.Revit.FamilyFoundry.Resolution;
+using Pe.Revit.FamilyFoundry.Plans;
+using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.Global.Revit.Ui;
 using Pe.Shared.StorageRuntime;
@@ -40,9 +40,9 @@ public class CmdFFMakeATVariants : IExternalCommand {
             var variants = variantDescriptors.Select(factory.CreateVariant).ToList();
 
             // Request parameter snapshots
-            var collectorQueue = new CollectorQueue()
-                .Add(new ParamSectionCollector())
-                .Add(new LookupTableSectionCollector());
+            var collectorQueue = new SnapshotCapturePipeline()
+                .Add(new ParameterSnapshotCollector())
+                .Add(new LookupTableSnapshotCollector());
 
             var processor = new OperationProcessor(doc, new ExecutionOptions());
             var outputs = processor.ProcessFamilyDocumentIntoVariants(variants, collectorQueue, outputFolderPath);
@@ -158,7 +158,7 @@ public class ATVariantQueueFactory {
     }
 }
 
-public class ATVariantSettings : BaseProfileSettings {
+public class ATVariantSettings : BaseProfile {
     public Dictionary<string, char> SecondLetterDict { get; init; } = new() {
         { "Bar", 'B' },
         { "Slot", 'S' },

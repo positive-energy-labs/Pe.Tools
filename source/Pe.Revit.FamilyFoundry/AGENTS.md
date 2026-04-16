@@ -15,7 +15,7 @@ Owns Family Foundry authored settings, operation queues, runtime operations, com
 - `OperationQueue.cs` and `BaseOperation.cs` — authored execution plan and operation model.
 - `OperationGroups/` and `Operations/` — reusable runtime mutation building blocks.
 - `SchemaDefinitions/FamilyFoundrySchemaDefinitions.cs` — Family Foundry schema/provider wiring.
-- `Aggregators/Snapshots/` and `Snapshots/` — snapshot capture, portable structure, and apply/proof-oriented diagnostics.
+- `Capture/` and `Snapshots/` — snapshot capture entrypoints, collectors, portable structure, and apply/proof-oriented diagnostics.
 - `Resolution/AuthoredParamDrivenSolidsCompiler.cs` — authored param-driven solids compile path.
 - `OperationSettings/` — authored settings contracts used by profiles.
 

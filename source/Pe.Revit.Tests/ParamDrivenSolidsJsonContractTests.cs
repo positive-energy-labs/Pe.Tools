@@ -1,12 +1,12 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
-using Pe.Revit.FamilyFoundry.Resolution;
+using Pe.Revit.FamilyFoundry.Profiles;
+using Pe.Revit.FamilyFoundry.Snapshots;
+using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Core.Json;
-using Pe.Tools.Commands.FamilyFoundry;
 
 namespace Pe.Revit.Tests;
 
@@ -62,7 +62,7 @@ public sealed class ParamDrivenSolidsJsonContractTests {
 
     [Test]
     public void Profile_schema_accepts_flattened_inline_cylinder_height_object() {
-        var contract = SettingsJsonContract.ValidateAndRoundTrip<FFManagerSettings>(
+        var contract = SettingsJsonContract.ValidateAndRoundTrip<FFManagerProfile>(
             """
             {
               "ParamDrivenSolids": {
@@ -96,7 +96,7 @@ public sealed class ParamDrivenSolidsJsonContractTests {
 
     [Test]
     public void Profile_schema_accepts_flattened_end_offset_cylinder_height_object() {
-        var contract = SettingsJsonContract.ValidateAndRoundTrip<FFManagerSettings>(
+        var contract = SettingsJsonContract.ValidateAndRoundTrip<FFManagerProfile>(
             """
             {
               "ParamDrivenSolids": {
@@ -128,7 +128,7 @@ public sealed class ParamDrivenSolidsJsonContractTests {
 
     [Test]
     public void Profile_schema_accepts_flattened_inline_span_object() {
-        var contract = SettingsJsonContract.ValidateAndRoundTrip<FFManagerSettings>(
+        var contract = SettingsJsonContract.ValidateAndRoundTrip<FFManagerProfile>(
             """
             {
               "ParamDrivenSolids": {
@@ -205,7 +205,7 @@ public sealed class ParamDrivenSolidsJsonContractTests {
 
         var profile = FamilySnapshotProfileProjector.ProjectToProfile(snapshot, "__CURRENT_FAMILY__");
         var json = RevitJsonFormatting.SerializeIndented(profile, RevitJsonFormatting.CreateRevitIndentedSettings());
-        var roundTrip = SettingsJsonContract.ValidateAndRoundTrip<FFManagerSettings>(json, "projected-profile.json");
+        var roundTrip = SettingsJsonContract.ValidateAndRoundTrip<FFManagerProfile>(json, "projected-profile.json");
         var compiled = AuthoredParamDrivenSolidsCompiler.Compile(roundTrip.Value.ParamDrivenSolids);
 
         Assert.That(roundTrip.CanonicalJson, Does.Contain("\"Height\": {"));

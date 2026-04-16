@@ -1,7 +1,7 @@
-﻿using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.FamilyFoundry.Operations;
-using Pe.Revit.FamilyFoundry.OperationSettings;
-using Pe.Revit.Global.Revit.Lib.Schedules.Filters;
+using Pe.Revit.FamilyFoundry.Plans;
+using Pe.Revit.Global.Revit.Documents.Schedules.Filters;
 using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
 using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 using Pe.Shared.StorageRuntime.Json.SchemaProviders;
@@ -56,8 +56,8 @@ internal sealed class ExcludeSharedParameterSchemaDefinition : SettingsSchemaDef
     }
 }
 
-internal sealed class FilterFamiliesSettingsSchemaDefinition : SettingsSchemaDefinition<BaseProfileSettings.FilterFamiliesSettings> {
-    public override void Configure(ISettingsSchemaBuilder<BaseProfileSettings.FilterFamiliesSettings> builder) =>
+internal sealed class FilterFamiliesSettingsSchemaDefinition : SettingsSchemaDefinition<BaseProfile.FilterFamiliesSettings> {
+    public override void Configure(ISettingsSchemaBuilder<BaseProfile.FilterFamiliesSettings> builder) =>
         builder.Property(item => item.IncludeByCondition,
             property => property.WithDescription(
                 "Optional conditional filter based on family parameter values. Uses schedule filter logic to evaluate parameter conditions. Leave FieldName empty to disable this filter."));

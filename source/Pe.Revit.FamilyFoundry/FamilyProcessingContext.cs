@@ -1,4 +1,4 @@
-﻿using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.FamilyFoundry.Snapshots;
 
 namespace Pe.Revit.FamilyFoundry;
 

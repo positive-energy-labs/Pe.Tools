@@ -1,9 +1,9 @@
-﻿using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Snapshots;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
-namespace Pe.Revit.FamilyFoundry.Resolution;
+namespace Pe.Revit.FamilyFoundry.Plans;
 
 public static partial class AuthoredParamDrivenSolidsCompiler {
     private const double ConnectorStubSeedDepth = 0.5 / 12.0;
@@ -23,14 +23,14 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
             ["@CenterFB"] = "Center (Front/Back)"
         };
 
-    public static ParamDrivenSolidsCompileResult Compile(AuthoredParamDrivenSolidsSettings settings) {
+    public static ParamDrivenSolidsPlan Compile(AuthoredParamDrivenSolidsSettings settings) {
         var diagnostics = new List<ParamDrivenSolidsDiagnostic>();
         var planes = new Dictionary<string, PublishedPlane>(StringComparer.OrdinalIgnoreCase);
         var spans = new Dictionary<string, PublishedSpan>(StringComparer.OrdinalIgnoreCase);
         var symmetricPairs = new Dictionary<string, SymmetricPlanePairSpec>(StringComparer.Ordinal);
         var offsetConstraints = new Dictionary<string, OffsetPlaneConstraintSpec>(StringComparer.Ordinal);
-        var rectangles = new List<ConstrainedRectangleExtrusionSpec>();
-        var circles = new List<ConstrainedCircleExtrusionSpec>();
+        var rectangles = new List<ConstrainedRectangleExtrusionSnapshot>();
+        var circles = new List<ConstrainedCircleExtrusionSnapshot>();
         var connectors = new List<CompiledParamDrivenConnectorSpec>();
 
         SeedBuiltInPlanes(settings.Frame, planes, diagnostics);
@@ -150,20 +150,20 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
             .Where(planeName => !otherNamedPlaneRefs.Contains(planeName))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        return new ParamDrivenSolidsCompileResult(
-            new MakeParamDrivenPlanesAndDimsSettings {
+        return new ParamDrivenSolidsPlan(
+            new ParamDrivenPlanesAndDimsPlan {
                 Enabled = symmetricPairs.Count > 0 || offsetConstraints.Count > 0,
                 SymmetricPairs = symmetricPairs.Values.ToList(),
                 Offsets = offsetConstraints.Values
                     .Where(offset => !connectorOnlyFacePlanes.Contains(offset.PlaneName))
                     .ToList()
             },
-            new MakeConstrainedExtrusionsSettings {
+            new ConstrainedExtrusionsPlan {
                 Enabled = rectangles.Count > 0 || circles.Count > 0,
                 Rectangles = rectangles,
                 Circles = circles
             },
-            new MakeParamDrivenConnectorsSettings {
+            new ParamDrivenConnectorsPlan {
                 Enabled = connectors.Count > 0,
                 Connectors = connectors
             },
@@ -340,7 +340,7 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         IDictionary<string, PublishedPlane> planes,
         IDictionary<string, SymmetricPlanePairSpec> symmetricPairs,
         IDictionary<string, OffsetPlaneConstraintSpec> offsets,
-        ICollection<ConstrainedRectangleExtrusionSpec> rectangles,
+        ICollection<ConstrainedRectangleExtrusionSnapshot> rectangles,
         IList<ParamDrivenSolidsDiagnostic> diagnostics
     ) {
         if (string.IsNullOrWhiteSpace(prism.Name)) {
@@ -368,7 +368,7 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         if (height.Outcome != CompileOutcome.Compiled)
             return height.Outcome;
 
-        rectangles.Add(new ConstrainedRectangleExtrusionSpec {
+        rectangles.Add(new ConstrainedRectangleExtrusionSnapshot {
             Name = prism.Name.Trim(),
             IsSolid = prism.IsSolid,
             StartOffset = height.StartOffset,
@@ -396,7 +396,7 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         AuthoredCylinderSpec cylinder,
         IDictionary<string, PublishedPlane> planes,
         IDictionary<string, OffsetPlaneConstraintSpec> offsets,
-        ICollection<ConstrainedCircleExtrusionSpec> circles,
+        ICollection<ConstrainedCircleExtrusionSnapshot> circles,
         IList<ParamDrivenSolidsDiagnostic> diagnostics
     ) {
         if (string.IsNullOrWhiteSpace(cylinder.Name)) {
@@ -435,7 +435,7 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         if (height.Outcome != CompileOutcome.Compiled)
             return height.Outcome;
 
-        circles.Add(new ConstrainedCircleExtrusionSpec {
+        circles.Add(new ConstrainedCircleExtrusionSnapshot {
             Name = cylinder.Name.Trim(),
             IsSolid = cylinder.IsSolid,
             StartOffset = height.StartOffset,
@@ -492,12 +492,12 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         var hostFaceName = host.PlaneName!;
         var hostPlaneName = host.PlaneName!;
         if (offsets.Values.FirstOrDefault(offset => string.Equals(offset.PlaneName, hostFaceName, StringComparison.OrdinalIgnoreCase))
-            is { } hostOffsetSpec) {
-            hostPlaneName = hostOffsetSpec.AnchorPlaneName;
-            var hostOffsetSign = hostOffsetSpec.Direction == OffsetDirection.Negative ? "-" : "+";
-            var hostOffsetValue = !string.IsNullOrWhiteSpace(hostOffsetSpec.Parameter)
-                ? $"P:{hostOffsetSpec.Parameter.Trim()}"
-                : $"L:{(hostOffsetSpec.Driver.LiteralValue ?? 0.0).ToString("R", CultureInfo.InvariantCulture)}";
+            is { } hostOffsetConstraintSnapshot) {
+            hostPlaneName = hostOffsetConstraintSnapshot.AnchorPlaneName;
+            var hostOffsetSign = hostOffsetConstraintSnapshot.Direction == OffsetDirection.Negative ? "-" : "+";
+            var hostOffsetValue = !string.IsNullOrWhiteSpace(hostOffsetConstraintSnapshot.Parameter)
+                ? $"P:{hostOffsetConstraintSnapshot.Parameter.Trim()}"
+                : $"L:{(hostOffsetConstraintSnapshot.Driver.LiteralValue ?? 0.0).ToString("R", CultureInfo.InvariantCulture)}";
             hostFaceName = $"__OFFSET__|{host.PlaneName!}|{hostOffsetSign}|{hostOffsetValue}";
         }
 
@@ -592,7 +592,7 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
             HostFacePlaneName = hostFacePlaneName,
             DepthDirection = depthDirection,
             DepthDriver = depthDriver,
-            RoundStub = new ConstrainedCircleExtrusionSpec {
+            RoundStub = new ConstrainedCircleExtrusionSnapshot {
                 Name = stubSolidName,
                 IsSolid = connector.IsSolid,
                 StartOffset = 0.0,

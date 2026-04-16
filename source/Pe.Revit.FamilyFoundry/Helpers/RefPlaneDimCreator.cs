@@ -1,11 +1,11 @@
-﻿using Pe.Revit.FamilyFoundry.Operations;
-using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Operations;
+using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Snapshots;
 
 namespace Pe.Revit.FamilyFoundry.Helpers;
 
 /// <summary>
-///     Creates reference planes and dimensions from MirrorSpec and OffsetSpec.
+///     Creates reference planes and dimensions from MirrorConstraintSnapshot and OffsetConstraintSnapshot.
 ///     Plane creation and dimension creation are separate to allow transaction commits between them.
 /// </summary>
 public class RefPlaneDimCreator(
@@ -135,7 +135,7 @@ public class RefPlaneDimCreator(
     /// <summary>
      ///     Creates mirror planes: two planes symmetric around center.
      /// </summary>
-    public void CreateMirrorPlanes(MirrorSpec spec) {
+    public void CreateMirrorPlanes(MirrorConstraintSnapshot spec) {
         Console.WriteLine($"[CreateMirrorPlanes] Processing: {spec.Name}, Center: {spec.CenterAnchor}");
 
         var center = query.Get(spec.CenterAnchor);
@@ -177,7 +177,7 @@ public class RefPlaneDimCreator(
     /// <summary>
     ///     Creates offset plane: one plane offset from anchor.
     /// </summary>
-    public void CreateOffsetPlane(OffsetSpec spec) {
+    public void CreateOffsetPlane(OffsetConstraintSnapshot spec) {
         Console.WriteLine($"[CreateOffsetPlane] Processing: {spec.Name}, Anchor: {spec.AnchorName}");
 
         var anchor = this.ResolveReferencePlane(spec.AnchorName);
@@ -483,7 +483,7 @@ public class RefPlaneDimCreator(
     /// <summary>
      ///     Creates mirror dimensions: EQ constraint (3 planes) + parameter label (2 planes).
      /// </summary>
-    public void CreateMirrorDimensions(MirrorSpec spec, int staggerIndex) {
+    public void CreateMirrorDimensions(MirrorConstraintSnapshot spec, int staggerIndex) {
         Console.WriteLine(
             $"[CreateMirrorDimensions] Processing: {spec.Name}, Center: {spec.CenterAnchor}, Stagger: {staggerIndex}");
 
@@ -584,7 +584,7 @@ public class RefPlaneDimCreator(
     /// <summary>
     ///     Creates offset dimension: single dimension between anchor and target.
     /// </summary>
-    public void CreateOffsetDimension(OffsetSpec spec, int staggerIndex) {
+    public void CreateOffsetDimension(OffsetConstraintSnapshot spec, int staggerIndex) {
         Console.WriteLine(
             $"[CreateOffsetDimension] Processing: {spec.Name}, Anchor: {spec.AnchorName}, Stagger: {staggerIndex}");
 

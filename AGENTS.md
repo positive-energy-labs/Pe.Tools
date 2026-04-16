@@ -10,7 +10,7 @@ Repo-wide agent guidance for current paths, validation habits, Revit workflow co
 
 ## Purpose
 
-This repo exists to improve Engineering Designer workflows for MEP firms through strongly typed, debuggable Revit tooling. Optimize for linear execution flow, fail-fast behavior, composable systems, and wrappers around finicky Revit API behavior.
+This repo exists to improve Engineering Designer workflows for MEP firms through strongly typed, debuggable Revit tooling. Optimize for linear execution flow, fail-fast behavior, composable systems, and most of all wrappers around finicky Revit API behavior.
 
 ## Critical Entry Points
 
@@ -50,18 +50,19 @@ This repo exists to improve Engineering Designer workflows for MEP firms through
 | **document session** | Open/active/UI-tab state for documents in the current Revit process | Prefer session services or `UIApplication` helpers for this; avoid presenting it as pure `Document` behavior |
 | **document key** | The canonical identity string used to describe or match an open Revit document | Prefer one shared implementation near `Pe.Revit.Global`; avoid ad hoc cache keys per caller when the concept is the same |
 | **RR debug** | A live Rider/Revit debug session against the deployed runtime lane, and the only normal lane where hot reload is available | Prefer this over vague phrases like `live debug`; avoid implying hot reload exists outside RR debug |
-| **collect** | Read live Revit data into a catalog, list, context, or other discovery/query result | Prefer this for broad live-document read flows; avoid using it for preserved portable state |
-| **capture** | Convert live Revit state into a durable captured form, with provenance when it matters | Prefer this when the output is intended to survive document/session/version boundaries |
+| **collect** | Read live Revit state into a transient catalog, list, context, or other discovery/query result | Prefer this for live-document queries; avoid using it for durable portable state |
+| **capture** | Convert live Revit state into a durable snapshot or spec, with provenance when it matters | Prefer this when the output is meant to survive document/session/version boundaries |
+| **create** | Materialize new Revit objects, elements, or documents when no compatible target exists yet | Use carefully; in current code this is mostly a lower-level implementation concern inside broader apply flows |
 | **spec** | A composable building block of authored intent or normalized portable structure | Prefer this for reusable building blocks that can appear inside profiles and snapshots |
 | **structural validation** | Parse/schema/composition validation that does not require a live Revit document | Avoid implying it covers FF semantic or operation-time rules |
 | **live-document** | Behavior that requires the active Revit document/thread | Prefer this over older capability wording like `RevitAssemblyOnly` |
-| **snapshot** | Captured point-in-time state composed of reusable specs plus source/provenance metadata where needed | Avoid using it as the umbrella term for every derived output |
+| **snapshot** | Durable captured point-in-time state composed of reusable specs plus source/provenance metadata where needed | Avoid using it as the umbrella term for every derived output |
 | **projection** | A target-shaped derived output such as a matrix, dataset, csv, profile fragment, or profile-shaped view | Prefer this for derived output shapes; avoid using it for captured source state |
-| **apply** | Write compatible specs, snapshots, or projections back into live Revit | Prefer this over `replay` when the behavior is patch/merge oriented rather than sequential |
-| **profile** | Authored settings input that drives Family Foundry or related commands | Avoid using it as a synonym for snapshot output |
+| **apply** | Write compatible authored or captured state back into live Revit | Prefer this over `replay` when the behavior is patch/merge oriented rather than sequential |
+| **profile** | The top-level authored settings document that drives a command or workflow | Avoid using it as a synonym for snapshot output or reusable building blocks |
 
 ## Living Memory
-- Repo is greenfeild. Always tend towards making changes that serve long-term, "ideal" shapes. Back compat is *rarely* a concern unless explicitly stated. Research existing patterns before changing code and follow repo conventions, but refactor when the current shape is clearly worse.
+- Repo is greenfield. Always tend towards making changes that serve long-term, "ideal" shapes. Back compat is *rarely* a concern unless explicitly stated. Research existing patterns before changing code and follow repo conventions, but refactor when the current shape is clearly worse.
 - Minimize API surface area. Favor type-safety, nullability correctness, generics, `nameof`, pattern matching, and small explicit contracts.
 - Prefer `Result<T>` / `Try...` patterns on public or user-facing flows instead of exceptions when failure is expected.
 - Use Serilog `Log.*` instead of `Console.WriteLine` or `Debug.WriteLine` in runtime code.
@@ -71,7 +72,21 @@ This repo exists to improve Engineering Designer workflows for MEP firms through
 - For docs reshaping or consolidation work, use the `document-project-docs` skill in `C:\Users\kaitp\.agents\skills\document-project-docs`; repo docs use `AGENTS.md`, `_DEV.md`, and `_GOALS.md` naming.
 - Prefer semantic role names over vague suffixes: `Collector` for live gathering, `Snapshot` for captured portable state, `Projection` for derived target shapes, and `Spec` for reusable authored/portable building blocks.
 - Use verb-to-noun pairing consistently: `Collect...` returns collections/catalogs, `Capture...` returns snapshots, `ProjectTo...` returns projections, and `Apply...` mutates live Revit from specs/snapshots/projections.
+- Ground the language in real public seams before standardizing it repo-wide. Current anchors:
+  - `Capture...` -> `Document.CaptureFamilySnapshot()` / `FamilyDocument.CaptureFamilySnapshot()`
+  - `Collect...` -> query-style collectors such as `ScheduleCatalogCollector`, `ScheduleQueryCollector`, `ProjectLoadedFamilyCollector`, `ProjectParameterCatalogCollector`, and FF source collectors behind `IFamilySnapshotCollector` / `IProjectSnapshotCollector`
+  - `ProjectTo...` -> `Pe.Revit.FamilyFoundry.Profiles.FamilySnapshotProfileProjector`, `FamilyParamProfileAdapter.ProjectSnapshotsToProfile(...)`
+  - `Apply...` -> document-owned `ApplyFamilyProfile(...)` / `ApplyFamilyMigrationProfile(...)` extensions plus operation queues such as `SetKnownParams`, `SetLookupTables`, and related mutation operations
+- Treat `snapshot` as the noun pair for `capture`: current concrete snapshot types are `FamilySnapshot`, `ParameterSnapshot`, `RefPlaneSnapshot`, and `ParamDrivenSolidsSnapshot`.
+- Treat `profile` as the noun for top-level authored settings documents: current concrete examples are `FFManagerProfile`, `FFMigratorProfile`, and `ScheduleProfile`.
 - Put document-owned identity/path/binding helpers on `Document` extensions as close to `Pe.Revit.Global` as possible. Keep open/active/navigation behavior in session-aware services or `UIApplication` extensions.
+- Prefer `Document` / `FamilyDocument` as the public entrypoints for document-owned collect/capture/apply flows, even when the returned models still live in a feature package.
+- Keep feature-owned captured shapes and apply policy in the owning package until the concept proves broader than one feature; only then lift the models and helpers closer to `Pe.Revit.Global`.
+- Current naming debt to reduce over time:
+  - `SnapshotCollector` is the preferred FF capture noun for fragment-level live document reads
+  - `Snapshots/` currently mixes captured models and legacy/resolved `Spec` types
+  - `Capture/` vs `Snapshots/` is the preferred split, but callers and docs should keep reinforcing that boundary consistently
+- Do not force `create` / `apply` into fake purity when one workflow mixes both. Reserve `create` for cases where the primary semantic value is materializing a new target; otherwise prefer `apply` for the caller-facing workflow and let lower-level helpers create as needed.
 - Do not let multiple packages invent competing document-key or document-path logic. Collapse those behind one document-owned seam before adding more callers.
 - Do not strip native Revit types out of specs or snapshots just for portability. Keep them when they materially help correctness, but require human-readable converters and schema metadata/options/examples at authoring and persistence boundaries.
 
@@ -88,9 +103,9 @@ This repo exists to improve Engineering Designer workflows for MEP firms through
 
 ### Testing / exploration
 
-- The easiest sandbox for ad hoc POCs is `C:\Users\kaitp\OneDrive\Documents\ArchSmarter\Launchpad VS Code\LaunchpadScripts`.
-- Use that sandbox for quick experiments, reflection probes, behavior verification, and performance comparisons when possible instead of polluting repo runtime code.
-- If Launchpad cannot reach the needed internals, a temporary task-palette path is acceptable, but treat it as a fallback.
+- The easiest sandbox for ad hoc probing, scripting, POCs is `C:\Users\kaitp\source\repos\Pe.Tools\source\Pe.Revit.Scripting` using inline snippets, or creating files in user `Documents\Pe.Scripting` for files you want to persist.
+- use for quick experiments, reflection probes, behavior verification, and performance comparisons when possible instead of polluting repo runtime code.
+- If Pe.Revit.Scripting cannot reach the needed internals, a temporary task-palette path is acceptable, but treat it as a fallback.
 
 ### Family Foundry
 
@@ -106,5 +121,5 @@ This repo exists to improve Engineering Designer workflows for MEP firms through
 
 ## Outstanding Guidance to add:
 
-- the wpf baml resolution errors that occasional happen. ***major*** blocker, but cause still unknown/unsolved
+- the WPF BAML resolution errors that occasionally happen. ***major*** blocker, but cause still unknown/unsolved
 - build/release/publish workflow. First need to resolve installer.csproj build though

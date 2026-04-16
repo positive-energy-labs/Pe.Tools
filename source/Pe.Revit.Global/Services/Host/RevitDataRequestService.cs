@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Autodesk.Revit.DB;
 using Pe.Shared.HostContracts.RevitData;
 using Pe.Shared.HostContracts.Protocol;
@@ -6,7 +6,7 @@ using Pe.Revit.Global.Revit.Lib.Electrical;
 using Pe.Revit.Global.Revit.Lib.Selection;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
-using Pe.Revit.Global.Revit.Lib.Schedules;
+using Pe.Revit.Global.Revit.Documents.Schedules;
 using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Services.Document;
 using ricaun.Revit.UI.Tasks;
@@ -53,13 +53,13 @@ internal sealed class RevitDataRequestService {
         () => this.EnqueueAsync(() => this.GetScheduleCatalogCore(request))
     );
 
-    public Task<ScheduleSpecsQueryEnvelopeResponse> GetScheduleSpecsQueryEnvelopeAsync(
-        ScheduleSpecsQueryRequest request
+    public Task<ScheduleProfilesQueryEnvelopeResponse> GetScheduleProfilesQueryEnvelopeAsync(
+        ScheduleProfilesQueryRequest request
     ) => this._cache.GetOrCreateAsync(
-        HostInvalidationDomain.ScheduleSpecsQuery,
-        BuildRequestKey("schedule-specs-query", request),
+        HostInvalidationDomain.ScheduleProfilesQuery,
+        BuildRequestKey("schedule-profiles-query", request),
         CatalogCacheWindow,
-        () => this.EnqueueAsync(() => this.GetScheduleSpecsQueryCore(request))
+        () => this.EnqueueAsync(() => this.GetScheduleProfilesQueryCore(request))
     );
 
     public Task<ScheduleQueryEnvelopeResponse> GetScheduleQueryEnvelopeAsync(
@@ -128,9 +128,9 @@ internal sealed class RevitDataRequestService {
         () => this.EnqueueAsync(() => this.GetElectricalLoadClassificationsCatalogCore(request))
     );
 
-    public Task<RevitDocumentContextEnvelopeResponse> GetRevitDocumentContextEnvelopeAsync(
-        RevitDocumentContextRequest request
-    ) => this.EnqueueAsync(() => this.GetRevitDocumentContextCore(request));
+    public Task<RevitDocumentSessionContextEnvelopeResponse> GetRevitDocumentSessionContextEnvelopeAsync(
+        RevitDocumentSessionContextRequest request
+    ) => this.EnqueueAsync(() => this.GetRevitDocumentSessionContextCore(request));
 
     public void Invalidate(params HostInvalidationDomain[] domains) =>
         this._cache.Invalidate(domains);
@@ -189,15 +189,15 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    private ScheduleSpecsQueryEnvelopeResponse GetScheduleSpecsQueryCore(ScheduleSpecsQueryRequest request) {
+    private ScheduleProfilesQueryEnvelopeResponse GetScheduleProfilesQueryCore(ScheduleProfilesQueryRequest request) {
         var documentResult = GetActiveProjectDocument();
         if (!documentResult.Ok)
-            return documentResult.ToScheduleSpecsQueryFailureEnvelope();
+            return documentResult.ToScheduleProfilesQueryFailureEnvelope();
 
         var uiApp = RevitUiSession.CurrentUIApplication;
-        if (request.Query?.Kind == ScheduleSpecsQueryKind.CurrentActiveView &&
+        if (request.Query?.Kind == ScheduleProfilesQueryKind.CurrentActiveView &&
             uiApp.GetActiveView() is not ViewSchedule) {
-            return HostEnvelopeResults.Failure<ScheduleSpecsQueryData>(
+            return HostEnvelopeResults.Failure<ScheduleProfilesQueryData>(
                 EnvelopeCode.Failed,
                 "Active view is not a schedule view.",
                 [
@@ -210,28 +210,28 @@ internal sealed class RevitDataRequestService {
                         "Open a schedule view and retry."
                     )
                 ]
-            ).ToScheduleSpecsQueryEnvelope();
+            ).ToScheduleProfilesQueryEnvelope();
         }
 
         try {
-            var data = ScheduleSpecQueryCollector.Collect(documentResult.Data!, request.Query);
+            var data = ScheduleProfileQueryCollector.Collect(documentResult.Data!, request.Query);
             return HostEnvelopeResults.Success(
                 data,
                 EnvelopeCode.Ok,
-                $"Collected {data.Entries.Count} schedule specs."
-            ).ToScheduleSpecsQueryEnvelope();
+                $"Collected {data.Entries.Count} schedule profiles."
+            ).ToScheduleProfilesQueryEnvelope();
         } catch (Exception ex) {
-            return HostEnvelopeResults.Failure<ScheduleSpecsQueryData>(
+            return HostEnvelopeResults.Failure<ScheduleProfilesQueryData>(
                 EnvelopeCode.Failed,
                 ex.Message,
                 [
                     HostEnvelopeResults.ExceptionIssue(
-                        "ScheduleSpecsQueryException",
+                        "ScheduleProfilesQueryException",
                         ex,
                         "Verify the active document is a project document and retry."
                     )
                 ]
-            ).ToScheduleSpecsQueryEnvelope();
+            ).ToScheduleProfilesQueryEnvelope();
         }
     }
 
@@ -533,8 +533,8 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    private RevitDocumentContextEnvelopeResponse GetRevitDocumentContextCore(
-        RevitDocumentContextRequest request
+    private RevitDocumentSessionContextEnvelopeResponse GetRevitDocumentSessionContextCore(
+        RevitDocumentSessionContextRequest request
     ) {
         try {
             var uiApp = RevitUiSession.CurrentUIApplication;
@@ -548,7 +548,7 @@ internal sealed class RevitDataRequestService {
                 .ToList();
             var activeDocumentSummary = openDocumentSummaries.FirstOrDefault(doc => doc.IsActive);
 
-            var baseData = new RevitDocumentContextData(
+            var baseData = new RevitDocumentSessionContextData(
                 activeDocumentSummary != null,
                 activeDocumentSummary,
                 null,
@@ -560,18 +560,18 @@ internal sealed class RevitDataRequestService {
             if (!HasTargetDocumentCriteria(request.TargetDocument)) {
                 var resolvedData = baseData with { ResolvedDocument = activeDocumentSummary };
                 var message = activeDocumentSummary == null
-                    ? "Collected Revit document context. No active document is currently available."
-                    : $"Collected Revit document context. Active document '{activeDocumentSummary.Title}' is the default target.";
+                    ? "Collected Revit document session context. No active document is currently available."
+                    : $"Collected Revit document session context. Active document '{activeDocumentSummary.Title}' is the default target.";
                 return HostEnvelopeResults.Success(
                     resolvedData,
                     EnvelopeCode.Ok,
                     message
-                ).ToRevitDocumentContextEnvelope();
+                ).ToRevitDocumentSessionContextEnvelope();
             }
 
             var resolution = ResolveTargetDocument(openDocumentSummaries, request.TargetDocument!);
             if (!resolution.Ok) {
-                return new RevitDocumentContextEnvelopeResponse(
+                return new RevitDocumentSessionContextEnvelopeResponse(
                     false,
                     resolution.Code,
                     resolution.Message,
@@ -584,20 +584,20 @@ internal sealed class RevitDataRequestService {
             return HostEnvelopeResults.Success(
                 data,
                 EnvelopeCode.Ok,
-                $"Collected Revit document context. Resolved target document '{resolution.Data!.Title}'."
-            ).ToRevitDocumentContextEnvelope();
+                $"Collected Revit document session context. Resolved target document '{resolution.Data!.Title}'."
+            ).ToRevitDocumentSessionContextEnvelope();
         } catch (Exception ex) {
-            return HostEnvelopeResults.Failure<RevitDocumentContextData>(
+            return HostEnvelopeResults.Failure<RevitDocumentSessionContextData>(
                 EnvelopeCode.Failed,
                 ex.Message,
                 [
                     HostEnvelopeResults.ExceptionIssue(
-                        "RevitDocumentContextException",
+                        "RevitDocumentSessionContextException",
                         ex,
                         "Verify the Revit session is open and retry."
                     )
                 ]
-            ).ToRevitDocumentContextEnvelope();
+            ).ToRevitDocumentSessionContextEnvelope();
         }
     }
 
@@ -666,7 +666,7 @@ internal sealed class RevitDataRequestService {
         );
     }
 
-    private static bool HasTargetDocumentCriteria(RevitDocumentTarget? target) =>
+    private static bool HasTargetDocumentCriteria(RevitDocumentSelector? target) =>
         target != null && (
             !string.IsNullOrWhiteSpace(target.DocumentKey) ||
             !string.IsNullOrWhiteSpace(target.Path) ||
@@ -676,7 +676,7 @@ internal sealed class RevitDataRequestService {
 
     private static HostEnvelopeResult<RevitDocumentSummary> ResolveTargetDocument(
         IReadOnlyList<RevitDocumentSummary> openDocuments,
-        RevitDocumentTarget target
+        RevitDocumentSelector target
     ) {
         var candidates = openDocuments
             .Where(doc =>
@@ -797,7 +797,7 @@ internal static class RevitDataRequestResultExtensions {
         this HostEnvelopeResult<RevitDocument> result) =>
         new(result.Ok, result.Code, result.Message, result.Issues, null);
 
-    public static ScheduleSpecsQueryEnvelopeResponse ToScheduleSpecsQueryFailureEnvelope(
+    public static ScheduleProfilesQueryEnvelopeResponse ToScheduleProfilesQueryFailureEnvelope(
         this HostEnvelopeResult<RevitDocument> result
     ) => new(result.Ok, result.Code, result.Message, result.Issues, null);
 

@@ -5,7 +5,7 @@ using Pe.Shared.StorageRuntime.Validation;
 namespace Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 
 public static class FFManagerManifest {
-    public static SettingsModuleManifest<FFManagerSettings> Module { get; } = new(
+    public static SettingsModuleManifest<FFManagerProfile> Module { get; } = new(
         "CmdFFManager",
         "profiles",
         SettingsCatalogStorageProfiles.SharedAuthoring,

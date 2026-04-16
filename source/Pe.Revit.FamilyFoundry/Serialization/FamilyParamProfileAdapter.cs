@@ -1,6 +1,6 @@
-﻿using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
-using Pe.Revit.FamilyFoundry.OperationSettings;
-using Pe.Revit.FamilyFoundry.Resolution;
+using Pe.Revit.FamilyFoundry.Snapshots;
+using Pe.Revit.FamilyFoundry.Plans;
+using Pe.Revit.FamilyFoundry.Plans;
 
 namespace Pe.Revit.FamilyFoundry.Serialization;
 

@@ -1,4 +1,4 @@
-using Pe.Revit.Global.Revit.Lib.Schedules;
+using Pe.Revit.Global.Revit.Documents.Schedules;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Documents;
 using Pe.Shared.StorageRuntime.Modules;
@@ -9,7 +9,7 @@ namespace Pe.Shared.SettingsCatalog.Manifests.Schedules;
 public static class ScheduleManagerSettingsManifest {
     public const string ModuleKey = "Schedule Manager";
 
-    public static SettingsModuleManifest<ScheduleSpec> Profiles { get; } = new(
+    public static SettingsModuleManifest<ScheduleProfile> Profiles { get; } = new(
         ModuleKey,
         RootKeys.Schedules,
         SettingsCatalogStorageProfiles.SharedAuthoring,

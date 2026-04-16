@@ -2,7 +2,7 @@ using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Resolution;
+using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.Global;
 using Pe.Revit.Global.Utils.Files;
 using Pe.Shared.StorageRuntime.Json.ContractResolvers;
@@ -23,8 +23,8 @@ namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 ///     Handles all infrastructure (storage, profile discovery, preview, palette wiring)
 ///     while keeping command-specific logic (queue building, actions) in command files.
 /// </summary>
-/// <typeparam name="TProfile">The profile type (must inherit from BaseProfileSettings)</typeparam>
-public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSettings, new() {
+/// <typeparam name="TProfile">The profile type (must inherit from BaseProfile)</typeparam>
+public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new() {
     private readonly List<FoundryAction<TProfile>> _actions = [];
     private readonly string _commandName;
     private readonly Document _doc;
@@ -190,7 +190,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
 
         if (ct.IsCancellationRequested) return null;
 
-        if (profile is FFManagerSettings familyProfile) {
+        if (profile is FFManagerProfile familyProfile) {
             var compileResult = AuthoredParamDrivenSolidsCompiler.Compile(familyProfile.ParamDrivenSolids);
             authoredWarnings = compileResult.Diagnostics
                 .Where(diagnostic => diagnostic.Severity == ParamDrivenDiagnosticSeverity.Warning)
@@ -210,7 +210,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
         // Build queue structure for preview (using temp file just for structure, not storing definitions)
         var previewApsParamData = await PaletteThreading.RunRevitAsync(() => {
             using var previewTempFile = new TempSharedParamFile(context.Doc);
-            return BaseProfileSettings.ConvertToSharedParameterDefinitions(apsParamModels, previewTempFile);
+            return BaseProfile.ConvertToSharedParameterDefinitions(apsParamModels, previewTempFile);
         }, ct);
 
         if (ct.IsCancellationRequested || previewApsParamData == null) return null;
@@ -401,7 +401,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfileSetting
 /// <summary>
 ///     Represents an action in the Foundry palette.
 /// </summary>
-internal class FoundryAction<TProfile> where TProfile : BaseProfileSettings, new() {
+internal class FoundryAction<TProfile> where TProfile : BaseProfile, new() {
     public string Name { get; init; }
     public Action<FoundryContext<TProfile>> Handler { get; init; }
     public Func<FoundryContext<TProfile>, bool> CanExecute { get; init; }

@@ -2,7 +2,7 @@
 
 ## North Star
 
-Make authored family-processing workflows predictable, debuggable, and reusable across authoring, snapshotting, replay, and targeted automation.
+Make authored family-processing workflows predictable, debuggable, and reusable across authoring, capture, projection, apply, and targeted automation.
 
 Family Foundry should own semantic authoring intent, compilation, replay policy, and proof artifacts while leaning on deeper reusable family/document modules for the low-level Revit mechanics.
 
@@ -20,7 +20,8 @@ Family Foundry should own semantic authoring intent, compilation, replay policy,
 - Preserve strong logging, snapshots, and proof artifacts so regressions are auditable.
 - Prefer one canonical authored shape for a workflow instead of parallel overlapping models.
 - Push reusable family/document mechanics down into `Pe.Revit.Extensions` and `Pe.Revit.Global` instead of letting `Pe.App` commands or feature orchestration own them.
-- Treat `FamilyDocument`, `FamilyManager`, and related extension surfaces as the preferred home for reusable family-side collectors, inspectors, creators, and appliers.
+- Treat `Document`, `FamilyDocument`, `FamilyManager`, and related extension surfaces as the preferred entrypoints for reusable family-side collect/capture/apply flows.
+- Keep Family Foundry-owned snapshots, projections, and apply policy local until they prove broader than Family Foundry itself.
 
 ## Integration Goals
 

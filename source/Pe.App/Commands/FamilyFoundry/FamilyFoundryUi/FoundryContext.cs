@@ -11,8 +11,8 @@ namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 ///     Generic context for Family Foundry palette operations.
 ///     Holds document references, storage, settings, and UI state.
 /// </summary>
-/// <typeparam name="TProfile">The profile type (must inherit from BaseProfileSettings)</typeparam>
-public class FoundryContext<TProfile> where TProfile : BaseProfileSettings, new() {
+/// <typeparam name="TProfile">The profile type (must inherit from BaseProfile)</typeparam>
+public class FoundryContext<TProfile> where TProfile : BaseProfile, new() {
     public Document Doc { get; init; }
     public UIDocument UiDoc { get; init; }
     public ModuleStorage<TProfile> Storage { get; init; }

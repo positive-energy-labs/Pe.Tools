@@ -1,15 +1,15 @@
 using Autodesk.Revit.DB.Mechanical;
 using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
-using Pe.Revit.FamilyFoundry.Resolution;
+using Pe.Revit.FamilyFoundry.Snapshots;
+using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 
 namespace Pe.Revit.Tests;
 
 internal sealed record RoundtripArtifact(
-    FFManagerSettings Profile,
+    FFManagerProfile Profile,
     AuthoredParamDrivenSolidsSettings Authored,
-    ParamDrivenSolidsCompileResult Compiled,
+    ParamDrivenSolidsPlan Compiled,
     FamilyProcessingContext Context,
     string SavedFamilyPath,
     Document? SourceDocument,
@@ -55,7 +55,7 @@ internal sealed record CompiledPlanExpectation(
     IReadOnlyList<string> ExpectedDimensionDrivers,
     IReadOnlyList<string> ExpectedConnectorNames
 ) {
-    public static CompiledPlanExpectation From(ParamDrivenSolidsCompileResult compiled) =>
+    public static CompiledPlanExpectation From(ParamDrivenSolidsPlan compiled) =>
         new(
             compiled.RefPlanesAndDims.SymmetricPairs.Count,
             compiled.RefPlanesAndDims.Offsets.Count,

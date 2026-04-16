@@ -1,7 +1,7 @@
-﻿using Pe.Revit.Extensions.FamDocument;
+using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.Helpers;
-using Pe.Revit.FamilyFoundry.OperationSettings;
-using Pe.Revit.FamilyFoundry.Resolution;
+using Pe.Revit.FamilyFoundry.Plans;
+using Pe.Revit.FamilyFoundry.Plans;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
@@ -9,8 +9,8 @@ namespace Pe.Revit.FamilyFoundry.Operations;
 ///     Recreates constrained extrusions from canonical reference-plane specs.
 ///     V1 fully supports constrained rectangles and circles.
 /// </summary>
-public class MakeConstrainedExtrusions(MakeConstrainedExtrusionsSettings settings)
-    : DocOperation<MakeConstrainedExtrusionsSettings>(settings) {
+public class MakeConstrainedExtrusions(ConstrainedExtrusionsPlan settings)
+    : DocOperation<ConstrainedExtrusionsPlan>(settings) {
     public override string Description => "Create canonical reference-plane-constrained extrusions";
 
     public override OperationLog Execute(

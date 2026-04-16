@@ -1,11 +1,11 @@
-﻿using Autodesk.Revit.DB;
+using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamDocument.GetValue;
 using Pe.Revit.Extensions.FamDocument.SetValue;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.OperationGroups;
-using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
@@ -124,8 +124,7 @@ internal static class PracticalBenchmarks {
                     throw new InvalidOperationException("Expected a family document.");
 
                 var iterationOutput = benchmarkOutput.SubDir("iterations").SubDir($"iter-{iteration:00}");
-                var result = CmdFFManager.ProcessFamiliesCore(
-                    familyDocument,
+                var result = familyDocument.ApplyFamilyProfile(
                     profile,
                     $"{WineGuardianIndoorProfileFixture}-iter-{iteration:00}",
                     new LoadAndSaveOptions {
@@ -134,7 +133,7 @@ internal static class PracticalBenchmarks {
                         SaveFamilyToInternalPath = true,
                         SaveFamilyToOutputDir = true
                     },
-                    iterationOutput.DirectoryPath,
+                    OutputStorage.ExactDir(iterationOutput.DirectoryPath),
                     new ExecutionOptions {
                         SingleTransaction = false,
                         OptimizeTypeOperations = false,
@@ -209,9 +208,9 @@ internal static class PracticalBenchmarks {
         var stagedProjectPath = StageGenericProjectDocument(application, FamilyFoundryMigratorQueueBenchmarkName, benchmarkOutput.SubDir("seed"));
         var profile = CreateBenchmarkMigratorProfile();
         var queue = CmdFFMigrator.BuildQueueCore(profile, []);
-        var collectorQueue = new CollectorQueue()
-            .Add(new ParamSectionCollector())
-            .Add(new RefPlaneSectionCollector());
+        var collectorQueue = new SnapshotCapturePipeline()
+            .Add(new ParameterSnapshotCollector())
+            .Add(new ReferencePlaneSnapshotCollector());
 
         return BenchmarkHarness.RunDocumentLoop(
             application,
@@ -572,7 +571,7 @@ internal static class PracticalBenchmarks {
         return Path.Combine(outputDirectory, safeFamilyName, $"{safeFamilyName}.rfa");
     }
 
-    private static FFManagerSettings LoadProfileFixture(string fixtureFileName) {
+    private static FFManagerProfile LoadProfileFixture(string fixtureFileName) {
         var assemblyDirectory = Path.GetDirectoryName(typeof(PracticalBenchmarks).Assembly.Location)
                                 ?? throw new InvalidOperationException("Could not resolve the app assembly directory.");
         var fixturePath = Path.Combine(assemblyDirectory, "Benchmarks", "Profiles", fixtureFileName);
@@ -580,7 +579,7 @@ internal static class PracticalBenchmarks {
             throw new FileNotFoundException($"Profile fixture not found at '{fixturePath}'.", fixturePath);
 
         var json = File.ReadAllText(fixturePath);
-        return SettingsJsonContract.ValidateAndRoundTrip<FFManagerSettings>(json, fixturePath).Value;
+        return SettingsJsonContract.ValidateAndRoundTrip<FFManagerProfile>(json, fixturePath).Value;
     }
 
     private static void EnsureSavedFamilyFileIsOpenable(
@@ -657,7 +656,7 @@ internal static class PracticalBenchmarks {
         return snapshots;
     }
 
-    private static FamilyProcessingContext ValidateSingleContextResult(FFManagerProcessFamiliesActionResult result) {
+    private static FamilyProcessingContext ValidateSingleContextResult(FamilyProfileApplyResult result) {
         if (!result.Success)
             throw new InvalidOperationException(result.Error ?? "Family Foundry roundtrip failed.");
         if (result.Contexts.Count != 1)
@@ -754,7 +753,7 @@ internal static class PracticalBenchmarks {
             iterationActionMs);
     }
 
-    private static FFMigratorSettings CreateBenchmarkMigratorProfile() =>
+    private static FFMigratorProfile CreateBenchmarkMigratorProfile() =>
         new() {
             ExecutionOptions = new ExecutionOptions {
                 SingleTransaction = false,
@@ -762,12 +761,12 @@ internal static class PracticalBenchmarks {
                 EnableCollectors = true,
                 SuppressWarnings = true
             },
-            FilterFamilies = new BaseProfileSettings.FilterFamiliesSettings {
+            FilterFamilies = new BaseProfile.FilterFamiliesSettings {
                 IncludeUnusedFamilies = true,
                 IncludeNames = new IncludeFamilies { StartingWith = [""] },
                 ExcludeNames = new ExcludeFamilies()
             },
-            FilterApsParams = new BaseProfileSettings.FilterApsParamsSettings {
+            FilterApsParams = new BaseProfile.FilterApsParamsSettings {
                 IncludeNames = new IncludeSharedParameter(),
                 ExcludeNames = new ExcludeSharedParameter()
             },

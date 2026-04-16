@@ -1,20 +1,20 @@
-﻿using Autodesk.Revit.DB;
+using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
 using Autodesk.Revit.DB.Mechanical;
 using Autodesk.Revit.DB.Plumbing;
 using Nice3point.Revit.Extensions.Runtime;
 using Pe.Revit.Extensions.FamDocument;
-using Pe.Revit.FamilyFoundry.Resolution;
+using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Helpers;
-using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Snapshots;
 using Serilog;
 using System.Globalization;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
-public sealed class MakeParamDrivenConnectors(MakeParamDrivenConnectorsSettings settings)
-    : DocOperation<MakeParamDrivenConnectorsSettings>(settings) {
+public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings)
+    : DocOperation<ParamDrivenConnectorsPlan>(settings) {
     private const double DefaultStubDepth = 0.5 / 12.0;
     private static readonly HashSet<string> UnassociableConnectorParameters = [
         "Category", "System Type", "Power Factor State", "Design Option", "Family Name", "Type Name"
@@ -151,7 +151,7 @@ public sealed class MakeParamDrivenConnectors(MakeParamDrivenConnectorsSettings 
                 HostFacePlaneName = spec.HostFacePlaneName,
                 DepthDirection = spec.DepthDirection,
                 DepthDriver = spec.DepthDriver,
-                RectangularStub = new ConstrainedRectangleExtrusionSpec {
+                RectangularStub = new ConstrainedRectangleExtrusionSnapshot {
                     Name = spec.RectangularStub.Name,
                     IsSolid = spec.RectangularStub.IsSolid,
                     StartOffset = startOffset,
@@ -189,7 +189,7 @@ public sealed class MakeParamDrivenConnectors(MakeParamDrivenConnectorsSettings 
             HostFacePlaneName = spec.HostFacePlaneName,
             DepthDirection = spec.DepthDirection,
             DepthDriver = spec.DepthDriver,
-            RoundStub = new ConstrainedCircleExtrusionSpec {
+            RoundStub = new ConstrainedCircleExtrusionSnapshot {
                 Name = spec.RoundStub.Name,
                 IsSolid = spec.RoundStub.IsSolid,
                 StartOffset = startOffset,
@@ -219,7 +219,7 @@ public sealed class MakeParamDrivenConnectors(MakeParamDrivenConnectorsSettings 
     ) => (0.0, resolvedDepth);
 
     private static IReadOnlyList<string> CollectLengthDrivenParameterNames(
-        MakeParamDrivenConnectorsSettings settings
+        ParamDrivenConnectorsPlan settings
     ) => settings.Connectors
         .SelectMany(spec => GetLengthDrivenParameterNames(spec))
         .Where(name => !string.IsNullOrWhiteSpace(name))

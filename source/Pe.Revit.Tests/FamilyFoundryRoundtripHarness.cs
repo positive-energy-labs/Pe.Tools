@@ -1,12 +1,11 @@
-using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
-using Pe.Revit.FamilyFoundry.OperationSettings;
-using Pe.Revit.FamilyFoundry.Resolution;
+using Pe.Revit.FamilyFoundry.Apply;
+using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Serialization;
+using Pe.Revit.FamilyFoundry.Capture;
+using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
-using Pe.Tools.Commands.FamilyFoundry;
 
 namespace Pe.Revit.Tests;
 
@@ -54,7 +53,7 @@ internal static class FamilyFoundryRoundtripHarness {
     ) {
         var sourceDocument = RevitFamilyFixtureHarness.OpenFamilyFixture(application, familyFixtureFileName);
         try {
-            var sourceSnapshot = CollectFamilySnapshot(sourceDocument);
+            var sourceSnapshot = sourceDocument.CaptureFamilySnapshot();
             var authored = sourceSnapshot.ParamDrivenSolids ?? new AuthoredParamDrivenSolidsSettings();
             var profile = ProjectToProfile(sourceSnapshot);
             var sourceCategory = sourceDocument.OwnerFamily?.FamilyCategory
@@ -92,37 +91,7 @@ internal static class FamilyFoundryRoundtripHarness {
         }
     }
 
-    public static FamilySnapshot CollectFamilySnapshot(Document doc) {
-        if (!doc.IsFamilyDocument)
-            throw new InvalidOperationException("Expected a family document.");
-
-        var famDoc = new FamilyDocument(doc);
-        var familyName = Path.GetFileNameWithoutExtension(doc.PathName);
-        if (string.IsNullOrWhiteSpace(familyName))
-            familyName = doc.Title ?? "Unnamed";
-
-        var snapshot = new FamilySnapshot { FamilyName = familyName };
-
-        var paramCollector = new ParamSectionCollector();
-        if (((IFamilyDocCollector)paramCollector).ShouldCollect(snapshot))
-            ((IFamilyDocCollector)paramCollector).Collect(snapshot, famDoc);
-
-        var lookupCollector = new LookupTableSectionCollector();
-        if (lookupCollector.ShouldCollect(snapshot))
-            lookupCollector.Collect(snapshot, famDoc);
-
-        var refPlaneCollector = new RefPlaneSectionCollector();
-        if (refPlaneCollector.ShouldCollect(snapshot))
-            refPlaneCollector.Collect(snapshot, famDoc);
-
-        var extrusionCollector = new ExtrusionSectionCollector();
-        if (extrusionCollector.ShouldCollect(snapshot))
-            extrusionCollector.Collect(snapshot, famDoc);
-
-        return snapshot;
-    }
-
-    public static FFManagerSettings ProjectToProfile(FamilySnapshot snapshot) {
+    public static FFManagerProfile ProjectToProfile(FamilySnapshot snapshot) {
         var sharedParameterNames = snapshot.Parameters?.Data?
                                        .Select(parameter => parameter.SharedGuid.HasValue
                                            ? parameter.Name?.Trim()
@@ -155,14 +124,13 @@ internal static class FamilyFoundryRoundtripHarness {
                 new Dictionary<string, double>(StringComparer.Ordinal)))
             .ToList();
 
-    public static FFManagerProcessFamiliesActionResult ProcessRoundtrip(
+    public static FamilyProfileApplyResult ProcessRoundtrip(
         Document familyDocument,
-        FFManagerSettings profile,
+        FFManagerProfile profile,
         string profileName,
         string outputDirectory
     ) {
-        var result = CmdFFManager.ProcessFamiliesCore(
-            familyDocument,
+        var result = familyDocument.ApplyFamilyProfile(
             profile,
             profileName,
             new LoadAndSaveOptions {
@@ -171,7 +139,7 @@ internal static class FamilyFoundryRoundtripHarness {
                 SaveFamilyToInternalPath = true,
                 SaveFamilyToOutputDir = true
             },
-            outputDirectory);
+            OutputStorage.ExactDir(outputDirectory));
 
         Assert.That(result.Success, Is.True, result.Error);
         Assert.That(result.Contexts, Has.Count.EqualTo(1));
