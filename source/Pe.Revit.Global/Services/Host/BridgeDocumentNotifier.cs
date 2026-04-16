@@ -1,4 +1,5 @@
 using Autodesk.Revit.DB.Events;
+using Autodesk.Revit.UI.Events;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Revit.Global.Services.Document;
 using Serilog;
@@ -13,6 +14,8 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
     private readonly Action<IReadOnlyList<HostInvalidationDomain>>? _invalidateDomains;
     private readonly Func<DocumentInvalidationEvent, Task> _publishAsync;
     private readonly object _sync = new();
+    private string? _lastActiveDocumentTitle;
+    private bool _lastHasActiveDocument;
     private bool _disposed;
     private bool _isInitialized;
     private DateTime _lastDocumentChangedNotificationUtc = DateTime.MinValue;
@@ -31,7 +34,9 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
                 return;
 
             if (this._isInitialized) {
+                var uiApp = DocumentManager.uiapp;
                 var app = DocumentManager.uiapp.Application;
+                uiApp.ViewActivated -= this.OnViewActivated;
                 app.DocumentChanged -= this.OnDocumentChanged;
                 app.DocumentOpened -= this.OnDocumentOpened;
                 app.DocumentClosed -= this.OnDocumentClosed;
@@ -45,7 +50,9 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
         lock (this._sync) {
             if (this._disposed || this._isInitialized)
                 return;
+            var uiApp = DocumentManager.uiapp;
             var app = DocumentManager.uiapp.Application;
+            uiApp.ViewActivated += this.OnViewActivated;
             app.DocumentChanged += this.OnDocumentChanged;
             app.DocumentOpened += this.OnDocumentOpened;
             app.DocumentClosed += this.OnDocumentClosed;
@@ -61,6 +68,20 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
 
     private void OnDocumentClosed(object? sender, DocumentClosedEventArgs e) =>
         _ = this.PublishAsync(this.BuildCurrentPayload(DocumentInvalidationReason.Closed));
+
+    private void OnViewActivated(object? sender, ViewActivatedEventArgs e) {
+        var activeDocument = e?.CurrentActiveView?.Document;
+        var currentTitle = activeDocument?.Title;
+        var hasActiveDocument = activeDocument != null;
+
+        lock (this._sync) {
+            if (string.Equals(this._lastActiveDocumentTitle, currentTitle, StringComparison.Ordinal) &&
+                this._lastHasActiveDocument == hasActiveDocument)
+                return;
+        }
+
+        _ = this.PublishAsync(this.BuildCurrentPayload(DocumentInvalidationReason.Changed));
+    }
 
     private void OnDocumentChanged(object? sender, DocumentChangedEventArgs e) {
         var modifiedCount = e.GetModifiedElementIds().Count;
@@ -86,6 +107,8 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
             HostInvalidationDomain.SettingsFieldOptions,
             HostInvalidationDomain.SettingsParameterCatalog,
             HostInvalidationDomain.ScheduleCatalog,
+            HostInvalidationDomain.ScheduleSpecsQuery,
+            HostInvalidationDomain.ScheduleQuery,
             HostInvalidationDomain.LoadedFamiliesCatalog,
             HostInvalidationDomain.LoadedFamiliesMatrix,
             HostInvalidationDomain.ProjectParameterBindings,
@@ -107,6 +130,10 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
 
     private async Task PublishAsync(DocumentInvalidationEvent payload) {
         try {
+            lock (this._sync) {
+                this._lastActiveDocumentTitle = payload.DocumentTitle;
+                this._lastHasActiveDocument = payload.HasActiveDocument;
+            }
             await this._publishAsync(payload);
         } catch (Exception ex) {
             Log.Warning(ex, "SettingsEditor bridge failed to publish document invalidation event.");

@@ -22,6 +22,41 @@ public enum ScheduleParameterUsageKind {
     CombinedComponent
 }
 
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum ScheduleSpecsQueryKind {
+    CurrentActiveView,
+    ScheduleReferences,
+    ScheduleNames
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum ScheduleQueryKind {
+    CurrentActiveView,
+    ScheduleReferences,
+    ScheduleNames
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum ScheduleSectionType {
+    Header,
+    Body,
+    Summary,
+    Footer
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum ScheduleCellSourceKind {
+    Unknown,
+    TextOnly,
+    Parameter,
+    Combined,
+    Calculated
+}
+
 [ExportTsInterface]
 public record ScheduleParameterUsageEntry(
     string FieldName,
@@ -37,7 +72,7 @@ public record ScheduleOnFinishSettings(
 );
 
 [ExportTsInterface]
-public record ScheduleTitleBorderStyleDefinition(
+public record ScheduleTitleBorderSpec(
     string? TopLineStyleName,
     string? BottomLineStyleName,
     string? LeftLineStyleName,
@@ -45,13 +80,13 @@ public record ScheduleTitleBorderStyleDefinition(
 );
 
 [ExportTsInterface]
-public record ScheduleTitleStyleDefinition(
+public record ScheduleTitleStyleSpec(
     string HorizontalAlignment,
-    ScheduleTitleBorderStyleDefinition BorderStyle
+    ScheduleTitleBorderSpec BorderStyle
 );
 
 [ExportTsInterface]
-public record ScheduleFieldFormatDefinition(
+public record ScheduleFieldFormatSpec(
     string? UnitTypeId,
     string? SymbolTypeId,
     double? Accuracy,
@@ -63,7 +98,7 @@ public record ScheduleFieldFormatDefinition(
 );
 
 [ExportTsInterface]
-public record CombinedParameterDefinition(
+public record CombinedParameterSpec(
     string ParameterName,
     string Prefix,
     string Suffix,
@@ -71,7 +106,7 @@ public record CombinedParameterDefinition(
 );
 
 [ExportTsInterface]
-public record ScheduleFieldDefinition(
+public record ScheduleFieldSpec(
     string ParameterName,
     string ColumnHeaderOverride,
     string HeaderGroup,
@@ -81,12 +116,12 @@ public record ScheduleFieldDefinition(
     string HorizontalAlignment,
     string? CalculatedType,
     string PercentageOfField,
-    ScheduleFieldFormatDefinition? FormatOptions,
-    List<CombinedParameterDefinition>? CombinedParameters
+    ScheduleFieldFormatSpec? FormatOptions,
+    List<CombinedParameterSpec>? CombinedParameters
 );
 
 [ExportTsInterface]
-public record ScheduleSortGroupDefinition(
+public record ScheduleSortGroupSpec(
     string FieldName,
     string SortOrder,
     bool ShowHeader,
@@ -95,24 +130,38 @@ public record ScheduleSortGroupDefinition(
 );
 
 [ExportTsInterface]
-public record ScheduleFilterDefinition(
+public record ScheduleFilterSpec(
     string FieldName,
     string FilterType,
     string Value
 );
 
 [ExportTsInterface]
-public record ScheduleDefinition(
+public record ScheduleSpec(
     string Name,
     string CategoryName,
     string? ViewTemplateName,
-    ScheduleTitleStyleDefinition TitleStyle,
+    ScheduleTitleStyleSpec TitleStyle,
     bool IsItemized,
     bool FilterBySheet,
-    List<ScheduleFieldDefinition> Fields,
-    List<ScheduleSortGroupDefinition> SortGroup,
-    List<ScheduleFilterDefinition> Filters,
+    List<ScheduleFieldSpec> Fields,
+    List<ScheduleSortGroupSpec> SortGroup,
+    List<ScheduleFilterSpec> Filters,
     ScheduleOnFinishSettings? OnFinishSettings
+);
+
+[ExportTsInterface]
+public record ScheduleCatalogSheetPlacement(
+    string SheetNumber,
+    string SheetName
+);
+
+[ExportTsInterface]
+public record ScheduleCatalogCustomParameterValue(
+    string Name,
+    string? Value,
+    string? DisplayValue,
+    RequestedParameterStorageType StorageType
 );
 
 [ExportTsInterface]
@@ -122,8 +171,15 @@ public record ScheduleCatalogEntry(
     string Name,
     string? CategoryName,
     bool IsTemplate,
-    ScheduleDefinition Definition,
-    List<ScheduleParameterUsageEntry> ParameterUsages
+    string? ViewTemplateName,
+    bool IsItemized,
+    bool FilterBySheet,
+    bool IsPlacedOnSheet,
+    List<ScheduleCatalogSheetPlacement> SheetPlacements,
+    List<string> FieldParameterNames,
+    List<ScheduleFilterSpec> Filters,
+    List<ScheduleParameterUsageEntry> ParameterUsages,
+    List<ScheduleCatalogCustomParameterValue> CustomParameters
 );
 
 [ExportTsInterface]
@@ -140,5 +196,144 @@ public record ScheduleCatalogEnvelopeResponse(
     List<ValidationIssue> Issues,
     ScheduleCatalogData? Data
 ) : IHostDataEnvelope<ScheduleCatalogData> {
+    public object? GetData() => this.Data;
+}
+
+[ExportTsInterface]
+public record ScheduleSpecsQuery(
+    ScheduleSpecsQueryKind Kind = ScheduleSpecsQueryKind.ScheduleReferences,
+    List<long>? ScheduleIds = null,
+    List<string>? ScheduleUniqueIds = null,
+    List<string>? ScheduleNames = null,
+    bool IncludeTemplates = true
+);
+
+[ExportTsInterface]
+public record ScheduleSpecsQueryRequest(
+    ScheduleSpecsQuery? Query = null,
+    BridgeSessionSelector? Target = null
+) : IBridgeSessionRequest;
+
+[ExportTsInterface]
+public record ScheduleSpecQueryEntry(
+    long ScheduleId,
+    string ScheduleUniqueId,
+    string Name,
+    string? CategoryName,
+    bool IsTemplate,
+    ScheduleSpec Spec,
+    List<ScheduleParameterUsageEntry> ParameterUsages,
+    List<ScheduleCatalogCustomParameterValue> CustomParameters
+);
+
+[ExportTsInterface]
+public record ScheduleSpecsQueryData(
+    string DocumentTitle,
+    ScheduleSpecsQueryKind QueryKind,
+    int RequestedScheduleCount,
+    int ResolvedScheduleCount,
+    List<ScheduleSpecQueryEntry> Entries,
+    List<RevitDataIssue> Issues
+);
+
+[ExportTsInterface]
+public record ScheduleSpecsQueryEnvelopeResponse(
+    bool Ok,
+    EnvelopeCode Code,
+    string Message,
+    List<ValidationIssue> Issues,
+    ScheduleSpecsQueryData? Data
+) : IHostDataEnvelope<ScheduleSpecsQueryData> {
+    public object? GetData() => this.Data;
+}
+
+[ExportTsInterface]
+public record ScheduleQuery(
+    ScheduleQueryKind Kind = ScheduleQueryKind.ScheduleReferences,
+    List<long>? ScheduleIds = null,
+    List<string>? ScheduleUniqueIds = null,
+    List<string>? ScheduleNames = null
+);
+
+[ExportTsInterface]
+public record ScheduleQueryRequest(
+    ScheduleQuery? Query = null,
+    BridgeSessionSelector? Target = null
+) : IBridgeSessionRequest;
+
+[ExportTsInterface]
+public record ScheduleMergedRegion(
+    int TopRowNumber,
+    int LeftColumnNumber,
+    int BottomRowNumber,
+    int RightColumnNumber
+);
+
+[ExportTsInterface]
+public record ScheduleCellProjection(
+    int ColumnNumber,
+    string DisplayText,
+    string? ColumnHeaderText,
+    bool IsBlank,
+    ScheduleCellSourceKind SourceKind,
+    string? ParameterText,
+    string? CombinedText,
+    string? CalculatedValueName,
+    string? CalculatedValueText,
+    ScheduleMergedRegion? MergedRegion
+);
+
+[ExportTsInterface]
+public record ScheduleRowProjection(
+    int RowNumber,
+    List<ScheduleCellProjection> Cells
+);
+
+[ExportTsInterface]
+public record ScheduleSectionProjection(
+    ScheduleSectionType SectionType,
+    bool IsValid,
+    int FirstRowNumber,
+    int LastRowNumber,
+    int FirstColumnNumber,
+    int LastColumnNumber,
+    int NumberOfRows,
+    int NumberOfColumns,
+    List<ScheduleRowProjection> Rows
+);
+
+[ExportTsInterface]
+public record ScheduleProjection(
+    long ScheduleId,
+    string ScheduleUniqueId,
+    string ScheduleName,
+    string? CategoryName,
+    bool IsTemplate,
+    long? ViewTemplateId,
+    string? ViewTemplateUniqueId,
+    string? ViewTemplateName,
+    bool IsPlacedOnSheet,
+    List<ScheduleCatalogSheetPlacement> SheetPlacements,
+    List<ScheduleSectionProjection> Sections
+);
+
+[ExportTsInterface]
+public record ScheduleQueryData(
+    string DocumentTitle,
+    ScheduleQueryKind QueryKind,
+    int RequestedScheduleCount,
+    int ResolvedScheduleCount,
+    List<ScheduleProjection> Entries,
+    List<RevitDataIssue> Issues
+);
+
+[ExportTsInterface]
+public record ScheduleQueryEnvelopeResponse(
+    bool Ok,
+    EnvelopeCode Code,
+    string Message,
+    List<ValidationIssue> Issues,
+    ScheduleQueryData? Data
+) : IHostDataEnvelope<ScheduleQueryData> {
     public object? GetData() => this.Data;
 }

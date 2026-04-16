@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Autodesk.Revit.DB;
 using Pe.Shared.HostContracts.RevitData;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Revit.Global.Revit.Lib.Electrical;
@@ -49,6 +50,24 @@ internal sealed class RevitDataRequestService {
         BuildRequestKey("schedule-catalog", request),
         CatalogCacheWindow,
         () => this.EnqueueAsync(() => this.GetScheduleCatalogCore(request))
+    );
+
+    public Task<ScheduleSpecsQueryEnvelopeResponse> GetScheduleSpecsQueryEnvelopeAsync(
+        ScheduleSpecsQueryRequest request
+    ) => this._cache.GetOrCreateAsync(
+        HostInvalidationDomain.ScheduleSpecsQuery,
+        BuildRequestKey("schedule-specs-query", request),
+        CatalogCacheWindow,
+        () => this.EnqueueAsync(() => this.GetScheduleSpecsQueryCore(request))
+    );
+
+    public Task<ScheduleQueryEnvelopeResponse> GetScheduleQueryEnvelopeAsync(
+        ScheduleQueryRequest request
+    ) => this._cache.GetOrCreateAsync(
+        HostInvalidationDomain.ScheduleQuery,
+        BuildRequestKey("schedule-query", request),
+        CatalogCacheWindow,
+        () => this.EnqueueAsync(() => this.GetScheduleQueryCore(request))
     );
 
     public Task<LoadedFamiliesMatrixEnvelopeResponse> GetLoadedFamiliesMatrixEnvelopeAsync(
@@ -162,6 +181,116 @@ internal sealed class RevitDataRequestService {
                     )
                 ]
             ).ToScheduleCatalogEnvelope();
+        }
+    }
+
+    private ScheduleSpecsQueryEnvelopeResponse GetScheduleSpecsQueryCore(ScheduleSpecsQueryRequest request) {
+        var documentResult = GetActiveProjectDocument();
+        if (!documentResult.Ok)
+            return documentResult.ToScheduleSpecsQueryFailureEnvelope();
+
+        if (request.Query?.Kind == ScheduleSpecsQueryKind.CurrentActiveView &&
+            DocumentManager.uiapp.ActiveUIDocument?.ActiveView is not ViewSchedule) {
+            return HostEnvelopeResults.Failure<ScheduleSpecsQueryData>(
+                EnvelopeCode.Failed,
+                "Active view is not a schedule view.",
+                [
+                    new ValidationIssue(
+                        "$.query.kind",
+                        null,
+                        "ScheduleActiveViewRequired",
+                        "error",
+                        "Active view is not a schedule view.",
+                        "Open a schedule view and retry."
+                    )
+                ]
+            ).ToScheduleSpecsQueryEnvelope();
+        }
+
+        try {
+            var data = ScheduleSpecQueryCollector.Collect(documentResult.Data!, request.Query);
+            return HostEnvelopeResults.Success(
+                data,
+                EnvelopeCode.Ok,
+                $"Collected {data.Entries.Count} schedule specs."
+            ).ToScheduleSpecsQueryEnvelope();
+        } catch (Exception ex) {
+            return HostEnvelopeResults.Failure<ScheduleSpecsQueryData>(
+                EnvelopeCode.Failed,
+                ex.Message,
+                [
+                    HostEnvelopeResults.ExceptionIssue(
+                        "ScheduleSpecsQueryException",
+                        ex,
+                        "Verify the active document is a project document and retry."
+                    )
+                ]
+            ).ToScheduleSpecsQueryEnvelope();
+        }
+    }
+
+    private ScheduleQueryEnvelopeResponse GetScheduleQueryCore(ScheduleQueryRequest request) {
+        var documentResult = GetActiveProjectDocument();
+        if (!documentResult.Ok)
+            return documentResult.ToScheduleQueryFailureEnvelope();
+
+        var activeScheduleView = DocumentManager.uiapp.ActiveUIDocument?.ActiveView as ViewSchedule;
+        if (request.Query?.Kind == ScheduleQueryKind.CurrentActiveView &&
+            activeScheduleView == null) {
+            return HostEnvelopeResults.Failure<ScheduleQueryData>(
+                EnvelopeCode.Failed,
+                "Active view is not a schedule view.",
+                [
+                    new ValidationIssue(
+                        "$.query.kind",
+                        null,
+                        "ScheduleActiveViewRequired",
+                        "error",
+                        "Active view is not a schedule view.",
+                        "Open a non-template schedule view and retry."
+                    )
+                ]
+            ).ToScheduleQueryEnvelope();
+        }
+
+        if (request.Query?.Kind == ScheduleQueryKind.CurrentActiveView &&
+            (activeScheduleView.IsTemplate ||
+             activeScheduleView.Name.Contains("<Revision Schedule>", StringComparison.OrdinalIgnoreCase))) {
+            return HostEnvelopeResults.Failure<ScheduleQueryData>(
+                EnvelopeCode.Failed,
+                "Active view is not a supported non-template schedule view.",
+                [
+                    new ValidationIssue(
+                        "$.query.kind",
+                        null,
+                        "ScheduleProjectionActiveViewRequired",
+                        "error",
+                        "Active view is not a supported non-template schedule view.",
+                        "Open a non-template schedule view and retry."
+                    )
+                ]
+            ).ToScheduleQueryEnvelope();
+        }
+
+        try {
+            var data = ScheduleQueryCollector.Collect(documentResult.Data!, request.Query);
+            return HostEnvelopeResults.Success(
+                data,
+                EnvelopeCode.Ok,
+                $"Collected {data.Entries.Count} schedule projections."
+            ).ToScheduleQueryEnvelope();
+        } catch (Exception ex) {
+            return HostEnvelopeResults.Failure<ScheduleQueryData>(
+                EnvelopeCode.Failed,
+                ex.Message,
+                [
+                    HostEnvelopeResults.ExceptionIssue(
+                        "ScheduleQueryException",
+                        ex,
+                        "Verify the active document is a project document and retry."
+                    )
+                ]
+            ).ToScheduleQueryEnvelope();
         }
     }
 
@@ -505,6 +634,14 @@ internal static class RevitDataRequestResultExtensions {
     public static ScheduleCatalogEnvelopeResponse ToScheduleCatalogFailureEnvelope(
         this HostEnvelopeResult<RevitDocument> result) =>
         new(result.Ok, result.Code, result.Message, result.Issues, null);
+
+    public static ScheduleSpecsQueryEnvelopeResponse ToScheduleSpecsQueryFailureEnvelope(
+        this HostEnvelopeResult<RevitDocument> result
+    ) => new(result.Ok, result.Code, result.Message, result.Issues, null);
+
+    public static ScheduleQueryEnvelopeResponse ToScheduleQueryFailureEnvelope(
+        this HostEnvelopeResult<RevitDocument> result
+    ) => new(result.Ok, result.Code, result.Message, result.Issues, null);
 
     public static LoadedFamiliesCatalogEnvelopeResponse ToCatalogFailureEnvelope(
         this HostEnvelopeResult<RevitDocument> result) =>

@@ -40,6 +40,12 @@ internal sealed class HostOperationRegistry {
             HostOperations.Bridge<ScheduleCatalogRequest, ScheduleCatalogEnvelopeResponse>(
                 GetScheduleCatalogOperationContract.Definition
             ),
+            HostOperations.Bridge<ScheduleSpecsQueryRequest, ScheduleSpecsQueryEnvelopeResponse>(
+                GetScheduleSpecsQueryOperationContract.Definition
+            ),
+            HostOperations.Bridge<ScheduleQueryRequest, ScheduleQueryEnvelopeResponse>(
+                GetScheduleQueryOperationContract.Definition
+            ),
             HostOperations.Create<NoRequest>(
                 GetLoadedFamiliesFilterSchemaOperationContract.Definition,
                 static (request, context, cancellationToken) =>

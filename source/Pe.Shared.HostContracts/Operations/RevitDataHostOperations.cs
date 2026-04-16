@@ -37,6 +37,30 @@ public static class GetScheduleCatalogOperationContract {
         );
 }
 
+public static class GetScheduleSpecsQueryOperationContract {
+    public static readonly HostOperationDefinition Definition =
+        HostOperationDefinition.Create<ScheduleSpecsQueryRequest, ScheduleSpecsQueryEnvelopeResponse>(
+            "revit-data.schedule-specs-query",
+            HostHttpVerb.Post,
+            "/api/revit-data/schedules/specs/query",
+            HostExecutionMode.Bridge,
+            "Get Schedule Specs Query",
+            new HostCachePolicy("schedule-specs-query", 10)
+        );
+}
+
+public static class GetScheduleQueryOperationContract {
+    public static readonly HostOperationDefinition Definition =
+        HostOperationDefinition.Create<ScheduleQueryRequest, ScheduleQueryEnvelopeResponse>(
+            "revit-data.schedule-query",
+            HostHttpVerb.Post,
+            "/api/revit-data/schedules/query",
+            HostExecutionMode.Bridge,
+            "Get Schedule Query",
+            new HostCachePolicy("schedule-query", 10)
+        );
+}
+
 public static class GetLoadedFamiliesCatalogOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<LoadedFamiliesCatalogRequest, LoadedFamiliesCatalogEnvelopeResponse>(

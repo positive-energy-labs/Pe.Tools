@@ -13,6 +13,11 @@ public static class ElementContextCollector {
         ElementContextQuery? query = null
     ) {
         var issues = new List<RevitDataIssue>();
+        var requestedParameterNames = ElectricalCollectorSupport.NormalizeRequestedParameterNames(
+            query?.ParameterQuery,
+            issues,
+            "ElementContext"
+        );
         var resolution = ResolveQuery(doc, query, issues);
         var panelScheduleCounts = new FilteredElementCollector(doc)
             .OfClass(typeof(PanelScheduleView))
@@ -21,7 +26,7 @@ public static class ElementContextCollector {
             .ToDictionary(group => group.Key, group => group.Count());
 
         var entries = resolution.Elements
-            .Select(element => TryCollectEntry(doc, element, panelScheduleCounts, issues))
+            .Select(element => TryCollectEntry(doc, element, panelScheduleCounts, requestedParameterNames, issues))
             .Where(entry => entry != null)
             .Cast<ElementContextEntry>()
             .ToList();
@@ -123,10 +128,12 @@ public static class ElementContextCollector {
         Document doc,
         Element element,
         IReadOnlyDictionary<long, int> panelScheduleCounts,
+        IReadOnlyList<string> requestedParameterNames,
         List<RevitDataIssue> issues
     ) {
         try {
             var family = element as FamilyInstance;
+            var identity = ElectricalCollectorSupport.CollectElementIdentity(element, requestedParameterNames);
             var panelScheduleCount = panelScheduleCounts.TryGetValue(element.Id.Value(), out var count) ? count : 0;
             var panel = TryCollectPanelContext(family, panelScheduleCount);
             var circuit = TryCollectCircuitContext(element);
@@ -145,7 +152,9 @@ public static class ElementContextCollector {
                 family?.Symbol?.Family?.Name,
                 family?.Symbol?.Name,
                 ElectricalCollectorSupport.ReadMark(element),
-                ElectricalCollectorSupport.ReadTagInstance(element),
+                identity.EffectiveIdentity,
+                identity.EffectiveIdentitySource,
+                identity.RequestedParameters,
                 GetLevelName(doc, element),
                 electrical,
                 connectors,
