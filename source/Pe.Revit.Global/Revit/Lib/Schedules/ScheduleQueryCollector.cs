@@ -1,5 +1,6 @@
-using Autodesk.Revit.DB;
+﻿using Autodesk.Revit.DB;
 using Pe.Revit.Global.PolyFill;
+using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Services.Document;
 using Pe.Shared.HostContracts.RevitData;
 using InternalScheduleFieldSpec = Pe.Revit.Global.Revit.Lib.Schedules.Fields.ScheduleFieldSpec;
@@ -44,7 +45,7 @@ public static class ScheduleQueryCollector {
     }
 
     private static QueryResolution ResolveCurrentActiveView(List<RevitDataIssue> issues) {
-        var activeView = DocumentManager.uiapp.ActiveUIDocument?.ActiveView;
+        var activeView = RevitUiSession.CurrentUIApplication.GetActiveView();
         if (activeView is ViewSchedule schedule && !schedule.IsTemplate && !IsRevisionSchedule(schedule)) {
             return new QueryResolution(
                 ScheduleQueryKind.CurrentActiveView,

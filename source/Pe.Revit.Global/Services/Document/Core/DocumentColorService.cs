@@ -1,4 +1,4 @@
-using System.Windows.Media;
+﻿using System.Windows.Media;
 using WpfColor = System.Windows.Media.Color;
 
 namespace Pe.Revit.Global.Services.Document.Core;
@@ -26,7 +26,7 @@ public class DocumentColorService {
     public WpfColor GetOrCreateDocumentColor(Autodesk.Revit.DB.Document doc) {
         if (doc == null) return Colors.Gray;
 
-        var docKey = GetDocumentKey(doc);
+        var docKey = doc.GetDocumentKey();
 
         // Check cache first
         if (this._colorCache.TryGetValue(docKey, out var cachedColor)) return cachedColor;
@@ -51,10 +51,7 @@ public class DocumentColorService {
     public void RemoveDocument(Autodesk.Revit.DB.Document doc) {
         if (doc == null) return;
 
-        var docKey = GetDocumentKey(doc);
+        var docKey = doc.GetDocumentKey();
         _ = this._colorCache.Remove(docKey);
     }
-
-    private static string GetDocumentKey(Autodesk.Revit.DB.Document doc) =>
-        !string.IsNullOrEmpty(doc.PathName) ? doc.PathName : doc.Title;
 }

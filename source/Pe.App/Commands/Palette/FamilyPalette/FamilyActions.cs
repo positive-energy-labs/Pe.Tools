@@ -1,6 +1,7 @@
-using Autodesk.Revit.UI;
+﻿using Autodesk.Revit.UI;
 using Pe.App.Services;
 using Pe.Revit.Extensions.UiApplication;
+using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.PolyFill;
 using Pe.Revit.Global.Services.Document;
 using OperationCanceledException = Autodesk.Revit.Exceptions.OperationCanceledException;
@@ -204,7 +205,8 @@ internal static class FamilyActions {
     ///     Zooms to and selects an element in the view.
     /// </summary>
     internal static void HandleZoomToFamilyInstance(UnifiedFamilyItem item) {
-        var uidoc = DocumentManager.GetActiveUIDocument();
+        var uidoc = RevitUiSession.CurrentUIApplication.GetActiveUIDocument();
+        if (uidoc == null) return;
         if (item.FamilyInstance == null) return;
         var id = item.FamilyInstance.Id;
         if (id == null) return;
@@ -216,9 +218,10 @@ internal static class FamilyActions {
     ///     Opens and activates a family for editing. For family types/instances, it attempts to open the family to that type
     /// </summary>
     internal static void HandleOpenEditFamily(UnifiedFamilyItem item) {
+        var uiApp = RevitUiSession.CurrentUIApplication;
         if (item == null) return;
         if (item.ItemType == FamilyItemType.Family && item.Family != null) {
-            DocumentManager.uiapp.OpenAndActivateFamily(item.Family);
+            uiApp.OpenAndActivateFamily(item.Family);
         } else {
             var sym = item.GetFamilySymbol();
             if (sym != null) {
@@ -227,7 +230,7 @@ internal static class FamilyActions {
             } else {
                 var fam = item.GetFamily();
                 if (fam == null) return;
-                DocumentManager.uiapp.OpenAndActivateFamily(fam);
+                uiApp.OpenAndActivateFamily(fam);
             }
         }
     }
@@ -270,9 +273,10 @@ internal static class FamilyActions {
     ///     Opens a family and activates a specific type within it.
     /// </summary>
     private static void OpenAndActivateFamilyType(FamilySymbol symbol) {
-        DocumentManager.uiapp.OpenAndActivateFamily(symbol.Family);
+        var uiApp = RevitUiSession.CurrentUIApplication;
+        uiApp.OpenAndActivateFamily(symbol.Family);
 
-        var famDoc = DocumentManager.FindOpenFamilyDocument(symbol.Family);
+        var famDoc = uiApp.FindOpenFamilyDocument(symbol.Family);
         if (famDoc?.IsFamilyDocument != true) return;
 
         var familyManager = famDoc.FamilyManager;

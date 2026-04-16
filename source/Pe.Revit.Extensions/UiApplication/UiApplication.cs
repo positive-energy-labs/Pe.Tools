@@ -1,5 +1,6 @@
-using Autodesk.Revit.Exceptions;
+﻿using Autodesk.Revit.Exceptions;
 using Autodesk.Revit.UI;
+using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Services.Document;
 using System.Diagnostics;
 
@@ -26,13 +27,13 @@ public static class OpenDocumentExtensions {
             // (ActiveView setter doesn't stick when called from palette callbacks sometimes. Particularly for 
             // Sheets/Schedules which are already open.)
             // PERFORMANCE: This is the fast path for MRU views - ~99% of cases. No logging to minimize overhead.
-            if (DocumentManager.IsDocumentActive(targetDoc)) {
+            if (uiApp.IsDocumentActive(targetDoc)) {
                 targetUiDoc.RequestViewChange(targetView);
                 return;
             }
 
             // CASE 2: Target document is open but not active (less common, log for diagnostics)
-            if (DocumentManager.IsDocumentOpen(targetDoc)) {
+            if (uiApp.IsDocumentOpen(targetDoc)) {
                 Console.WriteLine($"[OpenAndActivateView] Document '{targetDoc.Title}' is open but not active");
 
                 // For family documents, use the special family activation (saves to temp)
@@ -47,7 +48,7 @@ public static class OpenDocumentExtensions {
 
                 // For project documents: OpenAndActivateDocument
                 // WARNING: For cloud documents, this triggers network calls and may be slow/fail offline
-                var existingDocPath = DocumentManager.GetDocumentModelPath(targetDoc);
+                var existingDocPath = targetDoc.GetDocumentModelPath();
                 if (existingDocPath != null) {
                     var isCloud = targetDoc.IsModelInCloud;
                     Console.WriteLine($"[OpenAndActivateView] Using OpenAndActivateDocument (isCloud={isCloud})");
@@ -71,7 +72,7 @@ public static class OpenDocumentExtensions {
             }
 
             // CASE 3: Document not open - try to open it via file path (rare case, log for diagnostics)
-            var newDocPath = DocumentManager.GetDocumentModelPath(targetDoc);
+            var newDocPath = targetDoc.GetDocumentModelPath();
             if (newDocPath == null) {
                 Console.WriteLine($"[OpenAndActivateView] Cannot open document '{targetDoc.Title}' - no valid path");
                 return;
@@ -83,7 +84,7 @@ public static class OpenDocumentExtensions {
             openedUiDoc.RequestViewChange(targetView);
         } catch (Exception ex) {
             // Only log detailed state on error
-            Console.WriteLine(DocumentManager.LogDocumentState(targetView, "OpenAndActivateView ERROR"));
+            Console.WriteLine(uiApp.LogDocumentState(targetView, "OpenAndActivateView ERROR"));
             Console.WriteLine(ex.ToStringDemystified());
         }
     }
@@ -100,17 +101,17 @@ public static class OpenDocumentExtensions {
     ///     skip SaveAs and use OpenAndActivateDocument directly with the existing path.
     /// </summary>
     public static void OpenAndActivateFamily(this UIApplication uiApp, Family family) {
-        Console.WriteLine(DocumentManager.LogDocumentState(context: "OpenAndActivateFamily START"));
+        Console.WriteLine(uiApp.LogDocumentState(context: "OpenAndActivateFamily START"));
 
         try {
             // Check if family document is already open
-            var existingFamDoc = DocumentManager.FindOpenFamilyDocument(family);
+            var existingFamDoc = uiApp.FindOpenFamilyDocument(family);
 
             if (existingFamDoc != null) {
                 Console.WriteLine($"[OpenAndActivateFamily] Family '{family.Name}' is already open");
 
                 // If it's already the active document, nothing to do
-                if (DocumentManager.IsDocumentActive(existingFamDoc)) {
+                if (uiApp.IsDocumentActive(existingFamDoc)) {
                     Console.WriteLine("[OpenAndActivateFamily] Family doc is active, nothing to do");
                     return;
                 }
@@ -123,7 +124,7 @@ public static class OpenDocumentExtensions {
 
             // Family document is not open - open it via EditFamily
             Console.WriteLine($"[OpenAndActivateFamily] Family '{family.Name}' is NOT open, calling EditFamily...");
-            var activeDoc = DocumentManager.GetActiveDocument();
+            var activeDoc = uiApp.GetActiveDocument();
             var famDoc = activeDoc?.EditFamily(family);
 
             if (famDoc == null) {
@@ -132,14 +133,14 @@ public static class OpenDocumentExtensions {
             }
 
             Console.WriteLine($"[OpenAndActivateFamily] EditFamily returned document '{famDoc.Title}'");
-            Console.WriteLine(DocumentManager.LogDocumentState(context: "After EditFamily"));
+            Console.WriteLine(uiApp.LogDocumentState(context: "After EditFamily"));
 
             // EditFamily opens the document but does NOT activate it in the UI.
             // ShowElements is unreliable for activation.
             // The reliable approach: save to temp file and use OpenAndActivateDocument
             ActivateOpenFamilyDocument(uiApp, famDoc, family.Name);
         } catch (Exception ex) {
-            Console.WriteLine(DocumentManager.LogDocumentState(context: "OpenAndActivateFamily ERROR"));
+            Console.WriteLine(uiApp.LogDocumentState(context: "OpenAndActivateFamily ERROR"));
             Console.WriteLine(ex.ToStringDemystified());
         }
     }
@@ -177,7 +178,7 @@ public static class OpenDocumentExtensions {
     /// </summary>
     private static void ActivateOpenFamilyDocumentAndView(Document famDoc, View targetView) {
         UIDocument activatedUiDoc;
-        var uiApp = DocumentManager.uiapp;
+        var uiApp = RevitUiSession.CurrentUIApplication;
 
         // OPTIMIZATION: If family already has a PathName, try direct activation first
         if (!string.IsNullOrEmpty(famDoc.PathName)) {
@@ -259,7 +260,7 @@ public static class OpenDocumentExtensions {
     ) {
         var sw = Stopwatch.StartNew();
         var timerFired = false;
-        var uiApp = DocumentManager.uiapp;
+        var uiApp = RevitUiSession.CurrentUIApplication;
         var timeoutTimer = new Timer(_ => {
             timerFired = true;
             Console.WriteLine($"[TryOpenCloudDocument] Timeout reached after {timeoutSeconds}s.");

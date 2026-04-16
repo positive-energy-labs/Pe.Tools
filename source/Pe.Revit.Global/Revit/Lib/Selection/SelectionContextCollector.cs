@@ -1,9 +1,11 @@
-using Autodesk.Revit.DB;
+﻿using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.Global.PolyFill;
 using Pe.Revit.Global.Revit.Lib.Electrical;
 using Pe.Revit.Global.Services.Document;
 using Pe.Shared.HostContracts.RevitData;
+
+using Pe.Revit.Global.Revit.Documents;
 
 namespace Pe.Revit.Global.Revit.Lib.Selection;
 
@@ -55,7 +57,7 @@ public static class ElementContextCollector {
     }
 
     private static QueryResolution ResolveCurrentSelection(Document doc) {
-        var selectionIds = DocumentManager.uiapp.ActiveUIDocument?.Selection.GetElementIds().ToList() ?? [];
+        var selectionIds = RevitUiSession.CurrentUIApplication.GetActiveUIDocument()?.Selection.GetElementIds().ToList() ?? [];
         var elements = selectionIds
             .Select(doc.GetElement)
             .Where(element => element != null)

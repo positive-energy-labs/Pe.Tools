@@ -1,242 +1,31 @@
-using Autodesk.Revit.UI.Events;
-using Pe.Revit.Global.PolyFill;
+﻿using Pe.Revit.Global.PolyFill;
+using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Services.Document.Core;
 using Color = System.Windows.Media.Color;
 
 namespace Pe.Revit.Global.Services.Document;
 
 /// <summary>
-///     Singleton service for managing documents and tracking view activation history (MRU).
-///     Provides document state queries (static methods) and delegates MRU buffer management to MruViewBuffer.
+///     Session-aware document service for active/open window state and MRU tracking.
+///     Pure document-owned helpers live in <see cref="Pe.Revit.Global.Revit.Documents" /> and remain available here
+///     only as compatibility delegates while callers migrate.
 ///     Note: No locking needed as Revit API is single-threaded.
 /// </summary>
 public class DocumentManager {
-    private static DocumentManager? _instance;
     private readonly DocumentColorService _colorService = new();
     private readonly MruViewBuffer _mruBuffer = new();
 
-
     private DocumentManager() { }
 
-    public static UIApplication uiapp => new RibbonItemEventArgs().Application;
+    public static UIApplication uiapp => RevitUiSession.CurrentUIApplication;
 
     public static DocumentManager Instance {
         get {
-            _instance ??= new DocumentManager();
-            return _instance;
+            field ??= new DocumentManager();
+            return field;
         }
     }
-
-    /// <summary>
-    /// Returns <c>doc.ParameterBindings</c> as an IEnumerable of <c>(Definition, ElementBinding)</c>.
-    /// Revit gives <c>DefinitionBindingMapIterator</c>, which is awkward for LINQ.
-    /// This adapter provides an ergonomic IEnumerable over project bindings.
-    /// </summary>
-    public static IEnumerable<(Definition def, ElementBinding binding)> GetProjectParameterBindings(Autodesk.Revit.DB.Document doc) {
-        if (doc.IsFamilyDocument) yield break;
-
-        var iter = doc.ParameterBindings.ForwardIterator();
-        while (iter.MoveNext()) {
-            if (iter is { Key: { } def, Current: ElementBinding binding }) {
-                yield return (def, binding);
-            }
-        }
-    }
-
-    /// <summary>
-    /// For the current active document, converts <c>doc.ParameterBindings</c> to an IEnumerable of <c>(Definition, ElementBinding)</c>.
-    /// Revit gives <c>DefinitionBindingMapIterator</c>, which is awkward for LINQ.
-    /// This adapter provides an ergonomic IEnumerable over project bindings.
-    /// </summary>
-    public static IEnumerable<(Definition def, ElementBinding binding)> GetProjectParameterBindings() =>
-        GetProjectParameterBindings(GetActiveDocument());
-
-    public static IntPtr GetActiveWindow() => uiapp.MainWindowHandle;
-
-    public static UIDocument GetActiveUIDocument() => uiapp.ActiveUIDocument;
-
-    /// <summary>Gets the active document from the UIApplication. </summary>
-    public static Autodesk.Revit.DB.Document GetActiveDocument() => uiapp.ActiveUIDocument.Document;
-
-    /// <summary>Gets the active view from the UIApplication. </summary>
-    public static View GetActiveView() => uiapp.ActiveUIDocument.ActiveView;
-
-
-    /// <summary>Gets all open documents from the UIApplication. </summary>
-    public static IEnumerable<Autodesk.Revit.DB.Document> GetOpenDocuments() =>
-        uiapp?.Application.Documents.Cast<Autodesk.Revit.DB.Document>() ?? [];
-
-    /// <summary>Gets all open UIViews across all documents. </summary>
-    public static IEnumerable<UIView> GetOpenUiViews() =>
-        GetOpenDocuments().SelectMany(d => {
-            try {
-                var uiDoc = new UIDocument(d);
-                return uiDoc.GetOpenUIViews();
-            } catch {
-                return [];
-            }
-        });
-
-    /// <summary>Gets all open view ElementIds across all documents. </summary>
-    public static IEnumerable<ElementId> GetOpenViewIds() =>
-        GetOpenUiViews().Select(v => v.ViewId);
-
-    /// <summary>Checks if a document is open. </summary>
-    public static bool IsDocumentOpen(Autodesk.Revit.DB.Document doc) =>
-        GetOpenDocuments().Any(d => d.Title == doc.Title);
-
-    /// <summary>Checks if a document is the active document. </summary>
-    public static bool IsDocumentActive(Autodesk.Revit.DB.Document doc) =>
-        GetActiveDocument()?.Title == doc.Title;
-
-    /// <summary>Checks if a view (by ElementId) is currently open as a tab. </summary>
-    public static bool IsViewOpen(ElementId viewId) =>
-        GetOpenViewIds().Contains(viewId);
-
-    /// <summary>Finds an open document by title or path name. </summary>
-    public static Autodesk.Revit.DB.Document? FindDocumentByName(string name) =>
-        GetOpenDocuments().FirstOrDefault(d => d.Title == name || d.Title.Contains(name));
-
-    /// <summary>
-    ///     Finds an open family document matching the given Family.
-    ///     (partial match on Title because title is the file name, e.g., "Building.rvt" or "Family.rfa").
-    /// </summary>
-    public static Autodesk.Revit.DB.Document? FindOpenFamilyDocument(Family family) =>
-        GetOpenDocuments().FirstOrDefault(d => d.IsFamilyDocument && d.Title.Contains(family.Name));
-
-    /// <summary>Gets the ModelPath for a document (cloud or file-based).</summary>
-    public static ModelPath? GetDocumentModelPath(Autodesk.Revit.DB.Document doc) {
-        try {
-            if (doc.IsWorkshared)
-                return doc.GetWorksharingCentralModelPath();
-        } catch {
-            // Fall through to non-workshared path handling.
-        }
-
-        return doc switch {
-            { IsModelInCloud: true } => doc.GetCloudModelPath(),
-            { PathName.Length: > 0 } => new FilePath(doc.PathName),
-            _ => null // Return null for unsaved documents (like newly opened family docs)
-        };
-    }
-
-    public static string? GetDocumentPath(Autodesk.Revit.DB.Document doc) {
-        try {
-            var modelPath = GetDocumentModelPath(doc);
-            if (modelPath == null)
-                return string.IsNullOrWhiteSpace(doc.PathName) ? null : doc.PathName;
-
-            var userVisiblePath = ModelPathUtils.ConvertModelPathToUserVisiblePath(modelPath);
-            return string.IsNullOrWhiteSpace(userVisiblePath) ? null : userVisiblePath;
-        } catch {
-            return string.IsNullOrWhiteSpace(doc.PathName) ? null : doc.PathName;
-        }
-    }
-
-    public static string GetDocumentKey(Autodesk.Revit.DB.Document doc) {
-        var documentKind = doc.IsFamilyDocument ? "family" : "project";
-        var cloudProjectGuid = GetCloudProjectGuid(doc);
-        var cloudModelGuid = GetCloudModelGuid(doc);
-        if (!string.IsNullOrWhiteSpace(cloudProjectGuid) && !string.IsNullOrWhiteSpace(cloudModelGuid))
-            return $"{documentKind}:cloud:{cloudProjectGuid}:{cloudModelGuid}";
-
-        var documentPath = GetDocumentPath(doc);
-        if (!string.IsNullOrWhiteSpace(documentPath))
-            return $"{documentKind}:path:{documentPath}";
-
-        return $"{documentKind}:unsaved:{doc.Title}:{doc.GetHashCode()}";
-    }
-
-    public static string? GetCloudProjectGuid(Autodesk.Revit.DB.Document doc) {
-        try {
-            if (!doc.IsModelInCloud)
-                return null;
-
-            return GetDocumentModelPath(doc)?.GetProjectGUID().ToString("D");
-        } catch {
-            return null;
-        }
-    }
-
-    public static string? GetCloudModelGuid(Autodesk.Revit.DB.Document doc) {
-        try {
-            if (!doc.IsModelInCloud)
-                return null;
-
-            return GetDocumentModelPath(doc)?.GetModelGUID().ToString("D");
-        } catch {
-            return null;
-        }
-    }
-
-    public static string? GetCloudModelUrn(Autodesk.Revit.DB.Document doc) {
-        try {
-            if (!doc.IsModelInCloud)
-                return null;
-
-            var urn = doc.GetCloudModelUrn();
-            return string.IsNullOrWhiteSpace(urn) ? null : urn;
-        } catch {
-            return null;
-        }
-    }
-
-    public static Autodesk.Revit.DB.Document? FindOpenDocumentByKey(string documentKey) =>
-        GetOpenDocuments().FirstOrDefault(doc =>
-            string.Equals(GetDocumentKey(doc), documentKey, StringComparison.OrdinalIgnoreCase));
-
-    public static string LogDocumentState(View? view = null, string? context = null) {
-        var sb = new StringBuilder();
-        if (!string.IsNullOrEmpty(context)) _ = sb.AppendLine($"=== {context} ===");
-        _ = sb.AppendLine("=== Document State ===");
-
-        var activeDoc = GetActiveDocument();
-        var activeView = GetActiveView();
-        var activeViewId = activeView?.Id;
-        var openDocs = GetOpenDocuments().ToList();
-        var openUiViews = GetOpenUiViews().ToList();
-
-        if (view != null) {
-            _ = sb.AppendLine($"Target Document: {view.Document.Title} (Path: {view.Document.PathName})")
-                .AppendLine($"Target View: {view.Name} (ID: {view.Id.Value()})");
-        }
-
-        _ = sb.AppendLine($"Active Document: {activeDoc?.Title ?? "None"} (Path: {activeDoc?.PathName ?? "N/A"})")
-            .AppendLine($"Active View: {activeView?.Name ?? "None"} (ID: {activeViewId?.Value() ?? -1})")
-            .AppendLine(
-                $"Open Documents ({openDocs.Count}): {string.Join("\n  - ", openDocs.Select(d => $"{d.Title} (Path: {d.PathName})"))}")
-            .AppendLine(
-                $"Open Views ({openUiViews.Count}): {string.Join("\n  - ", openUiViews.Select(v => v.ViewId.Value()))}");
-
-        return sb.ToString();
-    }
-
-    public static string LogDocumentDetails(Autodesk.Revit.DB.Document doc, string? context = null) {
-        var sb = new StringBuilder();
-        if (!string.IsNullOrEmpty(context)) _ = sb.AppendLine($"=== {context} ===");
-        _ = sb.AppendLine("=== Document Details ===");
-
-        _ = sb.AppendLine($"Title: {doc.Title}")
-            .AppendLine($"PathName: {doc.PathName ?? "(empty)"}")
-            .AppendLine($"IsFamilyDocument: {doc.IsFamilyDocument}")
-            .AppendLine($"IsModelInCloud: {doc.IsModelInCloud}")
-            .AppendLine($"IsModifiable: {doc.IsModifiable}")
-            .AppendLine($"IsReadOnly: {doc.IsReadOnly}")
-            .AppendLine($"IsWorkshared: {doc.IsWorkshared}");
-
-        var modelPath = GetDocumentModelPath(doc);
-        if (modelPath != null) {
-            _ = sb.AppendLine($"ModelPath Type: {modelPath.GetType().Name}");
-            var userPath = ModelPathUtils.ConvertModelPathToUserVisiblePath(modelPath);
-            _ = sb.AppendLine($"UserVisiblePath: {userPath}");
-            _ = sb.AppendLine($"ServerPath: {modelPath.ServerPath}");
-        } else
-            _ = sb.AppendLine("ModelPath: null (unsaved document)");
-
-        return sb.ToString();
-    }
-
-
+    
     /// <summary>
     ///     Records a view activation. The previous view is only added to the MRU buffer if
     ///     it meets the criteria (active for >= 3 seconds or currently open as a tab).
