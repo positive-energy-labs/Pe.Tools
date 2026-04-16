@@ -9,7 +9,6 @@ using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Revit.Ui;
 using Pe.Revit.Global.Services.Aps.Models;
-using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 using Pe.Shared.StorageRuntime;
 using Serilog.Events;
 using System.Diagnostics;

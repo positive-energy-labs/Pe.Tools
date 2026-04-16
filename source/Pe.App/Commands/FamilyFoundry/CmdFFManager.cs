@@ -5,11 +5,11 @@ using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.Plans;
+using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.Global;
 using Pe.Revit.Global.Revit.Ui;
 using Pe.Shared.SettingsCatalog;
 using Pe.Shared.SettingsCatalog.Manifests;
-using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 using Pe.Shared.StorageRuntime;
 using Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 using Serilog.Events;
@@ -125,7 +125,7 @@ public class CmdFFManager : IExternalCommand {
         }
 
         var additionalReferences = KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.RefPlanesAndDims)
-            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.InternalExtrusions))
+            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.Extrusions))
             .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.Connectors))
             .ToList();
         var knownParamPlan = KnownParamPlanBuilder.Compile(
@@ -153,7 +153,7 @@ public class CmdFFManager : IExternalCommand {
             }))
             .Add(new MakeParamDrivenPlanesAndDims(compiledSolids.RefPlanesAndDims))
             .Add(new SetKnownParams(formulaOnlyAssignments, knownParamPlan.Catalog))
-            .Add(new MakeConstrainedExtrusions(compiledSolids.InternalExtrusions))
+            .Add(new MakeConstrainedExtrusions(compiledSolids.Extrusions))
             .Add(new MakeParamDrivenConnectors(compiledSolids.Connectors))
             .Add(new MakeRefPlaneSubcategories(specs))
             .Add(new SortParams(new SortParamsSettings()));

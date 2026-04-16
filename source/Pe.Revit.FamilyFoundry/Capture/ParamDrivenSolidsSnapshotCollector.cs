@@ -42,7 +42,7 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
         };
 
     public bool ShouldCollect(FamilySnapshot snapshot) =>
-        snapshot.ParamDrivenSolids == null || !snapshot.ParamDrivenSolids.HasContent;
+        snapshot.AuthoredParamDrivenSolids == null || !snapshot.AuthoredParamDrivenSolids.HasContent;
 
     public void Collect(FamilySnapshot snapshot, FamilyDocument famDoc) {
         var legacy = CollectLegacyFromFamilyDoc(famDoc.Document, snapshot.RefPlanesAndDims);
@@ -50,10 +50,10 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
             famDoc.Document,
             legacy,
             snapshot.RefPlanesAndDims);
-        snapshot.ParamDrivenSolids = authoredSnapshot;
+        snapshot.AuthoredParamDrivenSolids = authoredSnapshot;
         snapshot.RefPlanesAndDims = RemoveInternalAuthoredConstraints(
             snapshot.RefPlanesAndDims,
-            snapshot.ParamDrivenSolids);
+            snapshot.AuthoredParamDrivenSolids);
     }
 
     private static ExtrusionSnapshot CollectLegacyFromFamilyDoc(Document doc, RefPlaneSnapshot? refPlanesAndDims) {

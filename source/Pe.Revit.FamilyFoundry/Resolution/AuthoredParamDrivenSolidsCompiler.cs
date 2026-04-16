@@ -158,7 +158,7 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
                     .Where(offset => !connectorOnlyFacePlanes.Contains(offset.PlaneName))
                     .ToList()
             },
-            new ConstrainedExtrusionsPlan {
+            new ParamDrivenExtrusionsPlan {
                 Enabled = rectangles.Count > 0 || circles.Count > 0,
                 Rectangles = rectangles,
                 Circles = circles

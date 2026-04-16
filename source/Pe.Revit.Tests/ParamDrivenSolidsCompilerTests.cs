@@ -206,9 +206,9 @@ public sealed class ParamDrivenSolidsCompilerTests {
         var result = AuthoredParamDrivenSolidsCompiler.Compile(settings);
 
         Assert.That(result.CanExecute, Is.True);
-        Assert.That(result.InternalExtrusions.Circles, Has.Count.EqualTo(1));
-        Assert.That(result.InternalExtrusions.Rectangles, Has.Count.EqualTo(1));
-        Assert.That(result.InternalExtrusions.Rectangles[0].SketchPlaneName, Is.EqualTo("Core Top"));
+        Assert.That(result.Extrusions.Circles, Has.Count.EqualTo(1));
+        Assert.That(result.Extrusions.Rectangles, Has.Count.EqualTo(1));
+        Assert.That(result.Extrusions.Rectangles[0].SketchPlaneName, Is.EqualTo("Core Top"));
     }
 
     [Test]
@@ -308,7 +308,7 @@ public sealed class ParamDrivenSolidsCompilerTests {
 
         var compiled = AuthoredParamDrivenSolidsCompiler.Compile(settings);
         var parameters = KnownParamPlanBuilder.CollectReferencedParameterNames(compiled.RefPlanesAndDims)
-            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(compiled.InternalExtrusions))
+            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(compiled.Extrusions))
             .Distinct(StringComparer.Ordinal)
             .ToList();
 

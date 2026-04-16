@@ -4,7 +4,6 @@ using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.FamilyFoundry.Plans;
-using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Core.Json;
 
@@ -183,7 +182,7 @@ public sealed class ParamDrivenSolidsJsonContractTests {
     public void Snapshot_projected_profile_serializes_back_to_canonical_public_shape() {
         var snapshot = new FamilySnapshot {
             FamilyName = "Projected Fixture",
-            ParamDrivenSolids = new AuthoredParamDrivenSolidsSettings {
+            AuthoredParamDrivenSolids = new AuthoredParamDrivenSolidsSettings {
                 Cylinders = [
                     new AuthoredCylinderSpec {
                         Name = "Basin Body",

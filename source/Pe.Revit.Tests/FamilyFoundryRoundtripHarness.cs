@@ -5,7 +5,6 @@ using Pe.Revit.FamilyFoundry.Serialization;
 using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.FamilyFoundry.Snapshots;
-using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 
 namespace Pe.Revit.Tests;
 
@@ -54,7 +53,7 @@ internal static class FamilyFoundryRoundtripHarness {
         var sourceDocument = RevitFamilyFixtureHarness.OpenFamilyFixture(application, familyFixtureFileName);
         try {
             var sourceSnapshot = sourceDocument.CaptureFamilySnapshot();
-            var authored = sourceSnapshot.ParamDrivenSolids ?? new AuthoredParamDrivenSolidsSettings();
+            var authored = sourceSnapshot.AuthoredParamDrivenSolids ?? new AuthoredParamDrivenSolidsSettings();
             var profile = ProjectToProfile(sourceSnapshot);
             var sourceCategory = sourceDocument.OwnerFamily?.FamilyCategory
                                  ?? throw new InvalidOperationException("Source family category was not available.");

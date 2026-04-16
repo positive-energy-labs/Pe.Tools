@@ -1,8 +1,8 @@
 using Autodesk.Revit.DB.Mechanical;
 using Pe.Revit.FamilyFoundry;
+using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.FamilyFoundry.Plans;
-using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 
 namespace Pe.Revit.Tests;
 
@@ -59,8 +59,8 @@ internal sealed record CompiledPlanExpectation(
         new(
             compiled.RefPlanesAndDims.SymmetricPairs.Count,
             compiled.RefPlanesAndDims.Offsets.Count,
-            compiled.InternalExtrusions.Rectangles.Count,
-            compiled.InternalExtrusions.Circles.Count,
+            compiled.Extrusions.Rectangles.Count,
+            compiled.Extrusions.Circles.Count,
             compiled.Connectors.Connectors.Count,
             compiled.RefPlanesAndDims.SymmetricPairs
                 .SelectMany(spec => new[] {

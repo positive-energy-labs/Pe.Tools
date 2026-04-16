@@ -20,9 +20,8 @@ public class OperationLog(string operationName, List<LogEntry> entries) {
 /// <summary>
 ///     Individual log entry for an operation with semantic state tracking.
 /// </summary>
-public class LogEntry {
-    public LogEntry(string name) => this.Name = name;
-    public string Name { get; }
+public class LogEntry(string name) {
+    public string Name { get; } = name;
     public string FamilyTypeName { get; private set; }
     private List<string> MessageList { get; } = [];
 

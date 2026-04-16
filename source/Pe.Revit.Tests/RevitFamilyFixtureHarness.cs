@@ -1,8 +1,8 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamDocument.GetValue;
+using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.Global.Utils.Files;
 using Pe.Shared.RevitData.Parameters;
-using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 using Pe.Shared.StorageRuntime.Core.Json;
 
 namespace Pe.Revit.Tests;

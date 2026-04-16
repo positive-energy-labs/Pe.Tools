@@ -9,8 +9,8 @@ namespace Pe.Revit.FamilyFoundry.Operations;
 ///     Recreates constrained extrusions from canonical reference-plane specs.
 ///     V1 fully supports constrained rectangles and circles.
 /// </summary>
-public class MakeConstrainedExtrusions(ConstrainedExtrusionsPlan settings)
-    : DocOperation<ConstrainedExtrusionsPlan>(settings) {
+public class MakeConstrainedExtrusions(ParamDrivenExtrusionsPlan settings)
+    : DocOperation<ParamDrivenExtrusionsPlan>(settings) {
     public override string Description => "Create canonical reference-plane-constrained extrusions";
 
     public override OperationLog Execute(

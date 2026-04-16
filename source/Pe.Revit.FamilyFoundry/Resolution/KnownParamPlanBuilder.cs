@@ -85,7 +85,7 @@ public static class KnownParamPlanBuilder {
         .ToList();
 
     public static IReadOnlyList<string> CollectReferencedParameterNames(
-        ConstrainedExtrusionsPlan settings
+        ParamDrivenExtrusionsPlan settings
     ) => settings.Rectangles
         .SelectMany(spec => new[] {
             spec.PairADriver.TryGetParameterName() ?? spec.PairAParameter,

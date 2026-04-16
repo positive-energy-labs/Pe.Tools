@@ -7,13 +7,13 @@ using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.Plans;
+using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.Global;
 using Pe.Revit.Global.Revit.Lib;
 using Pe.Revit.Global.Revit.Ui;
 using Pe.Revit.Global.Utils.Files;
 using Pe.Shared.SettingsCatalog;
 using Pe.Shared.SettingsCatalog.Manifests;
-using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Modules;
 using Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
@@ -122,7 +122,7 @@ public class CmdFFMigrator : IExternalCommand {
         if (!string.IsNullOrWhiteSpace(runResult.OutputFolderPath))
             message += $"\nOutput: {runResult.OutputFolderPath}";
         new Ballogger().Add(level, new StackFrame(), message).Show();
-        if (runResult.ProcessedFamilyNames.Count > 0) {
+        if (runResult.ProcessedFamilyNames.Count > 0 && !ctx.Doc.IsFamilyDocument) {
             FamilyPlacementHelper.PromptAndPlaceFamilies(
                 ctx.UiDoc.Application,
                 runResult.ProcessedFamilyNames,

@@ -18,7 +18,9 @@ public class OperationProcessor(
     Document doc,
     ExecutionOptions? executionOptions = null
 ) : IDisposable {
+    private ProcessingResultBuilder? _artifactWriter;
     private readonly ExecutionOptions _exOpts = executionOptions ?? new ExecutionOptions();
+    private bool _openArtifactsOnFinish;
 
     /// <summary>
     ///     A function to select families in the Document. If the document is a family document, this will not be called
@@ -54,6 +56,12 @@ public class OperationProcessor(
                     Console.WriteLine(ex.ToStringDemystified());
                 }
             };
+        return this;
+    }
+
+    public OperationProcessor WithArtifactWriter(ProcessingResultBuilder artifactWriter, bool openOnFinish = false) {
+        this._artifactWriter = artifactWriter ?? throw new ArgumentNullException(nameof(artifactWriter));
+        this._openArtifactsOnFinish = openOnFinish;
         return this;
     }
 
@@ -152,6 +160,7 @@ public class OperationProcessor(
             if (!famDoc.Close(false))
                 throw new InvalidOperationException($"Failed to close family document for {family.Name}");
             contexts.Add(context);
+            this.WriteArtifacts(context);
             this._perFamilyCallback?.Invoke(context);
         }
 
@@ -189,6 +198,7 @@ public class OperationProcessor(
                         .CollectPostSnapshot(collectorQueue),
                 out var context);
         // Note: No Close() call - we don't close the active family document
+        this.WriteArtifacts(context);
         this._perFamilyCallback?.Invoke(context);
         return [context];
     }
@@ -296,6 +306,7 @@ public class OperationProcessor(
                 context.OperationLogs = variantLogs;
                 context.TotalMs = variantSw.Elapsed.TotalMilliseconds;
                 contexts.Add(context);
+                this.WriteArtifacts(context);
             }
         } catch (Exception ex) {
             contexts.Add(new FamilyProcessingContext {
@@ -326,6 +337,28 @@ public class OperationProcessor(
         }
 
         return savePaths;
+    }
+
+    private void WriteArtifacts(FamilyProcessingContext context) {
+        if (this._artifactWriter == null)
+            return;
+
+        try {
+            _ = this._artifactWriter.WriteSingleFamilyOutput(context, this._openArtifactsOnFinish);
+        } catch (Exception ex) {
+            var (logs, error) = context.OperationLogs;
+            if (logs != null) {
+                logs.Add(new OperationLog("Processing artifacts", [
+                    new LogEntry("Processing artifacts").Error(ex.Message)
+                ]));
+                context.OperationLogs = logs;
+                return;
+            }
+
+            context.OperationLogs = error == null
+                ? new Exception($"Processing artifact generation failed: {ex.Message}")
+                : new Exception($"{error.Message}{Environment.NewLine}Processing artifact generation failed: {ex.Message}");
+        }
     }
 }
 
@@ -370,14 +403,9 @@ public class LoadAndSaveOptions {
 /// <summary>
 ///     Specification for a family variant including its queue and optional metadata.
 /// </summary>
-public class VariantSpec {
-    public VariantSpec(string name, OperationQueue queue) {
-        this.Name = name;
-        this.Queue = queue;
-    }
-
-    public string Name { get; }
-    public OperationQueue Queue { get; }
+public class VariantSpec(string name, OperationQueue queue) {
+    public string Name { get; } = name;
+    public OperationQueue Queue { get; } = queue;
 
     /// <summary>
     ///     Optional metadata dictionary for storing variant-specific information

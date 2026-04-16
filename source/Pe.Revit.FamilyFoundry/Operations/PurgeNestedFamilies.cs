@@ -3,10 +3,7 @@ using Pe.Revit.Global.PolyFill;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
-public class PurgeNestedFamilies : DocOperation<DefaultOperationSettings> {
-    public PurgeNestedFamilies(DefaultOperationSettings settings) : base(settings) {
-    }
-
+public class PurgeNestedFamilies(DefaultOperationSettings settings) : DocOperation<DefaultOperationSettings>(settings) {
     public override string Description => "Delete unused nested families from the family";
 
     public override OperationLog Execute(FamilyDocument doc,
