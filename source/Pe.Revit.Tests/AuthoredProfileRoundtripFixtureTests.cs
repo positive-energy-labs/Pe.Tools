@@ -199,7 +199,7 @@ public sealed class AuthoredProfileRoundtripFixtureTests {
 
             FamilyFoundryRoundtripAssertions.AssertCompiledPlanMatchesAuthored(artifact);
             FamilyFoundryRoundtripAssertions.AssertAuthoredGraphCounts(
-                artifact.Context.PostProcessSnapshot!.ParamDrivenSolids!,
+                artifact.Context.PostProcessSnapshot!.AuthoredParamDrivenSolids!,
                 sourceExpectation);
             FamilyFoundryRoundtripAssertions.AssertTypeNamesMatch(sourceDocument, artifact.SavedDocument);
 

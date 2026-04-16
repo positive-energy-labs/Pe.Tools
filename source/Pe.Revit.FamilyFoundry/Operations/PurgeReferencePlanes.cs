@@ -4,9 +4,8 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
-public class PurgeReferencePlanes : DocOperation<PurgeReferencePlanesSettings> {
-    public PurgeReferencePlanes(PurgeReferencePlanesSettings settings) : base(settings) { }
-
+public class PurgeReferencePlanes(PurgeReferencePlanesSettings settings)
+    : DocOperation<PurgeReferencePlanesSettings>(settings) {
     public override string Description =>
         "Deletes reference planes in the Family which are not used by anything important";
 

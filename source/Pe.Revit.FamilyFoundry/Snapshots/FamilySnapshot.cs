@@ -20,8 +20,8 @@ public class FamilySnapshot {
     /// <summary>Reference plane and dimension snapshots with source tracking.</summary>
     public RefPlaneSnapshot RefPlanesAndDims { get; set; }
 
-    /// <summary>Authored solid snapshot used for authoring roundtrips.</summary>
-    public AuthoredParamDrivenSolidsSettings ParamDrivenSolids { get; set; }
+    /// <summary>Authored solid projection used for authoring roundtrips.</summary>
+    public AuthoredParamDrivenSolidsSettings AuthoredParamDrivenSolids { get; set; }
 
     // Future captured fields: connectors, etc.
 }

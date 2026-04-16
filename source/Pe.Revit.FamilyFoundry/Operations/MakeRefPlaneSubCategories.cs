@@ -126,15 +126,9 @@ public class MakeRefPlaneSubcategories(List<RefPlaneSubcategorySpec> specs)
     }
 }
 
-public class SubcategoryCache {
+public class SubcategoryCache(Document doc, BuiltInCategory parentCategory) {
     private readonly Dictionary<string, Category> _cache = new();
-    private readonly Document _doc;
-    private readonly Category _parentCategory;
-
-    public SubcategoryCache(Document doc, BuiltInCategory parentCategory) {
-        this._doc = doc;
-        this._parentCategory = Category.GetCategory(doc, parentCategory);
-    }
+    private readonly Category _parentCategory = Category.GetCategory(doc, parentCategory);
 
     public Category GetMatching(RefPlaneSubcategorySpec spec) {
         var existing = this.GetExisting(spec.Name);
@@ -163,7 +157,7 @@ public class SubcategoryCache {
             return false;
 
         if (spec.LinePatternName != null) {
-            var specPatternId = spec.GetLinePatternId(this._doc);
+            var specPatternId = spec.GetLinePatternId(doc);
             var currentPattern = subcat.GetLinePatternId(GraphicsStyleType.Projection);
             if (currentPattern != specPatternId)
                 return false;

@@ -39,8 +39,8 @@ internal static class FamilyFoundryRoundtripAssertions {
         var expected = CompiledPlanExpectation.From(compiled);
 
         Assert.That(compiled.CanExecute, Is.True, string.Join(Environment.NewLine, compiled.Diagnostics.Select(d => d.ToDisplayMessage())));
-        Assert.That(compiled.InternalExtrusions.Rectangles, Has.Count.EqualTo(authored.Prisms.Count));
-        Assert.That(compiled.InternalExtrusions.Circles, Has.Count.EqualTo(authored.Cylinders.Count));
+        Assert.That(compiled.Extrusions.Rectangles, Has.Count.EqualTo(authored.Prisms.Count));
+        Assert.That(compiled.Extrusions.Circles, Has.Count.EqualTo(authored.Cylinders.Count));
         Assert.That(compiled.Connectors.Connectors, Has.Count.EqualTo(authored.Connectors.Count));
         Assert.That(expected.ExpectedPlaneNames, Is.Not.Empty);
         Assert.That(expected.ExpectedPlaneNames.All(name => !string.IsNullOrWhiteSpace(name)), Is.True);
@@ -50,7 +50,7 @@ internal static class FamilyFoundryRoundtripAssertions {
         Assert.That(
             compiled.RefPlanesAndDims.Offsets.All(spec => spec.Driver.IsLiteralDriven || !string.IsNullOrWhiteSpace(spec.Parameter)),
             Is.True);
-        Assert.That(artifact.Context.PostProcessSnapshot?.ParamDrivenSolids?.HasContent, Is.True);
+        Assert.That(artifact.Context.PostProcessSnapshot?.AuthoredParamDrivenSolids?.HasContent, Is.True);
     }
 
     public static void AssertSavedFamilyHasOnlyTypes(Document familyDocument, params string[] expectedTypeNames) {
@@ -159,7 +159,7 @@ internal static class FamilyFoundryRoundtripAssertions {
     ) {
         foreach (var (typeName, state) in states) {
             var unmatched = state.Prisms.ToList();
-            foreach (var spec in compiled.InternalExtrusions.Rectangles) {
+            foreach (var spec in compiled.Extrusions.Rectangles) {
                 var match = unmatched
                     .OrderBy(candidate => ScoreRectangleCandidate(candidate, spec, state))
                     .FirstOrDefault();
@@ -176,7 +176,7 @@ internal static class FamilyFoundryRoundtripAssertions {
     ) {
         foreach (var (typeName, state) in states) {
             var unmatched = state.Cylinders.ToList();
-            foreach (var spec in compiled.InternalExtrusions.Circles) {
+            foreach (var spec in compiled.Extrusions.Circles) {
                 var match = unmatched
                     .OrderBy(candidate => ScoreCircleCandidate(candidate, spec, state))
                     .FirstOrDefault();

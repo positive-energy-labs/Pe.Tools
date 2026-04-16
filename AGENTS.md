@@ -22,7 +22,7 @@ This repo exists to improve Engineering Designer workflows for MEP firms through
 - `source/Pe.Revit.Extensions` — strong primitives such as FamilyDocument, SetValue w/ coercion context, TrySetFormula/Fast, w/ formula validation, FindParameter & GeValue, etc.
 - `source/Pe.Revit.FamilyFoundry/OperationProcessor.cs` — main FF execution orchestrator.
 - `source/Pe.Revit.Tests/AGENTS.md` — runner-specific Revit test lane workflow.
-- `.cursor/rules/family-foundry-dev.mdc` and `.cursor/rules/family-foundry-architecture.mdc` — dense local FF debugging/architecture guidance.
+- `docs/features/family-foundry/_DEV.md` and `docs/features/family-foundry/_GOALS.md` — cross-package FF transparency model, debugging read order, and long-term output contract.
 
 ## Validation
 

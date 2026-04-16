@@ -4,7 +4,7 @@ namespace Pe.Revit.FamilyFoundry.Plans;
 
 public sealed record ParamDrivenSolidsPlan(
     ParamDrivenPlanesAndDimsPlan RefPlanesAndDims,
-    ConstrainedExtrusionsPlan InternalExtrusions,
+    ParamDrivenExtrusionsPlan Extrusions,
     ParamDrivenConnectorsPlan Connectors,
     IReadOnlyList<ParamDrivenSolidsDiagnostic> Diagnostics
 ) {

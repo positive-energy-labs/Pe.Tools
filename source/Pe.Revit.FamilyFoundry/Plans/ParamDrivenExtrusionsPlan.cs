@@ -3,7 +3,7 @@ using System.ComponentModel;
 
 namespace Pe.Revit.FamilyFoundry.Plans;
 
-public class ConstrainedExtrusionsPlan : IOperationSettings {
+public class ParamDrivenExtrusionsPlan : IOperationSettings {
     [Description("Constrained rectangle extrusions to create.")]
     public List<ConstrainedRectangleExtrusionSnapshot> Rectangles { get; init; } = [];
 
