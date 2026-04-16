@@ -46,9 +46,12 @@ This repo exists to improve Engineering Designer workflows for MEP firms through
 | **app** | `Pe.App`, the in-proc Revit add-in runtime rooted in the `Pe.App` package | Prefer this for the Revit-side runtime lane; avoid using `app` to mean the whole repo or product |
 | **host** | `Pe.Host`, the out-of-proc HTTP/SSE settings backend | Avoid using `host` for the Revit add-in bridge |
 | **bridge** | The Revit-side named-pipe connection to `Pe.Host` | Avoid calling HTTP endpoints the bridge |
+| **document-owned** | Behavior that can be derived from a specific `Document` without needing active/open UI session state | Prefer `Document` extensions for this; avoid burying it in session/global manager types |
+| **document session** | Open/active/UI-tab state for documents in the current Revit process | Prefer session services or `UIApplication` helpers for this; avoid presenting it as pure `Document` behavior |
+| **document key** | The canonical identity string used to describe or match an open Revit document | Prefer one shared implementation near `Pe.Revit.Global`; avoid ad hoc cache keys per caller when the concept is the same |
 | **RR debug** | A live Rider/Revit debug session against the deployed runtime lane, and the only normal lane where hot reload is available | Prefer this over vague phrases like `live debug`; avoid implying hot reload exists outside RR debug |
-| **collect** | Gather live Revit data for discovery, catalogs, or broad inspection | Prefer this for collectors and broad read flows; avoid using it for preserved portable state |
-| **capture** | Convert live Revit state into a durable captured form | Prefer this when the output is intended to survive document/session/version boundaries |
+| **collect** | Read live Revit data into a catalog, list, context, or other discovery/query result | Prefer this for broad live-document read flows; avoid using it for preserved portable state |
+| **capture** | Convert live Revit state into a durable captured form, with provenance when it matters | Prefer this when the output is intended to survive document/session/version boundaries |
 | **spec** | A composable building block of authored intent or normalized portable structure | Prefer this for reusable building blocks that can appear inside profiles and snapshots |
 | **structural validation** | Parse/schema/composition validation that does not require a live Revit document | Avoid implying it covers FF semantic or operation-time rules |
 | **live-document** | Behavior that requires the active Revit document/thread | Prefer this over older capability wording like `RevitAssemblyOnly` |
@@ -67,7 +70,9 @@ This repo exists to improve Engineering Designer workflows for MEP firms through
 - Keep docs local and current. Remove stale goals, stale paths, and rename-era references rather than preserving history.
 - For docs reshaping or consolidation work, use the `document-project-docs` skill in `C:\Users\kaitp\.agents\skills\document-project-docs`; repo docs use `AGENTS.md`, `_DEV.md`, and `_GOALS.md` naming.
 - Prefer semantic role names over vague suffixes: `Collector` for live gathering, `Snapshot` for captured portable state, `Projection` for derived target shapes, and `Spec` for reusable authored/portable building blocks.
-- Use verb→noun pairing consistently: `Collect...` returns collections/catalogs, `Capture...` returns snapshots, `ProjectTo...` returns projections, and `Apply...` mutates live Revit from specs/snapshots/projections.
+- Use verb-to-noun pairing consistently: `Collect...` returns collections/catalogs, `Capture...` returns snapshots, `ProjectTo...` returns projections, and `Apply...` mutates live Revit from specs/snapshots/projections.
+- Put document-owned identity/path/binding helpers on `Document` extensions as close to `Pe.Revit.Global` as possible. Keep open/active/navigation behavior in session-aware services or `UIApplication` extensions.
+- Do not let multiple packages invent competing document-key or document-path logic. Collapse those behind one document-owned seam before adding more callers.
 - Do not strip native Revit types out of specs or snapshots just for portability. Keep them when they materially help correctness, but require human-readable converters and schema metadata/options/examples at authoring and persistence boundaries.
 
 ### Revit runtime / hot reload

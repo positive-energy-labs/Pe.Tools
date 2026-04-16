@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Autodesk.Revit.DB;
 using Pe.Shared.HostContracts.RevitData;
 using Pe.Shared.HostContracts.Protocol;
@@ -7,6 +7,7 @@ using Pe.Revit.Global.Revit.Lib.Selection;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 using Pe.Revit.Global.Revit.Lib.Schedules;
+using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Services.Document;
 using ricaun.Revit.UI.Tasks;
 using RevitDocument = Autodesk.Revit.DB.Document;
@@ -193,8 +194,9 @@ internal sealed class RevitDataRequestService {
         if (!documentResult.Ok)
             return documentResult.ToScheduleSpecsQueryFailureEnvelope();
 
+        var uiApp = RevitUiSession.CurrentUIApplication;
         if (request.Query?.Kind == ScheduleSpecsQueryKind.CurrentActiveView &&
-            DocumentManager.uiapp.ActiveUIDocument?.ActiveView is not ViewSchedule) {
+            uiApp.GetActiveView() is not ViewSchedule) {
             return HostEnvelopeResults.Failure<ScheduleSpecsQueryData>(
                 EnvelopeCode.Failed,
                 "Active view is not a schedule view.",
@@ -238,7 +240,7 @@ internal sealed class RevitDataRequestService {
         if (!documentResult.Ok)
             return documentResult.ToScheduleQueryFailureEnvelope();
 
-        var activeScheduleView = DocumentManager.uiapp.ActiveUIDocument?.ActiveView as ViewSchedule;
+        var activeScheduleView = RevitUiSession.CurrentUIApplication.GetActiveView() as ViewSchedule;
         if (request.Query?.Kind == ScheduleQueryKind.CurrentActiveView &&
             activeScheduleView == null) {
             return HostEnvelopeResults.Failure<ScheduleQueryData>(
@@ -461,8 +463,9 @@ internal sealed class RevitDataRequestService {
         if (!documentResult.Ok)
             return documentResult.ToElectricalPanelSchedulesQueryFailureEnvelope();
 
+        var uiApp = RevitUiSession.CurrentUIApplication;
         if (request.Query?.Kind == ElectricalPanelSchedulesQueryKind.CurrentActiveView &&
-            DocumentManager.uiapp.ActiveUIDocument?.ActiveView is not Autodesk.Revit.DB.Electrical.PanelScheduleView) {
+            uiApp.GetActiveView() is not Autodesk.Revit.DB.Electrical.PanelScheduleView) {
             return HostEnvelopeResults.Failure<ElectricalPanelSchedulesQueryData>(
                 EnvelopeCode.Failed,
                 "Active view is not a panel schedule view.",
@@ -534,8 +537,9 @@ internal sealed class RevitDataRequestService {
         RevitDocumentContextRequest request
     ) {
         try {
-            var activeDocument = DocumentManager.uiapp.ActiveUIDocument?.Document;
-            var openDocuments = DocumentManager.GetOpenDocuments()
+            var uiApp = RevitUiSession.CurrentUIApplication;
+            var activeDocument = uiApp.GetActiveDocument();
+            var openDocuments = uiApp.GetOpenDocuments()
                 .ToList();
             var openDocumentSummaries = openDocuments
                 .Select(doc => CreateDocumentSummary(doc, activeDocument))
@@ -644,21 +648,21 @@ internal sealed class RevitDataRequestService {
         RevitDocument document,
         RevitDocument? activeDocument
     ) {
-        var documentKey = DocumentManager.GetDocumentKey(document);
-        var activeDocumentKey = activeDocument == null ? null : DocumentManager.GetDocumentKey(activeDocument);
+        var documentKey = document.GetDocumentKey();
+        var activeDocumentKey = activeDocument == null ? null : activeDocument.GetDocumentKey();
         return new RevitDocumentSummary(
             documentKey,
             document.Title,
-            DocumentManager.GetDocumentPath(document),
+            document.GetDocumentPath(),
             document.IsFamilyDocument,
             document.IsWorkshared,
             string.Equals(documentKey, activeDocumentKey, StringComparison.OrdinalIgnoreCase),
             document.IsModifiable,
             document.IsReadOnly,
             document.IsModelInCloud,
-            DocumentManager.GetCloudProjectGuid(document),
-            DocumentManager.GetCloudModelGuid(document),
-            DocumentManager.GetCloudModelUrn(document)
+            document.GetCloudProjectGuid(),
+            document.GetCloudModelGuid(),
+            document.GetCloudModelUrn()
         );
     }
 
@@ -728,7 +732,7 @@ internal sealed class RevitDataRequestService {
         string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
 
     private static HostEnvelopeResult<RevitDocument> GetActiveDocument() {
-        var document = DocumentManager.uiapp.ActiveUIDocument?.Document;
+        var document = RevitUiSession.CurrentUIApplication.GetActiveDocument();
         if (document == null) {
             return HostEnvelopeResults.Failure<RevitDocument>(
                 EnvelopeCode.NoDocument,

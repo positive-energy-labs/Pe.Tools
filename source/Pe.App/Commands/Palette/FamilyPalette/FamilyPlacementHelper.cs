@@ -1,5 +1,6 @@
-using Autodesk.Revit.DB.Structure;
+﻿using Autodesk.Revit.DB.Structure;
 using Autodesk.Revit.UI;
+using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Revit.Ui;
 using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Ui.Core;
@@ -23,7 +24,8 @@ public static class FamilyPlacementHelper {
     public static void ShowPlacementPaletteForFamily(Family family) {
         if (family == null) return;
 
-        var activeView = DocumentManager.GetActiveView() ?? throw new InvalidOperationException("No active view");
+        var activeView = RevitUiSession.CurrentUIApplication.GetActiveView() ??
+                         throw new InvalidOperationException("No active view");
 
         // Check if active view is valid for placing families
         if (!IsValidPlacementView(activeView)) {
@@ -68,7 +70,9 @@ public static class FamilyPlacementHelper {
                                 var symbol = item?.FamilySymbol;
                                 if (symbol == null) return;
 
-                                var uiDoc = DocumentManager.GetActiveUIDocument();
+                                var uiDoc = RevitUiSession.CurrentUIApplication.GetActiveUIDocument();
+                                if (uiDoc == null)
+                                    return;
 
                                 try {
                                     // Activate symbol if needed

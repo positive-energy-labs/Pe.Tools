@@ -1,5 +1,6 @@
+﻿using Pe.Revit.Global.PolyFill;
+using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Services.Document;
-using Pe.Revit.Global.PolyFill;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -40,7 +41,7 @@ public class EphemeralWindow : Window {
         this.Title = title;
         this.SizeToContent =
             SizeToContent.WidthAndHeight; // Size to both dimensions for independent palette/panel sizing
-        var ownerHandle = DocumentManager.GetActiveWindow();
+        var ownerHandle = RevitUiSession.CurrentUIApplication.GetActiveWindowHandle();
         if (ownerHandle != IntPtr.Zero) {
             _ = new WindowInteropHelper(this) { Owner = ownerHandle };
             this.WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -168,7 +169,7 @@ public class EphemeralWindow : Window {
     /// </remarks>
     public static void RestoreRevitFocus() {
         try {
-            var revitHandle = DocumentManager.GetActiveWindow();
+            var revitHandle = RevitUiSession.CurrentUIApplication.GetActiveWindowHandle();
             if (revitHandle != IntPtr.Zero) {
                 var success = SetForegroundWindow(revitHandle);
             }
@@ -209,7 +210,7 @@ public class EphemeralWindow : Window {
             if (activateType == WA_INACTIVE && !this._isClosing && this.IsEphemeral) {
                 // lParam contains the handle of the window being activated (may be zero)
                 var newActiveWindow = lParam;
-                var revitHandle = DocumentManager.GetActiveWindow();
+                var revitHandle = RevitUiSession.CurrentUIApplication.GetActiveWindowHandle();
 
                 // Get actual foreground window (more reliable than lParam)
                 var actualForegroundWindow = GetForegroundWindow();

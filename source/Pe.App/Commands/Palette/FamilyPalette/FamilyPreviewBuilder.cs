@@ -1,7 +1,9 @@
+﻿
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamDocument.GetValue;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Global.PolyFill;
+using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Services.Document;
 using ArgumentException = Autodesk.Revit.Exceptions.ArgumentException;
 
@@ -227,7 +229,7 @@ public static class FamilyPreviewBuilder {
         var shouldClose = false;
 
         try {
-            famDoc = DocumentManager.FindOpenFamilyDocument(family);
+            famDoc = RevitUiSession.CurrentUIApplication.FindOpenFamilyDocument(family);
             if (famDoc == null) {
                 famDoc = hostDocument.EditFamily(family);
                 shouldClose = famDoc != null;

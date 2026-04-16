@@ -1,4 +1,5 @@
-using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
+﻿using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
+using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Services.Document;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData.Parameters;
@@ -48,7 +49,7 @@ public static class LoadedFamiliesFormulaCollector {
         var shouldClose = false;
 
         try {
-            var existingFamilyDocument = DocumentManager.FindOpenFamilyDocument(familyElement);
+            var existingFamilyDocument = RevitUiSession.CurrentUIApplication.FindOpenFamilyDocument(familyElement);
             familyDocument = existingFamilyDocument ?? projectDocument.EditFamily(familyElement);
             shouldClose = existingFamilyDocument == null;
 
@@ -368,7 +369,7 @@ public static class LoadedFamiliesFormulaCollector {
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var lookup = new List<RevitProjectBindingMetadata>();
 
-        foreach (var (definition, binding) in DocumentManager.GetProjectParameterBindings(projectDocument)) {
+        foreach (var (definition, binding) in projectDocument.GetProjectParameterBindings()) {
             if (string.IsNullOrWhiteSpace(definition?.Name))
                 continue;
 

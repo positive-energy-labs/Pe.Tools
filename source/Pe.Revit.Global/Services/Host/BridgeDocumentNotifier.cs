@@ -1,5 +1,6 @@
-using Autodesk.Revit.DB.Events;
+﻿using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI.Events;
+using Pe.Revit.Global.Revit.Documents;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Revit.Global.Services.Document;
 using Serilog;
@@ -34,8 +35,8 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
                 return;
 
             if (this._isInitialized) {
-                var uiApp = DocumentManager.uiapp;
-                var app = DocumentManager.uiapp.Application;
+                var uiApp = RevitUiSession.CurrentUIApplication;
+                var app = uiApp.Application;
                 uiApp.ViewActivated -= this.OnViewActivated;
                 app.DocumentChanged -= this.OnDocumentChanged;
                 app.DocumentOpened -= this.OnDocumentOpened;
@@ -50,8 +51,8 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
         lock (this._sync) {
             if (this._disposed || this._isInitialized)
                 return;
-            var uiApp = DocumentManager.uiapp;
-            var app = DocumentManager.uiapp.Application;
+            var uiApp = RevitUiSession.CurrentUIApplication;
+            var app = uiApp.Application;
             uiApp.ViewActivated += this.OnViewActivated;
             app.DocumentChanged += this.OnDocumentChanged;
             app.DocumentOpened += this.OnDocumentOpened;
@@ -71,7 +72,7 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
 
     private void OnViewActivated(object? sender, ViewActivatedEventArgs e) {
         var activeDocument = e?.CurrentActiveView?.Document;
-        var currentKey = activeDocument == null ? null : DocumentManager.GetDocumentKey(activeDocument);
+        var currentKey = activeDocument == null ? null : activeDocument.GetDocumentKey();
         var hasActiveDocument = activeDocument != null;
 
         lock (this._sync) {
@@ -102,13 +103,14 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
     }
 
     private DocumentInvalidationEvent BuildCurrentPayload(DocumentInvalidationReason reason) {
-        var activeDocument = DocumentManager.uiapp.ActiveUIDocument?.Document;
-        var activeDocumentKey = activeDocument == null ? null : DocumentManager.GetDocumentKey(activeDocument);
-        var activeDocumentPath = activeDocument == null ? null : DocumentManager.GetDocumentPath(activeDocument);
-        var activeDocumentCloudProjectGuid = activeDocument == null ? null : DocumentManager.GetCloudProjectGuid(activeDocument);
-        var activeDocumentCloudModelGuid = activeDocument == null ? null : DocumentManager.GetCloudModelGuid(activeDocument);
-        var activeDocumentCloudModelUrn = activeDocument == null ? null : DocumentManager.GetCloudModelUrn(activeDocument);
-        var openDocumentCount = DocumentManager.GetOpenDocuments().Count();
+        var uiApp = RevitUiSession.CurrentUIApplication;
+        var activeDocument = uiApp.GetActiveDocument();
+        var activeDocumentKey = activeDocument == null ? null : activeDocument.GetDocumentKey();
+        var activeDocumentPath = activeDocument == null ? null : activeDocument.GetDocumentPath();
+        var activeDocumentCloudProjectGuid = activeDocument == null ? null : activeDocument.GetCloudProjectGuid();
+        var activeDocumentCloudModelGuid = activeDocument == null ? null : activeDocument.GetCloudModelGuid();
+        var activeDocumentCloudModelUrn = activeDocument == null ? null : activeDocument.GetCloudModelUrn();
+        var openDocumentCount = uiApp.GetOpenDocuments().Count();
         var invalidatedDomains = new List<HostInvalidationDomain> {
             HostInvalidationDomain.SettingsFieldOptions,
             HostInvalidationDomain.SettingsParameterCatalog,

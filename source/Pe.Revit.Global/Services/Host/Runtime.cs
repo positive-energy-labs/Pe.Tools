@@ -1,5 +1,6 @@
 ﻿using Pe.Revit.Global.Services.Document;
 using Pe.Shared.HostContracts.Protocol;
+using Pe.Revit.Global.Revit.Documents;
 using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
@@ -78,7 +79,7 @@ public static class HostRuntime {
                 _connectionOptions.SessionId,
                 _connectionOptions.ConnectTimeoutMs,
                 _moduleRegistry.GetModules().Count(),
-                DocumentManager.GetActiveDocument()?.Title
+                RevitUiSession.CurrentUIApplication.GetActiveDocument()?.Title
             );
 
             var disposeStopwatch = Stopwatch.StartNew();
@@ -172,14 +173,15 @@ public static class HostRuntime {
                 };
             }
 
+            var activeDocument = RevitUiSession.CurrentUIApplication.GetActiveDocument();
             return new RuntimeStatus(
                 _moduleRegistry != null,
                 false,
                 _connectionOptions.PipeName,
                 _connectionOptions.SessionId,
                 _connectionOptions.ProcessId,
-                DocumentManager.GetActiveDocument() != null,
-                DocumentManager.GetActiveDocument()?.Title,
+                activeDocument != null,
+                activeDocument?.Title,
                 _moduleRegistry?.GetModules().Count() ?? 0,
                 Revit.Utils.Utils.GetRevitVersion(),
                 RuntimeInformation.FrameworkDescription,

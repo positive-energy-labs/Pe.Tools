@@ -1,9 +1,9 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
-using WpfColor = System.Windows.Media.Color;
 using Pe.Revit.Global.Services.Document;
+using WpfColor = System.Windows.Media.Color;
 
 namespace Pe.Revit.Global.Services.Document.Core;
 
@@ -92,7 +92,7 @@ public static class RevitTabColorReader {
     /// </summary>
     private static Visual? GetMainRevitWindow() {
         try {
-            var mainWindowHandle = DocumentManager.GetActiveWindow();
+            var mainWindowHandle = RevitUiSession.CurrentUIApplication.GetActiveWindowHandle();
             if (mainWindowHandle == IntPtr.Zero) return null;
 
             var source = HwndSource.FromHwnd(mainWindowHandle);

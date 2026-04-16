@@ -1,5 +1,6 @@
-using Autodesk.Revit.DB;
+﻿using Autodesk.Revit.DB;
 using Pe.Revit.Global.PolyFill;
+using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Services.Document;
 using Pe.Shared.HostContracts.RevitData;
 
@@ -45,7 +46,7 @@ public static class ScheduleSpecQueryCollector {
         bool includeTemplates,
         List<RevitDataIssue> issues
     ) {
-        var activeView = DocumentManager.uiapp.ActiveUIDocument?.ActiveView;
+        var activeView = RevitUiSession.CurrentUIApplication.GetActiveView();
         if (activeView is not ViewSchedule schedule || IsRevisionSchedule(schedule)) {
             issues.Add(ScheduleCollectorSupport.Warning(
                 "ScheduleSpecsCurrentActiveViewUnavailable",

@@ -1,6 +1,7 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
+using Pe.Revit.Global.Revit.Documents;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Global.Services.Host.Operations;
@@ -83,8 +84,8 @@ internal sealed class BridgeAgent : IDisposable {
         RevitTaskService revitTaskService
     ) {
         var startupStopwatch = Stopwatch.StartNew();
-        var uiapp = DocumentManager.uiapp;
-        var activeDocument = uiapp.ActiveUIDocument?.Document;
+        var uiapp = RevitUiSession.CurrentUIApplication;
+        var activeDocument = uiapp.GetActiveDocument();
         this._moduleRegistry = moduleRegistry;
         this._hostOptions = hostOptions;
         Log.Information(
@@ -203,8 +204,8 @@ internal sealed class BridgeAgent : IDisposable {
             this._hostOptions.PipeName,
             this._hostOptions.SessionId,
             this._hostOptions.ProcessId,
-            DocumentManager.uiapp.ActiveUIDocument?.Document != null,
-            DocumentManager.uiapp.ActiveUIDocument?.Document?.Title,
+            RevitUiSession.CurrentUIApplication.GetActiveDocument() != null,
+            RevitUiSession.CurrentUIApplication.GetActiveDocument()?.Title,
             this._moduleRegistry.GetModules().Count(),
             this.RevitVersion,
             this.RuntimeFramework,
@@ -380,7 +381,7 @@ internal sealed class BridgeAgent : IDisposable {
     }
 
     private void SendHandshake() {
-        var activeDocument = DocumentManager.uiapp.ActiveUIDocument?.Document;
+        var activeDocument = RevitUiSession.CurrentUIApplication.GetActiveDocument();
         var availableModules = this._moduleRegistry.GetModules()
             .Where(module => IsModuleAvailableForDocument(module, activeDocument))
             .OrderBy(module => module.ModuleKey, StringComparer.OrdinalIgnoreCase)
@@ -400,16 +401,16 @@ internal sealed class BridgeAgent : IDisposable {
             RuntimeInformation.FrameworkDescription,
             activeDocument != null,
             activeDocument?.Title,
-            activeDocument == null ? null : DocumentManager.GetDocumentKey(activeDocument),
-            activeDocument == null ? null : DocumentManager.GetDocumentPath(activeDocument),
+            activeDocument == null ? null : activeDocument.GetDocumentKey(),
+            activeDocument == null ? null : activeDocument.GetDocumentPath(),
             activeDocument?.IsFamilyDocument ?? false,
             activeDocument?.IsWorkshared ?? false,
             activeDocument?.IsModelInCloud ?? false,
-            activeDocument == null ? null : DocumentManager.GetCloudProjectGuid(activeDocument),
-            activeDocument == null ? null : DocumentManager.GetCloudModelGuid(activeDocument),
-            activeDocument == null ? null : DocumentManager.GetCloudModelUrn(activeDocument),
+            activeDocument == null ? null : activeDocument.GetCloudProjectGuid(),
+            activeDocument == null ? null : activeDocument.GetCloudModelGuid(),
+            activeDocument == null ? null : activeDocument.GetCloudModelUrn(),
             DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            DocumentManager.GetOpenDocuments().Count(),
+            RevitUiSession.CurrentUIApplication.GetOpenDocuments().Count(),
             availableModules
         );
         this._lastAdvertisedDocumentKey = handshake.ActiveDocumentKey;

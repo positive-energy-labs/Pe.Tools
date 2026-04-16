@@ -1,10 +1,10 @@
-using Pe.Revit.Global.PolyFill;
+﻿using Pe.Revit.Global.PolyFill;
 
 namespace Pe.Revit.Global.Services.Document.Core;
 
 /// <summary>
 ///     Manages the Most Recently Used (MRU) view buffer for tracking view activation history.
-///     Uses <see cref="DocumentManager" /> static methods for all document/view state queries.
+///     Uses session helpers for active/open state and the shared document key extension for document identity.
 ///     Note: No locking needed as Revit API is single-threaded.
 /// </summary>
 public class MruViewBuffer {
@@ -30,7 +30,12 @@ public class MruViewBuffer {
     public void RecordViewActivation(Autodesk.Revit.DB.Document doc, ElementId viewId) {
         if (doc == null || viewId == null || viewId == ElementId.InvalidElementId) return;
 
-        var newViewRef = new ViewReference(doc.Title, doc.PathName, viewId);
+        var newViewRef = new ViewReference(
+            doc.Title,
+            doc.GetDocumentPath() ?? doc.PathName,
+            doc.GetDocumentKey(),
+            doc.GetDocumentMruAffinityKey(),
+            viewId);
 
         if (this._previousViewRef != null && !this._previousViewRef.Equals(newViewRef)) {
             if (this.ShouldCommitPreviousView(this._previousViewRef, this._priorViewRef)) {
@@ -57,11 +62,11 @@ public class MruViewBuffer {
         var views = new List<View>();
         // Track seen views by DocumentKey + ViewId to prevent duplicates (same ViewId can exist in different docs)
         var seenViews = new HashSet<string>();
-        var currentView = DocumentManager.GetActiveView();
+        var currentView = uiApp.GetActiveView();
 
         // Add current view first if it exists
         if (currentView != null) {
-            var currentViewKey = $"{GetDocumentKey(currentView.Document)}|{currentView.Id.Value()}";
+            var currentViewKey = $"{currentView.Document.GetDocumentKey()}|{currentView.Id.Value()}";
             views.Add(currentView);
             _ = seenViews.Add(currentViewKey);
         }
@@ -75,7 +80,7 @@ public class MruViewBuffer {
             if (seenViews.Contains(viewKey)) continue;
 
             // Only skip if the document is closed (view can't be accessed)
-            var targetDoc = DocumentManager.FindDocumentByName(viewRef.DocumentTitle);
+            var targetDoc = this.FindBufferedDocument(uiApp, viewRef);
             if (targetDoc == null) continue;
 
             // Get the view element - this works even if the view tab is closed
@@ -94,7 +99,7 @@ public class MruViewBuffer {
     public void RemoveDocumentViews(Autodesk.Revit.DB.Document doc) {
         if (doc == null) return;
 
-        var docKey = GetDocumentKey(doc);
+        var docKey = doc.GetDocumentKey();
         _ = this._buffer.RemoveAll(v => v.DocumentKey == docKey);
         if (this._previousViewRef?.DocumentKey == docKey)
             this._previousViewRef = null;
@@ -139,7 +144,10 @@ public class MruViewBuffer {
         // For views < 2s: check if we crossed a document boundary to get to this view
         // Compare the view we're deciding about (previousViewRef) with the view BEFORE it (priorViewRef)
         if (priorViewRef != null) {
-            var crossedDocBoundary = previousViewRef.DocumentKey != priorViewRef.DocumentKey;
+            var crossedDocBoundary = !string.Equals(
+                previousViewRef.DocumentMruAffinityKey,
+                priorViewRef.DocumentMruAffinityKey,
+                StringComparison.OrdinalIgnoreCase);
 
             Console.WriteLine(
                 $"[MruViewBuffer] ShouldCommit '{previousViewRef.DocumentTitle}' viewId={previousViewRef.ViewId.Value()}: " +
@@ -162,19 +170,21 @@ public class MruViewBuffer {
             this._buffer.RemoveRange(MaxBufferSize, this._buffer.Count - MaxBufferSize);
     }
 
-    /// <summary>
-    ///     Gets a stable key for a document. Uses Title for family documents with temp paths
-    ///     (they get new temp paths each activation), otherwise uses PathName.
-    /// </summary>
-    private static string GetDocumentKey(Autodesk.Revit.DB.Document doc) {
-        var path = doc.PathName;
-        if (string.IsNullOrEmpty(path)) return doc.Title;
+    private Autodesk.Revit.DB.Document? FindBufferedDocument(UIApplication uiApp, ViewReference viewRef) {
+        var exactDocument = uiApp.FindOpenDocumentByKey(viewRef.DocumentKey) ??
+                            uiApp.FindOpenDocumentByPath(viewRef.DocumentPath);
+        if (exactDocument != null)
+            return exactDocument;
 
-        // Family documents in temp paths get new GUIDs each time, use Title instead
-        var isTempPath = path.Contains(@"\Temp\", StringComparison.OrdinalIgnoreCase) ||
-                         path.Contains(@"/Temp/", StringComparison.OrdinalIgnoreCase);
-        var isFamilyInTemp = isTempPath && path.EndsWith(".rfa", StringComparison.OrdinalIgnoreCase);
+        var affinityMatches = uiApp.GetOpenDocuments()
+            .Where(doc => string.Equals(doc.GetDocumentMruAffinityKey(), viewRef.DocumentMruAffinityKey, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (affinityMatches.Count == 1)
+            return affinityMatches[0];
 
-        return isFamilyInTemp ? doc.Title : path;
+        var titleMatches = uiApp.GetOpenDocuments()
+            .Where(doc => string.Equals(doc.Title, viewRef.DocumentTitle, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        return titleMatches.Count == 1 ? titleMatches[0] : null;
     }
 }

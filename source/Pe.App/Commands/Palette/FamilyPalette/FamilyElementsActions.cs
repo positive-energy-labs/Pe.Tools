@@ -1,5 +1,7 @@
+﻿
 using Pe.App.Services;
 using Pe.Revit.Extensions.FamDocument;
+using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Services.Document;
 
 namespace Pe.App.Commands.Palette.FamilyPalette;
@@ -88,7 +90,8 @@ internal static class FamilyElementsActions {
     ///     Zooms to and selects an element in the view.
     /// </summary>
     internal static void HandleZoomToElement(FamilyElementItem? item) {
-        var uidoc = DocumentManager.GetActiveUIDocument();
+        var uidoc = RevitUiSession.CurrentUIApplication.GetActiveUIDocument();
+        if (uidoc == null) return;
         if (item?.ElementId == null) return;
         uidoc.ShowElements(item.ElementId);
         uidoc.Selection.SetElementIds([item.ElementId]);
@@ -109,7 +112,8 @@ internal static class FamilyElementsActions {
             _ => throw new InvalidOperationException($"Unknown element type: {item.ElementType}")
         };
 
-        var doc = DocumentManager.GetActiveDocument();
+        var doc = RevitUiSession.CurrentUIApplication.GetActiveDocument();
+        if (doc == null) return;
         _ = RevitDbExplorerService.TrySnoopObject(doc, objectToSnoop, item.TextPrimary);
     }
 }

@@ -1,7 +1,6 @@
-using Pe.Shared.HostContracts.RevitData;
+﻿using Pe.Shared.HostContracts.RevitData;
 using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
 using Pe.Revit.Global.Revit.Lib.Parameters;
-using Pe.Revit.Global.Services.Document;
 using Pe.Shared.RevitData.Parameters;
 
 namespace Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
@@ -15,8 +14,8 @@ public static class ProjectParameterBindingsCollector {
         var categoryFilter = BuildCategoryFilter(selectedFamilies, filter);
         var issues = new List<CollectedIssue>();
 
-        var bindings = DocumentManager.GetProjectParameterBindings(doc)
-            .Select(binding => MapBinding(doc, binding.def, binding.binding, categoryFilter, issues))
+        var bindings = doc.GetProjectParameterBindings()
+            .Select(binding => MapBinding(doc, binding.definition, binding.binding, categoryFilter, issues))
             .Where(binding => binding != null)
             .Cast<CollectedProjectParameterBindingRecord>()
             .OrderBy(binding => binding.Name, StringComparer.OrdinalIgnoreCase)

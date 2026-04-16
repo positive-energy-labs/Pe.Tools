@@ -6,6 +6,7 @@ using Nice3point.Revit.Toolkit.External;
 using Pe.App.Services.AutoTag;
 using Pe.Tools.SettingsEditor;
 using Pe.App.Tasks;
+using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Global.Services.Host;
 using Pe.Revit.Scripting.Transport;
@@ -51,7 +52,7 @@ public class Application : ExternalApplication {
         // unless PE_SETTINGS_BRIDGE_AUTO_CONNECT is explicitly enabled.
         HostRuntime.Initialize(revitTaskService, KnownSettingsRegistry.RegisterRevitModules);
         _scriptingPipeServer = new ScriptingPipeServer(new ScriptingPipeMessageHandler(
-            () => DocumentManager.uiapp,
+            () => RevitUiSession.CurrentUIApplication,
             message => Log.Information("Revit scripting notification: {Message}", message)
         ));
 

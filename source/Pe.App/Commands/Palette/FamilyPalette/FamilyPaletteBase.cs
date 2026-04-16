@@ -1,5 +1,6 @@
-using Autodesk.Revit.Attributes;
+﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
+using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Revit.Ui;
 using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Ui.Core;
@@ -39,9 +40,9 @@ public abstract class FamilyPaletteBase : IExternalCommand {
 
     internal static Result ShowPalette(int defaultTabIndex, string? filterValue = null) {
         try {
-            var uiapp = DocumentManager.uiapp;
-            var doc = DocumentManager.GetActiveDocument();
-            var uidoc = DocumentManager.GetActiveUIDocument();
+            var uiapp = RevitUiSession.CurrentUIApplication;
+            var doc = uiapp.GetActiveDocument();
+            var uidoc = uiapp.GetActiveUIDocument();
             if (doc == null || uidoc == null) {
                 Log.Error("Failed to get active document or UIDocument");
                 return Result.Failed;
