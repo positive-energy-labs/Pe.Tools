@@ -1,6 +1,6 @@
-﻿using Pe.Revit.Extensions.FamDocument.SetValue;
+using Pe.Revit.Extensions.FamDocument.SetValue;
 using Pe.Revit.Extensions.FamManager;
-using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Shared.StorageRuntime.Json;
 using Pe.Shared.StorageRuntime.Json;
 using System.ComponentModel;
@@ -114,3 +114,4 @@ public class MappingData {
         "Coercion strategy to use for the remapping. CoerceByStorageType will be used when none is specified.")]
     public string MappingStrategy { get; init; } = nameof(BuiltInCoercionStrategy.CoerceByStorageType);
 }
+

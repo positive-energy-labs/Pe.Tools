@@ -46,3 +46,4 @@ public class ExcludeSharedParameter {
     [Includable(IncludableFragmentRoot.SharedParameterNames)]
     public List<string> StartingWith { get; init; } = [];
 }
+

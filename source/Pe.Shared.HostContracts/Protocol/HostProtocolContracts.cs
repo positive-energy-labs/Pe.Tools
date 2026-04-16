@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Shared.HostContracts.Operations;
 using TypeGen.Core.TypeAnnotations;
@@ -38,7 +38,7 @@ public static class HttpRoutes {
         GetLoadedFamiliesFilterFieldOptionsOperationContract.Definition.Route;
 
     public static readonly string ScheduleCatalog = GetScheduleCatalogOperationContract.Definition.Route;
-    public static readonly string ScheduleSpecsQuery = GetScheduleSpecsQueryOperationContract.Definition.Route;
+    public static readonly string ScheduleProfilesQuery = GetScheduleProfilesQueryOperationContract.Definition.Route;
     public static readonly string ScheduleQuery = GetScheduleQueryOperationContract.Definition.Route;
     public static readonly string LoadedFamiliesCatalog = GetLoadedFamiliesCatalogOperationContract.Definition.Route;
     public static readonly string LoadedFamiliesMatrix = GetLoadedFamiliesMatrixOperationContract.Definition.Route;
@@ -62,7 +62,7 @@ public static class HttpRoutes {
         GetElectricalLoadClassificationsCatalogOperationContract.Definition.Route;
 
     public static readonly string DocumentContext =
-        GetRevitDocumentContextOperationContract.Definition.Route;
+        GetRevitDocumentSessionContextOperationContract.Definition.Route;
 
     public static readonly string ScriptingWorkspaceBootstrap =
         GetScriptWorkspaceBootstrapOperationContract.Definition.Route;
@@ -94,7 +94,7 @@ public enum HostInvalidationDomain {
     SettingsFieldOptions,
     SettingsParameterCatalog,
     ScheduleCatalog,
-    ScheduleSpecsQuery,
+    ScheduleProfilesQuery,
     ScheduleQuery,
     LoadedFamiliesCatalog,
     LoadedFamiliesMatrix,

@@ -1,6 +1,7 @@
-﻿using Pe.Revit.Extensions.FamDocument;
-using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.Extensions.FamDocument;
+using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Revit.FamilyFoundry.Snapshots;
+using Pe.Revit.Global.Revit.Documents;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
@@ -62,7 +63,7 @@ public class OperationProcessor(
     /// </summary>
     public (List<FamilyProcessingContext> contexts, double totalMs) ProcessQueue(
         OperationQueue queue,
-        CollectorQueue? collectorQueue = null,
+        SnapshotCapturePipeline? collectorQueue = null,
         string? outputFolderPath = null,
         LoadAndSaveOptions? loadAndSaveOptions = null) {
         var totalSw = Stopwatch.StartNew();
@@ -80,7 +81,7 @@ public class OperationProcessor(
 
     public (List<FamilyProcessingContext> contexts, double totalMs) ProcessQueueDangerously(
         OperationQueue queue,
-        CollectorQueue? collectorQueue,
+        SnapshotCapturePipeline? collectorQueue,
         string? outputFolderPath = null,
         LoadAndSaveOptions? loadAndSaveOptions = null
     ) {
@@ -109,7 +110,7 @@ public class OperationProcessor(
 
     private List<FamilyProcessingContext> ProcessNormalDocument(
         OperationQueue queue,
-        CollectorQueue? collectorQueue,
+        SnapshotCapturePipeline? collectorQueue,
         LoadAndSaveOptions? loadAndSaveOptions,
         string? outputFolderPath
     ) {
@@ -157,13 +158,13 @@ public class OperationProcessor(
         return contexts;
     }
 
-    private List<FamilyProcessingContext> ProcessFamilyDocument(OperationQueue queue, CollectorQueue? collectorQueue) {
+    private List<FamilyProcessingContext> ProcessFamilyDocument(OperationQueue queue, SnapshotCapturePipeline? collectorQueue) {
         return this.ProcessFamilyDocument(queue, collectorQueue, null, null);
     }
 
     private List<FamilyProcessingContext> ProcessFamilyDocument(
         OperationQueue queue,
-        CollectorQueue? collectorQueue,
+        SnapshotCapturePipeline? collectorQueue,
         LoadAndSaveOptions? loadAndSaveOptions,
         string? outputFolderPath
     ) {
@@ -200,7 +201,7 @@ public class OperationProcessor(
 
     public List<FamilyProcessingContext> ProcessFamilyDocumentIntoVariants(
         List<(string variant, OperationQueue queue)> variants,
-        CollectorQueue? collectorQueue,
+        SnapshotCapturePipeline? collectorQueue,
         string outputDirectory
     ) => this.ProcessFamilyDocumentIntoVariants(
         variants.Select(v => new VariantSpec(v.variant, v.queue)).ToList(),
@@ -210,7 +211,7 @@ public class OperationProcessor(
 
     public List<FamilyProcessingContext> ProcessFamilyDocumentIntoVariants(
         List<VariantSpec> variants,
-        CollectorQueue? collectorQueue,
+        SnapshotCapturePipeline? collectorQueue,
         string outputDirectory
     ) {
         var contexts = new List<FamilyProcessingContext>();
@@ -313,37 +314,18 @@ public class OperationProcessor(
         string? outputFolderPath
     ) {
         var savePaths = new List<string>();
-        var familyFileName = GetFamilyFileName(famDoc);
+        var familyFileStem = famDoc.Document.GetFamilyFileStem();
+        var familyFileName = $"{familyFileStem}.rfa";
 
         if ((options?.SaveFamilyToInternalPath ?? false) && !string.IsNullOrWhiteSpace(famDoc.PathName))
             savePaths.Add(famDoc.PathName);
 
         if ((options?.SaveFamilyToOutputDir ?? false) && !string.IsNullOrWhiteSpace(outputFolderPath)) {
-            var familyOutputDirectory = Path.Combine(outputFolderPath, GetFamilyDirectoryName(famDoc));
+            var familyOutputDirectory = Path.Combine(outputFolderPath, familyFileStem);
             savePaths.Add(Path.Combine(familyOutputDirectory, familyFileName));
         }
 
         return savePaths;
-    }
-
-    private static string GetFamilyFileName(FamilyDocument famDoc) => $"{GetSanitizedFamilyStem(famDoc)}.rfa";
-
-    private static string GetFamilyDirectoryName(FamilyDocument famDoc) => GetSanitizedFamilyStem(famDoc);
-
-    private static string GetSanitizedFamilyStem(FamilyDocument famDoc) {
-        var familyName = famDoc.OwnerFamily?.Name;
-        if (string.IsNullOrWhiteSpace(familyName))
-            familyName = Path.GetFileNameWithoutExtension(famDoc.Document.Title);
-        if (string.IsNullOrWhiteSpace(familyName))
-            familyName = "Family";
-
-        var invalidChars = Path.GetInvalidFileNameChars();
-        var sanitized = new string(familyName
-            .Select(ch => invalidChars.Contains(ch) ? '_' : ch)
-            .ToArray())
-            .Trim();
-
-        return string.IsNullOrWhiteSpace(sanitized) ? "Family" : sanitized;
     }
 }
 
@@ -401,9 +383,9 @@ public class VariantSpec {
     ///     Optional metadata dictionary for storing variant-specific information
     ///     (e.g., synthetic settings, configuration data, etc.)
     /// </summary>
-    public BaseProfileSettings Profile { get; set; }
+    public BaseProfile Profile { get; set; }
 
-    public VariantSpec WithProfile(BaseProfileSettings profile) {
+    public VariantSpec WithProfile(BaseProfile profile) {
         this.Profile = profile;
         return this;
     }

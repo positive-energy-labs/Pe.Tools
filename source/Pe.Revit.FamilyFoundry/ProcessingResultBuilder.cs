@@ -1,11 +1,8 @@
-﻿using Pe.Revit.FamilyFoundry.OperationSettings;
-using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.FamilyFoundry.Plans;
+using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.FamilyFoundry.Serialization;
 using Pe.Revit.Global;
 using Pe.Revit.Global.PolyFill;
-using Pe.Shared.StorageRuntime;
-using Pe.Shared.StorageRuntime;
-using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
 
@@ -19,7 +16,7 @@ public class ProcessingResultBuilder {
     private readonly OutputStorage _runOutput;
     private List<(string Name, string Description, string Type, string IsMerged)> _operationMetadata = [];
     private string _profileName;
-    private object _profileSettings;
+    private object _profilePayload;
 
     public ProcessingResultBuilder(ModuleStorage storage) : this(storage.Output().TimestampedSubDir()) { }
 
@@ -39,18 +36,18 @@ public class ProcessingResultBuilder {
 
     private static string GetInstTypeStr(ParameterSnapshot param) => param.IsInstance ? "INST" : "TYPE";
 
-    public ProcessingResultBuilder WithProfile<T>(T settings, string profileName) where T : BaseProfileSettings {
-        this._profileSettings = settings;
+    public ProcessingResultBuilder WithProfile<T>(T profile, string profileName) where T : BaseProfile {
+        this._profilePayload = profile;
         this._profileName = profileName;
         return this;
     }
 
     /// <summary>
-    ///     Sets profile settings and name without BaseProfileSettings constraint.
-    ///     Use for variant-specific or custom settings objects.
+    ///     Sets the top-level authored profile payload and name without a BaseProfile constraint.
+    ///     Use for variant-specific or custom profile-shaped objects.
     /// </summary>
-    public ProcessingResultBuilder WithCustomProfile(object settings, string profileName) {
-        this._profileSettings = settings;
+    public ProcessingResultBuilder WithCustomProfile(object profile, string profileName) {
+        this._profilePayload = profile;
         this._profileName = profileName;
         return this;
     }
@@ -71,20 +68,20 @@ public class ProcessingResultBuilder {
         var familyDirName = SanitizeDirName(ctx.FamilyName);
         var familyOutput = this._runOutput.SubDir(familyDirName);
 
-        // Serialize each section separately (pre-processing)
+        // Serialize each captured snapshot field separately (pre-processing).
         if (ctx.PreProcessSnapshot != null)
-            SerializeSnapshotSections(ctx.PreProcessSnapshot, familyOutput, "pre");
+            SerializeCapturedCollections(ctx.PreProcessSnapshot, familyOutput, "pre");
 
-        // Serialize each section separately (post-processing)
+        // Serialize each captured snapshot field separately (post-processing).
         if (ctx.PostProcessSnapshot != null)
-            SerializeSnapshotSections(ctx.PostProcessSnapshot, familyOutput, "post");
+            SerializeCapturedCollections(ctx.PostProcessSnapshot, familyOutput, "post");
 
-        var settingsName = $"snapshot-profile-{this._profileName}.json";
+        var profileArtifactName = $"snapshot-profile-{this._profileName}.json";
         var abridgedName = "logs-abridged.json";
         var detailedName = "logs-detailed.json";
         var paramDiffName = "snapshot-parameters-diff.json";
 
-        _ = familyOutput.Json(settingsName).Write(this._profileSettings);
+        _ = familyOutput.Json(profileArtifactName).Write(this._profilePayload);
         _ = familyOutput.Json(abridgedName).Write(BuildAbridged(ctx));
         var detailedPath = familyOutput.Json(detailedName).Write(this.BuildDetailed(ctx))!;
         _ = familyOutput.Json(paramDiffName).Write(BuildParameterDiff(ctx));
@@ -314,7 +311,7 @@ public class ProcessingResultBuilder {
     }
 
 
-    private static void SerializeSnapshotSections(FamilySnapshot snapshot, OutputStorage output, string prefix) {
+    private static void SerializeCapturedCollections(FamilySnapshot snapshot, OutputStorage output, string prefix) {
         if (snapshot.Parameters?.Data != null && snapshot.Parameters.Data.Count > 0) {
             var paramsData = snapshot.Parameters.Data;
             var sharedParameterNames = paramsData
@@ -342,9 +339,9 @@ public class ProcessingResultBuilder {
         }
 
         if (snapshot.RefPlanesAndDims != null) {
-            var hasSpecs = snapshot.RefPlanesAndDims.MirrorSpecs.Count > 0 ||
-                           snapshot.RefPlanesAndDims.OffsetSpecs.Count > 0;
-            if (hasSpecs)
+            var hasConstraints = snapshot.RefPlanesAndDims.MirrorConstraintSnapshots.Count > 0 ||
+                                 snapshot.RefPlanesAndDims.OffsetConstraintSnapshots.Count > 0;
+            if (hasConstraints)
                 _ = output.Json($"snapshot-refplanesanddims-{prefix}.json").Write(snapshot.RefPlanesAndDims);
         }
 
@@ -377,10 +374,10 @@ public class DryRunResultBuilder(ModuleStorage storage) {
     private List<Family> _families = [];
     private List<(string Name, string Description, string Type, string IsMerged)> _operationMetadata = [];
     private string _profileName;
-    private object _profileSettings;
+    private object _profilePayload;
 
-    public DryRunResultBuilder WithProfile<T>(T settings, string profileName) where T : BaseProfileSettings {
-        this._profileSettings = settings;
+    public DryRunResultBuilder WithProfile<T>(T profile, string profileName) where T : BaseProfile {
+        this._profilePayload = profile;
         this._profileName = profileName;
         return this;
     }
@@ -414,7 +411,7 @@ public class DryRunResultBuilder(ModuleStorage storage) {
         var detailed = new {
             Timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
             Profile = this._profileName,
-            ProfileSettings = this._profileSettings,
+            ProfileSettings = this._profilePayload,
             Operations = this._operationMetadata.Select(op =>
                 new { Operation = $"[Batch {op.IsMerged}] ({op.Type}) {op.Name}", op.Description }).ToList(),
             ApsParameters =

@@ -5,7 +5,7 @@ using Pe.Shared.StorageRuntime.Validation;
 namespace Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 
 public static class FFMigratorManifest {
-    public static SettingsModuleManifest<FFMigratorSettings> Module { get; } = new(
+    public static SettingsModuleManifest<FFMigratorProfile> Module { get; } = new(
         "CmdFFMigrator",
         "profiles",
         SettingsCatalogStorageProfiles.SharedAuthoring,

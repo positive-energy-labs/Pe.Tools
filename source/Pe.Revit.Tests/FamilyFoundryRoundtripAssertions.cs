@@ -1,8 +1,8 @@
 using Autodesk.Revit.DB.Mechanical;
 using Autodesk.Revit.DB.Plumbing;
 using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.OperationSettings;
-using Pe.Revit.FamilyFoundry.Resolution;
+using Pe.Revit.FamilyFoundry.Plans;
+using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Snapshots;
 
 namespace Pe.Revit.Tests;
@@ -82,7 +82,7 @@ internal static class FamilyFoundryRoundtripAssertions {
     }
 
     public static void AssertOffsetPlanesTrackDriversAcrossStates(
-        ParamDrivenSolidsCompileResult compiled,
+        ParamDrivenSolidsPlan compiled,
         IReadOnlyList<(string TypeName, RuntimeStateProbe Result)> states
     ) {
         foreach (var offset in compiled.RefPlanesAndDims.Offsets) {
@@ -105,7 +105,7 @@ internal static class FamilyFoundryRoundtripAssertions {
     }
 
     public static void AssertSymmetricPairsTrackDriversAcrossStates(
-        ParamDrivenSolidsCompileResult compiled,
+        ParamDrivenSolidsPlan compiled,
         IReadOnlyList<(string TypeName, RuntimeStateProbe Result)> states
     ) {
         foreach (var pair in compiled.RefPlanesAndDims.SymmetricPairs) {
@@ -131,7 +131,7 @@ internal static class FamilyFoundryRoundtripAssertions {
     }
 
     public static void AssertDimensionLabelsMatchCompiledPlan(
-        ParamDrivenSolidsCompileResult compiled,
+        ParamDrivenSolidsPlan compiled,
         IReadOnlyList<(string TypeName, RuntimeStateProbe Result)> states
     ) {
         Assert.That(states, Is.Not.Empty);
@@ -154,7 +154,7 @@ internal static class FamilyFoundryRoundtripAssertions {
     }
 
     public static void AssertPrismsTrackConstrainingPlanesAcrossStates(
-        ParamDrivenSolidsCompileResult compiled,
+        ParamDrivenSolidsPlan compiled,
         IReadOnlyList<(string TypeName, RuntimeStateProbe Result)> states
     ) {
         foreach (var (typeName, state) in states) {
@@ -171,7 +171,7 @@ internal static class FamilyFoundryRoundtripAssertions {
     }
 
     public static void AssertCylindersTrackConstrainingPlanesAcrossStates(
-        ParamDrivenSolidsCompileResult compiled,
+        ParamDrivenSolidsPlan compiled,
         IReadOnlyList<(string TypeName, RuntimeStateProbe Result)> states
     ) {
         foreach (var (typeName, state) in states) {
@@ -198,7 +198,7 @@ internal static class FamilyFoundryRoundtripAssertions {
     }
 
     public static void AssertConnectorsTrackFacesAndDriversAcrossStates(
-        ParamDrivenSolidsCompileResult compiled,
+        ParamDrivenSolidsPlan compiled,
         IReadOnlyList<(string TypeName, RuntimeStateProbe Result)> states
     ) {
         var expectations = compiled.Connectors.Connectors.Select(BuildConnectorExpectation).ToList();
@@ -423,7 +423,7 @@ internal static class FamilyFoundryRoundtripAssertions {
 
     private static double ScoreRectangleCandidate(
         RuntimePrismProbe candidate,
-        ConstrainedRectangleExtrusionSpec spec,
+        ConstrainedRectangleExtrusionSnapshot spec,
         RuntimeStateProbe state
     ) {
         var pairAScore = ScorePairAlignment(candidate.Min, candidate.Max, GetPlane(state, spec.PairAPlane1), GetPlane(state, spec.PairAPlane2));
@@ -435,7 +435,7 @@ internal static class FamilyFoundryRoundtripAssertions {
 
     private static void AssertRectangleExtents(
         RuntimePrismProbe candidate,
-        ConstrainedRectangleExtrusionSpec spec,
+        ConstrainedRectangleExtrusionSnapshot spec,
         RuntimeStateProbe state,
         string typeName
     ) {
@@ -446,7 +446,7 @@ internal static class FamilyFoundryRoundtripAssertions {
 
     private static double ScoreCircleCandidate(
         RuntimeCylinderProbe candidate,
-        ConstrainedCircleExtrusionSpec spec,
+        ConstrainedCircleExtrusionSnapshot spec,
         RuntimeStateProbe state
     ) {
         var expectedDiameter = ResolveDriverValue(spec.DiameterDriver, spec.DiameterParameter, state);

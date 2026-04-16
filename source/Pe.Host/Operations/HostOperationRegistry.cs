@@ -1,4 +1,4 @@
-﻿using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.HostContracts.RevitData;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts.Scripting;
@@ -40,8 +40,8 @@ internal sealed class HostOperationRegistry {
             HostOperations.Bridge<ScheduleCatalogRequest, ScheduleCatalogEnvelopeResponse>(
                 GetScheduleCatalogOperationContract.Definition
             ),
-            HostOperations.Bridge<ScheduleSpecsQueryRequest, ScheduleSpecsQueryEnvelopeResponse>(
-                GetScheduleSpecsQueryOperationContract.Definition
+            HostOperations.Bridge<ScheduleProfilesQueryRequest, ScheduleProfilesQueryEnvelopeResponse>(
+                GetScheduleProfilesQueryOperationContract.Definition
             ),
             HostOperations.Bridge<ScheduleQueryRequest, ScheduleQueryEnvelopeResponse>(
                 GetScheduleQueryOperationContract.Definition
@@ -78,8 +78,8 @@ internal sealed class HostOperationRegistry {
             HostOperations.Bridge<ElectricalLoadClassificationsCatalogRequest, ElectricalLoadClassificationsCatalogEnvelopeResponse>(
                 GetElectricalLoadClassificationsCatalogOperationContract.Definition
             ),
-            HostOperations.Bridge<RevitDocumentContextRequest, RevitDocumentContextEnvelopeResponse>(
-                GetRevitDocumentContextOperationContract.Definition
+            HostOperations.Bridge<RevitDocumentSessionContextRequest, RevitDocumentSessionContextEnvelopeResponse>(
+                GetRevitDocumentSessionContextOperationContract.Definition
             ),
             HostOperations.Create<OpenSettingsDocumentRequest>(
                 OpenSettingsDocumentOperationContract.Definition,

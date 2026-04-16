@@ -1,12 +1,12 @@
-﻿using Autodesk.Revit.DB;
+using Autodesk.Revit.DB;
 using Pe.Revit.Global.PolyFill;
 using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Services.Document;
 using Pe.Shared.HostContracts.RevitData;
-using InternalScheduleFieldSpec = Pe.Revit.Global.Revit.Lib.Schedules.Fields.ScheduleFieldSpec;
-using InternalScheduleSpec = Pe.Revit.Global.Revit.Lib.Schedules.ScheduleSpec;
+using InternalScheduleFieldSpec = Pe.Revit.Global.Revit.Documents.Schedules.Fields.ScheduleFieldSpec;
+using InternalScheduleProfile = Pe.Revit.Global.Revit.Documents.Schedules.ScheduleProfile;
 
-namespace Pe.Revit.Global.Revit.Lib.Schedules;
+namespace Pe.Revit.Global.Revit.Documents.Schedules;
 
 public static class ScheduleQueryCollector {
     public static ScheduleQueryData Collect(
@@ -153,7 +153,7 @@ public static class ScheduleQueryCollector {
         List<RevitDataIssue> issues
     ) {
         try {
-            var spec = ScheduleHelper.SerializeSchedule(schedule);
+            var profile = schedule.CaptureScheduleProfile();
             var sheetPlacements = ScheduleCollectorSupport.CollectSheetPlacements(doc, schedule);
             var template = ScheduleCollectorSupport.GetViewTemplate(schedule);
 
@@ -168,7 +168,7 @@ public static class ScheduleQueryCollector {
                 template?.Name,
                 sheetPlacements.Count != 0,
                 sheetPlacements,
-                CollectSections(schedule, spec)
+                CollectSections(schedule, profile)
             );
         } catch (Exception ex) {
             issues.Add(ScheduleCollectorSupport.Warning(
@@ -182,17 +182,17 @@ public static class ScheduleQueryCollector {
 
     private static List<ScheduleSectionProjection> CollectSections(
         ViewSchedule schedule,
-        InternalScheduleSpec spec
+        InternalScheduleProfile profile
     ) => [
-        CollectSection(schedule, spec, ScheduleSectionType.Header, SectionType.Header),
-        CollectSection(schedule, spec, ScheduleSectionType.Body, SectionType.Body),
-        CollectSection(schedule, spec, ScheduleSectionType.Summary, SectionType.Summary),
-        CollectSection(schedule, spec, ScheduleSectionType.Footer, SectionType.Footer)
+        CollectSection(schedule, profile, ScheduleSectionType.Header, SectionType.Header),
+        CollectSection(schedule, profile, ScheduleSectionType.Body, SectionType.Body),
+        CollectSection(schedule, profile, ScheduleSectionType.Summary, SectionType.Summary),
+        CollectSection(schedule, profile, ScheduleSectionType.Footer, SectionType.Footer)
     ];
 
     private static ScheduleSectionProjection CollectSection(
         ViewSchedule schedule,
-        InternalScheduleSpec spec,
+        InternalScheduleProfile profile,
         ScheduleSectionType contractSectionType,
         SectionType revitSectionType
     ) {
@@ -212,10 +212,10 @@ public static class ScheduleQueryCollector {
         }
 
         var columnHeaders = revitSectionType == SectionType.Body
-            ? CollectBodyColumnHeaders(schedule, section, spec)
+            ? CollectBodyColumnHeaders(schedule, section, profile)
             : new Dictionary<int, string?>();
         var fieldsByColumn = revitSectionType == SectionType.Body
-            ? CollectVisibleBodyFields(section, spec)
+            ? CollectVisibleBodyFields(section, profile)
             : new Dictionary<int, InternalScheduleFieldSpec>();
         var rows = new List<ScheduleRowProjection>();
 
@@ -260,10 +260,10 @@ public static class ScheduleQueryCollector {
     private static Dictionary<int, string?> CollectBodyColumnHeaders(
         ViewSchedule schedule,
         TableSectionData bodySection,
-        InternalScheduleSpec spec
+        InternalScheduleProfile profile
     ) {
         var headers = new Dictionary<int, string?>();
-        var visibleFields = spec.Fields
+        var visibleFields = profile.Fields
             .Where(field => !field.IsHidden)
             .ToList();
         var bodyColumn = bodySection.FirstColumnNumber;
@@ -282,10 +282,10 @@ public static class ScheduleQueryCollector {
 
     private static Dictionary<int, InternalScheduleFieldSpec> CollectVisibleBodyFields(
         TableSectionData bodySection,
-        InternalScheduleSpec spec
+        InternalScheduleProfile profile
     ) {
         var fieldsByColumn = new Dictionary<int, InternalScheduleFieldSpec>();
-        var visibleFields = spec.Fields
+        var visibleFields = profile.Fields
             .Where(field => !field.IsHidden)
             .ToList();
 

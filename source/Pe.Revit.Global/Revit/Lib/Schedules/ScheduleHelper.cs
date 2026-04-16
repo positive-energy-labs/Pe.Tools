@@ -1,25 +1,25 @@
 using Autodesk.Revit.DB.Structure;
-using Pe.Revit.Global.Revit.Lib.Schedules.Fields;
-using Pe.Revit.Global.Revit.Lib.Schedules.Filters;
-using Pe.Revit.Global.Revit.Lib.Schedules.HeaderGroups;
-using Pe.Revit.Global.Revit.Lib.Schedules.SortGroup;
-using Pe.Revit.Global.Revit.Lib.Schedules.TitleStyle;
-using Pe.Revit.Global.Revit.Lib.Schedules.ViewTemplate;
+using Pe.Revit.Global.Revit.Documents.Schedules.Fields;
+using Pe.Revit.Global.Revit.Documents.Schedules.Filters;
+using Pe.Revit.Global.Revit.Documents.Schedules.HeaderGroups;
+using Pe.Revit.Global.Revit.Documents.Schedules.SortGroup;
+using Pe.Revit.Global.Revit.Documents.Schedules.TitleStyle;
+using Pe.Revit.Global.Revit.Documents.Schedules.ViewTemplate;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData.Parameters;
 using Serilog;
 
-namespace Pe.Revit.Global.Revit.Lib.Schedules;
+namespace Pe.Revit.Global.Revit.Documents.Schedules;
 
-public static class ScheduleHelper {
+internal static class ScheduleHelper {
     /// <summary>
-    ///     Serializes a ViewSchedule into a ScheduleSpec.
+    ///     Serializes a ViewSchedule into a ScheduleProfile.
     /// </summary>
-    public static ScheduleSpec SerializeSchedule(ViewSchedule schedule) {
+    public static ScheduleProfile SerializeSchedule(ViewSchedule schedule) {
         var def = schedule.Definition;
         var category = Category.GetCategory(schedule.Document, def.CategoryId);
 
-        var spec = new ScheduleSpec {
+        var profile = new ScheduleProfile {
             Name = schedule.Name,
             CategoryName = category?.BuiltInCategory ?? BuiltInCategory.INVALID,
             IsItemized = def.IsItemized,
@@ -33,62 +33,62 @@ public static class ScheduleHelper {
         for (var i = 0; i < def.GetFieldCount(); i++) {
             var field = def.GetField(i);
             var fieldSpec = ScheduleFieldSpec.SerializeFrom(field, schedule);
-            spec.Fields.Add(fieldSpec);
+            profile.Fields.Add(fieldSpec);
         }
 
         // Serialize sort/group fields
         for (var i = 0; i < def.GetSortGroupFieldCount(); i++) {
             var sortGroupField = def.GetSortGroupField(i);
             var sortGroupSpec = ScheduleSortGroupSpec.SerializeFrom(sortGroupField, def);
-            spec.SortGroup.Add(sortGroupSpec);
+            profile.SortGroup.Add(sortGroupSpec);
         }
 
         // Serialize filters
         for (var i = 0; i < def.GetFilterCount(); i++) {
             var filter = def.GetFilter(i);
             var filterSpec = ScheduleFilterSpec.SerializeFrom(filter, def);
-            spec.Filters.Add(filterSpec);
+            profile.Filters.Add(filterSpec);
         }
 
-        // Serialize header groups (updates field specs in place)
-        HeaderGroupHandler.SerializeHeaderGroups(schedule, spec.Fields);
+        // Serialize header groups (updates field profiles in place).
+        HeaderGroupHandler.SerializeHeaderGroups(schedule, profile.Fields);
 
         // Serialize title style (borders and alignment)
-        spec.TitleStyle = ScheduleTitleStyleSpec.SerializeFrom(schedule);
+        profile.TitleStyle = ScheduleTitleStyleSpec.SerializeFrom(schedule);
 
         // Serialize view template
-        spec.ViewTemplateName = ViewTemplateHandler.SerializeViewTemplate(schedule);
+        profile.ViewTemplateName = ViewTemplateHandler.SerializeViewTemplate(schedule);
 
-        return spec;
+        return profile;
     }
 
     /// <summary>
-    ///     Creates a schedule from a ScheduleSpec.
+    ///     Creates a schedule from a ScheduleProfile.
     /// </summary>
-    public static ScheduleCreationResult CreateSchedule(Document doc, ScheduleSpec spec) {
-        var categoryId = FindCategoryId(doc, spec.CategoryName);
+    public static ScheduleCreationResult CreateSchedule(Document doc, ScheduleProfile profile) {
+        var categoryId = FindCategoryId(doc, profile.CategoryName);
         if (categoryId == ElementId.InvalidElementId)
             throw new ArgumentException(
-                $"Category '{GetCategoryDisplayName(spec.CategoryName)}' not found in document");
+                $"Category '{GetCategoryDisplayName(profile.CategoryName)}' not found in document");
 
         // Create schedule
         var schedule = ViewSchedule.CreateSchedule(doc, categoryId);
-        schedule.Name = GetUniqueScheduleName(doc, spec.Name);
+        schedule.Name = GetUniqueScheduleName(doc, profile.Name);
 
         var result = new ScheduleCreationResult {
             Schedule = schedule,
             ScheduleName = schedule.Name,
-            CategoryName = GetCategoryDisplayName(spec.CategoryName),
-            IsItemized = spec.IsItemized
+            CategoryName = GetCategoryDisplayName(profile.CategoryName),
+            IsItemized = profile.IsItemized
         };
 
         // Apply schedule-level settings
         var def = schedule.Definition;
-        def.IsItemized = spec.IsItemized;
+        def.IsItemized = profile.IsItemized;
         def.ClearFields();
 
         // Apply filter-by-sheet setting
-        if (spec.FilterBySheet) {
+        if (profile.FilterBySheet) {
             if (def.IsValidCategoryForFilterBySheet()) {
                 try {
                     def.IsFilteredBySheet = true;
@@ -99,12 +99,12 @@ public static class ScheduleHelper {
                 }
             } else {
                 result.FilterBySheetSkipped =
-                    $"Category '{GetCategoryDisplayName(spec.CategoryName)}' does not support filter-by-sheet";
+                    $"Category '{GetCategoryDisplayName(profile.CategoryName)}' does not support filter-by-sheet";
             }
         }
 
         // Apply fields using tuple aggregation
-        foreach (var fieldSpec in spec.Fields.Where(f => f.CalculatedType is null)) {
+        foreach (var fieldSpec in profile.Fields.Where(f => f.CalculatedType is null)) {
             var (applied, skipped, warnings) = fieldSpec.ApplyTo(
                 schedule, def, FindSchedulableField, FindParameterIdByName);
 
@@ -114,14 +114,14 @@ public static class ScheduleHelper {
         }
 
         // Collect calculated field guidance
-        foreach (var fieldSpec in spec.Fields.Where(f => f.CalculatedType.HasValue)) {
+        foreach (var fieldSpec in profile.Fields.Where(f => f.CalculatedType.HasValue)) {
             var guidance = fieldSpec.GetCalculatedFieldGuidance();
             if (guidance != null) result.SkippedCalculatedFields.Add(guidance);
         }
 
         // Apply sort/group using tuple aggregation
         def.ClearSortGroupFields();
-        foreach (var sortGroupSpec in spec.SortGroup) {
+        foreach (var sortGroupSpec in profile.SortGroup) {
             var (applied, skipped) = sortGroupSpec.ApplyTo(def);
             if (applied != null) result.AppliedSortGroups.Add(applied);
             if (skipped != null) result.SkippedSortGroups.Add(skipped);
@@ -129,12 +129,12 @@ public static class ScheduleHelper {
 
         // Apply filters using tuple aggregation
         def.ClearFilters();
-        if (spec.Filters.Count > 8) {
+        if (profile.Filters.Count > 8) {
             result.Warnings.Add(
-                $"Schedule supports maximum 8 filters, found {spec.Filters.Count}. Only first 8 will be applied.");
+                $"Schedule supports maximum 8 filters, found {profile.Filters.Count}. Only first 8 will be applied.");
         }
 
-        foreach (var filterSpec in spec.Filters.Take(8)) {
+        foreach (var filterSpec in profile.Filters.Take(8)) {
             var (applied, skipped, warning) = filterSpec.ApplyTo(def);
             if (applied != null) result.AppliedFilters.Add(applied);
             if (skipped != null) result.SkippedFilters.Add(skipped);
@@ -143,19 +143,19 @@ public static class ScheduleHelper {
 
         // Apply header groups
         var (appliedGroups, skippedGroups, headerWarnings) =
-            HeaderGroupHandler.ApplyHeaderGroups(schedule, spec.Fields);
+            HeaderGroupHandler.ApplyHeaderGroups(schedule, profile.Fields);
         result.AppliedHeaderGroups.AddRange(appliedGroups);
         result.SkippedHeaderGroups.AddRange(skippedGroups);
         result.Warnings.AddRange(headerWarnings);
 
         // Apply title style (borders and alignment) - must happen before view templates
-        var (appliedTitleStyle, titleStyleWarning) = spec.TitleStyle.ApplyTo(schedule);
+        var (appliedTitleStyle, titleStyleWarning) = profile.TitleStyle.ApplyTo(schedule);
         if (!appliedTitleStyle && titleStyleWarning != null)
             result.Warnings.Add(titleStyleWarning);
 
         // Apply view template
         var (appliedTemplate, skippedTemplate, templateWarning) =
-            ViewTemplateHandler.ApplyViewTemplate(schedule, spec.ViewTemplateName);
+            ViewTemplateHandler.ApplyViewTemplate(schedule, profile.ViewTemplateName);
         result.AppliedViewTemplate = appliedTemplate;
         result.SkippedViewTemplate = skippedTemplate;
         if (templateWarning != null) result.Warnings.Add(templateWarning);
@@ -176,9 +176,9 @@ public static class ScheduleHelper {
     ///     All changes are rolled back - no permanent modifications to the document.
     /// </summary>
     public static List<string> GetFamiliesMatchingFilters(Document doc,
-        ScheduleSpec spec,
+        ScheduleProfile profile,
         IEnumerable<Family>? families = null) {
-        var matchingFamilies = GetMatchingFamiliesByFilter(doc, spec, families, evaluateAllTypes: false);
+        var matchingFamilies = GetMatchingFamiliesByFilter(doc, profile, families, evaluateAllTypes: false);
         return matchingFamilies
             .Select(family => family.Name)
             .Distinct(StringComparer.Ordinal)
@@ -192,29 +192,29 @@ public static class ScheduleHelper {
     /// </summary>
     public static List<long> GetFamilyIdsMatchingFiltersAnyType(
         Document doc,
-        ScheduleSpec spec,
+        ScheduleProfile profile,
         IEnumerable<Family>? families = null
     ) =>
-        GetMatchingFamiliesByFilter(doc, spec, families, evaluateAllTypes: true)
+        GetMatchingFamiliesByFilter(doc, profile, families, evaluateAllTypes: true)
             .Select(family => family.Id.Value())
             .Distinct()
             .ToList();
 
     internal static List<long> GetFamilyIdsMatchingFiltersAnyType(
         Document doc,
-        ScheduleSpec spec,
+        ScheduleProfile profile,
         IReadOnlyList<TempPlacedSymbolRecord> placements
     ) {
         if (placements.Count == 0)
             return [];
 
-        if (spec.Filters.Count == 0)
+        if (profile.Filters.Count == 0)
             return placements
                 .Select(placement => placement.FamilyId)
                 .Distinct()
                 .ToList();
 
-        var schedule = CreateMinimalFilterEvaluationSchedule(doc, spec);
+        var schedule = CreateMinimalFilterEvaluationSchedule(doc, profile);
         doc.Regenerate();
 
         var matchingInstanceIds = CollectMatchingPlacedInstanceIds(doc, schedule.Id, placements);
@@ -223,14 +223,14 @@ public static class ScheduleHelper {
 
     private static List<Family> GetMatchingFamiliesByFilter(
         Document doc,
-        ScheduleSpec spec,
+        ScheduleProfile profile,
         IEnumerable<Family>? families,
         bool evaluateAllTypes
     ) {
-        var categoryId = FindCategoryId(doc, spec.CategoryName);
+        var categoryId = FindCategoryId(doc, profile.CategoryName);
         if (categoryId == ElementId.InvalidElementId)
             throw new ArgumentException(
-                $"Category '{GetCategoryDisplayName(spec.CategoryName)}' not found in document");
+                $"Category '{GetCategoryDisplayName(profile.CategoryName)}' not found in document");
 
         // Get families to test
         var familiesToTest = families?.ToList() ?? new FilteredElementCollector(doc)
@@ -243,7 +243,7 @@ public static class ScheduleHelper {
             return [];
 
         // If no filters, return all family names
-        if (spec.Filters.Count == 0)
+        if (profile.Filters.Count == 0)
             return familiesToTest;
 
         using var context = LoadedFamiliesTempPlacementEngine.CreateEvaluationContext(
@@ -261,7 +261,7 @@ public static class ScheduleHelper {
                     .Where(placement => placement != null)
                     .Cast<TempPlacedSymbolRecord>()
                     .ToList();
-            var matchingFamilyIds = GetFamilyIdsMatchingFiltersAnyType(doc, spec, placements)
+            var matchingFamilyIds = GetFamilyIdsMatchingFiltersAnyType(doc, profile, placements)
                 .ToHashSet();
 
             return familiesToTest
@@ -272,7 +272,7 @@ public static class ScheduleHelper {
         }
     }
 
-    internal static ViewSchedule CreateMinimalFilterEvaluationSchedule(Document doc, ScheduleSpec sourceSpec) {
+    internal static ViewSchedule CreateMinimalFilterEvaluationSchedule(Document doc, ScheduleProfile sourceSpec) {
         var categoryId = FindCategoryId(doc, sourceSpec.CategoryName);
         if (categoryId == ElementId.InvalidElementId)
             throw new ArgumentException(
@@ -286,7 +286,7 @@ public static class ScheduleHelper {
         return schedule;
     }
 
-    internal static void ApplyFilterFieldsAndFilters(ViewSchedule schedule, ScheduleSpec sourceSpec) {
+    internal static void ApplyFilterFieldsAndFilters(ViewSchedule schedule, ScheduleProfile sourceSpec) {
         var def = schedule.Definition;
         def.ClearFields();
         def.ClearFilters();

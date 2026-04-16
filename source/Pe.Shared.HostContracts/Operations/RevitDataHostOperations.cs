@@ -37,15 +37,15 @@ public static class GetScheduleCatalogOperationContract {
         );
 }
 
-public static class GetScheduleSpecsQueryOperationContract {
+public static class GetScheduleProfilesQueryOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<ScheduleSpecsQueryRequest, ScheduleSpecsQueryEnvelopeResponse>(
-            "revit-data.schedule-specs-query",
+        HostOperationDefinition.Create<ScheduleProfilesQueryRequest, ScheduleProfilesQueryEnvelopeResponse>(
+            "revit-data.schedule-profiles-query",
             HostHttpVerb.Post,
-            "/api/revit-data/schedules/specs/query",
+            "/api/revit-data/schedules/profiles/query",
             HostExecutionMode.Bridge,
-            "Get Schedule Specs Query",
-            new HostCachePolicy("schedule-specs-query", 10)
+            "Get Schedule Profiles Query",
+            new HostCachePolicy("schedule-profiles-query", 10)
         );
 }
 

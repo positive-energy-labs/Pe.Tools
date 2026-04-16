@@ -51,8 +51,8 @@ internal static class HostEnvelopeResultExtensions {
         ToScheduleCatalogEnvelope(this HostEnvelopeResult<ScheduleCatalogData> result) =>
         new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
 
-    public static ScheduleSpecsQueryEnvelopeResponse ToScheduleSpecsQueryEnvelope(
-        this HostEnvelopeResult<ScheduleSpecsQueryData> result
+    public static ScheduleProfilesQueryEnvelopeResponse ToScheduleProfilesQueryEnvelope(
+        this HostEnvelopeResult<ScheduleProfilesQueryData> result
     ) => new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
 
     public static ScheduleQueryEnvelopeResponse ToScheduleQueryEnvelope(
@@ -87,7 +87,7 @@ internal static class HostEnvelopeResultExtensions {
         this HostEnvelopeResult<ElectricalLoadClassificationsCatalogData> result
     ) => new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
 
-    public static RevitDocumentContextEnvelopeResponse ToRevitDocumentContextEnvelope(
-        this HostEnvelopeResult<RevitDocumentContextData> result
+    public static RevitDocumentSessionContextEnvelopeResponse ToRevitDocumentSessionContextEnvelope(
+        this HostEnvelopeResult<RevitDocumentSessionContextData> result
     ) => new(result.Ok, result.Code, result.Message, result.Issues, result.Data);
 }

@@ -1,9 +1,10 @@
-﻿using Autodesk.Revit.UI;
+using Autodesk.Revit.UI;
 using Nice3point.Revit.Extensions.UI;
 using Pe.App.Commands.Palette;
 using Pe.Tools.Commands;
 using Pe.Tools.Commands.AutoTag;
 using Pe.Tools.Commands.FamilyFoundry;
+using Pe.Tools.Commands.Schedules;
 using Pe.Tools.Commands.Scripting;
 using Pe.Tools.Commands.SettingsEditor;
 

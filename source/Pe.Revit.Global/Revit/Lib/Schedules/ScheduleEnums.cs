@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace Pe.Revit.Global.Revit.Lib.Schedules;
+namespace Pe.Revit.Global.Revit.Documents.Schedules;
 
 /// <summary>
 ///     Type of calculated field

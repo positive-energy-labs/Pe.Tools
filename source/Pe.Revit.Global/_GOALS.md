@@ -18,7 +18,8 @@ It should deepen the repo around document-centric and element-centric mechanics 
 
 - Centralize generally applicable document, selection, family, schedule, electrical, and element-context concepts close to shared Revit infrastructure.
 - Prefer deep reusable modules over one-off collectors or helpers embedded in commands.
-- Grow from collectors into counterpart creators/appliers only when the concept is stable beyond one feature.
+- Prefer document-owned entrypoints for reusable collect/capture/apply seams, even when a feature package still owns the returned models.
+- Grow from collectors into counterpart capture/apply helpers only when the concept is stable beyond one feature.
 - Keep feature packages focused on semantic intent and workflow policy, not raw Revit traversal or boilerplate document mechanics.
 - Work well with `Pe.Revit.Extensions` as the sharper home for validated wrappers and high-value extension surfaces such as `FamilyDocument`, `FamilyManager`, and parameter helpers.
 
@@ -26,11 +27,12 @@ It should deepen the repo around document-centric and element-centric mechanics 
 
 - Provide reusable Revit-side building blocks for `Pe.Host`, `Pe.Revit.Scripting`, `Pe.App`, tests, and feature packages.
 - Offer document-context and element-context concepts that can support both host endpoints and direct scripting without forcing each caller to rediscover the same patterns.
-- Make cross-feature concepts portable enough that a collector or applier proven in one workflow can be adopted by another without dragging feature-specific semantics with it.
+- Make cross-feature concepts portable enough that a collect/capture/apply surface proven in one workflow can be adopted by another without dragging feature-specific semantics with it.
 
 ## Non-Goals
 
 - Do not become a dumping ground for miscellaneous helpers with no stable concept behind them.
 - Do not absorb feature-owned semantic models merely because they touch Revit.
+- Do not absorb feature-owned snapshot or apply models before the concept is proven broader than one feature.
 - Do not chase completeness by wrapping the entire Revit API.
 - Do not move unstable experiments here before the concept has proven broader than one caller.

@@ -1,7 +1,7 @@
 using Pe.Revit.Global.PolyFill;
 using System.ComponentModel;
 
-namespace Pe.Revit.Global.Revit.Lib.Schedules.Fields;
+namespace Pe.Revit.Global.Revit.Documents.Schedules.Fields;
 
 /// <summary>
 ///     Combined parameter specification for combining multiple parameters into a single column

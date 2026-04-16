@@ -1,4 +1,4 @@
-﻿using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.HostContracts.RevitData;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.SettingsStorage;
 
@@ -29,10 +29,10 @@ internal sealed class BridgeOperationRegistry {
                 static (request, context, cancellationToken) =>
                     context.RevitDataRequestService.GetScheduleCatalogEnvelopeAsync(request)
             ),
-            BridgeOperations.Create<ScheduleSpecsQueryRequest, ScheduleSpecsQueryEnvelopeResponse>(
-                GetScheduleSpecsQueryOperationContract.Definition,
+            BridgeOperations.Create<ScheduleProfilesQueryRequest, ScheduleProfilesQueryEnvelopeResponse>(
+                GetScheduleProfilesQueryOperationContract.Definition,
                 static (request, context, cancellationToken) =>
-                    context.RevitDataRequestService.GetScheduleSpecsQueryEnvelopeAsync(request)
+                    context.RevitDataRequestService.GetScheduleProfilesQueryEnvelopeAsync(request)
             ),
             BridgeOperations.Create<ScheduleQueryRequest, ScheduleQueryEnvelopeResponse>(
                 GetScheduleQueryOperationContract.Definition,
@@ -79,10 +79,10 @@ internal sealed class BridgeOperationRegistry {
                 static (request, context, cancellationToken) =>
                     context.RevitDataRequestService.GetElectricalLoadClassificationsCatalogEnvelopeAsync(request)
             ),
-            BridgeOperations.Create<RevitDocumentContextRequest, RevitDocumentContextEnvelopeResponse>(
-                GetRevitDocumentContextOperationContract.Definition,
+            BridgeOperations.Create<RevitDocumentSessionContextRequest, RevitDocumentSessionContextEnvelopeResponse>(
+                GetRevitDocumentSessionContextOperationContract.Definition,
                 static (request, context, cancellationToken) =>
-                    context.RevitDataRequestService.GetRevitDocumentContextEnvelopeAsync(request)
+                    context.RevitDataRequestService.GetRevitDocumentSessionContextEnvelopeAsync(request)
             )
         ];
 

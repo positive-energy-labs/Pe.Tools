@@ -2,7 +2,7 @@ using Autodesk.Revit.DB;
 using Pe.Revit.Global.PolyFill;
 using Pe.Shared.HostContracts.RevitData;
 
-namespace Pe.Revit.Global.Revit.Lib.Schedules;
+namespace Pe.Revit.Global.Revit.Documents.Schedules;
 
 public static class ScheduleCatalogCollector {
     public static ScheduleCatalogData Collect(
@@ -35,7 +35,7 @@ public static class ScheduleCatalogCollector {
         List<RevitDataIssue> issues
     ) {
         try {
-            var spec = ScheduleHelper.SerializeSchedule(schedule);
+            var profile = schedule.CaptureScheduleProfile();
             var sheetPlacements = ScheduleCollectorSupport.CollectSheetPlacements(doc, schedule);
 
             return new ScheduleCatalogEntry(
@@ -44,13 +44,13 @@ public static class ScheduleCatalogCollector {
                 schedule.Name,
                 ScheduleCollectorSupport.GetCategoryName(doc, schedule),
                 schedule.IsTemplate,
-                spec.ViewTemplateName,
-                spec.IsItemized,
-                spec.FilterBySheet,
+                profile.ViewTemplateName,
+                profile.IsItemized,
+                profile.FilterBySheet,
                 sheetPlacements.Count != 0,
                 sheetPlacements,
-                ScheduleCollectorSupport.CollectFieldParameterNames(spec),
-                ScheduleCollectorSupport.ToContractFilters(spec.Filters),
+                ScheduleCollectorSupport.CollectFieldParameterNames(profile),
+                ScheduleCollectorSupport.ToContractFilters(profile.Filters),
                 ScheduleCollectorSupport.CollectParameterUsages(doc, schedule),
                 ScheduleCollectorSupport.CollectCustomParameters(schedule)
             );

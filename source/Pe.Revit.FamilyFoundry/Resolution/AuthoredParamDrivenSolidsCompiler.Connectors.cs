@@ -1,10 +1,10 @@
-﻿using Autodesk.Revit.DB.Electrical;
+using Autodesk.Revit.DB.Electrical;
 using Autodesk.Revit.DB.Mechanical;
 using Autodesk.Revit.DB.Plumbing;
-using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Snapshots;
 
-namespace Pe.Revit.FamilyFoundry.Resolution;
+namespace Pe.Revit.FamilyFoundry.Plans;
 
 public static partial class AuthoredParamDrivenSolidsCompiler {
     private static CompileOutcome TryCompileRectConnector(
@@ -83,7 +83,7 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
             HostFacePlaneName = hostFacePlaneName,
             DepthDirection = depthDirection,
             DepthDriver = depthDriver,
-            RectangularStub = new ConstrainedRectangleExtrusionSpec {
+            RectangularStub = new ConstrainedRectangleExtrusionSnapshot {
                 Name = stubSolidName,
                 IsSolid = connector.IsSolid,
                 StartOffset = 0.0,

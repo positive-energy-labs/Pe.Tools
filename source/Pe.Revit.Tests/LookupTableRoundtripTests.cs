@@ -1,5 +1,6 @@
-using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
-using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Snapshots;
+using Pe.Revit.FamilyFoundry.Plans;
+using Pe.Revit.FamilyFoundry.Snapshots;
 
 namespace Pe.Revit.Tests;
 
@@ -39,7 +40,7 @@ public sealed class LookupTableRoundtripTests {
                 Path.Combine(outputDirectory, "source-lookups"));
             var sourceTable = sourceTables.Single(table => string.Equals(table.TableName, LookupTableName, StringComparison.Ordinal));
 
-            var snapshot = FamilyFoundryRoundtripHarness.CollectFamilySnapshot(sourceDocument);
+            var snapshot = sourceDocument!.CaptureFamilySnapshot();
             Assert.Multiple(() => {
                 Assert.That(snapshot.LookupTables?.Data, Has.Count.EqualTo(1));
                 Assert.That(snapshot.Parameters?.Data, Is.Not.Empty);

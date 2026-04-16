@@ -1,8 +1,11 @@
-﻿using Pe.Revit.Extensions.FamDocument;
+using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Revit.FamilyFoundry.Snapshots;
+using Pe.Revit.Global.Revit.Documents;
 using System.Diagnostics;
+
+namespace Pe.Revit.FamilyFoundry;
 
 /// <summary>
 ///     Fluent pipeline for family processing. Owns context lifecycle and returns populated results via out parameter.
@@ -59,7 +62,7 @@ public static class FamilyProcessingPipelineExtensions {
         if (projectDoc == null) throw new ArgumentNullException(nameof(projectDoc));
         if (configure == null) throw new ArgumentNullException(nameof(configure));
 
-        context = new FamilyProcessingContext { FamilyName = ResolveFamilyName(famDoc) };
+        context = new FamilyProcessingContext { FamilyName = famDoc.Document.GetFamilyDisplayName() };
 
         var sw = Stopwatch.StartNew();
 
@@ -95,7 +98,7 @@ public static class FamilyProcessingPipelineExtensions {
     ) {
         if (configure == null) throw new ArgumentNullException(nameof(configure));
 
-        context = new FamilyProcessingContext { FamilyName = ResolveFamilyName(famDoc) };
+        context = new FamilyProcessingContext { FamilyName = famDoc.Document.GetFamilyDisplayName() };
 
         var sw = Stopwatch.StartNew();
 
@@ -192,15 +195,6 @@ public static class FamilyProcessingPipelineExtensions {
         return pipeline;
     }
 
-    private static string ResolveFamilyName(FamilyDocument famDoc) {
-        var familyName = famDoc.OwnerFamily?.Name;
-        if (string.IsNullOrWhiteSpace(familyName))
-            familyName = Path.GetFileNameWithoutExtension(famDoc.Document.Title);
-        if (string.IsNullOrWhiteSpace(familyName))
-            familyName = famDoc.Document.Title;
-        return string.IsNullOrWhiteSpace(familyName) ? "Family" : familyName;
-    }
-
     /// <summary>
     ///     Load family into project document. Only valid in project mode. Can only be called once.
     ///     Null options uses DefaultFamilyLoadOptions.
@@ -227,11 +221,11 @@ public static class FamilyProcessingPipelineExtensions {
 
     /// <summary>
     ///     Collect pre-processing snapshot. Runs project collectors (if available) then family doc collectors.
-    ///     First collector wins per section. Call before Process(). Null queue = no-op.
+    ///     First collector wins per snapshot field. Call before Process(). Null queue = no-op.
     /// </summary>
     public static FamilyProcessingPipeline CollectPreSnapshot(
         this FamilyProcessingPipeline pipeline,
-        CollectorQueue? collectorQueue
+        SnapshotCapturePipeline? collectorQueue
     ) {
         if (pipeline.Context == null)
             throw new InvalidOperationException("Context must be set before calling CollectPreSnapshot()");
@@ -252,11 +246,11 @@ public static class FamilyProcessingPipelineExtensions {
 
     /// <summary>
     ///     Collect post-processing snapshot. Runs project collectors (if available) then family doc collectors.
-    ///     First collector wins per section. Call after Process(). Null queue = no-op.
+    ///     First collector wins per snapshot field. Call after Process(). Null queue = no-op.
     /// </summary>
     public static FamilyProcessingPipeline CollectPostSnapshot(
         this FamilyProcessingPipeline pipeline,
-        CollectorQueue? collectorQueue
+        SnapshotCapturePipeline? collectorQueue
     ) {
         if (pipeline.Context == null)
             throw new InvalidOperationException("Context must be set before calling CollectPostSnapshot()");
@@ -281,7 +275,7 @@ public static class FamilyProcessingPipelineExtensions {
     /// </summary>
     private static FamilyProcessingPipeline CollectSnapshot(
         this FamilyProcessingPipeline pipeline,
-        CollectorQueue collectorQueue,
+        SnapshotCapturePipeline collectorQueue,
         Action<FamilyProcessingContext, FamilySnapshot> setSnapshot
     ) {
         var snapshot = new FamilySnapshot { FamilyName = pipeline.Context.FamilyName };

@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
 namespace Pe.Revit.FamilyFoundry.OperationSettings;
@@ -88,3 +88,4 @@ public sealed class SetLookupTablesSettings : IOperationSettings {
 
     public bool Enabled { get; init; } = true;
 }
+

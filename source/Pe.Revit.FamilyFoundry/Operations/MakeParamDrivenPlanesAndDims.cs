@@ -1,6 +1,6 @@
-﻿using Pe.Revit.Extensions.FamDocument;
+using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.Helpers;
-using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.FamilyFoundry.Plans;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
@@ -8,15 +8,15 @@ namespace Pe.Revit.FamilyFoundry.Operations;
 ///     Creates reference planes and dimensions from resolved ParamDrivenSolids plane plans.
 /// </summary>
 public class MakeParamDrivenPlanesAndDims(
-    MakeParamDrivenPlanesAndDimsSettings settings)
-    : OperationGroup<MakeParamDrivenPlanesAndDimsSettings>(
+    ParamDrivenPlanesAndDimsPlan settings)
+    : OperationGroup<ParamDrivenPlanesAndDimsPlan>(
         "Create reference planes and dimensions for the family",
         InitializeOperations(settings),
         settings.SymmetricPairs
             .Select(spec => $"{spec.PlaneNameBase} @ {spec.CenterPlaneName}")
             .Concat(settings.Offsets.Select(spec => $"{spec.PlaneName} @ {spec.AnchorPlaneName}"))) {
     private static List<IOperation> InitializeOperations(
-        MakeParamDrivenPlanesAndDimsSettings settings
+        ParamDrivenPlanesAndDimsPlan settings
     ) {
         var sharedState = new SharedCreatorState();
         return [
@@ -61,8 +61,8 @@ public class SharedCreatorState {
     public List<LogEntry>? Logs { get; set; }
 }
 
-public class MakeParamDrivenPlanes(MakeParamDrivenPlanesAndDimsSettings settings, SharedCreatorState shared)
-    : DocOperation<MakeParamDrivenPlanesAndDimsSettings>(settings) {
+public class MakeParamDrivenPlanes(ParamDrivenPlanesAndDimsPlan settings, SharedCreatorState shared)
+    : DocOperation<ParamDrivenPlanesAndDimsPlan>(settings) {
     public override string Description => "Create reference planes for the family";
 
     public override OperationLog Execute(
@@ -118,8 +118,8 @@ public class MakeParamDrivenPlanes(MakeParamDrivenPlanesAndDimsSettings settings
     }
 }
 
-public class MakeParamDrivenDimensions(MakeParamDrivenPlanesAndDimsSettings settings, SharedCreatorState shared)
-    : DocOperation<MakeParamDrivenPlanesAndDimsSettings>(settings) {
+public class MakeParamDrivenDimensions(ParamDrivenPlanesAndDimsPlan settings, SharedCreatorState shared)
+    : DocOperation<ParamDrivenPlanesAndDimsPlan>(settings) {
     public override string Description => "Create dimensions for reference planes";
 
     public override OperationLog Execute(

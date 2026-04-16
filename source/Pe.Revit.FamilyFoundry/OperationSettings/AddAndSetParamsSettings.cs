@@ -1,7 +1,7 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
-using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Shared.StorageRuntime.Json;
 using Pe.Shared.StorageRuntime.Json;
 using System.ComponentModel;
@@ -162,3 +162,4 @@ public sealed class SetKnownParamsSettings : IOperationSettings {
         return parameterNames;
     }
 }
+

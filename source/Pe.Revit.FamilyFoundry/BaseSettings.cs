@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Pe.Revit.FamilyFoundry;
 
-public class BaseSettings<TProfile> where TProfile : BaseProfileSettings, new() {
+public class BaseSettings<TProfile> where TProfile : BaseProfile, new() {
     [Required] public OnProcessingFinishSettings OnProcessingFinish { get; set; } = new();
 }
 

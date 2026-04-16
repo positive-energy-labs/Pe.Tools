@@ -1,7 +1,6 @@
-using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
+using Pe.Revit.FamilyFoundry.Capture;
+using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.FamilyFoundry.Snapshots;
-using Pe.Tools.Commands.FamilyFoundry;
 
 namespace Pe.Revit.Tests;
 
@@ -11,7 +10,7 @@ public sealed class FamilySnapshotProjectionTests {
     public void ProjectProfiles_empty_allowed_preserves_definition_only_family_and_cache_classified_shared_parameters() {
         var snapshot = new FamilySnapshot {
             FamilyName = "SeedFamily",
-            Parameters = new SnapshotSection<ParameterSnapshot> {
+            Parameters = new CapturedCollection<ParameterSnapshot> {
                 Data = [
                     new ParameterSnapshot {
                         Name = "Width",
@@ -58,7 +57,7 @@ public sealed class FamilySnapshotProjectionTests {
     public void ProjectProfiles_keeps_value_assignments_in_both_variants() {
         var snapshot = new FamilySnapshot {
             FamilyName = "SeedFamily",
-            Parameters = new SnapshotSection<ParameterSnapshot> {
+            Parameters = new CapturedCollection<ParameterSnapshot> {
                 Data = [
                     new ParameterSnapshot {
                         Name = "Width",

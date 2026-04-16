@@ -44,7 +44,7 @@ This document describes the browser-facing and tool-facing host contract exposed
   - `GET /api/revit-data/loaded-families/filter/schema`
   - `POST /api/revit-data/loaded-families/filter/field-options`
   - `POST /api/revit-data/schedules/catalog`
-  - `POST /api/revit-data/schedules/specs/query`
+  - `POST /api/revit-data/schedules/profiles/query`
   - `POST /api/revit-data/schedules/query`
   - `POST /api/revit-data/loaded-families/catalog`
   - `POST /api/revit-data/loaded-families/matrix`
@@ -69,9 +69,9 @@ This document describes the browser-facing and tool-facing host contract exposed
 
 - `POST /api/revit-data/schedules/catalog` is the discovery surface.
 - Catalog entries stay abbreviated: identity, category, template/itemization/sheet placement summary, parameter-usage metadata, field-parameter names, filter summaries, and adjacent browser custom parameters from the `ViewSchedule` element.
-- Browser custom parameters are project/browser metadata, not part of `ScheduleSpec`.
-- `POST /api/revit-data/schedules/specs/query` is the serialized authored-intent surface.
-- Specs are portable schedule intent and should use `ScheduleSpec` vocabulary, not `definition`.
+- Browser custom parameters are project/browser metadata, not part of `ScheduleProfile`.
+- `POST /api/revit-data/schedules/profiles/query` is the serialized authored-intent surface.
+- Profiles are portable top-level schedule intent and should use `ScheduleProfile` vocabulary, not `definition`.
 - `POST /api/revit-data/schedules/query` is the live schedule instance projection surface.
 - Projection responses should stay raw and honest: sections, rows, cells, blanks, merged regions, and best-effort source metadata only.
 

@@ -1,17 +1,15 @@
-﻿using Autodesk.Revit.Attributes;
+using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Aggregators.Snapshots;
-using Pe.Revit.FamilyFoundry.OperationSettings;
-using Pe.Revit.FamilyFoundry.Resolution;
-using Pe.Revit.FamilyFoundry.Serialization;
+using Pe.Revit.FamilyFoundry.Apply;
+using Pe.Revit.FamilyFoundry.Capture;
+using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.FamilyFoundry.Snapshots;
+using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Revit.Ui;
 using Pe.Revit.Global.Services.Aps.Models;
 using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
-using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime;
 using Serilog.Events;
 using System.Diagnostics;
@@ -39,13 +37,7 @@ public class CmdFFManagerProjectSnapshot : IExternalCommand {
         try {
             var storage = RuntimeStorageClient.Default.Module(CmdFFManager.AddinKey);
 
-            var snapshot = CollectFamilySnapshot(doc);
-            if (snapshot == null) {
-                new Ballogger()
-                    .Add(LogEventLevel.Error, new StackFrame(), "Failed to collect family snapshot")
-                    .Show();
-                return Result.Cancelled;
-            }
+            var snapshot = doc.CaptureFamilySnapshot();
 
             var projection = ProjectSnapshotToProfiles(snapshot);
             var denseProfile = projection.DenseProfile;
@@ -78,36 +70,6 @@ public class CmdFFManagerProjectSnapshot : IExternalCommand {
         }
     }
 
-    private static FamilySnapshot CollectFamilySnapshot(Document doc) {
-        if (!doc.IsFamilyDocument)
-            return null;
-
-        var famDoc = new FamilyDocument(doc);
-        var familyName = Path.GetFileNameWithoutExtension(doc.PathName);
-        if (string.IsNullOrWhiteSpace(familyName))
-            familyName = doc.Title ?? "Unnamed";
-
-        var snapshot = new FamilySnapshot { FamilyName = familyName };
-
-        var paramCollector = new ParamSectionCollector();
-        if (((IFamilyDocCollector)paramCollector).ShouldCollect(snapshot))
-            ((IFamilyDocCollector)paramCollector).Collect(snapshot, famDoc);
-
-        var lookupCollector = new LookupTableSectionCollector();
-        if (lookupCollector.ShouldCollect(snapshot))
-            lookupCollector.Collect(snapshot, famDoc);
-
-        var refPlaneCollector = new RefPlaneSectionCollector();
-        if (refPlaneCollector.ShouldCollect(snapshot))
-            refPlaneCollector.Collect(snapshot, famDoc);
-
-        var extrusionCollector = new ExtrusionSectionCollector();
-        if (extrusionCollector.ShouldCollect(snapshot))
-            extrusionCollector.Collect(snapshot, famDoc);
-
-        return snapshot;
-    }
-
     private static FamilySnapshotProfileProjection ProjectSnapshotToProfiles(FamilySnapshot snapshot) {
         var sharedParameterNames = ResolveCachedSharedParameterNames();
         return FamilySnapshotProfileProjector.ProjectProfiles(
@@ -131,7 +93,7 @@ public class CmdFFManagerProjectSnapshot : IExternalCommand {
         UIApplication uiApp,
         Document sourceDoc,
         FamilySnapshot snapshot,
-        FFManagerSettings profile,
+        FFManagerProfile profile,
         string outputDirectory
     ) {
         var targetDoc = CreateProjectedFamilyDocument(uiApp, sourceDoc, $"{snapshot.FamilyName} Snapshot");
@@ -139,8 +101,7 @@ public class CmdFFManagerProjectSnapshot : IExternalCommand {
             return null;
 
         try {
-            var result = CmdFFManager.ProcessFamiliesCore(
-                targetDoc,
+            var result = targetDoc.ApplyFamilyProfile(
                 profile,
                 $"{snapshot.FamilyName}-snapshot-apply",
                 new LoadAndSaveOptions {
@@ -149,7 +110,7 @@ public class CmdFFManagerProjectSnapshot : IExternalCommand {
                     SaveFamilyToInternalPath = false,
                     SaveFamilyToOutputDir = true
                 },
-                outputDirectory);
+                OutputStorage.ExactDir(outputDirectory));
 
             if (!result.Success || string.IsNullOrWhiteSpace(result.OutputFolderPath))
                 throw new InvalidOperationException(result.Error ?? "Projected profile apply family processing failed.");
@@ -253,19 +214,7 @@ public class CmdFFManagerProjectSnapshot : IExternalCommand {
     }
 
     private static string GetAppliedFamilyPath(string outputDirectory, Document targetDoc) {
-        var familyName = targetDoc.OwnerFamily?.Name;
-        if (string.IsNullOrWhiteSpace(familyName))
-            familyName = Path.GetFileNameWithoutExtension(targetDoc.Title);
-        if (string.IsNullOrWhiteSpace(familyName))
-            familyName = "Family";
-
-        var safeFamilyName = SanitizePathSegment(familyName);
-        return Path.Combine(outputDirectory, safeFamilyName, $"{safeFamilyName}.rfa");
-    }
-
-    private static string SanitizePathSegment(string value) {
-        var invalidChars = Path.GetInvalidFileNameChars();
-        var sanitized = new string(value.Select(ch => invalidChars.Contains(ch) ? '_' : ch).ToArray()).Trim();
-        return string.IsNullOrWhiteSpace(sanitized) ? "Family" : sanitized;
+        var familyFileStem = targetDoc.GetFamilyFileStem();
+        return Path.Combine(outputDirectory, familyFileStem, $"{familyFileStem}.rfa");
     }
 }

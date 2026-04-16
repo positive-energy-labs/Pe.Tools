@@ -10,7 +10,7 @@ Owns durable, cross-feature Revit-side building blocks with emphasis on document
 
 ## Critical Entry Points
 
-- `Revit/Documents/` - preferred home for document-owned extension surfaces such as identity, path, and binding helpers.
+- `Revit/Documents/` - preferred home for document-owned naming, identity, path, and other extension surfaces that only need `Document`.
 - `Revit/Documents/RevitUiSession.cs` and `UIApplicationDocumentSessionExtensions.cs` - explicit current-session and `UIApplication` document-session helpers.
 - `Services/Document/DocumentManager.cs` - session-aware document/open/active/MRU coordination.
 - `Services/Host/RevitDataRequestService.cs` - bridge-backed document query and summary shaping.
@@ -30,12 +30,16 @@ Owns durable, cross-feature Revit-side building blocks with emphasis on document
 | **document-owned** | Behavior derivable from a specific `Document` without active/open UI session state | Prefer extension methods or small document-centric helpers; avoid putting it behind session singletons |
 | **document session** | Open/active/UI-tab state for documents in the current Revit process | Prefer `DocumentManager` or `UIApplication`-adjacent helpers; avoid mixing it into pure `Document` helpers |
 | **document key** | Canonical identity string for an open Revit document used by host payloads, caches, and matching | Prefer one shared implementation; avoid per-caller variations |
-| **collector** | Live-document read path that returns a catalog, list, context, or other query result | Avoid using it for durable captured state |
+| **collect** | Live-document read path that returns a catalog, list, context, or other query result | Avoid using it for durable captured state |
+| **capture** | Durable document read path that returns a snapshot or other portable state | Prefer `Capture...` entrypoints when the output should survive the current session |
+| **snapshot** | Durable captured point-in-time state, possibly assembled from lower-level collectors | Avoid calling every query result a snapshot |
 | **apply** | Write compatible shared structures back into live Revit | Avoid mixing feature policy into low-level apply helpers unless the concept is truly feature-owned |
 
 ## Living Memory
 
 - If a helper only needs `Document`, default to a `Document` extension under `Revit/Documents/` before adding more static manager methods.
+- Prefer document-owned entrypoints even when the implementation still lives in a feature package; the feature model can move later without callers relearning the seam.
 - Keep `DocumentManager` focused on session-aware behavior: active/open document state, window handles, MRU tracking, and related UI coordination.
 - Document identity, document path, and project-parameter binding enumeration should not have multiple implementations.
+- Do not pull feature-owned snapshot or apply models into `Pe.Revit.Global` until the semantics are stable across more than one feature.
 - Reusable collectors belong here only when the concept is stable across features. Feature-specific semantics still belong with the owning feature package.
