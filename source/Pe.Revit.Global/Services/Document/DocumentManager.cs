@@ -105,12 +105,85 @@ public class DocumentManager {
         GetOpenDocuments().FirstOrDefault(d => d.IsFamilyDocument && d.Title.Contains(family.Name));
 
     /// <summary>Gets the ModelPath for a document (cloud or file-based).</summary>
-    public static ModelPath? GetDocumentModelPath(Autodesk.Revit.DB.Document doc) =>
-        doc switch {
+    public static ModelPath? GetDocumentModelPath(Autodesk.Revit.DB.Document doc) {
+        try {
+            if (doc.IsWorkshared)
+                return doc.GetWorksharingCentralModelPath();
+        } catch {
+            // Fall through to non-workshared path handling.
+        }
+
+        return doc switch {
             { IsModelInCloud: true } => doc.GetCloudModelPath(),
             { PathName.Length: > 0 } => new FilePath(doc.PathName),
             _ => null // Return null for unsaved documents (like newly opened family docs)
         };
+    }
+
+    public static string? GetDocumentPath(Autodesk.Revit.DB.Document doc) {
+        try {
+            var modelPath = GetDocumentModelPath(doc);
+            if (modelPath == null)
+                return string.IsNullOrWhiteSpace(doc.PathName) ? null : doc.PathName;
+
+            var userVisiblePath = ModelPathUtils.ConvertModelPathToUserVisiblePath(modelPath);
+            return string.IsNullOrWhiteSpace(userVisiblePath) ? null : userVisiblePath;
+        } catch {
+            return string.IsNullOrWhiteSpace(doc.PathName) ? null : doc.PathName;
+        }
+    }
+
+    public static string GetDocumentKey(Autodesk.Revit.DB.Document doc) {
+        var documentKind = doc.IsFamilyDocument ? "family" : "project";
+        var cloudProjectGuid = GetCloudProjectGuid(doc);
+        var cloudModelGuid = GetCloudModelGuid(doc);
+        if (!string.IsNullOrWhiteSpace(cloudProjectGuid) && !string.IsNullOrWhiteSpace(cloudModelGuid))
+            return $"{documentKind}:cloud:{cloudProjectGuid}:{cloudModelGuid}";
+
+        var documentPath = GetDocumentPath(doc);
+        if (!string.IsNullOrWhiteSpace(documentPath))
+            return $"{documentKind}:path:{documentPath}";
+
+        return $"{documentKind}:unsaved:{doc.Title}:{doc.GetHashCode()}";
+    }
+
+    public static string? GetCloudProjectGuid(Autodesk.Revit.DB.Document doc) {
+        try {
+            if (!doc.IsModelInCloud)
+                return null;
+
+            return GetDocumentModelPath(doc)?.GetProjectGUID().ToString("D");
+        } catch {
+            return null;
+        }
+    }
+
+    public static string? GetCloudModelGuid(Autodesk.Revit.DB.Document doc) {
+        try {
+            if (!doc.IsModelInCloud)
+                return null;
+
+            return GetDocumentModelPath(doc)?.GetModelGUID().ToString("D");
+        } catch {
+            return null;
+        }
+    }
+
+    public static string? GetCloudModelUrn(Autodesk.Revit.DB.Document doc) {
+        try {
+            if (!doc.IsModelInCloud)
+                return null;
+
+            var urn = doc.GetCloudModelUrn();
+            return string.IsNullOrWhiteSpace(urn) ? null : urn;
+        } catch {
+            return null;
+        }
+    }
+
+    public static Autodesk.Revit.DB.Document? FindOpenDocumentByKey(string documentKey) =>
+        GetOpenDocuments().FirstOrDefault(doc =>
+            string.Equals(GetDocumentKey(doc), documentKey, StringComparison.OrdinalIgnoreCase));
 
     public static string LogDocumentState(View? view = null, string? context = null) {
         var sb = new StringBuilder();

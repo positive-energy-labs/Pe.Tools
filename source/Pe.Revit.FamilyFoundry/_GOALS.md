@@ -4,6 +4,8 @@
 
 Make authored family-processing workflows predictable, debuggable, and reusable across authoring, snapshotting, replay, and targeted automation.
 
+Family Foundry should own semantic authoring intent, compilation, replay policy, and proof artifacts while leaning on deeper reusable family/document modules for the low-level Revit mechanics.
+
 ## User Goals
 
 - Author profiles in a compact, semantic shape instead of low-level Revit mutation detail.
@@ -17,15 +19,20 @@ Make authored family-processing workflows predictable, debuggable, and reusable 
 - Make operation flows easy to test with focused Revit-backed harnesses.
 - Preserve strong logging, snapshots, and proof artifacts so regressions are auditable.
 - Prefer one canonical authored shape for a workflow instead of parallel overlapping models.
+- Push reusable family/document mechanics down into `Pe.Revit.Extensions` and `Pe.Revit.Global` instead of letting `Pe.App` commands or feature orchestration own them.
+- Treat `FamilyDocument`, `FamilyManager`, and related extension surfaces as the preferred home for reusable family-side collectors, inspectors, creators, and appliers.
 
 ## Integration Goals
 
 - Expose settings shapes cleanly to the shared schema/runtime pipeline.
 - Support host/editor authoring without moving live Revit semantics out of the Revit lane.
 - Let tests prove behavior across replay, migration, and parameter-resolution scenarios with reusable harnesses.
+- Consume generalized document/family mechanics from sibling packages when the concept is broader than Family Foundry itself.
+- Keep feature-owned semantic layers such as authored profiles and compilers local even when the low-level mechanics are extracted.
 
 ## Non-Goals
 
 - Do not optimize for disconnected smart validation that requires the active Revit document.
 - Do not preserve older authoring models as permanent peers once a better canonical shape exists.
 - Do not hide ambiguous reverse-inference or runtime behavior behind silent heuristics.
+- Do not let Family Foundry become the accidental home of reusable document collectors or generic family mutation helpers merely because it needed them first.

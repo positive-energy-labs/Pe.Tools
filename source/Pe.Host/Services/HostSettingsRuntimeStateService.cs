@@ -4,7 +4,7 @@ namespace Pe.Host.Services;
 
 public sealed record HostSettingsRuntimeState(
     BridgeRuntimeSnapshot BridgeSnapshot,
-    IReadOnlyList<HostModuleDescriptor> AvailableModules
+    IReadOnlyList<HostModuleDescriptor> CatalogModules
 );
 
 public sealed class HostSettingsRuntimeStateService(
@@ -17,6 +17,6 @@ public sealed class HostSettingsRuntimeStateService(
     public HostSettingsRuntimeState GetState() =>
         new(
             this._bridgeCapabilityService.GetSnapshot(),
-            this._moduleCatalog.GetTransportDescriptors()
+            this._moduleCatalog.GetCatalogDescriptors()
         );
 }

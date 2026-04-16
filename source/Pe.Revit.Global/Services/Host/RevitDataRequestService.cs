@@ -127,6 +127,10 @@ internal sealed class RevitDataRequestService {
         () => this.EnqueueAsync(() => this.GetElectricalLoadClassificationsCatalogCore(request))
     );
 
+    public Task<RevitDocumentContextEnvelopeResponse> GetRevitDocumentContextEnvelopeAsync(
+        RevitDocumentContextRequest request
+    ) => this.EnqueueAsync(() => this.GetRevitDocumentContextCore(request));
+
     public void Invalidate(params HostInvalidationDomain[] domains) =>
         this._cache.Invalidate(domains);
 
@@ -526,6 +530,73 @@ internal sealed class RevitDataRequestService {
         }
     }
 
+    private RevitDocumentContextEnvelopeResponse GetRevitDocumentContextCore(
+        RevitDocumentContextRequest request
+    ) {
+        try {
+            var activeDocument = DocumentManager.uiapp.ActiveUIDocument?.Document;
+            var openDocuments = DocumentManager.GetOpenDocuments()
+                .ToList();
+            var openDocumentSummaries = openDocuments
+                .Select(doc => CreateDocumentSummary(doc, activeDocument))
+                .OrderByDescending(doc => doc.IsActive)
+                .ThenBy(doc => doc.Title, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var activeDocumentSummary = openDocumentSummaries.FirstOrDefault(doc => doc.IsActive);
+
+            var baseData = new RevitDocumentContextData(
+                activeDocumentSummary != null,
+                activeDocumentSummary,
+                null,
+                openDocumentSummaries.Count,
+                openDocumentSummaries,
+                []
+            );
+
+            if (!HasTargetDocumentCriteria(request.TargetDocument)) {
+                var resolvedData = baseData with { ResolvedDocument = activeDocumentSummary };
+                var message = activeDocumentSummary == null
+                    ? "Collected Revit document context. No active document is currently available."
+                    : $"Collected Revit document context. Active document '{activeDocumentSummary.Title}' is the default target.";
+                return HostEnvelopeResults.Success(
+                    resolvedData,
+                    EnvelopeCode.Ok,
+                    message
+                ).ToRevitDocumentContextEnvelope();
+            }
+
+            var resolution = ResolveTargetDocument(openDocumentSummaries, request.TargetDocument!);
+            if (!resolution.Ok) {
+                return new RevitDocumentContextEnvelopeResponse(
+                    false,
+                    resolution.Code,
+                    resolution.Message,
+                    resolution.Issues,
+                    baseData
+                );
+            }
+
+            var data = baseData with { ResolvedDocument = resolution.Data };
+            return HostEnvelopeResults.Success(
+                data,
+                EnvelopeCode.Ok,
+                $"Collected Revit document context. Resolved target document '{resolution.Data!.Title}'."
+            ).ToRevitDocumentContextEnvelope();
+        } catch (Exception ex) {
+            return HostEnvelopeResults.Failure<RevitDocumentContextData>(
+                EnvelopeCode.Failed,
+                ex.Message,
+                [
+                    HostEnvelopeResults.ExceptionIssue(
+                        "RevitDocumentContextException",
+                        ex,
+                        "Verify the Revit session is open and retry."
+                    )
+                ]
+            ).ToRevitDocumentContextEnvelope();
+        }
+    }
+
     private static HostEnvelopeResult<LoadedFamiliesFilter> ValidateMatrixFilter(LoadedFamiliesMatrixRequest request) {
         var categoryNames = request.Filter?.CategoryNames
             .Where(name => !string.IsNullOrWhiteSpace(name))
@@ -568,6 +639,93 @@ internal sealed class RevitDataRequestService {
 
     private void PublishLoadedFamilyMatrixProgress(string message) =>
         this._notificationSink?.Invoke(message);
+
+    private static RevitDocumentSummary CreateDocumentSummary(
+        RevitDocument document,
+        RevitDocument? activeDocument
+    ) {
+        var documentKey = DocumentManager.GetDocumentKey(document);
+        var activeDocumentKey = activeDocument == null ? null : DocumentManager.GetDocumentKey(activeDocument);
+        return new RevitDocumentSummary(
+            documentKey,
+            document.Title,
+            DocumentManager.GetDocumentPath(document),
+            document.IsFamilyDocument,
+            document.IsWorkshared,
+            string.Equals(documentKey, activeDocumentKey, StringComparison.OrdinalIgnoreCase),
+            document.IsModifiable,
+            document.IsReadOnly,
+            document.IsModelInCloud,
+            DocumentManager.GetCloudProjectGuid(document),
+            DocumentManager.GetCloudModelGuid(document),
+            DocumentManager.GetCloudModelUrn(document)
+        );
+    }
+
+    private static bool HasTargetDocumentCriteria(RevitDocumentTarget? target) =>
+        target != null && (
+            !string.IsNullOrWhiteSpace(target.DocumentKey) ||
+            !string.IsNullOrWhiteSpace(target.Path) ||
+            !string.IsNullOrWhiteSpace(target.Title) ||
+            target.IsFamilyDocument.HasValue
+        );
+
+    private static HostEnvelopeResult<RevitDocumentSummary> ResolveTargetDocument(
+        IReadOnlyList<RevitDocumentSummary> openDocuments,
+        RevitDocumentTarget target
+    ) {
+        var candidates = openDocuments
+            .Where(doc =>
+                MatchesFilter(doc.DocumentKey, target.DocumentKey) &&
+                MatchesFilter(doc.Path, target.Path) &&
+                MatchesFilter(doc.Title, target.Title) &&
+                (!target.IsFamilyDocument.HasValue || doc.IsFamilyDocument == target.IsFamilyDocument.Value))
+            .ToList();
+
+        if (candidates.Count == 1) {
+            return HostEnvelopeResults.Success(
+                candidates[0],
+                EnvelopeCode.Ok,
+                $"Resolved target document '{candidates[0].Title}'."
+            );
+        }
+
+        if (candidates.Count == 0) {
+            return HostEnvelopeResults.Failure<RevitDocumentSummary>(
+                EnvelopeCode.Failed,
+                "Target document did not match any open Revit document.",
+                [
+                    new ValidationIssue(
+                        "$.targetDocument",
+                        null,
+                        "TargetDocumentNotFound",
+                        "error",
+                        "Target document did not match any open Revit document.",
+                        "Inspect openDocuments from this response or refresh host-status and retry with a current document key."
+                    )
+                ]
+            );
+        }
+
+        return HostEnvelopeResults.Failure<RevitDocumentSummary>(
+            EnvelopeCode.Failed,
+            "Target document matched multiple open Revit documents.",
+            [
+                new ValidationIssue(
+                    "$.targetDocument",
+                    null,
+                    "TargetDocumentAmbiguous",
+                    "error",
+                    "Target document matched multiple open Revit documents.",
+                    "Provide documentKey or path to disambiguate the target document."
+                )
+            ]
+        );
+    }
+
+    private static bool MatchesFilter(string? actual, string? expected) =>
+        string.IsNullOrWhiteSpace(expected) ||
+        string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
 
     private static HostEnvelopeResult<RevitDocument> GetActiveDocument() {
         var document = DocumentManager.uiapp.ActiveUIDocument?.Document;

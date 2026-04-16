@@ -5,7 +5,7 @@ namespace Pe.Shared.HostContracts.Protocol;
 
 public static class BridgeProtocol {
     public const string Transport = "named-pipes";
-    public const int ContractVersion = 12;
+    public const int ContractVersion = 14;
     public const string DefaultPipeName = SettingsEditorRuntime.DefaultPipeName;
 }
 
@@ -27,6 +27,16 @@ public record BridgeHandshake(
     string RuntimeFramework,
     bool HasActiveDocument,
     string? ActiveDocumentTitle,
+    string? ActiveDocumentKey,
+    string? ActiveDocumentPath,
+    bool ActiveDocumentIsFamilyDocument,
+    bool ActiveDocumentIsWorkshared,
+    bool ActiveDocumentIsModelInCloud,
+    string? ActiveDocumentCloudProjectGuid,
+    string? ActiveDocumentCloudModelGuid,
+    string? ActiveDocumentCloudModelUrn,
+    long ActiveDocumentObservedAtUnixMs,
+    int OpenDocumentCount,
     List<HostModuleDescriptor> AvailableModules
 );
 

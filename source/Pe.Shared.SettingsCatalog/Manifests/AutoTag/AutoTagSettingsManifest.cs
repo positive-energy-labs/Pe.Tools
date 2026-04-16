@@ -9,7 +9,9 @@ public static class AutoTagSettingsManifest {
         "AutoTag",
         "autotag",
         SettingsStorageModuleOptions.Empty,
-        storageDefinitionFactory: CreateStorageDefinition
+        storageDefinitionFactory: CreateStorageDefinition,
+        hostScope: SettingsModuleHostScope.ActiveDocument,
+        activeDocumentKind: SettingsModuleActiveDocumentKind.ProjectOnly
     );
 
     public static SettingsStorageModuleDefinition CreateStorageDefinition(
