@@ -1,7 +1,7 @@
 using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI;
 using Pe.Revit.Global.Services.Storage;
-using Pe.Shared.SettingsCatalog.Manifests.AutoTag;
+using Pe.Shared.StorageRuntime.AutoTag;
 using Serilog;
 
 namespace Pe.App.Services.AutoTag;

@@ -18,7 +18,7 @@ This repo exists to improve Engineering Designer workflows for MEP firms through
 - `source/Pe.App/ButtonRegistry.cs` — top-level command/ribbon exposure.
 - `source/Pe.Host/Program.cs` — external settings host, HTTP/SSE entrypoint.
 - `source/Pe.Shared.StorageRuntime/` — schema generation, field options, module registration, storage/document validation.
-- `source/Pe.Shared.SettingsCatalog/` — settings manifests and schema-definition registration.
+- `source/Pe.Shared.StorageRuntime/`, `source/Pe.Revit.Global/Revit/Lib/Schedules/`, and `source/Pe.Revit.FamilyFoundry/Profiles/` / `SchemaDefinitions/` — settings manifests, schema-definition registration, and module composition owned close to their runtime features.
 - `source/Pe.Revit.Extensions` — strong primitives such as FamilyDocument, SetValue w/ coercion context, TrySetFormula/Fast, w/ formula validation, FindParameter & GeValue, etc.
 - `source/Pe.Revit.FamilyFoundry/OperationProcessor.cs` — main FF execution orchestrator.
 - `source/Pe.Revit.Tests/AGENTS.md` — runner-specific Revit test lane workflow.

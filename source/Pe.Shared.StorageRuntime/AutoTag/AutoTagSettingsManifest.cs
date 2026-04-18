@@ -2,7 +2,7 @@ using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Modules;
 using Pe.Shared.StorageRuntime.Validation;
 
-namespace Pe.Shared.SettingsCatalog.Manifests.AutoTag;
+namespace Pe.Shared.StorageRuntime.AutoTag;
 
 public static class AutoTagSettingsManifest {
     public static SettingsModuleManifest<AutoTagSettings> Module { get; } = new(

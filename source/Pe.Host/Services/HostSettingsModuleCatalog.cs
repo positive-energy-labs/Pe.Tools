@@ -1,5 +1,5 @@
-using Pe.Shared.SettingsCatalog;
-using Pe.Shared.SettingsCatalog.Manifests;
+using Pe.Revit.FamilyFoundry;
+using Pe.Revit.Global.Revit.Documents.Schedules;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Modules;
@@ -20,7 +20,12 @@ public interface IHostSettingsModuleCatalog {
 
 public sealed class HostSettingsModuleCatalog : IHostSettingsModuleCatalog {
     private readonly SettingsRuntimeMode _runtimeMode;
-    private readonly IReadOnlyList<ISettingsModuleManifest> _modules = KnownSettingsRegistry.All;
+    private readonly IReadOnlyList<ISettingsModuleManifest> _modules =
+        SettingsModuleCatalogComposer.Combine(
+            StorageRuntimeSettingsModules.All,
+            RevitGlobalSettingsModules.All,
+            FamilyFoundrySettingsModules.All
+        );
     private readonly IReadOnlyDictionary<string, ISettingsModuleManifest> _modulesByModuleKey;
     private readonly IReadOnlyList<HostSettingsModuleDescriptor> _catalogDescriptors;
     private readonly HostWorkspacesData _workspaces;

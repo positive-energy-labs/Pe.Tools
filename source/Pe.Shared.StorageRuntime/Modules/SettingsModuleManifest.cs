@@ -1,9 +1,8 @@
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Documents;
 using Pe.Shared.StorageRuntime.Json;
-using Pe.Shared.StorageRuntime.Modules;
 
-namespace Pe.Shared.SettingsCatalog.Manifests;
+namespace Pe.Shared.StorageRuntime.Modules;
 
 public interface ISettingsModuleManifest : ISettingsModule {
     string DefaultRootKey { get; }
@@ -19,12 +18,15 @@ public sealed class SettingsModuleManifest<TSettings>(
     Func<SettingsRuntimeMode, SettingsStorageModuleDefinition>? storageDefinitionFactory = null,
     SettingsModuleHostScope hostScope = SettingsModuleHostScope.Session,
     SettingsModuleActiveDocumentKind activeDocumentKind = SettingsModuleActiveDocumentKind.Any
-    ) : BaseSettingsModule<TSettings>(moduleKey, defaultRootKey, storageOptions), ISettingsModuleManifest
+) : BaseSettingsModule<TSettings>(moduleKey, defaultRootKey, storageOptions), ISettingsModuleManifest
     where TSettings : class {
     public new string DefaultRootKey => base.DefaultRootKey;
 
-    public IReadOnlyList<SettingsRootDescriptor> Roots { get; } = roots ?? [new SettingsRootDescriptor(defaultRootKey, defaultRootKey)];
+    public IReadOnlyList<SettingsRootDescriptor> Roots { get; } =
+        roots ?? [new SettingsRootDescriptor(defaultRootKey, defaultRootKey)];
+
     public override SettingsModuleHostScope HostScope { get; } = hostScope;
+
     public override SettingsModuleActiveDocumentKind ActiveDocumentKind { get; } = activeDocumentKind;
 
     public override SettingsStorageModuleDefinition CreateStorageDefinition(SettingsRuntimeMode runtimeMode) =>
@@ -35,7 +37,7 @@ public sealed class SettingsModuleManifest<TSettings>(
         );
 }
 
-public static class SettingsCatalogStorageProfiles {
+public static class SettingsStorageProfiles {
     public static SettingsStorageModuleOptions SharedAuthoring { get; } = new(
         ["_shared", .. SettingsDirectiveRootCatalog.GlobalIncludeRoots],
         SettingsDirectiveRootCatalog.GlobalPresetRoots

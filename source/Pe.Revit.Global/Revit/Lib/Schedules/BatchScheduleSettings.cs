@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
-namespace Pe.Shared.SettingsCatalog.Manifests.Schedules;
+namespace Pe.Revit.Global.Revit.Documents.Schedules;
 
 /// <summary>
 ///     Settings for batch schedule creation.
