@@ -1,9 +1,7 @@
-using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Serialization;
 using Pe.Revit.FamilyFoundry.Snapshots;
-using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 
 namespace Pe.Revit.FamilyFoundry.Profiles;
 
@@ -48,10 +46,10 @@ public static class FamilySnapshotProfileProjector {
                 IncludeDefinitionOnlyParameters = includeDefinitionOnlyParameters,
                 IsSharedParameterName = isSharedParameterName
             });
-        var authoredSolids = snapshot.ParamDrivenSolids ?? new AuthoredParamDrivenSolidsSettings();
+        var authoredSolids = snapshot.AuthoredParamDrivenSolids ?? new AuthoredParamDrivenSolidsSettings();
         var solidsPlan = AuthoredParamDrivenSolidsCompiler.Compile(authoredSolids);
         var additionalReferences = KnownParamPlanBuilder.CollectReferencedParameterNames(solidsPlan.RefPlanesAndDims)
-            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(solidsPlan.InternalExtrusions))
+            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(solidsPlan.Extrusions))
             .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(solidsPlan.Connectors))
             .ToList();
         var referencedSnapshotDefinitions = KnownParamPlanBuilder.BuildFamilyDefinitionsFromSnapshots(

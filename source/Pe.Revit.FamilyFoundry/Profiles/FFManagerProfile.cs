@@ -1,9 +1,8 @@
-using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.OperationSettings;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
-namespace Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
+namespace Pe.Revit.FamilyFoundry.Profiles;
 
 public class FFManagerProfile : BaseProfile {
     [Description("Settings for explicit family parameter definitions.")]

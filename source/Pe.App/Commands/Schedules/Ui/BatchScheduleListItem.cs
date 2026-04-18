@@ -1,6 +1,6 @@
 using Newtonsoft.Json.Linq;
 using Pe.Revit.Ui.Core;
-using Pe.Shared.SettingsCatalog.Manifests.Schedules;
+using Pe.Revit.Global.Revit.Documents.Schedules;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Modules;
 using System.IO;

@@ -6,12 +6,14 @@ using Nice3point.Revit.Toolkit.External;
 using Pe.App.Services.AutoTag;
 using Pe.Tools.SettingsEditor;
 using Pe.App.Tasks;
+using Pe.Revit.FamilyFoundry;
+using Pe.Revit.Global.Revit.Documents.Schedules;
 using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Global.Services.Host;
 using Pe.Revit.Scripting.Transport;
 using Pe.Shared.HostContracts.Protocol;
-using Pe.Shared.SettingsCatalog;
+using Pe.Shared.StorageRuntime.Modules;
 using Pe.Revit.Ui.Core;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
@@ -50,7 +52,14 @@ public class Application : ExternalApplication {
 
         // Initialize the settings editor bridge metadata. Bridge connection remains manual
         // unless PE_SETTINGS_BRIDGE_AUTO_CONNECT is explicitly enabled.
-        HostRuntime.Initialize(revitTaskService, KnownSettingsRegistry.RegisterRevitModules);
+        HostRuntime.Initialize(revitTaskService, registry => {
+            SettingsModuleCatalogComposer.RegisterRevitModules(
+                registry,
+                StorageRuntimeSettingsModules.All,
+                RevitGlobalSettingsModules.All,
+                FamilyFoundrySettingsModules.All
+            );
+        });
         _scriptingPipeServer = new ScriptingPipeServer(new ScriptingPipeMessageHandler(
             () => RevitUiSession.CurrentUIApplication,
             message => Log.Information("Revit scripting notification: {Message}", message)

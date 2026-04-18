@@ -1,11 +1,10 @@
-using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.FamilyFoundry.Operations;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
-namespace Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
+namespace Pe.Revit.FamilyFoundry.Profiles;
 
 public class FFMigratorProfile : BaseProfile {
     [Description("Settings for cleaning the family document")]

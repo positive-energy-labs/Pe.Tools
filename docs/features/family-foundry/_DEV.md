@@ -9,7 +9,7 @@ Profiles describe intent, queues execute that intent, snapshots capture what the
 ## Architecture
 
 - `Pe.Revit.FamilyFoundry` owns the top-level Manager and Migrator profile types, snapshot-to-profile projection code, queue construction, compiler/resolution, runtime operations, snapshot capture, and artifact writing.
-- `Pe.Shared.SettingsCatalog` owns generic settings infrastructure, storage/manifests primitives, and non-FF settings modules.
+- `Pe.Shared.StorageRuntime` owns generic settings infrastructure and storage/manifests primitives. FF-owned manifests/profiles live in `Pe.Revit.FamilyFoundry`, and schedule-owned manifests live in `Pe.Revit.Global`.
 - `Pe.App` commands such as `CmdFFManager` and `CmdFFMigrator` should differ mainly in authored entrypoint and queue/profile payload, not in output shape.
 - `Pe.Revit.Tests` should increasingly use the same artifacts as proof seams instead of relying on logs alone.
 

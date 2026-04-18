@@ -1,16 +1,14 @@
 using Autodesk.Revit.DB;
 using Newtonsoft.Json;
-using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.Plans;
-using Pe.Revit.FamilyFoundry.Snapshots;
+using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.Global;
 using Pe.Revit.Global.Utils.Files;
 using Pe.Shared.StorageRuntime;
-using Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
 
 namespace Pe.Revit.FamilyFoundry.Apply;
 
@@ -50,43 +48,17 @@ public static class DocumentFamilyProfileApplyExtensions {
                 .Add(new ReferencePlaneSnapshotCollector())
                 .Add(new ParamDrivenSolidsSnapshotCollector());
 
-            using var processor = new OperationProcessor(doc, executionOptions);
-            var logs = processor
-                .SelectFamilies(() => null)
-                .ProcessQueue(queue, capturePipeline, runOutput?.DirectoryPath, finishSettings);
-
-            if (runOutput != null) {
-                var resultBuilder = new ProcessingResultBuilder(runOutput)
-                    .WithProfile(profile, profileName)
-                    .WithOperationMetadata(queue);
-
-                foreach (var context in logs.contexts)
-                    _ = resultBuilder.WriteSingleFamilyOutput(context, finishSettings.OpenOutputFilesOnCommandFinish);
-
-                if (logs.contexts.Count > 1)
-                    resultBuilder.WriteMultiFamilySummary(logs.totalMs, finishSettings.OpenOutputFilesOnCommandFinish);
-            }
-
-            var errors = logs.contexts
-                .Select(context => context.OperationLogs.AsTuple().error)
-                .Where(error => error != null)
-                .ToList();
-
-            return new FamilyProfileApplyResult(
-                errors.Count == 0,
-                errors.FirstOrDefault()?.Message,
-                logs.contexts,
-                logs.totalMs,
-                runOutput?.DirectoryPath
-            );
+            return FamilyProfileApplicator.ApplyProfile(
+                doc,
+                queue,
+                profile,
+                profileName,
+                capturePipeline,
+                finishSettings,
+                runOutput,
+                executionOptions);
         } catch (Exception ex) {
-            return new FamilyProfileApplyResult(
-                false,
-                ex.Message,
-                [],
-                0,
-                runOutput?.DirectoryPath
-            );
+            return new FamilyProfileApplyResult(false, ex.Message, [], 0, runOutput?.DirectoryPath);
         }
     }
 
@@ -113,50 +85,22 @@ public static class DocumentFamilyProfileApplyExtensions {
                 .Add(new LookupTableSnapshotCollector())
                 .Add(new ReferencePlaneSnapshotCollector());
             var finishSettings = onFinishSettings ?? new LoadAndSaveOptions { OpenOutputFilesOnCommandFinish = false };
-
-            var resultBuilder = runOutput == null
-                ? null
-                : new ProcessingResultBuilder(runOutput)
-                    .WithProfile(profile, profileName)
-                    .WithOperationMetadata(queue);
-            using var processor = new OperationProcessor(doc, profile.ExecutionOptions);
             var explicitFamilies = selectedFamilies?
                 .Where(family => family != null)
                 .GroupBy(family => family.Id)
                 .Select(group => group.First())
                 .ToList();
-            var logs = processor
-                .SelectFamilies(() =>
-                    explicitFamilies is { Count: > 0 }
-                        ? explicitFamilies
-                        : profile.GetFamilies(doc))
-                .ProcessQueue(queue, capturePipeline, resultBuilder?.RunOutputPath, finishSettings);
-            if (resultBuilder != null) {
-                foreach (var familyCtx in logs.contexts)
-                    _ = resultBuilder.WriteSingleFamilyOutput(familyCtx);
 
-                resultBuilder.WriteMultiFamilySummary(logs.totalMs, finishSettings.OpenOutputFilesOnCommandFinish);
-            }
-
-            var processedFamilyNames = logs.contexts
-                .Select(context => context.FamilyName)
-                .Where(name => !string.IsNullOrWhiteSpace(name) &&
-                               !string.Equals(name, "ERROR", StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            var errors = logs.contexts
-                .Select(context => context.OperationLogs.AsTuple().error)
-                .Where(error => error != null)
-                .ToList();
-            var hasErrors = errors.Count > 0;
-
-            return new FamilyMigrationApplyResult(
-                !hasErrors,
-                hasErrors ? errors.FirstOrDefault()?.Message ?? "Processing completed with errors." : null,
-                resultBuilder?.RunOutputPath,
-                processedFamilyNames,
-                logs.totalMs,
-                logs.contexts.Count
-            );
+            return FamilyProfileApplicator.ApplyMigrationProfile(
+                doc,
+                queue,
+                profile,
+                profileName,
+                () => explicitFamilies is { Count: > 0 } ? explicitFamilies : profile.GetFamilies(doc),
+                capturePipeline,
+                finishSettings,
+                runOutput,
+                profile.ExecutionOptions);
         } catch (Exception ex) {
             return new FamilyMigrationApplyResult(false, ex.Message, runOutput?.DirectoryPath, [], 0, 0);
         }
@@ -202,7 +146,7 @@ public static class DocumentFamilyProfileApplyExtensions {
         }
 
         var additionalReferences = KnownParamPlanBuilder.CollectReferencedParameterNames(solidsPlan.RefPlanesAndDims)
-            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(solidsPlan.InternalExtrusions))
+            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(solidsPlan.Extrusions))
             .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(solidsPlan.Connectors))
             .ToList();
         var knownParamPlan = KnownParamPlanBuilder.Compile(
@@ -231,7 +175,7 @@ public static class DocumentFamilyProfileApplyExtensions {
             }))
             .Add(new MakeParamDrivenPlanesAndDims(solidsPlan.RefPlanesAndDims))
             .Add(new SetKnownParams(formulaOnlyAssignments, knownParamPlan.Catalog))
-            .Add(new MakeConstrainedExtrusions(solidsPlan.InternalExtrusions))
+            .Add(new MakeConstrainedExtrusions(solidsPlan.Extrusions))
             .Add(new MakeParamDrivenConnectors(solidsPlan.Connectors))
             .Add(new MakeRefPlaneSubcategories(specs))
             .Add(new SortParams(new SortParamsSettings()));
@@ -323,20 +267,3 @@ public static class DocumentFamilyProfileApplyExtensions {
         return paramList;
     }
 }
-
-public sealed record FamilyProfileApplyResult(
-    bool Success,
-    string? Error,
-    List<FamilyProcessingContext> Contexts,
-    double TotalMs,
-    string? OutputFolderPath
-);
-
-public sealed record FamilyMigrationApplyResult(
-    bool Success,
-    string? Error,
-    string? OutputFolderPath,
-    List<string> ProcessedFamilyNames,
-    double TotalMs,
-    int FamilyCount
-);

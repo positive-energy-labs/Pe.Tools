@@ -1,7 +1,8 @@
+using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 using System.Runtime.CompilerServices;
 
-namespace Pe.Shared.SettingsCatalog.Manifests.FamilyFoundry;
+namespace Pe.Revit.FamilyFoundry.SchemaDefinitions;
 
 internal sealed class ProfileFamilyManagerSchemaDefinition : SettingsSchemaDefinition<FFManagerProfile> {
     public override void Configure(ISettingsSchemaBuilder<FFManagerProfile> builder) =>

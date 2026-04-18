@@ -1,8 +1,9 @@
+using Autodesk.Revit.DB;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using TypeGen.Core.TypeAnnotations;
 
-namespace Pe.Shared.SettingsCatalog.Manifests.AutoTag;
+namespace Pe.Shared.StorageRuntime.AutoTag;
 
 [ExportTsInterface]
 public class AutoTagSettings {

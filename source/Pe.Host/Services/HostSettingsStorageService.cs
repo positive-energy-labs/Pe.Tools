@@ -1,6 +1,4 @@
 using Pe.Shared.StorageRuntime;
-using Pe.Shared.SettingsCatalog;
-using Pe.Shared.SettingsCatalog.Manifests;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Documents;
 using Pe.Shared.StorageRuntime.Modules;

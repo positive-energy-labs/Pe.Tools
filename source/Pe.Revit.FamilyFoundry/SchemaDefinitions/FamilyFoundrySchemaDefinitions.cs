@@ -63,14 +63,6 @@ internal sealed class FilterFamiliesSettingsSchemaDefinition : SettingsSchemaDef
                 "Optional conditional filter based on family parameter values. Uses schedule filter logic to evaluate parameter conditions. Leave FieldName empty to disable this filter."));
 }
 
-internal sealed class ScheduleFilterSpecFamilyFoundrySchemaDefinition : SettingsSchemaDefinition<ScheduleFilterSpec> {
-    public override void Configure(ISettingsSchemaBuilder<ScheduleFilterSpec> builder) =>
-        builder.Property(item => item.FieldName, property => {
-            property.DependsOnSibling(OptionContextKeys.CategoryName);
-            property.UseFieldOptions<ScheduleFieldNamesProvider>();
-        });
-}
-
 internal sealed class GlobalParamAssignmentSchemaDefinition : SettingsSchemaDefinition<GlobalParamAssignment> {
     public override void Configure(ISettingsSchemaBuilder<GlobalParamAssignment> builder) =>
         builder.Property(item => item.Parameter,
@@ -127,7 +119,6 @@ internal static class FamilyFoundrySchemaDefinitionBootstrapper {
         SettingsSchemaDefinitionRegistry.Shared.Register(new IncludeSharedParameterSchemaDefinition());
         SettingsSchemaDefinitionRegistry.Shared.Register(new ExcludeSharedParameterSchemaDefinition());
         SettingsSchemaDefinitionRegistry.Shared.Register(new FilterFamiliesSettingsSchemaDefinition());
-        SettingsSchemaDefinitionRegistry.Shared.Register(new ScheduleFilterSpecFamilyFoundrySchemaDefinition());
         SettingsSchemaDefinitionRegistry.Shared.Register(new GlobalParamAssignmentSchemaDefinition());
         SettingsSchemaDefinitionRegistry.Shared.Register(new PerTypeAssignmentRowSchemaDefinition());
         SettingsSchemaDefinitionRegistry.Shared.Register(new SetKnownParamsSettingsSchemaDefinition());
