@@ -1,4 +1,4 @@
-using Autodesk.Revit.UI;
+﻿using Autodesk.Revit.UI;
 using Pe.App.Commands.Palette.TaskPalette;
 
 namespace Pe.App.Tasks;
@@ -17,8 +17,8 @@ public sealed class ExampleTask : ITask {
 
         var doc = uiApp.ActiveUIDocument?.Document;
         if (doc != null)
-            Console.WriteLine($"  Active document: {doc.Title}");
-        else
+            Console.WriteLine($"  TEST TEST Active document: {doc.Title}");
+        else 
             Console.WriteLine("  No active document");
 
         await Task.CompletedTask;

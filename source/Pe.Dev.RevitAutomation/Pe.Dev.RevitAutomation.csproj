@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net8.0-windows</TargetFramework>
+        <UseWPF>true</UseWPF>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>Pe.Dev.RevitAutomation</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="Assets\AutoApplyRiderHotReload.ahk" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
+</Project>

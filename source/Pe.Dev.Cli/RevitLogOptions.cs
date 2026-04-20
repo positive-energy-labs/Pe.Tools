@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 namespace Pe.Dev.Cli;
 
@@ -10,8 +10,7 @@ internal enum RevitLogTarget {
 
 internal sealed record RevitLogOptions(
     RevitLogTarget Target,
-    int TailLineCount,
-    bool PrintPathsOnly
+    int TailLineCount
 ) {
     private const int DefaultTailLineCount = 200;
 
@@ -21,7 +20,6 @@ internal sealed record RevitLogOptions(
 
         var target = ParseTarget(args[0]);
         var tailLineCount = DefaultTailLineCount;
-        var printPathsOnly = false;
 
         for (var i = 1; i < args.Count; i++) {
             var arg = args[i];
@@ -35,22 +33,22 @@ internal sealed record RevitLogOptions(
                 if (tailLineCount <= 0)
                     throw new ArgumentOutOfRangeException(nameof(args), "--tail must be greater than zero.");
                 break;
-            case "--path":
-                printPathsOnly = true;
-                break;
             default:
                 throw new ArgumentException($"Unknown argument '{arg}' for logs.");
             }
         }
 
-        return new RevitLogOptions(target, tailLineCount, printPathsOnly);
+        return new RevitLogOptions(target, tailLineCount);
     }
 
     public IReadOnlyList<(string label, string filePath)> ResolveLogFiles() =>
         this.Target switch {
-            RevitLogTarget.Host => [("host", LogFileLayout.HostLogPath)],
-            RevitLogTarget.App => [("app", LogFileLayout.RevitAppLogPath)],
-            RevitLogTarget.All => [("host", LogFileLayout.HostLogPath), ("app", LogFileLayout.RevitAppLogPath)],
+            RevitLogTarget.Host => [("host", Pe.Dev.RevitAutomation.DevLogPathResolver.HostLogPath)],
+            RevitLogTarget.App => [("app", Pe.Dev.RevitAutomation.DevLogPathResolver.RevitAppLogPath)],
+            RevitLogTarget.All => [
+                ("host", Pe.Dev.RevitAutomation.DevLogPathResolver.HostLogPath),
+                ("app", Pe.Dev.RevitAutomation.DevLogPathResolver.RevitAppLogPath)
+            ],
             _ => throw new InvalidOperationException($"Unsupported log target '{this.Target}'.")
         };
 

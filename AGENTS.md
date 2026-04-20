@@ -28,24 +28,81 @@ This repo exists to improve Engineering Designer workflows for MEP firms through
 
 Protect the current RRD session aggressively, breaking it can easily turn a small edit into a multi-minute restart plus document reopen wait. This is often the biggest source of friction in Revit development.
 
-The biggest rule: *don't build `Pe.App` unless asked* (nor the root `Pe.Tools.slnx`), doing so during RRD *will always break HR* and require a restart to continue iterating. Building `Pe.Host` is always safe. When given permission, prefer low-noise commands like: `dotnet build -c "Debug.R25" /p:WarningLevel=0`. Building `Pe.Revit.Tests` is encouraged, but generally avoid it if RRD is not running because it will start a new, non-HR-able Revit session. Due to this possibility and the fact that building tests do not redeply `Pe.App` dlls, treat `.Tests` config builds as test-runner prep, not proof that the deployed Revit add-in is fresh. If asked for Revit-backed validation, prefer the relevant solution `.Tests` configuration and focused runs before broad suite runs. Here are some rapid fire reminders:
+The biggest rule: *don't build `Pe.App` directly unless asked* (nor the root `Pe.Tools.slnx`) during RRD. For compile verification, use `./build`, not direct `Pe.App` builds. Building `Pe.Host` is always safe. Building `Pe.Revit.Tests` is encouraged, but generally avoid it if RRD is not running because it may start a new non-HR-able Revit session. Treat `.Tests` builds as test-runner prep, not proof that the deployed Revit add-in is fresh. If asked for Revit-backed validation, prefer the relevant `.Tests` configuration plus focused `dotnet test --filter ...` runs before broad suite runs. Here are the reminders that matter most:
 
 - If behavior diverges from source during live Revit work, confirm with a targeted log or artifact before assuming the logic is wrong.
 - Hot reload concerns must not narrow the intended fix. Apply the correct fix first, then state whether Rider/Revit likely needs restart.
 - Treat hot reload as RR-debug-only capability, not a general live Revit capability.
 - Always assume stale assemblies are possible during live Revit work.
+- `.Tests` outputs are isolated and RRD-safe. They do not compile `Pe.App` against the live deployed `Debug.R*` add-in outputs Rider is using.
 - A `.Tests` build does not redeploy `%APPDATA%\Autodesk\Revit\Addins\{RevitVersion}\Pe.App` while Revit is running.
-- If deployed dlls are stale a RRD restart is required
-- Hot reload is not trustworthy after many runtime shape or metadata changes, including added/removed members, signature changes, constructor changes, enum/record shape changes, new nested runtime types, and some attribute changes. This is a common cause of staleness
+- Pre-test hot reload is best-effort runtime alignment, not proof that the live runtime is fresh.
+- If deployed dlls are stale, a full Rider `Pe.App` restart is required.
+- Hot reload is not trustworthy after many runtime shape or metadata changes, including added/removed members, signature changes, constructor changes, enum/record shape changes, new nested runtime types, and some attribute changes. This is a common cause of staleness.
 - If the user explicitly says they restarted Revit from Rider using the normal runtime config, treat the deployed add-in as fresh unless behavior proves otherwise.
 
+### Build System
 
-TODO: add explanation of the new automation cli
+`Pe.Tools.slnx`, `Directory.build.props`, `./install/Installer.cs`, and `./build/Program.cs` are the main touchpoints for the build system. `slnx` and `build.props` orchestrate configuration, most notably TFM/Revit-year. Revit 2025 config is enforced as the default to allow maximum compatibility with IDEs and no-config-specified dotnet commands. `./build` is the compile-verification entrypoint used in `.github/workflows/Compile.yml`. `./install` remains the release/publish entrypoint.
+
+The key commands are:
+
+- Safe-compile: `dotnet run -c Debug -- --configuration Debug.R25` or `dotnet run -c Release` from `./build`
+- Pack/release automation still lives under `./build` and `./install`; do not reintroduce direct `Pe.App` compile verification as the primary path
+```
+./build
+    # safe-compile; non-disruptive to RRD/HR
+    dotnet run -c Debug -- --configuration Debug.R25
+    dotnet run -c Release
+    # publish/pack
+    dotnet run -c Release -- pack
+    dotnet run -c Release -- pack publish # for CI only, published Github release
+    
+./source
+    # start host
+    cd Pe.Host; dotnet run
+    # NOT RRD/HR-safe
+    cd Pe.App; dotnet build -c "Debug.R25"
+    cd Pe.App; dotnet build # build.props supplies Debug.R25 if no confix specified
+    
+./source/Pe.Revit.Tests
+    dotnet test -c Debug.R25.Tests --filter "Name~FFManager_round_duct_connector_roundtrips_and_stub_resizes_across_types" --no-build
+
+    
+  
+```
+
+The dev-automation CLI is `pe-dev`:
+
+- `pe-dev revit session`
+- `pe-dev revit logs all --tail 50`
+- `pe-dev revit hot-reload`
+- `pe-dev revit approve --revit-year 2025`
+- `pe-dev revit script --stdin --name Probe.cs`
 
 
 ## Testing, Validation, and Exploration
 
-Tests are discouraged... but Revit is a fickle beast with little transparency nor predictability. The resources available to you are `Pe.Revit.Scripting` scripts, existing `Pe.Host` HTTP endpoints, and `Pe.Revit.Tests` tests. Prefer them in that order, resorting to tests last. The Revit API docs/content library are invaluable for research as well. 
+Tests are still the last resort, but the guidance is now much simpler:
+
+1. For compile verification, use `./build`.
+2. For live probing, use `pe-dev revit script ...`, especially `--stdin` inline snippets.
+3. For Revit-backed verification, use focused `dotnet test` in a `.Tests` configuration.
+
+The easiest sandbox for ad hoc probing, scripting, and behavior verification is `pe-dev revit script --stdin --name Probe.cs`, or creating files in `<User>\Documents\Pe.Scripting` when you want to persist the probe. Before assuming source/runtime divergence, check:
+
+- `pe-dev revit session`
+- `pe-dev revit logs all --tail 50`
+
+The default focused Revit test loop is:
+
+```powershell
+dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c "Debug.R25.Tests" /p:WarningLevel=0
+dotnet test source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests --filter "FullyQualifiedName~Can_create_generic_model_family_document_from_rft"
+dotnet test source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests --filter "Name~FFManager_round_duct_connector_roundtrips" --no-build
+```
+
+`dotnet test` now triggers the pre-`VSTest` approval + hot-reload hook automatically. That hook is best-effort. If it warns that restart is likely or hot reload failed, treat the live runtime as suspect even though the `.Tests` assembly is fresh.
 
 The easiest sandbox for ad hoc probing, scripting, POC'ing is `Pe.Revit.Scripting` *inline snippets*, or creating files in user `<User>\Documents\Pe.Scripting` for files you want to persist. Use for quick experiments, reflection probes, behavior verification, and performance comparisons when possible instead of polluting repo runtime code.
 

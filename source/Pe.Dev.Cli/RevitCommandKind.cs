@@ -1,11 +1,11 @@
-namespace Pe.Dev.Cli;
+﻿namespace Pe.Dev.Cli;
 
 internal enum RevitCommandKind {
     Unknown,
+    Approve,
     HotReload,
-    ApproveAppAddin,
-    ApproveTestAddin,
     Logs,
-    AppPostBuild,
-    TestsPostBuild
+    Session,
+    Script,
+    InternalApproveWorker
 }

@@ -1,10 +1,10 @@
 using Microsoft.CodeAnalysis;
+using Pe.Dev.Cli;
 using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.Context;
 using Pe.Revit.Scripting.Execution;
 using Pe.Revit.Scripting.References;
 using Pe.Revit.Scripting.Storage;
-using Pe.Scripting.Cli;
 using Pe.Shared.HostContracts.Scripting;
 
 namespace Pe.Revit.Tests;
@@ -118,7 +118,7 @@ public sealed class RevitScriptingPortTests {
             Assert.That(File.Exists(result.ReadmePath), Is.True);
             Assert.That(File.ReadAllText(result.ReadmePath), Does.Not.Contain("lane"));
             Assert.That(Directory.Exists(inlineDirectory), Is.True);
-            Assert.That(File.ReadAllText(result.SampleScriptPath), Does.Contain("pe-script src\\SampleScript.cs"));
+            Assert.That(File.ReadAllText(result.SampleScriptPath), Does.Contain("pe-dev revit script src\\SampleScript.cs"));
             Assert.That(File.ReadAllText(result.SampleScriptPath),
                 Does.Contain("Define exactly one non-abstract PeScriptContainer"));
             Assert.That(result.GeneratedFiles, Does.Contain(agentsPath));
@@ -821,7 +821,7 @@ public sealed class RevitScriptingPortTests {
 
             Assert.That(result.Success, Is.True);
             Assert.That(File.Exists(createdPath), Is.True);
-            Assert.That(File.ReadAllText(createdPath), Does.Contain("pe-script src\\MyProbe.cs"));
+            Assert.That(File.ReadAllText(createdPath), Does.Contain("pe-dev revit script src\\MyProbe.cs"));
             Assert.That(File.ReadAllText(createdPath),
                 Does.Contain("Define exactly one non-abstract PeScriptContainer"));
             Assert.That(File.ReadAllText(createdPath), Does.Contain("public sealed class MyProbe : PeScriptContainer"));
@@ -834,13 +834,13 @@ public sealed class RevitScriptingPortTests {
     [Test]
     public void Cli_workspace_root_matches_shared_workspace_locations() =>
         Assert.That(
-            CliOptions.GetWorkspaceRoot("default"),
+            ScriptCliOptions.GetWorkspaceRoot("default"),
             Is.EqualTo(ScriptingWorkspaceLocations.ResolveWorkspaceRoot("default"))
         );
 
     [Test]
     public void Cli_no_longer_accepts_policy_argument() {
-        var parseResult = CliOptions.Parse(["--policy", "strict", "src\\Smoke.cs"]);
+        var parseResult = ScriptCliOptions.Parse(["--policy", "strict", "src\\Smoke.cs"]);
 
         Assert.That(parseResult.Success, Is.False);
         Assert.That(parseResult.ErrorMessage, Does.Contain("Unknown argument '--policy'"));

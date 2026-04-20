@@ -17,11 +17,11 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Pe.App\Pe.App.csproj"/>
+        <ProjectReference Include="..\Pe.Dev.Cli\Pe.Dev.Cli.csproj"/>
         <ProjectReference Include="..\Pe.Host\Pe.Host.csproj"/>
         <ProjectReference Include="..\Pe.Revit.FamilyFoundry\Pe.Revit.FamilyFoundry.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Scripting\Pe.Revit.Scripting.csproj"/>
-        <ProjectReference Include="..\Pe.Scripting.Cli\Pe.Scripting.Cli.csproj"/>
     </ItemGroup>
 
     <ItemGroup>
@@ -48,19 +48,32 @@
         </AssemblyAttribute>
     </ItemGroup>
 
+    <PropertyGroup>
+        <_PeDevCliStableConfiguration>$([System.String]::Copy('$(Configuration)').Replace('.Tests', ''))</_PeDevCliStableConfiguration>
+        <_PeDevCliStablePath>$(MSBuildProjectDirectory)\..\Pe.Dev.Cli\bin\$(_PeDevCliStableConfiguration)\net8.0-windows\pe-dev.dll</_PeDevCliStablePath>
+    </PropertyGroup>
     <!--
-      `.Tests` builds are the safe Revit-backed test lane. This post-build hook
-      only helps the live Rider/Revit workflow by preparing/triggering Rider hot
-      reload for changed runtime files and auto-approving add-in dialogs. The
-      actual runtime code still comes from the addin-loaded assemblies in Revit.
+      `.Tests` outputs are isolated and RRD-safe. This pre-test hook is only a
+      best-effort attempt to align the already-running live runtime with the
+      just-built source immediately before VSTest executes.
     -->
     <Target
-            Name="PostBuildPrepareRiderHotReload"
-            AfterTargets="Build"
+            Name="PrepareRevitRuntimeBeforeVSTest"
+            BeforeTargets="VSTest"
             Condition="$([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'"
     >
+        <Warning
+                Text="Skipping Revit pre-test automation because pe-dev was not found at '$(_PeDevCliStablePath)'. Build source/Pe.Dev.Cli with configuration '$(_PeDevCliStableConfiguration)' to restore the hook."
+                Condition="!Exists('$(_PeDevCliStablePath)')"
+        />
         <Exec
-                Command="dotnet run --project &quot;$(MSBuildProjectDirectory)\..\Pe.Dev.Cli\Pe.Dev.Cli.csproj&quot; -- revit tests-post-build --repo-root &quot;$(MSBuildProjectDirectory)\..\..&quot; --script-directory &quot;$(MSBuildProjectDirectory)&quot; --revit-year $(RevitVersion)"
+                Command="dotnet exec &quot;$(_PeDevCliStablePath)&quot; --repo-root &quot;$(MSBuildProjectDirectory)\..\..&quot; revit approve --revit-year $(RevitVersion) --skip-if-session-exists"
+                Condition="Exists('$(_PeDevCliStablePath)')"
+        />
+        <Exec
+                Command="dotnet exec &quot;$(_PeDevCliStablePath)&quot; --repo-root &quot;$(MSBuildProjectDirectory)\..\..&quot; revit hot-reload"
+                Condition="Exists('$(_PeDevCliStablePath)')"
+                IgnoreExitCode="true"
         />
     </Target>
 </Project>

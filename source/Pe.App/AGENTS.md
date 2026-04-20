@@ -24,6 +24,7 @@ itself.
 ## Validation
 
 - Do not build this project during RRD; building during a live Rider/Revit debug session always breaks hot reload.
+- For compile verification, use `dotnet run -c <...>` from `./build`, not direct `Pe.App` builds.
 - Prefer validating runtime-facing fixes through the smallest affected command or focused `.Tests` configuration when
   possible.
 - If a change should affect bridge behavior, verify both add-in startup wiring and the corresponding `Pe.Host`
@@ -44,6 +45,7 @@ itself.
 
 - This package's dependency graph owns the live RRD runtime. Be unusually cautious about builds because they will
   *always* force a costly Revit restart.
+- `Pe.App` only owns the post-deploy add-in approval hook now. Do not reintroduce hot-reload or test-run orchestration here.
 - Keep `Pe.App` thin. If logic starts looking reusable or testable outside the command shell, move it into the owning
   domain/shared package.
 - `Application.cs` is the startup truth. If a capability depends on bootstrapping, logging, or event subscription,

@@ -1,31 +1,26 @@
-namespace Pe.Dev.Cli;
+﻿namespace Pe.Dev.Cli;
 
 internal static class DevCliProgram {
     internal const string UsageText = """
                                       Usage:
-                                        pe-dev revit hot-reload [prepare-hot-reload args...]
-                                        pe-dev revit approve-app-addin [app-auto-approve args...]
-                                        pe-dev revit approve-test-addin [test-auto-approve args...]
-                                        pe-dev revit logs <host|app|all> [--tail <count>] [--path]
-                                        pe-dev revit app-post-build [--script-directory <path>] [--timeout-seconds <seconds>]
-                                        pe-dev revit tests-post-build [--script-directory <path>] [--revit-year <year>]
+                                        pe-dev revit approve [--revit-year <year>] [--timeout-seconds <seconds>] [--skip-if-session-exists]
+                                        pe-dev revit hot-reload
+                                        pe-dev revit logs <host|app|all> [--tail <count>]
+                                        pe-dev revit session
+                                        pe-dev revit script new <script-name-or-workspace-path>
+                                        pe-dev revit script <workspace-relative-script.cs>
+                                        pe-dev revit script --workspace <key> --path <workspace-relative-script.cs>
+                                        pe-dev revit script --stdin --name <fileName>
 
                                       Global options:
                                         --repo-root <path>   Override repo root discovery.
                                         --help, -h           Show this help text.
-
-                                      Notes:
-                                        - `hot-reload`, `approve-app-addin`, and `approve-test-addin` forward
-                                          their remaining arguments directly to the underlying PowerShell script.
-                                        - `logs` reads the bounded host/app log files under `Documents\\Pe.App\\Global`.
-                                        - `app-post-build` and `tests-post-build` provide stable CLI entrypoints
-                                          for the current build hooks.
                                       """;
 
     public static async Task<int> RunAsync(string[] args, CancellationToken cancellationToken) {
-        CliParseResult parseResult;
+        DevCliParseResult parseResult;
         try {
-            parseResult = CliOptions.Parse(args);
+            parseResult = DevCliOptions.Parse(args);
         } catch (Exception ex) {
             Console.Error.WriteLine(ex.Message);
             Console.Error.WriteLine(UsageText);
@@ -40,14 +35,6 @@ internal static class DevCliProgram {
             return parseResult.ShowUsage && string.IsNullOrWhiteSpace(parseResult.ErrorMessage) ? 0 : 10;
         }
 
-        RepoLayout repoLayout;
-        try {
-            repoLayout = RepoLayout.Create(parseResult.Options.RepoRoot);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            return 10;
-        }
-
-        return await RevitCommandRunner.RunAsync(parseResult.Options, repoLayout, cancellationToken);
+        return await RevitCommandRunner.RunAsync(parseResult.Options, cancellationToken);
     }
 }
