@@ -34,7 +34,6 @@
     <Project Path="source/Pe.Revit.Ui/Pe.Revit.Ui.csproj" />
     <Project Path="source/Pe.Shared.HostContracts/Pe.Shared.HostContracts.csproj" />
     <Project Path="source/Pe.Shared.RevitData/Pe.Shared.RevitData.csproj" />
-    <Project Path="source/Pe.Shared.SettingsCatalog/Pe.Shared.SettingsCatalog.csproj" />
     <Project Path="source/Pe.Shared.StorageRuntime/Pe.Shared.StorageRuntime.csproj" />
     <Project Path="source/Toon/Toon.csproj" />
 </Solution>

@@ -3,13 +3,12 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
-using System.Threading.Tasks;
 using WpfUiRichTextBox = Wpf.Ui.Controls.RichTextBox;
 
 // Note: This panel has complex domain-specific rendering that benefits from manual FlowDocument building.
 // FlowDocumentBuilder helpers are used where applicable (Create, AddSectionHeader, AddJsonBlock).
 
-namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
+namespace Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 
 /// <summary>
 ///     Side panel that displays profile preview data including operations, parameters, and families.

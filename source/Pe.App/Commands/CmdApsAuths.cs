@@ -6,7 +6,7 @@ using Pe.Shared.StorageRuntime;
 using Serilog.Events;
 using System.Diagnostics;
 
-namespace Pe.Tools.Commands;
+namespace Pe.App.Commands;
 
 [Transaction(TransactionMode.Manual)]
 public class CmdApsAuthNormal : IExternalCommand {

@@ -3,7 +3,7 @@ using Pe.Revit.FamilyFoundry;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Modules;
 
-namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
+namespace Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 
 /// <summary>
 ///     Generic context for Family Foundry palette operations.

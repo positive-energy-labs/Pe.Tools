@@ -1,7 +1,7 @@
-using System.Diagnostics;
 using Pe.Shared.HostContracts.Protocol;
+using System.Diagnostics;
 
-namespace Pe.Tools.SettingsEditor;
+namespace Pe.App.SettingsEditor;
 
 internal static class SettingsEditorBrowser {
     public static bool TryLaunch(

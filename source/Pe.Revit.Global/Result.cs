@@ -1,3 +1,5 @@
+namespace Pe.Revit.Global;
+
 public readonly struct Result<TValue> {
     private readonly TValue? _value;
     private readonly Exception? _error;

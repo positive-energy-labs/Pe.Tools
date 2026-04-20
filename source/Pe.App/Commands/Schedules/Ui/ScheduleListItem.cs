@@ -5,7 +5,7 @@ using System.IO;
 using System.Windows.Media.Imaging;
 using WpfColor = System.Windows.Media.Color;
 
-namespace Pe.Tools.Commands.Schedules.Ui;
+namespace Pe.App.Commands.Schedules.Ui;
 
 /// <summary>
 ///     Palette list item representing a Schedule profile JSON file.

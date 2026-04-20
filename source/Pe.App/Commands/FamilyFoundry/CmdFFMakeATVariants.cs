@@ -3,15 +3,13 @@ using Autodesk.Revit.UI;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
-using Pe.Revit.FamilyFoundry.Plans;
-using Pe.Revit.FamilyFoundry.Plans;
-using Pe.Revit.FamilyFoundry.Snapshots;
+using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.Global.Revit.Ui;
 using Pe.Shared.StorageRuntime;
 using Serilog.Events;
 using System.Diagnostics;
 
-namespace Pe.Tools.Commands.FamilyFoundry;
+namespace Pe.App.Commands.FamilyFoundry;
 
 [Transaction(TransactionMode.Manual)]
 public class CmdFFMakeATVariants : IExternalCommand {

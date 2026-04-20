@@ -12,7 +12,7 @@ using System.IO;
 using System.Text;
 using Toon;
 
-namespace Pe.Tools.Commands;
+namespace Pe.App.Commands;
 
 [Transaction(TransactionMode.Manual)]
 public class CmdCacheParametersService : IExternalCommand {

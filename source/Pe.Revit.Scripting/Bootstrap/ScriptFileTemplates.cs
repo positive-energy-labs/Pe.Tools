@@ -90,7 +90,7 @@ internal static class ScriptFileTemplates {
         - Keep assembly references explicit by default. Ambient probing of already-loaded Revit-process assemblies is an advanced troubleshooting path, not the normal authoring contract.
         - The public scripting surface is `Pe.Host`, but runtime execution still happens inside Revit through the internal scripting pipe.
         - Host scripting currently requires exactly one connected Revit bridge session.
-        - If runtime behavior diverges from source during RR debug, stale deployed assemblies are a plausible cause.
+        - If runtime behavior diverges from source during RRD, stale deployed assemblies are a plausible cause.
         - The generated project preserves user-authored DLL and package references across bootstrap regeneration, but it does not preserve arbitrary project-file customization beyond the supported workspace/project flow.
         - Keep scripts small and composable. Promote durable helpers into real repo packages instead of growing one-off script infrastructure here.
         """;

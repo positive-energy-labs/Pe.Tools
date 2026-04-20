@@ -1,8 +1,7 @@
-using Autodesk.Revit.DB;
-using Pe.Revit.Global.PolyFill;
+using Pe.Revit.Global.Revit.Documents.Schedules;
 using Pe.Shared.HostContracts.RevitData;
 
-namespace Pe.Revit.Global.Revit.Documents.Schedules;
+namespace Pe.Revit.Global.Revit.Lib.Schedules;
 
 public static class ScheduleCatalogCollector {
     public static ScheduleCatalogData Collect(

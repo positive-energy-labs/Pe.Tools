@@ -1,7 +1,6 @@
 using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.Plans;
-using Pe.Revit.Global.Revit.Documents.Schedules.Filters;
 using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
 using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 using Pe.Shared.StorageRuntime.Json.SchemaProviders;

@@ -3,6 +3,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Microsoft.CodeAnalysis;
 using Pe.Revit.Scripting.Bootstrap;
+using Pe.Revit.Scripting.Context;
 using Pe.Revit.Scripting.Diagnostics;
 using Pe.Revit.Scripting.References;
 using Pe.Revit.Scripting.Storage;

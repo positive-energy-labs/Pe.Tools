@@ -1,4 +1,5 @@
 using Pe.Revit.FamilyFoundry.Plans;
+using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.FamilyFoundry.Serialization;
 using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.Global;

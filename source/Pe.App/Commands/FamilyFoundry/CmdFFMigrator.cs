@@ -1,27 +1,25 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
+using Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 using Pe.App.Commands.Palette.FamilyPalette;
+using Pe.App.SettingsEditor;
 using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
-using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Profiles;
+using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.Global;
 using Pe.Revit.Global.Revit.Lib;
 using Pe.Revit.Global.Revit.Ui;
-using Pe.Revit.Global.Utils.Files;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Modules;
-using Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
-using Pe.Tools.SettingsEditor;
 using Serilog.Events;
 using System.Diagnostics;
 using System.IO;
 using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
 
-namespace Pe.Tools.Commands.FamilyFoundry;
+namespace Pe.App.Commands.FamilyFoundry;
 
 [Transaction(TransactionMode.Manual)]
 public class CmdFFMigrator : IExternalCommand {

@@ -4,6 +4,7 @@ using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.FamilyFoundry.Plans;
+using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Core.Json;
 

@@ -1,20 +1,19 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
+using Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
-using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Profiles;
+using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.Global;
 using Pe.Revit.Global.Revit.Ui;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Modules;
-using Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
 using Serilog.Events;
 using System.Diagnostics;
 
-namespace Pe.Tools.Commands.FamilyFoundry;
+namespace Pe.App.Commands.FamilyFoundry;
 // support add, delete, remap, sort, rename
 
 [Transaction(TransactionMode.Manual)]

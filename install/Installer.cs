@@ -92,7 +92,10 @@ static InstallerInputs ParseInstallerInputs(string[] args) {
     return new InstallerInputs(hostPublishDirectory, revitPublishDirectories.ToArray());
 }
 
-file sealed record InstallerInputs(
-    string HostPublishDirectory,
-    string[] RevitPublishDirectories
-);
+namespace Installer
+{
+    file sealed record InstallerInputs(
+        string HostPublishDirectory,
+        string[] RevitPublishDirectories
+    );
+}

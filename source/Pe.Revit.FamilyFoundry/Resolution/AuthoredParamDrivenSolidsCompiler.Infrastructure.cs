@@ -1,7 +1,4 @@
-using Pe.Revit.FamilyFoundry.Plans;
-using Pe.Revit.FamilyFoundry.Snapshots;
-
-namespace Pe.Revit.FamilyFoundry.Plans;
+namespace Pe.Revit.FamilyFoundry.Resolution;
 
 public static partial class AuthoredParamDrivenSolidsCompiler {
     private static PairResolution ResolveGeneratedSpan(

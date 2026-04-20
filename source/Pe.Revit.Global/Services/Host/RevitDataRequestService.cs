@@ -8,6 +8,7 @@ using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 using Pe.Revit.Global.Revit.Documents.Schedules;
 using Pe.Revit.Global.Revit.Documents;
+using Pe.Revit.Global.Revit.Lib.Schedules;
 using Pe.Revit.Global.Services.Document;
 using ricaun.Revit.UI.Tasks;
 using RevitDocument = Autodesk.Revit.DB.Document;

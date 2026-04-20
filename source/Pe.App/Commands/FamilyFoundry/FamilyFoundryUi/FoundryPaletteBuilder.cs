@@ -2,18 +2,18 @@ using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Profiles;
+using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.Global;
 using Pe.Revit.Global.Utils.Files;
-using Pe.Shared.StorageRuntime.Json.ContractResolvers;
-using Pe.Shared.StorageRuntime.Core.Json;
-using Pe.Shared.StorageRuntime.Modules;
 using Pe.Revit.Ui.Core;
 using Pe.Revit.Ui.Core.Services;
+using Pe.Shared.StorageRuntime.Json.ContractResolvers;
+using Pe.Shared.StorageRuntime.Modules;
+using JsonValidationException = Pe.Revit.Global.JsonValidationException;
 using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
 
-namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
+namespace Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 
 /// <summary>
 ///     Fluent builder for creating Family Foundry palette UIs.

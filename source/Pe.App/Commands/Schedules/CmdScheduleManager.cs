@@ -2,24 +2,25 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Pe.App.Commands.Palette.FamilyPalette;
+using Pe.App.Commands.Schedules.Ui;
 using Pe.Revit.Global.Revit.Documents.Schedules;
+using Pe.Revit.Global.Revit.Lib.Schedules;
 using Pe.Revit.Global.Revit.Ui;
+using Pe.Revit.Ui.Core;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Core.Json;
-using Pe.Shared.StorageRuntime.Core.Json.ContractResolvers;
 using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
 using Pe.Shared.StorageRuntime.Modules;
-using Pe.Tools.Commands.Schedules.Ui;
-using Pe.Revit.Ui.Core;
 using Serilog;
 using Serilog.Events;
 using System.Diagnostics;
 using System.IO;
 using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
+using JsonValidationException = Pe.Revit.Global.JsonValidationException;
 using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
 
-namespace Pe.Tools.Commands.Schedules;
+namespace Pe.App.Commands.Schedules;
 
 [Transaction(TransactionMode.Manual)]
 public class CmdScheduleManager : IExternalCommand {

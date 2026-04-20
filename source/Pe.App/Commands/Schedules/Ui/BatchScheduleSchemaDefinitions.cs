@@ -1,8 +1,8 @@
-using Pe.Revit.Global.Revit.Documents.Schedules;
+using Pe.Revit.Global.Revit.Lib.Schedules;
 using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 using System.Runtime.CompilerServices;
 
-namespace Pe.Tools.Commands.Schedules.Ui;
+namespace Pe.App.Commands.Schedules.Ui;
 
 internal sealed class BatchScheduleSettingsSchemaDefinition : SettingsSchemaDefinition<BatchScheduleSettings> {
     public override void Configure(ISettingsSchemaBuilder<BatchScheduleSettings> builder) =>

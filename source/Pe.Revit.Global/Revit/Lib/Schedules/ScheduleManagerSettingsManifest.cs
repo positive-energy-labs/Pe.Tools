@@ -3,7 +3,7 @@ using Pe.Shared.StorageRuntime.Documents;
 using Pe.Shared.StorageRuntime.Modules;
 using Pe.Shared.StorageRuntime.Validation;
 
-namespace Pe.Revit.Global.Revit.Documents.Schedules;
+namespace Pe.Revit.Global.Revit.Lib.Schedules;
 
 public static class ScheduleManagerSettingsManifest {
     public const string ModuleKey = "Schedule Manager";

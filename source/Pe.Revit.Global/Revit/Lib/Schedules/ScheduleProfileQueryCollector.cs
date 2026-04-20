@@ -1,10 +1,7 @@
-using Autodesk.Revit.DB;
-using Pe.Revit.Global.PolyFill;
-using Pe.Revit.Global.Revit.Documents;
-using Pe.Revit.Global.Services.Document;
+using Pe.Revit.Global.Revit.Documents.Schedules;
 using Pe.Shared.HostContracts.RevitData;
 
-namespace Pe.Revit.Global.Revit.Documents.Schedules;
+namespace Pe.Revit.Global.Revit.Lib.Schedules;
 
 public static class ScheduleProfileQueryCollector {
     public static ScheduleProfilesQueryData Collect(
