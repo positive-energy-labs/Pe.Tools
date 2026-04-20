@@ -24,6 +24,7 @@
         <File Path="Readme.md" />
     </Folder>
     <Project Path="source/Pe.App/Pe.App.csproj" />
+    <Project Path="source/Pe.Dev.Cli/Pe.Dev.Cli.csproj" />
     <Project Path="source/Pe.Host/Pe.Host.csproj" />
     <Project Path="source/Pe.Revit.Extensions/Pe.Revit.Extensions.csproj" />
     <Project Path="source/Pe.Revit.FamilyFoundry/Pe.Revit.FamilyFoundry.csproj" />

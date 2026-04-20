@@ -1,4 +1,4 @@
-﻿using Autodesk.Revit.DB.Events;
+using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.DB.ExtensibleStorage;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Events;
@@ -14,10 +14,13 @@ using Pe.Revit.Global.Services.Host;
 using Pe.Revit.Scripting.Transport;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.HostContracts.Protocol;
+using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
 using Serilog.Events;
+using Serilog.Formatting.Display;
+using System.IO;
 
 namespace Pe.App;
 
@@ -162,10 +165,11 @@ public class Application : ExternalApplication {
 
     private static void CreateLogger() {
         const string outputTemplate = "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}";
+        var appLogFile = StorageClient.Default.Global().RevitAppLog();
 
         Log.Logger = new LoggerConfiguration()
-            .WriteTo.Console(LogEventLevel.Debug, outputTemplate)
-            .WriteTo.Debug(LogEventLevel.Debug, outputTemplate) // Also write to Debug output (Visual Studio)
+            .WriteTo.Sink(new RevitAppLogSink(appLogFile, outputTemplate), LogEventLevel.Debug)
+            .WriteTo.Debug(LogEventLevel.Debug, outputTemplate)
             .MinimumLevel.Debug()
             .CreateLogger();
 
@@ -173,5 +177,16 @@ public class Application : ExternalApplication {
             var exception = (Exception)args.ExceptionObject;
             Log.Fatal(exception, "Domain unhandled exception");
         };
+    }
+}
+
+internal sealed class RevitAppLogSink(ManagedLogFile logFile, string outputTemplate) : Serilog.Core.ILogEventSink {
+    private readonly ManagedLogFile _logFile = logFile;
+    private readonly MessageTemplateTextFormatter _formatter = new(outputTemplate, null);
+
+    public void Emit(LogEvent logEvent) {
+        using var writer = new StringWriter();
+        _formatter.Format(logEvent, writer);
+        _logFile.Append(writer.ToString());
     }
 }
