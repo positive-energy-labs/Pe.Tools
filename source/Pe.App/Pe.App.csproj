@@ -78,16 +78,13 @@
         <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Ui\Pe.Revit.Ui.csproj"/>
     </ItemGroup>
-    <!-- Only run auto-approve script when launching from IDE, not during regular builds -->
-    <!-- This will only run when building from Rider/Visual Studio, not from command line -->
-    <!-- The wrapper script launches AutoApproveAddin.ps1 in a separate process to prevent build hangs -->
     <Target
             Name="PostBuildAutoApprove"
             AfterTargets="Build"
             Condition="'$(BuildingByReSharper)' == 'true'"
     >
         <Exec
-                Command="powershell.exe -ExecutionPolicy Bypass -NoProfile -File &quot;$(MSBuildProjectDirectory)\PostBuildActions.ps1&quot; -ScriptDirectory &quot;$(MSBuildProjectDirectory)&quot;"
+                Command="dotnet run --project &quot;$(MSBuildProjectDirectory)\..\Pe.Dev.Cli\Pe.Dev.Cli.csproj&quot; -- revit app-post-build --repo-root &quot;$(MSBuildProjectDirectory)\..\..&quot; --script-directory &quot;$(MSBuildProjectDirectory)&quot;"
         />
     </Target>
     <Target

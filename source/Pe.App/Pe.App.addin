@@ -3,7 +3,7 @@
         <Name>Pe.App</Name>
         <Assembly>Pe.App\Pe.App.dll</Assembly>
         <AddInId>43B12CEC-8FCF-4E33-AF86-904DCF056087</AddInId>
-        <FullClassName>Pe.Tools.Application</FullClassName>
+        <FullClassName>Pe.App.Application</FullClassName>
         <VendorId>Development</VendorId>
         <VendorDescription></VendorDescription>
     </AddIn>

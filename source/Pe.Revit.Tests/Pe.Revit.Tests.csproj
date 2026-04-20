@@ -60,7 +60,7 @@
         Condition="$([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'"
     >
         <Exec
-            Command="powershell.exe -ExecutionPolicy Bypass -NoProfile -File &quot;$(MSBuildProjectDirectory)\PostBuildHotReload.ps1&quot; -ScriptDirectory &quot;$(MSBuildProjectDirectory)&quot; -RevitYear $(RevitVersion)"
+            Command="dotnet run --project &quot;$(MSBuildProjectDirectory)\..\Pe.Dev.Cli\Pe.Dev.Cli.csproj&quot; -- revit tests-post-build --repo-root &quot;$(MSBuildProjectDirectory)\..\..&quot; --script-directory &quot;$(MSBuildProjectDirectory)&quot; --revit-year $(RevitVersion)"
         />
     </Target>
 </Project>
