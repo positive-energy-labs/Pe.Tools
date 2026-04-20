@@ -25,4 +25,9 @@ public sealed record BuildOptions {
     /// </summary>
     [Required]
     public string OutputDirectory { get; init; } = null!;
+
+    /// <summary>
+    ///     Optional explicit solution configuration to compile instead of the default Release.R* set.
+    /// </summary>
+    public string? Configuration { get; set; }
 }

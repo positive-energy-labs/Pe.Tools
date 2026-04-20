@@ -1,34 +1,25 @@
 # Pe.Revit.Tests
 
-This project runs real Revit-backed integration tests through
-`ricaun.RevitTest`.
+This project runs real Revit-backed integration tests through `ricaun.RevitTest`.
 
 ## Core model
 
 - Tests run inside real Revit, not a fake host.
 - This project is VSTest-based.
-- Prefer `dotnet build` plus `dotnet vstest`.
-- The test assembly comes from `.artifacts/tests`, but runtime code still comes
-  from the assemblies already loaded by Revit from the deployed addin.
-- A `.Tests` build is safe test-runner prep during a live Rider/Revit debug
-  session. It does not prove that Revit loaded fresh runtime code.
-- If the user restarted Revit from Rider by launching the normal `Pe.App`
-  debug configuration, treat the deployed runtime add-in as fresh by default.
-- A `.Tests` build does not redeploy the `%APPDATA%\Autodesk\Revit\Addins\2025`
-  addin copy while Revit is open. If you truly need a fresh deployed runtime,
-  that has to come from a normal `Pe.App` debug launch/restart.
+- Prefer `dotnet test`, not raw artifact-path `dotnet vstest`.
+- `.Tests` outputs are isolated and RRD-safe. They do not build against or redeploy the live `%APPDATA%\Autodesk\Revit\Addins\{RevitVersion}\Pe.App` copy Rider is using.
+- A `.Tests` build can be fresh while the already-running RRD runtime is still stale.
+- If the user restarted Revit from Rider by launching the normal `Pe.App` debug configuration, treat the deployed runtime add-in as fresh by default.
 
 ## Preferred loop
 
 1. Launch Revit from Rider using the normal `Pe.App` runtime debug config.
 2. Edit code.
 3. Build this project in the matching `.Tests` configuration.
-4. Let the post-build helper attempt Rider hot reload for changed runtime files.
-5. Run focused `dotnet vstest` commands from terminal.
-6. If behavior or logs do not match source, assume stale runtime assemblies
-   first. Confirm hot reload actually applied or restart the runtime add-in.
-7. After a fresh Rider `Pe.App` restart, do not keep blaming stale assemblies
-   unless there is concrete divergence between source and runtime behavior.
+4. Run focused `dotnet test` commands from terminal.
+5. Let the pre-`VSTest` hook start `pe-dev revit approve` and attempt `pe-dev revit hot-reload`.
+6. If behavior or logs do not match source, assume stale runtime assemblies first. Confirm hot reload actually applied or restart the runtime add-in.
+7. After a fresh Rider `Pe.App` restart, do not keep blaming stale assemblies unless there is concrete divergence between source and runtime behavior.
 
 ## Commands
 
@@ -41,24 +32,21 @@ dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c "Debug.R25.Tests" /p
 Run one test:
 
 ```powershell
-dotnet vstest .artifacts/tests/bin/Debug.R25.Tests/net8.0-windows/Pe.Revit.Tests.dll /Tests:Can_create_generic_model_family_document_from_rft
+dotnet test source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests --filter "FullyQualifiedName~Can_create_generic_model_family_document_from_rft"
 ```
 
-Run one test and print artifact paths:
+Run one named test without rebuilding:
 
 ```powershell
-dotnet vstest .artifacts/tests/bin/Debug.R25.Tests/net8.0-windows/Pe.Revit.Tests.dll /Tests:FFManager_round_duct_connector_roundtrips_and_stub_resizes_across_types /logger:"console;verbosity=detailed"
+dotnet test source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests --filter "Name~FFManager_round_duct_connector_roundtrips_and_stub_resizes_across_types" --no-build
 ```
 
 ## Runtime staleness
 
-- If behavior does not match source edits, suspect stale in-process assemblies
-  before assuming the change failed.
-- Apply the correct code fix first; do not narrow the implementation just to
-  stay hot-reload-safe.
-- Hot reload is not trustworthy after runtime member-shape changes such as:
-  added or removed members, method signature changes, constructor changes,
-  enum shape changes, record shape changes, or new nested/private runtime types.
+- If behavior does not match source edits, suspect stale in-process assemblies before assuming the change failed.
+- The pre-test hot reload hook is best-effort alignment, not proof of runtime freshness.
+- Apply the correct code fix first; do not narrow the implementation just to stay hot-reload-safe.
+- Hot reload is not trustworthy after runtime member-shape changes such as: added or removed members, method signature changes, constructor changes, enum shape changes, record shape changes, or new nested/private runtime types.
 - When those changes happen, treat the Rider/Revit session as restart-required.
 - If a fix appears missing, verify a new targeted runtime log line or output
   artifact before concluding the logic is wrong.
@@ -77,8 +65,8 @@ This avoids masking profile issues as runtime API bugs and vice versa.
 
 ## Test guidance
 
-- Prefer focused `vstest` runs while iterating. Use the full suite after the
-  local change is stable.
+- Prefer focused `dotnet test --filter ...` runs while iterating. Use the full suite after the local change is stable.
+- The pre-`VSTest` automation still runs for filtered `dotnet test` and for `dotnet test --no-build`.
 - When validating constrained family behavior, test across multiple family
   types or multiple parameter states. Single-state checks miss broken
   associations.

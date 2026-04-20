@@ -3,6 +3,7 @@
         <UseWPF>true</UseWPF>
         <DeployAddin>true</DeployAddin>
         <LaunchRevit>true</LaunchRevit>
+        <DisableFastUpToDateCheck>true</DisableFastUpToDateCheck>
         <EnableRevitTestConfigurations>true</EnableRevitTestConfigurations>
         <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
         <DeployAddin
@@ -78,13 +79,27 @@
         <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Ui\Pe.Revit.Ui.csproj"/>
     </ItemGroup>
+    <PropertyGroup>
+        <_PeDevCliStableConfiguration>Debug.R25</_PeDevCliStableConfiguration>
+        <_PeDevCliStablePath>$(MSBuildProjectDirectory)\..\Pe.Dev.Cli\bin\$(_PeDevCliStableConfiguration)\net8.0-windows\pe-dev.dll</_PeDevCliStablePath>
+    </PropertyGroup>
     <Target
-            Name="PostBuildAutoApprove"
-            AfterTargets="Build"
-            Condition="'$(BuildingByReSharper)' == 'true'"
+            Name="LaunchAddinApprovalWatcher"
+            AfterTargets="DeployAddin"
+            Condition="'$(DeployAddin)' == 'true' and '$(LaunchRevit)' == 'true' and '$(DesignTimeBuild)' != 'true'"
     >
+        <Message
+                Text="Launching approval watcher via '$(_PeDevCliStablePath)' for Revit $(RevitVersion)."
+                Importance="High"
+                Condition="Exists('$(_PeDevCliStablePath)')"
+        />
+        <Warning
+                Text="Skipping approval watcher because pe-dev was not found at '$(_PeDevCliStablePath)'. Build source/Pe.Dev.Cli with configuration '$(_PeDevCliStableConfiguration)' to restore the hook."
+                Condition="!Exists('$(_PeDevCliStablePath)')"
+        />
         <Exec
-                Command="dotnet run --project &quot;$(MSBuildProjectDirectory)\..\Pe.Dev.Cli\Pe.Dev.Cli.csproj&quot; -- revit app-post-build --repo-root &quot;$(MSBuildProjectDirectory)\..\..&quot; --script-directory &quot;$(MSBuildProjectDirectory)&quot;"
+                Command="dotnet exec &quot;$(_PeDevCliStablePath)&quot; --repo-root &quot;$(MSBuildProjectDirectory)\..\..&quot; revit approve --revit-year $(RevitVersion)"
+                Condition="Exists('$(_PeDevCliStablePath)')"
         />
     </Target>
     <Target

@@ -5,7 +5,7 @@
 ## Mental Model
 
 - `Pe.Host` is the public scripting surface.
-- `Pe.Scripting.Cli` and the frontend both call host HTTP.
+- `Pe.Dev.Cli` and the frontend both call host HTTP.
 - `Pe.Revit.Scripting` stays the execution engine.
 - the direct `Pe.Scripting.Revit` named pipe still exists, but only as host-to-Revit transport.
 
@@ -24,8 +24,9 @@
   - dependency resolution
   - compile/load/execute
   - direct named-pipe server and `ExternalEvent` handoff
-- `Pe.Scripting.Cli`
-  - run-first terminal flow over host HTTP
+- `Pe.Dev.Cli`
+  - `pe-dev revit script ...`
+  - dev-automation and run-first terminal flow over host HTTP
 
 ## Supported Source Shapes
 

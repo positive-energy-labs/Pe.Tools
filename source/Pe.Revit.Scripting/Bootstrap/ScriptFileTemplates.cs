@@ -42,7 +42,7 @@ internal static class ScriptFileTemplates {
 
         - Put container scripts under `src/`.
         - Derive exactly one non-abstract type from `PeScriptContainer`.
-        - Run scripts from the CLI with `pe-script src\MyProbe.cs`.
+        - Run scripts from the CLI with `pe-dev revit script src\MyProbe.cs`.
         - The CLI posts to `Pe.Host`, and the host forwards the request into Revit.
         - Add local DLL refs and `PackageReference` items in `PeScripts.csproj`.
         - Prefer `WriteLine(...)` for output. `Console.WriteLine(...)` is supported as a compatibility path.
@@ -76,7 +76,7 @@ internal static class ScriptFileTemplates {
         ## Validation
 
         - Derive exactly one non-abstract type from `PeScriptContainer` per execute request.
-        - The daily product path is workspace-first single-file execution. Keep supported scripts under `src/` and run them with `pe-script <workspace-relative-script.cs>`.
+        - The daily product path is workspace-first single-file execution. Keep supported scripts under `src/` and run them with `pe-dev revit script <workspace-relative-script.cs>`.
         - The script runner discovers exactly one `PeScriptContainer` type per request and executes that container.
         - Prefer explicit `WriteLine(...)` output for diagnostics you want returned to the caller.
         - `Console.WriteLine(...)` is supported as a compatibility path, not the preferred API.
@@ -109,7 +109,7 @@ internal static class ScriptFileTemplates {
     public static string CreateSampleScript() =>
         """
         // Run from this workspace root:
-        // pe-script src\SampleScript.cs
+        // pe-dev revit script src\SampleScript.cs
         //
         // IntelliSense tip:
         // Define exactly one non-abstract PeScriptContainer per execute request.

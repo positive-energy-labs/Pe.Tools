@@ -2,35 +2,39 @@
 
 ## Scope
 
-Owns the dev-facing terminal surface for local Revit iteration helpers such as Rider hot reload prep, add-in
-auto-approval, and build-hook orchestration.
+Owns the single dev-facing CLI surface for local Revit iteration helpers and scripting entrypoints.
 
 ## Purpose
 
-`Pe.Dev.Cli` exists to centralize fragile local automation behind stable commands that humans and agents can invoke
-directly. It should prefer explicit command seams over scattering PowerShell entrypoints across the repo.
+`Pe.Dev.Cli` exists to centralize fragile local automation and script execution behind one stable executable: `pe-dev`. Keep this package focused on command parsing, stdout/stderr behavior, and dispatch into shared automation/runtime seams instead of re-growing a second product surface.
 
 ## Critical Entry Points
 
-- `Program.cs` - repo-root discovery, command parsing, PowerShell script dispatch, and build-hook orchestration.
+- `Program.cs` - `pe-dev` entrypoint.
+- `DevCliProgram.cs` - top-level usage/help and command dispatch.
+- `RevitCommandRunner.cs` - `revit approve`, `hot-reload`, `logs`, `session`, and `script` command routing.
+- `ScriptCliProgram.cs` / `ScriptCliOptions.cs` - merged scripting CLI behavior now exposed as `pe-dev revit script ...`.
 
 ## Validation
 
 - Cheap validation loop:
-    - `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- --help`
-    - `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- revit hot-reload -DryRun`
-- Keep this CLI focused on stable command naming and orchestration. Do not duplicate the underlying automation logic
-  here unless the script implementation is actually being retired.
+  - `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- --help`
+  - `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- revit session`
+  - `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- revit logs all --tail 20`
+- Keep this CLI focused on stable command naming and orchestration. Shared automation logic belongs in `Pe.Dev.RevitAutomation`.
 
 ## Shared Language
 
-| Term               | Meaning                                                                                 | Prefer / Avoid                                          |
-|--------------------|-----------------------------------------------------------------------------------------|---------------------------------------------------------|
-| **build hook**     | A command shape used from project post-build targets or wrappers                        | Prefer stable CLI verbs over ad hoc script paths        |
-| **forwarded args** | Remaining command arguments passed straight through to the underlying PowerShell script | Prefer this when preserving an existing script contract |
+| Term | Meaning | Prefer / Avoid |
+| --- | --- | --- |
+| **single executable** | The repo should teach one CLI surface: `pe-dev` | Avoid reviving `pe-script` or separate automation executables |
+| **low-level command** | A primitive command like `revit approve` or `revit session` | Prefer this over hiding behavior behind many opaque aliases |
+| **script lane** | The `pe-dev revit script ...` workflow | Prefer this over talking about a separate scripting CLI |
 
 ## Living Memory
 
-- This package is the stable dev-automation seam, not the final home for every implementation detail.
-- Favor keeping command names stable even if the underlying script or automation backend changes later.
-- If a build hook must remain asynchronous to avoid hanging MSBuild, preserve that behavior here.
+- `Pe.Dev.Cli` is the only CLI humans and agents should learn in this repo.
+- `revit script` is part of the dev tooling surface, not a sibling product.
+- Build hooks must consume the built CLI output through `dotnet exec`, not `dotnet run`.
+- `revit approve` is background-only and intentionally relaunches an internal worker so MSBuild does not block.
+- `revit hot-reload` exposes no file or year arguments. Session selection, dirty-file discovery, and Rider cache handling are internal policy.

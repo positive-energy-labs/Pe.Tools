@@ -1,30 +1,21 @@
-using System.Diagnostics;
-using System.Globalization;
+﻿using System.Globalization;
+using Pe.Dev.RevitAutomation;
 
 namespace Pe.Dev.Cli;
 
 internal static class RevitCommandRunner {
-    public static Task<int> RunAsync(CliOptions options, RepoLayout repoLayout, CancellationToken cancellationToken) =>
+    private static readonly RevitProcessSessionSelector SessionSelector = new();
+    private static readonly RiderHotReloadService HotReloadService = new(SessionSelector, new RiderRecentOpenCache());
+    private static readonly RevitAddinApprovalWatcherService ApprovalWatcherService = new();
+
+    public static Task<int> RunAsync(DevCliOptions options, CancellationToken cancellationToken) =>
         options.CommandKind switch {
-            RevitCommandKind.HotReload => PowerShellScriptRunner.RunForegroundAsync(
-                repoLayout.RevitTestPrepareHotReloadScript,
-                options.ForwardedArguments,
-                cancellationToken
-            ),
-            RevitCommandKind.ApproveAppAddin => PowerShellScriptRunner.RunForegroundAsync(
-                repoLayout.AppAutoApproveScript,
-                options.ForwardedArguments,
-                cancellationToken
-            ),
-            RevitCommandKind.ApproveTestAddin => PowerShellScriptRunner.RunForegroundAsync(
-                repoLayout.RevitTestAutoApproveScript,
-                options.ForwardedArguments,
-                cancellationToken
-            ),
-            RevitCommandKind.Logs => Task.FromResult(RunLogs(options.ForwardedArguments)),
-            RevitCommandKind.AppPostBuild => Task.FromResult(RunAppPostBuild(repoLayout, options.ForwardedArguments)),
-            RevitCommandKind.TestsPostBuild => RunTestsPostBuildAsync(repoLayout, options.ForwardedArguments,
-                cancellationToken),
+            RevitCommandKind.Approve => Task.FromResult(RunApprove(options.CommandArguments)),
+            RevitCommandKind.InternalApproveWorker => RunApproveWorkerAsync(options.CommandArguments, cancellationToken),
+            RevitCommandKind.HotReload => RunHotReloadAsync(options.RepoRoot, options.CommandArguments, cancellationToken),
+            RevitCommandKind.Logs => Task.FromResult(RunLogs(options.CommandArguments)),
+            RevitCommandKind.Session => Task.FromResult(RunSession()),
+            RevitCommandKind.Script => ScriptCliProgram.RunAsync(options.CommandArguments.ToArray(), options.RepoRoot, cancellationToken),
             _ => Task.FromResult(10)
         };
 
@@ -38,11 +29,6 @@ internal static class RevitCommandRunner {
         }
 
         foreach (var (label, filePath) in options.ResolveLogFiles()) {
-            if (options.PrintPathsOnly) {
-                Console.WriteLine($"{label}: {filePath}");
-                continue;
-            }
-
             Console.WriteLine($"== {label} log ==");
             Console.WriteLine(filePath);
 
@@ -63,23 +49,25 @@ internal static class RevitCommandRunner {
         return 0;
     }
 
-    private static int RunAppPostBuild(RepoLayout repoLayout, IReadOnlyList<string> forwardedArguments) {
-        AppPostBuildOptions options;
+    private static int RunApprove(IReadOnlyList<string> forwardedArguments) {
+        RevitApproveOptions options;
         try {
-            options = AppPostBuildOptions.Parse(forwardedArguments, repoLayout.AppDirectory);
+            options = RevitApproveOptions.Parse(forwardedArguments);
         } catch (Exception ex) {
             Console.Error.WriteLine(ex.Message);
             return 10;
         }
 
-        var logFilePath = Path.Combine(options.ScriptDirectory, "AutoApproveAddin.log");
-        var launchResult = PowerShellScriptRunner.StartBackground(
-            repoLayout.AppAutoApproveScript,
-            [
-                "-TimeoutSeconds", options.TimeoutSeconds.ToString(CultureInfo.InvariantCulture),
-                "-LogFile", logFilePath,
-                "-ScriptDirectory", options.ScriptDirectory
-            ]
+        if (options.SkipIfSessionExists && SessionSelector.SelectNewestVisibleSession(options.RevitYear) is not null) {
+            var scope = options.RevitYear.HasValue
+                ? $"Revit {options.RevitYear.Value}"
+                : "Revit";
+            Console.WriteLine($"Skipped approval watcher because an existing {scope} session is already running.");
+            return 0;
+        }
+
+        var launchResult = CliProcessRelauncher.StartBackground(
+            BuildApproveWorkerArguments(options)
         );
 
         if (!launchResult.Success) {
@@ -91,70 +79,72 @@ internal static class RevitCommandRunner {
         return 0;
     }
 
-    private static async Task<int> RunTestsPostBuildAsync(
-        RepoLayout repoLayout,
+    private static async Task<int> RunApproveWorkerAsync(
         IReadOnlyList<string> forwardedArguments,
         CancellationToken cancellationToken
     ) {
-        TestsPostBuildOptions options;
+        RevitApproveOptions options;
         try {
-            options = TestsPostBuildOptions.Parse(forwardedArguments, repoLayout.RevitTestsDirectory);
+            options = RevitApproveOptions.Parse(forwardedArguments);
         } catch (Exception ex) {
             Console.Error.WriteLine(ex.Message);
             return 10;
         }
 
-        if (!HasMatchingRevitSession(options.RevitYear)) {
-            Console.WriteLine(
-                $"Skipping Rider hot reload prep and add-in auto-approval because no Revit {options.RevitYear} session is running."
-            );
-            return 0;
-        }
-
-        Console.WriteLine("Running Rider hot reload prep...");
-        var hotReloadExitCode = await PowerShellScriptRunner.RunForegroundAsync(
-            repoLayout.RevitTestPrepareHotReloadScript,
-            ["-RevitYear", options.RevitYear.ToString(CultureInfo.InvariantCulture)],
-            cancellationToken
-        );
-        if (hotReloadExitCode == 0)
-            Console.WriteLine("Rider hot reload prep finished");
-        else
-            Console.Error.WriteLine($"ERROR running Rider hot reload prep: exit code {hotReloadExitCode}");
-
-        Console.WriteLine("Running add-in auto-approval watcher...");
-        var autoApproveExitCode = await PowerShellScriptRunner.RunForegroundAsync(
-            repoLayout.RevitTestAutoApproveScript,
-            [
-                "-TimeoutSeconds", "60",
-                "-RevitYear", options.RevitYear.ToString(CultureInfo.InvariantCulture),
-                "-ScriptDirectory", options.ScriptDirectory
-            ],
-            cancellationToken
-        );
-        if (autoApproveExitCode == 0)
-            Console.WriteLine("Add-in auto-approval watcher finished");
-        else
-            Console.Error.WriteLine($"ERROR running add-in auto-approval watcher: exit code {autoApproveExitCode}");
-
-        return hotReloadExitCode != 0 ? hotReloadExitCode : autoApproveExitCode;
+        return await ApprovalWatcherService.RunAsync(options.TimeoutSeconds, options.RevitYear, cancellationToken);
     }
 
-    private static bool HasMatchingRevitSession(int revitYear) {
-        var yearText = revitYear.ToString(CultureInfo.InvariantCulture);
-        var revitProcesses = Process.GetProcessesByName("Revit");
-        if (revitProcesses.Length == 0) return false;
-
-        foreach (var process in revitProcesses) {
-            try {
-                if (process.MainWindowTitle.Contains(yearText, StringComparison.OrdinalIgnoreCase)) return true;
-            } catch {
-                // Ignore inaccessible process state and keep checking other sessions.
-            } finally {
-                process.Dispose();
-            }
+    private static async Task<int> RunHotReloadAsync(
+        string? repoRootOverride,
+        IReadOnlyList<string> forwardedArguments,
+        CancellationToken cancellationToken
+    ) {
+        if (forwardedArguments.Count > 0) {
+            Console.Error.WriteLine("`pe-dev revit hot-reload` does not accept additional arguments.");
+            return 10;
         }
 
-        return false;
+        string repoRoot;
+        try {
+            repoRoot = RepoRootResolver.Resolve(repoRootOverride);
+        } catch (Exception ex) {
+            Console.Error.WriteLine(ex.Message);
+            return 10;
+        }
+
+        var result = await HotReloadService.RunAsync(repoRoot, cancellationToken);
+        var output = result.Kind is RevitHotReloadResultKind.Failed or RevitHotReloadResultKind.RestartRequiredLikely
+            ? Console.Error
+            : Console.Out;
+        output.WriteLine(result.Message);
+        return result.Kind == RevitHotReloadResultKind.Failed ? 1 : 0;
+    }
+
+    private static int RunSession() {
+        var sessions = SessionSelector.DiscoverSessions();
+        var selectedSession = sessions.FirstOrDefault();
+        if (selectedSession is null) {
+            Console.WriteLine("No Revit sessions found.");
+            return 3;
+        }
+
+        Console.WriteLine(FormatSessionRecord("selected", selectedSession));
+        foreach (var session in sessions)
+            Console.WriteLine(FormatSessionRecord("candidate", session));
+
+        return 0;
+    }
+
+    private static string FormatSessionRecord(string label, RevitProcessSessionIdentity session) =>
+        $"{label} pid={session.ProcessId} startUtc={session.ProcessStartUtc:O} revitYear={(session.RevitYear?.ToString(CultureInfo.InvariantCulture) ?? "unknown")} title=\"{session.MainWindowTitle}\"";
+
+    private static IReadOnlyList<string> BuildApproveWorkerArguments(RevitApproveOptions options) {
+        var arguments = new List<string> { "__internal", "approve-worker", "--timeout-seconds", options.TimeoutSeconds.ToString(CultureInfo.InvariantCulture) };
+        if (options.RevitYear.HasValue) {
+            arguments.Add("--revit-year");
+            arguments.Add(options.RevitYear.Value.ToString(CultureInfo.InvariantCulture));
+        }
+
+        return arguments;
     }
 }

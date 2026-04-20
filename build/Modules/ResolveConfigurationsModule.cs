@@ -1,4 +1,6 @@
-﻿using Microsoft.VisualStudio.SolutionPersistence.Model;
+﻿using Build.Options;
+using Microsoft.Extensions.Options;
+using Microsoft.VisualStudio.SolutionPersistence.Model;
 using Microsoft.VisualStudio.SolutionPersistence.Serializer;
 using ModularPipelines.Context;
 using ModularPipelines.Git.Extensions;
@@ -10,9 +12,18 @@ namespace Build.Modules;
 /// <summary>
 ///     Resolve solution configurations required to compile the add-in for all supported Revit versions.
 /// </summary>
-public sealed class ResolveConfigurationsModule : Module<string[]> {
+public sealed class ResolveConfigurationsModule(IOptions<BuildOptions> buildOptions) : Module<string[]> {
     protected override async Task<string[]?> ExecuteAsync(IModuleContext context, CancellationToken cancellationToken) {
         var solutionModel = await LoadSolutionModelAsync(context, cancellationToken);
+        var explicitConfiguration = buildOptions.Value.Configuration;
+        if (!string.IsNullOrWhiteSpace(explicitConfiguration)) {
+            solutionModel.BuildTypes.ShouldContain(
+                explicitConfiguration,
+                $"Solution configuration '{explicitConfiguration}' was not found."
+            );
+            return [explicitConfiguration];
+        }
+
         var configurations = solutionModel.BuildTypes
             .Where(configuration => configuration.Contains("Release.R", StringComparison.OrdinalIgnoreCase))
             .ToArray();
@@ -22,8 +33,10 @@ public sealed class ResolveConfigurationsModule : Module<string[]> {
         return configurations;
     }
 
-    private static async Task<SolutionModel> LoadSolutionModelAsync(IModuleContext context,
-        CancellationToken cancellationToken) {
+    private static async Task<SolutionModel> LoadSolutionModelAsync(
+        IModuleContext context,
+        CancellationToken cancellationToken
+    ) {
         var solution = context.Git().RootDirectory.FindFile(file => file.Extension == ".slnx");
         if (solution is not null) {
             await using var slnxStream = solution.GetStream();

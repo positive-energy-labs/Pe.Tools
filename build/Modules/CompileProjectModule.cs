@@ -38,6 +38,9 @@ public sealed class CompileProjectModule : Module {
             ProjectSolution = Projects.Pe_App.FullName,
             Configuration = configuration,
             Properties = [
+                ("DeployAddin", "false"),
+                ("PublishAddin", "false"),
+                ("LaunchRevit", "false"),
                 ("VersionPrefix", versioning.VersionPrefix),
                 ("VersionSuffix", versioning.VersionSuffix!)
             ]

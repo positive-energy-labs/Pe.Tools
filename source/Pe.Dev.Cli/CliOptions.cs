@@ -1,11 +1,11 @@
-namespace Pe.Dev.Cli;
+﻿namespace Pe.Dev.Cli;
 
-internal sealed record CliOptions(
+internal sealed record DevCliOptions(
     string? RepoRoot,
     RevitCommandKind CommandKind,
-    IReadOnlyList<string> ForwardedArguments
+    IReadOnlyList<string> CommandArguments
 ) {
-    public static CliParseResult Parse(IReadOnlyList<string> args) {
+    public static DevCliParseResult Parse(IReadOnlyList<string> args) {
         string? repoRoot = null;
         var positionals = new List<string>();
 
@@ -14,9 +14,17 @@ internal sealed record CliOptions(
             switch (arg) {
             case "--help":
             case "-h":
-                return CliParseResult.Usage();
+                if (positionals.Count == 0)
+                    return DevCliParseResult.Usage();
+                positionals.Add(arg);
+                break;
             case "--repo-root":
-                repoRoot = RequireValue(args, ref i, arg);
+                if (positionals.Count == 0) {
+                    repoRoot = RequireValue(args, ref i, arg);
+                    break;
+                }
+
+                positionals.Add(arg);
                 break;
             default:
                 positionals.Add(arg);
@@ -24,24 +32,41 @@ internal sealed record CliOptions(
             }
         }
 
+        if (positionals.Count >= 2 && string.Equals(positionals[0], "__internal", StringComparison.OrdinalIgnoreCase)) {
+            var internalCommandKind = positionals[1].ToLowerInvariant() switch {
+                "approve-worker" => RevitCommandKind.InternalApproveWorker,
+                _ => RevitCommandKind.Unknown
+            };
+
+            if (internalCommandKind == RevitCommandKind.Unknown)
+                return DevCliParseResult.Failure($"Unknown internal command '{positionals[1]}'.", true);
+
+            return DevCliParseResult.SuccessResult(
+                new DevCliOptions(
+                    repoRoot,
+                    internalCommandKind,
+                    positionals.Skip(2).ToArray()
+                )
+            );
+        }
+
         if (positionals.Count < 2 || !string.Equals(positionals[0], "revit", StringComparison.OrdinalIgnoreCase))
-            return CliParseResult.Failure("Expected a `revit` command.", true);
+            return DevCliParseResult.Failure("Expected a `revit` command.", true);
 
         var commandKind = positionals[1].ToLowerInvariant() switch {
-            "hot-reload" or "prepare-hot-reload" => RevitCommandKind.HotReload,
-            "approve-app-addin" => RevitCommandKind.ApproveAppAddin,
-            "approve-test-addin" => RevitCommandKind.ApproveTestAddin,
+            "approve" => RevitCommandKind.Approve,
+            "hot-reload" => RevitCommandKind.HotReload,
             "logs" => RevitCommandKind.Logs,
-            "app-post-build" => RevitCommandKind.AppPostBuild,
-            "tests-post-build" => RevitCommandKind.TestsPostBuild,
+            "session" => RevitCommandKind.Session,
+            "script" => RevitCommandKind.Script,
             _ => RevitCommandKind.Unknown
         };
 
         if (commandKind == RevitCommandKind.Unknown)
-            return CliParseResult.Failure($"Unknown command '{positionals[1]}'.", true);
+            return DevCliParseResult.Failure($"Unknown command '{positionals[1]}'.", true);
 
-        return CliParseResult.SuccessResult(
-            new CliOptions(
+        return DevCliParseResult.SuccessResult(
+            new DevCliOptions(
                 repoRoot,
                 commandKind,
                 positionals.Skip(2).ToArray()
@@ -57,16 +82,16 @@ internal sealed record CliOptions(
     }
 }
 
-internal readonly record struct CliParseResult(
+internal readonly record struct DevCliParseResult(
     bool Success,
-    CliOptions? Options,
+    DevCliOptions? Options,
     string? ErrorMessage,
     bool ShowUsage
 ) {
-    public static CliParseResult SuccessResult(CliOptions options) => new(true, options, null, false);
+    public static DevCliParseResult SuccessResult(DevCliOptions options) => new(true, options, null, false);
 
-    public static CliParseResult Failure(string errorMessage, bool showUsage) =>
+    public static DevCliParseResult Failure(string errorMessage, bool showUsage) =>
         new(false, null, errorMessage, showUsage);
 
-    public static CliParseResult Usage() => new(false, null, null, true);
+    public static DevCliParseResult Usage() => new(false, null, null, true);
 }

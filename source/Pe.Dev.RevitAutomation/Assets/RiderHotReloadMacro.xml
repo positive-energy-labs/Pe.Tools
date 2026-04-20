@@ -1,0 +1,13 @@
+<application>
+    <component name="ActionMacroManager">
+        <macro name="Auto HR">
+        <!-- Open all uncommitted files -->
+            <action id="ActivateCommitToolWindow" />
+            <action id="Tree-selectAll" />
+            <action id="ChangesView.EditSource" />
+        <!-- Reload All From Disk, then Apply Changes -->
+            <action id="Synchronize" />
+            <action id="RiderDebuggerApplyEncChagnes" />
+        </macro>
+    </component>
+</application>
