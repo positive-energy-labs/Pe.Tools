@@ -1,6 +1,6 @@
-using Pe.Revit.Global.Revit.Documents.Schedules.Fields;
+using Pe.Revit.Global.Revit.Lib.Schedules.Fields;
 
-namespace Pe.Revit.Global.Revit.Documents.Schedules.HeaderGroups;
+namespace Pe.Revit.Global.Revit.Lib.Schedules.HeaderGroups;
 
 /// <summary>
 ///     Static handler for serializing and applying header groups.

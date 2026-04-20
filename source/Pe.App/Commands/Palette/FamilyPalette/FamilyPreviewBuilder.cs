@@ -1,6 +1,5 @@
 ﻿
 using Pe.Revit.Extensions.FamDocument;
-using Pe.Revit.Extensions.FamDocument.GetValue;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Global.PolyFill;
 using Pe.Revit.Global.Revit.Documents;

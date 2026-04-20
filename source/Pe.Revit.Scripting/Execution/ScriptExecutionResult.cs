@@ -1,5 +1,6 @@
 ﻿using System.Reflection;
 using Microsoft.CodeAnalysis;
+using Pe.Revit.Scripting.Context;
 using Pe.Shared.HostContracts.Scripting;
 
 namespace Pe.Revit.Scripting.Execution;

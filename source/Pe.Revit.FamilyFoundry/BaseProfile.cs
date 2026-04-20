@@ -1,7 +1,8 @@
 using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.Global;
 using Pe.Revit.Global.Revit.Documents.Schedules;
-using Pe.Revit.Global.Revit.Documents.Schedules.Filters;
+using Pe.Revit.Global.Revit.Lib.Schedules;
+using Pe.Revit.Global.Revit.Lib.Schedules.Filters;
 using Pe.Revit.Global.Utils.Files;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Json;

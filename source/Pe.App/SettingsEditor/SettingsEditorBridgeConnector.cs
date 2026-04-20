@@ -1,6 +1,6 @@
 ﻿using Pe.Revit.Global.Services.Host;
 
-namespace Pe.Tools.SettingsEditor;
+namespace Pe.App.SettingsEditor;
 
 internal sealed record SettingsEditorBridgeConnectResult(
     bool Success,

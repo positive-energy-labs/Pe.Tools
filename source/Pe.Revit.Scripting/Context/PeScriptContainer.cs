@@ -1,7 +1,7 @@
 ﻿using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 
-namespace Pe.Revit.Scripting;
+namespace Pe.Revit.Scripting.Context;
 
 public abstract class PeScriptContainer {
     public RevitScriptContext Context { get; internal set; } = null!;

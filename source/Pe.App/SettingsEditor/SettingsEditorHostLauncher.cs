@@ -1,10 +1,10 @@
-﻿using System.Diagnostics;
+﻿using Newtonsoft.Json;
+using Pe.Shared.HostContracts.Protocol;
+using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
-using Newtonsoft.Json;
-using Pe.Shared.HostContracts.Protocol;
 
-namespace Pe.Tools.SettingsEditor;
+namespace Pe.App.SettingsEditor;
 
 internal sealed record SettingsEditorHostLaunchResult(
     bool Success,

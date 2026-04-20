@@ -1,5 +1,6 @@
-using Pe.Revit.Global;
-using ValidationError = NJsonSchema.Validation.ValidationError;
+using NJsonSchema.Validation;
+
+namespace Pe.Revit.Global;
 
 /// <summary>
 ///     Exception thrown when an element has intersections with other elements

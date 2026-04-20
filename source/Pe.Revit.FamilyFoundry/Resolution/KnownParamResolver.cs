@@ -1,8 +1,7 @@
-using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.Global;
 using System.Text.RegularExpressions;
 
-namespace Pe.Revit.FamilyFoundry.Plans;
+namespace Pe.Revit.FamilyFoundry.Resolution;
 
 public sealed record KnownParamCatalog(
     IReadOnlyDictionary<string, FamilyParamDefinitionModel> FamilyDefinitions,

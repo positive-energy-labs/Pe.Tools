@@ -1,12 +1,12 @@
-using Pe.Revit.Global.Revit.Documents.Schedules.Fields;
-using Pe.Revit.Global.Revit.Documents.Schedules.SortGroup;
+using Pe.Revit.Global.Revit.Lib.Schedules.Fields;
+using Pe.Revit.Global.Revit.Lib.Schedules.SortGroup;
 using Pe.Revit.Ui.Core;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using WpfUiRichTextBox = Wpf.Ui.Controls.RichTextBox;
 
-namespace Pe.Tools.Commands.Schedules.Ui;
+namespace Pe.App.Commands.Schedules.Ui;
 
 /// <summary>
 ///     Side panel that displays schedule serialization preview data.

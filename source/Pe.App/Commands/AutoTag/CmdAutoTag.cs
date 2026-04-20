@@ -1,5 +1,4 @@
-﻿
-using Autodesk.Revit.Attributes;
+﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Pe.App.Services.AutoTag;
@@ -9,13 +8,12 @@ using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Core.Json;
 using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
 using Pe.Shared.StorageRuntime.Json;
-using Pe.Shared.StorageRuntime.Json.SchemaProviders;
 using Serilog;
 using System.IO;
 using System.Text;
 using Document = Autodesk.Revit.DB.Document;
 
-namespace Pe.Tools.Commands.AutoTag;
+namespace Pe.App.Commands.AutoTag;
 
 /// <summary>
 ///     Unified AutoTag command providing initialization, configuration, catch-up tagging,

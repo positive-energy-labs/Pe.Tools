@@ -1,6 +1,7 @@
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Plans;
+using Pe.Revit.FamilyFoundry.Resolution;
 
 namespace Pe.Revit.FamilyFoundry.OperationGroups;
 

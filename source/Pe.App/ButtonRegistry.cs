@@ -1,14 +1,13 @@
 using Autodesk.Revit.UI;
-using Nice3point.Revit.Extensions.UI;
+using Pe.App.Commands;
+using Pe.App.Commands.AutoTag;
+using Pe.App.Commands.FamilyFoundry;
 using Pe.App.Commands.Palette;
-using Pe.Tools.Commands;
-using Pe.Tools.Commands.AutoTag;
-using Pe.Tools.Commands.FamilyFoundry;
-using Pe.Tools.Commands.Schedules;
-using Pe.Tools.Commands.Scripting;
-using Pe.Tools.Commands.SettingsEditor;
+using Pe.App.Commands.Schedules;
+using Pe.App.Commands.Scripting;
+using Pe.App.Commands.SettingsEditor;
 
-namespace Pe.Tools;
+namespace Pe.App;
 
 /// <summary>
 ///     Centralized, type-safe registry for all ribbon buttons.

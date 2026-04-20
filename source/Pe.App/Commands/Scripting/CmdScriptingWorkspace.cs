@@ -1,15 +1,15 @@
-﻿using System.IO;
-using Autodesk.Revit.Attributes;
+﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
-using Pe.Tools.SettingsEditor;
-using Pe.Revit.Scripting;
+using Pe.App.SettingsEditor;
 using Pe.Revit.Scripting.Bootstrap;
+using Pe.Revit.Scripting.Context;
 using Pe.Revit.Scripting.References;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.StorageRuntime;
 using Serilog;
+using System.IO;
 
-namespace Pe.Tools.Commands.Scripting;
+namespace Pe.App.Commands.Scripting;
 
 [Transaction(TransactionMode.Manual)]
 public class CmdScriptingWorkspace : IExternalCommand {

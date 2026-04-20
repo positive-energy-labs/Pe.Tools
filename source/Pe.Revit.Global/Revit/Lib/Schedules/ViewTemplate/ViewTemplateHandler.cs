@@ -1,4 +1,4 @@
-namespace Pe.Revit.Global.Revit.Documents.Schedules.ViewTemplate;
+namespace Pe.Revit.Global.Revit.Lib.Schedules.ViewTemplate;
 
 /// <summary>
 ///     Static handler for serializing and applying view templates to schedules.

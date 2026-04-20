@@ -24,9 +24,9 @@ This repo exists to improve Engineering Designer workflows for MEP firms through
 - `source/Pe.Revit.Tests/AGENTS.md` — runner-specific Revit test lane workflow.
 - `docs/features/family-foundry/_DEV.md` and `docs/features/family-foundry/_GOALS.md` — cross-package FF transparency model, debugging read order, and long-term output contract.
 
-## Validation
+## Testing & Validation
 
-- Do not build unless the user asked. Building during RR debug always breaks hot reload.
+- Don't build unless asked, doing so during RRD always breaks hot reload.
 - If the user asked for Revit-backed validation, prefer the relevant `.Tests` lane and focused runs before broad suite runs.
 - If given permission to build, prefer low-noise commands like:
   - `dotnet build -c "Debug.R25" /p:WarningLevel=0`
@@ -49,7 +49,7 @@ This repo exists to improve Engineering Designer workflows for MEP firms through
 | **document-owned** | Behavior that can be derived from a specific `Document` without needing active/open UI session state | Prefer `Document` extensions for this; avoid burying it in session/global manager types |
 | **document session** | Open/active/UI-tab state for documents in the current Revit process | Prefer session services or `UIApplication` helpers for this; avoid presenting it as pure `Document` behavior |
 | **document key** | The canonical identity string used to describe or match an open Revit document | Prefer one shared implementation near `Pe.Revit.Global`; avoid ad hoc cache keys per caller when the concept is the same |
-| **RR debug** | A live Rider/Revit debug session against the deployed runtime lane, and the only normal lane where hot reload is available | Prefer this over vague phrases like `live debug`; avoid implying hot reload exists outside RR debug |
+| **RRD** | A live Rider/Revit debug session against the deployed runtime lane, and the only normal lane where hot reload is available | Prefer this over vague phrases like `live debug`; avoid implying hot reload exists outside RRD |
 | **collect** | Read live Revit state into a transient catalog, list, context, or other discovery/query result | Prefer this for live-document queries; avoid using it for durable portable state |
 | **capture** | Convert live Revit state into a durable snapshot or spec, with provenance when it matters | Prefer this when the output is meant to survive document/session/version boundaries |
 | **create** | Materialize new Revit objects, elements, or documents when no compatible target exists yet | Use carefully; in current code this is mostly a lower-level implementation concern inside broader apply flows |
@@ -92,7 +92,7 @@ This repo exists to improve Engineering Designer workflows for MEP firms through
 
 ### Revit runtime / hot reload
 
-- RR debug restart is expensive; avoid unnecessary builds, redeploy assumptions, or casual restart suggestions during an active session.
+- RRD restart is expensive; avoid unnecessary builds, redeploy assumptions, or casual restart suggestions during an active session.
 - Hot reload concerns must not narrow the intended fix. Apply the correct fix first, then state whether Rider/Revit likely needs restart.
 - Treat hot reload as RR-debug-only capability, not a general live Revit capability.
 - Always assume stale assemblies are possible during live Revit work.

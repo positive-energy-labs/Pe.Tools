@@ -4,6 +4,7 @@ using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Serialization;
 using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Revit.FamilyFoundry.Profiles;
+using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.FamilyFoundry.Snapshots;
 
 namespace Pe.Revit.Tests;

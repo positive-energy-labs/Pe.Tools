@@ -1,11 +1,10 @@
-
 using Pe.Revit.Ui.Core;
 using Pe.Shared.StorageRuntime;
 using System.IO;
 using System.Windows.Media.Imaging;
 using WpfColor = System.Windows.Media.Color;
 
-namespace Pe.Tools.Commands.FamilyFoundry.FamilyFoundryUi;
+namespace Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 
 /// <summary>
 ///     Palette list item representing a Family Foundry profile JSON file.

@@ -2,6 +2,7 @@ using Autodesk.Revit.DB.Mechanical;
 using Autodesk.Revit.DB.Plumbing;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Plans;
+using Pe.Revit.FamilyFoundry.Resolution;
 
 namespace Pe.Revit.Tests;
 

@@ -2,9 +2,11 @@ using Autodesk.Revit.UI;
 using Microsoft.CodeAnalysis;
 using Pe.Revit.Scripting;
 using Pe.Revit.Scripting.Bootstrap;
+using Pe.Revit.Scripting.Context;
 using Pe.Revit.Scripting.Execution;
 using Pe.Revit.Scripting.References;
 using Pe.Revit.Scripting.Storage;
+using Pe.Scripting.Cli;
 using Pe.Shared.HostContracts.Scripting;
 
 namespace Pe.Revit.Tests;
@@ -794,7 +796,7 @@ public sealed class RevitScriptingPortTests {
         Directory.CreateDirectory(workspaceRoot);
 
         try {
-            var result = global::ScriptCliProgram.CreateWorkspaceScriptFile(workspaceRoot, "MyProbe", overwriteExisting: false);
+            var result = global::Pe.Scripting.Cli.ScriptCliProgram.CreateWorkspaceScriptFile(workspaceRoot, "MyProbe", overwriteExisting: false);
             var createdPath = Path.Combine(workspaceRoot, "src", "MyProbe.cs");
 
             Assert.That(result.Success, Is.True);
@@ -811,7 +813,7 @@ public sealed class RevitScriptingPortTests {
     [Test]
     public void Cli_workspace_root_matches_shared_workspace_locations() {
         Assert.That(
-            global::CliOptions.GetWorkspaceRoot("default"),
+            global::Pe.Scripting.Cli.CliOptions.GetWorkspaceRoot("default"),
             Is.EqualTo(ScriptingWorkspaceLocations.ResolveWorkspaceRoot("default"))
         );
     }

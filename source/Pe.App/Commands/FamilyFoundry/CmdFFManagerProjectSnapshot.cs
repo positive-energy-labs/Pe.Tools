@@ -1,11 +1,7 @@
 using Autodesk.Revit.Attributes;
-using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Apply;
-using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Revit.FamilyFoundry.Profiles;
-using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Revit.Ui;
 using Pe.Revit.Global.Services.Aps.Models;
@@ -15,7 +11,7 @@ using System.Diagnostics;
 using System.IO;
 using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
 
-namespace Pe.Tools.Commands.FamilyFoundry;
+namespace Pe.App.Commands.FamilyFoundry;
 
 /// <summary>
 ///     Captures the current family state and projects it to an FF profile.

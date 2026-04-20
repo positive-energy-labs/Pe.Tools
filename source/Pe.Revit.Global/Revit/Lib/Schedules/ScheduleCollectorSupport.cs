@@ -1,5 +1,3 @@
-using Autodesk.Revit.DB;
-using Pe.Revit.Global.PolyFill;
 using Pe.Revit.Global.Revit.Lib.Parameters;
 using Pe.Shared.HostContracts.RevitData;
 using Pe.Shared.RevitData.Parameters;
@@ -11,15 +9,15 @@ using ContractScheduleSortGroupSpec = Pe.Shared.HostContracts.RevitData.Schedule
 using ContractScheduleProfile = Pe.Shared.HostContracts.RevitData.ScheduleProfile;
 using ContractScheduleTitleBorderSpec = Pe.Shared.HostContracts.RevitData.ScheduleTitleBorderSpec;
 using ContractScheduleTitleStyleSpec = Pe.Shared.HostContracts.RevitData.ScheduleTitleStyleSpec;
-using InternalCombinedParameterSpec = Pe.Revit.Global.Revit.Documents.Schedules.Fields.CombinedParameterSpec;
-using InternalScheduleFieldFormatSpec = Pe.Revit.Global.Revit.Documents.Schedules.Fields.ScheduleFieldFormatSpec;
-using InternalScheduleFieldSpec = Pe.Revit.Global.Revit.Documents.Schedules.Fields.ScheduleFieldSpec;
-using InternalScheduleFilterSpec = Pe.Revit.Global.Revit.Documents.Schedules.Filters.ScheduleFilterSpec;
-using InternalScheduleProfile = Pe.Revit.Global.Revit.Documents.Schedules.ScheduleProfile;
-using InternalScheduleSortGroupSpec = Pe.Revit.Global.Revit.Documents.Schedules.SortGroup.ScheduleSortGroupSpec;
-using InternalScheduleTitleStyleSpec = Pe.Revit.Global.Revit.Documents.Schedules.TitleStyle.ScheduleTitleStyleSpec;
+using InternalCombinedParameterSpec = Pe.Revit.Global.Revit.Lib.Schedules.Fields.CombinedParameterSpec;
+using InternalScheduleFieldFormatSpec = Pe.Revit.Global.Revit.Lib.Schedules.Fields.ScheduleFieldFormatSpec;
+using InternalScheduleFieldSpec = Pe.Revit.Global.Revit.Lib.Schedules.Fields.ScheduleFieldSpec;
+using InternalScheduleFilterSpec = Pe.Revit.Global.Revit.Lib.Schedules.Filters.ScheduleFilterSpec;
+using InternalScheduleProfile = Pe.Revit.Global.Revit.Lib.Schedules.ScheduleProfile;
+using InternalScheduleSortGroupSpec = Pe.Revit.Global.Revit.Lib.Schedules.SortGroup.ScheduleSortGroupSpec;
+using InternalScheduleTitleStyleSpec = Pe.Revit.Global.Revit.Lib.Schedules.TitleStyle.ScheduleTitleStyleSpec;
 
-namespace Pe.Revit.Global.Revit.Documents.Schedules;
+namespace Pe.Revit.Global.Revit.Lib.Schedules;
 
 internal static class ScheduleCollectorSupport {
     public static HashSet<string> ToFilterSet(IEnumerable<string>? values) =>

@@ -1,7 +1,7 @@
 ﻿using Autodesk.Revit.Attributes;
 using Nice3point.Revit.Toolkit.External;
 
-namespace Pe.Tools.Commands;
+namespace Pe.App.Commands;
 
 /// <summary>
 ///     External command entry point

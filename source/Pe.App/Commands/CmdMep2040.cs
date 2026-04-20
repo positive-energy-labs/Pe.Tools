@@ -5,7 +5,7 @@ using Pe.Revit.Global.Revit.Ui;
 using Serilog.Events;
 using System.Text;
 
-namespace Pe.Tools.Commands;
+namespace Pe.App.Commands;
 
 [Transaction(TransactionMode.Manual)]
 public class CmdMep2040 : IExternalCommand {

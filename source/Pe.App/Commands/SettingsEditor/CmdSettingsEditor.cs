@@ -1,12 +1,12 @@
 ﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
+using Pe.App.SettingsEditor;
 using Pe.Revit.Global.Services.Host;
-using Pe.Tools.SettingsEditor;
 using Serilog;
 using System.Diagnostics;
 using System.Text;
 
-namespace Pe.Tools.Commands.SettingsEditor;
+namespace Pe.App.Commands.SettingsEditor;
 
 [Transaction(TransactionMode.Manual)]
 public class CmdSettingsEditor : IExternalCommand {

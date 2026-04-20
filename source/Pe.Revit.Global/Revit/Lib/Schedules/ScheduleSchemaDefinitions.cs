@@ -1,13 +1,13 @@
-using Pe.Revit.Global.Revit.Documents.Schedules.Fields;
-using Pe.Revit.Global.Revit.Documents.Schedules.Filters;
-using Pe.Revit.Global.Revit.Documents.Schedules.SortGroup;
-using Pe.Revit.Global.Revit.Documents.Schedules.TitleStyle;
-using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
+using Pe.Revit.Global.Revit.Lib.Schedules.Fields;
+using Pe.Revit.Global.Revit.Lib.Schedules.Filters;
+using Pe.Revit.Global.Revit.Lib.Schedules.SortGroup;
+using Pe.Revit.Global.Revit.Lib.Schedules.TitleStyle;
 using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
+using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 using Pe.Shared.StorageRuntime.Json.SchemaProviders;
 using System.Runtime.CompilerServices;
 
-namespace Pe.Revit.Global.Revit.Documents.Schedules;
+namespace Pe.Revit.Global.Revit.Lib.Schedules;
 
 internal sealed class ScheduleProfileSchemaDefinition : SettingsSchemaDefinition<ScheduleProfile> {
     public override void Configure(ISettingsSchemaBuilder<ScheduleProfile> builder) {
