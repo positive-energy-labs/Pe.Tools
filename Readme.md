@@ -14,7 +14,8 @@ A suite of Revit add-ins and supporting libraries.
 
 ## Revit Scripting
 
-This repo includes a Revit scripting lane aimed at daily API probes and small automation loops without growing the main add-in assembly.
+This repo includes a Revit scripting lane aimed at daily API probes and small automation loops without growing the main
+add-in assembly.
 
 Current supported path:
 
@@ -22,8 +23,8 @@ Current supported path:
 - author single-file container scripts under `src/`
 - run them from the CLI with `pe-script src\MyProbe.cs`
 - or call `Pe.Host` over HTTP:
-  - `POST /api/scripting/workspace/bootstrap`
-  - `POST /api/scripting/execute`
+    - `POST /api/scripting/workspace/bootstrap`
+    - `POST /api/scripting/execute`
 - receive final buffered output and structured diagnostics in one response
 
 Transport posture:

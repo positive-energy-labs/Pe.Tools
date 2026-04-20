@@ -70,7 +70,7 @@ public class FamilyElementPreviewPanel : PaletteSidebarPanel<FamilyElementItem, 
         this._associatedContainer.Child = this._associatedElementsList;
         _ = mainStack.Children.Add(this._associatedContainer);
 
-        base.Content = mainStack;
+        this.Content = mainStack;
     }
 
     protected override void ShowLoading(FamilyElementItem item) {
@@ -80,8 +80,7 @@ public class FamilyElementPreviewPanel : PaletteSidebarPanel<FamilyElementItem, 
             .AddHeader(item.TextPrimary);
 
         var loadingPara = new Paragraph(new Run("Loading...") {
-            FontStyle = FontStyles.Italic,
-            Foreground = Brushes.Gray
+            FontStyle = FontStyles.Italic, Foreground = Brushes.Gray
         }) { Margin = new Thickness(0, 8, 0, 0) };
 
         doc.Blocks.Add(loadingPara);
@@ -90,7 +89,8 @@ public class FamilyElementPreviewPanel : PaletteSidebarPanel<FamilyElementItem, 
         this._associatedContainer.Visibility = Visibility.Collapsed;
     }
 
-    protected override async Task<FamilyElementPreviewData?> BuildDataAsync(FamilyElementItem item, CancellationToken ct) {
+    protected override async Task<FamilyElementPreviewData?> BuildDataAsync(FamilyElementItem item,
+        CancellationToken ct) {
         if (ct.IsCancellationRequested) return null;
         return await PaletteThreading.RunRevitAsync(() => this.BuildPreviewData(item), ct);
     }

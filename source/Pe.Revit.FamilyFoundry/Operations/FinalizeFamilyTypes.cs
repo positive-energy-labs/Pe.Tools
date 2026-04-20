@@ -1,6 +1,5 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.OperationGroups;
-using Pe.Revit.FamilyFoundry.Plans;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
@@ -21,13 +20,15 @@ internal sealed class FinalizeFamilyTypes(SetKnownParamsSettings settings, Known
     ) {
         var logs = new List<LogEntry>();
         if (!sharedState.CreatedDefaultPlaceholderType) {
-            logs.Add(new LogEntry("Finalize family types").Skip("No placeholder default family type was auto-created."));
+            logs.Add(new LogEntry("Finalize family types").Skip(
+                "No placeholder default family type was auto-created."));
             return new OperationLog(this.Name, logs);
         }
 
         var referencedTypeNames = this.Settings.GetReferencedFamilyTypeNames();
         if (referencedTypeNames.Contains(PlaceholderTypeName)) {
-            logs.Add(new LogEntry("Finalize family types").Skip("Placeholder type name is explicitly referenced by the profile."));
+            logs.Add(new LogEntry("Finalize family types").Skip(
+                "Placeholder type name is explicitly referenced by the profile."));
             return new OperationLog(this.Name, logs);
         }
 
@@ -47,7 +48,8 @@ internal sealed class FinalizeFamilyTypes(SetKnownParamsSettings settings, Known
             .ThenBy(type => type.Name, StringComparer.Ordinal)
             .FirstOrDefault();
         if (preferredType == null) {
-            logs.Add(new LogEntry("Finalize family types").Skip("No authored family type exists to replace the placeholder default."));
+            logs.Add(new LogEntry("Finalize family types").Skip(
+                "No authored family type exists to replace the placeholder default."));
             return new OperationLog(this.Name, logs);
         }
 
@@ -56,7 +58,8 @@ internal sealed class FinalizeFamilyTypes(SetKnownParamsSettings settings, Known
             fm.DeleteCurrentType();
             fm.CurrentType = preferredType;
             logs.Add(new LogEntry("Finalize family types")
-                .Success($"Deleted placeholder family type '{PlaceholderTypeName}' and set current type to '{preferredType.Name}'."));
+                .Success(
+                    $"Deleted placeholder family type '{PlaceholderTypeName}' and set current type to '{preferredType.Name}'."));
         } catch (Exception ex) {
             logs.Add(new LogEntry("Finalize family types").Error(ex));
         }

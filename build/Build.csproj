@@ -25,7 +25,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\source\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj" />
+        <ProjectReference Include="..\source\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj"/>
     </ItemGroup>
 
 </Project>

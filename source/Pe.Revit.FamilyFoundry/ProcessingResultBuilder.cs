@@ -1,11 +1,10 @@
-using Pe.Revit.FamilyFoundry.Plans;
+using Pe.Revit.FamilyFoundry.LookupTables;
 using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.FamilyFoundry.Serialization;
-using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.Global;
-using Pe.Revit.Global.PolyFill;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
+using System.Collections;
 using System.Reflection;
 
 namespace Pe.Revit.FamilyFoundry;
@@ -27,7 +26,8 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
     private static string GetDescription(ParameterSnapshot param) =>
         $"{GetInstTypeStr(param)}: {param.Name} ({GetDataTypeLabel(param)})";
 
-    private static string GetDataTypeLabel(ParameterSnapshot param) => SpecNamesProvider.GetLabelForForge(param.DataType);
+    private static string GetDataTypeLabel(ParameterSnapshot param) =>
+        SpecNamesProvider.GetLabelForForge(param.DataType);
 
     private static string GetPropGroupLabel(ParameterSnapshot param) =>
         PropertyGroupNamesProvider.GetLabelForForge(param.PropertiesGroup);
@@ -59,13 +59,10 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
         var familyOutput = this._runOutput.SubDir(familyDirName);
 
         var inputProfilePath = familyOutput.Json("input-profile.json").Write(this._profilePayload);
-        var operationPlanPath = familyOutput.Json("operation-plan.json").Write(this._operationMetadata.Select(op => new {
-            op.Name,
-            op.Description,
-            op.Type,
-            op.IsMerged
-        }).ToList());
-        var profileSummaryPath = familyOutput.Json("profile-summary.json").Write(BuildProfileSummary(this._profilePayload));
+        var operationPlanPath = familyOutput.Json("operation-plan.json").Write(this._operationMetadata
+            .Select(op => new { op.Name, op.Description, op.Type, op.IsMerged }).ToList());
+        var profileSummaryPath =
+            familyOutput.Json("profile-summary.json").Write(BuildProfileSummary(this._profilePayload));
         var inputProfilePlanPath = this.WriteInputProfilePlanArtifact(familyOutput, this._profilePayload);
 
         var preSnapshotArtifacts = ctx.PreProcessSnapshot == null
@@ -81,23 +78,23 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
         var snapshotDiffPath = familyOutput.Json("snapshot-diff.json").Write(BuildSnapshotDiff(ctx));
 
         var artifactManifest = new FamilyArtifactManifest(
-            FamilyDirectory: familyDirName,
-            InputProfilePath: this.RelativeToRun(inputProfilePath)!,
-            ProfileSummaryPath: this.RelativeToRun(profileSummaryPath)!,
-            OperationPlanPath: this.RelativeToRun(operationPlanPath)!,
-            InputProfileParamDrivenSolidsPlanPath: this.RelativeToRun(inputProfilePlanPath),
-            LogsAbridgedPath: this.RelativeToRun(abridgedPath)!,
-            LogsDetailedPath: this.RelativeToRun(detailedPath)!,
-            FamilyReportPath: string.Empty,
-            ParameterDiffPath: this.RelativeToRun(parameterDiffPath)!,
-            SnapshotDiffPath: this.RelativeToRun(snapshotDiffPath)!,
-            PreSnapshot: preSnapshotArtifacts,
-            PostSnapshot: postSnapshotArtifacts
+            familyDirName,
+            this.RequiredRelativeToRun(inputProfilePath),
+            this.RequiredRelativeToRun(profileSummaryPath),
+            this.RequiredRelativeToRun(operationPlanPath),
+            this.RelativeToRun(inputProfilePlanPath),
+            this.RequiredRelativeToRun(abridgedPath),
+            this.RequiredRelativeToRun(detailedPath),
+            string.Empty,
+            this.RequiredRelativeToRun(parameterDiffPath),
+            this.RequiredRelativeToRun(snapshotDiffPath),
+            preSnapshotArtifacts,
+            postSnapshotArtifacts
         );
 
         ctx.Artifacts = artifactManifest;
         var familyReportPath = familyOutput.Json("family-report.json").Write(this.BuildFamilyReport(ctx));
-        ctx.Artifacts = artifactManifest with { FamilyReportPath = this.RelativeToRun(familyReportPath)! };
+        ctx.Artifacts = artifactManifest with { FamilyReportPath = this.RequiredRelativeToRun(familyReportPath) };
 
         if (openOnFinish)
             FileUtils.OpenInDefaultApp(familyReportPath);
@@ -133,7 +130,7 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
                 Status = err != null ? "Failed" : errorCount > 0 ? "Completed with errors" : "Success",
                 SecondsElapsed = Math.Round(ctx.TotalMs / 1000.0, 3),
                 ErrorCount = errorCount,
-                Artifacts = ctx.Artifacts
+                ctx.Artifacts
             };
         }).ToList();
 
@@ -165,6 +162,7 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
         if (openOnFinish)
             FileUtils.OpenInDefaultApp(summaryPath);
     }
+
     private static object BuildAbridged(FamilyProcessingContext ctx) {
         var (logs, err) = ctx.OperationLogs;
         if (err is not null) {
@@ -229,11 +227,12 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
     private object BuildFamilyReport(FamilyProcessingContext ctx) => new {
         Family = ctx.FamilyName,
         Timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
-        Profile = new {
-            Name = this._profileName,
-            Type = this._profilePayload.GetType().Name,
-            Summary = BuildProfileSummary(this._profilePayload)
-        },
+        Profile =
+            new {
+                Name = this._profileName,
+                Type = this._profilePayload.GetType().Name,
+                Summary = BuildProfileSummary(this._profilePayload)
+            },
         Timings = new {
             TotalSecondsElapsed = Math.Round(ctx.TotalMs / 1000.0, 3),
             PreCollectionSecondsElapsed = Math.Round(ctx.PreCollectionMs / 1000.0, 3),
@@ -241,7 +240,7 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
             PostCollectionSecondsElapsed = Math.Round(ctx.PostCollectionMs / 1000.0, 3)
         },
         Error = ctx.OperationLogs.AsTuple().error?.Message,
-        Artifacts = ctx.Artifacts,
+        ctx.Artifacts,
         SnapshotVerification = BuildSnapshotDiff(ctx),
         Operations = this.BuildDetailed(ctx)
     };
@@ -331,9 +330,7 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
         return new {
             Family = ctx.FamilyName,
             Summary = new {
-                ParametersRemoved = removed.Count,
-                ParametersAdded = added.Count,
-                ParametersModified = modified.Count
+                ParametersRemoved = removed.Count, ParametersAdded = added.Count, ParametersModified = modified.Count
             },
             Removed = removed.Any() ? removed : null,
             Added = added.Any() ? added : null,
@@ -356,25 +353,31 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
                 LookupTableCount = postSummary.LookupTableCount - preSummary.LookupTableCount,
                 MirrorConstraintCount = postSummary.MirrorConstraintCount - preSummary.MirrorConstraintCount,
                 OffsetConstraintCount = postSummary.OffsetConstraintCount - preSummary.OffsetConstraintCount,
-                AuthoredPlanes = postSummary.AuthoredParamDrivenSolids.Planes - preSummary.AuthoredParamDrivenSolids.Planes,
-                AuthoredSpans = postSummary.AuthoredParamDrivenSolids.Spans - preSummary.AuthoredParamDrivenSolids.Spans,
-                AuthoredPrisms = postSummary.AuthoredParamDrivenSolids.Prisms - preSummary.AuthoredParamDrivenSolids.Prisms,
-                AuthoredCylinders = postSummary.AuthoredParamDrivenSolids.Cylinders - preSummary.AuthoredParamDrivenSolids.Cylinders,
-                AuthoredConnectors = postSummary.AuthoredParamDrivenSolids.Connectors - preSummary.AuthoredParamDrivenSolids.Connectors
+                AuthoredPlanes =
+                    postSummary.AuthoredParamDrivenSolids.Planes - preSummary.AuthoredParamDrivenSolids.Planes,
+                AuthoredSpans =
+                    postSummary.AuthoredParamDrivenSolids.Spans - preSummary.AuthoredParamDrivenSolids.Spans,
+                AuthoredPrisms =
+                    postSummary.AuthoredParamDrivenSolids.Prisms - preSummary.AuthoredParamDrivenSolids.Prisms,
+                AuthoredCylinders =
+                    postSummary.AuthoredParamDrivenSolids.Cylinders - preSummary.AuthoredParamDrivenSolids.Cylinders,
+                AuthoredConnectors =
+                    postSummary.AuthoredParamDrivenSolids.Connectors - preSummary.AuthoredParamDrivenSolids.Connectors
             },
             Parameters = BuildParameterDiff(ctx)
         };
     }
 
-    private SnapshotArtifactManifest WriteSnapshotArtifacts(FamilySnapshot snapshot, OutputStorage output, string phase) {
+    private SnapshotArtifactManifest
+        WriteSnapshotArtifacts(FamilySnapshot snapshot, OutputStorage output, string phase) {
         var snapshotPath = output.Json($"snapshot-{phase}.json").Write(snapshot);
         string? parameterProfilePath = null;
         if (snapshot.Parameters?.Data != null && snapshot.Parameters.Data.Count > 0) {
             var paramsData = snapshot.Parameters.Data;
             var sharedParameterNames = paramsData
                 .Select(parameter => parameter.SharedGuid.HasValue ? parameter.Name?.Trim() : null)
+                .OfType<string>()
                 .Where(name => !string.IsNullOrWhiteSpace(name))
-                .Select(name => name!)
                 .ToHashSet(StringComparer.Ordinal);
 
             parameterProfilePath = output.Json($"snapshot-parameters-{phase}.json").Write(
@@ -390,11 +393,12 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
         string? lookupTablesCsvPrefix = null;
         if (snapshot.LookupTables?.Data != null && snapshot.LookupTables.Data.Count > 0) {
             lookupTablesPath = output.Json($"snapshot-lookuptables-{phase}.json").Write(snapshot.LookupTables.Data);
-            LookupTables.LookupTableArtifactWriter.WriteCsvFiles(
+            LookupTableArtifactWriter.WriteCsvFiles(
                 snapshot.LookupTables.Data,
                 output.DirectoryPath,
                 $"snapshot-lookuptables-{phase}");
-            lookupTablesCsvPrefix = this.RelativeToRun(Path.Combine(output.DirectoryPath, $"snapshot-lookuptables-{phase}"));
+            lookupTablesCsvPrefix =
+                this.RelativeToRun(Path.Combine(output.DirectoryPath, $"snapshot-lookuptables-{phase}"));
         }
 
         string? refPlanesAndDimsPath = null;
@@ -402,14 +406,16 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
             var hasConstraints = snapshot.RefPlanesAndDims.MirrorConstraintSnapshots.Count > 0 ||
                                  snapshot.RefPlanesAndDims.OffsetConstraintSnapshots.Count > 0;
             if (hasConstraints)
-                refPlanesAndDimsPath = output.Json($"snapshot-refplanesanddims-{phase}.json").Write(snapshot.RefPlanesAndDims);
+                refPlanesAndDimsPath = output.Json($"snapshot-refplanesanddims-{phase}.json")
+                    .Write(snapshot.RefPlanesAndDims);
         }
 
         string? authoredParamDrivenSolidsPath = null;
         string? authoredParamDrivenSolidsPlanPath = null;
         if (snapshot.AuthoredParamDrivenSolids != null) {
             if (snapshot.AuthoredParamDrivenSolids.HasContent)
-                authoredParamDrivenSolidsPath = output.Json($"snapshot-authoredparamdrivensolids-{phase}.json").Write(snapshot.AuthoredParamDrivenSolids);
+                authoredParamDrivenSolidsPath = output.Json($"snapshot-authoredparamdrivensolids-{phase}.json")
+                    .Write(snapshot.AuthoredParamDrivenSolids);
 
             authoredParamDrivenSolidsPlanPath = WriteAuthoredSolidsPlanArtifact(
                 output,
@@ -418,24 +424,24 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
         }
 
         var projection = TryProjectSnapshotProfiles(snapshot);
-        var denseProjectionPath = projection == null
+        var denseProjectionPath = projection?.DenseProfile == null
             ? null
             : output.Json($"snapshot-profile-dense-{phase}.json").Write(projection.DenseProfile);
-        var emptyAllowedProjectionPath = projection == null
+        var emptyAllowedProjectionPath = projection?.EmptyAllowedProfile == null
             ? null
             : output.Json($"snapshot-profile-empty-allowed-{phase}.json").Write(projection.EmptyAllowedProfile);
 
         return new SnapshotArtifactManifest(
-            Phase: phase,
-            SnapshotPath: this.RelativeToRun(snapshotPath)!,
-            ParameterProfilePath: this.RelativeToRun(parameterProfilePath),
-            LookupTablesPath: this.RelativeToRun(lookupTablesPath),
-            LookupTablesCsvPrefix: lookupTablesCsvPrefix,
-            RefPlanesAndDimsPath: this.RelativeToRun(refPlanesAndDimsPath),
-            AuthoredParamDrivenSolidsPath: this.RelativeToRun(authoredParamDrivenSolidsPath),
-            AuthoredParamDrivenSolidsPlanPath: this.RelativeToRun(authoredParamDrivenSolidsPlanPath),
-            ProjectedDenseProfilePath: this.RelativeToRun(denseProjectionPath),
-            ProjectedEmptyAllowedProfilePath: this.RelativeToRun(emptyAllowedProjectionPath)
+            phase,
+            this.RequiredRelativeToRun(snapshotPath),
+            this.RelativeToRun(parameterProfilePath),
+            this.RelativeToRun(lookupTablesPath),
+            lookupTablesCsvPrefix,
+            this.RelativeToRun(refPlanesAndDimsPath),
+            this.RelativeToRun(authoredParamDrivenSolidsPath),
+            this.RelativeToRun(authoredParamDrivenSolidsPlanPath),
+            this.RelativeToRun(denseProjectionPath),
+            this.RelativeToRun(emptyAllowedProjectionPath)
         );
     }
 
@@ -455,12 +461,9 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
         var plan = AuthoredParamDrivenSolidsCompiler.Compile(authoredSolids);
         return output.Json(fileName).Write(new {
             Summary = BuildAuthoredParamDrivenSolidsSummary(authoredSolids),
-            CanExecute = plan.CanExecute,
+            plan.CanExecute,
             Diagnostics = plan.Diagnostics.Select(diagnostic => new {
-                diagnostic.Severity,
-                diagnostic.SolidName,
-                diagnostic.Path,
-                diagnostic.Message
+                diagnostic.Severity, diagnostic.SolidName, diagnostic.Path, diagnostic.Message
             }).ToList(),
             Plan = plan
         });
@@ -475,8 +478,8 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
                                            .Select(parameter => parameter.SharedGuid.HasValue
                                                ? parameter.Name?.Trim()
                                                : null)
+                                           .OfType<string>()
                                            .Where(name => !string.IsNullOrWhiteSpace(name))
-                                           .Select(name => name!)
                                            .ToHashSet(StringComparer.Ordinal)
                                        ?? [];
 
@@ -507,13 +510,13 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
         FamilySnapshot? snapshot,
         ReflectedSnapshotProjection? projection
     ) => new(
-        ParameterCount: snapshot?.Parameters?.Data?.Count ?? 0,
-        LookupTableCount: snapshot?.LookupTables?.Data?.Count ?? 0,
-        MirrorConstraintCount: snapshot?.RefPlanesAndDims?.MirrorConstraintSnapshots.Count ?? 0,
-        OffsetConstraintCount: snapshot?.RefPlanesAndDims?.OffsetConstraintSnapshots.Count ?? 0,
-        AuthoredParamDrivenSolids: BuildAuthoredParamDrivenSolidsSummary(snapshot?.AuthoredParamDrivenSolids),
-        ProjectedDenseProfile: BuildProfileLikeSummary(projection?.DenseProfile),
-        ProjectedEmptyAllowedProfile: BuildProfileLikeSummary(projection?.EmptyAllowedProfile)
+        snapshot?.Parameters?.Data?.Count ?? 0,
+        snapshot?.LookupTables?.Data?.Count ?? 0,
+        snapshot?.RefPlanesAndDims?.MirrorConstraintSnapshots.Count ?? 0,
+        snapshot?.RefPlanesAndDims?.OffsetConstraintSnapshots.Count ?? 0,
+        BuildAuthoredParamDrivenSolidsSummary(snapshot?.AuthoredParamDrivenSolids),
+        BuildProfileLikeSummary(projection?.DenseProfile),
+        BuildProfileLikeSummary(projection?.EmptyAllowedProfile)
     );
 
     private static object BuildProfileSummary(object profilePayload) {
@@ -530,15 +533,14 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
         }
 
         return new {
-            ProfileType = profilePayload.GetType().Name,
-            SharedShape = BuildProfileLikeSummary(profilePayload)
+            ProfileType = profilePayload.GetType().Name, SharedShape = BuildProfileLikeSummary(profilePayload)
         };
     }
 
     private static ProfileLikeSummary BuildProfileLikeSummary(object? profile) =>
         profile == null
-            ? new(false, 0, 0, 0, 0, BuildAuthoredParamDrivenSolidsSummary(null))
-            : new(
+            ? new ProfileLikeSummary(false, 0, 0, 0, 0, BuildAuthoredParamDrivenSolidsSummary(null))
+            : new ProfileLikeSummary(
                 true,
                 TryGetListCount(profile, "AddFamilyParams", "Parameters"),
                 TryGetListCount(profile, "SetLookupTables", "Tables"),
@@ -550,8 +552,8 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
     private static AuthoredParamDrivenSolidsSummary BuildAuthoredParamDrivenSolidsSummary(
         AuthoredParamDrivenSolidsSettings? authoredSolids
     ) => authoredSolids == null
-        ? new(false, null, 0, 0, 0, 0, 0)
-        : new(
+        ? new AuthoredParamDrivenSolidsSummary(false, null, 0, 0, 0, 0, 0)
+        : new AuthoredParamDrivenSolidsSummary(
             authoredSolids.HasContent,
             authoredSolids.Frame.ToString(),
             authoredSolids.Planes.Count,
@@ -566,8 +568,13 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
             ? null
             : Path.GetRelativePath(this._runOutput.DirectoryPath, absolutePath);
 
+    private string RequiredRelativeToRun(string? absolutePath) =>
+        this.RelativeToRun(absolutePath)
+        ?? throw new InvalidOperationException("Expected artifact path to resolve relative to run output.");
+
     private static AuthoredParamDrivenSolidsSettings? TryGetAuthoredParamDrivenSolids(object profilePayload) =>
-        profilePayload.GetType().GetProperty("ParamDrivenSolids")?.GetValue(profilePayload) as AuthoredParamDrivenSolidsSettings;
+        profilePayload.GetType().GetProperty("ParamDrivenSolids")?.GetValue(profilePayload) as
+            AuthoredParamDrivenSolidsSettings;
 
     private static int TryGetListCount(object root, string propertyName, string nestedPropertyName) {
         var property = root.GetType().GetProperty(propertyName)?.GetValue(root);
@@ -576,7 +583,7 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
 
         var nested = property.GetType().GetProperty(nestedPropertyName)?.GetValue(property);
         return nested switch {
-            System.Collections.ICollection collection => collection.Count,
+            ICollection collection => collection.Count,
             _ => 0
         };
     }
@@ -709,14 +716,15 @@ public class DryRunResultBuilder(ModuleStorage storage) {
             ProfileSettings = this._profilePayload,
             Operations = this._operationMetadata.Select(op =>
                 new { Operation = $"[Batch {op.IsMerged}] ({op.Type}) {op.Name}", op.Description }).ToList(),
-            ApsParameters = this._apsParams.Select(param => new {
-                param.ExternalDefinition.Name,
-                GUID = param.ExternalDefinition.GUID.ToString(),
-                GroupTypeId = param.GroupTypeId.TypeId,
-                DataType = param.ExternalDefinition.GetDataType().TypeId,
-                param.IsInstance,
-                param.ExternalDefinition.Description
-            }).ToList(),
+            ApsParameters =
+                this._apsParams.Select(param => new {
+                    param.ExternalDefinition.Name,
+                    GUID = param.ExternalDefinition.GUID.ToString(),
+                    GroupTypeId = param.GroupTypeId.TypeId,
+                    DataType = param.ExternalDefinition.GetDataType().TypeId,
+                    param.IsInstance,
+                    param.ExternalDefinition.Description
+                }).ToList(),
             Families = this._families.Select(family => new {
                 family.Name,
                 Id = family.Id.ToString(),

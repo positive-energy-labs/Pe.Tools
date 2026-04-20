@@ -33,7 +33,8 @@ public static class ScheduleProfileQueryCollector {
     ) {
         var effectiveQuery = query ?? new ScheduleProfilesQuery();
         return effectiveQuery.Kind switch {
-            ScheduleProfilesQueryKind.CurrentActiveView => ResolveCurrentActiveView(effectiveQuery.IncludeTemplates, issues),
+            ScheduleProfilesQueryKind.CurrentActiveView => ResolveCurrentActiveView(effectiveQuery.IncludeTemplates,
+                issues),
             ScheduleProfilesQueryKind.ScheduleNames => ResolveScheduleNames(doc, effectiveQuery, issues),
             _ => ResolveScheduleReferences(doc, effectiveQuery, issues)
         };
@@ -87,7 +88,6 @@ public static class ScheduleProfileQueryCollector {
                     "ScheduleProfileReferenceIdNotFound",
                     $"Could not resolve schedule id {scheduleId}.",
                     scheduleId.ToString())) {
-                continue;
             }
         }
 
@@ -97,7 +97,6 @@ public static class ScheduleProfileQueryCollector {
                     "ScheduleProfileReferenceUniqueIdNotFound",
                     $"Could not resolve schedule unique id '{scheduleUniqueId}'.",
                     scheduleUniqueId)) {
-                continue;
             }
         }
 

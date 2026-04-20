@@ -51,7 +51,7 @@ public class ApsAuthNormal : Aps.IOAuthTokenProvider {
 
 public class ApsAuthPkce : Aps.IOAuthTokenProvider {
     public string GetClientId() => GlobalSettingsAccessor.Read().ApsDesktopClientId1;
-    public string GetClientSecret() => null;
+    public string GetClientSecret() => string.Empty;
 }
 
 internal static class GlobalSettingsAccessor {

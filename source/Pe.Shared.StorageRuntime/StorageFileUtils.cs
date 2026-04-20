@@ -4,9 +4,10 @@ internal static class StorageFileUtils {
     public static string EnsureExtension(string filename, string expectedExtension) {
         if (string.IsNullOrWhiteSpace(filename))
             throw new ArgumentException("Filename cannot be null, empty, or whitespace.", nameof(filename));
-        if (string.IsNullOrWhiteSpace(expectedExtension))
+        if (string.IsNullOrWhiteSpace(expectedExtension)) {
             throw new ArgumentException("Expected extension cannot be null, empty, or whitespace.",
                 nameof(expectedExtension));
+        }
 
         var normalizedExpectedExtension = expectedExtension.StartsWith(".")
             ? expectedExtension.ToLowerInvariant()
@@ -40,9 +41,10 @@ internal static class StorageFileUtils {
     public static void ValidateFileNameAndExtension(string filePath, string expectedExtension) {
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path cannot be null, empty, or whitespace.", nameof(filePath));
-        if (string.IsNullOrWhiteSpace(expectedExtension))
+        if (string.IsNullOrWhiteSpace(expectedExtension)) {
             throw new ArgumentException("Expected extension cannot be null, empty, or whitespace.",
                 nameof(expectedExtension));
+        }
 
         var fileName = Path.GetFileName(filePath);
         var actualExtension = Path.GetExtension(fileName);

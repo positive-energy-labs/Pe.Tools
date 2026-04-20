@@ -21,7 +21,10 @@ public class TempSharedParamFile : IDisposable {
     }
 
     public DefinitionFile DefinitionFile { get; }
-    public DefinitionGroup TempGroup => this.DefinitionFile.Groups.get_Item("TempGroup") ?? this.DefinitionFile.Groups.Create("TempGroup");
+
+    public DefinitionGroup TempGroup => this.DefinitionFile.Groups.get_Item("TempGroup") ??
+                                        this.DefinitionFile.Groups.Create("TempGroup");
+
     public string TempFileName => this.DefinitionFile.Filename;
     public string OriginalFileName { get; }
     private Application App { get; }

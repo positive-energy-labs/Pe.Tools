@@ -67,9 +67,10 @@ internal static class ScheduleHelper {
     /// </summary>
     public static ScheduleCreationResult CreateSchedule(Document doc, ScheduleProfile profile) {
         var categoryId = FindCategoryId(doc, profile.CategoryName);
-        if (categoryId == ElementId.InvalidElementId)
+        if (categoryId == ElementId.InvalidElementId) {
             throw new ArgumentException(
                 $"Category '{GetCategoryDisplayName(profile.CategoryName)}' not found in document");
+        }
 
         // Create schedule
         var schedule = ViewSchedule.CreateSchedule(doc, categoryId);
@@ -178,7 +179,7 @@ internal static class ScheduleHelper {
     public static List<string> GetFamiliesMatchingFilters(Document doc,
         ScheduleProfile profile,
         IEnumerable<Family>? families = null) {
-        var matchingFamilies = GetMatchingFamiliesByFilter(doc, profile, families, evaluateAllTypes: false);
+        var matchingFamilies = GetMatchingFamiliesByFilter(doc, profile, families, false);
         return matchingFamilies
             .Select(family => family.Name)
             .Distinct(StringComparer.Ordinal)
@@ -195,7 +196,7 @@ internal static class ScheduleHelper {
         ScheduleProfile profile,
         IEnumerable<Family>? families = null
     ) =>
-        GetMatchingFamiliesByFilter(doc, profile, families, evaluateAllTypes: true)
+        GetMatchingFamiliesByFilter(doc, profile, families, true)
             .Select(family => family.Id.Value())
             .Distinct()
             .ToList();
@@ -208,11 +209,12 @@ internal static class ScheduleHelper {
         if (placements.Count == 0)
             return [];
 
-        if (profile.Filters.Count == 0)
+        if (profile.Filters.Count == 0) {
             return placements
                 .Select(placement => placement.FamilyId)
                 .Distinct()
                 .ToList();
+        }
 
         var schedule = CreateMinimalFilterEvaluationSchedule(doc, profile);
         doc.Regenerate();
@@ -228,9 +230,10 @@ internal static class ScheduleHelper {
         bool evaluateAllTypes
     ) {
         var categoryId = FindCategoryId(doc, profile.CategoryName);
-        if (categoryId == ElementId.InvalidElementId)
+        if (categoryId == ElementId.InvalidElementId) {
             throw new ArgumentException(
                 $"Category '{GetCategoryDisplayName(profile.CategoryName)}' not found in document");
+        }
 
         // Get families to test
         var familiesToTest = families?.ToList() ?? new FilteredElementCollector(doc)
@@ -274,9 +277,10 @@ internal static class ScheduleHelper {
 
     internal static ViewSchedule CreateMinimalFilterEvaluationSchedule(Document doc, ScheduleProfile sourceSpec) {
         var categoryId = FindCategoryId(doc, sourceSpec.CategoryName);
-        if (categoryId == ElementId.InvalidElementId)
+        if (categoryId == ElementId.InvalidElementId) {
             throw new ArgumentException(
                 $"Category '{GetCategoryDisplayName(sourceSpec.CategoryName)}' not found in document");
+        }
 
         var schedule = ViewSchedule.CreateSchedule(doc, categoryId);
         schedule.Name = $"_TempFilterEval_{Guid.NewGuid():N}";

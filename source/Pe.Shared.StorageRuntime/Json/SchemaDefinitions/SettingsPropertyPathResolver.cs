@@ -12,15 +12,16 @@ public static class SettingsPropertyPathResolver {
 
         var expression = propertyExpression.Body;
         while (expression is UnaryExpression unaryExpression &&
-               unaryExpression.NodeType == ExpressionType.Convert) {
+               unaryExpression.NodeType == ExpressionType.Convert)
             expression = unaryExpression.Operand;
-        }
 
-        if (expression is not MemberExpression memberExpression || memberExpression.Member is not PropertyInfo property)
+        if (expression is not MemberExpression memberExpression ||
+            memberExpression.Member is not PropertyInfo property) {
             throw new ArgumentException(
                 "Schema property expressions must target a direct property.",
                 nameof(propertyExpression)
             );
+        }
 
         return property;
     }
@@ -67,9 +68,8 @@ public static class SettingsPropertyPathResolver {
             genericTypeDefinition != typeof(ICollection<>) &&
             genericTypeDefinition != typeof(IEnumerable<>) &&
             genericTypeDefinition != typeof(IReadOnlyList<>) &&
-            genericTypeDefinition != typeof(IReadOnlyCollection<>)) {
+            genericTypeDefinition != typeof(IReadOnlyCollection<>))
             return null;
-        }
 
         return unwrappedType.GetGenericArguments()[0];
     }

@@ -1,8 +1,4 @@
-﻿using Autodesk.Revit.DB;
-using Autodesk.Revit.DB.Electrical;
-using Pe.Revit.Global.PolyFill;
-using Pe.Revit.Global.Revit.Documents;
-using Pe.Revit.Global.Services.Document;
+﻿using Autodesk.Revit.DB.Electrical;
 using Pe.Shared.HostContracts.RevitData;
 
 namespace Pe.Revit.Global.Revit.Lib.Electrical;
@@ -294,13 +290,16 @@ public static class ElectricalPanelScheduleQueryCollector {
                     ElectricalCollectorSupport.SafeGet(() => schedule.GetParamValue(revitSectionType, row, column))
                 );
                 var combinedText = ElectricalCollectorSupport.NullIfWhiteSpace(
-                    ElectricalCollectorSupport.SafeGet(() => schedule.GetCombinedParamValue(revitSectionType, row, column))
+                    ElectricalCollectorSupport.SafeGet(() =>
+                        schedule.GetCombinedParamValue(revitSectionType, row, column))
                 );
                 var calculatedValueName = ElectricalCollectorSupport.NullIfWhiteSpace(
-                    ElectricalCollectorSupport.SafeGet(() => schedule.GetCalculatedValueName(revitSectionType, row, column))
+                    ElectricalCollectorSupport.SafeGet(() =>
+                        schedule.GetCalculatedValueName(revitSectionType, row, column))
                 );
                 var calculatedValueText = ElectricalCollectorSupport.NullIfWhiteSpace(
-                    ElectricalCollectorSupport.SafeGet(() => schedule.GetCalculatedValueText(revitSectionType, row, column))
+                    ElectricalCollectorSupport.SafeGet(() =>
+                        schedule.GetCalculatedValueText(revitSectionType, row, column))
                 );
                 var circuit = revitSectionType == SectionType.Body
                     ? ElectricalCollectorSupport.SafeGet(() => schedule.GetCircuitByCell(row, column))
@@ -324,7 +323,8 @@ public static class ElectricalPanelScheduleQueryCollector {
                     isBlank,
                     circuit?.Id.Value(),
                     circuit?.UniqueId,
-                    DetermineCellSourceKind(displayText, parameterText, combinedText, calculatedValueName, calculatedValueText, isBlank),
+                    DetermineCellSourceKind(displayText, parameterText, combinedText, calculatedValueName,
+                        calculatedValueText, isBlank),
                     parameterText,
                     combinedText,
                     calculatedValueName,

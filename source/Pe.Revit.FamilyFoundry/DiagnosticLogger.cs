@@ -11,7 +11,7 @@ namespace Pe.Revit.FamilyFoundry;
 public class DiagnosticLogger : IDisposable {
     private readonly object _lock = new();
     private readonly string _logFilePath;
-    private StreamWriter _writer;
+    private StreamWriter? _writer;
 
     public DiagnosticLogger(string outputDirectory, string familyName) {
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");

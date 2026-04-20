@@ -11,10 +11,10 @@ namespace Pe.Revit.Global.Revit.Ui;
 /// </summary>
 public class ShortcutsService {
     private static readonly Lazy<ShortcutsService> _instance = new(() => new ShortcutsService());
-    private string _cachedFilePath;
+    private string? _cachedFilePath;
 
     private DateTime _lastFileModified;
-    private Dictionary<string, ShortcutInfo> _shortcuts;
+    private Dictionary<string, ShortcutInfo>? _shortcuts;
     private bool _uiFrameworkCommandsLoaded;
 
     private ShortcutsService() { }
@@ -262,7 +262,8 @@ public class ShortcutsService {
         var shortcuts = new Dictionary<string, ShortcutInfo>(StringComparer.OrdinalIgnoreCase);
         var (filePath, pathErr) = this.GetShortcutsFilePath();
 
-        if (pathErr is not null) return shortcuts;
+        if (pathErr is not null || string.IsNullOrEmpty(filePath))
+            return shortcuts;
 
         try {
             var doc = XDocument.Load(filePath);
@@ -298,7 +299,7 @@ public class ShortcutsService {
     /// <summary>
     ///     Parses the shortcuts attribute into a list of shortcut strings.
     /// </summary>
-    private static List<string> ParseShortcutString(string shortcutsAttr) =>
+    private static List<string> ParseShortcutString(string? shortcutsAttr) =>
         string.IsNullOrEmpty(shortcutsAttr)
             ? []
             : shortcutsAttr.Split('#').Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
@@ -306,7 +307,7 @@ public class ShortcutsService {
     /// <summary>
     ///     Parses the paths attribute into a list of path strings.
     /// </summary>
-    private static List<string> ParsePathsString(string pathsAttr) =>
+    private static List<string> ParsePathsString(string? pathsAttr) =>
         string.IsNullOrEmpty(pathsAttr)
             ? []
             : pathsAttr
@@ -340,8 +341,8 @@ public class ShortcutsService {
 ///     Represents keyboard shortcut information for a command.
 /// </summary>
 public class ShortcutInfo {
-    public string CommandId { get; set; }
-    public string CommandName { get; set; }
+    public required string CommandId { get; set; }
+    public required string CommandName { get; set; }
     public List<string> Shortcuts { get; set; } = [];
     public List<string> Paths { get; set; } = [];
 }

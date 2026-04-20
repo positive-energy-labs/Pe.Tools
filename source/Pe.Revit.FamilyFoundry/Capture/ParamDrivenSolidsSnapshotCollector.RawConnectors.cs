@@ -1,6 +1,5 @@
 using Autodesk.Revit.DB.Electrical;
 using Autodesk.Revit.DB.Mechanical;
-using Autodesk.Revit.DB.Plumbing;
 using Pe.Revit.FamilyFoundry.Helpers;
 
 namespace Pe.Revit.FamilyFoundry.Capture;
@@ -18,7 +17,8 @@ public partial class ParamDrivenSolidsSnapshotCollector {
 
         var connectorNames = authored.Connectors
             .Where(spec => !string.IsNullOrWhiteSpace(spec.Name))
-            .Select(spec => spec.Name.Trim())
+            .Select(spec => spec.Name?.Trim())
+            .OfType<string>()
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var planeNames = CollectPublishedPlaneNames(authored);
         var stubMatches = RawConnectorUnitInference.MatchOwnedStubs(doc);
@@ -36,7 +36,8 @@ public partial class ParamDrivenSolidsSnapshotCollector {
 
         foreach (var rawConnector in rawConnectors) {
             stubMatches.TryGetValue(rawConnector.Id, out var stubMatch);
-            var inferred = TryInferRawConnector(doc, rawConnector, stubMatch, referencePlanes, anchors, authored.Planes, planeNames, connectorNames);
+            var inferred = TryInferRawConnector(doc, rawConnector, stubMatch, referencePlanes, anchors, authored.Planes,
+                planeNames, connectorNames);
             if (inferred == null)
                 continue;
 
@@ -51,9 +52,8 @@ public partial class ParamDrivenSolidsSnapshotCollector {
         if (left.Domain != right.Domain ||
             !string.Equals(left.Face, right.Face, StringComparison.Ordinal) ||
             !string.Equals(left.Depth.By, right.Depth.By, StringComparison.Ordinal) ||
-            !string.Equals(left.Depth.Dir, right.Depth.Dir, StringComparison.OrdinalIgnoreCase)) {
+            !string.Equals(left.Depth.Dir, right.Depth.Dir, StringComparison.OrdinalIgnoreCase))
             return false;
-        }
 
         if (left.Round != null && right.Round != null) {
             return HaveSamePlaneRefs(left.Round.Center, right.Round.Center) &&
@@ -101,9 +101,8 @@ public partial class ParamDrivenSolidsSnapshotCollector {
         var centerAxes = RawConnectorUnitInference.GetPerpendicularAxes(faceAxis);
         if (!anchors.ContainsKey(faceAxis) ||
             !anchors.ContainsKey(centerAxes[0]) ||
-            !anchors.ContainsKey(centerAxes[1])) {
+            !anchors.ContainsKey(centerAxes[1]))
             return null;
-        }
 
         var hostNormal = anchors[faceAxis].Plane.Normal.Normalize();
         var name = CreateUniqueName(GetBaseConnectorName(connector, domain), connectorNames);
@@ -111,20 +110,23 @@ public partial class ParamDrivenSolidsSnapshotCollector {
         var depthBy = DefaultInferredConnectorDepth;
         var depthDir = normal.DotProduct(hostNormal) >= 0.0 ? "out" : "in";
         if (stubMatch != null &&
-            TryResolveStubPlacement(doc, connector, stubMatch, anchors[faceAxis].Plane, faceAxis, out var resolvedFacePoint, out var resolvedDepthBy, out var resolvedDepthDir)) {
+            TryResolveStubPlacement(doc, connector, stubMatch, anchors[faceAxis].Plane, faceAxis,
+                out var resolvedFacePoint, out var resolvedDepthBy, out var resolvedDepthDir)) {
             facePoint = resolvedFacePoint;
             depthBy = resolvedDepthBy;
             depthDir = resolvedDepthDir;
         }
 
-        var faceRef = ResolvePointPlaneRef($"{name} Face", facePoint, faceAxis, false, referencePlanes, anchors, planes, planeNames);
-        var center1Ref = ResolvePointPlaneRef($"{name} Center 1", connector.Origin, centerAxes[0], true, referencePlanes, anchors, planes, planeNames);
-        var center2Ref = ResolvePointPlaneRef($"{name} Center 2", connector.Origin, centerAxes[1], true, referencePlanes, anchors, planes, planeNames);
+        var faceRef = ResolvePointPlaneRef($"{name} Face", facePoint, faceAxis, false, referencePlanes, anchors, planes,
+            planeNames);
+        var center1Ref = ResolvePointPlaneRef($"{name} Center 1", connector.Origin, centerAxes[0], true,
+            referencePlanes, anchors, planes, planeNames);
+        var center2Ref = ResolvePointPlaneRef($"{name} Center 2", connector.Origin, centerAxes[1], true,
+            referencePlanes, anchors, planes, planeNames);
         if (string.IsNullOrWhiteSpace(faceRef) ||
             string.IsNullOrWhiteSpace(center1Ref) ||
-            string.IsNullOrWhiteSpace(center2Ref)) {
+            string.IsNullOrWhiteSpace(center2Ref))
             return null;
-        }
 
         var config = BuildConfig(connector, domain);
 
@@ -140,7 +142,8 @@ public partial class ParamDrivenSolidsSnapshotCollector {
                 Round = new AuthoredRoundConnectorGeometrySpec {
                     Center = [center1Ref, center2Ref],
                     Diameter = new AuthoredMeasureSpec {
-                        By = GetAssociatedOrLiteralMeasure(doc, connector, BuiltInParameter.CONNECTOR_DIAMETER, diameter)
+                        By = GetAssociatedOrLiteralMeasure(doc, connector, BuiltInParameter.CONNECTOR_DIAMETER,
+                            diameter)
                     }
                 },
                 Config = config
@@ -168,7 +171,8 @@ public partial class ParamDrivenSolidsSnapshotCollector {
 
         var widthAboutRef = center1Ref;
         var lengthAboutRef = center2Ref;
-        if (RawConnectorUnitInference.TryConnectorWidthUsesFirstAxis(connector, centerAxes[0], centerAxes[1], out var widthUsesCenter1Axis) &&
+        if (RawConnectorUnitInference.TryConnectorWidthUsesFirstAxis(connector, centerAxes[0], centerAxes[1],
+                out var widthUsesCenter1Axis) &&
             !widthUsesCenter1Axis) {
             widthAboutRef = center2Ref;
             lengthAboutRef = center1Ref;
@@ -203,9 +207,9 @@ public partial class ParamDrivenSolidsSnapshotCollector {
         var parameter = element.get_Parameter(builtInParameter);
         if (parameter != null &&
             doc.IsFamilyDocument &&
-            doc.FamilyManager.GetAssociatedFamilyParameter(parameter)?.Definition?.Name is { Length: > 0 } familyParameterName) {
+            doc.FamilyManager.GetAssociatedFamilyParameter(parameter)?.Definition?.Name is
+                { Length: > 0 } familyParameterName)
             return ToAuthoredLength(familyParameterName);
-        }
 
         return ToAuthoredLiteral(literalValue);
     }
@@ -217,26 +221,32 @@ public partial class ParamDrivenSolidsSnapshotCollector {
         if (domain == ParamDrivenConnectorDomain.Duct) {
             return new AuthoredConnectorConfigSpec {
                 SystemType = connector.SystemClassification.ToString(),
-                FlowConfiguration = ((DuctFlowConfigurationType)(connector.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_CONFIGURATION_PARAM)?.AsInteger()
-                                                                     ?? (int)DuctFlowConfigurationType.Preset)).ToString(),
-                FlowDirection = ((FlowDirectionType)(connector.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_DIRECTION_PARAM)?.AsInteger()
-                                                          ?? (int)FlowDirectionType.Bidirectional)).ToString(),
-                LossMethod = ((DuctLossMethodType)(connector.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_PARAM)?.AsInteger()
-                                                       ?? (int)DuctLossMethodType.NotDefined)).ToString()
+                FlowConfiguration =
+                    ((DuctFlowConfigurationType)(connector.get_Parameter(BuiltInParameter
+                                                     .RBS_DUCT_FLOW_CONFIGURATION_PARAM)?.AsInteger()
+                                                 ?? (int)DuctFlowConfigurationType.Preset)).ToString(),
+                FlowDirection =
+                    ((FlowDirectionType)(connector.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_DIRECTION_PARAM)
+                                             ?.AsInteger()
+                                         ?? (int)FlowDirectionType.Bidirectional)).ToString(),
+                LossMethod =
+                    ((DuctLossMethodType)(connector.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_PARAM)
+                                              ?.AsInteger()
+                                          ?? (int)DuctLossMethodType.NotDefined)).ToString()
             };
         }
 
         if (domain == ParamDrivenConnectorDomain.Pipe) {
             return new AuthoredConnectorConfigSpec {
                 SystemType = connector.SystemClassification.ToString(),
-                FlowDirection = ((FlowDirectionType)(connector.get_Parameter(BuiltInParameter.RBS_PIPE_FLOW_DIRECTION_PARAM)?.AsInteger()
-                                                          ?? (int)FlowDirectionType.Bidirectional)).ToString()
+                FlowDirection =
+                    ((FlowDirectionType)(connector.get_Parameter(BuiltInParameter.RBS_PIPE_FLOW_DIRECTION_PARAM)
+                                             ?.AsInteger()
+                                         ?? (int)FlowDirectionType.Bidirectional)).ToString()
             };
         }
 
-        return new AuthoredConnectorConfigSpec {
-            SystemType = ElectricalSystemType.PowerBalanced.ToString()
-        };
+        return new AuthoredConnectorConfigSpec { SystemType = ElectricalSystemType.PowerBalanced.ToString() };
     }
 
     private static string GetBaseConnectorName(ConnectorElement connector, ParamDrivenConnectorDomain domain) {
@@ -268,7 +278,8 @@ public partial class ParamDrivenSolidsSnapshotCollector {
         var exactMatch = referencePlanes
             .Where(plane => RawConnectorUnitInference.TryGetAxis(plane.Normal, out var planeAxis) &&
                             planeAxis == axis &&
-                            Math.Abs(SignedDistanceToPlaneAlongNormal(point, plane.BubbleEnd, plane.Normal.Normalize())) <= ConnectorPlaneTolerance)
+                            Math.Abs(SignedDistanceToPlaneAlongNormal(point, plane.BubbleEnd,
+                                plane.Normal.Normalize())) <= ConnectorPlaneTolerance)
             .OrderBy(plane => RankConnectorPlaneName(plane.Name, preferCenterPlanes))
             .ThenBy(plane => plane.Name, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
@@ -293,8 +304,10 @@ public partial class ParamDrivenSolidsSnapshotCollector {
         if (string.IsNullOrWhiteSpace(normalized))
             return false;
 
-        if (BuiltInPlaneRefs.TryGetValue(normalized, out planeRef))
+        if (BuiltInPlaneRefs.TryGetValue(normalized, out var builtInPlaneRef)) {
+            planeRef = builtInPlaneRef;
             return true;
+        }
 
         if (!planeNames.Contains(normalized))
             return false;
@@ -387,10 +400,13 @@ public partial class ParamDrivenSolidsSnapshotCollector {
 
         facePoint = ReplaceAxisCoordinate(connector.Origin, faceAxis, baseCoord);
         var baseSigned = SignedDistanceToPlane(facePoint, anchorPlane);
-        var terminalSigned = SignedDistanceToPlane(ReplaceAxisCoordinate(connector.Origin, faceAxis, resolvedTerminalCoord), anchorPlane);
+        var terminalSigned =
+            SignedDistanceToPlane(ReplaceAxisCoordinate(connector.Origin, faceAxis, resolvedTerminalCoord),
+                anchorPlane);
         depthDir = terminalSigned >= baseSigned ? "out" : "in";
         depthBy = Math.Abs(baseSigned) <= AuthoredOffsetTolerance
-            ? GetAssociatedOrLiteralMeasure(doc, stubMatch.Extrusion, BuiltInParameter.EXTRUSION_END_PARAM, depthMagnitude)
+            ? GetAssociatedOrLiteralMeasure(doc, stubMatch.Extrusion, BuiltInParameter.EXTRUSION_END_PARAM,
+                depthMagnitude)
             : ToAuthoredLiteral(depthMagnitude);
         return true;
     }

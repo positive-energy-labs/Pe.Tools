@@ -36,6 +36,7 @@ public class CoerceByStorageType : ICoercionStrategy {
     }
 
     public Result<FamilyParameter> Map(CoercionContext context) {
+        var sourceValueText = context.SourceValue?.ToString() ?? string.Empty;
         var convertedValue = (context.SourceStorageType, context.TargetStorageType) switch {
             // Same type - no conversion needed
             _ when context.SourceStorageType == context.TargetStorageType => context.SourceValue,
@@ -47,10 +48,10 @@ public class CoerceByStorageType : ICoercionStrategy {
                 context.SourceValue as int? ?? 0, context.TargetUnitType),
 
             // Safe to simply .ToString() on the integerParam's value
-            (StorageType.Integer, StorageType.String) => context.SourceValue.ToString(),
+            (StorageType.Integer, StorageType.String) => sourceValueText,
 
             // Try to use the SourceValueString if it is available, otherwise fall back to ToString()
-            (StorageType.Double, StorageType.String) => context.SourceValueString ?? context.SourceValue.ToString(),
+            (StorageType.Double, StorageType.String) => context.SourceValueString ?? sourceValueText,
 
             // Set to integer by extracting integer from the doubleParam's "value string"
             (StorageType.Double, StorageType.Integer) =>
@@ -58,9 +59,9 @@ public class CoerceByStorageType : ICoercionStrategy {
 
             // Set to integer by extracting integer from the stringParam's value
             (StorageType.String, StorageType.Integer) =>
-                Regexes.TryExtractInteger(context.SourceValue.ToString() ?? string.Empty, out var integer)
+                Regexes.TryExtractInteger(sourceValueText, out var integer)
                     ? integer
-                    : ParseStringToYesNo(context.SourceValue.ToString() ?? string.Empty),
+                    : ParseStringToYesNo(sourceValueText),
 
             // Set to double by parsing string - uses Revit's parser for measurable specs (imperial notation)
             (StorageType.String, StorageType.Double) =>
@@ -160,6 +161,7 @@ public class CoerceByStorageType : ICoercionStrategy {
                     out _
                 );
             }
+
             Console.WriteLine(
                 $"[CoerceByStorageType.CanParseStringToDouble] UnitFormatUtils.TryParse result={parseResult}");
             return parseResult;
@@ -176,7 +178,7 @@ public class CoerceByStorageType : ICoercionStrategy {
     ///     falls back to regex extraction for plain numbers.
     /// </summary>
     private static double ParseStringToDouble(CoercionContext context) {
-        var stringValue = context.SourceValue.ToString() ?? string.Empty;
+        var stringValue = context.SourceValue?.ToString() ?? string.Empty;
         var dataType = context.TargetDataType;
 
         // SpecTypeId.Number is reported as "measurable" by Revit but has no units,

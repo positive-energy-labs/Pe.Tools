@@ -1,6 +1,5 @@
 ﻿using ModularPipelines.Attributes;
 using ModularPipelines.Context;
-using ModularPipelines.GitHub.Extensions;
 using ModularPipelines.Modules;
 using System.Text;
 

@@ -1,5 +1,4 @@
-﻿using Autodesk.Revit.DB;
-namespace Pe.Revit.FamilyFoundry.Helpers;
+﻿namespace Pe.Revit.FamilyFoundry.Helpers;
 
 internal static partial class RawConnectorUnitInference {
     private const double AxisAlignmentTolerance = 0.95;
@@ -157,7 +156,7 @@ internal static partial class RawConnectorUnitInference {
             _ => double.MaxValue
         };
 
-        var score = planeDistance * 1000.0 + sizeScore + inPlaneDistance;
+        var score = (planeDistance * 1000.0) + sizeScore + inPlaneDistance;
         return new ScoredStubMatch(
             score,
             new RawConnectorStubMatch(

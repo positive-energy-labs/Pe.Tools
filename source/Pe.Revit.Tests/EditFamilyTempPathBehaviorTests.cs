@@ -7,21 +7,25 @@ public sealed class EditFamilyTempPathBehaviorTests {
     private const string ProbeParameterName = "_PE_EditFamily_TempPath_Probe";
 
     [Test]
-    public void EditFamily_reuses_the_dirty_open_family_document_backed_by_the_loaded_family_path(UIApplication uiApplication) {
+    public void EditFamily_reuses_the_dirty_open_family_document_backed_by_the_loaded_family_path(
+        UIApplication uiApplication) {
         var application = uiApplication.Application;
-        var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(EditFamily_reuses_the_dirty_open_family_document_backed_by_the_loaded_family_path));
+        var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
+            nameof(this.EditFamily_reuses_the_dirty_open_family_document_backed_by_the_loaded_family_path));
         var projectDocument = RevitFamilyFixtureHarness.CreateProjectDocument(application);
         var authoringFamilyDocument = RevitFamilyFixtureHarness.CreateFamilyDocument(
             application,
             BuiltInCategory.OST_GenericModel,
-            nameof(EditFamily_reuses_the_dirty_open_family_document_backed_by_the_loaded_family_path));
+            nameof(this.EditFamily_reuses_the_dirty_open_family_document_backed_by_the_loaded_family_path));
 
         Document? editedFamilyDocument = null;
         Document? reopenedEditedFamilyDocument = null;
 
         try {
-            var savedFamilyPath = RevitFamilyFixtureHarness.SaveDocumentCopy(authoringFamilyDocument, outputDirectory, "loaded-family");
-            var loadedFamily = RevitFamilyFixtureHarness.LoadFamilyIntoProject(application, projectDocument, savedFamilyPath);
+            var savedFamilyPath =
+                RevitFamilyFixtureHarness.SaveDocumentCopy(authoringFamilyDocument, outputDirectory, "loaded-family");
+            var loadedFamily =
+                RevitFamilyFixtureHarness.LoadFamilyIntoProject(application, projectDocument, savedFamilyPath);
 
             editedFamilyDocument = projectDocument.EditFamily(loadedFamily);
             using (var transaction = new Transaction(editedFamilyDocument, "Add probe parameter")) {
@@ -32,7 +36,7 @@ public sealed class EditFamilyTempPathBehaviorTests {
                         ProbeParameterName,
                         SpecTypeId.String.Text,
                         GroupTypeId.IdentityData,
-                        IsInstance: false));
+                        false));
                 _ = transaction.Commit();
             }
 
@@ -46,7 +50,8 @@ public sealed class EditFamilyTempPathBehaviorTests {
                 Assert.That(editedFamilyDocument.GetDocumentPath(), Is.EqualTo(savedFamilyPath));
                 Assert.That(editedFamilyDocument.GetDocumentKey(), Is.EqualTo($"family:path:{savedFamilyPath}"));
                 Assert.That(reopenedEditedFamilyDocument.PathName, Is.EqualTo(savedFamilyPath));
-                Assert.That(reopenedEditedFamilyDocument.GetDocumentKey(), Is.EqualTo(editedFamilyDocument.GetDocumentKey()));
+                Assert.That(reopenedEditedFamilyDocument.GetDocumentKey(),
+                    Is.EqualTo(editedFamilyDocument.GetDocumentKey()));
                 Assert.That(
                     RevitFamilyFixtureHarness.CollectFamilyParameterProbes(reopenedEditedFamilyDocument)
                         .Any(probe => string.Equals(probe.Name, ProbeParameterName, StringComparison.Ordinal)),
@@ -61,21 +66,28 @@ public sealed class EditFamilyTempPathBehaviorTests {
     }
 
     [Test]
-    public void Saving_an_edited_family_to_a_temp_path_causes_subsequent_EditFamily_calls_to_open_a_distinct_family_document_for_the_original_loaded_path(UIApplication uiApplication) {
+    public void
+        Saving_an_edited_family_to_a_temp_path_causes_subsequent_EditFamily_calls_to_open_a_distinct_family_document_for_the_original_loaded_path(
+            UIApplication uiApplication) {
         var application = uiApplication.Application;
-        var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(nameof(Saving_an_edited_family_to_a_temp_path_causes_subsequent_EditFamily_calls_to_open_a_distinct_family_document_for_the_original_loaded_path));
+        var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
+            nameof(this
+                .Saving_an_edited_family_to_a_temp_path_causes_subsequent_EditFamily_calls_to_open_a_distinct_family_document_for_the_original_loaded_path));
         var projectDocument = RevitFamilyFixtureHarness.CreateProjectDocument(application);
         var authoringFamilyDocument = RevitFamilyFixtureHarness.CreateFamilyDocument(
             application,
             BuiltInCategory.OST_GenericModel,
-            nameof(Saving_an_edited_family_to_a_temp_path_causes_subsequent_EditFamily_calls_to_open_a_distinct_family_document_for_the_original_loaded_path));
+            nameof(this
+                .Saving_an_edited_family_to_a_temp_path_causes_subsequent_EditFamily_calls_to_open_a_distinct_family_document_for_the_original_loaded_path));
 
         Document? editedFamilyDocument = null;
         Document? reopenedProjectFamilyDocument = null;
 
         try {
-            var savedFamilyPath = RevitFamilyFixtureHarness.SaveDocumentCopy(authoringFamilyDocument, outputDirectory, "loaded-family");
-            var loadedFamily = RevitFamilyFixtureHarness.LoadFamilyIntoProject(application, projectDocument, savedFamilyPath);
+            var savedFamilyPath =
+                RevitFamilyFixtureHarness.SaveDocumentCopy(authoringFamilyDocument, outputDirectory, "loaded-family");
+            var loadedFamily =
+                RevitFamilyFixtureHarness.LoadFamilyIntoProject(application, projectDocument, savedFamilyPath);
 
             editedFamilyDocument = projectDocument.EditFamily(loadedFamily);
             using (var transaction = new Transaction(editedFamilyDocument, "Add probe parameter")) {
@@ -86,11 +98,12 @@ public sealed class EditFamilyTempPathBehaviorTests {
                         ProbeParameterName,
                         SpecTypeId.String.Text,
                         GroupTypeId.IdentityData,
-                        IsInstance: false));
+                        false));
                 _ = transaction.Commit();
             }
 
-            var tempSavedFamilyPath = RevitFamilyFixtureHarness.SaveDocumentCopy(editedFamilyDocument, outputDirectory, "temp-saved-family");
+            var tempSavedFamilyPath =
+                RevitFamilyFixtureHarness.SaveDocumentCopy(editedFamilyDocument, outputDirectory, "temp-saved-family");
             reopenedProjectFamilyDocument = projectDocument.EditFamily(loadedFamily);
             var openFamilyDocuments = application.Documents.Cast<Document>()
                 .Where(document => document.IsFamilyDocument)
@@ -109,8 +122,10 @@ public sealed class EditFamilyTempPathBehaviorTests {
 
                 Assert.That(openFamilyDocuments, Has.Count.EqualTo(2));
                 Assert.That(reopenedProjectFamilyDocument.PathName, Is.EqualTo(savedFamilyPath));
-                Assert.That(reopenedProjectFamilyDocument.GetDocumentKey(), Is.EqualTo($"family:path:{savedFamilyPath}"));
-                Assert.That(reopenedProjectFamilyDocument.GetDocumentKey(), Is.Not.EqualTo(editedFamilyDocument.GetDocumentKey()));
+                Assert.That(reopenedProjectFamilyDocument.GetDocumentKey(),
+                    Is.EqualTo($"family:path:{savedFamilyPath}"));
+                Assert.That(reopenedProjectFamilyDocument.GetDocumentKey(),
+                    Is.Not.EqualTo(editedFamilyDocument.GetDocumentKey()));
                 Assert.That(
                     RevitFamilyFixtureHarness.CollectFamilyParameterProbes(reopenedProjectFamilyDocument)
                         .Any(probe => string.Equals(probe.Name, ProbeParameterName, StringComparison.Ordinal)),
@@ -126,8 +141,7 @@ public sealed class EditFamilyTempPathBehaviorTests {
     private static void CloseAllFamilyDocuments(Application application) {
         foreach (var familyDocument in application.Documents.Cast<Document>()
                      .Where(document => document.IsFamilyDocument)
-                     .ToList()) {
+                     .ToList())
             RevitFamilyFixtureHarness.CloseDocument(familyDocument);
-        }
     }
 }

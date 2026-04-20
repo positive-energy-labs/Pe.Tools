@@ -1,4 +1,3 @@
-using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.Global;
 
 namespace Pe.Revit.FamilyFoundry;
@@ -63,19 +62,20 @@ public class OperationContext {
 ///     Context for a single family's processing run. Properties populated by pipeline and immutable after completion.
 /// </summary>
 public class FamilyProcessingContext {
-    public string FamilyName { get; init; }
+    public string FamilyName { get; init; } = string.Empty;
 
     /// <summary>Artifact manifest generated for this family run, when output writing is enabled.</summary>
     public FamilyArtifactManifest? Artifacts { get; internal set; }
 
     /// <summary>Snapshot collected before processing.</summary>
-    public FamilySnapshot PreProcessSnapshot { get; internal set; }
+    public FamilySnapshot? PreProcessSnapshot { get; internal set; }
 
     /// <summary>Snapshot collected after processing.</summary>
-    public FamilySnapshot PostProcessSnapshot { get; internal set; }
+    public FamilySnapshot? PostProcessSnapshot { get; internal set; }
 
     /// <summary>Operation logs from processing, or an error if processing failed.</summary>
-    public Result<List<OperationLog>> OperationLogs { get; internal set; }
+    public Result<List<OperationLog>> OperationLogs { get; internal set; } =
+        new InvalidOperationException("Operation logs have not been initialized.");
 
     /// <summary>Total processing time in milliseconds.</summary>
     public double TotalMs { get; internal set; }
@@ -94,7 +94,7 @@ public class FamilyProcessingContext {
 
 
     /// <summary>Finds a parameter snapshot in the pre-process snapshot by name.</summary>
-    public ParameterSnapshot FindParameterSnapshot(string paramName) {
+    public ParameterSnapshot? FindParameterSnapshot(string paramName) {
         var parameters = this.PreProcessSnapshot?.Parameters?.Data;
         if (parameters is null || parameters.Count == 0)
             return null;
@@ -106,8 +106,10 @@ public class FamilyProcessingContext {
     }
 
     /// <summary>Gets the list of family types that have a value for the specified parameter.</summary>
-    public List<string> GetTypesWithValue(string paramName) => this.FindParameterSnapshot(paramName).GetTypesWithValue();
+    public List<string> GetTypesWithValue(string paramName) =>
+        this.FindParameterSnapshot(paramName)?.GetTypesWithValue() ?? [];
 
     /// <summary>Checks if a parameter has a (non-empty) value for all family types.</summary>
-    public bool HasValueForAllTypes(string paramName) => this.FindParameterSnapshot(paramName).HasValueForAllTypes();
+    public bool HasValueForAllTypes(string paramName) =>
+        this.FindParameterSnapshot(paramName)?.HasValueForAllTypes() == true;
 }

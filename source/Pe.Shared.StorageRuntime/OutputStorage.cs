@@ -5,9 +5,8 @@ namespace Pe.Shared.StorageRuntime;
 public sealed class OutputStorage {
     private const string DefaultName = "output";
 
-    public OutputStorage(string parentDirectoryPath, string? subdirectory = null) {
-        this.DirectoryPath = ResolveDirectoryPath(parentDirectoryPath, subdirectory ?? DefaultName);
-    }
+    public OutputStorage(string parentDirectoryPath, string? subdirectory = null) => this.DirectoryPath =
+        ResolveDirectoryPath(parentDirectoryPath, subdirectory ?? DefaultName);
 
     public string DirectoryPath { get; }
 

@@ -37,9 +37,7 @@ internal static class ViewTabConfig {
                 "Views",
                 () => ViewActions.CollectViews(doc, sheetCache),
                 commonActions
-            ) {
-                FilterKeySelector = i => i.TextPill
-            },
+            ) { FilterKeySelector = i => i.TextPill },
             new TabDefinition<UnifiedViewItem>(
                 "Schedules",
                 () => ViewActions.CollectSchedules(doc, sheetCache),
@@ -52,9 +50,7 @@ internal static class ViewTabConfig {
                 "Sheets",
                 () => ViewActions.CollectSheets(doc, sheetCache),
                 commonActions
-            ) {
-                FilterKeySelector = i => i.TextPill
-            }
+            ) { FilterKeySelector = i => i.TextPill }
         ];
     }
 }

@@ -1,6 +1,5 @@
 using Autodesk.Revit.UI;
 using Pe.Revit.Ui.Core;
-using System.Threading.Tasks;
 using System.Windows.Input;
 
 namespace Pe.App.Commands.Palette.FamilyPalette;
@@ -40,9 +39,7 @@ internal static class FamilyTabConfig {
                 },
                 OpenAndEditAction(),
                 SnoopAction(doc)
-            ) {
-                FilterKeySelector = i => i.TextPill
-            },
+            ) { FilterKeySelector = i => i.TextPill ?? string.Empty },
             new("Family Types", () => FamilyActions.CollectFamilyTypes(doc, uidoc, instancesOptions),
                 new PaletteAction<UnifiedFamilyItem> {
                     Name = "Place",
@@ -61,9 +58,7 @@ internal static class FamilyTabConfig {
                 },
                 OpenAndEditAction(),
                 SnoopAction(doc)
-            ) {
-                FilterKeySelector = i => i.TextSecondary
-            },
+            ) { FilterKeySelector = i => i.TextSecondary },
             new("Family Instances", () => FamilyActions.CollectFamilyInstances(doc, uidoc, instancesOptions),
                 new PaletteAction<UnifiedFamilyItem> {
                     Name = "Zoom To",
@@ -74,16 +69,14 @@ internal static class FamilyTabConfig {
                 },
                 OpenAndEditAction(),
                 SnoopAction(doc)
-            ) {
-                FilterKeySelector = i => i.TextPrimary
-            }
+            ) { FilterKeySelector = i => i.TextPrimary }
         };
 
         return (tabs, instancesOptions);
     }
 
     private static PaletteAction<UnifiedFamilyItem> OpenAndEditAction() =>
-        new PaletteAction<UnifiedFamilyItem> {
+        new() {
             Name = "Open/Edit",
             Modifiers = ModifierKeys.Control,
             Execute = item => {
@@ -94,7 +87,7 @@ internal static class FamilyTabConfig {
         };
 
     private static PaletteAction<UnifiedFamilyItem> SnoopAction(Document doc) =>
-        new PaletteAction<UnifiedFamilyItem> {
+        new() {
             Name = "Snoop",
             Modifiers = ModifierKeys.Alt,
             Execute = item => {
@@ -102,5 +95,4 @@ internal static class FamilyTabConfig {
                 return Task.CompletedTask;
             }
         };
-
 }

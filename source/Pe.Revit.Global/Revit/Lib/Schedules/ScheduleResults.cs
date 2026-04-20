@@ -1,9 +1,9 @@
 namespace Pe.Revit.Global.Revit.Lib.Schedules;
 
 public class ScheduleCreationResult {
-    public ViewSchedule Schedule { get; init; }
-    public string ScheduleName { get; init; }
-    public string CategoryName { get; init; }
+    public required ViewSchedule Schedule { get; init; }
+    public string ScheduleName { get; init; } = string.Empty;
+    public string CategoryName { get; init; } = string.Empty;
     public bool IsItemized { get; init; }
     public bool FilterBySheetApplied { get; set; }
     public string? FilterBySheetSkipped { get; set; }
@@ -28,8 +28,8 @@ public class ScheduleCreationResult {
 }
 
 public class AppliedFieldInfo {
-    public string ParameterName { get; init; }
-    public string ColumnHeaderOverride { get; init; }
+    public string ParameterName { get; init; } = string.Empty;
+    public string ColumnHeaderOverride { get; init; } = string.Empty;
     public bool IsHidden { get; init; }
     public double? ColumnWidth { get; init; }
     public ScheduleFieldDisplayType DisplayType { get; init; }
@@ -37,7 +37,7 @@ public class AppliedFieldInfo {
 }
 
 public class AppliedSortGroupInfo {
-    public string FieldName { get; init; }
+    public string FieldName { get; init; } = string.Empty;
     public ScheduleSortOrder SortOrder { get; init; }
     public bool ShowHeader { get; init; }
     public bool ShowFooter { get; init; }
@@ -45,15 +45,15 @@ public class AppliedSortGroupInfo {
 }
 
 public class AppliedFilterInfo {
-    public string FieldName { get; init; }
+    public string FieldName { get; init; } = string.Empty;
     public ScheduleFilterType FilterType { get; init; }
-    public string Value { get; init; }
-    public string StorageType { get; init; }
+    public string Value { get; init; } = string.Empty;
+    public string StorageType { get; init; } = string.Empty;
 }
 
 public record CalculatedFieldGuidance {
-    public string FieldName { get; init; }
-    public string CalculatedType { get; init; }
+    public string FieldName { get; init; } = string.Empty;
+    public string CalculatedType { get; init; } = string.Empty;
     public string? Guidance { get; init; }
     public string? PercentageOfField { get; init; }
 }

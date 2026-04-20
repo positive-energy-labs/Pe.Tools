@@ -9,7 +9,6 @@ using Pe.Shared.StorageRuntime.Context;
 using Pe.Shared.StorageRuntime.Json.FieldOptions;
 using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 using Pe.Shared.StorageRuntime.Json.SchemaProcessors;
-using Pe.Shared.StorageRuntime.PolyFill;
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Reflection;
@@ -164,21 +163,19 @@ public static class JsonSchemaFactory {
 
     private static void NormalizeCustomUnionWrappers(JToken token) {
         switch (token) {
-            case JObject obj:
-                if (ShouldRelaxAdditionalProperties(obj)) {
-                    _ = obj.Remove("additionalProperties");
-                }
+        case JObject obj:
+            if (ShouldRelaxAdditionalProperties(obj)) _ = obj.Remove("additionalProperties");
 
-                foreach (var property in obj.Properties().ToArray())
-                    NormalizeCustomUnionWrappers(property.Value);
+            foreach (var property in obj.Properties().ToArray())
+                NormalizeCustomUnionWrappers(property.Value);
 
-                break;
+            break;
 
-            case JArray array:
-                foreach (var item in array)
-                    NormalizeCustomUnionWrappers(item);
+        case JArray array:
+            foreach (var item in array)
+                NormalizeCustomUnionWrappers(item);
 
-                break;
+            break;
         }
     }
 
@@ -202,8 +199,6 @@ public static class JsonSchemaFactory {
     }
 
     private sealed class SyntheticPropertyInfo(Type propertyType) : PropertyInfo {
-        public static SyntheticPropertyInfo Create(Type propertyType) => new(propertyType);
-
         public override Type PropertyType { get; } = propertyType;
         public override PropertyAttributes Attributes => PropertyAttributes.None;
         public override bool CanRead => false;
@@ -211,6 +206,7 @@ public static class JsonSchemaFactory {
         public override string Name => propertyType.Name;
         public override Type DeclaringType => propertyType;
         public override Type ReflectedType => propertyType;
+        public static SyntheticPropertyInfo Create(Type propertyType) => new(propertyType);
 
         public override MethodInfo[] GetAccessors(bool nonPublic) => [];
         public override MethodInfo? GetGetMethod(bool nonPublic) => null;
@@ -220,6 +216,7 @@ public static class JsonSchemaFactory {
         public override object[] GetCustomAttributes(Type attributeType, bool inherit) => [];
         public override bool IsDefined(Type attributeType, bool inherit) => false;
         public override object? GetValue(object? obj, object?[]? index) => throw new NotSupportedException();
+
         public override object? GetValue(
             object? obj,
             BindingFlags invokeAttr,
@@ -227,7 +224,10 @@ public static class JsonSchemaFactory {
             object?[]? index,
             CultureInfo? culture
         ) => throw new NotSupportedException();
-        public override void SetValue(object? obj, object? value, object?[]? index) => throw new NotSupportedException();
+
+        public override void SetValue(object? obj, object? value, object?[]? index) =>
+            throw new NotSupportedException();
+
         public override void SetValue(
             object? obj,
             object? value,

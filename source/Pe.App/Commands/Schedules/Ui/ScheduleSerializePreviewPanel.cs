@@ -51,7 +51,7 @@ public class ScheduleSerializePreviewPanel : UserControl, ISidebarPanel<IPalette
         this.UpdateContent(data);
     }
 
-    private void UpdateContent(ScheduleSerializePreviewData data) {
+    private void UpdateContent(ScheduleSerializePreviewData? data) {
         if (data == null) {
             this._richTextBox.Document = FlowDocumentBuilder.Create();
             return;

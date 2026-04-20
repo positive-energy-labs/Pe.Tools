@@ -88,9 +88,8 @@ public static class KnownParamResolver {
             }
         }
 
-        foreach (var parameterName in globalAssignmentsByParameter.Keys.Concat(perTypeAssignmentsByParameter.Keys).Distinct(StringComparer.Ordinal)) {
-            ValidateResolvedParameterName(parameterName, catalog);
-        }
+        foreach (var parameterName in globalAssignmentsByParameter.Keys.Concat(perTypeAssignmentsByParameter.Keys)
+                     .Distinct(StringComparer.Ordinal)) ValidateResolvedParameterName(parameterName, catalog);
     }
 
     public static void ValidateResolvedParameterNames(
@@ -100,9 +99,8 @@ public static class KnownParamResolver {
         foreach (var parameterName in parameterNames
                      .Where(name => !string.IsNullOrWhiteSpace(name))
                      .Select(name => name.Trim())
-                     .Distinct(StringComparer.Ordinal)) {
+                     .Distinct(StringComparer.Ordinal))
             ValidateResolvedParameterName(parameterName, catalog);
-        }
     }
 
     public static AddFamilyParamsSettings ExtractRequiredFamilyDefinitions(
@@ -132,10 +130,7 @@ public static class KnownParamResolver {
             familyDefinitions.Add(familyDefinition);
         }
 
-        return new AddFamilyParamsSettings {
-            Enabled = familyDefinitions.Count > 0,
-            Parameters = familyDefinitions
-        };
+        return new AddFamilyParamsSettings { Enabled = familyDefinitions.Count > 0, Parameters = familyDefinitions };
     }
 
     public static bool IsPeParameterName(string? parameterName) =>

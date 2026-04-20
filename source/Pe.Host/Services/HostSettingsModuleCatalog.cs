@@ -1,6 +1,6 @@
 using Pe.Revit.FamilyFoundry;
-using Pe.Revit.Global.Revit.Documents.Schedules;
 using Pe.Revit.Global.Revit.Lib.Schedules;
+using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Modules;
@@ -20,15 +20,17 @@ public interface IHostSettingsModuleCatalog {
 }
 
 public sealed class HostSettingsModuleCatalog : IHostSettingsModuleCatalog {
-    private readonly SettingsRuntimeMode _runtimeMode;
+    private readonly IReadOnlyList<HostSettingsModuleDescriptor> _catalogDescriptors;
+
     private readonly IReadOnlyList<ISettingsModuleManifest> _modules =
         SettingsModuleCatalogComposer.Combine(
             StorageRuntimeSettingsModules.All,
             RevitGlobalSettingsModules.All,
             FamilyFoundrySettingsModules.All
         );
+
     private readonly IReadOnlyDictionary<string, ISettingsModuleManifest> _modulesByModuleKey;
-    private readonly IReadOnlyList<HostSettingsModuleDescriptor> _catalogDescriptors;
+    private readonly SettingsRuntimeMode _runtimeMode;
     private readonly HostWorkspacesData _workspaces;
 
     public HostSettingsModuleCatalog()
@@ -72,14 +74,14 @@ public sealed class HostSettingsModuleCatalog : IHostSettingsModuleCatalog {
             module.ModuleKey,
             module.DefaultRootKey,
             module.HostScope switch {
-                SettingsModuleHostScope.Host => Pe.Shared.HostContracts.Protocol.HostModuleScope.Host,
-                SettingsModuleHostScope.ActiveDocument => Pe.Shared.HostContracts.Protocol.HostModuleScope.ActiveDocument,
-                _ => Pe.Shared.HostContracts.Protocol.HostModuleScope.Session
+                SettingsModuleHostScope.Host => HostModuleScope.Host,
+                SettingsModuleHostScope.ActiveDocument => HostModuleScope.ActiveDocument,
+                _ => HostModuleScope.Session
             },
             module.ActiveDocumentKind switch {
-                SettingsModuleActiveDocumentKind.ProjectOnly => Pe.Shared.HostContracts.Protocol.HostModuleActiveDocumentKind.ProjectOnly,
-                SettingsModuleActiveDocumentKind.FamilyOnly => Pe.Shared.HostContracts.Protocol.HostModuleActiveDocumentKind.FamilyOnly,
-                _ => Pe.Shared.HostContracts.Protocol.HostModuleActiveDocumentKind.Any
+                SettingsModuleActiveDocumentKind.ProjectOnly => HostModuleActiveDocumentKind.ProjectOnly,
+                SettingsModuleActiveDocumentKind.FamilyOnly => HostModuleActiveDocumentKind.FamilyOnly,
+                _ => HostModuleActiveDocumentKind.Any
             }
         );
 }

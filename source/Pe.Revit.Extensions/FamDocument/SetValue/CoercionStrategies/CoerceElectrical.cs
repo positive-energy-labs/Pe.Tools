@@ -13,18 +13,19 @@ public class CoerceElectrical : ICoercionStrategy {
 
     public bool CanMap(CoercionContext context) {
         var isTargetElectrical = context.TargetDataType?.TypeId.Contains(".electrical:") == true;
-        var canExtractDouble = Regexes.TryExtractDouble(context.SourceValue.ToString(), out _);
+        var canExtractDouble = Regexes.TryExtractDouble(context.SourceValue?.ToString() ?? string.Empty, out _);
         return isTargetElectrical && canExtractDouble;
     }
 
     public Result<FamilyParameter> Map(CoercionContext context) {
         var currVal = context.SourceDataType switch {
-            var t when t == SpecTypeId.String.Text => this.ExtractDouble(context.SourceValue.ToString() ?? string.Empty,
+            var t when t == SpecTypeId.String.Text => this.ExtractDouble(
+                context.SourceValue?.ToString() ?? string.Empty,
                 context.TargetParam),
             var t when t == SpecTypeId.Number => context.SourceValue as double? ?? 0,
             var t when t == SpecTypeId.Int.Integer => context.SourceValue as int? ?? 0,
             var t when t?.TypeId.Contains(".electrical:") == true => this.ExtractDouble(
-                context.SourceValueString ?? context.SourceValue.ToString() ?? string.Empty,
+                context.SourceValueString ?? context.SourceValue?.ToString() ?? string.Empty,
                 context.TargetParam),
             _ => throw new ArgumentException(
                 $"Unsupported source type {context.SourceDataType?.ToLabel() ?? "null"} for electrical coercion")

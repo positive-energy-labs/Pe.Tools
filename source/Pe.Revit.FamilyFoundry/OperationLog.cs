@@ -22,7 +22,7 @@ public class OperationLog(string operationName, List<LogEntry> entries) {
 /// </summary>
 public class LogEntry(string name) {
     public string Name { get; } = name;
-    public string FamilyTypeName { get; private set; }
+    public string FamilyTypeName { get; private set; } = string.Empty;
     private List<string> MessageList { get; } = [];
 
     public string Message =>
@@ -37,18 +37,18 @@ public class LogEntry(string name) {
                     }));
 
     public LogStatus Status { get; private set; } = LogStatus.Pending;
-    public Exception Exception { get; private set; }
+    public Exception? Exception { get; private set; }
     public bool IsComplete => this.Status != LogStatus.Pending;
 
 
-    public LogEntry Success(string message = null) {
+    public LogEntry Success(string? message = null) {
         this.EnsurePending();
         this.Status = LogStatus.Success;
         if (message != null) this.MessageList.Add(message);
         return this;
     }
 
-    public LogEntry Skip(string message = null) {
+    public LogEntry Skip(string? message = null) {
         this.EnsurePending();
         this.Status = LogStatus.Skipped;
         if (message != null) this.MessageList.Add(message);

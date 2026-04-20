@@ -1,4 +1,3 @@
-using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Shared.RevitData.Parameters;
 using Pe.Shared.StorageRuntime.Json;
 
@@ -19,9 +18,7 @@ public sealed class StorageRuntimeJsonFormattingTests {
                 IsInstance = false,
                 PropertiesGroup = GroupTypeId.IdentityData,
                 DataType = SpecTypeId.Length,
-                ValuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal) {
-                    ["Default"] = "2' - 0\""
-                }
+                ValuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal) { ["Default"] = "2' - 0\"" }
             };
 
             jsonFile.Write(snapshot);

@@ -2,8 +2,8 @@ namespace Pe.Revit.Global.Revit.Documents;
 
 public static class DocumentIdentityExtensions {
     /// <summary>
-    /// Returns <c>doc.ParameterBindings</c> as an IEnumerable of <c>(Definition, ElementBinding)</c>.
-    /// Revit exposes <c>DefinitionBindingMapIterator</c>, which is awkward for LINQ and composition.
+    ///     Returns <c>doc.ParameterBindings</c> as an IEnumerable of <c>(Definition, ElementBinding)</c>.
+    ///     Revit exposes <c>DefinitionBindingMapIterator</c>, which is awkward for LINQ and composition.
     /// </summary>
     public static IEnumerable<(Definition definition, ElementBinding binding)> GetProjectParameterBindings(
         this Document doc
@@ -72,8 +72,8 @@ public static class DocumentIdentityExtensions {
     }
 
     /// <summary>
-    /// Returns a softer document continuity key for MRU/session heuristics.
-    /// This intentionally preserves logical family identity across temp-save and reopen flows.
+    ///     Returns a softer document continuity key for MRU/session heuristics.
+    ///     This intentionally preserves logical family identity across temp-save and reopen flows.
     /// </summary>
     public static string GetDocumentMruAffinityKey(this Document doc) {
         if (doc == null)

@@ -16,10 +16,10 @@ public sealed class BridgeServer(
     private readonly ILogger<BridgeServer> _logger = logger;
     private readonly BridgeHostOptions _options = options;
     private readonly ConcurrentDictionary<string, PendingBridgeRequest> _pending = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, Task> _sessionTasks = new(StringComparer.Ordinal);
     private readonly JsonSerializerSettings _serializerSettings = HostJson.CreateSerializerSettings();
-    private readonly object _sessionSync = new();
     private readonly Dictionary<string, ConnectedBridgeSession> _sessionsById = new(StringComparer.Ordinal);
+    private readonly object _sessionSync = new();
+    private readonly ConcurrentDictionary<string, Task> _sessionTasks = new(StringComparer.Ordinal);
     private string? _lastDisconnectReason;
 
     public bool IsConnected => this.GetSnapshot().BridgeIsConnected;
@@ -188,9 +188,8 @@ public sealed class BridgeServer(
                 case BridgeFrameKind.Response:
                     if (frame.Response != null &&
                         this._pending.TryRemove(frame.Response.RequestId, out var pending) &&
-                        string.Equals(pending.ConnectionId, transportSession.ConnectionId, StringComparison.Ordinal)) {
+                        string.Equals(pending.ConnectionId, transportSession.ConnectionId, StringComparison.Ordinal))
                         _ = pending.Completion.TrySetResult(frame.Response);
-                    }
 
                     break;
                 case BridgeFrameKind.Event:
@@ -224,7 +223,8 @@ public sealed class BridgeServer(
                     break;
                 case BridgeFrameKind.Disconnect:
                     disconnectReason = frame.DisconnectReason ?? "bridge client requested disconnect";
-                    this._logger.LogInformation("Revit bridge requested disconnect: SessionId={SessionId}, Reason={Reason}",
+                    this._logger.LogInformation(
+                        "Revit bridge requested disconnect: SessionId={SessionId}, Reason={Reason}",
                         connectedSnapshot?.SessionId, disconnectReason);
                     return;
                 default:
@@ -353,9 +353,8 @@ public sealed class BridgeServer(
         ConnectedBridgeSession? replacedSession = null;
         lock (this._sessionSync) {
             if (this._sessionsById.TryGetValue(snapshot.SessionId, out replacedSession) &&
-                string.Equals(replacedSession.ConnectionId, transportSession.ConnectionId, StringComparison.Ordinal)) {
+                string.Equals(replacedSession.ConnectionId, transportSession.ConnectionId, StringComparison.Ordinal))
                 replacedSession = null;
-            }
 
             this._sessionsById[snapshot.SessionId] = new ConnectedBridgeSession(
                 transportSession.ConnectionId,

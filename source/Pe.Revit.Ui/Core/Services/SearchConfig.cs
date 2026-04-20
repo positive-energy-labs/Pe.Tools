@@ -26,7 +26,7 @@ public class SearchConfig {
     ///     Optional custom scoring function to adjust search scores.
     ///     Receives the item and the calculated base score, returns adjusted score.
     /// </summary>
-    public Func<IPaletteListItem, double, double> CustomScoreAdjuster { get; set; }
+    public Func<IPaletteListItem, double, double>? CustomScoreAdjuster { get; set; }
 
     /// <summary>
     ///     Field weight multipliers for score calculation.

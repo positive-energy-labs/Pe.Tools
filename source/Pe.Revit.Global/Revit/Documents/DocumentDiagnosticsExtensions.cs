@@ -24,9 +24,8 @@ public static class DocumentDiagnosticsExtensions {
             var userPath = ModelPathUtils.ConvertModelPathToUserVisiblePath(modelPath);
             _ = sb.AppendLine($"UserVisiblePath: {userPath}");
             _ = sb.AppendLine($"ServerPath: {modelPath.ServerPath}");
-        } else {
+        } else
             _ = sb.AppendLine("ModelPath: null (unsaved document)");
-        }
 
         return sb.ToString();
     }

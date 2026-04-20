@@ -1,7 +1,3 @@
-using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Plans;
-using Pe.Revit.FamilyFoundry.Snapshots;
-
 namespace Pe.Revit.FamilyFoundry.Snapshots;
 
 /// <summary>
@@ -9,20 +5,19 @@ namespace Pe.Revit.FamilyFoundry.Snapshots;
 ///     Captured fields track provenance when the model needs it.
 /// </summary>
 public class FamilySnapshot {
-    public string FamilyName { get; init; }
+    public string FamilyName { get; init; } = string.Empty;
 
     /// <summary>Parameter snapshots with source tracking.</summary>
-    public CapturedCollection<ParameterSnapshot> Parameters { get; set; }
+    public CapturedCollection<ParameterSnapshot>? Parameters { get; set; }
 
     /// <summary>Embedded family lookup tables captured as portable table definitions.</summary>
-    public CapturedCollection<LookupTableDefinition> LookupTables { get; set; }
+    public CapturedCollection<LookupTableDefinition>? LookupTables { get; set; }
 
     /// <summary>Reference plane and dimension snapshots with source tracking.</summary>
-    public RefPlaneSnapshot RefPlanesAndDims { get; set; }
+    public RefPlaneSnapshot? RefPlanesAndDims { get; set; }
 
     /// <summary>Authored solid projection used for authoring roundtrips.</summary>
-    public AuthoredParamDrivenSolidsSettings AuthoredParamDrivenSolids { get; set; }
+    public AuthoredParamDrivenSolidsSettings? AuthoredParamDrivenSolids { get; set; }
 
     // Future captured fields: connectors, etc.
 }
-

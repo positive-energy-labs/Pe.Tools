@@ -48,9 +48,9 @@ public class ScheduleListItem : IPaletteListItem {
     /// <summary> Field count badge </summary>
     public string TextPill => $"{this.FieldCount} fields";
 
-    public Func<string> GetTextInfo => null!; // Tooltip disabled - info shown in preview panel
+    public Func<string> GetTextInfo => static () => string.Empty; // Tooltip disabled - info shown in preview panel
 
-    public BitmapImage Icon => null!;
+    public BitmapImage? Icon => null;
     public WpfColor? ItemColor => null;
 
     /// <summary>

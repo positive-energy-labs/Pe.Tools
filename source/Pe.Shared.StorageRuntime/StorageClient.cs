@@ -6,16 +6,16 @@ namespace Pe.Shared.StorageRuntime;
 public sealed class StorageClient {
     private readonly IStorageSource _source;
 
+    public StorageClient() : this(new LocalDiskStorageSource(BasePath)) { }
+
+    internal StorageClient(IStorageSource source) =>
+        this._source = source ?? throw new ArgumentNullException(nameof(source));
+
     public static StorageClient Default { get; } = new();
 
     public static string BasePath => SettingsStorageLocations.GetDefaultBasePath();
 
-    public StorageClient() : this(new LocalDiskStorageSource(BasePath)) { }
-
-    internal StorageClient(IStorageSource source) =>
-        _source = source ?? throw new ArgumentNullException(nameof(source));
-
-    public ModuleStorage Module(string moduleKey) => _source.CreateModule(moduleKey);
+    public ModuleStorage Module(string moduleKey) => this._source.CreateModule(moduleKey);
 
     public ModuleStorage<TSettings> Module<TSettings>(IStorageModule<TSettings> module) where TSettings : class {
         if (module == null)
@@ -34,7 +34,7 @@ public sealed class StorageClient {
         );
     }
 
-    public GlobalStorage Global() => _source.CreateGlobal();
+    public GlobalStorage Global() => this._source.CreateGlobal();
 }
 
 internal interface IStorageSource {
@@ -47,7 +47,7 @@ internal sealed class LocalDiskStorageSource(string basePath) : IStorageSource {
         ? throw new ArgumentException("Base path is required.", nameof(basePath))
         : Path.GetFullPath(basePath);
 
-    public ModuleStorage CreateModule(string moduleKey) => new(moduleKey, _basePath);
+    public ModuleStorage CreateModule(string moduleKey) => new(moduleKey, this._basePath);
 
-    public GlobalStorage CreateGlobal() => new(_basePath);
+    public GlobalStorage CreateGlobal() => new(this._basePath);
 }

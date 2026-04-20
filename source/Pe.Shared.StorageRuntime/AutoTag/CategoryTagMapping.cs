@@ -51,7 +51,7 @@ public static class CategoryTagMapping {
 
     public static IEnumerable<BuiltInCategory> GetTaggableCategories() => CategoryToTagMap.Keys;
 
-    public static string? GetCategoryName(Autodesk.Revit.DB.Document doc, BuiltInCategory builtInCategory) {
+    public static string? GetCategoryName(Document doc, BuiltInCategory builtInCategory) {
         if (doc == null)
             return null;
 
@@ -63,7 +63,7 @@ public static class CategoryTagMapping {
     }
 
     public static BuiltInCategory GetBuiltInCategoryFromName(
-        Autodesk.Revit.DB.Document doc,
+        Document doc,
         string categoryName
     ) {
         if (doc == null || string.IsNullOrWhiteSpace(categoryName))
@@ -72,9 +72,8 @@ public static class CategoryTagMapping {
         foreach (var builtInCategory in GetTaggableCategories()) {
             var existingName = GetCategoryName(doc, builtInCategory);
             if (existingName != null &&
-                existingName.Equals(categoryName, StringComparison.OrdinalIgnoreCase)) {
+                existingName.Equals(categoryName, StringComparison.OrdinalIgnoreCase))
                 return builtInCategory;
-            }
         }
 
         return BuiltInCategory.INVALID;

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ModularPipelines.Attributes;
 using ModularPipelines.Context;
+using ModularPipelines.FileSystem;
 using ModularPipelines.Git.Extensions;
 using ModularPipelines.Git.Options;
 using ModularPipelines.GitHub.Attributes;
@@ -11,6 +12,7 @@ using ModularPipelines.GitHub.Extensions;
 using ModularPipelines.Modules;
 using Octokit;
 using Shouldly;
+using File = ModularPipelines.FileSystem.File;
 
 namespace Build.Modules;
 
@@ -71,8 +73,8 @@ public sealed class PublishGithubModule(IOptions<BuildOptions> buildOptions) : M
                 token: cancellationToken);
     }
 
-    private static IEnumerable<ModularPipelines.FileSystem.File> EnumerateReleaseArtifacts(
-        ModularPipelines.FileSystem.Folder outputFolder,
+    private static IEnumerable<File> EnumerateReleaseArtifacts(
+        Folder outputFolder,
         string version) {
         if (!outputFolder.Exists)
             yield break;

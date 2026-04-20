@@ -24,18 +24,18 @@ public class AutoTagService {
         }
     }
 
-    public AutoTagSettings? GetSettingsForDocument(Autodesk.Revit.DB.Document doc) {
+    public AutoTagSettings? GetSettingsForDocument(Document doc) {
         var docHash = doc.GetHashCode();
         return this._documentSettings.TryGetValue(docHash, out var settings) ? settings : null;
     }
 
-    public void CleanupDocument(Autodesk.Revit.DB.Document doc) {
+    public void CleanupDocument(Document doc) {
         var docHash = doc.GetHashCode();
         if (this._documentSettings.Remove(docHash))
             Log.Debug("AutoTag: Cleaned up settings for closed document '{Title}'", doc.Title);
     }
 
-    public void SaveSettingsForDocument(Autodesk.Revit.DB.Document doc, AutoTagSettings settings) {
+    public void SaveSettingsForDocument(Document doc, AutoTagSettings settings) {
         if (this._documentStorage == null)
             throw new InvalidOperationException("AutoTag service not initialized");
 
@@ -48,7 +48,7 @@ public class AutoTagService {
         Log.Information("AutoTag: Settings saved and reloaded for '{Title}'", doc.Title);
     }
 
-    public bool HasSettingsInDocument(Autodesk.Revit.DB.Document doc) {
+    public bool HasSettingsInDocument(Document doc) {
         if (this._documentStorage == null)
             return false;
 
@@ -91,7 +91,7 @@ public class AutoTagService {
         }
     }
 
-    public AutoTagStatus GetStatus(Autodesk.Revit.DB.Document doc) {
+    public AutoTagStatus GetStatus(Document doc) {
         var settings = this.GetSettingsForDocument(doc);
         return new AutoTagStatus {
             IsInitialized = this._updater != null,
@@ -122,17 +122,18 @@ public class AutoTagService {
 
             if (settings.Enabled && settings.Configurations.Count > 0)
                 this.RegisterTriggersForDocument(doc, settings);
-            else
+            else {
                 Log.Debug(
                     "AutoTag: Skipping trigger registration for '{Title}' (disabled or no configurations)",
                     doc.Title
                 );
+            }
         } catch (Exception ex) {
             Log.Error(ex, "AutoTag: Failed to process document open");
         }
     }
 
-    private void RegisterTriggersForDocument(Autodesk.Revit.DB.Document doc, AutoTagSettings settings) {
+    private void RegisterTriggersForDocument(Document doc, AutoTagSettings settings) {
         if (this._updater == null)
             return;
 

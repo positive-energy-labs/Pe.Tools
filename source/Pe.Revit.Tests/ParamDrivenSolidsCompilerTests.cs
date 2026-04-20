@@ -1,7 +1,6 @@
 using Autodesk.Revit.DB.Mechanical;
 using Autodesk.Revit.DB.Plumbing;
 using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Resolution;
 
 namespace Pe.Revit.Tests;
@@ -12,11 +11,7 @@ public sealed class ParamDrivenSolidsCompilerTests {
     public void Compile_top_level_named_planes_without_solids() {
         var settings = new AuthoredParamDrivenSolidsSettings {
             Planes = new Dictionary<string, AuthoredPlaneSpec> {
-                ["Pipe Elevation"] = new() {
-                    From = "@Bottom",
-                    By = "param:PipeElevation",
-                    Dir = "out"
-                }
+                ["Pipe Elevation"] = new() { From = "@Bottom", By = "param:PipeElevation", Dir = "out" }
             }
         };
 
@@ -31,17 +26,16 @@ public sealed class ParamDrivenSolidsCompilerTests {
     public void Compile_blocks_top_level_plane_without_direction() {
         var settings = new AuthoredParamDrivenSolidsSettings {
             Planes = new Dictionary<string, AuthoredPlaneSpec> {
-                ["Pipe Elevation"] = new() {
-                    From = "@Bottom",
-                    By = "param:PipeElevation"
-                }
+                ["Pipe Elevation"] = new() { From = "@Bottom", By = "param:PipeElevation" }
             }
         };
 
         var result = AuthoredParamDrivenSolidsCompiler.Compile(settings);
 
         Assert.That(result.CanExecute, Is.False);
-        Assert.That(result.Diagnostics.Any(diagnostic => diagnostic.Message.Contains("Dir", StringComparison.OrdinalIgnoreCase)), Is.True);
+        Assert.That(
+            result.Diagnostics.Any(diagnostic =>
+                diagnostic.Message.Contains("Dir", StringComparison.OrdinalIgnoreCase)), Is.True);
     }
 
     [Test]
@@ -69,10 +63,7 @@ public sealed class ParamDrivenSolidsCompilerTests {
                     },
                     Height = new PlaneRefOrInlinePlaneSpec {
                         InlinePlane = new AuthoredNamedPlaneSpec {
-                            Name = "Cabinet Top",
-                            From = "@Bottom",
-                            By = "param:Height",
-                            Dir = "out"
+                            Name = "Cabinet Top", From = "@Bottom", By = "param:Height", Dir = "out"
                         }
                     }
                 }
@@ -82,15 +73,10 @@ public sealed class ParamDrivenSolidsCompilerTests {
                     Name = "SupplyAir",
                     Domain = ParamDrivenConnectorDomain.Duct,
                     Face = "plane:Cabinet Top",
-                    Depth = new AuthoredDepthSpec {
-                        By = "param:Depth",
-                        Dir = "out"
-                    },
+                    Depth = new AuthoredDepthSpec { By = "param:Depth", Dir = "out" },
                     Round = new AuthoredRoundConnectorGeometrySpec {
                         Center = ["@CenterLR", "@CenterFB"],
-                        Diameter = new AuthoredMeasureSpec {
-                            By = "param:Diameter"
-                        }
+                        Diameter = new AuthoredMeasureSpec { By = "param:Diameter" }
                     },
                     Config = new AuthoredConnectorConfigSpec {
                         SystemType = DuctSystemType.SupplyAir.ToString(),
@@ -109,7 +95,8 @@ public sealed class ParamDrivenSolidsCompilerTests {
         Assert.That(result.Connectors.Connectors[0].HostPlaneName, Is.EqualTo("Reference Plane"));
         Assert.That(result.Connectors.Connectors[0].HostFacePlaneName, Is.EqualTo("__OFFSET__|Cabinet Top|+|P:Height"));
         Assert.That(
-            result.RefPlanesAndDims.Offsets.Any(offset => string.Equals(offset.PlaneName, "Cabinet Top", StringComparison.Ordinal)),
+            result.RefPlanesAndDims.Offsets.Any(offset =>
+                string.Equals(offset.PlaneName, "Cabinet Top", StringComparison.Ordinal)),
             Is.True,
             "Inline height planes that are also referenced by connectors must still be emitted as real offset planes.");
     }
@@ -122,15 +109,10 @@ public sealed class ParamDrivenSolidsCompilerTests {
                     Name = "BackConn",
                     Domain = ParamDrivenConnectorDomain.Pipe,
                     Face = "@Bottom",
-                    Depth = new AuthoredDepthSpec {
-                        By = "param:Depth",
-                        Dir = "in"
-                    },
+                    Depth = new AuthoredDepthSpec { By = "param:Depth", Dir = "in" },
                     Round = new AuthoredRoundConnectorGeometrySpec {
                         Center = ["@CenterLR", "@CenterFB"],
-                        Diameter = new AuthoredMeasureSpec {
-                            By = "param:Diameter"
-                        }
+                        Diameter = new AuthoredMeasureSpec { By = "param:Diameter" }
                     },
                     Config = new AuthoredConnectorConfigSpec {
                         SystemType = PipeSystemType.ReturnHydronic.ToString(),
@@ -153,23 +135,15 @@ public sealed class ParamDrivenSolidsCompilerTests {
     public void Compile_cylinder_and_prism_can_share_named_plane_refs() {
         var settings = new AuthoredParamDrivenSolidsSettings {
             Planes = new Dictionary<string, AuthoredPlaneSpec> {
-                ["Core Top"] = new() {
-                    From = "@Bottom",
-                    By = "param:CoreHeight",
-                    Dir = "out"
-                }
+                ["Core Top"] = new() { From = "@Bottom", By = "param:CoreHeight", Dir = "out" }
             },
             Cylinders = [
                 new AuthoredCylinderSpec {
                     Name = "Core",
                     On = "@Bottom",
                     Center = ["@CenterLR", "@CenterFB"],
-                    Diameter = new AuthoredMeasureSpec {
-                        By = "param:CoreDiameter"
-                    },
-                    Height = new PlaneRefOrInlinePlaneSpec {
-                        PlaneRef = "plane:Core Top"
-                    }
+                    Diameter = new AuthoredMeasureSpec { By = "param:CoreDiameter" },
+                    Height = new PlaneRefOrInlinePlaneSpec { PlaneRef = "plane:Core Top" }
                 }
             ],
             Prisms = [
@@ -178,26 +152,17 @@ public sealed class ParamDrivenSolidsCompilerTests {
                     On = "plane:Core Top",
                     Width = new PlanePairOrInlineSpanSpec {
                         InlineSpan = new AuthoredSpanSpec {
-                            About = "@CenterFB",
-                            By = "param:CapWidth",
-                            Negative = "Cap Back",
-                            Positive = "Cap Front"
+                            About = "@CenterFB", By = "param:CapWidth", Negative = "Cap Back", Positive = "Cap Front"
                         }
                     },
                     Length = new PlanePairOrInlineSpanSpec {
                         InlineSpan = new AuthoredSpanSpec {
-                            About = "@CenterLR",
-                            By = "param:CapLength",
-                            Negative = "Cap Left",
-                            Positive = "Cap Right"
+                            About = "@CenterLR", By = "param:CapLength", Negative = "Cap Left", Positive = "Cap Right"
                         }
                     },
                     Height = new PlaneRefOrInlinePlaneSpec {
                         InlinePlane = new AuthoredNamedPlaneSpec {
-                            Name = "Cap Top",
-                            From = "plane:Core Top",
-                            By = "param:CapHeight",
-                            Dir = "out"
+                            Name = "Cap Top", From = "plane:Core Top", By = "param:CapHeight", Dir = "out"
                         }
                     }
                 }
@@ -220,10 +185,7 @@ public sealed class ParamDrivenSolidsCompilerTests {
             },
             Spans = [
                 new AuthoredSpanSpec {
-                    About = "@CenterFB",
-                    By = "param:Width",
-                    Negative = "Pipe Elevation",
-                    Positive = "Other Plane"
+                    About = "@CenterFB", By = "param:Width", Negative = "Pipe Elevation", Positive = "Other Plane"
                 }
             ]
         };
@@ -231,7 +193,9 @@ public sealed class ParamDrivenSolidsCompilerTests {
         var result = AuthoredParamDrivenSolidsCompiler.Compile(settings);
 
         Assert.That(result.CanExecute, Is.False);
-        Assert.That(result.Diagnostics.Any(diagnostic => diagnostic.Message.Contains("duplicated", StringComparison.OrdinalIgnoreCase)), Is.True);
+        Assert.That(
+            result.Diagnostics.Any(diagnostic =>
+                diagnostic.Message.Contains("duplicated", StringComparison.OrdinalIgnoreCase)), Is.True);
     }
 
     [Test]
@@ -242,15 +206,10 @@ public sealed class ParamDrivenSolidsCompilerTests {
                     Name = "SupplyWater",
                     Domain = ParamDrivenConnectorDomain.Pipe,
                     Face = "@Bottom",
-                    Depth = new AuthoredDepthSpec {
-                        By = "param:PipeDepth",
-                        Dir = "in"
-                    },
+                    Depth = new AuthoredDepthSpec { By = "param:PipeDepth", Dir = "in" },
                     Round = new AuthoredRoundConnectorGeometrySpec {
                         Center = ["@CenterLR", "plane:Missing Plane"],
-                        Diameter = new AuthoredMeasureSpec {
-                            By = "param:PipeDiameter"
-                        }
+                        Diameter = new AuthoredMeasureSpec { By = "param:PipeDiameter" }
                     },
                     Config = new AuthoredConnectorConfigSpec {
                         SystemType = PipeSystemType.ReturnHydronic.ToString(),
@@ -269,11 +228,7 @@ public sealed class ParamDrivenSolidsCompilerTests {
     public void CollectReferencedParameterNames_includes_top_level_planes_and_inline_spans() {
         var settings = new AuthoredParamDrivenSolidsSettings {
             Planes = new Dictionary<string, AuthoredPlaneSpec> {
-                ["Pipe Elevation"] = new() {
-                    From = "@Bottom",
-                    By = "param:PipeElevation",
-                    Dir = "out"
-                }
+                ["Pipe Elevation"] = new() { From = "@Bottom", By = "param:PipeElevation", Dir = "out" }
             },
             Prisms = [
                 new AuthoredPrismSpec {
@@ -297,10 +252,7 @@ public sealed class ParamDrivenSolidsCompilerTests {
                     },
                     Height = new PlaneRefOrInlinePlaneSpec {
                         InlinePlane = new AuthoredNamedPlaneSpec {
-                            Name = "Cabinet Top",
-                            From = "@Bottom",
-                            By = "param:Height",
-                            Dir = "out"
+                            Name = "Cabinet Top", From = "@Bottom", By = "param:Height", Dir = "out"
                         }
                     }
                 }

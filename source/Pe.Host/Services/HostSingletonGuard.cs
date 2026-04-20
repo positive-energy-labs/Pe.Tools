@@ -1,6 +1,5 @@
-﻿using System.Net.Http;
+﻿using Pe.Shared.HostContracts.Protocol;
 using System.Text.Json;
-using Pe.Shared.HostContracts.Protocol;
 
 namespace Pe.Host.Services;
 
@@ -60,7 +59,8 @@ internal static class HostSingletonGuard {
             var payloadJson = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
             var status = JsonSerializer.Deserialize<HostStatusData>(payloadJson, JsonOptions);
             return status != null &&
-                   string.Equals(status.RuntimeIdentity, SettingsEditorRuntime.RuntimeIdentity, StringComparison.Ordinal) &&
+                   string.Equals(status.RuntimeIdentity, SettingsEditorRuntime.RuntimeIdentity,
+                       StringComparison.Ordinal) &&
                    status.HostContractVersion == HostProtocol.ContractVersion &&
                    status.BridgeContractVersion == BridgeProtocol.ContractVersion &&
                    string.Equals(status.PipeName, options.PipeName, StringComparison.Ordinal);

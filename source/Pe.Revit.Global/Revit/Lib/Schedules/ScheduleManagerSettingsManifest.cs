@@ -12,11 +12,11 @@ public static class ScheduleManagerSettingsManifest {
         ModuleKey,
         RootKeys.Schedules,
         SettingsStorageProfiles.SharedAuthoring,
-        roots: [
+        [
             new SettingsRootDescriptor(RootKeys.Schedules, RootKeys.Schedules),
             new SettingsRootDescriptor(RootKeys.Batch, RootKeys.Batch)
         ],
-        storageDefinitionFactory: CreateProfilesStorageDefinition
+        CreateProfilesStorageDefinition
     );
 
     public static SettingsModuleManifest<BatchScheduleSettings> Batch { get; } = new(

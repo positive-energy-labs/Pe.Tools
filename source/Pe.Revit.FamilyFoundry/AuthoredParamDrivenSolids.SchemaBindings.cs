@@ -1,13 +1,13 @@
-﻿using System.Reflection;
-using System.Runtime.CompilerServices;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using NJsonSchema.Generation.TypeMappers;
-using Pe.Shared.StorageRuntime.Json;
-using Pe.Shared.StorageRuntime.Json.FieldOptions;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Core.Json;
+using Pe.Shared.StorageRuntime.Json;
+using Pe.Shared.StorageRuntime.Json.FieldOptions;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace Pe.Revit.FamilyFoundry;
 
@@ -77,8 +77,7 @@ internal sealed class PlanePairOrInlineSpanSchemaBinding : IJsonTypeSchemaBindin
         Reset(schema);
 
         var arraySchema = new JsonSchema {
-            Type = JsonObjectType.Array,
-            Item = new JsonSchema { Type = JsonObjectType.String }
+            Type = JsonObjectType.Array, Item = new JsonSchema { Type = JsonObjectType.String }
         };
 
         schema.OneOf.Add(arraySchema);

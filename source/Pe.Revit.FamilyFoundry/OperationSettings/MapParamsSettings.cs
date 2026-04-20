@@ -1,7 +1,5 @@
 using Pe.Revit.Extensions.FamDocument.SetValue;
 using Pe.Revit.Extensions.FamManager;
-using Pe.Revit.FamilyFoundry.Snapshots;
-using Pe.Shared.StorageRuntime.Json;
 using Pe.Shared.StorageRuntime.Json;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
@@ -42,11 +40,9 @@ public class MapParamsSettings : IOperationSettings {
             return [
                 .. currNames
                     .Select(fm.FindParameter)
-                    .Where(p => p is not null)
+                    .OfType<FamilyParameter>()
                     .Where(p => {
                         try {
-                            // Edge-case: param.Definition throws a null reference exception
-                            if (p is null) return false;
                             return !string.IsNullOrWhiteSpace(p.Definition.Name);
                         } catch {
                             return false;
@@ -60,7 +56,7 @@ public class MapParamsSettings : IOperationSettings {
         // 3. For each unique value set, take first by user priority
         var candidateSnapshots = currNames
             .Select(processingContext.FindParameterSnapshot)
-            .Where(x => x != null)
+            .OfType<ParameterSnapshot>()
             .Where(x => x.GetTypesWithValue().Count > 0);
 
         var paramSnapshots = candidateSnapshots.ToList();
@@ -76,13 +72,14 @@ public class MapParamsSettings : IOperationSettings {
         // 4. Order by quality (most types with values first). exclude
         return [
             .. enumerable
-                .Select(x => (n: x.Name, c: x.GetTypesWithValue().Count))
+                .Select(x => (n: x.Name ?? string.Empty, c: x.GetTypesWithValue().Count))
+                .Where(x => !string.IsNullOrWhiteSpace(x.n))
                 .OrderByDescending(x => x.c)
                 .ThenBy(x => currNames.IndexOf(x.n)) // preserve user priority as tiebreaker
                 .Select(x => fm.FindParameter(x.n))
+                .OfType<FamilyParameter>()
                 .Where(p => {
                     try {
-                        if (p is null) return false;
                         return !string.IsNullOrWhiteSpace(p.Definition.Name);
                     } catch {
                         return false;
@@ -91,7 +88,8 @@ public class MapParamsSettings : IOperationSettings {
         ];
     }
 
-    private static string GetValueSignature(ParameterSnapshot snapshot) {
+    private static string GetValueSignature(ParameterSnapshot? snapshot) {
+        if (snapshot == null) return string.Empty;
         if (!string.IsNullOrWhiteSpace(snapshot.Formula)) return $"FORMULA:{snapshot.Formula}";
 
         var sortedValues = snapshot.ValuesPerType
@@ -114,4 +112,3 @@ public class MappingData {
         "Coercion strategy to use for the remapping. CoerceByStorageType will be used when none is specified.")]
     public string MappingStrategy { get; init; } = nameof(BuiltInCoercionStrategy.CoerceByStorageType);
 }
-

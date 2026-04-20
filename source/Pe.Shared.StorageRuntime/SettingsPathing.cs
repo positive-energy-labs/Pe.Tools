@@ -1,22 +1,17 @@
-using Pe.Shared.StorageRuntime.PolyFill;
-
 namespace Pe.Shared.StorageRuntime;
 
 /// <summary>
 ///     Shared helpers for safe settings path resolution and settings discovery projections.
 /// </summary>
-public static class SettingsPathing
-{
-    public enum DirectiveScope
-    {
+public static class SettingsPathing {
+    public enum DirectiveScope {
         Local,
         Global
     }
 
     private const string GlobalSchemaNamespace = "global";
 
-    public static string ResolveCentralizedProfileSchemaPath(string schemaContextDirectory, Type profileType)
-    {
+    public static string ResolveCentralizedProfileSchemaPath(string schemaContextDirectory, Type profileType) {
         if (profileType == null)
             throw new ArgumentNullException(nameof(profileType));
 
@@ -30,8 +25,7 @@ public static class SettingsPathing
         DirectiveScope directiveScope,
         bool isPresetDirective,
         string rootSegment
-    )
-    {
+    ) {
         if (string.IsNullOrWhiteSpace(rootSegment))
             throw new ArgumentException("Root segment is required.", nameof(rootSegment));
 
@@ -46,8 +40,7 @@ public static class SettingsPathing
     public static string ResolveCentralizedSchemaNamespaceDirectory(
         string schemaContextDirectory,
         string? namespaceOverride = null
-    )
-    {
+    ) {
         if (string.IsNullOrWhiteSpace(schemaContextDirectory))
             throw new ArgumentException("Schema context directory is required.", nameof(schemaContextDirectory));
 
@@ -60,8 +53,7 @@ public static class SettingsPathing
         return Path.Combine(baseDirectory, "Global", "schemas", schemaNamespace);
     }
 
-    public static string ResolveSafeSubDirectoryPath(string rootPath, string? subdirectory, string paramName)
-    {
+    public static string ResolveSafeSubDirectoryPath(string rootPath, string? subdirectory, string paramName) {
         var normalized = NormalizeRelativePath(subdirectory, paramName);
         if (string.IsNullOrWhiteSpace(normalized))
             return rootPath;
@@ -71,8 +63,7 @@ public static class SettingsPathing
         return combined;
     }
 
-    public static string ResolveSafeRelativeJsonPath(string rootPath, string relativePath, string paramName)
-    {
+    public static string ResolveSafeRelativeJsonPath(string rootPath, string relativePath, string paramName) {
         var normalized = NormalizeRelativePath(relativePath, paramName);
         if (string.IsNullOrWhiteSpace(normalized))
             throw new ArgumentException("Relative path is required.", paramName);
@@ -83,8 +74,7 @@ public static class SettingsPathing
 
         var fileSegment = segments[^1];
         var extension = Path.GetExtension(fileSegment);
-        if (!string.IsNullOrEmpty(extension) && !extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
-        {
+        if (!string.IsNullOrEmpty(extension) && !extension.Equals(".json", StringComparison.OrdinalIgnoreCase)) {
             throw new ArgumentException(
                 $"Unsupported extension '{extension}'. Use .json or omit extension.",
                 paramName
@@ -107,8 +97,7 @@ public static class SettingsPathing
         return combined;
     }
 
-    public static string NormalizeRelativePath(string? input, string paramName)
-    {
+    public static string NormalizeRelativePath(string? input, string paramName) {
         var normalized = input?.Replace('\\', '/').Trim('/');
         if (string.IsNullOrWhiteSpace(normalized))
             return string.Empty;
@@ -122,8 +111,7 @@ public static class SettingsPathing
             segment == ".." ||
             segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
         );
-        if (!string.IsNullOrWhiteSpace(invalidSegment))
-        {
+        if (!string.IsNullOrWhiteSpace(invalidSegment)) {
             throw new ArgumentException(
                 $"Invalid relative path segment '{invalidSegment}'.",
                 paramName
@@ -149,8 +137,7 @@ public static class SettingsPathing
         IEnumerable<string>? allowedRoots,
         string paramName,
         bool requireGlobalAllowedRoot
-    )
-    {
+    ) {
         if (string.IsNullOrWhiteSpace(directivePath))
             throw new ArgumentException("Directive path is required.", paramName);
 
@@ -204,8 +191,7 @@ public static class SettingsPathing
     public static DirectiveFileCandidates ResolveDirectiveFileCandidates(
         ResolvedDirective directive,
         bool allowToonFallback
-    )
-    {
+    ) {
         var normalizedPath = directive.RelativePath.Replace('/', Path.DirectorySeparatorChar);
         var hasJsonExtension = directive.RelativePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
         var hasToonExtension = directive.RelativePath.EndsWith(".toon", StringComparison.OrdinalIgnoreCase);
@@ -215,8 +201,7 @@ public static class SettingsPathing
         EnsurePathUnderRoot(jsonPath, directive.RootDirectory, nameof(directive));
 
         string? toonPath = null;
-        if (allowToonFallback && !hasJsonExtension)
-        {
+        if (allowToonFallback && !hasJsonExtension) {
             toonPath = hasToonExtension
                 ? Path.GetFullPath(Path.Combine(directive.RootDirectory, normalizedPath))
                 : Path.GetFullPath(Path.Combine(directive.RootDirectory, normalizedPath + ".toon"));
@@ -226,8 +211,7 @@ public static class SettingsPathing
         return new DirectiveFileCandidates(jsonPath, toonPath);
     }
 
-    public static void EnsurePathUnderRoot(string candidatePath, string rootPath, string paramName)
-    {
+    public static void EnsurePathUnderRoot(string candidatePath, string rootPath, string paramName) {
         var normalizedRoot = Path.GetFullPath(rootPath)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var normalizedCandidate = Path.GetFullPath(candidatePath)
@@ -244,8 +228,7 @@ public static class SettingsPathing
     ///     Attempts to resolve the shared global fragments directory for a settings root.
     ///     Expected storage shape: {BasePath}/{Addin}/settings and {BasePath}/Global/fragments.
     /// </summary>
-    public static string? TryResolveGlobalFragmentsDirectory(string settingsRootPath)
-    {
+    public static string? TryResolveGlobalFragmentsDirectory(string settingsRootPath) {
         var normalizedRoot = Path.GetFullPath(settingsRootPath);
         var rootName = Path.GetFileName(
             normalizedRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
@@ -256,13 +239,10 @@ public static class SettingsPathing
         DirectoryInfo? settingsDirectory = null;
         if (string.Equals(rootName, "settings", StringComparison.OrdinalIgnoreCase))
             settingsDirectory = new DirectoryInfo(normalizedRoot);
-        else
-        {
+        else {
             var current = new DirectoryInfo(normalizedRoot);
-            while (current != null)
-            {
-                if (string.Equals(current.Name, "settings", StringComparison.OrdinalIgnoreCase))
-                {
+            while (current != null) {
+                if (string.Equals(current.Name, "settings", StringComparison.OrdinalIgnoreCase)) {
                     settingsDirectory = current;
                     break;
                 }
@@ -282,13 +262,10 @@ public static class SettingsPathing
         return Path.Combine(baseDirectory.FullName, "Global", "fragments");
     }
 
-    private static (string BaseDirectory, string Namespace) TryResolveStorageBaseAndNamespace(string contextDirectory)
-    {
+    private static (string BaseDirectory, string Namespace) TryResolveStorageBaseAndNamespace(string contextDirectory) {
         var current = new DirectoryInfo(contextDirectory);
-        while (current != null)
-        {
-            if (string.Equals(current.Name, "Global", StringComparison.OrdinalIgnoreCase))
-            {
+        while (current != null) {
+            if (string.Equals(current.Name, "Global", StringComparison.OrdinalIgnoreCase)) {
                 var baseDirectory = current.Parent?.FullName;
                 if (!string.IsNullOrWhiteSpace(baseDirectory))
                     return (baseDirectory, GlobalSchemaNamespace);
@@ -300,8 +277,7 @@ public static class SettingsPathing
         }
 
         var settingsAncestor = FindNamedAncestor(contextDirectory, "settings");
-        if (settingsAncestor != null)
-        {
+        if (settingsAncestor != null) {
             var addinDirectory = settingsAncestor.Parent;
             var baseDirectory = addinDirectory?.Parent;
             if (addinDirectory != null && baseDirectory != null)
@@ -309,8 +285,7 @@ public static class SettingsPathing
         }
 
         var stateAncestor = FindNamedAncestor(contextDirectory, "state");
-        if (stateAncestor != null)
-        {
+        if (stateAncestor != null) {
             var addinDirectory = stateAncestor.Parent;
             var baseDirectory = addinDirectory?.Parent;
             if (addinDirectory != null && baseDirectory != null)
@@ -322,11 +297,9 @@ public static class SettingsPathing
         return (fallbackBaseDirectory, NormalizeSchemaKey(fallbackNamespace));
     }
 
-    private static DirectoryInfo? FindNamedAncestor(string path, string ancestorName)
-    {
+    private static DirectoryInfo? FindNamedAncestor(string path, string ancestorName) {
         var current = new DirectoryInfo(path);
-        while (current != null)
-        {
+        while (current != null) {
             if (string.Equals(current.Name, ancestorName, StringComparison.OrdinalIgnoreCase))
                 return current;
 
@@ -336,8 +309,7 @@ public static class SettingsPathing
         return null;
     }
 
-    private static string NormalizeSchemaKey(string rawKey)
-    {
+    private static string NormalizeSchemaKey(string rawKey) {
         var normalized = rawKey
             .Replace('\\', '-')
             .Replace('/', '-')
@@ -352,8 +324,7 @@ public static class SettingsPathing
         return compacted.Trim('-').ToLowerInvariant();
     }
 
-    private static string BuildProfileTypeSchemaKey(Type type)
-    {
+    private static string BuildProfileTypeSchemaKey(Type type) {
         if (!type.IsGenericType)
             return NormalizeSchemaKey(type.FullName ?? type.Name);
 
@@ -378,10 +349,8 @@ public static class SettingsPathing
     public readonly record struct DirectiveFileCandidates(string JsonPath, string? ToonPath);
 }
 
-public static class SettingsDiscoveryBuilder
-{
-    public static SettingsFileEntry CreateSettingsFileEntry(string absoluteFilePath, string settingsRootPath)
-    {
+public static class SettingsDiscoveryBuilder {
+    public static SettingsFileEntry CreateSettingsFileEntry(string absoluteFilePath, string settingsRootPath) {
         var fileInfo = new FileInfo(absoluteFilePath);
         var relativePath = BclExtensions.GetRelativePath(settingsRootPath, absoluteFilePath).Replace('\\', '/');
         var relativePathWithoutExtension = Path.ChangeExtension(relativePath, null) ?? relativePath;
@@ -419,11 +388,9 @@ public static class SettingsDiscoveryBuilder
         string rootName,
         string rootRelativePath,
         List<SettingsFileEntry> files
-    )
-    {
+    ) {
         var root = new SettingsDirectoryNode(rootName, rootRelativePath, [], []);
-        foreach (var file in files)
-        {
+        foreach (var file in files) {
             var localRelativePath = GetLocalRelativePath(file.RelativePath, rootRelativePath);
             var localSegments = localRelativePath.SplitAndTrim('/', StringSplitOptions.RemoveEmptyEntries);
             if (localSegments.Length == 0)
@@ -433,15 +400,13 @@ public static class SettingsDiscoveryBuilder
             var directorySegments = localSegments.Take(localSegments.Length - 1);
             var current = root;
             var currentRelative = rootRelativePath;
-            foreach (var segment in directorySegments)
-            {
+            foreach (var segment in directorySegments) {
                 currentRelative = string.IsNullOrWhiteSpace(currentRelative)
                     ? segment
                     : $"{currentRelative}/{segment}";
                 var existing = current.Directories.FirstOrDefault(d =>
                     string.Equals(d.Name, segment, StringComparison.OrdinalIgnoreCase));
-                if (existing == null)
-                {
+                if (existing == null) {
                     existing = new SettingsDirectoryNode(segment, currentRelative, [], []);
                     current.Directories.Add(existing);
                 }
@@ -465,8 +430,7 @@ public static class SettingsDiscoveryBuilder
         return root;
     }
 
-    private static string GetLocalRelativePath(string fileRelativePath, string rootRelativePath)
-    {
+    private static string GetLocalRelativePath(string fileRelativePath, string rootRelativePath) {
         if (string.IsNullOrWhiteSpace(rootRelativePath))
             return fileRelativePath;
 
@@ -479,8 +443,7 @@ public static class SettingsDiscoveryBuilder
         return fileRelativePath;
     }
 
-    private static void SortTree(SettingsDirectoryNode node)
-    {
+    private static void SortTree(SettingsDirectoryNode node) {
         node.Directories.Sort((left, right) =>
             string.Compare(left.Name, right.Name, StringComparison.OrdinalIgnoreCase));
         node.Files.Sort((left, right) => string.Compare(left.Name, right.Name, StringComparison.OrdinalIgnoreCase));

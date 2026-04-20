@@ -1,7 +1,4 @@
 using Pe.Revit.Extensions.FamDocument;
-using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Capture;
-using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.Global.Revit.Documents;
 using System.Diagnostics;
 

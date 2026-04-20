@@ -24,18 +24,13 @@ internal static class SchemaExampleDefinitionConsolidator {
         }
 
         var groups = candidates
-            .GroupBy(candidate => new {
-                candidate.ProviderKey,
-                candidate.ExamplesSignature
-            })
+            .GroupBy(candidate => new { candidate.ProviderKey, candidate.ExamplesSignature })
             .ToList();
         var definitionIndex = 0;
 
         foreach (var group in groups) {
             var definitionName = NextDefinitionName(definitions, ref definitionIndex);
-            definitions[definitionName] = new JObject {
-                ["examples"] = group.First().Examples.DeepClone()
-            };
+            definitions[definitionName] = new JObject { ["examples"] = group.First().Examples.DeepClone() };
 
             foreach (var candidate in group) {
                 _ = candidate.Schema.Remove("examples");
@@ -45,9 +40,7 @@ internal static class SchemaExampleDefinitionConsolidator {
                     candidate.Schema["allOf"] = allOf;
                 }
 
-                allOf.Add(new JObject {
-                    ["$ref"] = $"#/definitions/{definitionName}"
-                });
+                allOf.Add(new JObject { ["$ref"] = $"#/definitions/{definitionName}" });
             }
         }
     }
@@ -74,9 +67,8 @@ internal static class SchemaExampleDefinitionConsolidator {
         candidate = default;
         if (schema["x-options"] is not JObject options ||
             options["key"]?.Value<string>() is not { Length: > 0 } providerKey ||
-            schema["examples"] is not JArray examples) {
+            schema["examples"] is not JArray examples)
             return false;
-        }
 
         candidate = new SchemaExampleCandidate(
             schema,
@@ -89,9 +81,9 @@ internal static class SchemaExampleDefinitionConsolidator {
 
     private static string NextDefinitionName(JObject definitions, ref int definitionIndex) {
         string definitionName;
-        do {
+        do
             definitionName = $"examples_{++definitionIndex}";
-        } while (definitions.Property(definitionName) != null);
+        while (definitions.Property(definitionName) != null);
 
         return definitionName;
     }

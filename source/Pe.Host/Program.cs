@@ -1,13 +1,20 @@
-﻿using Pe.Host;
-using Pe.Shared.HostContracts.Protocol;
+using Pe.Host;
 using Pe.Host.Operations;
 using Pe.Host.Services;
-using Microsoft.AspNetCore.Http.Json;
-using Microsoft.Extensions.Logging;
+using Pe.Revit.FamilyFoundry.SchemaDefinitions;
+using Pe.Revit.Global.Revit.Lib.Schedules;
+using Pe.Shared.HostContracts.Protocol;
+using Pe.Shared.StorageRuntime;
+using Pe.Shared.StorageRuntime.AutoTag;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
 HostRevitAssemblyResolver.EnsureRegistered();
+AutoTagSchemaDefinitionBootstrapper.EnsureRegistered();
+ScheduleSchemaDefinitionBootstrapper.EnsureRegistered();
+FamilyFoundrySchemaDefinitionBootstrapper.EnsureRegistered();
+FamilyFoundryRootSchemaDefinitionBootstrapper.EnsureRegistered();
+LoadedFamiliesFilterSchemaDefinitionBootstrapper.EnsureRegistered();
 
 var options = BridgeHostOptions.FromEnvironment();
 using var singletonHandle = HostSingletonGuard.TryAcquireOrExit(options);
@@ -15,9 +22,9 @@ if (singletonHandle == null)
     return;
 
 var builder = WebApplication.CreateBuilder(args);
-var hostLogFilePath = HostLogStorage.ResolveFilePath();
+var hostLogFile = StorageClient.Default.Global().HostLog();
 
-builder.Logging.AddProvider(new HostFileLoggerProvider(hostLogFilePath));
+builder.Logging.AddProvider(new HostFileLoggerProvider(hostLogFile));
 
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton<BridgeServer>();
@@ -57,7 +64,6 @@ app.Use(async (httpContext, next) => {
     } finally {
         activityService.OnRequestCompleted();
     }
-
 });
 HostEndpointMapper.MapOperations(app);
 app.MapGet(HttpRoutes.Events, async (
@@ -98,6 +104,6 @@ app.Logger.LogInformation(
     options.IdleShutdownEnabled,
     options.IdleShutdownTimeout.TotalMinutes
 );
-app.Logger.LogInformation("Host file logging enabled at {LogFilePath}", hostLogFilePath);
+app.Logger.LogInformation("Host file logging enabled at {LogFilePath}", hostLogFile.FilePath);
 
 app.Run(options.HostBaseUrl);

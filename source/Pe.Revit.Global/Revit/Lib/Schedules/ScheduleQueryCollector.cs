@@ -81,7 +81,6 @@ public static class ScheduleQueryCollector {
                     "ScheduleReferenceIdNotFound",
                     $"Could not resolve schedule id {scheduleId}.",
                     scheduleId.ToString())) {
-                continue;
             }
         }
 
@@ -91,7 +90,6 @@ public static class ScheduleQueryCollector {
                     "ScheduleReferenceUniqueIdNotFound",
                     $"Could not resolve schedule unique id '{scheduleUniqueId}'.",
                     scheduleUniqueId)) {
-                continue;
             }
         }
 
@@ -222,7 +220,8 @@ public static class ScheduleQueryCollector {
                 var displayText = GetDisplayText(schedule, section, revitSectionType, row, column);
                 var mergedRegion = TryCollectMergedRegion(section, row, column);
                 var isBlank = string.IsNullOrWhiteSpace(displayText);
-                var sourceMetadata = DetermineCellSource(displayText, isBlank, fieldsByColumn.TryGetValue(column, out var field) ? field : null);
+                var sourceMetadata = DetermineCellSource(displayText, isBlank,
+                    fieldsByColumn.TryGetValue(column, out var field) ? field : null);
 
                 cells.Add(new ScheduleCellProjection(
                     column,
@@ -287,9 +286,8 @@ public static class ScheduleQueryCollector {
             .ToList();
 
         var maxCount = Math.Min(bodySection.NumberOfColumns, visibleFields.Count);
-        for (var index = 0; index < maxCount; index++) {
+        for (var index = 0; index < maxCount; index++)
             fieldsByColumn[bodySection.FirstColumnNumber + index] = visibleFields[index];
-        }
 
         return fieldsByColumn;
     }

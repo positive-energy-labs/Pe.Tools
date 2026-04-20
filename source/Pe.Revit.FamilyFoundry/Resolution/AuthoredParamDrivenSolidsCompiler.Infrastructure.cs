@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Pe.Revit.FamilyFoundry.Resolution;
 
 public static partial class AuthoredParamDrivenSolidsCompiler {
@@ -34,7 +36,8 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
             Strength = RpStrength.StrongRef
         };
         symmetricPairs.TryAdd(BuildSymmetricKey(symmetric), symmetric);
-        spans[BuildPairKey(negativePlaneName, positivePlaneName)] = new PublishedSpan(negativePlaneName, positivePlaneName, driver);
+        spans[BuildPairKey(negativePlaneName, positivePlaneName)] =
+            new PublishedSpan(negativePlaneName, positivePlaneName, driver);
         planes[negativePlaneName] = new PublishedPlane(negativePlaneName, driver);
         planes[positivePlaneName] = new PublishedPlane(positivePlaneName, driver);
         return PairResolution.Compiled(negativePlaneName, positivePlaneName, driver);
@@ -59,12 +62,15 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
                 return PairResolution.Invalid;
             }
 
-            var ref1 = ResolvePlaneRef(spec.PlaneRefs[0], planes, diagnostics, ownerName, $"$.ParamDrivenSolids.{ownerName}.{axisName}");
-            var ref2 = ResolvePlaneRef(spec.PlaneRefs[1], planes, diagnostics, ownerName, $"$.ParamDrivenSolids.{ownerName}.{axisName}");
-            if (ref1.Outcome != CompileOutcome.Compiled || ref2.Outcome != CompileOutcome.Compiled)
+            var ref1 = ResolvePlaneRef(spec.PlaneRefs[0], planes, diagnostics, ownerName,
+                $"$.ParamDrivenSolids.{ownerName}.{axisName}");
+            var ref2 = ResolvePlaneRef(spec.PlaneRefs[1], planes, diagnostics, ownerName,
+                $"$.ParamDrivenSolids.{ownerName}.{axisName}");
+            if (ref1.Outcome != CompileOutcome.Compiled || ref2.Outcome != CompileOutcome.Compiled) {
                 return ref1.Outcome == CompileOutcome.Deferred || ref2.Outcome == CompileOutcome.Deferred
                     ? PairResolution.FromOutcome(CompileOutcome.Deferred)
                     : PairResolution.Invalid;
+            }
 
             if (spans.TryGetValue(BuildPairKey(ref1.PlaneName!, ref2.PlaneName!), out var exact))
                 return PairResolution.Compiled(exact.NegativePlaneName, exact.PositivePlaneName, exact.Driver);
@@ -106,7 +112,8 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         IList<ParamDrivenSolidsDiagnostic> diagnostics
     ) {
         if (!string.IsNullOrWhiteSpace(spec.PlaneRef)) {
-            var resolved = ResolvePlaneRef(spec.PlaneRef, planes, diagnostics, ownerName, $"$.ParamDrivenSolids.{ownerName}.{axisName}");
+            var resolved = ResolvePlaneRef(spec.PlaneRef, planes, diagnostics, ownerName,
+                $"$.ParamDrivenSolids.{ownerName}.{axisName}");
             if (resolved.Outcome != CompileOutcome.Compiled)
                 return PlaneResolution.FromOutcome(resolved.Outcome);
 
@@ -146,7 +153,8 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         IList<ParamDrivenSolidsDiagnostic> diagnostics
     ) {
         if (spec.EndOffset != null) {
-            if (!TryParseLengthDriver(spec.EndOffset.By, ownerName, $"$.ParamDrivenSolids.{ownerName}.Height", diagnostics, out var driver))
+            if (!TryParseLengthDriver(spec.EndOffset.By, ownerName, $"$.ParamDrivenSolids.{ownerName}.Height",
+                    diagnostics, out var driver))
                 return HeightResolution.Invalid;
 
             if (!TryParseOffsetDirection(spec.EndOffset.Dir, out var direction)) {
@@ -258,7 +266,7 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
             return false;
         }
 
-        var magnitude = double.Parse(match.Groups["value"].Value, System.Globalization.CultureInfo.InvariantCulture);
+        var magnitude = double.Parse(match.Groups["value"].Value, CultureInfo.InvariantCulture);
         var unit = match.Groups["unit"].Value;
         var feet = unit.Equals("ft", StringComparison.OrdinalIgnoreCase) || unit == "'"
             ? magnitude
@@ -278,7 +286,7 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
 
     private static string BuildDriverKey(LengthDriverSpec driver, string? parameter) {
         if (driver.IsLiteralDriven)
-            return $"L:{driver.LiteralValue?.ToString("R", System.Globalization.CultureInfo.InvariantCulture)}";
+            return $"L:{driver.LiteralValue?.ToString("R", CultureInfo.InvariantCulture)}";
 
         return $"P:{driver.TryGetParameterName() ?? parameter ?? string.Empty}";
     }
@@ -323,12 +331,13 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
     }
 
     private sealed record PublishedPlane(string Name, LengthDriverSpec Driver);
+
     private sealed record PublishedSpan(string NegativePlaneName, string PositivePlaneName, LengthDriverSpec Driver);
 
     private readonly record struct PlaneRefResolution(CompileOutcome Outcome, string? PlaneName) {
-        public static PlaneRefResolution Compiled(string planeName) => new(CompileOutcome.Compiled, planeName);
         public static PlaneRefResolution Deferred => new(CompileOutcome.Deferred, null);
         public static PlaneRefResolution Invalid => new(CompileOutcome.Invalid, null);
+        public static PlaneRefResolution Compiled(string planeName) => new(CompileOutcome.Compiled, planeName);
     }
 
     private readonly record struct PairResolution(
@@ -337,10 +346,10 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         string? PlaneName2,
         LengthDriverSpec Driver
     ) {
+        public static PairResolution Invalid => new(CompileOutcome.Invalid, null, null, LengthDriverSpec.None);
+
         public static PairResolution Compiled(string planeName1, string planeName2, LengthDriverSpec driver) =>
             new(CompileOutcome.Compiled, planeName1, planeName2, driver);
-
-        public static PairResolution Invalid => new(CompileOutcome.Invalid, null, null, LengthDriverSpec.None);
 
         public static PairResolution FromOutcome(CompileOutcome outcome) =>
             new(outcome, null, null, LengthDriverSpec.None);
@@ -351,10 +360,10 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         string? PlaneName,
         LengthDriverSpec Driver
     ) {
+        public static PlaneResolution Invalid => new(CompileOutcome.Invalid, null, LengthDriverSpec.None);
+
         public static PlaneResolution Compiled(string planeName, LengthDriverSpec driver) =>
             new(CompileOutcome.Compiled, planeName, driver);
-
-        public static PlaneResolution Invalid => new(CompileOutcome.Invalid, null, LengthDriverSpec.None);
 
         public static PlaneResolution FromOutcome(CompileOutcome outcome) =>
             new(outcome, null, LengthDriverSpec.None);
@@ -368,14 +377,15 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         double StartOffset,
         double EndOffset
     ) {
+        public static HeightResolution Invalid =>
+            new(CompileOutcome.Invalid, ExtrusionHeightControlMode.ReferencePlane, null, LengthDriverSpec.None, 0.0,
+                0.0);
+
         public static HeightResolution ReferencePlane(string planeName, LengthDriverSpec driver) =>
             new(CompileOutcome.Compiled, ExtrusionHeightControlMode.ReferencePlane, planeName, driver, 0.0, 1.0);
 
         public static HeightResolution FromEndOffset(double endOffset, LengthDriverSpec driver) =>
             new(CompileOutcome.Compiled, ExtrusionHeightControlMode.EndOffset, null, driver, 0.0, endOffset);
-
-        public static HeightResolution Invalid =>
-            new(CompileOutcome.Invalid, ExtrusionHeightControlMode.ReferencePlane, null, LengthDriverSpec.None, 0.0, 0.0);
 
         public static HeightResolution FromOutcome(CompileOutcome outcome) =>
             new(outcome, ExtrusionHeightControlMode.ReferencePlane, null, LengthDriverSpec.None, 0.0, 0.0);

@@ -1,9 +1,8 @@
-using Pe.Shared.HostContracts.RevitData;
 using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
 using Pe.Revit.Global.Revit.Lib.Parameters;
+using Pe.Shared.HostContracts.RevitData;
 using Pe.Shared.RevitData.Families;
 using Serilog;
-using System.Diagnostics;
 
 namespace Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 
@@ -28,8 +27,8 @@ public static class LoadedFamiliesMatrixCollector {
 
         var projectValueStopwatch = Stopwatch.StartNew();
         List<CollectedLoadedFamilyRecord> projectValueFamilies;
-        int projectPlacementAttempts = 0;
-        int projectPlacementSuccesses = 0;
+        var projectPlacementAttempts = 0;
+        var projectPlacementSuccesses = 0;
         using (var projectContext = LoadedFamiliesTempPlacementEngine.CreateEvaluationContext(doc, selectedFamilyIds)) {
             onProgress?.Invoke($"Family matrix collecting project values for {catalogFamilies.Count} families.");
             projectContext.BeginTransaction("Loaded Families Matrix Project Values");
@@ -56,6 +55,7 @@ public static class LoadedFamiliesMatrixCollector {
                 projectContext.RollBackTransaction();
             }
         }
+
         var projectValueElapsed = projectValueStopwatch.Elapsed;
         onProgress?.Invoke(
             $"Family matrix finished project value collection in {projectValueElapsed.TotalMilliseconds:F0} ms. Placed {projectPlacementSuccesses} of {projectPlacementAttempts} temp instances."
@@ -75,12 +75,13 @@ public static class LoadedFamiliesMatrixCollector {
 
         var scheduleMatchStopwatch = Stopwatch.StartNew();
         List<CollectedLoadedFamilyRecord> scheduleFamilies;
-        int schedulePlacementAttempts = 0;
-        int schedulePlacementSuccesses = 0;
+        var schedulePlacementAttempts = 0;
+        var schedulePlacementSuccesses = 0;
         var candidateSchedules = 0;
         var scheduleSerializeElapsed = TimeSpan.Zero;
         var scheduleEvalElapsed = TimeSpan.Zero;
-        using (var scheduleContext = LoadedFamiliesTempPlacementEngine.CreateEvaluationContext(doc, selectedFamilyIds)) {
+        using (var scheduleContext =
+               LoadedFamiliesTempPlacementEngine.CreateEvaluationContext(doc, selectedFamilyIds)) {
             onProgress?.Invoke("Family matrix matching schedules.");
             scheduleContext.BeginTransaction("Loaded Families Matrix Schedule Matching");
 
@@ -105,6 +106,7 @@ public static class LoadedFamiliesMatrixCollector {
                 scheduleContext.RollBackTransaction();
             }
         }
+
         var scheduleMatchElapsed = scheduleMatchStopwatch.Elapsed;
         onProgress?.Invoke(
             $"Family matrix finished schedule matching in {scheduleMatchElapsed.TotalMilliseconds:F0} ms across {candidateSchedules} schedules. Placed {schedulePlacementSuccesses} of {schedulePlacementAttempts} temp instances."

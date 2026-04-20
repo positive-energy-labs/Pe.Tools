@@ -1,8 +1,5 @@
-using Autodesk.Revit.DB.Mechanical;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Profiles;
-using Pe.Revit.FamilyFoundry.Snapshots;
-using Pe.Revit.FamilyFoundry.Plans;
 
 namespace Pe.Revit.Tests;
 
@@ -63,11 +60,7 @@ internal sealed record CompiledPlanExpectation(
             compiled.Extrusions.Circles.Count,
             compiled.Connectors.Connectors.Count,
             compiled.RefPlanesAndDims.SymmetricPairs
-                .SelectMany(spec => new[] {
-                    spec.CenterPlaneName,
-                    spec.NegativePlaneName,
-                    spec.PositivePlaneName
-                })
+                .SelectMany(spec => new[] { spec.CenterPlaneName, spec.NegativePlaneName, spec.PositivePlaneName })
                 .Concat(compiled.RefPlanesAndDims.Offsets.Select(spec => spec.PlaneName))
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(name => name, StringComparer.Ordinal)

@@ -1,8 +1,6 @@
-using Pe.Revit.Global.PolyFill;
 using Pe.Revit.Ui.Core;
 using Pe.Revit.Ui.Core.Services;
 using System.Collections.ObjectModel;
-using System.Threading;
 using System.Windows.Threading;
 
 namespace Pe.Revit.Ui.ViewModels;
@@ -43,13 +41,13 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     private readonly Dispatcher _dispatcher;
     private readonly SearchFilterService<TItem> _searchService;
     private readonly DispatcherTimer _selectionDebounceTimer;
-
-    /// <summary> Snapshot of the current tab for safe background filtering </summary>
-    private List<PaletteSearchSnapshot<TItem>> _currentSnapshot = [];
-    private int _snapshotTabIndex = -1;
     private readonly SemaphoreSlim _snapshotGate = new(1, 1);
 
     public readonly IReadOnlyList<TabDefinition<TItem>>? Tabs;
+
+    /// <summary> Snapshot of the current tab for safe background filtering </summary>
+    private List<PaletteSearchSnapshot<TItem>> _currentSnapshot = [];
+
     private CancellationTokenSource? _filterCts;
     private int _filterSequence;
 
@@ -71,6 +69,7 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     [ObservableProperty] private TItem? _selectedItem;
 
     private int _selectedTabIndex;
+    private int _snapshotTabIndex = -1;
 
     public PaletteViewModel(
         SearchFilterService<TItem> searchService,
@@ -120,7 +119,7 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     public ObservableCollection<TItem> FilteredItems { get; }
 
     /// <summary> Available filter values (only populated if filtering is enabled) </summary>
-    public ObservableCollection<string> AvailableFilterValues { get; }
+    public ObservableCollection<string>? AvailableFilterValues { get; }
 
     /// <summary> Whether filtering is enabled for this palette </summary>
     public bool IsFilteringEnabled => this.CurrentTabHasFiltering;
@@ -176,7 +175,7 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     }
 
     /// <summary> Event raised when selected tab changes </summary>
-    public event EventHandler SelectedTabChanged;
+    public event EventHandler? SelectedTabChanged;
 
     /// <summary>
     ///     Sets a callback to run once after the initial items load completes.
@@ -185,10 +184,10 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     public void SetInitialLoadCallback(Action callback) => this._onInitialLoadComplete = callback;
 
     /// <summary> Event raised when filtered items collection changes </summary>
-    public event EventHandler FilteredItemsChanged;
+    public event EventHandler? FilteredItemsChanged;
 
     /// <summary> Event raised when selection changes after debounce delay </summary>
-    public event EventHandler SelectionChangedDebounced;
+    public event EventHandler? SelectionChangedDebounced;
 
     [RelayCommand]
     private void MoveSelectionUp() {
@@ -300,9 +299,7 @@ public partial class PaletteViewModel<TItem> : ObservableObject, IPaletteViewMod
     /// <summary>
     ///     Filters items using 3-stage filtering: Tab -> Category Filter -> Search
     /// </summary>
-    private void FilterItems() {
-        _ = this.FilterItemsAsync();
-    }
+    private void FilterItems() => _ = this.FilterItemsAsync();
 
     private async Task FilterItemsAsync() {
         this._filterCts?.Cancel();

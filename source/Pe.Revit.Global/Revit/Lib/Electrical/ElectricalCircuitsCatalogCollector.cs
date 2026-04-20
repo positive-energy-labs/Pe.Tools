@@ -1,7 +1,6 @@
-using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
-using Pe.Revit.Global.PolyFill;
 using Pe.Shared.HostContracts.RevitData;
+using System.Text.RegularExpressions;
 
 namespace Pe.Revit.Global.Revit.Lib.Electrical;
 
@@ -270,7 +269,8 @@ public static class ElectricalCircuitsCatalogCollector {
         if (!string.IsNullOrWhiteSpace(candidate.EffectiveIdentity) &&
             loadNameTags.Contains(candidate.EffectiveIdentity)) {
             return candidate.EffectiveIdentitySource switch {
-                ElementIdentitySource.RequestedParameter => ElectricalNearbyProxyCandidateMatchReason.RequestedParameterIdentityMatch,
+                ElementIdentitySource.RequestedParameter => ElectricalNearbyProxyCandidateMatchReason
+                    .RequestedParameterIdentityMatch,
                 ElementIdentitySource.Mark => ElectricalNearbyProxyCandidateMatchReason.MarkIdentityMatch,
                 _ => ElectricalNearbyProxyCandidateMatchReason.NearbyIdentityCandidate
             };
@@ -283,11 +283,10 @@ public static class ElectricalCircuitsCatalogCollector {
         if (string.IsNullOrWhiteSpace(loadName))
             return [];
 
-        return System.Text.RegularExpressions.Regex.Matches(
+        return Regex.Matches(
                 loadName.ToUpperInvariant(),
                 @"\b[A-Z]{1,8}-\d+[A-Z]?\b"
             )
-            .Cast<System.Text.RegularExpressions.Match>()
             .Select(match => match.Value)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -335,7 +334,6 @@ public static class ElectricalCircuitsCatalogCollector {
         }
 
         var systemIds = wire.GetMEPSystems()
-            .Cast<ElementId>()
             .Select(id => id.Value())
             .Distinct()
             .ToList();

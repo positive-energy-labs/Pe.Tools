@@ -1,7 +1,6 @@
 namespace Pe.Dev.Cli;
 
-internal static class DevCliProgram
-{
+internal static class DevCliProgram {
     internal const string UsageText = """
                                       Usage:
                                         pe-dev revit hot-reload [prepare-hot-reload args...]
@@ -23,42 +22,28 @@ internal static class DevCliProgram
                                           for the current build hooks.
                                       """;
 
-    public static async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
-    {
+    public static async Task<int> RunAsync(string[] args, CancellationToken cancellationToken) {
         CliParseResult parseResult;
-        try
-        {
+        try {
             parseResult = CliOptions.Parse(args);
-        }
-        catch (Exception ex)
-        {
+        } catch (Exception ex) {
             Console.Error.WriteLine(ex.Message);
             Console.Error.WriteLine(UsageText);
             return 10;
         }
 
-        if (!parseResult.Success || parseResult.Options is null)
-        {
-            if (!string.IsNullOrWhiteSpace(parseResult.ErrorMessage))
-            {
-                Console.Error.WriteLine(parseResult.ErrorMessage);
-            }
+        if (!parseResult.Success || parseResult.Options is null) {
+            if (!string.IsNullOrWhiteSpace(parseResult.ErrorMessage)) Console.Error.WriteLine(parseResult.ErrorMessage);
 
-            if (parseResult.ShowUsage)
-            {
-                Console.Error.WriteLine(UsageText);
-            }
+            if (parseResult.ShowUsage) Console.Error.WriteLine(UsageText);
 
             return parseResult.ShowUsage && string.IsNullOrWhiteSpace(parseResult.ErrorMessage) ? 0 : 10;
         }
 
         RepoLayout repoLayout;
-        try
-        {
+        try {
             repoLayout = RepoLayout.Create(parseResult.Options.RepoRoot);
-        }
-        catch (Exception ex)
-        {
+        } catch (Exception ex) {
             Console.Error.WriteLine(ex.Message);
             return 10;
         }

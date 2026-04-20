@@ -1,5 +1,5 @@
+using Autodesk.Revit.Exceptions;
 using Pe.Revit.Extensions.FamDocument;
-using Pe.Revit.Global.PolyFill;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
@@ -61,7 +61,7 @@ public class PurgeModelLines(DefaultOperationSettings settings) : DocOperation<D
                 if (shouldDeleteAligned) aligned++;
                 else if (shouldDeleteGrouped) grouped++;
                 else other++;
-            } catch (Autodesk.Revit.Exceptions.InvalidObjectException) {
+            } catch (InvalidObjectException) {
                 // Element was cascade-deleted when a group mate was deleted
             }
         }

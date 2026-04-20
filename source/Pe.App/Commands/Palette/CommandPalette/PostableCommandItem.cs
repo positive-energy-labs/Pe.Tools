@@ -27,7 +27,7 @@ public class PostableCommandItem : IPaletteListItem, INotifyPropertyChanged {
     /// <summary>
     ///     Display name of the command
     /// </summary>
-    public string Name { get; set; }
+    public string Name { get; set; } = string.Empty;
 
     /// <summary>
     ///     Number of times this command has been used (for prioritization)
@@ -58,7 +58,7 @@ public class PostableCommandItem : IPaletteListItem, INotifyPropertyChanged {
     /// <summary>
     ///     Command icon from the ribbon
     /// </summary>
-    public ImageSource ImageSource { get; set; }
+    public ImageSource? ImageSource { get; set; }
 
     /// <summary>
     ///     Gets the primary shortcut as a display string
@@ -91,15 +91,15 @@ public class PostableCommandItem : IPaletteListItem, INotifyPropertyChanged {
         }
     }
 
-    public event PropertyChangedEventHandler PropertyChanged;
+    public event PropertyChangedEventHandler? PropertyChanged;
 
     // ISelectableItem implementation
     public string TextPrimary => this.Name;
     public string TextSecondary => this.TruncatedPaths;
-    public string TextPill => this.PrimaryShortcut;
+    public string? TextPill => this.PrimaryShortcut;
     public Func<string> GetTextInfo => () => this.AllPaths;
 
-    public BitmapImage Icon {
+    public BitmapImage? Icon {
         get {
             if (this.ImageSource is BitmapImage bitmapImage)
                 return bitmapImage;
@@ -134,7 +134,7 @@ public class PostableCommandItem : IPaletteListItem, INotifyPropertyChanged {
 
     public Color? ItemColor => null;
 
-    private void OnPropertyChanged([CallerMemberName] string propertyName = null) =>
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
         this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
     public override string ToString() => this.Name;

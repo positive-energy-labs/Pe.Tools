@@ -2,7 +2,6 @@ using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamDocument.SetValue;
 using Pe.Revit.Extensions.FamManager;
 using Pe.Revit.Extensions.FamParameter.Formula;
-using Pe.Revit.FamilyFoundry.Plans;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
@@ -49,10 +48,10 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
 
             if (currentTypeName is not null
                 && perTypeAssignmentsByParameter.TryGetValue(parameterName, out var valuesPerType)
-                && valuesPerType.TryGetValue(currentTypeName, out var perTypeValue)) {
+                && valuesPerType.TryGetValue(currentTypeName, out var perTypeValue))
                 valueToSet = perTypeValue;
-            } else if (globalAssignmentsByParameter.TryGetValue(parameterName, out var assignment)
-                       && assignment.Kind == ParamAssignmentKind.Value) {
+            else if (globalAssignmentsByParameter.TryGetValue(parameterName, out var assignment)
+                     && assignment.Kind == ParamAssignmentKind.Value) {
                 valueToSet = assignment.Value;
                 isFallback = true;
             }

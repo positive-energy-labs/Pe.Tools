@@ -17,6 +17,7 @@ internal sealed class PlanePairOrInlineSpanJsonConverter : JsonConverter<PlanePa
 
         if (token is JArray array) {
             var refs = array.Values<string>()
+                .OfType<string>()
                 .Where(value => !string.IsNullOrWhiteSpace(value))
                 .Select(value => value.Trim())
                 .ToList();
@@ -24,9 +25,7 @@ internal sealed class PlanePairOrInlineSpanJsonConverter : JsonConverter<PlanePa
         }
 
         if (token is JObject obj) {
-            return new PlanePairOrInlineSpanSpec {
-                InlineSpan = obj.ToObject<AuthoredSpanSpec>(serializer)
-            };
+            return new PlanePairOrInlineSpanSpec { InlineSpan = obj.ToObject<AuthoredSpanSpec>(serializer) };
         }
 
         throw new JsonSerializationException("Expected an array of plane refs or an inline span object.");
@@ -60,21 +59,15 @@ internal sealed class PlaneRefOrInlinePlaneJsonConverter : JsonConverter<PlaneRe
             return null;
 
         if (token.Type == JTokenType.String) {
-            return new PlaneRefOrInlinePlaneSpec {
-                PlaneRef = token.Value<string>()?.Trim()
-            };
+            return new PlaneRefOrInlinePlaneSpec { PlaneRef = token.Value<string>()?.Trim() };
         }
 
         if (token is JObject obj) {
             if (obj.TryGetValue(nameof(AuthoredNamedPlaneSpec.Name), StringComparison.OrdinalIgnoreCase, out _)) {
-                return new PlaneRefOrInlinePlaneSpec {
-                    InlinePlane = obj.ToObject<AuthoredNamedPlaneSpec>(serializer)
-                };
+                return new PlaneRefOrInlinePlaneSpec { InlinePlane = obj.ToObject<AuthoredNamedPlaneSpec>(serializer) };
             }
 
-            return new PlaneRefOrInlinePlaneSpec {
-                EndOffset = obj.ToObject<AuthoredEndOffsetPlaneSpec>(serializer)
-            };
+            return new PlaneRefOrInlinePlaneSpec { EndOffset = obj.ToObject<AuthoredEndOffsetPlaneSpec>(serializer) };
         }
 
         throw new JsonSerializationException("Expected a plane ref string or an inline plane object.");

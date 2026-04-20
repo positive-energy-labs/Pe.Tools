@@ -1,8 +1,5 @@
-using Pe.Revit.FamilyFoundry.OperationSettings;
-using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.FamilyFoundry.Serialization;
-using Pe.Revit.FamilyFoundry.Snapshots;
 
 namespace Pe.Revit.FamilyFoundry.Profiles;
 
@@ -17,8 +14,8 @@ public static class FamilySnapshotProfileProjector {
         string targetFamilyName,
         Func<string, bool>? isSharedParameterName = null
     ) {
-        var denseProfile = BuildProfile(snapshot, targetFamilyName, isSharedParameterName, includeDefinitionOnlyParameters: false);
-        var emptyAllowedProfile = BuildProfile(snapshot, targetFamilyName, isSharedParameterName, includeDefinitionOnlyParameters: true);
+        var denseProfile = BuildProfile(snapshot, targetFamilyName, isSharedParameterName, false);
+        var emptyAllowedProfile = BuildProfile(snapshot, targetFamilyName, isSharedParameterName, true);
         return new FamilySnapshotProfileProjection(denseProfile, emptyAllowedProfile);
     }
 
@@ -75,20 +72,23 @@ public static class FamilySnapshotProfileProjector {
 
         return new FFManagerProfile {
             ExecutionOptions = new ExecutionOptions { SingleTransaction = false, OptimizeTypeOperations = true },
-            FilterFamilies = new BaseProfile.FilterFamiliesSettings {
-                IncludeUnusedFamilies = true,
-                IncludeCategoriesEqualing = [],
-                IncludeNames = new IncludeFamilies { Equaling = [targetFamilyName] },
-                ExcludeNames = new ExcludeFamilies()
-            },
-            FilterApsParams = new BaseProfile.FilterApsParamsSettings {
-                IncludeNames = new IncludeSharedParameter { Equaling = requiredApsParameterNames },
-                ExcludeNames = new ExcludeSharedParameter()
-            },
+            FilterFamilies =
+                new BaseProfile.FilterFamiliesSettings {
+                    IncludeUnusedFamilies = true,
+                    IncludeCategoriesEqualing = [],
+                    IncludeNames = new IncludeFamilies { Equaling = [targetFamilyName] },
+                    ExcludeNames = new ExcludeFamilies()
+                },
+            FilterApsParams =
+                new BaseProfile.FilterApsParamsSettings {
+                    IncludeNames = new IncludeSharedParameter { Equaling = requiredApsParameterNames },
+                    ExcludeNames = new ExcludeSharedParameter()
+                },
             AddFamilyParams = resolvedFamilyParams,
-            SetLookupTables = new SetLookupTablesSettings {
-                Tables = snapshot.LookupTables?.Data?.Select(CloneLookupTable).ToList() ?? []
-            },
+            SetLookupTables =
+                new SetLookupTablesSettings {
+                    Tables = snapshot.LookupTables?.Data?.Select(CloneLookupTable).ToList() ?? []
+                },
             SetKnownParams = exportedParams.SetKnownParams,
             ParamDrivenSolids = authoredSolids
         };

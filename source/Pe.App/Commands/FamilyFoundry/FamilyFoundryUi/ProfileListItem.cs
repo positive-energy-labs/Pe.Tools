@@ -12,9 +12,9 @@ namespace Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 /// </summary>
 public class ProfileListItem : IPaletteListItem {
     public readonly FileInfo _fileInfo;
-    private readonly string _relativePath;
+    private readonly string? _relativePath;
 
-    public ProfileListItem(string filePath, string relativePath = null) {
+    public ProfileListItem(string filePath, string? relativePath = null) {
         this.FilePath = filePath;
         this._fileInfo = new FileInfo(filePath);
         this._relativePath = relativePath;
@@ -43,9 +43,9 @@ public class ProfileListItem : IPaletteListItem {
     /// <summary> Line count badge </summary>
     public string TextPill => $"{this.LineCount} lines";
 
-    public Func<string> GetTextInfo => null; // Tooltip disabled - info shown in preview panel
+    public Func<string> GetTextInfo => () => string.Empty; // Tooltip disabled - info shown in preview panel
 
-    public BitmapImage Icon => null;
+    public BitmapImage? Icon => null;
     public WpfColor? ItemColor => null;
 
     public static List<ProfileListItem> DiscoverProfiles(

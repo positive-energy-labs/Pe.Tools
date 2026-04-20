@@ -1,5 +1,5 @@
 using Pe.Shared.RevitData.PolyFill;
-    
+
 namespace Pe.Shared.RevitData.Families;
 
 public sealed class LoadedFamiliesMatrixEvaluationContext : IDisposable {
@@ -23,12 +23,22 @@ public sealed class LoadedFamiliesMatrixEvaluationContext : IDisposable {
     public IReadOnlyDictionary<long, List<FamilySymbol>> SymbolsByFamilyId { get; }
     public Dictionary<long, TempPlacedSymbolRecord> TempPlacementsBySymbolId { get; } = new();
     public Dictionary<long, List<TempPlacedSymbolRecord>> TempPlacementsByFamilyId { get; } = new();
+
     public Dictionary<ElementId, List<TempPlacedSymbolRecord>> TempPlacementsByCategoryId { get; } =
         new(ElementIdEqualityComparer.Instance);
+
     public Dictionary<long, List<ProjectLoadedFamilyIssue>> IssuesByFamilyId { get; } = new();
     public Transaction? EvaluationTransaction { get; private set; }
     public int PlacementAttempts { get; internal set; }
     public int PlacementSuccesses { get; internal set; }
+
+    public void Dispose() {
+        if (this._disposed)
+            return;
+
+        this.RollBackTransaction();
+        this._disposed = true;
+    }
 
     public IReadOnlyList<TempPlacedSymbolRecord> GetPlacedInstancesForFamily(long familyId) =>
         this.TempPlacementsByFamilyId.TryGetValue(familyId, out var placements)
@@ -92,14 +102,6 @@ public sealed class LoadedFamiliesMatrixEvaluationContext : IDisposable {
         this.IssuesByFamilyId.Clear();
         this.PlacementAttempts = 0;
         this.PlacementSuccesses = 0;
-    }
-
-    public void Dispose() {
-        if (this._disposed)
-            return;
-
-        this.RollBackTransaction();
-        this._disposed = true;
     }
 }
 

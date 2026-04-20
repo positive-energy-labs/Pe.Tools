@@ -56,11 +56,14 @@ public sealed class Csv<T>(string filePath) : CsvReadWriter<T> where T : class, 
 
             StorageFileUtils.EnsureDirectoryExists(this.FilePath);
             var properties = typeof(T).GetProperties().Where(property => property.CanRead).ToList();
-            var lines = new List<string> { string.Join(",", new[] { "Key" }.Concat(properties.Select(property => property.Name))) };
+            var lines = new List<string> {
+                string.Join(",", new[] { "Key" }.Concat(properties.Select(property => property.Name)))
+            };
 
             foreach (var entry in data) {
                 var values = new List<string> { entry.Key };
-                values.AddRange(properties.Select(property => property.GetValue(entry.Value)?.ToString() ?? string.Empty));
+                values.AddRange(
+                    properties.Select(property => property.GetValue(entry.Value)?.ToString() ?? string.Empty));
                 lines.Add(string.Join(",", values));
             }
 

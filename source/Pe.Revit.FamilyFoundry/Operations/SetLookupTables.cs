@@ -1,6 +1,5 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.LookupTables;
-using Pe.Revit.FamilyFoundry.Plans;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
@@ -29,17 +28,14 @@ public sealed class SetLookupTables(SetLookupTablesSettings settings)
         var manager = FamilySizeTableManager.GetFamilySizeTableManager(familyDocument, ownerFamilyId);
         if (manager == null || !manager.IsValidObject) {
             var created = FamilySizeTableManager.CreateFamilySizeTableManager(familyDocument, ownerFamilyId);
-            if (!created) {
-                throw new InvalidOperationException("Failed to create the family size-table manager.");
-            }
+            if (!created) throw new InvalidOperationException("Failed to create the family size-table manager.");
 
             manager = FamilySizeTableManager.GetFamilySizeTableManager(familyDocument, ownerFamilyId);
         }
 
         using (manager) {
-            if (manager == null || !manager.IsValidObject) {
+            if (manager == null || !manager.IsValidObject)
                 throw new InvalidOperationException("Failed to create or retrieve the family size-table manager.");
-            }
 
             var workingDirectory = Path.Combine(Path.GetTempPath(), "pelt", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(workingDirectory);
@@ -51,15 +47,14 @@ public sealed class SetLookupTables(SetLookupTablesSettings settings)
                     var csvPath = Path.Combine(workingDirectory, $"{SanitizePathSegment(tableName)}.csv");
                     File.WriteAllText(csvPath, LookupTableCsvCodec.Encode(table));
 
-                    if (this.Settings.ReplaceExisting && manager.HasSizeTable(tableName)) {
+                    if (this.Settings.ReplaceExisting && manager.HasSizeTable(tableName))
                         _ = manager.RemoveSizeTable(tableName);
-                    }
 
                     using var errorInfo = new FamilySizeTableErrorInfo();
                     var importSucceeded = manager.ImportSizeTable(familyDocument, csvPath, errorInfo);
-                    if (!importSucceeded) {
-                        throw new InvalidOperationException(FormatImportError(tableName, csvPath, errorInfo, File.ReadAllText(csvPath)));
-                    }
+                    if (!importSucceeded)
+                        throw new InvalidOperationException(FormatImportError(tableName, csvPath, errorInfo,
+                            File.ReadAllText(csvPath)));
 
                     logs.Add(new LogEntry(tableName).Success($"Imported lookup table '{tableName}' from '{csvPath}'"));
                 }
@@ -75,14 +70,16 @@ public sealed class SetLookupTables(SetLookupTablesSettings settings)
         }
     }
 
-    private static string FormatImportError(string tableName, string csvPath, FamilySizeTableErrorInfo? errorInfo, string? csvContent = null) {
+    private static string FormatImportError(string tableName,
+        string csvPath,
+        FamilySizeTableErrorInfo? errorInfo,
+        string? csvContent = null) {
         var csvSuffix = string.IsNullOrWhiteSpace(csvContent)
             ? string.Empty
             : $" CSV:`{csvContent.Replace("\r", "\\r").Replace("\n", "\\n")}`";
 
-        if (errorInfo == null || !errorInfo.IsValidObject) {
+        if (errorInfo == null || !errorInfo.IsValidObject)
             return $"Failed to import lookup table '{tableName}' from '{csvPath}'.{csvSuffix}";
-        }
 
         return $"Failed to import lookup table '{tableName}' from '{csvPath}'. " +
                $"Revit error={errorInfo.FamilySizeTableErrorType}, row={errorInfo.InvalidRowIndex}, column={errorInfo.InvalidColumnIndex}, header='{errorInfo.InvalidHeaderText}'.{csvSuffix}";

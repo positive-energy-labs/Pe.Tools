@@ -1,29 +1,24 @@
 namespace Pe.Shared.StorageRuntime;
 
 public sealed class GlobalLogStorage(string directoryPath) {
-    private const string DateTimeFormat = "yyyy-MM-dd HH:mm:ss";
-    private const int MaxLines = 500;
+    private const int DefaultMaxLines = 3000;
+    private const int ProcessLogMaxLines = 2000;
+    private const long TrimThresholdBytes = 1_048_576;
 
     public string DirectoryPath { get; } = EnsureDirectory(directoryPath);
 
-    public string FilePath => Path.Combine(this.DirectoryPath, "log.txt");
+    public string FilePath => this.Log().FilePath;
 
-    public void Append(string message) {
-        this.Trim();
-        var logEntry = $"({DateTime.Now.ToString(DateTimeFormat)}) {message}{Environment.NewLine}{Environment.NewLine}";
-        File.AppendAllText(this.FilePath, logEntry);
-    }
+    public void Append(string message) => this.Log().AppendTimestampedMessage(message);
 
-    private void Trim() {
-        if (!File.Exists(this.FilePath))
-            return;
+    public ManagedLogFile Log() => this.CreateManagedLogFile("log.txt", DefaultMaxLines);
 
-        var lines = File.ReadAllLines(this.FilePath);
-        if (lines.Length <= MaxLines)
-            return;
+    public ManagedLogFile HostLog() => this.CreateManagedLogFile("host.log.txt", ProcessLogMaxLines);
 
-        File.WriteAllLines(this.FilePath, lines.Skip(lines.Length - MaxLines).ToArray());
-    }
+    public ManagedLogFile RevitAppLog() => this.CreateManagedLogFile("revit.log.txt", ProcessLogMaxLines);
+
+    private ManagedLogFile CreateManagedLogFile(string fileName, int maxLines) =>
+        new(Path.Combine(this.DirectoryPath, fileName), maxLines, TrimThresholdBytes);
 
     private static string EnsureDirectory(string directoryPath) {
         if (string.IsNullOrWhiteSpace(directoryPath))

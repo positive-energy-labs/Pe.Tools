@@ -2,7 +2,6 @@
 using Autodesk.Revit.UI;
 using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Revit.Ui;
-using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Ui.Core;
 using Pe.Revit.Ui.Core.Services;
 using Serilog.Events;
@@ -154,7 +153,9 @@ public static class FamilyPlacementHelper {
     ///     Shows a palette with buttons to place each family interactively.
     /// </summary>
     private static void ShowFamilyPlacementPalette(UIApplication uiApp, List<string> familyNames, string commandName) {
-        var doc = uiApp.ActiveUIDocument.Document;
+        var doc = uiApp.ActiveUIDocument?.Document;
+        if (doc == null)
+            return;
         // doc.Regenerate();
         // Create palette items for each family
         // Get all families in the document first
@@ -212,6 +213,9 @@ public static class FamilyPlacementHelper {
                                     $"[FamilyPlacement] Symbol found: {symbol.Name}, IsActive: {symbol.IsActive}");
 
                                 var uiDoc = uiApp.ActiveUIDocument;
+                                if (uiDoc == null)
+                                    return;
+
                                 var doc = uiDoc.Document;
 
                                 try {
@@ -294,10 +298,10 @@ public class FamilyPlacementItem : IPaletteListItem {
         $"Types: {this.Family.GetFamilySymbolIds().Count}\n" +
         $"Id: {this.Family.Id}";
 
-    public BitmapImage Icon => null;
+    public BitmapImage? Icon => null;
     public Color? ItemColor => null;
 
-    public FamilySymbol GetFirstSymbol() {
+    public FamilySymbol? GetFirstSymbol() {
         var symbolIds = this.Family.GetFamilySymbolIds();
         if (symbolIds.Count == 0)
             return null;

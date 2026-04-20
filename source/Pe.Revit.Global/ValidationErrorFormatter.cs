@@ -1,5 +1,4 @@
 using NJsonSchema;
-using Pe.Revit.Global.PolyFill;
 using NJsonSchema.Validation;
 using ValidationError = NJsonSchema.Validation.ValidationError;
 

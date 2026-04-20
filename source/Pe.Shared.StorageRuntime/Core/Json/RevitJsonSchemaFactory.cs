@@ -49,7 +49,5 @@ public static class RevitJsonSchemaFactory {
         SettingsRuntimeMode runtimeMode,
         ISettingsDocumentContextAccessor? documentContextAccessor,
         bool resolveFieldOptionSamples
-    ) => new(runtimeMode, documentContextAccessor) {
-        ResolveFieldOptionSamples = resolveFieldOptionSamples
-    };
+    ) => new(runtimeMode, documentContextAccessor) { ResolveFieldOptionSamples = resolveFieldOptionSamples };
 }

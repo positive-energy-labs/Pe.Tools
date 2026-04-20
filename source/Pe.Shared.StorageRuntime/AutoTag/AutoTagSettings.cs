@@ -1,4 +1,3 @@
-using Autodesk.Revit.DB;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using TypeGen.Core.TypeAnnotations;

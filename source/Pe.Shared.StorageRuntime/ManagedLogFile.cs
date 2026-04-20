@@ -4,8 +4,8 @@ namespace Pe.Shared.StorageRuntime;
 
 public sealed class ManagedLogFile {
     private const string TimestampFormat = "yyyy-MM-dd HH:mm:ss";
-    private readonly object _sync = new();
     private readonly int _maxLines;
+    private readonly object _sync = new();
     private readonly long _trimThresholdBytes;
 
     public ManagedLogFile(string filePath, int maxLines, long trimThresholdBytes) {
@@ -13,14 +13,15 @@ public sealed class ManagedLogFile {
             throw new ArgumentException("File path is required.", nameof(filePath));
         if (maxLines <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxLines), "Max lines must be greater than zero.");
-        if (trimThresholdBytes <= 0)
+        if (trimThresholdBytes <= 0) {
             throw new ArgumentOutOfRangeException(
                 nameof(trimThresholdBytes),
                 "Trim threshold must be greater than zero.");
+        }
 
         this.FilePath = EnsureFileDirectory(filePath);
-        _maxLines = maxLines;
-        _trimThresholdBytes = trimThresholdBytes;
+        this._maxLines = maxLines;
+        this._trimThresholdBytes = trimThresholdBytes;
     }
 
     public string FilePath { get; }
@@ -29,14 +30,15 @@ public sealed class ManagedLogFile {
         if (string.IsNullOrEmpty(text))
             return;
 
-        lock (_sync) {
+        lock (this._sync) {
             this.TrimIfNeeded();
             File.AppendAllText(this.FilePath, text);
         }
     }
 
     public void AppendTimestampedMessage(string message) {
-        var logEntry = $"({DateTime.Now.ToString(TimestampFormat)}) {message}{Environment.NewLine}{Environment.NewLine}";
+        var logEntry =
+            $"({DateTime.Now.ToString(TimestampFormat)}) {message}{Environment.NewLine}{Environment.NewLine}";
         this.Append(logEntry);
     }
 
@@ -87,14 +89,14 @@ public sealed class ManagedLogFile {
             return;
 
         var fileInfo = new FileInfo(this.FilePath);
-        if (fileInfo.Length <= _trimThresholdBytes)
+        if (fileInfo.Length <= this._trimThresholdBytes)
             return;
 
         var lines = File.ReadAllLines(this.FilePath);
-        if (lines.Length <= _maxLines)
+        if (lines.Length <= this._maxLines)
             return;
 
-        File.WriteAllLines(this.FilePath, lines.Skip(lines.Length - _maxLines).ToArray());
+        File.WriteAllLines(this.FilePath, lines.Skip(lines.Length - this._maxLines).ToArray());
     }
 
     private static string EnsureFileDirectory(string filePath) {

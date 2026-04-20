@@ -1,5 +1,4 @@
 using Newtonsoft.Json;
-using Pe.Revit.Global.PolyFill;
 using Pe.Revit.Global.Services.Aps.Models;
 using Serilog;
 using System.Net;
@@ -109,7 +108,8 @@ internal static class OAuthHandler {
         lock (OAuthFlowLock) {
             try {
                 var authUrlPreview = authUrl.Length <= 100 ? authUrl : authUrl[..100] + "...";
-                Log.Information("[OAuthHandler] Starting OAuth flow execution (acquired lock). {AuthUrl}", authUrlPreview);
+                Log.Information("[OAuthHandler] Starting OAuth flow execution (acquired lock). {AuthUrl}",
+                    authUrlPreview);
 
                 TcpListener.Stop();
                 TcpListener.Start();
@@ -120,7 +120,8 @@ internal static class OAuthHandler {
                 if (localEndpoint.Port != OAuthConfig.CallbackPort) {
                     Log.Error("[OAuthHandler] TCP listener bound to wrong port. Expected: {Expected}, Actual: {Actual}",
                         OAuthConfig.CallbackPort, localEndpoint.Port);
-                    throw new InvalidOperationException($"Failed to bind TCP listener to port {OAuthConfig.CallbackPort}");
+                    throw new InvalidOperationException(
+                        $"Failed to bind TCP listener to port {OAuthConfig.CallbackPort}");
                 }
 
                 // Open browser for user authorization
@@ -156,11 +157,10 @@ internal static class OAuthHandler {
                 Log.Information("[OAuthHandler] Exchanging authorization code for token...");
                 var token = await ExchangeCodeForTokenAsync(flowData, authorizationCode).ConfigureAwait(false);
 
-                if (token != null) {
+                if (token != null)
                     Log.Information("[OAuthHandler] Token exchange successful");
-                } else {
+                else
                     Log.Warning("[OAuthHandler] Token exchange returned null");
-                }
 
                 callback?.Invoke(token);
             } else {
@@ -186,8 +186,7 @@ internal static class OAuthHandler {
     /// <summary>Exchanges an authorization code for an access token</summary>
     private static Task<OAuthToken?> ExchangeCodeForTokenAsync(OAuthFlowData flow, string code) {
         var additionalParams = new Dictionary<string, string> {
-            ["code"] = code,
-            ["redirect_uri"] = OAuthConfig.CallbackUri
+            ["code"] = code, ["redirect_uri"] = OAuthConfig.CallbackUri
         };
 
         // PKCE flow sends code_verifier, confidential flow sends client_secret
@@ -271,11 +270,10 @@ internal static class OAuthHandler {
 
         var authorizationCode = ExtractAuthorizationCode(request);
 
-        if (string.IsNullOrEmpty(authorizationCode)) {
+        if (string.IsNullOrEmpty(authorizationCode))
             Log.Warning("[OAuthHandler] Failed to extract authorization code from request");
-        } else {
+        else
             Log.Information("[OAuthHandler] Authorization code extracted successfully");
-        }
 
         // Send response page to browser
         var responsePage = string.IsNullOrEmpty(authorizationCode)
@@ -312,6 +310,7 @@ internal static class OAuthHandler {
                 Log.Warning("[OAuthHandler] Timeout waiting for HTTP request data");
                 return string.Empty;
             }
+
             Thread.Sleep(10);
         }
 

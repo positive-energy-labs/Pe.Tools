@@ -18,6 +18,7 @@ using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
+using Serilog.Core;
 using Serilog.Events;
 using Serilog.Formatting.Display;
 using System.IO;
@@ -33,6 +34,7 @@ public class Application : ExternalApplication {
     ///     RevitTaskService for executing code in Revit API context from async/WPF contexts.
     /// </summary>
     private static RevitTaskService? _revitTaskService;
+
     private static ScriptingPipeServer? _scriptingPipeServer;
 
     public override void OnStartup() {
@@ -141,7 +143,8 @@ public class Application : ExternalApplication {
     private void CreateRibbon() => ButtonRegistry.BuildRibbon(this.Application, "PE TOOLS");
 
     private static void TryAutoConnectBridge() {
-        var configuredValue = Environment.GetEnvironmentVariable(SettingsEditorRuntime.BridgeAutoConnectEnabledVariable);
+        var configuredValue =
+            Environment.GetEnvironmentVariable(SettingsEditorRuntime.BridgeAutoConnectEnabledVariable);
         if (!bool.TryParse(configuredValue, out var isEnabled) || !isEnabled)
             return;
 
@@ -180,13 +183,13 @@ public class Application : ExternalApplication {
     }
 }
 
-internal sealed class RevitAppLogSink(ManagedLogFile logFile, string outputTemplate) : Serilog.Core.ILogEventSink {
+internal sealed class RevitAppLogSink(ManagedLogFile logFile, string outputTemplate) : ILogEventSink {
+    private readonly MessageTemplateTextFormatter _formatter = new(outputTemplate);
     private readonly ManagedLogFile _logFile = logFile;
-    private readonly MessageTemplateTextFormatter _formatter = new(outputTemplate, null);
 
     public void Emit(LogEvent logEvent) {
         using var writer = new StringWriter();
-        _formatter.Format(logEvent, writer);
-        _logFile.Append(writer.ToString());
+        this._formatter.Format(logEvent, writer);
+        this._logFile.Append(writer.ToString());
     }
 }

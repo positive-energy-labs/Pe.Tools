@@ -2,8 +2,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Profiles;
-using Pe.Revit.FamilyFoundry.Snapshots;
-using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Core.Json;
@@ -13,7 +11,7 @@ namespace Pe.Revit.Tests;
 [TestFixture]
 public sealed class ParamDrivenSolidsJsonContractTests {
     [Test]
-    public void Plane_ref_or_inline_plane_schema_accepts_flattened_inline_plane_object() {
+    public void Plane_ref_or_inline_plane_schema_accepts_flattened_inline_plane_object() =>
         AssertSchemaAndJsonRoundTrip<PlaneRefOrInlinePlaneSpec>(
             """
             {
@@ -23,10 +21,9 @@ public sealed class ParamDrivenSolidsJsonContractTests {
               "Dir": "out"
             }
             """);
-    }
 
     [Test]
-    public void Plane_ref_or_inline_plane_schema_accepts_flattened_end_offset_object() {
+    public void Plane_ref_or_inline_plane_schema_accepts_flattened_end_offset_object() =>
         AssertSchemaAndJsonRoundTrip<PlaneRefOrInlinePlaneSpec>(
             """
             {
@@ -34,10 +31,9 @@ public sealed class ParamDrivenSolidsJsonContractTests {
               "Dir": "out"
             }
             """);
-    }
 
     [Test]
-    public void Plane_pair_or_inline_span_schema_accepts_inline_span_object() {
+    public void Plane_pair_or_inline_span_schema_accepts_inline_span_object() =>
         AssertSchemaAndJsonRoundTrip<PlanePairOrInlineSpanSpec>(
             """
             {
@@ -47,10 +43,9 @@ public sealed class ParamDrivenSolidsJsonContractTests {
               "Positive": "Front"
             }
             """);
-    }
 
     [Test]
-    public void Plane_pair_or_inline_span_schema_accepts_plane_ref_array() {
+    public void Plane_pair_or_inline_span_schema_accepts_plane_ref_array() =>
         AssertSchemaAndJsonRoundTrip<PlanePairOrInlineSpanSpec>(
             """
             [
@@ -58,7 +53,6 @@ public sealed class ParamDrivenSolidsJsonContractTests {
               "plane:Right"
             ]
             """);
-    }
 
     [Test]
     public void Profile_schema_accepts_flattened_inline_cylinder_height_object() {
@@ -91,7 +85,8 @@ public sealed class ParamDrivenSolidsJsonContractTests {
             "flattened-inline-cylinder-height.json");
 
         var compiled = AuthoredParamDrivenSolidsCompiler.Compile(contract.Value.ParamDrivenSolids);
-        Assert.That(compiled.CanExecute, Is.True, string.Join(Environment.NewLine, compiled.Diagnostics.Select(d => d.ToDisplayMessage())));
+        Assert.That(compiled.CanExecute, Is.True,
+            string.Join(Environment.NewLine, compiled.Diagnostics.Select(d => d.ToDisplayMessage())));
     }
 
     [Test]
@@ -123,7 +118,8 @@ public sealed class ParamDrivenSolidsJsonContractTests {
             "flattened-end-offset-cylinder-height.json");
 
         var compiled = AuthoredParamDrivenSolidsCompiler.Compile(contract.Value.ParamDrivenSolids);
-        Assert.That(compiled.CanExecute, Is.True, string.Join(Environment.NewLine, compiled.Diagnostics.Select(d => d.ToDisplayMessage())));
+        Assert.That(compiled.CanExecute, Is.True,
+            string.Join(Environment.NewLine, compiled.Diagnostics.Select(d => d.ToDisplayMessage())));
     }
 
     [Test]
@@ -167,7 +163,8 @@ public sealed class ParamDrivenSolidsJsonContractTests {
             "flattened-inline-span.json");
 
         var compiled = AuthoredParamDrivenSolidsCompiler.Compile(contract.Value.ParamDrivenSolids);
-        Assert.That(compiled.CanExecute, Is.True, string.Join(Environment.NewLine, compiled.Diagnostics.Select(d => d.ToDisplayMessage())));
+        Assert.That(compiled.CanExecute, Is.True,
+            string.Join(Environment.NewLine, compiled.Diagnostics.Select(d => d.ToDisplayMessage())));
     }
 
     [TestCaseSource(nameof(GetProfileFixtureNames))]
@@ -176,7 +173,8 @@ public sealed class ParamDrivenSolidsJsonContractTests {
         var compiled = AuthoredParamDrivenSolidsCompiler.Compile(contract.Value.ParamDrivenSolids);
 
         Assert.That(contract.CanonicalJson, Is.Not.Empty);
-        Assert.That(compiled.CanExecute, Is.True, string.Join(Environment.NewLine, compiled.Diagnostics.Select(d => d.ToDisplayMessage())));
+        Assert.That(compiled.CanExecute, Is.True,
+            string.Join(Environment.NewLine, compiled.Diagnostics.Select(d => d.ToDisplayMessage())));
     }
 
     [Test]
@@ -192,10 +190,7 @@ public sealed class ParamDrivenSolidsJsonContractTests {
                         Diameter = new AuthoredMeasureSpec { By = "param:PE_G_Dim_Width1" },
                         Height = new PlaneRefOrInlinePlaneSpec {
                             InlinePlane = new AuthoredNamedPlaneSpec {
-                                Name = "Basin Top",
-                                From = "@Bottom",
-                                By = "param:PE_G_Dim_Height1",
-                                Dir = "out"
+                                Name = "Basin Top", From = "@Bottom", By = "param:PE_G_Dim_Height1", Dir = "out"
                             }
                         }
                     }
@@ -211,12 +206,14 @@ public sealed class ParamDrivenSolidsJsonContractTests {
         Assert.That(roundTrip.CanonicalJson, Does.Contain("\"Height\": {"));
         Assert.That(roundTrip.CanonicalJson, Does.Contain("\"Name\": \"Basin Top\""));
         Assert.That(roundTrip.CanonicalJson, Does.Not.Contain("\"InlinePlane\""));
-        Assert.That(compiled.CanExecute, Is.True, string.Join(Environment.NewLine, compiled.Diagnostics.Select(d => d.ToDisplayMessage())));
+        Assert.That(compiled.CanExecute, Is.True,
+            string.Join(Environment.NewLine, compiled.Diagnostics.Select(d => d.ToDisplayMessage())));
     }
 
     private static IEnumerable<string> GetProfileFixtureNames() {
         var assemblyDirectory = Path.GetDirectoryName(typeof(RevitFamilyFixtureHarness).Assembly.Location)
-                                ?? throw new InvalidOperationException("Could not resolve the test assembly directory.");
+                                ?? throw new InvalidOperationException(
+                                    "Could not resolve the test assembly directory.");
         var profileDirectory = Path.Combine(assemblyDirectory, "Fixtures", "Profiles");
 
         return Directory.GetFiles(profileDirectory, "*.json", SearchOption.TopDirectoryOnly)
@@ -228,7 +225,8 @@ public sealed class ParamDrivenSolidsJsonContractTests {
 
     private static void AssertSchemaAndJsonRoundTrip<T>(string json)
         where T : class, new() {
-        var schema = RevitJsonSchemaFactory.BuildAuthoringSchema(typeof(T), SettingsRuntimeMode.HostOnly, resolveFieldOptionSamples: false);
+        var schema = RevitJsonSchemaFactory.BuildAuthoringSchema(typeof(T), SettingsRuntimeMode.HostOnly,
+            resolveFieldOptionSamples: false);
         var issues = schema.Validate(JToken.Parse(json));
         if (issues.Count != 0)
             Console.WriteLine(schema.ToJson());
@@ -242,7 +240,8 @@ public sealed class ParamDrivenSolidsJsonContractTests {
         var roundTripIssues = schema.Validate(JToken.Parse(canonicalJson));
         if (roundTripIssues.Count != 0)
             Console.WriteLine(schema.ToJson());
-        Assert.That(roundTripIssues, Is.Empty, string.Join(Environment.NewLine, roundTripIssues.Select(issue => issue.ToString())));
+        Assert.That(roundTripIssues, Is.Empty,
+            string.Join(Environment.NewLine, roundTripIssues.Select(issue => issue.ToString())));
         Assert.That(JToken.DeepEquals(JToken.Parse(json), JToken.Parse(canonicalJson)), Is.True);
     }
 }

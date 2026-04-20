@@ -2,7 +2,6 @@ using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamManager;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.FamilyFoundry.Operations;
-using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.Global;
 
 namespace Pe.Revit.FamilyFoundry.OperationGroups;
@@ -19,11 +18,13 @@ public class AddAndMapSharedParams(
         IEnumerable<SharedParameterDefinition> sharedParams
     ) {
         var sharedParameterDefinitions = sharedParams as SharedParameterDefinition[] ?? sharedParams.ToArray();
-        var ops = settings.Enabled ? new List<IOperation> {
-            new PreProcessMappings(settings, sharedParameterDefinitions),
-            new MapReplaceParams(settings, sharedParameterDefinitions),
-            new AddUnmappedSharedParams(settings, sharedParameterDefinitions)
-        } : [];
+        var ops = settings.Enabled
+            ? new List<IOperation> {
+                new PreProcessMappings(settings, sharedParameterDefinitions),
+                new MapReplaceParams(settings, sharedParameterDefinitions),
+                new AddUnmappedSharedParams(settings, sharedParameterDefinitions)
+            }
+            : [];
         if (!settings.DisablePerTypeFallback) ops.Add(new MapParams(settings));
         ops.Add(new BacklinkParamsToBuiltIn(settings));
 
@@ -64,7 +65,8 @@ public class PreProcessMappings(
             );
 
             if (!sharedParamsDict.TryGetValue(mapping.NewName, out var sharedParam)) {
-                _ = log.Skip($"Mapping data 'NewName' ({mapping.NewName}) does not match a shared parameter from the filtered set");
+                _ = log.Skip(
+                    $"Mapping data 'NewName' ({mapping.NewName}) does not match a shared parameter from the filtered set");
                 continue;
             }
 
@@ -91,7 +93,9 @@ public class PreProcessMappings(
                 try {
                     if (!currParam.IsBuiltInParameter()) continue;
                     foundMatch = TryMapBuiltInParameter(doc, currParam, sharedParam);
-                    if (foundMatch) _ = log.Success($"Mapped built-in {currParam.Definition.Name} → {sharedParam.ExternalDefinition.Name}");
+                    if (foundMatch)
+                        _ = log.Success(
+                            $"Mapped built-in {currParam.Definition.Name} → {sharedParam.ExternalDefinition.Name}");
                 } catch {
                     _ = log.Defer($"{currParam} → {mapping.NewName}"); // allow retrying 
                 }

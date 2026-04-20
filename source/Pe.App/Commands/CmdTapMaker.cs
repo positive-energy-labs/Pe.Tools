@@ -69,7 +69,12 @@ public class CmdTapMaker : IExternalCommand {
 
         try {
             var uidoc = uiApplication.ActiveUIDocument;
-            var doc = uidoc.Document;
+            var doc = uidoc?.Document;
+            if (doc == null)
+                return false;
+
+            if (trunkDuct is not MEPCurve trunkCurve)
+                return false;
 
             tapSizeInches = TapSizer(face, tapSizeInches);
             var tapSizeFeet = tapSizeInches / 12.0;
@@ -91,16 +96,17 @@ public class CmdTapMaker : IExternalCommand {
             var (tap, tapError) = TapPlacer(
                 doc,
                 face,
-                trunkDuct,
+                trunkCurve,
                 locationAdjusted,
                 tapSizeFeet,
                 tapDuctType,
                 balloon
             );
 
-            if (tapError is not null) {
+            if (tapError is not null || tap == null) {
                 _ = trans.RollBack();
-                _ = balloon.Add(LogEventLevel.Error, new StackFrame(), tapError);
+                _ = balloon.Add(LogEventLevel.Error, new StackFrame(),
+                    tapError ?? new InvalidOperationException("Tap creation returned no instance"));
                 balloon.Show();
                 return false;
             }
@@ -120,11 +126,11 @@ public class CmdTapMaker : IExternalCommand {
     private static Result<FamilyInstance> TapPlacer(
         Document doc,
         Face face,
-        Element trunkDuct,
+        MEPCurve trunkCurve,
         UV locationAdjusted,
         double tapSizeFeet,
         DuctType ductType,
-        Ballogger balloon = null
+        Ballogger? balloon = null
     ) {
         // Get all radial points at 45 degree increments in order of center-proximity
         var positions = Enumerable.Range(1, 9)
@@ -141,7 +147,7 @@ public class CmdTapMaker : IExternalCommand {
                 var altNormal = face.ComputeNormal(pos);
                 var (tap, tapError) = Ducts.MakeTakeoffWithBranch(
                     doc,
-                    trunkDuct as MEPCurve,
+                    trunkCurve,
                     altPoint,
                     altNormal,
                     tapSizeFeet,

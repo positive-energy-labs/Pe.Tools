@@ -1,6 +1,4 @@
-using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.FamilyFoundry.Operations;
-using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
 using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 using Pe.Shared.StorageRuntime.Json.SchemaProviders;
@@ -55,7 +53,8 @@ internal sealed class ExcludeSharedParameterSchemaDefinition : SettingsSchemaDef
     }
 }
 
-internal sealed class FilterFamiliesSettingsSchemaDefinition : SettingsSchemaDefinition<BaseProfile.FilterFamiliesSettings> {
+internal sealed class
+    FilterFamiliesSettingsSchemaDefinition : SettingsSchemaDefinition<BaseProfile.FilterFamiliesSettings> {
     public override void Configure(ISettingsSchemaBuilder<BaseProfile.FilterFamiliesSettings> builder) =>
         builder.Property(item => item.IncludeByCondition,
             property => property.WithDescription(
@@ -109,19 +108,46 @@ internal sealed class MakeElecConnectorParametersSchemaDefinition
     }
 }
 
-internal static class FamilyFoundrySchemaDefinitionBootstrapper {
+public static class FamilyFoundrySchemaDefinitionBootstrapper {
+    private static readonly object SyncRoot = new();
+    private static bool _registered;
+
     [ModuleInitializer]
-    internal static void Register() {
-        SettingsSchemaDefinitionRegistry.Shared.Register(new MappingDataSchemaDefinition());
-        SettingsSchemaDefinitionRegistry.Shared.Register(new IncludeFamiliesSchemaDefinition());
-        SettingsSchemaDefinitionRegistry.Shared.Register(new ExcludeFamiliesSchemaDefinition());
-        SettingsSchemaDefinitionRegistry.Shared.Register(new IncludeSharedParameterSchemaDefinition());
-        SettingsSchemaDefinitionRegistry.Shared.Register(new ExcludeSharedParameterSchemaDefinition());
-        SettingsSchemaDefinitionRegistry.Shared.Register(new FilterFamiliesSettingsSchemaDefinition());
-        SettingsSchemaDefinitionRegistry.Shared.Register(new GlobalParamAssignmentSchemaDefinition());
-        SettingsSchemaDefinitionRegistry.Shared.Register(new PerTypeAssignmentRowSchemaDefinition());
-        SettingsSchemaDefinitionRegistry.Shared.Register(new SetKnownParamsSettingsSchemaDefinition());
-        SettingsSchemaDefinitionRegistry.Shared.Register(new SetLookupTablesSettingsSchemaDefinition());
-        SettingsSchemaDefinitionRegistry.Shared.Register(new MakeElecConnectorParametersSchemaDefinition());
+    internal static void RegisterOnModuleLoad() => TryRegister();
+
+    public static void EnsureRegistered() {
+        if (_registered)
+            return;
+
+        lock (SyncRoot) {
+            if (_registered)
+                return;
+
+            SettingsSchemaDefinitionRegistry.Shared.Register(new MappingDataSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new IncludeFamiliesSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new ExcludeFamiliesSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new IncludeSharedParameterSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new ExcludeSharedParameterSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new FilterFamiliesSettingsSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new GlobalParamAssignmentSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new PerTypeAssignmentRowSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new SetKnownParamsSettingsSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new SetLookupTablesSettingsSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new MakeElecConnectorParametersSchemaDefinition());
+            _registered = true;
+        }
     }
+
+    private static void TryRegister() {
+        try {
+            EnsureRegistered();
+        } catch (Exception ex) when (IsMissingRevitAssembly(ex)) {
+        }
+    }
+
+    private static bool IsMissingRevitAssembly(Exception ex) =>
+        (ex is FileNotFoundException fileNotFoundException &&
+         string.Equals(fileNotFoundException.FileName?.Split(',')[0], "RevitAPI",
+             StringComparison.OrdinalIgnoreCase)) ||
+        (ex.InnerException is not null && IsMissingRevitAssembly(ex.InnerException));
 }

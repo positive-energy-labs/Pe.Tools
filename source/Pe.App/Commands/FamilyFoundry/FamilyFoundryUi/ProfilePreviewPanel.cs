@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
+using TextElement = System.Windows.Documents.TextElement;
 using WpfUiRichTextBox = Wpf.Ui.Controls.RichTextBox;
 
 // Note: This panel has complex domain-specific rendering that benefits from manual FlowDocument building.
@@ -52,7 +53,7 @@ public class ProfilePreviewPanel : PaletteSidebarPanel<ProfileListItem, PreviewD
 
     protected override void ClearContent() => this._richTextBox.Document = FlowDocumentBuilder.Create();
 
-    private void UpdateContent(PreviewData data) {
+    private void UpdateContent(PreviewData? data) {
         if (data == null) {
             this._richTextBox.Document = FlowDocumentBuilder.Create();
             return;
@@ -169,11 +170,11 @@ public class ProfilePreviewPanel : PaletteSidebarPanel<ProfileListItem, PreviewD
 
         if (data.IsValid) {
             var validRun = new Run("✓ Valid Profile") { FontWeight = FontWeights.Bold, FontSize = 12 };
-            validRun.SetResourceReference(Run.ForegroundProperty, "SystemFillColorSuccessBrush");
+            validRun.SetResourceReference(TextElement.ForegroundProperty, "SystemFillColorSuccessBrush");
             statusPara.Inlines.Add(validRun);
         } else {
             var invalidRun = new Run("✗ Invalid Profile") { FontWeight = FontWeights.Bold, FontSize = 12 };
-            invalidRun.SetResourceReference(Run.ForegroundProperty, "SystemFillColorCriticalBrush");
+            invalidRun.SetResourceReference(TextElement.ForegroundProperty, "SystemFillColorCriticalBrush");
             statusPara.Inlines.Add(invalidRun);
         }
 
@@ -184,13 +185,13 @@ public class ProfilePreviewPanel : PaletteSidebarPanel<ProfileListItem, PreviewD
             var fixesHeader = new Paragraph(new Run("Applied Fixes") { FontWeight = FontWeights.SemiBold }) {
                 Margin = new Thickness(0, 8, 0, 4)
             };
-            fixesHeader.SetResourceReference(Paragraph.ForegroundProperty, "SystemFillColorSuccessBrush");
+            fixesHeader.SetResourceReference(TextElement.ForegroundProperty, "SystemFillColorSuccessBrush");
             doc.Blocks.Add(fixesHeader);
 
             var fixesList = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
             foreach (var fix in data.AppliedFixes) {
                 var para = new Paragraph(new Run(fix));
-                para.SetResourceReference(Paragraph.ForegroundProperty, "SystemFillColorSuccessBrush");
+                para.SetResourceReference(TextElement.ForegroundProperty, "SystemFillColorSuccessBrush");
                 var listItem = new ListItem(para);
                 fixesList.ListItems.Add(listItem);
             }
@@ -203,13 +204,13 @@ public class ProfilePreviewPanel : PaletteSidebarPanel<ProfileListItem, PreviewD
             var errorsHeader = new Paragraph(new Run("Validation Errors") { FontWeight = FontWeights.SemiBold }) {
                 Margin = new Thickness(0, 8, 0, 4)
             };
-            errorsHeader.SetResourceReference(Paragraph.ForegroundProperty, "SystemFillColorCriticalBrush");
+            errorsHeader.SetResourceReference(TextElement.ForegroundProperty, "SystemFillColorCriticalBrush");
             doc.Blocks.Add(errorsHeader);
 
             var errorsList = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
             foreach (var error in data.RemainingErrors) {
                 var para = new Paragraph(new Run(error));
-                para.SetResourceReference(Paragraph.ForegroundProperty, "SystemFillColorCriticalBrush");
+                para.SetResourceReference(TextElement.ForegroundProperty, "SystemFillColorCriticalBrush");
                 var listItem = new ListItem(para);
                 errorsList.ListItems.Add(listItem);
             }
@@ -221,13 +222,13 @@ public class ProfilePreviewPanel : PaletteSidebarPanel<ProfileListItem, PreviewD
             var warningsHeader = new Paragraph(new Run("Warnings") { FontWeight = FontWeights.SemiBold }) {
                 Margin = new Thickness(0, 8, 0, 4)
             };
-            warningsHeader.SetResourceReference(Paragraph.ForegroundProperty, "SystemFillColorCautionBrush");
+            warningsHeader.SetResourceReference(TextElement.ForegroundProperty, "SystemFillColorCautionBrush");
             doc.Blocks.Add(warningsHeader);
 
             var warningsList = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
             foreach (var warning in data.Warnings) {
                 var para = new Paragraph(new Run(warning));
-                para.SetResourceReference(Paragraph.ForegroundProperty, "SystemFillColorCautionBrush");
+                para.SetResourceReference(TextElement.ForegroundProperty, "SystemFillColorCautionBrush");
                 warningsList.ListItems.Add(new ListItem(para));
             }
 

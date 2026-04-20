@@ -1,4 +1,4 @@
-using Pe.Revit.FamilyFoundry.Snapshots;
+using Newtonsoft.Json;
 using System.ComponentModel;
 
 namespace Pe.Revit.FamilyFoundry.Plans;
@@ -18,8 +18,9 @@ public sealed class CompiledParamDrivenConnectorSpec {
     public string HostPlaneName { get; init; } = string.Empty;
     public string HostFacePlaneName { get; init; } = string.Empty;
     public OffsetDirection DepthDirection { get; init; } = OffsetDirection.Positive;
-    [Newtonsoft.Json.JsonIgnore]
-    public LengthDriverSpec DepthDriver { get; init; } = LengthDriverSpec.None;
+
+    [JsonIgnore] public LengthDriverSpec DepthDriver { get; init; } = LengthDriverSpec.None;
+
     public ConstrainedRectangleExtrusionSnapshot? RectangularStub { get; init; }
     public ConstrainedCircleExtrusionSnapshot? RoundStub { get; init; }
     public ConnectorBindingsSpec Bindings { get; init; } = new();

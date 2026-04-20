@@ -1,13 +1,6 @@
-using Autodesk.Revit.DB;
-using Autodesk.Revit.DB.Electrical;
-using Autodesk.Revit.DB.Mechanical;
-using Autodesk.Revit.DB.Plumbing;
 using Nice3point.Revit.Extensions.Runtime;
 using Pe.Revit.Extensions.FamDocument;
-using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Helpers;
-using Pe.Revit.FamilyFoundry.Plans;
-using Pe.Revit.FamilyFoundry.Snapshots;
 using Serilog;
 using System.Globalization;
 
@@ -16,6 +9,7 @@ namespace Pe.Revit.FamilyFoundry.Operations;
 public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings)
     : DocOperation<ParamDrivenConnectorsPlan>(settings) {
     private const double DefaultStubDepth = 0.5 / 12.0;
+
     private static readonly HashSet<string> UnassociableConnectorParameters = [
         "Category", "System Type", "Power Factor State", "Design Option", "Family Name", "Type Name"
     ];
@@ -58,12 +52,14 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
             stubKey,
             flippedHostPlanes);
         if (executableSpec.DepthDirection == OffsetDirection.Negative && sketchPlaneOverride == null) {
-            logs.Add(new LogEntry(key).Error("Failed to resolve a connector sketch plane override for inward connector stub creation."));
+            logs.Add(new LogEntry(key).Error(
+                "Failed to resolve a connector sketch plane override for inward connector stub creation."));
             return;
         }
 
         var stubResult = spec.Profile == ParamDrivenConnectorProfile.Rectangular
-            ? ConstrainedExtrusionFactory.CreateRectangle(doc.Document, executableSpec.RectangularStub!, logs, stubKey, sketchPlaneOverride)
+            ? ConstrainedExtrusionFactory.CreateRectangle(doc.Document, executableSpec.RectangularStub!, logs, stubKey,
+                sketchPlaneOverride)
             : ConstrainedExtrusionFactory.CreateCircle(
                 doc.Document,
                 executableSpec.RoundStub!,
@@ -107,9 +103,8 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
         ) {
             hostOffset = 0.0;
             if (string.IsNullOrWhiteSpace(sourceSpec.HostFacePlaneName) ||
-                !sourceSpec.HostFacePlaneName.StartsWith("__OFFSET__|", StringComparison.Ordinal)) {
+                !sourceSpec.HostFacePlaneName.StartsWith("__OFFSET__|", StringComparison.Ordinal))
                 return false;
-            }
 
             var parts = sourceSpec.HostFacePlaneName.Split(new[] { '|' }, 4);
             if (parts.Length != 4)
@@ -119,9 +114,9 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
             if (parts[3].StartsWith("P:", StringComparison.Ordinal)) {
                 var parameterName = parts[3][2..].Trim();
                 if (string.IsNullOrWhiteSpace(parameterName) ||
-                    !LengthDriverSpec.FromLegacyParameter(parameterName).TryResolveCurrentValue(sourceDoc, out hostOffset)) {
+                    !LengthDriverSpec.FromLegacyParameter(parameterName)
+                        .TryResolveCurrentValue(sourceDoc, out hostOffset))
                     return false;
-                }
 
                 hostOffset = offsetSign * Math.Abs(hostOffset);
                 return true;
@@ -140,7 +135,8 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
 
         var resolvedDepth = ResolveCurrentDepth(doc, spec.DepthDriver);
         var hasEncodedHostOffset = TryResolveEncodedHostOffset(doc, spec, out var hostOffset);
-        var (startOffset, endOffset) = ResolveStubOffsets(spec.DepthDirection, hasEncodedHostOffset, hostOffset, resolvedDepth);
+        var (startOffset, endOffset) =
+            ResolveStubOffsets(spec.DepthDirection, hasEncodedHostOffset, hostOffset, resolvedDepth);
         if (spec.Profile == ParamDrivenConnectorProfile.Rectangular && spec.RectangularStub != null) {
             return new CompiledParamDrivenConnectorSpec {
                 Name = spec.Name,
@@ -223,7 +219,7 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
     ) => settings.Connectors
         .SelectMany(spec => GetLengthDrivenParameterNames(spec))
         .Where(name => !string.IsNullOrWhiteSpace(name))
-        .Select(name => name.Trim())
+        .Select(name => name!.Trim())
         .Distinct(StringComparer.Ordinal)
         .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
         .ToList();
@@ -267,7 +263,8 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
         if (hasEncodedHostOffset) {
             var parts = spec.HostFacePlaneName.Split(new[] { '|' }, 4);
             if (parts.Length != 4) {
-                logs.Add(new LogEntry(key).Error($"Connector host face payload '{spec.HostFacePlaneName}' is invalid."));
+                logs.Add(new LogEntry(key).Error(
+                    $"Connector host face payload '{spec.HostFacePlaneName}' is invalid."));
                 return null;
             }
 
@@ -282,7 +279,8 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
             if (parts[3].StartsWith("P:", StringComparison.Ordinal)) {
                 var parameterName = parts[3][2..].Trim();
                 if (string.IsNullOrWhiteSpace(parameterName) ||
-                    !LengthDriverSpec.FromLegacyParameter(parameterName).TryResolveCurrentValue(doc, out var parameterOffset)) {
+                    !LengthDriverSpec.FromLegacyParameter(parameterName)
+                        .TryResolveCurrentValue(doc, out var parameterOffset)) {
                     logs.Add(new LogEntry(key).Error(
                         $"Failed to resolve connector host offset parameter '{parameterName}'."));
                     return null;
@@ -291,7 +289,8 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
                 hostOffset = offsetSign * Math.Abs(parameterOffset);
             } else if (parts[3].StartsWith("L:", StringComparison.Ordinal)) {
                 var rawLiteral = parts[3][2..].Trim();
-                if (!double.TryParse(rawLiteral, NumberStyles.Float, CultureInfo.InvariantCulture, out var literalOffset)) {
+                if (!double.TryParse(rawLiteral, NumberStyles.Float, CultureInfo.InvariantCulture,
+                        out var literalOffset)) {
                     logs.Add(new LogEntry(key).Error(
                         $"Failed to parse connector host offset literal '{rawLiteral}'."));
                     return null;
@@ -299,7 +298,8 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
 
                 hostOffset = offsetSign * Math.Abs(literalOffset);
             } else {
-                logs.Add(new LogEntry(key).Error($"Connector host face payload '{spec.HostFacePlaneName}' is invalid."));
+                logs.Add(new LogEntry(key).Error(
+                    $"Connector host face payload '{spec.HostFacePlaneName}' is invalid."));
                 return null;
             }
         }
@@ -319,7 +319,8 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
                 sketchPlaneName,
                 requiresFlippedNormal);
             if (directionalSketchPlane == null)
-                logs.Add(new LogEntry(key).Error($"Failed to resolve directional connector sketch plane '{sketchPlaneName}'."));
+                logs.Add(new LogEntry(key).Error(
+                    $"Failed to resolve directional connector sketch plane '{sketchPlaneName}'."));
 
             return directionalSketchPlane;
         }
@@ -329,7 +330,8 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
             .Cast<ReferencePlane>()
             .FirstOrDefault(plane => string.Equals(plane.Name, sketchPlaneName, StringComparison.Ordinal));
         var basePlane = referencePlane != null
-            ? Plane.CreateByNormalAndOrigin(referencePlane.Normal.Normalize(), (referencePlane.BubbleEnd + referencePlane.FreeEnd) * 0.5)
+            ? Plane.CreateByNormalAndOrigin(referencePlane.Normal.Normalize(),
+                (referencePlane.BubbleEnd + referencePlane.FreeEnd) * 0.5)
             : new FilteredElementCollector(doc)
                 .OfClass(typeof(SketchPlane))
                 .Cast<SketchPlane>()
@@ -417,9 +419,8 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
         PlanarFace hostFace
     ) {
         if (spec.Domain == ParamDrivenConnectorDomain.Duct &&
-            spec.Profile == ParamDrivenConnectorProfile.Rectangular) {
+            spec.Profile == ParamDrivenConnectorProfile.Rectangular)
             return CreateBestRectangularDuctConnector(doc, spec, hostFace);
-        }
 
         var edge = hostFace.EdgeLoops
             .Cast<EdgeArray>()
@@ -443,8 +444,10 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
                 ? ConnectorElement.CreatePipeConnector(doc, spec.Config.Pipe!.SystemType, hostFace.Reference)
                 : ConnectorElement.CreatePipeConnector(doc, spec.Config.Pipe!.SystemType, hostFace.Reference, edge),
             ParamDrivenConnectorDomain.Electrical => edge == null
-                ? ConnectorElement.CreateElectricalConnector(doc, spec.Config.Electrical!.SystemType, hostFace.Reference)
-                : ConnectorElement.CreateElectricalConnector(doc, spec.Config.Electrical!.SystemType, hostFace.Reference, edge),
+                ? ConnectorElement.CreateElectricalConnector(doc, spec.Config.Electrical!.SystemType,
+                    hostFace.Reference)
+                : ConnectorElement.CreateElectricalConnector(doc, spec.Config.Electrical!.SystemType,
+                    hostFace.Reference, edge),
             _ => throw new InvalidOperationException($"Unsupported connector domain '{spec.Domain}'.")
         };
     }
@@ -512,14 +515,14 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
             return false;
 
         if (!spec.RectangularStub.PairADriver.TryResolveCurrentValue(doc, out width) &&
-            !LengthDriverSpec.FromLegacyParameter(spec.RectangularStub.PairAParameter).TryResolveCurrentValue(doc, out width)) {
+            !LengthDriverSpec.FromLegacyParameter(spec.RectangularStub.PairAParameter)
+                .TryResolveCurrentValue(doc, out width))
             return false;
-        }
 
         if (!spec.RectangularStub.PairBDriver.TryResolveCurrentValue(doc, out height) &&
-            !LengthDriverSpec.FromLegacyParameter(spec.RectangularStub.PairBParameter).TryResolveCurrentValue(doc, out height)) {
+            !LengthDriverSpec.FromLegacyParameter(spec.RectangularStub.PairBParameter)
+                .TryResolveCurrentValue(doc, out height))
             return false;
-        }
 
         width = Math.Abs(width);
         height = Math.Abs(height);
@@ -544,17 +547,18 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
                 spec.RectangularStub.PairBPlane2,
                 expectedFaceNormal,
                 out var expectedWidthAxis,
-                out var expectedLengthAxis)) {
+                out var expectedLengthAxis))
             return false;
-        }
 
-        if (!RawConnectorUnitInference.TryGetRectangularConnectorAxes(connector, out var actualWidthAxis, out var actualLengthAxis, out var actualFaceNormal))
+        if (!RawConnectorUnitInference.TryGetRectangularConnectorAxes(connector, out var actualWidthAxis,
+                out var actualLengthAxis, out var actualFaceNormal))
             return false;
 
         if (actualFaceNormal.DotProduct(expectedFaceNormal) < 0.0) {
             connector.FlipDirection();
             doc.Regenerate();
-            if (!RawConnectorUnitInference.TryGetRectangularConnectorAxes(connector, out actualWidthAxis, out actualLengthAxis, out actualFaceNormal))
+            if (!RawConnectorUnitInference.TryGetRectangularConnectorAxes(connector, out actualWidthAxis,
+                    out actualLengthAxis, out actualFaceNormal))
                 return false;
         }
 
@@ -664,7 +668,8 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
 
                 AssociateElementParameter(doc, connectorParam, sourceParameterName, key, target.Value.ToString(), logs);
             } catch (Exception ex) {
-                logs.Add(new LogEntry(key).Error($"Failed connector binding for '{connectorParam.Definition.Name}': {ex.Message}"));
+                logs.Add(new LogEntry(key).Error(
+                    $"Failed connector binding for '{connectorParam.Definition.Name}': {ex.Message}"));
             }
         }
     }
@@ -687,7 +692,7 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
             key,
             "stub end offset",
             logs,
-            required: true);
+            true);
     }
 
     private static void ApplyConnectorIntrinsicAssociations(
@@ -701,7 +706,8 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
             return;
 
         if (spec.Profile == ParamDrivenConnectorProfile.Round && spec.RoundStub != null) {
-            var diameterParameterName = spec.RoundStub.DiameterDriver.TryGetParameterName() ?? spec.RoundStub.DiameterParameter;
+            var diameterParameterName =
+                spec.RoundStub.DiameterDriver.TryGetParameterName() ?? spec.RoundStub.DiameterParameter;
             if (string.IsNullOrWhiteSpace(diameterParameterName))
                 return;
 
@@ -712,15 +718,17 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
                 key,
                 "connector diameter",
                 logs,
-                required: true);
+                true);
             return;
         }
 
         if (spec.RectangularStub == null)
             return;
 
-        var widthParameterName = spec.RectangularStub.PairADriver.TryGetParameterName() ?? spec.RectangularStub.PairAParameter;
-        var heightParameterName = spec.RectangularStub.PairBDriver.TryGetParameterName() ?? spec.RectangularStub.PairBParameter;
+        var widthParameterName = spec.RectangularStub.PairADriver.TryGetParameterName() ??
+                                 spec.RectangularStub.PairAParameter;
+        var heightParameterName = spec.RectangularStub.PairBDriver.TryGetParameterName() ??
+                                  spec.RectangularStub.PairBParameter;
 
         if (!string.IsNullOrWhiteSpace(widthParameterName)) {
             _ = AssociateBuiltInParameter(
@@ -730,7 +738,7 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
                 key,
                 "connector width",
                 logs,
-                required: true);
+                true);
         }
 
         if (!string.IsNullOrWhiteSpace(heightParameterName)) {
@@ -741,7 +749,7 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
                 key,
                 "connector height",
                 logs,
-                required: true);
+                true);
         }
     }
 
@@ -778,9 +786,11 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
 
         var sourceParam = doc.FamilyManager.Parameters
             .OfType<FamilyParameter>()
-            .FirstOrDefault(param => string.Equals(param.Definition.Name, sourceParameterName, StringComparison.Ordinal));
+            .FirstOrDefault(param =>
+                string.Equals(param.Definition.Name, sourceParameterName, StringComparison.Ordinal));
         if (sourceParam == null) {
-            logs.Add(new LogEntry(key).Error($"Binding source parameter '{sourceParameterName}' was not found for {targetLabel}."));
+            logs.Add(new LogEntry(key).Error(
+                $"Binding source parameter '{sourceParameterName}' was not found for {targetLabel}."));
             return false;
         }
 
@@ -811,5 +821,4 @@ public sealed class MakeParamDrivenConnectors(ParamDrivenConnectorsPlan settings
             BuiltInParameter.RBS_ELEC_APPARENT_LOAD => ConnectorParameterKey.ApparentPower,
             _ => null
         };
-
 }

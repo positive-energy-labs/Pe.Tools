@@ -1,5 +1,4 @@
-﻿using Autodesk.Revit.DB;
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 
 namespace Pe.Revit.FamilyFoundry.Helpers;
 
@@ -63,18 +62,16 @@ internal static partial class RawConnectorUnitInference {
                 lengthPlaneName1,
                 lengthPlaneName2,
                 out var rawWidthAxis,
-                out var rawLengthAxis)) {
+                out var rawLengthAxis))
             return false;
-        }
 
         var normalizedFace = NormalizeOrZero(faceNormal);
         var normalizedWidth = NormalizeOrZero(rawWidthAxis);
         var normalizedLength = NormalizeOrZero(rawLengthAxis);
         if (normalizedFace.GetLength() <= VectorMagnitudeTolerance ||
             normalizedWidth.GetLength() <= VectorMagnitudeTolerance ||
-            normalizedLength.GetLength() <= VectorMagnitudeTolerance) {
+            normalizedLength.GetLength() <= VectorMagnitudeTolerance)
             return false;
-        }
 
         var candidateWidth = normalizedWidth;
         var candidateLength = NormalizeOrZero(normalizedFace.CrossProduct(candidateWidth));
@@ -141,9 +138,8 @@ internal static partial class RawConnectorUnitInference {
         var normalizedActual = NormalizeOrZero(actual);
         var normalizedExpected = NormalizeOrZero(expected);
         if (normalizedActual.GetLength() <= VectorMagnitudeTolerance ||
-            normalizedExpected.GetLength() <= VectorMagnitudeTolerance) {
+            normalizedExpected.GetLength() <= VectorMagnitudeTolerance)
             return 1.0;
-        }
 
         return 1.0 - Math.Abs(normalizedActual.DotProduct(normalizedExpected));
     }
@@ -152,9 +148,8 @@ internal static partial class RawConnectorUnitInference {
         var normalizedActual = NormalizeOrZero(actual);
         var normalizedExpected = NormalizeOrZero(expected);
         if (normalizedActual.GetLength() <= VectorMagnitudeTolerance ||
-            normalizedExpected.GetLength() <= VectorMagnitudeTolerance) {
+            normalizedExpected.GetLength() <= VectorMagnitudeTolerance)
             return 2.0;
-        }
 
         return 1.0 - normalizedActual.DotProduct(normalizedExpected);
     }
@@ -232,9 +227,8 @@ internal static partial class RawConnectorUnitInference {
     ) {
         normal = XYZ.Zero;
         if (!TryResolveReferencePlane(doc, primaryPlaneName, out var plane) &&
-            !TryResolveReferencePlane(doc, secondaryPlaneName, out plane)) {
+            !TryResolveReferencePlane(doc, secondaryPlaneName, out plane))
             return false;
-        }
 
         normal = NormalizeOrZero(plane.Normal);
         return normal.GetLength() > VectorMagnitudeTolerance;

@@ -74,7 +74,8 @@ internal static class BenchmarkHarness {
         if (string.IsNullOrWhiteSpace(benchmarkName))
             throw new ArgumentException("Benchmark name is required.", nameof(benchmarkName));
         if (iterations <= 0)
-            throw new ArgumentOutOfRangeException(nameof(iterations), iterations, "Iterations must be greater than zero.");
+            throw new ArgumentOutOfRangeException(nameof(iterations), iterations,
+                "Iterations must be greater than zero.");
         if (openResource == null)
             throw new ArgumentNullException(nameof(openResource));
         if (performAction == null)
@@ -259,16 +260,11 @@ internal static class BenchmarkArtifactWriter {
             throw new ArgumentNullException(nameof(taskOutput));
 
         var readmePath = Path.Combine(taskOutput.DirectoryPath, "README.txt");
-        var content = string.Join(Environment.NewLine, [
-            "Practical benchmark task",
-            string.Empty,
-            "1. Install the matching Pe.Tools MSI.",
-            "2. Open Revit.",
-            "3. Run Task Palette.",
+        var content = string.Join(Environment.NewLine, "Practical benchmark task", string.Empty,
+            "1. Install the matching Pe.Tools MSI.", "2. Open Revit.", "3. Run Task Palette.",
             "4. Execute 'Run Practical Benchmarks'.",
             "5. Inspect the newest practical-benchmarks_* run folder for JSON artifacts and run-summary.txt.",
-            string.Empty
-        ]);
+            string.Empty);
         File.WriteAllText(readmePath, content);
     }
 

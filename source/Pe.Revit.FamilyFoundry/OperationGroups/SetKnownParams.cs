@@ -1,6 +1,4 @@
 using Pe.Revit.FamilyFoundry.Operations;
-using Pe.Revit.FamilyFoundry.Plans;
-using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Resolution;
 
 namespace Pe.Revit.FamilyFoundry.OperationGroups;
@@ -8,7 +6,8 @@ namespace Pe.Revit.FamilyFoundry.OperationGroups;
 /// <summary>
 ///     Operation group that optionally creates missing family types, then sets parameter values/formulas.
 ///     Execution order:
-///     0. CreateFamilyTypes (if createMissingFamilyTypes=true) - creates missing family types from PerTypeAssignmentsTable columns
+///     0. CreateFamilyTypes (if createMissingFamilyTypes=true) - creates missing family types from PerTypeAssignmentsTable
+///     columns
 ///     1. SetParamValues - sets global formulas or values from GlobalAssignments
 ///     2. SetParamValuesPerType - handles explicit per-type values and failed global value fallbacks
 /// </summary>

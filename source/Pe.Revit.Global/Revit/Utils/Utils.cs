@@ -1,7 +1,5 @@
 ﻿// Fixes CS0138 by using 'using static' for the Filters type
 
-using Serilog;
-
 namespace Pe.Revit.Global.Revit.Utils;
 
 public class Utils {

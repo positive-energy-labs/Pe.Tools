@@ -7,14 +7,14 @@ public static class InstallerConfiguration {
     public static ResolvedInstallerConfiguration Load() {
         var repositoryRoot = FindRepositoryRoot();
         var configuration = new ConfigurationBuilder()
-            .AddJsonFile(Path.Combine(repositoryRoot, "build", "appsettings.json"), optional: false)
+            .AddJsonFile(Path.Combine(repositoryRoot, "build", "appsettings.json"), false)
             .AddEnvironmentVariables()
             .Build();
 
         var buildOptions = configuration.GetRequiredSection("Build").Get<BuildConfiguration>()
-            ?? throw new InvalidOperationException("Build configuration could not be loaded.");
+                           ?? throw new InvalidOperationException("Build configuration could not be loaded.");
         var installerOptions = configuration.GetRequiredSection("Installer").Get<InstallerConfigurationSection>()
-            ?? throw new InvalidOperationException("Installer configuration could not be loaded.");
+                               ?? throw new InvalidOperationException("Installer configuration could not be loaded.");
 
         return new ResolvedInstallerConfiguration {
             ProductName = SettingsEditorRuntime.ProductName,

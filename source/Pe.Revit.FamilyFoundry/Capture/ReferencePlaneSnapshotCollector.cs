@@ -1,5 +1,4 @@
 using Pe.Revit.Extensions.FamDocument;
-using Pe.Revit.FamilyFoundry.Snapshots;
 
 namespace Pe.Revit.FamilyFoundry.Capture;
 
@@ -10,7 +9,8 @@ namespace Pe.Revit.FamilyFoundry.Capture;
 public class ReferencePlaneSnapshotCollector : IFamilySnapshotCollector {
     public bool ShouldCollect(FamilySnapshot snapshot) =>
         snapshot.RefPlanesAndDims == null ||
-        (snapshot.RefPlanesAndDims.MirrorConstraintSnapshots.Count == 0 && snapshot.RefPlanesAndDims.OffsetConstraintSnapshots.Count == 0);
+        (snapshot.RefPlanesAndDims.MirrorConstraintSnapshots.Count == 0 &&
+         snapshot.RefPlanesAndDims.OffsetConstraintSnapshots.Count == 0);
 
     public void Collect(FamilySnapshot snapshot, FamilyDocument famDoc) =>
         snapshot.RefPlanesAndDims = CollectFromFamilyDoc(famDoc);
@@ -89,11 +89,13 @@ public class ReferencePlaneSnapshotCollector : IFamilySnapshotCollector {
         }
 
         return new RefPlaneSnapshot {
-            Source = SnapshotSource.FamilyDoc, MirrorConstraintSnapshots = mirrorSpecs, OffsetConstraintSnapshots = offsetSpecs
+            Source = SnapshotSource.FamilyDoc,
+            MirrorConstraintSnapshots = mirrorSpecs,
+            OffsetConstraintSnapshots = offsetSpecs
         };
     }
 
-    private static string FindParameterDimension(
+    private static string? FindParameterDimension(
         List<Dimension> dimensions,
         ReferencePlane plane1,
         ReferencePlane plane2,
@@ -116,7 +118,7 @@ public class ReferencePlaneSnapshotCollector : IFamilySnapshotCollector {
         return null;
     }
 
-    private static string ExtractBaseName(string name1, string name2) {
+    private static string? ExtractBaseName(string name1, string name2) {
         // Find longest common prefix
         var minLength = Math.Min(name1.Length, name2.Length);
         var commonPrefix = "";
@@ -171,7 +173,7 @@ public class ReferencePlaneSnapshotCollector : IFamilySnapshotCollector {
         return (anchor, target, direction);
     }
 
-    private static ReferencePlane FindCenterPlaneGeometrically(List<ReferencePlane> planes) {
+    private static ReferencePlane? FindCenterPlaneGeometrically(List<ReferencePlane> planes) {
         if (planes.Count != 3) return null;
 
         var normal = planes[0].Normal;
@@ -195,7 +197,7 @@ public class ReferencePlaneSnapshotCollector : IFamilySnapshotCollector {
         return refPlanes;
     }
 
-    private static string GetDimensionParameter(Dimension dim) {
+    private static string? GetDimensionParameter(Dimension dim) {
         try {
             return dim.FamilyLabel?.Definition?.Name;
         } catch {

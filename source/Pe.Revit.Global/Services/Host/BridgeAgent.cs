@@ -1,14 +1,11 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
-using Pe.Revit.Global.Revit.Documents;
-using Pe.Shared.HostContracts.Protocol;
-using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Global.Services.Host.Operations;
+using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
-using System.Diagnostics;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
 
@@ -75,8 +72,8 @@ internal sealed class BridgeAgent : IDisposable {
     private readonly ThrottleGate _throttleGate = new();
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly StreamWriter _writer;
-    private string? _lastAdvertisedDocumentKey;
     private bool _disposed;
+    private string? _lastAdvertisedDocumentKey;
 
     public BridgeAgent(
         SettingsModuleRegistry moduleRegistry,
@@ -342,10 +339,7 @@ internal sealed class BridgeAgent : IDisposable {
             return;
 
         var payloadJson = JsonConvert.SerializeObject(
-            payload with {
-                SessionId = this._hostOptions.SessionId,
-                RevitVersion = this.RevitVersion
-            },
+            payload with { SessionId = this._hostOptions.SessionId, RevitVersion = this.RevitVersion },
             this._serializerSettings
         );
         var frame = new BridgeFrame(
@@ -425,8 +419,8 @@ internal sealed class BridgeAgent : IDisposable {
         this._writer.WriteLine(json);
     }
 
-    private static HostModuleDescriptor CreateHostModuleDescriptor(ISettingsModule module) {
-        return new HostModuleDescriptor(
+    private static HostModuleDescriptor CreateHostModuleDescriptor(ISettingsModule module) =>
+        new(
             module.ModuleKey,
             module.DefaultRootKey,
             module.HostScope switch {
@@ -440,7 +434,6 @@ internal sealed class BridgeAgent : IDisposable {
                 _ => HostModuleActiveDocumentKind.Any
             }
         );
-    }
 
     private static bool IsModuleAvailableForDocument(
         ISettingsModule module,

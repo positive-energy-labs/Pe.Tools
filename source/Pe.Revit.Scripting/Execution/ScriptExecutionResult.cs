@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+﻿using Autodesk.Revit.UI;
 using Microsoft.CodeAnalysis;
 using Pe.Revit.Scripting.Context;
 using Pe.Shared.HostContracts.Scripting;
@@ -16,7 +16,7 @@ internal sealed record ScriptSourceSet(
 );
 
 internal sealed record ScriptExecutionPlan(
-    Autodesk.Revit.UI.UIApplication UiApplication,
+    UIApplication UiApplication,
     string ExecutionId,
     string RevitVersion,
     string TargetFramework,

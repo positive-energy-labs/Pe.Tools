@@ -2,6 +2,7 @@
 using Autodesk.Revit.UI;
 using Pe.App.SettingsEditor;
 using Pe.Revit.Global.Services.Host;
+using Pe.Shared.HostContracts.Protocol;
 using Serilog;
 using System.Diagnostics;
 using System.Text;
@@ -93,7 +94,7 @@ public class CmdSettingsEditor : IExternalCommand {
                     "Settings Editor",
                     launched
                         ? "Opened the external settings editor in your default browser."
-                        : $"Could not open the external settings editor. Check {Pe.Shared.HostContracts.Protocol.SettingsEditorRuntime.FrontendBaseUrlVariable}."
+                        : $"Could not open the external settings editor. Check {SettingsEditorRuntime.FrontendBaseUrlVariable}."
                 );
                 break;
             }

@@ -5,9 +5,8 @@ namespace Pe.Shared.StorageRuntime;
 public sealed class StateStorage {
     private const string DefaultName = "state";
 
-    public StateStorage(string parentDirectoryPath, string? subdirectory = null) {
-        this.DirectoryPath = ResolveDirectoryPath(parentDirectoryPath, subdirectory ?? DefaultName);
-    }
+    public StateStorage(string parentDirectoryPath, string? subdirectory = null) => this.DirectoryPath =
+        ResolveDirectoryPath(parentDirectoryPath, subdirectory ?? DefaultName);
 
     public string DirectoryPath { get; }
 
@@ -42,7 +41,8 @@ public sealed class StateStorage {
             : normalizedRootRelativePath.Split('/').Last();
 
         if (!Directory.Exists(discoveryRootPath))
-            return new SettingsDiscoveryResult([], new SettingsDirectoryNode(rootName, normalizedRootRelativePath, [], []));
+            return new SettingsDiscoveryResult([],
+                new SettingsDirectoryNode(rootName, normalizedRootRelativePath, [], []));
 
         var searchOption = options.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
         var files = Directory.EnumerateFiles(discoveryRootPath, "*.json", searchOption)

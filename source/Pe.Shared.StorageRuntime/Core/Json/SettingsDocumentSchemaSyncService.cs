@@ -11,8 +11,8 @@ public sealed class SettingsDocumentSchemaSyncService(
     SettingsRuntimeMode runtimeMode = SettingsRuntimeMode.HostOnly,
     ISettingsDocumentContextAccessor? documentContextAccessor = null
 ) {
-    private readonly SettingsRuntimeMode _runtimeMode = runtimeMode;
     private readonly ISettingsDocumentContextAccessor? _documentContextAccessor = documentContextAccessor;
+    private readonly SettingsRuntimeMode _runtimeMode = runtimeMode;
 
     public string EnsureSynchronized(
         Type settingsType,
@@ -180,9 +180,10 @@ public sealed class SettingsDocumentSchemaSyncService(
             if (obj.Property("$include") != null || obj.Property("$preset") != null)
                 return true;
 
-            foreach (var property in obj.Properties())
+            foreach (var property in obj.Properties()) {
                 if (ContainsDirectiveMetadata(property.Value))
                     return true;
+            }
 
             return false;
         }

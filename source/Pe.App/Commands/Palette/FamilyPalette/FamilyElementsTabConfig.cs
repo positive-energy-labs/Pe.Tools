@@ -15,7 +15,7 @@ internal static class FamilyElementsTabConfig {
     internal static List<TabDefinition<FamilyElementItem>> CreateTabs(
         FamilyDocument familyDoc
     ) => [
-        new TabDefinition<FamilyElementItem>(
+        new(
             "All",
             () => FamilyElementsActions.CollectAllElements(familyDoc),
             new PaletteAction<FamilyElementItem> {
@@ -28,10 +28,8 @@ internal static class FamilyElementsTabConfig {
                 Modifiers = ModifierKeys.Alt,
                 Execute = async item => FamilyElementsActions.HandleSnoop(item)
             }
-        ) {
-            FilterKeySelector = i => i.TextPill
-        },
-        new TabDefinition<FamilyElementItem>(
+        ) { FilterKeySelector = i => i.TextPill },
+        new(
             "Families",
             () => FamilyElementsActions.CollectFamilies(familyDoc),
             new PaletteAction<FamilyElementItem> {
@@ -44,10 +42,8 @@ internal static class FamilyElementsTabConfig {
                 Modifiers = ModifierKeys.Alt,
                 Execute = async item => FamilyElementsActions.HandleSnoop(item)
             }
-        ) {
-            FilterKeySelector = i => i.TextPill
-        },
-        new TabDefinition<FamilyElementItem>(
+        ) { FilterKeySelector = i => i.TextPill },
+        new(
             "Params",
             () => FamilyElementsActions.CollectParameters(familyDoc),
             new PaletteAction<FamilyElementItem> {
@@ -55,10 +51,8 @@ internal static class FamilyElementsTabConfig {
                 Modifiers = ModifierKeys.Alt,
                 Execute = async item => FamilyElementsActions.HandleSnoop(item)
             }
-        ) {
-            FilterKeySelector = i => i.TextPill
-        },
-        new TabDefinition<FamilyElementItem>(
+        ) { FilterKeySelector = i => i.TextPill },
+        new(
             "Dims",
             () => FamilyElementsActions.CollectDimensions(familyDoc),
             new PaletteAction<FamilyElementItem> {
@@ -72,7 +66,7 @@ internal static class FamilyElementsTabConfig {
                 Execute = async item => FamilyElementsActions.HandleSnoop(item)
             }
         ),
-        new TabDefinition<FamilyElementItem>(
+        new(
             "Ref Planes",
             () => FamilyElementsActions.CollectReferencePlanes(familyDoc),
             new PaletteAction<FamilyElementItem> {
@@ -86,7 +80,7 @@ internal static class FamilyElementsTabConfig {
                 Execute = async item => FamilyElementsActions.HandleSnoop(item)
             }
         ),
-        new TabDefinition<FamilyElementItem>(
+        new(
             "Connectors",
             () => FamilyElementsActions.CollectConnectors(familyDoc),
             new PaletteAction<FamilyElementItem> {

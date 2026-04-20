@@ -1,5 +1,3 @@
-using Pe.Revit.FamilyFoundry.Plans;
-
 namespace Pe.Revit.FamilyFoundry.LookupTables;
 
 internal static class LookupTableValidator {
@@ -34,7 +32,8 @@ internal static class LookupTableValidator {
             throw new InvalidOperationException("Lookup table schema is missing required Name.");
 
         if (schema.Transport != LookupTableTransport.RevitCsv)
-            throw new InvalidOperationException($"Lookup table '{tableName}' uses unsupported transport '{schema.Transport}'.");
+            throw new InvalidOperationException(
+                $"Lookup table '{tableName}' uses unsupported transport '{schema.Transport}'.");
 
         if (schema.Columns.Count == 0)
             throw new InvalidOperationException($"Lookup table '{tableName}' must define at least one schema column.");
@@ -85,7 +84,8 @@ internal static class LookupTableValidator {
             .Select((row, index) => new {
                 Row = row,
                 Index = index,
-                Key = string.Join("\u001F", keyColumns.Select(columnName => GetRequiredCell(tableName, row, columnName).Trim()))
+                Key = string.Join("\u001F",
+                    keyColumns.Select(columnName => GetRequiredCell(tableName, row, columnName).Trim()))
             })
             .GroupBy(x => x.Key, StringComparer.Ordinal)
             .Where(group => keyColumns.Length > 0 && group.Count() > 1)
@@ -103,12 +103,11 @@ internal static class LookupTableValidator {
                     $"Lookup table '{tableName}' row {rowIndex + 1} is missing required RowName.");
             }
 
-            foreach (var column in schema.Columns) {
-                _ = GetRequiredCell(tableName, row, column.Name);
-            }
+            foreach (var column in schema.Columns) _ = GetRequiredCell(tableName, row, column.Name);
 
             var extraColumns = row.ValuesByColumn.Keys
-                .Where(columnName => !schema.Columns.Any(column => string.Equals(column.Name, columnName, StringComparison.Ordinal)))
+                .Where(columnName =>
+                    !schema.Columns.Any(column => string.Equals(column.Name, columnName, StringComparison.Ordinal)))
                 .OrderBy(name => name, StringComparer.Ordinal)
                 .ToArray();
             if (extraColumns.Length > 0) {

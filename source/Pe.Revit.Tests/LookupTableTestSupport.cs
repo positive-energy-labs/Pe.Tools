@@ -1,6 +1,5 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Operations;
 using System.Globalization;
 
@@ -8,25 +7,6 @@ namespace Pe.Revit.Tests;
 
 internal static class LookupTableTestSupport {
     public const string LookupTableNameParameterName = "LookupTableName";
-
-    internal sealed record LookupCase(
-        string Name,
-        ForgeTypeId DataType,
-        string ParameterName,
-        string ResultValue
-    );
-
-    internal sealed record AppliedLookupCaseResult(
-        LookupCase LookupCase,
-        string LookupCarrierParameterName,
-        string LookupFormula,
-        bool LookupFormulaAccepted,
-        string? LookupErrorMessage,
-        string? TargetFormula,
-        bool TargetFormulaAccepted,
-        string? TargetErrorMessage,
-        RevitFamilyFixtureHarness.ParameterValueSnapshot Snapshot
-    );
 
     public static void EnsureLookupSupportParameters(Document familyDocument, LookupCase lookupCase) {
         EnsureTypeParameter(familyDocument, GetLookupCarrierParameterName(lookupCase), SpecTypeId.Number);
@@ -87,11 +67,11 @@ internal static class LookupTableTestSupport {
         Rows = [
             new LookupTableRow {
                 RowName = rowName,
-                ValuesByColumn = new[] {
-                    new KeyValuePair<string, string>(keyColumnName, lookupValue)
-                }
-                .Concat(cases.Select(lookupCase => new KeyValuePair<string, string>(GetLookupCarrierParameterName(lookupCase), lookupCase.ResultValue)))
-                .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal)
+                ValuesByColumn = new[] { new KeyValuePair<string, string>(keyColumnName, lookupValue) }
+                    .Concat(cases.Select(lookupCase =>
+                        new KeyValuePair<string, string>(GetLookupCarrierParameterName(lookupCase),
+                            lookupCase.ResultValue)))
+                    .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal)
             }
         ]
     };
@@ -100,9 +80,7 @@ internal static class LookupTableTestSupport {
         using var transaction = new Transaction(familyDocument, $"Import lookup table '{table.Schema.Name}'");
         _ = transaction.Start();
 
-        var operation = new SetLookupTables(new SetLookupTablesSettings {
-            Tables = [table]
-        });
+        var operation = new SetLookupTables(new SetLookupTablesSettings { Tables = [table] });
         var log = operation.Execute(
             new FamilyDocument(familyDocument),
             new FamilyProcessingContext { FamilyName = familyDocument.Title },
@@ -142,16 +120,19 @@ internal static class LookupTableTestSupport {
             var familyDoc = new FamilyDocument(familyDocument);
             var familyManager = familyDocument.FamilyManager;
             var lookupParameter = familyManager.get_Parameter(lookupParameterName)
-                ?? throw new InvalidOperationException($"Lookup parameter '{lookupParameterName}' was not found.");
+                                  ?? throw new InvalidOperationException(
+                                      $"Lookup parameter '{lookupParameterName}' was not found.");
             var lookupTableNameParameter = familyManager.get_Parameter(LookupTableNameParameterName)
-                ?? throw new InvalidOperationException($"Lookup table-name parameter '{LookupTableNameParameterName}' was not found.");
+                                           ?? throw new InvalidOperationException(
+                                               $"Lookup table-name parameter '{LookupTableNameParameterName}' was not found.");
             SetLookupKeyValue(familyManager, lookupParameter, lookupValue);
             SetLookupTableNameValue(familyManager, lookupTableNameParameter, tableName);
 
             foreach (var lookupCase in cases) {
                 var lookupCarrierParameterName = GetLookupCarrierParameterName(lookupCase);
                 var lookupCarrierParameter = familyManager.get_Parameter(lookupCarrierParameterName)
-                    ?? throw new InvalidOperationException($"Lookup carrier parameter '{lookupCarrierParameterName}' was not found.");
+                                             ?? throw new InvalidOperationException(
+                                                 $"Lookup carrier parameter '{lookupCarrierParameterName}' was not found.");
                 var (lookupAccepted, lookupFormula, lookupErrorMessage) = TrySetLookupFormula(
                     familyDoc,
                     lookupCarrierParameter,
@@ -166,11 +147,13 @@ internal static class LookupTableTestSupport {
                     $"Expected size_lookup formula to be accepted for carrier '{lookupCarrierParameterName}'. Error: {lookupErrorMessage ?? "<null>"}");
 
                 var targetParameter = familyManager.get_Parameter(lookupCase.ParameterName)
-                    ?? throw new InvalidOperationException($"Lookup target parameter '{lookupCase.ParameterName}' was not found.");
+                                      ?? throw new InvalidOperationException(
+                                          $"Lookup target parameter '{lookupCase.ParameterName}' was not found.");
                 ApplyUnitBasisValueIfNeeded(familyDocument, familyManager, lookupCase);
 
                 var targetFormula = BuildTargetFormula(lookupCase);
-                var targetAccepted = familyDoc.TrySetFormula(targetParameter, targetFormula, out var targetErrorMessage);
+                var targetAccepted =
+                    familyDoc.TrySetFormula(targetParameter, targetFormula, out var targetErrorMessage);
                 Assert.That(
                     targetAccepted,
                     Is.True,
@@ -217,7 +200,8 @@ internal static class LookupTableTestSupport {
             return double.Parse(lookupCase.ResultValue, CultureInfo.InvariantCulture);
 
         if (UnitUtils.IsMeasurableSpec(lookupCase.DataType)) {
-            if (UnitFormatUtils.TryParse(familyDocument.GetUnits(), lookupCase.DataType, lookupCase.ResultValue, out var parsedValue))
+            if (UnitFormatUtils.TryParse(familyDocument.GetUnits(), lookupCase.DataType, lookupCase.ResultValue,
+                    out var parsedValue))
                 return parsedValue;
 
             var unitTypeId = familyDocument.GetUnits().GetFormatOptions(lookupCase.DataType).GetUnitTypeId();
@@ -232,9 +216,8 @@ internal static class LookupTableTestSupport {
     public static string GetExpectedHeaderFragment(Document familyDocument, LookupCase lookupCase) {
         if (lookupCase.DataType == SpecTypeId.Boolean.YesNo
             || lookupCase.DataType == SpecTypeId.Number
-            || UnitUtils.IsMeasurableSpec(lookupCase.DataType)) {
+            || UnitUtils.IsMeasurableSpec(lookupCase.DataType))
             return $"{GetLookupCarrierParameterName(lookupCase)}##number##general";
-        }
 
         throw new InvalidOperationException(
             $"Lookup-table test support does not yet handle spec '{lookupCase.DataType.TypeId}'.");
@@ -257,7 +240,9 @@ internal static class LookupTableTestSupport {
             $"Lookup-table test support does not yet handle spec '{lookupCase.DataType.TypeId}'.");
     }
 
-    private static void SetLookupKeyValue(FamilyManager familyManager, FamilyParameter lookupParameter, string rawValue) {
+    private static void SetLookupKeyValue(FamilyManager familyManager,
+        FamilyParameter lookupParameter,
+        string rawValue) {
         switch (lookupParameter.StorageType) {
         case StorageType.Integer:
             familyManager.Set(lookupParameter, int.Parse(rawValue, CultureInfo.InvariantCulture));
@@ -297,7 +282,8 @@ internal static class LookupTableTestSupport {
             return;
 
         var unitBasisParameter = familyManager.get_Parameter(unitBasisParameterName)
-            ?? throw new InvalidOperationException($"Lookup unit-basis parameter '{unitBasisParameterName}' was not found.");
+                                 ?? throw new InvalidOperationException(
+                                     $"Lookup unit-basis parameter '{unitBasisParameterName}' was not found.");
 
         var unitTypeId = familyDocument.GetUnits().GetFormatOptions(lookupCase.DataType).GetUnitTypeId();
         var oneUnitInInternalUnits = UnitUtils.ConvertToInternalUnits(1, unitTypeId);
@@ -367,7 +353,8 @@ internal static class LookupTableTestSupport {
         foreach (var defaultValue in defaultValues) {
             foreach (var currentTableName in tableNames) {
                 foreach (var resultColumn in resultColumns)
-                    yield return $"size_lookup({currentTableName}, {resultColumn}, {defaultValue}, {lookupParameterName})";
+                    yield return
+                        $"size_lookup({currentTableName}, {resultColumn}, {defaultValue}, {lookupParameterName})";
             }
         }
     }
@@ -385,10 +372,31 @@ internal static class LookupTableTestSupport {
 
         var unitTypeId = familyDocument.GetUnits().GetFormatOptions(dataType).GetUnitTypeId();
         var zeroInInternalUnits = UnitUtils.ConvertToInternalUnits(0, unitTypeId);
-        var formattedForFormula = UnitFormatUtils.Format(familyDocument.GetUnits(), dataType, zeroInInternalUnits, true);
-        var formattedForDisplay = UnitFormatUtils.Format(familyDocument.GetUnits(), dataType, zeroInInternalUnits, false);
+        var formattedForFormula =
+            UnitFormatUtils.Format(familyDocument.GetUnits(), dataType, zeroInInternalUnits, true);
+        var formattedForDisplay =
+            UnitFormatUtils.Format(familyDocument.GetUnits(), dataType, zeroInInternalUnits, false);
 
         yield return formattedForFormula;
         yield return formattedForDisplay;
     }
+
+    internal sealed record LookupCase(
+        string Name,
+        ForgeTypeId DataType,
+        string ParameterName,
+        string ResultValue
+    );
+
+    internal sealed record AppliedLookupCaseResult(
+        LookupCase LookupCase,
+        string LookupCarrierParameterName,
+        string LookupFormula,
+        bool LookupFormulaAccepted,
+        string? LookupErrorMessage,
+        string? TargetFormula,
+        bool TargetFormulaAccepted,
+        string? TargetErrorMessage,
+        RevitFamilyFixtureHarness.ParameterValueSnapshot Snapshot
+    );
 }

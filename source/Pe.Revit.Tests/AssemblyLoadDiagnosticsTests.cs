@@ -1,8 +1,7 @@
 using Pe.App.Commands.FamilyFoundry;
+using Pe.Revit.FamilyFoundry.Profiles;
 using System.Diagnostics;
 using System.Reflection;
-using Pe.Revit.FamilyFoundry;
-using Pe.Revit.FamilyFoundry.Profiles;
 
 namespace Pe.Revit.Tests;
 
@@ -19,9 +18,7 @@ public sealed class AssemblyLoadDiagnosticsTests {
         TestContext.Progress.WriteLine($"RevitVersion={revitApplication.VersionNumber}");
         TestContext.Progress.WriteLine($"RevitSubVersion={revitApplication.SubVersionNumber}");
 
-        foreach (var assembly in GetRelevantAssemblies()) {
-            TestContext.Progress.WriteLine(FormatAssemblyLine(assembly));
-        }
+        foreach (var assembly in GetRelevantAssemblies()) TestContext.Progress.WriteLine(FormatAssemblyLine(assembly));
 
         Assert.That(process.ProcessName, Is.EqualTo("Revit"));
     }
@@ -36,8 +33,7 @@ public sealed class AssemblyLoadDiagnosticsTests {
             });
 
         var anchorAssemblies = new[] {
-            typeof(AssemblyLoadDiagnosticsTests).Assembly,
-            typeof(CmdFFManager).Assembly,
+            typeof(AssemblyLoadDiagnosticsTests).Assembly, typeof(CmdFFManager).Assembly,
             typeof(FFManagerProfile).Assembly
         };
 
@@ -55,7 +51,8 @@ public sealed class AssemblyLoadDiagnosticsTests {
         var lastWriteTime = TryGetLastWriteTimeUtc(location);
         var moduleVersionId = assembly.ManifestModule.ModuleVersionId;
 
-        return $"{assemblyName.Name}|Version={version}|Mvid={moduleVersionId}|LastWriteUtc={lastWriteTime}|Location={location}";
+        return
+            $"{assemblyName.Name}|Version={version}|Mvid={moduleVersionId}|LastWriteUtc={lastWriteTime}|Location={location}";
     }
 
     private static string SafeGetAssemblyLocation(Assembly assembly) {

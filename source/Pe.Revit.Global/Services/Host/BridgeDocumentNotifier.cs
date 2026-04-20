@@ -1,8 +1,6 @@
 using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI.Events;
-using Pe.Revit.Global.Revit.Documents;
 using Pe.Shared.HostContracts.Protocol;
-using Pe.Revit.Global.Services.Document;
 using Serilog;
 
 namespace Pe.Revit.Global.Services.Host;
@@ -15,11 +13,11 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
     private readonly Action<IReadOnlyList<HostInvalidationDomain>>? _invalidateDomains;
     private readonly Func<DocumentInvalidationEvent, Task> _publishAsync;
     private readonly object _sync = new();
-    private string? _lastActiveDocumentKey;
-    private bool _lastHasActiveDocument;
     private bool _disposed;
     private bool _isInitialized;
+    private string? _lastActiveDocumentKey;
     private DateTime _lastDocumentChangedNotificationUtc = DateTime.MinValue;
+    private bool _lastHasActiveDocument;
 
     public BridgeDocumentNotifier(
         Func<DocumentInvalidationEvent, Task> publishAsync,
@@ -152,6 +150,7 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
                 this._lastActiveDocumentKey = payload.DocumentKey;
                 this._lastHasActiveDocument = payload.HasActiveDocument;
             }
+
             await this._publishAsync(payload);
         } catch (Exception ex) {
             Log.Warning(ex, "SettingsEditor bridge failed to publish document invalidation event.");

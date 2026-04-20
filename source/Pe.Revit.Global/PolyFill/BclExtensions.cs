@@ -131,7 +131,9 @@ public static class BclExtensions {
     ///     Splits a string with options including TrimEntries support.
     ///     Polyfill for StringSplitOptions.TrimEntries (added in .NET 5).
     /// </summary>
-    public static string[] SplitAndTrim(this string value, char separator, StringSplitOptions options = StringSplitOptions.None) {
+    public static string[] SplitAndTrim(this string value,
+        char separator,
+        StringSplitOptions options = StringSplitOptions.None) {
         var frameworkOptions = NormalizeSplitOptions(options);
         var parts = value.Split(new[] { separator }, frameworkOptions);
         return FinalizeSplitParts(parts, options);
@@ -141,7 +143,9 @@ public static class BclExtensions {
     ///     Splits a string with options including TrimEntries support.
     ///     Polyfill for StringSplitOptions.TrimEntries (added in .NET 5).
     /// </summary>
-    public static string[] SplitAndTrim(this string value, char[] separators, StringSplitOptions options = StringSplitOptions.None) {
+    public static string[] SplitAndTrim(this string value,
+        char[] separators,
+        StringSplitOptions options = StringSplitOptions.None) {
         var frameworkOptions = NormalizeSplitOptions(options);
         var parts = value.Split(separators, frameworkOptions);
         return FinalizeSplitParts(parts, options);
@@ -150,7 +154,9 @@ public static class BclExtensions {
     /// <summary>
     ///     Splits a string with a string separator and options including TrimEntries support.
     /// </summary>
-    public static string[] SplitAndTrim(this string value, string separator, StringSplitOptions options = StringSplitOptions.None) {
+    public static string[] SplitAndTrim(this string value,
+        string separator,
+        StringSplitOptions options = StringSplitOptions.None) {
         var frameworkOptions = NormalizeSplitOptions(options);
         var parts = value.Split(new[] { separator }, frameworkOptions);
         return FinalizeSplitParts(parts, options);
@@ -159,7 +165,9 @@ public static class BclExtensions {
     /// <summary>
     ///     Splits a string with string separators and options including TrimEntries support.
     /// </summary>
-    public static string[] SplitAndTrim(this string value, string[] separators, StringSplitOptions options = StringSplitOptions.None) {
+    public static string[] SplitAndTrim(this string value,
+        string[] separators,
+        StringSplitOptions options = StringSplitOptions.None) {
         var frameworkOptions = NormalizeSplitOptions(options);
         var parts = value.Split(separators, frameworkOptions);
         return FinalizeSplitParts(parts, options);
@@ -169,17 +177,14 @@ public static class BclExtensions {
     ///     Joins strings with a character separator.
     ///     Polyfill for string.Join(char, IEnumerable) (added in .NET Core).
     /// </summary>
-    public static string JoinWith(this IEnumerable<string> values, char separator) {
-        return string.Join(separator.ToString(), values);
-    }
+    public static string JoinWith(this IEnumerable<string> values, char separator) =>
+        string.Join(separator.ToString(), values);
 
     /// <summary>
     ///     Joins strings with a string separator.
     ///     Framework-agnostic wrapper around string.Join.
     /// </summary>
-    public static string JoinWith(this IEnumerable<string> values, string separator) {
-        return string.Join(separator, values);
-    }
+    public static string JoinWith(this IEnumerable<string> values, string separator) => string.Join(separator, values);
 
     private static StringSplitOptions NormalizeSplitOptions(StringSplitOptions options) =>
         (StringSplitOptions)((int)options & ~TrimEntriesFlag);

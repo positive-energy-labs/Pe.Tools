@@ -1,5 +1,3 @@
-using Pe.Revit.Global.PolyFill;
-
 namespace Pe.Revit.Extensions.FamParameter;
 
 public static class FamilyParameterParameterInfo {

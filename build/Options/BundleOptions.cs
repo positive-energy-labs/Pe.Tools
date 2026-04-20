@@ -1,6 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
-
-namespace Build.Options;
+﻿namespace Build.Options;
 
 /// <summary>
 ///     Information about the Autodesk application package.

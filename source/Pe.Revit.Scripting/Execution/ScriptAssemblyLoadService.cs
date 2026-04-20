@@ -1,7 +1,7 @@
-﻿using System.Reflection;
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Pe.Revit.Scripting.Diagnostics;
 using Pe.Shared.HostContracts.Scripting;
+using System.Reflection;
 #if NET5_0_OR_GREATER
 using System.Runtime.Loader;
 #endif
@@ -15,7 +15,7 @@ public sealed class ScriptAssemblyLoadService {
         string runtimeAssemblyPath,
         List<ScriptDiagnostic> diagnostics
     ) {
-        var runtimeResolutionState = BuildRuntimeResolutionState(
+        var runtimeResolutionState = this.BuildRuntimeResolutionState(
             runtimeReferencePaths,
             runtimeAssemblyPath,
             diagnostics
@@ -67,19 +67,16 @@ public sealed class ScriptAssemblyLoadService {
     ) {
         var referencePaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var alreadyLoadedAssemblyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies()) {
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             TryAddFrameworkAssembly(referencePaths, assembly);
-        }
 
         AddAssemblyPath(referencePaths, runtimeAssemblyPath, diagnostics, alreadyLoadedAssemblyNames);
 
-        foreach (var assemblyPath in compileReferencePaths) {
+        foreach (var assemblyPath in compileReferencePaths)
             AddAssemblyPath(referencePaths, assemblyPath, diagnostics, alreadyLoadedAssemblyNames);
-        }
 
-        foreach (var assemblyPath in runtimeReferencePaths) {
+        foreach (var assemblyPath in runtimeReferencePaths)
             AddAssemblyPath(referencePaths, assemblyPath, diagnostics, alreadyLoadedAssemblyNames);
-        }
 
         var metadataReferences = new List<MetadataReference>();
         foreach (var referencePath in referencePaths.Values.Distinct(StringComparer.OrdinalIgnoreCase)) {
@@ -143,9 +140,8 @@ public sealed class ScriptAssemblyLoadService {
                     simpleName
                 ));
             }
-        } else {
+        } else
             assemblyMap[simpleName] = assemblyPath;
-        }
     }
 
     private static void TryAddProbeDirectory(
@@ -169,10 +165,10 @@ public sealed class ScriptAssemblyLoadService {
     private sealed class ResolverSubscription : IDisposable {
         private readonly ResolveEventHandler _appDomainHandler;
         private readonly IReadOnlyDictionary<string, string> _assemblyMap;
-        private readonly IReadOnlyList<string> _probeDirectories;
 #if NET5_0_OR_GREATER
         private readonly Func<AssemblyLoadContext, AssemblyName, Assembly?> _loadContextHandler;
 #endif
+        private readonly IReadOnlyList<string> _probeDirectories;
         private bool _disposed;
 
         public ResolverSubscription(

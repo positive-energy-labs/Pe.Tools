@@ -40,8 +40,8 @@ public static class DocumentNamingExtensions {
 
         var invalidChars = Path.GetInvalidFileNameChars();
         var sanitized = new string(doc.GetFamilyDisplayName()
-            .Select(ch => invalidChars.Contains(ch) ? '_' : ch)
-            .ToArray())
+                .Select(ch => invalidChars.Contains(ch) ? '_' : ch)
+                .ToArray())
             .Trim();
 
         return string.IsNullOrWhiteSpace(sanitized) ? "Family" : sanitized;

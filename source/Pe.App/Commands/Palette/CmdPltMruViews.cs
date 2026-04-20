@@ -86,6 +86,6 @@ public class MruViewPaletteItem : IPaletteListItem {
     public Func<string> GetTextInfo => () =>
         $"Document: {this.View.Document.Title}\nView Type: {this.View.ViewType}\nId: {this.View.Id}";
 
-    public BitmapImage Icon => null;
+    public BitmapImage? Icon => null;
     public WpfColor? ItemColor { get; }
 }

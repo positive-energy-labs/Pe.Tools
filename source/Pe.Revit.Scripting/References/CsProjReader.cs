@@ -46,7 +46,8 @@ public sealed class CsProjReader {
             .Where(node => node.Name.LocalName == "Reference")
             .Select(node => new ScriptReferenceDeclaration(
                 node.Attribute("Include")?.Value?.Trim() ?? string.Empty,
-                node.Elements().FirstOrDefault(child => child.Name.LocalName == "HintPath")?.Value?.Trim() ?? string.Empty
+                node.Elements().FirstOrDefault(child => child.Name.LocalName == "HintPath")?.Value?.Trim() ??
+                string.Empty
             ))
             .Where(reference => !string.IsNullOrWhiteSpace(reference.HintPath))
             .ToList();

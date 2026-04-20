@@ -1,17 +1,9 @@
-using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
-using Pe.Revit.Global.PolyFill;
 using Pe.Shared.HostContracts.RevitData;
 
 namespace Pe.Revit.Global.Revit.Lib.Electrical;
 
 public static class ElectricalPanelsCatalogCollector {
-    private sealed record PanelScheduleStats(
-        int Count,
-        int? ConfiguredSlotCount,
-        ElectricalPanelCapacitySource CapacitySource
-    );
-
     public static ElectricalPanelsCatalogData Collect(
         Document doc,
         ElectricalPanelsCatalogRequest? request = null
@@ -31,7 +23,8 @@ public static class ElectricalPanelsCatalogCollector {
             .Cast<ElectricalPanelCatalogEntry>()
             .Where(entry => entry.IsOperationalPanel)
             .Where(entry => (panelNames.Count == 0 || panelNames.Contains(entry.PanelName)) &&
-                            (marks.Count == 0 || (!string.IsNullOrWhiteSpace(entry.Mark) && marks.Contains(entry.Mark))))
+                            (marks.Count == 0 ||
+                             (!string.IsNullOrWhiteSpace(entry.Mark) && marks.Contains(entry.Mark))))
             .OrderBy(entry => entry.PanelName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(entry => entry.Mark, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -51,7 +44,8 @@ public static class ElectricalPanelsCatalogCollector {
                 ? stats
                 : new PanelScheduleStats(0, null, ElectricalPanelCapacitySource.None);
             var panelScheduleCount = scheduleStats.Count;
-            var role = ElectricalCollectorSupport.DeterminePanelRole(equipment, assignedCircuits.Count, panelScheduleCount);
+            var role = ElectricalCollectorSupport.DeterminePanelRole(equipment, assignedCircuits.Count,
+                panelScheduleCount);
             var distributionSystemName = ElectricalCollectorSupport.SafeGet(() =>
                 ElectricalCollectorSupport.GetDistributionSystemName(equipment)
             );
@@ -146,4 +140,10 @@ public static class ElectricalPanelsCatalogCollector {
             ? occupiedSlotNumbers
             : Math.Max(system.PolesNumber, 1);
     }
+
+    private sealed record PanelScheduleStats(
+        int Count,
+        int? ConfiguredSlotCount,
+        ElectricalPanelCapacitySource CapacitySource
+    );
 }

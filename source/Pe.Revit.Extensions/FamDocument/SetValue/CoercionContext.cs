@@ -5,10 +5,10 @@ namespace Pe.Revit.Extensions.FamDocument.SetValue;
 ///     Supports both value-to-param and param-to-param mapping scenarios.
 /// </summary>
 public record CoercionContext {
-    public FamilyDocument FamilyDocument { get; init; }
-    public FamilyManager FamilyManager { get; init; }
-    public FamilyParameter TargetParam { get; init; }
-    public object SourceValue { get; init; }
+    public required FamilyDocument FamilyDocument { get; init; }
+    public required FamilyManager FamilyManager { get; init; }
+    public required FamilyParameter TargetParam { get; init; }
+    public required object? SourceValue { get; init; }
 
     /// <summary>
     ///     The string representation of the source parameter's internally stored value.
@@ -51,7 +51,7 @@ public record CoercionContext {
     /// <summary>
     ///     Factory method for creating a context from a direct value to target parameter mapping.
     /// </summary>
-    public static CoercionContext FromValue(FamilyDocument doc, object sourceValue, FamilyParameter targetParam) =>
+    public static CoercionContext FromValue(FamilyDocument doc, object? sourceValue, FamilyParameter targetParam) =>
         new() {
             FamilyDocument = doc,
             FamilyManager = doc.FamilyManager,
@@ -61,7 +61,7 @@ public record CoercionContext {
             TargetUnitType = ComputeTargetUnitType(doc, targetParam)
         };
 
-    private static StorageType DeriveStorageTypeFromValue(object value) =>
+    private static StorageType DeriveStorageTypeFromValue(object? value) =>
         value switch {
             double => StorageType.Double,
             int => StorageType.Integer,

@@ -3,9 +3,9 @@ using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using NJsonSchema.Generation;
 using NJsonSchema.Generation.TypeMappers;
+using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Json.FieldOptions;
 using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
-using Pe.Shared.StorageRuntime.Capabilities;
 using System.Collections.Concurrent;
 using System.Reflection;
 
@@ -127,7 +127,7 @@ public sealed class JsonTypeSchemaBindingRegistry {
         JsonSchemaBuildOptions options
     ) {
         var visited = new HashSet<Type>();
-        ApplyBindingsToSchemaCore(rootType, schema, options, visited);
+        this.ApplyBindingsToSchemaCore(rootType, schema, options, visited);
     }
 
     private static Type ResolveTargetType(Type propertyType) {
@@ -178,7 +178,7 @@ public sealed class JsonTypeSchemaBindingRegistry {
             );
         }
 
-        binding = (IJsonTypeSchemaBinding)Activator.CreateInstance(attribute.BindingType, nonPublic: true)!;
+        binding = (IJsonTypeSchemaBinding)Activator.CreateInstance(attribute.BindingType, true)!;
         return true;
     }
 
@@ -212,7 +212,7 @@ public sealed class JsonTypeSchemaBindingRegistry {
                 if (this.TryGet(targetType, out var binding))
                     binding.ConfigurePropertySchema(targetSchema, property, options);
 
-                ApplyBindingsToSchemaCore(targetType, targetSchema, options, visited);
+                this.ApplyBindingsToSchemaCore(targetType, targetSchema, options, visited);
             }
         } finally {
             _ = visited.Remove(effectiveType);

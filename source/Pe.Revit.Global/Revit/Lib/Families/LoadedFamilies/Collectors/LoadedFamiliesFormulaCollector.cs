@@ -1,9 +1,6 @@
 ﻿using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
-using Pe.Revit.Global.Revit.Documents;
-using Pe.Revit.Global.Services.Document;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData.Parameters;
-using System.Diagnostics;
 
 namespace Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 
@@ -109,9 +106,8 @@ public static class LoadedFamiliesFormulaCollector {
                     null,
                     entry.Metadata.Identity.Name
                 ));
-            } else {
+            } else
                 byNameAndScope[key] = entry;
-            }
 
             if (!entry.Metadata.Identity.SharedGuid.HasValue)
                 continue;
@@ -184,7 +180,7 @@ public static class LoadedFamiliesFormulaCollector {
             parameter,
             familyLookupObserved,
             familyParameterLookup,
-            allowNameScopeFallback: projectObservedBinding == null
+            projectObservedBinding == null
         );
         var mergedProjectBinding = familyParameter?.Metadata.IsShared == true
             ? FindMergedProjectBinding(parameter.CategoryName, familyParameter.Metadata, projectBindingLookup)
@@ -204,9 +200,7 @@ public static class LoadedFamiliesFormulaCollector {
             resolved.HasMergedSharedProjectBinding
         );
         classifiedParameter = classifiedParameter with {
-            Kind = classification.Kind,
-            Scope = classification.Scope,
-            ExcludedReason = classification.ExcludedReason
+            Kind = classification.Kind, Scope = classification.Scope, ExcludedReason = classification.ExcludedReason
         };
 
         if (familyParameter != null) {
@@ -223,10 +217,7 @@ public static class LoadedFamiliesFormulaCollector {
         }
 
         if (effectiveProjectBinding != null) {
-            return classifiedParameter with {
-                FormulaState = CollectedFormulaState.NotApplicable,
-                Formula = null
-            };
+            return classifiedParameter with { FormulaState = CollectedFormulaState.NotApplicable, Formula = null };
         }
 
         if (parameter.IsBuiltIn) {
@@ -277,10 +268,7 @@ public static class LoadedFamiliesFormulaCollector {
                 null,
                 parameter.Name
             ));
-            return parameter with {
-                FormulaState = CollectedFormulaState.Unknown,
-                Formula = null
-            };
+            return parameter with { FormulaState = CollectedFormulaState.Unknown, Formula = null };
         }
     }
 
@@ -374,10 +362,12 @@ public static class LoadedFamiliesFormulaCollector {
                 continue;
 
             var bindingCategories = (binding.Categories?.Cast<Category>()
-                    .Select(category => category.Name)
-                    .Where(name => !string.IsNullOrWhiteSpace(name)))
+                                         .Select(category => category.Name)
+                                         .Where(name => !string.IsNullOrWhiteSpace(name))
+                                     ?? Array.Empty<string?>())
+                .Select(name => name!)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList() ?? [];
+                .ToList();
             if (categoryNames.Count != 0) {
                 bindingCategories = bindingCategories
                     .Where(categoryNames.Contains)
@@ -446,7 +436,7 @@ public static class LoadedFamiliesFormulaCollector {
             DataTypeLabel = dataTypeId == null ? null : RevitTypeLabelCatalog.GetLabelForSpec(resolved.DataType),
             GroupTypeId = groupTypeId,
             GroupTypeLabel =
-                groupTypeId == null ? null : RevitTypeLabelCatalog.GetLabelForPropertyGroup(resolved.PropertiesGroup)
+            groupTypeId == null ? null : RevitTypeLabelCatalog.GetLabelForPropertyGroup(resolved.PropertiesGroup)
         };
     }
 

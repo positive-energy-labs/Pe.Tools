@@ -63,8 +63,7 @@ public sealed class SchemaPresetsProcessor : ISchemaProcessor {
         var normalizedRoot = IncludableFragmentRoots.NormalizeRoot(fragmentSchemaName);
 
         var presetProperty = new JsonSchemaProperty {
-            Type = JsonObjectType.String,
-            Description = "Path to preset file (without .json extension)."
+            Type = JsonObjectType.String, Description = "Path to preset file (without .json extension)."
         };
         presetProperty.ExtensionData ??= new Dictionary<string, object?>();
         presetProperty.ExtensionData["examples"] = new List<string> {

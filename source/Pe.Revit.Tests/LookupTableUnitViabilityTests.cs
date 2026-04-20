@@ -15,7 +15,7 @@ public sealed class LookupTableUnitViabilityTests {
     ) {
         var application = uiApplication.Application;
         var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
-            nameof(Lookup_table_number_columns_can_drive_pressure_voltage_current_airflow_and_yes_no_parameters));
+            nameof(this.Lookup_table_number_columns_can_drive_pressure_voltage_current_airflow_and_yes_no_parameters));
         Document? familyDocument = null;
 
         try {
@@ -35,7 +35,8 @@ public sealed class LookupTableUnitViabilityTests {
                     LookupTableTestSupport.LookupTableNameParameterName,
                     SpecTypeId.String.Text);
                 foreach (var lookupCase in lookupCases) {
-                    LookupTableTestSupport.EnsureTypeParameter(familyDocument, lookupCase.ParameterName, lookupCase.DataType);
+                    LookupTableTestSupport.EnsureTypeParameter(familyDocument, lookupCase.ParameterName,
+                        lookupCase.DataType);
                     LookupTableTestSupport.EnsureLookupSupportParameters(familyDocument, lookupCase);
                 }
 
@@ -60,8 +61,8 @@ public sealed class LookupTableUnitViabilityTests {
                 LookupTableName,
                 lookupCases);
             var exportedTable = RevitFamilyFixtureHarness.ExportFamilySizeTables(
-                familyDocument,
-                Path.Combine(outputDirectory, "lookup-exports"))
+                    familyDocument,
+                    Path.Combine(outputDirectory, "lookup-exports"))
                 .Single(table => string.Equals(table.TableName, LookupTableName, StringComparison.Ordinal));
 
             Assert.That(exportedTable.HeaderColumns[0], Is.EqualTo(string.Empty));
@@ -71,12 +72,16 @@ public sealed class LookupTableUnitViabilityTests {
                     $"[LOOKUP_CODEC_CASE] name={result.LookupCase.Name} parameter={result.LookupCase.ParameterName} lookupCarrier={result.LookupCarrierParameterName} lookupAccepted={result.LookupFormulaAccepted} targetAccepted={result.TargetFormulaAccepted} hasValue={result.Snapshot.HasValue} lookupFormula={result.LookupFormula} targetFormula={result.TargetFormula ?? "<null>"} valueString={result.Snapshot.ValueString ?? "<null>"} lookupError={result.LookupErrorMessage ?? "<null>"} targetError={result.TargetErrorMessage ?? "<null>"}");
 
                 Assert.Multiple(() => {
-                    Assert.That(result.LookupFormulaAccepted, Is.True, $"Lookup formula rejected for '{result.LookupCarrierParameterName}'.");
-                    Assert.That(result.TargetFormulaAccepted, Is.True, $"Target coercion formula rejected for '{result.LookupCase.ParameterName}'.");
-                    Assert.That(result.Snapshot.HasValue, Is.True, $"Expected '{result.LookupCase.ParameterName}' to evaluate.");
+                    Assert.That(result.LookupFormulaAccepted, Is.True,
+                        $"Lookup formula rejected for '{result.LookupCarrierParameterName}'.");
+                    Assert.That(result.TargetFormulaAccepted, Is.True,
+                        $"Target coercion formula rejected for '{result.LookupCase.ParameterName}'.");
+                    Assert.That(result.Snapshot.HasValue, Is.True,
+                        $"Expected '{result.LookupCase.ParameterName}' to evaluate.");
                     Assert.That(
                         exportedTable.HeaderColumns,
-                        Contains.Item(LookupTableTestSupport.GetExpectedHeaderFragment(familyDocument, result.LookupCase)),
+                        Contains.Item(
+                            LookupTableTestSupport.GetExpectedHeaderFragment(familyDocument, result.LookupCase)),
                         $"Expected exported CSV header for '{result.LookupCase.ParameterName}' to preserve the codec token.");
                 });
 
@@ -99,14 +104,13 @@ public sealed class LookupTableUnitViabilityTests {
         }
     }
 
-    private static void ConfigureStableLookupUnits(Document familyDocument) {
+    private static void ConfigureStableLookupUnits(Document familyDocument) =>
         LookupTableTestSupport.ConfigureUnits(
             familyDocument,
             (SpecTypeId.HvacPressure, UnitTypeId.PoundsForcePerSquareInch),
             (SpecTypeId.ElectricalPotential, UnitTypeId.Volts),
             (SpecTypeId.Current, UnitTypeId.Amperes),
             (SpecTypeId.AirFlow, UnitTypeId.CubicFeetPerMinute));
-    }
 
     private static IReadOnlyList<LookupTableTestSupport.LookupCase> BuildLookupCases() => [
         new("Pressure", SpecTypeId.HvacPressure, "ResultPressure", "0.75"),

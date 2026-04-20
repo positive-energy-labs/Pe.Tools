@@ -1,5 +1,3 @@
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Threading;
 
 namespace Pe.Revit.Ui.Core;
@@ -24,13 +22,19 @@ public static class PaletteThreading {
                 "RevitTaskAccessor not configured. Wire up in Application.OnStartup.");
         }
 
-        T result = default;
-        await RevitTaskAccessor.RunAsync(() => {
+        var runAsync = RevitTaskAccessor.RunAsync
+                       ?? throw new InvalidOperationException("RevitTaskAccessor.RunAsync is not configured.");
+        var hasResult = false;
+        T? result = default;
+        await runAsync(() => {
             result = action();
+            hasResult = true;
             return Task.CompletedTask;
         });
 
-        return ct.IsCancellationRequested ? default : result;
+        return ct.IsCancellationRequested || !hasResult
+            ? default
+            : result!;
     }
 
     public static Task RunOnUiAsync(

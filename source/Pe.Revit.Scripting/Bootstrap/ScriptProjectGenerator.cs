@@ -1,5 +1,6 @@
-﻿using System.Text;
-using Pe.Revit.Scripting.References;
+﻿using Pe.Revit.Scripting.References;
+using System.Security;
+using System.Text;
 
 namespace Pe.Revit.Scripting.Bootstrap;
 
@@ -9,8 +10,7 @@ public sealed class ScriptProjectGenerator(
     private const string RuntimeAssemblyName = "Pe.Revit.Scripting";
 
     private static readonly HashSet<string> GeneratedPackageNames = new(StringComparer.OrdinalIgnoreCase) {
-        "Nice3point.Revit.Api.RevitAPI",
-        "Nice3point.Revit.Api.RevitAPIUI"
+        "Nice3point.Revit.Api.RevitAPI", "Nice3point.Revit.Api.RevitAPIUI"
     };
 
     private readonly CsProjReader _csProjReader = csProjReader;
@@ -49,7 +49,8 @@ public sealed class ScriptProjectGenerator(
         builder.AppendLine();
         builder.AppendLine("  <ItemGroup>");
         foreach (var reference in preservedReferences) {
-            builder.AppendLine($"    <Reference Include=\"{EscapeXml(string.IsNullOrWhiteSpace(reference.Include) ? Path.GetFileNameWithoutExtension(reference.HintPath) : reference.Include)}\">");
+            builder.AppendLine(
+                $"    <Reference Include=\"{EscapeXml(string.IsNullOrWhiteSpace(reference.Include) ? Path.GetFileNameWithoutExtension(reference.HintPath) : reference.Include)}\">");
             builder.AppendLine($"      <HintPath>{EscapeXml(reference.HintPath)}</HintPath>");
             builder.AppendLine("    </Reference>");
         }
@@ -61,14 +62,17 @@ public sealed class ScriptProjectGenerator(
             if (string.IsNullOrWhiteSpace(packageReference.Version))
                 builder.AppendLine($"    <PackageReference Include=\"{EscapeXml(packageReference.Include)}\" />");
             else
-                builder.AppendLine($"    <PackageReference Include=\"{EscapeXml(packageReference.Include)}\" Version=\"{EscapeXml(packageReference.Version)}\" />");
+                builder.AppendLine(
+                    $"    <PackageReference Include=\"{EscapeXml(packageReference.Include)}\" Version=\"{EscapeXml(packageReference.Version)}\" />");
         }
 
         builder.AppendLine("  </ItemGroup>");
         builder.AppendLine();
         builder.AppendLine("  <ItemGroup>");
-        builder.AppendLine($"    <PackageReference Include=\"Nice3point.Revit.Api.RevitAPI\" Version=\"{EscapeXml(revitVersion)}.*\" />");
-        builder.AppendLine($"    <PackageReference Include=\"Nice3point.Revit.Api.RevitAPIUI\" Version=\"{EscapeXml(revitVersion)}.*\" />");
+        builder.AppendLine(
+            $"    <PackageReference Include=\"Nice3point.Revit.Api.RevitAPI\" Version=\"{EscapeXml(revitVersion)}.*\" />");
+        builder.AppendLine(
+            $"    <PackageReference Include=\"Nice3point.Revit.Api.RevitAPIUI\" Version=\"{EscapeXml(revitVersion)}.*\" />");
         builder.AppendLine("  </ItemGroup>");
         builder.AppendLine();
         builder.AppendLine("  <ItemGroup>");
@@ -101,5 +105,5 @@ public sealed class ScriptProjectGenerator(
     }
 
     private static string EscapeXml(string value) =>
-        System.Security.SecurityElement.Escape(value) ?? string.Empty;
+        SecurityElement.Escape(value) ?? string.Empty;
 }

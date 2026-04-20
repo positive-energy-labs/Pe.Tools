@@ -1,5 +1,3 @@
-using Pe.Revit.FamilyFoundry.Plans;
-
 namespace Pe.Revit.FamilyFoundry.LookupTables;
 
 public static class LookupTableArtifactWriter {

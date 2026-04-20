@@ -59,7 +59,8 @@ public class OrderedContractResolver : DefaultContractResolver {
 
         foreach (var currentType in typeHierarchy) {
             var members = currentType
-                .GetMembers(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                .GetMembers(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic |
+                            BindingFlags.DeclaredOnly)
                 .Where(member => member.MemberType is MemberTypes.Property or MemberTypes.Field)
                 .OrderBy(member => member.MetadataToken)
                 .ToList();

@@ -28,8 +28,8 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new()
 
     private readonly ISettingsModule<TProfile> _settingsModule;
     private readonly UIDocument _uiDoc;
-    private Action<FoundryContext<TProfile>, List<string>> _postProcess;
-    private Func<TProfile, List<SharedParameterDefinition>, OperationQueue> _queueBuilder;
+    private Action<FoundryContext<TProfile>, List<string>>? _postProcess;
+    private Func<TProfile, List<SharedParameterDefinition>, OperationQueue>? _queueBuilder;
 
     public FoundryPaletteBuilder(
         string displayName,
@@ -52,7 +52,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new()
     public FoundryPaletteBuilder<TProfile> WithAction(
         string name,
         Action<FoundryContext<TProfile>> handler,
-        Func<FoundryContext<TProfile>, bool> canExecute = null
+        Func<FoundryContext<TProfile>, bool>? canExecute = null
     ) {
         this._actions.Add(new FoundryAction<TProfile> { Name = name, Handler = handler, CanExecute = canExecute });
         return this;
@@ -113,14 +113,14 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new()
 
         // Create preview panel with injected preview building logic
         var previewPanel = new ProfilePreviewPanel(async (item, ct) => {
+            if (item == null)
+                return null;
+
             var data = await this.BuildPreviewDataAsync(item, context, ct);
             context.SelectedProfile = item;
             context.PreviewData = data;
             return data;
         });
-
-        // Store window reference to be captured in actions
-        EphemeralWindow window = null;
 
         // Convert FoundryActions to PaletteActions
         var paletteActions = this._actions.Select(a => new PaletteAction<ProfileListItem> {
@@ -130,7 +130,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new()
         }).ToList();
 
         // Create the palette with sidebar
-        window = PaletteFactory.Create(
+        var window = PaletteFactory.Create(
             $"{this._commandName} - Select Profile",
             new PaletteOptions<ProfileListItem> {
                 Persistence = (persistence, item => item.TextPrimary),
@@ -235,7 +235,10 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new()
             };
         }
 
-        var queue = this._queueBuilder(profile, previewApsParamData);
+        var queueBuilder = this._queueBuilder
+                           ?? throw new InvalidOperationException(
+                               "Queue builder must be configured before building previews.");
+        var queue = queueBuilder(profile, previewApsParamData);
         var operationMetadata = queue.GetExecutableMetadata();
 
         var families = await PaletteThreading.RunRevitAsync(() => profile.GetFamilies(context.Doc), ct);
@@ -244,7 +247,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new()
 
         // Extract APS parameter info
         var apsParameters = apsParamModels.Select(p => new ParameterInfo(
-            p.Name,
+            p.Name ?? string.Empty,
             p.DownloadOptions.IsInstance,
             GetDataTypeName(p.DownloadOptions.GetSpecTypeId())
         )).ToList();
@@ -332,7 +335,8 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new()
         }
 
         if (ex is InvalidOperationException invalidOpConflict &&
-            invalidOpConflict.Message.Contains("cannot define both GlobalAssignments and PerTypeAssignmentsTable values",
+            invalidOpConflict.Message.Contains(
+                "cannot define both GlobalAssignments and PerTypeAssignmentsTable values",
                 StringComparison.OrdinalIgnoreCase)) {
             return new List<string> {
                 invalidOpConflict.Message,
@@ -352,7 +356,8 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new()
         }
 
         if (ex is InvalidOperationException invalidPeFamilyParam &&
-            invalidPeFamilyParam.Message.Contains("invalid family parameter definitions", StringComparison.OrdinalIgnoreCase)) {
+            invalidPeFamilyParam.Message.Contains("invalid family parameter definitions",
+                StringComparison.OrdinalIgnoreCase)) {
             return new List<string> {
                 invalidPeFamilyParam.Message,
                 "Fix: remove PE_ parameters from AddFamilyParams.Parameters.",
@@ -392,14 +397,13 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new()
 
         return new List<string> { $"{ex.GetType().Name}: {ex.Message}" };
     }
-
 }
 
 /// <summary>
 ///     Represents an action in the Foundry palette.
 /// </summary>
 internal class FoundryAction<TProfile> where TProfile : BaseProfile, new() {
-    public string Name { get; init; }
-    public Action<FoundryContext<TProfile>> Handler { get; init; }
-    public Func<FoundryContext<TProfile>, bool> CanExecute { get; init; }
+    public required string Name { get; init; }
+    public required Action<FoundryContext<TProfile>> Handler { get; init; }
+    public Func<FoundryContext<TProfile>, bool>? CanExecute { get; init; }
 }

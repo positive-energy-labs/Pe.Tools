@@ -1,7 +1,6 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Extensions.FamParameter.Formula;
-using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.Ui.Core;
 using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
@@ -120,8 +119,12 @@ public class FamilyElementItem : IPaletteListItem {
 
         switch (this.ElementType) {
         case FamilyElementType.Parameter:
+            var familyParam = this.FamilyParam;
+            if (familyParam == null)
+                break;
+
             // Dimensions
-            foreach (var dim in this.FamilyParam!.AssociatedDimensions(this.FamilyDoc)) {
+            foreach (var dim in familyParam.AssociatedDimensions(this.FamilyDoc)) {
                 var dimType = dim.DimensionType?.Name ?? "Unknown Type";
                 results.Add(new AssociatedElement(
                     $"{dimType} (ID: {dim.Id})",
@@ -132,7 +135,7 @@ public class FamilyElementItem : IPaletteListItem {
             }
 
             // Arrays
-            foreach (var array in this.FamilyParam.AssociatedArrays(this.FamilyDoc)) {
+            foreach (var array in familyParam.AssociatedArrays(this.FamilyDoc)) {
                 results.Add(new AssociatedElement(
                     $"Array (ID: {array.Id})",
                     "Array",
@@ -142,7 +145,7 @@ public class FamilyElementItem : IPaletteListItem {
             }
 
             // Connectors
-            foreach (var connector in this.FamilyParam.AssociatedConnectors(this.FamilyDoc)) {
+            foreach (var connector in familyParam.AssociatedConnectors(this.FamilyDoc)) {
                 results.Add(new AssociatedElement(
                     $"{connector.Domain} Connector (ID: {connector.Id})",
                     "Connector",
@@ -152,7 +155,7 @@ public class FamilyElementItem : IPaletteListItem {
             }
 
             // Formula Dependents
-            foreach (var fp in this.FamilyParam.GetDependents(this.FamilyDoc.FamilyManager.Parameters)) {
+            foreach (var fp in familyParam.GetDependents(this.FamilyDoc.FamilyManager.Parameters)) {
                 results.Add(new AssociatedElement(
                     fp.Definition.Name,
                     "Parameter",
@@ -258,10 +261,12 @@ public class FamilyElementItem : IPaletteListItem {
     }
 
     private int GetAssociationCount() =>
-        this.FamilyParam!.AssociatedDimensions(this.FamilyDoc).Count() +
-        this.FamilyParam.AssociatedArrays(this.FamilyDoc).Count() +
-        this.FamilyParam.AssociatedConnectors(this.FamilyDoc).Count() +
-        this.FamilyParam.GetDependents(this.FamilyDoc.FamilyManager.Parameters).Count();
+        this.FamilyParam is not { } familyParam
+            ? 0
+            : familyParam.AssociatedDimensions(this.FamilyDoc).Count() +
+              familyParam.AssociatedArrays(this.FamilyDoc).Count() +
+              familyParam.AssociatedConnectors(this.FamilyDoc).Count() +
+              familyParam.GetDependents(this.FamilyDoc.FamilyManager.Parameters).Count();
 
     private string GetParameterTooltip() {
         var lines = new List<string> {

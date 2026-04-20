@@ -1,4 +1,3 @@
-using Pe.Revit.FamilyFoundry.Plans;
 using System.Text;
 
 namespace Pe.Revit.FamilyFoundry.LookupTables;
@@ -56,16 +55,12 @@ internal static class LookupTableCsvCodec {
             .ToList();
 
         return new LookupTableDefinition {
-            Schema = new LookupTableSchema {
-                Name = tableName.Trim(),
-                Columns = columns
-            },
-            Rows = dataRows
+            Schema = new LookupTableSchema { Name = tableName.Trim(), Columns = columns }, Rows = dataRows
         };
     }
 
     private static LookupTableColumn DecodeHeader(string header, LookupTableColumnRole role) {
-        var headerParts = (header ?? string.Empty).SplitAndTrim("##", StringSplitOptions.None);
+        var headerParts = (header ?? string.Empty).SplitAndTrim("##");
         var name = headerParts.Length > 0 ? headerParts[0].Trim() : string.Empty;
         var typeToken = headerParts.Length > 1 ? headerParts[1].Trim() : null;
         var unitToken = headerParts.Length > 2
@@ -99,8 +94,7 @@ internal static class LookupTableCsvCodec {
         }
 
         return new LookupTableRow {
-            RowName = cells.Count > 0 ? cells[0] : string.Empty,
-            ValuesByColumn = valuesByColumn
+            RowName = cells.Count > 0 ? cells[0] : string.Empty, ValuesByColumn = valuesByColumn
         };
     }
 
@@ -174,12 +168,10 @@ internal static class LookupTableCsvCodec {
                     if (i + 1 < csvContent.Length && csvContent[i + 1] == '"') {
                         currentCell.Append('"');
                         i++;
-                    } else {
+                    } else
                         inQuotes = false;
-                    }
-                } else {
+                } else
                     currentCell.Append(currentChar);
-                }
 
                 continue;
             }

@@ -1,13 +1,16 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.Profiles;
+using Pe.Revit.Global;
 using Pe.Revit.Global.Utils.Files;
 using Pe.Shared.RevitData.Parameters;
 using Pe.Shared.StorageRuntime.Core.Json;
+using System.Globalization;
 
 namespace Pe.Revit.Tests;
 
 internal static class RevitFamilyFixtureHarness {
     private const string GenericModelTemplateName = "Generic Model.rft";
+
     private static readonly string[] TemplateSubdirectories = [
         string.Empty,
         "English-Imperial",
@@ -18,62 +21,8 @@ internal static class RevitFamilyFixtureHarness {
         Path.Combine("Family Templates", "English")
     ];
 
-    internal sealed record FamilyTypeState(string Name, IReadOnlyDictionary<string, double> LengthValues);
-    internal sealed record ParameterDefinitionSpec(string Name, ForgeTypeId DataType, ForgeTypeId? Group = null, bool IsInstance = true);
-    internal sealed record ParameterTypeSnapshot(string TypeName, IReadOnlyDictionary<string, string> ValuesByParameter);
-    internal sealed record ParameterValueSnapshot(
-        string TypeName,
-        string? Formula,
-        object? RawValue,
-        string? ValueString,
-        bool HasValue,
-        StorageType StorageType,
-        string DataTypeId
-    );
-
-    internal sealed record SharedDefinitionSpec(
-        string Name,
-        ForgeTypeId DataType,
-        string GroupName = "TempGroup",
-        string Description = "",
-        Guid? Guid = null,
-        bool Visible = true
-    );
-
-    internal sealed record ProjectBindingProbe(
-        string Name,
-        string DefinitionType,
-        string IdentityKey,
-        string IdentityKind,
-        Guid? SharedGuid,
-        bool IsShared,
-        bool IsInstanceBinding,
-        string? GroupTypeId,
-        string? DataTypeId,
-        IReadOnlyList<string> CategoryNames
-    );
-
-    internal sealed record FamilyParameterProbe(
-        string Name,
-        bool IsShared,
-        bool IsInstance,
-        string IdentityKind,
-        Guid? SharedGuid,
-        long? ParameterElementId,
-        string? GroupTypeId,
-        string? DataTypeId,
-        string? Formula
-    );
-
-    internal sealed record FamilySizeTableProbe(
-        string TableName,
-        string ExportedCsvPath,
-        IReadOnlyList<string> HeaderColumns,
-        IReadOnlyList<string> Rows
-    );
-
     public static string ResolveGenericModelTemplatePath(
-        Autodesk.Revit.ApplicationServices.Application application
+        Application application
     ) {
         if (application == null)
             throw new ArgumentNullException(nameof(application));
@@ -95,7 +44,7 @@ internal static class RevitFamilyFixtureHarness {
     }
 
     public static Document CreateFamilyDocument(
-        Autodesk.Revit.ApplicationServices.Application application,
+        Application application,
         BuiltInCategory familyCategory,
         string familyName
     ) {
@@ -117,7 +66,7 @@ internal static class RevitFamilyFixtureHarness {
     }
 
     public static Document CreateProjectDocument(
-        Autodesk.Revit.ApplicationServices.Application application,
+        Application application,
         UnitSystem unitSystem = UnitSystem.Imperial
     ) {
         if (application == null)
@@ -166,11 +115,7 @@ internal static class RevitFamilyFixtureHarness {
         var savePath = Path.Combine(outputDirectory, $"{safeFileNameStem}{extension}");
         document.SaveAs(
             savePath,
-            new SaveAsOptions {
-                OverwriteExistingFile = true,
-                Compact = true,
-                MaximumBackups = 1
-            });
+            new SaveAsOptions { OverwriteExistingFile = true, Compact = true, MaximumBackups = 1 });
 
         return savePath;
     }
@@ -198,7 +143,8 @@ internal static class RevitFamilyFixtureHarness {
             throw new ArgumentException("Fixture file name is required.", nameof(fixtureFileName));
 
         var assemblyDirectory = Path.GetDirectoryName(typeof(RevitFamilyFixtureHarness).Assembly.Location)
-                                ?? throw new InvalidOperationException("Could not resolve the test assembly directory.");
+                                ?? throw new InvalidOperationException(
+                                    "Could not resolve the test assembly directory.");
         var fixturePath = Path.Combine(assemblyDirectory, "Fixtures", "Profiles", fixtureFileName);
         if (!File.Exists(fixturePath))
             throw new FileNotFoundException($"Profile fixture not found at '{fixturePath}'.", fixturePath);
@@ -211,7 +157,8 @@ internal static class RevitFamilyFixtureHarness {
             throw new ArgumentException("Fixture file name is required.", nameof(fixtureFileName));
 
         var assemblyDirectory = Path.GetDirectoryName(typeof(RevitFamilyFixtureHarness).Assembly.Location)
-                                ?? throw new InvalidOperationException("Could not resolve the test assembly directory.");
+                                ?? throw new InvalidOperationException(
+                                    "Could not resolve the test assembly directory.");
         var fixturePath = Path.Combine(assemblyDirectory, "Fixtures", "Families", fixtureFileName);
         if (!File.Exists(fixturePath))
             throw new FileNotFoundException($"Family fixture not found at '{fixturePath}'.", fixturePath);
@@ -220,7 +167,7 @@ internal static class RevitFamilyFixtureHarness {
     }
 
     public static Document OpenFamilyFixture(
-        Autodesk.Revit.ApplicationServices.Application application,
+        Application application,
         string fixtureFileName
     ) {
         if (application == null)
@@ -232,7 +179,7 @@ internal static class RevitFamilyFixtureHarness {
     }
 
     public static Document OpenFamilyDocument(
-        Autodesk.Revit.ApplicationServices.Application application,
+        Application application,
         string familyPath
     ) {
         if (application == null)
@@ -246,9 +193,8 @@ internal static class RevitFamilyFixtureHarness {
                ?? throw new InvalidOperationException($"Failed to open family document '{familyPath}'.");
     }
 
-    public static FFManagerProfile LoadProfileFixture(string fixtureFileName) {
-        return LoadProfileFixtureContract(fixtureFileName).Value;
-    }
+    public static FFManagerProfile LoadProfileFixture(string fixtureFileName) =>
+        LoadProfileFixtureContract(fixtureFileName).Value;
 
     public static SettingsJsonRoundTripResult<FFManagerProfile> LoadProfileFixtureContract(string fixtureFileName) {
         var fixturePath = GetProfileFixturePath(fixtureFileName);
@@ -257,7 +203,7 @@ internal static class RevitFamilyFixtureHarness {
     }
 
     public static void AssertSavedFamilyFileIsOpenable(
-        Autodesk.Revit.ApplicationServices.Application application,
+        Application application,
         string savedFamilyPath
     ) {
         if (application == null)
@@ -278,7 +224,7 @@ internal static class RevitFamilyFixtureHarness {
     }
 
     public static Family LoadFamilyIntoProject(
-        Autodesk.Revit.ApplicationServices.Application application,
+        Application application,
         Document projectDocument,
         string familyPath,
         IFamilyLoadOptions? loadOptions = null
@@ -308,7 +254,7 @@ internal static class RevitFamilyFixtureHarness {
     }
 
     public static Family LoadFamilyFixtureIntoProject(
-        Autodesk.Revit.ApplicationServices.Application application,
+        Application application,
         Document projectDocument,
         string fixtureFileName,
         IFamilyLoadOptions? loadOptions = null
@@ -345,20 +291,23 @@ internal static class RevitFamilyFixtureHarness {
         try {
             foreach (var state in states) {
                 var familyType = familyManager.Types
-                    .Cast<FamilyType>()
-                    .FirstOrDefault(type => string.Equals(type.Name, state.Name, StringComparison.Ordinal))
-                    ?? familyManager.NewType(state.Name);
+                                     .Cast<FamilyType>()
+                                     .FirstOrDefault(type =>
+                                         string.Equals(type.Name, state.Name, StringComparison.Ordinal))
+                                 ?? familyManager.NewType(state.Name);
 
                 familyManager.CurrentType = familyType;
 
                 foreach (var (parameterName, value) in state.LengthValues) {
                     var parameter = familyManager.get_Parameter(parameterName)
-                        ?? throw new InvalidOperationException($"Family parameter '{parameterName}' was not found.");
+                                    ?? throw new InvalidOperationException(
+                                        $"Family parameter '{parameterName}' was not found.");
 
                     if (!string.IsNullOrWhiteSpace(parameter.Formula)) {
                         var familyDoc = new FamilyDocument(familyDocument);
                         if (!familyDoc.UnsetFormula(parameter))
-                            throw new InvalidOperationException($"Family parameter '{parameterName}' formula could not be cleared for state evaluation.");
+                            throw new InvalidOperationException(
+                                $"Family parameter '{parameterName}' formula could not be cleared for state evaluation.");
                     }
 
                     familyManager.Set(parameter, value);
@@ -411,8 +360,7 @@ internal static class RevitFamilyFixtureHarness {
             return existing;
 
         var options = new ExternalDefinitionCreationOptions(definitionSpec.Name, definitionSpec.DataType) {
-            Description = definitionSpec.Description,
-            Visible = definitionSpec.Visible
+            Description = definitionSpec.Description, Visible = definitionSpec.Visible
         };
         if (definitionSpec.Guid.HasValue && definitionSpec.Guid.Value != Guid.Empty)
             options.GUID = definitionSpec.Guid.Value;
@@ -437,8 +385,7 @@ internal static class RevitFamilyFixtureHarness {
         var externalDefinition = definitionGroup.Definitions.get_Item(definitionSpec.Name) as ExternalDefinition;
         if (externalDefinition == null) {
             var options = new ExternalDefinitionCreationOptions(definitionSpec.Name, definitionSpec.DataType) {
-                Description = definitionSpec.Description,
-                Visible = definitionSpec.Visible
+                Description = definitionSpec.Description, Visible = definitionSpec.Visible
             };
             if (definitionSpec.Guid.HasValue && definitionSpec.Guid.Value != Guid.Empty)
                 options.GUID = definitionSpec.Guid.Value;
@@ -446,7 +393,7 @@ internal static class RevitFamilyFixtureHarness {
         }
 
         var familyDoc = new FamilyDocument(familyDocument);
-        return familyDoc.AddSharedParameter(new Pe.Revit.Global.SharedParameterDefinition(
+        return familyDoc.AddSharedParameter(new SharedParameterDefinition(
             externalDefinition,
             groupTypeId ?? GroupTypeId.IdentityData,
             isInstance));
@@ -463,13 +410,14 @@ internal static class RevitFamilyFixtureHarness {
         return familyDocument.FamilyManager.get_Parameter(sharedGuid);
     }
 
-    public static (bool DefinitionExisted, bool BindingSucceeded, string ProvidedDefinitionType) AddOrUpdateProjectParameterBinding(
-        Document projectDocument,
-        Definition definition,
-        bool isInstance,
-        ForgeTypeId groupTypeId,
-        params BuiltInCategory[] categories
-    ) {
+    public static (bool DefinitionExisted, bool BindingSucceeded, string ProvidedDefinitionType)
+        AddOrUpdateProjectParameterBinding(
+            Document projectDocument,
+            Definition definition,
+            bool isInstance,
+            ForgeTypeId groupTypeId,
+            params BuiltInCategory[] categories
+        ) {
         if (projectDocument == null)
             throw new ArgumentNullException(nameof(projectDocument));
         if (projectDocument.IsFamilyDocument)
@@ -573,7 +521,8 @@ internal static class RevitFamilyFixtureHarness {
                     string.IsNullOrWhiteSpace(parameter.Formula) ? null : parameter.Formula);
             })
             .OrderBy(probe => probe.Name, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(probe => probe.SharedGuid.HasValue ? probe.SharedGuid.Value.ToString("D") : string.Empty, StringComparer.Ordinal)
+            .ThenBy(probe => probe.SharedGuid.HasValue ? probe.SharedGuid.Value.ToString("D") : string.Empty,
+                StringComparer.Ordinal)
             .ThenBy(probe => probe.ParameterElementId ?? long.MinValue)
             .ToArray();
     }
@@ -603,9 +552,9 @@ internal static class RevitFamilyFixtureHarness {
             var safeTableName = SanitizePathSegment(tableName);
             var exportPath = Path.Combine(outputDirectory, $"{safeTableName}.csv");
             var exportSucceeded = manager.ExportSizeTable(tableName, exportPath);
-            if (!exportSucceeded || !File.Exists(exportPath)) {
-                throw new InvalidOperationException($"Failed to export family size table '{tableName}' to '{exportPath}'.");
-            }
+            if (!exportSucceeded || !File.Exists(exportPath))
+                throw new InvalidOperationException(
+                    $"Failed to export family size table '{tableName}' to '{exportPath}'.");
 
             var rows = File.ReadAllLines(exportPath);
             var headers = rows.Length == 0
@@ -623,7 +572,7 @@ internal static class RevitFamilyFixtureHarness {
     }
 
     public static Document ReopenDocument(
-        Autodesk.Revit.ApplicationServices.Application application,
+        Application application,
         Document document,
         string outputDirectory,
         string fileNameStem
@@ -676,7 +625,7 @@ internal static class RevitFamilyFixtureHarness {
         var familyDoc = new FamilyDocument(familyDocument);
         var familyManager = familyDocument.FamilyManager;
         var parameter = familyManager.get_Parameter(parameterName)
-            ?? throw new InvalidOperationException($"Family parameter '{parameterName}' was not found.");
+                        ?? throw new InvalidOperationException($"Family parameter '{parameterName}' was not found.");
         var snapshots = new List<ParameterValueSnapshot>(typeNames.Count);
 
         foreach (var typeName in typeNames.Distinct(StringComparer.Ordinal)) {
@@ -722,7 +671,8 @@ internal static class RevitFamilyFixtureHarness {
 
                 foreach (var (parameterName, value) in snapshot.ValuesByParameter) {
                     var parameter = familyManager.get_Parameter(parameterName)
-                        ?? throw new InvalidOperationException($"Family parameter '{parameterName}' was not found.");
+                                    ?? throw new InvalidOperationException(
+                                        $"Family parameter '{parameterName}' was not found.");
 
                     if (!string.IsNullOrWhiteSpace(parameter.Formula) && !familyDoc.UnsetFormula(parameter)) {
                         throw new InvalidOperationException(
@@ -734,10 +684,10 @@ internal static class RevitFamilyFixtureHarness {
                         familyManager.Set(parameter, value);
                         break;
                     case StorageType.Integer:
-                        familyManager.Set(parameter, int.Parse(value, System.Globalization.CultureInfo.InvariantCulture));
+                        familyManager.Set(parameter, int.Parse(value, CultureInfo.InvariantCulture));
                         break;
                     case StorageType.Double:
-                        familyManager.Set(parameter, double.Parse(value, System.Globalization.CultureInfo.InvariantCulture));
+                        familyManager.Set(parameter, double.Parse(value, CultureInfo.InvariantCulture));
                         break;
                     default:
                         throw new InvalidOperationException(
@@ -757,10 +707,10 @@ internal static class RevitFamilyFixtureHarness {
 
     public static double MeasureFirstRoundExtrusionDiameter(Document familyDocument) {
         var extrusion = new FilteredElementCollector(familyDocument)
-            .OfClass(typeof(Extrusion))
-            .Cast<Extrusion>()
-            .FirstOrDefault(IsRoundExtrusion)
-            ?? throw new InvalidOperationException("No round extrusion was found.");
+                            .OfClass(typeof(Extrusion))
+                            .Cast<Extrusion>()
+                            .FirstOrDefault(IsRoundExtrusion)
+                        ?? throw new InvalidOperationException("No round extrusion was found.");
 
         var arc = extrusion.Sketch?.Profile
             ?.Cast<CurveArray>()
@@ -771,7 +721,7 @@ internal static class RevitFamilyFixtureHarness {
             return arc.Radius * 2.0;
 
         var bbox = extrusion.get_BoundingBox(null)
-            ?? throw new InvalidOperationException("Round extrusion had no bounding box.");
+                   ?? throw new InvalidOperationException("Round extrusion had no bounding box.");
         var x = bbox.Max.X - bbox.Min.X;
         var y = bbox.Max.Y - bbox.Min.Y;
         return (x + y) / 2.0;
@@ -779,10 +729,10 @@ internal static class RevitFamilyFixtureHarness {
 
     public static double MeasureFirstRoundConnectorDiameter(Document familyDocument) {
         var connector = new FilteredElementCollector(familyDocument)
-            .OfClass(typeof(ConnectorElement))
-            .Cast<ConnectorElement>()
-            .FirstOrDefault()
-            ?? throw new InvalidOperationException("No connector was found.");
+                            .OfClass(typeof(ConnectorElement))
+                            .Cast<ConnectorElement>()
+                            .FirstOrDefault()
+                        ?? throw new InvalidOperationException("No connector was found.");
 
         var diameter = connector.get_Parameter(BuiltInParameter.CONNECTOR_DIAMETER)?.AsDouble();
         if (diameter is > 0.0)
@@ -797,23 +747,23 @@ internal static class RevitFamilyFixtureHarness {
 
     public static double MeasureFirstExtrusionDepth(Document familyDocument) {
         var extrusion = new FilteredElementCollector(familyDocument)
-            .OfClass(typeof(Extrusion))
-            .Cast<Extrusion>()
-            .FirstOrDefault()
-            ?? throw new InvalidOperationException("No extrusion was found.");
+                            .OfClass(typeof(Extrusion))
+                            .Cast<Extrusion>()
+                            .FirstOrDefault()
+                        ?? throw new InvalidOperationException("No extrusion was found.");
 
         return Math.Abs(extrusion.EndOffset - extrusion.StartOffset);
     }
 
     public static (double Width, double Length) MeasureFirstRectangularExtrusionPlanExtents(Document familyDocument) {
         var extrusion = new FilteredElementCollector(familyDocument)
-            .OfClass(typeof(Extrusion))
-            .Cast<Extrusion>()
-            .FirstOrDefault(IsRectangularExtrusion)
-            ?? throw new InvalidOperationException("No rectangular extrusion was found.");
+                            .OfClass(typeof(Extrusion))
+                            .Cast<Extrusion>()
+                            .FirstOrDefault(IsRectangularExtrusion)
+                        ?? throw new InvalidOperationException("No rectangular extrusion was found.");
 
         var bbox = extrusion.get_BoundingBox(null)
-            ?? throw new InvalidOperationException("Rectangular extrusion had no bounding box.");
+                   ?? throw new InvalidOperationException("Rectangular extrusion had no bounding box.");
         var x = bbox.Max.X - bbox.Min.X;
         var y = bbox.Max.Y - bbox.Min.Y;
         return (Math.Min(x, y), Math.Max(x, y));
@@ -821,10 +771,10 @@ internal static class RevitFamilyFixtureHarness {
 
     public static (double Width, double Length) MeasureFirstRectangularConnectorSize(Document familyDocument) {
         var connector = new FilteredElementCollector(familyDocument)
-            .OfClass(typeof(ConnectorElement))
-            .Cast<ConnectorElement>()
-            .FirstOrDefault()
-            ?? throw new InvalidOperationException("No connector was found.");
+                            .OfClass(typeof(ConnectorElement))
+                            .Cast<ConnectorElement>()
+                            .FirstOrDefault()
+                        ?? throw new InvalidOperationException("No connector was found.");
 
         var width = connector.get_Parameter(BuiltInParameter.CONNECTOR_WIDTH)?.AsDouble();
         var height = connector.get_Parameter(BuiltInParameter.CONNECTOR_HEIGHT)?.AsDouble();
@@ -872,7 +822,9 @@ internal static class RevitFamilyFixtureHarness {
             : lettersAndDigits[..12].ToLowerInvariant();
     }
 
-    private static void ConfigureOwnerFamily(Document familyDocument, BuiltInCategory familyCategory, string familyName) {
+    private static void ConfigureOwnerFamily(Document familyDocument,
+        BuiltInCategory familyCategory,
+        string familyName) {
         if (familyDocument == null)
             throw new ArgumentNullException(nameof(familyDocument));
         if (!familyDocument.IsFamilyDocument)
@@ -880,7 +832,8 @@ internal static class RevitFamilyFixtureHarness {
 
         var targetCategory = Category.GetCategory(familyDocument, familyCategory);
         if (targetCategory == null)
-            throw new InvalidOperationException($"Category '{familyCategory}' is not available in the family document.");
+            throw new InvalidOperationException(
+                $"Category '{familyCategory}' is not available in the family document.");
 
         using var transaction = new Transaction(familyDocument, "Configure test family");
         _ = transaction.Start();
@@ -891,4 +844,66 @@ internal static class RevitFamilyFixtureHarness {
         _ = transaction.Commit();
     }
 
+    internal sealed record FamilyTypeState(string Name, IReadOnlyDictionary<string, double> LengthValues);
+
+    internal sealed record ParameterDefinitionSpec(
+        string Name,
+        ForgeTypeId DataType,
+        ForgeTypeId? Group = null,
+        bool IsInstance = true);
+
+    internal sealed record ParameterTypeSnapshot(
+        string TypeName,
+        IReadOnlyDictionary<string, string> ValuesByParameter);
+
+    internal sealed record ParameterValueSnapshot(
+        string TypeName,
+        string? Formula,
+        object? RawValue,
+        string? ValueString,
+        bool HasValue,
+        StorageType StorageType,
+        string DataTypeId
+    );
+
+    internal sealed record SharedDefinitionSpec(
+        string Name,
+        ForgeTypeId DataType,
+        string GroupName = "TempGroup",
+        string Description = "",
+        Guid? Guid = null,
+        bool Visible = true
+    );
+
+    internal sealed record ProjectBindingProbe(
+        string Name,
+        string DefinitionType,
+        string IdentityKey,
+        string IdentityKind,
+        Guid? SharedGuid,
+        bool IsShared,
+        bool IsInstanceBinding,
+        string? GroupTypeId,
+        string? DataTypeId,
+        IReadOnlyList<string> CategoryNames
+    );
+
+    internal sealed record FamilyParameterProbe(
+        string Name,
+        bool IsShared,
+        bool IsInstance,
+        string IdentityKind,
+        Guid? SharedGuid,
+        long? ParameterElementId,
+        string? GroupTypeId,
+        string? DataTypeId,
+        string? Formula
+    );
+
+    internal sealed record FamilySizeTableProbe(
+        string TableName,
+        string ExportedCsvPath,
+        IReadOnlyList<string> HeaderColumns,
+        IReadOnlyList<string> Rows
+    );
 }

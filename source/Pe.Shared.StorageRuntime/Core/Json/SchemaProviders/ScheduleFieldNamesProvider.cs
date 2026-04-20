@@ -117,11 +117,11 @@ public class ScheduleNamesByCategoryProvider : IFieldOptionsSource {
                 .Where(schedule => !schedule.IsTemplate)
                 .Where(schedule => !schedule.Name.Contains("<Revision Schedule>", StringComparison.OrdinalIgnoreCase))
                 .Where(schedule => string.IsNullOrWhiteSpace(categoryName) ||
-                    string.Equals(
-                        Category.GetCategory(doc, schedule.Definition.CategoryId)?.Name,
-                        categoryName,
-                        StringComparison.OrdinalIgnoreCase
-                    ))
+                                   string.Equals(
+                                       Category.GetCategory(doc, schedule.Definition.CategoryId)?.Name,
+                                       categoryName,
+                                       StringComparison.OrdinalIgnoreCase
+                                   ))
                 .Select(schedule => schedule.Name)
                 .Where(name => !string.IsNullOrWhiteSpace(name))
                 .Distinct(StringComparer.OrdinalIgnoreCase)

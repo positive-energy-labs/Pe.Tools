@@ -1,15 +1,9 @@
 using Pe.Revit.Extensions.FamDocument;
-using Serilog;
-using Pe.Revit.FamilyFoundry.Operations;
-using System.Text.RegularExpressions;
-using Autodesk.Revit.DB.Electrical;
-using Autodesk.Revit.DB.Mechanical;
-using Autodesk.Revit.DB.Plumbing;
-using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.FamilyFoundry.Helpers;
-using Pe.Revit.FamilyFoundry.Plans;
-using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Resolution;
+using Serilog;
+using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace Pe.Revit.FamilyFoundry.Capture;
 
@@ -23,6 +17,7 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
     private const double DotOrthoTolerance = 0.15;
     private const double PlaneTolerance = 1e-6;
     private const double DistanceTolerance = 1e-4;
+
     private static readonly IReadOnlyDictionary<string, string> BuiltInPlaneRefs =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
             ["Left"] = "@Left",
@@ -95,9 +90,7 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
         ExtrusionSnapshot legacy,
         RefPlaneSnapshot? refPlanesAndDims
     ) {
-        var result = new AuthoredParamDrivenSolidsSettings {
-            Frame = ParamDrivenFamilyFrameKind.NonHosted
-        };
+        var result = new AuthoredParamDrivenSolidsSettings { Frame = ParamDrivenFamilyFrameKind.NonHosted };
 
         foreach (var rectangle in legacy.Rectangles) {
             if (TryBuildAuthoredPrism(doc, rectangle, refPlanesAndDims, out var prism))
@@ -162,7 +155,8 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
             if (string.IsNullOrWhiteSpace(planeName))
                 planeName = $"Plane {authoredSnapshot.Planes.Count + 1}";
 
-            if (!TryBuildAuthoredPlane(doc, spec.AnchorName, spec.Name, spec.Parameter, spec.Direction, out var authoredPlane))
+            if (!TryBuildAuthoredPlane(doc, spec.AnchorName, spec.Name, spec.Parameter, spec.Direction,
+                    out var authoredPlane))
                 continue;
 
             authoredSnapshot.Planes[planeName] = authoredPlane;
@@ -280,9 +274,8 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
         if (!IsValidAuthoredPlaneRef(on) ||
             !IsValidAuthoredPlaneRef(center1) ||
             !IsValidAuthoredPlaneRef(center2) ||
-            string.IsNullOrWhiteSpace(diameter)) {
+            string.IsNullOrWhiteSpace(diameter))
             return false;
-        }
 
         cylinder = new AuthoredCylinderSpec {
             Name = spec.Name,
@@ -372,7 +365,9 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
         return SolidAxis.Width;
     }
 
-    private static MirrorConstraintSnapshot? TryMatchMirrorConstraintSnapshot(Document doc, NamedPlanePair pair, IReadOnlyList<MirrorConstraintSnapshot> mirrorSpecs) {
+    private static MirrorConstraintSnapshot? TryMatchMirrorConstraintSnapshot(Document doc,
+        NamedPlanePair pair,
+        IReadOnlyList<MirrorConstraintSnapshot> mirrorSpecs) {
         foreach (var spec in mirrorSpecs) {
             var center = ResolveReferencePlane(doc, spec.CenterAnchor);
             if (center == null)
@@ -390,7 +385,8 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
         return null;
     }
 
-    private static OffsetConstraintSnapshot? TryMatchOffsetConstraintSnapshot(NamedPlanePair pair, IReadOnlyList<OffsetConstraintSnapshot> offsetSpecs) {
+    private static OffsetConstraintSnapshot? TryMatchOffsetConstraintSnapshot(NamedPlanePair pair,
+        IReadOnlyList<OffsetConstraintSnapshot> offsetSpecs) {
         foreach (var spec in offsetSpecs) {
             var pairNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
                 pair.Plane1 ?? string.Empty, pair.Plane2 ?? string.Empty
@@ -450,7 +446,8 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
         if (!TryBuildPairMeasure(doc, pair, out var by))
             return false;
 
-        if (!TryResolveSpanCenterPlane(doc, pair, refPlanesAndDims, axis, out var aboutPlaneName, out var negativePlaneName, out var positivePlaneName))
+        if (!TryResolveSpanCenterPlane(doc, pair, refPlanesAndDims, axis, out var aboutPlaneName,
+                out var negativePlaneName, out var positivePlaneName))
             return false;
 
         var about = ToAuthoredPlaneRef(aboutPlaneName);
@@ -458,10 +455,7 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
             return false;
 
         span = new AuthoredSpanSpec {
-            About = about,
-            By = by,
-            Negative = negativePlaneName,
-            Positive = positivePlaneName
+            About = about, By = by, Negative = negativePlaneName, Positive = positivePlaneName
         };
         return true;
     }
@@ -479,9 +473,11 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
         negativePlaneName = string.Empty;
         positivePlaneName = string.Empty;
 
-        var mirrorMatch = TryMatchMirrorConstraintSnapshot(doc, pair, refPlanesAndDims?.MirrorConstraintSnapshots ?? []);
+        var mirrorMatch =
+            TryMatchMirrorConstraintSnapshot(doc, pair, refPlanesAndDims?.MirrorConstraintSnapshots ?? []);
         if (mirrorMatch != null &&
-            TryOrderPairRelativeToCenter(doc, pair, mirrorMatch.CenterAnchor, out negativePlaneName, out positivePlaneName)) {
+            TryOrderPairRelativeToCenter(doc, pair, mirrorMatch.CenterAnchor, out negativePlaneName,
+                out positivePlaneName)) {
             centerPlaneName = mirrorMatch.CenterAnchor;
             return true;
         }
@@ -559,24 +555,21 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
     ) {
         var pair = new NamedPlanePair(bottomPlaneName, topPlaneName, parameterName);
         if (!pair.IsEmpty &&
-            TryBuildInlineHeightPlane(doc, pair, ownerName, sketchPlaneName, refPlanesAndDims, out var inlineHeightPlane)) {
+            TryBuildInlineHeightPlane(doc, pair, ownerName, sketchPlaneName, refPlanesAndDims,
+                out var inlineHeightPlane))
             return inlineHeightPlane;
-        }
 
         if (heightControlMode == ExtrusionHeightControlMode.EndOffset &&
-            TryBuildLiteralHeightFallback(startOffset, endOffset, out var endOffsetPlane)) {
+            TryBuildLiteralHeightFallback(startOffset, endOffset, out var endOffsetPlane))
             return endOffsetPlane;
-        }
 
         if (!pair.IsEmpty &&
-            TryBuildBestEffortInlineHeightPlane(doc, pair, ownerName, sketchPlaneName, out var fallbackInlinePlane)) {
+            TryBuildBestEffortInlineHeightPlane(doc, pair, ownerName, sketchPlaneName, out var fallbackInlinePlane))
             return fallbackInlinePlane;
-        }
 
         return new PlaneRefOrInlinePlaneSpec {
             EndOffset = new AuthoredEndOffsetPlaneSpec {
-                By = ToAuthoredLiteral(Math.Abs(endOffset - startOffset)),
-                Dir = endOffset >= startOffset ? "out" : "in"
+                By = ToAuthoredLiteral(Math.Abs(endOffset - startOffset)), Dir = endOffset >= startOffset ? "out" : "in"
             }
         };
     }
@@ -646,8 +639,7 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
 
         height = new PlaneRefOrInlinePlaneSpec {
             EndOffset = new AuthoredEndOffsetPlaneSpec {
-                By = ToAuthoredLiteral(value),
-                Dir = endOffset >= startOffset ? "out" : "in"
+                By = ToAuthoredLiteral(value), Dir = endOffset >= startOffset ? "out" : "in"
             }
         };
         return true;
@@ -667,11 +659,10 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
             return false;
 
         var by = ToAuthoredLength(parameterName);
-        double literalDistance = 0.0;
+        var literalDistance = 0.0;
         if (string.IsNullOrWhiteSpace(by) &&
-            !TryMeasurePlanePairDistance(doc, anchorPlaneName, targetPlaneName, out literalDistance)) {
+            !TryMeasurePlanePairDistance(doc, anchorPlaneName, targetPlaneName, out literalDistance))
             return false;
-        }
 
         plane = new AuthoredPlaneSpec {
             From = from,
@@ -745,9 +736,10 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
             }
         }
 
-        foreach (var cylinder in authoredSnapshot.Cylinders)
+        foreach (var cylinder in authoredSnapshot.Cylinders) {
             if (cylinder.Height.InlinePlane?.Name is { Length: > 0 } cylinderHeightPlane)
                 _ = names.Add(cylinderHeightPlane.Trim());
+        }
 
         return names;
     }
@@ -766,7 +758,7 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
             : $"param:{parameterName.Trim()}";
 
     private static string ToAuthoredLiteral(double internalFeet) =>
-        $"{internalFeet.ToString("0.###############", System.Globalization.CultureInfo.InvariantCulture)}ft";
+        $"{internalFeet.ToString("0.###############", CultureInfo.InvariantCulture)}ft";
 
     private static bool IsValidAuthoredPlaneRef(string? authoredRef) {
         var normalized = authoredRef?.Trim();
@@ -789,7 +781,9 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
     ) {
         spec = null!;
         if (!IsRectangleProfile(extrusion.Sketch.Profile)) {
-            Log.Debug("[ParamDrivenSolidsSnapshotCollector] Extrusion {ExtrusionId} was not recognized as a rectangle profile.", extrusion.Id.Value());
+            Log.Debug(
+                "[ParamDrivenSolidsSnapshotCollector] Extrusion {ExtrusionId} was not recognized as a rectangle profile.",
+                extrusion.Id.Value());
             return false;
         }
 
@@ -832,7 +826,9 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
     ) {
         spec = null!;
         if (!IsCircleProfile(extrusion.Sketch.Profile)) {
-            Log.Debug("[ParamDrivenSolidsSnapshotCollector] Extrusion {ExtrusionId} was not recognized as a circle profile.", extrusion.Id.Value());
+            Log.Debug(
+                "[ParamDrivenSolidsSnapshotCollector] Extrusion {ExtrusionId} was not recognized as a circle profile.",
+                extrusion.Id.Value());
             return false;
         }
 
@@ -1136,7 +1132,8 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
                 extrusion.Id.Value(),
                 profilePlanes.Select(plane => new {
                     plane.Name,
-                    Normal = $"{Math.Round(plane.Normal.X, 4)},{Math.Round(plane.Normal.Y, 4)},{Math.Round(plane.Normal.Z, 4)}"
+                    Normal =
+                        $"{Math.Round(plane.Normal.X, 4)},{Math.Round(plane.Normal.Y, 4)},{Math.Round(plane.Normal.Z, 4)}"
                 }).ToList());
             return false;
         }
@@ -1170,8 +1167,7 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
             .Where(plane => !string.IsNullOrWhiteSpace(plane.Name))
             .Where(plane => Math.Abs(Math.Abs(plane.Normal.Normalize().DotProduct(normal)) - 1.0) <= 1e-3)
             .Select(plane => new {
-                Plane = plane,
-                Distance = SignedDistanceToPlaneAlongNormal(plane.BubbleEnd, sketch.Origin, normal)
+                Plane = plane, Distance = SignedDistanceToPlaneAlongNormal(plane.BubbleEnd, sketch.Origin, normal)
             })
             .ToList();
 
@@ -1334,9 +1330,10 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
             return false;
 
         var center = arcs[0]!.Center;
-        var radius = arcs[0].Radius;
+        var radius = arcs[0]!.Radius;
         const double tolerance = 1e-6;
-        return arcs.All(arc => arc!.Center.IsAlmostEqualTo(center, tolerance) && Math.Abs(arc.Radius - radius) <= tolerance);
+        return arcs.All(arc =>
+            arc!.Center.IsAlmostEqualTo(center, tolerance) && Math.Abs(arc.Radius - radius) <= tolerance);
     }
 
     private static string GetExtrusionName(Extrusion extrusion) =>
@@ -1346,7 +1343,7 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
 
     private static string BuildSymmetricKey(SymmetricPlanePairSpec spec) =>
         $"M|{spec.PlaneNameBase}|{spec.CenterPlaneName}|{spec.Parameter}|{spec.Strength}";
-    
+
     private static string BuildMirrorKey(MirrorConstraintSnapshot spec) =>
         $"M|{spec.Name}|{spec.CenterAnchor}|{spec.Parameter}|{spec.Strength}";
 
@@ -1360,9 +1357,8 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
         var normalized = normal.Normalize();
         if (normalized.Z < 0 ||
             (Math.Abs(normalized.Z) <= PlaneTolerance && normalized.Y < 0) ||
-            (Math.Abs(normalized.Z) <= PlaneTolerance && Math.Abs(normalized.Y) <= PlaneTolerance && normalized.X < 0)) {
+            (Math.Abs(normalized.Z) <= PlaneTolerance && Math.Abs(normalized.Y) <= PlaneTolerance && normalized.X < 0))
             normalized = normalized.Negate();
-        }
 
         return $"{Math.Round(normalized.X, 3)}|{Math.Round(normalized.Y, 3)}|{Math.Round(normalized.Z, 3)}";
     }
@@ -1386,7 +1382,11 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
     }
 
     private sealed record CircleMirrorPairCandidate(string GroupKey, DimConstraint Pair);
-    private sealed record CircleMirrorTopologyCandidate(MirrorConstraintSnapshot Spec, string GroupKey, DimConstraint Pair);
+
+    private sealed record CircleMirrorTopologyCandidate(
+        MirrorConstraintSnapshot Spec,
+        string GroupKey,
+        DimConstraint Pair);
 
     private enum SolidAxis {
         Width,

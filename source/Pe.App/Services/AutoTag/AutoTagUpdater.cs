@@ -23,7 +23,10 @@ public class AutoTagUpdater : IUpdater {
 
     public UpdaterId GetUpdaterId() => this._updaterId;
     public string GetUpdaterName() => "Pe.Tools AutoTag Updater";
-    public string GetAdditionalInformation() => "Automatically tags elements after placement based on configured settings.";
+
+    public string GetAdditionalInformation() =>
+        "Automatically tags elements after placement based on configured settings.";
+
     public ChangePriority GetChangePriority() => ChangePriority.Annotations;
 
     public void Execute(UpdaterData data) {
@@ -64,7 +67,7 @@ public class AutoTagUpdater : IUpdater {
         this._tagTypeCache.Clear();
     }
 
-    private void ProcessElement(Autodesk.Revit.DB.Document doc, Element element, View view) {
+    private void ProcessElement(Document doc, Element element, View view) {
         var category = element.Category;
         if (category == null)
             return;
@@ -88,16 +91,15 @@ public class AutoTagUpdater : IUpdater {
     }
 
     private FamilySymbol? GetOrCacheTagType(
-        Autodesk.Revit.DB.Document doc,
+        Document doc,
         BuiltInCategory elementCategory,
         AutoTagConfiguration config
     ) {
         var cacheKey = $"{config.TagFamilyName}::{config.TagTypeName}";
         if (this._tagTypeCache.TryGetValue(cacheKey, out var cachedType) &&
             cachedType.IsValidObject &&
-            doc.GetElement(cachedType.Id) != null) {
+            doc.GetElement(cachedType.Id) != null)
             return cachedType;
-        }
 
         _ = this._tagTypeCache.Remove(cacheKey);
 
@@ -122,9 +124,8 @@ public class AutoTagUpdater : IUpdater {
             if (fallbackType != null) {
                 tagType = fallbackType;
                 this.NotifyTypeFallback(config, fallbackType, allTagsInCategory);
-            } else {
+            } else
                 this.NotifyAndDisableConfig(config, allTagsInCategory);
-            }
         }
 
         if (tagType != null) {
@@ -179,9 +180,9 @@ public class AutoTagUpdater : IUpdater {
         var message =
             $"Tag type '{config.TagFamilyName}:{config.TagTypeName}' not found for category '{categoryLabel}'.";
 
-        if (availableTypes.Count > 0) {
+        if (availableTypes.Count > 0)
             message += $"\n\nAvailable types for this family:\n  - {string.Join("\n  - ", availableTypes)}";
-        } else {
+        else {
             var availableFamilies = availableTags
                 .Select(tag => tag.FamilyName)
                 .Distinct()
@@ -201,7 +202,7 @@ public class AutoTagUpdater : IUpdater {
         CategoryNamesProvider.GetLabelForBuiltInCategory(category);
 
     private void CreateTag(
-        Autodesk.Revit.DB.Document doc,
+        Document doc,
         Element element,
         FamilySymbol tagType,
         AutoTagConfiguration config,
@@ -252,13 +253,13 @@ public class AutoTagUpdater : IUpdater {
 
         var angleRad = config.OffsetAngle * Math.PI / 180.0;
         return new XYZ(
-            baseLocation.X + config.OffsetDistance * Math.Cos(angleRad),
-            baseLocation.Y + config.OffsetDistance * Math.Sin(angleRad),
+            baseLocation.X + (config.OffsetDistance * Math.Cos(angleRad)),
+            baseLocation.Y + (config.OffsetDistance * Math.Sin(angleRad)),
             baseLocation.Z
         );
     }
 
-    private bool IsElementTagged(Autodesk.Revit.DB.Document doc, Element element, View view) {
+    private bool IsElementTagged(Document doc, Element element, View view) {
         try {
             return new FilteredElementCollector(doc, view.Id)
                 .OfClass(typeof(IndependentTag))

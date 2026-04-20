@@ -1,9 +1,6 @@
-﻿
-using Pe.Revit.Extensions.FamDocument;
+﻿using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamParameter;
-using Pe.Revit.Global.PolyFill;
 using Pe.Revit.Global.Revit.Documents;
-using Pe.Revit.Global.Services.Document;
 using ArgumentException = Autodesk.Revit.Exceptions.ArgumentException;
 
 namespace Pe.App.Commands.Palette.FamilyPalette;
@@ -24,7 +21,8 @@ public static class FamilyPreviewBuilder {
         var typeNames = symbolIds
             .Select(id => doc.GetElement(id) as FamilySymbol)
             .Where(s => s != null)
-            .Select(s => s!.Name)
+            .Select(s => s?.Name)
+            .OfType<string>()
             .OrderBy(n => n)
             .ToList();
 
@@ -66,8 +64,9 @@ public static class FamilyPreviewBuilder {
         return symbolIds
             .Select(id => doc.GetElement(id) as FamilySymbol)
             .Where(s => s != null)
-            .OrderBy(s => s!.Name)
-            .ToList()!;
+            .Cast<FamilySymbol>()
+            .OrderBy(s => s.Name)
+            .ToList();
     }
 
     private static List<FamilyParameterPreview> CollectParametersFromFamily(
@@ -285,10 +284,11 @@ public static class FamilyPreviewBuilder {
             return existing;
 
         Guid? sharedGuid = null;
-        if (param.IsShared)
+        if (param.IsShared) {
             try { sharedGuid = param.GUID; } catch {
                 /* GUID access can throw */
             }
+        }
 
         var created = new FamilyParameterPreview {
             Name = param.Definition.Name,
@@ -330,10 +330,11 @@ public static class FamilyPreviewBuilder {
         var def = param.Definition;
 
         Guid? sharedGuid = null;
-        if (param.IsShared)
+        if (param.IsShared) {
             try { sharedGuid = param.GUID; } catch {
                 /* GUID access can throw */
             }
+        }
 
         var created = new FamilyParameterPreview {
             Name = def.Name,

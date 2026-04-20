@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Globalization;
-using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -214,9 +213,7 @@ public partial class AutoSuggestBox : RevitHostedUserControl {
         this.RequestFilteredItemsRefresh();
     }
 
-    private void OnTextBoxGotFocus(object sender, RoutedEventArgs e) {
-        this.RequestFilteredItemsRefresh();
-    }
+    private void OnTextBoxGotFocus(object sender, RoutedEventArgs e) => this.RequestFilteredItemsRefresh();
 
     private void OnTextBoxLostFocus(object sender, RoutedEventArgs e) {
         if (this.IsFocusWithinSuggestionsList(Keyboard.FocusedElement as DependencyObject)) return;
@@ -225,7 +222,8 @@ public partial class AutoSuggestBox : RevitHostedUserControl {
 
     private static void OnItemsSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) {
         if (d is not AutoSuggestBox box) return;
-        box.UpdateItemsSourceSubscription(e.OldValue as INotifyCollectionChanged, e.NewValue as INotifyCollectionChanged);
+        box.UpdateItemsSourceSubscription(e.OldValue as INotifyCollectionChanged,
+            e.NewValue as INotifyCollectionChanged);
         box.RequestFilteredItemsRefresh();
     }
 
@@ -289,9 +287,7 @@ public partial class AutoSuggestBox : RevitHostedUserControl {
 
             if (string.IsNullOrEmpty(searchText) || this.IsMatch(searchText, primaryText)) {
                 items.Add(new AutoSuggestBoxItem {
-                    PrimaryText = primaryText,
-                    SecondaryText = secondaryText,
-                    Value = item
+                    PrimaryText = primaryText, SecondaryText = secondaryText, Value = item
                 });
             }
         }

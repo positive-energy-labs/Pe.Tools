@@ -1,5 +1,4 @@
 using Pe.Revit.FamilyFoundry.OperationGroups;
-using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.FamilyFoundry.Operations;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;

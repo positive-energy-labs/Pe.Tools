@@ -1,5 +1,4 @@
 using Pe.Shared.StorageRuntime.Json;
-using Pe.Shared.StorageRuntime.Json;
 
 namespace Pe.Revit.FamilyFoundry.OperationSettings;
 
@@ -46,4 +45,3 @@ public class ExcludeSharedParameter {
     [Includable(IncludableFragmentRoot.SharedParameterNames)]
     public List<string> StartingWith { get; init; } = [];
 }
-

@@ -1,8 +1,6 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
-using Pe.Revit.FamilyFoundry.Snapshots;
-using Pe.Shared.StorageRuntime.Json;
 using Pe.Shared.StorageRuntime.Json;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
@@ -93,9 +91,8 @@ public sealed class SetKnownParamsSettings : IOperationSettings {
 
         foreach (var assignment in this.GlobalAssignments) {
             var parameterName = assignment.Parameter?.Trim();
-            if (string.IsNullOrWhiteSpace(parameterName)) {
+            if (string.IsNullOrWhiteSpace(parameterName))
                 throw new InvalidOperationException("Global assignment is missing required parameter name.");
-            }
 
             if (!assignments.TryAdd(parameterName, assignment with { Parameter = parameterName })) {
                 throw new InvalidOperationException(
@@ -162,4 +159,3 @@ public sealed class SetKnownParamsSettings : IOperationSettings {
         return parameterNames;
     }
 }
-

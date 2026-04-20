@@ -63,8 +63,7 @@ public static class SettingsEditorRuntime {
         }
 
         var installRoots = new[] {
-            GetSingleUserHostInstallPath(localAppData),
-            GetMultiUserHostInstallPath(programFiles)
+            GetSingleUserHostInstallPath(localAppData), GetMultiUserHostInstallPath(programFiles)
         };
 
         foreach (var root in installRoots) {

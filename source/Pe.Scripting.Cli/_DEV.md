@@ -2,15 +2,16 @@
 
 ## Mental Model
 
-The CLI is the stable run-first outer loop for scripting. It validates the supported input shape, posts one sync request to `Pe.Host`, and prints the returned output and diagnostics.
+The CLI is the stable run-first outer loop for scripting. It validates the supported input shape, posts one sync request
+to `Pe.Host`, and prints the returned output and diagnostics.
 
 ## Architecture
 
 - argument parsing and local workspace preflight happen first
 - request construction can include:
-  - inline source
-  - workspace-relative source path
-  - current `PeScripts.csproj` content
+    - inline source
+    - workspace-relative source path
+    - current `PeScripts.csproj` content
 - execution goes through host HTTP, not directly to the Revit pipe
 - host then proxies to the internal scripting pipe
 - one response returns buffered output plus structured diagnostics
@@ -18,15 +19,15 @@ The CLI is the stable run-first outer loop for scripting. It validates the suppo
 ## Key Flows
 
 - workspace file run:
-  - `pe-script src\MyProbe.cs`
-  - validates the file under the default workspace root
-  - posts `ExecuteRevitScriptRequest` to `/api/scripting/execute`
+    - `pe-script src\MyProbe.cs`
+    - validates the file under the default workspace root
+    - posts `ExecuteRevitScriptRequest` to `/api/scripting/execute`
 - stdin run:
-  - `Get-Content .\Scratch.cs | pe-script --stdin --name Scratch.cs`
-  - posts inline snippet content to the same host endpoint
+    - `Get-Content .\Scratch.cs | pe-script --stdin --name Scratch.cs`
+    - posts inline snippet content to the same host endpoint
 - `new` command:
-  - stays local-only
-  - creates a workspace-relative `.cs` file skeleton
+    - stays local-only
+    - creates a workspace-relative `.cs` file skeleton
 
 ## Open Questions
 

@@ -1,7 +1,6 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamManager;
 using Pe.Revit.Extensions.FamParameter;
-using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
 

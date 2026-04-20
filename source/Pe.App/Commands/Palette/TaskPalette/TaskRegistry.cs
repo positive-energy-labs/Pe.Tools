@@ -1,5 +1,3 @@
-using Pe.Revit.Global.PolyFill;
-
 namespace Pe.App.Commands.Palette.TaskPalette;
 
 /// <summary>
@@ -64,7 +62,7 @@ public sealed class TaskRegistry {
     /// <summary>
     ///     Gets a task by ID (type name)
     /// </summary>
-    public ITask GetById(string id) {
+    public ITask? GetById(string id) {
         lock (this._lock) return this._tasks.GetValueOrDefault(id);
     }
 
@@ -76,6 +74,7 @@ public sealed class TaskRegistry {
             return this._tasks.Values
                 .Select(t => t.Category)
                 .Where(c => !string.IsNullOrEmpty(c))
+                .Cast<string>()
                 .Distinct()
                 .OrderBy(c => c)
                 .ToList();

@@ -1,4 +1,3 @@
-using Pe.Revit.Global.PolyFill;
 using Pe.Revit.Ui.Controls;
 using Pe.Revit.Ui.Core;
 using System.Collections;
@@ -110,6 +109,8 @@ public partial class ListView {
         if (e.AddedItems.Count == 0 || this._scrollViewer == null) return;
 
         var selectedItem = e.AddedItems[0];
+        if (selectedItem == null)
+            return;
         // Use dispatcher to ensure the container is generated and laid out
         _ = this.Dispatcher.BeginInvoke(() => this.AnimateScrollIntoView(selectedItem),
             DispatcherPriority.Loaded);
@@ -184,11 +185,11 @@ public partial class ListView {
     public WpfUiListViewItem? ContainerFromItem(object item) =>
         this.ItemListView.ItemContainerGenerator.ContainerFromItem(item) as WpfUiListViewItem;
 
-    public event SelectionChangedEventHandler SelectionChanged;
-    public event MouseButtonEventHandler ItemMouseLeftButtonUp;
-    public event MouseButtonEventHandler ItemMouseRightButtonUp;
-    public event MouseEventHandler ItemMouseMove;
-    public event MouseEventHandler ItemMouseLeave;
+    public event SelectionChangedEventHandler? SelectionChanged;
+    public event MouseButtonEventHandler? ItemMouseLeftButtonUp;
+    public event MouseButtonEventHandler? ItemMouseRightButtonUp;
+    public event MouseEventHandler? ItemMouseMove;
+    public event MouseEventHandler? ItemMouseLeave;
 
     /// <summary>
     ///     Scrolls to bring the specified item into view.

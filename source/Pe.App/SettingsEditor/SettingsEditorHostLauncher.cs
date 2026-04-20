@@ -17,7 +17,8 @@ internal static class SettingsEditorHostLauncher {
     public static SettingsEditorHostLaunchResult EnsureRunning() {
         try {
             if (TryGetCompatibleHostStatus(out _))
-                return new SettingsEditorHostLaunchResult(true, true, false, "Settings editor host is already running.");
+                return new SettingsEditorHostLaunchResult(true, true, false,
+                    "Settings editor host is already running.");
 
             if (!IsAutoStartEnabled())
                 return new SettingsEditorHostLaunchResult(false, false, false, GetAutoStartDisabledMessage());
@@ -77,7 +78,8 @@ internal static class SettingsEditorHostLauncher {
             var payloadJson = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
             status = JsonConvert.DeserializeObject<HostStatusData>(payloadJson);
             return status != null &&
-                   string.Equals(status.RuntimeIdentity, SettingsEditorRuntime.RuntimeIdentity, StringComparison.Ordinal) &&
+                   string.Equals(status.RuntimeIdentity, SettingsEditorRuntime.RuntimeIdentity,
+                       StringComparison.Ordinal) &&
                    status.HostContractVersion == HostProtocol.ContractVersion &&
                    status.BridgeContractVersion == BridgeProtocol.ContractVersion &&
                    string.Equals(status.PipeName, GetExpectedPipeName(), StringComparison.Ordinal);

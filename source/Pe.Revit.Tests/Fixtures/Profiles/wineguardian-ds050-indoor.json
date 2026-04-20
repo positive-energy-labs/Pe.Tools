@@ -5,12 +5,18 @@
   },
   "FilterFamilies": {
     "IncludeNames": {
-      "Equaling": ["FF-Test-WineGuardianDS050Indoor.rfa"]
+      "Equaling": [
+        "FF-Test-WineGuardianDS050Indoor.rfa"
+      ]
     }
   },
   "FilterApsParams": {
     "IncludeNames": {
-      "Equaling": ["PE_G_Dim_Height1", "PE_G_Dim_Length1", "PE_G_Dim_Width1"]
+      "Equaling": [
+        "PE_G_Dim_Height1",
+        "PE_G_Dim_Length1",
+        "PE_G_Dim_Width1"
+      ]
     }
   },
   "AddFamilyParams": {
@@ -67,13 +73,22 @@
         "Name": "SuctionLineDiameter",
         "DataType": "autodesk.spec.aec:length-2.0.1"
       },
-      { "Name": "DrainDiameter", "DataType": "autodesk.spec.aec:length-2.0.1" },
-      { "Name": "DrainDepth", "DataType": "autodesk.spec.aec:length-2.0.1" },
+      {
+        "Name": "DrainDiameter",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "DrainDepth",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
       {
         "Name": "DrainSideOffset",
         "DataType": "autodesk.spec.aec:length-2.0.1"
       },
-      { "Name": "DrainElevation", "DataType": "autodesk.spec.aec:length-2.0.1" }
+      {
+        "Name": "DrainElevation",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      }
     ]
   },
   "SetKnownParams": {
@@ -91,24 +106,78 @@
       }
     ],
     "PerTypeAssignmentsTable": [
-      { "Parameter": "PE_G_Dim_Length1", "DS050": "23.81\"" },
-      { "Parameter": "PE_G_Dim_Width1", "DS050": "25.04\"" },
-      { "Parameter": "PE_G_Dim_Height1", "DS050": "19.65\"" },
-      { "Parameter": "SupplyAirDiameter", "DS050": "10\"" },
-      { "Parameter": "SupplyAirDepth", "DS050": "6\"" },
-      { "Parameter": "ReturnAirDiameter", "DS050": "10\"" },
-      { "Parameter": "ReturnAirDepth", "DS050": "6\"" },
-      { "Parameter": "ReturnAirCenterElevation", "DS050": "9.84\"" },
-      { "Parameter": "ServicePanelOffset", "DS050": "7.50\"" },
-      { "Parameter": "ServiceLineHalfSpacing", "DS050": "0.75\"" },
-      { "Parameter": "ServiceLineElevation", "DS050": "13.85\"" },
-      { "Parameter": "RefrigerantDepth", "DS050": "2\"" },
-      { "Parameter": "LiquidLineDiameter", "DS050": "0.25\"" },
-      { "Parameter": "SuctionLineDiameter", "DS050": "0.50\"" },
-      { "Parameter": "DrainDiameter", "DS050": "0.50\"" },
-      { "Parameter": "DrainDepth", "DS050": "2\"" },
-      { "Parameter": "DrainSideOffset", "DS050": "8.50\"" },
-      { "Parameter": "DrainElevation", "DS050": "1.00\"" }
+      {
+        "Parameter": "PE_G_Dim_Length1",
+        "DS050": "23.81\""
+      },
+      {
+        "Parameter": "PE_G_Dim_Width1",
+        "DS050": "25.04\""
+      },
+      {
+        "Parameter": "PE_G_Dim_Height1",
+        "DS050": "19.65\""
+      },
+      {
+        "Parameter": "SupplyAirDiameter",
+        "DS050": "10\""
+      },
+      {
+        "Parameter": "SupplyAirDepth",
+        "DS050": "6\""
+      },
+      {
+        "Parameter": "ReturnAirDiameter",
+        "DS050": "10\""
+      },
+      {
+        "Parameter": "ReturnAirDepth",
+        "DS050": "6\""
+      },
+      {
+        "Parameter": "ReturnAirCenterElevation",
+        "DS050": "9.84\""
+      },
+      {
+        "Parameter": "ServicePanelOffset",
+        "DS050": "7.50\""
+      },
+      {
+        "Parameter": "ServiceLineHalfSpacing",
+        "DS050": "0.75\""
+      },
+      {
+        "Parameter": "ServiceLineElevation",
+        "DS050": "13.85\""
+      },
+      {
+        "Parameter": "RefrigerantDepth",
+        "DS050": "2\""
+      },
+      {
+        "Parameter": "LiquidLineDiameter",
+        "DS050": "0.25\""
+      },
+      {
+        "Parameter": "SuctionLineDiameter",
+        "DS050": "0.50\""
+      },
+      {
+        "Parameter": "DrainDiameter",
+        "DS050": "0.50\""
+      },
+      {
+        "Parameter": "DrainDepth",
+        "DS050": "2\""
+      },
+      {
+        "Parameter": "DrainSideOffset",
+        "DS050": "8.50\""
+      },
+      {
+        "Parameter": "DrainElevation",
+        "DS050": "1.00\""
+      }
     ]
   },
   "ParamDrivenSolids": {
@@ -139,8 +208,16 @@
         "By": "param:SuctionLineCenterOffset",
         "Dir": "out"
       },
-      "Drain Side": { "From": "@CenterFB", "By": "param:DrainSideOffset", "Dir": "out" },
-      "Drain Elevation": { "From": "@Bottom", "By": "param:DrainElevation", "Dir": "out" }
+      "Drain Side": {
+        "From": "@CenterFB",
+        "By": "param:DrainSideOffset",
+        "Dir": "out"
+      },
+      "Drain Elevation": {
+        "From": "@Bottom",
+        "By": "param:DrainElevation",
+        "Dir": "out"
+      }
     },
     "Spans": [],
     "Prisms": [
@@ -174,10 +251,18 @@
         "Name": "SupplyAir",
         "Domain": "Duct",
         "Face": "plane:Cabinet Top",
-        "Depth": { "By": "param:SupplyAirDepth", "Dir": "out" },
+        "Depth": {
+          "By": "param:SupplyAirDepth",
+          "Dir": "out"
+        },
         "Round": {
-          "Center": ["@CenterLR", "@CenterFB"],
-          "Diameter": { "By": "param:SupplyAirDiameter" }
+          "Center": [
+            "@CenterLR",
+            "@CenterFB"
+          ],
+          "Diameter": {
+            "By": "param:SupplyAirDiameter"
+          }
         },
         "Config": {
           "SystemType": "SupplyAir",
@@ -190,10 +275,18 @@
         "Name": "ReturnAir",
         "Domain": "Duct",
         "Face": "plane:Cabinet Back",
-        "Depth": { "By": "param:ReturnAirDepth", "Dir": "in" },
+        "Depth": {
+          "By": "param:ReturnAirDepth",
+          "Dir": "in"
+        },
         "Round": {
-          "Center": ["@CenterLR", "plane:Return Air Elevation"],
-          "Diameter": { "By": "param:ReturnAirDiameter" }
+          "Center": [
+            "@CenterLR",
+            "plane:Return Air Elevation"
+          ],
+          "Diameter": {
+            "By": "param:ReturnAirDiameter"
+          }
         },
         "Config": {
           "SystemType": "ReturnAir",
@@ -206,7 +299,10 @@
         "Name": "LiquidLine",
         "Domain": "Pipe",
         "Face": "plane:Cabinet Left",
-        "Depth": { "By": "param:RefrigerantDepth", "Dir": "in" },
+        "Depth": {
+          "By": "param:RefrigerantDepth",
+          "Dir": "in"
+        },
         "Round": {
           "Center": [
             "plane:Liquid Line Center",
@@ -225,7 +321,10 @@
         "Name": "SuctionLine",
         "Domain": "Pipe",
         "Face": "plane:Cabinet Left",
-        "Depth": { "By": "param:RefrigerantDepth", "Dir": "in" },
+        "Depth": {
+          "By": "param:RefrigerantDepth",
+          "Dir": "in"
+        },
         "Round": {
           "Center": [
             "plane:Suction Line Center",
@@ -244,9 +343,15 @@
         "Name": "CondensateDrain",
         "Domain": "Pipe",
         "Face": "plane:Cabinet Left",
-        "Depth": { "By": "param:DrainDepth", "Dir": "in" },
+        "Depth": {
+          "By": "param:DrainDepth",
+          "Dir": "in"
+        },
         "Round": {
-          "Center": ["plane:Drain Side", "plane:Drain Elevation"],
+          "Center": [
+            "plane:Drain Side",
+            "plane:Drain Elevation"
+          ],
           "Diameter": {
             "By": "param:DrainDiameter"
           }

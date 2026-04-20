@@ -1,5 +1,3 @@
-using Pe.Revit.FamilyFoundry.Plans;
-
 namespace Pe.Revit.FamilyFoundry.Plans;
 
 public sealed record ParamDrivenSolidsPlan(
@@ -8,7 +6,8 @@ public sealed record ParamDrivenSolidsPlan(
     ParamDrivenConnectorsPlan Connectors,
     IReadOnlyList<ParamDrivenSolidsDiagnostic> Diagnostics
 ) {
-    public bool CanExecute => this.Diagnostics.All(diagnostic => diagnostic.Severity != ParamDrivenDiagnosticSeverity.Error);
+    public bool CanExecute =>
+        this.Diagnostics.All(diagnostic => diagnostic.Severity != ParamDrivenDiagnosticSeverity.Error);
 }
 
 public sealed record ParamDrivenSolidsDiagnostic(
