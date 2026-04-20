@@ -1,12 +1,12 @@
-using Pe.Shared.HostContracts.RevitData;
-using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Revit.Global.Revit.Lib.Parameters;
 using Pe.Revit.Global.Services.Document;
+using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Context;
+using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
 using Pe.Shared.StorageRuntime.Json.FieldOptions;
 using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
-using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
 using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
@@ -21,8 +21,10 @@ public class RequestService {
     private static readonly TimeSpan FieldOptionsThrottleWindow = TimeSpan.FromMilliseconds(350);
     private static readonly TimeSpan ParameterCatalogThrottleWindow = TimeSpan.FromMilliseconds(750);
 
+    private readonly ISettingsDocumentContextAccessor _documentContextAccessor =
+        new DocumentManagerRevitContextAccessor();
+
     private readonly SettingsModuleRegistry _moduleRegistry;
-    private readonly ISettingsDocumentContextAccessor _documentContextAccessor = new DocumentManagerRevitContextAccessor();
     private readonly RevitTaskService _revitTaskService;
     private readonly ThrottleGate _throttleGate;
 

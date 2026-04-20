@@ -1,7 +1,6 @@
 using Pe.Revit.Extensions.FamDocument.SetValue;
 using System.Diagnostics;
 using System.Globalization;
-using BCS = Pe.Revit.Extensions.FamDocument.SetValue.BuiltInCoercionStrategy;
 
 namespace Pe.Revit.Extensions.FamDocument;
 

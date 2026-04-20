@@ -1,4 +1,3 @@
-using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.FamilyFoundry.Serialization;
 
 namespace Pe.Revit.Tests;
@@ -13,26 +12,20 @@ public sealed class FamilyParamProfileAdapterTests {
                 IsInstance = false,
                 PropertiesGroup = GroupTypeId.Geometry,
                 DataType = SpecTypeId.Length,
-                ValuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal) {
-                    ["Default"] = null
-                }
+                ValuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal) { ["Default"] = null }
             },
             new ParameterSnapshot {
                 Name = "PE_G___TagInstance",
                 IsInstance = true,
                 PropertiesGroup = GroupTypeId.IdentityData,
                 DataType = SpecTypeId.String.Text,
-                ValuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal) {
-                    ["Default"] = "ST-#"
-                }
+                ValuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal) { ["Default"] = "ST-#" }
             }
         };
 
         var export = FamilyParamProfileAdapter.ProjectSnapshotsToProfile(
             snapshots,
-            new FamilyParamProfileExportOptions {
-                IncludeDefinitionOnlyParameters = true
-            });
+            new FamilyParamProfileExportOptions { IncludeDefinitionOnlyParameters = true });
 
         Assert.Multiple(() => {
             Assert.That(export.AddFamilyParams.Enabled, Is.True);
@@ -52,17 +45,14 @@ public sealed class FamilyParamProfileAdapterTests {
                 PropertiesGroup = GroupTypeId.Geometry,
                 DataType = SpecTypeId.Length,
                 ValuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal) {
-                    ["Type A"] = "0\"",
-                    ["Type B"] = "0\""
+                    ["Type A"] = "0\"", ["Type B"] = "0\""
                 }
             }
         };
 
         var export = FamilyParamProfileAdapter.ProjectSnapshotsToProfile(
             snapshots,
-            new FamilyParamProfileExportOptions {
-                IncludeDefinitionOnlyParameters = true
-            });
+            new FamilyParamProfileExportOptions { IncludeDefinitionOnlyParameters = true });
 
         Assert.That(
             export.SetKnownParams.GlobalAssignments.Single(assignment => assignment.Parameter == "Offset").Value,
@@ -77,9 +67,7 @@ public sealed class FamilyParamProfileAdapterTests {
                 IsInstance = false,
                 PropertiesGroup = GroupTypeId.Geometry,
                 DataType = SpecTypeId.Length,
-                ValuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal) {
-                    ["Default"] = null
-                }
+                ValuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal) { ["Default"] = null }
             }
         };
 

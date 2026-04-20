@@ -8,7 +8,7 @@ namespace Pe.Revit.Global.Services.Aps.Core;
 ///     Self-contained: includes its own PKCE generation (no external dependencies).
 /// </summary>
 internal sealed record OAuthFlowData {
-    public string ClientId { get; init; }
+    public string ClientId { get; init; } = string.Empty;
     public string? ClientSecret { get; init; }
     public string? CodeVerifier { get; init; }
 

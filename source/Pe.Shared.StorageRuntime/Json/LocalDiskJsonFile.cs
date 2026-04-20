@@ -30,18 +30,18 @@ public sealed class LocalDiskJsonFile<T>(string filePath) : JsonReadWriter<T> wh
     }
 
     public bool IsCacheValid(int maxAgeMinutes, Func<T, bool>? contentValidator = null) {
-        if (_cachedData == null || !File.Exists(this.FilePath))
+        if (this._cachedData == null || !File.Exists(this.FilePath))
             return false;
 
         var fileModifiedUtc = new DateTimeOffset(File.GetLastWriteTimeUtc(this.FilePath), TimeSpan.Zero);
-        if (fileModifiedUtc > _cachedModifiedUtc)
+        if (fileModifiedUtc > this._cachedModifiedUtc)
             return false;
 
-        var age = DateTimeOffset.UtcNow - _cachedModifiedUtc;
+        var age = DateTimeOffset.UtcNow - this._cachedModifiedUtc;
         if (age.TotalMinutes > maxAgeMinutes)
             return false;
 
-        return contentValidator?.Invoke(_cachedData) ?? true;
+        return contentValidator?.Invoke(this._cachedData) ?? true;
     }
 
     private static string Initialize(string filePath) {
@@ -58,8 +58,8 @@ public sealed class LocalDiskJsonFile<T>(string filePath) : JsonReadWriter<T> wh
     }
 
     private void UpdateCache(T data) {
-        _cachedData = data;
-        _cachedModifiedUtc = File.Exists(this.FilePath)
+        this._cachedData = data;
+        this._cachedModifiedUtc = File.Exists(this.FilePath)
             ? new DateTimeOffset(File.GetLastWriteTimeUtc(this.FilePath), TimeSpan.Zero)
             : DateTimeOffset.UtcNow;
     }

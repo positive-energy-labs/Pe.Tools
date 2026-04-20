@@ -26,7 +26,7 @@ public class ViewPreviewPanel : PaletteSidebarPanel<UnifiedViewItem, ViewPreview
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
         };
 
-        base.Content = this._richTextBox;
+        this.Content = this._richTextBox;
     }
 
     protected override void ShowLoading(UnifiedViewItem item) {
@@ -34,8 +34,7 @@ public class ViewPreviewPanel : PaletteSidebarPanel<UnifiedViewItem, ViewPreview
             .AddHeader(item.TextPrimary);
 
         var loadingPara = new Paragraph(new Run("Loading...") {
-            FontStyle = FontStyles.Italic,
-            Foreground = Brushes.Gray
+            FontStyle = FontStyles.Italic, Foreground = Brushes.Gray
         }) { Margin = new Thickness(0, 8, 0, 0) };
 
         doc.Blocks.Add(loadingPara);
@@ -88,8 +87,7 @@ public class ViewPreviewPanel : PaletteSidebarPanel<UnifiedViewItem, ViewPreview
     private ViewPreviewData BuildViewPreviewData(UnifiedViewItem item) {
         var view = item.View;
         var summary = new List<(string key, string value)> {
-            ("Type", view.ViewType.ToString()),
-            ("Detail Level", view.DetailLevel.ToString())
+            ("Type", view.ViewType.ToString()), ("Detail Level", view.DetailLevel.ToString())
         };
 
         var level = view.FindParameter(BuiltInParameter.PLAN_VIEW_LEVEL)?.AsValueString();

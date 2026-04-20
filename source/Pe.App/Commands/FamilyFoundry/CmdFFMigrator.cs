@@ -12,6 +12,7 @@ using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.Global;
 using Pe.Revit.Global.Revit.Lib;
 using Pe.Revit.Global.Revit.Ui;
+using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Modules;
 using Serilog.Events;
@@ -91,7 +92,7 @@ public class CmdFFMigrator : IExternalCommand {
 
     private void HandleProcessFamilies(FoundryContext<FFMigratorProfile> ctx) {
         if (ctx.SelectedProfile == null) return;
-        if (!ctx.PreviewData.IsValid) {
+        if (ctx.PreviewData?.IsValid != true) {
             new Ballogger()
                 .Add(LogEventLevel.Error, new StackFrame(), "Cannot process families - profile has validation errors")
                 .Show();
@@ -149,12 +150,13 @@ public class CmdFFMigrator : IExternalCommand {
             .Add(
                 LogEventLevel.Warning,
                 new StackFrame(),
-                $"Could not open external settings-editor route. Check {Pe.Shared.HostContracts.Protocol.SettingsEditorRuntime.FrontendBaseUrlVariable}."
+                $"Could not open external settings-editor route. Check {SettingsEditorRuntime.FrontendBaseUrlVariable}."
             )
             .Show();
     }
 
-    internal static FFMigratorPlaceFamiliesActionResult PlaceFamiliesCore(UIApplication uiApp, FFMigratorProfile profile) {
+    internal static FFMigratorPlaceFamiliesActionResult PlaceFamiliesCore(UIApplication uiApp,
+        FFMigratorProfile profile) {
         var doc = uiApp.ActiveUIDocument?.Document;
         if (doc == null)
             return new FFMigratorPlaceFamiliesActionResult(false, "No active document.", [], 0);
@@ -181,7 +183,8 @@ public class CmdFFMigrator : IExternalCommand {
         }
     }
 
-    internal static OperationQueue BuildQueueCore(FFMigratorProfile profile, List<SharedParameterDefinition> apsParamData) {
+    internal static OperationQueue BuildQueueCore(FFMigratorProfile profile,
+        List<SharedParameterDefinition> apsParamData) {
         var pClone = DeepCloneProfile(profile);
         var apsParamNames = apsParamData.Select(p => p.ExternalDefinition.Name).ToList();
         var mappingDataAllNames = pClone.AddAndMapSharedParams.MappingData
@@ -273,7 +276,8 @@ public class CmdFFMigrator : IExternalCommand {
         }
     }
 
-    private static ModuleStorage<FFMigratorProfile> ResolveStorage() => RuntimeStorageClient.Default.Module(SettingsModule);
+    private static ModuleStorage<FFMigratorProfile> ResolveStorage() =>
+        RuntimeStorageClient.Default.Module(SettingsModule);
 
     private static string ResolveRootKey(string? subDirectory) =>
         string.IsNullOrWhiteSpace(subDirectory)

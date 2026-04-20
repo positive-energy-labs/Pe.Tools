@@ -1,4 +1,3 @@
-using Pe.Revit.FamilyFoundry.OperationSettings;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 

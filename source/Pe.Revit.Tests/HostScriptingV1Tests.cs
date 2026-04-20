@@ -1,7 +1,3 @@
-using System.IO.Pipes;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Pe.Host;
 using Pe.Host.Operations;
@@ -9,6 +5,10 @@ using Pe.Host.Services;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts.Scripting;
+using System.IO.Pipes;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Pe.Revit.Tests;
 
@@ -38,7 +38,7 @@ public sealed class HostScriptingV1Tests {
 
         var client = new HostScriptingPipeClientService(pipeName);
         var result = await client.BootstrapWorkspaceAsync(
-            new ScriptWorkspaceBootstrapRequest("default", CreateSampleScript: false),
+            new ScriptWorkspaceBootstrapRequest("default", false),
             CancellationToken.None
         );
         var capturedRequest = await serverTask;
@@ -64,14 +64,13 @@ public sealed class HostScriptingV1Tests {
 
         var serverTask = Task.Run(() => ServeOnceAsync(
             pipeName,
-            request => new ScriptingPipeResponse(true, string.Empty, Result: expected)
+            request => new ScriptingPipeResponse(true, string.Empty, expected)
         ));
 
         var client = new HostScriptingPipeClientService(pipeName);
         var result = await client.ExecuteAsync(
             new ExecuteRevitScriptRequest(
-                ScriptContent: "WriteLine(\"hi\");",
-                SourceKind: ScriptExecutionSourceKind.InlineSnippet,
+                "WriteLine(\"hi\");",
                 WorkspaceKey: "default",
                 ProjectContent: "<Project />",
                 SourceName: "SmokeScript.cs"
@@ -90,12 +89,11 @@ public sealed class HostScriptingV1Tests {
 
     [Test]
     public void Host_scripting_pipe_client_translates_pipe_timeout_to_actionable_message() {
-        var client = new HostScriptingPipeClientService(CreatePipeName(), connectTimeoutMs: 50);
+        var client = new HostScriptingPipeClientService(CreatePipeName(), 50);
 
         var ex = Assert.ThrowsAsync<InvalidOperationException>(() => client.ExecuteAsync(
             new ExecuteRevitScriptRequest(
-                ScriptContent: "WriteLine(\"hi\");",
-                SourceKind: ScriptExecutionSourceKind.InlineSnippet
+                "WriteLine(\"hi\");"
             ),
             CancellationToken.None
         ));
@@ -116,8 +114,7 @@ public sealed class HostScriptingV1Tests {
         var client = new HostScriptingPipeClientService(pipeName);
         var ex = Assert.ThrowsAsync<InvalidOperationException>(() => client.ExecuteAsync(
             new ExecuteRevitScriptRequest(
-                ScriptContent: "WriteLine(\"hi\");",
-                SourceKind: ScriptExecutionSourceKind.InlineSnippet
+                "WriteLine(\"hi\");"
             ),
             CancellationToken.None
         ));
@@ -139,8 +136,7 @@ public sealed class HostScriptingV1Tests {
         var client = new HostScriptingPipeClientService(pipeName);
         var ex = Assert.ThrowsAsync<InvalidOperationException>(() => client.ExecuteAsync(
             new ExecuteRevitScriptRequest(
-                ScriptContent: "WriteLine(\"hi\");",
-                SourceKind: ScriptExecutionSourceKind.InlineSnippet
+                "WriteLine(\"hi\");"
             ),
             CancellationToken.None
         ));
@@ -188,7 +184,7 @@ public sealed class HostScriptingV1Tests {
         var context = CreateOperationContext(CreateBridgeSnapshot(1), proxy);
 
         var result = await operation.ExecuteAsync(
-            new ScriptWorkspaceBootstrapRequest("default", CreateSampleScript: false),
+            new ScriptWorkspaceBootstrapRequest("default", false),
             context,
             CancellationToken.None
         );
@@ -220,7 +216,8 @@ public sealed class HostScriptingV1Tests {
 
     private static IHostOperation GetBootstrapOperation() {
         var registry = new HostOperationRegistry();
-        var found = registry.TryGetByKey(GetScriptWorkspaceBootstrapOperationContract.Definition.Key, out var operation);
+        var found = registry.TryGetByKey(GetScriptWorkspaceBootstrapOperationContract.Definition.Key,
+            out var operation);
         Assert.That(found, Is.True);
         return operation!;
     }
@@ -231,34 +228,34 @@ public sealed class HostScriptingV1Tests {
                 $"session-{index}",
                 "2025",
                 1000 + index,
-                HasActiveDocument: false,
-                ActiveDocumentTitle: null,
-                ActiveDocumentKey: null,
-                ActiveDocumentPath: null,
-                ActiveDocumentIsFamilyDocument: false,
-                ActiveDocumentIsWorkshared: false,
-                ActiveDocumentIsModelInCloud: false,
-                ActiveDocumentCloudProjectGuid: null,
-                ActiveDocumentCloudModelGuid: null,
-                ActiveDocumentCloudModelUrn: null,
-                ActiveDocumentObservedAtUnixMs: 0,
-                OpenDocumentCount: 0,
-                RuntimeFramework: "net8.0-windows",
-                BridgeContractVersion: BridgeProtocol.ContractVersion,
-                BridgeTransport: BridgeProtocol.Transport,
-                AvailableModules: [],
-                ConnectedAtUnixMs: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + index
+                false,
+                null,
+                null,
+                null,
+                false,
+                false,
+                false,
+                null,
+                null,
+                null,
+                0,
+                0,
+                "net8.0-windows",
+                BridgeProtocol.ContractVersion,
+                BridgeProtocol.Transport,
+                [],
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + index
             ))
             .ToList();
         var defaultSession = sessions.FirstOrDefault();
 
         return new BridgeRuntimeSnapshot(
-            BridgeIsConnected: sessions.Count != 0,
-            PipeName: "Pe.Host",
-            DefaultSessionId: defaultSession?.SessionId,
-            DefaultSession: defaultSession,
-            Sessions: sessions,
-            DisconnectReason: sessions.Count == 0 ? "not connected" : null
+            sessions.Count != 0,
+            "Pe.Host",
+            defaultSession?.SessionId,
+            defaultSession,
+            sessions,
+            sessions.Count == 0 ? "not connected" : null
         );
     }
 
@@ -275,10 +272,8 @@ public sealed class HostScriptingV1Tests {
         );
         await server.WaitForConnectionAsync();
 
-        using var reader = new StreamReader(server, Encoding.UTF8, false, 4096, leaveOpen: true);
-        using var writer = new StreamWriter(server, new UTF8Encoding(false), 4096, leaveOpen: true) {
-            AutoFlush = true
-        };
+        using var reader = new StreamReader(server, Encoding.UTF8, false, 4096, true);
+        using var writer = new StreamWriter(server, new UTF8Encoding(false), 4096, true) { AutoFlush = true };
 
         var requestJson = await reader.ReadLineAsync();
         Assert.That(requestJson, Is.Not.Null.And.Not.Empty);

@@ -1,6 +1,7 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.Revit.FamilyFoundry;
+using Pe.Revit.FamilyFoundry.LookupTables;
 using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Revit.Ui;
@@ -26,9 +27,9 @@ public class CmdFFManagerProjectSnapshot : IExternalCommand {
     ) {
         var uiDoc = commandData.Application.ActiveUIDocument;
         var uiApp = commandData.Application;
-            
+
         var doc = uiDoc.Document;
-        
+
         try {
             var storage = RuntimeStorageClient.Default.Module(CmdFFManager.AddinKey);
 
@@ -42,7 +43,7 @@ public class CmdFFManagerProjectSnapshot : IExternalCommand {
             var emptyAllowedProfileName = $"{snapshot.FamilyName}-snapshot-empty-allowed.json";
             var denseOutputPath = outputDir.Json(denseProfileName).Write(denseProfile);
             var emptyAllowedOutputPath = outputDir.Json(emptyAllowedProfileName).Write(emptyAllowedProfile);
-            Pe.Revit.FamilyFoundry.LookupTables.LookupTableArtifactWriter.WriteCsvFiles(
+            LookupTableArtifactWriter.WriteCsvFiles(
                 denseProfile.SetLookupTables.Tables,
                 outputDir.DirectoryPath,
                 "lookup-tables");
@@ -74,12 +75,13 @@ public class CmdFFManagerProjectSnapshot : IExternalCommand {
     }
 
     private static HashSet<string> ResolveCachedSharedParameterNames() {
-        var cache = RuntimeStorageClient.Default.Global().State().Json<ParametersApi.Parameters>("parameters-service-cache").Read();
+        var cache = RuntimeStorageClient.Default.Global().State()
+            .Json<ParametersApi.Parameters>("parameters-service-cache").Read();
         return cache.Results?
                    .Where(parameter => !parameter.IsArchived)
                    .Select(parameter => parameter.Name?.Trim())
+                   .OfType<string>()
                    .Where(name => !string.IsNullOrWhiteSpace(name))
-                   .Select(name => name!)
                    .ToHashSet(StringComparer.Ordinal)
                ?? [];
     }
@@ -108,7 +110,8 @@ public class CmdFFManagerProjectSnapshot : IExternalCommand {
                 OutputStorage.ExactDir(outputDirectory));
 
             if (!result.Success || string.IsNullOrWhiteSpace(result.OutputFolderPath))
-                throw new InvalidOperationException(result.Error ?? "Projected profile apply family processing failed.");
+                throw new InvalidOperationException(result.Error ??
+                                                    "Projected profile apply family processing failed.");
 
             return GetAppliedFamilyPath(result.OutputFolderPath, targetDoc);
         } finally {

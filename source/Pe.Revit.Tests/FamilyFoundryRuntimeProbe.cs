@@ -1,6 +1,3 @@
-using Autodesk.Revit.DB.Mechanical;
-using Autodesk.Revit.DB.Plumbing;
-
 namespace Pe.Revit.Tests;
 
 internal static class FamilyFoundryRuntimeProbe {
@@ -11,7 +8,7 @@ internal static class FamilyFoundryRuntimeProbe {
         familyDocument.Regenerate();
 
         var currentType = familyDocument.FamilyManager.CurrentType
-            ?? throw new InvalidOperationException("The family document had no current type.");
+                          ?? throw new InvalidOperationException("The family document had no current type.");
         var planes = CollectPlanes(familyDocument);
         var dimensions = CollectDimensions(familyDocument, planes);
         var prisms = CollectPrisms(familyDocument);
@@ -32,13 +29,13 @@ internal static class FamilyFoundryRuntimeProbe {
             connectors.Count);
     }
 
-    private static IReadOnlyDictionary<string, double> CollectParameterValues(Document familyDocument, FamilyType currentType) =>
+    private static IReadOnlyDictionary<string, double> CollectParameterValues(Document familyDocument,
+        FamilyType currentType) =>
         familyDocument.FamilyManager.Parameters
             .Cast<FamilyParameter>()
             .Where(parameter => currentType.HasValue(parameter))
             .Select(parameter => new {
-                parameter.Definition.Name,
-                Value = TryGetLengthLikeValue(currentType, parameter)
+                parameter.Definition.Name, Value = TryGetLengthLikeValue(currentType, parameter)
             })
             .Where(entry => entry.Value != null)
             .ToDictionary(entry => entry.Name, entry => entry.Value!.Value, StringComparer.Ordinal);
@@ -86,9 +83,8 @@ internal static class FamilyFoundryRuntimeProbe {
 
         for (var index = 0; index < dimension.References.Size; index++) {
             if (familyDocument.GetElement(dimension.References.get_Item(index)) is not ReferencePlane plane ||
-                string.IsNullOrWhiteSpace(plane.Name)) {
+                string.IsNullOrWhiteSpace(plane.Name))
                 continue;
-            }
 
             planeNames.Add(plane.Name.Trim());
         }
@@ -109,9 +105,8 @@ internal static class FamilyFoundryRuntimeProbe {
         IReadOnlyDictionary<string, RuntimePlaneProbe> planes
     ) {
         if (!planes.TryGetValue(planeNames[0], out var first) ||
-            !planes.TryGetValue(planeNames[^1], out var last)) {
+            !planes.TryGetValue(planeNames[^1], out var last))
             return 0.0;
-        }
 
         return Math.Abs((last.Midpoint - first.Midpoint).DotProduct(first.Normal));
     }
@@ -194,10 +189,12 @@ internal static class FamilyFoundryRuntimeProbe {
     private static FlowDirectionType? TryGetFlowDirection(ConnectorElement connector) {
         try {
             return connector.Domain switch {
-                Domain.DomainHvac => (FlowDirectionType)(connector.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_DIRECTION_PARAM)?.AsInteger()
+                Domain.DomainHvac => (FlowDirectionType)(connector.get_Parameter(BuiltInParameter
+                                                             .RBS_DUCT_FLOW_DIRECTION_PARAM)?.AsInteger()
+                                                         ?? (int)FlowDirectionType.Bidirectional),
+                Domain.DomainPiping => (FlowDirectionType)(connector.get_Parameter(BuiltInParameter
+                                                               .RBS_PIPE_FLOW_DIRECTION_PARAM)?.AsInteger()
                                                            ?? (int)FlowDirectionType.Bidirectional),
-                Domain.DomainPiping => (FlowDirectionType)(connector.get_Parameter(BuiltInParameter.RBS_PIPE_FLOW_DIRECTION_PARAM)?.AsInteger()
-                                                             ?? (int)FlowDirectionType.Bidirectional),
                 _ => null
             };
         } catch {

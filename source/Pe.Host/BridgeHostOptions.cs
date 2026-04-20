@@ -28,11 +28,8 @@ public sealed record BridgeHostOptions(
 
     private static IReadOnlyList<string> BuildAllowedOrigins(string frontendBaseUrl) => [
         .. new[] {
-                frontendBaseUrl,
-                SettingsEditorRuntime.DefaultFrontendBaseUrl,
-                "http://localhost:5173",
-                "http://localhost:3000",
-                "http://127.0.0.1:5150", "http://127.0.0.1:5173", "http://127.0.0.1:3000"
+                frontendBaseUrl, SettingsEditorRuntime.DefaultFrontendBaseUrl, "http://localhost:5173",
+                "http://localhost:3000", "http://127.0.0.1:5150", "http://127.0.0.1:5173", "http://127.0.0.1:3000"
             }
             .Distinct(StringComparer.OrdinalIgnoreCase)
     ];

@@ -8,19 +8,21 @@ public sealed class ParameterDefinitionResolutionTests {
     private const string SharedParameterName = "_PE_DefinitionResolution_Shared";
 
     [Test]
-    public void Project_binding_resolution_prefers_internal_definition_identity_and_preserves_shared_guid(UIApplication uiApplication) {
+    public void Project_binding_resolution_prefers_internal_definition_identity_and_preserves_shared_guid(
+        UIApplication uiApplication) {
         var application = uiApplication.Application;
         var sharedGuid = Guid.NewGuid();
         var externalSpec = new RevitFamilyFixtureHarness.SharedDefinitionSpec(
             SharedParameterName,
             SpecTypeId.String.Text,
-            GroupName: "DefinitionResolution",
-            Description: "Definition resolution proof shared parameter.",
-            Guid: sharedGuid);
+            "DefinitionResolution",
+            "Definition resolution proof shared parameter.",
+            sharedGuid);
         var projectDocument = RevitFamilyFixtureHarness.CreateProjectDocument(application);
 
         try {
-            var externalDefinition = RevitFamilyFixtureHarness.CreateSharedParameterDefinition(projectDocument, externalSpec);
+            var externalDefinition =
+                RevitFamilyFixtureHarness.CreateSharedParameterDefinition(projectDocument, externalSpec);
             Assert.That(externalDefinition.GUID, Is.EqualTo(sharedGuid));
 
             var before = RevitFamilyFixtureHarness.CollectProjectBindingProbes(projectDocument)
@@ -31,7 +33,7 @@ public sealed class ParameterDefinitionResolutionTests {
             var insert = RevitFamilyFixtureHarness.AddOrUpdateProjectParameterBinding(
                 projectDocument,
                 externalDefinition,
-                isInstance: true,
+                true,
                 GroupTypeId.IdentityData,
                 BuiltInCategory.OST_MechanicalEquipment);
 
@@ -66,7 +68,7 @@ public sealed class ParameterDefinitionResolutionTests {
             var reinsert = RevitFamilyFixtureHarness.AddOrUpdateProjectParameterBinding(
                 projectDocument,
                 internalDefinition,
-                isInstance: false,
+                false,
                 GroupTypeId.Geometry,
                 BuiltInCategory.OST_PlumbingEquipment);
 
@@ -102,13 +104,13 @@ public sealed class ParameterDefinitionResolutionTests {
         var sharedSpec = new RevitFamilyFixtureHarness.SharedDefinitionSpec(
             "_PE_FamilyScoped_Shared",
             SpecTypeId.String.Text,
-            GroupName: "DefinitionResolution",
-            Description: "Family-scoped shared parameter proof.",
-            Guid: sharedGuid);
+            "DefinitionResolution",
+            "Family-scoped shared parameter proof.",
+            sharedGuid);
         var familyDocument = RevitFamilyFixtureHarness.CreateFamilyDocument(
             application,
             BuiltInCategory.OST_GenericModel,
-            nameof(Shared_family_parameter_resolution_is_guid_stable_and_stays_family_scoped));
+            nameof(this.Shared_family_parameter_resolution_is_guid_stable_and_stays_family_scoped));
 
         try {
             using var transaction = new Transaction(familyDocument, "Add shared family parameter");
@@ -117,7 +119,7 @@ public sealed class ParameterDefinitionResolutionTests {
                 familyDocument,
                 sharedSpec,
                 GroupTypeId.IdentityData,
-                isInstance: true);
+                true);
             _ = transaction.Commit();
 
             var resolvedByGuid = RevitFamilyFixtureHarness.FindSharedFamilyParameter(familyDocument, sharedGuid);
@@ -144,7 +146,7 @@ public sealed class ParameterDefinitionResolutionTests {
         var familyDocument = RevitFamilyFixtureHarness.CreateFamilyDocument(
             application,
             BuiltInCategory.OST_GenericModel,
-            nameof(Plain_family_parameter_resolution_falls_back_to_name_identity));
+            nameof(this.Plain_family_parameter_resolution_falls_back_to_name_identity));
 
         try {
             FamilyParameter familyParameter;

@@ -9,7 +9,7 @@ public class SortParams(SortParamsSettings settings) : DocOperation<SortParamsSe
     public override string Description =>
         $"Sort family parameters ({this.Settings.ParamNameSortOrder}, {this.Settings.ParamTypeSortOrder}, {this.Settings.ParamValueSortOrder})";
 
-    public IComparer<string> GetNameComparer() {
+    public IComparer<string>? GetNameComparer() {
         var order = this.Settings.ParamNameSortOrder;
         return order switch {
             ParamNameSortOrder.None => null,

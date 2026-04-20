@@ -10,10 +10,10 @@ namespace Pe.Revit.FamilyFoundry.Snapshots;
 /// </summary>
 public class MirrorConstraintSnapshot {
     /// <summary>Base name - generates "{Name} (Left)" and "{Name} (Right)" planes</summary>
-    public string Name { get; init; }
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>The center anchor plane (e.g., "Center (Left/Right)")</summary>
-    public string CenterAnchor { get; init; }
+    public string CenterAnchor { get; init; } = string.Empty;
 
     /// <summary>Parameter to assign to the 2-plane dimension label</summary>
     public string? Parameter { get; init; }
@@ -45,10 +45,10 @@ public class MirrorConstraintSnapshot {
 /// </summary>
 public class OffsetConstraintSnapshot {
     /// <summary>Name of the plane being created</summary>
-    public string Name { get; init; }
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>The anchor/reference plane to offset from</summary>
-    public string AnchorName { get; init; }
+    public string AnchorName { get; init; } = string.Empty;
 
     /// <summary>Direction of offset from anchor (Positive or Negative along normal)</summary>
     public OffsetDirection Direction { get; init; }

@@ -37,12 +37,15 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
             return CompileOutcome.Invalid;
         }
 
-        var center1 = ResolvePlaneRef(connector.Rect.Center[0], planes, diagnostics, connector.Name, "$.ParamDrivenSolids.Connectors.Rect.Center");
-        var center2 = ResolvePlaneRef(connector.Rect.Center[1], planes, diagnostics, connector.Name, "$.ParamDrivenSolids.Connectors.Rect.Center");
-        if (center1.Outcome != CompileOutcome.Compiled || center2.Outcome != CompileOutcome.Compiled)
+        var center1 = ResolvePlaneRef(connector.Rect.Center[0], planes, diagnostics, connector.Name,
+            "$.ParamDrivenSolids.Connectors.Rect.Center");
+        var center2 = ResolvePlaneRef(connector.Rect.Center[1], planes, diagnostics, connector.Name,
+            "$.ParamDrivenSolids.Connectors.Rect.Center");
+        if (center1.Outcome != CompileOutcome.Compiled || center2.Outcome != CompileOutcome.Compiled) {
             return center1.Outcome == CompileOutcome.Deferred || center2.Outcome == CompileOutcome.Deferred
                 ? CompileOutcome.Deferred
                 : CompileOutcome.Invalid;
+        }
 
         var width = ResolveGeneratedSpan(
             connector.Name,
@@ -113,12 +116,17 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         runtimeConfig = new ConnectorDomainConfigSpec();
 
         if (connector.Domain == ParamDrivenConnectorDomain.Duct) {
-            if (!TryParseEnum(connector.Config.SystemType, connector.Name, "$.ParamDrivenSolids.Connectors.Config.SystemType", diagnostics, out DuctSystemType systemType) ||
-                !TryParseEnum(connector.Config.FlowConfiguration, connector.Name, "$.ParamDrivenSolids.Connectors.Config.FlowConfiguration", diagnostics, out DuctFlowConfigurationType flowConfiguration) ||
-                !TryParseEnum(connector.Config.FlowDirection, connector.Name, "$.ParamDrivenSolids.Connectors.Config.FlowDirection", diagnostics, out FlowDirectionType flowDirection) ||
-                !TryParseEnum(connector.Config.LossMethod, connector.Name, "$.ParamDrivenSolids.Connectors.Config.LossMethod", diagnostics, out DuctLossMethodType lossMethod)) {
+            if (!TryParseEnum(connector.Config.SystemType, connector.Name,
+                    "$.ParamDrivenSolids.Connectors.Config.SystemType", diagnostics, out DuctSystemType systemType) ||
+                !TryParseEnum(connector.Config.FlowConfiguration, connector.Name,
+                    "$.ParamDrivenSolids.Connectors.Config.FlowConfiguration", diagnostics,
+                    out DuctFlowConfigurationType flowConfiguration) ||
+                !TryParseEnum(connector.Config.FlowDirection, connector.Name,
+                    "$.ParamDrivenSolids.Connectors.Config.FlowDirection", diagnostics,
+                    out FlowDirectionType flowDirection) ||
+                !TryParseEnum(connector.Config.LossMethod, connector.Name,
+                    "$.ParamDrivenSolids.Connectors.Config.LossMethod", diagnostics, out DuctLossMethodType lossMethod))
                 return false;
-            }
 
             runtimeConfig = new ConnectorDomainConfigSpec {
                 Duct = new DuctConnectorConfigSpec {
@@ -132,27 +140,27 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         }
 
         if (connector.Domain == ParamDrivenConnectorDomain.Pipe) {
-            if (!TryParseEnum(connector.Config.SystemType, connector.Name, "$.ParamDrivenSolids.Connectors.Config.SystemType", diagnostics, out PipeSystemType pipeSystemType) ||
-                !TryParseEnum(connector.Config.FlowDirection, connector.Name, "$.ParamDrivenSolids.Connectors.Config.FlowDirection", diagnostics, out FlowDirectionType pipeFlowDirection)) {
+            if (!TryParseEnum(connector.Config.SystemType, connector.Name,
+                    "$.ParamDrivenSolids.Connectors.Config.SystemType", diagnostics,
+                    out PipeSystemType pipeSystemType) ||
+                !TryParseEnum(connector.Config.FlowDirection, connector.Name,
+                    "$.ParamDrivenSolids.Connectors.Config.FlowDirection", diagnostics,
+                    out FlowDirectionType pipeFlowDirection))
                 return false;
-            }
 
             runtimeConfig = new ConnectorDomainConfigSpec {
-                Pipe = new PipeConnectorConfigSpec {
-                    SystemType = pipeSystemType,
-                    FlowDirection = pipeFlowDirection
-                }
+                Pipe = new PipeConnectorConfigSpec { SystemType = pipeSystemType, FlowDirection = pipeFlowDirection }
             };
             return true;
         }
 
-        if (!TryParseEnum(connector.Config.SystemType, connector.Name, "$.ParamDrivenSolids.Connectors.Config.SystemType", diagnostics, out ElectricalSystemType electricalSystemType))
+        if (!TryParseEnum(connector.Config.SystemType, connector.Name,
+                "$.ParamDrivenSolids.Connectors.Config.SystemType", diagnostics,
+                out ElectricalSystemType electricalSystemType))
             return false;
 
         runtimeConfig = new ConnectorDomainConfigSpec {
-            Electrical = new ElectricalConnectorConfigSpec {
-                SystemType = electricalSystemType
-            }
+            Electrical = new ElectricalConnectorConfigSpec { SystemType = electricalSystemType }
         };
         return true;
     }

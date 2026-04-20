@@ -1,6 +1,4 @@
-﻿using Pe.Revit.Global.PolyFill;
-using Pe.Revit.Global.Revit.Documents;
-using Pe.Revit.Global.Services.Document.Core;
+﻿using Pe.Revit.Global.Services.Document.Core;
 using Color = System.Windows.Media.Color;
 
 namespace Pe.Revit.Global.Services.Document;
@@ -25,7 +23,7 @@ public class DocumentManager {
             return field;
         }
     }
-    
+
     /// <summary>
     ///     Records a view activation. The previous view is only added to the MRU buffer if
     ///     it meets the criteria (active for >= 3 seconds or currently open as a tab).

@@ -9,7 +9,6 @@ using Wpf.Ui.Controls;
 using Visibility = System.Windows.Visibility;
 using Grid = System.Windows.Controls.Grid;
 using Button = Wpf.Ui.Controls.Button;
-using AnimatedScrollViewer = Pe.Revit.Ui.Controls.AnimatedScrollViewer;
 using Color = System.Windows.Media.Color;
 using Controls_AnimatedScrollViewer = Pe.Revit.Ui.Controls.AnimatedScrollViewer;
 using Point = System.Windows.Point;
@@ -70,23 +69,23 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     private readonly SolidColorBrush _pinHoverBrush = new(Color.FromRgb(126, 179, 255));
     private readonly SolidColorBrush _pinPinnedBrush = new(Color.FromRgb(100, 149, 237));
     private readonly List<Button> _tabButtons = [];
-    private ActionMenu _actionMenu;
-    private PaletteSidebar _currentSidebar;
-    private CustomKeyBindings _customKeyBindings;
-    private Func<Task<bool>> _executeItemFunc;
-    private FilterBox _filterBox;
-    private Func<object> _getSelectedItemFunc;
+    private ActionMenu? _actionMenu;
+    private PaletteSidebar? _currentSidebar;
+    private CustomKeyBindings? _customKeyBindings;
+    private Func<Task<bool>>? _executeItemFunc;
+    private FilterBox? _filterBox;
+    private Func<object?>? _getSelectedItemFunc;
     private bool _isCtrlPressed;
     private bool _isPanelExpanded;
     private bool _isTrayExpanded;
-    private Action _onCtrlReleased;
-    private EphemeralWindow _parentWindow;
+    private Action? _onCtrlReleased;
+    private EphemeralWindow? _parentWindow;
     private bool _sidebarAutoExpanded;
 
     /// <summary> Per-tab action registry for dynamic action switching </summary>
     private Dictionary<int, object>? _tabActionBindings;
 
-    private SelectableTextBox _tooltipPanel;
+    private SelectableTextBox? _tooltipPanel;
     private double _trayMaxHeight = DefaultTrayMaxHeight;
 
     public Palette(bool isSearchBoxHidden = false) {
@@ -106,7 +105,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         }
     }
 
-    public event EventHandler<CloseRequestedEventArgs> CloseRequested;
+    public event EventHandler<CloseRequestedEventArgs>? CloseRequested;
 
     /// <summary>
     ///     Sets the title displayed in the palette's title bar.
@@ -120,9 +119,9 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     /// </summary>
     internal void Initialize<TItem>(
         PaletteViewModel<TItem> viewModel,
-        CustomKeyBindings customKeyBindings = null,
-        Action onCtrlReleased = null,
-        PaletteSidebar paletteSidebar = null
+        CustomKeyBindings? customKeyBindings = null,
+        Action? onCtrlReleased = null,
+        PaletteSidebar? paletteSidebar = null
     ) where TItem : class, IPaletteListItem {
         this.DataContext = viewModel;
         this._customKeyBindings = customKeyBindings;
@@ -134,12 +133,15 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         // Create FilterBox if filtering is enabled
         var hasFiltering = viewModel.AvailableFilterValues != null;
         if (hasFiltering) {
+            var availableFilterValues = viewModel.AvailableFilterValues;
+            if (availableFilterValues == null)
+                throw new InvalidOperationException("Available filter values should exist when filtering is enabled.");
             this._filterBox = new FilterBox<PaletteViewModel<TItem>>(
                 viewModel,
                 [Key.Tab, Key.Escape],
                 () => viewModel.SelectedFilterValue,
-                value => viewModel.SelectedFilterValue = value,
-                viewModel.AvailableFilterValues
+                value => viewModel.SelectedFilterValue = value ?? string.Empty,
+                availableFilterValues
             ) {
                 // Set initial visibility based on current tab
                 Visibility = viewModel.CurrentTabHasFiltering
@@ -168,7 +170,8 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
 
         // Calculate and set list height based on visible items
         var listHeight = DefaultVisibleItems * ItemHeight;
-        var itemListBorder = (Border)this.ItemListView.Parent;
+        var itemListBorder = this.ItemListView.Parent as Border
+                             ?? throw new InvalidOperationException("Palette ItemListView parent border is missing.");
         itemListBorder.MaxHeight = listHeight;
 
         // Set panel default height to match palette with visible items
@@ -186,8 +189,10 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
 
         // Build per-tab action bindings (includes single-tab palettes)
         this._tabActionBindings = new Dictionary<int, object>();
+        var tabs = viewModel.Tabs
+                   ?? throw new InvalidOperationException("Palette tabs are required during initialization.");
         for (var i = 0; i < viewModel.ActualTabCount; i++) {
-            var tab = viewModel.Tabs[i];
+            var tab = tabs[i];
             var tabActionBinding = new ActionBinding<TItem>();
             tabActionBinding.RegisterRange(tab.Actions);
             this._tabActionBindings[i] = tabActionBinding;
@@ -200,7 +205,9 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         this._actionMenu = actionMenu;
 
         // Get the active action binding for the current tab (guaranteed to exist due to validation)
-        var activeActionBinding = this.GetActionBindingForTab<TItem>(viewModel.SelectedTabIndex)!;
+        var activeActionBinding = this.GetActionBindingForTab<TItem>(viewModel.SelectedTabIndex)
+                                  ?? throw new InvalidOperationException(
+                                      "Expected an action binding for the selected tab.");
 
         // Store ActionBinding as attached property so child controls can access it
         PaletteAttachedProperties.SetActionBinding(this, activeActionBinding);
@@ -213,7 +220,9 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         this._executeItemFunc = async () => {
             var selectedItem = viewModel.SelectedItem;
             if (selectedItem == null) return false;
-            var currentActionBinding = this.GetActionBindingForTab<TItem>(viewModel.SelectedTabIndex)!;
+            var currentActionBinding = this.GetActionBindingForTab<TItem>(viewModel.SelectedTabIndex);
+            if (currentActionBinding == null)
+                return false;
             return await this.ExecuteItemTyped(selectedItem, currentActionBinding, viewModel, Keyboard.Modifiers);
         };
 
@@ -302,7 +311,8 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
         };
 
         // Set up tooltip popover exit handler
-        this._tooltipPanel.ExitRequested += (_, _) => this.Focus();
+        if (this._tooltipPanel != null)
+            this._tooltipPanel.ExitRequested += (_, _) => this.Focus();
     }
 
     /// <summary>
@@ -384,7 +394,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
     /// </summary>
     /// <param name="content">Content to display in the tray.</param>
     /// <param name="maxHeight">Maximum height when expanded. Defaults to 200px.</param>
-    public void SetTrayContent(UIElement content, double maxHeight = DefaultTrayMaxHeight) {
+    public void SetTrayContent(UIElement? content, double maxHeight = DefaultTrayMaxHeight) {
         if (content == null) return;
 
         this.TrayContent.Content = content;
@@ -544,7 +554,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
                 "RevitTaskAccessor not configured. Wire up in App.OnStartup.");
         }
 
-        this.ExecuteDeferred(() => RevitTaskAccessor.RunAsync(action));
+        this.ExecuteDeferred(() => RevitTaskAccessor.RunAsync!(action));
     }
 
     private void RequestClose(bool restoreFocus = true) =>
@@ -616,7 +626,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             this.RequestClose();
             e.Handled = true;
         } else if (e.Key == Key.Enter && selectedItem != null)
-            e.Handled = await this._executeItemFunc();
+            e.Handled = await this._executeItemFunc!();
         // No idea why this is needed, but it is and its very counterintuitive. 
         // Without it, when the search box is hidden, ONLY the up/down keys work, and none of the others
         else if (e.Key == Key.Up && modifiers == ModifierKeys.None && this._isSearchBoxHidden)
@@ -638,7 +648,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
                 // Fallback to tooltip for palettes without sidebar
                 e.Handled = this.ShowPopover(placementTarget => {
                     var tooltipText = item.GetTextInfo?.Invoke();
-                    this._tooltipPanel.Show(placementTarget, tooltipText);
+                    this._tooltipPanel?.Show(placementTarget, tooltipText);
                 });
             }
         } else if (e.Key == Key.Right && selectedItem != null) {
@@ -695,7 +705,7 @@ public sealed partial class Palette : ICloseRequestable, ITitleable {
             return true;
 
         case NavigationAction.Execute:
-            return await this._executeItemFunc();
+            return await this._executeItemFunc!();
 
         case NavigationAction.Cancel:
             this.RequestClose();

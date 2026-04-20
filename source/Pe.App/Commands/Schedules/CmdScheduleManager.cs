@@ -249,7 +249,7 @@ public class CmdScheduleManager : IExternalCommand {
         // Update context with selected profile
         this.BuildPreviewData(profileItem, ctx);
 
-        if (!ctx.PreviewData.IsValid) {
+        if (ctx.PreviewData?.IsValid != true || ctx.SelectedProfile == null) {
             new Ballogger()
                 .Add(LogEventLevel.Error, new StackFrame(), "Cannot create schedule - profile has validation errors")
                 .Show();
@@ -357,6 +357,14 @@ public class CmdScheduleManager : IExternalCommand {
 
         // Update context with selected profile
         this.BuildPreviewData(profileItem, context);
+
+        if (context.SelectedProfile == null || context.PreviewData?.IsValid != true) {
+            new Ballogger()
+                .Add(LogEventLevel.Error, new StackFrame(),
+                    "Cannot place sample families - profile has validation errors")
+                .Show();
+            return;
+        }
 
         var profile = context.ProfilesStorage.ReadRequired(context.SelectedProfile.TextPrimary);
 
@@ -479,9 +487,9 @@ public class CmdScheduleManager : IExternalCommand {
         }
     }
 
-    private string WriteCreationOutput(ScheduleManagerContext ctx,
+    private string? WriteCreationOutput(ScheduleManagerContext ctx,
         ScheduleCreationResult result,
-        string profileName = null,
+        string? profileName = null,
         string outputSubDirectory = "create") {
         try {
             var createOutputDir = ctx.Storage.Output().SubDir(outputSubDirectory);
@@ -549,10 +557,10 @@ public class CmdScheduleManager : IExternalCommand {
         }
     }
 
-    private string WriteErrorOutput(ScheduleManagerContext ctx,
+    private string? WriteErrorOutput(ScheduleManagerContext ctx,
         string profileName,
         string errorMessage,
-        Exception ex = null,
+        Exception? ex = null,
         string outputSubDirectory = "create") {
         try {
             var createOutputDir = ctx.Storage.Output().SubDir(outputSubDirectory);
@@ -579,15 +587,15 @@ public class CmdScheduleManager : IExternalCommand {
 }
 
 public class ScheduleManagerContext {
-    public Document Doc { get; init; }
-    public UIDocument UiDoc { get; init; }
-    public ModuleStorage Storage { get; init; }
-    public ModuleSettingsStorage<ScheduleProfile> ProfilesStorage { get; init; }
-    public ModuleDocumentStorage ProfilesDocuments { get; init; }
+    public required Document Doc { get; init; }
+    public required UIDocument UiDoc { get; init; }
+    public required ModuleStorage Storage { get; init; }
+    public required ModuleSettingsStorage<ScheduleProfile> ProfilesStorage { get; init; }
+    public required ModuleDocumentStorage ProfilesDocuments { get; init; }
 
     // UI state: what's currently selected and displayed
-    public ScheduleListItem SelectedProfile { get; set; }
-    public SchedulePreviewData PreviewData { get; set; }
+    public ScheduleListItem? SelectedProfile { get; set; }
+    public SchedulePreviewData? PreviewData { get; set; }
 }
 
 public enum ScheduleTabType {
@@ -601,8 +609,8 @@ public enum ScheduleTabType {
 public interface ISchedulePaletteItem : IPaletteListItem {
     ScheduleTabType TabType { get; }
     string CategoryName { get; }
-    ScheduleListItem GetCreateItem();
-    BatchScheduleListItem GetBatchItem();
+    ScheduleListItem? GetCreateItem();
+    BatchScheduleListItem? GetBatchItem();
 }
 
 /// <summary>
@@ -624,14 +632,14 @@ public class SchedulePaletteItemWrapper : ISchedulePaletteItem {
         _ => string.Empty
     };
 
-    public ScheduleListItem GetCreateItem() => this._inner as ScheduleListItem;
-    public BatchScheduleListItem GetBatchItem() => this._inner as BatchScheduleListItem;
+    public ScheduleListItem? GetCreateItem() => this._inner as ScheduleListItem;
+    public BatchScheduleListItem? GetBatchItem() => this._inner as BatchScheduleListItem;
 
     // Delegate all IPaletteListItem members to inner
     public string TextPrimary => this._inner.TextPrimary;
     public string TextSecondary => this._inner.TextSecondary;
-    public string TextPill => this._inner.TextPill;
+    public string? TextPill => this._inner.TextPill;
     public Func<string> GetTextInfo => this._inner.GetTextInfo;
-    public BitmapImage Icon => this._inner.Icon;
+    public BitmapImage? Icon => this._inner.Icon;
     public Color? ItemColor => this._inner.ItemColor;
 }

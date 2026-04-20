@@ -5,6 +5,7 @@ namespace Pe.Revit.FamilyFoundry.Resolution;
 
 public static partial class AuthoredParamDrivenSolidsCompiler {
     private const double ConnectorStubSeedDepth = 0.5 / 12.0;
+
     private static readonly Regex LengthLiteralPattern = new(
         @"^\s*(?<value>[-+]?\d+(?:\.\d+)?)\s*(?<unit>in|""|ft|')\s*$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -43,11 +44,15 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
 
             foreach (var item in pending) {
                 var outcome = item.Kind switch {
-                    PendingWorkKind.Plane => TryCompilePlane(item.Name, item.Plane!, planes, offsetConstraints, diagnostics),
+                    PendingWorkKind.Plane => TryCompilePlane(item.Name, item.Plane!, planes, offsetConstraints,
+                        diagnostics),
                     PendingWorkKind.Span => TryCompileSpan(item.Span!, spans, planes, symmetricPairs, diagnostics),
-                    PendingWorkKind.Prism => TryCompilePrism(item.Prism!, spans, planes, symmetricPairs, offsetConstraints, rectangles, diagnostics),
-                    PendingWorkKind.Cylinder => TryCompileCylinder(item.Cylinder!, planes, offsetConstraints, circles, diagnostics),
-                    PendingWorkKind.Connector => TryCompileConnector(item.Connector!, spans, planes, symmetricPairs, offsetConstraints, connectors, diagnostics),
+                    PendingWorkKind.Prism => TryCompilePrism(item.Prism!, spans, planes, symmetricPairs,
+                        offsetConstraints, rectangles, diagnostics),
+                    PendingWorkKind.Cylinder => TryCompileCylinder(item.Cylinder!, planes, offsetConstraints, circles,
+                        diagnostics),
+                    PendingWorkKind.Connector => TryCompileConnector(item.Connector!, spans, planes, symmetricPairs,
+                        offsetConstraints, connectors, diagnostics),
                     _ => CompileOutcome.Invalid
                 };
 
@@ -77,13 +82,15 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
 
         var connectorFacePlanes = settings.Connectors
             .Select(connector => connector.Face?.Trim())
-            .Where(face => !string.IsNullOrWhiteSpace(face) && face.StartsWith("plane:", StringComparison.OrdinalIgnoreCase))
+            .Where(face =>
+                !string.IsNullOrWhiteSpace(face) && face.StartsWith("plane:", StringComparison.OrdinalIgnoreCase))
             .Select(face => face!["plane:".Length..].Trim())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var otherNamedPlaneRefs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         void AddPlaneRef(string? planeRef) {
-            if (string.IsNullOrWhiteSpace(planeRef) || !planeRef.StartsWith("plane:", StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrWhiteSpace(planeRef) ||
+                !planeRef.StartsWith("plane:", StringComparison.OrdinalIgnoreCase))
                 return;
 
             _ = otherNamedPlaneRefs.Add(planeRef["plane:".Length..].Trim());
@@ -157,14 +164,9 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
                     .ToList()
             },
             new ParamDrivenExtrusionsPlan {
-                Enabled = rectangles.Count > 0 || circles.Count > 0,
-                Rectangles = rectangles,
-                Circles = circles
+                Enabled = rectangles.Count > 0 || circles.Count > 0, Rectangles = rectangles, Circles = circles
             },
-            new ParamDrivenConnectorsPlan {
-                Enabled = connectors.Count > 0,
-                Connectors = connectors
-            },
+            new ParamDrivenConnectorsPlan { Enabled = connectors.Count > 0, Connectors = connectors },
             diagnostics
         );
     }
@@ -200,9 +202,8 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
             return;
         }
 
-        foreach (var (token, planeName) in BuiltInPlaneNames) {
+        foreach (var (token, planeName) in BuiltInPlaneNames)
             planes[planeName] = new PublishedPlane(planeName, LengthDriverSpec.None);
-        }
     }
 
     private static void ValidateTopLevelPlaneNameCollisions(
@@ -215,7 +216,8 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
             .Select(name => name.Trim())
             .ToList();
 
-        foreach (var collision in names.GroupBy(name => name, StringComparer.OrdinalIgnoreCase).Where(group => group.Count() > 1)) {
+        foreach (var collision in names.GroupBy(name => name, StringComparer.OrdinalIgnoreCase)
+                     .Where(group => group.Count() > 1)) {
             diagnostics.Add(new ParamDrivenSolidsDiagnostic(
                 ParamDrivenDiagnosticSeverity.Error,
                 collision.Key,
@@ -250,7 +252,8 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
             return CompileOutcome.Invalid;
         }
 
-        var resolvedFrom = ResolvePlaneRef(spec.From, planes, diagnostics, normalizedName, "$.ParamDrivenSolids.Planes");
+        var resolvedFrom =
+            ResolvePlaneRef(spec.From, planes, diagnostics, normalizedName, "$.ParamDrivenSolids.Planes");
         if (resolvedFrom.Outcome != CompileOutcome.Compiled)
             return resolvedFrom.Outcome;
 
@@ -354,11 +357,13 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         if (sketch.Outcome != CompileOutcome.Compiled)
             return sketch.Outcome;
 
-        var width = ResolvePairOrInlineSpan(prism.Name, "Width", prism.Width, spans, planes, symmetricPairs, diagnostics);
+        var width = ResolvePairOrInlineSpan(prism.Name, "Width", prism.Width, spans, planes, symmetricPairs,
+            diagnostics);
         if (width.Outcome != CompileOutcome.Compiled)
             return width.Outcome;
 
-        var length = ResolvePairOrInlineSpan(prism.Name, "Length", prism.Length, spans, planes, symmetricPairs, diagnostics);
+        var length = ResolvePairOrInlineSpan(prism.Name, "Length", prism.Length, spans, planes, symmetricPairs,
+            diagnostics);
         if (length.Outcome != CompileOutcome.Compiled)
             return length.Outcome;
 
@@ -419,14 +424,18 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
         if (sketch.Outcome != CompileOutcome.Compiled)
             return sketch.Outcome;
 
-        var center1 = ResolvePlaneRef(cylinder.Center[0], planes, diagnostics, cylinder.Name, "$.ParamDrivenSolids.Cylinders.Center");
-        var center2 = ResolvePlaneRef(cylinder.Center[1], planes, diagnostics, cylinder.Name, "$.ParamDrivenSolids.Cylinders.Center");
-        if (center1.Outcome != CompileOutcome.Compiled || center2.Outcome != CompileOutcome.Compiled)
+        var center1 = ResolvePlaneRef(cylinder.Center[0], planes, diagnostics, cylinder.Name,
+            "$.ParamDrivenSolids.Cylinders.Center");
+        var center2 = ResolvePlaneRef(cylinder.Center[1], planes, diagnostics, cylinder.Name,
+            "$.ParamDrivenSolids.Cylinders.Center");
+        if (center1.Outcome != CompileOutcome.Compiled || center2.Outcome != CompileOutcome.Compiled) {
             return center1.Outcome == CompileOutcome.Deferred || center2.Outcome == CompileOutcome.Deferred
                 ? CompileOutcome.Deferred
                 : CompileOutcome.Invalid;
+        }
 
-        if (!TryParseLengthDriver(cylinder.Diameter.By, cylinder.Name, "$.ParamDrivenSolids.Cylinders.Diameter", diagnostics, out var diameterDriver))
+        if (!TryParseLengthDriver(cylinder.Diameter.By, cylinder.Name, "$.ParamDrivenSolids.Cylinders.Diameter",
+                diagnostics, out var diameterDriver))
             return CompileOutcome.Invalid;
 
         var height = ResolveHeightSpec(cylinder.Name, cylinder.Height, planes, offsets, diagnostics);
@@ -471,11 +480,13 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
             return CompileOutcome.Invalid;
         }
 
-        var host = ResolvePlaneRef(connector.Face, planes, diagnostics, connector.Name, "$.ParamDrivenSolids.Connectors.Face");
+        var host = ResolvePlaneRef(connector.Face, planes, diagnostics, connector.Name,
+            "$.ParamDrivenSolids.Connectors.Face");
         if (host.Outcome != CompileOutcome.Compiled)
             return host.Outcome;
 
-        if (!TryParseLengthDriver(connector.Depth.By, connector.Name, "$.ParamDrivenSolids.Connectors.Depth", diagnostics, out var depthDriver))
+        if (!TryParseLengthDriver(connector.Depth.By, connector.Name, "$.ParamDrivenSolids.Connectors.Depth",
+                diagnostics, out var depthDriver))
             return CompileOutcome.Invalid;
 
         if (!TryParseOffsetDirection(connector.Depth.Dir, out var depthDirection)) {
@@ -489,7 +500,8 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
 
         var hostFaceName = host.PlaneName!;
         var hostPlaneName = host.PlaneName!;
-        if (offsets.Values.FirstOrDefault(offset => string.Equals(offset.PlaneName, hostFaceName, StringComparison.OrdinalIgnoreCase))
+        if (offsets.Values.FirstOrDefault(offset =>
+                string.Equals(offset.PlaneName, hostFaceName, StringComparison.OrdinalIgnoreCase))
             is { } hostOffsetConstraintSnapshot) {
             hostPlaneName = hostOffsetConstraintSnapshot.AnchorPlaneName;
             var hostOffsetSign = hostOffsetConstraintSnapshot.Direction == OffsetDirection.Negative ? "-" : "+";
@@ -571,14 +583,18 @@ public static partial class AuthoredParamDrivenSolidsCompiler {
             return CompileOutcome.Invalid;
         }
 
-        var center1 = ResolvePlaneRef(connector.Round.Center[0], planes, diagnostics, connector.Name, "$.ParamDrivenSolids.Connectors.Round.Center");
-        var center2 = ResolvePlaneRef(connector.Round.Center[1], planes, diagnostics, connector.Name, "$.ParamDrivenSolids.Connectors.Round.Center");
-        if (center1.Outcome != CompileOutcome.Compiled || center2.Outcome != CompileOutcome.Compiled)
+        var center1 = ResolvePlaneRef(connector.Round.Center[0], planes, diagnostics, connector.Name,
+            "$.ParamDrivenSolids.Connectors.Round.Center");
+        var center2 = ResolvePlaneRef(connector.Round.Center[1], planes, diagnostics, connector.Name,
+            "$.ParamDrivenSolids.Connectors.Round.Center");
+        if (center1.Outcome != CompileOutcome.Compiled || center2.Outcome != CompileOutcome.Compiled) {
             return center1.Outcome == CompileOutcome.Deferred || center2.Outcome == CompileOutcome.Deferred
                 ? CompileOutcome.Deferred
                 : CompileOutcome.Invalid;
+        }
 
-        if (!TryParseLengthDriver(connector.Round.Diameter.By, connector.Name, "$.ParamDrivenSolids.Connectors.Round.Diameter", diagnostics, out var diameterDriver))
+        if (!TryParseLengthDriver(connector.Round.Diameter.By, connector.Name,
+                "$.ParamDrivenSolids.Connectors.Round.Diameter", diagnostics, out var diameterDriver))
             return CompileOutcome.Invalid;
 
         connectors.Add(new CompiledParamDrivenConnectorSpec {

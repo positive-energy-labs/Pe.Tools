@@ -39,8 +39,8 @@ public sealed class ModuleStorage(string moduleKey, string basePath) {
 }
 
 public sealed class ModuleStorage<TSettings> where TSettings : class {
-    private readonly ModuleStorage _moduleStorage;
     private readonly ModuleDocumentStorage _documents;
+    private readonly ModuleStorage _moduleStorage;
 
     public ModuleStorage(
         string moduleKey,
@@ -54,8 +54,8 @@ public sealed class ModuleStorage<TSettings> where TSettings : class {
         var resolvedBasePath = string.IsNullOrWhiteSpace(basePath)
             ? StorageClient.BasePath
             : Path.GetFullPath(basePath);
-        _moduleStorage = new ModuleStorage(moduleKey, resolvedBasePath);
-        _documents = new ModuleDocumentStorage(
+        this._moduleStorage = new ModuleStorage(moduleKey, resolvedBasePath);
+        this._documents = new ModuleDocumentStorage(
             moduleKey,
             defaultRootKey,
             storageOptions,
@@ -66,13 +66,13 @@ public sealed class ModuleStorage<TSettings> where TSettings : class {
         );
     }
 
-    public string ModuleKey => _moduleStorage.ModuleKey;
+    public string ModuleKey => this._moduleStorage.ModuleKey;
 
-    public string BasePath => _moduleStorage.BasePath;
+    public string BasePath => this._moduleStorage.BasePath;
 
-    public ModuleDocumentStorage Documents() => _documents;
+    public ModuleDocumentStorage Documents() => this._documents;
 
-    public StateStorage State() => _moduleStorage.State();
+    public StateStorage State() => this._moduleStorage.State();
 
-    public OutputStorage Output() => _moduleStorage.Output();
+    public OutputStorage Output() => this._moduleStorage.Output();
 }

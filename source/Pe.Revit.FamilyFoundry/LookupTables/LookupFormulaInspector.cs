@@ -1,4 +1,3 @@
-using Pe.Revit.FamilyFoundry.Snapshots;
 using System.Text;
 
 namespace Pe.Revit.FamilyFoundry.LookupTables;
@@ -24,17 +23,15 @@ internal static class LookupFormulaInspector {
                 continue;
 
             if (!keyCounts.TryGetValue(lookupReference.TableName, out var existingCount)
-                || lookupReference.LookupKeyCount > existingCount) {
+                || lookupReference.LookupKeyCount > existingCount)
                 keyCounts[lookupReference.TableName] = lookupReference.LookupKeyCount;
-            }
         }
 
         return keyCounts;
     }
 
-    public static bool TryParseSizeLookup(string? formula, out LookupFormulaReference lookupReference) {
-        return TryParseSizeLookup(formula, null, out lookupReference);
-    }
+    public static bool TryParseSizeLookup(string? formula, out LookupFormulaReference lookupReference) =>
+        TryParseSizeLookup(formula, null, out lookupReference);
 
     public static bool TryParseSizeLookup(
         string? formula,
@@ -109,11 +106,11 @@ internal static class LookupFormulaInspector {
                 inString = !inString;
 
             if (!inString) {
-                if (currentChar == '(') {
+                if (currentChar == '(')
                     depth++;
-                } else if (currentChar == ')') {
+                else if (currentChar == ')')
                     depth--;
-                } else if (currentChar == ',' && depth == 0) {
+                else if (currentChar == ',' && depth == 0) {
                     arguments.Add(current.ToString().Trim());
                     current.Clear();
                     continue;
@@ -134,7 +131,8 @@ internal static class LookupFormulaInspector {
             : trimmed;
     }
 
-    private static string ResolveTableName(string tableNameArgument, IReadOnlyDictionary<string, string>? parameterValues) {
+    private static string ResolveTableName(string tableNameArgument,
+        IReadOnlyDictionary<string, string>? parameterValues) {
         var literalValue = Unquote(tableNameArgument);
         if (tableNameArgument.TrimStart().StartsWith("\"", StringComparison.Ordinal))
             return literalValue;

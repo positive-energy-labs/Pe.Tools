@@ -54,11 +54,14 @@ public class CmdFFMakeATVariants : IExternalCommand {
 
                 // Get variant spec from context tag
                 if (ctx.Tag is VariantSpec variantSpec) {
+                    var variantProfile = variantSpec.Profile as ATVariantSettings
+                                         ?? throw new InvalidOperationException(
+                                             $"Variant '{variantSpec.Name}' is missing an {nameof(ATVariantSettings)} profile.");
                     // Create variant-specific settings object for serialization
                     var variantSettings = new {
                         VariantName = variantSpec.Name.Trim(),
                         BaseATSettings = new { settings.SecondLetterDict },
-                        SyntheticSetKnownParamsSettings = ((ATVariantSettings)variantSpec.Profile).SyntheticTag
+                        SyntheticSetKnownParamsSettings = variantProfile.SyntheticTag
                     };
 
                     // Update builder with variant-specific settings and metadata
@@ -135,9 +138,7 @@ public class ATVariantQueueFactory {
             perTypeRow.ValuesByType[typeName] = value;
 
         // Build synthetic settings that will be logged
-        var syntheticSettings = new SetKnownParamsSettings {
-            PerTypeAssignmentsTable = [perTypeRow]
-        };
+        var syntheticSettings = new SetKnownParamsSettings { PerTypeAssignmentsTable = [perTypeRow] };
         var knownParamCatalog = new KnownParamCatalog(
             new Dictionary<string, FamilyParamDefinitionModel>(StringComparer.Ordinal),
             new HashSet<string>(["PE_G___TagInstance"], StringComparer.Ordinal),

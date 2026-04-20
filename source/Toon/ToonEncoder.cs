@@ -1,7 +1,7 @@
+using Newtonsoft.Json.Linq;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
-using Newtonsoft.Json.Linq;
 
 namespace Toon;
 
@@ -30,12 +30,15 @@ internal static class ToonEncoder {
     }
 
     private static void EncodeObject(JObject obj, int indentLevel, List<string> lines, ToonOptions options) {
-        foreach (var property in obj.Properties()) {
+        foreach (var property in obj.Properties())
             EncodeField(property.Name, property.Value, indentLevel, lines, options);
-        }
     }
 
-    private static void EncodeField(string key, JToken value, int indentLevel, List<string> lines, ToonOptions options) {
+    private static void EncodeField(string key,
+        JToken value,
+        int indentLevel,
+        List<string> lines,
+        ToonOptions options) {
         var indent = GetIndent(indentLevel, options);
         var encodedKey = EncodeKey(key);
 
@@ -83,9 +86,7 @@ internal static class ToonEncoder {
         }
 
         lines.Add($"{indent}{prefix}[{array.Count}]:");
-        foreach (var item in array) {
-            EncodeListItem(item, indentLevel + 1, lines, options);
-        }
+        foreach (var item in array) EncodeListItem(item, indentLevel + 1, lines, options);
     }
 
     private static void EncodeListItem(JToken item, int indentLevel, List<string> lines, ToonOptions options) {
@@ -117,28 +118,24 @@ internal static class ToonEncoder {
             }
 
             var firstProp = props[0];
-            if (IsPrimitiveLike(firstProp.Value)) {
-                lines.Add($"{indent}- {EncodeKey(firstProp.Name)}: {EncodePrimitive(firstProp.Value, options.Delimiter)}");
-            } else if (firstProp.Value is JArray firstArray) {
+            if (IsPrimitiveLike(firstProp.Value))
+                lines.Add(
+                    $"{indent}- {EncodeKey(firstProp.Name)}: {EncodePrimitive(firstProp.Value, options.Delimiter)}");
+            else if (firstProp.Value is JArray firstArray) {
                 var temp = new List<string>();
                 EncodeArrayWithHeader(EncodeKey(firstProp.Name), firstArray, indentLevel + 1, temp, options);
                 if (temp.Count > 0) {
                     var firstLine = temp[0].TrimStart();
                     lines.Add($"{indent}- {firstLine}");
-                    for (var i = 1; i < temp.Count; i++) {
-                        lines.Add(temp[i]);
-                    }
-                } else {
+                    for (var i = 1; i < temp.Count; i++) lines.Add(temp[i]);
+                } else
                     lines.Add($"{indent}- {EncodeKey(firstProp.Name)}[0]:");
-                }
             } else {
                 lines.Add($"{indent}- {EncodeKey(firstProp.Name)}:");
                 EncodeObject((JObject)firstProp.Value, indentLevel + 2, lines, options);
             }
 
-            foreach (var prop in props.Skip(1)) {
-                EncodeField(prop.Name, prop.Value, indentLevel + 1, lines, options);
-            }
+            foreach (var prop in props.Skip(1)) EncodeField(prop.Name, prop.Value, indentLevel + 1, lines, options);
 
             return;
         }
@@ -149,59 +146,43 @@ internal static class ToonEncoder {
     private static bool TryGetTabular(JArray array, out List<string> columns, out List<List<JToken>> rows) {
         columns = [];
         rows = [];
-        if (array.Count == 0) {
-            return false;
-        }
+        if (array.Count == 0) return false;
 
-        if (!array.All(x => x is JObject)) {
-            return false;
-        }
+        if (!array.All(x => x is JObject)) return false;
 
         var first = (JObject)array[0];
         var firstColumns = first.Properties().Select(p => p.Name).ToList();
-        if (firstColumns.Count == 0) {
-            return false;
-        }
+        if (firstColumns.Count == 0) return false;
 
         foreach (var item in array.Cast<JObject>()) {
             var keys = item.Properties().Select(p => p.Name).OrderBy(x => x, StringComparer.Ordinal).ToList();
             var firstSorted = firstColumns.OrderBy(x => x, StringComparer.Ordinal).ToList();
-            if (!keys.SequenceEqual(firstSorted, StringComparer.Ordinal)) {
-                return false;
-            }
+            if (!keys.SequenceEqual(firstSorted, StringComparer.Ordinal)) return false;
 
-            if (item.Properties().Any(p => !IsPrimitiveLike(p.Value))) {
-                return false;
-            }
+            if (item.Properties().Any(p => !IsPrimitiveLike(p.Value))) return false;
         }
 
         columns = firstColumns;
-        foreach (var item in array.Cast<JObject>()) {
+        foreach (var item in array.Cast<JObject>())
             rows.Add(columns.Select(c => item[c] ?? JValue.CreateNull()).ToList());
-        }
 
         return true;
     }
 
-    private static string EncodePrimitive(JToken token, char delimiter) {
-        return token.Type switch {
+    private static string EncodePrimitive(JToken token, char delimiter) =>
+        token.Type switch {
             JTokenType.Null => "null",
             JTokenType.Boolean => token.Value<bool>() ? "true" : "false",
             JTokenType.Integer => Convert.ToString(token, CultureInfo.InvariantCulture) ?? "0",
             JTokenType.Float => EncodeFloat(token),
             _ => EncodeString(token.ToString(), delimiter)
         };
-    }
 
     private static string EncodeFloat(JToken token) {
         var value = token.Value<double>();
-        if (double.IsNaN(value) || double.IsInfinity(value)) {
-            return "null";
-        }
+        if (double.IsNaN(value) || double.IsInfinity(value)) return "null";
 
-        if (value == 0) {
-            return "0";
-        }
+        if (value == 0) return "0";
 
         return value.ToString("0.###############################", CultureInfo.InvariantCulture);
     }
@@ -215,9 +196,7 @@ internal static class ToonEncoder {
     }
 
     private static string EncodeString(string value, char delimiter) {
-        if (NeedsQuotes(value, delimiter)) {
-            return Quote(value);
-        }
+        if (NeedsQuotes(value, delimiter)) return Quote(value);
 
         return value;
     }

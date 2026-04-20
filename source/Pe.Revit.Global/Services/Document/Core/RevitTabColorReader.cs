@@ -2,7 +2,6 @@
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
-using Pe.Revit.Global.Services.Document;
 using WpfColor = System.Windows.Media.Color;
 
 namespace Pe.Revit.Global.Services.Document.Core;
@@ -97,7 +96,7 @@ public static class RevitTabColorReader {
 
             var source = HwndSource.FromHwnd(mainWindowHandle);
             // FromHwnd can return null if the window is invalid or destroyed
-            return source?.RootVisual as Visual;
+            return source?.RootVisual;
         } catch {
             return null;
         }
@@ -116,7 +115,7 @@ public static class RevitTabColorReader {
             if (child is T typedChild)
                 yield return typedChild;
 
-            foreach (var descendant in FindDescendants<T>(child))
+            foreach (var descendant in child.FindDescendants<T>())
                 yield return descendant;
         }
     }
@@ -135,7 +134,7 @@ public static class RevitTabColorReader {
             if (child.GetType().Name == typeName)
                 yield return child;
 
-            foreach (var descendant in FindDescendantsByTypeName(child, typeName))
+            foreach (var descendant in child.FindDescendantsByTypeName(typeName))
                 yield return descendant;
         }
     }

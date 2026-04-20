@@ -5,37 +5,99 @@
   },
   "FilterFamilies": {
     "IncludeNames": {
-      "Equaling": ["FF-Test-GrinderPumpBasin.rfa"]
+      "Equaling": [
+        "FF-Test-GrinderPumpBasin.rfa"
+      ]
     }
   },
   "FilterApsParams": {
     "IncludeNames": {
-      "Equaling": ["PE_G_Dim_Height1", "PE_G_Dim_Width1"]
+      "Equaling": [
+        "PE_G_Dim_Height1",
+        "PE_G_Dim_Width1"
+      ]
     }
   },
   "AddFamilyParams": {
     "Parameters": [
-      { "Name": "BasinDiameter", "DataType": "autodesk.spec.aec:length-2.0.1" },
-      { "Name": "BasinRadius", "DataType": "autodesk.spec.aec:length-2.0.1" },
-      { "Name": "AntiFloatDiameter", "DataType": "autodesk.spec.aec:length-2.0.1" },
-      { "Name": "AntiFloatThickness", "DataType": "autodesk.spec.aec:length-2.0.1" },
-      { "Name": "DischargeDiameter", "DataType": "autodesk.spec.aec:length-2.0.1" },
-      { "Name": "DischargeProjection", "DataType": "autodesk.spec.aec:length-2.0.1" },
-      { "Name": "DischargeCenterElevation", "DataType": "autodesk.spec.aec:length-2.0.1" }
+      {
+        "Name": "BasinDiameter",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "BasinRadius",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "AntiFloatDiameter",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "AntiFloatThickness",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "DischargeDiameter",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "DischargeProjection",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      },
+      {
+        "Name": "DischargeCenterElevation",
+        "DataType": "autodesk.spec.aec:length-2.0.1"
+      }
     ]
   },
   "SetKnownParams": {
     "OverrideExistingValues": true,
     "GlobalAssignments": [
-      { "Parameter": "PE_G_Dim_Width1", "Kind": "Value", "Value": "36\"" },
-      { "Parameter": "PE_G_Dim_Height1", "Kind": "Value", "Value": "72\"" },
-      { "Parameter": "AntiFloatDiameter", "Kind": "Value", "Value": "42.5\"" },
-      { "Parameter": "AntiFloatThickness", "Kind": "Value", "Value": "2\"" },
-      { "Parameter": "DischargeDiameter", "Kind": "Value", "Value": "2\"" },
-      { "Parameter": "DischargeProjection", "Kind": "Value", "Value": "6\"" },
-      { "Parameter": "DischargeCenterElevation", "Kind": "Value", "Value": "48\"" },
-      { "Parameter": "BasinDiameter", "Kind": "Formula", "Value": "PE_G_Dim_Width1" },
-      { "Parameter": "BasinRadius", "Kind": "Formula", "Value": "BasinDiameter / 2" }
+      {
+        "Parameter": "PE_G_Dim_Width1",
+        "Kind": "Value",
+        "Value": "36\""
+      },
+      {
+        "Parameter": "PE_G_Dim_Height1",
+        "Kind": "Value",
+        "Value": "72\""
+      },
+      {
+        "Parameter": "AntiFloatDiameter",
+        "Kind": "Value",
+        "Value": "42.5\""
+      },
+      {
+        "Parameter": "AntiFloatThickness",
+        "Kind": "Value",
+        "Value": "2\""
+      },
+      {
+        "Parameter": "DischargeDiameter",
+        "Kind": "Value",
+        "Value": "2\""
+      },
+      {
+        "Parameter": "DischargeProjection",
+        "Kind": "Value",
+        "Value": "6\""
+      },
+      {
+        "Parameter": "DischargeCenterElevation",
+        "Kind": "Value",
+        "Value": "48\""
+      },
+      {
+        "Parameter": "BasinDiameter",
+        "Kind": "Formula",
+        "Value": "PE_G_Dim_Width1"
+      },
+      {
+        "Parameter": "BasinRadius",
+        "Kind": "Formula",
+        "Value": "BasinDiameter / 2"
+      }
     ],
     "PerTypeAssignmentsTable": []
   },
@@ -60,7 +122,10 @@
         "Name": "Basin Body",
         "IsSolid": true,
         "On": "@Bottom",
-        "Center": ["@CenterLR", "@CenterFB"],
+        "Center": [
+          "@CenterLR",
+          "@CenterFB"
+        ],
         "Diameter": {
           "By": "param:BasinDiameter"
         },
@@ -75,7 +140,10 @@
         "Name": "Anti-Float Collar",
         "IsSolid": true,
         "On": "@Bottom",
-        "Center": ["@CenterLR", "@CenterFB"],
+        "Center": [
+          "@CenterLR",
+          "@CenterFB"
+        ],
         "Diameter": {
           "By": "param:AntiFloatDiameter"
         },
@@ -85,7 +153,7 @@
           "By": "param:AntiFloatThickness",
           "Dir": "out"
         }
-      },
+      }
     ],
     "Connectors": [
       {
@@ -97,7 +165,10 @@
           "Dir": "out"
         },
         "Round": {
-          "Center": ["@CenterFB", "plane:Discharge Centerline"],
+          "Center": [
+            "@CenterFB",
+            "plane:Discharge Centerline"
+          ],
           "Diameter": {
             "By": "param:DischargeDiameter"
           }

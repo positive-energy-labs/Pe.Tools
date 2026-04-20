@@ -1,7 +1,6 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Extensions.FamParameter.Formula;
-using Pe.Revit.FamilyFoundry.Plans;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
@@ -36,7 +35,7 @@ public class PurgeParams : DocOperation<PurgeParamsSettings> {
         return values.All(this.IsValueEmpty);
     }
 
-    private bool IsValueEmpty(string value) {
+    private bool IsValueEmpty(string? value) {
         if (value == null) return true;
         if (this.Settings.ConsiderEmptyStringAsEmpty && string.IsNullOrWhiteSpace(value)) return true;
         if (this.Settings.ConsiderZeroValueAsEmpty && IsZeroValue(value)) return true;

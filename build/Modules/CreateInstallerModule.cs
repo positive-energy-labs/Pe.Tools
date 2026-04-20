@@ -12,6 +12,7 @@ using Pe.Shared.HostContracts.Protocol;
 using Shouldly;
 using Sourcy.DotNet;
 using File = ModularPipelines.FileSystem.File;
+using InstallerOptions = Build.Options.InstallerOptions;
 
 namespace Build.Modules;
 
@@ -22,7 +23,7 @@ namespace Build.Modules;
 [DependsOn<CompileProjectModule>]
 public sealed class CreateInstallerModule(
     IOptions<BuildOptions> buildOptions,
-    IOptions<Build.Options.InstallerOptions> installerOptions) : Module {
+    IOptions<InstallerOptions> installerOptions) : Module {
     protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
         var versioningResult = await context.GetModule<ResolveVersioningModule>();
         var versioning = versioningResult.ValueOrDefault!;
@@ -135,7 +136,7 @@ public sealed class CreateInstallerModule(
         return wixToolFolder;
     }
 
-    private static void ValidateInstallerAssets(Folder rootDirectory, Build.Options.InstallerOptions options) {
+    private static void ValidateInstallerAssets(Folder rootDirectory, InstallerOptions options) {
         var requiredFiles = new[] { options.BannerImagePath, options.BackgroundImagePath, options.ProductIconPath };
 
         foreach (var relativeOrAbsolutePath in requiredFiles) {

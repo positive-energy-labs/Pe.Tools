@@ -159,32 +159,38 @@ public static class Formula {
             return false;
 
         if (!lookupContext.ParsedSuccessfully) {
-            errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup could not be parsed safely for validation.";
+            errorMessage =
+                $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup could not be parsed safely for validation.";
             return true;
         }
 
         if (lookupContext.Arguments.Count < 4) {
-            errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup requires at least 4 arguments: table name, return column, default value, and at least one lookup key.";
+            errorMessage =
+                $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup requires at least 4 arguments: table name, return column, default value, and at least one lookup key.";
             return true;
         }
 
         if (string.IsNullOrWhiteSpace(lookupContext.Arguments[0])) {
-            errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup table-name argument is blank.";
+            errorMessage =
+                $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup table-name argument is blank.";
             return true;
         }
 
         if (string.IsNullOrWhiteSpace(lookupContext.Arguments[1])) {
-            errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup return-column argument is blank.";
+            errorMessage =
+                $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup return-column argument is blank.";
             return true;
         }
 
         if (string.IsNullOrWhiteSpace(lookupContext.Arguments[2])) {
-            errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup default-value argument is blank.";
+            errorMessage =
+                $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup default-value argument is blank.";
             return true;
         }
 
         if (lookupContext.Arguments.Skip(3).Any(string.IsNullOrWhiteSpace)) {
-            errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup contains a blank lookup-key argument.";
+            errorMessage =
+                $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup contains a blank lookup-key argument.";
             return true;
         }
 
@@ -193,7 +199,8 @@ public static class Formula {
         if (UnitUtils.IsMeasurableSpec(dataType)
             && LooksLikePlainNumberLiteral(fallback)
             && !UnitFormatUtils.TryParse(famDoc.GetUnits(), dataType, fallback, out _)) {
-            errorMessage = $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup default '{fallback}' is a plain numeric literal, but measurable parameters usually need a unit-typed fallback compatible with '{dataType.TypeId}'. Example patterns from real families are values like '2.38\"' or '0 GPM'.";
+            errorMessage =
+                $"Cannot set formula on parameter '{targetParam.Name()}'. size_lookup default '{fallback}' is a plain numeric literal, but measurable parameters usually need a unit-typed fallback compatible with '{dataType.TypeId}'. Example patterns from real families are values like '2.38\"' or '0 GPM'.";
             return true;
         }
 
@@ -295,5 +302,8 @@ public static class Formula {
         CultureInfo.InvariantCulture,
         out _);
 
-    private sealed record SizeLookupFormulaContext(IReadOnlyList<string> Arguments, string FormulaForReferenceValidation, bool ParsedSuccessfully);
+    private sealed record SizeLookupFormulaContext(
+        IReadOnlyList<string> Arguments,
+        string FormulaForReferenceValidation,
+        bool ParsedSuccessfully);
 }

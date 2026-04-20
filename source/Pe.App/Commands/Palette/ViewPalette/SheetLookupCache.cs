@@ -1,5 +1,3 @@
-using Pe.Revit.Global.PolyFill;
-
 namespace Pe.App.Commands.Palette.ViewPalette;
 
 /// <summary>
@@ -35,7 +33,7 @@ public class SheetLookupCache {
     /// <summary>
     ///     Gets the sheet info for a view, or null if not placed on any sheet.
     /// </summary>
-    public SheetInfo GetSheetInfo(ElementId viewId) =>
+    public SheetInfo? GetSheetInfo(ElementId viewId) =>
         this._viewToSheet.TryGetValue(viewId, out var info) ? info : null;
 
     /// <summary>

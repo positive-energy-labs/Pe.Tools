@@ -1,15 +1,12 @@
+using Autodesk.Revit.DB.Electrical;
 using Newtonsoft.Json;
-using Autodesk.Revit.DB;
-using Pe.Shared.HostContracts.RevitData;
-using Pe.Shared.HostContracts.Protocol;
 using Pe.Revit.Global.Revit.Lib.Electrical;
-using Pe.Revit.Global.Revit.Lib.Selection;
-using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
-using Pe.Revit.Global.Revit.Documents.Schedules;
-using Pe.Revit.Global.Revit.Documents;
 using Pe.Revit.Global.Revit.Lib.Schedules;
-using Pe.Revit.Global.Services.Document;
+using Pe.Revit.Global.Revit.Lib.Selection;
+using Pe.Shared.HostContracts.Protocol;
+using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.HostContracts.SettingsStorage;
 using ricaun.Revit.UI.Tasks;
 using RevitDocument = Autodesk.Revit.DB.Document;
 
@@ -120,9 +117,10 @@ internal sealed class RevitDataRequestService {
         () => this.EnqueueAsync(() => this.GetElectricalPanelSchedulesQueryCore(request))
     );
 
-    public Task<ElectricalLoadClassificationsCatalogEnvelopeResponse> GetElectricalLoadClassificationsCatalogEnvelopeAsync(
-        ElectricalLoadClassificationsCatalogRequest request
-    ) => this._cache.GetOrCreateAsync(
+    public Task<ElectricalLoadClassificationsCatalogEnvelopeResponse>
+        GetElectricalLoadClassificationsCatalogEnvelopeAsync(
+            ElectricalLoadClassificationsCatalogRequest request
+        ) => this._cache.GetOrCreateAsync(
         HostInvalidationDomain.ElectricalLoadClassificationsCatalog,
         BuildRequestKey("electrical-load-classifications-catalog", request),
         CatalogCacheWindow,
@@ -261,6 +259,7 @@ internal sealed class RevitDataRequestService {
         }
 
         if (request.Query?.Kind == ScheduleQueryKind.CurrentActiveView &&
+            activeScheduleView is not null &&
             (activeScheduleView.IsTemplate ||
              activeScheduleView.Name.Contains("<Revision Schedule>", StringComparison.OrdinalIgnoreCase))) {
             return HostEnvelopeResults.Failure<ScheduleQueryData>(
@@ -466,7 +465,7 @@ internal sealed class RevitDataRequestService {
 
         var uiApp = RevitUiSession.CurrentUIApplication;
         if (request.Query?.Kind == ElectricalPanelSchedulesQueryKind.CurrentActiveView &&
-            uiApp.GetActiveView() is not Autodesk.Revit.DB.Electrical.PanelScheduleView) {
+            uiApp.GetActiveView() is not PanelScheduleView) {
             return HostEnvelopeResults.Failure<ElectricalPanelSchedulesQueryData>(
                 EnvelopeCode.Failed,
                 "Active view is not a panel schedule view.",

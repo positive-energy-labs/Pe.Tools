@@ -7,9 +7,8 @@ namespace Pe.Shared.StorageRuntime.Json.ContractResolvers;
 public class RegisteredTypeContractResolver : OrderedContractResolver {
     private readonly JsonTypeSchemaBindingRegistry _bindingRegistry;
 
-    public RegisteredTypeContractResolver(JsonTypeSchemaBindingRegistry? bindingRegistry = null) {
+    public RegisteredTypeContractResolver(JsonTypeSchemaBindingRegistry? bindingRegistry = null) =>
         this._bindingRegistry = bindingRegistry ?? JsonTypeSchemaBindingRegistry.Shared;
-    }
 
     protected override JsonProperty CreateProperty(MemberInfo member, MemberSerialization memberSerialization) {
         var property = base.CreateProperty(member, memberSerialization);
@@ -49,10 +48,8 @@ public class RegisteredTypeContractResolver : OrderedContractResolver {
             genericTypeDefinition != typeof(ICollection<>) &&
             genericTypeDefinition != typeof(IEnumerable<>) &&
             genericTypeDefinition != typeof(IReadOnlyList<>) &&
-            genericTypeDefinition != typeof(IReadOnlyCollection<>)) {
-
+            genericTypeDefinition != typeof(IReadOnlyCollection<>))
             return unwrappedType;
-        }
 
 
         return unwrappedType.GetGenericArguments()[0];

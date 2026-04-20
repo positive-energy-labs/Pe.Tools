@@ -1,9 +1,9 @@
-﻿using System.Text.RegularExpressions;
-using NuGet.Frameworks;
+﻿using NuGet.Frameworks;
 using NuGet.Packaging;
 using NuGet.Versioning;
 using Pe.Revit.Scripting.Diagnostics;
 using Pe.Shared.HostContracts.Scripting;
+using System.Text.RegularExpressions;
 
 namespace Pe.Revit.Scripting.References;
 
@@ -17,7 +17,7 @@ public sealed class ScriptReferenceResolver(
         string workspaceRoot,
         string? revitVersion = null
     ) {
-        var diagnostics = new List<Pe.Shared.HostContracts.Scripting.ScriptDiagnostic>();
+        var diagnostics = new List<ScriptDiagnostic>();
         var compileReferencePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var runtimeReferencePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -98,7 +98,7 @@ public sealed class ScriptReferenceResolver(
         string targetFramework,
         string? revitVersion
     ) {
-        var diagnostics = new List<Pe.Shared.HostContracts.Scripting.ScriptDiagnostic>();
+        var diagnostics = new List<ScriptDiagnostic>();
         var compileReferencePaths = new List<string>();
         var runtimeReferencePaths = new List<string>();
         var alreadyLoadedRuntimePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -231,7 +231,9 @@ public sealed class ScriptReferenceResolver(
             .GetDirectories(packageDirectory)
             .Select(Path.GetFileName)
             .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Select(name => new { Name = name!, IsParsed = NuGetVersion.TryParse(name, out var version), Version = version })
+            .Select(name => new {
+                Name = name!, IsParsed = NuGetVersion.TryParse(name, out var version), Version = version
+            })
             .Where(item => item.IsParsed)
             .OrderByDescending(item => item.Version)
             .FirstOrDefault();
@@ -254,7 +256,9 @@ public sealed class ScriptReferenceResolver(
             .GetDirectories(packageDirectory)
             .Select(Path.GetFileName)
             .Where(name => !string.IsNullOrWhiteSpace(name) && regex.IsMatch(name))
-            .Select(name => new { Name = name!, IsParsed = NuGetVersion.TryParse(name, out var version), Version = version })
+            .Select(name => new {
+                Name = name!, IsParsed = NuGetVersion.TryParse(name, out var version), Version = version
+            })
             .Where(item => item.IsParsed)
             .OrderByDescending(item => item.Version)
             .FirstOrDefault();
@@ -308,6 +312,7 @@ public sealed class ScriptReferenceResolver(
             );
             compileReferencePaths = this.FilterCompatibleAssetPaths(compileReferencePaths, projectFramework);
         }
+
         if (compileReferencePaths.Count == 0) {
             compileReferencePaths = this.SelectAssembliesFromAssetDirectory(
                 Path.Combine(versionDirectory, "lib"),
@@ -342,6 +347,7 @@ public sealed class ScriptReferenceResolver(
             );
             runtimeReferencePaths = this.FilterCompatibleAssetPaths(runtimeReferencePaths, projectFramework);
         }
+
         if (runtimeReferencePaths.Count == 0) {
             runtimeReferencePaths = this.SelectAssembliesFromAssetDirectory(
                 Path.Combine(versionDirectory, "lib"),
@@ -404,16 +410,20 @@ public sealed class ScriptReferenceResolver(
         FrameworkSpecificGroup? chosenGroup = null;
         if (projectFramework != null) {
             chosenGroup = SelectExactFrameworkGroup(groups, projectFramework)
-                ?? SelectSameFrameworkFallback(groups, projectFramework);
+                          ?? SelectSameFrameworkFallback(groups, projectFramework);
         }
 
         chosenGroup ??=
-            groups.FirstOrDefault(group => group.TargetFramework.GetShortFolderName().Equals("netstandard2.1", StringComparison.OrdinalIgnoreCase))
-            ?? groups.FirstOrDefault(group => group.TargetFramework.GetShortFolderName().Equals("netstandard2.0", StringComparison.OrdinalIgnoreCase));
+            groups.FirstOrDefault(group =>
+                group.TargetFramework.GetShortFolderName().Equals("netstandard2.1", StringComparison.OrdinalIgnoreCase))
+            ?? groups.FirstOrDefault(group =>
+                group.TargetFramework.GetShortFolderName()
+                    .Equals("netstandard2.0", StringComparison.OrdinalIgnoreCase));
 
         if (chosenGroup == null && projectFramework == null) {
             chosenGroup = groups.OrderByDescending(group =>
-                (group.Items ?? Array.Empty<string>()).Count(item => item.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                (group.Items ?? Array.Empty<string>()).Count(item =>
+                    item.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
             ).FirstOrDefault();
         }
 
@@ -503,7 +513,7 @@ public sealed class ScriptReferenceResolver(
         DirectoryAssetGroup? chosenGroup = null;
         if (projectFramework != null) {
             chosenGroup = SelectExactDirectoryFrameworkGroup(groups, projectFramework)
-                ?? SelectSameDirectoryFrameworkFallback(groups, projectFramework);
+                          ?? SelectSameDirectoryFrameworkFallback(groups, projectFramework);
         }
 
         chosenGroup ??=
@@ -549,7 +559,8 @@ public sealed class ScriptReferenceResolver(
         NuGetFramework projectFramework
     ) => groups
         .Where(group =>
-            string.Equals(group.TargetFramework.Framework, projectFramework.Framework, StringComparison.OrdinalIgnoreCase)
+            string.Equals(group.TargetFramework.Framework, projectFramework.Framework,
+                StringComparison.OrdinalIgnoreCase)
             && group.TargetFramework.Version <= projectFramework.Version)
         .OrderByDescending(group => group.TargetFramework.Version)
         .FirstOrDefault();
@@ -582,7 +593,8 @@ public sealed class ScriptReferenceResolver(
         IReadOnlyList<string> compileReferencePaths
     ) {
         var loadedAssemblies = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(assembly => !assembly.IsDynamic && !string.IsNullOrWhiteSpace(assembly.Location) && File.Exists(assembly.Location))
+            .Where(assembly => !assembly.IsDynamic && !string.IsNullOrWhiteSpace(assembly.Location) &&
+                               File.Exists(assembly.Location))
             .ToDictionary(
                 assembly => assembly.GetName().Name ?? string.Empty,
                 assembly => assembly.Location,
@@ -631,7 +643,8 @@ public sealed class ScriptReferenceResolver(
             })
             .Where(item =>
                 item.Framework != null
-                && string.Equals(item.Framework.Framework, projectFramework.Framework, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(item.Framework.Framework, projectFramework.Framework,
+                    StringComparison.OrdinalIgnoreCase)
                 && item.Framework.Version <= projectFramework.Version)
             .OrderByDescending(item => item.Framework!.Version)
             .ToList();
@@ -648,7 +661,7 @@ public sealed class ScriptReferenceResolver(
             .Where(path => {
                 var folder = Path.GetFileName(Path.GetDirectoryName(path));
                 return string.Equals(folder, "netstandard2.1", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(folder, "netstandard2.0", StringComparison.OrdinalIgnoreCase);
+                       || string.Equals(folder, "netstandard2.0", StringComparison.OrdinalIgnoreCase);
             })
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -661,7 +674,7 @@ public sealed class ScriptReferenceResolver(
     private sealed record PackageResolutionResult(
         IReadOnlyList<string> CompileReferencePaths,
         IReadOnlyList<string> RuntimeReferencePaths,
-        IReadOnlyList<Pe.Shared.HostContracts.Scripting.ScriptDiagnostic> Diagnostics
+        IReadOnlyList<ScriptDiagnostic> Diagnostics
     );
 
     private sealed record PackageAssetSelection(

@@ -1,7 +1,5 @@
 using Pe.Revit.Extensions.FamDocument;
-using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.FamilyFoundry.LookupTables;
-using Pe.Revit.FamilyFoundry.Plans;
 
 namespace Pe.Revit.FamilyFoundry.Capture;
 
@@ -19,18 +17,12 @@ public sealed class LookupTableSnapshotCollector : IFamilySnapshotCollector {
         var familyDocument = famDoc.Document;
         var ownerFamilyId = familyDocument.OwnerFamily?.Id;
         if (ownerFamilyId == null) {
-            return new CapturedCollection<LookupTableDefinition> {
-                Source = SnapshotSource.FamilyDoc,
-                Data = []
-            };
+            return new CapturedCollection<LookupTableDefinition> { Source = SnapshotSource.FamilyDoc, Data = [] };
         }
 
         using var manager = FamilySizeTableManager.GetFamilySizeTableManager(familyDocument, ownerFamilyId);
         if (manager == null || !manager.IsValidObject || manager.NumberOfSizeTables == 0) {
-            return new CapturedCollection<LookupTableDefinition> {
-                Source = SnapshotSource.FamilyDoc,
-                Data = []
-            };
+            return new CapturedCollection<LookupTableDefinition> { Source = SnapshotSource.FamilyDoc, Data = [] };
         }
 
         var keyCountsByTable = LookupFormulaInspector.CollectLookupKeyCounts(parameterSnapshots);
@@ -40,13 +32,11 @@ public sealed class LookupTableSnapshotCollector : IFamilySnapshotCollector {
         try {
             var tables = manager.GetAllSizeTableNames()
                 .OrderBy(name => name, StringComparer.Ordinal)
-                .Select(tableName => ExportAndDecodeTable(manager, familyDocument, workingDirectory, tableName, keyCountsByTable))
+                .Select(tableName =>
+                    ExportAndDecodeTable(manager, familyDocument, workingDirectory, tableName, keyCountsByTable))
                 .ToList();
 
-            return new CapturedCollection<LookupTableDefinition> {
-                Source = SnapshotSource.FamilyDoc,
-                Data = tables
-            };
+            return new CapturedCollection<LookupTableDefinition> { Source = SnapshotSource.FamilyDoc, Data = tables };
         } finally {
             try {
                 Directory.Delete(workingDirectory, true);

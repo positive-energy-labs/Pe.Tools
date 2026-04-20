@@ -1,4 +1,5 @@
 using Pe.App.Commands.Palette.TaskPalette;
+using Serilog;
 using System.Reflection;
 
 namespace Pe.App.Tasks;
@@ -24,15 +25,18 @@ public static class TaskInitializer {
 
         foreach (var taskType in taskTypes) {
             try {
-                // Create instance and register
-                var task = (ITask)Activator.CreateInstance(taskType);
+                if (Activator.CreateInstance(taskType) is not ITask task) {
+                    Log.Warning("Failed to create task instance for {TaskType}", taskType.FullName);
+                    continue;
+                }
+
                 TaskRegistry.Instance.RegisterByType(taskType, task);
             } catch (Exception ex) {
-                Console.WriteLine($"⚠ Failed to register task '{taskType.Name}': {ex.Message}");
+                Log.Warning(ex, "Failed to register task {TaskType}", taskType.FullName);
             }
         }
 
         var count = TaskRegistry.Instance.GetAll().Count;
-        Console.WriteLine($"✓ Registered {count} tasks");
+        Log.Information("Registered {TaskCount} tasks", count);
     }
 }

@@ -2,7 +2,9 @@
 
 ## Mental Model
 
-This package is the settings infrastructure layer. It gives the repo one explicit way to describe settings modules, compose JSON documents, generate schemas, validate authored files, and resolve smart field metadata without hardcoding every feature into the host or Revit command layer.
+This package is the settings infrastructure layer. It gives the repo one explicit way to describe settings modules,
+compose JSON documents, generate schemas, validate authored files, and resolve smart field metadata without hardcoding
+every feature into the host or Revit command layer.
 
 ## Architecture
 

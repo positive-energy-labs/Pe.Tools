@@ -65,9 +65,7 @@ internal static class ScheduleCollectorSupport {
 
         foreach (var field in profile.Fields) {
             if (field.CombinedParameters is { Count: > 0 }) {
-                foreach (var combinedParameter in field.CombinedParameters) {
-                    AddName(combinedParameter.ParameterName);
-                }
+                foreach (var combinedParameter in field.CombinedParameters) AddName(combinedParameter.ParameterName);
 
                 continue;
             }
@@ -106,7 +104,9 @@ internal static class ScheduleCollectorSupport {
             profile.Fields.Select(ToContractField).ToList(),
             profile.SortGroup.Select(ToContractSortGroup).ToList(),
             profile.Filters.Select(ToContractFilter).ToList(),
-            profile.OnFinishSettings == null ? null : new ScheduleOnFinishSettings(profile.OnFinishSettings.OpenScheduleOnFinish)
+            profile.OnFinishSettings == null
+                ? null
+                : new ScheduleOnFinishSettings(profile.OnFinishSettings.OpenScheduleOnFinish)
         );
 
     public static List<ScheduleParameterUsageEntry> CollectParameterUsages(
@@ -147,7 +147,7 @@ internal static class ScheduleCollectorSupport {
 
     private static IEnumerable<ScheduleParameterUsageEntry> CollectFieldUsages(
         Document doc,
-        Autodesk.Revit.DB.ScheduleField field
+        ScheduleField field
     ) {
         var columnHeading = field.ColumnHeading ?? string.Empty;
         var fieldName = field.GetName();

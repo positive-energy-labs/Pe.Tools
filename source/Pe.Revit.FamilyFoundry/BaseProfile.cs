@@ -1,11 +1,9 @@
-using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.Global;
 using Pe.Revit.Global.Revit.Documents.Schedules;
 using Pe.Revit.Global.Revit.Lib.Schedules;
 using Pe.Revit.Global.Revit.Lib.Schedules.Filters;
 using Pe.Revit.Global.Utils.Files;
 using Pe.Shared.StorageRuntime;
-using Pe.Shared.StorageRuntime.Json;
 using Pe.Shared.StorageRuntime.Json;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
@@ -61,8 +59,11 @@ public class BaseProfile {
     ) =>
         apsParamModels.Select(p => {
             var dlOpts = p.DownloadOptions;
+            var externalDefinition = dlOpts.GetExternalDefinition(tempFile.TempGroup)
+                                     ?? throw new InvalidOperationException(
+                                         $"Failed to resolve external definition for APS parameter '{p.Name}'.");
             return new SharedParameterDefinition(
-                dlOpts.GetExternalDefinition(tempFile.TempGroup),
+                externalDefinition,
                 dlOpts.GetGroupTypeId(),
                 dlOpts.IsInstance);
         }).ToList();
@@ -124,9 +125,7 @@ public class BaseProfile {
 
             // Use ScheduleHelper to evaluate the filter using Revit's native schedule filtering
             var scheduleProfile = new ScheduleProfile {
-                Name = "Family Filter",
-                CategoryName = familyBuiltInCategory,
-                Filters = [this.IncludeByCondition]
+                Name = "Family Filter", CategoryName = familyBuiltInCategory, Filters = [this.IncludeByCondition]
             };
 
             var matchingFamilies = doc.GetFamiliesMatchingScheduleProfileFilters(scheduleProfile, [f]);
@@ -138,7 +137,7 @@ public class BaseProfile {
                                     this.IncludeNames.Containing.Any() ||
                                     this.IncludeNames.StartingWith.Any();
 
-            if (!hasIncludeFilters) return false;
+            if (!hasIncludeFilters) return true;
 
             return this.IncludeNames.Equaling.Any(familyName.Equals) ||
                    this.IncludeNames.Containing.Any(familyName.Contains) ||
@@ -186,9 +185,12 @@ public class BaseProfile {
             // Exclude everything by default - only include if there are include filters AND the parameter matches
             if (!hasIncludeFilters) return false;
 
-            return equaling.Any(p.Name.Equals) ||
-                   containing.Any(p.Name.Contains) ||
-                   startingWith.Any(p.Name.StartsWith);
+            var name = p.Name;
+            if (string.IsNullOrWhiteSpace(name))
+                return false;
+            return equaling.Any(name.Equals) ||
+                   containing.Any(name.Contains) ||
+                   startingWith.Any(name.StartsWith);
         }
 
         private bool IsExcluded(ParamModelRes p) {
@@ -202,9 +204,12 @@ public class BaseProfile {
 
             if (!hasExcludeFilters) return false;
 
-            return equaling.Any(p.Name.Equals) ||
-                   containing.Any(p.Name.Contains) ||
-                   startingWith.Any(p.Name.StartsWith);
+            var name = p.Name;
+            if (string.IsNullOrWhiteSpace(name))
+                return false;
+            return equaling.Any(name.Equals) ||
+                   containing.Any(name.Contains) ||
+                   startingWith.Any(name.StartsWith);
         }
     }
 }

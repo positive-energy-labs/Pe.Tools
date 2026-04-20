@@ -2,8 +2,6 @@
 using Pe.App.Services;
 using Pe.Revit.Extensions.UiApplication;
 using Pe.Revit.Global.Revit.Documents;
-using Pe.Revit.Global.PolyFill;
-using Pe.Revit.Global.Services.Document;
 using OperationCanceledException = Autodesk.Revit.Exceptions.OperationCanceledException;
 
 namespace Pe.App.Commands.Palette.FamilyPalette;
@@ -220,14 +218,13 @@ internal static class FamilyActions {
     internal static void HandleOpenEditFamily(UnifiedFamilyItem item) {
         var uiApp = RevitUiSession.CurrentUIApplication;
         if (item == null) return;
-        if (item.ItemType == FamilyItemType.Family && item.Family != null) {
+        if (item.ItemType == FamilyItemType.Family && item.Family != null)
             uiApp.OpenAndActivateFamily(item.Family);
-        } else {
+        else {
             var sym = item.GetFamilySymbol();
-            if (sym != null) {
+            if (sym != null)
                 OpenAndActivateFamilyType(sym);
-                return;
-            } else {
+            else {
                 var fam = item.GetFamily();
                 if (fam == null) return;
                 uiApp.OpenAndActivateFamily(fam);

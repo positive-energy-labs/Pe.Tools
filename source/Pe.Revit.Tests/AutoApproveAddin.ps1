@@ -22,7 +22,7 @@ $script:PollingIntervalMs = 200
 
 if ($script:LogFileEnabled)
 {
-    if ([string]::IsNullOrEmpty($LogFile))
+    if ( [string]::IsNullOrEmpty($LogFile))
     {
         if (-not [string]::IsNullOrEmpty($ScriptDirectory) -and (Test-Path $ScriptDirectory))
         {
@@ -102,7 +102,7 @@ function Test-EstablishedSameYearRevitAlreadyRunning
     )
 
     $matchingProcesses = Get-Process -Name "Revit" -ErrorAction SilentlyContinue |
-        Where-Object { $_.MainWindowTitle -match [regex]::Escape([string]$TargetYear) }
+            Where-Object { $_.MainWindowTitle -match [regex]::Escape([string]$TargetYear) }
 
     foreach ($process in $matchingProcesses)
     {
@@ -111,13 +111,13 @@ function Test-EstablishedSameYearRevitAlreadyRunning
             $ageSeconds = ((Get-Date) - $process.StartTime).TotalSeconds
             if ($ageSeconds -ge $ThresholdSeconds)
             {
-                Write-Log "Detected established Revit $TargetYear process (PID: $($process.Id), AgeSeconds: $([math]::Round($ageSeconds, 1))). Skipping auto-approval watcher."
+                Write-Log "Detected established Revit $TargetYear process (PID: $( $process.Id ), AgeSeconds: $([math]::Round($ageSeconds, 1) )). Skipping auto-approval watcher."
                 return $true
             }
         }
         catch
         {
-            Write-Log "WARNING: Could not inspect Revit process $($process.Id): $($_.Exception.Message)"
+            Write-Log "WARNING: Could not inspect Revit process $( $process.Id ): $( $_.Exception.Message )"
         }
     }
 
@@ -144,7 +144,7 @@ try
         if ($null -ne $revitProcesses -and $revitProcesses.Count -gt 0)
         {
             $revitFound = $true
-            Write-Log "Revit process found (PID: $($revitProcesses[0].Id))"
+            Write-Log "Revit process found (PID: $( $revitProcesses[0].Id ))"
         }
         else
         {
@@ -191,7 +191,7 @@ try
                     public const uint BM_CLICK = 0x00F5;
                 }
 "@
-            if ([PostMessageHelper]::PostMessage([IntPtr]$buttonHandle, [PostMessageHelper]::BM_CLICK, [IntPtr]::Zero, [IntPtr]::Zero))
+            if ( [PostMessageHelper]::PostMessage([IntPtr]$buttonHandle, [PostMessageHelper]::BM_CLICK, [IntPtr]::Zero, [IntPtr]::Zero))
             {
                 Start-Sleep -Milliseconds 200
                 return $true
@@ -199,7 +199,7 @@ try
         }
         catch
         {
-            Write-Log "ERROR: Failed to click button: $($_.Exception.Message)"
+            Write-Log "ERROR: Failed to click button: $( $_.Exception.Message )"
         }
 
         return $false
@@ -279,7 +279,7 @@ try
                                 $dialogsClicked++
                                 $lastDialogTime = Get-Date
                                 $elapsed = ((Get-Date) - $startTime).TotalSeconds
-                                Write-Log "SUCCESS: Clicked 'Always Load' on dialog #$dialogsClicked (closed after $([math]::Round($elapsed, 2))s)"
+                                Write-Log "SUCCESS: Clicked 'Always Load' on dialog #$dialogsClicked (closed after $([math]::Round($elapsed, 2) )s)"
                                 [void]$clickedHandles.Add($handle)
                             }
                         }
@@ -299,7 +299,7 @@ try
         }
         catch
         {
-            Write-Log "ERROR during polling: $($_.Exception.Message)"
+            Write-Log "ERROR during polling: $( $_.Exception.Message )"
         }
 
         Start-Sleep -Milliseconds $script:PollingIntervalMs
@@ -316,7 +316,7 @@ try
 
     if ($null -ne $remainingDialogs -and $remainingDialogs.Count -gt 0)
     {
-        Write-Log "ERROR: $($remainingDialogs.Count) security dialog(s) still exist!"
+        Write-Log "ERROR: $( $remainingDialogs.Count ) security dialog(s) still exist!"
     }
     elseif ($dialogsClicked -gt 0)
     {
@@ -331,7 +331,7 @@ try
 }
 catch
 {
-    $errorMsg = "FATAL ERROR: $($_.Exception.Message)"
+    $errorMsg = "FATAL ERROR: $( $_.Exception.Message )"
     Write-Log $errorMsg
     exit 1
 }

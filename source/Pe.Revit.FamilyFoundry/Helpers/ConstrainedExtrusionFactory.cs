@@ -1,6 +1,3 @@
-using Autodesk.Revit.DB;
-using Pe.Revit.Extensions.FamDocument;
-using Pe.Revit.FamilyFoundry.Snapshots;
 using Serilog;
 
 namespace Pe.Revit.FamilyFoundry.Helpers;
@@ -37,7 +34,8 @@ internal static class ConstrainedExtrusionFactory {
             !TryIntersect3Planes(rpA1, rpB2, sketchGeomPlane, out var p01) ||
             !TryIntersect3Planes(rpA2, rpB2, sketchGeomPlane, out var p11) ||
             !TryIntersect3Planes(rpA2, rpB1, sketchGeomPlane, out var p10)) {
-            logs.Add(new LogEntry(key).Error("Could not resolve rectangle corner intersections from reference planes."));
+            logs.Add(new LogEntry(key).Error(
+                "Could not resolve rectangle corner intersections from reference planes."));
             return ExtrusionCreationResult.Failed;
         }
 
@@ -81,12 +79,17 @@ internal static class ConstrainedExtrusionFactory {
             return ExtrusionCreationResult.Failed;
         }
 
-        TryAssociateEndOffsetHeightDriver(doc, extrusion, spec.HeightControlMode, spec.HeightDriver, spec.HeightParameter, logs, key);
+        TryAssociateEndOffsetHeightDriver(doc, extrusion, spec.HeightControlMode, spec.HeightDriver,
+            spec.HeightParameter, logs, key);
         TryAlignSketchLinesToPlanes(doc, extrusion, [rpA1, rpA2, rpB1, rpB2], logs, key);
-        if (heightPlan.ShouldAlignCaps)
-            TryAlignExtrusionCapsToHeightPlanes(doc, extrusion, sketchGeomPlane.Normal.Normalize(), heightPlan.BottomPlane!, heightPlan.TopPlane!, logs, key);
+        if (heightPlan.ShouldAlignCaps &&
+            heightPlan.BottomPlane != null &&
+            heightPlan.TopPlane != null)
+            TryAlignExtrusionCapsToHeightPlanes(doc, extrusion, sketchGeomPlane.Normal.Normalize(),
+                heightPlan.BottomPlane, heightPlan.TopPlane, logs, key);
 
-        var terminalFace = GetTerminalFace(extrusion, sketchGeomPlane.Normal.Normalize(), heightPlan.StartOffset, heightPlan.EndOffset);
+        var terminalFace = GetTerminalFace(extrusion, sketchGeomPlane.Normal.Normalize(), heightPlan.StartOffset,
+            heightPlan.EndOffset);
         logs.Add(new LogEntry(key).Success("Created and constrained to reference planes."));
         return ExtrusionCreationResult.Success(extrusion, terminalFace, sketchGeomPlane.Normal.Normalize());
     }
@@ -115,14 +118,16 @@ internal static class ConstrainedExtrusionFactory {
 
         var sketchGeomPlane = sketchPlane.GetPlane();
         if (!TryIntersect2PlanesAndSketchPlane(centerPlane1, centerPlane2, sketchGeomPlane, out var center)) {
-            logs.Add(new LogEntry(key).Error("Could not resolve cylinder center from the sketch plane and center planes."));
+            logs.Add(new LogEntry(key).Error(
+                "Could not resolve cylinder center from the sketch plane and center planes."));
             return ExtrusionCreationResult.Failed;
         }
 
-        var diameter = TryGetCurrentDiameter(doc, spec.DiameterDriver, spec.DiameterParameter, out var resolvedDiameter) &&
-                       resolvedDiameter > PlaneTolerance
-            ? resolvedDiameter
-            : DefaultSeedDiameter;
+        var diameter =
+            TryGetCurrentDiameter(doc, spec.DiameterDriver, spec.DiameterParameter, out var resolvedDiameter) &&
+            resolvedDiameter > PlaneTolerance
+                ? resolvedDiameter
+                : DefaultSeedDiameter;
 
         var radius = diameter / 2.0;
         if (radius <= PlaneTolerance) {
@@ -168,23 +173,27 @@ internal static class ConstrainedExtrusionFactory {
             var extrusion = doc.FamilyCreate.NewExtrusion(spec.IsSolid, profile, sketchPlane, seedDepth);
             extrusion.EndOffset = heightPlan.EndOffset;
             extrusion.StartOffset = heightPlan.StartOffset;
-            TryAssociateEndOffsetHeightDriver(doc, extrusion, spec.HeightControlMode, spec.HeightDriver, spec.HeightParameter, logs, key);
+            TryAssociateEndOffsetHeightDriver(doc, extrusion, spec.HeightControlMode, spec.HeightDriver,
+                spec.HeightParameter, logs, key);
             if (effectiveOptions.CreateDiameterLabel)
                 TryLabelCircleDiameter(doc, extrusion, spec, logs, key);
             if (effectiveOptions.AlignCenterToPlanes)
                 TryAlignCircleCenterToPlanes(doc, extrusion, centerPlane1, centerPlane2, logs, key);
-            if (heightPlan.ShouldAlignCaps) {
+            if (heightPlan.ShouldAlignCaps &&
+                heightPlan.BottomPlane != null &&
+                heightPlan.TopPlane != null) {
                 TryAlignExtrusionCapsToHeightPlanes(
                     doc,
                     extrusion,
                     sketchGeomPlane.Normal.Normalize(),
-                    heightPlan.BottomPlane!,
-                    heightPlan.TopPlane!,
+                    heightPlan.BottomPlane,
+                    heightPlan.TopPlane,
                     logs,
                     key);
             }
 
-            var terminalFace = GetTerminalFace(extrusion, sketchGeomPlane.Normal.Normalize(), heightPlan.StartOffset, heightPlan.EndOffset);
+            var terminalFace = GetTerminalFace(extrusion, sketchGeomPlane.Normal.Normalize(), heightPlan.StartOffset,
+                heightPlan.EndOffset);
             logs.Add(new LogEntry(key).Success("Created from ParamDrivenSolids circle plan."));
             return ExtrusionCreationResult.Success(extrusion, terminalFace, sketchGeomPlane.Normal.Normalize());
         } catch (Exception ex) {
@@ -193,7 +202,10 @@ internal static class ConstrainedExtrusionFactory {
         }
     }
 
-    public static PlanarFace? GetTerminalFace(Extrusion extrusion, XYZ sketchNormal, double startOffset, double endOffset) {
+    public static PlanarFace? GetTerminalFace(Extrusion extrusion,
+        XYZ sketchNormal,
+        double startOffset,
+        double endOffset) {
         var targetDistance = Math.Abs(endOffset) >= Math.Abs(startOffset) ? endOffset : startOffset;
         return GetCapFace(extrusion, sketchNormal, targetDistance);
     }
@@ -206,9 +218,7 @@ internal static class ConstrainedExtrusionFactory {
         string key
     ) {
         var diameterParameterName = spec.DiameterDriver.TryGetParameterName() ?? spec.DiameterParameter;
-        if (string.IsNullOrWhiteSpace(diameterParameterName)) {
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(diameterParameterName)) return;
 
         var diameterParameter = doc.FamilyManager.get_Parameter(diameterParameterName);
         if (diameterParameter == null) {
@@ -239,7 +249,8 @@ internal static class ConstrainedExtrusionFactory {
             var dimension = doc.FamilyCreate.NewDiameterDimension(diameterView, arc.Reference, origin);
             dimension.FamilyLabel = diameterParameter;
         } catch (Exception ex) {
-            logs.Add(new LogEntry(key).Error($"Created extrusion, but failed diameter dimension labeling: {ex.Message}"));
+            logs.Add(
+                new LogEntry(key).Error($"Created extrusion, but failed diameter dimension labeling: {ex.Message}"));
         }
     }
 
@@ -314,6 +325,9 @@ internal static class ConstrainedExtrusionFactory {
                     maxFace = face;
                 }
             }
+
+            if (alignView == null)
+                return;
 
             if (minFace?.Reference != null)
                 TryCreateAlignment(doc, alignView, minFace.Reference, bottomPlane.GetReference());
@@ -415,7 +429,8 @@ internal static class ConstrainedExtrusionFactory {
             .Cast<View>()
             .FirstOrDefault(view =>
                 !view.IsTemplate &&
-                view.ViewType is ViewType.FloorPlan or ViewType.CeilingPlan or ViewType.EngineeringPlan or ViewType.AreaPlan);
+                view.ViewType is ViewType.FloorPlan or ViewType.CeilingPlan or ViewType.EngineeringPlan
+                    or ViewType.AreaPlan);
     }
 
     private static View? GetBestCircleAuthoringView(Document doc, Extrusion extrusion) {
@@ -434,7 +449,8 @@ internal static class ConstrainedExtrusionFactory {
     private static View? GetPreferredPlanAuthoringView(Document doc) =>
         IsPlanAuthoringView(doc.ActiveView)
             ? doc.ActiveView
-            : GetFirstNonTemplateView(doc, ViewType.FloorPlan, ViewType.CeilingPlan, ViewType.EngineeringPlan, ViewType.AreaPlan)
+            : GetFirstNonTemplateView(doc, ViewType.FloorPlan, ViewType.CeilingPlan, ViewType.EngineeringPlan,
+                  ViewType.AreaPlan)
               ?? GetWorkingView(doc);
 
     private static View? GetBestAlignmentView(Document doc, ReferencePlane p1, ReferencePlane p2) {
@@ -470,10 +486,7 @@ internal static class ConstrainedExtrusionFactory {
             .OfClass(typeof(View))
             .Cast<View>()
             .Where(view => !view.IsTemplate && viewTypes.Contains(view.ViewType))
-            .Select(view => new {
-                View = view,
-                Alignment = TryGetAlignmentScore(view, normalizedTarget)
-            })
+            .Select(view => new { View = view, Alignment = TryGetAlignmentScore(view, normalizedTarget) })
             .Where(candidate => candidate.Alignment != null)
             .OrderByDescending(candidate => candidate.Alignment)
             .Select(candidate => candidate.View)
@@ -501,7 +514,8 @@ internal static class ConstrainedExtrusionFactory {
     ) {
         var alignmentView = GetWorkingView(doc);
         if (alignmentView == null) {
-            logs.Add(new LogEntry(key).Error("Created extrusion, but no valid view was available for sketch alignment."));
+            logs.Add(
+                new LogEntry(key).Error("Created extrusion, but no valid view was available for sketch alignment."));
             return;
         }
 
@@ -518,7 +532,8 @@ internal static class ConstrainedExtrusionFactory {
                 continue;
 
             try {
-                _ = doc.FamilyCreate.NewAlignment(alignmentView, matchingLine.GeometryCurve.Reference, plane.GetReference());
+                _ = doc.FamilyCreate.NewAlignment(alignmentView, matchingLine.GeometryCurve.Reference,
+                    plane.GetReference());
             } catch (Exception ex) {
                 logs.Add(new LogEntry(key).Error(
                     $"Created extrusion, but failed sketch alignment for plane '{plane.Name}': {ex.Message}"));
@@ -689,7 +704,7 @@ internal static class ConstrainedExtrusionFactory {
             return false;
         }
 
-        intersection = (n2xn3 * d1 + n3xn1 * d2 + n1xn2 * d3) * (1.0 / denominator);
+        intersection = ((n2xn3 * d1) + (n3xn1 * d2) + (n1xn2 * d3)) * (1.0 / denominator);
         return true;
     }
 
@@ -732,8 +747,11 @@ internal static class ConstrainedExtrusionFactory {
         if (mode == ExtrusionHeightControlMode.EndOffset) {
             var signedFallback = Math.Abs(endOffset - startOffset) > PlaneTolerance
                 ? endOffset - startOffset
-                : (Math.Abs(endOffset) > PlaneTolerance ? endOffset : DefaultSeedDepth);
-            if (TryResolveHeightMagnitude(doc, driver, parameterName, out var magnitude) && Math.Abs(magnitude) > PlaneTolerance)
+                : Math.Abs(endOffset) > PlaneTolerance
+                    ? endOffset
+                    : DefaultSeedDepth;
+            if (TryResolveHeightMagnitude(doc, driver, parameterName, out var magnitude) &&
+                Math.Abs(magnitude) > PlaneTolerance)
                 signedFallback = Math.Sign(signedFallback) * Math.Abs(magnitude);
 
             return ResolvedExtrusionHeightPlan.FromEndOffset(
@@ -745,15 +763,16 @@ internal static class ConstrainedExtrusionFactory {
         if (!hasHeightPair)
             return ResolvedExtrusionHeightPlan.DirectOffsets(startOffset, endOffset);
 
-        var bottomHeightPlane = GetReferencePlane(doc, bottomPlaneName!);
-        var topHeightPlane = GetReferencePlane(doc, topPlaneName!);
+        var bottomHeightPlane = GetReferencePlane(doc, bottomPlaneName);
+        var topHeightPlane = GetReferencePlane(doc, topPlaneName);
         if (bottomHeightPlane == null || topHeightPlane == null) {
             logs.Add(new LogEntry(key).Error("Height constraint planes were configured but could not be found."));
             return ResolvedExtrusionHeightPlan.Invalid;
         }
 
         var sketchNormal = sketchGeomPlane.Normal.Normalize();
-        var dBottom = SignedDistanceToPlaneAlongNormal(bottomHeightPlane.BubbleEnd, sketchGeomPlane.Origin, sketchNormal);
+        var dBottom =
+            SignedDistanceToPlaneAlongNormal(bottomHeightPlane.BubbleEnd, sketchGeomPlane.Origin, sketchNormal);
         var dTop = SignedDistanceToPlaneAlongNormal(topHeightPlane.BubbleEnd, sketchGeomPlane.Origin, sketchNormal);
         return ResolvedExtrusionHeightPlan.ReferencePlane(
             Math.Min(dBottom, dTop),

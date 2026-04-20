@@ -13,6 +13,10 @@ public sealed class GlobalStorage(string basePath) {
 
     public GlobalLogStorage Log() => new(this.DirectoryPath);
 
+    public ManagedLogFile HostLog() => this.Log().HostLog();
+
+    public ManagedLogFile RevitAppLog() => this.Log().RevitAppLog();
+
     public JsonReadWriter<T> Settings<T>(string filename = "settings") where T : class, new() =>
         new LocalDiskJsonFile<T>(Path.Combine(this.DirectoryPath, StorageFileUtils.EnsureExtension(filename, ".json")));
 

@@ -3,7 +3,6 @@ using Newtonsoft.Json.Linq;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Json;
 using Pe.Shared.StorageRuntime.Modules;
-using Pe.Shared.StorageRuntime.PolyFill;
 
 namespace Pe.Shared.StorageRuntime.Documents;
 
@@ -14,10 +13,7 @@ public sealed class LocalDiskSettingsStorageBackend(
     string? basePath = null,
     SettingsRuntimeMode runtimeMode = SettingsRuntimeMode.HostOnly,
     IReadOnlyDictionary<string, SettingsStorageModuleDefinition>? moduleDefinitionsByModuleKey = null
-    )
-{
-    private readonly SettingsRuntimeMode _runtimeMode = runtimeMode;
-
+) {
     private readonly string _basePath = string.IsNullOrWhiteSpace(basePath)
         ? SettingsStorageLocations.GetDefaultBasePath()
         : Path.GetFullPath(basePath);
@@ -26,13 +22,14 @@ public sealed class LocalDiskSettingsStorageBackend(
         moduleDefinitionsByModuleKey ??
         new Dictionary<string, SettingsStorageModuleDefinition>(StringComparer.OrdinalIgnoreCase);
 
+    private readonly SettingsRuntimeMode _runtimeMode = runtimeMode;
+
     public Task<SettingsDiscoveryResult> DiscoverAsync(
         string moduleKey,
         string rootKey,
         SettingsDiscoveryOptions options,
         CancellationToken cancellationToken = default
-    )
-    {
+    ) {
         cancellationToken.ThrowIfCancellationRequested();
 
         options ??= new SettingsDiscoveryOptions();
@@ -51,8 +48,7 @@ public sealed class LocalDiskSettingsStorageBackend(
             ? rootKey
             : normalizedRootRelativePath.Split('/').Last();
 
-        if (!Directory.Exists(discoveryRootPath))
-        {
+        if (!Directory.Exists(discoveryRootPath)) {
             return Task.FromResult(new SettingsDiscoveryResult(
                 [],
                 new SettingsDirectoryNode(rootName, normalizedRootRelativePath, [], [])
@@ -76,8 +72,7 @@ public sealed class LocalDiskSettingsStorageBackend(
     public Task<SettingsDocumentSnapshot> OpenAsync(
         OpenSettingsDocumentRequest request,
         CancellationToken cancellationToken = default
-    )
-    {
+    ) {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(this.ReadSnapshot(request, request.IncludeComposedContent));
     }
@@ -85,8 +80,7 @@ public sealed class LocalDiskSettingsStorageBackend(
     public Task<SaveSettingsDocumentResult> SaveAsync(
         SaveSettingsDocumentRequest request,
         CancellationToken cancellationToken = default
-    )
-    {
+    ) {
         cancellationToken.ThrowIfCancellationRequested();
 
         var moduleDefinition = this.ResolveRequiredModuleDefinition(
@@ -109,8 +103,7 @@ public sealed class LocalDiskSettingsStorageBackend(
                                    StringComparison.Ordinal
                                );
 
-        if (conflictDetected || !validation.IsValid)
-        {
+        if (conflictDetected || !validation.IsValid) {
             return Task.FromResult(new SaveSettingsDocumentResult(
                 this.BuildMetadata(request.DocumentId, documentPath),
                 false,
@@ -140,8 +133,7 @@ public sealed class LocalDiskSettingsStorageBackend(
     public Task<SettingsValidationResult> ValidateAsync(
         ValidateSettingsDocumentRequest request,
         CancellationToken cancellationToken = default
-    )
-    {
+    ) {
         cancellationToken.ThrowIfCancellationRequested();
         var moduleDefinition = this.ResolveRequiredModuleDefinition(
             request.DocumentId.ModuleKey,
@@ -158,8 +150,7 @@ public sealed class LocalDiskSettingsStorageBackend(
     private SettingsDocumentSnapshot ReadSnapshot(
         OpenSettingsDocumentRequest request,
         bool includeComposedOutput
-    )
-    {
+    ) {
         var moduleDefinition = this.ResolveRequiredModuleDefinition(
             request.DocumentId.ModuleKey,
             request.DocumentId.RootKey
@@ -191,15 +182,11 @@ public sealed class LocalDiskSettingsStorageBackend(
         string rawContent,
         SettingsStorageModuleDefinition moduleDefinition,
         bool includeComposedOutput
-    )
-    {
-        try
-        {
+    ) {
+        try {
             var rawObject = JObject.Parse(rawContent);
             return this.MaterializeDocument(documentId, rawContent, rawObject, moduleDefinition, includeComposedOutput);
-        }
-        catch (JsonReaderException ex)
-        {
+        } catch (JsonReaderException ex) {
             return new MaterializedDocument(
                 null,
                 [],
@@ -219,17 +206,14 @@ public sealed class LocalDiskSettingsStorageBackend(
         JObject rawObject,
         SettingsStorageModuleDefinition moduleDefinition,
         bool includeComposedOutput
-    )
-    {
+    ) {
         var dependencies = new List<SettingsDocumentDependency>();
         string? composedContent = null;
         JObject? composedObject = null;
         List<SettingsValidationIssue> issues = [];
 
-        try
-        {
-            if (ShouldRunCompositionPreflight(rawObject, moduleDefinition.StorageOptions))
-            {
+        try {
+            if (ShouldRunCompositionPreflight(rawObject, moduleDefinition.StorageOptions)) {
                 var pipeline = this.CreateCompositionPipeline(documentId, moduleDefinition);
                 composedObject = pipeline.ComposeForRead(
                     (JObject)rawObject.DeepClone(),
@@ -238,13 +222,12 @@ public sealed class LocalDiskSettingsStorageBackend(
                     artifact => dependencies.Add(this.CreateDependency(documentId, artifact,
                         SettingsDocumentDependencyKind.Preset))
                 );
-                if (includeComposedOutput)
+                if (includeComposedOutput) {
                     composedContent =
                         JsonFormatting.NormalizeTrailingNewline(composedObject.ToString(Formatting.Indented));
+                }
             }
-        }
-        catch (JsonCompositionException ex)
-        {
+        } catch (JsonCompositionException ex) {
             issues.Add(new SettingsValidationIssue(
                 "$",
                 "CompositionError",
@@ -252,9 +235,7 @@ public sealed class LocalDiskSettingsStorageBackend(
                 ex.Message,
                 "Fix the directive path or allowed root configuration."
             ));
-        }
-        catch (Exception ex)
-        {
+        } catch (Exception ex) {
             issues.Add(new SettingsValidationIssue(
                 "$",
                 "CompositionFailure",
@@ -264,8 +245,7 @@ public sealed class LocalDiskSettingsStorageBackend(
             ));
         }
 
-        if (issues.Count == 0 && moduleDefinition.Validator != null)
-        {
+        if (issues.Count == 0 && moduleDefinition.Validator != null) {
             var validatorResult = moduleDefinition.Validator.Validate(
                 documentId,
                 rawContent,
@@ -290,10 +270,8 @@ public sealed class LocalDiskSettingsStorageBackend(
         string rawContent,
         SettingsStorageModuleDefinition moduleDefinition,
         bool includeComposedContent
-    )
-    {
-        try
-        {
+    ) {
+        try {
             var rawObject = JObject.Parse(rawContent);
             return this.MaterializeDocument(
                 documentId,
@@ -302,9 +280,7 @@ public sealed class LocalDiskSettingsStorageBackend(
                 moduleDefinition,
                 includeComposedContent
             ).Validation;
-        }
-        catch (JsonReaderException ex)
-        {
+        } catch (JsonReaderException ex) {
             return SettingsValidationResults.Error(
                 "$",
                 "JsonParseError",
@@ -323,18 +299,15 @@ public sealed class LocalDiskSettingsStorageBackend(
         moduleDefinition.StorageOptions.PresetRoots
     );
 
-    private SettingsStorageModuleDefinition ResolveRequiredModuleDefinition(string moduleKey, string rootKey)
-    {
-        if (!this._moduleDefinitionsByModuleKey.TryGetValue(moduleKey, out var definition))
-        {
+    private SettingsStorageModuleDefinition ResolveRequiredModuleDefinition(string moduleKey, string rootKey) {
+        if (!this._moduleDefinitionsByModuleKey.TryGetValue(moduleKey, out var definition)) {
             throw new InvalidOperationException(
                 $"Storage module '{moduleKey}' is not configured."
             );
         }
 
         if (definition.AllowedRootKeys.Count != 0 &&
-            !definition.AllowedRootKeys.Contains(rootKey, StringComparer.OrdinalIgnoreCase))
-        {
+            !definition.AllowedRootKeys.Contains(rootKey, StringComparer.OrdinalIgnoreCase)) {
             throw new InvalidOperationException(
                 $"Storage root '{rootKey}' is not configured for module '{moduleKey}'."
             );
@@ -351,24 +324,19 @@ public sealed class LocalDiskSettingsStorageBackend(
         moduleOptions.PresetRoots.Count != 0 ||
         ContainsDirectiveMetadata(token);
 
-    private static bool ContainsDirectiveMetadata(JToken token)
-    {
-        if (token is JObject obj)
-        {
+    private static bool ContainsDirectiveMetadata(JToken token) {
+        if (token is JObject obj) {
             if (obj.Property("$include") != null || obj.Property("$preset") != null)
                 return true;
 
-            foreach (var property in obj.Properties())
-            {
+            foreach (var property in obj.Properties()) {
                 if (ContainsDirectiveMetadata(property.Value))
                     return true;
             }
         }
 
-        if (token is JArray array)
-        {
-            foreach (var item in array)
-            {
+        if (token is JArray array) {
+            foreach (var item in array) {
                 if (item != null && ContainsDirectiveMetadata(item))
                     return true;
             }
@@ -393,11 +361,9 @@ public sealed class LocalDiskSettingsStorageBackend(
     private SettingsDocumentId CreateDependencyId(
         SettingsDocumentId sourceDocumentId,
         SettingsCompositionArtifact artifact
-    )
-    {
+    ) {
         var normalizedDependencyPath = Path.GetFullPath(artifact.SourceFilePath);
-        if (artifact.ResolvedDirective.Scope == SettingsPathing.DirectiveScope.Global)
-        {
+        if (artifact.ResolvedDirective.Scope == SettingsPathing.DirectiveScope.Global) {
             var globalFragmentsDirectory = SettingsPathing.TryResolveGlobalFragmentsDirectory(
                 this.ResolveRootDirectory(sourceDocumentId.ModuleKey, sourceDocumentId.RootKey)
             ) ?? artifact.ResolvedDirective.RootDirectory;
@@ -419,8 +385,7 @@ public sealed class LocalDiskSettingsStorageBackend(
     private SettingsDocumentMetadata BuildMetadata(
         SettingsDocumentId documentId,
         string documentPath
-    )
-    {
+    ) {
         var kind = File.Exists(documentPath)
             ? SettingsDiscoveryBuilder.CreateSettingsFileEntry(
                 documentPath,
@@ -442,8 +407,7 @@ public sealed class LocalDiskSettingsStorageBackend(
     private IReadOnlyDictionary<string, string> BuildCapabilityHints(
         bool includeComposedContent,
         SettingsStorageModuleDefinition moduleDefinition
-    ) => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-    {
+    ) => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
         ["backend"] = "local-disk",
         ["availableCapabilities"] = JsonConvert.SerializeObject(this._runtimeMode.ToMetadata()),
         ["schemaValidation"] = moduleDefinition.Validator == null ? "not-configured" : "configured",
@@ -451,8 +415,7 @@ public sealed class LocalDiskSettingsStorageBackend(
         ["dependencyScopes"] = "local,global"
     };
 
-    private string ResolveDocumentPath(SettingsDocumentId documentId)
-    {
+    private string ResolveDocumentPath(SettingsDocumentId documentId) {
         var rootDirectory = this.ResolveRootDirectory(documentId.ModuleKey, documentId.RootKey);
         return SettingsPathing.ResolveSafeRelativeJsonPath(
             rootDirectory,
@@ -464,8 +427,7 @@ public sealed class LocalDiskSettingsStorageBackend(
     private string ResolveRootDirectory(string moduleKey, string rootKey) =>
         SettingsStorageLocations.ResolveSettingsRootDirectory(this._basePath, moduleKey, rootKey);
 
-    private static SettingsVersionToken? CreateVersionToken(string documentPath)
-    {
+    private static SettingsVersionToken? CreateVersionToken(string documentPath) {
         if (!File.Exists(documentPath))
             return null;
 
@@ -473,8 +435,7 @@ public sealed class LocalDiskSettingsStorageBackend(
         return new SettingsVersionToken($"{fileInfo.LastWriteTimeUtc.Ticks:x}-{fileInfo.Length:x}");
     }
 
-    private static SettingsValidationResult CreateValidationResult(IReadOnlyList<SettingsValidationIssue> issues)
-    {
+    private static SettingsValidationResult CreateValidationResult(IReadOnlyList<SettingsValidationIssue> issues) {
         var hasErrors = issues.Any(issue => string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase));
         return new SettingsValidationResult(!hasErrors, issues);
     }

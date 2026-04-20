@@ -66,7 +66,8 @@ internal static class SchemaUiDocumentSynchronizer {
             .Distinct(StringComparer.Ordinal)
             .ToList() ?? [];
         var fixedColumnSet = new HashSet<string>(fixedColumns, StringComparer.Ordinal);
-        var preferredDynamicColumns = uiMetadata.Behavior?.DynamicColumnOrder?.Values?.Where(column => !string.IsNullOrWhiteSpace(column))
+        var preferredDynamicColumns = uiMetadata.Behavior?.DynamicColumnOrder?.Values
+            ?.Where(column => !string.IsNullOrWhiteSpace(column))
             .Distinct(StringComparer.Ordinal)
             .ToList() ?? [];
         var observedDynamicColumns = CollectObservedDynamicColumns(array, fixedColumnSet);
@@ -202,6 +203,7 @@ internal static class SchemaUiDocumentSynchronizer {
 
         return existing switch {
             JObject obj => obj,
+            null => null,
             _ => JToken.FromObject(existing).Type == JTokenType.Object
                 ? (JObject)JToken.FromObject(existing)
                 : null
@@ -216,5 +218,4 @@ internal static class SchemaUiDocumentSynchronizer {
         parent[propertyName] = created;
         return created;
     }
-
 }

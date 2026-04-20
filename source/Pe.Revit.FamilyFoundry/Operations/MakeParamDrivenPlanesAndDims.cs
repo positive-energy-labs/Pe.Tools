@@ -1,6 +1,5 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.Helpers;
-using Pe.Revit.FamilyFoundry.Plans;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
@@ -106,13 +105,15 @@ public class MakeParamDrivenPlanes(ParamDrivenPlanesAndDimsPlan settings, Shared
             break;
         }
 
-        foreach (var spec in pendingPairs)
+        foreach (var spec in pendingPairs) {
             shared.Logs.Add(new LogEntry($"Symmetric planes: {spec.PlaneNameBase} @ {spec.CenterPlaneName}")
                 .Error("Center anchor was not available after heuristic dependency ordering."));
+        }
 
-        foreach (var spec in pendingOffsets)
+        foreach (var spec in pendingOffsets) {
             shared.Logs.Add(new LogEntry($"Offset plane: {spec.PlaneName}")
                 .Error($"Anchor '{spec.AnchorPlaneName}' was not available after heuristic dependency ordering."));
+        }
 
         return new OperationLog(this.Name, shared.Logs);
     }

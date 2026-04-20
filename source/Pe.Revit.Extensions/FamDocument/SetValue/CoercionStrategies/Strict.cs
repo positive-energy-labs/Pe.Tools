@@ -40,8 +40,11 @@ public class Strict : ICoercionStrategy {
         case ElementId elementIdValue:
             fm.Set(target, elementIdValue);
             return target;
+        case null:
+            return new ArgumentException("Invalid null value for strict coercion");
         default:
-            return new ArgumentException($"Invalid type of value to set ({context.SourceValue.GetType().Name})");
+            return new ArgumentException(
+                $"Invalid type of value to set ({context.SourceValue?.GetType().Name ?? "null"})");
         }
     }
 }

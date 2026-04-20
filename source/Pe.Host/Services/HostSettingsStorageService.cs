@@ -1,8 +1,7 @@
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Capabilities;
-using Pe.Shared.StorageRuntime.Documents;
-using Pe.Shared.StorageRuntime.Modules;
 using Pe.Shared.StorageRuntime.Core.Json;
+using Pe.Shared.StorageRuntime.Modules;
 using HostOpenRequest = Pe.Shared.HostContracts.SettingsStorage.OpenSettingsDocumentRequest;
 using HostSaveRequest = Pe.Shared.HostContracts.SettingsStorage.SaveSettingsDocumentRequest;
 using HostSaveResult = Pe.Shared.HostContracts.SettingsStorage.SaveSettingsDocumentResult;
@@ -27,7 +26,7 @@ public sealed class HostSettingsStorageService {
     private readonly SettingsDocumentSchemaSyncService _schemaSyncService;
 
     public HostSettingsStorageService(IHostSettingsModuleCatalog moduleCatalog)
-        : this(moduleCatalog, null, SettingsRuntimeMode.HostOnly) {
+        : this(moduleCatalog, null) {
     }
 
     public HostSettingsStorageService(

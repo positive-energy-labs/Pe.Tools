@@ -38,7 +38,7 @@ namespace Pe.Scripting.Cli {
                 var createResult = CreateWorkspaceScriptFile(
                     CliOptions.GetWorkspaceRoot(options.WorkspaceKey),
                     options.WorkspaceRelativePath ?? throw new InvalidOperationException("Workspace path is required."),
-                    overwriteExisting: false
+                    false
                 );
                 if (!createResult.Success) {
                     Console.Error.WriteLine(createResult.Message);
@@ -72,8 +72,11 @@ namespace Pe.Scripting.Cli {
                 Console.Out.Write(result.Output);
 
             foreach (var diagnostic in result.Diagnostics) {
-                var sourceSuffix = string.IsNullOrWhiteSpace(diagnostic.Source) ? string.Empty : $" ({diagnostic.Source})";
-                Console.Error.WriteLine($"[{diagnostic.Severity}] {diagnostic.Stage}{sourceSuffix}: {diagnostic.Message}");
+                var sourceSuffix = string.IsNullOrWhiteSpace(diagnostic.Source)
+                    ? string.Empty
+                    : $" ({diagnostic.Source})";
+                Console.Error.WriteLine(
+                    $"[{diagnostic.Severity}] {diagnostic.Stage}{sourceSuffix}: {diagnostic.Message}");
             }
 
             if (result.Status != ScriptExecutionStatus.Succeeded) {
@@ -116,9 +119,7 @@ namespace Pe.Scripting.Cli {
             ExecuteRevitScriptRequest request,
             CancellationToken cancellationToken
         ) {
-            using var httpClient = new HttpClient {
-                Timeout = Timeout.InfiniteTimeSpan
-            };
+            using var httpClient = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
             using var response = await httpClient.PostAsJsonAsync(
                 GetHostBaseUrl().TrimEnd('/') + HttpRoutes.ScriptingExecute,
                 request,
@@ -181,7 +182,8 @@ namespace Pe.Scripting.Cli {
                 var normalizedRelativePath = CliOptions.NormalizeCreatePath(relativePath);
                 var fullPath = CliOptions.ResolveWorkspaceFilePath(workspaceRoot, normalizedRelativePath);
                 if (Directory.Exists(fullPath))
-                    return ScriptFileCreationResult.Failure($"Workspace path must point to a .cs file, not a directory: {normalizedRelativePath}");
+                    return ScriptFileCreationResult.Failure(
+                        $"Workspace path must point to a .cs file, not a directory: {normalizedRelativePath}");
 
                 if (File.Exists(fullPath) && !overwriteExisting)
                     return ScriptFileCreationResult.Failure($"Workspace script already exists: {fullPath}");
@@ -277,9 +279,9 @@ namespace Pe.Scripting.Cli {
                                         """;
 
         public static CliParseResult Parse(IReadOnlyList<string> args) {
-            string workspaceKey = "default";
+            var workspaceKey = "default";
             string? workspaceRelativePath = null;
-            bool useStdin = false;
+            var useStdin = false;
             string? sourceName = null;
             var commandKind = CliCommandKind.Execute;
             string? positionalPath = null;
@@ -303,15 +305,16 @@ namespace Pe.Scripting.Cli {
                     sourceName = RequireValue(args, ref i, arg);
                     break;
                 default:
-                    if (string.Equals(arg, "new", StringComparison.OrdinalIgnoreCase) && commandKind == CliCommandKind.Execute) {
+                    if (string.Equals(arg, "new", StringComparison.OrdinalIgnoreCase) &&
+                        commandKind == CliCommandKind.Execute) {
                         commandKind = CliCommandKind.CreateNewFile;
                         break;
                     }
 
                     if (arg.StartsWith("--", StringComparison.Ordinal))
-                        return CliParseResult.Failure($"Unknown argument '{arg}'.", showUsage: true);
+                        return CliParseResult.Failure($"Unknown argument '{arg}'.", true);
                     if (positionalPath != null)
-                        return CliParseResult.Failure("Only one positional workspace path may be provided.", showUsage: true);
+                        return CliParseResult.Failure("Only one positional workspace path may be provided.", true);
 
                     positionalPath = arg;
                     break;
@@ -320,16 +323,17 @@ namespace Pe.Scripting.Cli {
 
             if (commandKind == CliCommandKind.CreateNewFile) {
                 if (useStdin)
-                    return CliParseResult.Failure("Do not combine 'new' with --stdin.", showUsage: true);
+                    return CliParseResult.Failure("Do not combine 'new' with --stdin.", true);
 
                 workspaceRelativePath ??= positionalPath;
                 if (string.IsNullOrWhiteSpace(workspaceRelativePath))
-                    return CliParseResult.Failure("A script name or workspace-relative path is required for 'new'.", showUsage: true);
+                    return CliParseResult.Failure("A script name or workspace-relative path is required for 'new'.",
+                        true);
 
                 workspaceRelativePath = NormalizeCreatePath(workspaceRelativePath);
                 var validationError = ValidateCreatableWorkspacePath(workspaceKey, workspaceRelativePath);
                 if (validationError != null)
-                    return CliParseResult.Failure(validationError, showUsage: false);
+                    return CliParseResult.Failure(validationError, false);
 
                 return CliParseResult.SuccessResult(
                     new CliOptions(
@@ -344,21 +348,22 @@ namespace Pe.Scripting.Cli {
 
             if (useStdin) {
                 if (!string.IsNullOrWhiteSpace(workspaceRelativePath) || !string.IsNullOrWhiteSpace(positionalPath))
-                    return CliParseResult.Failure("Do not combine --stdin with a workspace path.", showUsage: true);
+                    return CliParseResult.Failure("Do not combine --stdin with a workspace path.", true);
             } else {
                 workspaceRelativePath ??= positionalPath;
                 if (string.IsNullOrWhiteSpace(workspaceRelativePath))
-                    return CliParseResult.Failure("A workspace-relative .cs path or --stdin is required.", showUsage: true);
+                    return CliParseResult.Failure("A workspace-relative .cs path or --stdin is required.", true);
 
                 if (Path.IsPathRooted(workspaceRelativePath))
-                    return CliParseResult.Failure("Only workspace-relative script paths are supported in this slice.", showUsage: true);
+                    return CliParseResult.Failure("Only workspace-relative script paths are supported in this slice.",
+                        true);
 
                 if (!workspaceRelativePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
-                    return CliParseResult.Failure("Workspace path must point to a .cs file.", showUsage: true);
+                    return CliParseResult.Failure("Workspace path must point to a .cs file.", true);
 
                 var validationError = ValidateWorkspacePath(workspaceKey, workspaceRelativePath);
                 if (validationError != null)
-                    return CliParseResult.Failure(validationError, showUsage: false);
+                    return CliParseResult.Failure(validationError, false);
             }
 
             return CliParseResult.SuccessResult(
@@ -414,7 +419,8 @@ namespace Pe.Scripting.Cli {
             if (!normalizedPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
                 normalizedPath += ".cs";
 
-            if (!normalizedPath.Contains(Path.DirectorySeparatorChar) && !normalizedPath.Contains(Path.AltDirectorySeparatorChar))
+            if (!normalizedPath.Contains(Path.DirectorySeparatorChar) &&
+                !normalizedPath.Contains(Path.AltDirectorySeparatorChar))
                 normalizedPath = Path.Combine("src", normalizedPath);
 
             return normalizedPath;
@@ -428,7 +434,8 @@ namespace Pe.Scripting.Cli {
             var fullPath = Path.GetFullPath(Path.Combine(resolvedWorkspaceRoot, relativePath));
             var workspaceRootWithSeparator = EnsureTrailingSeparator(resolvedWorkspaceRoot);
             if (!fullPath.StartsWith(workspaceRootWithSeparator, StringComparison.OrdinalIgnoreCase))
-                throw new ArgumentException($"Workspace path escapes the workspace root: {relativePath}", nameof(relativePath));
+                throw new ArgumentException($"Workspace path escapes the workspace root: {relativePath}",
+                    nameof(relativePath));
             if (!fullPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException("Workspace path must point to a .cs file.", nameof(relativePath));
 
@@ -448,7 +455,10 @@ namespace Pe.Scripting.Cli {
         bool ShowUsage
     ) {
         public static CliParseResult SuccessResult(CliOptions options) => new(true, options, null, false);
-        public static CliParseResult Failure(string errorMessage, bool showUsage) => new(false, null, errorMessage, showUsage);
+
+        public static CliParseResult Failure(string errorMessage, bool showUsage) =>
+            new(false, null, errorMessage, showUsage);
+
         public static CliParseResult Usage() => new(false, null, null, true);
     }
 

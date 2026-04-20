@@ -57,7 +57,7 @@ public class CmdScriptingWorkspace : IExternalCommand {
         throw new InvalidOperationException(connectResult.RuntimeActionResult.Message);
     }
 
-    private static ScriptWorkspaceBootstrapData BootstrapWorkspace(UIApplication uiApplication) { 
+    private static ScriptWorkspaceBootstrapData BootstrapWorkspace(UIApplication uiApplication) {
         var revitVersion = uiApplication.Application.VersionNumber ?? "unknown";
         var targetFramework = ResolveTargetFramework(revitVersion);
         var runtimeAssemblyPath = typeof(PeScriptContainer).Assembly.Location;
@@ -65,7 +65,7 @@ public class CmdScriptingWorkspace : IExternalCommand {
 
         return bootstrapService.Bootstrap(
             DefaultWorkspaceKey,
-            createSampleScript: true,
+            true,
             revitVersion,
             targetFramework,
             runtimeAssemblyPath

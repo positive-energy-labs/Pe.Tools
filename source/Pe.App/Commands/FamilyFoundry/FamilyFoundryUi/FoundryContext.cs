@@ -11,14 +11,14 @@ namespace Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 /// </summary>
 /// <typeparam name="TProfile">The profile type (must inherit from BaseProfile)</typeparam>
 public class FoundryContext<TProfile> where TProfile : BaseProfile, new() {
-    public Document Doc { get; init; }
-    public UIDocument UiDoc { get; init; }
-    public ModuleStorage<TProfile> Storage { get; init; }
-    public ModuleSettingsStorage<TProfile> Settings { get; init; }
-    public ModuleDocumentStorage Documents { get; init; }
-    public OnProcessingFinishSettings OnFinishSettings { get; init; }
+    public required Document Doc { get; init; }
+    public required UIDocument UiDoc { get; init; }
+    public required ModuleStorage<TProfile> Storage { get; init; }
+    public required ModuleSettingsStorage<TProfile> Settings { get; init; }
+    public required ModuleDocumentStorage Documents { get; init; }
+    public required OnProcessingFinishSettings OnFinishSettings { get; init; }
 
     // UI state: what's currently selected and displayed
-    public ProfileListItem SelectedProfile { get; set; }
-    public PreviewData PreviewData { get; set; }
+    public ProfileListItem? SelectedProfile { get; set; }
+    public PreviewData? PreviewData { get; set; }
 }

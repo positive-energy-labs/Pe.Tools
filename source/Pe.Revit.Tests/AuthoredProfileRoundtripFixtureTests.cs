@@ -1,9 +1,13 @@
-using Pe.Revit.FamilyFoundry;
-
 namespace Pe.Revit.Tests;
 
 [TestFixture]
 public sealed class AuthoredProfileRoundtripFixtureTests {
+    [OneTimeSetUp]
+    public void SetUp(UIApplication uiApplication) =>
+        this._dbApplication = uiApplication?.Application
+                              ?? throw new InvalidOperationException(
+                                  "ricaun.RevitTest did not provide a UIApplication.");
+
     private const BuiltInCategory TestFamilyCategory = BuiltInCategory.OST_GenericModel;
     private const string WineGuardianIndoorFamilyName = "FF-Test-WineGuardianDS050Indoor";
     private const string WineGuardianOutdoorFamilyName = "FF-Test-WineGuardianDS050Outdoor";
@@ -13,25 +17,18 @@ public sealed class AuthoredProfileRoundtripFixtureTests {
     private const string GrinderPumpBasinProfileFixture = "grinder-pump-basin.json";
     private const string PeGrdSupplyFamilyFixture = "pe-grd-supply.rfa";
 
-    private Autodesk.Revit.ApplicationServices.Application _dbApplication = null!;
-
-    [OneTimeSetUp]
-    public void SetUp(UIApplication uiApplication) {
-        _dbApplication = uiApplication?.Application
-            ?? throw new InvalidOperationException("ricaun.RevitTest did not provide a UIApplication.");
-    }
+    private Application _dbApplication = null!;
 
     [Test]
     public void WineGuardian_DS050_Indoor_profile_aligns_with_runtime_across_type_matrix() {
         RoundtripArtifact? artifact = null;
 
         try {
-            artifact = FamilyFoundryRoundtripHarness.RunProfileFixtureRoundtrip(
-                _dbApplication,
+            artifact = FamilyFoundryRoundtripHarness.RunProfileFixtureRoundtrip(this._dbApplication,
                 WineGuardianIndoorProfileFixture,
                 TestFamilyCategory,
                 WineGuardianIndoorFamilyName,
-                nameof(WineGuardian_DS050_Indoor_profile_aligns_with_runtime_across_type_matrix));
+                nameof(this.WineGuardian_DS050_Indoor_profile_aligns_with_runtime_across_type_matrix));
 
             FamilyFoundryRoundtripAssertions.AssertAuthoredGraphCounts(
                 artifact.Authored,
@@ -70,7 +67,8 @@ public sealed class AuthoredProfileRoundtripFixtureTests {
             FamilyFoundryRoundtripAssertions.AssertOffsetPlanesTrackDriversAcrossStates(artifact.Compiled, states);
             FamilyFoundryRoundtripAssertions.AssertSymmetricPairsTrackDriversAcrossStates(artifact.Compiled, states);
             FamilyFoundryRoundtripAssertions.AssertPrismsTrackConstrainingPlanesAcrossStates(artifact.Compiled, states);
-            FamilyFoundryRoundtripAssertions.AssertConnectorsTrackFacesAndDriversAcrossStates(artifact.Compiled, states);
+            FamilyFoundryRoundtripAssertions
+                .AssertConnectorsTrackFacesAndDriversAcrossStates(artifact.Compiled, states);
         } finally {
             artifact?.CloseDocuments();
         }
@@ -81,12 +79,11 @@ public sealed class AuthoredProfileRoundtripFixtureTests {
         RoundtripArtifact? artifact = null;
 
         try {
-            artifact = FamilyFoundryRoundtripHarness.RunProfileFixtureRoundtrip(
-                _dbApplication,
+            artifact = FamilyFoundryRoundtripHarness.RunProfileFixtureRoundtrip(this._dbApplication,
                 WineGuardianOutdoorProfileFixture,
                 TestFamilyCategory,
                 WineGuardianOutdoorFamilyName,
-                nameof(WineGuardian_DS050_Outdoor_profile_aligns_with_runtime_across_type_matrix));
+                nameof(this.WineGuardian_DS050_Outdoor_profile_aligns_with_runtime_across_type_matrix));
 
             FamilyFoundryRoundtripAssertions.AssertAuthoredGraphCounts(
                 artifact.Authored,
@@ -122,7 +119,8 @@ public sealed class AuthoredProfileRoundtripFixtureTests {
             FamilyFoundryRoundtripAssertions.AssertOffsetPlanesTrackDriversAcrossStates(artifact.Compiled, states);
             FamilyFoundryRoundtripAssertions.AssertSymmetricPairsTrackDriversAcrossStates(artifact.Compiled, states);
             FamilyFoundryRoundtripAssertions.AssertPrismsTrackConstrainingPlanesAcrossStates(artifact.Compiled, states);
-            FamilyFoundryRoundtripAssertions.AssertConnectorsTrackFacesAndDriversAcrossStates(artifact.Compiled, states);
+            FamilyFoundryRoundtripAssertions
+                .AssertConnectorsTrackFacesAndDriversAcrossStates(artifact.Compiled, states);
         } finally {
             artifact?.CloseDocuments();
         }
@@ -133,12 +131,11 @@ public sealed class AuthoredProfileRoundtripFixtureTests {
         RoundtripArtifact? artifact = null;
 
         try {
-            artifact = FamilyFoundryRoundtripHarness.RunProfileFixtureRoundtrip(
-                _dbApplication,
+            artifact = FamilyFoundryRoundtripHarness.RunProfileFixtureRoundtrip(this._dbApplication,
                 GrinderPumpBasinProfileFixture,
                 TestFamilyCategory,
                 GrinderPumpBasinFamilyName,
-                nameof(GrinderPumpBasin_profile_aligns_with_runtime_across_type_matrix));
+                nameof(this.GrinderPumpBasin_profile_aligns_with_runtime_across_type_matrix));
 
             Console.WriteLine($"[PE_FF_TEST_SAVED_FAMILY] {artifact.SavedFamilyPath}");
 
@@ -175,8 +172,10 @@ public sealed class AuthoredProfileRoundtripFixtureTests {
 
             FamilyFoundryRoundtripAssertions.AssertDimensionLabelsMatchCompiledPlan(artifact.Compiled, states);
             FamilyFoundryRoundtripAssertions.AssertOffsetPlanesTrackDriversAcrossStates(artifact.Compiled, states);
-            FamilyFoundryRoundtripAssertions.AssertCylindersTrackConstrainingPlanesAcrossStates(artifact.Compiled, states);
-            FamilyFoundryRoundtripAssertions.AssertConnectorsTrackFacesAndDriversAcrossStates(artifact.Compiled, states);
+            FamilyFoundryRoundtripAssertions.AssertCylindersTrackConstrainingPlanesAcrossStates(artifact.Compiled,
+                states);
+            FamilyFoundryRoundtripAssertions
+                .AssertConnectorsTrackFacesAndDriversAcrossStates(artifact.Compiled, states);
         } finally {
             artifact?.CloseDocuments();
         }
@@ -187,14 +186,14 @@ public sealed class AuthoredProfileRoundtripFixtureTests {
         RoundtripArtifact? artifact = null;
 
         try {
-            artifact = FamilyFoundryRoundtripHarness.RunSnapshotApplyRoundtrip(
-                _dbApplication,
+            artifact = FamilyFoundryRoundtripHarness.RunSnapshotApplyRoundtrip(this._dbApplication,
                 PeGrdSupplyFamilyFixture,
                 "FF-Test-PEGRDSnapshotAuthored",
-                nameof(PeGrd_Supply_snapshot_apply_aligns_with_runtime_across_existing_type_matrix));
+                nameof(this.PeGrd_Supply_snapshot_apply_aligns_with_runtime_across_existing_type_matrix));
 
             var sourceDocument = artifact.SourceDocument
-                ?? throw new InvalidOperationException("Snapshot apply roundtrip did not return a source document.");
+                                 ?? throw new InvalidOperationException(
+                                     "Snapshot apply roundtrip did not return a source document.");
             var sourceExpectation = AuthoredGraphExpectation.From(artifact.Authored);
 
             FamilyFoundryRoundtripAssertions.AssertCompiledPlanMatchesAuthored(artifact);
@@ -216,13 +215,20 @@ public sealed class AuthoredProfileRoundtripFixtureTests {
                 states,
                 FamilyFoundryRuntimeProbe.Collect);
 
-            FamilyFoundryRoundtripAssertions.AssertDimensionLabelsMatchCompiledPlan(artifact.Compiled, savedStateProbes);
-            FamilyFoundryRoundtripAssertions.AssertOffsetPlanesTrackDriversAcrossStates(artifact.Compiled, savedStateProbes);
-            FamilyFoundryRoundtripAssertions.AssertSymmetricPairsTrackDriversAcrossStates(artifact.Compiled, savedStateProbes);
-            FamilyFoundryRoundtripAssertions.AssertPrismsTrackConstrainingPlanesAcrossStates(artifact.Compiled, savedStateProbes);
-            FamilyFoundryRoundtripAssertions.AssertCylindersTrackConstrainingPlanesAcrossStates(artifact.Compiled, savedStateProbes);
-            FamilyFoundryRoundtripAssertions.AssertVerticalSpansMatchAcrossExistingTypes(sourceDocument, artifact.SavedDocument);
-            FamilyFoundryRoundtripAssertions.AssertRectangularConnectorOrientationMatchesSourceAcrossExistingTypes(sourceDocument, artifact.SavedDocument);
+            FamilyFoundryRoundtripAssertions.AssertDimensionLabelsMatchCompiledPlan(artifact.Compiled,
+                savedStateProbes);
+            FamilyFoundryRoundtripAssertions.AssertOffsetPlanesTrackDriversAcrossStates(artifact.Compiled,
+                savedStateProbes);
+            FamilyFoundryRoundtripAssertions.AssertSymmetricPairsTrackDriversAcrossStates(artifact.Compiled,
+                savedStateProbes);
+            FamilyFoundryRoundtripAssertions.AssertPrismsTrackConstrainingPlanesAcrossStates(artifact.Compiled,
+                savedStateProbes);
+            FamilyFoundryRoundtripAssertions.AssertCylindersTrackConstrainingPlanesAcrossStates(artifact.Compiled,
+                savedStateProbes);
+            FamilyFoundryRoundtripAssertions.AssertVerticalSpansMatchAcrossExistingTypes(sourceDocument,
+                artifact.SavedDocument);
+            FamilyFoundryRoundtripAssertions.AssertRectangularConnectorOrientationMatchesSourceAcrossExistingTypes(
+                sourceDocument, artifact.SavedDocument);
         } finally {
             artifact?.CloseDocuments();
         }
@@ -252,33 +258,36 @@ public sealed class AuthoredProfileRoundtripFixtureTests {
 
         return [
             CreateState("WG-IN-Base", baseValues),
-            CreateState("WG-IN-Wide", baseValues, new Dictionary<string, double>(StringComparer.Ordinal) {
-                ["PE_G_Dim_Width1"] = Inches(28.0),
-                ["ServicePanelOffset"] = Inches(8.25),
-                ["DrainSideOffset"] = Inches(9.75),
-                ["SupplyAirDiameter"] = Inches(11.0),
-                ["ReturnAirDiameter"] = Inches(11.0),
-                ["RefrigerantDepth"] = Inches(2.5),
-                ["DrainDepth"] = Inches(2.5),
-                ["LiquidLineDiameter"] = Inches(0.375),
-                ["SuctionLineDiameter"] = Inches(0.625),
-                ["DrainDiameter"] = Inches(0.625)
-            }),
-            CreateState("WG-IN-Long", baseValues, new Dictionary<string, double>(StringComparer.Ordinal) {
-                ["PE_G_Dim_Length1"] = Inches(27.0),
-                ["SupplyAirDepth"] = Inches(7.0),
-                ["ReturnAirDepth"] = Inches(7.0),
-                ["RefrigerantDepth"] = Inches(3.0),
-                ["DrainDepth"] = Inches(2.25)
-            }),
-            CreateState("WG-IN-Tall", baseValues, new Dictionary<string, double>(StringComparer.Ordinal) {
-                ["PE_G_Dim_Height1"] = Inches(23.0),
-                ["ReturnAirCenterElevation"] = Inches(12.0),
-                ["ServiceLineElevation"] = Inches(16.0),
-                ["DrainElevation"] = Inches(2.0),
-                ["SupplyAirDepth"] = Inches(6.5),
-                ["ReturnAirDepth"] = Inches(6.5)
-            })
+            CreateState("WG-IN-Wide", baseValues,
+                new Dictionary<string, double>(StringComparer.Ordinal) {
+                    ["PE_G_Dim_Width1"] = Inches(28.0),
+                    ["ServicePanelOffset"] = Inches(8.25),
+                    ["DrainSideOffset"] = Inches(9.75),
+                    ["SupplyAirDiameter"] = Inches(11.0),
+                    ["ReturnAirDiameter"] = Inches(11.0),
+                    ["RefrigerantDepth"] = Inches(2.5),
+                    ["DrainDepth"] = Inches(2.5),
+                    ["LiquidLineDiameter"] = Inches(0.375),
+                    ["SuctionLineDiameter"] = Inches(0.625),
+                    ["DrainDiameter"] = Inches(0.625)
+                }),
+            CreateState("WG-IN-Long", baseValues,
+                new Dictionary<string, double>(StringComparer.Ordinal) {
+                    ["PE_G_Dim_Length1"] = Inches(27.0),
+                    ["SupplyAirDepth"] = Inches(7.0),
+                    ["ReturnAirDepth"] = Inches(7.0),
+                    ["RefrigerantDepth"] = Inches(3.0),
+                    ["DrainDepth"] = Inches(2.25)
+                }),
+            CreateState("WG-IN-Tall", baseValues,
+                new Dictionary<string, double>(StringComparer.Ordinal) {
+                    ["PE_G_Dim_Height1"] = Inches(23.0),
+                    ["ReturnAirCenterElevation"] = Inches(12.0),
+                    ["ServiceLineElevation"] = Inches(16.0),
+                    ["DrainElevation"] = Inches(2.0),
+                    ["SupplyAirDepth"] = Inches(6.5),
+                    ["ReturnAirDepth"] = Inches(6.5)
+                })
         ];
     }
 
@@ -297,22 +306,24 @@ public sealed class AuthoredProfileRoundtripFixtureTests {
 
         return [
             CreateState("WG-OUT-Base", baseValues),
-            CreateState("WG-OUT-Wide", baseValues, new Dictionary<string, double>(StringComparer.Ordinal) {
-                ["PE_G_Dim_Width1"] = Inches(14.0),
-                ["ServicePanelOffset"] = Inches(4.75),
-                ["LiquidLineDiameter"] = Inches(0.375),
-                ["SuctionLineDiameter"] = Inches(0.625),
-                ["ServiceLineDepth"] = Inches(2.5)
-            }),
-            CreateState("WG-OUT-Long", baseValues, new Dictionary<string, double>(StringComparer.Ordinal) {
-                ["PE_G_Dim_Length1"] = Inches(38.0),
-                ["ServiceLineDepth"] = Inches(3.0)
-            }),
-            CreateState("WG-OUT-Tall", baseValues, new Dictionary<string, double>(StringComparer.Ordinal) {
-                ["PE_G_Dim_Height1"] = Inches(30.0),
-                ["ServiceLineElevation"] = Inches(17.0),
-                ["ServiceLineDepth"] = Inches(2.75)
-            })
+            CreateState("WG-OUT-Wide", baseValues,
+                new Dictionary<string, double>(StringComparer.Ordinal) {
+                    ["PE_G_Dim_Width1"] = Inches(14.0),
+                    ["ServicePanelOffset"] = Inches(4.75),
+                    ["LiquidLineDiameter"] = Inches(0.375),
+                    ["SuctionLineDiameter"] = Inches(0.625),
+                    ["ServiceLineDepth"] = Inches(2.5)
+                }),
+            CreateState("WG-OUT-Long", baseValues,
+                new Dictionary<string, double>(StringComparer.Ordinal) {
+                    ["PE_G_Dim_Length1"] = Inches(38.0), ["ServiceLineDepth"] = Inches(3.0)
+                }),
+            CreateState("WG-OUT-Tall", baseValues,
+                new Dictionary<string, double>(StringComparer.Ordinal) {
+                    ["PE_G_Dim_Height1"] = Inches(30.0),
+                    ["ServiceLineElevation"] = Inches(17.0),
+                    ["ServiceLineDepth"] = Inches(2.75)
+                })
         ];
     }
 
@@ -329,29 +340,32 @@ public sealed class AuthoredProfileRoundtripFixtureTests {
 
         return [
             CreateState("GP-Base", baseValues),
-            CreateState("GP-Wide", baseValues, new Dictionary<string, double>(StringComparer.Ordinal) {
-                ["PE_G_Dim_Width1"] = Inches(42.0),
-                ["AntiFloatDiameter"] = Inches(48.5),
-                ["AntiFloatThickness"] = Inches(3.0),
-                ["DischargeDiameter"] = Inches(3.0),
-                ["DischargeProjection"] = Inches(8.0),
-                ["DischargeCenterElevation"] = Inches(54.0)
-            }),
-            CreateState("GP-Tall", baseValues, new Dictionary<string, double>(StringComparer.Ordinal) {
-                ["PE_G_Dim_Height1"] = Inches(84.0),
-                ["AntiFloatThickness"] = Inches(2.5),
-                ["DischargeProjection"] = Inches(7.0),
-                ["DischargeCenterElevation"] = Inches(58.0)
-            }),
-            CreateState("GP-Compact", baseValues, new Dictionary<string, double>(StringComparer.Ordinal) {
-                ["PE_G_Dim_Width1"] = Inches(30.0),
-                ["PE_G_Dim_Height1"] = Inches(60.0),
-                ["AntiFloatDiameter"] = Inches(36.5),
-                ["AntiFloatThickness"] = Inches(1.5),
-                ["DischargeDiameter"] = Inches(1.5),
-                ["DischargeProjection"] = Inches(5.0),
-                ["DischargeCenterElevation"] = Inches(34.0)
-            })
+            CreateState("GP-Wide", baseValues,
+                new Dictionary<string, double>(StringComparer.Ordinal) {
+                    ["PE_G_Dim_Width1"] = Inches(42.0),
+                    ["AntiFloatDiameter"] = Inches(48.5),
+                    ["AntiFloatThickness"] = Inches(3.0),
+                    ["DischargeDiameter"] = Inches(3.0),
+                    ["DischargeProjection"] = Inches(8.0),
+                    ["DischargeCenterElevation"] = Inches(54.0)
+                }),
+            CreateState("GP-Tall", baseValues,
+                new Dictionary<string, double>(StringComparer.Ordinal) {
+                    ["PE_G_Dim_Height1"] = Inches(84.0),
+                    ["AntiFloatThickness"] = Inches(2.5),
+                    ["DischargeProjection"] = Inches(7.0),
+                    ["DischargeCenterElevation"] = Inches(58.0)
+                }),
+            CreateState("GP-Compact", baseValues,
+                new Dictionary<string, double>(StringComparer.Ordinal) {
+                    ["PE_G_Dim_Width1"] = Inches(30.0),
+                    ["PE_G_Dim_Height1"] = Inches(60.0),
+                    ["AntiFloatDiameter"] = Inches(36.5),
+                    ["AntiFloatThickness"] = Inches(1.5),
+                    ["DischargeDiameter"] = Inches(1.5),
+                    ["DischargeProjection"] = Inches(5.0),
+                    ["DischargeCenterElevation"] = Inches(34.0)
+                })
         ];
     }
 

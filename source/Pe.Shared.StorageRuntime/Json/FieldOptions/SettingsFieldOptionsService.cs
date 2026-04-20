@@ -1,6 +1,6 @@
+using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 using System.Reflection;
-using Pe.Shared.StorageRuntime.Capabilities;
 
 namespace Pe.Shared.StorageRuntime.Json.FieldOptions;
 
@@ -35,11 +35,13 @@ public sealed class SettingsFieldOptionsService : ISettingsFieldOptionsService {
 
         var property = SettingsPropertyPathResolver.ResolveProperty(settingsType, propertyPath);
         if (property == null)
-            return new FieldOptionsResult(FieldOptionsResultKind.Empty, "Property not found for field options.", null, []);
+            return new FieldOptionsResult(FieldOptionsResultKind.Empty, "Property not found for field options.", null,
+                []);
 
         var source = this.ResolveSource(property);
         if (source == null)
-            return new FieldOptionsResult(FieldOptionsResultKind.Empty, "No field options configured for property.", null, []);
+            return new FieldOptionsResult(FieldOptionsResultKind.Empty, "No field options configured for property.",
+                null, []);
 
         var descriptor = source.Describe();
         if (!string.Equals(descriptor.Key, sourceKey, StringComparison.Ordinal)) {
@@ -81,9 +83,8 @@ public sealed class SettingsFieldOptionsService : ISettingsFieldOptionsService {
     private IFieldOptionsSource? ResolveSource(PropertyInfo property) {
         if (SettingsSchemaDefinitionRegistry.Shared.TryGet(property.DeclaringType!, out var definition) &&
             definition.Bindings.TryGetValue(property.Name, out var binding) &&
-            binding.FieldOptionsSource != null) {
+            binding.FieldOptionsSource != null)
             return binding.FieldOptionsSource;
-        }
 
         return JsonTypeSchemaBindingRegistry.Shared.TryResolveFieldOptionsSource(property, out var source)
             ? source

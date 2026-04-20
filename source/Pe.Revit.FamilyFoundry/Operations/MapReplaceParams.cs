@@ -1,7 +1,6 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Extensions.FamParameter.Formula;
-using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.Global;
 using BCS = Pe.Revit.Extensions.FamDocument.SetValue.BuiltInCoercionStrategy;
 

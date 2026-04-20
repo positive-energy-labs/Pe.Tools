@@ -46,7 +46,7 @@ public class CmdFFManager : IExternalCommand {
     }
 
     private void HandleApplyProfile(FoundryContext<FFManagerProfile> ctx) {
-        if (!ctx.PreviewData.IsValid) {
+        if (ctx.PreviewData?.IsValid != true || ctx.SelectedProfile == null) {
             new Ballogger()
                 .Add(LogEventLevel.Error, new StackFrame(), "Cannot apply profile - profile has validation errors")
                 .Show();
@@ -63,9 +63,8 @@ public class CmdFFManager : IExternalCommand {
             ctx.OnFinishSettings,
             runOutput);
 
-        if (!applyResult.Success) {
+        if (!applyResult.Success)
             throw new InvalidOperationException(applyResult.Error ?? "FF Manager processing failed.");
-        }
 
         var balloon = new Ballogger();
         foreach (var logCtx in applyResult.Contexts) {
@@ -102,8 +101,7 @@ public class CmdFFManager : IExternalCommand {
         if (!hasProcessedAtParam) {
             profile.AddFamilyParams.AddParameters([
                 new FamilyParamDefinitionModel {
-                    Name = "_FOUNDRY LAST PROCESSED AT",
-                    DataType = SpecTypeId.String.Text
+                    Name = "_FOUNDRY LAST PROCESSED AT", DataType = SpecTypeId.String.Text
                 }
             ]);
         }
@@ -119,10 +117,12 @@ public class CmdFFManager : IExternalCommand {
         var compiledSolids = AuthoredParamDrivenSolidsCompiler.Compile(profile.ParamDrivenSolids);
         if (!compiledSolids.CanExecute) {
             throw new InvalidOperationException(
-                string.Join(Environment.NewLine, ParamDrivenSolidsDiagnosticFormatter.ToDisplayMessages(compiledSolids.Diagnostics)));
+                string.Join(Environment.NewLine,
+                    ParamDrivenSolidsDiagnosticFormatter.ToDisplayMessages(compiledSolids.Diagnostics)));
         }
 
-        var additionalReferences = KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.RefPlanesAndDims)
+        var additionalReferences = KnownParamPlanBuilder
+            .CollectReferencedParameterNames(compiledSolids.RefPlanesAndDims)
             .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.Extrusions))
             .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.Connectors))
             .ToList();
@@ -146,8 +146,7 @@ public class CmdFFManager : IExternalCommand {
             .Add(new SetLookupTables(profile.SetLookupTables))
             .Add(new SetKnownParams(valueFirstAssignments, knownParamPlan.Catalog, true))
             .Add(new EmitParamDrivenSolidsDiagnostics(new EmitParamDrivenSolidsDiagnosticsSettings {
-                Enabled = compilerMessages.Count > 0,
-                Messages = compilerMessages
+                Enabled = compilerMessages.Count > 0, Messages = compilerMessages
             }))
             .Add(new MakeParamDrivenPlanesAndDims(compiledSolids.RefPlanesAndDims))
             .Add(new SetKnownParams(formulaOnlyAssignments, knownParamPlan.Catalog))

@@ -1,8 +1,8 @@
+using Pe.Shared.HostContracts.Scripting;
 using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Pe.Shared.HostContracts.Scripting;
 
 namespace Pe.Host.Services;
 
@@ -24,6 +24,7 @@ internal sealed class HostScriptingPipeClientService(
 ) : IHostScriptingPipeClientService {
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
     private readonly int _connectTimeoutMs = connectTimeoutMs;
+
     private readonly string _pipeName = string.IsNullOrWhiteSpace(pipeName)
         ? ScriptingPipeProtocol.PipeName
         : pipeName;
@@ -35,8 +36,8 @@ internal sealed class HostScriptingPipeClientService(
         var response = await this.SendAsync(
             new ScriptingPipeRequest(
                 ScriptingPipeCommand.BootstrapWorkspace,
-                WorkspaceKey: request.WorkspaceKey,
-                CreateSampleScript: request.CreateSampleScript
+                request.WorkspaceKey,
+                request.CreateSampleScript
             ),
             cancellationToken
         );
@@ -54,7 +55,7 @@ internal sealed class HostScriptingPipeClientService(
         var response = await this.SendAsync(
             new ScriptingPipeRequest(
                 ScriptingPipeCommand.ExecuteScript,
-                WorkspaceKey: request.WorkspaceKey,
+                request.WorkspaceKey,
                 SourceKind: request.SourceKind,
                 SourcePath: request.SourcePath,
                 ScriptContent: request.ScriptContent,
@@ -95,10 +96,8 @@ internal sealed class HostScriptingPipeClientService(
             );
         }
 
-        using var reader = new StreamReader(pipeClient, Encoding.UTF8, false, 4096, leaveOpen: true);
-        using var writer = new StreamWriter(pipeClient, new UTF8Encoding(false), 4096, leaveOpen: true) {
-            AutoFlush = true
-        };
+        using var reader = new StreamReader(pipeClient, Encoding.UTF8, false, 4096, true);
+        using var writer = new StreamWriter(pipeClient, new UTF8Encoding(false), 4096, true) { AutoFlush = true };
 
         var payload = JsonSerializer.Serialize(request, JsonOptions);
         string? responseLine;

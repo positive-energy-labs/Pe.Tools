@@ -185,7 +185,7 @@ internal static class FormulaUtils {
 
             // Validate boundaries
             var leftValid = i == 0 || BoundaryChars.Contains(chars[i - 1]);
-            var rightValid = (i + paramLen >= chars.Length) || BoundaryChars.Contains(chars[i + paramLen]);
+            var rightValid = i + paramLen >= chars.Length || BoundaryChars.Contains(chars[i + paramLen]);
 
             if (leftValid && rightValid) {
                 // Mask this occurrence with spaces

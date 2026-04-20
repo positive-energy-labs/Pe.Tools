@@ -88,4 +88,3 @@ public sealed class SetLookupTablesSettings : IOperationSettings {
 
     public bool Enabled { get; init; } = true;
 }
-

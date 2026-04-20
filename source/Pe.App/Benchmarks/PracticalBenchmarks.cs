@@ -1,3 +1,4 @@
+using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI;
 using Pe.App.Commands.FamilyFoundry;
 using Pe.Revit.Extensions.FamDocument;
@@ -20,10 +21,18 @@ internal static class PracticalBenchmarks {
     internal const int DefaultIterations = 3;
     private const BuiltInCategory TestFamilyCategory = BuiltInCategory.OST_GenericModel;
     private const string WineGuardianIndoorProfileFixture = "wineguardian-ds050-indoor.json";
-    private const string FamilyFoundryRoundtripBenchmarkName = "FF_manager_roundtrip_can_repeat_on_staged_generic_family_document";
-    private const string LoadedFamiliesMatrixBenchmarkName = "Loaded_families_matrix_can_repeat_on_staged_project_document";
-    private const string FamilyFoundryMigratorQueueBenchmarkName = "FF_migrator_style_queue_can_repeat_on_staged_project_document";
-    private const string ParameterAssignmentPathsBenchmarkName = "Parameter_assignment_paths_can_repeat_on_staged_family_document";
+
+    private const string FamilyFoundryRoundtripBenchmarkName =
+        "FF_manager_roundtrip_can_repeat_on_staged_generic_family_document";
+
+    private const string LoadedFamiliesMatrixBenchmarkName =
+        "Loaded_families_matrix_can_repeat_on_staged_project_document";
+
+    private const string FamilyFoundryMigratorQueueBenchmarkName =
+        "FF_migrator_style_queue_can_repeat_on_staged_project_document";
+
+    private const string ParameterAssignmentPathsBenchmarkName =
+        "Parameter_assignment_paths_can_repeat_on_staged_family_document";
 
     public static PracticalBenchmarkRunResult RunAll(
         UIApplication uiApplication,
@@ -49,7 +58,6 @@ internal static class PracticalBenchmarks {
             FamilyFoundryRoundtripBenchmarkName,
             () => RunFamilyFoundryRoundtrip(
                 uiApplication.Application,
-                DefaultIterations,
                 log: log),
             metadata,
             runOutput,
@@ -60,7 +68,6 @@ internal static class PracticalBenchmarks {
             LoadedFamiliesMatrixBenchmarkName,
             () => RunLoadedFamiliesMatrix(
                 uiApplication.Application,
-                DefaultIterations,
                 log: log),
             metadata,
             runOutput,
@@ -71,7 +78,6 @@ internal static class PracticalBenchmarks {
             FamilyFoundryMigratorQueueBenchmarkName,
             () => RunFamilyFoundryMigratorQueue(
                 uiApplication.Application,
-                DefaultIterations,
                 log: log),
             metadata,
             runOutput,
@@ -82,7 +88,6 @@ internal static class PracticalBenchmarks {
             ParameterAssignmentPathsBenchmarkName,
             () => RunParameterAssignmentPaths(
                 uiApplication.Application,
-                DefaultIterations,
                 log: log),
             metadata,
             runOutput,
@@ -162,7 +167,8 @@ internal static class PracticalBenchmarks {
             throw new ArgumentNullException(nameof(application));
 
         var benchmarkOutput = workingOutput ?? CreateTemporaryWorkingOutput(LoadedFamiliesMatrixBenchmarkName);
-        var stagedProjectPath = StageGenericProjectDocument(application, LoadedFamiliesMatrixBenchmarkName, benchmarkOutput.SubDir("seed"));
+        var stagedProjectPath = StageGenericProjectDocument(application, LoadedFamiliesMatrixBenchmarkName,
+            benchmarkOutput.SubDir("seed"));
 
         return BenchmarkHarness.RunDocumentLoop(
             application,
@@ -178,9 +184,11 @@ internal static class PracticalBenchmarks {
                 var visibleParameterCount = data.Families.Sum(family => family.VisibleParameters.Count);
 
                 if (data.Families.Count <= 1)
-                    throw new InvalidOperationException("Loaded families matrix benchmark expected more than one family.");
+                    throw new InvalidOperationException(
+                        "Loaded families matrix benchmark expected more than one family.");
                 if (visibleParameterCount <= 0)
-                    throw new InvalidOperationException("Loaded families matrix benchmark expected at least one visible parameter.");
+                    throw new InvalidOperationException(
+                        "Loaded families matrix benchmark expected at least one visible parameter.");
 
                 return new LoadedFamiliesMatrixBenchmarkResult(
                     data.Families.Count,
@@ -201,7 +209,8 @@ internal static class PracticalBenchmarks {
             throw new ArgumentNullException(nameof(application));
 
         var benchmarkOutput = workingOutput ?? CreateTemporaryWorkingOutput(FamilyFoundryMigratorQueueBenchmarkName);
-        var stagedProjectPath = StageGenericProjectDocument(application, FamilyFoundryMigratorQueueBenchmarkName, benchmarkOutput.SubDir("seed"));
+        var stagedProjectPath = StageGenericProjectDocument(application, FamilyFoundryMigratorQueueBenchmarkName,
+            benchmarkOutput.SubDir("seed"));
         var profile = CreateBenchmarkMigratorProfile();
         var queue = CmdFFMigrator.BuildQueueCore(profile, []);
         var collectorQueue = new SnapshotCapturePipeline()
@@ -246,9 +255,10 @@ internal static class PracticalBenchmarks {
                             SaveFamilyToOutputDir = true
                         });
 
-                if (logs.contexts.Count != targetFamilies.Count)
+                if (logs.contexts.Count != targetFamilies.Count) {
                     throw new InvalidOperationException(
                         $"Expected {targetFamilies.Count} migrator contexts but received {logs.contexts.Count}.");
+                }
 
                 var firstError = logs.contexts
                     .Select(context => context.OperationLogs.AsTuple().error)
@@ -256,7 +266,8 @@ internal static class PracticalBenchmarks {
                 if (firstError != null)
                     throw new InvalidOperationException(firstError.ToString());
 
-                var outputFiles = Directory.GetFiles(iterationOutput.DirectoryPath, "*.rfa", SearchOption.AllDirectories);
+                var outputFiles =
+                    Directory.GetFiles(iterationOutput.DirectoryPath, "*.rfa", SearchOption.AllDirectories);
                 if (outputFiles.Length == 0)
                     throw new InvalidOperationException("Migrator benchmark did not produce any saved family files.");
                 EnsureSavedFamilyFileIsOpenable(application, outputFiles[0]);
@@ -312,9 +323,7 @@ internal static class PracticalBenchmarks {
                                 familyDocument,
                                 "NominalLength",
                                 new Dictionary<string, string>(StringComparer.Ordinal) {
-                                    ["Type-A"] = "1.25",
-                                    ["Type-B"] = "2.5",
-                                    ["Type-C"] = "3.75"
+                                    ["Type-A"] = "1.25", ["Type-B"] = "2.5", ["Type-C"] = "3.75"
                                 },
                                 0));
 
@@ -322,7 +331,8 @@ internal static class PracticalBenchmarks {
                         if (allSnapshots.Count != familyTypes.Length)
                             throw new InvalidOperationException("Did not capture all parameter assignment snapshots.");
                         if (allSnapshots.Any(snapshot => !snapshot.HasValue))
-                            throw new InvalidOperationException("One or more parameter assignment snapshots did not have values.");
+                            throw new InvalidOperationException(
+                                "One or more parameter assignment snapshots did not have values.");
 
                         return new ParameterAssignmentBenchmarkResult(
                             fastGlobal,
@@ -346,18 +356,21 @@ internal static class PracticalBenchmarks {
 
         try {
             var summary = run();
-            entries.Add(BenchmarkArtifactWriter.WriteBenchmarkResult(runOutput, definition, benchmarkName, metadata, summary));
+            entries.Add(BenchmarkArtifactWriter.WriteBenchmarkResult(runOutput, definition, benchmarkName, metadata,
+                summary));
         } catch (Exception ex) {
-            entries.Add(BenchmarkArtifactWriter.WriteBenchmarkFailure(runOutput, definition, benchmarkName, metadata, ex));
+            entries.Add(
+                BenchmarkArtifactWriter.WriteBenchmarkFailure(runOutput, definition, benchmarkName, metadata, ex));
             log($"[{definition.Id}] FAILED: {ex.Message}");
         }
     }
 
-    private static BenchmarkRunMetadataArtifact CreateRunMetadata(UIApplication uiApplication, OutputStorage runOutput) {
+    private static BenchmarkRunMetadataArtifact
+        CreateRunMetadata(UIApplication uiApplication, OutputStorage runOutput) {
         var assemblyVersion = typeof(PracticalBenchmarks).Assembly
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-            ?? typeof(PracticalBenchmarks).Assembly.GetName().Version?.ToString()
-            ?? "Unknown";
+                                  .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+                              ?? typeof(PracticalBenchmarks).Assembly.GetName().Version?.ToString()
+                              ?? "Unknown";
 
         return new BenchmarkRunMetadataArtifact(
             Path.GetFileName(runOutput.DirectoryPath),
@@ -453,7 +466,7 @@ internal static class PracticalBenchmarks {
         Autodesk.Revit.ApplicationServices.Application application,
         Action<string> log
     ) {
-        void OnFailuresProcessing(object? _, Autodesk.Revit.DB.Events.FailuresProcessingEventArgs args) {
+        void OnFailuresProcessing(object? _, FailuresProcessingEventArgs args) {
             var accessor = args.GetFailuresAccessor();
             if (accessor == null)
                 return;
@@ -482,12 +495,8 @@ internal static class PracticalBenchmarks {
     private static string ResolveGenericModelTemplatePath(Autodesk.Revit.ApplicationServices.Application application) {
         var templateRoot = application.FamilyTemplatePath;
         var candidates = new[] {
-                string.Empty,
-                "English-Imperial",
-                "English_I",
-                "English",
-                Path.Combine("Family Templates", "English-Imperial"),
-                Path.Combine("Family Templates", "English_I"),
+                string.Empty, "English-Imperial", "English_I", "English",
+                Path.Combine("Family Templates", "English-Imperial"), Path.Combine("Family Templates", "English_I"),
                 Path.Combine("Family Templates", "English")
             }
             .Select(subdirectory => string.IsNullOrWhiteSpace(subdirectory)
@@ -511,7 +520,8 @@ internal static class PracticalBenchmarks {
     ) {
         var templatePath = ResolveGenericModelTemplatePath(application);
         var document = application.NewFamilyDocument(templatePath)
-            ?? throw new InvalidOperationException($"Failed to create family document from template '{templatePath}'.");
+                       ?? throw new InvalidOperationException(
+                           $"Failed to create family document from template '{templatePath}'.");
         if (!document.IsFamilyDocument)
             throw new InvalidOperationException($"Template '{templatePath}' did not create a family document.");
 
@@ -548,11 +558,7 @@ internal static class PracticalBenchmarks {
         var savePath = Path.Combine(outputDirectory, $"{safeFileNameStem}{extension}");
         document.SaveAs(
             savePath,
-            new SaveAsOptions {
-                OverwriteExistingFile = true,
-                Compact = true,
-                MaximumBackups = 1
-            });
+            new SaveAsOptions { OverwriteExistingFile = true, Compact = true, MaximumBackups = 1 });
         return savePath;
     }
 
@@ -589,11 +595,13 @@ internal static class PracticalBenchmarks {
 
         try {
             savedDocument = application.OpenDocumentFile(savedFamilyPath)
-                ?? throw new InvalidOperationException($"Failed to open saved family '{savedFamilyPath}'.");
+                            ?? throw new InvalidOperationException($"Failed to open saved family '{savedFamilyPath}'.");
             if (!savedDocument.IsFamilyDocument)
-                throw new InvalidOperationException($"Saved file '{savedFamilyPath}' did not reopen as a family document.");
+                throw new InvalidOperationException(
+                    $"Saved file '{savedFamilyPath}' did not reopen as a family document.");
             if (savedDocument.OwnerFamily == null)
-                throw new InvalidOperationException($"Saved family '{savedFamilyPath}' did not expose an owner family.");
+                throw new InvalidOperationException(
+                    $"Saved family '{savedFamilyPath}' did not expose an owner family.");
         } finally {
             CloseDocument(savedDocument);
         }
@@ -633,7 +641,7 @@ internal static class PracticalBenchmarks {
     ) {
         var familyDoc = new FamilyDocument(familyDocument);
         var parameter = familyDocument.FamilyManager.get_Parameter(parameterName)
-            ?? throw new InvalidOperationException($"Family parameter '{parameterName}' was not found.");
+                        ?? throw new InvalidOperationException($"Family parameter '{parameterName}' was not found.");
         var snapshots = new List<ParameterValueSnapshot>(typeNames.Count);
 
         foreach (var typeName in typeNames.Distinct(StringComparer.Ordinal)) {
@@ -699,7 +707,7 @@ internal static class PracticalBenchmarks {
     ) {
         var familyDoc = new FamilyDocument(familyDocument);
         var parameter = familyDocument.FamilyManager.get_Parameter(parameterName)
-            ?? throw new InvalidOperationException($"Family parameter '{parameterName}' was not found.");
+                        ?? throw new InvalidOperationException($"Family parameter '{parameterName}' was not found.");
 
         if (!familyDoc.TrySetUnsetFormula(parameter, value, out var errorMessage)) {
             throw new InvalidOperationException(
@@ -728,7 +736,7 @@ internal static class PracticalBenchmarks {
     ) {
         var familyDoc = new FamilyDocument(familyDocument);
         var parameter = familyDocument.FamilyManager.get_Parameter(parameterName)
-            ?? throw new InvalidOperationException($"Family parameter '{parameterName}' was not found.");
+                        ?? throw new InvalidOperationException($"Family parameter '{parameterName}' was not found.");
 
         foreach (var (typeName, value) in valuesByType) {
             SetCurrentType(familyDocument, typeName);
@@ -751,27 +759,26 @@ internal static class PracticalBenchmarks {
 
     private static FFMigratorProfile CreateBenchmarkMigratorProfile() =>
         new() {
-            ExecutionOptions = new ExecutionOptions {
-                SingleTransaction = false,
-                OptimizeTypeOperations = true,
-                EnableCollectors = true,
-                SuppressWarnings = true
-            },
-            FilterFamilies = new BaseProfile.FilterFamiliesSettings {
-                IncludeUnusedFamilies = true,
-                IncludeNames = new IncludeFamilies { StartingWith = [""] },
-                ExcludeNames = new ExcludeFamilies()
-            },
-            FilterApsParams = new BaseProfile.FilterApsParamsSettings {
-                IncludeNames = new IncludeSharedParameter(),
-                ExcludeNames = new ExcludeSharedParameter()
-            },
+            ExecutionOptions =
+                new ExecutionOptions {
+                    SingleTransaction = false,
+                    OptimizeTypeOperations = true,
+                    EnableCollectors = true,
+                    SuppressWarnings = true
+                },
+            FilterFamilies =
+                new BaseProfile.FilterFamiliesSettings {
+                    IncludeUnusedFamilies = true,
+                    IncludeNames = new IncludeFamilies { StartingWith = [""] },
+                    ExcludeNames = new ExcludeFamilies()
+                },
+            FilterApsParams =
+                new BaseProfile.FilterApsParamsSettings {
+                    IncludeNames = new IncludeSharedParameter(), ExcludeNames = new ExcludeSharedParameter()
+                },
             CleanFamilyDocument = new CleanFamilyDocumentSettings { Enabled = false },
-            AddAndMapSharedParams = new MapParamsSettings {
-                Enabled = false,
-                DisablePerTypeFallback = true,
-                MappingData = []
-            },
+            AddAndMapSharedParams =
+                new MapParamsSettings { Enabled = false, DisablePerTypeFallback = true, MappingData = [] },
             AddFamilyParams = new AddFamilyParamsSettings { Enabled = false, Parameters = [] },
             SetKnownParams = new SetKnownParamsSettings { Enabled = false },
             MakeElectricalConnector = new MakeElecConnectorSettings { Enabled = false },
@@ -838,7 +845,11 @@ internal sealed record AssignmentBenchmarkResult(
     double IterationActionMs
 );
 
-internal sealed record ParameterDefinitionSpec(string Name, ForgeTypeId DataType, ForgeTypeId? Group = null, bool IsInstance = true);
+internal sealed record ParameterDefinitionSpec(
+    string Name,
+    ForgeTypeId DataType,
+    ForgeTypeId? Group = null,
+    bool IsInstance = true);
 
 internal sealed record ParameterValueSnapshot(
     string TypeName,
@@ -857,8 +868,10 @@ internal sealed record ParameterAssignmentBenchmarkResult(
 ) {
     public static string FormatSummary(BenchmarkLoopResult<ParameterAssignmentBenchmarkResult> summary) {
         var globalAvg = summary.Iterations.Average(iteration => iteration.Result.GlobalValueFastPath.IterationActionMs);
-        var perTypeAvg = summary.Iterations.Average(iteration => iteration.Result.PerTypeCoercionPath.IterationActionMs);
+        var perTypeAvg =
+            summary.Iterations.Average(iteration => iteration.Result.PerTypeCoercionPath.IterationActionMs);
         var typeCount = summary.Iterations.First().Result.NominalLengthSnapshots.Count;
-        return $"[{summary.Name}] ParameterAssignment Summary: Iterations={summary.IterationCount}, TypeCount={typeCount}, AvgGlobalMs={globalAvg:F1}, AvgPerTypeMs={perTypeAvg:F1}";
+        return
+            $"[{summary.Name}] ParameterAssignment Summary: Iterations={summary.IterationCount}, TypeCount={typeCount}, AvgGlobalMs={globalAvg:F1}, AvgPerTypeMs={perTypeAvg:F1}";
     }
 }

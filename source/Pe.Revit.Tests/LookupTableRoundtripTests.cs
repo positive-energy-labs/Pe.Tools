@@ -1,7 +1,3 @@
-using Pe.Revit.FamilyFoundry.Snapshots;
-using Pe.Revit.FamilyFoundry.Plans;
-using Pe.Revit.FamilyFoundry.Snapshots;
-
 namespace Pe.Revit.Tests;
 
 [TestFixture]
@@ -14,10 +10,11 @@ public sealed class LookupTableRoundtripTests {
     private const string LookupKeyValue = "1";
 
     [Test]
-    public void Snapshot_projection_roundtrips_embedded_lookup_tables_and_size_lookup_formulas(UIApplication uiApplication) {
+    public void Snapshot_projection_roundtrips_embedded_lookup_tables_and_size_lookup_formulas(
+        UIApplication uiApplication) {
         var application = uiApplication.Application;
         var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
-            nameof(Snapshot_projection_roundtrips_embedded_lookup_tables_and_size_lookup_formulas));
+            nameof(this.Snapshot_projection_roundtrips_embedded_lookup_tables_and_size_lookup_formulas));
 
         Document? sourceDocument = null;
         Document? replayDocument = null;
@@ -38,7 +35,8 @@ public sealed class LookupTableRoundtripTests {
             var sourceTables = RevitFamilyFixtureHarness.ExportFamilySizeTables(
                 sourceDocument,
                 Path.Combine(outputDirectory, "source-lookups"));
-            var sourceTable = sourceTables.Single(table => string.Equals(table.TableName, LookupTableName, StringComparison.Ordinal));
+            var sourceTable = sourceTables.Single(table =>
+                string.Equals(table.TableName, LookupTableName, StringComparison.Ordinal));
 
             var snapshot = sourceDocument!.CaptureFamilySnapshot();
             Assert.Multiple(() => {
@@ -70,7 +68,7 @@ public sealed class LookupTableRoundtripTests {
             var result = FamilyFoundryRoundtripHarness.ProcessRoundtrip(
                 replayDocument,
                 profile,
-                nameof(Snapshot_projection_roundtrips_embedded_lookup_tables_and_size_lookup_formulas),
+                nameof(this.Snapshot_projection_roundtrips_embedded_lookup_tables_and_size_lookup_formulas),
                 outputDirectory);
             var savedFamilyPath = RevitFamilyFixtureHarness.GetExpectedSavedFamilyPath(
                 result.OutputFolderPath!,
@@ -80,14 +78,17 @@ public sealed class LookupTableRoundtripTests {
             replayDocument = null;
 
             savedDocument = application.OpenDocumentFile(savedFamilyPath)
-                ?? throw new InvalidOperationException($"Failed to open saved lookup roundtrip family '{savedFamilyPath}'.");
+                            ?? throw new InvalidOperationException(
+                                $"Failed to open saved lookup roundtrip family '{savedFamilyPath}'.");
 
             var savedTables = RevitFamilyFixtureHarness.ExportFamilySizeTables(
                 savedDocument,
                 Path.Combine(outputDirectory, "saved-lookups"));
-            var savedTable = savedTables.Single(table => string.Equals(table.TableName, LookupTableName, StringComparison.Ordinal));
+            var savedTable = savedTables.Single(table =>
+                string.Equals(table.TableName, LookupTableName, StringComparison.Ordinal));
 
-            Assert.That(savedTable.Rows, Is.EqualTo(sourceTable.Rows), "Expected the embedded lookup CSV to roundtrip unchanged.");
+            Assert.That(savedTable.Rows, Is.EqualTo(sourceTable.Rows),
+                "Expected the embedded lookup CSV to roundtrip unchanged.");
 
             var parameterProbes = RevitFamilyFixtureHarness.CollectFamilyParameterProbes(savedDocument)
                 .Where(probe => !string.IsNullOrWhiteSpace(probe.Formula))
@@ -105,7 +106,8 @@ public sealed class LookupTableRoundtripTests {
                         savedDocument,
                         lookupCase.ParameterName,
                         [LookupTypeName]).Single();
-                    Assert.That(valueSnapshot.HasValue, Is.True, $"Expected '{lookupCase.ParameterName}' to evaluate after replay.");
+                    Assert.That(valueSnapshot.HasValue, Is.True,
+                        $"Expected '{lookupCase.ParameterName}' to evaluate after replay.");
                 }
 
                 _ = transaction.RollBack();
@@ -115,7 +117,8 @@ public sealed class LookupTableRoundtripTests {
                 Path.Combine(result.OutputFolderPath!, savedDocument.OwnerFamily.Name, "snapshot-lookuptables-post"),
                 "*.csv",
                 SearchOption.TopDirectoryOnly);
-            Assert.That(lookupArtifactFiles, Is.Not.Empty, "Expected post-snapshot lookup CSV artifacts to be written.");
+            Assert.That(lookupArtifactFiles, Is.Not.Empty,
+                "Expected post-snapshot lookup CSV artifacts to be written.");
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(savedDocument);
             RevitFamilyFixtureHarness.CloseDocument(replayDocument);
@@ -136,7 +139,8 @@ public sealed class LookupTableRoundtripTests {
                 LookupTableTestSupport.LookupTableNameParameterName,
                 SpecTypeId.String.Text);
             foreach (var lookupCase in lookupCases) {
-                LookupTableTestSupport.EnsureTypeParameter(familyDocument, lookupCase.ParameterName, lookupCase.DataType);
+                LookupTableTestSupport.EnsureTypeParameter(familyDocument, lookupCase.ParameterName,
+                    lookupCase.DataType);
                 LookupTableTestSupport.EnsureLookupSupportParameters(familyDocument, lookupCase);
             }
 
@@ -166,12 +170,11 @@ public sealed class LookupTableRoundtripTests {
             lookupCases);
     }
 
-    private static void ConfigureStableLookupUnits(Document familyDocument) {
+    private static void ConfigureStableLookupUnits(Document familyDocument) =>
         LookupTableTestSupport.ConfigureUnits(
             familyDocument,
             (SpecTypeId.ElectricalPotential, UnitTypeId.Volts),
             (SpecTypeId.AirFlow, UnitTypeId.CubicFeetPerMinute));
-    }
 
     private static IReadOnlyList<LookupTableTestSupport.LookupCase> BuildRoundtripCases() => [
         new("Voltage", SpecTypeId.ElectricalPotential, "ResultVoltage", "120"),

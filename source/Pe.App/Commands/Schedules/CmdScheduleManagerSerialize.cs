@@ -82,8 +82,7 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
                 profile,
                 Formatting.Indented,
                 new JsonSerializerSettings {
-                    NullValueHandling = NullValueHandling.Ignore,
-                    ContractResolver = new RevitTypeContractResolver()
+                    NullValueHandling = NullValueHandling.Ignore, ContractResolver = new RevitTypeContractResolver()
                 });
 
             return new ScheduleSerializePreviewData {
@@ -181,12 +180,12 @@ public class ScheduleSerializePaletteItem(ViewSchedule schedule) : IPaletteListI
 }
 
 public class ScheduleSerializePreviewData {
-    public string ProfileName { get; set; }
+    public string ProfileName { get; set; } = string.Empty;
     public string? CategoryName { get; set; }
     public bool? IsItemized { get; set; }
     public List<ScheduleFieldSpec>? Fields { get; set; }
     public List<ScheduleSortGroupSpec>? SortGroup { get; set; }
-    public string ProfileJson { get; set; }
+    public string ProfileJson { get; set; } = string.Empty;
     public bool IsValid { get; set; }
     public string? ErrorMessage { get; set; }
 }

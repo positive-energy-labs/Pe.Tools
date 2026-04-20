@@ -1,9 +1,8 @@
-﻿using System.Text;
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.Diagnostics;
-using Pe.Shared.HostContracts.Scripting;
+using System.Text;
 
 namespace Pe.Revit.Scripting.Execution;
 
@@ -16,7 +15,7 @@ public sealed class ScriptCompilationService {
             CSharpSyntaxTree.ParseText(
                 CreateGlobalUsingsSource(),
                 new CSharpParseOptions(LanguageVersion.Latest),
-                path: "__PeScriptUsings.g.cs"
+                "__PeScriptUsings.g.cs"
             )
         };
 
@@ -24,7 +23,7 @@ public sealed class ScriptCompilationService {
             syntaxTrees.Add(CSharpSyntaxTree.ParseText(
                 sourceFile.Content,
                 new CSharpParseOptions(LanguageVersion.Latest),
-                path: sourceFile.Name
+                sourceFile.Name
             ));
         }
 

@@ -1,6 +1,4 @@
-using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Electrical;
-using Pe.Revit.Global.PolyFill;
 using Pe.Shared.HostContracts.RevitData;
 
 namespace Pe.Revit.Global.Revit.Lib.Electrical;
@@ -290,8 +288,12 @@ internal static class ElectricalCollectorSupport {
         return new RequestedElementParameterValue(
             parameterName,
             parameter != null,
-            parameter == null ? null : NullIfWhiteSpace(parameter.AsString()) ?? NullIfWhiteSpace(parameter.AsValueString()),
-            parameter == null ? null : NullIfWhiteSpace(parameter.AsValueString()) ?? NullIfWhiteSpace(parameter.AsString()),
+            parameter == null
+                ? null
+                : NullIfWhiteSpace(parameter.AsString()) ?? NullIfWhiteSpace(parameter.AsValueString()),
+            parameter == null
+                ? null
+                : NullIfWhiteSpace(parameter.AsValueString()) ?? NullIfWhiteSpace(parameter.AsString()),
             ToRequestedParameterStorageType(parameter?.StorageType ?? StorageType.None)
         );
     }

@@ -25,17 +25,17 @@ public sealed class ModuleSettingsStorage<TSettings>(
         NullValueHandling = NullValueHandling.Ignore
     };
 
-    private readonly ModuleDocumentStorage _documents = documents ?? throw new ArgumentNullException(nameof(documents));
     private readonly ISettingsDocumentContextAccessor? _documentContextAccessor = documentContextAccessor;
 
+    private readonly ModuleDocumentStorage _documents = documents ?? throw new ArgumentNullException(nameof(documents));
+
     public TSettings ReadRequired(string relativePath, string? rootKey = null) {
-        var resolvedRootKey = rootKey ?? _documents.DefaultRootKey;
+        var resolvedRootKey = rootKey ?? this._documents.DefaultRootKey;
         this.EnsureSynchronized(relativePath, resolvedRootKey);
 
-        var snapshot = _documents.OpenAsync(relativePath, true, resolvedRootKey).GetAwaiter().GetResult();
+        var snapshot = this._documents.OpenAsync(relativePath, true, resolvedRootKey).GetAwaiter().GetResult();
         if (!snapshot.Validation.IsValid) {
-            throw new JsonValidationException(
-                _documents.ResolveDocumentPath(relativePath, resolvedRootKey),
+            throw new JsonValidationException(this._documents.ResolveDocumentPath(relativePath, resolvedRootKey),
                 snapshot.Validation.Issues.Select(issue => $"{issue.Path}: {issue.Message}")
             );
         }
@@ -53,18 +53,17 @@ public sealed class ModuleSettingsStorage<TSettings>(
     }
 
     public string ResolveDocumentPath(string relativePath, string? rootKey = null) =>
-        _documents.ResolveDocumentPath(relativePath, rootKey);
+        this._documents.ResolveDocumentPath(relativePath, rootKey);
 
-    public ModuleDocumentStorage Documents() => _documents;
+    public ModuleDocumentStorage Documents() => this._documents;
 
     private void EnsureSynchronized(string relativePath, string rootKey) {
-        var syncService = new SettingsDocumentSchemaSyncService(_documents.RuntimeMode, _documentContextAccessor);
-        var documentPath = _documents.ResolveDocumentPath(relativePath, rootKey);
-        var rootDirectory = _documents.ResolveRootDirectory(rootKey);
+        var syncService =
+            new SettingsDocumentSchemaSyncService(this._documents.RuntimeMode, this._documentContextAccessor);
+        var documentPath = this._documents.ResolveDocumentPath(relativePath, rootKey);
+        var rootDirectory = this._documents.ResolveRootDirectory(rootKey);
 
-        syncService.EnsureSynchronized(
-            _documents.SettingsType,
-            _documents.StorageOptions,
+        syncService.EnsureSynchronized(this._documents.SettingsType, this._documents.StorageOptions,
             documentPath,
             rootDirectory
         );

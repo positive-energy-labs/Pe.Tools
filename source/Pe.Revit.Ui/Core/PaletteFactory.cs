@@ -55,7 +55,7 @@ public sealed class TabDefinition<TItem> where TItem : class, IPaletteListItem {
     ///     <code>
     ///     // Filter by view type:
     ///     FilterKeySelector = item => item.View.ViewType.ToString()
-    ///
+    /// 
     ///     // Filter by category:
     ///     FilterKeySelector = item => item.TextPill
     ///     </code>
@@ -178,7 +178,7 @@ public static class PaletteFactory {
 
         // Create Ctrl-release callback if provided
         // Pass viewModel reference so callback can read current SelectedItem when Ctrl is released
-        Action onCtrlReleased = null;
+        Action? onCtrlReleased = null;
         if (options.OnCtrlReleased != null) {
             var vmRef = viewModel; // Capture viewModel reference
             onCtrlReleased = options.OnCtrlReleased(vmRef);
@@ -256,7 +256,7 @@ public static class PaletteFactory {
 ///     Consumers should use <see cref="ISidebarPanel{TItem}" /> instead.
 /// </summary>
 internal class PaletteSidebar {
-    public UIElement Content { get; init; }
+    public required UIElement Content { get; init; }
     public GridLength Width { get; init; } = new(450);
 }
 
@@ -302,7 +302,7 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     ///     <code>
     ///     // Search both name and description:
     ///     SearchConfig = SearchConfig.PrimaryAndSecondary()
-    ///
+    /// 
     ///     // Disable search entirely:
     ///     SearchConfig = null
     ///     </code>
@@ -393,10 +393,10 @@ public class PaletteOptions<TItem> where TItem : class, IPaletteListItem {
     ///     <code>
     ///     // Minimal - only the default ephemerality toggle:
     ///     // No Tray property needed, it's automatic
-    ///
+    /// 
     ///     // With custom content below the default toggle:
     ///     Tray = new PaletteTray { Content = optionsPanel }
-    ///
+    /// 
     ///     // Custom max height:
     ///     Tray = new PaletteTray {
     ///         Content = optionsPanel,

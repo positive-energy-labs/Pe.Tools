@@ -1,6 +1,4 @@
 using Pe.Revit.FamilyFoundry.Operations;
-using Pe.Revit.FamilyFoundry.Plans;
-using Pe.Revit.FamilyFoundry.Snapshots;
 
 namespace Pe.Revit.FamilyFoundry.Helpers;
 
@@ -94,7 +92,8 @@ public class RefPlaneDimCreator(
             .Cast<View>()
             .FirstOrDefault(view =>
                 !view.IsTemplate &&
-                view.ViewType is ViewType.FloorPlan or ViewType.CeilingPlan or ViewType.EngineeringPlan or ViewType.AreaPlan);
+                view.ViewType is ViewType.FloorPlan or ViewType.CeilingPlan or ViewType.EngineeringPlan
+                    or ViewType.AreaPlan);
     }
 
     #region Plane Creation (First Operation)
@@ -112,7 +111,8 @@ public class RefPlaneDimCreator(
 
         if (query.Get(spec.NegativePlaneName) != null && query.Get(spec.PositivePlaneName) != null) {
             Console.WriteLine("[CreateSymmetricPlanes] Both planes already exist, skipping");
-            logs.Add(new LogEntry($"Symmetric planes: {spec.PlaneNameBase} @ {spec.CenterPlaneName}").Skip("Already exist"));
+            logs.Add(
+                new LogEntry($"Symmetric planes: {spec.PlaneNameBase} @ {spec.CenterPlaneName}").Skip("Already exist"));
             return;
         }
 
@@ -121,10 +121,12 @@ public class RefPlaneDimCreator(
         var midpoint = (center.BubbleEnd + center.FreeEnd) * 0.5;
         var cutVec = normal.CrossProduct(direction);
         var t = direction * PlaneExtent;
-        var seedOffset = ResolveSeedOffset(spec.Driver, spec.Parameter, isMirror: true);
+        var seedOffset = this.ResolveSeedOffset(spec.Driver, spec.Parameter, true);
 
-        var negativeCreated = this.CreatePlane(spec.NegativePlaneName, midpoint - (normal * seedOffset), t, cutVec, spec.Strength);
-        var positiveCreated = this.CreatePlane(spec.PositivePlaneName, midpoint + (normal * seedOffset), t, cutVec, spec.Strength);
+        var negativeCreated = this.CreatePlane(spec.NegativePlaneName, midpoint - (normal * seedOffset), t, cutVec,
+            spec.Strength);
+        var positiveCreated = this.CreatePlane(spec.PositivePlaneName, midpoint + (normal * seedOffset), t, cutVec,
+            spec.Strength);
 
         if (negativeCreated && positiveCreated) {
             logs.Add(new LogEntry($"Symmetric planes: {spec.PlaneNameBase} @ {spec.CenterPlaneName}").Success(
@@ -133,8 +135,8 @@ public class RefPlaneDimCreator(
     }
 
     /// <summary>
-     ///     Creates mirror planes: two planes symmetric around center.
-     /// </summary>
+    ///     Creates mirror planes: two planes symmetric around center.
+    /// </summary>
     public void CreateMirrorPlanes(MirrorConstraintSnapshot spec) {
         Console.WriteLine($"[CreateMirrorPlanes] Processing: {spec.Name}, Center: {spec.CenterAnchor}");
 
@@ -163,7 +165,7 @@ public class RefPlaneDimCreator(
         var midpoint = (center.BubbleEnd + center.FreeEnd) * 0.5;
         var cutVec = normal.CrossProduct(direction);
         var t = direction * PlaneExtent;
-        var seedOffset = ResolveSeedOffset(null, spec.Parameter, isMirror: true);
+        var seedOffset = this.ResolveSeedOffset(null, spec.Parameter, true);
 
         var leftCreated = this.CreatePlane(leftName, midpoint - (normal * seedOffset), t, cutVec, spec.Strength);
         var rightCreated = this.CreatePlane(rightName, midpoint + (normal * seedOffset), t, cutVec, spec.Strength);
@@ -198,7 +200,7 @@ public class RefPlaneDimCreator(
         var direction = anchor.Direction;
         var cutVec = normal.CrossProduct(direction);
         var t = direction * PlaneExtent;
-        var seedOffset = ResolveSeedOffset(null, spec.Parameter, isMirror: false);
+        var seedOffset = this.ResolveSeedOffset(null, spec.Parameter, false);
 
         var offsetVector = spec.Direction == OffsetDirection.Positive
             ? normal * seedOffset
@@ -214,7 +216,8 @@ public class RefPlaneDimCreator(
         var anchor = this.ResolveReferencePlane(spec.AnchorPlaneName);
         if (anchor == null) {
             Console.WriteLine($"[CreateOffsetPlane] Anchor not found: {spec.AnchorPlaneName}");
-            logs.Add(new LogEntry($"Offset plane: {spec.PlaneName}").Error($"Anchor '{spec.AnchorPlaneName}' not found"));
+            logs.Add(
+                new LogEntry($"Offset plane: {spec.PlaneName}").Error($"Anchor '{spec.AnchorPlaneName}' not found"));
             return;
         }
 
@@ -229,7 +232,7 @@ public class RefPlaneDimCreator(
         var direction = anchor.Direction;
         var cutVec = normal.CrossProduct(direction);
         var t = direction * PlaneExtent;
-        var seedOffset = ResolveSeedOffset(spec.Driver, spec.Parameter, isMirror: false);
+        var seedOffset = this.ResolveSeedOffset(spec.Driver, spec.Parameter, false);
 
         var offsetVector = spec.Direction == OffsetDirection.Positive
             ? normal * seedOffset
@@ -267,7 +270,7 @@ public class RefPlaneDimCreator(
     }
 
     private double ResolveSeedOffset(LengthDriverSpec? driver, string? parameterName, bool isMirror) {
-        var currentValue = TryGetCurrentLengthValue(driver, parameterName);
+        var currentValue = this.TryGetCurrentLengthValue(driver, parameterName);
         if (currentValue is null || currentValue <= 1e-9)
             return PlaneOffset;
 
@@ -307,13 +310,13 @@ public class RefPlaneDimCreator(
             return null;
 
         return new FilteredElementCollector(doc)
-            .OfClass(typeof(ReferencePlane))
-            .Cast<ReferencePlane>()
-            .FirstOrDefault(rp =>
-                !string.IsNullOrWhiteSpace(rp.Name) &&
-                rp.Name.IndexOf("level", StringComparison.OrdinalIgnoreCase) >= 0 &&
-                Math.Abs(rp.Normal.Normalize().Z) > 0.95)
-            ?? this.TryCreateReferencePlaneFromSketchPlane(requestedName);
+                   .OfClass(typeof(ReferencePlane))
+                   .Cast<ReferencePlane>()
+                   .FirstOrDefault(rp =>
+                       !string.IsNullOrWhiteSpace(rp.Name) &&
+                       rp.Name.IndexOf("level", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                       Math.Abs(rp.Normal.Normalize().Z) > 0.95)
+               ?? this.TryCreateReferencePlaneFromSketchPlane(requestedName);
     }
 
     private static IEnumerable<string> GetAnchorAliases(string requestedName) {
@@ -344,10 +347,12 @@ public class RefPlaneDimCreator(
             var direction = BuildStableDirection(normal);
             var cutVec = normal.CrossProduct(direction).Normalize();
             var t = direction * PlaneExtent;
-            var referencePlane = doc.FamilyCreate.NewReferencePlane(plane.Origin + t, plane.Origin - t, cutVec, workingView);
+            var referencePlane =
+                doc.FamilyCreate.NewReferencePlane(plane.Origin + t, plane.Origin - t, cutVec, workingView);
             referencePlane.Name = requestedName;
             _ = query.ReCache(requestedName);
-            logs.Add(new LogEntry($"Sketch plane anchor: {requestedName}").Success("Created companion reference plane from sketch plane."));
+            logs.Add(new LogEntry($"Sketch plane anchor: {requestedName}").Success(
+                "Created companion reference plane from sketch plane."));
             return referencePlane;
         } catch (Exception ex) {
             logs.Add(new LogEntry($"Sketch plane anchor: {requestedName}").Error(ex));
@@ -404,15 +409,20 @@ public class RefPlaneDimCreator(
         if (negativePlane == null || positivePlane == null) {
             Console.WriteLine(
                 $"[CreateSymmetricDimensions] Planes not found - Negative: {negativePlane != null}, Positive: {positivePlane != null}");
-            logs.Add(new LogEntry($"Symmetric dims: {spec.PlaneNameBase} @ {spec.CenterPlaneName}").Error("Planes not found"));
+            logs.Add(
+                new LogEntry($"Symmetric dims: {spec.PlaneNameBase} @ {spec.CenterPlaneName}")
+                    .Error("Planes not found"));
             return;
         }
 
         var dimOffset = DimStaggerStep + (DimStaggerStep * staggerIndex);
 
         if (this.DimensionExists(negativePlane, positivePlane)) {
-            Console.WriteLine($"[CreateSymmetricDimensions] Param dim already exists between {spec.NegativePlaneName} and {spec.PositivePlaneName}");
-            logs.Add(new LogEntry($"Symmetric param dim: {spec.PlaneNameBase} @ {spec.CenterPlaneName}").Skip("Already exists"));
+            Console.WriteLine(
+                $"[CreateSymmetricDimensions] Param dim already exists between {spec.NegativePlaneName} and {spec.PositivePlaneName}");
+            logs.Add(
+                new LogEntry($"Symmetric param dim: {spec.PlaneNameBase} @ {spec.CenterPlaneName}").Skip(
+                    "Already exists"));
         } else {
             try {
                 var dimView = this.GetBestDimensionView(negativePlane, positivePlane);
@@ -435,14 +445,18 @@ public class RefPlaneDimCreator(
                     var param = doc.FamilyManager.get_Parameter(spec.Parameter);
                     if (param != null) {
                         paramDim.FamilyLabel = param;
-                        logs.Add(new LogEntry($"Symmetric param dim: {spec.PlaneNameBase} @ {spec.CenterPlaneName}").Success(
-                            $"Label: {spec.Parameter}"));
+                        logs.Add(new LogEntry($"Symmetric param dim: {spec.PlaneNameBase} @ {spec.CenterPlaneName}")
+                            .Success(
+                                $"Label: {spec.Parameter}"));
                     } else {
-                        logs.Add(new LogEntry($"Symmetric param dim: {spec.PlaneNameBase} @ {spec.CenterPlaneName}").Success(
-                            $"(param '{spec.Parameter}' not found)"));
+                        logs.Add(new LogEntry($"Symmetric param dim: {spec.PlaneNameBase} @ {spec.CenterPlaneName}")
+                            .Success(
+                                $"(param '{spec.Parameter}' not found)"));
                     }
                 } else
-                    logs.Add(new LogEntry($"Symmetric param dim: {spec.PlaneNameBase} @ {spec.CenterPlaneName}").Success("Created"));
+                    logs.Add(
+                        new LogEntry($"Symmetric param dim: {spec.PlaneNameBase} @ {spec.CenterPlaneName}").Success(
+                            "Created"));
             } catch (Exception ex) {
                 Console.WriteLine($"[CreateSymmetricDimensions] Param dim ERROR: {ex.Message}");
                 logs.Add(new LogEntry($"Symmetric param dim: {spec.PlaneNameBase} @ {spec.CenterPlaneName}").Error(ex));
@@ -452,7 +466,9 @@ public class RefPlaneDimCreator(
         if (this.DimensionExists(negativePlane, center, positivePlane)) {
             Console.WriteLine(
                 $"[CreateSymmetricDimensions] EQ dim already exists between {spec.NegativePlaneName}, {spec.CenterPlaneName}, {spec.PositivePlaneName}");
-            logs.Add(new LogEntry($"Symmetric EQ dim: {spec.PlaneNameBase} @ {spec.CenterPlaneName}").Skip("Already exists"));
+            logs.Add(
+                new LogEntry($"Symmetric EQ dim: {spec.PlaneNameBase} @ {spec.CenterPlaneName}")
+                    .Skip("Already exists"));
         } else {
             try {
                 var eqDimView = this.GetBestDimensionView(negativePlane, positivePlane);
@@ -467,12 +483,15 @@ public class RefPlaneDimCreator(
                 eqRefArray.Append(center.GetReference());
                 eqRefArray.Append(positivePlane.GetReference());
 
-                var eqDimLine = CreateDimensionLine(negativePlane, positivePlane, dimOffset - DimStaggerStep, eqDimView);
+                var eqDimLine =
+                    CreateDimensionLine(negativePlane, positivePlane, dimOffset - DimStaggerStep, eqDimView);
                 Console.WriteLine($"[CreateSymmetricDimensions] EQ dim line length: {eqDimLine.Length:F6}");
 
                 var eqDim = doc.FamilyCreate.NewLinearDimension(eqDimView, eqDimLine, eqRefArray);
                 eqDim.AreSegmentsEqual = true;
-                logs.Add(new LogEntry($"Symmetric EQ dim: {spec.PlaneNameBase} @ {spec.CenterPlaneName}").Success("Created"));
+                logs.Add(
+                    new LogEntry($"Symmetric EQ dim: {spec.PlaneNameBase} @ {spec.CenterPlaneName}")
+                        .Success("Created"));
             } catch (Exception ex) {
                 Console.WriteLine($"[CreateSymmetricDimensions] EQ dim ERROR: {ex.Message}");
                 logs.Add(new LogEntry($"Symmetric EQ dim: {spec.PlaneNameBase} @ {spec.CenterPlaneName}").Error(ex));
@@ -481,8 +500,8 @@ public class RefPlaneDimCreator(
     }
 
     /// <summary>
-     ///     Creates mirror dimensions: EQ constraint (3 planes) + parameter label (2 planes).
-     /// </summary>
+    ///     Creates mirror dimensions: EQ constraint (3 planes) + parameter label (2 planes).
+    /// </summary>
     public void CreateMirrorDimensions(MirrorConstraintSnapshot spec, int staggerIndex) {
         Console.WriteLine(
             $"[CreateMirrorDimensions] Processing: {spec.Name}, Center: {spec.CenterAnchor}, Stagger: {staggerIndex}");
@@ -606,6 +625,10 @@ public class RefPlaneDimCreator(
 
         var dimOffset = DimStaggerStep + (DimStaggerStep * staggerIndex);
         var dimView = this.GetBestDimensionView(anchor, target);
+        if (dimView == null) {
+            logs.Add(new LogEntry($"Offset dim: {spec.Name}").Error("Could not find a compatible dimension view"));
+            return;
+        }
 
         try {
             var refArray = new ReferenceArray();
@@ -654,6 +677,10 @@ public class RefPlaneDimCreator(
 
         var dimOffset = DimStaggerStep + (DimStaggerStep * staggerIndex);
         var dimView = this.GetBestDimensionView(anchor, target);
+        if (dimView == null) {
+            logs.Add(new LogEntry($"Offset dim: {spec.PlaneName}").Error("Could not find a compatible dimension view"));
+            return;
+        }
 
         try {
             var refArray = new ReferenceArray();
@@ -671,7 +698,8 @@ public class RefPlaneDimCreator(
                     dim.FamilyLabel = param;
                     logs.Add(new LogEntry($"Offset dim: {spec.PlaneName}").Success($"Label: {spec.Parameter}"));
                 } else
-                    logs.Add(new LogEntry($"Offset dim: {spec.PlaneName}").Success($"(param '{spec.Parameter}' not found)"));
+                    logs.Add(new LogEntry($"Offset dim: {spec.PlaneName}").Success(
+                        $"(param '{spec.Parameter}' not found)"));
             } else
                 logs.Add(new LogEntry($"Offset dim: {spec.PlaneName}").Success("Created"));
         } catch (Exception ex) {

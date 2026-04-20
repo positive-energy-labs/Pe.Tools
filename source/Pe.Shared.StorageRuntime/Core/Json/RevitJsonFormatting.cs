@@ -1,8 +1,8 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using Pe.Shared.StorageRuntime.Core.Json.ContractResolvers;
 using Pe.Shared.StorageRuntime.Json;
 using Pe.Shared.StorageRuntime.Json.ContractResolvers;
-using Pe.Shared.StorageRuntime.Core.Json.ContractResolvers;
 
 namespace Pe.Shared.StorageRuntime.Core.Json;
 
@@ -48,8 +48,7 @@ public static class RevitJsonFormatting {
     }
 
     private static JsonSerializerSettings CreateIndentedSettings() => new() {
-        Formatting = Formatting.Indented,
-        NullValueHandling = NullValueHandling.Ignore
+        Formatting = Formatting.Indented, NullValueHandling = NullValueHandling.Ignore
     };
 
     private static void AddStringEnumConverter(JsonSerializerSettings settings) {

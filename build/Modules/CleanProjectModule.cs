@@ -17,7 +17,8 @@ public sealed class CleanProjectModule(IOptions<BuildOptions> buildOptions) : Sy
     protected override void ExecuteModule(IModuleContext context, CancellationToken cancellationToken) {
         var rootDirectory = context.Git().RootDirectory;
         var outputDirectory = rootDirectory.GetFolder(buildOptions.Value.OutputDirectory);
-        var legacyInstallerOutputDirectory = rootDirectory.GetFolder("install").GetFolder(buildOptions.Value.OutputDirectory);
+        var legacyInstallerOutputDirectory =
+            rootDirectory.GetFolder("install").GetFolder(buildOptions.Value.OutputDirectory);
         var buildOutputDirectories = rootDirectory
             .GetFolders(folder => folder.Name is "bin" or "obj")
             .Where(folder => folder.Parent != Projects.Build.Directory);

@@ -1,5 +1,4 @@
-﻿using Autodesk.Revit.DB;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 
 namespace Pe.Revit.FamilyFoundry;
 
@@ -10,23 +9,21 @@ public sealed class LengthDriverSpec {
     public double? LiteralValue { get; init; }
     public string AuthoredValue { get; init; } = string.Empty;
 
-    [JsonIgnore]
-    public bool IsEmpty => string.IsNullOrWhiteSpace(this.ParameterName) && this.LiteralValue == null;
+    [JsonIgnore] public bool IsEmpty => string.IsNullOrWhiteSpace(this.ParameterName) && this.LiteralValue == null;
 
-    [JsonIgnore]
-    public bool IsParameterDriven => !string.IsNullOrWhiteSpace(this.ParameterName);
+    [JsonIgnore] public bool IsParameterDriven => !string.IsNullOrWhiteSpace(this.ParameterName);
 
-    [JsonIgnore]
-    public bool IsLiteralDriven => this.LiteralValue != null;
+    [JsonIgnore] public bool IsLiteralDriven => this.LiteralValue != null;
 
     public static LengthDriverSpec FromParameter(string parameterName, string authoredValue = "") => new() {
         ParameterName = parameterName?.Trim() ?? string.Empty,
-        AuthoredValue = string.IsNullOrWhiteSpace(authoredValue) ? parameterName?.Trim() ?? string.Empty : authoredValue.Trim()
+        AuthoredValue = string.IsNullOrWhiteSpace(authoredValue)
+            ? parameterName?.Trim() ?? string.Empty
+            : authoredValue.Trim()
     };
 
     public static LengthDriverSpec FromLiteral(double literalValue, string authoredValue) => new() {
-        LiteralValue = literalValue,
-        AuthoredValue = authoredValue?.Trim() ?? string.Empty
+        LiteralValue = literalValue, AuthoredValue = authoredValue?.Trim() ?? string.Empty
     };
 
     public static LengthDriverSpec FromLegacyParameter(string? parameterName) =>

@@ -1,6 +1,4 @@
-using Autodesk.Revit.UI;
 using Microsoft.CodeAnalysis;
-using Pe.Revit.Scripting;
 using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.Context;
 using Pe.Revit.Scripting.Execution;
@@ -18,21 +16,21 @@ public sealed class RevitScriptingPortTests {
         var runtimeAssemblyPath = typeof(PeScriptContainer).Assembly.Location;
         var generator = CreateProjectGenerator();
         var existingProject = """
-            <Project Sdk="Microsoft.NET.Sdk">
-              <ItemGroup>
-                <Reference Include="MyLib">
-                  <HintPath>C:\temp\my-lib.dll</HintPath>
-                </Reference>
-                <Reference Include="Pe.Revit.Scripting">
-                  <HintPath>C:\temp\should-be-replaced.dll</HintPath>
-                </Reference>
-              </ItemGroup>
-              <ItemGroup>
-                <PackageReference Include="Example.Package" Version="1.2.3" />
-                <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2025.*" />
-              </ItemGroup>
-            </Project>
-            """;
+                              <Project Sdk="Microsoft.NET.Sdk">
+                                <ItemGroup>
+                                  <Reference Include="MyLib">
+                                    <HintPath>C:\temp\my-lib.dll</HintPath>
+                                  </Reference>
+                                  <Reference Include="Pe.Revit.Scripting">
+                                    <HintPath>C:\temp\should-be-replaced.dll</HintPath>
+                                  </Reference>
+                                </ItemGroup>
+                                <ItemGroup>
+                                  <PackageReference Include="Example.Package" Version="1.2.3" />
+                                  <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2025.*" />
+                                </ItemGroup>
+                              </Project>
+                              """;
 
         var generated = generator.GenerateProjectContent(
             existingProject,
@@ -70,14 +68,14 @@ public sealed class RevitScriptingPortTests {
         var runtimeAssemblyPath = typeof(PeScriptContainer).Assembly.Location;
         var generator = CreateProjectGenerator();
         var existingProject = """
-            <Project Sdk="Microsoft.NET.Sdk">
-              <ItemGroup>
-                <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2024.*" />
-                <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2024.*" />
-                <PackageReference Include="Example.Package" Version="1.2.3" />
-              </ItemGroup>
-            </Project>
-            """;
+                              <Project Sdk="Microsoft.NET.Sdk">
+                                <ItemGroup>
+                                  <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2024.*" />
+                                  <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2024.*" />
+                                  <PackageReference Include="Example.Package" Version="1.2.3" />
+                                </ItemGroup>
+                              </Project>
+                              """;
 
         var generated = generator.GenerateProjectContent(
             existingProject,
@@ -87,8 +85,10 @@ public sealed class RevitScriptingPortTests {
             runtimeAssemblyPath
         );
 
-        Assert.That(generated, Does.Contain("""<PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2026.*" />"""));
-        Assert.That(generated, Does.Contain("""<PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2026.*" />"""));
+        Assert.That(generated,
+            Does.Contain("""<PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2026.*" />"""));
+        Assert.That(generated,
+            Does.Contain("""<PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2026.*" />"""));
         Assert.That(generated, Does.Not.Contain("Version=\"2024.*\""));
         Assert.That(generated, Does.Contain("""<PackageReference Include="Example.Package" Version="1.2.3" />"""));
     }
@@ -103,22 +103,24 @@ public sealed class RevitScriptingPortTests {
 
             var result = bootstrapService.Bootstrap(
                 workspaceKey,
-                createSampleScript: true,
-                revitVersion: "2025",
-                targetFramework: "net8.0-windows",
+                true,
+                "2025",
+                "net8.0-windows",
                 runtimeAssemblyPath
             );
 
             var agentsPath = RevitScriptingStorageLocations.ResolveAgentsPath(workspaceKey);
             var inlineDirectory = RevitScriptingStorageLocations.ResolveInlineDirectory(workspaceKey);
             Assert.That(File.Exists(agentsPath), Is.True);
-            Assert.That(File.ReadAllText(agentsPath), Does.Contain("The script runner discovers exactly one `PeScriptContainer` type"));
+            Assert.That(File.ReadAllText(agentsPath),
+                Does.Contain("The script runner discovers exactly one `PeScriptContainer` type"));
             Assert.That(File.ReadAllText(agentsPath), Does.Not.Contain("lane"));
             Assert.That(File.Exists(result.ReadmePath), Is.True);
             Assert.That(File.ReadAllText(result.ReadmePath), Does.Not.Contain("lane"));
             Assert.That(Directory.Exists(inlineDirectory), Is.True);
             Assert.That(File.ReadAllText(result.SampleScriptPath), Does.Contain("pe-script src\\SampleScript.cs"));
-            Assert.That(File.ReadAllText(result.SampleScriptPath), Does.Contain("Define exactly one non-abstract PeScriptContainer"));
+            Assert.That(File.ReadAllText(result.SampleScriptPath),
+                Does.Contain("Define exactly one non-abstract PeScriptContainer"));
             Assert.That(result.GeneratedFiles, Does.Contain(agentsPath));
         } finally {
             DeleteWorkspace(workspaceRoot);
@@ -132,7 +134,8 @@ public sealed class RevitScriptingPortTests {
 
         Assert.That(basePath.EndsWith(Path.Combine("Pe.Scripting"), StringComparison.OrdinalIgnoreCase), Is.True);
         Assert.That(
-            workspaceRoot.EndsWith(Path.Combine("Pe.Scripting", "workspace", "default"), StringComparison.OrdinalIgnoreCase),
+            workspaceRoot.EndsWith(Path.Combine("Pe.Scripting", "workspace", "default"),
+                StringComparison.OrdinalIgnoreCase),
             Is.True
         );
     }
@@ -157,20 +160,21 @@ public sealed class RevitScriptingPortTests {
         var resolver = new ScriptReferenceResolver(new CsProjReader());
         var assemblyPath = typeof(PeScriptContainer).Assembly.Location;
         var projectContent = $$"""
-            <Project Sdk="Microsoft.NET.Sdk">
-              <ItemGroup>
-                <Reference Include="Pe.Revit.Scripting">
-                  <HintPath>{{assemblyPath}}</HintPath>
-                </Reference>
-              </ItemGroup>
-            </Project>
-            """;
+                               <Project Sdk="Microsoft.NET.Sdk">
+                                 <ItemGroup>
+                                   <Reference Include="Pe.Revit.Scripting">
+                                     <HintPath>{{assemblyPath}}</HintPath>
+                                   </Reference>
+                                 </ItemGroup>
+                               </Project>
+                               """;
 
         var result = resolver.Resolve(projectContent, Path.GetTempPath());
 
         Assert.That(result.CompileReferencePaths, Does.Contain(assemblyPath));
         Assert.That(result.RuntimeReferencePaths, Does.Contain(assemblyPath));
-        Assert.That(result.Diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error), Is.False);
+        Assert.That(result.Diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error),
+            Is.False);
     }
 
     [Test]
@@ -181,21 +185,22 @@ public sealed class RevitScriptingPortTests {
         Directory.CreateDirectory(Path.GetDirectoryName(assemblyPath)!);
         File.WriteAllBytes(assemblyPath, [1, 2, 3, 4]);
         var projectContent = """
-            <Project Sdk="Microsoft.NET.Sdk">
-              <ItemGroup>
-                <Reference Include="Yeared.Local">
-                  <HintPath>lib\$(RevitYear)\Yeared.Local.dll</HintPath>
-                </Reference>
-              </ItemGroup>
-            </Project>
-            """;
+                             <Project Sdk="Microsoft.NET.Sdk">
+                               <ItemGroup>
+                                 <Reference Include="Yeared.Local">
+                                   <HintPath>lib\$(RevitYear)\Yeared.Local.dll</HintPath>
+                                 </Reference>
+                               </ItemGroup>
+                             </Project>
+                             """;
 
         try {
             var result = resolver.Resolve(projectContent, workspaceRoot, "2025");
 
             Assert.That(result.CompileReferencePaths, Does.Contain(assemblyPath));
             Assert.That(result.RuntimeReferencePaths, Does.Contain(assemblyPath));
-            Assert.That(result.Diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error), Is.False);
+            Assert.That(result.Diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error),
+                Is.False);
         } finally {
             DeleteWorkspace(workspaceRoot);
         }
@@ -207,15 +212,15 @@ public sealed class RevitScriptingPortTests {
         var packageDll = packageCache.AddPackage("Example.Package", "1.2.3", "net8.0", "Example.Package.dll");
         var resolver = new ScriptReferenceResolver(new CsProjReader());
         var projectContent = """
-            <Project Sdk="Microsoft.NET.Sdk">
-              <PropertyGroup>
-                <TargetFramework>net8.0-windows</TargetFramework>
-              </PropertyGroup>
-              <ItemGroup>
-                <PackageReference Include="Example.Package" Version="1.2.3" />
-              </ItemGroup>
-            </Project>
-            """;
+                             <Project Sdk="Microsoft.NET.Sdk">
+                               <PropertyGroup>
+                                 <TargetFramework>net8.0-windows</TargetFramework>
+                               </PropertyGroup>
+                               <ItemGroup>
+                                 <PackageReference Include="Example.Package" Version="1.2.3" />
+                               </ItemGroup>
+                             </Project>
+                             """;
 
         var originalNugetPackages = Environment.GetEnvironmentVariable("NUGET_PACKAGES");
         Environment.SetEnvironmentVariable("NUGET_PACKAGES", packageCache.RootPath);
@@ -223,7 +228,8 @@ public sealed class RevitScriptingPortTests {
             var result = resolver.Resolve(projectContent, Path.GetTempPath());
             Assert.That(result.CompileReferencePaths, Does.Contain(packageDll));
             Assert.That(result.RuntimeReferencePaths, Does.Contain(packageDll));
-            Assert.That(result.Diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error), Is.False);
+            Assert.That(result.Diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error),
+                Is.False);
         } finally {
             Environment.SetEnvironmentVariable("NUGET_PACKAGES", originalNugetPackages);
         }
@@ -237,15 +243,15 @@ public sealed class RevitScriptingPortTests {
         _ = packageCache.AddPackage("Example.Package", "1.3.0", "net8.0", "Example.Package.dll");
         var resolver = new ScriptReferenceResolver(new CsProjReader());
         var projectContent = """
-            <Project Sdk="Microsoft.NET.Sdk">
-              <PropertyGroup>
-                <TargetFramework>net8.0-windows</TargetFramework>
-              </PropertyGroup>
-              <ItemGroup>
-                <PackageReference Include="Example.Package" Version="1.2.*" />
-              </ItemGroup>
-            </Project>
-            """;
+                             <Project Sdk="Microsoft.NET.Sdk">
+                               <PropertyGroup>
+                                 <TargetFramework>net8.0-windows</TargetFramework>
+                               </PropertyGroup>
+                               <ItemGroup>
+                                 <PackageReference Include="Example.Package" Version="1.2.*" />
+                               </ItemGroup>
+                             </Project>
+                             """;
 
         var originalNugetPackages = Environment.GetEnvironmentVariable("NUGET_PACKAGES");
         Environment.SetEnvironmentVariable("NUGET_PACKAGES", packageCache.RootPath);
@@ -253,7 +259,9 @@ public sealed class RevitScriptingPortTests {
             var result = resolver.Resolve(projectContent, Path.GetTempPath());
             Assert.That(result.CompileReferencePaths, Does.Contain(latestDll));
             Assert.That(result.RuntimeReferencePaths, Does.Contain(latestDll));
-            Assert.That(result.CompileReferencePaths.Any(path => path.Contains("1.3.0", StringComparison.OrdinalIgnoreCase)), Is.False);
+            Assert.That(
+                result.CompileReferencePaths.Any(path => path.Contains("1.3.0", StringComparison.OrdinalIgnoreCase)),
+                Is.False);
         } finally {
             Environment.SetEnvironmentVariable("NUGET_PACKAGES", originalNugetPackages);
         }
@@ -265,15 +273,15 @@ public sealed class RevitScriptingPortTests {
         var packageDll = packageCache.AddPackage("Yeared.Package", "2025.2.0", "net8.0", "Yeared.Package.dll");
         var resolver = new ScriptReferenceResolver(new CsProjReader());
         var projectContent = """
-            <Project Sdk="Microsoft.NET.Sdk">
-              <PropertyGroup>
-                <TargetFramework>net8.0-windows</TargetFramework>
-              </PropertyGroup>
-              <ItemGroup>
-                <PackageReference Include="Yeared.Package" Version="$(RevitYear).*" />
-              </ItemGroup>
-            </Project>
-            """;
+                             <Project Sdk="Microsoft.NET.Sdk">
+                               <PropertyGroup>
+                                 <TargetFramework>net8.0-windows</TargetFramework>
+                               </PropertyGroup>
+                               <ItemGroup>
+                                 <PackageReference Include="Yeared.Package" Version="$(RevitYear).*" />
+                               </ItemGroup>
+                             </Project>
+                             """;
 
         var originalNugetPackages = Environment.GetEnvironmentVariable("NUGET_PACKAGES");
         Environment.SetEnvironmentVariable("NUGET_PACKAGES", packageCache.RootPath);
@@ -281,7 +289,8 @@ public sealed class RevitScriptingPortTests {
             var result = resolver.Resolve(projectContent, Path.GetTempPath(), "2025");
             Assert.That(result.CompileReferencePaths, Does.Contain(packageDll));
             Assert.That(result.RuntimeReferencePaths, Does.Contain(packageDll));
-            Assert.That(result.Diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error), Is.False);
+            Assert.That(result.Diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error),
+                Is.False);
         } finally {
             Environment.SetEnvironmentVariable("NUGET_PACKAGES", originalNugetPackages);
         }
@@ -293,15 +302,15 @@ public sealed class RevitScriptingPortTests {
         packageCache.AddPackage("Broken.Package", "1.0.0", "net9.0", "Broken.Package.dll");
         var resolver = new ScriptReferenceResolver(new CsProjReader());
         var projectContent = """
-            <Project Sdk="Microsoft.NET.Sdk">
-              <PropertyGroup>
-                <TargetFramework>net48</TargetFramework>
-              </PropertyGroup>
-              <ItemGroup>
-                <PackageReference Include="Broken.Package" Version="1.0.0" />
-              </ItemGroup>
-            </Project>
-            """;
+                             <Project Sdk="Microsoft.NET.Sdk">
+                               <PropertyGroup>
+                                 <TargetFramework>net48</TargetFramework>
+                               </PropertyGroup>
+                               <ItemGroup>
+                                 <PackageReference Include="Broken.Package" Version="1.0.0" />
+                               </ItemGroup>
+                             </Project>
+                             """;
 
         var originalNugetPackages = Environment.GetEnvironmentVariable("NUGET_PACKAGES");
         Environment.SetEnvironmentVariable("NUGET_PACKAGES", packageCache.RootPath);
@@ -309,7 +318,8 @@ public sealed class RevitScriptingPortTests {
             var result = resolver.Resolve(projectContent, Path.GetTempPath());
             Assert.That(result.CompileReferencePaths, Is.Empty);
             Assert.That(result.RuntimeReferencePaths, Is.Empty);
-            Assert.That(result.Diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error), Is.True);
+            Assert.That(result.Diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error),
+                Is.True);
         } finally {
             Environment.SetEnvironmentVariable("NUGET_PACKAGES", originalNugetPackages);
         }
@@ -321,15 +331,15 @@ public sealed class RevitScriptingPortTests {
         _ = packageCache.AddPackageReferenceOnly("CompileOnly.Package", "1.0.0", "net8.0", "CompileOnly.Package.dll");
         var resolver = new ScriptReferenceResolver(new CsProjReader());
         var projectContent = """
-            <Project Sdk="Microsoft.NET.Sdk">
-              <PropertyGroup>
-                <TargetFramework>net8.0-windows</TargetFramework>
-              </PropertyGroup>
-              <ItemGroup>
-                <PackageReference Include="CompileOnly.Package" Version="1.0.0" />
-              </ItemGroup>
-            </Project>
-            """;
+                             <Project Sdk="Microsoft.NET.Sdk">
+                               <PropertyGroup>
+                                 <TargetFramework>net8.0-windows</TargetFramework>
+                               </PropertyGroup>
+                               <ItemGroup>
+                                 <PackageReference Include="CompileOnly.Package" Version="1.0.0" />
+                               </ItemGroup>
+                             </Project>
+                             """;
 
         var originalNugetPackages = Environment.GetEnvironmentVariable("NUGET_PACKAGES");
         Environment.SetEnvironmentVariable("NUGET_PACKAGES", packageCache.RootPath);
@@ -338,8 +348,10 @@ public sealed class RevitScriptingPortTests {
             Assert.That(result.CompileReferencePaths, Is.Not.Empty);
             Assert.That(result.RuntimeReferencePaths, Is.Empty);
             Assert.That(result.Diagnostics.Any(diagnostic =>
-                diagnostic.Severity == ScriptDiagnosticSeverity.Error
-                && diagnostic.Message.Contains("no compatible runtime assemblies", StringComparison.OrdinalIgnoreCase)), Is.True);
+                    diagnostic.Severity == ScriptDiagnosticSeverity.Error
+                    && diagnostic.Message.Contains("no compatible runtime assemblies",
+                        StringComparison.OrdinalIgnoreCase)),
+                Is.True);
         } finally {
             Environment.SetEnvironmentVariable("NUGET_PACKAGES", originalNugetPackages);
         }
@@ -357,15 +369,15 @@ public sealed class RevitScriptingPortTests {
         );
         var resolver = new ScriptReferenceResolver(new CsProjReader());
         var projectContent = """
-            <Project Sdk="Microsoft.NET.Sdk">
-              <PropertyGroup>
-                <TargetFramework>net8.0-windows</TargetFramework>
-              </PropertyGroup>
-              <ItemGroup>
-                <PackageReference Include="CompileOnly.RuntimeBacked.Package" Version="1.0.0" />
-              </ItemGroup>
-            </Project>
-            """;
+                             <Project Sdk="Microsoft.NET.Sdk">
+                               <PropertyGroup>
+                                 <TargetFramework>net8.0-windows</TargetFramework>
+                               </PropertyGroup>
+                               <ItemGroup>
+                                 <PackageReference Include="CompileOnly.RuntimeBacked.Package" Version="1.0.0" />
+                               </ItemGroup>
+                             </Project>
+                             """;
 
         var originalNugetPackages = Environment.GetEnvironmentVariable("NUGET_PACKAGES");
         Environment.SetEnvironmentVariable("NUGET_PACKAGES", packageCache.RootPath);
@@ -374,8 +386,10 @@ public sealed class RevitScriptingPortTests {
             Assert.That(result.CompileReferencePaths, Does.Contain(compileAssemblyPath));
             Assert.That(result.RuntimeReferencePaths, Does.Contain(loadedAssemblyPath));
             Assert.That(result.Diagnostics.Any(diagnostic =>
-                diagnostic.Severity == ScriptDiagnosticSeverity.Error
-                && diagnostic.Message.Contains("no compatible runtime assemblies", StringComparison.OrdinalIgnoreCase)), Is.False);
+                    diagnostic.Severity == ScriptDiagnosticSeverity.Error
+                    && diagnostic.Message.Contains("no compatible runtime assemblies",
+                        StringComparison.OrdinalIgnoreCase)),
+                Is.False);
         } finally {
             Environment.SetEnvironmentVariable("NUGET_PACKAGES", originalNugetPackages);
         }
@@ -393,27 +407,29 @@ public sealed class RevitScriptingPortTests {
         );
         var resolver = new ScriptReferenceResolver(new CsProjReader());
         var projectContent = """
-            <Project Sdk="Microsoft.NET.Sdk">
-              <PropertyGroup>
-                <TargetFramework>net8.0-windows</TargetFramework>
-              </PropertyGroup>
-              <ItemGroup>
-                <PackageReference Include="CompileOnly.RuntimeBacked.Package" Version="1.0.0" />
-              </ItemGroup>
-            </Project>
-            """;
+                             <Project Sdk="Microsoft.NET.Sdk">
+                               <PropertyGroup>
+                                 <TargetFramework>net8.0-windows</TargetFramework>
+                               </PropertyGroup>
+                               <ItemGroup>
+                                 <PackageReference Include="CompileOnly.RuntimeBacked.Package" Version="1.0.0" />
+                               </ItemGroup>
+                             </Project>
+                             """;
 
         var originalNugetPackages = Environment.GetEnvironmentVariable("NUGET_PACKAGES");
         Environment.SetEnvironmentVariable("NUGET_PACKAGES", packageCache.RootPath);
         try {
             var result = resolver.Resolve(projectContent, Path.GetTempPath());
             var alreadyLoadedMessages = result.Diagnostics
-                .Where(diagnostic => diagnostic.Message.Contains("Using already-loaded runtime assembly", StringComparison.OrdinalIgnoreCase))
+                .Where(diagnostic => diagnostic.Message.Contains("Using already-loaded runtime assembly",
+                    StringComparison.OrdinalIgnoreCase))
                 .ToList();
             var duplicateResolvedRuntimeMessages = result.Diagnostics
                 .Where(diagnostic =>
                     diagnostic.Message.Contains("Resolved package runtime assembly", StringComparison.OrdinalIgnoreCase)
-                    && diagnostic.Message.Contains(Path.GetFileName(loadedAssemblyPath), StringComparison.OrdinalIgnoreCase))
+                    && diagnostic.Message.Contains(Path.GetFileName(loadedAssemblyPath),
+                        StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             Assert.That(alreadyLoadedMessages.Count, Is.EqualTo(1));
@@ -446,7 +462,7 @@ public sealed class RevitScriptingPortTests {
             var service = CreateExecutionService(uiApplication);
             var result = service.Execute(
                 new ExecuteRevitScriptRequest(
-                    ScriptContent: """
+                    """
                     public sealed class InlineOverrideScript : PeScriptContainer
                     {
                         public override void Execute()
@@ -455,7 +471,7 @@ public sealed class RevitScriptingPortTests {
                         }
                     }
                     """,
-                    SourceKind: ScriptExecutionSourceKind.InlineSnippet,
+                    ScriptExecutionSourceKind.InlineSnippet,
                     WorkspaceKey: workspaceKey,
                     ProjectContent: "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>"
                 ),
@@ -517,7 +533,8 @@ public sealed class RevitScriptingPortTests {
         try {
             var alreadyLoadedMessages = diagnostics
                 .Where(diagnostic =>
-                    diagnostic.Message.Contains("Using already-loaded assembly 'Pe.Revit.Scripting'", StringComparison.OrdinalIgnoreCase))
+                    diagnostic.Message.Contains("Using already-loaded assembly 'Pe.Revit.Scripting'",
+                        StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             Assert.That(alreadyLoadedMessages.Count, Is.EqualTo(1));
@@ -531,7 +548,7 @@ public sealed class RevitScriptingPortTests {
         var service = CreateExecutionService(uiApplication);
 
         var result = service.Execute(new ExecuteRevitScriptRequest(
-            ScriptContent: """
+            """
             public sealed class NotAContainer
             {
             }
@@ -547,7 +564,7 @@ public sealed class RevitScriptingPortTests {
         var service = CreateExecutionService(uiApplication);
 
         var result = service.Execute(new ExecuteRevitScriptRequest(
-            ScriptContent: """
+            """
             public sealed class ScriptA : PeScriptContainer
             {
                 public override void Execute()
@@ -565,7 +582,9 @@ public sealed class RevitScriptingPortTests {
         ), "test-multiple-container");
 
         Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Rejected));
-        Assert.That(result.Diagnostics.Any(diagnostic => diagnostic.Message.Contains("Multiple PeScriptContainer", StringComparison.Ordinal)), Is.True);
+        Assert.That(
+            result.Diagnostics.Any(diagnostic =>
+                diagnostic.Message.Contains("Multiple PeScriptContainer", StringComparison.Ordinal)), Is.True);
     }
 
     [Test]
@@ -573,7 +592,7 @@ public sealed class RevitScriptingPortTests {
         var service = CreateExecutionService(uiApplication);
 
         var result = service.Execute(new ExecuteRevitScriptRequest(
-            ScriptContent: """
+            """
             public sealed class BrokenScript : PeScriptContainer
             {
                 public override void Execute()
@@ -597,7 +616,7 @@ public sealed class RevitScriptingPortTests {
             var service = CreateExecutionService(uiApplication);
             var result = service.Execute(
                 new ExecuteRevitScriptRequest(
-                    ScriptContent: """
+                    """
                     public sealed class InlineScript : PeScriptContainer
                     {
                         public override void Execute()
@@ -606,7 +625,7 @@ public sealed class RevitScriptingPortTests {
                         }
                     }
                     """,
-                    SourceKind: ScriptExecutionSourceKind.InlineSnippet,
+                    ScriptExecutionSourceKind.InlineSnippet,
                     WorkspaceKey: workspaceKey,
                     SourceName: "SmokeInline.cs"
                 ),
@@ -631,7 +650,7 @@ public sealed class RevitScriptingPortTests {
             var service = CreateExecutionService(uiApplication);
             var result = service.Execute(
                 new ExecuteRevitScriptRequest(
-                    ScriptContent: """
+                    """
                     public sealed class BrokenInline : PeScriptContainer
                     {
                         public override void Execute()
@@ -640,7 +659,7 @@ public sealed class RevitScriptingPortTests {
                         }
                     }
                     """,
-                    SourceKind: ScriptExecutionSourceKind.InlineSnippet,
+                    ScriptExecutionSourceKind.InlineSnippet,
                     WorkspaceKey: workspaceKey,
                     SourceName: "SmokeInlineFail.cs"
                 ),
@@ -649,7 +668,8 @@ public sealed class RevitScriptingPortTests {
 
             Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.CompilationFailed));
             Assert.That(result.Diagnostics.Any(diagnostic =>
-                diagnostic.Source != null && diagnostic.Source.Contains("LastInline.cs", StringComparison.Ordinal)), Is.True);
+                    diagnostic.Source != null && diagnostic.Source.Contains("LastInline.cs", StringComparison.Ordinal)),
+                Is.True);
         } finally {
             DeleteWorkspace(workspaceRoot);
         }
@@ -678,7 +698,7 @@ public sealed class RevitScriptingPortTests {
             var service = CreateExecutionService(uiApplication);
             var failedResult = service.Execute(
                 new ExecuteRevitScriptRequest(
-                    ScriptContent: """
+                    """
                     public sealed class BrokenInline : PeScriptContainer
                     {
                         public override void Execute()
@@ -687,7 +707,7 @@ public sealed class RevitScriptingPortTests {
                         }
                     }
                     """,
-                    SourceKind: ScriptExecutionSourceKind.InlineSnippet,
+                    ScriptExecutionSourceKind.InlineSnippet,
                     WorkspaceKey: workspaceKey
                 ),
                 "test-inline-first"
@@ -796,13 +816,14 @@ public sealed class RevitScriptingPortTests {
         Directory.CreateDirectory(workspaceRoot);
 
         try {
-            var result = global::Pe.Scripting.Cli.ScriptCliProgram.CreateWorkspaceScriptFile(workspaceRoot, "MyProbe", overwriteExisting: false);
+            var result = ScriptCliProgram.CreateWorkspaceScriptFile(workspaceRoot, "MyProbe", false);
             var createdPath = Path.Combine(workspaceRoot, "src", "MyProbe.cs");
 
             Assert.That(result.Success, Is.True);
             Assert.That(File.Exists(createdPath), Is.True);
             Assert.That(File.ReadAllText(createdPath), Does.Contain("pe-script src\\MyProbe.cs"));
-            Assert.That(File.ReadAllText(createdPath), Does.Contain("Define exactly one non-abstract PeScriptContainer"));
+            Assert.That(File.ReadAllText(createdPath),
+                Does.Contain("Define exactly one non-abstract PeScriptContainer"));
             Assert.That(File.ReadAllText(createdPath), Does.Contain("public sealed class MyProbe : PeScriptContainer"));
             Assert.That(result.WarningMessage, Does.Contain("PeScripts.csproj"));
         } finally {
@@ -811,12 +832,11 @@ public sealed class RevitScriptingPortTests {
     }
 
     [Test]
-    public void Cli_workspace_root_matches_shared_workspace_locations() {
+    public void Cli_workspace_root_matches_shared_workspace_locations() =>
         Assert.That(
-            global::Pe.Scripting.Cli.CliOptions.GetWorkspaceRoot("default"),
+            CliOptions.GetWorkspaceRoot("default"),
             Is.EqualTo(ScriptingWorkspaceLocations.ResolveWorkspaceRoot("default"))
         );
-    }
 
     [Test]
     public void Cli_no_longer_accepts_policy_argument() {
@@ -844,7 +864,7 @@ public sealed class RevitScriptingPortTests {
     private static void DeleteWorkspace(string workspaceRoot) {
         try {
             if (Directory.Exists(workspaceRoot))
-                Directory.Delete(workspaceRoot, recursive: true);
+                Directory.Delete(workspaceRoot, true);
         } catch {
             // Best effort temp cleanup.
         }
@@ -857,6 +877,8 @@ public sealed class RevitScriptingPortTests {
         }
 
         public string RootPath { get; }
+
+        public void Dispose() => DeleteWorkspace(this.RootPath);
 
         public string AddPackage(
             string packageName,
@@ -895,7 +917,5 @@ public sealed class RevitScriptingPortTests {
             File.WriteAllBytes(assemblyPath, [1, 2, 3, 4]);
             return assemblyPath;
         }
-
-        public void Dispose() => DeleteWorkspace(this.RootPath);
     }
 }

@@ -27,6 +27,7 @@ public static class KnownParamPlanBuilder {
 
         var referencedParameterNames = normalizedAssignments.GetAllReferencedParameterNames()
             .Concat(additionalReferences ?? [])
+            .OfType<string>()
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .Select(name => name.Trim())
             .Distinct(StringComparer.Ordinal)
@@ -35,7 +36,8 @@ public static class KnownParamPlanBuilder {
 
         KnownParamResolver.ValidateResolvedParameterNames(referencedParameterNames, catalog);
 
-        var requiredFamilyDefinitions = KnownParamResolver.ExtractRequiredFamilyDefinitions(referencedParameterNames, catalog);
+        var requiredFamilyDefinitions =
+            KnownParamResolver.ExtractRequiredFamilyDefinitions(referencedParameterNames, catalog);
         var resolvedFamilyParams = MergeFamilyParamDefinitions(normalizedFamilyParams, requiredFamilyDefinitions);
         var requiredApsParameterNames = referencedParameterNames
             .Where(KnownParamResolver.IsPeParameterName)
@@ -65,6 +67,7 @@ public static class KnownParamPlanBuilder {
         .Concat(settings.Offsets
             .Select(spec => spec.Driver.TryGetParameterName() ?? spec.Parameter))
         .Distinct(StringComparer.Ordinal)
+        .OfType<string>()
         .Where(name => !string.IsNullOrWhiteSpace(name))
         .Select(name => name.Trim())
         .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
@@ -74,7 +77,9 @@ public static class KnownParamPlanBuilder {
         ParamDrivenConnectorsPlan settings
     ) => settings.Connectors
         .SelectMany(spec => GetLengthDrivenParameterNames(spec))
-        .Concat(settings.Connectors.SelectMany(spec => spec.Bindings.Parameters.Select(binding => binding.SourceParameter)))
+        .Concat(settings.Connectors.SelectMany(spec =>
+            spec.Bindings.Parameters.Select(binding => binding.SourceParameter)))
+        .OfType<string>()
         .Where(name => !string.IsNullOrWhiteSpace(name))
         .Select(name => name.Trim())
         .Distinct(StringComparer.Ordinal)
@@ -93,6 +98,7 @@ public static class KnownParamPlanBuilder {
             spec.DiameterDriver.TryGetParameterName() ?? spec.DiameterParameter,
             spec.HeightDriver.TryGetParameterName() ?? spec.HeightParameter
         }))
+        .OfType<string>()
         .Where(name => !string.IsNullOrWhiteSpace(name))
         .Select(name => name.Trim())
         .Distinct(StringComparer.Ordinal)
@@ -117,11 +123,10 @@ public static class KnownParamPlanBuilder {
     public static IReadOnlyList<string> CollectReferencedParameterNames(
         MakeElecConnectorSettings settings
     ) => new[] {
-            settings.SourceParameterNames.Voltage,
-            settings.SourceParameterNames.NumberOfPoles,
-            settings.SourceParameterNames.ApparentPower,
-            settings.SourceParameterNames.MinimumCircuitAmpacity
+            settings.SourceParameterNames.Voltage, settings.SourceParameterNames.NumberOfPoles,
+            settings.SourceParameterNames.ApparentPower, settings.SourceParameterNames.MinimumCircuitAmpacity
         }
+        .OfType<string>()
         .Where(name => !string.IsNullOrWhiteSpace(name))
         .Select(name => name.Trim())
         .Distinct(StringComparer.Ordinal)
@@ -135,30 +140,28 @@ public static class KnownParamPlanBuilder {
     ) {
         var snapshotByName = snapshots
             .Where(snapshot => !string.IsNullOrWhiteSpace(snapshot.Name))
-            .GroupBy(snapshot => snapshot.Name.Trim(), StringComparer.Ordinal)
+            .GroupBy(snapshot => snapshot.Name?.Trim() ?? string.Empty, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 
         var familyDefinitions = referencedParameterNames
+            .OfType<string>()
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .Select(name => name.Trim())
             .Distinct(StringComparer.Ordinal)
             .Where(name => !(isSharedParameterName?.Invoke(name) ?? KnownParamResolver.IsPeParameterName(name)))
             .Select(name => snapshotByName.TryGetValue(name, out var snapshot)
                 ? new FamilyParamDefinitionModel {
-                    Name = snapshot.Name,
+                    Name = snapshot.Name ?? string.Empty,
                     IsInstance = snapshot.IsInstance,
                     PropertiesGroup = snapshot.PropertiesGroup,
                     DataType = snapshot.DataType
                 }
                 : null)
             .Where(definition => definition != null)
-            .Select(definition => definition!)
+            .Cast<FamilyParamDefinitionModel>()
             .ToList();
 
-        return new AddFamilyParamsSettings {
-            Enabled = familyDefinitions.Count > 0,
-            Parameters = familyDefinitions
-        };
+        return new AddFamilyParamsSettings { Enabled = familyDefinitions.Count > 0, Parameters = familyDefinitions };
     }
 
     public static AddFamilyParamsSettings MergeFamilyParamDefinitions(
@@ -183,10 +186,7 @@ public static class KnownParamPlanBuilder {
             .Select(parameter => parameter with { Name = parameter.Name?.Trim() ?? string.Empty })
             .ToList();
 
-        return new AddFamilyParamsSettings {
-            Enabled = settings.Enabled,
-            Parameters = normalized
-        };
+        return new AddFamilyParamsSettings { Enabled = settings.Enabled, Parameters = normalized };
     }
 
     private static SetKnownParamsSettings NormalizeAssignments(SetKnownParamsSettings settings) {

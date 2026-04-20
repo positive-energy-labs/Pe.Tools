@@ -18,28 +18,28 @@ public sealed class ButtonRegistry {
     ///     All button registrations. This is the single source of truth for button configuration.
     /// </summary>
     private static readonly List<IButtonRegistration> Registrations = new() {
-        Register<CmdScheduleManager>(new ButtonRegistration<CmdScheduleManager> {
+        Register(new ButtonRegistration<CmdScheduleManager> {
             Text = "Schedule Manager Creator",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Create individual schedules or batches from a profile.",
             Container = new ButtonContainer.Panel("Migration")
         }),
-        Register<CmdScheduleManagerSerialize>(new ButtonRegistration<CmdScheduleManagerSerialize> {
+        Register(new ButtonRegistration<CmdScheduleManagerSerialize> {
             Text = "Schedule Manager Serializer",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Serialize schedules.",
             Container = new ButtonContainer.Panel("Migration")
         }),
-        Register<CmdFFManager>(new ButtonRegistration<CmdFFManager> {
+        Register(new ButtonRegistration<CmdFFManager> {
             Text = "FF Manager Creator",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Manage families in a variety of ways from the Family Foundry.",
             Container = new ButtonContainer.Panel("Migration")
         }),
-        Register<CmdFFManagerProjectSnapshot>(new ButtonRegistration<CmdFFManagerProjectSnapshot> {
+        Register(new ButtonRegistration<CmdFFManagerProjectSnapshot> {
             Text = "FF Snapshot Projector",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
@@ -47,14 +47,14 @@ public sealed class ButtonRegistry {
                 "Capture the current family state, project it to an FF profile, and optionally apply that projected profile to a fresh family document.",
             Container = new ButtonContainer.Panel("Migration")
         }),
-        Register<CmdFFMigrator>(new ButtonRegistration<CmdFFMigrator> {
+        Register(new ButtonRegistration<CmdFFMigrator> {
             Text = "FF Migrator",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Process families in a variety of ways from the Family Foundry.",
             Container = new ButtonContainer.Panel("Migration")
         }),
-        Register<CmdFFMakeATVariants>(new ButtonRegistration<CmdFFMakeATVariants> {
+        Register(new ButtonRegistration<CmdFFMakeATVariants> {
             Text = "Make AT Variants",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
@@ -62,7 +62,7 @@ public sealed class ButtonRegistry {
                 "Create Air Terminal variants from an air terminal family by prepopulating the PE_G___TagInstance parameter and setting an existing duct connector's connection settings properly.",
             Container = new ButtonContainer.Panel("Migration")
         }),
-        Register<CmdPltCommands>(new ButtonRegistration<CmdPltCommands> {
+        Register(new ButtonRegistration<CmdPltCommands> {
             Text = "Command Palette",
             SmallImage = "square-terminal16.png",
             LargeImage = "square-terminal32.png",
@@ -70,70 +70,70 @@ public sealed class ButtonRegistry {
                 "Search and execute Revit commands quickly without looking through Revit's tabs, ribbons, and panels. Not all commands are guaranteed to run.",
             Container = new ButtonContainer.Panel("Tools")
         }),
-        Register<CmdPltViews>(new ButtonRegistration<CmdPltViews> {
+        Register(new ButtonRegistration<CmdPltViews> {
             Text = "All",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Search and open all views, schedules, and sheets in the current document.",
             Container = new ButtonContainer.Split("View Palette", "Tools")
         }),
-        Register<CmdPltViewsOnly>(new ButtonRegistration<CmdPltViewsOnly> {
+        Register(new ButtonRegistration<CmdPltViewsOnly> {
             Text = "Views",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Search and open views in the current document.",
             Container = new ButtonContainer.Split("View Palette", "Tools")
         }),
-        Register<CmdPltSchedules>(new ButtonRegistration<CmdPltSchedules> {
+        Register(new ButtonRegistration<CmdPltSchedules> {
             Text = "Schedules",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Search and open schedules in the current document.",
             Container = new ButtonContainer.Split("View Palette", "Tools")
         }),
-        Register<CmdPltSheets>(new ButtonRegistration<CmdPltSheets> {
+        Register(new ButtonRegistration<CmdPltSheets> {
             Text = "Sheets",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Search and open sheets in the current document.",
             Container = new ButtonContainer.Split("View Palette", "Tools")
         }),
-        Register<CmdPltMruViews>(new ButtonRegistration<CmdPltMruViews> {
+        Register(new ButtonRegistration<CmdPltMruViews> {
             Text = "MRU Views",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Open recently visited views in MRU (Most Recently Used) order.",
             Container = new ButtonContainer.Panel("Tools")
         }),
-        Register<CmdPltFamilies>(new ButtonRegistration<CmdPltFamilies> {
+        Register(new ButtonRegistration<CmdPltFamilies> {
             Text = "Families",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Browse families in the current document.",
             Container = new ButtonContainer.Split("Family Palette", "Tools")
         }),
-        Register<CmdPltFamilyTypes>(new ButtonRegistration<CmdPltFamilyTypes> {
+        Register(new ButtonRegistration<CmdPltFamilyTypes> {
             Text = "Types",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Browse family types in the current document.",
             Container = new ButtonContainer.Split("Family Palette", "Tools")
         }),
-        Register<CmdPltFamilyInstances>(new ButtonRegistration<CmdPltFamilyInstances> {
+        Register(new ButtonRegistration<CmdPltFamilyInstances> {
             Text = "Instances",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Browse family instances in the current document.",
             Container = new ButtonContainer.Split("Family Palette", "Tools")
         }),
-        Register<CmdPltFamilyElements>(new ButtonRegistration<CmdPltFamilyElements> {
+        Register(new ButtonRegistration<CmdPltFamilyElements> {
             Text = "Family Elements",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Browse elements inside the current family document.",
             Container = new ButtonContainer.Panel("Tools")
         }),
-        Register<CmdPltTasks>(new ButtonRegistration<CmdPltTasks> {
+        Register(new ButtonRegistration<CmdPltTasks> {
             Text = "Task Palette",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
@@ -151,7 +151,7 @@ public sealed class ButtonRegistry {
                               """,
             Container = new ButtonContainer.Panel("Tools")
         }),
-        Register<CmdTapMaker>(new ButtonRegistration<CmdTapMaker> {
+        Register(new ButtonRegistration<CmdTapMaker> {
             Text = "Tap Maker",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
@@ -166,7 +166,7 @@ public sealed class ButtonRegistry {
                               """,
             Container = new ButtonContainer.Panel("Tools")
         }),
-        Register<CmdApsAuthPKCE>(new ButtonRegistration<CmdApsAuthPKCE> {
+        Register(new ButtonRegistration<CmdApsAuthPKCE> {
             Text = "OAuth PKCE",
             SmallImage = "id-card16.png",
             LargeImage = "id-card32.png",
@@ -174,7 +174,7 @@ public sealed class ButtonRegistry {
                 "Get an access token from Autodesk Platform Services. This is primarily for testing purposes, but running it will not hurt anything.",
             Container = new ButtonContainer.PullDown("General", "Manage")
         }),
-        Register<CmdApsAuthNormal>(new ButtonRegistration<CmdApsAuthNormal> {
+        Register(new ButtonRegistration<CmdApsAuthNormal> {
             Text = "OAuth Normal",
             SmallImage = "id-card16.png",
             LargeImage = "id-card32.png",
@@ -182,14 +182,14 @@ public sealed class ButtonRegistry {
                 "Get an access token from Autodesk Platform Services. This is primarily for testing purposes, but running it will not hurt anything.",
             Container = new ButtonContainer.PullDown("General", "Manage")
         }),
-        Register<CmdCacheParametersService>(new ButtonRegistration<CmdCacheParametersService> {
+        Register(new ButtonRegistration<CmdCacheParametersService> {
             Text = "Cache Params Svc",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Cache the parameters service data for use in the Family Foundry command.",
             Container = new ButtonContainer.PullDown("General", "Manage")
         }),
-        Register<CmdAutoTag>(new ButtonRegistration<CmdAutoTag> {
+        Register(new ButtonRegistration<CmdAutoTag> {
             Text = "AutoTag",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
@@ -208,7 +208,7 @@ public sealed class ButtonRegistry {
                               """,
             Container = new ButtonContainer.PullDown("General", "Manage")
         }),
-        Register<CmdSettingsEditor>(new ButtonRegistration<CmdSettingsEditor> {
+        Register(new ButtonRegistration<CmdSettingsEditor> {
             Text = "Settings Editor",
             SmallImage = "monitor-down16.png",
             LargeImage = "monitor-down32.png",
@@ -223,7 +223,7 @@ public sealed class ButtonRegistry {
                               """,
             Container = new ButtonContainer.PullDown("General", "Manage")
         }),
-        Register<CmdScriptingWorkspace>(new ButtonRegistration<CmdScriptingWorkspace> {
+        Register(new ButtonRegistration<CmdScriptingWorkspace> {
             Text = "Script Workspace",
             SmallImage = "square-terminal16.png",
             LargeImage = "square-terminal32.png",
@@ -339,9 +339,10 @@ public sealed class ButtonRegistry {
         private PushButton CreatePanelButton(
             Dictionary<string, RibbonPanel> panels,
             ButtonContainer.Panel panelContainer) {
-            if (!panels.TryGetValue(panelContainer.PanelName, out var panel))
+            if (!panels.TryGetValue(panelContainer.PanelName, out var panel)) {
                 throw new InvalidOperationException(
                     $"Panel '{panelContainer.PanelName}' not found. Ensure panels are created before buttons.");
+            }
 
             return panel.AddPushButton<TCommand>(this.Text);
         }
@@ -353,9 +354,10 @@ public sealed class ButtonRegistry {
             var key = $"{pullDownContainer.PanelName}.{pullDownContainer.PullDownName}";
 
             if (!pulldowns.TryGetValue(key, out var pulldown)) {
-                if (!panels.TryGetValue(pullDownContainer.PanelName, out var panel))
+                if (!panels.TryGetValue(pullDownContainer.PanelName, out var panel)) {
                     throw new InvalidOperationException(
                         $"Panel '{pullDownContainer.PanelName}' not found for pulldown '{pullDownContainer.PullDownName}'.");
+                }
 
                 pulldown = panel.AddPullDownButton(pullDownContainer.PullDownName);
                 pulldowns[key] = pulldown;
@@ -371,9 +373,10 @@ public sealed class ButtonRegistry {
             var key = $"{splitContainer.PanelName}.{splitContainer.SplitName}";
 
             if (!splitButtons.TryGetValue(key, out var splitButton)) {
-                if (!panels.TryGetValue(splitContainer.PanelName, out var panel))
+                if (!panels.TryGetValue(splitContainer.PanelName, out var panel)) {
                     throw new InvalidOperationException(
                         $"Panel '{splitContainer.PanelName}' not found for split button '{splitContainer.SplitName}'.");
+                }
 
                 splitButton = panel.AddSplitButton(splitContainer.SplitName);
                 splitButtons[key] = splitButton;

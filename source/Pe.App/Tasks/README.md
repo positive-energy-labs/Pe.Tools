@@ -205,7 +205,8 @@ first.
 - Open Revit.
 - Run `Task Palette`.
 - Execute `Run Practical Benchmarks`.
-- Inspect `Documents/Pe.App/CmdPltTasks/output/RunPracticalBenchmarksTask/` for the newest `practical-benchmarks_*` run folder, the per-benchmark JSON files, and `run-summary.txt`.
+- Inspect `Documents/Pe.App/CmdPltTasks/output/RunPracticalBenchmarksTask/` for the newest `practical-benchmarks_*` run
+  folder, the per-benchmark JSON files, and `run-summary.txt`.
 
 ## Future: User-Defined Tasks
 

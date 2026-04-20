@@ -1,5 +1,4 @@
 using F23.StringSimilarity;
-using Pe.Revit.Global.PolyFill;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Json;
 
@@ -66,23 +65,29 @@ public class SearchFilterService<TItem> where TItem : class, IPaletteListItem {
         if (this.IsStorageDisabled) return;
         var key = this._keyGenerator!(item);
         if (string.IsNullOrWhiteSpace(key)) return;
-        ItemUsageData existing;
+        ItemUsageData? existing;
         lock (this._usageLock)
             existing = this._usageCache.GetValueOrDefault(key);
         var usageCount = (existing?.UsageCount ?? 0) + 1;
 
         var usageData = new ItemUsageData { ItemKey = key, UsageCount = usageCount, LastUsed = DateTime.Now };
+        var state = this._state;
+        if (state == null)
+            return;
 
-        _ = this._state.WriteRow(key, usageData);
+        _ = state.WriteRow(key, usageData);
         lock (this._usageLock)
             this._usageCache[key] = usageData;
     }
 
     public void LoadUsageData() {
         if (this.IsStorageDisabled) return;
+        var state = this._state;
+        if (state == null)
+            return;
 
         lock (this._usageLock)
-            this._usageCache = this._state!.Read();
+            this._usageCache = state.Read();
     }
 
     /// <summary>

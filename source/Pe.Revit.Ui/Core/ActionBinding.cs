@@ -74,7 +74,8 @@ public class ActionBinding<TItem> : ActionBinding where TItem : class, IPaletteL
                 "RevitTaskAccessor not configured. Wire up in Application.OnStartup.");
         }
 
-        await RevitTaskAccessor.RunAsync(() => action.Execute(item));
+        var runAsync = RevitTaskAccessor.RunAsync!;
+        await runAsync(() => action.Execute(item));
     }
 
     /// <summary>

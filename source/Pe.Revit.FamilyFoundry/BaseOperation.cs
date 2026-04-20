@@ -160,12 +160,12 @@ public abstract class TypeOperation<TSettings>(TSettings settings) : IOperation
     public void AbortOperation(string message) => throw new AbortOperationException(message);
 }
 
-public class MergedTypeOperation(List<(IOperation Op, OperationContext Ctx)> operations) : IExecutable {
+public class MergedTypeOperation(List<(IOperation Op, OperationContext? Ctx)> operations) : IExecutable {
     private readonly HashSet<IOperation> _abortedOps = [];
 
-    public List<(IOperation Op, OperationContext Ctx)> Operations { get; } = operations;
+    public List<(IOperation Op, OperationContext? Ctx)> Operations { get; } = operations;
 
-    public Func<FamilyDocument, FamilyProcessingContext, List<OperationLog>> ToFunc(OperationContext ignoredContext) =>
+    public Func<FamilyDocument, FamilyProcessingContext, List<OperationLog>> ToFunc(OperationContext? ignoredContext) =>
         (famDoc, processingContext) => {
             string? currFamTypeName = null;
             string? currOpName = null;
@@ -201,7 +201,7 @@ public class MergedTypeOperation(List<(IOperation Op, OperationContext Ctx)> ope
                         try {
                             currOpName = op.Name;
                             var opSw = Stopwatch.StartNew();
-                            var log = op.Execute(famDoc, processingContext, ctx);
+                            var log = op.Execute(famDoc, processingContext, ctx ?? new OperationContext());
 
                             opSw.Stop();
 

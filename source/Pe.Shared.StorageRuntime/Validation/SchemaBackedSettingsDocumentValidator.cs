@@ -4,10 +4,10 @@ using Newtonsoft.Json.Serialization;
 using NJsonSchema;
 using NJsonSchema.Annotations;
 using Pe.Shared.StorageRuntime.Capabilities;
-using Pe.Shared.StorageRuntime.Documents;
-using Pe.Shared.StorageRuntime.Json;
 using Pe.Shared.StorageRuntime.Core.Json;
 using Pe.Shared.StorageRuntime.Core.Json.ContractResolvers;
+using Pe.Shared.StorageRuntime.Documents;
+using Pe.Shared.StorageRuntime.Json;
 using System.Reflection;
 
 namespace Pe.Shared.StorageRuntime.Validation;

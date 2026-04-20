@@ -37,7 +37,8 @@ var project = new Project {
     ControlPanelInfo = { Manufacturer = configuration.Manufacturer, ProductIcon = configuration.ProductIconPath }
 };
 
-var layout = Generator.GenerateWixEntities(installerInputs.HostPublishDirectory, installerInputs.RevitPublishDirectories);
+var layout =
+    Generator.GenerateWixEntities(installerInputs.HostPublishDirectory, installerInputs.RevitPublishDirectories);
 project.RemoveDialogsBetween(NativeDialogs.WelcomeDlg, NativeDialogs.CustomizeDlg);
 
 BuildSingleUserMsi();
@@ -92,8 +93,7 @@ static InstallerInputs ParseInstallerInputs(string[] args) {
     return new InstallerInputs(hostPublishDirectory, revitPublishDirectories.ToArray());
 }
 
-namespace Installer
-{
+namespace Installer {
     file sealed record InstallerInputs(
         string HostPublishDirectory,
         string[] RevitPublishDirectories

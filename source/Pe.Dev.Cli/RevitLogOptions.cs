@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Pe.Dev.Cli;
 
 internal enum RevitLogTarget {
@@ -24,20 +26,20 @@ internal sealed record RevitLogOptions(
         for (var i = 1; i < args.Count; i++) {
             var arg = args[i];
             switch (arg.ToLowerInvariant()) {
-                case "--tail":
-                case "-tail":
-                    tailLineCount = int.Parse(
-                        RequireValue(args, ref i, arg),
-                        System.Globalization.CultureInfo.InvariantCulture
-                    );
-                    if (tailLineCount <= 0)
-                        throw new ArgumentOutOfRangeException(nameof(args), "--tail must be greater than zero.");
-                    break;
-                case "--path":
-                    printPathsOnly = true;
-                    break;
-                default:
-                    throw new ArgumentException($"Unknown argument '{arg}' for logs.");
+            case "--tail":
+            case "-tail":
+                tailLineCount = int.Parse(
+                    RequireValue(args, ref i, arg),
+                    CultureInfo.InvariantCulture
+                );
+                if (tailLineCount <= 0)
+                    throw new ArgumentOutOfRangeException(nameof(args), "--tail must be greater than zero.");
+                break;
+            case "--path":
+                printPathsOnly = true;
+                break;
+            default:
+                throw new ArgumentException($"Unknown argument '{arg}' for logs.");
             }
         }
 

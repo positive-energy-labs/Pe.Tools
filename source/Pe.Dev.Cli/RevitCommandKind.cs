@@ -1,7 +1,6 @@
 namespace Pe.Dev.Cli;
 
-internal enum RevitCommandKind
-{
+internal enum RevitCommandKind {
     Unknown,
     HotReload,
     ApproveAppAddin,

@@ -24,7 +24,8 @@ public class SchedulePreviewPanel : PaletteSidebarPanel<ISchedulePaletteItem, Sc
     ///     Delegate that builds SchedulePreviewData from an ISchedulePaletteItem and cancellation token.
     ///     This delegate should handle caching and context updates internally and respect ct when doing work.
     /// </param>
-    public SchedulePreviewPanel(Func<ISchedulePaletteItem?, CancellationToken, Task<SchedulePreviewData?>> previewBuilder) {
+    public SchedulePreviewPanel(
+        Func<ISchedulePaletteItem?, CancellationToken, Task<SchedulePreviewData?>> previewBuilder) {
         this._previewBuilder = previewBuilder;
 
         // Palette handles sidebar padding and scrolling - just provide the content
@@ -41,7 +42,8 @@ public class SchedulePreviewPanel : PaletteSidebarPanel<ISchedulePaletteItem, Sc
         this.Content = this._richTextBox;
     }
 
-    protected override async Task<SchedulePreviewData?> BuildDataAsync(ISchedulePaletteItem item, CancellationToken ct) {
+    protected override async Task<SchedulePreviewData?>
+        BuildDataAsync(ISchedulePaletteItem item, CancellationToken ct) {
         if (ct.IsCancellationRequested) return null;
         return await this._previewBuilder(item, ct);
     }
@@ -50,7 +52,7 @@ public class SchedulePreviewPanel : PaletteSidebarPanel<ISchedulePaletteItem, Sc
 
     protected override void ClearContent() => this._richTextBox.Document = FlowDocumentBuilder.Create();
 
-    private void UpdateContent(SchedulePreviewData data) {
+    private void UpdateContent(SchedulePreviewData? data) {
         if (data == null) {
             this._richTextBox.Document = FlowDocumentBuilder.Create();
             return;

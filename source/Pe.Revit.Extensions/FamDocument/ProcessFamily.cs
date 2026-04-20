@@ -110,22 +110,6 @@ public static class FamilyDocumentProcessFamily {
         return $"{description} [{failureGuid}]";
     }
 
-    private sealed class WarningSuppressingFailuresPreprocessor(
-        ICollection<(bool IsError, string Message)> diagnostics
-    ) : IFailuresPreprocessor {
-        public FailureProcessingResult PreprocessFailures(FailuresAccessor failuresAccessor) {
-            foreach (var failureMessage in failuresAccessor.GetFailureMessages()) {
-                if (failureMessage.GetSeverity() != FailureSeverity.Warning)
-                    continue;
-
-                diagnostics.Add((false, $"Suppressed warning: {DescribeFailure(failureMessage)}"));
-                failuresAccessor.DeleteWarning(failureMessage);
-            }
-
-            return FailureProcessingResult.Continue;
-        }
-    }
-
     /// <summary>
     ///     Executes a function against the family document and captures the result via out parameter.
     ///     Does NOT wrap in a transaction - caller controls transaction scope.
@@ -207,6 +191,22 @@ public static class FamilyDocumentProcessFamily {
         return closed
             ? family
             : throw new InvalidOperationException("Failed to close family document after load error.");
+    }
+
+    private sealed class WarningSuppressingFailuresPreprocessor(
+        ICollection<(bool IsError, string Message)> diagnostics
+    ) : IFailuresPreprocessor {
+        public FailureProcessingResult PreprocessFailures(FailuresAccessor failuresAccessor) {
+            foreach (var failureMessage in failuresAccessor.GetFailureMessages()) {
+                if (failureMessage.GetSeverity() != FailureSeverity.Warning)
+                    continue;
+
+                diagnostics.Add((false, $"Suppressed warning: {DescribeFailure(failureMessage)}"));
+                failuresAccessor.DeleteWarning(failureMessage);
+            }
+
+            return FailureProcessingResult.Continue;
+        }
     }
 }
 

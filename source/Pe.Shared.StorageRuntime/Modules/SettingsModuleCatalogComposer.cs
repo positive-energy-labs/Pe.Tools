@@ -15,8 +15,7 @@ public static class SettingsModuleCatalogComposer {
     ) {
         foreach (var module in Combine(moduleSources)
                      .Where(module => module.HostScope != SettingsModuleHostScope.Host &&
-                                      module.SettingsType != typeof(object))) {
+                                      module.SettingsType != typeof(object)))
             registry.Register(module);
-        }
     }
 }

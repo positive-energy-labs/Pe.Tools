@@ -1,4 +1,3 @@
-using Pe.Revit.Global.PolyFill;
 using Pe.Revit.Ui.Core;
 using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
@@ -19,7 +18,6 @@ public enum FamilyItemType {
 ///     Enables a single tabbed palette for all family-related elements in project documents.
 /// </summary>
 public class UnifiedFamilyItem : IPaletteListItem {
-
     public UnifiedFamilyItem(Family family) {
         this.ItemType = FamilyItemType.Family;
         this.Family = family;
@@ -77,9 +75,10 @@ public class UnifiedFamilyItem : IPaletteListItem {
         FamilyItemType.FamilyType => this.GetFamily()?.Name ?? "Unknown",
         _ => string.Empty
     };
-    public string TextPill => this.GetFamily()?.FamilyCategory?.Name ?? "Unknown";
 
-    public Func<string>? GetTextInfo => null; // Sidebar preview provides detailed info
+    public string? TextPill => this.GetFamily()?.FamilyCategory?.Name ?? "Unknown";
+
+    public Func<string> GetTextInfo => () => string.Empty; // Sidebar preview provides detailed info
 
     public BitmapImage? Icon => null;
     public Color? ItemColor => null;

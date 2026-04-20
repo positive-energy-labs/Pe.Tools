@@ -40,8 +40,8 @@ public sealed class HostIdleMonitorService(
     ILogger<HostIdleMonitorService> logger
 ) : BackgroundService {
     private static readonly TimeSpan CheckInterval = TimeSpan.FromMinutes(1);
-    private readonly IHostApplicationLifetime _applicationLifetime = applicationLifetime;
     private readonly HostActivityService _activityService = activityService;
+    private readonly IHostApplicationLifetime _applicationLifetime = applicationLifetime;
     private readonly BridgeServer _bridgeServer = bridgeServer;
     private readonly ILogger<HostIdleMonitorService> _logger = logger;
     private readonly BridgeHostOptions _options = options;

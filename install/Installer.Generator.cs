@@ -42,13 +42,10 @@ public static partial class Generator {
         }
 
         var hostFeature = new Feature {
-            Name = "Shared Host",
-            Description = "Install the shared external host used by connected Revit sessions."
+            Name = "Shared Host", Description = "Install the shared external host used by connected Revit sessions."
         };
 
-        var hostEntities = new WixEntity[] {
-            new Files(hostFeature, $@"{hostPublishDirectory}\*.*")
-        };
+        var hostEntities = new WixEntity[] { new Files(hostFeature, $@"{hostPublishDirectory}\*.*") };
 
         LogFeatureFiles(hostPublishDirectory, "Host");
 

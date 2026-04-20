@@ -54,9 +54,13 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
     ///     Performs the full 3-legged OAuth flow, opening browser for user consent.
     /// </summary>
     private static string PerformFullOAuthFlow(string clientId, string clientSecret) {
-        var tcs = new TaskCompletionSource<Result<string>>();
+        ArgumentException.ThrowIfNullOrEmpty(clientId);
+        ArgumentException.ThrowIfNullOrEmpty(clientSecret);
 
-        Log.Information("[OAuth] Starting 3-legged OAuth flow for clientId: {ClientId}", clientId?.Substring(0, Math.Min(8, clientId?.Length ?? 0)) + "...");
+        var tcs = new TaskCompletionSource<Result<string>>();
+        var clientIdPrefix = clientId[..Math.Min(8, clientId.Length)];
+
+        Log.Information("[OAuth] Starting 3-legged OAuth flow for clientId: {ClientId}", clientIdPrefix + "...");
 
         OAuthHandler.Invoke3LeggedOAuth(clientId, clientSecret, token => {
             if (token == null) {
@@ -228,9 +232,8 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
                 if (!RefreshInProgress.Contains(clientId)) {
                     // Other thread finished - check if we got a fresh token
                     if (TokenCache.TryGetValue(clientId, out var cached) &&
-                        DateTime.UtcNow < cached.ExpiresAt.AddSeconds(-ExpirationBufferSeconds)) {
+                        DateTime.UtcNow < cached.ExpiresAt.AddSeconds(-ExpirationBufferSeconds))
                         return cached.AccessToken;
-                    }
 
                     break; // Refresh finished but failed, we'll need to try ourselves or do full flow
                 }

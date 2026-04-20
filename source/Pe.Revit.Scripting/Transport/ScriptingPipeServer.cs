@@ -1,20 +1,30 @@
+using Pe.Shared.HostContracts.Scripting;
+using Serilog;
 using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
-using Pe.Shared.HostContracts.Scripting;
-using Serilog;
 
 namespace Pe.Revit.Scripting.Transport;
 
 public sealed class ScriptingPipeServer : IDisposable {
+    private readonly Task _listenLoop;
     private readonly ScriptingPipeMessageHandler _messageHandler;
     private readonly CancellationTokenSource _shutdown = new();
-    private readonly Task _listenLoop;
     private bool _disposed;
 
     public ScriptingPipeServer(ScriptingPipeMessageHandler messageHandler) {
         this._messageHandler = messageHandler;
         this._listenLoop = Task.Run(() => this.RunAsync());
+    }
+
+    public void Dispose() {
+        if (this._disposed)
+            return;
+
+        this._disposed = true;
+        this._shutdown.Cancel();
+        this._messageHandler.Dispose();
+        this._shutdown.Dispose();
     }
 
     private async Task RunAsync() {
@@ -28,9 +38,11 @@ public sealed class ScriptingPipeServer : IDisposable {
                     PipeTransmissionMode.Message,
                     PipeOptions.Asynchronous
                 );
-                Log.Information("Revit scripting pipe waiting for client: Pipe={PipeName}", ScriptingPipeProtocol.PipeName);
+                Log.Information("Revit scripting pipe waiting for client: Pipe={PipeName}",
+                    ScriptingPipeProtocol.PipeName);
                 await WaitForConnectionAsync(pipe, this._shutdown.Token).ConfigureAwait(false);
-                Log.Information("Revit scripting pipe client connected: Pipe={PipeName}", ScriptingPipeProtocol.PipeName);
+                Log.Information("Revit scripting pipe client connected: Pipe={PipeName}",
+                    ScriptingPipeProtocol.PipeName);
                 await this.HandleClientAsync(pipe, this._shutdown.Token).ConfigureAwait(false);
             } catch (OperationCanceledException) when (this._shutdown.IsCancellationRequested) {
                 break;
@@ -48,10 +60,8 @@ public sealed class ScriptingPipeServer : IDisposable {
         NamedPipeServerStream pipe,
         CancellationToken cancellationToken
     ) {
-        using var reader = new StreamReader(pipe, Encoding.UTF8, false, 4096, leaveOpen: true);
-        using var writer = new StreamWriter(pipe, new UTF8Encoding(false), 4096, leaveOpen: true) {
-            AutoFlush = true
-        };
+        using var reader = new StreamReader(pipe, Encoding.UTF8, false, 4096, true);
+        using var writer = new StreamWriter(pipe, new UTF8Encoding(false), 4096, true) { AutoFlush = true };
 
         var line = await ReadLineAsync(reader, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(line))
@@ -79,16 +89,6 @@ public sealed class ScriptingPipeServer : IDisposable {
         } catch (Exception ex) {
             return new ScriptingPipeResponse(false, ex.Message);
         }
-    }
-
-    public void Dispose() {
-        if (this._disposed)
-            return;
-
-        this._disposed = true;
-        this._shutdown.Cancel();
-        this._messageHandler.Dispose();
-        this._shutdown.Dispose();
     }
 
     private static async Task WaitForConnectionAsync(

@@ -92,7 +92,7 @@ public class MakeElecConnector(MakeElecConnectorSettings settings) : DocOperatio
         return logs;
     }
 
-    private FamilyParameter GetSourceParameter(FamilyDocument doc, string name) =>
+    private FamilyParameter? GetSourceParameter(FamilyDocument doc, string name) =>
         doc.FamilyManager.Parameters
             .OfType<FamilyParameter>()
             .FirstOrDefault(fp => fp.Definition.Name == name);
@@ -284,16 +284,12 @@ public class MakeElecConnectorSettings : IOperationSettings {
     public bool Enabled { get; init; } = true;
 
     public class Parameters {
-        [Required]
-        public string NumberOfPoles { get; init; } = "PE_E___NumberOfPoles";
+        [Required] public string NumberOfPoles { get; init; } = "PE_E___NumberOfPoles";
 
-        [Required]
-        public string ApparentPower { get; init; } = "PE_E___ApparentPower";
+        [Required] public string ApparentPower { get; init; } = "PE_E___ApparentPower";
 
-        [Required]
-        public string Voltage { get; init; } = "PE_E___Voltage";
+        [Required] public string Voltage { get; init; } = "PE_E___Voltage";
 
-        [Required]
-        public string MinimumCircuitAmpacity { get; init; } = "PE_E___MCA";
+        [Required] public string MinimumCircuitAmpacity { get; init; } = "PE_E___MCA";
     }
 }

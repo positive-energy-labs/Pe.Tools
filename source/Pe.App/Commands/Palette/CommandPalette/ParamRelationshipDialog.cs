@@ -1,7 +1,6 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Extensions.FamParameter.Formula;
-using Pe.Revit.Global.PolyFill;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;

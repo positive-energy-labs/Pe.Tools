@@ -12,13 +12,13 @@ public class TaskItem : IPaletteListItem {
     /// <summary>
     ///     The underlying task implementation
     /// </summary>
-    public ITask Task { get; init; }
+    public required ITask Task { get; init; }
 
     /// <summary>
     ///     Unique identifier derived from the task's type name.
     ///     Used for persistence and duplicate prevention.
     /// </summary>
-    public string Id { get; init; }
+    public required string Id { get; init; }
 
     /// <summary>
     ///     Number of times this task has been used (for prioritization)
@@ -35,6 +35,6 @@ public class TaskItem : IPaletteListItem {
     public string TextSecondary => this.Task.Description ?? string.Empty;
     public string TextPill => this.Task.Category ?? string.Empty;
     public Func<string> GetTextInfo => () => this.Task.Description ?? string.Empty;
-    public BitmapImage Icon => null; // Future: custom icons per task
+    public BitmapImage? Icon => null; // Future: custom icons per task
     public Color? ItemColor => null; // Future: category-based colors
 }

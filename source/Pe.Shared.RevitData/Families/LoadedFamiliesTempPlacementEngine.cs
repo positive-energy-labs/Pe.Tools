@@ -1,6 +1,5 @@
-using Pe.Shared.RevitData.PolyFill;
-
 using Autodesk.Revit.DB.Structure;
+using Pe.Shared.RevitData.PolyFill;
 
 namespace Pe.Shared.RevitData.Families;
 
@@ -94,9 +93,9 @@ public static class LoadedFamiliesTempPlacementEngine {
         try {
             return new TempInstanceResult(
                 doc.Create.NewFamilyInstance(
-                XYZ.Zero,
-                symbol,
-                StructuralType.NonStructural
+                    XYZ.Zero,
+                    symbol,
+                    StructuralType.NonStructural
                 ),
                 null
             );

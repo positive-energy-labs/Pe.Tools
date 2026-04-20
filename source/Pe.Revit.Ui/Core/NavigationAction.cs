@@ -34,7 +34,7 @@ public class PaletteKeyBinding {
     public bool Matches(Key key, ModifierKeys modifiers) =>
         this.Key == key && this.Modifiers == modifiers;
 
-    public override bool Equals(object obj) =>
+    public override bool Equals(object? obj) =>
         obj is PaletteKeyBinding other && this.Key == other.Key && this.Modifiers == other.Modifiers;
 
     public override int GetHashCode() {

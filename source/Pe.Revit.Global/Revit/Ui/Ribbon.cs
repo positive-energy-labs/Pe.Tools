@@ -35,7 +35,7 @@ public class Ribbon {
 
     public static IEnumerable<DiscoveredPanel> GetAllPanels() =>
         GetAllTabs()
-            .SelectMany(tab => tab.Panels
+            .SelectMany(tab => (tab.Panels ?? [])
                 .Where(panel => panel.IsVisible && panel.IsEnabled)
                 .Select(panel => new DiscoveredPanel {
                     Tab = panel.Tab, Cookie = panel.Cookie, Source = panel.Source, RibbonControl = panel.RibbonControl
@@ -50,7 +50,11 @@ public class Ribbon {
         var commandList = new List<DiscoveredCommand>();
 
         foreach (var panel in panels) {
-            foreach (var item in panel.Source.Items) {
+            var items = panel.Source?.Items;
+            if (items == null)
+                continue;
+
+            foreach (var item in items) {
                 if (!item.IsVisible || !item.IsEnabled) continue;
                 var command = ProcessRibbonItem(item, panel, commandList);
                 if (command != null) commandList.Add(command);
@@ -100,7 +104,7 @@ public class Ribbon {
                 ToolTip = item.ToolTip,
                 Description = item.Description?.ToString() ?? "",
                 ToolTipResolver = item.ToolTipResolver,
-                Tab = panel.Tab.Title,
+                Tab = panel.Tab?.Title ?? string.Empty,
                 Panel = panel.Cookie,
                 ItemType = item.GetType().Name,
                 Image = imageSource
@@ -199,9 +203,10 @@ public class Ribbon {
 
         // Recurse into children
         try {
-            if (item.Items != null)
+            if (item.Items != null) {
                 foreach (var child in item.Items)
                     found |= SearchAndLogItem(child, searchTerm, tabName, panelName, depth + 1);
+            }
         } catch { }
 
         return found;
@@ -229,9 +234,10 @@ public class Ribbon {
 
         // Try to recurse into children
         try {
-            if (item.Items != null && item.Items.Count > 0)
+            if (item.Items != null && item.Items.Count > 0) {
                 foreach (var child in item.Items)
                     LogRibbonItemRecursive(child, indent + 2);
+            }
         } catch { }
     }
 
@@ -275,33 +281,33 @@ public class Ribbon {
 
 public class DiscoveredTab {
     /// <summary> Name, what you see in UI. RibbonTab.Title, DefaultTitle, AutomationName are always same</summary>
-    public string Name { get; set; }
+    public string Name { get; set; } = string.Empty;
 
     /// <summary> Internal ID, not sure what it's used for</summary>
-    public string Id { get; set; }
+    public string Id { get; set; } = string.Empty;
 
     /// <summary> Panels contained within the tab</summary>
-    public RibbonPanelCollection Panels { get; set; }
+    public RibbonPanelCollection? Panels { get; set; }
 
     /// <summary> TBD: Not sure what this is, but possibly useful</summary>
-    public ICollectionView DockedPanels { get; set; }
+    public ICollectionView? DockedPanels { get; set; }
 
     /// <summary> TBD: Not sure what this is, but possibly useful</summary>
-    public RibbonControl RibbonControl { get; set; }
+    public RibbonControl? RibbonControl { get; set; }
 }
 
 public class DiscoveredPanel {
     /// <summary> The parent tab of this panel</summary>
-    public RibbonTab Tab { get; set; }
+    public RibbonTab? Tab { get; set; }
 
     /// <summary> Internal ID, not sure what it's used for and has a strange format</summary>
-    public string Cookie { get; set; }
+    public string Cookie { get; set; } = string.Empty;
 
     /// <summary> Can access Panel items via RibbonPanelSource.Items</summary>
-    public RibbonPanelSource Source { get; set; }
+    public RibbonPanelSource? Source { get; set; }
 
     /// <summary> TBD: Not sure what this is, but possibly useful</summary>
-    public RibbonControl RibbonControl { get; set; }
+    public RibbonControl? RibbonControl { get; set; }
 }
 
 public class DiscoveredCommand {
@@ -312,19 +318,19 @@ public class DiscoveredCommand {
     ///     There are often near duplicates, like ID_OBJECTS_FAMSYM and ID_OBJECTS_FAMSYM_RibbonListButton
     ///     It is also often empty or not a commandId at all.
     /// </summary>
-    public string Id { get; set; }
+    public string Id { get; set; } = string.Empty;
 
     /// <summary>
     ///     Human-readable name of the command, often empty.
     ///     If empty, this.Text may be non-empty. Both may also be empty.
     /// </summary>
-    public string Name { get; set; }
+    public string Name { get; set; } = string.Empty;
 
     /// <summary>
     ///     Another type of name, always similar to Name, often empty.
     ///     RibbonItem.Text, AutomationName, and TextBinding always seem to be same.
     /// </summary>
-    public string Text { get; set; }
+    public string Text { get; set; } = string.Empty;
 
     /// <summary> Often empty, look into ToolTipResolver for more information. </summary>
     public object? ToolTip { get; set; }
@@ -333,12 +339,12 @@ public class DiscoveredCommand {
     public ImageSource? Image { get; set; }
 
     /// <summary> A standin for tooltip? seems to be non-empty more often than Tooltip is.</summary>
-    public string Description { get; set; }
+    public string Description { get; set; } = string.Empty;
 
     public object? ToolTipResolver { get; set; }
-    public string Tab { get; set; }
-    public string Panel { get; set; }
+    public string Tab { get; set; } = string.Empty;
+    public string Panel { get; set; } = string.Empty;
 
     /// <summary> Type of the item, e.g. RibbonButton, RibbonToggleButton, etc. </summary>
-    public string ItemType { get; set; }
+    public string ItemType { get; set; } = string.Empty;
 }

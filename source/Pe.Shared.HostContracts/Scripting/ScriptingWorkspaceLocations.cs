@@ -24,7 +24,8 @@ public static class ScriptingWorkspaceLocations {
         var workspaceRoot = Path.GetFullPath(Path.Combine(workspaceDirectory, normalizedWorkspaceKey));
         var workspaceDirectoryWithSeparator = EnsureTrailingSeparator(workspaceDirectory);
         if (!workspaceRoot.StartsWith(workspaceDirectoryWithSeparator, StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException($"Workspace key escapes the workspace root: {workspaceKey}", nameof(workspaceKey));
+            throw new ArgumentException($"Workspace key escapes the workspace root: {workspaceKey}",
+                nameof(workspaceKey));
 
         return workspaceRoot;
     }

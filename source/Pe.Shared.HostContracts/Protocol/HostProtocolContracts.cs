@@ -69,7 +69,6 @@ public static class HttpRoutes {
 
     public static readonly string ScriptingExecute =
         ExecuteRevitScriptOperationContract.Definition.Route;
-
 }
 
 [ExportTsClass]

@@ -1,5 +1,4 @@
 using Pe.Shared.StorageRuntime.AutoTag;
-using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Documents;
 
 namespace Pe.Shared.StorageRuntime.Modules;

@@ -7,7 +7,7 @@ namespace Pe.Revit.FamilyFoundry;
 ///     Tracks (operation, context) pairs for group context lifecycle management.
 /// </summary>
 public class OperationQueue {
-    private readonly List<(IOperation Op, OperationContext Ctx)> _operations = new();
+    private readonly List<(IOperation Op, OperationContext? Ctx)> _operations = new();
 
     /// <summary>
     ///     Gets all operations in the queue for inspection.
@@ -45,6 +45,7 @@ public class OperationQueue {
         this._operations
             .Select(o => o.Ctx)
             .Where(c => c != null)
+            .Cast<OperationContext>()
             .Distinct()
             .ToList()
             .ForEach(c => c.Reset());
@@ -127,7 +128,7 @@ public class OperationQueue {
         var namedFuncs = executableOps
             .Select(pair => (
                 Name: GetExecutableName(pair.Executable),
-                Callback: pair.Executable.ToFunc(pair.Ctx)))
+                Callback: pair.Executable.ToFunc(pair.Ctx ?? new OperationContext())))
             .ToArray();
 
         return singleTransaction
@@ -135,19 +136,19 @@ public class OperationQueue {
             : namedFuncs;
     }
 
-    private List<(IExecutable Executable, OperationContext Ctx)> ToExecutableList() =>
+    private List<(IExecutable Executable, OperationContext? Ctx)> ToExecutableList() =>
         this._operations.Select(o => ((IExecutable)o.Op, o.Ctx)).ToList();
 
-    public List<(IExecutable Executable, OperationContext Ctx)> ToTypeOptimizedExecutableList() {
-        var finalOps = new List<(IExecutable, OperationContext)>();
-        var currentBatch = new List<(IOperation Op, OperationContext Ctx)>();
+    public List<(IExecutable Executable, OperationContext? Ctx)> ToTypeOptimizedExecutableList() {
+        var finalOps = new List<(IExecutable, OperationContext?)>();
+        var currentBatch = new List<(IOperation Op, OperationContext? Ctx)>();
 
         foreach (var (op, ctx) in this._operations) {
             var isTypeOp = IsTypeOperation(op);
 
-            if (isTypeOp) {
+            if (isTypeOp)
                 currentBatch.Add((op, ctx));
-            } else {
+            else {
                 if (currentBatch.Count > 0) {
                     // MergedTypeOperation stores its own contexts, pass null at execution
                     finalOps.Add((new MergedTypeOperation(currentBatch), null));

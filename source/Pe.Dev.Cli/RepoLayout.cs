@@ -7,12 +7,10 @@ internal sealed record RepoLayout(
     string AppAutoApproveScript,
     string RevitTestAutoApproveScript,
     string RevitTestPrepareHotReloadScript
-)
-{
+) {
     private const string SolutionMarkerFileName = "Pe.Tools.slnx";
 
-    public static RepoLayout Create(string? repoRootOverride)
-    {
+    public static RepoLayout Create(string? repoRootOverride) {
         var repoRoot = ResolveRepoRoot(repoRootOverride);
         var appDirectory = Path.Combine(repoRoot, "source", "Pe.App");
         var revitTestsDirectory = Path.Combine(repoRoot, "source", "Pe.Revit.Tests");
@@ -27,26 +25,15 @@ internal sealed record RepoLayout(
         );
     }
 
-    private static string ResolveRepoRoot(string? repoRootOverride)
-    {
-        if (!string.IsNullOrWhiteSpace(repoRootOverride))
-        {
-            return ValidateRepoRoot(repoRootOverride);
-        }
+    private static string ResolveRepoRoot(string? repoRootOverride) {
+        if (!string.IsNullOrWhiteSpace(repoRootOverride)) return ValidateRepoRoot(repoRootOverride);
 
         var environmentRoot = Environment.GetEnvironmentVariable("PE_TOOLS_REPO_ROOT");
-        if (!string.IsNullOrWhiteSpace(environmentRoot))
-        {
-            return ValidateRepoRoot(environmentRoot);
-        }
+        if (!string.IsNullOrWhiteSpace(environmentRoot)) return ValidateRepoRoot(environmentRoot);
 
-        foreach (var candidate in EnumerateProbeRoots())
-        {
+        foreach (var candidate in EnumerateProbeRoots()) {
             var discoveredRoot = FindRepoRoot(candidate);
-            if (discoveredRoot is not null)
-            {
-                return discoveredRoot;
-            }
+            if (discoveredRoot is not null) return discoveredRoot;
         }
 
         throw new InvalidOperationException(
@@ -54,21 +41,15 @@ internal sealed record RepoLayout(
         );
     }
 
-    private static IEnumerable<string> EnumerateProbeRoots()
-    {
+    private static IEnumerable<string> EnumerateProbeRoots() {
         yield return Directory.GetCurrentDirectory();
         yield return AppContext.BaseDirectory;
     }
 
-    private static string? FindRepoRoot(string startDirectory)
-    {
+    private static string? FindRepoRoot(string startDirectory) {
         var current = new DirectoryInfo(Path.GetFullPath(startDirectory));
-        while (current is not null)
-        {
-            if (File.Exists(Path.Combine(current.FullName, SolutionMarkerFileName)))
-            {
-                return current.FullName;
-            }
+        while (current is not null) {
+            if (File.Exists(Path.Combine(current.FullName, SolutionMarkerFileName))) return current.FullName;
 
             current = current.Parent;
         }
@@ -76,11 +57,9 @@ internal sealed record RepoLayout(
         return null;
     }
 
-    private static string ValidateRepoRoot(string repoRoot)
-    {
+    private static string ValidateRepoRoot(string repoRoot) {
         var fullPath = Path.GetFullPath(repoRoot);
-        if (!File.Exists(Path.Combine(fullPath, SolutionMarkerFileName)))
-        {
+        if (!File.Exists(Path.Combine(fullPath, SolutionMarkerFileName))) {
             throw new InvalidOperationException(
                 $"Repo root '{fullPath}' does not contain {SolutionMarkerFileName}."
             );

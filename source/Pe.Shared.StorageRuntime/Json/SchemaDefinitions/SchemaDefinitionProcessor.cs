@@ -2,8 +2,8 @@
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using NJsonSchema.Generation;
-using Pe.Shared.StorageRuntime.Json.FieldOptions;
 using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Json.FieldOptions;
 
 namespace Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 
@@ -125,8 +125,9 @@ public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : 
             return binding.Ui;
 
         var resolvedValues = TryResolveDynamicColumnOrderValues(binding.UiDynamicColumnOrderSource, options);
-        var dynamicColumnOrder = binding.Ui.Behavior?.DynamicColumnOrder;
-        if (dynamicColumnOrder == null)
+        var behavior = binding.Ui.Behavior;
+        var dynamicColumnOrder = behavior?.DynamicColumnOrder;
+        if (behavior == null || dynamicColumnOrder == null)
             return binding.Ui;
 
         var mergedValues = resolvedValues.Count == 0
@@ -134,9 +135,7 @@ public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : 
             : resolvedValues;
 
         return binding.Ui with {
-            Behavior = binding.Ui.Behavior with {
-                DynamicColumnOrder = dynamicColumnOrder with { Values = mergedValues.ToList() }
-            }
+            Behavior = behavior with { DynamicColumnOrder = dynamicColumnOrder with { Values = mergedValues.ToList() } }
         };
     }
 

@@ -1,5 +1,4 @@
-﻿using System.Reflection;
-using Autodesk.Revit.DB;
+﻿using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Microsoft.CodeAnalysis;
 using Pe.Revit.Scripting.Bootstrap;
@@ -9,6 +8,7 @@ using Pe.Revit.Scripting.References;
 using Pe.Revit.Scripting.Storage;
 using Pe.Shared.HostContracts.Scripting;
 using Serilog;
+using System.Reflection;
 
 namespace Pe.Revit.Scripting.Execution;
 
@@ -41,8 +41,8 @@ public sealed class RevitScriptExecutionService(
 
         var diagnostics = new List<ScriptDiagnostic>();
         var outputSink = new ScriptOutputSink();
-        string revitVersion = "unknown";
-        string targetFramework = string.Empty;
+        var revitVersion = "unknown";
+        var targetFramework = string.Empty;
         string? containerTypeName = null;
 
         try {
@@ -108,7 +108,8 @@ public sealed class RevitScriptExecutionService(
                 executionId,
                 runtimeReferenceScope.MetadataReferences.Count
             );
-            if (diagnostics.Any(diagnostic => diagnostic.Stage == "resolve" && diagnostic.Severity == ScriptDiagnosticSeverity.Error)) {
+            if (diagnostics.Any(diagnostic =>
+                    diagnostic.Stage == "resolve" && diagnostic.Severity == ScriptDiagnosticSeverity.Error)) {
                 runtimeReferenceScope.ResolverScope.Dispose();
                 return CreateResult(
                     ScriptExecutionStatus.ReferenceResolutionFailed,
@@ -247,7 +248,8 @@ public sealed class RevitScriptExecutionService(
 
         try {
             var sourceSet = request.SourceKind switch {
-                ScriptExecutionSourceKind.InlineSnippet => this.MaterializeInlineSnippet(workspaceKey, request.ScriptContent),
+                ScriptExecutionSourceKind.InlineSnippet => this.MaterializeInlineSnippet(workspaceKey,
+                    request.ScriptContent),
                 ScriptExecutionSourceKind.WorkspacePath => this.LoadWorkspaceSource(workspaceKey, request.SourcePath),
                 _ => throw new InvalidOperationException($"Unsupported source kind '{request.SourceKind}'.")
             };
@@ -325,10 +327,12 @@ public sealed class RevitScriptExecutionService(
     private ScriptSourceSet LoadWorkspaceSource(string workspaceKey, string? sourcePath) {
         var fullPath = RevitScriptingStorageLocations.ResolveWorkspaceSourceFilePath(
             workspaceKey,
-            sourcePath ?? throw new ArgumentException("SourcePath is required for workspace file execution.", nameof(sourcePath))
+            sourcePath ?? throw new ArgumentException("SourcePath is required for workspace file execution.",
+                nameof(sourcePath))
         );
         if (Directory.Exists(fullPath))
-            throw new ArgumentException("Workspace source path must point to a .cs file, not a directory.", nameof(sourcePath));
+            throw new ArgumentException("Workspace source path must point to a .cs file, not a directory.",
+                nameof(sourcePath));
         if (!fullPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Workspace source path must point to a .cs file.", nameof(sourcePath));
         if (!File.Exists(fullPath))

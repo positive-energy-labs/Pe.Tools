@@ -16,7 +16,11 @@ public class CmdMep2040 : IExternalCommand {
     ) {
         var uiapp = commandData.Application;
         var uidoc = uiapp.ActiveUIDocument;
-        var doc = uidoc.Document;
+        var doc = uidoc?.Document;
+        if (doc == null) {
+            message = "No active document found";
+            return Result.Failed;
+        }
 
         var balloon = new Ballogger();
         var metalPipeLength = TotalPipeLength(doc);
@@ -38,7 +42,7 @@ public class CmdMep2040 : IExternalCommand {
     /// <summary>
     ///     Gets the total length of all Pipe elements in the document, optionally filtered by material name.
     /// </summary>
-    private static double TotalPipeLength(Document doc, string materialName = null) {
+    private static double TotalPipeLength(Document doc, string? materialName = null) {
         var pipes = new FilteredElementCollector(doc).OfClass(typeof(Pipe)).OfType<Pipe>();
         var totalLength = 0.0;
         foreach (var pipe in pipes) {
@@ -69,13 +73,13 @@ public class CmdMep2040 : IExternalCommand {
     /// </summary>
     private static double TotalPipeVolume(Document doc, string pst = "") {
         var pipes = new FilteredElementCollector(doc).OfClass(typeof(Pipe)).OfType<Pipe>().Where(pipe =>
-            pipe.FindParameter(BuiltInParameter.RBS_PIPING_SYSTEM_TYPE_PARAM) // EXTRACT THIS LATER
-                .AsValueString() == pst
+            pipe.FindParameter(BuiltInParameter.RBS_PIPING_SYSTEM_TYPE_PARAM)?.AsValueString() == pst
         );
 
         return pipes.Select(pipe => pipe.FindParameter(BuiltInParameter.HOST_VOLUME_COMPUTED))
             .Where(volParam => volParam != null && volParam.StorageType == StorageType.Double)
-            .Sum(volParam => volParam.AsDouble());
+            .Select(volParam => volParam?.AsDouble() ?? 0.0)
+            .Sum();
     }
 
     /// <summary>

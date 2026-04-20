@@ -12,7 +12,8 @@ namespace Pe.Revit.Global.Revit.Lib.Schedules;
 internal sealed class ScheduleProfileSchemaDefinition : SettingsSchemaDefinition<ScheduleProfile> {
     public override void Configure(ISettingsSchemaBuilder<ScheduleProfile> builder) {
         builder.Property(item => item.CategoryName, property => property.UseFieldOptions<CategoryNamesProvider>());
-        builder.Property(item => item.ViewTemplateName, property => property.UseFieldOptions<ScheduleViewTemplateNamesProvider>());
+        builder.Property(item => item.ViewTemplateName,
+            property => property.UseFieldOptions<ScheduleViewTemplateNamesProvider>());
         builder.Property(item => item.Fields, property => property.WithDisplayName("Fields"));
     }
 }
@@ -57,20 +58,50 @@ internal sealed class ScheduleSortGroupSpecSchemaDefinition : SettingsSchemaDefi
 internal sealed class TitleBorderStyleSpecSchemaDefinition : SettingsSchemaDefinition<TitleBorderStyleSpec> {
     public override void Configure(ISettingsSchemaBuilder<TitleBorderStyleSpec> builder) {
         builder.Property(item => item.TopLineStyleName, property => property.UseFieldOptions<LineStyleNamesProvider>());
-        builder.Property(item => item.BottomLineStyleName, property => property.UseFieldOptions<LineStyleNamesProvider>());
-        builder.Property(item => item.LeftLineStyleName, property => property.UseFieldOptions<LineStyleNamesProvider>());
-        builder.Property(item => item.RightLineStyleName, property => property.UseFieldOptions<LineStyleNamesProvider>());
+        builder.Property(item => item.BottomLineStyleName,
+            property => property.UseFieldOptions<LineStyleNamesProvider>());
+        builder.Property(item => item.LeftLineStyleName,
+            property => property.UseFieldOptions<LineStyleNamesProvider>());
+        builder.Property(item => item.RightLineStyleName,
+            property => property.UseFieldOptions<LineStyleNamesProvider>());
     }
 }
 
-internal static class ScheduleSchemaDefinitionBootstrapper {
+public static class ScheduleSchemaDefinitionBootstrapper {
+    private static readonly object SyncRoot = new();
+    private static bool _registered;
+
     [ModuleInitializer]
-    internal static void Register() {
-        SettingsSchemaDefinitionRegistry.Shared.Register(new ScheduleProfileSchemaDefinition());
-        SettingsSchemaDefinitionRegistry.Shared.Register(new ScheduleFieldSpecSchemaDefinition());
-        SettingsSchemaDefinitionRegistry.Shared.Register(new CombinedParameterSpecSchemaDefinition());
-        SettingsSchemaDefinitionRegistry.Shared.Register(new ScheduleFilterSpecSchemaDefinition());
-        SettingsSchemaDefinitionRegistry.Shared.Register(new ScheduleSortGroupSpecSchemaDefinition());
-        SettingsSchemaDefinitionRegistry.Shared.Register(new TitleBorderStyleSpecSchemaDefinition());
+    internal static void RegisterOnModuleLoad() => TryRegister();
+
+    public static void EnsureRegistered() {
+        if (_registered)
+            return;
+
+        lock (SyncRoot) {
+            if (_registered)
+                return;
+
+            SettingsSchemaDefinitionRegistry.Shared.Register(new ScheduleProfileSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new ScheduleFieldSpecSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new CombinedParameterSpecSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new ScheduleFilterSpecSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new ScheduleSortGroupSpecSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new TitleBorderStyleSpecSchemaDefinition());
+            _registered = true;
+        }
     }
+
+    private static void TryRegister() {
+        try {
+            EnsureRegistered();
+        } catch (Exception ex) when (IsMissingRevitAssembly(ex)) {
+        }
+    }
+
+    private static bool IsMissingRevitAssembly(Exception ex) =>
+        (ex is FileNotFoundException fileNotFoundException &&
+         string.Equals(fileNotFoundException.FileName?.Split(',')[0], "RevitAPI",
+             StringComparison.OrdinalIgnoreCase)) ||
+        (ex.InnerException is not null && IsMissingRevitAssembly(ex.InnerException));
 }

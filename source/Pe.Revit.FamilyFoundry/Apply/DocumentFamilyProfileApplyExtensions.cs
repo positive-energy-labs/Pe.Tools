@@ -1,10 +1,6 @@
-using Autodesk.Revit.DB;
 using Newtonsoft.Json;
-using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Revit.FamilyFoundry.OperationGroups;
-using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.FamilyFoundry.Operations;
-using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.Global;
@@ -40,8 +36,7 @@ public static class DocumentFamilyProfileApplyExtensions {
             };
 
             var executionOptions = executionOptionsOverride ?? new ExecutionOptions {
-                SingleTransaction = false,
-                OptimizeTypeOperations = false
+                SingleTransaction = false, OptimizeTypeOperations = false
             };
             var capturePipeline = new SnapshotCapturePipeline()
                 .Add(new ParameterSnapshotCollector())
@@ -126,8 +121,7 @@ public static class DocumentFamilyProfileApplyExtensions {
         if (!hasProcessedAtParam) {
             profile.AddFamilyParams.AddParameters([
                 new FamilyParamDefinitionModel {
-                    Name = "_FOUNDRY LAST PROCESSED AT",
-                    DataType = SpecTypeId.String.Text
+                    Name = "_FOUNDRY LAST PROCESSED AT", DataType = SpecTypeId.String.Text
                 }
             ]);
         }
@@ -143,7 +137,8 @@ public static class DocumentFamilyProfileApplyExtensions {
         var solidsPlan = AuthoredParamDrivenSolidsCompiler.Compile(profile.ParamDrivenSolids);
         if (!solidsPlan.CanExecute) {
             throw new InvalidOperationException(
-                string.Join(Environment.NewLine, ParamDrivenSolidsDiagnosticFormatter.ToDisplayMessages(solidsPlan.Diagnostics)));
+                string.Join(Environment.NewLine,
+                    ParamDrivenSolidsDiagnosticFormatter.ToDisplayMessages(solidsPlan.Diagnostics)));
         }
 
         var additionalReferences = KnownParamPlanBuilder.CollectReferencedParameterNames(solidsPlan.RefPlanesAndDims)
@@ -171,8 +166,7 @@ public static class DocumentFamilyProfileApplyExtensions {
             .Add(new SetLookupTables(profile.SetLookupTables))
             .Add(new SetKnownParams(valueFirstAssignments, knownParamPlan.Catalog, true))
             .Add(new EmitParamDrivenSolidsDiagnostics(new EmitParamDrivenSolidsDiagnosticsSettings {
-                Enabled = compilerMessages.Count > 0,
-                Messages = compilerMessages
+                Enabled = compilerMessages.Count > 0, Messages = compilerMessages
             }))
             .Add(new MakeParamDrivenPlanesAndDims(solidsPlan.RefPlanesAndDims))
             .Add(new SetKnownParams(formulaOnlyAssignments, knownParamPlan.Catalog))

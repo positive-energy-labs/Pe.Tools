@@ -1,5 +1,3 @@
-using Autodesk.Revit.DB;
-using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Shared.StorageRuntime;
 
 namespace Pe.Revit.FamilyFoundry.Apply;
@@ -79,9 +77,8 @@ public static class FamilyProfileApplicator {
                 .SelectFamilies(familySelector)
                 .ProcessQueue(queue, capturePipeline, resultBuilder?.RunOutputPath, finishSettings);
 
-            if (resultBuilder != null) {
+            if (resultBuilder != null)
                 resultBuilder.WriteMultiFamilySummary(logs.totalMs, finishSettings.OpenOutputFilesOnCommandFinish);
-            }
 
             var processedFamilyNames = logs.contexts
                 .Select(context => context.FamilyName)

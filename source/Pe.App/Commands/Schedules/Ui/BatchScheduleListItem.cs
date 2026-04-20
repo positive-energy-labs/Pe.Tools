@@ -13,10 +13,10 @@ namespace Pe.App.Commands.Schedules.Ui;
 ///     Palette list item representing a batch schedule configuration.
 /// </summary>
 public class BatchScheduleListItem : IPaletteListItem {
+    private readonly ModuleDocumentStorage _documents;
     private readonly FileInfo _fileInfo;
     private readonly string _relativePath;
     private readonly ModuleSettingsStorage<BatchScheduleSettings> _settings;
-    private readonly ModuleDocumentStorage _documents;
 
     public BatchScheduleListItem(
         string filePath,
@@ -54,9 +54,9 @@ public class BatchScheduleListItem : IPaletteListItem {
     /// <summary> Schedule count badge </summary>
     public string TextPill => $"{this.ScheduleCount} schedules";
 
-    public Func<string> GetTextInfo => null;
+    public Func<string> GetTextInfo => () => string.Empty;
 
-    public BitmapImage Icon => null;
+    public BitmapImage? Icon => null;
     public WpfColor? ItemColor => null;
 
     /// <summary>

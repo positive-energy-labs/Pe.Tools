@@ -1,6 +1,4 @@
 using Pe.Revit.Extensions.FamDocument;
-using Pe.Revit.FamilyFoundry.Capture;
-using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.Global.Revit.Documents;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
@@ -14,18 +12,19 @@ namespace Pe.Revit.FamilyFoundry;
 /// </summary>
 /// <param name="executionOptions">The execution options for the processor. If null, default options will be used.</param>
 /// <param name="doc">The document to process.</param>
-public class OperationProcessor( 
+public class OperationProcessor(
     Document doc,
     ExecutionOptions? executionOptions = null
 ) : IDisposable {
-    private ProcessingResultBuilder? _artifactWriter;
     private readonly ExecutionOptions _exOpts = executionOptions ?? new ExecutionOptions();
-    private bool _openArtifactsOnFinish;
+    private ProcessingResultBuilder? _artifactWriter;
 
     /// <summary>
     ///     A function to select families in the Document. If the document is a family document, this will not be called
     /// </summary>
     private Func<List<Family>?> _documentFamilySelector = () => null;
+
+    private bool _openArtifactsOnFinish;
 
     private Action<FamilyProcessingContext>? _perFamilyCallback;
 
@@ -167,9 +166,8 @@ public class OperationProcessor(
         return contexts;
     }
 
-    private List<FamilyProcessingContext> ProcessFamilyDocument(OperationQueue queue, SnapshotCapturePipeline? collectorQueue) {
-        return this.ProcessFamilyDocument(queue, collectorQueue, null, null);
-    }
+    private List<FamilyProcessingContext> ProcessFamilyDocument(OperationQueue queue,
+        SnapshotCapturePipeline? collectorQueue) => this.ProcessFamilyDocument(queue, collectorQueue, null, null);
 
     private List<FamilyProcessingContext> ProcessFamilyDocument(
         OperationQueue queue,
@@ -357,7 +355,8 @@ public class OperationProcessor(
 
             context.OperationLogs = error == null
                 ? new Exception($"Processing artifact generation failed: {ex.Message}")
-                : new Exception($"{error.Message}{Environment.NewLine}Processing artifact generation failed: {ex.Message}");
+                : new Exception(
+                    $"{error.Message}{Environment.NewLine}Processing artifact generation failed: {ex.Message}");
         }
     }
 }
@@ -411,7 +410,7 @@ public class VariantSpec(string name, OperationQueue queue) {
     ///     Optional metadata dictionary for storing variant-specific information
     ///     (e.g., synthetic settings, configuration data, etc.)
     /// </summary>
-    public BaseProfile Profile { get; set; }
+    public BaseProfile? Profile { get; set; }
 
     public VariantSpec WithProfile(BaseProfile profile) {
         this.Profile = profile;

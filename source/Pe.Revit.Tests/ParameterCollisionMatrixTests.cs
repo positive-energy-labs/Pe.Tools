@@ -21,105 +21,106 @@ public sealed class ParameterCollisionMatrixTests {
     );
 
     [Test]
-    public void Same_name_collision_matrix_preserves_distinct_identities_across_guid_and_datatype_mismatches(UIApplication uiApplication) {
+    public void Same_name_collision_matrix_preserves_distinct_identities_across_guid_and_datatype_mismatches(
+        UIApplication uiApplication) {
         const string sameNameDifferentGuid = "_PE_Collision_SameNameDifferentGuid";
         const string sameNameDifferentDatatype = "_PE_Collision_SameNameDifferentDatatype";
 
         var cases = new[] {
             new CollisionMatrixCase(
-                Name: "project_first__same_name__different_shared_guid",
-                AuthorProjectFirst: true,
-                ProjectSpec: new RevitFamilyFixtureHarness.SharedDefinitionSpec(
-                    Name: sameNameDifferentGuid,
-                    DataType: SpecTypeId.String.Text,
-                    GroupName: "CollisionMatrix",
-                    Description: "Project-side shared parameter.",
-                    Guid: Guid.NewGuid()),
-                FamilyPlainSpec: null,
-                FamilySharedSpec: new RevitFamilyFixtureHarness.SharedDefinitionSpec(
-                    Name: sameNameDifferentGuid,
-                    DataType: SpecTypeId.String.Text,
-                    GroupName: "CollisionMatrix",
-                    Description: "Family-side shared parameter with different guid.",
-                    Guid: Guid.NewGuid()),
-                ExpectedProjectIdentityKind: nameof(RevitParameterIdentityKind.SharedGuid),
-                ExpectedFamilyIdentityKind: nameof(RevitParameterIdentityKind.SharedGuid),
-                ExpectDistinctSharedGuids: true,
-                ExpectFamilySharedGuid: true,
-                ExpectedProjectDataTypeId: SpecTypeId.String.Text.TypeId,
-                ExpectedFamilyDataTypeId: SpecTypeId.String.Text.TypeId,
-                ExpectedProjectGroupTypeId: GroupTypeId.IdentityData.TypeId,
-                ExpectedFamilyGroupTypeId: GroupTypeId.IdentityData.TypeId),
+                "project_first__same_name__different_shared_guid",
+                true,
+                new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+                    sameNameDifferentGuid,
+                    SpecTypeId.String.Text,
+                    "CollisionMatrix",
+                    "Project-side shared parameter.",
+                    Guid.NewGuid()),
+                null,
+                new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+                    sameNameDifferentGuid,
+                    SpecTypeId.String.Text,
+                    "CollisionMatrix",
+                    "Family-side shared parameter with different guid.",
+                    Guid.NewGuid()),
+                nameof(RevitParameterIdentityKind.SharedGuid),
+                nameof(RevitParameterIdentityKind.SharedGuid),
+                true,
+                true,
+                SpecTypeId.String.Text.TypeId,
+                SpecTypeId.String.Text.TypeId,
+                GroupTypeId.IdentityData.TypeId,
+                GroupTypeId.IdentityData.TypeId),
             new CollisionMatrixCase(
-                Name: "family_first__same_name__different_shared_guid",
-                AuthorProjectFirst: false,
-                ProjectSpec: new RevitFamilyFixtureHarness.SharedDefinitionSpec(
-                    Name: sameNameDifferentGuid,
-                    DataType: SpecTypeId.String.Text,
-                    GroupName: "CollisionMatrix",
-                    Description: "Project-side shared parameter authored second.",
-                    Guid: Guid.NewGuid()),
-                FamilyPlainSpec: null,
-                FamilySharedSpec: new RevitFamilyFixtureHarness.SharedDefinitionSpec(
-                    Name: sameNameDifferentGuid,
-                    DataType: SpecTypeId.String.Text,
-                    GroupName: "CollisionMatrix",
-                    Description: "Family-side shared parameter authored first with different guid.",
-                    Guid: Guid.NewGuid()),
-                ExpectedProjectIdentityKind: nameof(RevitParameterIdentityKind.SharedGuid),
-                ExpectedFamilyIdentityKind: nameof(RevitParameterIdentityKind.SharedGuid),
-                ExpectDistinctSharedGuids: true,
-                ExpectFamilySharedGuid: true,
-                ExpectedProjectDataTypeId: SpecTypeId.String.Text.TypeId,
-                ExpectedFamilyDataTypeId: SpecTypeId.String.Text.TypeId,
-                ExpectedProjectGroupTypeId: GroupTypeId.IdentityData.TypeId,
-                ExpectedFamilyGroupTypeId: GroupTypeId.IdentityData.TypeId),
+                "family_first__same_name__different_shared_guid",
+                false,
+                new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+                    sameNameDifferentGuid,
+                    SpecTypeId.String.Text,
+                    "CollisionMatrix",
+                    "Project-side shared parameter authored second.",
+                    Guid.NewGuid()),
+                null,
+                new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+                    sameNameDifferentGuid,
+                    SpecTypeId.String.Text,
+                    "CollisionMatrix",
+                    "Family-side shared parameter authored first with different guid.",
+                    Guid.NewGuid()),
+                nameof(RevitParameterIdentityKind.SharedGuid),
+                nameof(RevitParameterIdentityKind.SharedGuid),
+                true,
+                true,
+                SpecTypeId.String.Text.TypeId,
+                SpecTypeId.String.Text.TypeId,
+                GroupTypeId.IdentityData.TypeId,
+                GroupTypeId.IdentityData.TypeId),
             new CollisionMatrixCase(
-                Name: "project_first__same_name__different_datatype",
-                AuthorProjectFirst: true,
-                ProjectSpec: new RevitFamilyFixtureHarness.SharedDefinitionSpec(
-                    Name: sameNameDifferentDatatype,
-                    DataType: SpecTypeId.String.Text,
-                    GroupName: "CollisionMatrix",
-                    Description: "Project string parameter.",
-                    Guid: Guid.NewGuid()),
-                FamilyPlainSpec: new RevitFamilyFixtureHarness.ParameterDefinitionSpec(
-                    Name: sameNameDifferentDatatype,
-                    DataType: SpecTypeId.Length,
-                    Group: GroupTypeId.Geometry,
-                    IsInstance: false),
-                FamilySharedSpec: null,
-                ExpectedProjectIdentityKind: nameof(RevitParameterIdentityKind.SharedGuid),
-                ExpectedFamilyIdentityKind: nameof(RevitParameterIdentityKind.ParameterElement),
-                ExpectDistinctSharedGuids: false,
-                ExpectFamilySharedGuid: false,
-                ExpectedProjectDataTypeId: SpecTypeId.String.Text.TypeId,
-                ExpectedFamilyDataTypeId: SpecTypeId.Length.TypeId,
-                ExpectedProjectGroupTypeId: GroupTypeId.IdentityData.TypeId,
-                ExpectedFamilyGroupTypeId: GroupTypeId.Geometry.TypeId),
+                "project_first__same_name__different_datatype",
+                true,
+                new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+                    sameNameDifferentDatatype,
+                    SpecTypeId.String.Text,
+                    "CollisionMatrix",
+                    "Project string parameter.",
+                    Guid.NewGuid()),
+                new RevitFamilyFixtureHarness.ParameterDefinitionSpec(
+                    sameNameDifferentDatatype,
+                    SpecTypeId.Length,
+                    GroupTypeId.Geometry,
+                    false),
+                null,
+                nameof(RevitParameterIdentityKind.SharedGuid),
+                nameof(RevitParameterIdentityKind.ParameterElement),
+                false,
+                false,
+                SpecTypeId.String.Text.TypeId,
+                SpecTypeId.Length.TypeId,
+                GroupTypeId.IdentityData.TypeId,
+                GroupTypeId.Geometry.TypeId),
             new CollisionMatrixCase(
-                Name: "family_first__same_name__different_datatype",
-                AuthorProjectFirst: false,
-                ProjectSpec: new RevitFamilyFixtureHarness.SharedDefinitionSpec(
-                    Name: sameNameDifferentDatatype,
-                    DataType: SpecTypeId.String.Text,
-                    GroupName: "CollisionMatrix",
-                    Description: "Project string parameter authored second.",
-                    Guid: Guid.NewGuid()),
-                FamilyPlainSpec: new RevitFamilyFixtureHarness.ParameterDefinitionSpec(
-                    Name: sameNameDifferentDatatype,
-                    DataType: SpecTypeId.Length,
-                    Group: GroupTypeId.Geometry,
-                    IsInstance: false),
-                FamilySharedSpec: null,
-                ExpectedProjectIdentityKind: nameof(RevitParameterIdentityKind.SharedGuid),
-                ExpectedFamilyIdentityKind: nameof(RevitParameterIdentityKind.ParameterElement),
-                ExpectDistinctSharedGuids: false,
-                ExpectFamilySharedGuid: false,
-                ExpectedProjectDataTypeId: SpecTypeId.String.Text.TypeId,
-                ExpectedFamilyDataTypeId: SpecTypeId.Length.TypeId,
-                ExpectedProjectGroupTypeId: GroupTypeId.IdentityData.TypeId,
-                ExpectedFamilyGroupTypeId: GroupTypeId.Geometry.TypeId)
+                "family_first__same_name__different_datatype",
+                false,
+                new RevitFamilyFixtureHarness.SharedDefinitionSpec(
+                    sameNameDifferentDatatype,
+                    SpecTypeId.String.Text,
+                    "CollisionMatrix",
+                    "Project string parameter authored second.",
+                    Guid.NewGuid()),
+                new RevitFamilyFixtureHarness.ParameterDefinitionSpec(
+                    sameNameDifferentDatatype,
+                    SpecTypeId.Length,
+                    GroupTypeId.Geometry,
+                    false),
+                null,
+                nameof(RevitParameterIdentityKind.SharedGuid),
+                nameof(RevitParameterIdentityKind.ParameterElement),
+                false,
+                false,
+                SpecTypeId.String.Text.TypeId,
+                SpecTypeId.Length.TypeId,
+                GroupTypeId.IdentityData.TypeId,
+                GroupTypeId.Geometry.TypeId)
         };
 
         foreach (var testCase in cases)
@@ -127,10 +128,11 @@ public sealed class ParameterCollisionMatrixTests {
     }
 
     private static void RunCase(
-        Autodesk.Revit.ApplicationServices.Application application,
+        Application application,
         CollisionMatrixCase testCase
     ) {
-        var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory($"{nameof(Same_name_collision_matrix_preserves_distinct_identities_across_guid_and_datatype_mismatches)}_{testCase.Name}");
+        var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(
+            $"{nameof(Same_name_collision_matrix_preserves_distinct_identities_across_guid_and_datatype_mismatches)}_{testCase.Name}");
         var projectDocument = RevitFamilyFixtureHarness.CreateProjectDocument(application);
         var familyDocument = RevitFamilyFixtureHarness.CreateFamilyDocument(
             application,
@@ -143,9 +145,12 @@ public sealed class ParameterCollisionMatrixTests {
             else
                 AuthorFamilyThenProject(projectDocument, familyDocument, testCase);
 
-            var savedFamilyPath = RevitFamilyFixtureHarness.SaveDocumentCopy(familyDocument, outputDirectory, testCase.Name);
-            var loadedFamily = RevitFamilyFixtureHarness.LoadFamilyIntoProject(application, projectDocument, savedFamilyPath);
-            Assert.That(loadedFamily, Is.Not.Null, $"Case '{testCase.Name}' should load the authored family into the project.");
+            var savedFamilyPath =
+                RevitFamilyFixtureHarness.SaveDocumentCopy(familyDocument, outputDirectory, testCase.Name);
+            var loadedFamily =
+                RevitFamilyFixtureHarness.LoadFamilyIntoProject(application, projectDocument, savedFamilyPath);
+            Assert.That(loadedFamily, Is.Not.Null,
+                $"Case '{testCase.Name}' should load the authored family into the project.");
 
             var projectProbe = RevitFamilyFixtureHarness.CollectProjectBindingProbes(projectDocument)
                 .Single(probe => string.Equals(probe.Name, testCase.ProjectSpec.Name, StringComparison.Ordinal));
@@ -156,29 +161,42 @@ public sealed class ParameterCollisionMatrixTests {
                     .Single(probe => string.Equals(probe.Name, testCase.ProjectSpec.Name, StringComparison.Ordinal));
 
                 Assert.Multiple(() => {
-                    Assert.That(projectProbe.IdentityKind, Is.EqualTo(testCase.ExpectedProjectIdentityKind), $"Case '{testCase.Name}' project identity kind");
-                    Assert.That(projectProbe.DataTypeId, Is.EqualTo(testCase.ExpectedProjectDataTypeId), $"Case '{testCase.Name}' project datatype");
-                    Assert.That(projectProbe.GroupTypeId, Is.EqualTo(testCase.ExpectedProjectGroupTypeId), $"Case '{testCase.Name}' project group");
+                    Assert.That(projectProbe.IdentityKind, Is.EqualTo(testCase.ExpectedProjectIdentityKind),
+                        $"Case '{testCase.Name}' project identity kind");
+                    Assert.That(projectProbe.DataTypeId, Is.EqualTo(testCase.ExpectedProjectDataTypeId),
+                        $"Case '{testCase.Name}' project datatype");
+                    Assert.That(projectProbe.GroupTypeId, Is.EqualTo(testCase.ExpectedProjectGroupTypeId),
+                        $"Case '{testCase.Name}' project group");
 
-                    Assert.That(familyProbe.IdentityKind, Is.EqualTo(testCase.ExpectedFamilyIdentityKind), $"Case '{testCase.Name}' family identity kind");
-                    Assert.That(familyProbe.DataTypeId, Is.EqualTo(testCase.ExpectedFamilyDataTypeId), $"Case '{testCase.Name}' family datatype");
-                    Assert.That(familyProbe.GroupTypeId, Is.EqualTo(testCase.ExpectedFamilyGroupTypeId), $"Case '{testCase.Name}' family group");
-                    Assert.That(projectProbe.Name, Is.EqualTo(familyProbe.Name), $"Case '{testCase.Name}' shared display name");
+                    Assert.That(familyProbe.IdentityKind, Is.EqualTo(testCase.ExpectedFamilyIdentityKind),
+                        $"Case '{testCase.Name}' family identity kind");
+                    Assert.That(familyProbe.DataTypeId, Is.EqualTo(testCase.ExpectedFamilyDataTypeId),
+                        $"Case '{testCase.Name}' family datatype");
+                    Assert.That(familyProbe.GroupTypeId, Is.EqualTo(testCase.ExpectedFamilyGroupTypeId),
+                        $"Case '{testCase.Name}' family group");
+                    Assert.That(projectProbe.Name, Is.EqualTo(familyProbe.Name),
+                        $"Case '{testCase.Name}' shared display name");
 
-                    if (testCase.ExpectFamilySharedGuid) {
-                        Assert.That(familyProbe.SharedGuid, Is.Not.Null, $"Case '{testCase.Name}' family shared guid presence");
-                    } else {
-                        Assert.That(familyProbe.SharedGuid, Is.Null, $"Case '{testCase.Name}' family shared guid absence");
-                    }
+                    if (testCase.ExpectFamilySharedGuid)
+                        Assert.That(familyProbe.SharedGuid, Is.Not.Null,
+                            $"Case '{testCase.Name}' family shared guid presence");
+                    else
+                        Assert.That(familyProbe.SharedGuid, Is.Null,
+                            $"Case '{testCase.Name}' family shared guid absence");
 
                     if (testCase.ExpectDistinctSharedGuids) {
-                        Assert.That(projectProbe.SharedGuid, Is.Not.Null, $"Case '{testCase.Name}' project shared guid presence");
-                        Assert.That(familyProbe.SharedGuid, Is.Not.Null, $"Case '{testCase.Name}' family shared guid presence for comparison");
-                        Assert.That(projectProbe.SharedGuid, Is.Not.EqualTo(familyProbe.SharedGuid), $"Case '{testCase.Name}' guid mismatch should prevent merge");
-                        Assert.That(projectProbe.IdentityKey, Is.Not.EqualTo($"shared:{familyProbe.SharedGuid!.Value:D}"), $"Case '{testCase.Name}' identity keys should stay distinct");
-                    } else {
-                        Assert.That(projectProbe.SharedGuid, Is.Not.Null, $"Case '{testCase.Name}' project shared guid presence");
-                    }
+                        Assert.That(projectProbe.SharedGuid, Is.Not.Null,
+                            $"Case '{testCase.Name}' project shared guid presence");
+                        Assert.That(familyProbe.SharedGuid, Is.Not.Null,
+                            $"Case '{testCase.Name}' family shared guid presence for comparison");
+                        Assert.That(projectProbe.SharedGuid, Is.Not.EqualTo(familyProbe.SharedGuid),
+                            $"Case '{testCase.Name}' guid mismatch should prevent merge");
+                        Assert.That(projectProbe.IdentityKey,
+                            Is.Not.EqualTo($"shared:{familyProbe.SharedGuid!.Value:D}"),
+                            $"Case '{testCase.Name}' identity keys should stay distinct");
+                    } else
+                        Assert.That(projectProbe.SharedGuid, Is.Not.Null,
+                            $"Case '{testCase.Name}' project shared guid presence");
                 });
             } finally {
                 RevitFamilyFixtureHarness.CloseDocument(editedFamilyDocument);
@@ -215,7 +233,7 @@ public sealed class ParameterCollisionMatrixTests {
         RevitFamilyFixtureHarness.AddOrUpdateProjectParameterBinding(
             projectDocument,
             projectDefinition,
-            isInstance: true,
+            true,
             GroupTypeId.IdentityData,
             BuiltInCategory.OST_GenericModel);
     }
@@ -232,7 +250,7 @@ public sealed class ParameterCollisionMatrixTests {
                 familyDocument,
                 testCase.FamilySharedSpec,
                 GroupTypeId.IdentityData,
-                isInstance: true);
+                true);
         }
 
         if (testCase.FamilyPlainSpec != null)

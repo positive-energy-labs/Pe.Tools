@@ -17,7 +17,7 @@ public interface JsonReadWriter<T> : JsonReader<T>, JsonWriter<T> where T : clas
 public interface CsvReader<T> {
     string FilePath { get; }
     Dictionary<string, T> Read();
-    T ReadRow(string key);
+    T? ReadRow(string key);
 }
 
 public interface CsvWriter<T> {

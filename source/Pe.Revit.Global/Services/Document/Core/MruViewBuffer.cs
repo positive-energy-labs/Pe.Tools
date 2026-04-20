@@ -1,6 +1,4 @@
-﻿using Pe.Revit.Global.PolyFill;
-
-namespace Pe.Revit.Global.Services.Document.Core;
+﻿namespace Pe.Revit.Global.Services.Document.Core;
 
 /// <summary>
 ///     Manages the Most Recently Used (MRU) view buffer for tracking view activation history.
@@ -127,6 +125,7 @@ public class MruViewBuffer {
     ///     - StartUpPage' s doc !=
     ///         priorView's doc → crossed boundary → FILTER OUT ✅
     /// 
+    /// 
     /// </summary>
     private bool ShouldCommitPreviousView(ViewReference previousViewRef, ViewReference? priorViewRef) {
         if (previousViewRef == null) return false;
@@ -177,7 +176,8 @@ public class MruViewBuffer {
             return exactDocument;
 
         var affinityMatches = uiApp.GetOpenDocuments()
-            .Where(doc => string.Equals(doc.GetDocumentMruAffinityKey(), viewRef.DocumentMruAffinityKey, StringComparison.OrdinalIgnoreCase))
+            .Where(doc => string.Equals(doc.GetDocumentMruAffinityKey(), viewRef.DocumentMruAffinityKey,
+                StringComparison.OrdinalIgnoreCase))
             .ToList();
         if (affinityMatches.Count == 1)
             return affinityMatches[0];

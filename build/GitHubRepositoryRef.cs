@@ -10,7 +10,8 @@ internal sealed record GitHubRepositoryRef(string Owner, string Name) {
         var repository = Environment.GetEnvironmentVariable("GITHUB_REPOSITORY");
 
         if (!string.IsNullOrWhiteSpace(repository)) {
-            var split = repository.Split('/', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            var split = repository.Split('/', 2,
+                StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
             if (split.Length == 2) return new GitHubRepositoryRef(split[0], split[1]);
         }

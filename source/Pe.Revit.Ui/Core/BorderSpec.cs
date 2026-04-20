@@ -35,7 +35,7 @@ public class BorderSpec {
     private string _borderBrushResourceKey = string.Empty;
     private Thickness _borderThickness = new(0);
     private CornerRadius _cornerRadius = new((double)UiSz.l);
-    private DropShadowEffect _dropShadowEffect;
+    private DropShadowEffect? _dropShadowEffect;
     private (double minHeight, double height, double maxHeight) _heights = (0.0, double.NaN, double.PositiveInfinity);
     private HorizontalAlignment _horizontalAlignment = HorizontalAlignment.Stretch;
     private Thickness _margin = new(0);
@@ -201,7 +201,7 @@ public class BorderSpec {
     /// <summary>
     ///     Creates the Border with all configured properties applied in one pass.
     /// </summary>
-    public Border CreateAround(UIElement child = null) {
+    public Border CreateAround(UIElement? child = null) {
         var border = new Border {
             Child = child,
             CornerRadius = this._cornerRadius,
@@ -220,12 +220,12 @@ public class BorderSpec {
         };
 
         // Apply brushes - use SetResourceReference for dynamic resources, direct assignment for static brushes
-        if (this._borderBrushResourceKey != null) {
+        if (!string.IsNullOrEmpty(this._borderBrushResourceKey)) {
             border.SetResourceReference(System.Windows.Controls.Border.BorderBrushProperty,
                 this._borderBrushResourceKey);
         }
 
-        if (this._backgroundResourceKey != null)
+        if (!string.IsNullOrEmpty(this._backgroundResourceKey))
             border.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, this._backgroundResourceKey);
 
         return border;

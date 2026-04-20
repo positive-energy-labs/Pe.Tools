@@ -67,7 +67,7 @@ public class UnifiedViewItem : IPaletteListItem {
     };
 
     // Tooltip not used - sidebar preview panel displays detailed info
-    public Func<string> GetTextInfo => null;
+    public Func<string> GetTextInfo => static () => string.Empty;
 
     public BitmapImage? Icon => null;
     public Color? ItemColor => null;

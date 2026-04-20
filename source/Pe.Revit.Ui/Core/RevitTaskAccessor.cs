@@ -13,7 +13,7 @@ public static class RevitTaskAccessor {
     ///     Delegate to execute an async action in Revit API context.
     ///     Returns a Task that completes when the action has executed.
     /// </summary>
-    public static Func<Func<Task>, Task> RunAsync { get; set; }
+    public static Func<Func<Task>, Task>? RunAsync { get; set; }
 
     /// <summary>
     ///     Whether the accessor has been configured with a valid delegate.

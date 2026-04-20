@@ -10,7 +10,7 @@ internal static class SchemaDefaultDocumentPruner {
         if (documentToken == null)
             throw new ArgumentNullException(nameof(documentToken));
 
-        _ = PruneNode(schema, documentToken, isRoot: true);
+        _ = PruneNode(schema, documentToken, true);
     }
 
     private static bool PruneNode(JsonSchema? schema, JToken token, bool isRoot = false) {
@@ -50,11 +50,9 @@ internal static class SchemaDefaultDocumentPruner {
 
     private static bool PruneArray(JsonSchema schema, JArray array, bool isRoot) {
         var itemSchema = SchemaDocumentSchemaResolver.ResolveArrayItemSchema(schema, array);
-        if (itemSchema != null) {
-            foreach (var item in array) {
+        if (itemSchema != null)
+            foreach (var item in array)
                 _ = PruneNode(itemSchema, item);
-            }
-        }
 
         return !isRoot && MatchesExplicitDefault(schema, array);
     }

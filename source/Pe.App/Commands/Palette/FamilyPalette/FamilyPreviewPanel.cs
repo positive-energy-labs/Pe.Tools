@@ -3,7 +3,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
-using System.Threading.Tasks;
 using WpfUiRichTextBox = Wpf.Ui.Controls.RichTextBox;
 
 namespace Pe.App.Commands.Palette.FamilyPalette;
@@ -37,7 +36,7 @@ public class FamilyPreviewPanel : PaletteSidebarPanel<UnifiedFamilyItem, FamilyP
         };
 
         _ = this._mainPanel.Children.Add(this._infoBox);
-        base.Content = this._mainPanel;
+        this.Content = this._mainPanel;
     }
 
     /// <summary>Updates preview from pre-built data</summary>
@@ -118,8 +117,7 @@ public class FamilyPreviewPanel : PaletteSidebarPanel<UnifiedFamilyItem, FamilyP
 
         // Add section header to info box
         var headerPara = new Paragraph(new Run(sectionTitle) { FontWeight = FontWeights.SemiBold }) {
-            Margin = new Thickness(0, 6, 0, 2),
-            LineHeight = 1
+            Margin = new Thickness(0, 6, 0, 2), LineHeight = 1
         };
         doc.Blocks.Add(headerPara);
 
@@ -197,7 +195,8 @@ public class FamilyPreviewPanel : PaletteSidebarPanel<UnifiedFamilyItem, FamilyP
         return await PaletteThreading.RunRevitAsync(() => item.ItemType switch {
             FamilyItemType.Family => FamilyPreviewBuilder.BuildFromFamilyWithParameters(item.Family!, this._doc),
             FamilyItemType.FamilyType => FamilyPreviewBuilder.BuildFromFamilySymbol(item.FamilySymbol!, this._doc),
-            FamilyItemType.FamilyInstance => FamilyPreviewBuilder.BuildFromFamilyInstance(item.FamilyInstance!, this._doc),
+            FamilyItemType.FamilyInstance => FamilyPreviewBuilder.BuildFromFamilyInstance(item.FamilyInstance!,
+                this._doc),
             _ => null
         }, ct);
     }
@@ -214,12 +213,11 @@ public class FamilyPreviewPanel : PaletteSidebarPanel<UnifiedFamilyItem, FamilyP
         // Show basic info that's cheap to access (already computed in the item)
         var doc = FlowDocumentBuilder.Create();
         _ = doc.AddHeader(item.TextPrimary);
-        _ = doc.AddKeyValue("Category", item.TextPill);
+        _ = doc.AddKeyValue("Category", item.TextPill ?? string.Empty);
 
         // Add loading indicator for parameters
         var loadingPara = new Paragraph(new Run("Loading...") {
-            FontStyle = FontStyles.Italic,
-            Foreground = Brushes.Gray
+            FontStyle = FontStyles.Italic, Foreground = Brushes.Gray
         }) { Margin = new Thickness(0, 8, 0, 0) };
         doc.Blocks.Add(loadingPara);
 

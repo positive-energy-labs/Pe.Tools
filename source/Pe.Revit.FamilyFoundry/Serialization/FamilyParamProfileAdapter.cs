@@ -1,6 +1,3 @@
-using Pe.Revit.FamilyFoundry.Snapshots;
-using Pe.Revit.FamilyFoundry.Plans;
-using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Revit.FamilyFoundry.Resolution;
 
 namespace Pe.Revit.FamilyFoundry.Serialization;
@@ -55,13 +52,11 @@ public static class FamilyParamProfileAdapter {
         }
 
         var familyEnabled = options.EnabledWhenEmpty || familyParameters.Count > 0;
-        var assignmentsEnabled = options.EnabledWhenEmpty || globalAssignments.Count > 0 || perTypeAssignments.Count > 0;
+        var assignmentsEnabled =
+            options.EnabledWhenEmpty || globalAssignments.Count > 0 || perTypeAssignments.Count > 0;
 
         return new FamilyParamProfileExport(
-            new AddFamilyParamsSettings {
-                Enabled = familyEnabled,
-                Parameters = familyParameters
-            },
+            new AddFamilyParamsSettings { Enabled = familyEnabled, Parameters = familyParameters },
             new SetKnownParamsSettings {
                 Enabled = assignmentsEnabled,
                 OverrideExistingValues = true,
@@ -74,10 +69,10 @@ public static class FamilyParamProfileAdapter {
     public static List<ParameterSnapshot> SortAndOrder(List<ParameterSnapshot> snapshots) {
         snapshots ??= [];
         return snapshots.Select(snapshot => snapshot with {
-            ValuesPerType = snapshot.ValuesPerType
-                .OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.Ordinal)
-        }).OrderBy(snapshot => snapshot.Name, StringComparer.OrdinalIgnoreCase)
+                ValuesPerType = snapshot.ValuesPerType
+                    .OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.Ordinal)
+            }).OrderBy(snapshot => snapshot.Name, StringComparer.OrdinalIgnoreCase)
             .ThenByDescending(snapshot => snapshot.IsInstance)
             .ToList();
     }

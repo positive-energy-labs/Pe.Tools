@@ -1,11 +1,6 @@
-﻿using Autodesk.Revit.DB;
-using Autodesk.Revit.DB.Electrical;
-using Pe.Revit.Global.PolyFill;
+﻿using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.Global.Revit.Lib.Electrical;
-using Pe.Revit.Global.Services.Document;
 using Pe.Shared.HostContracts.RevitData;
-
-using Pe.Revit.Global.Revit.Documents;
 
 namespace Pe.Revit.Global.Revit.Lib.Selection;
 
@@ -57,11 +52,11 @@ public static class ElementContextCollector {
     }
 
     private static QueryResolution ResolveCurrentSelection(Document doc) {
-        var selectionIds = RevitUiSession.CurrentUIApplication.GetActiveUIDocument()?.Selection.GetElementIds().ToList() ?? [];
+        var selectionIds =
+            RevitUiSession.CurrentUIApplication.GetActiveUIDocument()?.Selection.GetElementIds().ToList() ?? [];
         var elements = selectionIds
             .Select(doc.GetElement)
             .Where(element => element != null)
-            .Cast<Element>()
             .ToList();
 
         return new QueryResolution(
@@ -200,8 +195,9 @@ public static class ElementContextCollector {
             .ToList();
         var primarySystem = systems.Count == 1 ? systems[0] : null;
         var baseEquipment = systems.Count == 1
-            ? doc.GetElement(new ElementId(primarySystem!.SystemId)) is ElectricalSystem circuit && circuit.BaseEquipment != null
-                ? ToElementRef(circuit.BaseEquipment as FamilyInstance, circuit.BaseEquipment)
+            ? doc.GetElement(new ElementId(primarySystem!.SystemId)) is ElectricalSystem circuit &&
+              circuit.BaseEquipment != null
+                ? ToElementRef(circuit.BaseEquipment, circuit.BaseEquipment)
                 : null
             : null;
 
@@ -223,7 +219,6 @@ public static class ElementContextCollector {
 
         if (element is Wire wire) {
             foreach (var system in wire.GetMEPSystems()
-                         .Cast<ElementId>()
                          .Select(doc.GetElement)
                          .OfType<ElectricalSystem>()
                          .GroupBy(system => system.Id.Value())
@@ -277,7 +272,8 @@ public static class ElementContextCollector {
             return null;
 
         var assignedCircuits = ElectricalCollectorSupport.GetAssignedCircuits(equipment).Count;
-        if (ElectricalCollectorSupport.DeterminePanelRole(equipment, assignedCircuits, panelScheduleCount) != ElectricalInsightRole.Panel)
+        if (ElectricalCollectorSupport.DeterminePanelRole(equipment, assignedCircuits, panelScheduleCount) !=
+            ElectricalInsightRole.Panel)
             return null;
 
         return new ElementContextPanelData(
@@ -296,7 +292,6 @@ public static class ElementContextCollector {
             return null;
 
         var systems = wire.GetMEPSystems()
-            .Cast<ElementId>()
             .Select(id => doc.GetElement(id))
             .OfType<ElectricalSystem>()
             .Select(ToSystemRef)
@@ -344,7 +339,8 @@ public static class ElementContextCollector {
         );
     }
 
-    private static ElementContextLoadClassificationData? TryCollectLoadClassificationContext(Document doc, Element element) {
+    private static ElementContextLoadClassificationData? TryCollectLoadClassificationContext(Document doc,
+        Element element) {
         if (element is not ElectricalLoadClassification classification)
             return null;
 

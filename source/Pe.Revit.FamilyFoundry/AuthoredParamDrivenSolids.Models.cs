@@ -15,15 +15,14 @@ public sealed class AuthoredParamDrivenSolidsSettings : IOperationSettings {
     public List<AuthoredConnectorSpec> Connectors { get; init; } = [];
 
     [JsonIgnore]
-    public bool Enabled { get; init; } = true;
-
-    [JsonIgnore]
     public bool HasContent =>
         this.Planes.Count > 0 ||
         this.Spans.Count > 0 ||
         this.Prisms.Count > 0 ||
         this.Cylinders.Count > 0 ||
         this.Connectors.Count > 0;
+
+    [JsonIgnore] public bool Enabled { get; init; } = true;
 }
 
 public class AuthoredPlaneSpec {

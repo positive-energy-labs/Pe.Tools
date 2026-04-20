@@ -1,4 +1,3 @@
-using Pe.Revit.FamilyFoundry.Plans;
 using Pe.Shared.StorageRuntime.Core.Json.RevitTypes;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
@@ -13,7 +12,7 @@ namespace Pe.Revit.FamilyFoundry.Snapshots;
 public record ParameterSpec {
     [Description("The name of the parameter")]
     [Required]
-    public string Name { get; init; }
+    public string Name { get; init; } = string.Empty;
 
     [Description(
         "Whether the parameter is an instance parameter (true) or a type parameter (false). Defaults to true.")]
@@ -115,4 +114,3 @@ public record ParameterSnapshot : ParameterSpec {
         return distinctValues.Count == 1 ? distinctValues[0] : null;
     }
 }
-

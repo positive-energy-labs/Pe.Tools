@@ -28,24 +28,26 @@ public static class GetElectricalCircuitsCatalogOperationContract {
 
 public static class GetElectricalLoadClassificationsCatalogOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<ElectricalLoadClassificationsCatalogRequest, ElectricalLoadClassificationsCatalogEnvelopeResponse>(
-            "revit-data.electrical.load-classifications.catalog",
-            HostHttpVerb.Post,
-            "/api/revit-data/electrical/load-classifications/catalog",
-            HostExecutionMode.Bridge,
-            "Get Electrical Load Classifications Catalog",
-            new HostCachePolicy("electrical-load-classifications-catalog", 10)
-        );
+        HostOperationDefinition
+            .Create<ElectricalLoadClassificationsCatalogRequest, ElectricalLoadClassificationsCatalogEnvelopeResponse>(
+                "revit-data.electrical.load-classifications.catalog",
+                HostHttpVerb.Post,
+                "/api/revit-data/electrical/load-classifications/catalog",
+                HostExecutionMode.Bridge,
+                "Get Electrical Load Classifications Catalog",
+                new HostCachePolicy("electrical-load-classifications-catalog", 10)
+            );
 }
 
 public static class GetElectricalPanelSchedulesQueryOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<ElectricalPanelSchedulesQueryRequest, ElectricalPanelSchedulesQueryEnvelopeResponse>(
-            "revit-data.electrical.panel-schedules.query",
-            HostHttpVerb.Post,
-            "/api/revit-data/electrical/panel-schedules/query",
-            HostExecutionMode.Bridge,
-            "Get Electrical Panel Schedules Query",
-            new HostCachePolicy("electrical-panel-schedules-query", 10)
-        );
+        HostOperationDefinition
+            .Create<ElectricalPanelSchedulesQueryRequest, ElectricalPanelSchedulesQueryEnvelopeResponse>(
+                "revit-data.electrical.panel-schedules.query",
+                HostHttpVerb.Post,
+                "/api/revit-data/electrical/panel-schedules/query",
+                HostExecutionMode.Bridge,
+                "Get Electrical Panel Schedules Query",
+                new HostCachePolicy("electrical-panel-schedules-query", 10)
+            );
 }

@@ -4,14 +4,18 @@ namespace Pe.Shared.RevitData.Parameters;
 
 public static class RevitTypeLabelCatalog {
     private static readonly Lazy<Dictionary<string, BuiltInCategory>> CategoryLabelMap = new(BuildCategoryLabelMap);
+
     private static readonly Lazy<Dictionary<BuiltInCategory, string>> CategoryValueMap =
         new(() => CategoryLabelMap.Value.ToDictionary(kvp => kvp.Value, kvp => kvp.Key));
 
     private static readonly Lazy<Dictionary<string, ForgeTypeId>> SpecLabelMap = new(BuildSpecLabelMap);
+
     private static readonly Lazy<Dictionary<ForgeTypeId, string>> SpecValueMap =
         new(() => SpecLabelMap.Value.ToDictionary(kvp => kvp.Value, kvp => kvp.Key));
 
-    private static readonly Lazy<Dictionary<string, ForgeTypeId>> PropertyGroupLabelMap = new(BuildPropertyGroupLabelMap);
+    private static readonly Lazy<Dictionary<string, ForgeTypeId>> PropertyGroupLabelMap =
+        new(BuildPropertyGroupLabelMap);
+
     private static readonly Lazy<Dictionary<ForgeTypeId, string>> PropertyGroupValueMap =
         new(() => PropertyGroupLabelMap.Value.ToDictionary(kvp => kvp.Value, kvp => kvp.Key));
 

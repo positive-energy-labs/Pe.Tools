@@ -14,13 +14,12 @@ internal sealed class JsonCompositionSchemaSynchronizer(
     SettingsRuntimeMode runtimeMode = SettingsRuntimeMode.LiveDocument,
     ISettingsDocumentContextAccessor? documentContextAccessor = null
 ) : ISettingsCompositionSchemaSynchronizer {
-    private readonly SettingsRuntimeMode _runtimeMode = runtimeMode;
-
     private readonly ISettingsDocumentContextAccessor? _documentContextAccessor = documentContextAccessor;
     private readonly IReadOnlyDictionary<string, Type> _fragmentItemTypesByRoot = fragmentItemTypesByRoot;
     private readonly Dictionary<string, JsonSchema> _fragmentSchemasByRoot = new(StringComparer.OrdinalIgnoreCase);
     private readonly IReadOnlyDictionary<string, Type> _presetObjectTypesByRoot = presetObjectTypesByRoot;
     private readonly Dictionary<string, JsonSchema> _presetSchemasByRoot = new(StringComparer.OrdinalIgnoreCase);
+    private readonly SettingsRuntimeMode _runtimeMode = runtimeMode;
     private readonly string _schemaDirectory = schemaDirectory;
 
     public void EnsureFragmentSchema(SettingsCompositionArtifact artifact) {
@@ -47,7 +46,7 @@ internal sealed class JsonCompositionSchemaSynchronizer(
             this._fragmentSchemasByRoot[artifact.ResolvedDirective.RootSegment] = fragmentSchema;
         }
 
-        if (TryParseObject(fragmentContent, out var fragmentObject))
+        if (TryParseObject(fragmentContent, out var fragmentObject) && fragmentObject != null)
             SchemaUiDocumentSynchronizer.Synchronize(fragmentSchema, fragmentObject);
 
         var updatedContent = JsonSchemaDocumentService.WriteSchemaAndInjectReference(
@@ -85,7 +84,7 @@ internal sealed class JsonCompositionSchemaSynchronizer(
             this._presetSchemasByRoot[artifact.ResolvedDirective.RootSegment] = presetSchema;
         }
 
-        if (TryParseObject(presetContent, out var presetObject))
+        if (TryParseObject(presetContent, out var presetObject) && presetObject != null)
             SchemaUiDocumentSynchronizer.Synchronize(presetSchema, presetObject);
 
         var updatedContent = JsonSchemaDocumentService.WriteSchemaAndInjectReference(

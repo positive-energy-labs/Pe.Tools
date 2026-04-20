@@ -1,5 +1,5 @@
-using Pe.Shared.HostContracts.RevitData;
 using Pe.Shared.HostContracts.Operations;
+using Pe.Shared.HostContracts.RevitData;
 using Pe.Shared.HostContracts.SettingsStorage;
 
 namespace Pe.Revit.Global.Services.Host.Operations;
@@ -69,16 +69,19 @@ internal sealed class BridgeOperationRegistry {
                 static (request, context, cancellationToken) =>
                     context.RevitDataRequestService.GetElectricalCircuitsCatalogEnvelopeAsync(request)
             ),
-            BridgeOperations.Create<ElectricalPanelSchedulesQueryRequest, ElectricalPanelSchedulesQueryEnvelopeResponse>(
-                GetElectricalPanelSchedulesQueryOperationContract.Definition,
-                static (request, context, cancellationToken) =>
-                    context.RevitDataRequestService.GetElectricalPanelSchedulesQueryEnvelopeAsync(request)
-            ),
-            BridgeOperations.Create<ElectricalLoadClassificationsCatalogRequest, ElectricalLoadClassificationsCatalogEnvelopeResponse>(
-                GetElectricalLoadClassificationsCatalogOperationContract.Definition,
-                static (request, context, cancellationToken) =>
-                    context.RevitDataRequestService.GetElectricalLoadClassificationsCatalogEnvelopeAsync(request)
-            ),
+            BridgeOperations
+                .Create<ElectricalPanelSchedulesQueryRequest, ElectricalPanelSchedulesQueryEnvelopeResponse>(
+                    GetElectricalPanelSchedulesQueryOperationContract.Definition,
+                    static (request, context, cancellationToken) =>
+                        context.RevitDataRequestService.GetElectricalPanelSchedulesQueryEnvelopeAsync(request)
+                ),
+            BridgeOperations
+                .Create<ElectricalLoadClassificationsCatalogRequest,
+                    ElectricalLoadClassificationsCatalogEnvelopeResponse>(
+                    GetElectricalLoadClassificationsCatalogOperationContract.Definition,
+                    static (request, context, cancellationToken) =>
+                        context.RevitDataRequestService.GetElectricalLoadClassificationsCatalogEnvelopeAsync(request)
+                ),
             BridgeOperations.Create<RevitDocumentSessionContextRequest, RevitDocumentSessionContextEnvelopeResponse>(
                 GetRevitDocumentSessionContextOperationContract.Definition,
                 static (request, context, cancellationToken) =>

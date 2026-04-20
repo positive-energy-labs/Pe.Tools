@@ -1,10 +1,8 @@
-using Autodesk.Revit.DB.Structure;
-using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
 using Pe.Revit.Global.Revit.Documents.Schedules;
+using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
 using Pe.Revit.Global.Revit.Lib.Schedules;
 using Pe.Shared.RevitData.Families;
 using Serilog;
-using System.Diagnostics;
 
 namespace Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 
@@ -156,8 +154,7 @@ public static class LoadedFamiliesScheduleCollector {
     ) =>
         families
             .Select(family => new {
-                Record = family,
-                Element = familyElements.TryGetValue(family.FamilyId, out var element) ? element : null
+                Record = family, Element = familyElements.TryGetValue(family.FamilyId, out var element) ? element : null
             })
             .Where(x => x.Element?.FamilyCategory?.Id != null)
             .GroupBy(

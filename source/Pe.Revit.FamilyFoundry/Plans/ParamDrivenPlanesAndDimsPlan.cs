@@ -1,4 +1,4 @@
-using Pe.Revit.FamilyFoundry.Snapshots;
+using Newtonsoft.Json;
 using System.ComponentModel;
 
 namespace Pe.Revit.FamilyFoundry.Plans;
@@ -20,8 +20,9 @@ public sealed class SymmetricPlanePairSpec {
     public string NegativePlaneName { get; init; } = string.Empty;
     public string PositivePlaneName { get; init; } = string.Empty;
     public string? Parameter { get; init; }
-    [Newtonsoft.Json.JsonIgnore]
-    public LengthDriverSpec Driver { get; init; } = LengthDriverSpec.None;
+
+    [JsonIgnore] public LengthDriverSpec Driver { get; init; } = LengthDriverSpec.None;
+
     public RpStrength Strength { get; init; } = RpStrength.NotARef;
 }
 
@@ -31,7 +32,8 @@ public sealed class OffsetPlaneConstraintSpec {
     public string AnchorPlaneName { get; init; } = string.Empty;
     public OffsetDirection Direction { get; init; }
     public string? Parameter { get; init; }
-    [Newtonsoft.Json.JsonIgnore]
-    public LengthDriverSpec Driver { get; init; } = LengthDriverSpec.None;
+
+    [JsonIgnore] public LengthDriverSpec Driver { get; init; } = LengthDriverSpec.None;
+
     public RpStrength Strength { get; init; } = RpStrength.NotARef;
 }

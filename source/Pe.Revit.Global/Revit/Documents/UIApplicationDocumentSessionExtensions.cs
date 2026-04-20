@@ -103,7 +103,8 @@ public static class UIApplicationDocumentSessionExtensions {
                 .AppendLine($"Target View: {targetView.Name} (ID: {targetView.Id.Value()})");
         }
 
-        _ = sb.AppendLine($"Active Document: {activeDocument?.Title ?? "None"} (Path: {activeDocument?.PathName ?? "N/A"})")
+        _ = sb.AppendLine(
+                $"Active Document: {activeDocument?.Title ?? "None"} (Path: {activeDocument?.PathName ?? "N/A"})")
             .AppendLine($"Active View: {activeView?.Name ?? "None"} (ID: {activeView?.Id.Value() ?? -1})")
             .AppendLine(
                 $"Open Documents ({openDocuments.Count}): {string.Join("\n  - ", openDocuments.Select(doc => $"{doc.Title} (Path: {doc.PathName})"))}")

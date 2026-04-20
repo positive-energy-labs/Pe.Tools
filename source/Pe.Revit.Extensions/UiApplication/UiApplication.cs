@@ -1,7 +1,5 @@
 ﻿using Autodesk.Revit.Exceptions;
 using Autodesk.Revit.UI;
-using Pe.Revit.Global.Revit.Documents;
-using Pe.Revit.Global.Services.Document;
 using System.Diagnostics;
 
 namespace Pe.Revit.Extensions.UiApplication;
@@ -264,7 +262,7 @@ public static class OpenDocumentExtensions {
         var timeoutTimer = new Timer(_ => {
             timerFired = true;
             Console.WriteLine($"[TryOpenCloudDocument] Timeout reached after {timeoutSeconds}s.");
-        }, null, (int)(timeoutSeconds * 1000), Timeout.Infinite);
+        }, null, timeoutSeconds * 1000, Timeout.Infinite);
 
         try {
             Console.WriteLine(

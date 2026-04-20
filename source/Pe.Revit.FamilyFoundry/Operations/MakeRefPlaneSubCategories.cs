@@ -1,5 +1,4 @@
 using Pe.Revit.Extensions.FamDocument;
-using Pe.Revit.FamilyFoundry.Snapshots;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
@@ -32,11 +31,11 @@ namespace Pe.Revit.FamilyFoundry.Operations;
 // };
 public record RefPlaneSubcategorySpec {
     public RpStrength Strength { get; init; }
-    public string Name { get; init; }
-    public Color Color { get; init; }
+    public required string Name { get; init; }
+    public required Color Color { get; init; }
     public string LinePatternName { get; init; } = "Dash"; // null = use solid line
 
-    public ElementId GetLinePatternId(Document doc) {
+    public ElementId? GetLinePatternId(Document doc) {
         if (string.IsNullOrEmpty(this.LinePatternName))
             return null;
 
@@ -128,15 +127,18 @@ public class MakeRefPlaneSubcategories(List<RefPlaneSubcategorySpec> specs)
 
 public class SubcategoryCache(Document doc, BuiltInCategory parentCategory) {
     private readonly Dictionary<string, Category> _cache = new();
-    private readonly Category _parentCategory = Category.GetCategory(doc, parentCategory);
 
-    public Category GetMatching(RefPlaneSubcategorySpec spec) {
+    private readonly Category _parentCategory = Category.GetCategory(doc, parentCategory)
+                                                ?? throw new InvalidOperationException(
+                                                    $"Category '{parentCategory}' not found.");
+
+    public Category? GetMatching(RefPlaneSubcategorySpec spec) {
         var existing = this.GetExisting(spec.Name);
         if (existing == null) return null;
         return this.MatchesSpec(existing, spec) ? existing : null;
     }
 
-    public Category GetExisting(string name) {
+    public Category? GetExisting(string name) {
         if (string.IsNullOrEmpty(name)) return null;
 
         if (this._cache.ContainsKey(name)) return this._cache[name];
@@ -149,9 +151,7 @@ public class SubcategoryCache(Document doc, BuiltInCategory parentCategory) {
     }
 
     private bool MatchesSpec(Category subcat, RefPlaneSubcategorySpec spec) {
-        static bool ColorsMatch(Color c1, Color c2) {
-            return c1.Red == c2.Red && c1.Green == c2.Green && c1.Blue == c2.Blue;
-        }
+        static bool ColorsMatch(Color c1, Color c2) => c1.Red == c2.Red && c1.Green == c2.Green && c1.Blue == c2.Blue;
 
         if (!ColorsMatch(subcat.LineColor, spec.Color))
             return false;

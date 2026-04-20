@@ -58,11 +58,7 @@ public class CmdCacheParametersService : IExternalCommand {
         if (enrichedData.Count == 0)
             return [];
 
-        var writtenPaths = new List<string> {
-            $"{basePath}.csv",
-            $"{basePath}.toon",
-            $"{basePath}.md"
-        };
+        var writtenPaths = new List<string> { $"{basePath}.csv", $"{basePath}.toon", $"{basePath}.md" };
 
         WriteCsv(enrichedData, writtenPaths[0]);
         WriteToon(enrichedData, writtenPaths[1]);
@@ -99,17 +95,17 @@ public class CmdCacheParametersService : IExternalCommand {
         if (data.Count == 0) return;
 
         var abridgedData = data.Select(p => new {
-            p.Id,
-            p.Name,
-            p.Description,
-            p.IsInstance,
-            p.ValueTypeId,
-            p.SpecId,
-            p.SpecLabel,
-            p.GroupId,
-            p.GroupLabel,
-            p.CategoryIds
-        }
+                p.Id,
+                p.Name,
+                p.Description,
+                p.IsInstance,
+                p.ValueTypeId,
+                p.SpecId,
+                p.SpecLabel,
+                p.GroupId,
+                p.GroupLabel,
+                p.CategoryIds
+            }
         ).ToList();
 
         var json = JsonConvert.SerializeObject(abridgedData, Formatting.Indented);
@@ -265,6 +261,23 @@ public class EnrichedParameterData {
         }
     }
 
+    public string? Id { get; }
+    public string? Name { get; }
+    public string? Description { get; }
+    public string? SpecId { get; }
+    public string SpecLabel { get; } = string.Empty;
+    public string? ValueTypeId { get; }
+    public bool ReadOnly { get; }
+    public string? CreatedBy { get; }
+    public string? CreatedAt { get; }
+    public bool IsArchived { get; }
+    public bool IsInstance { get; }
+    public bool Visible { get; }
+    public string? GroupId { get; }
+    public string GroupLabel { get; } = string.Empty;
+    public List<string> CategoryIds { get; } = [];
+    public List<string> CategoryLabels { get; } = [];
+
     private static string? TryGetMetadataBindingId(
         IEnumerable<ParametersApi.Parameters.ParametersResult.RawMetadataValue> metadata,
         string metadataId) =>
@@ -306,23 +319,6 @@ public class EnrichedParameterData {
             return string.Empty;
         }
     }
-
-    public string? Id { get; }
-    public string? Name { get; }
-    public string? Description { get; }
-    public string? SpecId { get; }
-    public string SpecLabel { get; } = string.Empty;
-    public string? ValueTypeId { get; }
-    public bool ReadOnly { get; }
-    public string? CreatedBy { get; }
-    public string? CreatedAt { get; }
-    public bool IsArchived { get; }
-    public bool IsInstance { get; }
-    public bool Visible { get; }
-    public string? GroupId { get; }
-    public string GroupLabel { get; } = string.Empty;
-    public List<string> CategoryIds { get; } = [];
-    public List<string> CategoryLabels { get; } = [];
 }
 
 public class CacheParametersService : Aps.IOAuthTokenProvider, Aps.IParametersTokenProvider {
