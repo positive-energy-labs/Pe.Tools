@@ -2,11 +2,11 @@
 
 ## Scope
 
-Owns the run-first terminal surface for the scripting lane: workspace-relative single-file execution, stdin snippet execution, host request construction, and exit-code mapping.
+Owns the run-first terminal surface for the scripting workflow: workspace-relative single-file execution, stdin snippet execution, host request construction, and exit-code mapping.
 
 ## Purpose
 
-`Pe.Scripting.Cli` exists to close the iteration loop without a VSIX. It should make the supported scripting lane trivially runnable by humans and agents while staying intentionally narrow and aligned with the public host contract.
+`Pe.Scripting.Cli` exists to close the iteration loop without a VSIX. It should make the supported scripting workflow trivially runnable by humans and agents while staying intentionally narrow and aligned with the public host contract.
 
 ## Critical Entry Points
 

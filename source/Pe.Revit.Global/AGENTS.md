@@ -30,10 +30,6 @@ Owns durable, cross-feature Revit-side building blocks with emphasis on document
 | **document-owned** | Behavior derivable from a specific `Document` without active/open UI session state | Prefer extension methods or small document-centric helpers; avoid putting it behind session singletons |
 | **document session** | Open/active/UI-tab state for documents in the current Revit process | Prefer `DocumentManager` or `UIApplication`-adjacent helpers; avoid mixing it into pure `Document` helpers |
 | **document key** | Canonical identity string for an open Revit document used by host payloads, caches, and matching | Prefer one shared implementation; avoid per-caller variations |
-| **collect** | Live-document read path that returns a catalog, list, context, or other query result | Avoid using it for durable captured state |
-| **capture** | Durable document read path that returns a snapshot or other portable state | Prefer `Capture...` entrypoints when the output should survive the current session |
-| **snapshot** | Durable captured point-in-time state, possibly assembled from lower-level collectors | Avoid calling every query result a snapshot |
-| **apply** | Write compatible shared structures back into live Revit | Avoid mixing feature policy into low-level apply helpers unless the concept is truly feature-owned |
 
 ## Living Memory
 

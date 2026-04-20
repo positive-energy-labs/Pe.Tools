@@ -19,7 +19,7 @@ Owns Family Foundry authored settings, operation queues, runtime operations, com
 - `Capture/` and `Snapshots/` — snapshot capture entrypoints, collectors, portable structure, and apply/proof-oriented diagnostics.
 - `Profiles/` — FF-owned authored profile contracts, manifests, and snapshot-to-profile projection seams.
 - `Resolution/AuthoredParamDrivenSolidsCompiler.cs` — authored param-driven solids compile path.
-- `Apply/DocumentFamilyProfileApplyExtensions.cs` and `Apply/FamilyProfileApplicator.cs` — document-owned apply verbs plus the shared runtime apply lane.
+- `Apply/DocumentFamilyProfileApplyExtensions.cs` and `Apply/FamilyProfileApplicator.cs` — document-owned apply verbs plus the shared runtime apply path.
 - `OperationSettings/` — authored settings contracts used by profiles.
 - `docs/features/family-foundry/_DEV.md` — cross-package output/transparency model and default debugging read order.
 
@@ -35,11 +35,6 @@ Owns Family Foundry authored settings, operation queues, runtime operations, com
 
 | Term | Meaning | Prefer / Avoid |
 | --- | --- | --- |
-| **profile** | Authored Family Foundry settings document | Avoid using it for collected runtime state |
-| **spec** | A reusable building block that can appear inside both authored profiles and captured snapshots | Prefer this for canonical portable/authored building blocks instead of vague `Model` or `State` names |
-| **snapshot** | Captured family/document state composed of specs plus source/provenance metadata where needed | Avoid using it as authored input terminology or as the name for every derived output |
-| **projection** | A target-shaped derived output such as a matrix, dataset, csv, or profile fragment | Prefer this for shaped outputs; avoid using it for captured source state |
-| **apply** | Patch/merge-oriented write-back into live Revit from specs, snapshots, or compatible projections | Prefer this over `replay` unless strict sequence fidelity is actually the point |
 | **operation** | One runtime mutation/action unit in the FF queue | Avoid calling whole workflows one operation when the queue/group distinction matters |
 | **queue** | Ordered set of operations/groups passed to `OperationProcessor` | Avoid using it as a synonym for a single command |
 | **param-driven solids** | The canonical authored/serialized semantic solids shape | Avoid referring to old low-level extrusion authoring as an equal peer model |
