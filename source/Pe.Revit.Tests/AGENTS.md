@@ -9,11 +9,11 @@ This project runs real Revit-backed integration tests through
 - This project is VSTest-based.
 - Prefer `dotnet build` plus `dotnet vstest`.
 - The test assembly comes from `.artifacts/tests`, but runtime code still comes
-  from the assemblies already loaded by Revit from the deployed addin lane.
-- A `.Tests` build is safe test-lane prep during a live Rider/Revit debug
+  from the assemblies already loaded by Revit from the deployed addin.
+- A `.Tests` build is safe test-runner prep during a live Rider/Revit debug
   session. It does not prove that Revit loaded fresh runtime code.
 - If the user restarted Revit from Rider by launching the normal `Pe.App`
-  debug configuration, treat the deployed runtime lane as fresh by default.
+  debug configuration, treat the deployed runtime add-in as fresh by default.
 - A `.Tests` build does not redeploy the `%APPDATA%\Autodesk\Revit\Addins\2025`
   addin copy while Revit is open. If you truly need a fresh deployed runtime,
   that has to come from a normal `Pe.App` debug launch/restart.
@@ -26,7 +26,7 @@ This project runs real Revit-backed integration tests through
 4. Let the post-build helper attempt Rider hot reload for changed runtime files.
 5. Run focused `dotnet vstest` commands from terminal.
 6. If behavior or logs do not match source, assume stale runtime assemblies
-   first. Confirm hot reload actually applied or restart the runtime lane.
+   first. Confirm hot reload actually applied or restart the runtime add-in.
 7. After a fresh Rider `Pe.App` restart, do not keep blaming stale assemblies
    unless there is concrete divergence between source and runtime behavior.
 

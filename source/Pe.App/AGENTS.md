@@ -20,7 +20,7 @@ Owns the Revit add-in entrypoint, ribbon/command exposure, task palette commands
 ## Validation
 
 - Do not build this project during RRD; building during a live Rider/Revit debug session always breaks hot reload.
-- Prefer validating runtime-facing fixes through the smallest affected command or focused `.Tests` lane when possible.
+- Prefer validating runtime-facing fixes through the smallest affected command or focused `.Tests` configuration when possible.
 - If a change should affect bridge behavior, verify both add-in startup wiring and the corresponding `Pe.Host` endpoint/service path.
 - Auto-connect is opt-in through `PE_SETTINGS_BRIDGE_AUTO_CONNECT=true`. Do not silently turn the bridge into an always-on startup dependency.
 
@@ -28,13 +28,14 @@ Owns the Revit add-in entrypoint, ribbon/command exposure, task palette commands
 
 | Term | Meaning | Prefer / Avoid |
 | --- | --- | --- |
-| **runtime lane** | The deployed Revit add-in assemblies loaded by Revit | Avoid confusing this with the `.Tests` lane |
+| **runtime add-in** | The deployed Revit add-in assemblies loaded by Revit | Avoid confusing this with the `.Tests` configuration |
 | **bridge** | The Revit-side named-pipe connection to `Pe.Host` | Avoid using it for HTTP/SSE endpoints |
-| **RRD** | A live Rider/Revit debug session against the deployed runtime lane | Prefer this over vague phrases like `live debug` when the Rider+Revit lane specifically matters |
+| **RRD** | A live Rider/Revit debug session against the deployed runtime add-in | Prefer this over vague phrases like `live debug` when the Rider+Revit setup specifically matters |
 | **task** | A Task Palette action under `Tasks/` | Avoid using it as a synonym for background/async work |
 
 ## Living Memory
 
+- This package's dependency graph owns the live RRD runtime. Be unusually cautious about builds because they will *always* force a costly Revit restart.
 - Keep `Pe.App` thin. If logic starts looking reusable or testable outside the command shell, move it into the owning domain/shared package.
 - `Application.cs` is the startup truth. If a capability depends on bootstrapping, logging, or event subscription, verify it there first.
 - `ButtonRegistry.cs` is the ribbon truth. Do not scatter command discovery assumptions across docs.

@@ -6,7 +6,7 @@ Owns the Revit-side scripting runtime: workspace bootstrap, project regeneration
 
 ## Purpose
 
-`Pe.Revit.Scripting` is the execution engine behind the scripting lane. It should keep the supported single-file workspace flow stable and explicit while staying transport-agnostic from the product surface's point of view.
+`Pe.Revit.Scripting` is the execution engine behind the scripting workflow. It should keep the supported single-file workspace flow stable and explicit while staying transport-agnostic from the product surface's point of view.
 
 ## Critical Entry Points
 
@@ -23,7 +23,7 @@ Owns the Revit-side scripting runtime: workspace bootstrap, project regeneration
 
 - Prefer resolver and execution tests in `source/Pe.Revit.Tests/RevitScriptingPortTests.cs` before broad Revit test runs.
 - If you change the supported authoring contract, update the generated workspace templates in `Bootstrap/ScriptFileTemplates.cs` in the same pass.
-- Build validation for this lane is currently `dotnet build Pe.Tools.slnx -c Debug.R25 /p:WarningLevel=0` when builds are allowed.
+- Build validation for this package is currently `dotnet build Pe.Tools.slnx -c Debug.R25 /p:WarningLevel=0` when builds are allowed.
 
 ## Shared Language
 
@@ -37,7 +37,7 @@ Owns the Revit-side scripting runtime: workspace bootstrap, project regeneration
 
 ## Living Memory
 
-- The supported file lane is workspace-first and single-file only. Multi-file or manifest/package execution is future direction, not current behavior.
+- The supported file flow is workspace-first and single-file only. Multi-file or manifest/package execution is future direction, not current behavior.
 - Successful compile in `Strict` mode should imply runnable dependency availability. Do not collapse compile assets and runtime assets back into one flat list.
 - `WriteLine(...)` is the preferred output path. `Console.WriteLine(...)` is compatibility only and should stay obviously second-class in docs and samples.
 - Inline snippets should be normalized into `.inline\LastInline.cs` before execution so runtime behavior stays file-backed and debuggable.

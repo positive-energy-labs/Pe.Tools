@@ -34,8 +34,10 @@ Owns the external settings host: HTTP endpoints, settings SSE streams, host-side
 | **schema envelope** | The host response wrapper around generated schema data and issues | Avoid using it as a synonym for raw JSON schema |
 | **settings event stream** | `/api/settings/events` invalidation SSE for document and host-status changes | Avoid using it for unrelated streaming workflows |
 | **scripting proxy** | Host-local sync forwarder from `/api/scripting/*` to `Pe.Scripting.Revit` | Avoid calling it a bridge operation |
+
 ## Living Memory
 
+- Prefer host-side iteration when possible; unlike Pe.App, host work usually does not consume the active RRD session.
 - Keep HTTP as the source of truth for request/response workflows.
 - Keep `/api/settings/events` invalidation-only.
 - `Pe.Host` should not grow Revit-side fallback logic. If data needs the active document/thread, route it through the bridge.
