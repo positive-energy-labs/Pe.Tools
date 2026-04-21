@@ -24,14 +24,6 @@ public sealed class RiderHotReloadService(
                 return new RevitHotReloadResult(RevitHotReloadResultKind.NoSession, "No Revit sessions found.", []);
 
             var dirtyFiles = await this.GetDirtyRuntimeFilesAsync(repoRoot, cancellationToken);
-            if (dirtyFiles.Count == 0)
-                return new RevitHotReloadResult(
-                    RevitHotReloadResultKind.NoDirtyFiles,
-                    $"No dirty runtime .cs files were found for selected session PID {session.ProcessId}.",
-                    [],
-                    session
-                );
-
             var filesToOpen = this.GetFilesToOpen(dirtyFiles, session);
             var riderExecutable = TryResolveRiderExecutable()
                                   ?? throw new InvalidOperationException("Could not locate rider64.exe.");
@@ -45,6 +37,9 @@ public sealed class RiderHotReloadService(
             await this.TriggerHotReloadAsync(autoHotkeyExecutable, ahkScriptPath, dirtyFiles, cancellationToken);
 
             var restartRequiredLikely = await this.IsRestartRequiredLikelyAsync(repoRoot, dirtyFiles, cancellationToken);
+            var dirtySummary = dirtyFiles.Count == 0
+                ? "No dirty runtime .cs files were detected, but Auto HR was still triggered."
+                : $"Hot reload was triggered for {dirtyFiles.Count} runtime file(s) against selected session PID {session.ProcessId}.";
             return restartRequiredLikely
                 ? new RevitHotReloadResult(
                     RevitHotReloadResultKind.RestartRequiredLikely,
@@ -54,7 +49,7 @@ public sealed class RiderHotReloadService(
                 )
                 : new RevitHotReloadResult(
                     RevitHotReloadResultKind.Triggered,
-                    $"Hot reload was triggered for {dirtyFiles.Count} runtime file(s) against selected session PID {session.ProcessId}.",
+                    dirtySummary,
                     dirtyFiles,
                     session
                 );
