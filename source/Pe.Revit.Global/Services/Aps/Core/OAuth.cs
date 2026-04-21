@@ -77,7 +77,8 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
         ApsTokenRequest request,
         IReadOnlyList<string> scopes
     ) {
-        ArgumentException.ThrowIfNullOrEmpty(clientId);
+        if (string.IsNullOrEmpty(clientId))
+            throw new ArgumentException("Client ID is required.", nameof(clientId));
 
         var tcs = new TaskCompletionSource<(ApsTokenResult? Result, Exception? Error)>();
         var clientIdPrefix = clientId[..Math.Min(8, clientId.Length)];

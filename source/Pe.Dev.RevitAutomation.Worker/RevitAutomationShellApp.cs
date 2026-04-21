@@ -4,7 +4,6 @@ using Autodesk.Revit.Exceptions;
 using DesignAutomationFramework;
 using Newtonsoft.Json;
 using Pe.Revit.Global.Revit.Documents;
-using Pe.Revit.Global.Revit.Lib.Parameters;
 using Pe.Revit.Global.Services.Aps.Models;
 
 namespace Pe.Dev.RevitAutomation.Worker;
@@ -16,6 +15,11 @@ public sealed class RevitAutomationShellApp : IExternalDBApplication {
     private const string ResultPath = "automation-result.json";
     private const string JobPrefix = "PE_AUTOMATION_JOB ";
     private const string ProbePrefix = "PE_AUTOMATION_PROBE ";
+    private static readonly IReadOnlyDictionary<AutomationJobType, IAutomationWorkloadHandler> WorkloadHandlers =
+        new IAutomationWorkloadHandler[] {
+            new ParameterCollectionWorkloadHandler(),
+            new ScheduleCollectionWorkloadHandler()
+        }.ToDictionary(handler => handler.JobType);
 
     public ExternalDBApplicationResult OnStartup(ControlledApplication application) {
         DesignAutomationBridge.DesignAutomationReadyEvent += this.HandleDesignAutomationReadyEvent;
@@ -53,19 +57,16 @@ public sealed class RevitAutomationShellApp : IExternalDBApplication {
                 document = revitApplication.OpenDocumentFile(modelPath, new OpenOptions());
                 WriteDocumentOpened(input, document);
 
-                switch (input.JobType) {
-                case AutomationJobType.CloudOpenProbe:
+                if (input.JobType == AutomationJobType.CloudOpenProbe) {
                     args.Succeeded = true;
                     WriteJobMarker("JOB_SUCCESS", new {
                         jobType = input.JobType,
                         documentTitle = document.Title
                     });
-                    break;
-                case AutomationJobType.ParameterCollection:
-                    ExecuteParameterCollection(input, document);
+                } else if (WorkloadHandlers.TryGetValue(input.JobType, out var handler)) {
+                    handler.Execute(new AutomationWorkloadContext(input, document, ResultPath, WriteJobMarker));
                     args.Succeeded = true;
-                    break;
-                default:
+                } else {
                     throw new System.InvalidOperationException($"Unsupported automation job type '{input.JobType}'.");
                 }
             } catch (Exception ex) {
@@ -84,34 +85,6 @@ public sealed class RevitAutomationShellApp : IExternalDBApplication {
         } finally {
             WriteJobMarker("END");
         }
-    }
-
-    private static void ExecuteParameterCollection(AutomationJobInput input, Document document) {
-        var artifact = ParameterCollectionArtifactCollector.Collect(
-            document,
-            input.RunId,
-            input.Engine,
-            input.Region,
-            input.ProjectGuid,
-            input.ModelGuid,
-            input.ParameterCollection?.Filter,
-            progress => WriteJobMarker("PROGRESS", new {
-                jobType = input.JobType,
-                message = progress
-            })
-        );
-
-        File.WriteAllText(ResultPath, JsonConvert.SerializeObject(artifact, Formatting.Indented));
-        WriteJobMarker("ARTIFACT_WRITTEN", new {
-            jobType = input.JobType,
-            localName = ResultPath,
-            familyCount = artifact.LoadedFamiliesMatrix.Families.Count,
-            bindingCount = artifact.ProjectParameterBindings.Entries.Count
-        });
-        WriteJobMarker("JOB_SUCCESS", new {
-            jobType = input.JobType,
-            documentTitle = artifact.DocumentTitle
-        });
     }
 
     private static void WriteDocumentOpened(AutomationJobInput input, Document document) {

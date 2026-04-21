@@ -1,0 +1,929 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JSON Viewer</title>
+  <style>
+    :root {
+      --bg: #f4efe6;
+      --bg-deep: #eadfc9;
+      --panel: rgba(255, 251, 244, 0.94);
+      --panel-strong: #fffaf2;
+      --border: rgba(69, 49, 29, 0.14);
+      --text: #23170f;
+      --muted: #766251;
+      --accent: #9d4526;
+      --accent-soft: rgba(157, 69, 38, 0.12);
+      --blue: #1f5f7a;
+      --green: #2d6a3d;
+      --gold: #8f6f17;
+      --red: #8c3030;
+      --shadow: 0 18px 52px rgba(61, 39, 18, 0.12);
+      --radius: 20px;
+      --mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+      --sans: "Segoe UI Variable", "Aptos", "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--sans);
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.7), transparent 34%),
+        radial-gradient(circle at top right, rgba(157, 69, 38, 0.09), transparent 22%),
+        linear-gradient(180deg, #faf6ee 0%, var(--bg) 100%);
+    }
+
+    .shell {
+      width: min(1380px, calc(100vw - 32px));
+      margin: 24px auto;
+      display: grid;
+      gap: 16px;
+    }
+
+    .hero,
+    .toolbar,
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 24px;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -80px;
+      bottom: -90px;
+      width: 280px;
+      height: 280px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(157, 69, 38, 0.16), transparent 70%);
+      pointer-events: none;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(28px, 4vw, 46px);
+      line-height: 1;
+      letter-spacing: -0.04em;
+    }
+
+    .lead {
+      margin: 0;
+      max-width: 72ch;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+
+    .toolbar {
+      display: grid;
+      gap: 14px;
+      padding: 16px;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    button,
+    .file-button {
+      appearance: none;
+      border: 1px solid rgba(35, 23, 15, 0.1);
+      background: var(--panel-strong);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 10px 16px;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+    }
+
+    button:hover,
+    .file-button:hover {
+      transform: translateY(-1px);
+      border-color: rgba(157, 69, 38, 0.28);
+      background: #ffffff;
+    }
+
+    .file-button {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .file-button input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .search {
+      flex: 1 1 280px;
+      min-width: 240px;
+      border: 1px solid rgba(35, 23, 15, 0.1);
+      background: var(--panel-strong);
+      border-radius: 999px;
+      padding: 11px 16px;
+      font: inherit;
+      color: var(--text);
+    }
+
+    .search:focus {
+      outline: 2px solid rgba(157, 69, 38, 0.18);
+      border-color: rgba(157, 69, 38, 0.32);
+    }
+
+    .dropzone {
+      border: 1.5px dashed rgba(157, 69, 38, 0.28);
+      border-radius: 18px;
+      padding: 18px;
+      text-align: center;
+      color: var(--muted);
+      background: linear-gradient(135deg, rgba(157, 69, 38, 0.05), rgba(31, 95, 122, 0.03));
+    }
+
+    .dropzone.is-active {
+      color: var(--text);
+      border-color: rgba(157, 69, 38, 0.48);
+      background: linear-gradient(135deg, rgba(157, 69, 38, 0.14), rgba(31, 95, 122, 0.08));
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 10px;
+    }
+
+    .stat {
+      background: rgba(255, 255, 255, 0.58);
+      border: 1px solid rgba(35, 23, 15, 0.06);
+      border-radius: 16px;
+      padding: 12px 14px;
+    }
+
+    .stat-label {
+      margin-bottom: 6px;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .stat-value {
+      font-size: 14px;
+      word-break: break-word;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(420px, 1.15fr) minmax(320px, 0.85fr);
+      gap: 16px;
+    }
+
+    .panel {
+      min-height: 560px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 16px 18px;
+      border-bottom: 1px solid rgba(35, 23, 15, 0.07);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .panel-title {
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .panel-body {
+      flex: 1;
+      overflow: auto;
+      padding: 18px;
+    }
+
+    .tree,
+    .tree ul {
+      list-style: none;
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .tree {
+      padding-left: 0;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .tree li {
+      margin: 2px 0;
+    }
+
+    .tree li.hidden {
+      display: none;
+    }
+
+    .node-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      min-height: 24px;
+      padding: 2px 6px 2px 4px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+    .node-row:hover {
+      background: rgba(35, 23, 15, 0.04);
+    }
+
+    .node-row.is-selected {
+      background: var(--accent-soft);
+      box-shadow: inset 0 0 0 1px rgba(157, 69, 38, 0.14);
+    }
+
+    .toggle {
+      width: 18px;
+      height: 18px;
+      flex: 0 0 18px;
+      display: inline-grid;
+      place-items: center;
+      margin-top: 1px;
+      padding: 0;
+      border-radius: 50%;
+      border: 1px solid rgba(35, 23, 15, 0.08);
+      background: rgba(255, 255, 255, 0.78);
+      font-family: var(--sans);
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .toggle:hover {
+      transform: none;
+      background: #ffffff;
+    }
+
+    .toggle.placeholder {
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .label {
+      min-width: 0;
+      word-break: break-word;
+    }
+
+    .key {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .type {
+      display: inline-block;
+      margin-left: 8px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(35, 23, 15, 0.06);
+      color: var(--muted);
+      font-family: var(--sans);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .preview {
+      margin-left: 8px;
+      color: var(--muted);
+    }
+
+    .children {
+      display: none;
+    }
+
+    .children.is-open {
+      display: block;
+    }
+
+    .string { color: var(--green); }
+    .number { color: var(--blue); }
+    .boolean { color: var(--gold); }
+    .null { color: var(--red); }
+
+    .inspector {
+      display: grid;
+      gap: 14px;
+    }
+
+    .inspector-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.56);
+      border: 1px solid rgba(35, 23, 15, 0.06);
+      border-radius: 16px;
+      padding: 12px 14px;
+    }
+
+    .card-label {
+      margin-bottom: 6px;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .card-value {
+      font-size: 14px;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+
+    .preview-block {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .empty {
+      min-height: 320px;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    mark {
+      background: rgba(255, 211, 94, 0.5);
+      color: inherit;
+      padding: 0 1px;
+      border-radius: 2px;
+    }
+
+    code {
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    @media (max-width: 980px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <h1>JSON Viewer</h1>
+      <p class="lead">
+        Open a local JSON file and inspect it as a collapsible tree. The right pane only shows the selected
+        node instead of rendering the full document, so large files stay usable.
+      </p>
+    </section>
+
+    <section class="toolbar">
+      <div class="controls">
+        <label class="file-button">
+          Open JSON File
+          <input id="fileInput" type="file" accept=".json,application/json">
+        </label>
+        <button id="expandAll" type="button">Expand All</button>
+        <button id="collapseAll" type="button">Collapse All</button>
+        <button id="copySelection" type="button">Copy Selection</button>
+        <input id="searchInput" class="search" type="search" placeholder="Search keys and values">
+      </div>
+      <div id="dropzone" class="dropzone">
+        Drop a `.json` file here, or open
+        <code>C:\Users\kaitp\source\repos\Pe.Tools\.artifacts\automation\results\2025\60777bf4-dbf7-4d34-92ae-fc40651ca265.json</code>
+        from the button above.
+      </div>
+      <div id="meta" class="meta"></div>
+    </section>
+
+    <section class="layout">
+      <article class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Tree</div>
+          <div id="matchCount" class="panel-title"></div>
+        </div>
+        <div id="treePanel" class="panel-body">
+          <div class="empty">No file loaded yet.</div>
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Inspector</div>
+          <div id="selectionLabel" class="panel-title"></div>
+        </div>
+        <div id="inspectorPanel" class="panel-body">
+          <div class="empty">Select a node to inspect its value.</div>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const dropzone = document.getElementById("dropzone");
+    const searchInput = document.getElementById("searchInput");
+    const treePanel = document.getElementById("treePanel");
+    const inspectorPanel = document.getElementById("inspectorPanel");
+    const meta = document.getElementById("meta");
+    const matchCount = document.getElementById("matchCount");
+    const selectionLabel = document.getElementById("selectionLabel");
+    const expandAllButton = document.getElementById("expandAll");
+    const collapseAllButton = document.getElementById("collapseAll");
+    const copySelectionButton = document.getElementById("copySelection");
+
+    let currentData = null;
+    let currentFileName = "";
+    let currentQuery = "";
+    let selectedPath = "$";
+    let expandedPaths = new Set(["$"]);
+    let selectedRow = null;
+
+    fileInput.addEventListener("change", event => {
+      const file = event.target.files && event.target.files[0];
+      if (file) {
+        loadFile(file);
+      }
+    });
+
+    ["dragenter", "dragover"].forEach(type => {
+      dropzone.addEventListener(type, event => {
+        event.preventDefault();
+        dropzone.classList.add("is-active");
+      });
+    });
+
+    ["dragleave", "dragend", "drop"].forEach(type => {
+      dropzone.addEventListener(type, event => {
+        event.preventDefault();
+        if (type !== "drop") {
+          dropzone.classList.remove("is-active");
+        }
+      });
+    });
+
+    dropzone.addEventListener("drop", event => {
+      dropzone.classList.remove("is-active");
+      const file = event.dataTransfer.files && event.dataTransfer.files[0];
+      if (file) {
+        loadFile(file);
+      }
+    });
+
+    searchInput.addEventListener("input", () => {
+      currentQuery = searchInput.value.trim().toLowerCase();
+      renderTree();
+    });
+
+    expandAllButton.addEventListener("click", () => {
+      if (currentData === null) {
+        return;
+      }
+
+      expandedPaths = new Set();
+      collectExpandablePaths(currentData, "$");
+      renderTree();
+    });
+
+    collapseAllButton.addEventListener("click", () => {
+      expandedPaths = new Set(["$"]);
+      renderTree();
+    });
+
+    copySelectionButton.addEventListener("click", async () => {
+      if (currentData === null) {
+        return;
+      }
+
+      const value = getValueAtPath(currentData, selectedPath);
+      const text = formatValueForInspector(value);
+
+      try {
+        await navigator.clipboard.writeText(text);
+        copySelectionButton.textContent = "Copied";
+        setTimeout(() => {
+          copySelectionButton.textContent = "Copy Selection";
+        }, 1200);
+      } catch {
+        copySelectionButton.textContent = "Copy Failed";
+        setTimeout(() => {
+          copySelectionButton.textContent = "Copy Selection";
+        }, 1200);
+      }
+    });
+
+    async function loadFile(file) {
+      currentFileName = file.name;
+
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        currentData = parsed;
+        selectedPath = "$";
+        expandedPaths = new Set(["$"]);
+        renderMeta(file, parsed);
+        renderTree();
+        renderInspector();
+      } catch (error) {
+        currentData = null;
+        currentFileName = file.name;
+        selectedPath = "$";
+        expandedPaths = new Set(["$"]);
+        meta.innerHTML = "";
+        matchCount.textContent = "";
+        selectionLabel.textContent = "";
+        treePanel.innerHTML = `<div class="empty">Could not read <strong>${escapeHtml(file.name)}</strong> as JSON.<br>${escapeHtml(error.message)}</div>`;
+        inspectorPanel.innerHTML = `<div class="empty">Invalid JSON.</div>`;
+      }
+    }
+
+    function renderMeta(file, data) {
+      const topLevelType = getTypeLabel(data);
+      const topLevelCount = getChildCount(data);
+
+      meta.innerHTML = "";
+      [
+        ["File", file.name],
+        ["Size", formatBytes(file.size)],
+        ["Top-Level Type", topLevelType],
+        ["Top-Level Count", String(topLevelCount)]
+      ].forEach(([label, value]) => {
+        const card = document.createElement("div");
+        card.className = "stat";
+        card.innerHTML = `
+          <div class="stat-label">${escapeHtml(label)}</div>
+          <div class="stat-value">${escapeHtml(value)}</div>
+        `;
+        meta.appendChild(card);
+      });
+    }
+
+    function renderTree() {
+      if (currentData === null) {
+        treePanel.innerHTML = `<div class="empty">No file loaded yet.</div>`;
+        matchCount.textContent = "";
+        return;
+      }
+
+      treePanel.innerHTML = "";
+      selectedRow = null;
+
+      const rootList = document.createElement("ul");
+      rootList.className = "tree";
+      const rootNode = buildNode(currentFileName || "root", currentData, "$", true);
+      rootList.appendChild(rootNode.element);
+      treePanel.appendChild(rootList);
+
+      const visibleCount = treePanel.querySelectorAll("li.node:not(.hidden)").length;
+      matchCount.textContent = currentQuery ? `${visibleCount} visible matches` : "";
+    }
+
+    function buildNode(key, value, path, forceVisible) {
+      const li = document.createElement("li");
+      li.className = "node";
+
+      const nodeMatches = isMatch(buildSearchText(key, value));
+      const isContainer = value !== null && typeof value === "object";
+
+      const row = document.createElement("div");
+      row.className = "node-row";
+      row.dataset.path = path;
+
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "toggle";
+
+      const label = document.createElement("div");
+      label.className = "label";
+
+      if (isContainer) {
+        const count = getChildCount(value);
+        toggle.textContent = expandedPaths.has(path) || currentQuery ? "-" : "+";
+        label.innerHTML = `
+          <span class="key">${highlight(key)}</span>
+          <span class="type">${Array.isArray(value) ? "array" : "object"}</span>
+          <span class="preview">${count} item${count === 1 ? "" : "s"}</span>
+        `;
+      } else {
+        toggle.classList.add("placeholder");
+        toggle.textContent = ".";
+        label.innerHTML = `
+          <span class="key">${highlight(key)}</span>
+          <span>: </span>
+          <span class="${value === null ? "null" : typeof value}">${formatPrimitive(value)}</span>
+        `;
+      }
+
+      row.appendChild(toggle);
+      row.appendChild(label);
+      li.appendChild(row);
+
+      if (path === selectedPath) {
+        row.classList.add("is-selected");
+        selectedRow = row;
+      }
+
+      row.addEventListener("click", event => {
+        if (event.target === toggle && isContainer) {
+          return;
+        }
+
+        selectedPath = path;
+        renderInspector();
+        if (selectedRow) {
+          selectedRow.classList.remove("is-selected");
+        }
+        row.classList.add("is-selected");
+        selectedRow = row;
+      });
+
+      let matched = nodeMatches || !currentQuery || forceVisible;
+
+      if (isContainer) {
+        const childrenList = document.createElement("ul");
+        childrenList.className = "children";
+        const shouldOpen = currentQuery || expandedPaths.has(path);
+        childrenList.classList.toggle("is-open", shouldOpen);
+
+        toggle.addEventListener("click", event => {
+          event.stopPropagation();
+          if (expandedPaths.has(path)) {
+            expandedPaths.delete(path);
+          } else {
+            expandedPaths.add(path);
+          }
+
+          childrenList.classList.toggle("is-open", expandedPaths.has(path));
+          toggle.textContent = expandedPaths.has(path) ? "-" : "+";
+        });
+
+        if (Array.isArray(value)) {
+          value.forEach((item, index) => {
+            const childPath = appendPath(path, index);
+            const childNode = buildNode(`[${index}]`, item, childPath, false);
+            childrenList.appendChild(childNode.element);
+            matched = matched || childNode.matched;
+          });
+        } else {
+          Object.entries(value).forEach(([childKey, childValue]) => {
+            const childPath = appendPath(path, childKey);
+            const childNode = buildNode(childKey, childValue, childPath, false);
+            childrenList.appendChild(childNode.element);
+            matched = matched || childNode.matched;
+          });
+        }
+
+        if (currentQuery && matched) {
+          childrenList.classList.add("is-open");
+          toggle.textContent = "-";
+        }
+
+        li.appendChild(childrenList);
+      }
+
+      li.classList.toggle("hidden", !matched);
+      return { element: li, matched };
+    }
+
+    function renderInspector() {
+      if (currentData === null) {
+        selectionLabel.textContent = "";
+        inspectorPanel.innerHTML = `<div class="empty">Select a node to inspect its value.</div>`;
+        return;
+      }
+
+      const value = getValueAtPath(currentData, selectedPath);
+      const type = getTypeLabel(value);
+      const childCount = getChildCount(value);
+      const previewText = formatValueForInspector(value);
+
+      selectionLabel.textContent = selectedPath;
+      inspectorPanel.innerHTML = `
+        <div class="inspector">
+          <div class="inspector-grid">
+            <div class="card">
+              <div class="card-label">Path</div>
+              <div class="card-value">${escapeHtml(selectedPath)}</div>
+            </div>
+            <div class="card">
+              <div class="card-label">Type</div>
+              <div class="card-value">${escapeHtml(type)}</div>
+            </div>
+            <div class="card">
+              <div class="card-label">Children</div>
+              <div class="card-value">${escapeHtml(String(childCount))}</div>
+            </div>
+            <div class="card">
+              <div class="card-label">Preview Size</div>
+              <div class="card-value">${escapeHtml(formatBytes(previewText.length))}</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-label">Preview</div>
+            <pre class="preview-block">${escapeHtml(previewText)}</pre>
+          </div>
+        </div>
+      `;
+    }
+
+    function collectExpandablePaths(value, path) {
+      if (value === null || typeof value !== "object") {
+        return;
+      }
+
+      expandedPaths.add(path);
+      if (Array.isArray(value)) {
+        value.forEach((item, index) => {
+          collectExpandablePaths(item, appendPath(path, index));
+        });
+        return;
+      }
+
+      Object.entries(value).forEach(([key, childValue]) => {
+        collectExpandablePaths(childValue, appendPath(path, key));
+      });
+    }
+
+    function getValueAtPath(root, path) {
+      if (path === "$") {
+        return root;
+      }
+
+      const tokens = path
+        .slice(2)
+        .split("/")
+        .filter(token => token.length > 0)
+        .map(decodePathToken);
+      let current = root;
+      for (const token of tokens) {
+        current = current[token];
+      }
+
+      return current;
+    }
+
+    function appendPath(basePath, token) {
+      return `${basePath}/${encodePathToken(token)}`;
+    }
+
+    function encodePathToken(token) {
+      return String(token)
+        .replaceAll("~", "~0")
+        .replaceAll("/", "~1");
+    }
+
+    function decodePathToken(token) {
+      const decoded = token
+        .replaceAll("~1", "/")
+        .replaceAll("~0", "~");
+      return /^\d+$/.test(decoded) ? Number(decoded) : decoded;
+    }
+
+    function getChildCount(value) {
+      if (value === null || typeof value !== "object") {
+        return 0;
+      }
+
+      return Array.isArray(value) ? value.length : Object.keys(value).length;
+    }
+
+    function buildSearchText(key, value) {
+      if (value === null) {
+        return `${key} null`;
+      }
+
+      if (typeof value === "object") {
+        const preview = Array.isArray(value)
+          ? value.slice(0, 3).map(item => String(item)).join(" ")
+          : Object.keys(value).slice(0, 5).join(" ");
+        return `${key} ${preview}`.toLowerCase();
+      }
+
+      return `${key} ${String(value)}`.toLowerCase();
+    }
+
+    function isMatch(text) {
+      if (!currentQuery) {
+        return true;
+      }
+
+      return text.toLowerCase().includes(currentQuery);
+    }
+
+    function getTypeLabel(value) {
+      if (value === null) {
+        return "null";
+      }
+
+      if (Array.isArray(value)) {
+        return "array";
+      }
+
+      return typeof value;
+    }
+
+    function formatPrimitive(value) {
+      if (value === null) {
+        return "null";
+      }
+
+      if (typeof value === "string") {
+        return highlight(`"${value}"`);
+      }
+
+      return highlight(String(value));
+    }
+
+    function formatValueForInspector(value) {
+      if (value === null) {
+        return "null";
+      }
+
+      if (typeof value === "string") {
+        return value;
+      }
+
+      if (typeof value === "number" || typeof value === "boolean") {
+        return String(value);
+      }
+
+      const pretty = JSON.stringify(value, null, 2);
+      const limit = 6000;
+      if (pretty.length <= limit) {
+        return pretty;
+      }
+
+      return `${pretty.slice(0, limit)}\n\n... truncated ${pretty.length - limit} characters ...`;
+    }
+
+    function highlight(text) {
+      const safe = escapeHtml(String(text));
+      if (!currentQuery) {
+        return safe;
+      }
+
+      const escapedQuery = currentQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return safe.replace(new RegExp(escapedQuery, "ig"), match => `<mark>${match}</mark>`);
+    }
+
+    function formatBytes(bytes) {
+      if (bytes < 1024) {
+        return `${bytes} B`;
+      }
+
+      if (bytes < 1024 * 1024) {
+        return `${(bytes / 1024).toFixed(1)} KB`;
+      }
+
+      return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    }
+
+    function escapeHtml(value) {
+      return value
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+  </script>
+</body>
+</html>

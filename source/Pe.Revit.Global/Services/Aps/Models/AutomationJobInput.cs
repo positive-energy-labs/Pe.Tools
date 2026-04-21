@@ -7,7 +7,8 @@ namespace Pe.Revit.Global.Services.Aps.Models;
 [JsonConverter(typeof(StringEnumConverter))]
 public enum AutomationJobType {
     CloudOpenProbe,
-    ParameterCollection
+    ParameterCollection,
+    ScheduleCollection
 }
 
 public sealed class AutomationJobInput {
@@ -19,6 +20,7 @@ public sealed class AutomationJobInput {
     [JsonProperty("runId")] public string RunId { get; init; } = "";
     [JsonProperty("expectedTitle")] public string? ExpectedTitle { get; init; }
     [JsonProperty("parameterCollection")] public ParameterCollectionRequest? ParameterCollection { get; init; }
+    [JsonProperty("scheduleCollection")] public ScheduleCollectionRequest? ScheduleCollection { get; init; }
 
     public string GetNormalizedRegion() {
         var normalized = this.Region.Trim().ToUpperInvariant();
@@ -41,6 +43,8 @@ public sealed class AutomationJobInput {
 
         if (this.JobType == AutomationJobType.ParameterCollection && this.ParameterCollection == null)
             throw new InvalidDataException("ParameterCollection payload is required for ParameterCollection jobs.");
+        if (this.JobType == AutomationJobType.ScheduleCollection && this.ScheduleCollection == null)
+            throw new InvalidDataException("ScheduleCollection payload is required for ScheduleCollection jobs.");
     }
 
     public string ToJson() {

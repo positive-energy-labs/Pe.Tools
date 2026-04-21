@@ -15,7 +15,8 @@ public static class ParameterCollectionArtifactCollector {
         LoadedFamiliesFilter? filter = null,
         Action<string>? onProgress = null
     ) {
-        ArgumentNullException.ThrowIfNull(doc);
+        if (doc == null)
+            throw new ArgumentNullException(nameof(doc));
 
         var bindings = ProjectParameterBindingsCollector.Collect(doc, filter);
         var matrix = LoadedFamiliesMatrixCollector.Collect(doc, filter, onProgress);

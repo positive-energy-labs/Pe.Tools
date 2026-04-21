@@ -1,14 +1,14 @@
 using Pe.Revit.Global.Revit.Lib.Parameters;
-using Pe.Shared.HostContracts.RevitData;
 using Pe.Shared.RevitData.Parameters;
 using ContractCombinedParameterSpec = Pe.Shared.HostContracts.RevitData.CombinedParameterSpec;
 using ContractScheduleFieldFormatSpec = Pe.Shared.HostContracts.RevitData.ScheduleFieldFormatSpec;
 using ContractScheduleFieldSpec = Pe.Shared.HostContracts.RevitData.ScheduleFieldSpec;
 using ContractScheduleFilterSpec = Pe.Shared.HostContracts.RevitData.ScheduleFilterSpec;
-using ContractScheduleSortGroupSpec = Pe.Shared.HostContracts.RevitData.ScheduleSortGroupSpec;
 using ContractScheduleProfile = Pe.Shared.HostContracts.RevitData.ScheduleProfile;
+using ContractScheduleSortGroupSpec = Pe.Shared.HostContracts.RevitData.ScheduleSortGroupSpec;
 using ContractScheduleTitleBorderSpec = Pe.Shared.HostContracts.RevitData.ScheduleTitleBorderSpec;
 using ContractScheduleTitleStyleSpec = Pe.Shared.HostContracts.RevitData.ScheduleTitleStyleSpec;
+using Pe.Shared.HostContracts.RevitData;
 using InternalCombinedParameterSpec = Pe.Revit.Global.Revit.Lib.Schedules.Fields.CombinedParameterSpec;
 using InternalScheduleFieldFormatSpec = Pe.Revit.Global.Revit.Lib.Schedules.Fields.ScheduleFieldFormatSpec;
 using InternalScheduleFieldSpec = Pe.Revit.Global.Revit.Lib.Schedules.Fields.ScheduleFieldSpec;
@@ -59,36 +59,32 @@ internal static class ScheduleCollectorSupport {
             ))
             .ToList();
 
-    public static List<string> CollectFieldParameterNames(InternalScheduleProfile profile) {
-        var orderedNames = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    public static bool MatchesCustomParameterFilters(
+        ViewSchedule schedule,
+        IEnumerable<ScheduleCustomParameterFilter>? filters
+    ) {
+        var requestedFilters = filters?
+            .Where(filter => !string.IsNullOrWhiteSpace(filter.ParameterName))
+            .ToList() ?? [];
+        if (requestedFilters.Count == 0)
+            return true;
 
-        foreach (var field in profile.Fields) {
-            if (field.CombinedParameters is { Count: > 0 }) {
-                foreach (var combinedParameter in field.CombinedParameters) AddName(combinedParameter.ParameterName);
+        var customParameters = CollectCustomParameters(schedule);
+        foreach (var filter in requestedFilters) {
+            var matchedParameter = customParameters
+                .FirstOrDefault(parameter =>
+                    string.Equals(parameter.Name, filter.ParameterName, StringComparison.OrdinalIgnoreCase));
+            if (matchedParameter == null)
+                return false;
 
-                continue;
-            }
-
-            if (field.CalculatedType.HasValue)
-                continue;
-
-            AddName(field.ParameterName);
+            if (!MatchesCustomParameterFilter(matchedParameter, filter))
+                return false;
         }
 
-        return orderedNames;
-
-        void AddName(string? parameterName) {
-            if (string.IsNullOrWhiteSpace(parameterName))
-                return;
-
-            var trimmed = parameterName.Trim();
-            if (seen.Add(trimmed))
-                orderedNames.Add(trimmed);
-        }
+        return true;
     }
 
-    public static List<ContractScheduleFilterSpec> ToContractFilters(IEnumerable<InternalScheduleFilterSpec> filters) =>
+    public static List<ScheduleFilterSpec> ToContractFilters(IEnumerable<InternalScheduleFilterSpec> filters) =>
         filters
             .Select(ToContractFilter)
             .ToList();
@@ -145,6 +141,37 @@ internal static class ScheduleCollectorSupport {
             : schedule.Document.GetElement(templateId) as View;
     }
 
+    public static string BuildFieldKey(
+        Document doc,
+        ScheduleField field,
+        string fallbackName
+    ) {
+        if (field.IsCombinedParameterField)
+            return $"combined:{fallbackName}";
+
+        if (!field.HasSchedulableField)
+            return $"field:{fallbackName}";
+
+        var schedulableField = field.GetSchedulableField();
+        return ParameterIdentityEngine.GetParameterKey(doc, schedulableField.ParameterId, fallbackName);
+    }
+
+    private static bool MatchesCustomParameterFilter(
+        ScheduleCatalogCustomParameterValue parameter,
+        ScheduleCustomParameterFilter filter
+    ) {
+        var actualValue = NullIfWhiteSpace(parameter.DisplayValue) ?? NullIfWhiteSpace(parameter.Value);
+        var expectedValue = NullIfWhiteSpace(filter.ExpectedValue);
+        return filter.MatchKind switch {
+            ScheduleCustomParameterMatchKind.Equals => string.Equals(
+                actualValue,
+                expectedValue,
+                StringComparison.OrdinalIgnoreCase
+            ),
+            _ => false
+        };
+    }
+
     private static IEnumerable<ScheduleParameterUsageEntry> CollectFieldUsages(
         Document doc,
         ScheduleField field
@@ -157,9 +184,7 @@ internal static class ScheduleCollectorSupport {
                 yield return new ScheduleParameterUsageEntry(
                     fieldName,
                     columnHeading,
-                    field.IsHidden,
-                    ScheduleParameterUsageKind.CombinedComponent,
-                    ParameterIdentityEngine.FromParameterId(doc, combinedParameter.ParamId, fieldName)
+                    ParameterIdentityEngine.GetParameterKey(doc, combinedParameter.ParamId, fieldName)
                 );
             }
 
@@ -173,9 +198,7 @@ internal static class ScheduleCollectorSupport {
         yield return new ScheduleParameterUsageEntry(
             fieldName,
             columnHeading,
-            field.IsHidden,
-            ScheduleParameterUsageKind.Field,
-            ParameterIdentityEngine.FromParameterId(doc, schedulableField.ParameterId, fieldName)
+            ParameterIdentityEngine.GetParameterKey(doc, schedulableField.ParameterId, fieldName)
         );
     }
 
