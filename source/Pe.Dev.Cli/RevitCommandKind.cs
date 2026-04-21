@@ -3,6 +3,7 @@
 internal enum RevitCommandKind {
     Unknown,
     Approve,
+    Automation,
     HotReload,
     Logs,
     Session,

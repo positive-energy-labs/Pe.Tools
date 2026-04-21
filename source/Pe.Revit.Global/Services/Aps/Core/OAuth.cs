@@ -1,4 +1,4 @@
-using Pe.Revit.Global.Services.Aps.Models;
+﻿using Pe.Revit.Global.Services.Aps.Models;
 using Serilog;
 
 namespace Pe.Revit.Global.Services.Aps.Core;
@@ -25,27 +25,44 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
     /// </summary>
     /// <returns>A valid access token string</returns>
     /// <exception cref="Exception">Thrown if authentication was denied or failed</exception>
-    public string GetToken() {
+    public string GetToken() => this.GetToken(ApsTokenRequest.ForParameterService());
+
+    public string GetToken(ApsTokenRequest request) => this.GetTokenResult(request).AccessToken;
+
+    public ApsTokenResult GetTokenResult(ApsTokenRequest request) {
         var clientId = this._tokenProvider.GetClientId();
         if (string.IsNullOrEmpty(clientId))
             throw new InvalidOperationException("ClientId is not set");
 
         var clientSecret = this._tokenProvider.GetClientSecret();
+        var scopes = request.ResolveScopes();
+        var cacheKey = new CacheKey(clientId, request.FlowKind, string.Join(" ", scopes));
 
         // PHASE 1: Quick cache read under lock (fast path)
-        var (cachedToken, needsRefresh) = ReadCacheState(clientId);
+        var (cachedToken, needsRefresh) = ReadCacheState(cacheKey);
         if (cachedToken != null && !needsRefresh)
-            return cachedToken.AccessToken;
+            return CreateTokenResult(cachedToken, request);
 
         // PHASE 2: Attempt token refresh outside lock (slow path, no blocking)
-        if (cachedToken?.RefreshToken is { Length: > 0 } refreshToken) {
-            var refreshResult = TryRefreshTokenWithRaceProtection(clientId, clientSecret, refreshToken, cachedToken);
-            if (refreshResult != null)
-                return refreshResult;
+        if (request.FlowKind == ApsAuthFlowKind.ThreeLeggedConfidential &&
+            cachedToken?.RefreshToken is { Length: > 0 } refreshToken) {
+            var refreshedToken = TryRefreshTokenWithRaceProtection(
+                cacheKey,
+                clientSecret,
+                refreshToken,
+                cachedToken
+            );
+
+            if (refreshedToken != null)
+                return CreateTokenResult(refreshedToken, request);
         }
 
-        // PHASE 3: Full OAuth flow (user interaction required)
-        return PerformFullOAuthFlow(clientId, clientSecret);
+        return request.FlowKind switch {
+            ApsAuthFlowKind.TwoLegged => PerformClientCredentialsFlow(clientId, clientSecret, cacheKey, request, scopes),
+            ApsAuthFlowKind.ThreeLeggedConfidential =>
+                PerformFullOAuthFlow(clientId, clientSecret, cacheKey, request, scopes),
+            _ => throw new ArgumentOutOfRangeException(nameof(request.FlowKind), request.FlowKind, null)
+        };
     }
 
     #region Full OAuth Flow
@@ -53,33 +70,41 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
     /// <summary>
     ///     Performs the full 3-legged OAuth flow, opening browser for user consent.
     /// </summary>
-    private static string PerformFullOAuthFlow(string clientId, string clientSecret) {
+    private static ApsTokenResult PerformFullOAuthFlow(
+        string clientId,
+        string? clientSecret,
+        CacheKey cacheKey,
+        ApsTokenRequest request,
+        IReadOnlyList<string> scopes
+    ) {
         ArgumentException.ThrowIfNullOrEmpty(clientId);
-        ArgumentException.ThrowIfNullOrEmpty(clientSecret);
 
-        var tcs = new TaskCompletionSource<Result<string>>();
+        var tcs = new TaskCompletionSource<(ApsTokenResult? Result, Exception? Error)>();
         var clientIdPrefix = clientId[..Math.Min(8, clientId.Length)];
 
         Log.Information("[OAuth] Starting 3-legged OAuth flow for clientId: {ClientId}", clientIdPrefix + "...");
 
-        OAuthHandler.Invoke3LeggedOAuth(clientId, clientSecret, token => {
+        OAuthHandler.Invoke3LeggedOAuth(clientId, clientSecret, scopes, token => {
             if (token == null) {
                 Log.Warning("[OAuth] Callback received null token (authentication failed or was denied)");
-                tcs.SetResult(new Exception(
-                    "Authentication was denied or failed. Please try again. " +
-                    "In the event of unexpected failure after 2 or 3 attempts, contact the developer."));
+                tcs.SetResult((
+                    null,
+                    new Exception(
+                        "Authentication was denied or failed. Please try again. " +
+                        "In the event of unexpected failure after 2 or 3 attempts, contact the developer."
+                    )
+                ));
                 return;
             }
 
             try {
                 var newCached = CreateCachedToken(token);
-                UpdateCache(clientId, newCached);
-                // AccessToken is in OAuthToken, guaranteed non-null
+                UpdateCache(cacheKey, newCached);
                 Log.Information("[OAuth] Callback recieved and token cached successfully");
-                tcs.SetResult(token.AccessToken!);
+                tcs.SetResult((CreateTokenResult(newCached, request), null));
             } catch (Exception ex) {
                 Log.Error(ex, "[OAuth] Failed to cache token");
-                tcs.SetResult(new Exception($"Failed to cache token: {ex.Message}"));
+                tcs.SetResult((null, new Exception($"Failed to cache token: {ex.Message}", ex)));
             }
         });
 
@@ -95,14 +120,14 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
                 "Please try again. If the issue persists, check your APS credentials in Global settings.");
         }
 
-        var (accessToken, error) = tcs.Task.Result;
+        var (tokenResult, error) = tcs.Task.Result;
         if (error is not null) {
             Log.Error(error, "[OAuth] Authentication failed");
             throw error;
         }
 
         Log.Information("[OAuth] Authentication completed successfully");
-        return accessToken is not null ? accessToken : throw new Exception("Access token is null");
+        return tokenResult ?? throw new Exception("Access token is null");
     }
 
     #endregion
@@ -111,13 +136,14 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
 
     /// <summary>Internal record for caching token data including refresh token</summary>
     private sealed record CachedToken(string AccessToken, string RefreshToken, DateTime ExpiresAt);
+    private sealed record CacheKey(string ClientId, ApsAuthFlowKind FlowKind, string ScopeKey);
 
     #endregion
 
     #region Static Cache Infrastructure
 
     /// <summary>Cache of tokens keyed by client ID, shared across all OAuth instances</summary>
-    private static readonly Dictionary<string, CachedToken> TokenCache = new();
+    private static readonly Dictionary<CacheKey, CachedToken> TokenCache = new();
 
     /// <summary>Lock for thread-safe cache access - kept minimal scope</summary>
     private static readonly object CacheLock = new();
@@ -126,7 +152,7 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
     ///     Tracks which client IDs are currently being refreshed.
     ///     Prevents multiple threads from attempting simultaneous refreshes for the same client.
     /// </summary>
-    private static readonly HashSet<string> RefreshInProgress = new();
+    private static readonly HashSet<CacheKey> RefreshInProgress = new();
 
     #endregion
 
@@ -140,6 +166,7 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
 
     /// <summary>Timeout for token refresh HTTP requests</summary>
     private static readonly TimeSpan RefreshTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan ClientCredentialsTimeout = TimeSpan.FromSeconds(15);
 
     #endregion
 
@@ -150,9 +177,9 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
     ///     Lock scope is minimal - just the dictionary read.
     /// </summary>
     /// <returns>Tuple of (cached token or null, whether refresh is needed)</returns>
-    private static (CachedToken? Token, bool NeedsRefresh) ReadCacheState(string clientId) {
+    private static (CachedToken? Token, bool NeedsRefresh) ReadCacheState(CacheKey cacheKey) {
         lock (CacheLock) {
-            if (!TokenCache.TryGetValue(clientId, out var cached))
+            if (!TokenCache.TryGetValue(cacheKey, out var cached))
                 return (null, false);
 
             var needsRefresh = DateTime.UtcNow >= cached.ExpiresAt.AddSeconds(-ExpirationBufferSeconds);
@@ -163,8 +190,8 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
     /// <summary>
     ///     Updates the cache with a new token. Lock scope is minimal - just the dictionary write.
     /// </summary>
-    private static void UpdateCache(string clientId, CachedToken newToken) {
-        lock (CacheLock) TokenCache[clientId] = newToken;
+    private static void UpdateCache(CacheKey cacheKey, CachedToken newToken) {
+        lock (CacheLock) TokenCache[cacheKey] = newToken;
     }
 
     /// <summary>
@@ -174,10 +201,18 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
     /// <param name="fallbackRefreshToken">Refresh token to use if response doesn't include one</param>
     private static CachedToken CreateCachedToken(OAuthToken token, string? fallbackRefreshToken = null) =>
         new(
-            // AccessToken and RefreshToken are in OAuthToken, guaranteed non-null
             token.AccessToken!,
             token.RefreshToken ?? fallbackRefreshToken ?? "",
             DateTime.UtcNow.AddSeconds(token.ExpiresIn ?? DefaultExpirationSeconds)
+        );
+
+    private static ApsTokenResult CreateTokenResult(CachedToken token, ApsTokenRequest request) =>
+        new(
+            token.AccessToken,
+            token.ExpiresAt,
+            string.IsNullOrWhiteSpace(token.RefreshToken) ? null : token.RefreshToken,
+            request.ScopeProfile,
+            request.FlowKind
         );
 
     #endregion
@@ -188,52 +223,52 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
     ///     Attempts to refresh the token with race condition protection.
     ///     If another thread is already refreshing this client's token, waits for that to complete.
     /// </summary>
-    /// <returns>The new access token, or null if refresh failed</returns>
-    private static string? TryRefreshTokenWithRaceProtection(
-        string clientId,
+    /// <returns>The refreshed cached token, or null if refresh failed</returns>
+    private static CachedToken? TryRefreshTokenWithRaceProtection(
+        CacheKey cacheKey,
         string? clientSecret,
         string refreshToken,
         CachedToken originalCached) {
         // Check if another thread is already refreshing this token
         lock (CacheLock) {
-            if (RefreshInProgress.Contains(clientId)) {
+            if (RefreshInProgress.Contains(cacheKey)) {
                 // Another thread is refreshing - wait for it and check cache again
                 // This prevents N threads all hitting the API simultaneously
-                return WaitForOtherRefreshAndCheckCache(clientId);
+                return WaitForOtherRefreshAndCheckCache(cacheKey);
             }
 
             // Mark that we're starting a refresh
-            _ = RefreshInProgress.Add(clientId);
+            _ = RefreshInProgress.Add(cacheKey);
         }
 
         try {
-            var refreshedToken = ExecuteTokenRefresh(clientId, clientSecret, refreshToken);
+            var refreshedToken = ExecuteTokenRefresh(cacheKey.ClientId, clientSecret, refreshToken);
             if (refreshedToken == null)
                 return null;
 
             var newCached = CreateCachedToken(refreshedToken, originalCached.RefreshToken);
-            UpdateCache(clientId, newCached);
-            return newCached.AccessToken;
+            UpdateCache(cacheKey, newCached);
+            return newCached;
         } finally {
             // Always clear the refresh-in-progress flag
-            lock (CacheLock) _ = RefreshInProgress.Remove(clientId);
+            lock (CacheLock) _ = RefreshInProgress.Remove(cacheKey);
         }
     }
 
     /// <summary>
     ///     Waits briefly for another thread's refresh to complete, then checks the cache.
     /// </summary>
-    private static string? WaitForOtherRefreshAndCheckCache(string clientId) {
+    private static CachedToken? WaitForOtherRefreshAndCheckCache(CacheKey cacheKey) {
         // Simple spin-wait with backoff - in practice, refresh takes ~100-500ms
         for (var i = 0; i < 50; i++) {
             Thread.Sleep(100); // 100ms * 50 = 5 second max wait
 
             lock (CacheLock) {
-                if (!RefreshInProgress.Contains(clientId)) {
+                if (!RefreshInProgress.Contains(cacheKey)) {
                     // Other thread finished - check if we got a fresh token
-                    if (TokenCache.TryGetValue(clientId, out var cached) &&
+                    if (TokenCache.TryGetValue(cacheKey, out var cached) &&
                         DateTime.UtcNow < cached.ExpiresAt.AddSeconds(-ExpirationBufferSeconds))
-                        return cached.AccessToken;
+                        return cached;
 
                     break; // Refresh finished but failed, we'll need to try ourselves or do full flow
                 }
@@ -251,10 +286,6 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
     ///     deadlocks when called from UI synchronization contexts (common in Revit add-ins).
     /// </remarks>
     private static OAuthToken? ExecuteTokenRefresh(string clientId, string? clientSecret, string refreshToken) {
-        // Client secret is for token refresh
-        if (string.IsNullOrEmpty(clientSecret))
-            return null;
-
         try {
             using var cts = new CancellationTokenSource(RefreshTimeout);
             var task = OAuthHandler.RefreshTokenAsync(clientId, clientSecret, refreshToken, cts.Token);
@@ -268,6 +299,32 @@ public class OAuth(TokenProviders.IAuth tokenProvider) {
             // TODO: update this to give feedback
             return null;
         }
+    }
+
+    #endregion
+
+    #region Client Credentials
+
+    private static ApsTokenResult PerformClientCredentialsFlow(
+        string clientId,
+        string? clientSecret,
+        CacheKey cacheKey,
+        ApsTokenRequest request,
+        IReadOnlyList<string> scopes
+    ) {
+        if (string.IsNullOrWhiteSpace(clientSecret))
+            throw new InvalidOperationException("A client secret is required for 2-legged APS authentication.");
+
+        using var cts = new CancellationTokenSource(ClientCredentialsTimeout);
+        var token = OAuthHandler
+            .AcquireClientCredentialsTokenAsync(clientId, clientSecret, scopes, cts.Token)
+            .ConfigureAwait(false)
+            .GetAwaiter()
+            .GetResult();
+
+        var cachedToken = CreateCachedToken(token);
+        UpdateCache(cacheKey, cachedToken);
+        return CreateTokenResult(cachedToken, request);
     }
 
     #endregion

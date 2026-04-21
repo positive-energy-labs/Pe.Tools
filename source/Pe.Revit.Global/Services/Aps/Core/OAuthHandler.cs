@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Pe.Revit.Global.Services.Aps.Models;
 using Serilog;
 using System.Net;
@@ -21,8 +21,8 @@ internal static class OAuthHandler {
     #region Authorization URL
 
     /// <summary>Generates the OAuth authorization URL with all parameters</summary>
-    private static string BuildAuthorizationUrl(OAuthFlowData flow) {
-        var scopeParam = Uri.EscapeDataString(string.Join(" ", OAuthConfig.RequestedScopes));
+    private static string BuildAuthorizationUrl(OAuthFlowData flow, IReadOnlyList<string> scopes) {
+        var scopeParam = Uri.EscapeDataString(string.Join(" ", scopes));
         var redirectParam = Uri.EscapeDataString(OAuthConfig.CallbackUri);
 
         var url = $"{OAuthConfig.AuthorizeEndpoint}?response_type=code" +
@@ -53,11 +53,38 @@ internal static class OAuthHandler {
     /// </summary>
     /// <param name="clientId">The application client ID</param>
     /// <param name="clientSecret">The client secret (null/empty for PKCE flow)</param>
+    /// <param name="scopes">Requested scopes for the authorization flow</param>
     /// <param name="callback">Callback invoked with the result</param>
-    public static void Invoke3LeggedOAuth(string clientId, string clientSecret, CallbackDelegate callback) {
+    public static void Invoke3LeggedOAuth(
+        string clientId,
+        string? clientSecret,
+        IReadOnlyList<string> scopes,
+        CallbackDelegate callback
+    ) {
         var flowData = OAuthFlowData.Create(clientId, clientSecret);
-        var authUrl = BuildAuthorizationUrl(flowData);
+        var authUrl = BuildAuthorizationUrl(flowData, scopes);
         ExecuteOAuthFlow(authUrl, flowData, callback);
+    }
+
+    public static async Task<OAuthToken> AcquireClientCredentialsTokenAsync(
+        string clientId,
+        string clientSecret,
+        IReadOnlyList<string> scopes,
+        CancellationToken cancellationToken = default
+    ) {
+        if (string.IsNullOrWhiteSpace(clientSecret))
+            throw new ArgumentException("Client secret is required for 2-legged OAuth", nameof(clientSecret));
+
+        var formData = BuildTokenRequestForm(
+            "client_credentials",
+            clientId,
+            clientSecret,
+            [],
+            scopes
+        );
+
+        return await PostTokenRequestAsync(formData, cancellationToken).ConfigureAwait(false)
+               ?? throw new HttpRequestException("Token response could not be parsed");
     }
 
     /// <summary>
@@ -73,7 +100,7 @@ internal static class OAuthHandler {
     /// <exception cref="OperationCanceledException">If the operation is cancelled or times out</exception>
     public static async Task<OAuthToken> RefreshTokenAsync(
         string clientId,
-        string clientSecret,
+        string? clientSecret,
         string refreshToken,
         CancellationToken cancellationToken = default) {
         if (string.IsNullOrEmpty(refreshToken))
@@ -209,12 +236,17 @@ internal static class OAuthHandler {
         string grantType,
         string clientId,
         string? clientSecret,
-        Dictionary<string, string> additionalParams) {
+        Dictionary<string, string> additionalParams,
+        IReadOnlyList<string>? scopes = null
+    ) {
         var form = new Dictionary<string, string> { ["grant_type"] = grantType, ["client_id"] = clientId };
 
         // Only include client_secret for confidential clients
         if (!string.IsNullOrEmpty(clientSecret))
             form["client_secret"] = clientSecret;
+
+        if (scopes is { Count: > 0 })
+            form["scope"] = string.Join(" ", scopes);
 
         // Add any additional parameters
         foreach (var (key, value) in additionalParams)
@@ -365,3 +397,5 @@ internal static class OAuthHandler {
 
     #endregion
 }
+
+// PE_HOT_RELOAD_NUDGE

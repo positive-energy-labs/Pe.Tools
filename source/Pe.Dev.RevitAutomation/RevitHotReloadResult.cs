@@ -2,10 +2,8 @@
 
 public enum RevitHotReloadResultKind {
     NoSession,
-    NoDirtyFiles,
     Triggered,
-    Failed,
-    RestartRequiredLikely
+    Failed
 }
 
 public sealed record RevitHotReloadResult(

@@ -21,9 +21,11 @@ public sealed class CleanProjectModule(IOptions<BuildOptions> buildOptions) : Sy
             rootDirectory.GetFolder("install").GetFolder(buildOptions.Value.OutputDirectory);
         var buildOutputDirectories = rootDirectory
             .GetFolders(folder => folder.Name is "bin" or "obj")
-            .Where(folder => folder.Parent != Projects.Build.Directory);
+            .Where(folder => folder.Parent != Projects.Build.Directory)
+            .Where(folder => folder.Exists);
 
-        foreach (var buildFolder in buildOutputDirectories) buildFolder.Clean();
+        foreach (var buildFolder in buildOutputDirectories)
+            buildFolder.Clean();
 
         if (outputDirectory.Exists) outputDirectory.Clean();
         if (legacyInstallerOutputDirectory.Exists) legacyInstallerOutputDirectory.Clean();

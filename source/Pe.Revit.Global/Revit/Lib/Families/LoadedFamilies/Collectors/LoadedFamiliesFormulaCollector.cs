@@ -46,7 +46,7 @@ public static class LoadedFamiliesFormulaCollector {
         var shouldClose = false;
 
         try {
-            var existingFamilyDocument = RevitUiSession.CurrentUIApplication.FindOpenFamilyDocument(familyElement);
+            var existingFamilyDocument = projectDocument.Application.FindOpenFamilyDocument(familyElement);
             familyDocument = existingFamilyDocument ?? projectDocument.EditFamily(familyElement);
             shouldClose = existingFamilyDocument == null;
 

@@ -13,6 +13,10 @@
     </ItemGroup>
 
     <ItemGroup>
+        <PackageReference Include="Autodesk.PackageBuilder" Version="2.0.2"/>
+    </ItemGroup>
+
+    <ItemGroup>
         <None Include="Assets\AutoApplyRiderHotReload.ahk" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 </Project>

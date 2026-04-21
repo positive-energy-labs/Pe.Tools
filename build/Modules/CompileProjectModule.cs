@@ -33,16 +33,20 @@ public sealed class CompileProjectModule : Module {
         IModuleContext context,
         ResolveVersioningResult versioning,
         string configuration,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken
+    ) {
+        var publishAddin = configuration.Contains("Release", StringComparison.OrdinalIgnoreCase);
+
         await context.DotNet().Build(new DotNetBuildOptions {
             ProjectSolution = Projects.Pe_App.FullName,
             Configuration = configuration,
             Properties = [
                 ("DeployAddin", "false"),
-                ("PublishAddin", "false"),
+                ("PublishAddin", publishAddin ? "true" : "false"),
                 ("LaunchRevit", "false"),
                 ("VersionPrefix", versioning.VersionPrefix),
                 ("VersionSuffix", versioning.VersionSuffix!)
             ]
         }, cancellationToken: cancellationToken);
+    }
 }

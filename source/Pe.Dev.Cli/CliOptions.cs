@@ -55,6 +55,7 @@ internal sealed record DevCliOptions(
 
         var commandKind = positionals[1].ToLowerInvariant() switch {
             "approve" => RevitCommandKind.Approve,
+            "automation" => RevitCommandKind.Automation,
             "hot-reload" => RevitCommandKind.HotReload,
             "logs" => RevitCommandKind.Logs,
             "session" => RevitCommandKind.Session,
