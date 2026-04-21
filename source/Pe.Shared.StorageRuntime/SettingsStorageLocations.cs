@@ -58,8 +58,10 @@ public static class SettingsStorageLocations {
         string primaryBasePath,
         IEnumerable<string> alternateBasePaths
     ) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(primaryBasePath);
-        ArgumentNullException.ThrowIfNull(alternateBasePaths);
+        if (string.IsNullOrWhiteSpace(primaryBasePath))
+            throw new ArgumentException("Primary base path is required.", nameof(primaryBasePath));
+        if (alternateBasePaths == null)
+            throw new ArgumentNullException(nameof(alternateBasePaths));
 
         var candidates = new List<string>();
         AddCandidate(candidates, primaryBasePath);

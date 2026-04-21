@@ -10,6 +10,7 @@ public static class ScheduleCatalogCollector {
     ) {
         var categoryNames = ScheduleCollectorSupport.ToFilterSet(request?.CategoryNames);
         var scheduleNames = ScheduleCollectorSupport.ToFilterSet(request?.ScheduleNames);
+        var customParameterFilters = request?.CustomParameterFilters ?? [];
         var includeTemplates = request?.IncludeTemplates ?? false;
         var issues = new List<RevitDataIssue>();
 
@@ -18,7 +19,7 @@ public static class ScheduleCatalogCollector {
             .Cast<ViewSchedule>()
             .Where(schedule => includeTemplates || !schedule.IsTemplate)
             .Where(schedule => !schedule.Name.Contains("<Revision Schedule>", StringComparison.OrdinalIgnoreCase))
-            .Where(schedule => MatchesFilter(schedule, categoryNames, scheduleNames))
+            .Where(schedule => MatchesFilter(schedule, categoryNames, scheduleNames, customParameterFilters))
             .OrderBy(schedule => schedule.Name, StringComparer.OrdinalIgnoreCase)
             .Select(schedule => TryCollectEntry(doc, schedule, issues))
             .Where(entry => entry != null)
@@ -36,6 +37,10 @@ public static class ScheduleCatalogCollector {
         try {
             var profile = schedule.CaptureScheduleProfile();
             var sheetPlacements = ScheduleCollectorSupport.CollectSheetPlacements(doc, schedule);
+            var customParameters = ScheduleCollectorSupport.CollectCustomParameters(schedule);
+            var visibleFamilies = ScheduleVisibleFamilyCollector.CollectVisibleFamilies(doc, schedule);
+            var visibleBodyRowCount = ScheduleVisibleFamilyCollector.GetVisibleBodyRowCount(schedule);
+            var visibleInstanceCount = visibleFamilies.Sum(entry => entry.VisibleInstanceCount);
 
             return new ScheduleCatalogEntry(
                 schedule.Id.Value(),
@@ -48,10 +53,13 @@ public static class ScheduleCatalogCollector {
                 profile.FilterBySheet,
                 sheetPlacements.Count != 0,
                 sheetPlacements,
-                ScheduleCollectorSupport.CollectFieldParameterNames(profile),
                 ScheduleCollectorSupport.ToContractFilters(profile.Filters),
                 ScheduleCollectorSupport.CollectParameterUsages(doc, schedule),
-                ScheduleCollectorSupport.CollectCustomParameters(schedule)
+                customParameters,
+                visibleBodyRowCount,
+                visibleFamilies.Count,
+                visibleInstanceCount,
+                visibleFamilies
             );
         } catch (Exception ex) {
             issues.Add(new RevitDataIssue(
@@ -67,9 +75,13 @@ public static class ScheduleCatalogCollector {
     private static bool MatchesFilter(
         ViewSchedule schedule,
         HashSet<string> categoryNames,
-        HashSet<string> scheduleNames
+        HashSet<string> scheduleNames,
+        IReadOnlyList<ScheduleCustomParameterFilter> customParameterFilters
     ) {
         if (scheduleNames.Count != 0 && !scheduleNames.Contains(schedule.Name))
+            return false;
+
+        if (!ScheduleCollectorSupport.MatchesCustomParameterFilters(schedule, customParameterFilters))
             return false;
 
         if (categoryNames.Count == 0)

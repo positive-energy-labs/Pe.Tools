@@ -4,6 +4,12 @@ using Pe.Shared.RevitData.Parameters;
 namespace Pe.Revit.Global.Revit.Lib.Parameters;
 
 public static class ParameterIdentityEngine {
+    public static string GetParameterKey(
+        Document doc,
+        ElementId? parameterId,
+        string fallbackName
+    ) => RevitParameterIdentityFactory.FromParameterId(doc, parameterId, fallbackName).Key;
+
     public static ParameterIdentity FromCanonical(RevitParameterIdentity parameter) =>
         new(
             parameter.Key,

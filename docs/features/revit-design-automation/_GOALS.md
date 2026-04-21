@@ -2,7 +2,10 @@
 
 ## North Star
 
-Provide one dev-facing `pe-dev revit automation ...` command family that can package a headless Revit automation shell, run that shell in Autodesk Design Automation, and execute real document workloads against cloud models without inventing a second APS subsystem.
+Provide a dev-facing `pe-dev revit automation ...` command family that can package a headless Revit automation shell, run that shell in Autodesk Design Automation, and execute real document workloads against cloud models without inventing a second APS subsystem.
+
+Build the core of DA orchestration such that jobs can be easily spun off from `Pe.App`.  The use-case of these jobs mostly applies to `Pe.Revit.FamilyFoundry` and `Pe.Revit.Global.Revit` where it enable *truly portable* Revit objects. We could for example specify a cloud model: run an FFMigrator queue, run FFManager to generate a family from scratch and load it in, or serialize a schedule and download into the locally open model, diff a family snapshot in one model to another. Features like this would greatly advance the ergonomics/UX dimension of "portability".
+
 
 ## User Goals
 

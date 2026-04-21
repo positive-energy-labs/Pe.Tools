@@ -1,11 +1,12 @@
 using Pe.Revit.Global.Revit.Documents.Schedules;
 using Pe.Shared.HostContracts.RevitData;
-using InternalScheduleFieldSpec = Pe.Revit.Global.Revit.Lib.Schedules.Fields.ScheduleFieldSpec;
-using InternalScheduleProfile = Pe.Revit.Global.Revit.Lib.Schedules.ScheduleProfile;
 
 namespace Pe.Revit.Global.Revit.Lib.Schedules;
 
 public static class ScheduleQueryCollector {
+    private const string SyntheticFamiliesKey = "synthetic:families";
+    private const string SyntheticFamiliesHeader = "Families";
+
     public static ScheduleQueryData Collect(
         Document doc,
         ScheduleQuery? query = null
@@ -15,7 +16,7 @@ public static class ScheduleQueryCollector {
         var entries = resolution.Schedules
             .Select(schedule => TryCollectProjection(doc, schedule, issues))
             .Where(entry => entry != null)
-            .Cast<ScheduleProjection>()
+            .Cast<ScheduleRenderedScheduleEntry>()
             .ToList();
 
         return new ScheduleQueryData(
@@ -77,20 +78,28 @@ public static class ScheduleQueryCollector {
 
         foreach (var scheduleId in scheduleIds) {
             var schedule = doc.GetElement(new ElementId(scheduleId)) as ViewSchedule;
-            if (!TryAddResolvedSchedule(schedules, seenIds, schedule, issues,
-                    "ScheduleReferenceIdNotFound",
-                    $"Could not resolve schedule id {scheduleId}.",
-                    scheduleId.ToString())) {
-            }
+            _ = TryAddResolvedSchedule(
+                schedules,
+                seenIds,
+                schedule,
+                issues,
+                "ScheduleReferenceIdNotFound",
+                $"Could not resolve schedule id {scheduleId}.",
+                scheduleId.ToString()
+            );
         }
 
         foreach (var scheduleUniqueId in scheduleUniqueIds) {
             var schedule = doc.GetElement(scheduleUniqueId) as ViewSchedule;
-            if (!TryAddResolvedSchedule(schedules, seenIds, schedule, issues,
-                    "ScheduleReferenceUniqueIdNotFound",
-                    $"Could not resolve schedule unique id '{scheduleUniqueId}'.",
-                    scheduleUniqueId)) {
-            }
+            _ = TryAddResolvedSchedule(
+                schedules,
+                seenIds,
+                schedule,
+                issues,
+                "ScheduleReferenceUniqueIdNotFound",
+                $"Could not resolve schedule unique id '{scheduleUniqueId}'.",
+                scheduleUniqueId
+            );
         }
 
         return new QueryResolution(
@@ -142,28 +151,47 @@ public static class ScheduleQueryCollector {
         );
     }
 
-    private static ScheduleProjection? TryCollectProjection(
+    private static ScheduleRenderedScheduleEntry? TryCollectProjection(
         Document doc,
         ViewSchedule schedule,
         List<RevitDataIssue> issues
     ) {
         try {
-            var profile = schedule.CaptureScheduleProfile();
             var sheetPlacements = ScheduleCollectorSupport.CollectSheetPlacements(doc, schedule);
-            var template = ScheduleCollectorSupport.GetViewTemplate(schedule);
+            var visibleFamilies = ScheduleVisibleFamilyCollector.CollectVisibleFamilies(doc, schedule);
+            var visibleInstances = ScheduleVisibleFamilyCollector.CollectVisibleInstances(doc, schedule);
+            var visibleBodyRowCount = ScheduleVisibleFamilyCollector.GetVisibleBodyRowCount(schedule);
+            var bodySection = ScheduleCollectorSupport.SafeGet(() => schedule.GetTableData().GetSectionData(SectionType.Body));
+            var contexts = bodySection == null
+                ? []
+                : CollectColumnContexts(doc, schedule, bodySection);
+            var rows = bodySection == null
+                ? []
+                : CollectRows(schedule, bodySection, contexts, visibleInstances, issues);
+            var columns = contexts
+                .Select(context => context.Column)
+                .Append(new ScheduleRenderedColumn(
+                    bodySection == null ? 0 : bodySection.LastColumnNumber + 1,
+                    SyntheticFamiliesHeader,
+                    SyntheticFamiliesKey
+                ))
+                .ToList();
 
-            return new ScheduleProjection(
+            return new ScheduleRenderedScheduleEntry(
                 schedule.Id.Value(),
                 schedule.UniqueId,
                 schedule.Name,
                 ScheduleCollectorSupport.GetCategoryName(doc, schedule),
                 schedule.IsTemplate,
-                template?.Id.Value(),
-                template?.UniqueId,
-                template?.Name,
                 sheetPlacements.Count != 0,
                 sheetPlacements,
-                CollectSections(schedule, profile)
+                visibleBodyRowCount,
+                visibleFamilies.Count,
+                visibleInstances.Count,
+                visibleFamilies,
+                visibleInstances,
+                columns,
+                rows
             );
         } catch (Exception ex) {
             issues.Add(ScheduleCollectorSupport.Warning(
@@ -175,209 +203,131 @@ public static class ScheduleQueryCollector {
         }
     }
 
-    private static List<ScheduleSectionProjection> CollectSections(
+    private static List<ColumnContext> CollectColumnContexts(
+        Document doc,
         ViewSchedule schedule,
-        InternalScheduleProfile profile
-    ) => [
-        CollectSection(schedule, profile, ScheduleSectionType.Header, SectionType.Header),
-        CollectSection(schedule, profile, ScheduleSectionType.Body, SectionType.Body),
-        CollectSection(schedule, profile, ScheduleSectionType.Summary, SectionType.Summary),
-        CollectSection(schedule, profile, ScheduleSectionType.Footer, SectionType.Footer)
-    ];
-
-    private static ScheduleSectionProjection CollectSection(
-        ViewSchedule schedule,
-        InternalScheduleProfile profile,
-        ScheduleSectionType contractSectionType,
-        SectionType revitSectionType
+        TableSectionData bodySection
     ) {
-        var section = ScheduleCollectorSupport.SafeGet(() => schedule.GetTableData().GetSectionData(revitSectionType));
-        if (section == null) {
-            return new ScheduleSectionProjection(
-                contractSectionType,
-                false,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                []
-            );
+        var contexts = new List<ColumnContext>();
+        var visibleColumnNumber = bodySection.FirstColumnNumber;
+
+        for (var i = 0; i < schedule.Definition.GetFieldCount() && visibleColumnNumber <= bodySection.LastColumnNumber; i++) {
+            var field = schedule.Definition.GetField(i);
+            if (field.IsHidden)
+                continue;
+
+            var fieldName = field.GetName();
+            var headerText = ScheduleCollectorSupport.NullIfWhiteSpace(field.ColumnHeading) ?? fieldName;
+            contexts.Add(new ColumnContext(
+                new ScheduleRenderedColumn(
+                    visibleColumnNumber,
+                    headerText,
+                    ScheduleCollectorSupport.BuildFieldKey(doc, field, fieldName)
+                ),
+                fieldName,
+                headerText
+            ));
+            visibleColumnNumber++;
         }
 
-        var columnHeaders = revitSectionType == SectionType.Body
-            ? CollectBodyColumnHeaders(schedule, section, profile)
-            : new Dictionary<int, string?>();
-        var fieldsByColumn = revitSectionType == SectionType.Body
-            ? CollectVisibleBodyFields(section, profile)
-            : new Dictionary<int, InternalScheduleFieldSpec>();
-        var rows = new List<ScheduleRowProjection>();
+        return contexts;
+    }
 
-        for (var row = section.FirstRowNumber; row <= section.LastRowNumber; row++) {
-            var cells = new List<ScheduleCellProjection>();
-            for (var column = section.FirstColumnNumber; column <= section.LastColumnNumber; column++) {
-                var displayText = GetDisplayText(schedule, section, revitSectionType, row, column);
-                var mergedRegion = TryCollectMergedRegion(section, row, column);
-                var isBlank = string.IsNullOrWhiteSpace(displayText);
-                var sourceMetadata = DetermineCellSource(displayText, isBlank,
-                    fieldsByColumn.TryGetValue(column, out var field) ? field : null);
+    private static List<ScheduleRenderedRow> CollectRows(
+        ViewSchedule schedule,
+        TableSectionData bodySection,
+        IReadOnlyList<ColumnContext> contexts,
+        IReadOnlyList<ScheduleVisibleInstanceEntry> visibleInstances,
+        List<RevitDataIssue> issues
+    ) {
+        var rows = new List<ScheduleRenderedRow>();
+        var familyColumn = contexts.FirstOrDefault(context => MatchesIdentityColumn(context, "Family"));
+        var typeColumn = contexts.FirstOrDefault(context => MatchesIdentityColumn(context, "Type"));
+        var canResolveInstances = familyColumn != null || typeColumn != null;
 
-                cells.Add(new ScheduleCellProjection(
-                    column,
-                    displayText,
-                    columnHeaders.TryGetValue(column, out var columnHeaderText) ? columnHeaderText : null,
-                    isBlank,
-                    sourceMetadata.SourceKind,
-                    sourceMetadata.ParameterText,
-                    sourceMetadata.CombinedText,
-                    sourceMetadata.CalculatedValueName,
-                    sourceMetadata.CalculatedValueText,
-                    mergedRegion
+        if (!canResolveInstances && visibleInstances.Count != 0) {
+            issues.Add(ScheduleCollectorSupport.Warning(
+                "ScheduleRowInstanceReferencesUnavailable",
+                "Row instance references were left empty because the schedule does not expose a visible Family or Type column.",
+                schedule.Name
+            ));
+        }
+
+        for (var rowNumber = bodySection.FirstRowNumber; rowNumber <= bodySection.LastRowNumber; rowNumber++) {
+            var values = contexts
+                .Select(context => ScheduleCollectorSupport.SafeGet(() => schedule.GetCellText(SectionType.Body, rowNumber, context.Column.ColumnNumber)) ?? string.Empty)
+                .ToList();
+
+            var instanceIds = canResolveInstances
+                ? ResolveRowInstanceIds(values, contexts, visibleInstances, familyColumn, typeColumn)
+                : [];
+            if (canResolveInstances && instanceIds.Count == 0 && values.Any(value => !string.IsNullOrWhiteSpace(value))) {
+                issues.Add(ScheduleCollectorSupport.Warning(
+                    "ScheduleRowInstanceReferencesUnresolved",
+                    $"Rendered row {rowNumber} could not be matched to visible schedule instances.",
+                    schedule.Name
                 ));
             }
 
-            rows.Add(new ScheduleRowProjection(row, cells));
+            values.Add(BuildSyntheticFamiliesValue(instanceIds, visibleInstances));
+            rows.Add(new ScheduleRenderedRow(rowNumber, values, instanceIds));
         }
 
-        return new ScheduleSectionProjection(
-            contractSectionType,
-            true,
-            section.FirstRowNumber,
-            section.LastRowNumber,
-            section.FirstColumnNumber,
-            section.LastColumnNumber,
-            section.NumberOfRows,
-            section.NumberOfColumns,
-            rows
-        );
+        return rows;
     }
 
-    private static Dictionary<int, string?> CollectBodyColumnHeaders(
-        ViewSchedule schedule,
-        TableSectionData bodySection,
-        InternalScheduleProfile profile
+    private static List<long> ResolveRowInstanceIds(
+        IReadOnlyList<string> values,
+        IReadOnlyList<ColumnContext> contexts,
+        IReadOnlyList<ScheduleVisibleInstanceEntry> visibleInstances,
+        ColumnContext? familyColumn,
+        ColumnContext? typeColumn
     ) {
-        var headers = new Dictionary<int, string?>();
-        var visibleFields = profile.Fields
-            .Where(field => !field.IsHidden)
+        var familyValue = GetColumnValue(values, contexts, familyColumn);
+        var typeValue = GetColumnValue(values, contexts, typeColumn);
+
+        return visibleInstances
+            .Where(instance =>
+                (familyValue == null || string.Equals(instance.FamilyName, familyValue, StringComparison.OrdinalIgnoreCase)) &&
+                (typeValue == null || string.Equals(instance.FamilyTypeName, typeValue, StringComparison.OrdinalIgnoreCase)))
+            .Select(instance => instance.InstanceId)
             .ToList();
-        var bodyColumn = bodySection.FirstColumnNumber;
-
-        foreach (var field in visibleFields.Take(bodySection.NumberOfColumns)) {
-            headers[bodyColumn] = ScheduleCollectorSupport.NullIfWhiteSpace(
-                string.IsNullOrWhiteSpace(field.ColumnHeaderOverride)
-                    ? field.ParameterName
-                    : field.ColumnHeaderOverride
-            );
-            bodyColumn++;
-        }
-
-        return headers;
     }
 
-    private static Dictionary<int, InternalScheduleFieldSpec> CollectVisibleBodyFields(
-        TableSectionData bodySection,
-        InternalScheduleProfile profile
+    private static string BuildSyntheticFamiliesValue(
+        IReadOnlyList<long> instanceIds,
+        IReadOnlyList<ScheduleVisibleInstanceEntry> visibleInstances
+    ) => string.Join(
+        ", ",
+        visibleInstances
+            .Where(instance => instanceIds.Contains(instance.InstanceId))
+            .Select(instance => instance.FamilyName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+    );
+
+    private static string? GetColumnValue(
+        IReadOnlyList<string> values,
+        IReadOnlyList<ColumnContext> contexts,
+        ColumnContext? context
     ) {
-        var fieldsByColumn = new Dictionary<int, InternalScheduleFieldSpec>();
-        var visibleFields = profile.Fields
-            .Where(field => !field.IsHidden)
-            .ToList();
-
-        var maxCount = Math.Min(bodySection.NumberOfColumns, visibleFields.Count);
-        for (var index = 0; index < maxCount; index++)
-            fieldsByColumn[bodySection.FirstColumnNumber + index] = visibleFields[index];
-
-        return fieldsByColumn;
-    }
-
-    private static ScheduleMergedRegion? TryCollectMergedRegion(
-        TableSectionData section,
-        int row,
-        int column
-    ) {
-        var mergedCell = ScheduleCollectorSupport.SafeGet(() => section.GetMergedCell(row, column));
-        if (mergedCell == null)
+        if (context == null)
             return null;
 
-        return new ScheduleMergedRegion(
-            mergedCell.Top,
-            mergedCell.Left,
-            mergedCell.Bottom,
-            mergedCell.Right
-        );
-    }
-
-    private static string GetDisplayText(
-        ViewSchedule schedule,
-        TableSectionData section,
-        SectionType revitSectionType,
-        int row,
-        int column
-    ) {
-        if (revitSectionType == SectionType.Body) {
-            var bodyText = ScheduleCollectorSupport.SafeGet(() => schedule.GetCellText(SectionType.Body, row, column));
-            if (bodyText != null)
-                return bodyText;
-        }
-
-        return ScheduleCollectorSupport.SafeGet(() => section.GetCellText(row, column)) ?? string.Empty;
-    }
-
-    private static CellSourceMetadata DetermineCellSource(
-        string displayText,
-        bool isBlank,
-        InternalScheduleFieldSpec? field
-    ) {
-        if (field != null) {
-            if (field.CombinedParameters is { Count: > 0 }) {
-                return new CellSourceMetadata(
-                    ScheduleCellSourceKind.Combined,
-                    null,
-                    isBlank ? null : displayText,
-                    null,
-                    null
-                );
+        var index = -1;
+        for (var i = 0; i < contexts.Count; i++) {
+            if (ReferenceEquals(contexts[i], context) || contexts[i] == context) {
+                index = i;
+                break;
             }
-
-            if (field.CalculatedType.HasValue) {
-                return new CellSourceMetadata(
-                    ScheduleCellSourceKind.Calculated,
-                    null,
-                    null,
-                    field.ParameterName,
-                    isBlank ? null : displayText
-                );
-            }
-
-            return new CellSourceMetadata(
-                isBlank ? ScheduleCellSourceKind.Unknown : ScheduleCellSourceKind.Parameter,
-                isBlank ? null : displayText,
-                null,
-                null,
-                null
-            );
         }
-
-        if (!isBlank && !string.IsNullOrWhiteSpace(displayText)) {
-            return new CellSourceMetadata(
-                ScheduleCellSourceKind.TextOnly,
-                null,
-                null,
-                null,
-                null
-            );
-        }
-
-        return new CellSourceMetadata(
-            ScheduleCellSourceKind.Unknown,
-            null,
-            null,
-            null,
-            null
-        );
+        return index < 0 ? null : ScheduleCollectorSupport.NullIfWhiteSpace(values[index]);
     }
+
+    private static bool MatchesIdentityColumn(ColumnContext context, string expected) =>
+        string.Equals(context.FieldName, expected, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(context.HeaderText, expected, StringComparison.OrdinalIgnoreCase);
 
     private static List<ViewSchedule> CollectQueryableSchedules(Document doc) =>
         new FilteredElementCollector(doc)
@@ -416,11 +366,9 @@ public static class ScheduleQueryCollector {
         List<ViewSchedule> Schedules
     );
 
-    private sealed record CellSourceMetadata(
-        ScheduleCellSourceKind SourceKind,
-        string? ParameterText,
-        string? CombinedText,
-        string? CalculatedValueName,
-        string? CalculatedValueText
+    private sealed record ColumnContext(
+        ScheduleRenderedColumn Column,
+        string FieldName,
+        string HeaderText
     );
 }

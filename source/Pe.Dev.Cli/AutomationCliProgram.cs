@@ -18,6 +18,8 @@ internal static class AutomationCliProgram {
             : args[0].ToLowerInvariant() switch {
                 "collect-parameters" => await RunCollectParametersAsync(args, repoRootOverride, cancellationToken),
                 "collect-parameters-batch" => await RunCollectParametersBatchAsync(args, repoRootOverride, cancellationToken),
+                "collect-schedules" => await RunCollectSchedulesAsync(args, repoRootOverride, cancellationToken),
+                "collect-schedules-batch" => await RunCollectSchedulesBatchAsync(args, repoRootOverride, cancellationToken),
                 "discover-models" => await RunDiscoverModelsAsync(args, repoRootOverride, cancellationToken),
                 "list-contents" => await RunListContentsAsync(args, cancellationToken),
                 "list-hubs" => await RunListHubsAsync(args, cancellationToken),
@@ -274,6 +276,104 @@ internal static class AutomationCliProgram {
         return result.FailureCount == 0 ? 0 : 24;
     }
 
+    private static async Task<int> RunCollectSchedulesAsync(
+        IReadOnlyList<string> args,
+        string? repoRootOverride,
+        CancellationToken cancellationToken
+    ) {
+        AutomationScheduleCollectionCliOptions options;
+        try {
+            options = AutomationScheduleCollectionCliOptions.Parse(args);
+        } catch (Exception ex) {
+            Console.Error.WriteLine(ex.Message);
+            WriteAutomationUsage();
+            return 10;
+        }
+
+        var service = new RevitAutomationScheduleCollectionService();
+        ScheduleCollectionResult result;
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(GetProbeLifetime(options.TimeoutSeconds));
+        try {
+            result = await service.RunAsync(
+                options.ToOptions(),
+                repoRootOverride,
+                message => {
+                    if (!options.Json)
+                        Console.WriteLine(message);
+                },
+                timeoutCts.Token
+            );
+        } catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested) {
+            result = new ScheduleCollectionResult {
+                Succeeded = false,
+                Classification = ScheduleCollectionClassification.TimedOut,
+                Engine = options.Engine,
+                Region = options.Region,
+                ProjectGuid = options.ProjectGuid,
+                ModelGuid = options.ModelGuid,
+                FailureMessage =
+                    $"Automation schedule collection exceeded the process timeout of {(int)GetProbeLifetime(options.TimeoutSeconds).TotalSeconds} seconds and was cancelled."
+            };
+        } catch (Exception ex) {
+            result = new ScheduleCollectionResult {
+                Succeeded = false,
+                Classification = ScheduleCollectionClassification.WorkItemSubmissionFailed,
+                Engine = options.Engine,
+                Region = options.Region,
+                ProjectGuid = options.ProjectGuid,
+                ModelGuid = options.ModelGuid,
+                FailureMessage = ex.Message
+            };
+        }
+
+        if (options.Json)
+            Console.WriteLine(JsonSerializer.Serialize(result, JsonOptions));
+        else
+            WriteHumanResult(result);
+
+        return GetExitCode(result.Classification);
+    }
+
+    private static async Task<int> RunCollectSchedulesBatchAsync(
+        IReadOnlyList<string> args,
+        string? repoRootOverride,
+        CancellationToken cancellationToken
+    ) {
+        AutomationScheduleCollectionBatchCliOptions options;
+        try {
+            options = AutomationScheduleCollectionBatchCliOptions.Parse(args);
+        } catch (Exception ex) {
+            Console.Error.WriteLine(ex.Message);
+            WriteAutomationUsage();
+            return 10;
+        }
+
+        var service = new RevitAutomationScheduleCollectionBatchService();
+        ScheduleCollectionBatchResult result;
+        try {
+            result = await service.RunAsync(
+                options.ManifestPath,
+                repoRootOverride,
+                message => {
+                    if (!options.Json)
+                        Console.WriteLine(message);
+                },
+                cancellationToken
+            );
+        } catch (Exception ex) {
+            Console.Error.WriteLine(ex.Message);
+            return 14;
+        }
+
+        if (options.Json)
+            Console.WriteLine(JsonSerializer.Serialize(result, JsonOptions));
+        else
+            WriteHumanResult(result);
+
+        return result.FailureCount == 0 ? 0 : 24;
+    }
+
     private static async Task<int> RunProbeAccessAsync(
         IReadOnlyList<string> args,
         string? repoRootOverride,
@@ -438,6 +538,39 @@ internal static class AutomationCliProgram {
         }
     }
 
+    private static void WriteHumanResult(ScheduleCollectionResult result) {
+        Console.WriteLine($"Classification: {result.Classification}");
+        Console.WriteLine($"Engine: {result.Engine}");
+        Console.WriteLine($"Region: {result.Region}");
+        Console.WriteLine($"Project: {result.ProjectGuid}");
+        Console.WriteLine($"Model: {result.ModelGuid}");
+        if (!string.IsNullOrWhiteSpace(result.WorkItemId))
+            Console.WriteLine($"Workitem: {result.WorkItemId}");
+        if (!string.IsNullOrWhiteSpace(result.DocumentTitle))
+            Console.WriteLine($"Document: {result.DocumentTitle}");
+        if (!string.IsNullOrWhiteSpace(result.ArtifactLocalPath))
+            Console.WriteLine($"Artifact: {result.ArtifactLocalPath}");
+        if (!string.IsNullOrWhiteSpace(result.FailureMessage))
+            Console.WriteLine($"Failure: {result.FailureMessage}");
+        if (!string.IsNullOrWhiteSpace(result.RawReportExcerpt)) {
+            Console.WriteLine("Report:");
+            Console.WriteLine(result.RawReportExcerpt);
+        }
+    }
+
+    private static void WriteHumanResult(ScheduleCollectionBatchResult result) {
+        Console.WriteLine($"Manifest: {result.ManifestPath}");
+        Console.WriteLine($"Models: {result.TotalModelCount}");
+        Console.WriteLine($"Succeeded: {result.SuccessCount}");
+        Console.WriteLine($"Failed: {result.FailureCount}");
+        foreach (var item in result.Results) {
+            Console.WriteLine(
+                $"{item.Classification}: {item.Region} {DisplayId(item.ProjectGuid, true)} {DisplayId(item.ModelGuid, true)}" +
+                (string.IsNullOrWhiteSpace(item.ArtifactLocalPath) ? "" : $" -> {item.ArtifactLocalPath}")
+            );
+        }
+    }
+
     private static void WriteHumanResult(AutomationHubCatalogResult result) {
         Console.WriteLine($"Hubs: {result.Hubs.Count}");
         foreach (var hub in result.Hubs)
@@ -509,6 +642,8 @@ internal static class AutomationCliProgram {
         Console.Error.WriteLine(AutomationDiscoverModelsCliOptions.UsageText);
         Console.Error.WriteLine(AutomationParameterCollectionCliOptions.UsageText);
         Console.Error.WriteLine(AutomationParameterCollectionBatchCliOptions.UsageText);
+        Console.Error.WriteLine(AutomationScheduleCollectionCliOptions.UsageText);
+        Console.Error.WriteLine(AutomationScheduleCollectionBatchCliOptions.UsageText);
         Console.Error.WriteLine(AutomationProbeAccessCliOptions.UsageText);
         Console.Error.WriteLine(AutomationWorkItemCliOptions.UsageText);
     }
@@ -540,6 +675,22 @@ internal static class AutomationCliProgram {
             ParameterCollectionClassification.CollectionFailed => 23,
             ParameterCollectionClassification.ArtifactDownloadFailed => 24,
             ParameterCollectionClassification.TimedOut => 25,
+            _ => 1
+        };
+
+    private static int GetExitCode(ScheduleCollectionClassification classification) =>
+        classification switch {
+            ScheduleCollectionClassification.Success => 0,
+            ScheduleCollectionClassification.ManagementTokenFailed => 11,
+            ScheduleCollectionClassification.UserTokenFailed => 12,
+            ScheduleCollectionClassification.ArtifactTokenFailed => 13,
+            ScheduleCollectionClassification.WorkItemSubmissionUnauthorized => 14,
+            ScheduleCollectionClassification.WorkItemSubmissionFailed => 15,
+            ScheduleCollectionClassification.CloudModelUnauthorized => 21,
+            ScheduleCollectionClassification.CloudModelNotFound => 22,
+            ScheduleCollectionClassification.CollectionFailed => 23,
+            ScheduleCollectionClassification.ArtifactDownloadFailed => 24,
+            ScheduleCollectionClassification.TimedOut => 25,
             _ => 1
         };
 }
