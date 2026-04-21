@@ -1,0 +1,391 @@
+using Pe.Revit.Global.Services.Aps;
+using Pe.Revit.Global.Services.Aps.Models;
+using System.IO;
+using System.Net.Http;
+
+namespace Pe.Dev.RevitAutomation;
+
+public sealed class RevitAutomationParameterCollectionBatchService {
+    private readonly RevitAutomationWorkerBundleBuilder _bundleBuilder = new();
+    private readonly AutomationJobReportParser _reportParser = new();
+
+    public async Task<ParameterCollectionBatchResult> RunAsync(
+        string manifestPath,
+        string? repoRootOverride,
+        Action<string>? log,
+        CancellationToken cancellationToken
+    ) {
+        var repoRoot = RepoRootResolver.Resolve(repoRootOverride);
+        var manifest = ParameterCollectionBatchManifest.LoadFromFile(manifestPath);
+        var authProvider = new StoredApsWebAuthTokenProvider();
+        var settings = RevitAutomationSettings.Load(authProvider.GetClientId());
+        var aps = new Aps(authProvider);
+
+        try {
+            log?.Invoke("Auth: acquiring management token");
+            _ = aps.GetTokenResult(ApsTokenRequest.ForAutomationManagement());
+        } catch (Exception ex) {
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ParameterCollectionClassification.ManagementTokenFailed, manifest, ex.Message);
+        }
+
+        ApsTokenResult userToken;
+        try {
+            log?.Invoke("Auth: acquiring delegated user token");
+            userToken = aps.GetTokenResult(ApsTokenRequest.ForAutomationUserContext());
+        } catch (Exception ex) {
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ParameterCollectionClassification.UserTokenFailed, manifest, ex.Message);
+        }
+
+        ApsTokenResult artifactToken;
+        try {
+            log?.Invoke("Auth: acquiring artifact token");
+            artifactToken = aps.GetTokenResult(new ApsTokenRequest {
+                FlowKind = ApsAuthFlowKind.TwoLegged,
+                ExplicitScopes = ["bucket:create", "bucket:read", "data:read", "data:write"]
+            });
+        } catch (Exception ex) {
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ParameterCollectionClassification.ArtifactTokenFailed, manifest, ex.Message);
+        }
+
+        WorkerBundleArtifact bundle;
+        try {
+            bundle = await this._bundleBuilder.BuildAsync(repoRoot, manifest.Engine, log, cancellationToken)
+                .ConfigureAwait(false);
+        } catch (Exception ex) {
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ParameterCollectionClassification.WorkItemSubmissionFailed, manifest, ex.Message);
+        }
+
+        var automationClient = aps.Automation();
+        try {
+            await RevitAutomationParameterCollectionService.EnsureShellReadyAsync(
+                    automationClient,
+                    settings,
+                    manifest.Engine,
+                    bundle.PackageContents,
+                    log,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        } catch (HttpRequestException ex) when (ex.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden) {
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ParameterCollectionClassification.WorkItemSubmissionUnauthorized, manifest, ex.Message);
+        } catch (Exception ex) {
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ParameterCollectionClassification.WorkItemSubmissionFailed, manifest, ex.Message);
+        }
+
+        var objectStorage = new AutomationObjectStorageClient(artifactToken.AccessToken);
+        var bucketKey = settings.BuildArtifactBucketKey();
+        try {
+            log?.Invoke($"Artifacts: ensuring OSS bucket {bucketKey}");
+            await objectStorage.EnsureTransientBucketAsync(bucketKey, cancellationToken).ConfigureAwait(false);
+        } catch (Exception ex) {
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ParameterCollectionClassification.ArtifactTokenFailed, manifest, ex.Message);
+        }
+
+        var pending = new Queue<ParameterCollectionBatchEntry>(manifest.Models);
+        var active = new Dictionary<string, BatchTracker>(StringComparer.Ordinal);
+        var results = new List<ParameterCollectionResult>();
+        var maxConcurrency = Math.Max(1, manifest.MaxConcurrency);
+
+        while ((pending.Count > 0 || active.Count > 0) && !cancellationToken.IsCancellationRequested) {
+            while (pending.Count > 0 && active.Count < maxConcurrency) {
+                var entry = pending.Dequeue();
+                var tracker = await SubmitAsync(
+                        entry,
+                        manifest,
+                        repoRoot,
+                        bucketKey,
+                        artifactToken.AccessToken,
+                        userToken.AccessToken,
+                        settings,
+                        automationClient,
+                        log,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+
+                if (tracker.SubmissionFailure != null) {
+                    results.Add(tracker.SubmissionFailure);
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(tracker.WorkItemId))
+                    active[tracker.WorkItemId] = tracker;
+            }
+
+            if (active.Count == 0)
+                continue;
+
+            await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken).ConfigureAwait(false);
+            var statuses = await automationClient.GetWorkItemStatusesAsync(active.Keys.ToArray(), cancellationToken).ConfigureAwait(false);
+            foreach (var status in statuses) {
+                if (string.IsNullOrWhiteSpace(status.Id) || !active.TryGetValue(status.Id, out var tracker))
+                    continue;
+
+                if (!RevitAutomationParameterCollectionService.IsTerminal(status.Status))
+                    continue;
+
+                var finalized = await FinalizeAsync(
+                        tracker,
+                        status,
+                        manifest,
+                        objectStorage,
+                        automationClient,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+                results.Add(finalized);
+                active.Remove(status.Id);
+            }
+        }
+
+        return new ParameterCollectionBatchResult {
+            ManifestPath = manifestPath,
+            TotalModelCount = manifest.Models.Count,
+            SuccessCount = results.Count(result => result.Succeeded),
+            FailureCount = results.Count(result => !result.Succeeded),
+            Results = results
+        };
+    }
+
+    private async Task<BatchTracker> SubmitAsync(
+        ParameterCollectionBatchEntry entry,
+        ParameterCollectionBatchManifest manifest,
+        string repoRoot,
+        string bucketKey,
+        string artifactAccessToken,
+        string userAccessToken,
+        RevitAutomationSettings settings,
+        Pe.Revit.Global.Services.Aps.Core.AutomationApiClient automationClient,
+        Action<string>? log,
+        CancellationToken cancellationToken
+    ) {
+        var options = entry.ToOptions(manifest);
+        var runId = Guid.NewGuid().ToString("D");
+        var objectKey = BuildArtifactObjectKey(entry, runId);
+        var artifactPath = BuildArtifactLocalPath(repoRoot, manifest.Engine, objectKey);
+        var input = new AutomationJobInput {
+            JobType = AutomationJobType.ParameterCollection,
+            Engine = manifest.Engine,
+            Region = entry.Region,
+            ProjectGuid = entry.ProjectGuid,
+            ModelGuid = entry.ModelGuid,
+            RunId = runId,
+            ExpectedTitle = entry.ExpectedTitle,
+            ParameterCollection = new Pe.Shared.HostContracts.RevitData.ParameterCollectionRequest(entry.Filter)
+        };
+
+        try {
+            log?.Invoke($"Automation: submitting batch workitem for {entry.ModelGuid}");
+            var submission = await automationClient.SubmitWorkItemAsync(
+                    new AutomationWorkItemSpec {
+                        ActivityId = $"{settings.Namespace}.{settings.ActivityId}+{settings.AliasId}",
+                        LimitProcessingTimeSec = manifest.TimeoutSeconds,
+                        Debug = manifest.Debug,
+                        Arguments = new Dictionary<string, object>(StringComparer.Ordinal) {
+                            ["inputParams"] = new Dictionary<string, object>(StringComparer.Ordinal) {
+                                ["url"] = RevitAutomationParameterCollectionService.BuildJsonDataUrl(input.ToJson())
+                            },
+                            ["resultJson"] = new Dictionary<string, object>(StringComparer.Ordinal) {
+                                ["verb"] = "put",
+                                ["url"] = $"urn:adsk.objects:os.object:{bucketKey}/{Uri.EscapeDataString(objectKey)}",
+                                ["headers"] = new Dictionary<string, string>(StringComparer.Ordinal) {
+                                    ["Authorization"] = $"Bearer {artifactAccessToken}"
+                                }
+                            },
+                            ["adsk3LeggedToken"] = userAccessToken
+                        }
+                    },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+
+            if (string.IsNullOrWhiteSpace(submission.Id)) {
+                return new BatchTracker {
+                    SubmissionFailure = new ParameterCollectionResult {
+                        Succeeded = false,
+                        Classification = ParameterCollectionClassification.WorkItemSubmissionFailed,
+                        Engine = options.Engine,
+                        Region = options.Region,
+                        ProjectGuid = options.ProjectGuid,
+                        ModelGuid = options.ModelGuid,
+                        ArtifactBucketKey = bucketKey,
+                        ArtifactObjectKey = objectKey,
+                        ArtifactLocalPath = artifactPath,
+                        FailureMessage = "Automation workitem submission did not return an id."
+                    }
+                };
+            }
+
+            return new BatchTracker {
+                Options = options,
+                WorkItemId = submission.Id,
+                ArtifactBucketKey = bucketKey,
+                ArtifactObjectKey = objectKey,
+                ArtifactLocalPath = artifactPath
+            };
+        } catch (HttpRequestException ex) when (ex.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden) {
+            return new BatchTracker {
+                SubmissionFailure = new ParameterCollectionResult {
+                    Succeeded = false,
+                    Classification = ParameterCollectionClassification.WorkItemSubmissionUnauthorized,
+                    Engine = options.Engine,
+                    Region = options.Region,
+                    ProjectGuid = options.ProjectGuid,
+                    ModelGuid = options.ModelGuid,
+                    ArtifactBucketKey = bucketKey,
+                    ArtifactObjectKey = objectKey,
+                    ArtifactLocalPath = artifactPath,
+                    FailureMessage = ex.Message
+                }
+            };
+        } catch (Exception ex) {
+            return new BatchTracker {
+                SubmissionFailure = new ParameterCollectionResult {
+                    Succeeded = false,
+                    Classification = ParameterCollectionClassification.WorkItemSubmissionFailed,
+                    Engine = options.Engine,
+                    Region = options.Region,
+                    ProjectGuid = options.ProjectGuid,
+                    ModelGuid = options.ModelGuid,
+                    ArtifactBucketKey = bucketKey,
+                    ArtifactObjectKey = objectKey,
+                    ArtifactLocalPath = artifactPath,
+                    FailureMessage = ex.Message
+                }
+            };
+        }
+    }
+
+    private async Task<ParameterCollectionResult> FinalizeAsync(
+        BatchTracker tracker,
+        AutomationWorkItemStatus status,
+        ParameterCollectionBatchManifest manifest,
+        AutomationObjectStorageClient objectStorage,
+        Pe.Revit.Global.Services.Aps.Core.AutomationApiClient automationClient,
+        CancellationToken cancellationToken
+    ) {
+        var report = await automationClient.GetWorkItemReportAsync(status.ReportUrl, cancellationToken).ConfigureAwait(false);
+        var parsedReport = this._reportParser.Parse(report.ReportContent);
+        if (!string.Equals(status.Status, "success", StringComparison.OrdinalIgnoreCase)) {
+            return BuildFailureResult(tracker, parsedReport, ParameterCollectionClassification.CollectionFailed);
+        }
+
+        try {
+            await objectStorage.DownloadObjectAsync(
+                    tracker.ArtifactBucketKey,
+                    tracker.ArtifactObjectKey,
+                    tracker.ArtifactLocalPath,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        } catch (Exception ex) {
+            return new ParameterCollectionResult {
+                Succeeded = false,
+                Classification = ParameterCollectionClassification.ArtifactDownloadFailed,
+                WorkItemId = tracker.WorkItemId,
+                Engine = tracker.Options.Engine,
+                Region = tracker.Options.Region,
+                ProjectGuid = tracker.Options.ProjectGuid,
+                ModelGuid = tracker.Options.ModelGuid,
+                DocumentTitle = parsedReport.DocumentTitle,
+                FailureMessage = ex.Message,
+                RawReportExcerpt = parsedReport.RawExcerpt,
+                ArtifactBucketKey = tracker.ArtifactBucketKey,
+                ArtifactObjectKey = tracker.ArtifactObjectKey,
+                ArtifactLocalPath = tracker.ArtifactLocalPath
+            };
+        }
+
+        return new ParameterCollectionResult {
+            Succeeded = true,
+            Classification = ParameterCollectionClassification.Success,
+            WorkItemId = tracker.WorkItemId,
+            Engine = tracker.Options.Engine,
+            Region = tracker.Options.Region,
+            ProjectGuid = tracker.Options.ProjectGuid,
+            ModelGuid = tracker.Options.ModelGuid,
+            DocumentTitle = parsedReport.DocumentTitle,
+            RawReportExcerpt = parsedReport.RawExcerpt,
+            ArtifactBucketKey = tracker.ArtifactBucketKey,
+            ArtifactObjectKey = tracker.ArtifactObjectKey,
+            ArtifactLocalPath = tracker.ArtifactLocalPath
+        };
+    }
+
+    private static ParameterCollectionResult BuildFailureResult(
+        BatchTracker tracker,
+        ParsedAutomationJobReport parsedReport,
+        ParameterCollectionClassification defaultClassification
+    ) {
+        var classification = parsedReport.Classification switch {
+            nameof(ProbeAccessClassification.CloudModelUnauthorized) or "CloudModelUnauthorized" =>
+                ParameterCollectionClassification.CloudModelUnauthorized,
+            nameof(ProbeAccessClassification.CloudModelNotFound) or "CloudModelNotFound" =>
+                ParameterCollectionClassification.CloudModelNotFound,
+            _ => defaultClassification
+        };
+
+        return new ParameterCollectionResult {
+            Succeeded = false,
+            Classification = classification,
+            WorkItemId = tracker.WorkItemId,
+            Engine = tracker.Options.Engine,
+            Region = tracker.Options.Region,
+            ProjectGuid = tracker.Options.ProjectGuid,
+            ModelGuid = tracker.Options.ModelGuid,
+            DocumentTitle = parsedReport.DocumentTitle,
+            FailureMessage = parsedReport.FailureMessage,
+            RawReportExcerpt = parsedReport.RawExcerpt,
+            ArtifactBucketKey = tracker.ArtifactBucketKey,
+            ArtifactObjectKey = tracker.ArtifactObjectKey,
+            ArtifactLocalPath = tracker.ArtifactLocalPath
+        };
+    }
+
+    private static ParameterCollectionBatchResult BuildPreflightFailure(
+        string manifestPath,
+        int totalModelCount,
+        ParameterCollectionClassification classification,
+        ParameterCollectionBatchManifest manifest,
+        string? failureMessage
+    ) =>
+        new() {
+            ManifestPath = manifestPath,
+            TotalModelCount = totalModelCount,
+            SuccessCount = 0,
+            FailureCount = totalModelCount,
+            Results = manifest.Models
+                .Select(entry => new ParameterCollectionResult {
+                    Succeeded = false,
+                    Classification = classification,
+                    Engine = manifest.Engine,
+                    Region = entry.Region,
+                    ProjectGuid = entry.ProjectGuid,
+                    ModelGuid = entry.ModelGuid,
+                    FailureMessage = failureMessage
+                })
+                .ToList()
+        };
+
+    private static string BuildArtifactObjectKey(ParameterCollectionBatchEntry entry, string runId) =>
+        $"parameter-collections/{DateTime.UtcNow:yyyy/MM/dd}/{entry.Region.Trim().ToUpperInvariant()}/{entry.ProjectGuid.Trim().ToLowerInvariant()}/{entry.ModelGuid.Trim().ToLowerInvariant()}/{runId}.json";
+
+    private static string BuildArtifactLocalPath(string repoRoot, string engine, string objectKey) =>
+        Path.Combine(
+            repoRoot,
+            ".artifacts",
+            "automation",
+            "results",
+            RevitAutomationParameterCollectionService.ResolveEngineYear(engine).ToString(),
+            Path.GetFileName(objectKey)
+        );
+
+    private sealed class BatchTracker {
+        public ParameterCollectionOptions Options { get; init; } = null!;
+        public string WorkItemId { get; init; } = "";
+        public string ArtifactBucketKey { get; init; } = "";
+        public string ArtifactObjectKey { get; init; } = "";
+        public string ArtifactLocalPath { get; init; } = "";
+        public ParameterCollectionResult? SubmissionFailure { get; init; }
+    }
+}

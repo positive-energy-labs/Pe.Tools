@@ -5,12 +5,13 @@ namespace Pe.Dev.Cli;
 
 internal static class RevitCommandRunner {
     private static readonly RevitProcessSessionSelector SessionSelector = new();
-    private static readonly RiderHotReloadService HotReloadService = new(SessionSelector, new RiderRecentOpenCache());
+    private static readonly RiderHotReloadService HotReloadService = new(SessionSelector);
     private static readonly RevitAddinApprovalWatcherService ApprovalWatcherService = new();
 
     public static Task<int> RunAsync(DevCliOptions options, CancellationToken cancellationToken) =>
         options.CommandKind switch {
             RevitCommandKind.Approve => Task.FromResult(RunApprove(options.CommandArguments)),
+            RevitCommandKind.Automation => AutomationCliProgram.RunAsync(options.CommandArguments, options.RepoRoot, cancellationToken),
             RevitCommandKind.InternalApproveWorker => RunApproveWorkerAsync(options.CommandArguments, cancellationToken),
             RevitCommandKind.HotReload => RunHotReloadAsync(options.RepoRoot, options.CommandArguments, cancellationToken),
             RevitCommandKind.Logs => Task.FromResult(RunLogs(options.CommandArguments)),
@@ -113,7 +114,7 @@ internal static class RevitCommandRunner {
         }
 
         var result = await HotReloadService.RunAsync(repoRoot, cancellationToken);
-        var output = result.Kind is RevitHotReloadResultKind.Failed or RevitHotReloadResultKind.RestartRequiredLikely
+        var output = result.Kind is RevitHotReloadResultKind.Failed
             ? Console.Error
             : Console.Out;
         output.WriteLine(result.Message);

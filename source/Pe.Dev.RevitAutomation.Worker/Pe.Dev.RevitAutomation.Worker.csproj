@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework Condition="'$(RevitVersion)' == '2025' or '$(RevitVersion)' == '2026'">net8.0-windows</TargetFramework>
+        <TargetFramework Condition="'$(TargetFramework)' == ''">net8.0-windows</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <OutputType>Library</OutputType>
+        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+        <RootNamespace>Pe.Dev.RevitAutomation.Worker</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Autodesk.Forge.DesignAutomation.Revit" Version="2025.0.1" Condition="'$(RevitVersion)' == '2025' or '$(RevitVersion)' == ''"/>
+        <PackageReference Include="Autodesk.Forge.DesignAutomation.Revit" Version="2026.0.0" Condition="'$(RevitVersion)' == '2026'"/>
+        <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*"/>
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj"/>
+    </ItemGroup>
+</Project>

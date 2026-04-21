@@ -24,6 +24,7 @@ if (!parsedArgs.Commands.Contains("pack") && !parsedArgs.Commands.Contains("publ
 if (parsedArgs.Commands.Contains("pack")) {
     builder.Services.AddModule<CleanProjectModule>();
     builder.Services.AddModule<CreateBundleModule>();
+    builder.Services.AddModule<CreateAutomationBundleModule>();
     builder.Services.AddModule<CreateInstallerModule>();
 }
 

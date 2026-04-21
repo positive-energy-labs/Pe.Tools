@@ -8,9 +8,12 @@ public static class SettingsStorageLocations {
     public const string DefaultModuleSettingsDirectoryName = "settings";
 
     public static string GetDefaultBasePath() =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            DefaultStorageDirectoryName
+        ResolvePreferredBasePath(
+            Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                DefaultStorageDirectoryName
+            ),
+            EnumerateAlternateDefaultBasePaths()
         );
 
     public static string ResolveModuleDirectory(string basePath, string moduleKey) {
@@ -50,4 +53,54 @@ public static class SettingsStorageLocations {
             : ResolveModuleSettingsDirectory(basePath, moduleKey);
         return SettingsPathing.ResolveSafeSubDirectoryPath(settingsDirectory, rootKey, nameof(rootKey));
     }
+
+    internal static string ResolvePreferredBasePath(
+        string primaryBasePath,
+        IEnumerable<string> alternateBasePaths
+    ) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(primaryBasePath);
+        ArgumentNullException.ThrowIfNull(alternateBasePaths);
+
+        var candidates = new List<string>();
+        AddCandidate(candidates, primaryBasePath);
+
+        foreach (var alternateBasePath in alternateBasePaths)
+            AddCandidate(candidates, alternateBasePath);
+
+        var candidatesWithSettings = candidates
+            .Where(ContainsGlobalSettingsFile)
+            .ToList();
+        if (candidatesWithSettings.Count != 0)
+            return candidatesWithSettings[0];
+
+        var existingCandidates = candidates
+            .Where(Directory.Exists)
+            .ToList();
+        if (existingCandidates.Count != 0)
+            return existingCandidates[0];
+
+        return candidates[0];
+    }
+
+    private static IEnumerable<string> EnumerateAlternateDefaultBasePaths() {
+        var oneDriveRoot = Environment.GetEnvironmentVariable("OneDrive");
+        if (!string.IsNullOrWhiteSpace(oneDriveRoot))
+            yield return Path.Combine(oneDriveRoot, "Documents", DefaultStorageDirectoryName);
+
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrWhiteSpace(userProfile))
+            yield return Path.Combine(userProfile, "OneDrive", "Documents", DefaultStorageDirectoryName);
+    }
+
+    private static void AddCandidate(ICollection<string> candidates, string? candidatePath) {
+        if (string.IsNullOrWhiteSpace(candidatePath))
+            return;
+
+        var normalizedPath = Path.GetFullPath(candidatePath);
+        if (!candidates.Contains(normalizedPath))
+            candidates.Add(normalizedPath);
+    }
+
+    private static bool ContainsGlobalSettingsFile(string basePath) =>
+        File.Exists(Path.Combine(basePath, "Global", "settings.json"));
 }

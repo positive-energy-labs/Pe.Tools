@@ -10,7 +10,7 @@ namespace Pe.Dev.Cli;
 
 internal static class ScriptCliProgram {
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
-    private static readonly RiderHotReloadService HotReloadService = new(new RevitProcessSessionSelector(), new RiderRecentOpenCache());
+    private static readonly RiderHotReloadService HotReloadService = new(new RevitProcessSessionSelector());
 
     public static async Task<int> RunAsync(
         string[] args,
@@ -111,13 +111,7 @@ internal static class ScriptCliProgram {
         var result = await HotReloadService.RunAsync(repoRoot, cancellationToken);
         switch (result.Kind) {
         case RevitHotReloadResultKind.NoSession:
-        case RevitHotReloadResultKind.NoDirtyFiles:
-            Console.Error.WriteLine(result.Message);
-            break;
         case RevitHotReloadResultKind.Triggered:
-            Console.Error.WriteLine(result.Message);
-            break;
-        case RevitHotReloadResultKind.RestartRequiredLikely:
         case RevitHotReloadResultKind.Failed:
             Console.Error.WriteLine(result.Message);
             break;

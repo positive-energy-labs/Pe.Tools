@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 
 namespace Pe.Revit.Global.Services.Aps.Core;
 
@@ -18,7 +18,7 @@ internal sealed record OAuthFlowData {
     /// <summary>
     ///     Factory method that validates inputs and creates the appropriate flow type.
     /// </summary>
-    public static OAuthFlowData Create(string clientId, string clientSecret) {
+    public static OAuthFlowData Create(string clientId, string? clientSecret) {
         if (string.IsNullOrEmpty(clientId))
             throw new ArgumentException("ClientId is required", nameof(clientId));
 
@@ -65,3 +65,5 @@ internal sealed record OAuthFlowData {
 
     #endregion
 }
+
+// PE_HOT_RELOAD_NUDGE
