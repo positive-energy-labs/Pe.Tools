@@ -135,16 +135,14 @@ RunRiderAction(actionName) {
     global riderSelector
 
     savedClipboard := A_Clipboard
-    SendEvent "{Esc}"
-    Sleep 250
-    SendEvent "^+a"
-    Sleep 1200
-    A_Clipboard := actionName
+    SendEvent "^p"
     Sleep 100
+    SendEvent "^a"
+    A_Clipboard := actionName
     SendEvent "^v"
-    Sleep 1200
+    Sleep 500
     SendEvent "{Enter}"
-    Sleep 400
+    Sleep 150
     A_Clipboard := savedClipboard
 }
 
@@ -159,13 +157,11 @@ if !WinWaitActive(riderSelector, , 2) {
     ExitApp 2
 }
 
-Sleep 500
+Sleep 200
 originals := NudgeFiles(targetFiles)
+Sleep 200
+RunRiderAction("Auto HR")
 Sleep 500
-RunRiderAction("Reload All From Disk")
-Sleep 300
 RestoreFiles(originals)
 Sleep 500
-RunRiderAction("Apply Changes")
-Sleep 250
 ExitApp 0
