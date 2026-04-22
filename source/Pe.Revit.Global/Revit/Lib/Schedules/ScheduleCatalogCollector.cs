@@ -1,5 +1,6 @@
 using Pe.Revit.Global.Revit.Documents.Schedules;
-using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Schedules;
 
 namespace Pe.Revit.Global.Revit.Lib.Schedules;
 
@@ -35,12 +36,13 @@ public static class ScheduleCatalogCollector {
         List<RevitDataIssue> issues
     ) {
         try {
-            var profile = schedule.CaptureScheduleProfile();
+            var profile = schedule.CaptureAuthoredScheduleProfile();
             var sheetPlacements = ScheduleCollectorSupport.CollectSheetPlacements(doc, schedule);
             var customParameters = ScheduleCollectorSupport.CollectCustomParameters(schedule);
-            var visibleFamilies = ScheduleVisibleFamilyCollector.CollectVisibleFamilies(doc, schedule);
-            var visibleBodyRowCount = ScheduleVisibleFamilyCollector.GetVisibleBodyRowCount(schedule);
-            var visibleInstanceCount = visibleFamilies.Sum(entry => entry.VisibleInstanceCount);
+            var visibleFamilyInstances = ScheduleVisibleFamilyCollector.CollectVisibleFamilyInstances(doc, schedule);
+            var visibleFamilies = ScheduleVisibleFamilyCollector.CollectVisibleFamilies(visibleFamilyInstances);
+            var visibleBodyRowCount = ScheduleVisibleFamilyCollector.GetVisibleBodyRowCount(doc, schedule);
+            var visibleInstanceCount = visibleFamilyInstances.Count;
 
             return new ScheduleCatalogEntry(
                 schedule.Id.Value(),
@@ -53,7 +55,7 @@ public static class ScheduleCatalogCollector {
                 profile.FilterBySheet,
                 sheetPlacements.Count != 0,
                 sheetPlacements,
-                ScheduleCollectorSupport.ToContractFilters(profile.Filters),
+                profile.Filters,
                 ScheduleCollectorSupport.CollectParameterUsages(doc, schedule),
                 customParameters,
                 visibleBodyRowCount,

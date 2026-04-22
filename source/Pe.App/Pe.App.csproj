@@ -30,12 +30,6 @@
         <PackageReference Include="ricaun.Revit.UI.Tasks" Version="1.*"/>
         <!-- TypeScript Type Generation -->
         <PackageReference Include="TypeGen" Version="5.0.0"/>
-        <PackageReference
-                Include="PolySharp"
-                Version="1.14.1"
-                PrivateAssets="all"
-                Condition="'$(TargetFramework)' == 'net48'"
-        />
         <!-- Build -->
         <PackageReference Include="ILRepack" Version="2.0.44">
             <IncludeAssets
@@ -72,9 +66,11 @@
         />
     </ItemGroup>
     <ItemGroup>
+        <ProjectReference Include="..\Pe.Shared.Aps\Pe.Shared.Aps.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Extensions\Pe.Revit.Extensions.csproj"/>
         <ProjectReference Include="..\Pe.Revit.FamilyFoundry\Pe.Revit.FamilyFoundry.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj"/>
+        <ProjectReference Include="..\Pe.Revit.SettingsRuntime\Pe.Revit.SettingsRuntime.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Scripting\Pe.Revit.Scripting.csproj"/>
         <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Ui\Pe.Revit.Ui.csproj"/>

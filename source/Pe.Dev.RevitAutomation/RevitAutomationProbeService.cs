@@ -1,5 +1,6 @@
-﻿using Pe.Revit.Global.Services.Aps;
-using Pe.Revit.Global.Services.Aps.Models;
+using Pe.Shared.Aps;
+using Pe.Shared.Aps.Models;
+using System.Net;
 using System.Net.Http;
 
 namespace Pe.Dev.RevitAutomation;
@@ -53,7 +54,8 @@ public sealed class RevitAutomationProbeService {
                     cancellationToken
                 )
                 .ConfigureAwait(false);
-        } catch (HttpRequestException ex) when (ex.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden) {
+        } catch (HttpRequestException ex) when
+            (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) {
             return BuildFailure(options, ProbeAccessClassification.WorkItemSubmissionUnauthorized, ex.Message);
         } catch (Exception ex) {
             return BuildFailure(options, ProbeAccessClassification.WorkItemSubmissionFailed, ex.Message);
@@ -78,7 +80,8 @@ public sealed class RevitAutomationProbeService {
                         Debug = options.Debug,
                         Arguments = new Dictionary<string, object>(StringComparer.Ordinal) {
                             ["inputParams"] = new Dictionary<string, object>(StringComparer.Ordinal) {
-                                ["url"] = RevitAutomationParameterCollectionService.BuildJsonDataUrl(probeInput.ToJson())
+                                ["url"] =
+                                    RevitAutomationParameterCollectionService.BuildJsonDataUrl(probeInput.ToJson())
                             },
                             ["adsk3LeggedToken"] = userToken.AccessToken
                         }
@@ -86,21 +89,24 @@ public sealed class RevitAutomationProbeService {
                     cancellationToken
                 )
                 .ConfigureAwait(false);
-        } catch (HttpRequestException ex) when (ex.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden) {
+        } catch (HttpRequestException ex) when
+            (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) {
             return BuildFailure(options, ProbeAccessClassification.WorkItemSubmissionUnauthorized, ex.Message);
         } catch (Exception ex) {
             return BuildFailure(options, ProbeAccessClassification.WorkItemSubmissionFailed, ex.Message);
         }
 
         if (string.IsNullOrWhiteSpace(submission.Id))
-            return BuildFailure(options, ProbeAccessClassification.WorkItemSubmissionFailed, "Automation workitem submission did not return an id.");
+            return BuildFailure(options, ProbeAccessClassification.WorkItemSubmissionFailed,
+                "Automation workitem submission did not return an id.");
 
         log?.Invoke($"Automation: workitem {submission.Id}");
         var deadline = DateTime.UtcNow.AddSeconds(options.TimeoutSeconds);
-        AutomationWorkItemStatus status = submission;
+        var status = submission;
         while (!IsTerminal(status.Status) && DateTime.UtcNow < deadline) {
             await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
-            status = await automationClient.GetWorkItemStatusAsync(submission.Id, cancellationToken).ConfigureAwait(false);
+            status = await automationClient.GetWorkItemStatusAsync(submission.Id, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         if (!IsTerminal(status.Status)) {
@@ -112,11 +118,13 @@ public sealed class RevitAutomationProbeService {
                 Region = options.Region,
                 ProjectGuid = options.ProjectGuid,
                 ModelGuid = options.ModelGuid,
-                FailureMessage = $"Automation workitem '{submission.Id}' timed out after {options.TimeoutSeconds} seconds."
+                FailureMessage =
+                    $"Automation workitem '{submission.Id}' timed out after {options.TimeoutSeconds} seconds."
             };
         }
 
-        var report = await automationClient.GetWorkItemReportAsync(status.ReportUrl, cancellationToken).ConfigureAwait(false);
+        var report = await automationClient.GetWorkItemReportAsync(status.ReportUrl, cancellationToken)
+            .ConfigureAwait(false);
         var parsedReport = this._reportParser.Parse(report.ReportContent);
         var classification = parsedReport.Classification switch {
             nameof(ProbeAccessClassification.Success) or "Success" => ProbeAccessClassification.Success,

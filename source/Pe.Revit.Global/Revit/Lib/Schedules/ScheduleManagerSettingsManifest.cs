@@ -1,14 +1,16 @@
+using Pe.Revit.SettingsRuntime.Validation;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Documents;
 using Pe.Shared.StorageRuntime.Modules;
-using Pe.Shared.StorageRuntime.Validation;
+using SharedBatchScheduleSettings = Pe.Shared.RevitData.Schedules.BatchScheduleSettings;
+using SharedScheduleProfile = Pe.Shared.RevitData.Schedules.ScheduleProfile;
 
 namespace Pe.Revit.Global.Revit.Lib.Schedules;
 
 public static class ScheduleManagerSettingsManifest {
     public const string ModuleKey = "Schedule Manager";
 
-    public static SettingsModuleManifest<ScheduleProfile> Profiles { get; } = new(
+    public static SettingsModuleManifest<SharedScheduleProfile> Profiles { get; } = new(
         ModuleKey,
         RootKeys.Schedules,
         SettingsStorageProfiles.SharedAuthoring,
@@ -19,10 +21,11 @@ public static class ScheduleManagerSettingsManifest {
         CreateProfilesStorageDefinition
     );
 
-    public static SettingsModuleManifest<BatchScheduleSettings> Batch { get; } = new(
+    public static SettingsModuleManifest<SharedBatchScheduleSettings> Batch { get; } = new(
         ModuleKey,
         RootKeys.Batch,
-        SettingsStorageProfiles.SharedAuthoring
+        SettingsStorageProfiles.SharedAuthoring,
+        storageDefinitionFactory: CreateBatchStorageDefinition
     );
 
     public static SettingsStorageModuleDefinition CreateProfilesStorageDefinition(
@@ -31,7 +34,9 @@ public static class ScheduleManagerSettingsManifest {
         Profiles.DefaultRootKey,
         Profiles.Roots.Select(root => root.RootKey).ToList(),
         Profiles.StorageOptions,
-        new SchemaBackedSettingsDocumentValidator(Profiles.SettingsType, runtimeMode)
+        runtimeMode == SettingsRuntimeMode.LiveDocument
+            ? new SchemaBackedSettingsDocumentValidator(Profiles.SettingsType, runtimeMode)
+            : null
     );
 
     public static SettingsStorageModuleDefinition CreateBatchStorageDefinition(
@@ -39,7 +44,9 @@ public static class ScheduleManagerSettingsManifest {
     ) => SettingsStorageModuleDefinition.CreateSingleRoot(
         Batch.DefaultRootKey,
         Batch.StorageOptions,
-        new SchemaBackedSettingsDocumentValidator(Batch.SettingsType, runtimeMode)
+        runtimeMode == SettingsRuntimeMode.LiveDocument
+            ? new SchemaBackedSettingsDocumentValidator(Batch.SettingsType, runtimeMode)
+            : null
     );
 
     public static class RootKeys {

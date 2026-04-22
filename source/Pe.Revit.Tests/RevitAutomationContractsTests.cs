@@ -1,6 +1,6 @@
 using Pe.Dev.RevitAutomation;
-using Pe.Revit.Global.Services.Aps.Models;
-using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.Aps.Models;
+using ContractScheduleCatalogRequest = Pe.Shared.RevitData.Schedules.ScheduleCatalogRequest;
 
 namespace Pe.Revit.Tests;
 
@@ -35,8 +35,10 @@ public sealed class RevitAutomationContractsTests {
             Assert.That(roundTripped.RunId, Is.EqualTo(runId));
             Assert.That(roundTripped.ParameterCollection, Is.Not.Null);
             Assert.That(roundTripped.ParameterCollection!.Filter, Is.Not.Null);
-            Assert.That(roundTripped.ParameterCollection.Filter!.CategoryNames, Is.EqualTo(new[] { "Duct Accessories" }));
-            Assert.That(roundTripped.ParameterCollection.Filter.FamilyNames, Is.EqualTo(new[] { "_PE_DA_DuctAccessory" }));
+            Assert.That(roundTripped.ParameterCollection.Filter!.CategoryNames,
+                Is.EqualTo(new[] { "Duct Accessories" }));
+            Assert.That(roundTripped.ParameterCollection.Filter.FamilyNames,
+                Is.EqualTo(new[] { "_PE_DA_DuctAccessory" }));
         });
     }
 
@@ -53,7 +55,7 @@ public sealed class RevitAutomationContractsTests {
             ModelGuid = modelGuid,
             RunId = runId,
             ScheduleCollection = new ScheduleCollectionRequest(
-                new ScheduleCatalogRequest {
+                new ContractScheduleCatalogRequest {
                     CustomParameterFilters = [
                         new ScheduleCustomParameterFilter(
                             "Discipline",
@@ -62,9 +64,7 @@ public sealed class RevitAutomationContractsTests {
                         )
                     ]
                 },
-                new ScheduleCatalogRequest {
-                    CategoryNames = ["Mechanical Equipment", "Duct Accessories"]
-                }
+                new ContractScheduleCatalogRequest { CategoryNames = ["Mechanical Equipment", "Duct Accessories"] }
             )
         };
 
@@ -78,7 +78,8 @@ public sealed class RevitAutomationContractsTests {
             Assert.That(roundTripped.RunId, Is.EqualTo(runId));
             Assert.That(roundTripped.ScheduleCollection, Is.Not.Null);
             Assert.That(roundTripped.ScheduleCollection!.PrimaryCatalogRequest, Is.Not.Null);
-            Assert.That(roundTripped.ScheduleCollection.PrimaryCatalogRequest!.CustomParameterFilters.Count, Is.EqualTo(1));
+            Assert.That(roundTripped.ScheduleCollection.PrimaryCatalogRequest!.CustomParameterFilters.Count,
+                Is.EqualTo(1));
             Assert.That(
                 roundTripped.ScheduleCollection.PrimaryCatalogRequest.CustomParameterFilters[0].ParameterName,
                 Is.EqualTo("Discipline")

@@ -1,12 +1,13 @@
 using Pe.Revit.Global.Revit.Lib.Parameters;
 using Pe.Revit.Global.Services.Document;
+using Pe.Revit.SettingsRuntime.Context;
+using Pe.Revit.SettingsRuntime.Core.Json.FieldOptions;
+using Pe.Revit.SettingsRuntime.Core.Json.SchemaDefinitions;
+using Pe.Revit.SettingsRuntime.Core.Json.SchemaProviders;
 using Pe.Shared.HostContracts.RevitData;
 using Pe.Shared.HostContracts.SettingsStorage;
+using Pe.Shared.RevitData;
 using Pe.Shared.StorageRuntime.Capabilities;
-using Pe.Shared.StorageRuntime.Context;
-using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
-using Pe.Shared.StorageRuntime.Json.FieldOptions;
-using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
 using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
@@ -117,6 +118,21 @@ public class RequestService {
         );
         return response;
     }
+
+    public async Task<GetSettingsModuleCatalogBridgeResponse> GetSettingsModuleCatalogAsync(
+        GetSettingsModuleCatalogBridgeRequest request
+    ) => await this.EnqueueAsync(() => {
+        var activeDocument = RevitUiSession.CurrentUIApplication.GetActiveDocument();
+        var modules = this._moduleRegistry.GetModules()
+            .OfType<ISettingsModuleManifest>()
+            .Where(SettingsModuleAvailability.IsBridgeDiscoverable)
+            .Where(module => SettingsModuleAvailability.IsAvailableForDocument(module, activeDocument))
+            .OrderBy(module => module.ModuleKey, StringComparer.OrdinalIgnoreCase)
+            .Select(SettingsModuleAvailability.CreateSettingsModuleDescriptor)
+            .ToList();
+
+        return new GetSettingsModuleCatalogBridgeResponse(modules);
+    });
 
     private async Task<ParameterCatalogEnvelopeResponse> GetParameterCatalogCore(ParameterCatalogRequest request) =>
         await this.EnqueueAsync(() => {
@@ -405,7 +421,7 @@ public class RequestService {
         );
 
     private static FieldOptionItem ToFieldOptionItem(
-        Shared.StorageRuntime.Json.FieldOptions.FieldOptionItem item
+        SettingsRuntime.Core.Json.FieldOptions.FieldOptionItem item
     ) => new(
         item.Value,
         item.Label,

@@ -7,4 +7,6 @@ global using Pe.Revit.FamilyFoundry.OperationSettings;
 global using Pe.Revit.FamilyFoundry.Plans;
 global using Pe.Revit.FamilyFoundry.Snapshots;
 global using Pe.Revit.Global.PolyFill;
+global using Pe.Shared.RevitData;
+global using Pe.Shared.RevitData.Schedules;
 global using Pe.Shared.StorageRuntime;

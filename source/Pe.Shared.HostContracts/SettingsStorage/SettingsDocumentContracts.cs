@@ -1,5 +1,6 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using Pe.Shared.HostContracts.Protocol;
 using TypeGen.Core.TypeAnnotations;
 
 namespace Pe.Shared.HostContracts.SettingsStorage;
@@ -81,23 +82,52 @@ public record SettingsDocumentSnapshot(
 );
 
 [ExportTsInterface]
+public record SettingsModuleStorageOptionsContract(
+    List<string> IncludeRoots,
+    List<string> PresetRoots
+);
+
+[ExportTsInterface]
+public record SettingsModuleDescriptor(
+    string ModuleKey,
+    string DefaultRootKey,
+    List<SettingsRootDescriptor> Roots,
+    SettingsModuleStorageOptionsContract StorageOptions,
+    HostModuleScope Scope,
+    HostModuleActiveDocumentKind ActiveDocumentKind
+);
+
+[ExportTsInterface]
+public record GetSettingsModuleCatalogBridgeRequest(
+    BridgeSessionSelector? Target = null
+) : IBridgeSessionRequest;
+
+[ExportTsInterface]
+public record GetSettingsModuleCatalogBridgeResponse(
+    List<SettingsModuleDescriptor> Modules
+);
+
+[ExportTsInterface]
 public record OpenSettingsDocumentRequest(
     SettingsDocumentId DocumentId,
-    bool IncludeComposedContent = false
-);
+    bool IncludeComposedContent = false,
+    BridgeSessionSelector? Target = null
+) : IBridgeSessionRequest;
 
 [ExportTsInterface]
 public record SaveSettingsDocumentRequest(
     SettingsDocumentId DocumentId,
     string RawContent,
-    SettingsVersionToken? ExpectedVersionToken = null
-);
+    SettingsVersionToken? ExpectedVersionToken = null,
+    BridgeSessionSelector? Target = null
+) : IBridgeSessionRequest;
 
 [ExportTsInterface]
 public record ValidateSettingsDocumentRequest(
     SettingsDocumentId DocumentId,
-    string RawContent
-);
+    string RawContent,
+    BridgeSessionSelector? Target = null
+) : IBridgeSessionRequest;
 
 [ExportTsInterface]
 public record SaveSettingsDocumentResult(
@@ -133,6 +163,11 @@ public record SettingsWorkspaceDescriptor(
 public record SettingsWorkspacesData(
     List<SettingsWorkspaceDescriptor> Workspaces
 );
+
+[ExportTsInterface]
+public record GetSettingsWorkspacesRequest(
+    BridgeSessionSelector? Target = null
+) : IBridgeSessionRequest;
 
 [ExportTsInterface]
 public record SettingsFileEntry(
@@ -182,4 +217,5 @@ public record SettingsTreeRequest {
     public bool Recursive { get; init; }
     public bool IncludeFragments { get; init; }
     public bool IncludeSchemas { get; init; }
+    public BridgeSessionSelector? Target { get; init; }
 }

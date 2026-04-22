@@ -1,4 +1,4 @@
-<Project Sdk="Nice3point.Revit.Sdk/6.2.1">
+<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
@@ -11,6 +11,5 @@
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
-        <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all" Condition="'$(TargetFramework)' == 'net48'"/>
     </ItemGroup>
 </Project>

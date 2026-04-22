@@ -4,7 +4,7 @@ namespace Pe.Shared.StorageRuntime;
 
 public sealed class GlobalStorage(string basePath) {
     public string DirectoryPath { get; } = EnsureDirectory(
-        SettingsStorageLocations.ResolveModuleDirectory(basePath, "Global")
+        GlobalStorageLocations.ResolveGlobalDirectory(basePath)
     );
 
     public StateStorage State() => new(this.DirectoryPath);
@@ -21,11 +21,7 @@ public sealed class GlobalStorage(string basePath) {
         new LocalDiskJsonFile<T>(Path.Combine(this.DirectoryPath, StorageFileUtils.EnsureExtension(filename, ".json")));
 
     public string ResolveGlobalFragmentPath(string relativePath) {
-        var fragmentsDirectoryPath = SettingsPathing.ResolveSafeSubDirectoryPath(
-            this.DirectoryPath,
-            "fragments",
-            "fragments"
-        );
+        var fragmentsDirectoryPath = GlobalStorageLocations.ResolveFragmentsDirectory(basePath);
         _ = Directory.CreateDirectory(fragmentsDirectoryPath);
         return SettingsPathing.ResolveSafeRelativeJsonPath(fragmentsDirectoryPath, relativePath, nameof(relativePath));
     }

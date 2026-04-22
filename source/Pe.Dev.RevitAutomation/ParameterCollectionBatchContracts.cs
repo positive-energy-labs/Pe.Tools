@@ -1,12 +1,15 @@
 using Newtonsoft.Json;
-using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.RevitData;
 using System.IO;
 
 namespace Pe.Dev.RevitAutomation;
 
 public sealed class ParameterCollectionBatchManifest {
     [JsonProperty("engine")] public string Engine { get; init; } = ParameterCollectionOptions.DefaultEngine;
-    [JsonProperty("timeoutSeconds")] public int TimeoutSeconds { get; init; } = ParameterCollectionOptions.DefaultTimeoutSeconds;
+
+    [JsonProperty("timeoutSeconds")]
+    public int TimeoutSeconds { get; init; } = ParameterCollectionOptions.DefaultTimeoutSeconds;
+
     [JsonProperty("maxConcurrency")] public int MaxConcurrency { get; init; } = 4;
     [JsonProperty("debug")] public bool Debug { get; init; } = true;
     [JsonProperty("mask")] public bool Mask { get; init; } = true;
@@ -22,10 +25,12 @@ public sealed class ParameterCollectionBatchManifest {
 
     public static ParameterCollectionBatchManifest LoadFromFile(string filePath) {
         if (!File.Exists(filePath))
-            throw new FileNotFoundException($"Parameter collection batch manifest '{filePath}' was not found.", filePath);
+            throw new FileNotFoundException($"Parameter collection batch manifest '{filePath}' was not found.",
+                filePath);
 
         var manifest = JsonConvert.DeserializeObject<ParameterCollectionBatchManifest>(File.ReadAllText(filePath))
-                       ?? throw new InvalidDataException("Parameter collection batch manifest JSON was empty or invalid.");
+                       ?? throw new InvalidDataException(
+                           "Parameter collection batch manifest JSON was empty or invalid.");
         manifest.Validate();
         return manifest;
     }

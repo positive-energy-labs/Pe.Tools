@@ -1,0 +1,31 @@
+<Project>
+    <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0' and '$(ProjectLayer)' == 'SharedNeutral'">
+        <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all"/>
+    </ItemGroup>
+
+    <ItemGroup
+            Condition="'$(TargetFramework)' == 'net48' and ('$(ProjectLayer)' == 'RevitMultiYear' or '$(ProjectLayer)' == 'SharedRevitTransitional' or '$(ProjectLayer)' == 'RevitTests')"
+    >
+        <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all"/>
+    </ItemGroup>
+
+    <Target Name="ValidateSharedNeutralReferences" BeforeTargets="ResolveReferences" Condition="'$(ProjectLayer)' == 'SharedNeutral'">
+        <ItemGroup>
+            <_ForbiddenSharedNeutralPackageReference
+                    Include="@(PackageReference)"
+                    Condition="$([System.String]::Copy('%(PackageReference.Identity)').StartsWith('Nice3point.Revit.')) == 'True' or $([System.String]::Copy('%(PackageReference.Identity)').StartsWith('ricaun.Revit.')) == 'True'"
+            />
+            <_ForbiddenSharedNeutralProjectReference
+                    Include="@(ProjectReference)"
+                    Condition="$([System.String]::Copy('%(ProjectReference.Identity)').Contains('\\Pe.Revit.')) == 'True'"
+            />
+        </ItemGroup>
+
+        <Error
+                Condition="'@(_ForbiddenSharedNeutralPackageReference)' != ''"
+                Text="SharedNeutral package '$(MSBuildProjectName)' cannot reference Revit packages: @(_ForbiddenSharedNeutralPackageReference->'%(Identity)', ', ')"/>
+        <Error
+                Condition="'@(_ForbiddenSharedNeutralProjectReference)' != ''"
+                Text="SharedNeutral package '$(MSBuildProjectName)' cannot reference Revit projects: @(_ForbiddenSharedNeutralProjectReference->'%(Identity)', ', ')"/>
+    </Target>
+</Project>

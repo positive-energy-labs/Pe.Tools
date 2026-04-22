@@ -1,4 +1,4 @@
-using Pe.Shared.StorageRuntime.Core.Json.RevitTypes;
+using Pe.Revit.SettingsRuntime.Core.Json.RevitTypes;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 

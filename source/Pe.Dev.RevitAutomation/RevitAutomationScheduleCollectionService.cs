@@ -1,8 +1,9 @@
 using Newtonsoft.Json;
-using Pe.Revit.Global.Services.Aps;
-using Pe.Revit.Global.Services.Aps.Models;
-using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.Aps;
+using Pe.Shared.Aps.Models;
+using Pe.Shared.RevitData.Schedules;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 
 namespace Pe.Dev.RevitAutomation;
@@ -67,7 +68,8 @@ public sealed class RevitAutomationScheduleCollectionService {
                     cancellationToken
                 )
                 .ConfigureAwait(false);
-        } catch (HttpRequestException ex) when (ex.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden) {
+        } catch (HttpRequestException ex) when
+            (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) {
             return BuildFailure(options, ScheduleCollectionClassification.WorkItemSubmissionUnauthorized, ex.Message);
         } catch (Exception ex) {
             return BuildFailure(options, ScheduleCollectionClassification.WorkItemSubmissionFailed, ex.Message);
@@ -106,9 +108,10 @@ public sealed class RevitAutomationScheduleCollectionService {
                         LimitProcessingTimeSec = options.TimeoutSeconds,
                         Debug = options.Debug,
                         Arguments = new Dictionary<string, object>(StringComparer.Ordinal) {
-                            ["inputParams"] = new Dictionary<string, object>(StringComparer.Ordinal) {
-                                ["url"] = RevitAutomationParameterCollectionService.BuildJsonDataUrl(input.ToJson())
-                            },
+                            ["inputParams"] =
+                                new Dictionary<string, object>(StringComparer.Ordinal) {
+                                    ["url"] = RevitAutomationParameterCollectionService.BuildJsonDataUrl(input.ToJson())
+                                },
                             ["resultJson"] = new Dictionary<string, object>(StringComparer.Ordinal) {
                                 ["verb"] = "put",
                                 ["url"] = objectStorage.BuildObjectUrn(bucketKey, objectKey),
@@ -122,21 +125,24 @@ public sealed class RevitAutomationScheduleCollectionService {
                     cancellationToken
                 )
                 .ConfigureAwait(false);
-        } catch (HttpRequestException ex) when (ex.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden) {
+        } catch (HttpRequestException ex) when
+            (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) {
             return BuildFailure(options, ScheduleCollectionClassification.WorkItemSubmissionUnauthorized, ex.Message);
         } catch (Exception ex) {
             return BuildFailure(options, ScheduleCollectionClassification.WorkItemSubmissionFailed, ex.Message);
         }
 
         if (string.IsNullOrWhiteSpace(submission.Id))
-            return BuildFailure(options, ScheduleCollectionClassification.WorkItemSubmissionFailed, "Automation workitem submission did not return an id.");
+            return BuildFailure(options, ScheduleCollectionClassification.WorkItemSubmissionFailed,
+                "Automation workitem submission did not return an id.");
 
         log?.Invoke($"Automation: workitem {submission.Id}");
         var deadline = DateTime.UtcNow.AddSeconds(options.TimeoutSeconds);
-        AutomationWorkItemStatus status = submission;
+        var status = submission;
         while (!RevitAutomationParameterCollectionService.IsTerminal(status.Status) && DateTime.UtcNow < deadline) {
             await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
-            status = await automationClient.GetWorkItemStatusAsync(submission.Id, cancellationToken).ConfigureAwait(false);
+            status = await automationClient.GetWorkItemStatusAsync(submission.Id, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         if (!RevitAutomationParameterCollectionService.IsTerminal(status.Status)) {
@@ -151,19 +157,23 @@ public sealed class RevitAutomationScheduleCollectionService {
                 ArtifactBucketKey = bucketKey,
                 ArtifactObjectKey = objectKey,
                 ArtifactLocalPath = artifactPath,
-                FailureMessage = $"Automation workitem '{submission.Id}' timed out after {options.TimeoutSeconds} seconds."
+                FailureMessage =
+                    $"Automation workitem '{submission.Id}' timed out after {options.TimeoutSeconds} seconds."
             };
         }
 
-        var report = await automationClient.GetWorkItemReportAsync(status.ReportUrl, cancellationToken).ConfigureAwait(false);
+        var report = await automationClient.GetWorkItemReportAsync(status.ReportUrl, cancellationToken)
+            .ConfigureAwait(false);
         var parsedReport = this._reportParser.Parse(report.ReportContent);
         if (!string.Equals(status.Status, "success", StringComparison.OrdinalIgnoreCase))
             return BuildReportFailure(options, submission.Id, bucketKey, objectKey, artifactPath, parsedReport);
 
         try {
             log?.Invoke($"Artifacts: downloading {bucketKey}/{objectKey}");
-            await objectStorage.DownloadObjectAsync(bucketKey, objectKey, artifactPath, cancellationToken).ConfigureAwait(false);
-            _ = JsonConvert.DeserializeObject<ScheduleCollectionArtifact>(await File.ReadAllTextAsync(artifactPath, cancellationToken).ConfigureAwait(false))
+            await objectStorage.DownloadObjectAsync(bucketKey, objectKey, artifactPath, cancellationToken)
+                .ConfigureAwait(false);
+            _ = JsonConvert.DeserializeObject<ScheduleCollectionArtifact>(
+                    await File.ReadAllTextAsync(artifactPath, cancellationToken).ConfigureAwait(false))
                 ?? throw new InvalidDataException("Downloaded schedule collection artifact was unreadable JSON.");
         } catch (Exception ex) {
             return new ScheduleCollectionResult {

@@ -1,6 +1,9 @@
-using Pe.Revit.Global.Services.Aps;
-using Pe.Revit.Global.Services.Aps.Models;
+using Pe.Shared.Aps;
+using Pe.Shared.Aps.Core;
+using Pe.Shared.Aps.Models;
+using Pe.Shared.RevitData;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 
 namespace Pe.Dev.RevitAutomation;
@@ -25,7 +28,8 @@ public sealed class RevitAutomationParameterCollectionBatchService {
             log?.Invoke("Auth: acquiring management token");
             _ = aps.GetTokenResult(ApsTokenRequest.ForAutomationManagement());
         } catch (Exception ex) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ParameterCollectionClassification.ManagementTokenFailed, manifest, ex.Message);
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
+                ParameterCollectionClassification.ManagementTokenFailed, manifest, ex.Message);
         }
 
         ApsTokenResult userToken;
@@ -33,7 +37,8 @@ public sealed class RevitAutomationParameterCollectionBatchService {
             log?.Invoke("Auth: acquiring delegated user token");
             userToken = aps.GetTokenResult(ApsTokenRequest.ForAutomationUserContext());
         } catch (Exception ex) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ParameterCollectionClassification.UserTokenFailed, manifest, ex.Message);
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
+                ParameterCollectionClassification.UserTokenFailed, manifest, ex.Message);
         }
 
         ApsTokenResult artifactToken;
@@ -44,7 +49,8 @@ public sealed class RevitAutomationParameterCollectionBatchService {
                 ExplicitScopes = ["bucket:create", "bucket:read", "data:read", "data:write"]
             });
         } catch (Exception ex) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ParameterCollectionClassification.ArtifactTokenFailed, manifest, ex.Message);
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
+                ParameterCollectionClassification.ArtifactTokenFailed, manifest, ex.Message);
         }
 
         WorkerBundleArtifact bundle;
@@ -52,7 +58,8 @@ public sealed class RevitAutomationParameterCollectionBatchService {
             bundle = await this._bundleBuilder.BuildAsync(repoRoot, manifest.Engine, log, cancellationToken)
                 .ConfigureAwait(false);
         } catch (Exception ex) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ParameterCollectionClassification.WorkItemSubmissionFailed, manifest, ex.Message);
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
+                ParameterCollectionClassification.WorkItemSubmissionFailed, manifest, ex.Message);
         }
 
         var automationClient = aps.Automation();
@@ -66,10 +73,13 @@ public sealed class RevitAutomationParameterCollectionBatchService {
                     cancellationToken
                 )
                 .ConfigureAwait(false);
-        } catch (HttpRequestException ex) when (ex.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ParameterCollectionClassification.WorkItemSubmissionUnauthorized, manifest, ex.Message);
+        } catch (HttpRequestException ex) when
+            (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) {
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
+                ParameterCollectionClassification.WorkItemSubmissionUnauthorized, manifest, ex.Message);
         } catch (Exception ex) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ParameterCollectionClassification.WorkItemSubmissionFailed, manifest, ex.Message);
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
+                ParameterCollectionClassification.WorkItemSubmissionFailed, manifest, ex.Message);
         }
 
         var objectStorage = new AutomationObjectStorageClient(artifactToken.AccessToken);
@@ -78,7 +88,8 @@ public sealed class RevitAutomationParameterCollectionBatchService {
             log?.Invoke($"Artifacts: ensuring OSS bucket {bucketKey}");
             await objectStorage.EnsureTransientBucketAsync(bucketKey, cancellationToken).ConfigureAwait(false);
         } catch (Exception ex) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ParameterCollectionClassification.ArtifactTokenFailed, manifest, ex.Message);
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
+                ParameterCollectionClassification.ArtifactTokenFailed, manifest, ex.Message);
         }
 
         var pending = new Queue<ParameterCollectionBatchEntry>(manifest.Models);
@@ -89,7 +100,7 @@ public sealed class RevitAutomationParameterCollectionBatchService {
         while ((pending.Count > 0 || active.Count > 0) && !cancellationToken.IsCancellationRequested) {
             while (pending.Count > 0 && active.Count < maxConcurrency) {
                 var entry = pending.Dequeue();
-                var tracker = await SubmitAsync(
+                var tracker = await this.SubmitAsync(
                         entry,
                         manifest,
                         repoRoot,
@@ -116,7 +127,8 @@ public sealed class RevitAutomationParameterCollectionBatchService {
                 continue;
 
             await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken).ConfigureAwait(false);
-            var statuses = await automationClient.GetWorkItemStatusesAsync(active.Keys.ToArray(), cancellationToken).ConfigureAwait(false);
+            var statuses = await automationClient.GetWorkItemStatusesAsync(active.Keys.ToArray(), cancellationToken)
+                .ConfigureAwait(false);
             foreach (var status in statuses) {
                 if (string.IsNullOrWhiteSpace(status.Id) || !active.TryGetValue(status.Id, out var tracker))
                     continue;
@@ -124,7 +136,7 @@ public sealed class RevitAutomationParameterCollectionBatchService {
                 if (!RevitAutomationParameterCollectionService.IsTerminal(status.Status))
                     continue;
 
-                var finalized = await FinalizeAsync(
+                var finalized = await this.FinalizeAsync(
                         tracker,
                         status,
                         manifest,
@@ -155,7 +167,7 @@ public sealed class RevitAutomationParameterCollectionBatchService {
         string artifactAccessToken,
         string userAccessToken,
         RevitAutomationSettings settings,
-        Pe.Revit.Global.Services.Aps.Core.AutomationApiClient automationClient,
+        AutomationApiClient automationClient,
         Action<string>? log,
         CancellationToken cancellationToken
     ) {
@@ -171,7 +183,7 @@ public sealed class RevitAutomationParameterCollectionBatchService {
             ModelGuid = entry.ModelGuid,
             RunId = runId,
             ExpectedTitle = entry.ExpectedTitle,
-            ParameterCollection = new Pe.Shared.HostContracts.RevitData.ParameterCollectionRequest(entry.Filter)
+            ParameterCollection = new ParameterCollectionRequest(entry.Filter)
         };
 
         try {
@@ -182,9 +194,10 @@ public sealed class RevitAutomationParameterCollectionBatchService {
                         LimitProcessingTimeSec = manifest.TimeoutSeconds,
                         Debug = manifest.Debug,
                         Arguments = new Dictionary<string, object>(StringComparer.Ordinal) {
-                            ["inputParams"] = new Dictionary<string, object>(StringComparer.Ordinal) {
-                                ["url"] = RevitAutomationParameterCollectionService.BuildJsonDataUrl(input.ToJson())
-                            },
+                            ["inputParams"] =
+                                new Dictionary<string, object>(StringComparer.Ordinal) {
+                                    ["url"] = RevitAutomationParameterCollectionService.BuildJsonDataUrl(input.ToJson())
+                                },
                             ["resultJson"] = new Dictionary<string, object>(StringComparer.Ordinal) {
                                 ["verb"] = "put",
                                 ["url"] = $"urn:adsk.objects:os.object:{bucketKey}/{Uri.EscapeDataString(objectKey)}",
@@ -223,7 +236,8 @@ public sealed class RevitAutomationParameterCollectionBatchService {
                 ArtifactObjectKey = objectKey,
                 ArtifactLocalPath = artifactPath
             };
-        } catch (HttpRequestException ex) when (ex.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden) {
+        } catch (HttpRequestException ex) when
+            (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) {
             return new BatchTracker {
                 SubmissionFailure = new ParameterCollectionResult {
                     Succeeded = false,
@@ -261,14 +275,14 @@ public sealed class RevitAutomationParameterCollectionBatchService {
         AutomationWorkItemStatus status,
         ParameterCollectionBatchManifest manifest,
         AutomationObjectStorageClient objectStorage,
-        Pe.Revit.Global.Services.Aps.Core.AutomationApiClient automationClient,
+        AutomationApiClient automationClient,
         CancellationToken cancellationToken
     ) {
-        var report = await automationClient.GetWorkItemReportAsync(status.ReportUrl, cancellationToken).ConfigureAwait(false);
+        var report = await automationClient.GetWorkItemReportAsync(status.ReportUrl, cancellationToken)
+            .ConfigureAwait(false);
         var parsedReport = this._reportParser.Parse(report.ReportContent);
-        if (!string.Equals(status.Status, "success", StringComparison.OrdinalIgnoreCase)) {
+        if (!string.Equals(status.Status, "success", StringComparison.OrdinalIgnoreCase))
             return BuildFailureResult(tracker, parsedReport, ParameterCollectionClassification.CollectionFailed);
-        }
 
         try {
             await objectStorage.DownloadObjectAsync(

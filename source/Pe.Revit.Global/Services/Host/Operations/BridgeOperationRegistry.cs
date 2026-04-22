@@ -14,6 +14,11 @@ internal sealed class BridgeOperationRegistry {
                 static (request, context, cancellationToken) =>
                     context.RequestService.GetFieldOptionsEnvelopeAsync(request)
             ),
+            BridgeOperations.Create<GetSettingsModuleCatalogBridgeRequest, GetSettingsModuleCatalogBridgeResponse>(
+                GetSettingsModuleCatalogBridgeOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RequestService.GetSettingsModuleCatalogAsync(request)
+            ),
             BridgeOperations.Create<ParameterCatalogRequest, ParameterCatalogEnvelopeResponse>(
                 GetParameterCatalogOperationContract.Definition,
                 static (request, context, cancellationToken) =>

@@ -75,7 +75,7 @@ public class ScheduleFilterSpec {
                     storageTypeStr = "Double";
                 } else if (storageType == StorageType.ElementId &&
                            int.TryParse(this.Value, out var elementIdValue)) {
-                    var elementId = new ElementId(elementIdValue);
+                    var elementId = elementIdValue.ToElementId();
                     filter = new ScheduleFilter(field.FieldId, this.FilterType, elementId);
                     storageTypeStr = "ElementId";
                 } else {

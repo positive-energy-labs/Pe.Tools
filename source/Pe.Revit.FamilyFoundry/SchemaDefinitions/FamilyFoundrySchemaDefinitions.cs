@@ -1,7 +1,6 @@
 using Pe.Revit.FamilyFoundry.Operations;
-using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
-using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
-using Pe.Shared.StorageRuntime.Json.SchemaProviders;
+using Pe.Revit.SettingsRuntime.Core.Json.SchemaDefinitions;
+using Pe.Revit.SettingsRuntime.Core.Json.SchemaProviders;
 using System.Runtime.CompilerServices;
 
 namespace Pe.Revit.FamilyFoundry.SchemaDefinitions;

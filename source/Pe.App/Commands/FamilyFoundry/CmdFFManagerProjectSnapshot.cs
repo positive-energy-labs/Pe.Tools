@@ -109,9 +109,10 @@ public class CmdFFManagerProjectSnapshot : IExternalCommand {
                 },
                 OutputStorage.ExactDir(outputDirectory));
 
-            if (!result.Success || string.IsNullOrWhiteSpace(result.OutputFolderPath))
+            if (!result.Success || string.IsNullOrWhiteSpace(result.OutputFolderPath)) {
                 throw new InvalidOperationException(result.Error ??
                                                     "Projected profile apply family processing failed.");
+            }
 
             return GetAppliedFamilyPath(result.OutputFolderPath, targetDoc);
         } finally {

@@ -46,7 +46,6 @@ public sealed class ModuleStorage<TSettings> where TSettings : class {
         string moduleKey,
         string defaultRootKey,
         SettingsStorageModuleOptions storageOptions,
-        Type settingsType,
         SettingsRuntimeMode runtimeMode = SettingsRuntimeMode.HostOnly,
         string? basePath = null,
         IReadOnlyDictionary<string, SettingsStorageModuleDefinition>? moduleDefinitionsByModuleKey = null
@@ -59,7 +58,6 @@ public sealed class ModuleStorage<TSettings> where TSettings : class {
             moduleKey,
             defaultRootKey,
             storageOptions,
-            settingsType,
             runtimeMode,
             resolvedBasePath,
             moduleDefinitionsByModuleKey

@@ -1,5 +1,6 @@
 using Autodesk.Revit.DB.Electrical;
 using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.RevitData;
 using System.Text.RegularExpressions;
 
 namespace Pe.Revit.Global.Revit.Lib.Electrical;
@@ -240,7 +241,7 @@ public static class ElectricalCircuitsCatalogCollector {
 
     private static ElectricalNearbyProxyCandidateEntry ToNearbyProxyCandidateEntry(
         CandidateDistance candidateDistance,
-        IReadOnlySet<string> loadNameTags
+        HashSet<string> loadNameTags
     ) {
         var candidate = candidateDistance.Candidate;
         var matchReason = DetermineMatchReason(candidate, loadNameTags);
@@ -264,7 +265,7 @@ public static class ElectricalCircuitsCatalogCollector {
 
     private static ElectricalNearbyProxyCandidateMatchReason DetermineMatchReason(
         NearbyProxyCandidate candidate,
-        IReadOnlySet<string> loadNameTags
+        HashSet<string> loadNameTags
     ) {
         if (!string.IsNullOrWhiteSpace(candidate.EffectiveIdentity) &&
             loadNameTags.Contains(candidate.EffectiveIdentity)) {

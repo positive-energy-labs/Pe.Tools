@@ -8,15 +8,12 @@ public sealed record HostSettingsRuntimeState(
 );
 
 public sealed class HostSettingsRuntimeStateService(
-    IHostSettingsModuleCatalog moduleCatalog,
     IHostBridgeCapabilityService bridgeCapabilityService
 ) {
     private readonly IHostBridgeCapabilityService _bridgeCapabilityService = bridgeCapabilityService;
-    private readonly IHostSettingsModuleCatalog _moduleCatalog = moduleCatalog;
 
-    public HostSettingsRuntimeState GetState() =>
-        new(
-            this._bridgeCapabilityService.GetSnapshot(),
-            this._moduleCatalog.GetCatalogDescriptors()
-        );
+    public HostSettingsRuntimeState GetState() {
+        var snapshot = this._bridgeCapabilityService.GetSnapshot();
+        return new HostSettingsRuntimeState(snapshot, HostSettingsModuleCatalog.GetCatalogDescriptors(snapshot));
+    }
 }

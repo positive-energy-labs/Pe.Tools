@@ -1,5 +1,5 @@
 using Pe.Dev.RevitAutomation;
-using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.RevitData;
 using System.Globalization;
 
 namespace Pe.Dev.Cli;
@@ -17,9 +17,9 @@ internal sealed record AutomationParameterCollectionCliOptions(
     LoadedFamiliesFilter? Filter
 ) {
     public const string UsageText = """
-                                     Usage:
-                                       pe-dev revit automation collect-parameters --region <US|EMEA> --project-guid <guid> --model-guid <guid> [--expected-title <title>] [--engine <engine>] [--timeout-seconds <seconds>] [--debug <true|false>] [--mask <true|false>] [--family-name <name>]... [--category-name <name>]... [--placement-scope <AllLoaded|PlacedOnly|UnplacedOnly>] [--json]
-                                     """;
+                                    Usage:
+                                      pe-dev revit automation collect-parameters --region <US|EMEA> --project-guid <guid> --model-guid <guid> [--expected-title <title>] [--engine <engine>] [--timeout-seconds <seconds>] [--debug <true|false>] [--mask <true|false>] [--family-name <name>]... [--category-name <name>]... [--placement-scope <AllLoaded|PlacedOnly|UnplacedOnly>] [--json]
+                                    """;
 
     public static AutomationParameterCollectionCliOptions Parse(IReadOnlyList<string> args) {
         if (args.Count == 0 || !string.Equals(args[0], "collect-parameters", StringComparison.OrdinalIgnoreCase))
@@ -60,10 +60,10 @@ internal sealed record AutomationParameterCollectionCliOptions(
                 timeoutSeconds = int.Parse(RequireValue(args, ref i, arg), CultureInfo.InvariantCulture);
                 break;
             case "--debug":
-                debug = ReadBooleanOption(args, ref i, defaultValue: true);
+                debug = ReadBooleanOption(args, ref i, true);
                 break;
             case "--mask":
-                mask = ReadBooleanOption(args, ref i, defaultValue: true);
+                mask = ReadBooleanOption(args, ref i, true);
                 break;
             case "--family-name":
                 familyNames.Add(RequireValue(args, ref i, arg));
@@ -89,12 +89,11 @@ internal sealed record AutomationParameterCollectionCliOptions(
         if (string.IsNullOrWhiteSpace(modelGuid))
             throw new ArgumentException("Missing required argument `--model-guid`.");
 
-        var filter = familyNames.Count == 0 && categoryNames.Count == 0 && placementScope == LoadedFamilyPlacementScope.AllLoaded
+        var filter = familyNames.Count == 0 && categoryNames.Count == 0 &&
+                     placementScope == LoadedFamilyPlacementScope.AllLoaded
             ? null
             : new LoadedFamiliesFilter {
-                FamilyNames = familyNames,
-                CategoryNames = categoryNames,
-                PlacementScope = placementScope
+                FamilyNames = familyNames, CategoryNames = categoryNames, PlacementScope = placementScope
             };
 
         return new AutomationParameterCollectionCliOptions(

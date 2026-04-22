@@ -17,4 +17,18 @@ public static class ElementIdExtensions {
 #else
             elementId.IntegerValue;
 #endif
+
+    public static ElementId ToElementId(this long value) =>
+#if REVIT2025 || REVIT2026
+        new(value);
+#else
+        new(checked((int)value));
+#endif
+
+    public static ElementId ToElementId(this int value) =>
+#if REVIT2025 || REVIT2026
+        new(value);
+#else
+        new(value);
+#endif
 }

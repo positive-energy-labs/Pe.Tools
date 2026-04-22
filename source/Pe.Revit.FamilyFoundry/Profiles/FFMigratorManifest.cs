@@ -1,6 +1,6 @@
+using Pe.Revit.SettingsRuntime.Validation;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Modules;
-using Pe.Shared.StorageRuntime.Validation;
 
 namespace Pe.Revit.FamilyFoundry.Profiles;
 
@@ -17,6 +17,8 @@ public static class FFMigratorManifest {
     ) => SettingsStorageModuleDefinition.CreateSingleRoot(
         Module.DefaultRootKey,
         Module.StorageOptions,
-        new SchemaBackedSettingsDocumentValidator(Module.SettingsType, runtimeMode)
+        runtimeMode == SettingsRuntimeMode.LiveDocument
+            ? new SchemaBackedSettingsDocumentValidator(Module.SettingsType, runtimeMode)
+            : null
     );
 }

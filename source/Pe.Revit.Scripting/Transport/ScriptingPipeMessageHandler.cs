@@ -69,7 +69,8 @@ public sealed class ScriptingPipeMessageHandler : IExternalEventHandler, IDispos
         ScriptingPipeRequest request,
         CancellationToken cancellationToken
     ) {
-        ObjectDisposedException.ThrowIf(this._disposed, this);
+        if (this._disposed)
+            throw new ObjectDisposedException(nameof(ScriptingPipeMessageHandler));
 
         var completion =
             new TaskCompletionSource<ScriptingPipeResponse>(TaskCreationOptions.RunContinuationsAsynchronously);

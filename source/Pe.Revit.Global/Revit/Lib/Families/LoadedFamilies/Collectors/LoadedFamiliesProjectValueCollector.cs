@@ -1,5 +1,4 @@
 using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
-using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 

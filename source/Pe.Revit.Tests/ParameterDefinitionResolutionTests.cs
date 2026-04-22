@@ -1,4 +1,5 @@
 using Pe.Revit.Extensions.FamManager;
+using Pe.Revit.Global.Revit.Lib.Parameters;
 using Pe.Shared.RevitData.Parameters;
 
 namespace Pe.Revit.Tests;
@@ -118,8 +119,7 @@ public sealed class ParameterDefinitionResolutionTests {
             var familyParameter = RevitFamilyFixtureHarness.AddSharedFamilyParameter(
                 familyDocument,
                 sharedSpec,
-                GroupTypeId.IdentityData,
-                true);
+                GroupTypeId.IdentityData);
             _ = transaction.Commit();
 
             var resolvedByGuid = RevitFamilyFixtureHarness.FindSharedFamilyParameter(familyDocument, sharedGuid);

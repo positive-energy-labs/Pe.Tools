@@ -1,5 +1,6 @@
 using Pe.Revit.Global.Revit.Documents.Schedules;
-using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Schedules;
 
 namespace Pe.Revit.Global.Revit.Lib.Schedules;
 
@@ -83,7 +84,7 @@ public static class ScheduleProfileQueryCollector {
             .ToList();
 
         foreach (var scheduleId in scheduleIds) {
-            var schedule = doc.GetElement(new ElementId(scheduleId)) as ViewSchedule;
+            var schedule = doc.GetElement(scheduleId.ToElementId()) as ViewSchedule;
             if (!TryAddResolvedSchedule(schedules, seenIds, schedule, query.IncludeTemplates, issues,
                     "ScheduleProfileReferenceIdNotFound",
                     $"Could not resolve schedule id {scheduleId}.",
@@ -155,14 +156,14 @@ public static class ScheduleProfileQueryCollector {
         List<RevitDataIssue> issues
     ) {
         try {
-            var profile = schedule.CaptureScheduleProfile();
+            var profile = schedule.CaptureAuthoredScheduleProfile();
             return new ScheduleProfileQueryEntry(
                 schedule.Id.Value(),
                 schedule.UniqueId,
                 schedule.Name,
                 ScheduleCollectorSupport.GetCategoryName(doc, schedule),
                 schedule.IsTemplate,
-                ScheduleCollectorSupport.ToContractProfile(profile),
+                profile,
                 ScheduleCollectorSupport.CollectParameterUsages(doc, schedule),
                 ScheduleCollectorSupport.CollectCustomParameters(schedule)
             );

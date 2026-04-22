@@ -1,8 +1,8 @@
 using Newtonsoft.Json;
-using Pe.Revit.Global.Services.Aps;
-using Pe.Revit.Global.Services.Aps.Core;
-using Pe.Revit.Global.Services.Aps.Models;
-using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.Aps;
+using Pe.Shared.Aps.Core;
+using Pe.Shared.Aps.Models;
+using Pe.Shared.RevitData;
 using System.IO;
 
 namespace Pe.Dev.RevitAutomation;
@@ -16,11 +16,7 @@ public sealed class RevitAutomationModelDiscoveryService {
         var hubs = await client.GetHubsAsync(cancellationToken).ConfigureAwait(false);
         return new AutomationHubCatalogResult {
             Hubs = hubs
-                .Select(hub => new AutomationHubDescriptor {
-                    Id = hub.Id,
-                    Name = hub.Name,
-                    Region = hub.Region
-                })
+                .Select(hub => new AutomationHubDescriptor { Id = hub.Id, Name = hub.Name, Region = hub.Region })
                 .OrderBy(hub => hub.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList()
         };
@@ -36,10 +32,7 @@ public sealed class RevitAutomationModelDiscoveryService {
         return new AutomationProjectCatalogResult {
             HubId = options.HubId,
             Projects = projects
-                .Select(project => new AutomationProjectDescriptor {
-                    Id = project.Id,
-                    Name = project.Name
-                })
+                .Select(project => new AutomationProjectDescriptor { Id = project.Id, Name = project.Name })
                 .OrderBy(project => project.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList()
         };
@@ -51,12 +44,14 @@ public sealed class RevitAutomationModelDiscoveryService {
         CancellationToken cancellationToken
     ) {
         var client = CreateDataManagementClient(log);
-        var scope = await ResolveScopeAsync(client, options.HubId, options.ProjectId, options.FolderId, options.FolderPath, cancellationToken)
+        var scope = await ResolveScopeAsync(client, options.HubId, options.ProjectId, options.FolderId,
+                options.FolderPath, cancellationToken)
             .ConfigureAwait(false);
 
         var entries = scope.FolderId == null
             ? await client.GetTopFoldersAsync(options.HubId, options.ProjectId, cancellationToken).ConfigureAwait(false)
-            : await client.GetFolderContentsAsync(options.ProjectId, scope.FolderId, cancellationToken).ConfigureAwait(false);
+            : await client.GetFolderContentsAsync(options.ProjectId, scope.FolderId, cancellationToken)
+                .ConfigureAwait(false);
 
         return new AutomationContentCatalogResult {
             HubId = options.HubId,
@@ -64,10 +59,7 @@ public sealed class RevitAutomationModelDiscoveryService {
             ScopeName = scope.DisplayPath,
             Entries = entries
                 .Select(entry => new AutomationContentDescriptor {
-                    Id = entry.Id,
-                    Name = entry.Name,
-                    IsFolder = entry.IsFolder,
-                    ExtensionType = entry.ExtensionType
+                    Id = entry.Id, Name = entry.Name, IsFolder = entry.IsFolder, ExtensionType = entry.ExtensionType
                 })
                 .OrderByDescending(entry => entry.IsFolder)
                 .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
@@ -84,19 +76,24 @@ public sealed class RevitAutomationModelDiscoveryService {
         var client = CreateDataManagementClient(log);
         var hubs = await client.GetHubsAsync(cancellationToken).ConfigureAwait(false);
         var hub = hubs.FirstOrDefault(candidate => string.Equals(candidate.Id, options.HubId, StringComparison.Ordinal))
-                  ?? throw new InvalidOperationException($"Hub '{options.HubId}' was not found in the authenticated account.");
+                  ?? throw new InvalidOperationException(
+                      $"Hub '{options.HubId}' was not found in the authenticated account.");
         var projects = await client.GetProjectsAsync(options.HubId, cancellationToken).ConfigureAwait(false);
-        var project = projects.FirstOrDefault(candidate => string.Equals(candidate.Id, options.ProjectId, StringComparison.Ordinal))
-                      ?? throw new InvalidOperationException($"Project '{options.ProjectId}' was not found in hub '{options.HubId}'.");
+        var project = projects.FirstOrDefault(candidate =>
+                          string.Equals(candidate.Id, options.ProjectId, StringComparison.Ordinal))
+                      ?? throw new InvalidOperationException(
+                          $"Project '{options.ProjectId}' was not found in hub '{options.HubId}'.");
 
         var resolvedRegion = ResolveRegion(options.RegionOverride, hub.Region);
-        var scope = await ResolveScopeAsync(client, options.HubId, options.ProjectId, options.FolderId, options.FolderPath, cancellationToken)
+        var scope = await ResolveScopeAsync(client, options.HubId, options.ProjectId, options.FolderId,
+                options.FolderPath, cancellationToken)
             .ConfigureAwait(false);
         var excludeMatcher = new PathGlobMatcher(options.ExcludePathGlobs);
 
         var discoveredModels = new List<DiscoveredAutomationModel>();
         if (scope.FolderId == null) {
-            var topFolders = await client.GetTopFoldersAsync(options.HubId, options.ProjectId, cancellationToken).ConfigureAwait(false);
+            var topFolders = await client.GetTopFoldersAsync(options.HubId, options.ProjectId, cancellationToken)
+                .ConfigureAwait(false);
             foreach (var folder in topFolders.Where(entry => entry.IsFolder)) {
                 await DiscoverFolderAsync(
                         client,
@@ -150,7 +147,8 @@ public sealed class RevitAutomationModelDiscoveryService {
 
         if (!string.IsNullOrWhiteSpace(options.OutManifestPath)) {
             var repoRoot = RepoRootResolver.Resolve(repoRootOverride);
-            var manifestPath = WriteManifest(repoRoot, options.OutManifestPath, discoveredModels, resolvedRegion, options);
+            var manifestPath = WriteManifest(repoRoot, options.OutManifestPath, discoveredModels, resolvedRegion,
+                options);
             result.ManifestPath = manifestPath;
         }
 
@@ -229,26 +227,17 @@ public sealed class RevitAutomationModelDiscoveryService {
             throw new ArgumentException("Pass either --folder-id or --folder-path, not both.");
 
         if (!string.IsNullOrWhiteSpace(folderId)) {
-            return new ResolvedFolderScope {
-                FolderId = folderId.Trim(),
-                DisplayPath = folderId.Trim()
-            };
+            return new ResolvedFolderScope { FolderId = folderId.Trim(), DisplayPath = folderId.Trim() };
         }
 
         if (string.IsNullOrWhiteSpace(folderPath)) {
-            return new ResolvedFolderScope {
-                FolderId = null,
-                DisplayPath = "(top folders)"
-            };
+            return new ResolvedFolderScope { FolderId = null, DisplayPath = "(top folders)" };
         }
 
         var segments = SplitFolderPath(folderPath);
         var topFolders = await client.GetTopFoldersAsync(hubId, projectId, cancellationToken).ConfigureAwait(false);
         if (segments.Length == 0) {
-            return new ResolvedFolderScope {
-                FolderId = null,
-                DisplayPath = "(top folders)"
-            };
+            return new ResolvedFolderScope { FolderId = null, DisplayPath = "(top folders)" };
         }
 
         var first = topFolders.FirstOrDefault(folder => folder.IsFolder && MatchesName(folder.Name, segments[0]))
@@ -257,16 +246,15 @@ public sealed class RevitAutomationModelDiscoveryService {
         var currentFolder = first;
         var displaySegments = new List<string> { first.Name };
         for (var i = 1; i < segments.Length; i++) {
-            var contents = await client.GetFolderContentsAsync(projectId, currentFolder.Id, cancellationToken).ConfigureAwait(false);
+            var contents = await client.GetFolderContentsAsync(projectId, currentFolder.Id, cancellationToken)
+                .ConfigureAwait(false);
             currentFolder = contents.FirstOrDefault(folder => folder.IsFolder && MatchesName(folder.Name, segments[i]))
-                            ?? throw BuildFolderResolutionFailure(folderPath, string.Join("/", displaySegments), contents);
+                            ?? throw BuildFolderResolutionFailure(folderPath, string.Join("/", displaySegments),
+                                contents);
             displaySegments.Add(currentFolder.Name);
         }
 
-        return new ResolvedFolderScope {
-            FolderId = currentFolder.Id,
-            DisplayPath = string.Join("/", displaySegments)
-        };
+        return new ResolvedFolderScope { FolderId = currentFolder.Id, DisplayPath = string.Join("/", displaySegments) };
     }
 
     private static async Task DiscoverFolderAsync(
@@ -282,13 +270,14 @@ public sealed class RevitAutomationModelDiscoveryService {
         Action<string>? log,
         CancellationToken cancellationToken
     ) {
-        if (excludeMatcher.IsMatch(folderPath, treatAsFolder: true)) {
+        if (excludeMatcher.IsMatch(folderPath, true)) {
             log?.Invoke($"Discovery: skipping excluded path {folderPath}");
             return;
         }
 
         log?.Invoke($"Discovery: scanning {folderPath}");
-        var contents = await client.GetFolderContentsAsync(project.Id, folderId, cancellationToken).ConfigureAwait(false);
+        var contents = await client.GetFolderContentsAsync(project.Id, folderId, cancellationToken)
+            .ConfigureAwait(false);
         foreach (var item in contents.Where(entry => !entry.IsFolder)) {
             if (!ShouldIncludeByName(item.Name, options.NameContains))
                 continue;
@@ -299,7 +288,8 @@ public sealed class RevitAutomationModelDiscoveryService {
                 continue;
             }
 
-            var model = await TryReadModelAsync(client, project.Id, item, folderPath, region, hub, project, cancellationToken)
+            var model = await TryReadModelAsync(client, project.Id, item, folderPath, region, hub, project,
+                    cancellationToken)
                 .ConfigureAwait(false);
             if (model != null)
                 discoveredModels.Add(model);

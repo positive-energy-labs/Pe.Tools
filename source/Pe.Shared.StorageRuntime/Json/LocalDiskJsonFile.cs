@@ -1,11 +1,10 @@
-﻿using Newtonsoft.Json;
-using Pe.Shared.StorageRuntime.Core.Json;
+using Newtonsoft.Json;
 
 namespace Pe.Shared.StorageRuntime.Json;
 
 public sealed class LocalDiskJsonFile<T>(string filePath) : JsonReadWriter<T> where T : class, new() {
     private static readonly JsonSerializerSettings SerializerSettings =
-        RevitJsonFormatting.CreateRevitIndentedSettings();
+        JsonFormatting.CreateIndentedSettings();
 
     private T? _cachedData;
     private DateTimeOffset _cachedModifiedUtc;

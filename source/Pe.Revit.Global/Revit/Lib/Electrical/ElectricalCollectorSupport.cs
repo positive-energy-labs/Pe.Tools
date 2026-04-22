@@ -1,5 +1,5 @@
 using Autodesk.Revit.DB.Electrical;
-using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.RevitData;
 
 namespace Pe.Revit.Global.Revit.Lib.Electrical;
 

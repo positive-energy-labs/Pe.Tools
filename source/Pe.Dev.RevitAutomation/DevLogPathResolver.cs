@@ -1,12 +1,14 @@
+using Pe.Shared.SettingsLayout;
 using System.IO;
-using Pe.Shared.StorageRuntime;
 
 namespace Pe.Dev.RevitAutomation;
 
 public static class DevLogPathResolver {
-    public static string HostLogPath => StorageClient.Default.Global().HostLog().FilePath;
+    private static string BasePath => SettingsStorageLocations.GetDefaultBasePath();
 
-    public static string RevitAppLogPath => StorageClient.Default.Global().RevitAppLog().FilePath;
+    public static string HostLogPath => GlobalStorageLocations.ResolveHostLogPath(BasePath);
+
+    public static string RevitAppLogPath => GlobalStorageLocations.ResolveRevitAppLogPath(BasePath);
 
     public static string RevitApprovalWatcherLogPath =>
         Path.Combine(

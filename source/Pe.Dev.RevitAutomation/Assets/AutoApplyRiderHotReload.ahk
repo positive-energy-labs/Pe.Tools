@@ -5,9 +5,14 @@ SetTitleMatchMode 2
 DetectHiddenWindows true
 
 riderSelector := "Pe.Tools ahk_exe rider64.exe"
+fileListPath := ""
 warningSeconds := 3
 skipWarning := false
 mode := "full"
+
+if A_Args.Length >= 1 {
+    fileListPath := A_Args[1]
+}
 
 if A_Args.Length >= 2 {
     try {
@@ -46,6 +51,51 @@ if !WinExist(riderSelector) {
 
 if !WinExist(riderSelector) {
     ExitApp 1
+}
+
+LoadTargetFiles(path) {
+    if (path = "" || !FileExist(path)) {
+        return []
+    }
+
+    files := []
+    for line in StrSplit(FileRead(path, "UTF-8"), "`n", "`r") {
+        trimmed := Trim(line, " `t`r`n`"")
+        if (trimmed = "") {
+            continue
+        }
+
+        files.Push(trimmed)
+    }
+
+    return files
+}
+
+NudgeFiles(files) {
+    originals := Map()
+
+    for file in files {
+        if !FileExist(file) {
+            continue
+        }
+
+        original := FileRead(file, "UTF-8")
+        originals[file] := original
+
+        handle := FileOpen(file, "w", "UTF-8")
+        handle.Write(original . "`r`n// PE_HOT_RELOAD_NUDGE`r`n")
+        handle.Close()
+    }
+
+    return originals
+}
+
+RestoreFiles(originals) {
+    for file, original in originals {
+        handle := FileOpen(file, "w", "UTF-8")
+        handle.Write(original)
+        handle.Close()
+    }
 }
 
 WarnBeforeAutomation(seconds) {
@@ -96,6 +146,8 @@ RunRiderAction(actionName) {
     A_Clipboard := savedClipboard
 }
 
+targetFiles := LoadTargetFiles(fileListPath)
+
 if !skipWarning {
     WarnBeforeAutomation(warningSeconds)
 }
@@ -105,6 +157,13 @@ if !WinWaitActive(riderSelector, , 2) {
     ExitApp 2
 }
 
-Sleep 200
-RunRiderAction("Auto HR")
+Sleep 250
+originals := NudgeFiles(targetFiles)
+Sleep 250
+RunRiderAction("Reload All From Disk")
+Sleep 350
+RestoreFiles(originals)
+Sleep 500
+RunRiderAction("Apply Changes")
+Sleep 250
 ExitApp 0

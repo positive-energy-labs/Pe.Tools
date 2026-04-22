@@ -1,4 +1,4 @@
-using Pe.Revit.Global.Services.Aps;
+using Pe.Shared.Aps;
 
 namespace Pe.Dev.RevitAutomation;
 
@@ -17,9 +17,7 @@ public sealed class RevitAutomationWorkItemInspectorService {
             .ConfigureAwait(false);
 
         var result = new AutomationWorkItemInspectResult {
-            WorkItemId = status.Id ?? options.WorkItemId,
-            Status = status.Status,
-            ReportUrl = status.ReportUrl
+            WorkItemId = status.Id ?? options.WorkItemId, Status = status.Status, ReportUrl = status.ReportUrl
         };
 
         if (!options.IncludeReport || string.IsNullOrWhiteSpace(status.ReportUrl))

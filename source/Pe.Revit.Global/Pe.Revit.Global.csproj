@@ -26,7 +26,6 @@
         <PackageReference Include="Serilog.Sinks.Debug" Version="3.0.0"/>
 
         <!-- Polyfills for net48 compatibility with modern C# features -->
-        <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all" Condition="'$(TargetFramework)' == 'net48'"/>
         <PackageReference Include="System.Net.Http" Version="4.3.4" Condition="'$(TargetFramework)' == 'net48'"/>
 
         <!-- Revit Task Service for thread marshaling -->
@@ -44,6 +43,8 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Pe.Revit.Scripting\Pe.Revit.Scripting.csproj"/>
+        <ProjectReference Include="..\Pe.Revit.SettingsRuntime\Pe.Revit.SettingsRuntime.csproj"/>
+        <ProjectReference Include="..\Pe.Shared.Aps\Pe.Shared.Aps.csproj"/>
         <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj"/>
         <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj"/>
         <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj"/>

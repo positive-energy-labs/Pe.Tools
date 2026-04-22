@@ -1,5 +1,5 @@
 using Pe.Revit.FamilyFoundry.Profiles;
-using Pe.Shared.StorageRuntime.Json.SchemaDefinitions;
+using Pe.Revit.SettingsRuntime.Core.Json.SchemaDefinitions;
 using System.Runtime.CompilerServices;
 
 namespace Pe.Revit.FamilyFoundry.SchemaDefinitions;

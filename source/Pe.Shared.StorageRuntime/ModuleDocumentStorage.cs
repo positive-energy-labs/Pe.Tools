@@ -12,7 +12,6 @@ public sealed class ModuleDocumentStorage {
         string moduleKey,
         string defaultRootKey,
         SettingsStorageModuleOptions storageOptions,
-        Type settingsType,
         SettingsRuntimeMode runtimeMode = SettingsRuntimeMode.HostOnly,
         string? basePath = null,
         IReadOnlyDictionary<string, SettingsStorageModuleDefinition>? moduleDefinitionsByModuleKey = null
@@ -24,7 +23,6 @@ public sealed class ModuleDocumentStorage {
             ? throw new ArgumentException("Default root key is required.", nameof(defaultRootKey))
             : defaultRootKey;
         this.StorageOptions = storageOptions ?? throw new ArgumentNullException(nameof(storageOptions));
-        this.SettingsType = settingsType ?? throw new ArgumentNullException(nameof(settingsType));
         this.RuntimeMode = runtimeMode;
         this._basePath = string.IsNullOrWhiteSpace(basePath)
             ? StorageClient.BasePath
@@ -42,7 +40,6 @@ public sealed class ModuleDocumentStorage {
 
     public string ModuleKey { get; }
     public string DefaultRootKey { get; }
-    public Type SettingsType { get; }
     public SettingsStorageModuleOptions StorageOptions { get; }
     public SettingsRuntimeMode RuntimeMode { get; }
 

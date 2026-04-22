@@ -1,24 +1,27 @@
 using Autodesk.Revit.ApplicationServices;
+using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.Exceptions;
 using DesignAutomationFramework;
 using Newtonsoft.Json;
 using Pe.Revit.Global.Revit.Documents;
-using Pe.Revit.Global.Services.Aps.Models;
+using Pe.Shared.Aps.Models;
+using FileNotFoundException = System.IO.FileNotFoundException;
+using InvalidOperationException = System.InvalidOperationException;
 
 namespace Pe.Dev.RevitAutomation.Worker;
 
-[Autodesk.Revit.Attributes.Regeneration(Autodesk.Revit.Attributes.RegenerationOption.Manual)]
-[Autodesk.Revit.Attributes.Transaction(Autodesk.Revit.Attributes.TransactionMode.Manual)]
+[Regeneration(RegenerationOption.Manual)]
+[Transaction(TransactionMode.Manual)]
 public sealed class RevitAutomationShellApp : IExternalDBApplication {
     private const string InputPath = "automation-input.json";
     private const string ResultPath = "automation-result.json";
     private const string JobPrefix = "PE_AUTOMATION_JOB ";
     private const string ProbePrefix = "PE_AUTOMATION_PROBE ";
+
     private static readonly IReadOnlyDictionary<AutomationJobType, IAutomationWorkloadHandler> WorkloadHandlers =
         new IAutomationWorkloadHandler[] {
-            new ParameterCollectionWorkloadHandler(),
-            new ScheduleCollectionWorkloadHandler()
+            new ParameterCollectionWorkloadHandler(), new ScheduleCollectionWorkloadHandler()
         }.ToDictionary(handler => handler.JobType);
 
     public ExternalDBApplicationResult OnStartup(ControlledApplication application) {
@@ -33,18 +36,20 @@ public sealed class RevitAutomationShellApp : IExternalDBApplication {
         WriteJobMarker("START");
         try {
             var input = AutomationJobInput.LoadFromFile(InputPath);
-            WriteJobMarker("INPUT", new {
-                jobType = input.JobType,
-                engine = input.Engine,
-                region = input.Region,
-                projectGuid = input.ProjectGuid,
-                modelGuid = input.ModelGuid,
-                runId = input.RunId,
-                expectedTitle = input.ExpectedTitle
-            });
+            WriteJobMarker("INPUT",
+                new {
+                    jobType = input.JobType,
+                    engine = input.Engine,
+                    region = input.Region,
+                    projectGuid = input.ProjectGuid,
+                    modelGuid = input.ModelGuid,
+                    runId = input.RunId,
+                    expectedTitle = input.ExpectedTitle
+                });
 
             var revitApplication = args.DesignAutomationData?.RevitApp
-                                   ?? throw new System.InvalidOperationException("Design automation Revit application was unavailable.");
+                                   ?? throw new InvalidOperationException(
+                                       "Design automation Revit application was unavailable.");
 
             var modelPath = ModelPathUtils.ConvertCloudGUIDsToCloudPath(
                 input.GetNormalizedRegion(),
@@ -59,16 +64,12 @@ public sealed class RevitAutomationShellApp : IExternalDBApplication {
 
                 if (input.JobType == AutomationJobType.CloudOpenProbe) {
                     args.Succeeded = true;
-                    WriteJobMarker("JOB_SUCCESS", new {
-                        jobType = input.JobType,
-                        documentTitle = document.Title
-                    });
+                    WriteJobMarker("JOB_SUCCESS", new { jobType = input.JobType, documentTitle = document.Title });
                 } else if (WorkloadHandlers.TryGetValue(input.JobType, out var handler)) {
                     handler.Execute(new AutomationWorkloadContext(input, document, ResultPath, WriteJobMarker));
                     args.Succeeded = true;
-                } else {
-                    throw new System.InvalidOperationException($"Unsupported automation job type '{input.JobType}'.");
-                }
+                } else
+                    throw new InvalidOperationException($"Unsupported automation job type '{input.JobType}'.");
             } catch (Exception ex) {
                 WriteFailure(input, ex);
                 args.Succeeded = false;
@@ -77,10 +78,7 @@ public sealed class RevitAutomationShellApp : IExternalDBApplication {
                     document.Close(false);
             }
         } catch (Exception ex) {
-            WriteJobMarker("JOB_FAIL_OTHER", new {
-                exceptionType = ex.GetType().FullName,
-                message = ex.Message
-            });
+            WriteJobMarker("JOB_FAIL_OTHER", new { exceptionType = ex.GetType().FullName, message = ex.Message });
             args.Succeeded = false;
         } finally {
             WriteJobMarker("END");
@@ -95,7 +93,8 @@ public sealed class RevitAutomationShellApp : IExternalDBApplication {
             modelGuid = SafeRead(document.GetCloudModelGuid),
             cloudModelUrn = SafeRead(document.GetCloudModelUrn),
             expectedTitleMatched = string.IsNullOrWhiteSpace(input.ExpectedTitle) ||
-                                   string.Equals(document.Title, input.ExpectedTitle, StringComparison.OrdinalIgnoreCase)
+                                   string.Equals(document.Title, input.ExpectedTitle,
+                                       StringComparison.OrdinalIgnoreCase)
         };
 
         WriteJobMarker("DOCUMENT_OPENED", payload);
@@ -105,11 +104,7 @@ public sealed class RevitAutomationShellApp : IExternalDBApplication {
 
     private static void WriteFailure(AutomationJobInput input, Exception ex) {
         var marker = ClassifyFailureMarker(ex);
-        var payload = new {
-            jobType = input.JobType,
-            exceptionType = ex.GetType().FullName,
-            message = ex.Message
-        };
+        var payload = new { jobType = input.JobType, exceptionType = ex.GetType().FullName, message = ex.Message };
 
         WriteJobMarker(marker, payload);
         if (input.JobType == AutomationJobType.CloudOpenProbe) {
@@ -128,9 +123,9 @@ public sealed class RevitAutomationShellApp : IExternalDBApplication {
             RevitServerUnauthenticatedUserException => "JOB_FAIL_UNAUTHORIZED",
             CentralModelAccessDeniedException => "JOB_FAIL_UNAUTHORIZED",
             AccessDeniedException => "JOB_FAIL_UNAUTHORIZED",
-            System.IO.FileNotFoundException fileNotFoundException when IsAssemblyLoadFailure(fileNotFoundException) =>
+            FileNotFoundException fileNotFoundException when IsAssemblyLoadFailure(fileNotFoundException) =>
                 "JOB_FAIL_ASSEMBLY_LOAD",
-            System.IO.FileNotFoundException => "JOB_FAIL_NOT_FOUND",
+            FileNotFoundException => "JOB_FAIL_NOT_FOUND",
             CentralModelException centralModelException when ContainsNotFoundSignal(centralModelException.Message) =>
                 "JOB_FAIL_NOT_FOUND",
             _ when ContainsUnauthorizedSignal(exception.Message) => "JOB_FAIL_UNAUTHORIZED",
@@ -138,7 +133,7 @@ public sealed class RevitAutomationShellApp : IExternalDBApplication {
             _ => "JOB_FAIL_OTHER"
         };
 
-    private static bool IsAssemblyLoadFailure(System.IO.FileNotFoundException exception) =>
+    private static bool IsAssemblyLoadFailure(FileNotFoundException exception) =>
         Contains(exception.Message, "Could not load file or assembly");
 
     private static bool ContainsUnauthorizedSignal(string? message) =>

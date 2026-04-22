@@ -19,7 +19,7 @@ public static class GetSchemaOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<SchemaRequest, SchemaEnvelopeResponse>(
             "settings.schema",
-            HostHttpVerb.Get,
+            HostHttpVerb.Post,
             "/api/settings/schema",
             HostExecutionMode.Local,
             "Get Schema"
@@ -28,9 +28,9 @@ public static class GetSchemaOperationContract {
 
 public static class GetWorkspacesOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<NoRequest, SettingsWorkspacesData>(
+        HostOperationDefinition.Create<GetSettingsWorkspacesRequest, SettingsWorkspacesData>(
             "settings.workspaces",
-            HostHttpVerb.Get,
+            HostHttpVerb.Post,
             "/api/settings/workspaces",
             HostExecutionMode.Local,
             "Get Workspaces"
@@ -41,10 +41,21 @@ public static class DiscoverSettingsTreeOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<SettingsTreeRequest, SettingsDiscoveryResult>(
             "settings.tree",
-            HostHttpVerb.Get,
+            HostHttpVerb.Post,
             "/api/settings/tree",
             HostExecutionMode.Local,
             "Discover Settings Tree"
+        );
+}
+
+public static class GetSettingsModuleCatalogBridgeOperationContract {
+    public static readonly HostOperationDefinition Definition =
+        HostOperationDefinition.Create<GetSettingsModuleCatalogBridgeRequest, GetSettingsModuleCatalogBridgeResponse>(
+            "settings.module-catalog",
+            HostHttpVerb.Post,
+            "/_internal/settings/module-catalog",
+            HostExecutionMode.Bridge,
+            "Get Settings Module Catalog"
         );
 }
 

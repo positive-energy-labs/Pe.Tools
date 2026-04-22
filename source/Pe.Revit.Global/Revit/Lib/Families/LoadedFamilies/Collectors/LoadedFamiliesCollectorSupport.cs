@@ -1,7 +1,7 @@
 using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
-using Pe.Shared.HostContracts.RevitData;
+using Pe.Revit.SettingsRuntime.Core.Json;
+using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Families;
-using Pe.Shared.RevitData.Parameters;
 
 namespace Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
 
@@ -112,8 +112,8 @@ internal static class LoadedFamiliesCollectorSupport {
         ProjectLoadedFamilyRecord family,
         ProjectLoadedFamilyParameter parameter
     ) {
-        var dataTypeId = NormalizeForgeTypeId(parameter.DataType);
-        var groupTypeId = NormalizeForgeTypeId(parameter.PropertiesGroup);
+        var dataTypeId = parameter.DataTypeKey;
+        var groupTypeId = parameter.PropertiesGroupKey;
         return new CollectedFamilyParameterRecord {
             FamilyId = family.FamilyId,
             FamilyUniqueId = family.FamilyUniqueId,
@@ -124,10 +124,13 @@ internal static class LoadedFamiliesCollectorSupport {
             IsInstance = parameter.IsInstance,
             StorageType = parameter.StorageType.ToString(),
             DataTypeId = dataTypeId,
-            DataTypeLabel = dataTypeId == null ? null : RevitTypeLabelCatalog.GetLabelForSpec(parameter.DataType),
+            DataTypeLabel =
+                dataTypeId == null ? null : RevitTypeLabelCatalog.GetLabelForSpec(new ForgeTypeId(dataTypeId)),
             GroupTypeId = groupTypeId,
             GroupTypeLabel =
-                groupTypeId == null ? null : RevitTypeLabelCatalog.GetLabelForPropertyGroup(parameter.PropertiesGroup),
+                groupTypeId == null
+                    ? null
+                    : RevitTypeLabelCatalog.GetLabelForPropertyGroup(new ForgeTypeId(groupTypeId)),
             Kind = CollectedParameterKind.Unknown,
             Scope = CollectedParameterScope.Unresolved,
             FormulaState = CollectedFormulaState.Unknown,
@@ -164,7 +167,4 @@ internal static class LoadedFamiliesCollectorSupport {
                 .Where(value => !string.IsNullOrWhiteSpace(value))
                 .Select(value => value.Trim())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-    private static string? NormalizeForgeTypeId(ForgeTypeId forgeTypeId) =>
-        string.IsNullOrWhiteSpace(forgeTypeId?.TypeId) ? null : forgeTypeId.TypeId;
 }
