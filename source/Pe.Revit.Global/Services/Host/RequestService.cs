@@ -1,9 +1,8 @@
-using Pe.Revit.Global.Revit.Lib.Parameters;
+using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Global.Services.Document;
-using Pe.Revit.SettingsRuntime.Context;
-using Pe.Revit.SettingsRuntime.Core.Json.FieldOptions;
-using Pe.Revit.SettingsRuntime.Core.Json.SchemaDefinitions;
-using Pe.Revit.SettingsRuntime.Core.Json.SchemaProviders;
+using Pe.Revit.SettingsRuntime.Json.FieldOptions;
+using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
+using Pe.Revit.SettingsRuntime.Json.SchemaProviders;
 using Pe.Shared.HostContracts.RevitData;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
@@ -21,9 +20,6 @@ namespace Pe.Revit.Global.Services.Host;
 public class RequestService {
     private static readonly TimeSpan FieldOptionsThrottleWindow = TimeSpan.FromMilliseconds(350);
     private static readonly TimeSpan ParameterCatalogThrottleWindow = TimeSpan.FromMilliseconds(750);
-
-    private readonly ISettingsDocumentContextAccessor _documentContextAccessor =
-        new DocumentManagerRevitContextAccessor();
 
     private readonly SettingsModuleRegistry _moduleRegistry;
     private readonly RevitTaskService _revitTaskService;
@@ -137,8 +133,8 @@ public class RequestService {
     private async Task<ParameterCatalogEnvelopeResponse> GetParameterCatalogCore(ParameterCatalogRequest request) =>
         await this.EnqueueAsync(() => {
             try {
-                var providerContext = this.CreateFieldOptionsContext(request.ContextValues);
-                var doc = providerContext.GetActiveDocument<Autodesk.Revit.DB.Document>();
+                var providerContext = CreateFieldOptionsContext(request.ContextValues);
+                var doc = providerContext.GetActiveDocument();
                 if (doc == null) {
                     return HostEnvelopeResults
                         .Failure<ParameterCatalogData>(
@@ -198,7 +194,7 @@ public class RequestService {
                     typeof(LoadedFamiliesFilter),
                     request.PropertyPath,
                     request.SourceKey,
-                    this.CreateFieldOptionsContext(request.ContextValues)
+                    CreateFieldOptionsContext(request.ContextValues)
                 )
                 .AsTask()
                 .GetAwaiter()
@@ -290,7 +286,7 @@ public class RequestService {
                         type,
                         request.PropertyPath,
                         request.SourceKey,
-                        this.CreateFieldOptionsContext(request.ContextValues)
+                        CreateFieldOptionsContext(request.ContextValues)
                     )
                     .AsTask()
                     .GetAwaiter()
@@ -401,11 +397,10 @@ public class RequestService {
             []
         );
 
-    private FieldOptionsExecutionContext CreateFieldOptionsContext(
+    private static FieldOptionsExecutionContext CreateFieldOptionsContext(
         IReadOnlyDictionary<string, string>? contextValues = null
     ) => new(
         SettingsRuntimeMode.LiveDocument,
-        this._documentContextAccessor,
         contextValues
     );
 
@@ -421,7 +416,7 @@ public class RequestService {
         );
 
     private static FieldOptionItem ToFieldOptionItem(
-        SettingsRuntime.Core.Json.FieldOptions.FieldOptionItem item
+        SettingsRuntime.Json.FieldOptions.FieldOptionItem item
     ) => new(
         item.Value,
         item.Label,

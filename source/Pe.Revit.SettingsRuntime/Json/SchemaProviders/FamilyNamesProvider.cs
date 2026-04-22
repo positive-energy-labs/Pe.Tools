@@ -1,0 +1,43 @@
+using Pe.Revit.SettingsRuntime.Json.FieldOptions;
+using Pe.Shared.StorageRuntime.Capabilities;
+
+namespace Pe.Revit.SettingsRuntime.Json.SchemaProviders;
+
+/// <summary>
+///     Provides family names from the active Revit document.
+/// </summary>
+public class FamilyNamesProvider : IFieldOptionsSource {
+    public FieldOptionsDescriptor Describe() => new(
+        nameof(FamilyNamesProvider),
+        SettingsOptionsResolverKind.Remote,
+        SettingsOptionsMode.Suggestion,
+        true,
+        [],
+        SettingsRuntimeMode.LiveDocument
+    );
+
+    public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
+        FieldOptionsExecutionContext context,
+        CancellationToken cancellationToken = default
+    ) {
+        try {
+            var doc = context.GetActiveDocument();
+            if (doc == null)
+                return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
+
+            var items = new FilteredElementCollector(doc)
+                .OfClass(typeof(Family))
+                .Cast<Family>()
+                .Select(family => family.Name)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .Select(value => new FieldOptionItem(value, value, null))
+                .ToList();
+            return new ValueTask<IReadOnlyList<FieldOptionItem>>(items);
+        } catch {
+            return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
+        }
+    }
+}
+

@@ -1,0 +1,12 @@
+global using System;
+global using System.Collections.Generic;
+global using System.Diagnostics;
+global using System.IO;
+global using System.Linq;
+global using System.Text;
+global using Autodesk.Revit.ApplicationServices;
+global using Autodesk.Revit.DB;
+global using Autodesk.Revit.UI;
+global using Pe.Revit.Extensions.ProjDocument;
+global using Pe.Revit.PolyFill;
+global using View = Autodesk.Revit.DB.View;

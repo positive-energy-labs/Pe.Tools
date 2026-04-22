@@ -1,22 +1,19 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Pe.Revit.SettingsRuntime.Context;
-using Pe.Revit.SettingsRuntime.Core.Json;
-using Pe.Revit.SettingsRuntime.Core.Json.ContractResolvers;
+using Pe.Revit.SettingsRuntime.Json;
+using Pe.Revit.SettingsRuntime.Json.ContractResolvers;
 
 namespace Pe.Revit.SettingsRuntime.Modules;
 
 public static class TypedModuleStorageExtensions {
     public static ModuleSettingsStorage<TSettings> Settings<TSettings>(
-        this ModuleStorage<TSettings> storage,
-        ISettingsDocumentContextAccessor? documentContextAccessor = null
+        this ModuleStorage<TSettings> storage
     ) where TSettings : class =>
-        new(storage.Documents(), documentContextAccessor);
+        new(storage.Documents());
 }
 
 public sealed class ModuleSettingsStorage<TSettings>(
-    ModuleDocumentStorage documents,
-    ISettingsDocumentContextAccessor? documentContextAccessor = null
+    ModuleDocumentStorage documents
 ) where TSettings : class {
     private static readonly JsonSerializerSettings DeserializerSettings = new() {
         Formatting = Formatting.Indented,
@@ -25,7 +22,6 @@ public sealed class ModuleSettingsStorage<TSettings>(
         NullValueHandling = NullValueHandling.Ignore
     };
 
-    private readonly ISettingsDocumentContextAccessor? _documentContextAccessor = documentContextAccessor;
 
     private readonly ModuleDocumentStorage _documents = documents ?? throw new ArgumentNullException(nameof(documents));
 
@@ -59,11 +55,11 @@ public sealed class ModuleSettingsStorage<TSettings>(
 
     private void EnsureSynchronized(string relativePath, string rootKey) {
         var syncService =
-            new SettingsDocumentSchemaSyncService(this._documents.RuntimeMode, this._documentContextAccessor);
+            new SettingsDocumentSchemaSyncService(this._documents.RuntimeMode);
         var documentPath = this._documents.ResolveDocumentPath(relativePath, rootKey);
         var rootDirectory = this._documents.ResolveRootDirectory(rootKey);
 
-        syncService.EnsureSynchronized(typeof(TSettings), this._documents.StorageOptions,
+        _ = syncService.EnsureSynchronized(typeof(TSettings), this._documents.StorageOptions,
             documentPath,
             rootDirectory
         );

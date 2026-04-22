@@ -455,7 +455,10 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
             return false;
 
         span = new AuthoredSpanSpec {
-            About = about, By = by, Negative = negativePlaneName, Positive = positivePlaneName
+            About = about,
+            By = by,
+            Negative = negativePlaneName,
+            Positive = positivePlaneName
         };
         return true;
     }
@@ -569,7 +572,8 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
 
         return new PlaneRefOrInlinePlaneSpec {
             EndOffset = new AuthoredEndOffsetPlaneSpec {
-                By = ToAuthoredLiteral(Math.Abs(endOffset - startOffset)), Dir = endOffset >= startOffset ? "out" : "in"
+                By = ToAuthoredLiteral(Math.Abs(endOffset - startOffset)),
+                Dir = endOffset >= startOffset ? "out" : "in"
             }
         };
     }
@@ -639,7 +643,8 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
 
         height = new PlaneRefOrInlinePlaneSpec {
             EndOffset = new AuthoredEndOffsetPlaneSpec {
-                By = ToAuthoredLiteral(value), Dir = endOffset >= startOffset ? "out" : "in"
+                By = ToAuthoredLiteral(value),
+                Dir = endOffset >= startOffset ? "out" : "in"
             }
         };
         return true;
@@ -1167,7 +1172,8 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
             .Where(plane => !string.IsNullOrWhiteSpace(plane.Name))
             .Where(plane => Math.Abs(Math.Abs(plane.Normal.Normalize().DotProduct(normal)) - 1.0) <= 1e-3)
             .Select(plane => new {
-                Plane = plane, Distance = SignedDistanceToPlaneAlongNormal(plane.BubbleEnd, sketch.Origin, normal)
+                Plane = plane,
+                Distance = SignedDistanceToPlaneAlongNormal(plane.BubbleEnd, sketch.Origin, normal)
             })
             .ToList();
 

@@ -1,5 +1,5 @@
 using Newtonsoft.Json.Linq;
-using Pe.Revit.SettingsRuntime.Core.Json;
+using Pe.Revit.SettingsRuntime.Json;
 using Pe.Shared.StorageRuntime.Capabilities;
 
 namespace Pe.Revit.Tests;

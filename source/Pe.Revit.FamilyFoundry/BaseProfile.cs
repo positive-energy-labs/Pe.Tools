@@ -1,14 +1,14 @@
+using Pe.Revit.DocumentData.Schedules.Runtime;
+using Pe.Revit.DocumentData.Schedules.Runtime.Filters;
+using Pe.Revit.Extensions.Schedules;
 using Pe.Revit.Global;
-using Pe.Revit.Global.Revit.Documents.Schedules;
-using Pe.Revit.Global.Revit.Lib.Schedules;
-using Pe.Revit.Global.Revit.Lib.Schedules.Filters;
 using Pe.Revit.Global.Utils.Files;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Json;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using ParamModelRes = Pe.Revit.Global.Services.Aps.Models.ParametersApi.Parameters.ParametersResult;
-using ParamModel = Pe.Revit.Global.Services.Aps.Models.ParametersApi.Parameters;
+using ParamModelRes = Pe.Revit.Global.Services.Aps.ParametersApi.Parameters.ParametersResult;
+using ParamModel = Pe.Revit.Global.Services.Aps.ParametersApi.Parameters;
 
 
 namespace Pe.Revit.FamilyFoundry;
@@ -125,7 +125,9 @@ public class BaseProfile {
 
             // Use ScheduleHelper to evaluate the filter using Revit's native schedule filtering
             var scheduleProfile = new ScheduleProfile {
-                Name = "Family Filter", CategoryName = familyBuiltInCategory, Filters = [this.IncludeByCondition]
+                Name = "Family Filter",
+                CategoryName = familyBuiltInCategory,
+                Filters = [this.IncludeByCondition]
             };
 
             var matchingFamilies = doc.GetFamiliesMatchingScheduleProfileFilters(scheduleProfile, [f]);

@@ -1,4 +1,4 @@
-using Pe.Revit.SettingsRuntime.Core.Json;
+using Pe.Revit.DocumentData.Parameters;
 using Pe.Shared.StorageRuntime.Json;
 
 namespace Pe.Revit.Tests;
@@ -24,7 +24,7 @@ public sealed class StorageRuntimeJsonFormattingTests {
             jsonFile.Write(snapshot);
 
             var content = File.ReadAllText(filePath);
-            var expectedGroupLabel = RevitTypeLabelCatalog.GetLabelForPropertyGroup(GroupTypeId.IdentityData);
+            var expectedGroupLabel = RevitLabelCatalog.GetLabelForPropertyGroup(GroupTypeId.IdentityData);
             var expectedDataTypeLabel = BuildExpectedSpecLabel(SpecTypeId.Length);
 
             Assert.Multiple(() => {
@@ -47,5 +47,5 @@ public sealed class StorageRuntimeJsonFormattingTests {
     }
 
     private static string BuildExpectedSpecLabel(ForgeTypeId forgeTypeId) =>
-        RevitTypeLabelCatalog.GetLabelForSpec(forgeTypeId);
+        RevitLabelCatalog.GetLabelForSpec(forgeTypeId);
 }

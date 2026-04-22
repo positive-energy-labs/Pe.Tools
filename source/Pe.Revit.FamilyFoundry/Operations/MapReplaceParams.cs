@@ -92,8 +92,8 @@ public class MapReplaceParams : DocOperation<MapParamsSettings> {
         var referencedParam = parameters.TryGetSingleReference(replaced.Formula);
         if (referencedParam != null) _ = doc.UnsetFormula(referencedParam);
 
-        // Defer only when the value is coercible, and the mapping strategy is not a simple one. 
-        // A Tale Of Struggles: The actual contents of the formula are irrelevant for this decision 
+        // Defer only when the value is coercible, and the mapping strategy is not a simple one.
+        // A Tale Of Struggles: The actual contents of the formula are irrelevant for this decision
         var msgBase = $"Replaced {currParamName} → {replaced.Definition.Name}";
         var coercibleDataType = this.IgnoreCoercionDataTypes.Contains(replaced.Definition.GetDataType());
         var coercionStrategySimple = mappingStrategy is nameof(BCS.Strict) or nameof(BCS.CoerceByStorageType);

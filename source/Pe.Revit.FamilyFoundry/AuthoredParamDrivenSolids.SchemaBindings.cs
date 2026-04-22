@@ -2,8 +2,8 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using NJsonSchema.Generation.TypeMappers;
-using Pe.Revit.SettingsRuntime.Core.Json;
-using Pe.Revit.SettingsRuntime.Core.Json.FieldOptions;
+using Pe.Revit.SettingsRuntime.Json;
+using Pe.Revit.SettingsRuntime.Json.FieldOptions;
 using Pe.Shared.StorageRuntime.Capabilities;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -123,3 +123,4 @@ internal static class AuthoredParamDrivenSolidsSchemaFragments {
         return JsonSchema.FromJsonAsync(schemaObject.ToString(Formatting.None)).GetAwaiter().GetResult();
     }
 }
+

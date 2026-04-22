@@ -200,7 +200,9 @@ public static class ParamRelationshipDialog {
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
 
         _ = panel.Children.Add(new TextBlock {
-            Text = name, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 8, 0)
+            Text = name,
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 0, 8, 0)
         });
 
         _ = panel.Children.Add(new Border {

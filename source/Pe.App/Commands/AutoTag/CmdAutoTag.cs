@@ -2,9 +2,9 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Pe.App.Services.AutoTag;
-using Pe.Revit.SettingsRuntime.AutoTag;
-using Pe.Revit.SettingsRuntime.Core.Json;
-using Pe.Revit.SettingsRuntime.Core.Json.SchemaProviders;
+using Pe.Revit.SettingsRuntime.Json;
+using Pe.Revit.SettingsRuntime.Json.SchemaProviders;
+using Pe.Revit.SettingsRuntime.Modules.AutoTag;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Serilog;
@@ -515,3 +515,4 @@ public class CmdAutoTag : IExternalCommand {
 
     #endregion
 }
+

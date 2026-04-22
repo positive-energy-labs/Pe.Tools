@@ -1,9 +1,9 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Pe.Revit.SettingsRuntime.Core.Json;
-using Pe.Revit.SettingsRuntime.Core.Json.FieldOptions;
-using Pe.Revit.SettingsRuntime.Core.Json.SchemaDefinitions;
-using Pe.Revit.SettingsRuntime.Core.Json.SchemaProviders;
+using Pe.Revit.SettingsRuntime.Json;
+using Pe.Revit.SettingsRuntime.Json.FieldOptions;
+using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
+using Pe.Revit.SettingsRuntime.Json.SchemaProviders;
 using Pe.Shared.StorageRuntime.Capabilities;
 
 namespace Pe.Revit.Tests;
@@ -121,3 +121,4 @@ public sealed class SchemaDefinitionFieldOptionsTests {
         [JsonProperty("parameter")] public string Parameter { get; init; } = string.Empty;
     }
 }
+

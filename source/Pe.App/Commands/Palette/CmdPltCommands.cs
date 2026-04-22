@@ -39,11 +39,11 @@ public class CmdPltCommands : IExternalCommand {
                             new PaletteAction<PostableCommandItem> {
                                 Name = "Execute",
                                 Execute = async item => {
-                                    var (success, error) = Revit.Global.Revit.Lib.Commands.Execute(uiapp, item.Command);
+                                    var (success, error) = Revit.Global.Lib.Commands.Execute(uiapp, item.Command);
                                     if (error is not null) Log.Error("Error: " + error.Message + error.StackTrace);
                                     if (success) commandHelper.UpdateCommandUsage(item.Command);
                                 },
-                                CanExecute = item => Revit.Global.Revit.Lib.Commands.IsAvailable(uiapp, item.Command)
+                                CanExecute = item => Revit.Global.Lib.Commands.IsAvailable(uiapp, item.Command)
                             }
                         )
                     ]

@@ -12,6 +12,6 @@ global using System.Net.Http;
 global using Autodesk.Revit.Attributes;
 global using Autodesk.Revit.DB;
 global using Autodesk.Revit.UI;
-global using Pe.Revit.Global.Revit.Documents;
-global using Pe.Revit.Global.PolyFill;
+global using Pe.Revit.PolyFill;
+global using Pe.Revit.Extensions.ProjDocument;
 global using View = Autodesk.Revit.DB.View;

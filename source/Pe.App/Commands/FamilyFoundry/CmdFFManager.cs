@@ -1,13 +1,14 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
+using Pe.Revit;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.Global;
-using Pe.Revit.Global.Revit.Ui;
+using Pe.Revit.Global.Ui;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Modules;
 using Serilog.Events;
@@ -146,7 +147,8 @@ public class CmdFFManager : IExternalCommand {
             .Add(new SetLookupTables(profile.SetLookupTables))
             .Add(new SetKnownParams(valueFirstAssignments, knownParamPlan.Catalog, true))
             .Add(new EmitParamDrivenSolidsDiagnostics(new EmitParamDrivenSolidsDiagnosticsSettings {
-                Enabled = compilerMessages.Count > 0, Messages = compilerMessages
+                Enabled = compilerMessages.Count > 0,
+                Messages = compilerMessages
             }))
             .Add(new MakeParamDrivenPlanesAndDims(compiledSolids.RefPlanesAndDims))
             .Add(new SetKnownParams(formulaOnlyAssignments, knownParamPlan.Catalog))
