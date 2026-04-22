@@ -1,6 +1,6 @@
 ﻿using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.Global.Revit.Lib.Electrical;
-using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.RevitData;
 
 namespace Pe.Revit.Global.Revit.Lib.Selection;
 
@@ -83,7 +83,7 @@ public static class ElementContextCollector {
             .ToList();
 
         foreach (var elementId in elementIds) {
-            var element = doc.GetElement(new ElementId(elementId));
+            var element = doc.GetElement(elementId.ToElementId());
             if (element == null) {
                 issues.Add(new RevitDataIssue(
                     "ElementContextElementIdNotFound",
@@ -195,7 +195,7 @@ public static class ElementContextCollector {
             .ToList();
         var primarySystem = systems.Count == 1 ? systems[0] : null;
         var baseEquipment = systems.Count == 1
-            ? doc.GetElement(new ElementId(primarySystem!.SystemId)) is ElectricalSystem circuit &&
+            ? doc.GetElement(primarySystem!.SystemId.ToElementId()) is ElectricalSystem circuit &&
               circuit.BaseEquipment != null
                 ? ToElementRef(circuit.BaseEquipment, circuit.BaseEquipment)
                 : null

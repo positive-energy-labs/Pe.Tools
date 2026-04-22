@@ -1,16 +1,22 @@
 using Newtonsoft.Json;
-using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.RevitData.Schedules;
 using System.IO;
 
 namespace Pe.Dev.RevitAutomation;
 
 public sealed class ScheduleCollectionBatchManifest {
     [JsonProperty("engine")] public string Engine { get; init; } = ScheduleCollectionOptions.DefaultEngine;
-    [JsonProperty("timeoutSeconds")] public int TimeoutSeconds { get; init; } = ScheduleCollectionOptions.DefaultTimeoutSeconds;
+
+    [JsonProperty("timeoutSeconds")]
+    public int TimeoutSeconds { get; init; } = ScheduleCollectionOptions.DefaultTimeoutSeconds;
+
     [JsonProperty("maxConcurrency")] public int MaxConcurrency { get; init; } = 4;
     [JsonProperty("debug")] public bool Debug { get; init; } = true;
     [JsonProperty("mask")] public bool Mask { get; init; } = true;
-    [JsonProperty("request")] public ScheduleCollectionRequest Request { get; init; } = ScheduleCollectionDefaults.CreateDefaultRequest();
+
+    [JsonProperty("request")]
+    public ScheduleCollectionRequest Request { get; init; } = ScheduleCollectionDefaults.CreateDefaultRequest();
+
     [JsonProperty("models")] public List<ScheduleCollectionBatchEntry> Models { get; init; } = [];
 
     public void Validate() {
@@ -23,10 +29,12 @@ public sealed class ScheduleCollectionBatchManifest {
 
     public static ScheduleCollectionBatchManifest LoadFromFile(string filePath) {
         if (!File.Exists(filePath))
-            throw new FileNotFoundException($"Schedule collection batch manifest '{filePath}' was not found.", filePath);
+            throw new FileNotFoundException($"Schedule collection batch manifest '{filePath}' was not found.",
+                filePath);
 
         var manifest = JsonConvert.DeserializeObject<ScheduleCollectionBatchManifest>(File.ReadAllText(filePath))
-                       ?? throw new InvalidDataException("Schedule collection batch manifest JSON was empty or invalid.");
+                       ?? throw new InvalidDataException(
+                           "Schedule collection batch manifest JSON was empty or invalid.");
         manifest.Validate();
         return manifest;
     }

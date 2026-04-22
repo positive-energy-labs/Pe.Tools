@@ -1,6 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <TargetFramework>net8.0-windows</TargetFramework>
         <UseWPF>true</UseWPF>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
@@ -8,8 +7,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj"/>
-        <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj"/>
+        <ProjectReference Include="..\Pe.Shared.Aps\Pe.Shared.Aps.csproj"/>
+        <ProjectReference Include="..\Pe.Shared.SettingsLayout\Pe.Shared.SettingsLayout.csproj"/>
     </ItemGroup>
 
     <ItemGroup>

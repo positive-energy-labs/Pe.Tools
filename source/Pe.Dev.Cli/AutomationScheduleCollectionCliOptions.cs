@@ -1,5 +1,5 @@
 using Pe.Dev.RevitAutomation;
-using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.RevitData.Schedules;
 using System.Globalization;
 
 namespace Pe.Dev.Cli;
@@ -17,9 +17,9 @@ internal sealed record AutomationScheduleCollectionCliOptions(
     ScheduleCollectionRequest Request
 ) {
     public const string UsageText = """
-                                     Usage:
-                                       pe-dev revit automation collect-schedules --region <US|EMEA> --project-guid <guid> --model-guid <guid> [--expected-title <title>] [--engine <engine>] [--timeout-seconds <seconds>] [--debug <true|false>] [--mask <true|false>] [--primary-parameter-name <name>] [--primary-value <value>] [--primary-category-name <name>]... [--primary-schedule-name <name>]... [--fallback-category-name <name>]... [--fallback-schedule-name <name>]... [--include-templates <true|false>] [--json]
-                                     """;
+                                    Usage:
+                                      pe-dev revit automation collect-schedules --region <US|EMEA> --project-guid <guid> --model-guid <guid> [--expected-title <title>] [--engine <engine>] [--timeout-seconds <seconds>] [--debug <true|false>] [--mask <true|false>] [--primary-parameter-name <name>] [--primary-value <value>] [--primary-category-name <name>]... [--primary-schedule-name <name>]... [--fallback-category-name <name>]... [--fallback-schedule-name <name>]... [--include-templates <true|false>] [--json]
+                                    """;
 
     public static AutomationScheduleCollectionCliOptions Parse(IReadOnlyList<string> args) {
         if (args.Count == 0 || !string.Equals(args[0], "collect-schedules", StringComparison.OrdinalIgnoreCase))
@@ -39,7 +39,8 @@ internal sealed record AutomationScheduleCollectionCliOptions(
         var primaryValue = ScheduleCollectionDefaults.DefaultPrimaryParameterValue;
         var primaryCategoryNames = new List<string>();
         var primaryScheduleNames = new List<string>();
-        var fallbackCategoryNames = new List<string>(ScheduleCollectionDefaults.CreateDefaultFallbackCatalogRequest().CategoryNames);
+        var fallbackCategoryNames =
+            new List<string>(ScheduleCollectionDefaults.CreateDefaultFallbackCatalogRequest().CategoryNames);
         var fallbackScheduleNames = new List<string>();
 
         for (var i = 1; i < args.Count; i++) {
@@ -64,10 +65,10 @@ internal sealed record AutomationScheduleCollectionCliOptions(
                 timeoutSeconds = int.Parse(RequireValue(args, ref i, arg), CultureInfo.InvariantCulture);
                 break;
             case "--debug":
-                debug = ReadBooleanOption(args, ref i, defaultValue: true);
+                debug = ReadBooleanOption(args, ref i, true);
                 break;
             case "--mask":
-                mask = ReadBooleanOption(args, ref i, defaultValue: true);
+                mask = ReadBooleanOption(args, ref i, true);
                 break;
             case "--primary-parameter-name":
                 primaryParameterName = RequireValue(args, ref i, arg);
@@ -88,7 +89,7 @@ internal sealed record AutomationScheduleCollectionCliOptions(
                 fallbackScheduleNames.Add(RequireValue(args, ref i, arg));
                 break;
             case "--include-templates":
-                includeTemplates = ReadBooleanOption(args, ref i, defaultValue: true);
+                includeTemplates = ReadBooleanOption(args, ref i, true);
                 break;
             case "--json":
                 json = true;
@@ -109,7 +110,8 @@ internal sealed record AutomationScheduleCollectionCliOptions(
             CategoryNames = primaryCategoryNames,
             ScheduleNames = primaryScheduleNames,
             IncludeTemplates = includeTemplates,
-            CustomParameterFilters = string.IsNullOrWhiteSpace(primaryParameterName) || string.IsNullOrWhiteSpace(primaryValue)
+            CustomParameterFilters = string.IsNullOrWhiteSpace(primaryParameterName) ||
+                                     string.IsNullOrWhiteSpace(primaryValue)
                 ? []
                 : [
                     new ScheduleCustomParameterFilter(

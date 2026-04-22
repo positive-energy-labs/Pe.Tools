@@ -5,7 +5,7 @@ namespace Pe.Shared.HostContracts.Protocol;
 
 public static class BridgeProtocol {
     public const string Transport = "named-pipes";
-    public const int ContractVersion = 14;
+    public const int ContractVersion = 15;
     public const string DefaultPipeName = SettingsEditorRuntime.DefaultPipeName;
 }
 

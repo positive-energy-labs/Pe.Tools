@@ -615,8 +615,10 @@ public sealed class ScriptReferenceResolver(
             return value;
 
         return value
-            .Replace("$(RevitVersion)", revitVersion, StringComparison.OrdinalIgnoreCase)
-            .Replace("$(RevitYear)", revitVersion, StringComparison.OrdinalIgnoreCase);
+            .Replace("$(RevitVersion)", revitVersion)
+            .Replace("$(revitversion)", revitVersion)
+            .Replace("$(RevitYear)", revitVersion)
+            .Replace("$(revityear)", revitVersion);
     }
 
     private IReadOnlyList<string> FilterCompatibleAssetPaths(

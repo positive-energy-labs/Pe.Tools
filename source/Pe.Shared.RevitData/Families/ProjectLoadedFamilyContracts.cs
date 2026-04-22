@@ -26,9 +26,9 @@ public sealed record ProjectLoadedFamilyIssue(
 public sealed record ProjectLoadedFamilyParameter {
     public required RevitParameterIdentity Identity { get; init; }
     public bool IsInstance { get; init; }
-    public ForgeTypeId PropertiesGroup { get; init; } = new("");
-    public ForgeTypeId DataType { get; init; } = SpecTypeId.String.Text;
-    public StorageType StorageType { get; init; }
+    public string? PropertiesGroupKey { get; init; }
+    public string? DataTypeKey { get; init; }
+    public RequestedParameterStorageType StorageType { get; init; }
     public List<string> TypeNames { get; init; } = [];
     public Dictionary<string, string?> ValuesByType { get; init; } = new(StringComparer.Ordinal);
 }
@@ -50,9 +50,9 @@ public sealed record ProjectLoadedFamilyRecord {
 public sealed record ProjectParameterCatalogEntry {
     public required RevitParameterIdentity Identity { get; init; }
     public bool IsInstance { get; init; }
-    public ForgeTypeId PropertiesGroup { get; init; } = new("");
-    public ForgeTypeId DataType { get; init; } = SpecTypeId.String.Text;
-    public StorageType StorageType { get; init; }
+    public string? PropertiesGroupKey { get; init; }
+    public string? DataTypeKey { get; init; }
+    public RequestedParameterStorageType StorageType { get; init; }
     public HashSet<string> FamilyNames { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string?> ValuesPerType { get; init; } = new(StringComparer.Ordinal);
 }

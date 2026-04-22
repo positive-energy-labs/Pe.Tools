@@ -1,5 +1,6 @@
 ﻿using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
-using Pe.Shared.RevitData.Families;
+using Pe.Revit.Global.Revit.Lib.Parameters;
+using Pe.Revit.SettingsRuntime.Core.Json;
 using Pe.Shared.RevitData.Parameters;
 
 namespace Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
@@ -216,9 +217,8 @@ public static class LoadedFamiliesFormulaCollector {
             return ApplyFamilyFormula(classifiedParameter, familyParameter.Parameter, familyName, issues);
         }
 
-        if (effectiveProjectBinding != null) {
+        if (effectiveProjectBinding != null)
             return classifiedParameter with { FormulaState = CollectedFormulaState.NotApplicable, Formula = null };
-        }
 
         if (parameter.IsBuiltIn) {
             return classifiedParameter with {

@@ -3,6 +3,7 @@ using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
 using Pe.Revit.Global.Services.Host.Operations;
 using Pe.Shared.HostContracts.Protocol;
+using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
@@ -377,9 +378,10 @@ internal sealed class BridgeAgent : IDisposable {
     private void SendHandshake() {
         var activeDocument = RevitUiSession.CurrentUIApplication.GetActiveDocument();
         var availableModules = this._moduleRegistry.GetModules()
-            .Where(module => IsModuleAvailableForDocument(module, activeDocument))
+            .Where(SettingsModuleAvailability.IsBridgeDiscoverable)
+            .Where(module => SettingsModuleAvailability.IsAvailableForDocument(module, activeDocument))
             .OrderBy(module => module.ModuleKey, StringComparer.OrdinalIgnoreCase)
-            .Select(CreateHostModuleDescriptor)
+            .Select(SettingsModuleAvailability.CreateHostModuleDescriptor)
             .ToList();
         Log.Debug(
             "Settings editor bridge handshake module snapshot: ActiveDocument={ActiveDocumentTitle}, ModuleCount={ModuleCount}",
@@ -417,39 +419,6 @@ internal sealed class BridgeAgent : IDisposable {
         // Startup runs on the Revit UI thread, so avoid sync-over-async during the initial bridge handshake.
         var json = JsonConvert.SerializeObject(frame, this._serializerSettings);
         this._writer.WriteLine(json);
-    }
-
-    private static HostModuleDescriptor CreateHostModuleDescriptor(ISettingsModule module) =>
-        new(
-            module.ModuleKey,
-            module.DefaultRootKey,
-            module.HostScope switch {
-                SettingsModuleHostScope.Host => HostModuleScope.Host,
-                SettingsModuleHostScope.ActiveDocument => HostModuleScope.ActiveDocument,
-                _ => HostModuleScope.Session
-            },
-            module.ActiveDocumentKind switch {
-                SettingsModuleActiveDocumentKind.ProjectOnly => HostModuleActiveDocumentKind.ProjectOnly,
-                SettingsModuleActiveDocumentKind.FamilyOnly => HostModuleActiveDocumentKind.FamilyOnly,
-                _ => HostModuleActiveDocumentKind.Any
-            }
-        );
-
-    private static bool IsModuleAvailableForDocument(
-        ISettingsModule module,
-        Autodesk.Revit.DB.Document? activeDocument
-    ) {
-        if (module.HostScope != SettingsModuleHostScope.ActiveDocument)
-            return true;
-
-        if (activeDocument == null)
-            return false;
-
-        return module.ActiveDocumentKind switch {
-            SettingsModuleActiveDocumentKind.ProjectOnly => !activeDocument.IsFamilyDocument,
-            SettingsModuleActiveDocumentKind.FamilyOnly => activeDocument.IsFamilyDocument,
-            _ => true
-        };
     }
 
     private async Task SendDisconnectAsync() {
@@ -498,6 +467,62 @@ internal sealed class BridgeAgent : IDisposable {
                 this._hostOptions.PipeName
             );
         }
+    }
+}
+
+internal static class SettingsModuleAvailability {
+    public static bool IsBridgeDiscoverable(ISettingsModule module) =>
+        module.HostScope != SettingsModuleHostScope.Host && module.SettingsType != typeof(object);
+
+    public static bool IsAvailableForDocument(
+        ISettingsModule module,
+        Autodesk.Revit.DB.Document? activeDocument
+    ) {
+        if (module.HostScope != SettingsModuleHostScope.ActiveDocument)
+            return true;
+
+        if (activeDocument == null)
+            return false;
+
+        return module.ActiveDocumentKind switch {
+            SettingsModuleActiveDocumentKind.ProjectOnly => !activeDocument.IsFamilyDocument,
+            SettingsModuleActiveDocumentKind.FamilyOnly => activeDocument.IsFamilyDocument,
+            _ => true
+        };
+    }
+
+    public static HostModuleDescriptor CreateHostModuleDescriptor(ISettingsModule module) =>
+        new(
+            module.ModuleKey,
+            module.DefaultRootKey,
+            module.HostScope switch {
+                SettingsModuleHostScope.Host => HostModuleScope.Host,
+                SettingsModuleHostScope.ActiveDocument => HostModuleScope.ActiveDocument,
+                _ => HostModuleScope.Session
+            },
+            module.ActiveDocumentKind switch {
+                SettingsModuleActiveDocumentKind.ProjectOnly => HostModuleActiveDocumentKind.ProjectOnly,
+                SettingsModuleActiveDocumentKind.FamilyOnly => HostModuleActiveDocumentKind.FamilyOnly,
+                _ => HostModuleActiveDocumentKind.Any
+            }
+        );
+
+    public static SettingsModuleDescriptor CreateSettingsModuleDescriptor(ISettingsModuleManifest module) {
+        var hostDescriptor = CreateHostModuleDescriptor(module);
+        return new SettingsModuleDescriptor(
+            module.ModuleKey,
+            module.DefaultRootKey,
+            module.Roots.Select(root => new SettingsRootDescriptor(
+                root.RootKey,
+                root.DisplayName
+            )).ToList(),
+            new SettingsModuleStorageOptionsContract(
+                [.. module.StorageOptions.IncludeRoots],
+                [.. module.StorageOptions.PresetRoots]
+            ),
+            hostDescriptor.Scope,
+            hostDescriptor.ActiveDocumentKind
+        );
     }
 }
 

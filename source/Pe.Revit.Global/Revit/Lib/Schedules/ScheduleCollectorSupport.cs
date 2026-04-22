@@ -1,21 +1,11 @@
 using Pe.Revit.Global.Revit.Lib.Parameters;
+using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Parameters;
-using ContractCombinedParameterSpec = Pe.Shared.HostContracts.RevitData.CombinedParameterSpec;
-using ContractScheduleFieldFormatSpec = Pe.Shared.HostContracts.RevitData.ScheduleFieldFormatSpec;
-using ContractScheduleFieldSpec = Pe.Shared.HostContracts.RevitData.ScheduleFieldSpec;
-using ContractScheduleFilterSpec = Pe.Shared.HostContracts.RevitData.ScheduleFilterSpec;
-using ContractScheduleProfile = Pe.Shared.HostContracts.RevitData.ScheduleProfile;
-using ContractScheduleSortGroupSpec = Pe.Shared.HostContracts.RevitData.ScheduleSortGroupSpec;
-using ContractScheduleTitleBorderSpec = Pe.Shared.HostContracts.RevitData.ScheduleTitleBorderSpec;
-using ContractScheduleTitleStyleSpec = Pe.Shared.HostContracts.RevitData.ScheduleTitleStyleSpec;
-using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.RevitData.Schedules;
+using ContractCombinedParameterSpec = Pe.Shared.RevitData.Schedules.CombinedParameterSpec;
+using ContractScheduleFilterSpec = Pe.Shared.RevitData.Schedules.ScheduleFilterSpec;
 using InternalCombinedParameterSpec = Pe.Revit.Global.Revit.Lib.Schedules.Fields.CombinedParameterSpec;
-using InternalScheduleFieldFormatSpec = Pe.Revit.Global.Revit.Lib.Schedules.Fields.ScheduleFieldFormatSpec;
-using InternalScheduleFieldSpec = Pe.Revit.Global.Revit.Lib.Schedules.Fields.ScheduleFieldSpec;
 using InternalScheduleFilterSpec = Pe.Revit.Global.Revit.Lib.Schedules.Filters.ScheduleFilterSpec;
-using InternalScheduleProfile = Pe.Revit.Global.Revit.Lib.Schedules.ScheduleProfile;
-using InternalScheduleSortGroupSpec = Pe.Revit.Global.Revit.Lib.Schedules.SortGroup.ScheduleSortGroupSpec;
-using InternalScheduleTitleStyleSpec = Pe.Revit.Global.Revit.Lib.Schedules.TitleStyle.ScheduleTitleStyleSpec;
 
 namespace Pe.Revit.Global.Revit.Lib.Schedules;
 
@@ -88,22 +78,6 @@ internal static class ScheduleCollectorSupport {
         filters
             .Select(ToContractFilter)
             .ToList();
-
-    public static ContractScheduleProfile ToContractProfile(InternalScheduleProfile profile) =>
-        new(
-            profile.Name,
-            profile.CategoryName.ToString(),
-            profile.ViewTemplateName,
-            ToContractTitleStyle(profile.TitleStyle),
-            profile.IsItemized,
-            profile.FilterBySheet,
-            profile.Fields.Select(ToContractField).ToList(),
-            profile.SortGroup.Select(ToContractSortGroup).ToList(),
-            profile.Filters.Select(ToContractFilter).ToList(),
-            profile.OnFinishSettings == null
-                ? null
-                : new ScheduleOnFinishSettings(profile.OnFinishSettings.OpenScheduleOnFinish)
-        );
 
     public static List<ScheduleParameterUsageEntry> CollectParameterUsages(
         Document doc,
@@ -202,59 +176,12 @@ internal static class ScheduleCollectorSupport {
         );
     }
 
-    private static ContractScheduleTitleStyleSpec ToContractTitleStyle(InternalScheduleTitleStyleSpec spec) =>
-        new(
-            spec.HorizontalAlignment.ToString(),
-            new ContractScheduleTitleBorderSpec(
-                spec.BorderStyle.TopLineStyleName,
-                spec.BorderStyle.BottomLineStyleName,
-                spec.BorderStyle.LeftLineStyleName,
-                spec.BorderStyle.RightLineStyleName
-            )
-        );
-
-    private static ContractScheduleFieldSpec ToContractField(InternalScheduleFieldSpec spec) =>
-        new(
-            spec.ParameterName,
-            spec.ColumnHeaderOverride,
-            spec.HeaderGroup,
-            spec.IsHidden,
-            spec.DisplayType.ToString(),
-            spec.ColumnWidth,
-            spec.HorizontalAlignment.ToString(),
-            spec.CalculatedType?.ToString(),
-            spec.PercentageOfField,
-            spec.FormatOptions == null ? null : ToContractFieldFormat(spec.FormatOptions),
-            spec.CombinedParameters?.Select(ToContractCombinedParameter).ToList()
-        );
-
-    private static ContractScheduleFieldFormatSpec ToContractFieldFormat(InternalScheduleFieldFormatSpec spec) =>
-        new(
-            spec.UnitTypeId,
-            spec.SymbolTypeId,
-            spec.Accuracy,
-            spec.SuppressTrailingZeros,
-            spec.SuppressLeadingZeros,
-            spec.UsePlusPrefix,
-            spec.UseDigitGrouping,
-            spec.SuppressSpaces
-        );
-
     private static ContractCombinedParameterSpec ToContractCombinedParameter(InternalCombinedParameterSpec spec) =>
         new(
             spec.ParameterName,
             spec.Prefix,
             spec.Suffix,
             spec.Separator
-        );
-
-    private static ContractScheduleSortGroupSpec ToContractSortGroup(InternalScheduleSortGroupSpec spec) =>
-        new(
-            spec.FieldName,
-            spec.SortOrder.ToString(),
-            spec.ShowHeader,
-            spec.ShowFooter,
-            spec.ShowBlankLine
         );
 
     private static ContractScheduleFilterSpec ToContractFilter(InternalScheduleFilterSpec spec) =>

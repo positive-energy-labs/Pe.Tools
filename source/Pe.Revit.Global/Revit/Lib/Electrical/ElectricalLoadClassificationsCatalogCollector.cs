@@ -1,5 +1,6 @@
 using Autodesk.Revit.DB.Electrical;
 using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.RevitData;
 
 namespace Pe.Revit.Global.Revit.Lib.Electrical;
 
@@ -36,13 +37,14 @@ public static class ElectricalLoadClassificationsCatalogCollector {
     ) {
         try {
             var demandFactor = doc.GetElement(classification.DemandFactorId) as ElectricalDemandFactorDefinition;
+            var other = TryGetOtherLoadFlag(classification);
             return new ElectricalLoadClassificationCatalogEntry(
                 classification.Id.Value(),
                 classification.UniqueId,
                 classification.Name,
                 classification.Abbreviation,
                 classification.Motor,
-                classification.Other,
+                other,
                 classification.SpaceLoadClass.ToString(),
                 demandFactor == null
                     ? null
@@ -64,5 +66,13 @@ public static class ElectricalLoadClassificationsCatalogCollector {
             ));
             return null;
         }
+    }
+
+    private static bool TryGetOtherLoadFlag(ElectricalLoadClassification classification) {
+        var property = typeof(ElectricalLoadClassification).GetProperty("Other");
+        if (property?.PropertyType == typeof(bool) && property.GetValue(classification) is bool value)
+            return value;
+
+        return false;
     }
 }

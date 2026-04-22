@@ -31,9 +31,9 @@ This document describes the browser-facing and tool-facing host contract exposed
 
 - settings/status/schema/storage:
   - `GET /api/settings/host-status`
-  - `GET /api/settings/schema`
-  - `GET /api/settings/workspaces`
-  - `GET /api/settings/tree`
+  - `POST /api/settings/schema`
+  - `POST /api/settings/workspaces`
+  - `POST /api/settings/tree`
   - `POST /api/settings/document/open`
   - `POST /api/settings/document/validate`
   - `POST /api/settings/document/save`
@@ -56,6 +56,13 @@ This document describes the browser-facing and tool-facing host contract exposed
 - scripting:
   - `POST /api/scripting/workspace/bootstrap`
   - `POST /api/scripting/execute`
+
+## Structural Host Mode
+
+- During the current settings runtime split, Revit-authored schema routes intentionally degrade on host.
+- `POST /api/settings/schema` returns `409 Conflict` for Revit-backed modules such as `Schedule Manager`.
+- `GET /api/revit-data/loaded-families/filter/schema` currently also returns `409 Conflict` in structural host mode.
+- Bridge-backed data and field-options routes still work when a matching Revit session is connected.
 
 ## Element Context Query
 

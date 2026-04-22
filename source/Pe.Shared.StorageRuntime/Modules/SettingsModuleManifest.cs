@@ -4,6 +4,15 @@ using Pe.Shared.StorageRuntime.Json;
 
 namespace Pe.Shared.StorageRuntime.Modules;
 
+public sealed record StructuralSettingsModuleDescriptor(
+    string ModuleKey,
+    string DefaultRootKey,
+    IReadOnlyList<SettingsRootDescriptor> Roots,
+    SettingsStorageModuleOptions StorageOptions,
+    SettingsModuleHostScope HostScope,
+    SettingsModuleActiveDocumentKind ActiveDocumentKind
+);
+
 public interface ISettingsModuleManifest : ISettingsModule {
     string DefaultRootKey { get; }
     IReadOnlyList<SettingsRootDescriptor> Roots { get; }
@@ -42,4 +51,16 @@ public static class SettingsStorageProfiles {
         ["_shared", .. SettingsDirectiveRootCatalog.GlobalIncludeRoots],
         SettingsDirectiveRootCatalog.GlobalPresetRoots
     );
+}
+
+public static class StructuralSettingsModuleDescriptorMapper {
+    public static StructuralSettingsModuleDescriptor ToStructuralDescriptor(this ISettingsModuleManifest module) =>
+        new(
+            module.ModuleKey,
+            module.DefaultRootKey,
+            module.Roots,
+            module.StorageOptions,
+            module.HostScope,
+            module.ActiveDocumentKind
+        );
 }

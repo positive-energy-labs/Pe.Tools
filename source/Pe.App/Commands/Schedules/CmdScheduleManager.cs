@@ -6,11 +6,11 @@ using Pe.App.Commands.Schedules.Ui;
 using Pe.Revit.Global.Revit.Documents.Schedules;
 using Pe.Revit.Global.Revit.Lib.Schedules;
 using Pe.Revit.Global.Revit.Ui;
+using Pe.Revit.SettingsRuntime.Core.Json;
+using Pe.Revit.SettingsRuntime.Core.Json.SchemaProviders;
+using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.StorageRuntime;
-using Pe.Shared.StorageRuntime.Core.Json;
-using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
-using Pe.Shared.StorageRuntime.Modules;
 using Serilog;
 using Serilog.Events;
 using System.Diagnostics;
@@ -19,6 +19,7 @@ using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
 using JsonValidationException = Pe.Revit.Global.JsonValidationException;
 using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
+using SharedScheduleProfile = Pe.Shared.RevitData.Schedules.ScheduleProfile;
 
 namespace Pe.App.Commands.Schedules;
 
@@ -86,7 +87,7 @@ public class CmdScheduleManager : IExternalCommand {
             // Create the palette with tabs - each tab defines its own items and actions
             var window = PaletteFactory.Create("Schedule Manager",
                 new PaletteOptions<ISchedulePaletteItem> {
-                    Persistence = (storage, item => item.TextPrimary),
+                    Persistence = (Storage: storage, PersistenceKey: item => item.TextPrimary),
                     DefaultTabIndex = 0,
                     SidebarPanel = previewPanel,
                     Tabs = [
@@ -149,7 +150,7 @@ public class CmdScheduleManager : IExternalCommand {
 
     private SchedulePreviewData TryLoadPreviewData(
         ScheduleListItem profileItem,
-        ModuleSettingsStorage<ScheduleProfile> profilesStorage
+        ModuleSettingsStorage<SharedScheduleProfile> profilesStorage
     ) {
         try {
             return this.LoadValidPreviewData(profileItem, profilesStorage);
@@ -162,7 +163,7 @@ public class CmdScheduleManager : IExternalCommand {
 
     private SchedulePreviewData LoadValidPreviewData(
         ScheduleListItem profileItem,
-        ModuleSettingsStorage<ScheduleProfile> profilesStorage
+        ModuleSettingsStorage<SharedScheduleProfile> profilesStorage
     ) {
         var profile = profilesStorage.ReadRequired(profileItem.TextPrimary);
 
@@ -172,9 +173,13 @@ public class CmdScheduleManager : IExternalCommand {
             RevitJsonFormatting.CreateRevitIndentedSettings()
         );
 
+        var categoryLabel = string.IsNullOrWhiteSpace(profile.CategoryName)
+            ? string.Empty
+            : profile.CategoryName;
+
         return new SchedulePreviewData {
             ProfileName = profileItem.TextPrimary,
-            CategoryName = CategoryNamesProvider.GetLabelForBuiltInCategory(profile.CategoryName),
+            CategoryName = categoryLabel,
             IsItemized = profile.IsItemized,
             Fields = profile.Fields,
             SortGroup = profile.SortGroup,
@@ -257,7 +262,7 @@ public class CmdScheduleManager : IExternalCommand {
         }
 
         // Load profile fresh for execution
-        ScheduleProfile scheduleProfile;
+        SharedScheduleProfile scheduleProfile;
         try {
             scheduleProfile = ctx.ProfilesStorage.ReadRequired(ctx.SelectedProfile.TextPrimary);
         } catch (Exception ex) {
@@ -341,7 +346,7 @@ public class CmdScheduleManager : IExternalCommand {
                 $"View template skipped: {result.SkippedViewTemplate}")
             .AddIf(hasWarnings, LogEventLevel.Warning, null, "Warnings:")
             .AddIf(hasWarnings, LogEventLevel.Warning, null,
-                string.Join("\n", result.Warnings.Select(w => $"  • {w}")))
+                string.Join("\n", result.Warnings.Select(w => $"  â€¢ {w}")))
             .Show(() => FileUtils.OpenInDefaultApp(outputPath), "Open Output File");
 
 
@@ -369,8 +374,8 @@ public class CmdScheduleManager : IExternalCommand {
         var profile = context.ProfilesStorage.ReadRequired(context.SelectedProfile.TextPrimary);
 
         // Get families of the schedule's category
-        var category = Category.GetCategory(context.Doc, profile.CategoryName);
-        var categoryLabel = CategoryNamesProvider.GetLabelForBuiltInCategory(profile.CategoryName);
+        var category = CategoryNamesProvider.TryFindCategoryByName(context.Doc, profile.CategoryName);
+        var categoryLabel = profile.CategoryName;
 
         if (category == null) {
             new Ballogger()
@@ -471,13 +476,13 @@ public class CmdScheduleManager : IExternalCommand {
 
             if (createdSchedules.Any()) {
                 _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
-                    $"Created schedules:\n{string.Join("\n", createdSchedules.Select(s => $"  • {s}"))}");
+                    $"Created schedules:\n{string.Join("\n", createdSchedules.Select(s => $"  â€¢ {s}"))}");
             }
 
             if (failCount > 0) {
                 var failures = results.Where(r => !r.success).ToList();
                 _ = balloon.Add(LogEventLevel.Warning, new StackFrame(),
-                    $"Failed schedules:\n{string.Join("\n", failures.Select(f => $"  • {f.profileName}: {f.errorMessage}"))}");
+                    $"Failed schedules:\n{string.Join("\n", failures.Select(f => $"  â€¢ {f.profileName}: {f.errorMessage}"))}");
             }
 
             var outputPath = context.Storage.Output().SubDir("batch").DirectoryPath;
@@ -590,7 +595,7 @@ public class ScheduleManagerContext {
     public required Document Doc { get; init; }
     public required UIDocument UiDoc { get; init; }
     public required ModuleStorage Storage { get; init; }
-    public required ModuleSettingsStorage<ScheduleProfile> ProfilesStorage { get; init; }
+    public required ModuleSettingsStorage<SharedScheduleProfile> ProfilesStorage { get; init; }
     public required ModuleDocumentStorage ProfilesDocuments { get; init; }
 
     // UI state: what's currently selected and displayed

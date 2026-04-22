@@ -25,7 +25,6 @@ public sealed class StorageClient {
             module.ModuleKey,
             module.DefaultRootKey,
             module.StorageOptions,
-            module.SettingsType,
             SettingsRuntimeMode.LiveDocument,
             BasePath,
             new Dictionary<string, SettingsStorageModuleDefinition>(StringComparer.OrdinalIgnoreCase) {

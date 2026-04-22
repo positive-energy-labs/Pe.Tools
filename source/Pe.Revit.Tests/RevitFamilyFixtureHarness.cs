@@ -1,9 +1,9 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.Global;
+using Pe.Revit.Global.Revit.Lib.Parameters;
 using Pe.Revit.Global.Utils.Files;
-using Pe.Shared.RevitData.Parameters;
-using Pe.Shared.StorageRuntime.Core.Json;
+using Pe.Revit.SettingsRuntime.Core.Json;
 using System.Globalization;
 
 namespace Pe.Revit.Tests;
@@ -305,9 +305,10 @@ internal static class RevitFamilyFixtureHarness {
 
                     if (!string.IsNullOrWhiteSpace(parameter.Formula)) {
                         var familyDoc = new FamilyDocument(familyDocument);
-                        if (!familyDoc.UnsetFormula(parameter))
+                        if (!familyDoc.UnsetFormula(parameter)) {
                             throw new InvalidOperationException(
                                 $"Family parameter '{parameterName}' formula could not be cleared for state evaluation.");
+                        }
                     }
 
                     familyManager.Set(parameter, value);
@@ -552,9 +553,10 @@ internal static class RevitFamilyFixtureHarness {
             var safeTableName = SanitizePathSegment(tableName);
             var exportPath = Path.Combine(outputDirectory, $"{safeTableName}.csv");
             var exportSucceeded = manager.ExportSizeTable(tableName, exportPath);
-            if (!exportSucceeded || !File.Exists(exportPath))
+            if (!exportSucceeded || !File.Exists(exportPath)) {
                 throw new InvalidOperationException(
                     $"Failed to export family size table '{tableName}' to '{exportPath}'.");
+            }
 
             var rows = File.ReadAllLines(exportPath);
             var headers = rows.Length == 0
@@ -831,9 +833,10 @@ internal static class RevitFamilyFixtureHarness {
             throw new InvalidOperationException("Expected a family document.");
 
         var targetCategory = Category.GetCategory(familyDocument, familyCategory);
-        if (targetCategory == null)
+        if (targetCategory == null) {
             throw new InvalidOperationException(
                 $"Category '{familyCategory}' is not available in the family document.");
+        }
 
         using var transaction = new Transaction(familyDocument, "Configure test family");
         _ = transaction.Start();

@@ -4,17 +4,16 @@ using Newtonsoft.Json;
 using Pe.App.Commands.Schedules.Ui;
 using Pe.Revit.Global.Revit.Documents.Schedules;
 using Pe.Revit.Global.Revit.Lib.Schedules;
-using Pe.Revit.Global.Revit.Lib.Schedules.Fields;
-using Pe.Revit.Global.Revit.Lib.Schedules.SortGroup;
 using Pe.Revit.Global.Revit.Ui;
+using Pe.Revit.SettingsRuntime.Core.Json;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.StorageRuntime;
-using Pe.Shared.StorageRuntime.Core.Json.ContractResolvers;
-using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
 using Serilog.Events;
 using System.Diagnostics;
 using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
+using SharedScheduleFieldSpec = Pe.Shared.RevitData.Schedules.ScheduleFieldSpec;
+using SharedScheduleSortGroupSpec = Pe.Shared.RevitData.Schedules.ScheduleSortGroupSpec;
 using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
 
 namespace Pe.App.Commands.Schedules;
@@ -51,7 +50,7 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
             // Create the palette
             var window = PaletteFactory.Create("Schedule Serializer",
                 new PaletteOptions<ScheduleSerializePaletteItem> {
-                    Persistence = (storage, item => item.TextPrimary),
+                    Persistence = (Storage: storage, PersistenceKey: item => item.TextPrimary),
                     SidebarPanel = previewPanel,
                     Tabs = [
                         new TabDefinition<ScheduleSerializePaletteItem>(
@@ -75,19 +74,14 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
     private ScheduleSerializePreviewData BuildSerializationPreview(ScheduleSerializePaletteItem serializeItem) {
         try {
             // Serialize the schedule to get the profile
-            var profile = serializeItem.Schedule.CaptureScheduleProfile();
+            var profile = serializeItem.Schedule.CaptureAuthoredScheduleProfile();
 
             // Serialize to JSON exactly as it would be saved
-            var profileJson = JsonConvert.SerializeObject(
-                profile,
-                Formatting.Indented,
-                new JsonSerializerSettings {
-                    NullValueHandling = NullValueHandling.Ignore, ContractResolver = new RevitTypeContractResolver()
-                });
+            var profileJson = JsonConvert.SerializeObject(profile, RevitJsonFormatting.CreateRevitIndentedSettings());
 
             return new ScheduleSerializePreviewData {
                 ProfileName = profile.Name,
-                CategoryName = CategoryNamesProvider.GetLabelForBuiltInCategory(profile.CategoryName),
+                CategoryName = profile.CategoryName,
                 IsItemized = profile.IsItemized,
                 Fields = profile.Fields,
                 SortGroup = profile.SortGroup,
@@ -109,7 +103,7 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
 
         try {
             var serializeOutputDir = storage.Output().SubDir("serialize");
-            var profile = serializeItem.Schedule.CaptureScheduleProfile();
+            var profile = serializeItem.Schedule.CaptureAuthoredScheduleProfile();
 
             // Prepend timestamp to filename
             var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
@@ -183,8 +177,8 @@ public class ScheduleSerializePreviewData {
     public string ProfileName { get; set; } = string.Empty;
     public string? CategoryName { get; set; }
     public bool? IsItemized { get; set; }
-    public List<ScheduleFieldSpec>? Fields { get; set; }
-    public List<ScheduleSortGroupSpec>? SortGroup { get; set; }
+    public List<SharedScheduleFieldSpec>? Fields { get; set; }
+    public List<SharedScheduleSortGroupSpec>? SortGroup { get; set; }
     public string ProfileJson { get; set; } = string.Empty;
     public bool IsValid { get; set; }
     public string? ErrorMessage { get; set; }

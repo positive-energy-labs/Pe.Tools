@@ -58,13 +58,21 @@ public sealed class LocalDiskSettingsStorageBackend(
         var searchOption = options.Recursive
             ? SearchOption.AllDirectories
             : SearchOption.TopDirectoryOnly;
+        var directories = Directory.EnumerateDirectories(discoveryRootPath, "*", searchOption)
+            .Select(path => BclExtensions.GetRelativePath(rootDirectory, path).Replace('\\', '/'))
+            .ToList();
         var files = Directory.EnumerateFiles(discoveryRootPath, "*.json", searchOption)
             .Select(path => SettingsDiscoveryBuilder.CreateSettingsFileEntry(path, rootDirectory))
             .Where(entry => options.IncludeFragments || !entry.IsFragment)
             .Where(entry => options.IncludeSchemas || !entry.IsSchema)
             .OrderByDescending(entry => entry.ModifiedUtc)
             .ToList();
-        var tree = SettingsDiscoveryBuilder.BuildDirectoryTree(rootName, normalizedRootRelativePath, files);
+        var tree = SettingsDiscoveryBuilder.BuildDirectoryTree(
+            rootName,
+            normalizedRootRelativePath,
+            files,
+            directories
+        );
 
         return Task.FromResult(new SettingsDiscoveryResult(files, tree));
     }

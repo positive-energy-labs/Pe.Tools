@@ -8,8 +8,8 @@ using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
+using Pe.Revit.SettingsRuntime.Core.Json;
 using Pe.Shared.StorageRuntime;
-using Pe.Shared.StorageRuntime.Core.Json;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
@@ -183,12 +183,15 @@ internal static class PracticalBenchmarks {
                 var data = LoadedFamiliesMatrixCollector.Collect(projectDocument, null, progressLines.Add);
                 var visibleParameterCount = data.Families.Sum(family => family.VisibleParameters.Count);
 
-                if (data.Families.Count <= 1)
+                if (data.Families.Count <= 1) {
                     throw new InvalidOperationException(
                         "Loaded families matrix benchmark expected more than one family.");
-                if (visibleParameterCount <= 0)
+                }
+
+                if (visibleParameterCount <= 0) {
                     throw new InvalidOperationException(
                         "Loaded families matrix benchmark expected at least one visible parameter.");
+                }
 
                 return new LoadedFamiliesMatrixBenchmarkResult(
                     data.Families.Count,
@@ -330,9 +333,10 @@ internal static class PracticalBenchmarks {
                         var allSnapshots = CaptureParameterSnapshots(familyDocument, "NominalLength", familyTypes);
                         if (allSnapshots.Count != familyTypes.Length)
                             throw new InvalidOperationException("Did not capture all parameter assignment snapshots.");
-                        if (allSnapshots.Any(snapshot => !snapshot.HasValue))
+                        if (allSnapshots.Any(snapshot => !snapshot.HasValue)) {
                             throw new InvalidOperationException(
                                 "One or more parameter assignment snapshots did not have values.");
+                        }
 
                         return new ParameterAssignmentBenchmarkResult(
                             fastGlobal,
@@ -596,12 +600,15 @@ internal static class PracticalBenchmarks {
         try {
             savedDocument = application.OpenDocumentFile(savedFamilyPath)
                             ?? throw new InvalidOperationException($"Failed to open saved family '{savedFamilyPath}'.");
-            if (!savedDocument.IsFamilyDocument)
+            if (!savedDocument.IsFamilyDocument) {
                 throw new InvalidOperationException(
                     $"Saved file '{savedFamilyPath}' did not reopen as a family document.");
-            if (savedDocument.OwnerFamily == null)
+            }
+
+            if (savedDocument.OwnerFamily == null) {
                 throw new InvalidOperationException(
                     $"Saved family '{savedFamilyPath}' did not expose an owner family.");
+            }
         } finally {
             CloseDocument(savedDocument);
         }

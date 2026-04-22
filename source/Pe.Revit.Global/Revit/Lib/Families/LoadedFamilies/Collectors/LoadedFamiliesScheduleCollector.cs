@@ -1,7 +1,6 @@
 using Pe.Revit.Global.Revit.Documents.Schedules;
 using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Models;
 using Pe.Revit.Global.Revit.Lib.Schedules;
-using Pe.Shared.RevitData.Families;
 using Serilog;
 
 namespace Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
@@ -30,7 +29,7 @@ public static class LoadedFamiliesScheduleCollector {
             var categoryPlacements = context.GetPlacedInstancesForCategory(categoryGroup.CategoryId).ToList();
             foreach (var schedule in schedules) {
                 var serializeStopwatch = Stopwatch.StartNew();
-                var profile = schedule.CaptureScheduleProfile();
+                var profile = schedule.CaptureRuntimeScheduleProfile();
                 profile.FilterBySheet = false;
                 var serializeElapsed = serializeStopwatch.Elapsed;
 
@@ -74,7 +73,7 @@ public static class LoadedFamiliesScheduleCollector {
                 continue;
 
             foreach (var schedule in schedules) {
-                var profile = schedule.CaptureScheduleProfile();
+                var profile = schedule.CaptureRuntimeScheduleProfile();
                 profile.FilterBySheet = false;
                 var matchingFamilyIds = doc.GetFamilyIdsMatchingScheduleProfileFiltersAnyType(
                     profile,

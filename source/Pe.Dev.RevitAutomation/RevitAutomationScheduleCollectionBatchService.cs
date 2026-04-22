@@ -1,7 +1,8 @@
-using Pe.Revit.Global.Services.Aps;
-using Pe.Revit.Global.Services.Aps.Models;
-using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.Aps;
+using Pe.Shared.Aps.Core;
+using Pe.Shared.Aps.Models;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 
 namespace Pe.Dev.RevitAutomation;
@@ -26,7 +27,8 @@ public sealed class RevitAutomationScheduleCollectionBatchService {
             log?.Invoke("Auth: acquiring management token");
             _ = aps.GetTokenResult(ApsTokenRequest.ForAutomationManagement());
         } catch (Exception ex) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ScheduleCollectionClassification.ManagementTokenFailed, manifest, ex.Message);
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
+                ScheduleCollectionClassification.ManagementTokenFailed, manifest, ex.Message);
         }
 
         ApsTokenResult userToken;
@@ -34,7 +36,8 @@ public sealed class RevitAutomationScheduleCollectionBatchService {
             log?.Invoke("Auth: acquiring delegated user token");
             userToken = aps.GetTokenResult(ApsTokenRequest.ForAutomationUserContext());
         } catch (Exception ex) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ScheduleCollectionClassification.UserTokenFailed, manifest, ex.Message);
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
+                ScheduleCollectionClassification.UserTokenFailed, manifest, ex.Message);
         }
 
         ApsTokenResult artifactToken;
@@ -45,7 +48,8 @@ public sealed class RevitAutomationScheduleCollectionBatchService {
                 ExplicitScopes = ["bucket:create", "bucket:read", "data:read", "data:write"]
             });
         } catch (Exception ex) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ScheduleCollectionClassification.ArtifactTokenFailed, manifest, ex.Message);
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
+                ScheduleCollectionClassification.ArtifactTokenFailed, manifest, ex.Message);
         }
 
         WorkerBundleArtifact bundle;
@@ -53,7 +57,8 @@ public sealed class RevitAutomationScheduleCollectionBatchService {
             bundle = await this._bundleBuilder.BuildAsync(repoRoot, manifest.Engine, log, cancellationToken)
                 .ConfigureAwait(false);
         } catch (Exception ex) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ScheduleCollectionClassification.WorkItemSubmissionFailed, manifest, ex.Message);
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
+                ScheduleCollectionClassification.WorkItemSubmissionFailed, manifest, ex.Message);
         }
 
         var automationClient = aps.Automation();
@@ -67,10 +72,13 @@ public sealed class RevitAutomationScheduleCollectionBatchService {
                     cancellationToken
                 )
                 .ConfigureAwait(false);
-        } catch (HttpRequestException ex) when (ex.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ScheduleCollectionClassification.WorkItemSubmissionUnauthorized, manifest, ex.Message);
+        } catch (HttpRequestException ex) when
+            (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) {
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
+                ScheduleCollectionClassification.WorkItemSubmissionUnauthorized, manifest, ex.Message);
         } catch (Exception ex) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ScheduleCollectionClassification.WorkItemSubmissionFailed, manifest, ex.Message);
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
+                ScheduleCollectionClassification.WorkItemSubmissionFailed, manifest, ex.Message);
         }
 
         var objectStorage = new AutomationObjectStorageClient(artifactToken.AccessToken);
@@ -79,7 +87,8 @@ public sealed class RevitAutomationScheduleCollectionBatchService {
             log?.Invoke($"Artifacts: ensuring OSS bucket {bucketKey}");
             await objectStorage.EnsureTransientBucketAsync(bucketKey, cancellationToken).ConfigureAwait(false);
         } catch (Exception ex) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count, ScheduleCollectionClassification.ArtifactTokenFailed, manifest, ex.Message);
+            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
+                ScheduleCollectionClassification.ArtifactTokenFailed, manifest, ex.Message);
         }
 
         var pending = new Queue<ScheduleCollectionBatchEntry>(manifest.Models);
@@ -90,7 +99,7 @@ public sealed class RevitAutomationScheduleCollectionBatchService {
         while ((pending.Count > 0 || active.Count > 0) && !cancellationToken.IsCancellationRequested) {
             while (pending.Count > 0 && active.Count < maxConcurrency) {
                 var entry = pending.Dequeue();
-                var tracker = await SubmitAsync(
+                var tracker = await this.SubmitAsync(
                         entry,
                         manifest,
                         repoRoot,
@@ -117,7 +126,8 @@ public sealed class RevitAutomationScheduleCollectionBatchService {
                 continue;
 
             await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken).ConfigureAwait(false);
-            var statuses = await automationClient.GetWorkItemStatusesAsync(active.Keys.ToArray(), cancellationToken).ConfigureAwait(false);
+            var statuses = await automationClient.GetWorkItemStatusesAsync(active.Keys.ToArray(), cancellationToken)
+                .ConfigureAwait(false);
             foreach (var status in statuses) {
                 if (string.IsNullOrWhiteSpace(status.Id) || !active.TryGetValue(status.Id, out var tracker))
                     continue;
@@ -125,7 +135,7 @@ public sealed class RevitAutomationScheduleCollectionBatchService {
                 if (!RevitAutomationParameterCollectionService.IsTerminal(status.Status))
                     continue;
 
-                var finalized = await FinalizeAsync(
+                var finalized = await this.FinalizeAsync(
                         tracker,
                         status,
                         objectStorage,
@@ -155,7 +165,7 @@ public sealed class RevitAutomationScheduleCollectionBatchService {
         string artifactAccessToken,
         string userAccessToken,
         RevitAutomationSettings settings,
-        Pe.Revit.Global.Services.Aps.Core.AutomationApiClient automationClient,
+        AutomationApiClient automationClient,
         Action<string>? log,
         CancellationToken cancellationToken
     ) {
@@ -182,9 +192,10 @@ public sealed class RevitAutomationScheduleCollectionBatchService {
                         LimitProcessingTimeSec = manifest.TimeoutSeconds,
                         Debug = manifest.Debug,
                         Arguments = new Dictionary<string, object>(StringComparer.Ordinal) {
-                            ["inputParams"] = new Dictionary<string, object>(StringComparer.Ordinal) {
-                                ["url"] = RevitAutomationParameterCollectionService.BuildJsonDataUrl(input.ToJson())
-                            },
+                            ["inputParams"] =
+                                new Dictionary<string, object>(StringComparer.Ordinal) {
+                                    ["url"] = RevitAutomationParameterCollectionService.BuildJsonDataUrl(input.ToJson())
+                                },
                             ["resultJson"] = new Dictionary<string, object>(StringComparer.Ordinal) {
                                 ["verb"] = "put",
                                 ["url"] = $"urn:adsk.objects:os.object:{bucketKey}/{Uri.EscapeDataString(objectKey)}",
@@ -223,7 +234,8 @@ public sealed class RevitAutomationScheduleCollectionBatchService {
                 ArtifactObjectKey = objectKey,
                 ArtifactLocalPath = artifactPath
             };
-        } catch (HttpRequestException ex) when (ex.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden) {
+        } catch (HttpRequestException ex) when
+            (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) {
             return new BatchTracker {
                 SubmissionFailure = new ScheduleCollectionResult {
                     Succeeded = false,
@@ -260,14 +272,14 @@ public sealed class RevitAutomationScheduleCollectionBatchService {
         BatchTracker tracker,
         AutomationWorkItemStatus status,
         AutomationObjectStorageClient objectStorage,
-        Pe.Revit.Global.Services.Aps.Core.AutomationApiClient automationClient,
+        AutomationApiClient automationClient,
         CancellationToken cancellationToken
     ) {
-        var report = await automationClient.GetWorkItemReportAsync(status.ReportUrl, cancellationToken).ConfigureAwait(false);
+        var report = await automationClient.GetWorkItemReportAsync(status.ReportUrl, cancellationToken)
+            .ConfigureAwait(false);
         var parsedReport = this._reportParser.Parse(report.ReportContent);
-        if (!string.Equals(status.Status, "success", StringComparison.OrdinalIgnoreCase)) {
+        if (!string.Equals(status.Status, "success", StringComparison.OrdinalIgnoreCase))
             return BuildFailureResult(tracker, parsedReport, ScheduleCollectionClassification.CollectionFailed);
-        }
 
         try {
             await objectStorage.DownloadObjectAsync(

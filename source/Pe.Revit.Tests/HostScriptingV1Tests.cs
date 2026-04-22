@@ -199,10 +199,7 @@ public sealed class HostScriptingV1Tests {
         BridgeRuntimeSnapshot snapshot,
         IHostScriptingPipeClientService scriptingPipeClientService
     ) {
-        var runtimeStateService = new HostSettingsRuntimeStateService(
-            new HostSettingsModuleCatalog(),
-            new FakeBridgeCapabilityService(snapshot)
-        );
+        var runtimeStateService = new HostSettingsRuntimeStateService(new FakeBridgeCapabilityService(snapshot));
 
         return new HostOperationContext(
             null!,

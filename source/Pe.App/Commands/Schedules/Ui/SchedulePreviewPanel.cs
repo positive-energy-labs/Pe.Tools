@@ -1,6 +1,5 @@
-using Pe.Revit.Global.Revit.Lib.Schedules.Fields;
-using Pe.Revit.Global.Revit.Lib.Schedules.SortGroup;
 using Pe.Revit.Ui.Core;
+using Pe.Shared.RevitData.Schedules;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -95,11 +94,11 @@ public class SchedulePreviewPanel : PaletteSidebarPanel<ISchedulePaletteItem, Sc
                         ("Name", f => f.ParameterName),
                         ("Header", f => f.ColumnHeaderOverride ?? string.Empty),
                         ("Display",
-                            f => f.DisplayType != ScheduleFieldDisplayType.Standard
-                                ? f.DisplayType.ToString()
+                            f => !string.Equals(f.DisplayType, "Standard", StringComparison.OrdinalIgnoreCase)
+                                ? f.DisplayType
                                 : string.Empty),
                         ("Width", f => f.ColumnWidth.HasValue ? f.ColumnWidth.Value.ToString("F2") : string.Empty),
-                        ("Type", f => f.CalculatedType.HasValue ? f.CalculatedType.Value.ToString() : string.Empty),
+                        ("Type", f => f.CalculatedType ?? string.Empty),
                         ("Hidden", f => f.IsHidden ? "Yes" : string.Empty)
                     ],
                     9

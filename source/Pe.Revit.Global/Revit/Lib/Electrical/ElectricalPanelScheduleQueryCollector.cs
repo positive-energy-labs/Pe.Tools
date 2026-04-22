@@ -1,5 +1,5 @@
 ﻿using Autodesk.Revit.DB.Electrical;
-using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.RevitData;
 
 namespace Pe.Revit.Global.Revit.Lib.Electrical;
 
@@ -79,7 +79,7 @@ public static class ElectricalPanelScheduleQueryCollector {
             .ToList();
 
         foreach (var scheduleId in scheduleIds) {
-            var schedule = doc.GetElement(new ElementId(scheduleId)) as PanelScheduleView;
+            var schedule = doc.GetElement(scheduleId.ToElementId()) as PanelScheduleView;
             if (schedule == null) {
                 issues.Add(ElectricalCollectorSupport.Warning(
                     "ElectricalPanelScheduleIdNotFound",
@@ -143,7 +143,7 @@ public static class ElectricalPanelScheduleQueryCollector {
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var panelId in panelIds) {
-            var panel = doc.GetElement(new ElementId(panelId)) as FamilyInstance;
+            var panel = doc.GetElement(panelId.ToElementId()) as FamilyInstance;
             if (panel == null) {
                 issues.Add(ElectricalCollectorSupport.Warning(
                     "ElectricalPanelReferenceIdNotFound",

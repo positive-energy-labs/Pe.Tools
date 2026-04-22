@@ -1,14 +1,19 @@
-﻿using Autodesk.Revit.Attributes;
+using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Pe.Revit.Global.Services.Aps;
+using Pe.Revit.Global.Services.Aps.Core;
 using Pe.Revit.Global.Services.Aps.Models;
+using Pe.Shared.Aps;
+using Pe.Shared.Aps.Models;
+using Pe.Shared.SettingsLayout;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Json;
 using Serilog;
 using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using Toon;
 
@@ -25,9 +30,10 @@ public class CmdCacheParametersService : IExternalCommand {
         var apsParamsCache = globalState.Json<ParametersApi.Parameters>(cacheFilename);
         var cacheFilePath = ((JsonReader<ParametersApi.Parameters>)apsParamsCache).FilePath;
 
-        var svcAps = new Aps(new CacheParametersService());
+        var tokenProvider = new CacheParametersService();
+        var svcAps = new Aps(tokenProvider);
         var parameters = Task.Run(async () =>
-            await svcAps.Parameters(new CacheParametersService()).GetParameters(
+            await CreateParametersClient(svcAps, tokenProvider).GetParameters(
                 apsParamsCache, false)
         ).Result;
 
@@ -39,6 +45,19 @@ public class CmdCacheParametersService : IExternalCommand {
             additionalFormatPaths);
 
         return Result.Succeeded;
+    }
+
+    private static Parameters CreateParametersClient(Aps aps, TokenProviders.IParameters tokenProvider) {
+        var httpClient = new HttpClient {
+            BaseAddress = new Uri("https://developer.api.autodesk.com/"),
+            DefaultRequestHeaders = {
+                Accept = { new MediaTypeWithQualityHeaderValue("application/json") },
+                Authorization =
+                    new AuthenticationHeaderValue("Bearer", aps.GetToken(ApsTokenRequest.ForParameterService()))
+            }
+        };
+
+        return new Parameters(httpClient, tokenProvider);
     }
 
     private static IReadOnlyList<string> WriteAdditionalFormats(
@@ -321,7 +340,7 @@ public class EnrichedParameterData {
     }
 }
 
-public class CacheParametersService : Aps.IOAuthTokenProvider, Aps.IParametersTokenProvider {
+public class CacheParametersService : Aps.IOAuthTokenProvider, TokenProviders.IParameters {
 #if DEBUG
     public string GetClientId() => ReadGlobalSettings().ApsWebClientId1;
     public string GetClientSecret() => ReadGlobalSettings().ApsWebClientSecret1;

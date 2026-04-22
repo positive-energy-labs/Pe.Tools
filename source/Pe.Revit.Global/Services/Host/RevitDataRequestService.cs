@@ -7,8 +7,12 @@ using Pe.Revit.Global.Revit.Lib.Selection;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts.RevitData;
 using Pe.Shared.HostContracts.SettingsStorage;
+using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Schedules;
 using ricaun.Revit.UI.Tasks;
 using RevitDocument = Autodesk.Revit.DB.Document;
+using HostScheduleCatalogRequest = Pe.Shared.HostContracts.RevitData.ScheduleCatalogRequest;
+using ScheduleCatalogRequest = Pe.Shared.RevitData.Schedules.ScheduleCatalogRequest;
 
 namespace Pe.Revit.Global.Services.Host;
 
@@ -43,7 +47,7 @@ internal sealed class RevitDataRequestService {
     );
 
     public Task<ScheduleCatalogEnvelopeResponse> GetScheduleCatalogEnvelopeAsync(
-        ScheduleCatalogRequest request
+        HostScheduleCatalogRequest request
     ) => this._cache.GetOrCreateAsync(
         HostInvalidationDomain.ScheduleCatalog,
         BuildRequestKey("schedule-catalog", request),
@@ -161,13 +165,13 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    private ScheduleCatalogEnvelopeResponse GetScheduleCatalogCore(ScheduleCatalogRequest request) {
+    private ScheduleCatalogEnvelopeResponse GetScheduleCatalogCore(HostScheduleCatalogRequest request) {
         var documentResult = GetActiveProjectDocument();
         if (!documentResult.Ok)
             return documentResult.ToScheduleCatalogFailureEnvelope();
 
         try {
-            var data = ScheduleCatalogCollector.Collect(documentResult.Data!, request);
+            var data = ScheduleCatalogCollector.Collect(documentResult.Data!, ToSharedCatalogRequest(request));
             return HostEnvelopeResults.Success(
                 data,
                 EnvelopeCode.Ok,
@@ -782,6 +786,15 @@ internal sealed class RevitDataRequestService {
 
     private static string BuildRequestKey(string prefix, object request) =>
         $"{prefix}:{JsonConvert.SerializeObject(request)}";
+
+    private static ScheduleCatalogRequest ToSharedCatalogRequest(
+        HostScheduleCatalogRequest request
+    ) => new() {
+        CategoryNames = request.CategoryNames,
+        ScheduleNames = request.ScheduleNames,
+        CustomParameterFilters = request.CustomParameterFilters,
+        IncludeTemplates = request.IncludeTemplates
+    };
 }
 
 internal static class RevitDataRequestResultExtensions {

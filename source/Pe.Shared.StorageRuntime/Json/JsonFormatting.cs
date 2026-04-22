@@ -10,6 +10,10 @@ public static class JsonFormatting {
             ? Environment.NewLine
             : content.TrimEnd('\r', '\n') + Environment.NewLine;
 
+    public static JsonSerializerSettings CreateIndentedSettings() => new() {
+        Formatting = Formatting.Indented, NullValueHandling = NullValueHandling.Ignore
+    };
+
     public static JsonSerializerSettings CreateCamelCaseSettings() {
         var settings = CreateDefaultSettings();
         settings.ContractResolver = new CamelCasePropertyNamesContractResolver();

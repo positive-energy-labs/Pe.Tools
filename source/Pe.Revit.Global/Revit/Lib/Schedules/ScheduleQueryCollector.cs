@@ -1,5 +1,5 @@
-using Pe.Revit.Global.Revit.Documents.Schedules;
-using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Schedules;
 
 namespace Pe.Revit.Global.Revit.Lib.Schedules;
 
@@ -77,7 +77,7 @@ public static class ScheduleQueryCollector {
             .ToList();
 
         foreach (var scheduleId in scheduleIds) {
-            var schedule = doc.GetElement(new ElementId(scheduleId)) as ViewSchedule;
+            var schedule = doc.GetElement(scheduleId.ToElementId()) as ViewSchedule;
             _ = TryAddResolvedSchedule(
                 schedules,
                 seenIds,
@@ -158,16 +158,17 @@ public static class ScheduleQueryCollector {
     ) {
         try {
             var sheetPlacements = ScheduleCollectorSupport.CollectSheetPlacements(doc, schedule);
-            var visibleFamilies = ScheduleVisibleFamilyCollector.CollectVisibleFamilies(doc, schedule);
-            var visibleInstances = ScheduleVisibleFamilyCollector.CollectVisibleInstances(doc, schedule);
-            var visibleBodyRowCount = ScheduleVisibleFamilyCollector.GetVisibleBodyRowCount(schedule);
-            var bodySection = ScheduleCollectorSupport.SafeGet(() => schedule.GetTableData().GetSectionData(SectionType.Body));
+            var visibleFamilyInstances = ScheduleVisibleFamilyCollector.CollectVisibleFamilyInstances(doc, schedule);
+            var visibleFamilies = ScheduleVisibleFamilyCollector.CollectVisibleFamilies(visibleFamilyInstances);
+            var visibleInstances = ScheduleVisibleFamilyCollector.CollectVisibleInstances(visibleFamilyInstances);
+            var bodySection =
+                ScheduleCollectorSupport.SafeGet(() => schedule.GetTableData().GetSectionData(SectionType.Body));
             var contexts = bodySection == null
                 ? []
                 : CollectColumnContexts(doc, schedule, bodySection);
             var rows = bodySection == null
                 ? []
-                : CollectRows(schedule, bodySection, contexts, visibleInstances, issues);
+                : CollectRows(schedule, bodySection, contexts);
             var columns = contexts
                 .Select(context => context.Column)
                 .Append(new ScheduleRenderedColumn(
@@ -185,7 +186,7 @@ public static class ScheduleQueryCollector {
                 schedule.IsTemplate,
                 sheetPlacements.Count != 0,
                 sheetPlacements,
-                visibleBodyRowCount,
+                rows.Count,
                 visibleFamilies.Count,
                 visibleInstances.Count,
                 visibleFamilies,
@@ -211,7 +212,9 @@ public static class ScheduleQueryCollector {
         var contexts = new List<ColumnContext>();
         var visibleColumnNumber = bodySection.FirstColumnNumber;
 
-        for (var i = 0; i < schedule.Definition.GetFieldCount() && visibleColumnNumber <= bodySection.LastColumnNumber; i++) {
+        for (var i = 0;
+             i < schedule.Definition.GetFieldCount() && visibleColumnNumber <= bodySection.LastColumnNumber;
+             i++) {
             var field = schedule.Definition.GetField(i);
             if (field.IsHidden)
                 continue;
@@ -236,98 +239,84 @@ public static class ScheduleQueryCollector {
     private static List<ScheduleRenderedRow> CollectRows(
         ViewSchedule schedule,
         TableSectionData bodySection,
-        IReadOnlyList<ColumnContext> contexts,
-        IReadOnlyList<ScheduleVisibleInstanceEntry> visibleInstances,
-        List<RevitDataIssue> issues
+        IReadOnlyList<ColumnContext> contexts
     ) {
         var rows = new List<ScheduleRenderedRow>();
-        var familyColumn = contexts.FirstOrDefault(context => MatchesIdentityColumn(context, "Family"));
-        var typeColumn = contexts.FirstOrDefault(context => MatchesIdentityColumn(context, "Type"));
-        var canResolveInstances = familyColumn != null || typeColumn != null;
-
-        if (!canResolveInstances && visibleInstances.Count != 0) {
-            issues.Add(ScheduleCollectorSupport.Warning(
-                "ScheduleRowInstanceReferencesUnavailable",
-                "Row instance references were left empty because the schedule does not expose a visible Family or Type column.",
-                schedule.Name
-            ));
-        }
+        var skippingLeadingHeaderRows = true;
 
         for (var rowNumber = bodySection.FirstRowNumber; rowNumber <= bodySection.LastRowNumber; rowNumber++) {
             var values = contexts
-                .Select(context => ScheduleCollectorSupport.SafeGet(() => schedule.GetCellText(SectionType.Body, rowNumber, context.Column.ColumnNumber)) ?? string.Empty)
+                .Select(context =>
+                    ScheduleCollectorSupport.SafeGet(() =>
+                        schedule.GetCellText(SectionType.Body, rowNumber, context.Column.ColumnNumber)) ?? string.Empty)
                 .ToList();
+            if (skippingLeadingHeaderRows) {
+                var isLeadingHeaderRow =
+                    IsHeaderLikeBodyRow(values, contexts)
+                    || IsAllTextBodyRow(bodySection, contexts, rowNumber);
+                if (isLeadingHeaderRow)
+                    continue;
 
-            var instanceIds = canResolveInstances
-                ? ResolveRowInstanceIds(values, contexts, visibleInstances, familyColumn, typeColumn)
-                : [];
-            if (canResolveInstances && instanceIds.Count == 0 && values.Any(value => !string.IsNullOrWhiteSpace(value))) {
-                issues.Add(ScheduleCollectorSupport.Warning(
-                    "ScheduleRowInstanceReferencesUnresolved",
-                    $"Rendered row {rowNumber} could not be matched to visible schedule instances.",
-                    schedule.Name
-                ));
+                skippingLeadingHeaderRows = false;
             }
 
-            values.Add(BuildSyntheticFamiliesValue(instanceIds, visibleInstances));
-            rows.Add(new ScheduleRenderedRow(rowNumber, values, instanceIds));
+            values.Add(string.Empty);
+            rows.Add(new ScheduleRenderedRow(
+                rowNumber,
+                ClassifyRowKind(bodySection, contexts, rowNumber),
+                values,
+                []
+            ));
         }
 
         return rows;
     }
 
-    private static List<long> ResolveRowInstanceIds(
+    private static bool IsHeaderLikeBodyRow(
         IReadOnlyList<string> values,
         IReadOnlyList<ColumnContext> contexts,
-        IReadOnlyList<ScheduleVisibleInstanceEntry> visibleInstances,
-        ColumnContext? familyColumn,
-        ColumnContext? typeColumn
+        bool requireAtLeastOneValue = true
     ) {
-        var familyValue = GetColumnValue(values, contexts, familyColumn);
-        var typeValue = GetColumnValue(values, contexts, typeColumn);
+        if (values.Count != contexts.Count)
+            return false;
 
-        return visibleInstances
-            .Where(instance =>
-                (familyValue == null || string.Equals(instance.FamilyName, familyValue, StringComparison.OrdinalIgnoreCase)) &&
-                (typeValue == null || string.Equals(instance.FamilyTypeName, typeValue, StringComparison.OrdinalIgnoreCase)))
-            .Select(instance => instance.InstanceId)
-            .ToList();
-    }
-
-    private static string BuildSyntheticFamiliesValue(
-        IReadOnlyList<long> instanceIds,
-        IReadOnlyList<ScheduleVisibleInstanceEntry> visibleInstances
-    ) => string.Join(
-        ", ",
-        visibleInstances
-            .Where(instance => instanceIds.Contains(instance.InstanceId))
-            .Select(instance => instance.FamilyName)
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-    );
-
-    private static string? GetColumnValue(
-        IReadOnlyList<string> values,
-        IReadOnlyList<ColumnContext> contexts,
-        ColumnContext? context
-    ) {
-        if (context == null)
-            return null;
-
-        var index = -1;
+        var matchedCount = 0;
         for (var i = 0; i < contexts.Count; i++) {
-            if (ReferenceEquals(contexts[i], context) || contexts[i] == context) {
-                index = i;
-                break;
-            }
+            var rowValue = ScheduleCollectorSupport.NullIfWhiteSpace(values[i]) ?? string.Empty;
+            var headerValue = contexts[i].HeaderText;
+            if (!string.Equals(rowValue, headerValue, StringComparison.Ordinal))
+                return false;
+            matchedCount++;
         }
-        return index < 0 ? null : ScheduleCollectorSupport.NullIfWhiteSpace(values[index]);
+
+        return !requireAtLeastOneValue || matchedCount != 0;
     }
 
-    private static bool MatchesIdentityColumn(ColumnContext context, string expected) =>
-        string.Equals(context.FieldName, expected, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(context.HeaderText, expected, StringComparison.OrdinalIgnoreCase);
+    private static ScheduleRenderedRowKind ClassifyRowKind(
+        TableSectionData bodySection,
+        IReadOnlyList<ColumnContext> contexts,
+        int rowNumber
+    ) => IsAllTextBodyRow(bodySection, contexts, rowNumber)
+        ? ScheduleRenderedRowKind.GroupFooter
+        : ScheduleRenderedRowKind.Data;
+
+    private static bool IsAllTextBodyRow(
+        TableSectionData bodySection,
+        IReadOnlyList<ColumnContext> contexts,
+        int rowNumber
+    ) {
+        if (contexts.Count == 0)
+            return false;
+
+        foreach (var context in contexts) {
+            var cellType =
+                ScheduleCollectorSupport.SafeGet(() => bodySection.GetCellType(rowNumber, context.Column.ColumnNumber));
+            if (cellType != CellType.Text)
+                return false;
+        }
+
+        return true;
+    }
 
     private static List<ViewSchedule> CollectQueryableSchedules(Document doc) =>
         new FilteredElementCollector(doc)

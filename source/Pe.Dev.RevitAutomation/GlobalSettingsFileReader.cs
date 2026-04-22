@@ -1,5 +1,5 @@
 using Newtonsoft.Json;
-using Pe.Shared.StorageRuntime;
+using Pe.Shared.SettingsLayout;
 using System.IO;
 
 namespace Pe.Dev.RevitAutomation;
@@ -25,9 +25,5 @@ internal static class GlobalSettingsFileReader {
     }
 
     internal static string ResolveSettingsPath(string? basePathOverride = null) =>
-        Path.Combine(
-            basePathOverride ?? SettingsStorageLocations.GetDefaultBasePath(),
-            "Global",
-            "settings.json"
-        );
+        GlobalStorageLocations.ResolveSettingsPath(basePathOverride ?? SettingsStorageLocations.GetDefaultBasePath());
 }

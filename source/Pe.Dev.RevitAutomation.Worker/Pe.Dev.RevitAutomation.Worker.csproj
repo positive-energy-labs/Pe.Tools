@@ -1,7 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <TargetFramework Condition="'$(RevitVersion)' == '2025' or '$(RevitVersion)' == '2026'">net8.0-windows</TargetFramework>
-        <TargetFramework Condition="'$(TargetFramework)' == ''">net8.0-windows</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <OutputType>Library</OutputType>
@@ -18,5 +16,6 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj"/>
+        <ProjectReference Include="..\Pe.Shared.Aps\Pe.Shared.Aps.csproj"/>
     </ItemGroup>
 </Project>

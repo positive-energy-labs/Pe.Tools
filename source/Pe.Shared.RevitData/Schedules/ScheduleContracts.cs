@@ -236,9 +236,17 @@ public record ScheduleVisibleInstanceEntry(
     string? CategoryName
 );
 
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum ScheduleRenderedRowKind {
+    Data,
+    GroupFooter
+}
+
 [ExportTsInterface]
 public record ScheduleRenderedRow(
     int RowNumber,
+    ScheduleRenderedRowKind Kind,
     List<string> Values,
     List<long> InstanceIds
 );

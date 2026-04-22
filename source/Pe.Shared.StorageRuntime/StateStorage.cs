@@ -40,18 +40,27 @@ public sealed class StateStorage {
             ? DefaultName
             : normalizedRootRelativePath.Split('/').Last();
 
-        if (!Directory.Exists(discoveryRootPath))
+        if (!Directory.Exists(discoveryRootPath)) {
             return new SettingsDiscoveryResult([],
                 new SettingsDirectoryNode(rootName, normalizedRootRelativePath, [], []));
+        }
 
         var searchOption = options.Recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+        var directories = Directory.EnumerateDirectories(discoveryRootPath, "*", searchOption)
+            .Select(path => BclExtensions.GetRelativePath(this.DirectoryPath, path).Replace('\\', '/'))
+            .ToList();
         var files = Directory.EnumerateFiles(discoveryRootPath, "*.json", searchOption)
             .Select(path => SettingsDiscoveryBuilder.CreateSettingsFileEntry(path, this.DirectoryPath))
             .Where(entry => options.IncludeFragments || !entry.IsFragment)
             .Where(entry => options.IncludeSchemas || !entry.IsSchema)
             .OrderByDescending(entry => entry.ModifiedUtc)
             .ToList();
-        var tree = SettingsDiscoveryBuilder.BuildDirectoryTree(rootName, normalizedRootRelativePath, files);
+        var tree = SettingsDiscoveryBuilder.BuildDirectoryTree(
+            rootName,
+            normalizedRootRelativePath,
+            files,
+            directories
+        );
         return new SettingsDiscoveryResult(files, tree);
     }
 

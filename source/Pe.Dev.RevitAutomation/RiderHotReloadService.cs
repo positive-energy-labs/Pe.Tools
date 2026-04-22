@@ -14,18 +14,23 @@ public sealed class RiderHotReloadService(RevitProcessSessionSelector sessionSel
             if (session is null)
                 return new RevitHotReloadResult(RevitHotReloadResultKind.NoSession, "No Revit sessions found.", []);
 
+            var unstagedFiles = await this.GetUnstagedRuntimeFilesAsync(repoRoot, cancellationToken);
             var autoHotkeyExecutable = TryResolveAutoHotkeyExecutable()
                                        ?? throw new InvalidOperationException(
                                            "Could not locate AutoHotkey64.exe."
                                        );
             var ahkScriptPath = this.ResolveHotReloadScriptPath();
 
-            await this.TriggerHotReloadAsync(autoHotkeyExecutable, ahkScriptPath, cancellationToken);
+            await this.TriggerHotReloadAsync(autoHotkeyExecutable, ahkScriptPath, unstagedFiles, cancellationToken);
+
+            var message = unstagedFiles.Count == 0
+                ? $"Auto HR was triggered against selected session PID {session.ProcessId}. No unstaged runtime .cs files were nudged."
+                : $"Auto HR was triggered against selected session PID {session.ProcessId} after nudging {unstagedFiles.Count} unstaged runtime file(s).";
 
             return new RevitHotReloadResult(
                 RevitHotReloadResultKind.Triggered,
-                $"Auto HR was triggered against selected session PID {session.ProcessId}.",
-                [],
+                message,
+                unstagedFiles,
                 session
             );
         } catch (Exception ex) {
@@ -37,23 +42,47 @@ public sealed class RiderHotReloadService(RevitProcessSessionSelector sessionSel
         }
     }
 
+    private async Task<IReadOnlyList<string>> GetUnstagedRuntimeFilesAsync(string repoRoot,
+        CancellationToken cancellationToken) {
+        var output = await RunProcessCaptureAsync(
+            "git",
+            ["-C", repoRoot, "status", "--porcelain", "--untracked-files=all"],
+            cancellationToken
+        );
+
+        if (output.ExitCode != 0)
+            throw new InvalidOperationException(output.StandardError.Trim());
+
+        return RiderHotReloadFileDiscovery.ParseUnstagedRuntimeFiles(repoRoot, output.StandardOutput);
+    }
+
     private async Task TriggerHotReloadAsync(
         string autoHotkeyExecutable,
         string ahkScriptPath,
+        IReadOnlyList<string> unstagedFiles,
         CancellationToken cancellationToken
     ) {
-        var result = await RunProcessCaptureAsync(
-            autoHotkeyExecutable,
-            [ahkScriptPath, string.Empty, DefaultWarningSeconds.ToString(), "0"],
-            cancellationToken,
-            useShellExecute: false
-        );
-        if (result.ExitCode != 0)
-            throw new InvalidOperationException(
-                string.IsNullOrWhiteSpace(result.StandardError)
-                    ? $"AutoHotkey exited with code {result.ExitCode}."
-                    : result.StandardError.Trim()
+        var artifactPath = Path.Combine(Path.GetTempPath(), $"pe-rider-hot-reload-files-{Guid.NewGuid():N}.txt");
+
+        try {
+            await File.WriteAllLinesAsync(artifactPath, unstagedFiles, cancellationToken);
+
+            var result = await RunProcessCaptureAsync(
+                autoHotkeyExecutable,
+                [ahkScriptPath, artifactPath, DefaultWarningSeconds.ToString(), "0"],
+                cancellationToken,
+                false
             );
+            if (result.ExitCode != 0) {
+                throw new InvalidOperationException(
+                    string.IsNullOrWhiteSpace(result.StandardError)
+                        ? $"AutoHotkey exited with code {result.ExitCode}."
+                        : result.StandardError.Trim()
+                );
+            }
+        } finally {
+            TryDeleteFile(artifactPath);
+        }
     }
 
     private string ResolveHotReloadScriptPath() {
@@ -68,6 +97,14 @@ public sealed class RiderHotReloadService(RevitProcessSessionSelector sessionSel
     private static string? TryResolveAutoHotkeyExecutable() {
         const string defaultPath = @"C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe";
         return File.Exists(defaultPath) ? defaultPath : null;
+    }
+
+    private static void TryDeleteFile(string path) {
+        try {
+            if (File.Exists(path))
+                File.Delete(path);
+        } catch {
+        }
     }
 
     private static async Task<ProcessCaptureResult> RunProcessCaptureAsync(

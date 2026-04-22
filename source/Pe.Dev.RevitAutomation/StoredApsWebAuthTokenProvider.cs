@@ -1,4 +1,5 @@
-using Pe.Revit.Global.Services.Aps;
+using Pe.Shared.Aps;
+using Pe.Shared.SettingsLayout;
 
 namespace Pe.Dev.RevitAutomation;
 
@@ -25,5 +26,5 @@ internal sealed class StoredApsWebAuthTokenProvider : Aps.IOAuthTokenProvider {
         );
     }
 
-    private static Pe.Shared.StorageRuntime.GlobalSettings ReadSettings() => GlobalSettingsFileReader.Load();
+    private static GlobalSettings ReadSettings() => GlobalSettingsFileReader.Load();
 }

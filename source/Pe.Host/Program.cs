@@ -1,20 +1,13 @@
 using Pe.Host;
 using Pe.Host.Operations;
 using Pe.Host.Services;
-using Pe.Revit.FamilyFoundry.SchemaDefinitions;
-using Pe.Revit.Global.Revit.Lib.Schedules;
 using Pe.Shared.HostContracts.Protocol;
-using Pe.Shared.StorageRuntime;
-using Pe.Shared.StorageRuntime.AutoTag;
+using Pe.Shared.SettingsLayout;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-HostRevitAssemblyResolver.EnsureRegistered();
-AutoTagSchemaDefinitionBootstrapper.EnsureRegistered();
-ScheduleSchemaDefinitionBootstrapper.EnsureRegistered();
-FamilyFoundrySchemaDefinitionBootstrapper.EnsureRegistered();
-FamilyFoundryRootSchemaDefinitionBootstrapper.EnsureRegistered();
-LoadedFamiliesFilterSchemaDefinitionBootstrapper.EnsureRegistered();
+const int HostProcessLogMaxLines = 2000;
+const long HostLogTrimThresholdBytes = 1_048_576;
 
 var options = BridgeHostOptions.FromEnvironment();
 using var singletonHandle = HostSingletonGuard.TryAcquireOrExit(options);
@@ -22,7 +15,12 @@ if (singletonHandle == null)
     return;
 
 var builder = WebApplication.CreateBuilder(args);
-var hostLogFile = StorageClient.Default.Global().HostLog();
+var basePath = SettingsStorageLocations.GetDefaultBasePath();
+var hostLogFile = new ManagedLogFile(
+    GlobalStorageLocations.ResolveHostLogPath(basePath),
+    HostProcessLogMaxLines,
+    HostLogTrimThresholdBytes
+);
 
 builder.Logging.AddProvider(new HostFileLoggerProvider(hostLogFile));
 
@@ -34,7 +32,7 @@ builder.Services.AddSingleton<HostOperationRegistry>();
 builder.Services.AddSingleton<HostOperationExecutor>();
 builder.Services.AddSingleton<IHostBridgeCapabilityService, HostBridgeCapabilityService>();
 builder.Services.AddSingleton<IHostScriptingPipeClientService, HostScriptingPipeClientService>();
-builder.Services.AddSingleton<IHostSettingsModuleCatalog>(_ => new HostSettingsModuleCatalog());
+builder.Services.AddSingleton<IHostSettingsModuleCatalog, HostSettingsModuleCatalog>();
 builder.Services.AddSingleton<HostSettingsRuntimeStateService>();
 builder.Services.AddSingleton<HostSchemaService>();
 builder.Services.AddSingleton(sp => new HostSettingsStorageService(

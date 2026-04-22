@@ -12,6 +12,7 @@ using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.Global;
 using Pe.Revit.Global.Revit.Lib;
 using Pe.Revit.Global.Revit.Ui;
+using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Modules;

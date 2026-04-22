@@ -1,5 +1,4 @@
-using Pe.Revit.Global.Revit.Documents;
-using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.RevitData.Schedules;
 
 namespace Pe.Revit.Global.Revit.Lib.Schedules;
 
@@ -25,7 +24,8 @@ public static class ScheduleCollectionArtifactCollector {
         var resolvedViaFallback = false;
 
         if (primaryCatalog.Entries.Count == 0 && effectiveRequest.FallbackCatalogRequest != null) {
-            onProgress?.Invoke("Schedule collection primary catalog returned no schedules. Resolving fallback schedule catalog.");
+            onProgress?.Invoke(
+                "Schedule collection primary catalog returned no schedules. Resolving fallback schedule catalog.");
             resolvedCatalog = ScheduleCatalogCollector.Collect(doc, effectiveRequest.FallbackCatalogRequest);
             resolvedViaFallback = true;
         }

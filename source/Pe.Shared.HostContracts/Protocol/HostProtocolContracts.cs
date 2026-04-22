@@ -74,7 +74,7 @@ public static class HttpRoutes {
 [ExportTsClass]
 public static class HostProtocol {
     public const string Transport = "http+sse";
-    public const int ContractVersion = 28;
+    public const int ContractVersion = 29;
 }
 
 public interface IBridgeSessionRequest {

@@ -1,4 +1,4 @@
-using Pe.Revit.Global.Services.Aps.Models;
+using Pe.Shared.Aps.Models;
 
 namespace Pe.Dev.RevitAutomation;
 
@@ -20,12 +20,13 @@ internal static class RevitAutomationShellDefinitions {
                 $"$(engine.path)\\\\revitcoreconsole.exe /al \"$(appbundles[{settings.AppBundleId}].path)\""
             ],
             Parameters = new Dictionary<string, AutomationParameterSpec>(StringComparer.Ordinal) {
-                ["inputParams"] = new() {
-                    Verb = "get",
-                    Description = "Automation shell input payload",
-                    LocalName = InputLocalName,
-                    Required = true
-                },
+                ["inputParams"] =
+                    new() {
+                        Verb = "get",
+                        Description = "Automation shell input payload",
+                        LocalName = InputLocalName,
+                        Required = true
+                    },
                 ["resultJson"] = new() {
                     Verb = "put",
                     Description = "Automation shell result payload",

@@ -12,10 +12,10 @@
         <PackageReference Include="Nice3point.Revit.Extensions" Version="$(RevitVersion).*"/>
         <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*"/>
         <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*"/>
-        <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all" Condition="'$(TargetFramework)' == 'net48'"/>
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\Pe.Shared.Aps\Pe.Shared.Aps.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj"/>
     </ItemGroup>
 

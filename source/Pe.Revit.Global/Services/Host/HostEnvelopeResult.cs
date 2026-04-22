@@ -1,5 +1,7 @@
 using Pe.Shared.HostContracts.RevitData;
 using Pe.Shared.HostContracts.SettingsStorage;
+using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Schedules;
 
 namespace Pe.Revit.Global.Services.Host;
 

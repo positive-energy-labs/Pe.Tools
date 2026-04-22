@@ -1,6 +1,6 @@
 using Pe.Revit.Global.Revit.Ui;
-using Pe.Shared.StorageRuntime.AutoTag;
-using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
+using Pe.Revit.SettingsRuntime.AutoTag;
+using Pe.Revit.SettingsRuntime.Core.Json.SchemaProviders;
 using Serilog;
 using Serilog.Events;
 

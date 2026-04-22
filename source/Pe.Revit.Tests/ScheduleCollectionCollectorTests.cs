@@ -1,6 +1,6 @@
 using Autodesk.Revit.DB.Structure;
 using Pe.Revit.Global.Revit.Lib.Schedules;
-using Pe.Shared.HostContracts.RevitData;
+using ContractScheduleCatalogRequest = Pe.Shared.RevitData.Schedules.ScheduleCatalogRequest;
 
 namespace Pe.Revit.Tests;
 
@@ -36,7 +36,8 @@ public sealed class ScheduleCollectionCollectorTests {
                 outputDirectory,
                 "mechanical-equipment"
             );
-            var loadedFamily = RevitFamilyFixtureHarness.LoadFamilyIntoProject(application, projectDocument, familyPath);
+            var loadedFamily =
+                RevitFamilyFixtureHarness.LoadFamilyIntoProject(application, projectDocument, familyPath);
             Assert.That(loadedFamily, Is.Not.Null);
 
             var schedule = CreateScheduleWithPlacedFamily(projectDocument, loadedFamily!, scheduleName, "Family");
@@ -44,7 +45,7 @@ public sealed class ScheduleCollectionCollectorTests {
 
             var data = ScheduleCatalogCollector.Collect(
                 projectDocument,
-                new ScheduleCatalogRequest {
+                new ContractScheduleCatalogRequest {
                     CustomParameterFilters = [
                         new ScheduleCustomParameterFilter(
                             "Discipline",
@@ -55,7 +56,8 @@ public sealed class ScheduleCollectionCollectorTests {
                 }
             );
 
-            var entry = data.Entries.SingleOrDefault(item => string.Equals(item.Name, scheduleName, StringComparison.Ordinal));
+            var entry = data.Entries.SingleOrDefault(item =>
+                string.Equals(item.Name, scheduleName, StringComparison.Ordinal));
             Assert.Multiple(() => {
                 Assert.That(entry, Is.Not.Null);
                 Assert.That(entry!.VisibleFamilyCount, Is.EqualTo(1));
@@ -99,20 +101,19 @@ public sealed class ScheduleCollectionCollectorTests {
                 outputDirectory,
                 "mechanical-equipment-family-field"
             );
-            var loadedFamily = RevitFamilyFixtureHarness.LoadFamilyIntoProject(application, projectDocument, familyPath);
+            var loadedFamily =
+                RevitFamilyFixtureHarness.LoadFamilyIntoProject(application, projectDocument, familyPath);
             Assert.That(loadedFamily, Is.Not.Null);
 
             var schedule = CreateScheduleWithPlacedFamily(projectDocument, loadedFamily!, scheduleName, "Family");
             var data = ScheduleQueryCollector.Collect(
                 projectDocument,
-                new ScheduleQuery {
-                    Kind = ScheduleQueryKind.ScheduleReferences,
-                    ScheduleIds = [schedule.Id.Value()]
-                }
+                new ScheduleQuery { Kind = ScheduleQueryKind.ScheduleReferences, ScheduleIds = [schedule.Id.Value()] }
             );
 
             var entry = data.Entries.Single();
-            var familiesColumn = entry.Columns.Single(column => string.Equals(column.Key, "synthetic:families", StringComparison.Ordinal));
+            var familiesColumn = entry.Columns.Single(column =>
+                string.Equals(column.Key, "synthetic:families", StringComparison.Ordinal));
             var familiesColumnIndex = entry.Columns.IndexOf(familiesColumn);
             var firstRow = entry.Rows.First();
             var referencedInstances = entry.VisibleInstances
@@ -165,20 +166,19 @@ public sealed class ScheduleCollectionCollectorTests {
                 outputDirectory,
                 "mechanical-equipment-no-family-field"
             );
-            var loadedFamily = RevitFamilyFixtureHarness.LoadFamilyIntoProject(application, projectDocument, familyPath);
+            var loadedFamily =
+                RevitFamilyFixtureHarness.LoadFamilyIntoProject(application, projectDocument, familyPath);
             Assert.That(loadedFamily, Is.Not.Null);
 
             var schedule = CreateScheduleWithPlacedFamily(projectDocument, loadedFamily!, scheduleName, "Type");
             var data = ScheduleQueryCollector.Collect(
                 projectDocument,
-                new ScheduleQuery {
-                    Kind = ScheduleQueryKind.ScheduleReferences,
-                    ScheduleIds = [schedule.Id.Value()]
-                }
+                new ScheduleQuery { Kind = ScheduleQueryKind.ScheduleReferences, ScheduleIds = [schedule.Id.Value()] }
             );
 
             var entry = data.Entries.Single();
-            var familiesColumn = entry.Columns.Single(column => string.Equals(column.Key, "synthetic:families", StringComparison.Ordinal));
+            var familiesColumn = entry.Columns.Single(column =>
+                string.Equals(column.Key, "synthetic:families", StringComparison.Ordinal));
             var familiesColumnIndex = entry.Columns.IndexOf(familiesColumn);
             var firstRow = entry.Rows.First();
 
@@ -186,7 +186,8 @@ public sealed class ScheduleCollectionCollectorTests {
                 Assert.That(firstRow.Values[familiesColumnIndex], Is.Empty);
                 Assert.That(firstRow.InstanceIds, Is.Empty);
                 Assert.That(
-                    data.Issues.Any(issue => string.Equals(issue.Code, "ScheduleRowInstanceReferencesUnavailable", StringComparison.Ordinal)),
+                    data.Issues.Any(issue => string.Equals(issue.Code, "ScheduleRowInstanceReferencesUnavailable",
+                        StringComparison.Ordinal)),
                     Is.True
                 );
             });
@@ -206,7 +207,7 @@ public sealed class ScheduleCollectionCollectorTests {
 
         using (var transaction = new Transaction(projectDocument, $"Create schedule '{scheduleName}'")) {
             _ = transaction.Start();
-            var symbolId = loadedFamily.GetFamilySymbolIds().Cast<ElementId>().First();
+            var symbolId = loadedFamily.GetFamilySymbolIds().First();
             var symbol = (FamilySymbol)projectDocument.GetElement(symbolId);
             if (!symbol.IsActive)
                 symbol.Activate();
@@ -220,12 +221,14 @@ public sealed class ScheduleCollectionCollectorTests {
                 .First();
             _ = projectDocument.Create.NewFamilyInstance(XYZ.Zero, symbol, level, StructuralType.NonStructural);
 
-            schedule = ViewSchedule.CreateSchedule(projectDocument, new ElementId(BuiltInCategory.OST_MechanicalEquipment));
+            schedule = ViewSchedule.CreateSchedule(projectDocument,
+                new ElementId(BuiltInCategory.OST_MechanicalEquipment));
             schedule.Name = scheduleName;
             schedule.Definition.IsItemized = true;
 
             var schedulableField = schedule.Definition.GetSchedulableFields()
-                .First(field => string.Equals(field.GetName(projectDocument), fieldName, StringComparison.OrdinalIgnoreCase));
+                .First(field =>
+                    string.Equals(field.GetName(projectDocument), fieldName, StringComparison.OrdinalIgnoreCase));
             _ = schedule.Definition.AddField(schedulableField);
 
             _ = transaction.Commit();

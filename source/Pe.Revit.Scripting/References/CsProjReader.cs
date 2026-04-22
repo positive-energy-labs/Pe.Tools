@@ -34,7 +34,8 @@ public sealed class CsProjReader {
             .Descendants()
             .FirstOrDefault(node => node.Name.LocalName == "TargetFrameworks")
             ?.Value
-            ?.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            ?.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(value => value.Trim())
             .FirstOrDefault();
 
         return targetFrameworks ?? string.Empty;

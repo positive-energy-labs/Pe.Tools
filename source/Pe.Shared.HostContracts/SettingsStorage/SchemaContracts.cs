@@ -7,7 +7,10 @@ using TypeGen.Core.TypeAnnotations;
 namespace Pe.Shared.HostContracts.SettingsStorage;
 
 [ExportTsInterface]
-public record SchemaRequest(string ModuleKey);
+public record SchemaRequest(
+    string ModuleKey,
+    BridgeSessionSelector? Target = null
+) : IBridgeSessionRequest;
 
 [ExportTsInterface]
 public record FieldOptionsRequest(

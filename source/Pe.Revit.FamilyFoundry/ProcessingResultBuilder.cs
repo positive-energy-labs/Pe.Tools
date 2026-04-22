@@ -2,8 +2,8 @@ using Pe.Revit.FamilyFoundry.LookupTables;
 using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.FamilyFoundry.Serialization;
 using Pe.Revit.Global;
+using Pe.Revit.SettingsRuntime.Core.Json.SchemaProviders;
 using Pe.Shared.StorageRuntime;
-using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
 using System.Collections;
 using System.Reflection;
 
@@ -405,17 +405,19 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
         if (snapshot.RefPlanesAndDims != null) {
             var hasConstraints = snapshot.RefPlanesAndDims.MirrorConstraintSnapshots.Count > 0 ||
                                  snapshot.RefPlanesAndDims.OffsetConstraintSnapshots.Count > 0;
-            if (hasConstraints)
+            if (hasConstraints) {
                 refPlanesAndDimsPath = output.Json($"snapshot-refplanesanddims-{phase}.json")
                     .Write(snapshot.RefPlanesAndDims);
+            }
         }
 
         string? authoredParamDrivenSolidsPath = null;
         string? authoredParamDrivenSolidsPlanPath = null;
         if (snapshot.AuthoredParamDrivenSolids != null) {
-            if (snapshot.AuthoredParamDrivenSolids.HasContent)
+            if (snapshot.AuthoredParamDrivenSolids.HasContent) {
                 authoredParamDrivenSolidsPath = output.Json($"snapshot-authoredparamdrivensolids-{phase}.json")
                     .Write(snapshot.AuthoredParamDrivenSolids);
+            }
 
             authoredParamDrivenSolidsPlanPath = WriteAuthoredSolidsPlanArtifact(
                 output,
@@ -566,7 +568,7 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
     private string? RelativeToRun(string? absolutePath) =>
         string.IsNullOrWhiteSpace(absolutePath)
             ? null
-            : Path.GetRelativePath(this._runOutput.DirectoryPath, absolutePath);
+            : GetRelativePathCompat(this._runOutput.DirectoryPath, absolutePath!);
 
     private string RequiredRelativeToRun(string? absolutePath) =>
         this.RelativeToRun(absolutePath)
@@ -605,6 +607,17 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
 
         var sanitized = new string(chars).Trim();
         return string.IsNullOrWhiteSpace(sanitized) ? "Unnamed" : sanitized;
+    }
+
+    private static string GetRelativePathCompat(string relativeTo, string path) {
+        var basePath = Path.GetFullPath(relativeTo);
+        if (!basePath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+            basePath += Path.DirectorySeparatorChar;
+
+        var targetPath = Path.GetFullPath(path);
+        var relativeUri = new Uri(basePath).MakeRelativeUri(new Uri(targetPath));
+        return Uri.UnescapeDataString(relativeUri.ToString())
+            .Replace('/', Path.DirectorySeparatorChar);
     }
 }
 

@@ -1,13 +1,12 @@
-﻿using Autodesk.Revit.Attributes;
+using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Pe.App.Services.AutoTag;
+using Pe.Revit.SettingsRuntime.AutoTag;
+using Pe.Revit.SettingsRuntime.Core.Json;
+using Pe.Revit.SettingsRuntime.Core.Json.SchemaProviders;
 using Pe.Shared.StorageRuntime;
-using Pe.Shared.StorageRuntime.AutoTag;
 using Pe.Shared.StorageRuntime.Capabilities;
-using Pe.Shared.StorageRuntime.Core.Json;
-using Pe.Shared.StorageRuntime.Core.Json.SchemaProviders;
-using Pe.Shared.StorageRuntime.Json;
 using Serilog;
 using System.IO;
 using System.Text;

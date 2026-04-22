@@ -1,6 +1,6 @@
-using System.Globalization;
 using Pe.Dev.RevitAutomation;
-using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.RevitData;
+using System.Globalization;
 
 namespace Pe.Dev.Cli;
 
@@ -23,9 +23,9 @@ internal sealed record AutomationDiscoverModelsCliOptions(
     LoadedFamiliesFilter? Filter
 ) {
     public const string UsageText = """
-                                     Usage:
-                                       pe-dev revit automation discover-models --hub-id <id> --project-id <id> [--folder-id <id> | --folder-path <path>] [--name-contains <text>] [--recurse <true|false>] [--exclude-path-glob <pattern>]... [--region <US|EMEA>] [--out-manifest <path>] [--engine <engine>] [--timeout-seconds <seconds>] [--max-concurrency <count>] [--debug <true|false>] [--mask <true|false>] [--family-name <name>]... [--category-name <name>]... [--placement-scope <AllLoaded|PlacedOnly|UnplacedOnly>] [--json]
-                                     """;
+                                    Usage:
+                                      pe-dev revit automation discover-models --hub-id <id> --project-id <id> [--folder-id <id> | --folder-path <path>] [--name-contains <text>] [--recurse <true|false>] [--exclude-path-glob <pattern>]... [--region <US|EMEA>] [--out-manifest <path>] [--engine <engine>] [--timeout-seconds <seconds>] [--max-concurrency <count>] [--debug <true|false>] [--mask <true|false>] [--family-name <name>]... [--category-name <name>]... [--placement-scope <AllLoaded|PlacedOnly|UnplacedOnly>] [--json]
+                                    """;
 
     public static AutomationDiscoverModelsCliOptions Parse(IReadOnlyList<string> args) {
         if (args.Count == 0 || !string.Equals(args[0], "discover-models", StringComparison.OrdinalIgnoreCase))
@@ -71,7 +71,7 @@ internal sealed record AutomationDiscoverModelsCliOptions(
                 excludePathGlobs.Add(RequireValue(args, ref i, args[i]));
                 break;
             case "--recurse":
-                recurse = ReadBooleanOption(args, ref i, defaultValue: true);
+                recurse = ReadBooleanOption(args, ref i, true);
                 break;
             case "--out-manifest":
                 outManifestPath = RequireValue(args, ref i, args[i]);
@@ -89,10 +89,10 @@ internal sealed record AutomationDiscoverModelsCliOptions(
                 maxConcurrency = int.Parse(RequireValue(args, ref i, args[i]), CultureInfo.InvariantCulture);
                 break;
             case "--debug":
-                debug = ReadBooleanOption(args, ref i, defaultValue: true);
+                debug = ReadBooleanOption(args, ref i, true);
                 break;
             case "--mask":
-                mask = ReadBooleanOption(args, ref i, defaultValue: true);
+                mask = ReadBooleanOption(args, ref i, true);
                 break;
             case "--family-name":
                 familyNames.Add(RequireValue(args, ref i, args[i]));
@@ -101,7 +101,7 @@ internal sealed record AutomationDiscoverModelsCliOptions(
                 categoryNames.Add(RequireValue(args, ref i, args[i]));
                 break;
             case "--placement-scope":
-                placementScope = Enum.Parse<LoadedFamilyPlacementScope>(RequireValue(args, ref i, args[i]), ignoreCase: true);
+                placementScope = Enum.Parse<LoadedFamilyPlacementScope>(RequireValue(args, ref i, args[i]), true);
                 break;
             case "--json":
                 json = true;

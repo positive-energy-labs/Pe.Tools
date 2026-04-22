@@ -1,6 +1,7 @@
+using Pe.Shared.HostContracts.Protocol;
+using Pe.Shared.SettingsLayout;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Capabilities;
-using Pe.Shared.StorageRuntime.Core.Json;
 using Pe.Shared.StorageRuntime.Modules;
 using HostOpenRequest = Pe.Shared.HostContracts.SettingsStorage.OpenSettingsDocumentRequest;
 using HostSaveRequest = Pe.Shared.HostContracts.SettingsStorage.SaveSettingsDocumentRequest;
@@ -11,7 +12,7 @@ using HostDocumentSnapshot = Pe.Shared.HostContracts.SettingsStorage.SettingsDoc
 using HostValidationRequest = Pe.Shared.HostContracts.SettingsStorage.ValidateSettingsDocumentRequest;
 using HostValidationResult = Pe.Shared.HostContracts.SettingsStorage.SettingsValidationResult;
 using HostWorkspacesData = Pe.Shared.HostContracts.SettingsStorage.SettingsWorkspacesData;
-using SettingsDocumentId = Pe.Shared.HostContracts.SettingsStorage.SettingsDocumentId;
+using HostWorkspacesRequest = Pe.Shared.HostContracts.SettingsStorage.GetSettingsWorkspacesRequest;
 using RuntimeSettingsVersionToken = Pe.Shared.StorageRuntime.Documents.SettingsVersionToken;
 
 namespace Pe.Host.Services;
@@ -23,7 +24,6 @@ public sealed class HostSettingsStorageService {
     private readonly string _basePath;
     private readonly IHostSettingsModuleCatalog _moduleCatalog;
     private readonly SettingsRuntimeMode _runtimeMode;
-    private readonly SettingsDocumentSchemaSyncService _schemaSyncService;
 
     public HostSettingsStorageService(IHostSettingsModuleCatalog moduleCatalog)
         : this(moduleCatalog, null) {
@@ -37,14 +37,13 @@ public sealed class HostSettingsStorageService {
         this._moduleCatalog = moduleCatalog;
         this._basePath = basePath ?? SettingsStorageLocations.GetDefaultBasePath();
         this._runtimeMode = runtimeMode;
-        this._schemaSyncService = new SettingsDocumentSchemaSyncService(runtimeMode);
     }
 
     public async Task<HostDiscoveryResult> DiscoverAsync(
         HostTreeRequest request,
         CancellationToken cancellationToken = default
     ) {
-        var module = this.ResolveModule(request.ModuleKey);
+        var module = await this.ResolveModuleAsync(request.ModuleKey, request.Target, cancellationToken);
         var discovery = await this.CreateDocuments(module).DiscoverAsync(
             new SettingsDiscoveryOptions(
                 request.SubDirectory,
@@ -62,8 +61,9 @@ public sealed class HostSettingsStorageService {
         HostOpenRequest request,
         CancellationToken cancellationToken = default
     ) {
-        this.TrySynchronizeDocumentOnDisk(request.DocumentId);
-        var documents = this.CreateDocuments(this.ResolveModule(request.DocumentId.ModuleKey));
+        var documents = this.CreateDocuments(
+            await this.ResolveModuleAsync(request.DocumentId.ModuleKey, request.Target, cancellationToken)
+        );
         return (await documents.OpenAsync(
             request.DocumentId.RelativePath,
             request.IncludeComposedContent,
@@ -76,15 +76,16 @@ public sealed class HostSettingsStorageService {
         HostSaveRequest request,
         CancellationToken cancellationToken = default
     ) {
-        var synchronizedRequest = this.SynchronizeRequestContent(request);
-        var documents = this.CreateDocuments(this.ResolveModule(synchronizedRequest.DocumentId.ModuleKey));
+        var documents = this.CreateDocuments(
+            await this.ResolveModuleAsync(request.DocumentId.ModuleKey, request.Target, cancellationToken)
+        );
         return (await documents.SaveAsync(
-            synchronizedRequest.DocumentId.RelativePath,
-            synchronizedRequest.RawContent,
-            synchronizedRequest.ExpectedVersionToken is null
+            request.DocumentId.RelativePath,
+            request.RawContent,
+            request.ExpectedVersionToken is null
                 ? null
-                : new RuntimeSettingsVersionToken(synchronizedRequest.ExpectedVersionToken.Value),
-            synchronizedRequest.DocumentId.RootKey,
+                : new RuntimeSettingsVersionToken(request.ExpectedVersionToken.Value),
+            request.DocumentId.RootKey,
             cancellationToken
         )).ToContract();
     }
@@ -93,7 +94,9 @@ public sealed class HostSettingsStorageService {
         HostValidationRequest request,
         CancellationToken cancellationToken = default
     ) {
-        var documents = this.CreateDocuments(this.ResolveModule(request.DocumentId.ModuleKey));
+        var documents = this.CreateDocuments(
+            await this.ResolveModuleAsync(request.DocumentId.ModuleKey, request.Target, cancellationToken)
+        );
         return (await documents.ValidateAsync(
             request.DocumentId.RelativePath,
             request.RawContent,
@@ -102,77 +105,33 @@ public sealed class HostSettingsStorageService {
         )).ToContract();
     }
 
-    public HostWorkspacesData GetWorkspaces() => this._moduleCatalog.GetWorkspaces();
+    public Task<HostWorkspacesData> GetWorkspacesAsync(
+        HostWorkspacesRequest request,
+        CancellationToken cancellationToken = default
+    ) => this._moduleCatalog.GetWorkspacesAsync(request.Target, cancellationToken);
 
-    private ISettingsModuleManifest ResolveModule(string moduleKey) =>
-        this._moduleCatalog.TryGetModule(moduleKey, out var module)
-            ? module
-            : throw new InvalidOperationException($"Unknown settings module '{moduleKey}'.");
+    private async Task<StructuralSettingsModuleDescriptor> ResolveModuleAsync(
+        string moduleKey,
+        BridgeSessionSelector? target,
+        CancellationToken cancellationToken
+    ) {
+        var module = await this._moduleCatalog.TryGetModuleAsync(moduleKey, target, cancellationToken);
+        return module ?? throw new InvalidOperationException($"Unknown settings module '{moduleKey}'.");
+    }
 
-    private ModuleDocumentStorage CreateDocuments(ISettingsModuleManifest module) =>
+    private ModuleDocumentStorage CreateDocuments(StructuralSettingsModuleDescriptor module) =>
         new(
             module.ModuleKey,
             module.DefaultRootKey,
             module.StorageOptions,
-            module.SettingsType,
             this._runtimeMode,
             this._basePath,
             new Dictionary<string, SettingsStorageModuleDefinition>(StringComparer.OrdinalIgnoreCase) {
-                [module.ModuleKey] = module.CreateStorageDefinition(this._runtimeMode)
+                [module.ModuleKey] = new(
+                    module.DefaultRootKey,
+                    module.Roots.Select(root => root.RootKey).ToList(),
+                    module.StorageOptions
+                )
             }
         );
-
-    private void TrySynchronizeDocumentOnDisk(SettingsDocumentId documentId) {
-        if (!this._moduleCatalog.TryGetModule(documentId.ModuleKey, out var module) ||
-            module.SettingsType == typeof(object))
-            return;
-
-        var rootDirectory = SettingsStorageLocations.ResolveSettingsRootDirectory(
-            this._basePath,
-            documentId.ModuleKey,
-            documentId.RootKey
-        );
-        var documentPath = SettingsPathing.ResolveSafeRelativeJsonPath(
-            rootDirectory,
-            documentId.RelativePath,
-            nameof(documentId.RelativePath)
-        );
-        if (!File.Exists(documentPath))
-            return;
-
-        _ = this._schemaSyncService.EnsureSynchronized(
-            module.SettingsType,
-            module.StorageOptions,
-            documentPath,
-            rootDirectory
-        );
-    }
-
-    private HostSaveRequest SynchronizeRequestContent(HostSaveRequest request) {
-        if (!this._moduleCatalog.TryGetModule(request.DocumentId.ModuleKey, out var module) ||
-            module.SettingsType == typeof(object))
-            return request;
-
-        var rootDirectory = SettingsStorageLocations.ResolveSettingsRootDirectory(
-            this._basePath,
-            request.DocumentId.ModuleKey,
-            request.DocumentId.RootKey
-        );
-        var documentPath = SettingsPathing.ResolveSafeRelativeJsonPath(
-            rootDirectory,
-            request.DocumentId.RelativePath,
-            nameof(request.DocumentId.RelativePath)
-        );
-        var synchronizedContent = this._schemaSyncService.SynchronizeContentForSave(
-            module.SettingsType,
-            module.StorageOptions,
-            request.RawContent,
-            documentPath,
-            rootDirectory
-        );
-
-        return string.Equals(synchronizedContent, request.RawContent, StringComparison.Ordinal)
-            ? request
-            : request with { RawContent = synchronizedContent };
-    }
 }

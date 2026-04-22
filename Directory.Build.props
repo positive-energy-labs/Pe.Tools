@@ -2,68 +2,118 @@
     <PropertyGroup>
         <Configurations>Debug.R23;Debug.R24;Debug.R25;Debug.R26</Configurations>
         <Configurations
-        >$(Configurations);Release.R23;Release.R24;Release.R25;Release.R26</Configurations>
+        >$(Configurations);Release.R23;Release.R24;Release.R25;Release.R26
+        </Configurations>
+        <DefaultItemExcludes>$(DefaultItemExcludes);obj\**</DefaultItemExcludes>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Configuration)' != ''">
+        <BaseIntermediateOutputPath>obj\$(Configuration)\</BaseIntermediateOutputPath>
+        <IntermediateOutputPath>$(BaseIntermediateOutputPath)</IntermediateOutputPath>
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(EnableRevitTestConfigurations)' == 'true'">
         <Configurations
-        >$(Configurations);Debug.R23.Tests;Debug.R24.Tests;Debug.R25.Tests;Debug.R26.Tests</Configurations>
+        >$(Configurations);Debug.R23.Tests;Debug.R24.Tests;Debug.R25.Tests;Debug.R26.Tests
+        </Configurations>
         <Configurations
-        >$(Configurations);Release.R23.Tests;Release.R24.Tests;Release.R25.Tests;Release.R26.Tests</Configurations>
+        >$(Configurations);Release.R23.Tests;Release.R24.Tests;Release.R25.Tests;Release.R26.Tests
+        </Configurations>
     </PropertyGroup>
 
     <PropertyGroup
-        Condition="'$(MSBuildProjectName)' == 'Build' and '$(MSBuildProjectName)' == 'Installer'"
+            Condition="'$(MSBuildProjectName)' == 'Build' and '$(MSBuildProjectName)' == 'Installer'"
     >
         <DeployAddin>false</DeployAddin>
     </PropertyGroup>
 
     <PropertyGroup
-        Condition="'$(MSBuildProjectName)' != 'Build' and '$(MSBuildProjectName)' != 'Installer'"
+            Condition="'$(MSBuildProjectName)' != 'Build' and '$(MSBuildProjectName)' != 'Installer'"
     >
         <Configuration Condition="'$(Configuration)' == ''">Debug.R25</Configuration>
+        <ProjectLayer
+                Condition="'$(ProjectLayer)' == '' and ('$(MSBuildProjectName)' == 'Pe.Shared.HostContracts' or '$(MSBuildProjectName)' == 'Pe.Shared.Aps' or '$(MSBuildProjectName)' == 'Pe.Shared.RevitData' or '$(MSBuildProjectName)' == 'Pe.Shared.SettingsLayout' or '$(MSBuildProjectName)' == 'Pe.Shared.StorageRuntime' or '$(MSBuildProjectName)' == 'Toon')"
+        >SharedNeutral
+        </ProjectLayer>
+        <ProjectLayer
+                Condition="'$(ProjectLayer)' == '' and '$(MSBuildProjectName)' == 'Pe.Shared.RevitProfiles'"
+        >SharedRevitTransitional
+        </ProjectLayer>
+        <ProjectLayer
+                Condition="'$(ProjectLayer)' == '' and ('$(MSBuildProjectName)' == 'Pe.Host' or '$(MSBuildProjectName)' == 'Pe.Dev.Cli' or '$(MSBuildProjectName)' == 'Pe.Dev.RevitAutomation')"
+        >OutOfProc
+        </ProjectLayer>
+        <ProjectLayer
+                Condition="'$(ProjectLayer)' == '' and '$(MSBuildProjectName)' == 'Pe.Dev.RevitAutomation.Worker'"
+        >RevitExecutionNet8
+        </ProjectLayer>
+        <ProjectLayer
+                Condition="'$(ProjectLayer)' == '' and ('$(MSBuildProjectName)' == 'Pe.App' or '$(MSBuildProjectName)' == 'Pe.Revit.Global' or '$(MSBuildProjectName)' == 'Pe.Revit.Extensions' or '$(MSBuildProjectName)' == 'Pe.Revit.FamilyFoundry' or '$(MSBuildProjectName)' == 'Pe.Revit.Scripting' or '$(MSBuildProjectName)' == 'Pe.Revit.SettingsRuntime' or '$(MSBuildProjectName)' == 'Pe.Revit.StorageRuntime' or '$(MSBuildProjectName)' == 'Pe.Revit.Ui')"
+        >RevitMultiYear
+        </ProjectLayer>
+        <ProjectLayer
+                Condition="'$(ProjectLayer)' == '' and '$(MSBuildProjectName)' == 'Pe.Revit.Tests'"
+        >RevitTests
+        </ProjectLayer>
         <_RevitConfigurationVersion
-            Condition="'$(RevitVersion)' == '' Or '$(RevitVersion)' == '-1'"
-        >$([System.Text.RegularExpressions.Regex]::Match('$(Configuration)', '.*\.R(\d{2}|\d{4})(?:\.|$)').Groups[1].Value)</_RevitConfigurationVersion>
+                Condition="'$(RevitVersion)' == '' Or '$(RevitVersion)' == '-1'"
+        >$([System.Text.RegularExpressions.Regex]::Match('$(Configuration)', '.*\.R(\d{2}|\d{4})(?:\.|$)').Groups[1].Value)
+        </_RevitConfigurationVersion>
         <RevitVersion
-            Condition="('$(RevitVersion)' == '' Or '$(RevitVersion)' == '-1') and '$(_RevitConfigurationVersion.Length)' == '4'"
-        >$(_RevitConfigurationVersion)</RevitVersion>
+                Condition="('$(RevitVersion)' == '' Or '$(RevitVersion)' == '-1') and '$(_RevitConfigurationVersion.Length)' == '4'"
+        >$(_RevitConfigurationVersion)
+        </RevitVersion>
         <RevitVersion
-            Condition="('$(RevitVersion)' == '' Or '$(RevitVersion)' == '-1') and '$(_RevitConfigurationVersion.Length)' == '2'"
-        >20$(_RevitConfigurationVersion)</RevitVersion>
+                Condition="('$(RevitVersion)' == '' Or '$(RevitVersion)' == '-1') and '$(_RevitConfigurationVersion.Length)' == '2'"
+        >20$(_RevitConfigurationVersion)
+        </RevitVersion>
         <_IsNoRevitConfig
-            Condition="'$(RevitVersion)' == '' Or '$(RevitVersion)' == '-1'"
-        >true</_IsNoRevitConfig>
+                Condition="'$(RevitVersion)' == '' Or '$(RevitVersion)' == '-1'"
+        >true
+        </_IsNoRevitConfig>
         <RevitVersion Condition="'$(_IsNoRevitConfig)' == 'true'">2025</RevitVersion>
         <TargetFramework
-            Condition="'$(_IsNoRevitConfig)' == 'true'"
-        >net8.0-windows</TargetFramework>
+                Condition="'$(TargetFramework)' == '' and '$(ProjectLayer)' == 'SharedNeutral'"
+        >netstandard2.0
+        </TargetFramework>
+        <TargetFramework
+                Condition="'$(TargetFramework)' == '' and ('$(ProjectLayer)' == 'OutOfProc' or '$(ProjectLayer)' == 'RevitExecutionNet8' or '$(ProjectLayer)' == 'RevitTests')"
+        >net8.0-windows
+        </TargetFramework>
+        <TargetFramework
+                Condition="'$(TargetFramework)' == '' and ('$(ProjectLayer)' == 'RevitMultiYear' or '$(ProjectLayer)' == 'SharedRevitTransitional') and ('$(RevitVersion)' == '2022' or '$(RevitVersion)' == '2023' or '$(RevitVersion)' == '2024')"
+        >net48
+        </TargetFramework>
+        <TargetFramework
+                Condition="'$(TargetFramework)' == '' and ('$(ProjectLayer)' == 'RevitMultiYear' or '$(ProjectLayer)' == 'SharedRevitTransitional') and ('$(RevitVersion)' == '2025' or '$(RevitVersion)' == '2026')"
+        >net8.0-windows
+        </TargetFramework>
+        <TargetFramework
+                Condition="'$(TargetFramework)' == '' and '$(_IsNoRevitConfig)' == 'true'"
+        >net8.0-windows
+        </TargetFramework>
     </PropertyGroup>
 
     <PropertyGroup
-        Condition="'$(MSBuildProjectName)' != 'Build' and '$(MSBuildProjectName)' != 'Installer' and '$(Configuration)' != ''"
+            Condition="'$(MSBuildProjectName)' != 'Build' and '$(MSBuildProjectName)' != 'Installer' and '$(Configuration)' != ''"
     >
         <IsRepackable>false</IsRepackable>
     </PropertyGroup>
 
-    <PropertyGroup Condition="'$(Configuration)' != ''">
-        <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
-    </PropertyGroup>
-
     <PropertyGroup
-        Condition="'$(Configuration)' != '' and $([System.String]::Copy('$(Configuration)').Contains('.R')) == 'True'"
+            Condition="'$(Configuration)' != '' and $([System.String]::Copy('$(Configuration)').Contains('.R')) == 'True'"
     >
-        <MSBuildProjectExtensionsPath>obj\$(Configuration)\</MSBuildProjectExtensionsPath>
+        <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
     </PropertyGroup>
 
     <PropertyGroup
-        Condition="'$(Configuration)' != '' and $([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'"
+            Condition="'$(Configuration)' != '' and $([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'"
     >
         <BaseOutputPath>$(MSBuildThisFileDirectory).artifacts\tests\bin\</BaseOutputPath>
     </PropertyGroup>
 
     <PropertyGroup
-        Condition="'$(MSBuildProjectName)' != 'Build' and '$(MSBuildProjectName)' != 'Installer' and '$(Configuration)' != '' and !$([System.String]::Copy('$(Configuration)').Contains('Release'))"
+            Condition="'$(MSBuildProjectName)' != 'Build' and '$(MSBuildProjectName)' != 'Installer' and '$(Configuration)' != '' and !$([System.String]::Copy('$(Configuration)').Contains('Release'))"
     >
         <AssemblyVersion>1.0.0.0</AssemblyVersion>
         <FileVersion>1.0.0.0</FileVersion>

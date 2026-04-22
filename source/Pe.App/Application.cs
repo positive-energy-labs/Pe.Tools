@@ -12,8 +12,10 @@ using Pe.Revit.Global.Revit.Lib.Schedules;
 using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Global.Services.Host;
 using Pe.Revit.Scripting.Transport;
+using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.HostContracts.Protocol;
+using Pe.Shared.SettingsLayout;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
@@ -60,7 +62,8 @@ public class Application : ExternalApplication {
         HostRuntime.Initialize(revitTaskService, registry => {
             SettingsModuleCatalogComposer.RegisterRevitModules(
                 registry,
-                StorageRuntimeSettingsModules.All,
+                StorageRuntimeNeutralSettingsModules.All,
+                RevitSettingsRuntimeModules.All,
                 RevitGlobalSettingsModules.All,
                 FamilyFoundrySettingsModules.All
             );

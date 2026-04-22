@@ -1,5 +1,6 @@
 using Autodesk.Revit.DB.Electrical;
 using Pe.Shared.HostContracts.RevitData;
+using Pe.Shared.RevitData;
 
 namespace Pe.Revit.Global.Revit.Lib.Electrical;
 
@@ -134,8 +135,9 @@ public static class ElectricalPanelsCatalogCollector {
 
     private static int GetOccupiedSlotCount(ElectricalSystem system) {
         var occupiedSlotNumbers = system.CircuitNumber
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Length;
+            .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(value => value.Trim())
+            .Count();
         return occupiedSlotNumbers > 0
             ? occupiedSlotNumbers
             : Math.Max(system.PolesNumber, 1);

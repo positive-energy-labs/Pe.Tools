@@ -18,13 +18,13 @@ internal sealed class HostOperationRegistry {
             ),
             HostOperations.Create<SchemaRequest>(
                 GetSchemaOperationContract.Definition,
-                static (request, context, cancellationToken) =>
-                    Task.FromResult(HostOperations.Local(context.SchemaService.GetSchemaEnvelope(request)))
+                static async (request, context, cancellationToken) =>
+                    HostOperations.Local(await context.SchemaService.GetSchemaEnvelopeAsync(request, cancellationToken))
             ),
-            HostOperations.Create<NoRequest>(
+            HostOperations.Create<GetSettingsWorkspacesRequest>(
                 GetWorkspacesOperationContract.Definition,
-                static (request, context, cancellationToken) =>
-                    Task.FromResult(HostOperations.Local(context.StorageService.GetWorkspaces()))
+                static async (request, context, cancellationToken) =>
+                    HostOperations.Local(await context.StorageService.GetWorkspacesAsync(request, cancellationToken))
             ),
             HostOperations.Create<SettingsTreeRequest>(
                 DiscoverSettingsTreeOperationContract.Definition,
