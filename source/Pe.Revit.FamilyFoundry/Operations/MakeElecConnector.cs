@@ -199,7 +199,9 @@ public class MakeElecConnector(MakeElecConnectorSettings settings) : DocOperatio
     private static IEnumerable<ConnectorHostCandidate> GetPlanarFaceHostCandidates(FamilyDocument doc) {
         var revitDoc = doc.Document;
         var options = new Options {
-            ComputeReferences = true, IncludeNonVisibleObjects = true, DetailLevel = ViewDetailLevel.Fine
+            ComputeReferences = true,
+            IncludeNonVisibleObjects = true,
+            DetailLevel = ViewDetailLevel.Fine
         };
 
         var candidates = new List<(ConnectorHostCandidate Candidate, double Area)>();

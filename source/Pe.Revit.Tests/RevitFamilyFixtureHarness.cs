@@ -1,9 +1,9 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.Global;
-using Pe.Revit.Global.Revit.Lib.Parameters;
+using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Global.Utils.Files;
-using Pe.Revit.SettingsRuntime.Core.Json;
+using Pe.Revit.SettingsRuntime.Json;
 using System.Globalization;
 
 namespace Pe.Revit.Tests;
@@ -361,7 +361,8 @@ internal static class RevitFamilyFixtureHarness {
             return existing;
 
         var options = new ExternalDefinitionCreationOptions(definitionSpec.Name, definitionSpec.DataType) {
-            Description = definitionSpec.Description, Visible = definitionSpec.Visible
+            Description = definitionSpec.Description,
+            Visible = definitionSpec.Visible
         };
         if (definitionSpec.Guid.HasValue && definitionSpec.Guid.Value != Guid.Empty)
             options.GUID = definitionSpec.Guid.Value;
@@ -386,7 +387,8 @@ internal static class RevitFamilyFixtureHarness {
         var externalDefinition = definitionGroup.Definitions.get_Item(definitionSpec.Name) as ExternalDefinition;
         if (externalDefinition == null) {
             var options = new ExternalDefinitionCreationOptions(definitionSpec.Name, definitionSpec.DataType) {
-                Description = definitionSpec.Description, Visible = definitionSpec.Visible
+                Description = definitionSpec.Description,
+                Visible = definitionSpec.Visible
             };
             if (definitionSpec.Guid.HasValue && definitionSpec.Guid.Value != Guid.Empty)
                 options.GUID = definitionSpec.Guid.Value;

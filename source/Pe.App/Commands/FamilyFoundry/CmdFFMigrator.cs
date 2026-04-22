@@ -4,14 +4,15 @@ using Newtonsoft.Json;
 using Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 using Pe.App.Commands.Palette.FamilyPalette;
 using Pe.App.SettingsEditor;
+using Pe.Revit;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.Global;
-using Pe.Revit.Global.Revit.Lib;
-using Pe.Revit.Global.Revit.Ui;
+using Pe.Revit.Global.Lib;
+using Pe.Revit.Global.Ui;
 using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.StorageRuntime;
@@ -270,7 +271,7 @@ public class CmdFFMigrator : IExternalCommand {
                 );
             }
 
-            FileUtils.OpenInDefaultApp(filePath);
+            _ = FileUtils.OpenInDefaultApp(filePath);
             return new FFMigratorOpenProfileFileActionResult(true, null, filePath, true);
         } catch (Exception ex) {
             return new FFMigratorOpenProfileFileActionResult(false, ex.Message, null, false);

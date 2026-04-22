@@ -1,5 +1,5 @@
 using Autodesk.Revit.DB.Structure;
-using Pe.Revit.Global.Revit.Lib.Schedules;
+using Pe.Revit.DocumentData.Schedules.Collect;
 using ContractScheduleCatalogRequest = Pe.Shared.RevitData.Schedules.ScheduleCatalogRequest;
 
 namespace Pe.Revit.Tests;

@@ -67,7 +67,7 @@ public class PurgeParams : DocOperation<PurgeParamsSettings> {
         // Remove unit indicators and whitespace, check if remaining is all zeros/dots
         var cleaned = trimmed
             .Replace("\"", "") // Remove inch marks
-            .Replace("'", "") // Remove foot marks  
+            .Replace("'", "") // Remove foot marks
             .Replace(" ", "") // Remove spaces
             .Replace(".", ""); // Remove decimal points
 

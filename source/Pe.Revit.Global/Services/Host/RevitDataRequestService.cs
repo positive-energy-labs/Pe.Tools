@@ -1,9 +1,9 @@
 using Autodesk.Revit.DB.Electrical;
 using Newtonsoft.Json;
-using Pe.Revit.Global.Revit.Lib.Electrical;
-using Pe.Revit.Global.Revit.Lib.Families.LoadedFamilies.Collectors;
-using Pe.Revit.Global.Revit.Lib.Schedules;
-using Pe.Revit.Global.Revit.Lib.Selection;
+using Pe.Revit.DocumentData.Electrical;
+using Pe.Revit.DocumentData.Families.Loaded.Collectors;
+using Pe.Revit.DocumentData.Schedules.Collect;
+using Pe.Revit.DocumentData.Selection;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts.RevitData;
 using Pe.Shared.HostContracts.SettingsStorage;
@@ -217,7 +217,11 @@ internal sealed class RevitDataRequestService {
         }
 
         try {
-            var data = ScheduleProfileQueryCollector.Collect(documentResult.Data!, request.Query);
+            var data = ScheduleProfileQueryCollector.Collect(
+                documentResult.Data!,
+                request.Query,
+                uiApp.GetActiveView()
+            );
             return HostEnvelopeResults.Success(
                 data,
                 EnvelopeCode.Ok,
@@ -283,7 +287,7 @@ internal sealed class RevitDataRequestService {
         }
 
         try {
-            var data = ScheduleQueryCollector.Collect(documentResult.Data!, request.Query);
+            var data = ScheduleQueryCollector.Collect(documentResult.Data!, request.Query, activeScheduleView);
             return HostEnvelopeResults.Success(
                 data,
                 EnvelopeCode.Ok,
@@ -381,7 +385,11 @@ internal sealed class RevitDataRequestService {
             return documentResult.ToElementContextQueryFailureEnvelope();
 
         try {
-            var data = ElementContextCollector.Collect(documentResult.Data!, request.Query);
+            var data = ElementContextCollector.Collect(
+                documentResult.Data!,
+                request.Query,
+                RevitUiSession.CurrentUIApplication.GetActiveUIDocument()?.Selection.GetElementIds().ToList()
+            );
             return HostEnvelopeResults.Success(
                 data,
                 EnvelopeCode.Ok,
@@ -410,7 +418,7 @@ internal sealed class RevitDataRequestService {
             return documentResult.ToElectricalPanelsFailureEnvelope();
 
         try {
-            var data = ElectricalPanelsCatalogCollector.Collect(documentResult.Data!, request);
+            var data = ElectricalPanelsCatalogCollector.Collect(documentResult.Data!, request.Filter);
             return HostEnvelopeResults.Success(
                 data,
                 EnvelopeCode.Ok,
@@ -439,7 +447,7 @@ internal sealed class RevitDataRequestService {
             return documentResult.ToElectricalCircuitsFailureEnvelope();
 
         try {
-            var data = ElectricalCircuitsCatalogCollector.Collect(documentResult.Data!, request);
+            var data = ElectricalCircuitsCatalogCollector.Collect(documentResult.Data!, request.Filter, request.Options);
             return HostEnvelopeResults.Success(
                 data,
                 EnvelopeCode.Ok,
@@ -487,7 +495,11 @@ internal sealed class RevitDataRequestService {
         }
 
         try {
-            var data = ElectricalPanelScheduleQueryCollector.Collect(documentResult.Data!, request.Query);
+            var data = ElectricalPanelScheduleQueryCollector.Collect(
+                documentResult.Data!,
+                request.Query,
+                RevitUiSession.CurrentUIApplication.GetActiveView()
+            );
             return HostEnvelopeResults.Success(
                 data,
                 EnvelopeCode.Ok,
@@ -516,7 +528,7 @@ internal sealed class RevitDataRequestService {
             return documentResult.ToElectricalLoadClassificationsFailureEnvelope();
 
         try {
-            var data = ElectricalLoadClassificationsCatalogCollector.Collect(documentResult.Data!, request);
+            var data = ElectricalLoadClassificationsCatalogCollector.Collect(documentResult.Data!, request.Filter);
             return HostEnvelopeResults.Success(
                 data,
                 EnvelopeCode.Ok,
@@ -846,3 +858,5 @@ internal static class RevitDataRequestResultExtensions {
         this HostEnvelopeResult<RevitDocument> result
     ) => new(result.Ok, result.Code, result.Message, result.Issues, null);
 }
+
+

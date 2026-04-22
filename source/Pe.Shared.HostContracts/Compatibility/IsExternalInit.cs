@@ -1,4 +1,4 @@
-namespace System.Runtime.CompilerServices;
+namespace Pe.Shared.HostContracts.Compatibility;
 
 internal static class IsExternalInit {
 }

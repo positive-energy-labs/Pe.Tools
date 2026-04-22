@@ -3,13 +3,13 @@ using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using NJsonSchema;
 using NJsonSchema.Annotations;
-using Pe.Revit.SettingsRuntime.Core.Json;
-using Pe.Revit.SettingsRuntime.Core.Json.ContractResolvers;
+using Pe.Revit.SettingsRuntime.Json;
+using Pe.Revit.SettingsRuntime.Json.ContractResolvers;
 using Pe.Shared.StorageRuntime.Capabilities;
 using System.Reflection;
-using DefaultInstanceFactory = Pe.Revit.SettingsRuntime.Core.Json.DefaultInstanceFactory;
-using JsonSchemaBuildOptions = Pe.Revit.SettingsRuntime.Core.Json.JsonSchemaBuildOptions;
-using JsonSchemaFactory = Pe.Revit.SettingsRuntime.Core.Json.JsonSchemaFactory;
+using DefaultInstanceFactory = Pe.Revit.SettingsRuntime.Json.DefaultInstanceFactory;
+using JsonSchemaBuildOptions = Pe.Revit.SettingsRuntime.Json.JsonSchemaBuildOptions;
+using JsonSchemaFactory = Pe.Revit.SettingsRuntime.Json.JsonSchemaFactory;
 
 namespace Pe.Revit.SettingsRuntime.Validation;
 
@@ -119,3 +119,4 @@ public sealed class SchemaBackedSettingsDocumentValidator(
         }
     }
 }
+

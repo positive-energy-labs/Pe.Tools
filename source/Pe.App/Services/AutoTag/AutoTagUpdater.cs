@@ -1,6 +1,6 @@
-using Pe.Revit.Global.Revit.Ui;
-using Pe.Revit.SettingsRuntime.AutoTag;
-using Pe.Revit.SettingsRuntime.Core.Json.SchemaProviders;
+using Pe.Revit.Global.Ui;
+using Pe.Revit.SettingsRuntime.Json.SchemaProviders;
+using Pe.Revit.SettingsRuntime.Modules.AutoTag;
 using Serilog;
 using Serilog.Events;
 
@@ -311,3 +311,4 @@ public class AutoTagUpdater : IUpdater {
 
     public void ClearCache() => this._tagTypeCache.Clear();
 }
+

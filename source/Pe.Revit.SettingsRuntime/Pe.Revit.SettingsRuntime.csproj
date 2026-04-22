@@ -18,6 +18,8 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj"/>
+        <ProjectReference Include="..\Pe.Revit.DocumentData\Pe.Revit.DocumentData.csproj"/>
         <ProjectReference Include="..\Pe.Shared.SettingsLayout\Pe.Shared.SettingsLayout.csproj"/>
         <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj"/>
         <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj"/>

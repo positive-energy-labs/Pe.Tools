@@ -1,5 +1,5 @@
-using Pe.Revit.Global.Revit.Lib;
-using Pe.Revit.Global.Revit.Ui;
+using Pe.Revit.Global.Lib;
+using Pe.Revit.Global.Ui;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Json;

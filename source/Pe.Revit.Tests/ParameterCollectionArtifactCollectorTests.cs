@@ -1,4 +1,4 @@
-using Pe.Revit.Global.Revit.Lib.Parameters;
+using Pe.Revit.DocumentData.Artifacts;
 using Pe.Shared.HostContracts.RevitData;
 
 namespace Pe.Revit.Tests;
@@ -109,3 +109,4 @@ public sealed class ParameterCollectionArtifactCollectorTests {
         }
     }
 }
+

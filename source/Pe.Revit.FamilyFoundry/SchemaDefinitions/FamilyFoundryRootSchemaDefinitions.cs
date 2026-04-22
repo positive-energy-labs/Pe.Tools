@@ -1,5 +1,5 @@
 using Pe.Revit.FamilyFoundry.Profiles;
-using Pe.Revit.SettingsRuntime.Core.Json.SchemaDefinitions;
+using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
 using System.Runtime.CompilerServices;
 
 namespace Pe.Revit.FamilyFoundry.SchemaDefinitions;
@@ -58,3 +58,4 @@ public static class FamilyFoundryRootSchemaDefinitionBootstrapper {
              StringComparison.OrdinalIgnoreCase)) ||
         (ex.InnerException is not null && IsMissingRevitAssembly(ex.InnerException));
 }
+

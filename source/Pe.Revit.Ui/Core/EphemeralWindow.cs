@@ -1,4 +1,4 @@
-﻿using Pe.Revit.Global.Revit.Documents;
+﻿using Pe.Revit.Extensions.ProjDocument;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -60,7 +60,9 @@ public class EphemeralWindow : Window {
         // Content border - transparent container, Palette manages its own backgrounds
         // The title is passed to the Palette to render in its title bar area
         this._contentBorder = new Border {
-            Child = content, Background = Brushes.Transparent, LayoutTransform = this._zoomTransform
+            Child = content,
+            Background = Brushes.Transparent,
+            LayoutTransform = this._zoomTransform
             // Allow dragging from anywhere on the palette background
             // (Palette will have its own title bar area for this)
         };

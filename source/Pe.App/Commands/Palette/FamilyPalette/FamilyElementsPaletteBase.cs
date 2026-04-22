@@ -1,7 +1,7 @@
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Pe.Revit.Extensions.FamDocument;
-using Pe.Revit.Global.Revit.Ui;
+using Pe.Revit.Global.Ui;
 using Pe.Revit.Ui.Core;
 using Pe.Revit.Ui.Core.Services;
 using Serilog;

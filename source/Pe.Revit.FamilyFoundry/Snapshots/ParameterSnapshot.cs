@@ -1,4 +1,4 @@
-using Pe.Revit.SettingsRuntime.Core.Json.RevitTypes;
+using Pe.Revit.SettingsRuntime.Json.RevitTypes;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
@@ -114,3 +114,4 @@ public record ParameterSnapshot : ParameterSpec {
         return distinctValues.Count == 1 ? distinctValues[0] : null;
     }
 }
+

@@ -97,7 +97,7 @@ public class PreProcessMappings(
                         _ = log.Success(
                             $"Mapped built-in {currParam.Definition.Name} → {sharedParam.ExternalDefinition.Name}");
                 } catch {
-                    _ = log.Defer($"{currParam} → {mapping.NewName}"); // allow retrying 
+                    _ = log.Defer($"{currParam} → {mapping.NewName}"); // allow retrying
                 }
             }
         }
