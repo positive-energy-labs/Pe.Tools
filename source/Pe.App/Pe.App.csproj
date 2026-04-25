@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Nice3point.Revit.Sdk/6.2.1">
     <PropertyGroup>
         <UseWPF>true</UseWPF>
-        <DeployAddin>true</DeployAddin>
-        <LaunchRevit>true</LaunchRevit>
+        <DeployAddin Condition="'$(DeployAddin)' == ''">true</DeployAddin>
+        <LaunchRevit Condition="'$(LaunchRevit)' == ''">true</LaunchRevit>
         <DisableFastUpToDateCheck>true</DisableFastUpToDateCheck>
         <EnableRevitTestConfigurations>true</EnableRevitTestConfigurations>
         <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
@@ -67,7 +67,6 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\Pe.Shared.Aps\Pe.Shared.Aps.csproj"/>
-        <ProjectReference Include="..\Pe.Revit.Extensions\Pe.Revit.Extensions.csproj"/>
         <ProjectReference Include="..\Pe.Revit.FamilyFoundry\Pe.Revit.FamilyFoundry.csproj"/>
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj"/>
@@ -76,27 +75,23 @@
         <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Ui\Pe.Revit.Ui.csproj"/>
     </ItemGroup>
-    <PropertyGroup>
-        <_PeDevCliStableConfiguration>Debug.R25</_PeDevCliStableConfiguration>
-        <_PeDevCliStablePath>$(MSBuildProjectDirectory)\..\Pe.Dev.Cli\bin\$(_PeDevCliStableConfiguration)\net8.0-windows\pe-dev.dll</_PeDevCliStablePath>
-    </PropertyGroup>
     <Target
             Name="LaunchAddinApprovalWatcher"
             AfterTargets="DeployAddin"
             Condition="'$(DeployAddin)' == 'true' and '$(LaunchRevit)' == 'true' and '$(DesignTimeBuild)' != 'true'"
     >
         <Message
-                Text="Launching approval watcher via '$(_PeDevCliStablePath)' for Revit $(RevitVersion)."
+                Text="Launching approval watcher via '$(PeStableCliPath)' for Revit $(RevitVersion)."
                 Importance="High"
-                Condition="Exists('$(_PeDevCliStablePath)')"
+                Condition="Exists('$(PeStableCliPath)')"
         />
         <Warning
-                Text="Skipping approval watcher because pe-dev was not found at '$(_PeDevCliStablePath)'. Build source/Pe.Dev.Cli with configuration '$(_PeDevCliStableConfiguration)' to restore the hook."
-                Condition="!Exists('$(_PeDevCliStablePath)')"
+                Text="Skipping approval watcher because pe-dev was not found at '$(PeStableCliPath)'. Build source/Pe.Dev.Cli with configuration '$(PeStableCliConfiguration)' to restore the hook."
+                Condition="!Exists('$(PeStableCliPath)')"
         />
         <Exec
-                Command="dotnet exec &quot;$(_PeDevCliStablePath)&quot; --repo-root &quot;$(MSBuildProjectDirectory)\..\..&quot; revit approve --revit-year $(RevitVersion)"
-                Condition="Exists('$(_PeDevCliStablePath)')"
+                Command="dotnet exec &quot;$(PeStableCliPath)&quot; --repo-root &quot;$(MSBuildProjectDirectory)\..\..&quot; revit approve --revit-year $(RevitVersion)"
+                Condition="Exists('$(PeStableCliPath)')"
         />
     </Target>
     <Target

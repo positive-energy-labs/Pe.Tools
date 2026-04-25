@@ -4,7 +4,6 @@ using Microsoft.Extensions.Options;
 using ModularPipelines.Attributes;
 using ModularPipelines.Context;
 using ModularPipelines.FileSystem;
-using ModularPipelines.Git.Extensions;
 using ModularPipelines.Modules;
 using Pe.Shared.HostContracts.Protocol;
 using Shouldly;
@@ -19,23 +18,31 @@ namespace Build.Modules;
 ///     Create the Autodesk .bundle package.
 /// </summary>
 [DependsOn<ResolveVersioningModule>]
-[DependsOn<CompileProjectModule>]
+[DependsOn<ResolveBuildMatrixModule>]
+[DependsOn<ResolveBuildLayoutModule>]
+[DependsOn<PublishRevitAddinModule>]
 public sealed partial class CreateBundleModule(
     IOptions<BuildOptions> buildOptions,
     IOptions<BundleOptions> bundleOptions) : Module {
     protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
         var versioningResult = await context.GetModule<ResolveVersioningModule>();
+        var matrixResult = await context.GetModule<ResolveBuildMatrixModule>();
+        var layoutResult = await context.GetModule<ResolveBuildLayoutModule>();
         var versioning = versioningResult.ValueOrDefault!;
+        var matrix = matrixResult.ValueOrDefault!;
+        var layout = layoutResult.ValueOrDefault!;
 
         var bundleTarget = new File(Projects.Pe_App.FullName);
-        var targetDirectories = bundleTarget.Folder!
-            .GetFolder("bin")
-            .GetFolders(folder => folder.Name == "publish")
+        var targetDirectories = matrix.ResolveConfigurations(BuildConfigurationGroup.Pack, buildOptions.Value.Configuration)
+            .Select(layout.GetRevitPublishDirectory)
+            .Select(path => new Folder(path))
+            .Where(folder => folder.Exists)
             .ToArray();
 
         targetDirectories.ShouldNotBeEmpty("No content were found to create a bundle");
 
-        var outputFolder = context.Git().RootDirectory.GetFolder(buildOptions.Value.OutputDirectory);
+        Directory.CreateDirectory(layout.BundlePackagesRoot);
+        var outputFolder = new Folder(layout.BundlePackagesRoot);
         var bundleFolder = outputFolder.CreateFolder($"{bundleTarget.NameWithoutExtension}.bundle");
         var contentFolder = bundleFolder.CreateFolder("Contents");
         var manifestFile = bundleFolder.GetFile("PackageContents.xml");
@@ -59,54 +66,51 @@ public sealed partial class CreateBundleModule(
             foreach (var filePath in targetDirectory.GetFiles(file => file.Exists)) {
                 var relativePath = Path.GetRelativePath(targetDirectory.Path, filePath.Path);
                 var destinationPath = versionFolder.GetFile(relativePath);
-                if (!destinationPath.Folder!.Exists) destinationPath.Folder!.Create();
+                if (!destinationPath.Folder!.Exists)
+                    destinationPath.Folder!.Create();
 
                 filePath.CopyTo(destinationPath.Path);
             }
         }
     }
 
-    /// <summary>
-    ///     Generate the Autodesk manifest.
-    /// </summary>
-    private void GenerateManifest(File bundleTarget,
+    private void GenerateManifest(
+        File bundleTarget,
         Folder[] targetDirectories,
         File manifestDirectory,
-        ResolveVersioningResult versioning) =>
-        BuilderUtils.Build<PackageContentsBuilder>(builder => {
-            builder.ApplicationPackage.Create()
-                .ProductType(ProductTypes.Application)
-                .AutodeskProduct(AutodeskProducts.Revit)
-                .Name(bundleTarget.NameWithoutExtension)
-                .AppVersion(versioning.Version);
+        ResolveVersioningResult versioning
+    ) => BuilderUtils.Build<PackageContentsBuilder>(builder => {
+        builder.ApplicationPackage.Create()
+            .ProductType(ProductTypes.Application)
+            .AutodeskProduct(AutodeskProducts.Revit)
+            .Name(bundleTarget.NameWithoutExtension)
+            .AppVersion(versioning.Version);
 
-            builder.CompanyDetails.Create(SettingsEditorRuntime.VendorName)
-                .Email(bundleOptions.Value.VendorEmail)
-                .Url(bundleOptions.Value.VendorUrl);
+        builder.CompanyDetails.Create(SettingsEditorRuntime.VendorName)
+            .Email(bundleOptions.Value.VendorEmail)
+            .Url(bundleOptions.Value.VendorUrl);
 
-            foreach (var targetDirectory in targetDirectories) {
-                TryParseVersion(targetDirectory.Path, out var version)
-                    .ShouldBeTrue($"Could not parse version from directory name: {targetDirectory.Path}");
+        foreach (var targetDirectory in targetDirectories) {
+            TryParseVersion(targetDirectory.Path, out var version)
+                .ShouldBeTrue($"Could not parse version from directory name: {targetDirectory.Path}");
 
-                var addinManifests = targetDirectory.GetFiles(file => file.Extension == ".addin");
-                foreach (var addinManifest in addinManifests) {
-                    var relativePath = Path.GetRelativePath(targetDirectory.Path, addinManifest.Path);
+            var addinManifests = targetDirectory.GetFiles(file => file.Extension == ".addin");
+            foreach (var addinManifest in addinManifests) {
+                var relativePath = Path.GetRelativePath(targetDirectory.Path, addinManifest.Path);
 
-                    builder.Components.CreateEntry($"Revit {version}")
-                        .RevitPlatform(int.Parse(version))
-                        .AppName(bundleTarget.NameWithoutExtension)
-                        .ModuleName($"./Contents/{version}/{relativePath}");
-                }
+                builder.Components.CreateEntry($"Revit {version}")
+                    .RevitPlatform(int.Parse(version))
+                    .AppName(bundleTarget.NameWithoutExtension)
+                    .ModuleName($"./Contents/{version}/{relativePath}");
             }
-        }, manifestDirectory);
+        }
+    }, manifestDirectory);
 
-    /// <summary>
-    ///     Parse a version string from the given input.
-    /// </summary>
     private static bool TryParseVersion(string input, [NotNullWhen(true)] out string? version) {
         version = null;
         var match = VersionRegex().Match(input);
-        if (!match.Success) return false;
+        if (!match.Success)
+            return false;
 
         switch (match.Value.Length) {
         case 4:
@@ -120,9 +124,8 @@ public sealed partial class CreateBundleModule(
         }
     }
 
-    /// <summary>
-    ///     A regular expression to match the last sequence of numeric characters in a string.
-    /// </summary>
     [GeneratedRegex(@"(\d+)(?!.*\d)")]
     private static partial Regex VersionRegex();
 }
+
+// PE_HOT_RELOAD_NUDGE

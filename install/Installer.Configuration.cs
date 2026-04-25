@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 using Pe.Shared.HostContracts.Protocol;
 
 namespace Installer;
@@ -11,16 +11,13 @@ public static class InstallerConfiguration {
             .AddEnvironmentVariables()
             .Build();
 
-        var buildOptions = configuration.GetRequiredSection("Build").Get<BuildConfiguration>()
-                           ?? throw new InvalidOperationException("Build configuration could not be loaded.");
         var installerOptions = configuration.GetRequiredSection("Installer").Get<InstallerConfigurationSection>()
                                ?? throw new InvalidOperationException("Installer configuration could not be loaded.");
 
         return new ResolvedInstallerConfiguration {
             ProductName = SettingsEditorRuntime.ProductName,
-            UpgradeCode = ParseGuid(installerOptions.UpgradeCode, "Installer:UpgradeCode"),
-            OutputDirectory = ResolveRepositoryPath(repositoryRoot,
-                RequireValue(buildOptions.OutputDirectory, "Build:OutputDirectory")),
+            UpgradeCode = ParseGuid(RequireValue(installerOptions.UpgradeCode, "Installer:UpgradeCode"), "Installer:UpgradeCode"),
+            OutputDirectory = ResolveInstallerOutputDirectory(repositoryRoot),
             BannerImagePath = ResolveRepositoryPath(repositoryRoot,
                 RequireValue(installerOptions.BannerImagePath, "Installer:BannerImagePath")),
             BackgroundImagePath = ResolveRepositoryPath(repositoryRoot,
@@ -30,6 +27,9 @@ public static class InstallerConfiguration {
             Manufacturer = SettingsEditorRuntime.VendorName
         };
     }
+
+    private static string ResolveInstallerOutputDirectory(string repositoryRoot) =>
+        Path.Combine(repositoryRoot, ".artifacts", "packages", "installers");
 
     private static string FindRepositoryRoot() {
         var startingDirectories = new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory }
@@ -74,12 +74,6 @@ public sealed record ResolvedInstallerConfiguration {
     public required string Manufacturer { get; init; }
 
     public string GetSingleUserHostInstallDirectory() => SettingsEditorRuntime.GetSingleUserHostInstallDirectory();
-
-    public string GetMultiUserHostInstallDirectory() => SettingsEditorRuntime.GetMultiUserHostInstallDirectory();
-}
-
-public sealed record BuildConfiguration {
-    public string? OutputDirectory { get; init; }
 }
 
 public sealed record InstallerConfigurationSection {
@@ -88,3 +82,5 @@ public sealed record InstallerConfigurationSection {
     public string? BackgroundImagePath { get; init; }
     public string? ProductIconPath { get; init; }
 }
+
+// PE_HOT_RELOAD_NUDGE

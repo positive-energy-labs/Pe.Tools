@@ -13,7 +13,7 @@ public static partial class Generator {
     /// <summary>
     ///     Generates Wix entities, features and directories for the installer.
     /// </summary>
-    public static InstallerLayout GenerateWixEntities(string hostPublishDirectory, string[] revitPublishDirectories) {
+    public static InstallerLayout GenerateWixEntities(string runtimePublishDirectory, string[] revitPublishDirectories) {
         var versionStorages = new Dictionary<string, List<WixEntity>>();
         var revitFeature = new Feature {
             Name = "Revit Add-in", Description = "Revit add-in installation files", Display = FeatureDisplay.expand
@@ -42,12 +42,13 @@ public static partial class Generator {
         }
 
         var hostFeature = new Feature {
-            Name = "Shared Host", Description = "Install the shared external host used by connected Revit sessions."
+            Name = "Shared Runtime",
+            Description = "Install the shared external host and pe-dev CLI used by connected Revit sessions."
         };
 
-        var hostEntities = new WixEntity[] { new Files(hostFeature, $@"{hostPublishDirectory}\*.*") };
+        var hostEntities = new WixEntity[] { new Files(hostFeature, $@"{runtimePublishDirectory}\*.*") };
 
-        LogFeatureFiles(hostPublishDirectory, "Host");
+        LogFeatureFiles(runtimePublishDirectory, "Runtime");
 
         return new InstallerLayout(
             versionStorages

@@ -5,8 +5,8 @@ using WixSharp.Controls;
 
 if (args.Length < 4) {
     throw new InvalidOperationException(
-        "Installer requires a version, a --host publish directory, and one or more Revit publish directories. " +
-        "Example: dotnet run -c Release -- 1.0.0 --host ..\\source\\Pe.Host\\bin\\Release\\publish\\Host ..\\source\\Pe.App\\bin\\Release.R25\\publish");
+        "Installer requires a version, a --runtime publish directory, and one or more Revit publish directories. " +
+        "Example: dotnet run -c Release -- 1.0.0 --runtime ..\\.artifacts\\publish\\host\\Release\\Host ..\\.artifacts\\publish\\revit\\Release.R25");
 }
 
 if (!Versioning.TryCreateFromVersionString(args[0], out var versioning)) {
@@ -38,15 +38,14 @@ var project = new Project {
 };
 
 var layout =
-    Generator.GenerateWixEntities(installerInputs.HostPublishDirectory, installerInputs.RevitPublishDirectories);
+    Generator.GenerateWixEntities(installerInputs.RuntimePublishDirectory, installerInputs.RevitPublishDirectories);
 project.RemoveDialogsBetween(NativeDialogs.WelcomeDlg, NativeDialogs.CustomizeDlg);
 
 BuildSingleUserMsi();
-BuildMultiUserUserMsi();
 
 void BuildSingleUserMsi() {
     project.Scope = InstallScope.perUser;
-    project.OutFileName = $"{configuration.ProductName}-{resolvedVersioning.Version}-SingleUser";
+    project.OutFileName = $"{configuration.ProductName}-{resolvedVersioning.Version}";
     project.Dirs = [
         new InstallDir(@"%AppDataFolder%\Autodesk\Revit\Addins\", layout.RevitEntities),
         new Dir(configuration.GetSingleUserHostInstallDirectory(), layout.HostEntities)
@@ -54,29 +53,16 @@ void BuildSingleUserMsi() {
     project.BuildMsi();
 }
 
-void BuildMultiUserUserMsi() {
-    project.Scope = InstallScope.perMachine;
-    project.OutFileName = $"{configuration.ProductName}-{resolvedVersioning.Version}-MultiUser";
-    project.Dirs = [
-        new InstallDir(
-            resolvedVersioning.VersionPrefix.Major >= 2027
-                ? @"%ProgramFiles%\Autodesk\Revit\Addins"
-                : @"%CommonAppDataFolder%\Autodesk\Revit\Addins", layout.RevitEntities),
-        new Dir(configuration.GetMultiUserHostInstallDirectory(), layout.HostEntities)
-    ];
-    project.BuildMsi();
-}
-
 static InstallerInputs ParseInstallerInputs(string[] args) {
-    string? hostPublishDirectory = null;
+    string? runtimePublishDirectory = null;
     var revitPublishDirectories = new List<string>();
 
     for (var index = 0; index < args.Length; index++) {
-        if (args[index].Equals("--host", StringComparison.OrdinalIgnoreCase)) {
+        if (args[index].Equals("--runtime", StringComparison.OrdinalIgnoreCase)) {
             if (index + 1 >= args.Length)
-                throw new InvalidOperationException("Installer argument '--host' requires a publish directory.");
+                throw new InvalidOperationException("Installer argument '--runtime' requires a publish directory.");
 
-            hostPublishDirectory = args[index + 1];
+            runtimePublishDirectory = args[index + 1];
             index++;
             continue;
         }
@@ -84,18 +70,18 @@ static InstallerInputs ParseInstallerInputs(string[] args) {
         revitPublishDirectories.Add(args[index]);
     }
 
-    if (string.IsNullOrWhiteSpace(hostPublishDirectory))
-        throw new InvalidOperationException("Installer requires a host publish directory via '--host <path>'.");
+    if (string.IsNullOrWhiteSpace(runtimePublishDirectory))
+        throw new InvalidOperationException("Installer requires a runtime publish directory via '--runtime <path>'.");
 
     if (revitPublishDirectories.Count == 0)
         throw new InvalidOperationException("Installer requires at least one Revit publish directory.");
 
-    return new InstallerInputs(hostPublishDirectory, revitPublishDirectories.ToArray());
+    return new InstallerInputs(runtimePublishDirectory, revitPublishDirectories.ToArray());
 }
 
 namespace Installer {
     file sealed record InstallerInputs(
-        string HostPublishDirectory,
+        string RuntimePublishDirectory,
         string[] RevitPublishDirectories
     );
 }

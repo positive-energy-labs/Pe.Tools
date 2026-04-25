@@ -20,17 +20,23 @@ namespace Build.Modules;
 ///     Create the .msi installer.
 /// </summary>
 [DependsOn<ResolveVersioningModule>]
-[DependsOn<CompileProjectModule>]
+[DependsOn<ResolveBuildMatrixModule>]
+[DependsOn<ResolveBuildLayoutModule>]
+[DependsOn<PublishRevitAddinModule>]
 public sealed class CreateInstallerModule(
     IOptions<BuildOptions> buildOptions,
     IOptions<InstallerOptions> installerOptions) : Module {
     protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
         var versioningResult = await context.GetModule<ResolveVersioningModule>();
+        var matrixResult = await context.GetModule<ResolveBuildMatrixModule>();
+        var layoutResult = await context.GetModule<ResolveBuildLayoutModule>();
         var versioning = versioningResult.ValueOrDefault!;
+        var matrix = matrixResult.ValueOrDefault!;
+        var layout = layoutResult.ValueOrDefault!;
         var rootDirectory = context.Git().RootDirectory;
 
-        var wixTarget = new File(Projects.Pe_App.FullName);
         var hostProject = rootDirectory.GetFolder("source").GetFolder("Pe.Host").GetFile("Pe.Host.csproj");
+        var cliProject = rootDirectory.GetFolder("source").GetFolder("Pe.Dev.Cli").GetFile("Pe.Dev.Cli.csproj");
         var wixInstaller = new File(Projects.Installer.FullName);
         var wixToolFolder = await InstallWixAsync(context, cancellationToken);
 
@@ -42,25 +48,35 @@ public sealed class CreateInstallerModule(
 
         var builderFile = wixInstaller.Folder!
             .GetFolder("bin")
-            .FindFile(file =>
-                file.NameWithoutExtension == wixInstaller.NameWithoutExtension && file.Extension == ".exe");
+            .GetFolder("Release")
+            .GetFolder("net10.0-windows")
+            .GetFile($"{wixInstaller.NameWithoutExtension}.exe");
 
-        builderFile.ShouldNotBeNull(
+        builderFile.Exists.ShouldBeTrue(
             $"No installer builder was found for the project: {wixInstaller.NameWithoutExtension}");
 
-        var targetDirectories = wixTarget.Folder!
-            .GetFolder("bin")
-            .GetFolders(folder => folder.Name == "publish")
-            .Select(folder => folder.Path)
+        var targetDirectories = matrix.ResolveConfigurations(BuildConfigurationGroup.Pack, buildOptions.Value.Configuration)
+            .Select(layout.GetRevitPublishDirectory)
+            .Where(Directory.Exists)
             .ToArray();
 
         targetDirectories.ShouldNotBeEmpty("No content were found to create an installer");
 
-        var hostPublishDirectory = await PublishHostAsync(context, hostProject, cancellationToken);
+        var runtimePublishDirectory = await PublishRuntimeAsync(
+            context,
+            hostProject,
+            cliProject,
+            layout,
+            cancellationToken
+        );
+
+        Directory.CreateDirectory(layout.InstallerPackagesRoot);
+        foreach (var existingInstallerPath in Directory.EnumerateFiles(layout.InstallerPackagesRoot, "*.msi"))
+            System.IO.File.Delete(existingInstallerPath);
 
         await context.Shell.Command.ExecuteCommandLineTool(
             new GenericCommandLineToolOptions(builderFile.Path) {
-                Arguments = [versioning.Version, "--host", hostPublishDirectory.Path, ..targetDirectories]
+                Arguments = [versioning.Version, "--runtime", runtimePublishDirectory.Path, ..targetDirectories]
             },
             new CommandExecutionOptions {
                 WorkingDirectory = wixInstaller.Folder,
@@ -70,51 +86,60 @@ public sealed class CreateInstallerModule(
                     }
             }, cancellationToken);
 
-        var outputFolder = rootDirectory.GetFolder(buildOptions.Value.OutputDirectory);
-        var outputFiles = outputFolder.GetFiles(file => file.Extension == ".msi").ToArray();
+        var outputFiles = Directory.EnumerateFiles(layout.InstallerPackagesRoot, "*.msi", SearchOption.TopDirectoryOnly)
+            .Where(path => Path.GetFileName(path).Contains(versioning.Version, StringComparison.OrdinalIgnoreCase))
+            .Select(path => new File(path))
+            .ToArray();
         outputFiles.ShouldNotBeEmpty("Failed to create an installer");
 
-        foreach (var outputFile in outputFiles) context.Summary.KeyValue("Artifacts", "Installer", outputFile.Path);
+        foreach (var outputFile in outputFiles)
+            context.Summary.KeyValue("Artifacts", "Installer", outputFile.Path);
     }
 
-    private static async Task<Folder> PublishHostAsync(
+    private static async Task<Folder> PublishRuntimeAsync(
         IModuleContext context,
         File hostProject,
+        File cliProject,
+        BuildLayout layout,
         CancellationToken cancellationToken
     ) {
-        var hostPublishDirectory = hostProject.Folder!
-            .GetFolder("bin")
-            .CreateFolder("Release")
-            .CreateFolder("publish")
-            .CreateFolder(SettingsEditorRuntime.HostFolderName);
+        if (Directory.Exists(layout.GetHostPublishDirectory("Release")))
+            Directory.Delete(layout.GetHostPublishDirectory("Release"), true);
 
-        await context.Shell.Command.ExecuteCommandLineTool(
-            new GenericCommandLineToolOptions("dotnet") {
-                Arguments = [
-                    "publish",
-                    hostProject.Path,
-                    "-c",
-                    "Release",
-                    "-r",
-                    "win-x64",
-                    "--self-contained",
-                    "false",
-                    "-o",
-                    hostPublishDirectory.Path
-                ]
-            },
-            cancellationToken: cancellationToken
-        );
+        Directory.CreateDirectory(layout.GetHostPublishDirectory("Release"));
+        var runtimePublishDirectory = new Folder(layout.GetHostPublishDirectory("Release"));
 
-        hostPublishDirectory.GetFiles(file => file.Exists)
-            .ShouldNotBeEmpty("Failed to publish Pe.Host for installer packaging.");
+        foreach (var project in new[] { hostProject, cliProject }) {
+            await context.Shell.Command.ExecuteCommandLineTool(
+                new GenericCommandLineToolOptions("dotnet") {
+                    Arguments = [
+                        "publish",
+                        project.Path,
+                        "-c",
+                        "Release",
+                        "-r",
+                        "win-x64",
+                        "--self-contained",
+                        "false",
+                        "-p:PeIsolatedBuild=true",
+                        "-o",
+                        runtimePublishDirectory.Path
+                    ]
+                },
+                cancellationToken: cancellationToken
+            );
+        }
 
-        return hostPublishDirectory;
+        runtimePublishDirectory.GetFiles(file => file.Exists)
+            .ShouldNotBeEmpty("Failed to publish the shared runtime for installer packaging.");
+        runtimePublishDirectory.GetFile(SettingsEditorRuntime.HostExecutableName).Exists
+            .ShouldBeTrue("Failed to publish Pe.Host for installer packaging.");
+        runtimePublishDirectory.GetFile(SettingsEditorRuntime.CliExecutableName).Exists
+            .ShouldBeTrue("Failed to publish pe-dev for installer packaging.");
+
+        return runtimePublishDirectory;
     }
 
-    /// <summary>
-    ///     Installs the WiX toolset required for building installers.
-    /// </summary>
     private static async Task<Folder> InstallWixAsync(IModuleContext context, CancellationToken cancellationToken) {
         var wixToolFolder = Folder.CreateTemporaryFolder();
         await context.DotNet().Tool
@@ -149,3 +174,5 @@ public sealed class CreateInstallerModule(
         }
     }
 }
+
+// PE_HOT_RELOAD_NUDGE

@@ -8,6 +8,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Pe.Shared.Aps\Pe.Shared.Aps.csproj"/>
+        <ProjectReference Include="..\Pe.Shared.RevitVersions\Pe.Shared.RevitVersions.csproj"/>
         <ProjectReference Include="..\Pe.Shared.SettingsLayout\Pe.Shared.SettingsLayout.csproj"/>
     </ItemGroup>
 

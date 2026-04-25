@@ -1,7 +1,5 @@
-﻿using Build.Options;
-using EnumerableAsyncProcessor.Extensions;
+﻿using EnumerableAsyncProcessor.Extensions;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using ModularPipelines.Attributes;
 using ModularPipelines.Context;
 using ModularPipelines.FileSystem;
@@ -21,18 +19,21 @@ namespace Build.Modules;
 /// </summary>
 [SkipIfNoGitHubToken]
 [DependsOn<ResolveVersioningModule>]
+[DependsOn<ResolveBuildLayoutModule>]
 [DependsOn<GenerateGitHubChangelogModule>]
 [DependsOn<CreateBundleModule>(Optional = true)]
 [DependsOn<CreateInstallerModule>(Optional = true)]
-public sealed class PublishGithubModule(IOptions<BuildOptions> buildOptions) : Module {
+public sealed class PublishGithubModule : Module {
     protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
         var versioningResult = await context.GetModule<ResolveVersioningModule>();
+        var layoutResult = await context.GetModule<ResolveBuildLayoutModule>();
         var changelogResult = await context.GetModule<GenerateGitHubChangelogModule>();
         var versioning = versioningResult.ValueOrDefault!;
+        var layout = layoutResult.ValueOrDefault!;
         var changelog = changelogResult.ValueOrDefault!;
 
-        var rootDirectory = context.Git().RootDirectory;
-        var outputFolder = rootDirectory.GetFolder(buildOptions.Value.OutputDirectory);
+        Directory.CreateDirectory(layout.PackagesRoot);
+        var outputFolder = new Folder(layout.PackagesRoot);
         var targetFiles = EnumerateReleaseArtifacts(outputFolder, versioning.Version).ToArray();
         targetFiles.ShouldNotBeEmpty("No artifacts were found to create the Release");
 
@@ -62,9 +63,11 @@ public sealed class PublishGithubModule(IOptions<BuildOptions> buildOptions) : M
         context.Summary.KeyValue("Deployment", "GitHub", release.HtmlUrl);
     }
 
-    protected override async Task OnFailedAsync(IModuleContext context,
+    protected override async Task OnFailedAsync(
+        IModuleContext context,
         Exception exception,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken
+    ) {
         var versioningResult = await context.GetModule<ResolveVersioningModule>();
         var versioning = versioningResult.ValueOrDefault!;
 
@@ -73,13 +76,12 @@ public sealed class PublishGithubModule(IOptions<BuildOptions> buildOptions) : M
                 token: cancellationToken);
     }
 
-    private static IEnumerable<File> EnumerateReleaseArtifacts(
-        Folder outputFolder,
-        string version) {
+    private static IEnumerable<File> EnumerateReleaseArtifacts(Folder outputFolder, string version) {
         if (!outputFolder.Exists)
             yield break;
 
-        foreach (var file in outputFolder.ListFiles()) {
+        foreach (var path in Directory.EnumerateFiles(outputFolder.Path, "*", SearchOption.AllDirectories)) {
+            var file = new File(path);
             if (file.Extension == ".zip")
                 yield return file;
 
@@ -88,3 +90,5 @@ public sealed class PublishGithubModule(IOptions<BuildOptions> buildOptions) : M
         }
     }
 }
+
+// PE_HOT_RELOAD_NUDGE

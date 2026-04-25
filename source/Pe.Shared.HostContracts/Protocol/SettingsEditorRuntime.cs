@@ -2,11 +2,13 @@
 
 public static class SettingsEditorRuntime {
     public const string RuntimeIdentity = "pe.tools.settings-editor";
-    public const string VendorName = "Positive Energy";
-    public const string ProductName = "Pe.Tools";
-    public const string HostFolderName = "Host";
-    public const string HostExecutableName = "Pe.Host.exe";
-    public const string HostDllName = "Pe.Host.dll";
+    public const string VendorName = Pe.Shared.SettingsLayout.DeploymentRuntimeLocations.VendorName;
+    public const string ProductName = Pe.Shared.SettingsLayout.DeploymentRuntimeLocations.ProductName;
+    public const string HostFolderName = Pe.Shared.SettingsLayout.DeploymentRuntimeLocations.HostFolderName;
+    public const string HostExecutableName = Pe.Shared.SettingsLayout.DeploymentRuntimeLocations.HostExecutableName;
+    public const string HostDllName = Pe.Shared.SettingsLayout.DeploymentRuntimeLocations.HostDllName;
+    public const string CliExecutableName = Pe.Shared.SettingsLayout.DeploymentRuntimeLocations.CliExecutableName;
+    public const string CliDllName = Pe.Shared.SettingsLayout.DeploymentRuntimeLocations.CliDllName;
 
     public const string FrontendBaseUrlVariable = "PE_SETTINGS_EDITOR_BASE_URL";
     public const string FrontendRouteVariable = "PE_SETTINGS_EDITOR_ROUTE";
@@ -39,36 +41,34 @@ public static class SettingsEditorRuntime {
             ? routePath
             : "/" + routePath;
 
-    public static string GetSingleUserHostInstallDirectory() =>
-        $@"%LocalAppDataFolder%\{VendorName}\{ProductName}\{HostFolderName}";
+    public static string GetSingleUserInstallDirectory() =>
+        Pe.Shared.SettingsLayout.DeploymentRuntimeLocations.GetPerUserInstallDirectory();
 
-    public static string GetMultiUserHostInstallDirectory() =>
-        $@"%ProgramFiles%\{VendorName}\{ProductName}\{HostFolderName}";
+    public static string GetSingleUserHostInstallDirectory() =>
+        Pe.Shared.SettingsLayout.DeploymentRuntimeLocations.GetPerUserHostInstallDirectory();
+
+    public static string GetSingleUserInstallPath(string localAppData) =>
+        Pe.Shared.SettingsLayout.DeploymentRuntimeLocations.GetPerUserInstallRootPath(localAppData);
 
     public static string GetSingleUserHostInstallPath(string localAppData) =>
-        Path.Combine(localAppData, VendorName, ProductName, HostFolderName);
-
-    public static string GetMultiUserHostInstallPath(string programFiles) =>
-        Path.Combine(programFiles, VendorName, ProductName, HostFolderName);
+        Pe.Shared.SettingsLayout.DeploymentRuntimeLocations.GetPerUserHostInstallPath(localAppData);
 
     public static IEnumerable<string> EnumerateHostExecutableCandidates(
         string? configuredPath,
-        string localAppData,
-        string programFiles
+        string localAppData
     ) {
-        if (!string.IsNullOrWhiteSpace(configuredPath)) {
-            yield return configuredPath;
-            if (configuredPath != null && configuredPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-                yield return Path.ChangeExtension(configuredPath, ".dll")!;
+        if (configuredPath is string configuredExecutablePath &&
+            !string.IsNullOrWhiteSpace(configuredExecutablePath)) {
+            yield return configuredExecutablePath;
+            if (configuredExecutablePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) {
+                var configuredDllPath = Path.ChangeExtension(configuredExecutablePath, ".dll");
+                if (!string.IsNullOrWhiteSpace(configuredDllPath))
+                    yield return configuredDllPath;
+            }
         }
 
-        var installRoots = new[] {
-            GetSingleUserHostInstallPath(localAppData), GetMultiUserHostInstallPath(programFiles)
-        };
-
-        foreach (var root in installRoots) {
-            yield return Path.Combine(root, HostExecutableName);
-            yield return Path.Combine(root, HostDllName);
-        }
+        var installRoot = GetSingleUserHostInstallPath(localAppData);
+        yield return Path.Combine(installRoot, HostExecutableName);
+        yield return Path.Combine(installRoot, HostDllName);
     }
 }

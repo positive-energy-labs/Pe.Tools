@@ -1,6 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
-
-namespace Build.Options;
+﻿namespace Build.Options;
 
 /// <summary>
 ///     Build configuration options.
@@ -21,13 +19,9 @@ public sealed record BuildOptions {
     public string? Version { get; init; }
 
     /// <summary>
-    ///     Path to build output
-    /// </summary>
-    [Required]
-    public string OutputDirectory { get; init; } = null!;
-
-    /// <summary>
     ///     Optional explicit solution configuration to compile instead of the default Release.R* set.
     /// </summary>
     public string? Configuration { get; set; }
 }
+
+// PE_HOT_RELOAD_NUDGE

@@ -1,18 +1,29 @@
 <Project>
+    <Import Project="build\BuildConfiguration.props"/>
+
     <PropertyGroup>
-        <Configurations>Debug.R23;Debug.R24;Debug.R25;Debug.R26</Configurations>
-        <Configurations>$(Configurations);Release.R23;Release.R24;Release.R25;Release.R26</Configurations>
-        <DefaultItemExcludes>$(DefaultItemExcludes);obj\**</DefaultItemExcludes>
-    </PropertyGroup>
+        <Configurations>$(PeRevitDebugConfigurations);$(PeRevitReleaseConfigurations)</Configurations>
+        <Configurations Condition="'$(EnableRevitTestConfigurations)' == 'true'">$(Configurations);$(PeRevitTestConfigurations)</Configurations>
+        <DefaultItemExcludes>$(DefaultItemExcludes);bin\**;obj\**</DefaultItemExcludes>
 
-    <PropertyGroup Condition="'$(Configuration)' != ''">
-        <BaseIntermediateOutputPath>obj\$(Configuration)\</BaseIntermediateOutputPath>
-        <IntermediateOutputPath>$(BaseIntermediateOutputPath)</IntermediateOutputPath>
-    </PropertyGroup>
+        <PeStableCliRelativePath Condition="'$(PeStableCliRelativePath)' == ''">source\Pe.Dev.Cli\bin\$(PeStableCliConfiguration)\net8.0-windows\pe-dev.dll</PeStableCliRelativePath>
+        <PeStableCliArtifactsRelativePath Condition="'$(PeStableCliArtifactsRelativePath)' == ''">.artifacts\build\Pe.Dev.Cli\$(PeStableCliConfiguration)\bin\$(PeStableCliConfiguration)\net8.0-windows\pe-dev.dll</PeStableCliArtifactsRelativePath>
+        <PeStableCliInteractivePath Condition="'$(PeStableCliInteractivePath)' == ''">$([System.IO.Path]::GetFullPath('$(PeRepositoryRoot)$(PeStableCliRelativePath)'))</PeStableCliInteractivePath>
+        <PeStableCliArtifactsPath Condition="'$(PeStableCliArtifactsPath)' == ''">$([System.IO.Path]::GetFullPath('$(PeRepositoryRoot)$(PeStableCliArtifactsRelativePath)'))</PeStableCliArtifactsPath>
+        <PeStableCliPath Condition="'$(PeStableCliPath)' == '' and Exists('$(PeStableCliInteractivePath)')">$(PeStableCliInteractivePath)</PeStableCliPath>
+        <PeStableCliPath Condition="'$(PeStableCliPath)' == '' and Exists('$(PeStableCliArtifactsPath)')">$(PeStableCliArtifactsPath)</PeStableCliPath>
+        <PeStableCliPath Condition="'$(PeStableCliPath)' == ''">$([System.IO.Path]::GetFullPath('$(PeRepositoryRoot)$(PeStableCliRelativePath)'))</PeStableCliPath>
 
-    <PropertyGroup Condition="'$(EnableRevitTestConfigurations)' == 'true'">
-        <Configurations>$(Configurations);Debug.R23.Tests;Debug.R24.Tests;Debug.R25.Tests;Debug.R26.Tests</Configurations>
-        <Configurations>$(Configurations);Release.R23.Tests;Release.R24.Tests;Release.R25.Tests;Release.R26.Tests</Configurations>
+        <PeIsIdeBuild Condition="'$(PeIsIdeBuild)' == '' and '$(BuildingByReSharper)' == 'true'">true</PeIsIdeBuild>
+        <PeIsIdeBuild Condition="'$(PeIsIdeBuild)' == '' and '$(BuildingByReSharper)' == 'True'">true</PeIsIdeBuild>
+        <PeIsIdeBuild Condition="'$(PeIsIdeBuild)' == '' and '$(BuildingInsideVisualStudio)' == 'true'">true</PeIsIdeBuild>
+        <PeIsIdeBuild Condition="'$(PeIsIdeBuild)' == '' and '$(BuildingInsideVisualStudio)' == 'True'">true</PeIsIdeBuild>
+        <PeIsIdeBuild Condition="'$(PeIsIdeBuild)' == ''">false</PeIsIdeBuild>
+
+        <PeIsolatedBuild Condition="'$(PeIsolatedBuild)' == '' and '$(PeIsIdeBuild)' == 'true'">false</PeIsolatedBuild>
+        <PeIsolatedBuild Condition="'$(PeIsolatedBuild)' == '' and '$(PeIsIdeBuild)' != 'true'">true</PeIsolatedBuild>
+        <PeBuildLane Condition="'$(PeBuildLane)' == '' and '$(PeIsolatedBuild)' == 'true'">isolated</PeBuildLane>
+        <PeBuildLane Condition="'$(PeBuildLane)' == ''">interactive</PeBuildLane>
     </PropertyGroup>
 
     <PropertyGroup>
@@ -24,8 +35,11 @@
         >true</IsSharedNeutralProject>
         <IsSharedNeutralProject Condition="'$(IsSharedNeutralProject)' == ''">false</IsSharedNeutralProject>
 
+        <IsAutomationWorkerProject Condition="'$(IsAutomationWorkerProject)' == '' and '$(MSBuildProjectName)' == 'Pe.Dev.RevitAutomation.Worker'">true</IsAutomationWorkerProject>
+        <IsAutomationWorkerProject Condition="'$(IsAutomationWorkerProject)' == ''">false</IsAutomationWorkerProject>
+
         <IsOutOfProcNet8Project
-                Condition="'$(IsOutOfProcNet8Project)' == '' and ('$(MSBuildProjectName)' == 'Pe.Host' or $([System.String]::Copy('$(MSBuildProjectName)').StartsWith('Pe.Dev.')) == 'True')"
+                Condition="'$(IsOutOfProcNet8Project)' == '' and ('$(MSBuildProjectName)' == 'Pe.Host' or ($([System.String]::Copy('$(MSBuildProjectName)').StartsWith('Pe.Dev.')) == 'True' and '$(IsAutomationWorkerProject)' != 'true'))"
         >true</IsOutOfProcNet8Project>
         <IsOutOfProcNet8Project Condition="'$(IsOutOfProcNet8Project)' == ''">false</IsOutOfProcNet8Project>
 
@@ -33,7 +47,7 @@
         <IsRevitTestProject Condition="'$(IsRevitTestProject)' == ''">false</IsRevitTestProject>
 
         <IsRevitProject
-                Condition="'$(IsRevitProject)' == '' and ('$(MSBuildProjectName)' == 'Pe.App' or ($([System.String]::Copy('$(MSBuildProjectName)').StartsWith('Pe.Revit.')) == 'True' and '$(MSBuildProjectName)' != 'Pe.Revit.Tests'))"
+                Condition="'$(IsRevitProject)' == '' and ('$(MSBuildProjectName)' == 'Pe.App' or '$(MSBuildProjectName)' == 'Pe.Revit' or ($([System.String]::Copy('$(MSBuildProjectName)').StartsWith('Pe.Revit.')) == 'True' and '$(MSBuildProjectName)' != 'Pe.Revit.Tests'))"
         >true</IsRevitProject>
         <IsRevitProject Condition="'$(IsRevitProject)' == ''">false</IsRevitProject>
     </PropertyGroup>
@@ -43,31 +57,54 @@
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(IsBuildOrInstallerProject)' != 'true'">
-        <Configuration Condition="'$(Configuration)' == ''">Debug.R25</Configuration>
+        <Configuration Condition="'$(Configuration)' == ''">$(PeDefaultRevitConfiguration)</Configuration>
 
         <_RevitConfigurationVersion Condition="'$(RevitVersion)' == '' or '$(RevitVersion)' == '-1'">$([System.Text.RegularExpressions.Regex]::Match('$(Configuration)', '.*\.R(\d{2}|\d{4})(?:\.|$)').Groups[1].Value)</_RevitConfigurationVersion>
         <RevitVersion Condition="('$(RevitVersion)' == '' or '$(RevitVersion)' == '-1') and '$(_RevitConfigurationVersion.Length)' == '4'">$(_RevitConfigurationVersion)</RevitVersion>
         <RevitVersion Condition="('$(RevitVersion)' == '' or '$(RevitVersion)' == '-1') and '$(_RevitConfigurationVersion.Length)' == '2'">20$(_RevitConfigurationVersion)</RevitVersion>
         <_IsNoRevitConfig Condition="'$(RevitVersion)' == '' or '$(RevitVersion)' == '-1'">true</_IsNoRevitConfig>
-        <RevitVersion Condition="'$(_IsNoRevitConfig)' == 'true'">2025</RevitVersion>
+        <RevitVersion Condition="'$(_IsNoRevitConfig)' == 'true'">$(PeDefaultRevitYear)</RevitVersion>
 
         <TargetFramework Condition="'$(TargetFramework)' == '' and '$(IsSharedNeutralProject)' == 'true'">netstandard2.0</TargetFramework>
+        <TargetFramework Condition="'$(TargetFramework)' == '' and '$(IsAutomationWorkerProject)' == 'true' and ('$(RevitVersion)' == '2023' or '$(RevitVersion)' == '2024')">net48</TargetFramework>
+        <TargetFramework Condition="'$(TargetFramework)' == '' and '$(IsAutomationWorkerProject)' == 'true' and ('$(RevitVersion)' == '2025' or '$(RevitVersion)' == '2026')">net8.0-windows</TargetFramework>
         <TargetFramework Condition="'$(TargetFramework)' == '' and ('$(IsOutOfProcNet8Project)' == 'true' or '$(IsRevitTestProject)' == 'true')">net8.0-windows</TargetFramework>
         <TargetFramework Condition="'$(TargetFramework)' == '' and '$(IsRevitProject)' == 'true' and ('$(RevitVersion)' == '2022' or '$(RevitVersion)' == '2023' or '$(RevitVersion)' == '2024')">net48</TargetFramework>
         <TargetFramework Condition="'$(TargetFramework)' == '' and '$(IsRevitProject)' == 'true' and ('$(RevitVersion)' == '2025' or '$(RevitVersion)' == '2026')">net8.0-windows</TargetFramework>
         <TargetFramework Condition="'$(TargetFramework)' == '' and '$(_IsNoRevitConfig)' == 'true'">net8.0-windows</TargetFramework>
     </PropertyGroup>
 
+    <PropertyGroup
+            Condition="'$(PeIsolatedBuild)' == 'true' and '$(IsBuildOrInstallerProject)' != 'true' and '$(Configuration)' != '' and !$([System.String]::Copy('$(MSBuildProjectName)').EndsWith('_wpftmp'))"
+    >
+        <BaseOutputPath>$(PeBuildArtifactsRoot)$(MSBuildProjectName)\$(Configuration)\bin\</BaseOutputPath>
+        <BaseIntermediateOutputPath>$(PeBuildArtifactsRoot)$(MSBuildProjectName)\$(Configuration)\obj\</BaseIntermediateOutputPath>
+        <IntermediateOutputPath>$(BaseIntermediateOutputPath)</IntermediateOutputPath>
+        <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
+        <DeployAddin>false</DeployAddin>
+        <LaunchRevit>false</LaunchRevit>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(PeIsolatedBuild)' != 'true' and '$(Configuration)' != ''">
+        <BaseIntermediateOutputPath>obj\$(Configuration)\</BaseIntermediateOutputPath>
+        <IntermediateOutputPath>$(BaseIntermediateOutputPath)</IntermediateOutputPath>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(PeIsolatedBuild)' == 'true' and '$(MSBuildProjectName)' == 'Pe.App' and '$(Configuration)' != ''">
+        <AddinPublishDir>$(PePublishArtifactsRoot)revit\$(Configuration)\</AddinPublishDir>
+        <PublishAddin Condition="'$(PublishAddin)' == ''">false</PublishAddin>
+    </PropertyGroup>
+
     <PropertyGroup Condition="'$(IsBuildOrInstallerProject)' != 'true' and '$(Configuration)' != ''">
         <IsRepackable>false</IsRepackable>
     </PropertyGroup>
 
-    <PropertyGroup Condition="'$(Configuration)' != '' and $([System.String]::Copy('$(Configuration)').Contains('.R')) == 'True'">
+    <PropertyGroup Condition="'$(PeIsolatedBuild)' != 'true' and '$(Configuration)' != '' and $([System.String]::Copy('$(Configuration)').Contains('.R')) == 'True'">
         <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
     </PropertyGroup>
 
-    <PropertyGroup Condition="'$(Configuration)' != '' and $([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'">
-        <BaseOutputPath>$(MSBuildThisFileDirectory).artifacts\tests\bin\</BaseOutputPath>
+    <PropertyGroup Condition="'$(PeIsolatedBuild)' != 'true' and '$(Configuration)' != '' and $([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'">
+        <BaseOutputPath>$(PeArtifactsRoot)tests\bin\</BaseOutputPath>
     </PropertyGroup>
 
     <PropertyGroup
@@ -76,5 +113,19 @@
         <AssemblyVersion>1.0.0.0</AssemblyVersion>
         <FileVersion>1.0.0.0</FileVersion>
         <InformationalVersion>dev</InformationalVersion>
+        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     </PropertyGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0' and '$(IsSharedNeutralProject)' == 'true'">
+        <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all"/>
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' == 'net48' and ('$(IsRevitProject)' == 'true' or '$(IsRevitTestProject)' == 'true')">
+        <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all"/>
+        <PackageReference Include="System.Net.Http" Version="4.3.4"/>
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' == 'net48' and '$(MSBuildProjectName)' == 'Pe.Revit.Scripting'">
+        <PackageReference Include="System.Text.Json" Version="8.0.5"/>
+    </ItemGroup>
 </Project>
