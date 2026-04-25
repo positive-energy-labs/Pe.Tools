@@ -1,12 +1,4 @@
 <Project>
-    <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0' and '$(IsSharedNeutralProject)' == 'true'">
-        <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all"/>
-    </ItemGroup>
-
-    <ItemGroup Condition="'$(TargetFramework)' == 'net48' and ('$(IsRevitProject)' == 'true' or '$(IsRevitTestProject)' == 'true')">
-        <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all"/>
-    </ItemGroup>
-
     <Target Name="ValidateSharedNeutralReferences" BeforeTargets="ResolveReferences" Condition="'$(IsSharedNeutralProject)' == 'true'">
         <ItemGroup>
             <_ForbiddenSharedNeutralPackageReference
@@ -15,7 +7,7 @@
             />
             <_ForbiddenSharedNeutralProjectReference
                     Include="@(ProjectReference)"
-                    Condition="$([System.String]::Copy('%(ProjectReference.Identity)').Contains('\\Pe.Revit.')) == 'True'"
+                    Condition="$([System.String]::Copy('%(ProjectReference.Identity)').Contains('\Pe.Revit.')) == 'True'"
             />
         </ItemGroup>
 

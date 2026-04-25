@@ -7,26 +7,26 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1"/>
-        <PackageReference Include="NUnit" Version="3.13.3"/>
-        <PackageReference Include="ricaun.RevitTest.TestAdapter" Version="1.11.0"/>
-        <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*"/>
-        <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*"/>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+        <PackageReference Include="NUnit" Version="3.13.3" />
+        <PackageReference Include="ricaun.RevitTest.TestAdapter" Version="1.11.0" />
+        <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*" />
+        <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Pe.App\Pe.App.csproj"/>
-        <ProjectReference Include="..\Pe.Dev.Cli\Pe.Dev.Cli.csproj"/>
-        <ProjectReference Include="..\Pe.Host\Pe.Host.csproj"/>
-        <ProjectReference Include="..\Pe.Revit.FamilyFoundry\Pe.Revit.FamilyFoundry.csproj"/>
-        <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj"/>
-        <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj"/>
-        <ProjectReference Include="..\Pe.Revit.Scripting\Pe.Revit.Scripting.csproj"/>
+        <ProjectReference Include="..\Pe.App\Pe.App.csproj" />
+        <ProjectReference Include="..\Pe.Dev.Cli\Pe.Dev.Cli.csproj" />
+        <ProjectReference Include="..\Pe.Host\Pe.Host.csproj" />
+        <ProjectReference Include="..\Pe.Revit.FamilyFoundry\Pe.Revit.FamilyFoundry.csproj" />
+        <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj" />
+        <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj" />
+        <ProjectReference Include="..\Pe.Revit.Scripting\Pe.Revit.Scripting.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-        <None Include="Fixtures\Profiles\**\*.json" CopyToOutputDirectory="PreserveNewest"/>
-        <None Include="Fixtures\Families\**\*.rfa" CopyToOutputDirectory="PreserveNewest"/>
+        <None Include="Fixtures\Profiles\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="Fixtures\Families\**\*.rfa" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
     <ItemGroup>
@@ -49,31 +49,13 @@
     </ItemGroup>
 
     <PropertyGroup>
-        <_PeDevCliStableConfiguration>$([System.String]::Copy('$(Configuration)').Replace('.Tests', ''))</_PeDevCliStableConfiguration>
-        <_PeDevCliStablePath>$(MSBuildProjectDirectory)\..\Pe.Dev.Cli\bin\$(_PeDevCliStableConfiguration)\net8.0-windows\pe-dev.dll</_PeDevCliStablePath>
+        <PeStableCliConfiguration
+        >$([System.String]::Copy('$(Configuration)').Replace('.Tests', ''))</PeStableCliConfiguration>
     </PropertyGroup>
     <!--
+      TODO: decide whether to run hot-reload before VSTest target.
       `.Tests` outputs are isolated and RRD-safe. This pre-test hook is only a
       best-effort attempt to align the already-running live runtime with the
       just-built source immediately before VSTest executes.
     -->
-    <Target
-            Name="PrepareRevitRuntimeBeforeVSTest"
-            BeforeTargets="VSTest"
-            Condition="$([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'"
-    >
-        <Warning
-                Text="Skipping Revit pre-test automation because pe-dev was not found at '$(_PeDevCliStablePath)'. Build source/Pe.Dev.Cli with configuration '$(_PeDevCliStableConfiguration)' to restore the hook."
-                Condition="!Exists('$(_PeDevCliStablePath)')"
-        />
-        <Exec
-                Command="dotnet exec &quot;$(_PeDevCliStablePath)&quot; --repo-root &quot;$(MSBuildProjectDirectory)\..\..&quot; revit approve --revit-year $(RevitVersion) --skip-if-session-exists"
-                Condition="Exists('$(_PeDevCliStablePath)')"
-        />
-        <Exec
-                Command="dotnet exec &quot;$(_PeDevCliStablePath)&quot; --repo-root &quot;$(MSBuildProjectDirectory)\..\..&quot; revit hot-reload"
-                Condition="Exists('$(_PeDevCliStablePath)')"
-                IgnoreExitCode="true"
-        />
-    </Target>
 </Project>

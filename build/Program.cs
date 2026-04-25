@@ -20,9 +20,6 @@ builder.Services.AddOptions<PublishOptions>().Bind(builder.Configuration.GetSect
 builder.Services.PostConfigure<BuildOptions>(options =>
     options.Configuration = parsedArgs.Configuration ?? options.Configuration);
 
-if (!parsedArgs.Commands.Contains("pack") && !parsedArgs.Commands.Contains("publish"))
-    _ = builder.Services.AddModule<CompileProjectModule>();
-
 if (parsedArgs.Commands.Contains("pack")) {
     _ = builder.Services.AddModule<CleanProjectModule>();
     _ = builder.Services.AddModule<CreateBundleModule>();
@@ -40,6 +37,9 @@ namespace Build {
         string? Configuration,
         HashSet<string> Commands
     ) {
+        private static readonly HashSet<string> SupportedCommands =
+            ["pack", "publish"];
+
         public static BuildCliArguments Parse(IReadOnlyList<string> args) {
             string? configuration = null;
             var commands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -59,7 +59,20 @@ namespace Build {
                 }
             }
 
+            if (commands.Count == 0)
+                throw new ArgumentException("Expected at least one command. Supported commands: pack, publish.");
+
+            var unsupportedCommands = commands
+                .Where(command => !SupportedCommands.Contains(command))
+                .OrderBy(command => command, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (unsupportedCommands.Length > 0)
+                throw new ArgumentException(
+                    $"Unsupported command(s): {string.Join(", ", unsupportedCommands)}. Supported commands: pack, publish.");
+
             return new BuildCliArguments(configuration, commands);
         }
     }
 }
+
+// PE_HOT_RELOAD_NUDGE

@@ -1,4 +1,4 @@
-namespace Pe.Shared.SettingsLayout;
+﻿namespace Pe.Shared.SettingsLayout;
 
 public static class GlobalStorageLocations {
     public static string ResolveGlobalDirectory(string basePath) =>
@@ -14,9 +14,9 @@ public static class GlobalStorageLocations {
             "fragments"
         );
 
-    public static string ResolveHostLogPath(string basePath) =>
-        Path.Combine(ResolveGlobalDirectory(basePath), "host.log.txt");
+    public static string ResolveHostLogPath(string? localAppData = null) =>
+        Path.Combine(DeploymentRuntimeLocations.GetLogRootPath(localAppData), "host.log.txt");
 
-    public static string ResolveRevitAppLogPath(string basePath) =>
-        Path.Combine(ResolveGlobalDirectory(basePath), "revit.log.txt");
+    public static string ResolveRevitAppLogPath(string? localAppData = null) =>
+        Path.Combine(DeploymentRuntimeLocations.GetLogRootPath(localAppData), "revit.log.txt");
 }

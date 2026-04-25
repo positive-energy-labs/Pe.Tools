@@ -41,7 +41,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'Directory.Packages.props') }}
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'build/BuildConfiguration.props', 'Directory.Packages.props') }}
           restore-keys: ${{ runner.os }}-nuget-
 
       - name: Publish packages

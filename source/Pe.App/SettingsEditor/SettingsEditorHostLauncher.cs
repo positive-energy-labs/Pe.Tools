@@ -119,11 +119,9 @@ internal static class SettingsEditorHostLauncher {
 
     private static IEnumerable<string> GetCandidateExecutablePaths() {
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         return SettingsEditorRuntime.EnumerateHostExecutableCandidates(
             Environment.GetEnvironmentVariable(SettingsEditorRuntime.HostExecutablePathVariable),
-            localAppData,
-            programFiles
+            localAppData
         );
     }
 

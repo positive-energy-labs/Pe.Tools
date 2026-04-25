@@ -1,33 +1,30 @@
-﻿using Build.Options;
-using Microsoft.Extensions.Options;
-using ModularPipelines.Attributes;
+﻿using ModularPipelines.Attributes;
 using ModularPipelines.Conditions;
 using ModularPipelines.Context;
-using ModularPipelines.Git.Extensions;
 using ModularPipelines.Modules;
-using Sourcy.DotNet;
 
 namespace Build.Modules;
 
 /// <summary>
-///     Clean projects and artifact directories.
+///     Clean isolated artifact directories without touching interactive bin/obj outputs.
 /// </summary>
 [SkipIf<IsCI>]
-public sealed class CleanProjectModule(IOptions<BuildOptions> buildOptions) : SyncModule {
-    protected override void ExecuteModule(IModuleContext context, CancellationToken cancellationToken) {
-        var rootDirectory = context.Git().RootDirectory;
-        var outputDirectory = rootDirectory.GetFolder(buildOptions.Value.OutputDirectory);
-        var legacyInstallerOutputDirectory =
-            rootDirectory.GetFolder("install").GetFolder(buildOptions.Value.OutputDirectory);
-        var buildOutputDirectories = rootDirectory
-            .GetFolders(folder => folder.Name is "bin" or "obj")
-            .Where(folder => folder.Parent != Projects.Build.Directory)
-            .Where(folder => folder.Exists);
+[DependsOn<ResolveBuildLayoutModule>]
+public sealed class CleanProjectModule : Module {
+    protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
+        var layoutResult = await context.GetModule<ResolveBuildLayoutModule>();
+        var layout = layoutResult.ValueOrDefault!;
+        var cleanTargets = new[] {
+            layout.ArtifactsRoot,
+            layout.PackagesRoot,
+            layout.PublishRoot
+        }.Distinct(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var buildFolder in buildOutputDirectories)
-            buildFolder.Clean();
+        foreach (var path in cleanTargets) {
+            if (!Directory.Exists(path))
+                continue;
 
-        if (outputDirectory.Exists) outputDirectory.Clean();
-        if (legacyInstallerOutputDirectory.Exists) legacyInstallerOutputDirectory.Clean();
+            Directory.Delete(path, true);
+        }
     }
 }
