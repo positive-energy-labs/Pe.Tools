@@ -1,4 +1,4 @@
-using Pe.Revit.DocumentData.Parameters;
+﻿using Pe.Revit.DocumentData.Parameters;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Parameters;
 using Pe.Shared.RevitData.Schedules;
@@ -6,6 +6,8 @@ using ContractCombinedParameterSpec = Pe.Shared.RevitData.Schedules.CombinedPara
 using ContractScheduleFilterSpec = Pe.Shared.RevitData.Schedules.ScheduleFilterSpec;
 using InternalCombinedParameterSpec = Pe.Revit.DocumentData.Schedules.Runtime.Fields.CombinedParameterSpec;
 using InternalScheduleFilterSpec = Pe.Revit.DocumentData.Schedules.Runtime.Filters.ScheduleFilterSpec;
+using System.Globalization;
+using System.Text;
 
 namespace Pe.Revit.DocumentData.Schedules.Collect;
 
@@ -130,6 +132,178 @@ internal static class ScheduleCollectorSupport {
         return ParameterIdentityEngine.GetParameterKey(doc, schedulableField.ParameterId, fallbackName);
     }
 
+    public static string NormalizeCellText(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : CollapseWhitespace(value.Replace("\r", " ").Replace("\n", " ").Trim());
+
+    public static ForgeTypeId? GetFieldSpecTypeId(ScheduleField field) =>
+        SafeGet(field.GetSpecTypeId);
+
+    public static Units? BuildEffectiveUnits(
+        Document doc,
+        TableSectionData bodySection,
+        int columnNumber,
+        ScheduleField field,
+        ForgeTypeId? specTypeId
+    ) {
+        if (specTypeId == null || specTypeId.Empty() || !UnitUtils.IsMeasurableSpec(specTypeId))
+            return null;
+
+        try {
+            var units = doc.GetUnits();
+            var formatOptions =
+                SafeGet(() => bodySection.GetCellFormatOptions(columnNumber, doc)) ?? SafeGet(field.GetFormatOptions);
+            if (formatOptions != null && !formatOptions.UseDefault)
+                units.SetFormatOptions(specTypeId, formatOptions);
+
+            return units;
+        } catch {
+            return SafeGet(doc.GetUnits);
+        }
+    }
+
+    public static bool IsComparableField(ScheduleField field) =>
+        field.DisplayType == ScheduleFieldDisplayType.Standard
+        && !field.IsCombinedParameterField
+        && !field.IsCalculatedField
+#if !REVIT2023
+        && field.FieldType != ScheduleFieldType.CustomField;
+#else
+    ;
+#endif
+
+    public static HashSet<string> GetMultipleValueTexts(ScheduleField field) {
+        var texts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddNormalizedText(texts, SafeGet(() => field.MultipleValuesText));
+        AddNormalizedText(texts, SafeGet(() => field.MultipleValuesCustomText));
+        AddNormalizedText(texts, "<varies>");
+        return texts;
+    }
+
+    public static IReadOnlyList<Element> CollectParameterSourceElements(
+        Document doc,
+        Element element
+    ) => EnumerateParameterSourceElements(doc, element).ToList();
+
+    public static ComparableFieldValue ReadFieldComparableValue(
+        Document doc,
+        Element element,
+        IReadOnlyList<Element> parameterSources,
+        ScheduleField field,
+        string fallbackName,
+        ForgeTypeId? specTypeId,
+        Units? effectiveUnits
+    ) {
+        var texts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!IsComparableField(field) || !field.HasSchedulableField)
+            return new ComparableFieldValue(texts, null);
+
+        double? rawDoubleValue = null;
+        foreach (var parameterSource in parameterSources) {
+            var parameter = ResolveParameter(doc, parameterSource, field.GetSchedulableField().ParameterId, fallbackName);
+            if (parameter == null)
+                continue;
+
+            AddParameterComparableTexts(texts, doc, parameter, specTypeId, effectiveUnits);
+            if (rawDoubleValue == null && parameter.StorageType == StorageType.Double)
+                rawDoubleValue = parameter.AsDouble();
+        }
+
+        if (element is FamilyInstance familyInstance) {
+            if (string.Equals(fallbackName, "Family", StringComparison.OrdinalIgnoreCase))
+                AddNormalizedText(texts, familyInstance.Symbol?.Family?.Name);
+
+            if (string.Equals(fallbackName, "Type", StringComparison.OrdinalIgnoreCase))
+                AddNormalizedText(texts, familyInstance.Symbol?.Name);
+
+            if (string.Equals(fallbackName, "Family and Type", StringComparison.OrdinalIgnoreCase))
+                AddNormalizedText(texts, $"{familyInstance.Symbol?.Family?.Name}: {familyInstance.Symbol?.Name}");
+        }
+
+        return new ComparableFieldValue(texts, rawDoubleValue);
+    }
+
+    public static HashSet<string> ReadFieldComparableTexts(
+        Document doc,
+        Element element,
+        ScheduleField field,
+        string fallbackName,
+        ForgeTypeId? specTypeId,
+        Units? effectiveUnits
+    ) => ReadFieldComparableValue(
+        doc,
+        element,
+        CollectParameterSourceElements(doc, element),
+        field,
+        fallbackName,
+        specTypeId,
+        effectiveUnits
+    ).TextValues;
+
+    public static double? ReadFieldComparableDoubleValue(
+        Document doc,
+        Element element,
+        ScheduleField field,
+        string fallbackName
+    ) => ReadFieldComparableValue(
+        doc,
+        element,
+        CollectParameterSourceElements(doc, element),
+        field,
+        fallbackName,
+        null,
+        null
+    ).RawDoubleValue;
+
+    public static string? ReadFieldDisplayValue(
+        Document doc,
+        Element element,
+        ScheduleField field,
+        string fallbackName
+    ) {
+        if (field == null)
+            throw new ArgumentNullException(nameof(field));
+
+        if (field.DisplayType != ScheduleFieldDisplayType.Standard)
+            return null;
+
+        if (field.IsCombinedParameterField)
+            return BuildCombinedFieldDisplayValue(doc, element, field, fallbackName);
+
+        if (!field.HasSchedulableField || field.IsCalculatedField)
+            return null;
+
+        return ReadParameterDisplayValue(doc, element, field.GetSchedulableField().ParameterId, fallbackName);
+    }
+
+    public static string? ReadParameterDisplayValue(
+        Document doc,
+        Element element,
+        ElementId? parameterId,
+        string fallbackName
+    ) {
+        if (element == null)
+            throw new ArgumentNullException(nameof(element));
+
+        foreach (var parameterSource in EnumerateParameterSourceElements(doc, element)) {
+            var parameter = ResolveParameter(doc, parameterSource, parameterId, fallbackName);
+            var directValue = NullIfWhiteSpace(parameter?.AsValueString()) ?? NullIfWhiteSpace(parameter?.AsString());
+            if (!string.IsNullOrWhiteSpace(directValue))
+                return directValue;
+        }
+
+        if (element is FamilyInstance familyInstance) {
+            if (string.Equals(fallbackName, "Family", StringComparison.OrdinalIgnoreCase))
+                return NullIfWhiteSpace(familyInstance.Symbol?.Family?.Name);
+
+            if (string.Equals(fallbackName, "Type", StringComparison.OrdinalIgnoreCase))
+                return NullIfWhiteSpace(familyInstance.Symbol?.Name);
+        }
+
+        return null;
+    }
+
     private static bool MatchesCustomParameterFilter(
         ScheduleCatalogCustomParameterValue parameter,
         ScheduleCustomParameterFilter filter
@@ -144,6 +318,33 @@ internal static class ScheduleCollectorSupport {
             ),
             _ => false
         };
+    }
+
+    private static string? BuildCombinedFieldDisplayValue(
+        Document doc,
+        Element element,
+        ScheduleField field,
+        string fallbackName
+    ) {
+        var combinedParameters = field.GetCombinedParameters();
+        if (combinedParameters == null || combinedParameters.Count == 0)
+            return null;
+
+        var builder = new StringBuilder();
+        foreach (var combinedParameter in combinedParameters) {
+            var parameterValue = ReadParameterDisplayValue(doc, element, combinedParameter.ParamId, fallbackName);
+            if (string.IsNullOrWhiteSpace(parameterValue))
+                continue;
+
+            if (builder.Length != 0)
+                _ = builder.Append(combinedParameter.Separator ?? " / ");
+
+            _ = builder.Append(combinedParameter.Prefix ?? string.Empty);
+            _ = builder.Append(parameterValue);
+            _ = builder.Append(combinedParameter.Suffix ?? string.Empty);
+        }
+
+        return builder.Length == 0 ? null : builder.ToString();
     }
 
     private static IEnumerable<ScheduleParameterUsageEntry> CollectFieldUsages(
@@ -194,6 +395,172 @@ internal static class ScheduleCollectorSupport {
     private static bool IsNonBuiltInParameter(Parameter parameter) =>
         RevitParameterIdentityFactory.FromParameter(parameter).Kind != RevitParameterIdentityKind.BuiltInParameter;
 
+    private static Parameter? ResolveParameter(
+        Document doc,
+        Element element,
+        ElementId? parameterId,
+        string fallbackName
+    ) {
+        if (parameterId == null || parameterId == ElementId.InvalidElementId)
+            return element.LookupParameter(fallbackName);
+
+        var rawParameterId = parameterId.Value();
+        if (rawParameterId < 0) {
+            try {
+                return element.get_Parameter((BuiltInParameter)rawParameterId);
+            } catch {
+                return element.LookupParameter(fallbackName);
+            }
+        }
+
+        var exactMatch = element.Parameters
+            .Cast<Parameter>()
+            .FirstOrDefault(parameter => parameter.Id.Value() == rawParameterId);
+        if (exactMatch != null)
+            return exactMatch;
+
+        var parameterName = doc.GetElement(parameterId)?.Name;
+        return element.LookupParameter(parameterName ?? fallbackName);
+    }
+
+    private static void AddParameterComparableTexts(
+        HashSet<string> texts,
+        Document doc,
+        Parameter parameter,
+        ForgeTypeId? specTypeId,
+        Units? effectiveUnits
+    ) {
+        AddNormalizedText(texts, parameter.AsValueString());
+        AddNormalizedText(texts, parameter.AsString());
+
+        switch (parameter.StorageType) {
+        case StorageType.Integer:
+            AddIntegerComparableTexts(texts, parameter);
+            break;
+        case StorageType.Double:
+            AddDoubleComparableTexts(texts, doc, parameter, specTypeId, effectiveUnits);
+            break;
+        case StorageType.ElementId:
+            AddElementIdComparableTexts(texts, doc, parameter);
+            break;
+        }
+    }
+
+    private static void AddIntegerComparableTexts(
+        HashSet<string> texts,
+        Parameter parameter
+    ) {
+        var intValue = parameter.AsInteger();
+        AddNormalizedText(texts, intValue.ToString(CultureInfo.InvariantCulture));
+
+        var dataType = SafeGet(() => parameter.Definition?.GetDataType());
+        if (dataType == SpecTypeId.Boolean.YesNo) {
+            AddNormalizedText(texts, intValue != 0 ? "Yes" : "No");
+            AddNormalizedText(texts, intValue != 0 ? "True" : "False");
+        }
+    }
+
+    private static void AddDoubleComparableTexts(
+        HashSet<string> texts,
+        Document doc,
+        Parameter parameter,
+        ForgeTypeId? specTypeId,
+        Units? effectiveUnits
+    ) {
+        var doubleValue = parameter.AsDouble();
+        AddNormalizedText(texts, doubleValue.ToString("G17", CultureInfo.InvariantCulture));
+
+        var resolvedSpecTypeId = specTypeId ?? SafeGet(() => parameter.Definition?.GetDataType());
+        if (resolvedSpecTypeId == null || resolvedSpecTypeId.Empty())
+            return;
+
+        if (resolvedSpecTypeId == SpecTypeId.Number) {
+            AddNormalizedText(texts, doubleValue.ToString("G", CultureInfo.InvariantCulture));
+            return;
+        }
+
+        if (!UnitUtils.IsMeasurableSpec(resolvedSpecTypeId))
+            return;
+
+        try {
+            var units = effectiveUnits ?? doc.GetUnits();
+            AddNormalizedText(texts, UnitFormatUtils.Format(units, resolvedSpecTypeId, doubleValue, false));
+            AddNormalizedText(texts, UnitFormatUtils.Format(units, resolvedSpecTypeId, doubleValue, true));
+        } catch {
+            // Some specs still reject formatting in edge cases.
+        }
+    }
+
+    private static void AddElementIdComparableTexts(
+        HashSet<string> texts,
+        Document doc,
+        Parameter parameter
+    ) {
+        var elementId = parameter.AsElementId();
+        if (elementId == null || elementId == ElementId.InvalidElementId)
+            return;
+
+        var referencedElement = doc.GetElement(elementId);
+        AddNormalizedText(texts, referencedElement?.Name);
+        AddNormalizedText(texts, $"[ID:{elementId.Value()}]");
+        AddNormalizedText(texts, referencedElement == null ? null : $"{referencedElement.Name} [ID:{elementId.Value()}]");
+    }
+
+    private static IEnumerable<Element> EnumerateParameterSourceElements(
+        Document doc,
+        Element element
+    ) {
+        var seenIds = new HashSet<long>();
+
+        if (seenIds.Add(element.Id.Value()))
+            yield return element;
+
+        if (element is FamilyInstance familyInstance && familyInstance.Symbol != null) {
+            if (seenIds.Add(familyInstance.Symbol.Id.Value()))
+                yield return familyInstance.Symbol;
+        }
+
+        var typeId = SafeGet(element.GetTypeId);
+        if (typeId == null || typeId == ElementId.InvalidElementId)
+            yield break;
+
+        var typeElement = SafeGet(() => doc.GetElement(typeId));
+        if (typeElement == null)
+            yield break;
+
+        if (seenIds.Add(typeElement.Id.Value()))
+            yield return typeElement;
+    }
+
+    private static void AddNormalizedText(
+        HashSet<string> texts,
+        string? value
+    ) {
+        var normalized = NormalizeCellText(value);
+        if (!string.IsNullOrWhiteSpace(normalized))
+            _ = texts.Add(normalized);
+    }
+
+    private static string CollapseWhitespace(string value) {
+        var builder = new StringBuilder(value.Length);
+        var lastWasWhitespace = false;
+
+        foreach (var ch in value) {
+            if (char.IsWhiteSpace(ch)) {
+                if (lastWasWhitespace)
+                    continue;
+
+                _ = builder.Append(' ');
+                lastWasWhitespace = true;
+            } else {
+                _ = builder.Append(ch);
+                lastWasWhitespace = false;
+            }
+        }
+
+        return builder.ToString();
+    }
+
     private static RequestedParameterStorageType ToRequestedParameterStorageType(StorageType storageType) =>
         storageType switch {
             StorageType.String => RequestedParameterStorageType.String,
@@ -202,5 +569,9 @@ internal static class ScheduleCollectorSupport {
             StorageType.ElementId => RequestedParameterStorageType.ElementId,
             _ => RequestedParameterStorageType.None
         };
-}
 
+    public sealed record ComparableFieldValue(
+        HashSet<string> TextValues,
+        double? RawDoubleValue
+    );
+}

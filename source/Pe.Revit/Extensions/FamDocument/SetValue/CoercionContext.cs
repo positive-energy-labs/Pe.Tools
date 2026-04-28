@@ -4,28 +4,49 @@ namespace Pe.Revit.Extensions.FamDocument.SetValue;
 ///     Context object containing all data needed for parameter coercion strategies.
 ///     Supports both value-to-param and param-to-param mapping scenarios.
 /// </summary>
-public record CoercionContext {
-    public required FamilyDocument FamilyDocument { get; init; }
-    public required FamilyManager FamilyManager { get; init; }
-    public required FamilyParameter TargetParam { get; init; }
-    public required object? SourceValue { get; init; }
+public sealed class CoercionContext {
+    private CoercionContext(FamilyDocument familyDocument,
+        FamilyManager familyManager,
+        FamilyParameter targetParam,
+        object? sourceValue,
+        StorageType sourceStorageType,
+        string? sourceValueString = null,
+        ForgeTypeId? sourceDataType = null,
+        ForgeTypeId? targetUnitType = null) {
+        this.FamilyDocument = familyDocument;
+        this.FamilyManager = familyManager;
+        this.TargetParam = targetParam;
+        this.SourceValue = sourceValue;
+        this.SourceStorageType = sourceStorageType;
+        this.SourceValueString = sourceValueString;
+        this.SourceDataType = sourceDataType;
+        this.TargetUnitType = targetUnitType;
+    }
+
+    public FamilyDocument FamilyDocument { get; }
+
+    public FamilyManager FamilyManager { get; }
+
+    public FamilyParameter TargetParam { get; }
+
+    public object? SourceValue { get; }
 
     /// <summary>
     ///     The string representation of the source parameter's internally stored value.
     ///     Only populated for param-to-param mapping. Will be null for value-to-param mapping.
     /// </summary>
-    public string? SourceValueString { get; init; }
+    public string? SourceValueString { get; }
 
     /// <summary>
     ///     The data type of the source parameter from FamilyParameter.Definition.GetDataType().
     ///     Only populated for param-to-param mapping. Will be null for value-to-param mapping.
     /// </summary>
-    public ForgeTypeId? SourceDataType { get; init; }
+    public ForgeTypeId? SourceDataType { get; }
 
     /// <summary>
     ///     The storage type of the source value, derived from the value's type.
     /// </summary>
-    public StorageType SourceStorageType { get; init; }
+    public StorageType SourceStorageType { get; }
 
     /// <summary>
     ///     The storage type of the target parameter from FamilyParameter.StorageType
@@ -46,20 +67,19 @@ public record CoercionContext {
     /// context.FamilyDocument.SetValueStrict(context.TargetParam, convertedVal);
     /// </code>
     /// </summary>
-    public ForgeTypeId? TargetUnitType { get; init; }
+    public ForgeTypeId? TargetUnitType { get; }
 
     /// <summary>
     ///     Factory method for creating a context from a direct value to target parameter mapping.
     /// </summary>
     public static CoercionContext FromValue(FamilyDocument doc, object? sourceValue, FamilyParameter targetParam) =>
-        new() {
-            FamilyDocument = doc,
-            FamilyManager = doc.FamilyManager,
-            SourceValue = sourceValue,
-            SourceStorageType = DeriveStorageTypeFromValue(sourceValue),
-            TargetParam = targetParam,
-            TargetUnitType = ComputeTargetUnitType(doc, targetParam)
-        };
+        new(
+            doc,
+            doc.FamilyManager,
+            targetParam,
+            sourceValue,
+            DeriveStorageTypeFromValue(sourceValue),
+            targetUnitType: ComputeTargetUnitType(doc, targetParam));
 
     private static StorageType DeriveStorageTypeFromValue(object? value) =>
         value switch {
@@ -76,16 +96,15 @@ public record CoercionContext {
     public static CoercionContext FromParam(FamilyDocument doc,
         FamilyParameter sourceParam,
         FamilyParameter targetParam) =>
-        new() {
-            FamilyDocument = doc,
-            FamilyManager = doc.FamilyManager,
-            SourceValue = doc.GetValue(sourceParam),
-            SourceValueString = doc.FamilyManager.CurrentType.AsValueString(sourceParam),
-            SourceDataType = sourceParam.Definition.GetDataType(),
-            SourceStorageType = sourceParam.StorageType,
-            TargetParam = targetParam,
-            TargetUnitType = ComputeTargetUnitType(doc, targetParam)
-        };
+        new(
+            doc,
+            doc.FamilyManager,
+            targetParam,
+            doc.GetValue(sourceParam),
+            sourceParam.StorageType,
+            doc.FamilyManager.CurrentType.AsValueString(sourceParam),
+            sourceParam.Definition.GetDataType(),
+            ComputeTargetUnitType(doc, targetParam));
 
     /// <summary>
     ///     Computes the target unit type for a parameter, handling exceptions gracefully.

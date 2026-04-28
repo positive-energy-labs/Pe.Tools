@@ -1,12 +1,10 @@
-using Pe.Shared.RevitData;
+﻿using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
+using System.Globalization;
 
 namespace Pe.Revit.DocumentData.Schedules.Collect;
 
 public static class ScheduleQueryCollector {
-    private const string SyntheticFamiliesKey = "synthetic:families";
-    private const string SyntheticFamiliesHeader = "Families";
-
     public static ScheduleQueryData Collect(
         Document doc,
         ScheduleQuery? query = null,
@@ -162,25 +160,35 @@ public static class ScheduleQueryCollector {
     ) {
         try {
             var sheetPlacements = ScheduleCollectorSupport.CollectSheetPlacements(doc, schedule);
-            var visibleFamilyInstances = ScheduleVisibleFamilyCollector.CollectVisibleFamilyInstances(doc, schedule);
-            var visibleFamilies = ScheduleVisibleFamilyCollector.CollectVisibleFamilies(visibleFamilyInstances);
-            var visibleInstances = ScheduleVisibleFamilyCollector.CollectVisibleInstances(visibleFamilyInstances);
+            var subjectElements = ScheduleRenderedSubjectCollector.CollectVisibleSubjects(doc, schedule);
+            var subjects = ScheduleRenderedSubjectCollector.CollectSubjects(subjectElements);
             var bodySection =
                 ScheduleCollectorSupport.SafeGet(() => schedule.GetTableData().GetSectionData(SectionType.Body));
             var contexts = bodySection == null
                 ? []
                 : CollectColumnContexts(doc, schedule, bodySection);
-            var rows = bodySection == null
-                ? []
-                : CollectRows(schedule, bodySection, contexts);
-            var columns = contexts
-                .Select(context => context.Column)
-                .Append(new ScheduleRenderedColumn(
-                    bodySection == null ? 0 : bodySection.LastColumnNumber + 1,
-                    SyntheticFamiliesHeader,
-                    SyntheticFamiliesKey
-                ))
+            var contextByColumnNumber = contexts.ToDictionary(context => context.Column.ColumnNumber);
+            var comparableContexts = contexts
+                .Where(context => context.IsComparable)
                 .ToList();
+            var subjectContexts = bodySection == null
+                ? []
+                : CollectSubjectContexts(doc, comparableContexts, subjectElements, subjects);
+            var collectedRows = bodySection == null
+                ? []
+                : CollectRows(schedule, bodySection, contexts, contextByColumnNumber, subjectContexts);
+            var rows = collectedRows.Select(item => item.Row).ToList();
+            var bindingSummary = SummarizeBinding(collectedRows);
+
+            if (subjects.Count != 0) {
+                if (bindingSummary.UnboundRowCount != 0) {
+                    issues.Add(ScheduleCollectorSupport.Warning(
+                        "ScheduleRowSubjectBindingIncomplete",
+                        $"{bindingSummary.UnboundRowCount} bindable data row(s) could not be bound to visible schedule subjects.",
+                        schedule.Name
+                    ));
+                }
+            }
 
             return new ScheduleRenderedScheduleEntry(
                 schedule.Id.Value(),
@@ -190,12 +198,17 @@ public static class ScheduleQueryCollector {
                 schedule.IsTemplate,
                 sheetPlacements.Count != 0,
                 sheetPlacements,
+                rows.Count == 0,
+                bindingSummary.BindingStatus,
+                bindingSummary.NotApplicableRowCount,
+                bindingSummary.NonBindableRowCount,
+                bindingSummary.BindableRowCount,
+                bindingSummary.BoundRowCount,
+                bindingSummary.UnboundRowCount,
                 rows.Count,
-                visibleFamilies.Count,
-                visibleInstances.Count,
-                visibleFamilies,
-                visibleInstances,
-                columns,
+                subjects.Count,
+                subjects,
+                contexts.Select(context => context.Column).ToList(),
                 rows
             );
         } catch (Exception ex) {
@@ -216,23 +229,31 @@ public static class ScheduleQueryCollector {
         var contexts = new List<ColumnContext>();
         var visibleColumnNumber = bodySection.FirstColumnNumber;
 
-        for (var i = 0;
-             i < schedule.Definition.GetFieldCount() && visibleColumnNumber <= bodySection.LastColumnNumber;
-             i++) {
-            var field = schedule.Definition.GetField(i);
+        for (var fieldIndex = 0;
+             fieldIndex < schedule.Definition.GetFieldCount() && visibleColumnNumber <= bodySection.LastColumnNumber;
+             fieldIndex++) {
+            var field = schedule.Definition.GetField(fieldIndex);
             if (field.IsHidden)
                 continue;
 
             var fieldName = field.GetName();
             var headerText = ScheduleCollectorSupport.NullIfWhiteSpace(field.ColumnHeading) ?? fieldName;
+            var specTypeId = ScheduleCollectorSupport.GetFieldSpecTypeId(field);
             contexts.Add(new ColumnContext(
                 new ScheduleRenderedColumn(
                     visibleColumnNumber,
                     headerText,
-                    ScheduleCollectorSupport.BuildFieldKey(doc, field, fieldName)
+                    ScheduleCollectorSupport.BuildFieldKey(doc, field, fieldName),
+                    fieldName,
+                    fieldIndex
                 ),
+                field,
                 fieldName,
-                headerText
+                headerText,
+                specTypeId,
+                ScheduleCollectorSupport.BuildEffectiveUnits(doc, bodySection, visibleColumnNumber, field, specTypeId),
+                ScheduleCollectorSupport.GetMultipleValueTexts(field),
+                ScheduleCollectorSupport.IsComparableField(field)
             ));
             visibleColumnNumber++;
         }
@@ -240,12 +261,52 @@ public static class ScheduleQueryCollector {
         return contexts;
     }
 
-    private static List<ScheduleRenderedRow> CollectRows(
+    private static List<SubjectContext> CollectSubjectContexts(
+        Document doc,
+        IReadOnlyList<ColumnContext> contexts,
+        IReadOnlyList<Element> subjectElements,
+        IReadOnlyList<ScheduleRenderedSubject> subjects
+    ) {
+        var subjectsById = subjects.ToDictionary(subject => subject.SubjectId);
+        return subjectElements
+            .Select(element => {
+                if (!subjectsById.TryGetValue(element.Id.Value(), out var subject))
+                    return null;
+
+                var parameterSources = ScheduleCollectorSupport.CollectParameterSourceElements(doc, element);
+                var valuesByColumn = new Dictionary<int, SubjectComparableValue>();
+                foreach (var context in contexts) {
+                    var comparableValue = ScheduleCollectorSupport.ReadFieldComparableValue(
+                        doc,
+                        element,
+                        parameterSources,
+                        context.Field,
+                        context.FieldName,
+                        context.SpecTypeId,
+                        context.EffectiveUnits
+                    );
+                    if (comparableValue.TextValues.Count == 0 && comparableValue.RawDoubleValue == null)
+                        continue;
+
+                    valuesByColumn[context.Column.ColumnNumber] =
+                        new SubjectComparableValue(comparableValue.TextValues, comparableValue.RawDoubleValue);
+                }
+
+                return new SubjectContext(subject, valuesByColumn);
+            })
+            .Where(context => context != null)
+            .Cast<SubjectContext>()
+            .ToList();
+    }
+
+    private static List<CollectedRow> CollectRows(
         ViewSchedule schedule,
         TableSectionData bodySection,
-        IReadOnlyList<ColumnContext> contexts
+        IReadOnlyList<ColumnContext> contexts,
+        IReadOnlyDictionary<int, ColumnContext> contextByColumnNumber,
+        IReadOnlyList<SubjectContext> subjectContexts
     ) {
-        var rows = new List<ScheduleRenderedRow>();
+        var rows = new List<CollectedRow>();
         var skippingLeadingHeaderRows = true;
 
         for (var rowNumber = bodySection.FirstRowNumber; rowNumber <= bodySection.LastRowNumber; rowNumber++) {
@@ -264,16 +325,109 @@ public static class ScheduleQueryCollector {
                 skippingLeadingHeaderRows = false;
             }
 
-            values.Add(string.Empty);
-            rows.Add(new ScheduleRenderedRow(
-                rowNumber,
-                ClassifyRowKind(bodySection, contexts, rowNumber),
-                values,
-                []
+            var rowKind = ClassifyRowKind(bodySection, contexts, rowNumber);
+            var binding = BindRow(values, contexts, contextByColumnNumber, subjectContexts, rowKind);
+            rows.Add(new CollectedRow(
+                new ScheduleRenderedRow(
+                    rowNumber,
+                    rowKind,
+                    values,
+                    binding.BindingKind,
+                    binding.ResolutionStatus,
+                    binding.ResolutionReason,
+                    binding.SubjectIds
+                ),
+                binding.ResolutionStatus
             ));
         }
 
         return rows;
+    }
+
+    private static RowBindingResult BindRow(
+        IReadOnlyList<string> values,
+        IReadOnlyList<ColumnContext> contexts,
+        IReadOnlyDictionary<int, ColumnContext> contextByColumnNumber,
+        IReadOnlyList<SubjectContext> subjectContexts,
+        ScheduleRenderedRowKind rowKind
+    ) {
+        if (rowKind != ScheduleRenderedRowKind.Data) {
+            return new RowBindingResult(
+                ScheduleRenderedRowBindingKind.None,
+                ScheduleRenderedRowSubjectResolutionStatus.NotApplicable,
+                ScheduleRenderedRowSubjectResolutionReason.NonDataRow,
+                []
+            );
+        }
+
+        if (values.Count != contexts.Count) {
+            return new RowBindingResult(
+                ScheduleRenderedRowBindingKind.None,
+                ScheduleRenderedRowSubjectResolutionStatus.NonBindable,
+                ScheduleRenderedRowSubjectResolutionReason.NoComparableValues,
+                []
+            );
+        }
+
+        if (subjectContexts.Count == 0) {
+            return new RowBindingResult(
+                ScheduleRenderedRowBindingKind.None,
+                ScheduleRenderedRowSubjectResolutionStatus.NonBindable,
+                ScheduleRenderedRowSubjectResolutionReason.NoVisibleSubjects,
+                []
+            );
+        }
+
+        var comparableValues = values
+            .Select((value, index) => {
+                var normalizedValue = ScheduleCollectorSupport.NormalizeCellText(value);
+                return new ComparableRowValue(
+                    contexts[index].Column.ColumnNumber,
+                    normalizedValue,
+                    contexts[index].IsComparable
+                    && !contexts[index].MultipleValueTexts.Contains(normalizedValue)
+                );
+            })
+            .Where(value => value.IsComparable && !string.IsNullOrWhiteSpace(value.Value))
+            .ToList();
+        if (comparableValues.Count == 0) {
+            return new RowBindingResult(
+                ScheduleRenderedRowBindingKind.None,
+                ScheduleRenderedRowSubjectResolutionStatus.NonBindable,
+                ScheduleRenderedRowSubjectResolutionReason.NoComparableValues,
+                []
+            );
+        }
+
+        var matchedSubjectIds = subjectContexts
+            .Where(subject =>
+                comparableValues.All(value =>
+                    subject.ValuesByColumn.TryGetValue(value.ColumnNumber, out var subjectValue)
+                    && MatchesComparableValue(contextByColumnNumber, value, subjectValue)))
+            .Select(subject => subject.Subject.SubjectId)
+            .Distinct()
+            .ToList();
+
+        return matchedSubjectIds.Count switch {
+            0 => new RowBindingResult(
+                ScheduleRenderedRowBindingKind.None,
+                ScheduleRenderedRowSubjectResolutionStatus.Unbound,
+                ScheduleRenderedRowSubjectResolutionReason.HeuristicMismatch,
+                []
+            ),
+            1 => new RowBindingResult(
+                ScheduleRenderedRowBindingKind.SingleSubject,
+                ScheduleRenderedRowSubjectResolutionStatus.Bound,
+                ScheduleRenderedRowSubjectResolutionReason.None,
+                matchedSubjectIds
+            ),
+            _ => new RowBindingResult(
+                ScheduleRenderedRowBindingKind.MultipleSubjects,
+                ScheduleRenderedRowSubjectResolutionStatus.Bound,
+                ScheduleRenderedRowSubjectResolutionReason.None,
+                matchedSubjectIds
+            )
+        };
     }
 
     private static bool IsHeaderLikeBodyRow(
@@ -286,8 +440,8 @@ public static class ScheduleQueryCollector {
 
         var matchedCount = 0;
         for (var i = 0; i < contexts.Count; i++) {
-            var rowValue = ScheduleCollectorSupport.NullIfWhiteSpace(values[i]) ?? string.Empty;
-            var headerValue = contexts[i].HeaderText;
+            var rowValue = ScheduleCollectorSupport.NormalizeCellText(values[i]);
+            var headerValue = ScheduleCollectorSupport.NormalizeCellText(contexts[i].HeaderText);
             if (!string.Equals(rowValue, headerValue, StringComparison.Ordinal))
                 return false;
             matchedCount++;
@@ -320,6 +474,87 @@ public static class ScheduleQueryCollector {
         }
 
         return true;
+    }
+
+    private static BindingSummary SummarizeBinding(
+        IReadOnlyList<CollectedRow> rows
+    ) {
+        var notApplicableRowCount = rows.Count(row =>
+            row.ResolutionStatus == ScheduleRenderedRowSubjectResolutionStatus.NotApplicable);
+        var nonBindableRowCount = rows.Count(row =>
+            row.ResolutionStatus == ScheduleRenderedRowSubjectResolutionStatus.NonBindable);
+        var bindableRowCount = rows.Count(row =>
+            row.ResolutionStatus is ScheduleRenderedRowSubjectResolutionStatus.Unbound
+                or ScheduleRenderedRowSubjectResolutionStatus.Bound);
+        var boundRowCount = rows.Count(row =>
+            row.ResolutionStatus == ScheduleRenderedRowSubjectResolutionStatus.Bound);
+        var unboundRowCount = rows.Count(row =>
+            row.ResolutionStatus == ScheduleRenderedRowSubjectResolutionStatus.Unbound);
+        var bindingStatus = bindableRowCount == 0 || boundRowCount == 0
+            ? ScheduleRenderedBindingStatus.None
+            : boundRowCount == bindableRowCount
+            ? ScheduleRenderedBindingStatus.Complete
+            : ScheduleRenderedBindingStatus.Partial;
+
+        return new BindingSummary(
+            bindingStatus,
+            notApplicableRowCount,
+            nonBindableRowCount,
+            bindableRowCount,
+            boundRowCount,
+            unboundRowCount
+        );
+    }
+
+    private static bool MatchesComparableValue(
+        IReadOnlyDictionary<int, ColumnContext> contextByColumnNumber,
+        ComparableRowValue rowValue,
+        SubjectComparableValue subjectValue
+    ) {
+        if (subjectValue.TextValues.Contains(rowValue.Value))
+            return true;
+
+        if (!contextByColumnNumber.TryGetValue(rowValue.ColumnNumber, out var context)
+            || subjectValue.RawDoubleValue == null)
+            return false;
+
+        return TryParseRowDouble(context, rowValue.Value, out var parsedValue)
+               && NearlyEquals(parsedValue, subjectValue.RawDoubleValue.Value);
+    }
+
+    private static bool TryParseRowDouble(
+        ColumnContext context,
+        string rowValue,
+        out double parsedValue
+    ) {
+        if (context.SpecTypeId == null || context.SpecTypeId.Empty()) {
+            parsedValue = default;
+            return false;
+        }
+
+        if (context.SpecTypeId == SpecTypeId.Number)
+            return double.TryParse(
+                rowValue,
+                NumberStyles.Float | NumberStyles.AllowThousands,
+                CultureInfo.InvariantCulture,
+                out parsedValue)
+                   || double.TryParse(
+                       rowValue,
+                       NumberStyles.Float | NumberStyles.AllowThousands,
+                       CultureInfo.CurrentCulture,
+                       out parsedValue);
+
+        if (!UnitUtils.IsMeasurableSpec(context.SpecTypeId) || context.EffectiveUnits == null) {
+            parsedValue = default;
+            return false;
+        }
+
+        return UnitFormatUtils.TryParse(context.EffectiveUnits, context.SpecTypeId, rowValue, out parsedValue);
+    }
+
+    private static bool NearlyEquals(double left, double right) {
+        var scale = Math.Max(1d, Math.Max(Math.Abs(left), Math.Abs(right)));
+        return Math.Abs(left - right) <= scale * 1e-6;
     }
 
     private static List<ViewSchedule> CollectQueryableSchedules(Document doc) =>
@@ -361,7 +596,49 @@ public static class ScheduleQueryCollector {
 
     private sealed record ColumnContext(
         ScheduleRenderedColumn Column,
+        ScheduleField Field,
         string FieldName,
-        string HeaderText
+        string HeaderText,
+        ForgeTypeId? SpecTypeId,
+        Units? EffectiveUnits,
+        HashSet<string> MultipleValueTexts,
+        bool IsComparable
+    );
+
+    private sealed record SubjectContext(
+        ScheduleRenderedSubject Subject,
+        Dictionary<int, SubjectComparableValue> ValuesByColumn
+    );
+
+    private sealed record ComparableRowValue(
+        int ColumnNumber,
+        string Value,
+        bool IsComparable
+    );
+
+    private sealed record RowBindingResult(
+        ScheduleRenderedRowBindingKind BindingKind,
+        ScheduleRenderedRowSubjectResolutionStatus ResolutionStatus,
+        ScheduleRenderedRowSubjectResolutionReason ResolutionReason,
+        List<long> SubjectIds
+    );
+
+    private sealed record CollectedRow(
+        ScheduleRenderedRow Row,
+        ScheduleRenderedRowSubjectResolutionStatus ResolutionStatus
+    );
+
+    private sealed record BindingSummary(
+        ScheduleRenderedBindingStatus BindingStatus,
+        int NotApplicableRowCount,
+        int NonBindableRowCount,
+        int BindableRowCount,
+        int BoundRowCount,
+        int UnboundRowCount
+    );
+
+    private sealed record SubjectComparableValue(
+        HashSet<string> TextValues,
+        double? RawDoubleValue
     );
 }

@@ -1,4 +1,4 @@
-using Pe.Shared.RevitData.Schedules;
+﻿using Pe.Shared.RevitData.Schedules;
 
 namespace Pe.Revit.DocumentData.Schedules.Collect;
 
@@ -18,30 +18,6 @@ internal static class ScheduleVisibleFamilyCollector {
             .ThenBy(instance => instance.Id.Value())
             .ToList();
     }
-
-    public static List<ScheduleVisibleInstanceEntry> CollectVisibleInstances(
-        IReadOnlyList<FamilyInstance> instances
-    ) => instances
-        .Select(instance => {
-            var symbol = instance.Symbol;
-            var family = symbol?.Family;
-            return new ScheduleVisibleInstanceEntry(
-                instance.Id.Value(),
-                instance.UniqueId,
-                family?.Name ?? string.Empty,
-                symbol?.Name ?? string.Empty,
-                family?.FamilyCategory?.Name
-            );
-        })
-        .OrderBy(entry => entry.FamilyName, StringComparer.OrdinalIgnoreCase)
-        .ThenBy(entry => entry.FamilyTypeName, StringComparer.OrdinalIgnoreCase)
-        .ThenBy(entry => entry.InstanceId)
-        .ToList();
-
-    public static List<ScheduleVisibleInstanceEntry> CollectVisibleInstances(
-        Document doc,
-        ViewSchedule schedule
-    ) => CollectVisibleInstances(CollectVisibleFamilyInstances(doc, schedule));
 
     public static List<ScheduleVisibleFamilyEntry> CollectVisibleFamilies(
         IReadOnlyList<FamilyInstance> instances

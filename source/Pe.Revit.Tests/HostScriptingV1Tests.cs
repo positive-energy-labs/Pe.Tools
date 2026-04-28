@@ -203,7 +203,6 @@ public sealed class HostScriptingV1Tests {
 
         return new HostOperationContext(
             null!,
-            null!,
             scriptingPipeClientService,
             runtimeStateService,
             null!,

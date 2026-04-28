@@ -1,9 +1,9 @@
-using Pe.Revit.DocumentData.Families.Loaded;
+﻿using Pe.Revit.DocumentData.Families.Loaded;
 using Pe.Revit.DocumentData.Schedules.Apply;
 using Pe.Revit.DocumentData.Schedules.Runtime;
 using SharedScheduleProfile = Pe.Shared.RevitData.Schedules.ScheduleProfile;
 
-namespace Pe.Revit.Extensions.Schedules;
+namespace Pe.Revit.DocumentData.Schedules;
 
 public static class DocumentScheduleProfileExtensions {
     public static ScheduleProfile CaptureRuntimeScheduleProfile(this ViewSchedule schedule) =>
@@ -48,3 +48,5 @@ public static class DocumentScheduleProfileExtensions {
         IReadOnlyList<TempPlacedSymbolRecord> placements
     ) => ScheduleHelper.GetFamilyIdsMatchingFiltersAnyType(doc, profile, placements);
 }
+
+// PE_HOT_RELOAD_NUDGE

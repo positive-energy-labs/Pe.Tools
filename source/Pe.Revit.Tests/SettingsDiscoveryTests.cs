@@ -25,8 +25,8 @@ public sealed class SettingsDiscoveryTests {
             var backend = new LocalDiskSettingsStorageBackend(
                 basePath,
                 SettingsRuntimeMode.HostOnly,
-                new Dictionary<string, SettingsStorageModuleDefinition>(StringComparer.OrdinalIgnoreCase) {
-                    ["Global"] = SettingsStorageModuleDefinition.CreateSingleRoot(
+                new Dictionary<string, SettingsStorageModuleRuntimeDefinition>(StringComparer.OrdinalIgnoreCase) {
+                    ["Global"] = SettingsStorageModuleRuntimeDefinition.CreateSingleRoot(
                         "fragments",
                         SettingsStorageProfiles.SharedAuthoring
                     )

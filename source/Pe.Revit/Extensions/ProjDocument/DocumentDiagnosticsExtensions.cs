@@ -1,4 +1,4 @@
-namespace Pe.Revit.Extensions.ProjDocument;
+﻿namespace Pe.Revit.Extensions.ProjDocument;
 
 public static class DocumentDiagnosticsExtensions {
     public static string LogDocumentDetails(this Document doc, string? context = null) {
@@ -6,6 +6,7 @@ public static class DocumentDiagnosticsExtensions {
             throw new ArgumentNullException(nameof(doc));
 
         var sb = new StringBuilder();
+        
         if (!string.IsNullOrEmpty(context))
             _ = sb.AppendLine($"=== {context} ===");
         _ = sb.AppendLine("=== Document Details ===");
@@ -17,7 +18,7 @@ public static class DocumentDiagnosticsExtensions {
             .AppendLine($"IsModifiable: {doc.IsModifiable}")
             .AppendLine($"IsReadOnly: {doc.IsReadOnly}")
             .AppendLine($"IsWorkshared: {doc.IsWorkshared}");
-
+        
         var modelPath = doc.GetDocumentModelPath();
         if (modelPath != null) {
             _ = sb.AppendLine($"ModelPath Type: {modelPath.GetType().Name}");
