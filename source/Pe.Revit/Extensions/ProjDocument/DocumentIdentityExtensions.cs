@@ -2,20 +2,6 @@ namespace Pe.Revit.Extensions.ProjDocument;
 
 public static class DocumentIdentityExtensions {
     /// <summary>
-    ///     Tries to resolve shared GUID from either:
-    ///     - ExternalDefinition.GUID
-    ///     - InternalDefinition.Id -> SharedParameterElement.GuidValue
-    /// </summary>
-    /// <returns>The shared GUID or null if not found</returns>
-    /// // TODO: go back to my llm parameter guide and get a better method for this
-    private static Guid? TryGetSharedGuid(this Document doc, Definition def) =>
-        def switch {
-            ExternalDefinition ext => ext.GUID,
-            InternalDefinition internalDef => (doc.GetElement(internalDef.Id) as SharedParameterElement)?.GuidValue,
-            _ => null
-        };
-
-    /// <summary>
     ///     Returns <c>doc.ParameterBindings</c> as an IEnumerable of <c>(Definition, ElementBinding)</c>.
     ///     Revit exposes <c>DefinitionBindingMapIterator</c>, which is awkward for LINQ and composition.
     /// </summary>

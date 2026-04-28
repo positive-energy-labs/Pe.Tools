@@ -302,8 +302,19 @@ public static class Formula {
         CultureInfo.InvariantCulture,
         out _);
 
-    private sealed record SizeLookupFormulaContext(
-        IReadOnlyList<string> Arguments,
-        string FormulaForReferenceValidation,
-        bool ParsedSuccessfully);
+    private sealed class SizeLookupFormulaContext {
+        public SizeLookupFormulaContext(IReadOnlyList<string> arguments,
+            string formulaForReferenceValidation,
+            bool parsedSuccessfully) {
+            this.Arguments = arguments;
+            this.FormulaForReferenceValidation = formulaForReferenceValidation;
+            this.ParsedSuccessfully = parsedSuccessfully;
+        }
+
+        public IReadOnlyList<string> Arguments { get; }
+
+        public string FormulaForReferenceValidation { get; }
+
+        public bool ParsedSuccessfully { get; }
+    }
 }

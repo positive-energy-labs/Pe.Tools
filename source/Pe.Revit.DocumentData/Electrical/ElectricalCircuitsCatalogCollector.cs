@@ -1,4 +1,4 @@
-using Autodesk.Revit.DB.Electrical;
+﻿using Autodesk.Revit.DB.Electrical;
 using Pe.Shared.RevitData;
 using System.Text.RegularExpressions;
 
@@ -288,6 +288,7 @@ public static class ElectricalCircuitsCatalogCollector {
                 loadName.ToUpperInvariant(),
                 @"\b[A-Z]{1,8}-\d+[A-Z]?\b"
             )
+            .Cast<Match>()
             .Select(match => match.Value)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -363,3 +364,5 @@ public static class ElectricalCircuitsCatalogCollector {
         double DistanceFeet
     );
 }
+
+// PE_HOT_RELOAD_NUDGE

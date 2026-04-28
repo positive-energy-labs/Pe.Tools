@@ -25,9 +25,6 @@
         <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0"/>
         <PackageReference Include="Serilog.Sinks.Debug" Version="3.0.0"/>
 
-        <!-- Polyfills for net48 compatibility with modern C# features -->
-        <PackageReference Include="System.Net.Http" Version="4.3.4" Condition="'$(TargetFramework)' == 'net48'"/>
-
         <!-- Revit Task Service for thread marshaling -->
         <PackageReference Include="ricaun.Revit.UI.Tasks" Version="1.*"/>
     </ItemGroup>

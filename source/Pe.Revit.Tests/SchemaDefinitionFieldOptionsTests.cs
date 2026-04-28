@@ -10,9 +10,14 @@ namespace Pe.Revit.Tests;
 
 [TestFixture]
 public sealed class SchemaDefinitionFieldOptionsTests {
+    private const string ProviderKey = "schema-definition-field-options-test-provider";
+
     [OneTimeSetUp]
-    public void RegisterTestSchemaDefinition() =>
+    public void RegisterTestSchemaDefinition() {
+        FieldOptionsProviderRegistry.Shared.Register(ProviderKey,
+            static () => new SchemaDefinitionFieldOptionsTestProvider());
         SettingsSchemaDefinitionRegistry.Shared.Register(new SchemaDefinitionFieldOptionsTestDefinition());
+    }
 
     [Test]
     public void UseFieldOptions_preserves_provider_dependencies_and_merges_builder_dependencies() {
@@ -91,14 +96,14 @@ public sealed class SchemaDefinitionFieldOptionsTests {
         : SettingsSchemaDefinition<SchemaDefinitionFieldOptionsTestSettings> {
         public override void Configure(ISettingsSchemaBuilder<SchemaDefinitionFieldOptionsTestSettings> builder) =>
             builder.Property(item => item.Parameter, property => {
-                property.UseFieldOptions<SchemaDefinitionFieldOptionsTestProvider>();
+                property.UseFieldOptions(ProviderKey, SettingsRuntimeMode.LiveDocument);
                 property.DependsOnSibling(OptionContextKeys.CategoryName);
             });
     }
 
     private sealed class SchemaDefinitionFieldOptionsTestProvider : IFieldOptionsSource {
         public FieldOptionsDescriptor Describe() => new(
-            "SchemaDefinitionFieldOptionsTestProvider",
+            ProviderKey,
             SettingsOptionsResolverKind.Remote,
             SettingsOptionsMode.Suggestion,
             true,
@@ -121,4 +126,3 @@ public sealed class SchemaDefinitionFieldOptionsTests {
         [JsonProperty("parameter")] public string Parameter { get; init; } = string.Empty;
     }
 }
-

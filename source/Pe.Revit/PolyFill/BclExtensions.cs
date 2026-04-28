@@ -1,5 +1,7 @@
 namespace Pe.Revit.PolyFill;
 
+using System.Net.Http;
+
 /// <summary>
 ///     Polyfill extension methods to provide modern BCL APIs across .NET Framework and .NET versions.
 ///     These methods abstract framework-specific differences in the Base Class Library.
