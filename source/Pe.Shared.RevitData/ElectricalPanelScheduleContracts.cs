@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using TypeGen.Core.TypeAnnotations;
 
@@ -30,6 +30,11 @@ public enum ElectricalPanelScheduleCellSourceKind {
     Combined,
     Calculated
 }
+
+[ExportTsInterface]
+public record ElectricalPanelSchedulesQueryRequest(
+    ElectricalPanelSchedulesQuery? Query = null
+);
 
 [ExportTsInterface]
 public record ElectricalPanelSchedulesQuery(

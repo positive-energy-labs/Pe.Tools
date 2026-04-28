@@ -15,8 +15,3 @@ public static class SchemaProjectionKeys {
     public const string CategoryNames = "categoryNames";
 }
 
-[ExportTsClass]
-public static class SchemaInvalidationKeys {
-    public const string DocumentChanged = "documentChanged";
-}
-

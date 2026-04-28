@@ -14,7 +14,6 @@ public sealed class JsonTypeSchemaBindingAttribute(Type bindingType) : Attribute
 public interface IJsonTypeSchemaBinding {
     JsonObjectType SchemaType { get; }
     JsonConverter? CreateConverter(PropertyInfo propertyInfo);
-    IFieldOptionsSource? CreateFieldOptionsSource(PropertyInfo propertyInfo);
     void ConfigureTypeSchema(JsonSchema schema, TypeMapperContext context);
     void ConfigurePropertySchema(JsonSchema schema, PropertyInfo propertyInfo, JsonSchemaBuildOptions options);
 }
@@ -26,4 +25,3 @@ public sealed class JsonTypeBindingTypeMapper(Type mappedType, IJsonTypeSchemaBi
     public void GenerateSchema(JsonSchema schema, TypeMapperContext context) =>
         binding.ConfigureTypeSchema(schema, context);
 }
-

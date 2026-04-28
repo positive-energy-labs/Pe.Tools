@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using TypeGen.Core.TypeAnnotations;
 
@@ -24,6 +24,22 @@ public enum ElectricalPanelCapacitySource {
     None,
     PanelScheduleData
 }
+
+[ExportTsInterface]
+public record ElectricalPanelsCatalogRequest(
+    ElectricalPanelFilter? Filter
+);
+
+[ExportTsInterface]
+public record ElectricalCircuitsCatalogRequest(
+    ElectricalCircuitFilter? Filter,
+    ElectricalCircuitsCatalogOptions? Options = null
+);
+
+[ExportTsInterface]
+public record ElectricalLoadClassificationsCatalogRequest(
+    ElectricalLoadClassificationFilter? Filter
+);
 
 [ExportTsInterface]
 public record ElectricalPanelFilter {

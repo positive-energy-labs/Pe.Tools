@@ -2,9 +2,7 @@ using Newtonsoft.Json;
 using NJsonSchema;
 using NJsonSchema.Generation.TypeMappers;
 using Pe.Revit.SettingsRuntime.Json.Converters;
-using Pe.Revit.SettingsRuntime.Json.FieldOptions;
 using Pe.Revit.SettingsRuntime.Json.RevitTypes;
-using Pe.Revit.SettingsRuntime.Json.SchemaProviders;
 using System.Reflection;
 
 namespace Pe.Revit.SettingsRuntime.Json;
@@ -26,11 +24,6 @@ public static class RevitTypeRegistry {
                 new RevitJsonTypeSchemaBinding(
                     JsonObjectType.String,
                     property => property.GetCustomAttribute<ForgeKindAttribute>()?.Kind switch {
-                        ForgeKind.Spec => new SpecNamesProvider(),
-                        ForgeKind.Group => new PropertyGroupNamesProvider(),
-                        _ => null
-                    },
-                    property => property.GetCustomAttribute<ForgeKindAttribute>()?.Kind switch {
                         ForgeKind.Spec => new SpecTypeConverter(),
                         ForgeKind.Group => new GroupTypeConverter(),
                         _ => null
@@ -42,7 +35,6 @@ public static class RevitTypeRegistry {
                 typeof(BuiltInCategory),
                 new RevitJsonTypeSchemaBinding(
                     JsonObjectType.String,
-                    _ => new CategoryNamesProvider(),
                     _ => new BuiltInCategoryConverter()
                 )
             );
@@ -61,15 +53,11 @@ public static class RevitTypeRegistry {
 
 internal sealed class RevitJsonTypeSchemaBinding(
     JsonObjectType schemaType,
-    Func<PropertyInfo, IFieldOptionsSource?> fieldOptionsSourceFactory,
     Func<PropertyInfo, JsonConverter?> converterFactory
 ) : IJsonTypeSchemaBinding {
     public JsonObjectType SchemaType { get; } = schemaType;
 
     public JsonConverter? CreateConverter(PropertyInfo propertyInfo) => converterFactory(propertyInfo);
-
-    public IFieldOptionsSource? CreateFieldOptionsSource(PropertyInfo propertyInfo) =>
-        fieldOptionsSourceFactory(propertyInfo);
 
     public void ConfigureTypeSchema(JsonSchema schema, TypeMapperContext context) {
         schema.Type = this.SchemaType;

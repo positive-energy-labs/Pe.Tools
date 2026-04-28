@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Shared.HostContracts.Protocol;
 using TypeGen.Core.TypeAnnotations;
@@ -98,9 +98,7 @@ public record SettingsModuleDescriptor(
 );
 
 [ExportTsInterface]
-public record GetSettingsModuleCatalogBridgeRequest(
-    BridgeSessionSelector? Target = null
-) : IBridgeSessionRequest;
+public record GetSettingsModuleCatalogBridgeRequest();
 
 [ExportTsInterface]
 public record GetSettingsModuleCatalogBridgeResponse(
@@ -110,24 +108,21 @@ public record GetSettingsModuleCatalogBridgeResponse(
 [ExportTsInterface]
 public record OpenSettingsDocumentRequest(
     SettingsDocumentId DocumentId,
-    bool IncludeComposedContent = false,
-    BridgeSessionSelector? Target = null
-) : IBridgeSessionRequest;
+    bool IncludeComposedContent = false
+);
 
 [ExportTsInterface]
 public record SaveSettingsDocumentRequest(
     SettingsDocumentId DocumentId,
     string RawContent,
-    SettingsVersionToken? ExpectedVersionToken = null,
-    BridgeSessionSelector? Target = null
-) : IBridgeSessionRequest;
+    SettingsVersionToken? ExpectedVersionToken = null
+);
 
 [ExportTsInterface]
 public record ValidateSettingsDocumentRequest(
     SettingsDocumentId DocumentId,
-    string RawContent,
-    BridgeSessionSelector? Target = null
-) : IBridgeSessionRequest;
+    string RawContent
+);
 
 [ExportTsInterface]
 public record SaveSettingsDocumentResult(
@@ -165,9 +160,7 @@ public record SettingsWorkspacesData(
 );
 
 [ExportTsInterface]
-public record GetSettingsWorkspacesRequest(
-    BridgeSessionSelector? Target = null
-) : IBridgeSessionRequest;
+public record GetSettingsWorkspacesRequest();
 
 [ExportTsInterface]
 public record SettingsFileEntry(
@@ -217,5 +210,4 @@ public record SettingsTreeRequest {
     public bool Recursive { get; init; }
     public bool IncludeFragments { get; init; }
     public bool IncludeSchemas { get; init; }
-    public BridgeSessionSelector? Target { get; init; }
 }

@@ -96,9 +96,7 @@ public sealed class SettingsFieldOptionsService : ISettingsFieldOptionsService {
             binding.FieldOptions != null)
             return binding.FieldOptions;
 
-        return JsonTypeSchemaBindingRegistry.Shared.TryResolveFieldOptionsSource(property, out var source)
-            ? source.Describe()
-            : null;
+        return null;
     }
 }
 

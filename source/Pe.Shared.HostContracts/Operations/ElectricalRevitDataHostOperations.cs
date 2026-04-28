@@ -1,53 +1,49 @@
-using Pe.Shared.HostContracts.RevitData;
+﻿using Pe.Shared.RevitData;
 
 namespace Pe.Shared.HostContracts.Operations;
 
 public static class GetElectricalPanelsCatalogOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<ElectricalPanelsCatalogRequest, ElectricalPanelsCatalogEnvelopeResponse>(
+        HostOperationDefinition.Create<ElectricalPanelsCatalogRequest, ElectricalPanelsCatalogData>(
             "revit-data.electrical.panels.catalog",
             HostHttpVerb.Post,
             "/api/revit-data/electrical/panels/catalog",
             HostExecutionMode.Bridge,
-            "Get Electrical Panels Catalog",
-            new HostCachePolicy("electrical-panels-catalog", 10)
+            "Get Electrical Panels Catalog"
         );
 }
 
 public static class GetElectricalCircuitsCatalogOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<ElectricalCircuitsCatalogRequest, ElectricalCircuitsCatalogEnvelopeResponse>(
+        HostOperationDefinition.Create<ElectricalCircuitsCatalogRequest, ElectricalCircuitsCatalogData>(
             "revit-data.electrical.circuits.catalog",
             HostHttpVerb.Post,
             "/api/revit-data/electrical/circuits/catalog",
             HostExecutionMode.Bridge,
-            "Get Electrical Circuits Catalog",
-            new HostCachePolicy("electrical-circuits-catalog", 10)
+            "Get Electrical Circuits Catalog"
         );
 }
 
 public static class GetElectricalLoadClassificationsCatalogOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition
-            .Create<ElectricalLoadClassificationsCatalogRequest, ElectricalLoadClassificationsCatalogEnvelopeResponse>(
+            .Create<ElectricalLoadClassificationsCatalogRequest, ElectricalLoadClassificationsCatalogData>(
                 "revit-data.electrical.load-classifications.catalog",
                 HostHttpVerb.Post,
                 "/api/revit-data/electrical/load-classifications/catalog",
                 HostExecutionMode.Bridge,
-                "Get Electrical Load Classifications Catalog",
-                new HostCachePolicy("electrical-load-classifications-catalog", 10)
+                "Get Electrical Load Classifications Catalog"
             );
 }
 
 public static class GetElectricalPanelSchedulesQueryOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition
-            .Create<ElectricalPanelSchedulesQueryRequest, ElectricalPanelSchedulesQueryEnvelopeResponse>(
+            .Create<ElectricalPanelSchedulesQueryRequest, ElectricalPanelSchedulesQueryData>(
                 "revit-data.electrical.panel-schedules.query",
                 HostHttpVerb.Post,
                 "/api/revit-data/electrical/panel-schedules/query",
                 HostExecutionMode.Bridge,
-                "Get Electrical Panel Schedules Query",
-                new HostCachePolicy("electrical-panel-schedules-query", 10)
+                "Get Electrical Panel Schedules Query"
             );
 }

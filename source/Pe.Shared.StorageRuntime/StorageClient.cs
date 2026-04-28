@@ -17,6 +17,26 @@ public sealed class StorageClient {
 
     public ModuleStorage Module(string moduleKey) => this._source.CreateModule(moduleKey);
 
+    public ModuleStorage<TSettings> Root<TSettings>(ISettingsRootBinding<TSettings> binding) where TSettings : class {
+        if (binding == null)
+            throw new ArgumentNullException(nameof(binding));
+
+        return new ModuleStorage<TSettings>(
+            binding.Module.ModuleKey,
+            binding.RootKey,
+            binding.Module.StorageOptions,
+            SettingsRuntimeMode.LiveDocument,
+            BasePath,
+            new Dictionary<string, SettingsStorageModuleRuntimeDefinition>(StringComparer.OrdinalIgnoreCase) {
+                [binding.Module.ModuleKey] = SettingsStorageModuleRuntimeDefinition.CreateSingleRoot(
+                    binding.RootKey,
+                    binding.Module.StorageOptions,
+                    binding.CreateValidator(SettingsRuntimeMode.LiveDocument)
+                )
+            }
+        );
+    }
+
     public ModuleStorage<TSettings> Module<TSettings>(IStorageModule<TSettings> module) where TSettings : class {
         if (module == null)
             throw new ArgumentNullException(nameof(module));
@@ -27,7 +47,7 @@ public sealed class StorageClient {
             module.StorageOptions,
             SettingsRuntimeMode.LiveDocument,
             BasePath,
-            new Dictionary<string, SettingsStorageModuleDefinition>(StringComparer.OrdinalIgnoreCase) {
+            new Dictionary<string, SettingsStorageModuleRuntimeDefinition>(StringComparer.OrdinalIgnoreCase) {
                 [module.ModuleKey] = module.CreateStorageDefinition(SettingsRuntimeMode.LiveDocument)
             }
         );

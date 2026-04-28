@@ -1,3 +1,4 @@
+﻿using Pe.Shared.SettingsLayout;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Modules;
 
@@ -9,7 +10,7 @@ public interface IStorageModule<TSettings> where TSettings : class {
     Type SettingsType { get; }
     SettingsStorageModuleOptions StorageOptions { get; }
 
-    SettingsStorageModuleDefinition CreateStorageDefinition(SettingsRuntimeMode runtimeMode);
+    SettingsStorageModuleRuntimeDefinition CreateStorageDefinition(SettingsRuntimeMode runtimeMode);
 }
 
 public sealed class ModuleStorage(string moduleKey, string basePath) {
@@ -19,7 +20,10 @@ public sealed class ModuleStorage(string moduleKey, string basePath) {
 
     public string DirectoryPath => SettingsStorageLocations.ResolveModuleDirectory(this.BasePath, this.ModuleKey);
 
-    public StateStorage State() => new(this.DirectoryPath);
+    public StateStorage State() => StateStorage.ExactDir(
+        DeploymentRuntimeLocations.GetModuleStatePath(this.ModuleKey),
+        Path.Combine(this.DirectoryPath, "state")
+    );
 
     public OutputStorage Output() => new(this.DirectoryPath);
 
@@ -48,7 +52,7 @@ public sealed class ModuleStorage<TSettings> where TSettings : class {
         SettingsStorageModuleOptions storageOptions,
         SettingsRuntimeMode runtimeMode = SettingsRuntimeMode.HostOnly,
         string? basePath = null,
-        IReadOnlyDictionary<string, SettingsStorageModuleDefinition>? moduleDefinitionsByModuleKey = null
+        IReadOnlyDictionary<string, SettingsStorageModuleRuntimeDefinition>? moduleDefinitionsByModuleKey = null
     ) {
         var resolvedBasePath = string.IsNullOrWhiteSpace(basePath)
             ? StorageClient.BasePath

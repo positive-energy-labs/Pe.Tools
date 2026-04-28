@@ -1,15 +1,16 @@
-using Pe.Revit.DocumentData.Parameters;
+﻿using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Global.Services.Document;
+using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.SettingsRuntime.Json.FieldOptions;
 using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
 using Pe.Revit.SettingsRuntime.Json.SchemaProviders;
-using Pe.Shared.HostContracts.RevitData;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
+using System.Runtime.ExceptionServices;
 using FieldOptionItem = Pe.Shared.HostContracts.SettingsStorage.FieldOptionItem;
 
 namespace Pe.Revit.Global.Services.Host;
@@ -21,13 +22,13 @@ public class RequestService {
     private static readonly TimeSpan FieldOptionsThrottleWindow = TimeSpan.FromMilliseconds(350);
     private static readonly TimeSpan ParameterCatalogThrottleWindow = TimeSpan.FromMilliseconds(750);
 
-    private readonly SettingsModuleRegistry _moduleRegistry;
+    private readonly SettingsRuntimeRegistry _moduleRegistry;
     private readonly RevitTaskService _revitTaskService;
     private readonly ThrottleGate _throttleGate;
 
     public RequestService(
         RevitTaskService revitTaskService,
-        SettingsModuleRegistry moduleRegistry,
+        SettingsRuntimeRegistry moduleRegistry,
         ThrottleGate throttleGate
     ) {
         this._revitTaskService = revitTaskService;
@@ -35,7 +36,7 @@ public class RequestService {
         this._throttleGate = throttleGate;
     }
 
-    public async Task<FieldOptionsEnvelopeResponse> GetFieldOptionsEnvelopeAsync(
+    public async Task<FieldOptionsData> GetFieldOptionsAsync(
         FieldOptionsRequest request,
         string? connectionId = null
     ) {
@@ -43,6 +44,7 @@ public class RequestService {
             connectionId,
             "field-options",
             request.ModuleKey,
+            request.RootKey,
             $"{request.PropertyPath}:{request.SourceKey}",
             request.ContextValues
         );
@@ -50,23 +52,13 @@ public class RequestService {
         var (response, decision) = await this._throttleGate.ExecuteAsync(
             key,
             FieldOptionsThrottleWindow,
-            async () => {
-                var result = await this.GetFieldOptionsCore(request);
-                return new FieldOptionsEnvelopeResponse(
-                    result.Ok,
-                    result.Code,
-                    result.Message,
-                    result.Issues,
-                    result.Data
-                );
-            }
+            () => this.GetFieldOptionsCore(request)
         );
-        LogThrottleDecision(nameof(this.GetFieldOptionsEnvelopeAsync), decision, request.ModuleKey,
-            request.PropertyPath);
+        LogThrottleDecision(nameof(this.GetFieldOptionsAsync), decision, request.ModuleKey, request.PropertyPath);
         return response;
     }
 
-    public async Task<ParameterCatalogEnvelopeResponse> GetParameterCatalogEnvelopeAsync(
+    public async Task<ParameterCatalogData> GetParameterCatalogAsync(
         ParameterCatalogRequest request,
         string? connectionId = null
     ) {
@@ -75,6 +67,7 @@ public class RequestService {
             "parameter-catalog",
             request.ModuleKey,
             null,
+            null,
             request.ContextValues
         );
         var (response, decision) = await this._throttleGate.ExecuteAsync(
@@ -82,11 +75,11 @@ public class RequestService {
             ParameterCatalogThrottleWindow,
             () => this.GetParameterCatalogCore(request)
         );
-        LogThrottleDecision(nameof(this.GetParameterCatalogEnvelopeAsync), decision, request.ModuleKey, null);
+        LogThrottleDecision(nameof(this.GetParameterCatalogAsync), decision, request.ModuleKey, null);
         return response;
     }
 
-    public async Task<FieldOptionsEnvelopeResponse> GetLoadedFamiliesFilterFieldOptionsEnvelopeAsync(
+    public async Task<FieldOptionsData> GetLoadedFamiliesFilterFieldOptionsAsync(
         LoadedFamiliesFilterFieldOptionsRequest request,
         string? connectionId = null
     ) {
@@ -94,6 +87,7 @@ public class RequestService {
             connectionId,
             "loaded-families-filter-field-options",
             nameof(LoadedFamiliesFilter),
+            null,
             $"{request.PropertyPath}:{request.SourceKey}",
             request.ContextValues
         );
@@ -101,13 +95,10 @@ public class RequestService {
         var (response, decision) = await this._throttleGate.ExecuteAsync(
             key,
             FieldOptionsThrottleWindow,
-            async () => {
-                var result = await this.GetLoadedFamiliesFilterFieldOptionsCore(request);
-                return result.ToFieldOptionsEnvelope();
-            }
+            () => this.GetLoadedFamiliesFilterFieldOptionsCore(request)
         );
         LogThrottleDecision(
-            nameof(this.GetLoadedFamiliesFilterFieldOptionsEnvelopeAsync),
+            nameof(this.GetLoadedFamiliesFilterFieldOptionsAsync),
             decision,
             nameof(LoadedFamiliesFilter),
             request.PropertyPath
@@ -115,12 +106,50 @@ public class RequestService {
         return response;
     }
 
-    public async Task<GetSettingsModuleCatalogBridgeResponse> GetSettingsModuleCatalogAsync(
+    public Task<SchemaData> GetSchemaAsync(SchemaRequest request) =>
+        this.EnqueueAsync(() => {
+            try {
+                var binding = this._moduleRegistry.ResolveRootBinding(request.ModuleKey, request.RootKey);
+                var schema = RevitJsonSchemaFactory.CreateEditorSchemaData(
+                    binding.SettingsType,
+                    SettingsRuntimeMode.LiveDocument,
+                    false
+                );
+
+                return new SchemaData(schema.SchemaJson, schema.FragmentSchemaJson);
+            } catch (Exception ex) {
+                throw BridgeOperationExceptions.Unexpected(
+                    "SchemaGenerationException",
+                    ex,
+                    "Check root binding registration and shared authored schema definitions."
+                );
+            }
+        });
+
+    public Task<SchemaData> GetLoadedFamiliesFilterSchemaAsync() =>
+        this.EnqueueAsync(() => {
+            try {
+                var schema = RevitJsonSchemaFactory.CreateEditorSchemaData(
+                    typeof(LoadedFamiliesFilter),
+                    SettingsRuntimeMode.LiveDocument,
+                    false
+                );
+
+                return new SchemaData(schema.SchemaJson, schema.FragmentSchemaJson);
+            } catch (Exception ex) {
+                throw BridgeOperationExceptions.Unexpected(
+                    "SchemaGenerationException",
+                    ex,
+                    "Check loaded families filter schema registration."
+                );
+            }
+        });
+
+    public Task<GetSettingsModuleCatalogBridgeResponse> GetSettingsModuleCatalogAsync(
         GetSettingsModuleCatalogBridgeRequest request
-    ) => await this.EnqueueAsync(() => {
+    ) => this.EnqueueAsync(() => {
         var activeDocument = RevitUiSession.CurrentUIApplication.GetActiveDocument();
         var modules = this._moduleRegistry.GetModules()
-            .OfType<ISettingsModuleManifest>()
             .Where(SettingsModuleAvailability.IsBridgeDiscoverable)
             .Where(module => SettingsModuleAvailability.IsAvailableForDocument(module, activeDocument))
             .OrderBy(module => module.ModuleKey, StringComparer.OrdinalIgnoreCase)
@@ -130,28 +159,23 @@ public class RequestService {
         return new GetSettingsModuleCatalogBridgeResponse(modules);
     });
 
-    private async Task<ParameterCatalogEnvelopeResponse> GetParameterCatalogCore(ParameterCatalogRequest request) =>
-        await this.EnqueueAsync(() => {
+    private Task<ParameterCatalogData> GetParameterCatalogCore(ParameterCatalogRequest request) =>
+        this.EnqueueAsync(() => {
             try {
                 var providerContext = CreateFieldOptionsContext(request.ContextValues);
                 var doc = providerContext.GetActiveDocument();
                 if (doc == null) {
-                    return HostEnvelopeResults
-                        .Failure<ParameterCatalogData>(
-                            EnvelopeCode.NoDocument,
-                            "No active document.",
-                            [
-                                new ValidationIssue(
-                                    "$",
-                                    null,
-                                    "NoActiveDocument",
-                                    "error",
-                                    "No active document.",
-                                    "Open a Revit document and retry."
-                                )
-                            ]
-                        )
-                        .ToParameterCatalogEnvelope();
+                    throw BridgeOperationExceptions.Conflict(
+                        "No active document.",
+                        [
+                            BridgeOperationExceptions.Issue(
+                                "$",
+                                "NoActiveDocument",
+                                "No active document.",
+                                "Open a Revit document and retry."
+                            )
+                        ]
+                    );
                 }
 
                 var entries = ParameterCatalogOptionFactory.Build(providerContext)
@@ -162,33 +186,21 @@ public class RequestService {
                     .Count();
                 var typeCount = entries.SelectMany(e => e.TypeNames).Distinct(StringComparer.Ordinal).Count();
 
-                return HostEnvelopeResults
-                    .Success(
-                        new ParameterCatalogData(entries, familyCount, typeCount),
-                        EnvelopeCode.Ok,
-                        $"Collected {entries.Count} parameter entries across {familyCount} families."
-                    )
-                    .ToParameterCatalogEnvelope();
+                return new ParameterCatalogData(entries, familyCount, typeCount);
+            } catch (BridgeOperationException) {
+                throw;
             } catch (Exception ex) {
-                return HostEnvelopeResults
-                    .Failure<ParameterCatalogData>(
-                        EnvelopeCode.Failed,
-                        ex.Message,
-                        [
-                            HostEnvelopeResults.ExceptionIssue(
-                                "ParameterCatalogException",
-                                ex,
-                                "Verify selected families and active document state."
-                            )
-                        ]
-                    )
-                    .ToParameterCatalogEnvelope();
+                throw BridgeOperationExceptions.Unexpected(
+                    "ParameterCatalogException",
+                    ex,
+                    "Verify selected families and active document state."
+                );
             }
         });
 
-    private async Task<HostEnvelopeResult<FieldOptionsData>> GetLoadedFamiliesFilterFieldOptionsCore(
+    private Task<FieldOptionsData> GetLoadedFamiliesFilterFieldOptionsCore(
         LoadedFamiliesFilterFieldOptionsRequest request
-    ) => await this.EnqueueAsync(() => {
+    ) => this.EnqueueAsync(() => {
         try {
             var fieldOptions = SettingsFieldOptionsService.Shared.GetOptionsAsync(
                     typeof(LoadedFamiliesFilter),
@@ -200,87 +212,31 @@ public class RequestService {
                 .GetAwaiter()
                 .GetResult();
 
-            if (fieldOptions.Kind == FieldOptionsResultKind.Empty)
-                return EmptyFieldOptions(request.SourceKey, fieldOptions.Message);
-
-            if (fieldOptions.Kind == FieldOptionsResultKind.Unsupported) {
-                return HostEnvelopeResults.Failure<FieldOptionsData>(
-                    EnvelopeCode.Failed,
-                    fieldOptions.Message,
-                    [
-                        new ValidationIssue(
-                            "$",
-                            null,
-                            "FieldOptionsUnsupported",
-                            "error",
-                            fieldOptions.Message,
-                            "Check active document state and runtime capability availability."
-                        )
-                    ]
-                ) with {
-                    Data = EmptyFieldOptionsData(request.SourceKey)
-                };
-            }
-
-            if (fieldOptions.Kind == FieldOptionsResultKind.Failure) {
-                return HostEnvelopeResults.Failure<FieldOptionsData>(
-                    EnvelopeCode.Failed,
-                    fieldOptions.Message,
-                    [
-                        new ValidationIssue(
-                            "$",
-                            null,
-                            "FieldOptionsException",
-                            "error",
-                            fieldOptions.Message,
-                            "Check field option source configuration and request path."
-                        )
-                    ]
-                ) with {
-                    Data = EmptyFieldOptionsData(request.SourceKey)
-                };
-            }
-
-            return HostEnvelopeResults.Success(
-                new FieldOptionsData(
-                    request.SourceKey,
-                    FieldOptionsMode.Suggestion,
-                    true,
-                    fieldOptions.Items.Select(ToFieldOptionItem).ToList()
-                ),
-                EnvelopeCode.Ok,
-                fieldOptions.Message
-            );
+            return CreateFieldOptionsData(request.SourceKey, fieldOptions);
+        } catch (BridgeOperationException) {
+            throw;
         } catch (Exception ex) {
             Log.Error(
                 ex,
                 "GetLoadedFamiliesFilterFieldOptions failed for property '{PropertyPath}'",
                 request.PropertyPath
             );
-            return HostEnvelopeResults.Failure<FieldOptionsData>(
-                EnvelopeCode.Failed,
-                ex.Message,
-                [
-                    HostEnvelopeResults.ExceptionIssue(
-                        "FieldOptionsException",
-                        ex,
-                        "Check provider configuration and request path."
-                    )
-                ]
-            ) with {
-                Data = EmptyFieldOptionsData(request.SourceKey)
-            };
+            throw BridgeOperationExceptions.Unexpected(
+                "FieldOptionsException",
+                ex,
+                "Check provider configuration and request path."
+            );
         }
     });
 
-    private async Task<HostEnvelopeResult<FieldOptionsData>> GetFieldOptionsCore(FieldOptionsRequest request) =>
-        await this.EnqueueAsync(() => {
+    private Task<FieldOptionsData> GetFieldOptionsCore(FieldOptionsRequest request) =>
+        this.EnqueueAsync(() => {
             try {
-                var type = this._moduleRegistry.ResolveByModuleKey(request.ModuleKey).SettingsType;
+                var type = this._moduleRegistry.ResolveRootBinding(request.ModuleKey, request.RootKey).SettingsType;
                 var property = SettingsPropertyPathResolver.ResolveProperty(type, request.PropertyPath);
 
                 if (property == null)
-                    return EmptyFieldOptions(request.SourceKey, "Property not found for field options provider.");
+                    return EmptyFieldOptionsData(request.SourceKey);
 
                 var fieldOptions = SettingsFieldOptionsService.Shared.GetOptionsAsync(
                         type,
@@ -292,72 +248,16 @@ public class RequestService {
                     .GetAwaiter()
                     .GetResult();
 
-                if (fieldOptions.Kind == FieldOptionsResultKind.Empty)
-                    return EmptyFieldOptions(request.SourceKey, fieldOptions.Message);
-
-                if (fieldOptions.Kind == FieldOptionsResultKind.Unsupported) {
-                    return HostEnvelopeResults.Failure<FieldOptionsData>(
-                        EnvelopeCode.Failed,
-                        fieldOptions.Message,
-                        [
-                            new ValidationIssue(
-                                "$",
-                                null,
-                                "FieldOptionsUnsupported",
-                                "error",
-                                fieldOptions.Message,
-                                "Check active document state and runtime capability availability."
-                            )
-                        ]
-                    ) with {
-                        Data = EmptyFieldOptionsData(request.SourceKey)
-                    };
-                }
-
-                if (fieldOptions.Kind == FieldOptionsResultKind.Failure) {
-                    return HostEnvelopeResults.Failure<FieldOptionsData>(
-                        EnvelopeCode.Failed,
-                        fieldOptions.Message,
-                        [
-                            new ValidationIssue(
-                                "$",
-                                null,
-                                "FieldOptionsException",
-                                "error",
-                                fieldOptions.Message,
-                                "Check field option source configuration and request path."
-                            )
-                        ]
-                    ) with {
-                        Data = EmptyFieldOptionsData(request.SourceKey)
-                    };
-                }
-
-                return HostEnvelopeResults.Success(
-                    new FieldOptionsData(
-                        request.SourceKey,
-                        FieldOptionsMode.Suggestion,
-                        true,
-                        fieldOptions.Items.Select(ToFieldOptionItem).ToList()
-                    ),
-                    EnvelopeCode.Ok,
-                    fieldOptions.Message
-                );
+                return CreateFieldOptionsData(request.SourceKey, fieldOptions);
+            } catch (BridgeOperationException) {
+                throw;
             } catch (Exception ex) {
                 Log.Error(ex, "GetFieldOptions failed for property '{PropertyPath}'", request.PropertyPath);
-                return HostEnvelopeResults.Failure<FieldOptionsData>(
-                    EnvelopeCode.Failed,
-                    ex.Message,
-                    [
-                        HostEnvelopeResults.ExceptionIssue(
-                            "FieldOptionsException",
-                            ex,
-                            "Check provider configuration and request path."
-                        )
-                    ]
-                ) with {
-                    Data = EmptyFieldOptionsData(request.SourceKey)
-                };
+                throw BridgeOperationExceptions.Unexpected(
+                    "FieldOptionsException",
+                    ex,
+                    "Check provider configuration and request path."
+                );
             }
         });
 
@@ -365,15 +265,35 @@ public class RequestService {
         var queueStopwatch = Stopwatch.StartNew();
         Log.Information("Settings editor request queue starting: ResultType={ResultType}", typeof(T).Name);
         T? result = default;
+        Exception? failure = null;
+        var completed = false;
         _ = await this._revitTaskService.Run(async () => {
             Log.Information(
                 "Settings editor request queue running on Revit thread after {ElapsedMs} ms: ResultType={ResultType}",
                 queueStopwatch.ElapsedMilliseconds,
                 typeof(T).Name
             );
-            result = action();
+            try {
+                result = action();
+                completed = true;
+            } catch (Exception ex) {
+                failure = ex;
+            }
+
             await Task.CompletedTask;
         });
+
+        if (failure != null)
+            ExceptionDispatchInfo.Capture(failure).Throw();
+
+        if (!completed) {
+            throw BridgeOperationExceptions.Unexpected(
+                "RequestQueueNoResult",
+                new InvalidOperationException($"Revit request queue produced no result for '{typeof(T).Name}'."),
+                "Check the Revit task queue execution path for swallowed exceptions."
+            );
+        }
+
         Log.Information(
             "Settings editor request queue completed in {ElapsedMs} ms: ResultType={ResultType}",
             queueStopwatch.ElapsedMilliseconds,
@@ -382,12 +302,48 @@ public class RequestService {
         return result!;
     }
 
-    private static HostEnvelopeResult<FieldOptionsData> EmptyFieldOptions(string sourceKey, string message) =>
-        HostEnvelopeResults.Success(
-            EmptyFieldOptionsData(sourceKey),
-            EnvelopeCode.Ok,
-            message
+    private static FieldOptionsData CreateFieldOptionsData(
+        string sourceKey,
+        FieldOptionsResult fieldOptions
+    ) {
+        if (fieldOptions.Kind == FieldOptionsResultKind.Empty)
+            return EmptyFieldOptionsData(sourceKey);
+
+        if (fieldOptions.Kind == FieldOptionsResultKind.Unsupported) {
+            throw BridgeOperationExceptions.Conflict(
+                fieldOptions.Message,
+                [
+                    BridgeOperationExceptions.Issue(
+                        "$",
+                        "FieldOptionsUnsupported",
+                        fieldOptions.Message,
+                        "Check active document state and runtime capability availability."
+                    )
+                ]
+            );
+        }
+
+        if (fieldOptions.Kind == FieldOptionsResultKind.Failure) {
+            throw BridgeOperationExceptions.Conflict(
+                fieldOptions.Message,
+                [
+                    BridgeOperationExceptions.Issue(
+                        "$",
+                        "FieldOptionsException",
+                        fieldOptions.Message,
+                        "Check field option source configuration and request path."
+                    )
+                ]
+            );
+        }
+
+        return new FieldOptionsData(
+            sourceKey,
+            FieldOptionsMode.Suggestion,
+            true,
+            fieldOptions.Items.Select(ToFieldOptionItem).ToList()
         );
+    }
 
     private static FieldOptionsData EmptyFieldOptionsData(string sourceKey) =>
         new(
@@ -427,6 +383,7 @@ public class RequestService {
         string? connectionId,
         string endpoint,
         string moduleKey,
+        string? rootKey,
         string? propertyPath,
         IReadOnlyDictionary<string, string>? siblingValues
     ) {
@@ -439,7 +396,7 @@ public class RequestService {
                     .Select(pair => $"{pair.Key}={pair.Value}")
             );
         return
-            $"{connectionId ?? "no-connection"}:{endpoint}:{moduleKey}:{propertyPath ?? string.Empty}:{siblingSignature}";
+            $"{connectionId ?? "no-connection"}:{endpoint}:{moduleKey}:{rootKey ?? string.Empty}:{propertyPath ?? string.Empty}:{siblingSignature}";
     }
 
     private static void LogThrottleDecision(

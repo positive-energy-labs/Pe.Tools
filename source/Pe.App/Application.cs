@@ -60,13 +60,11 @@ public class Application : ExternalApplication {
         // Initialize the settings editor bridge metadata. Bridge connection remains manual
         // unless PE_SETTINGS_BRIDGE_AUTO_CONNECT is explicitly enabled.
         HostRuntime.Initialize(revitTaskService, registry => {
-            SettingsModuleCatalogComposer.RegisterRevitModules(
-                registry,
-                StorageRuntimeNeutralSettingsModules.All,
-                RevitSettingsRuntimeModules.All,
-                RevitGlobalSettingsModules.All,
-                FamilyFoundrySettingsModules.All
-            );
+            registry.RegisterModules(StorageRuntimeStructuralModules.All);
+            registry.RegisterModules(RevitSettingsRuntimeRegistration.StructuralModules);
+            registry.RegisterRootBindings(RevitSettingsRuntimeRegistration.RootBindings);
+            registry.RegisterModules(FamilyFoundrySettingsRegistration.StructuralModules);
+            registry.RegisterRootBindings(FamilyFoundrySettingsRegistration.RootBindings);
         });
         _scriptingPipeServer = new ScriptingPipeServer(new ScriptingPipeMessageHandler(
             () => RevitUiSession.CurrentUIApplication,
@@ -184,6 +182,7 @@ public class Application : ExternalApplication {
             Log.Fatal(exception, "Domain unhandled exception");
         };
     }
+
 }
 
 internal sealed class RevitAppLogSink(ManagedLogFile logFile, string outputTemplate) : ILogEventSink {

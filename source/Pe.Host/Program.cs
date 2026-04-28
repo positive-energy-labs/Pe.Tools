@@ -1,4 +1,4 @@
-using Pe.Host;
+﻿using Pe.Host;
 using Pe.Host.Operations;
 using Pe.Host.Services;
 using Pe.Shared.HostContracts.Protocol;
@@ -15,9 +15,8 @@ if (singletonHandle == null)
     return;
 
 var builder = WebApplication.CreateBuilder(args);
-var basePath = SettingsStorageLocations.GetDefaultBasePath();
 var hostLogFile = new ManagedLogFile(
-    GlobalStorageLocations.ResolveHostLogPath(basePath),
+    GlobalStorageLocations.ResolveHostLogPath(),
     HostProcessLogMaxLines,
     HostLogTrimThresholdBytes
 );
@@ -34,9 +33,9 @@ builder.Services.AddSingleton<IHostBridgeCapabilityService, HostBridgeCapability
 builder.Services.AddSingleton<IHostScriptingPipeClientService, HostScriptingPipeClientService>();
 builder.Services.AddSingleton<IHostSettingsModuleCatalog, HostSettingsModuleCatalog>();
 builder.Services.AddSingleton<HostSettingsRuntimeStateService>();
-builder.Services.AddSingleton<HostSchemaService>();
 builder.Services.AddSingleton(sp => new HostSettingsStorageService(
-    sp.GetRequiredService<IHostSettingsModuleCatalog>()));
+    sp.GetRequiredService<IHostSettingsModuleCatalog>(),
+    sp.GetRequiredService<BridgeServer>()));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BridgeServer>());
 builder.Services.AddHostedService<HostIdleMonitorService>();
 builder.Services.ConfigureHttpJsonOptions(jsonOptions => {

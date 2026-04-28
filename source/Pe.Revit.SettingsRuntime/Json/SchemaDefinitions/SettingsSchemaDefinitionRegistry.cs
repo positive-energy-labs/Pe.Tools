@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 
 namespace Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
 
@@ -53,9 +53,6 @@ public sealed class SettingsSchemaDefinitionRegistry : ISettingsSchemaDefinition
         string.Equals(left.Id, right.Id, StringComparison.OrdinalIgnoreCase) &&
         string.Equals(left.Provider, right.Provider, StringComparison.OrdinalIgnoreCase) &&
         left.LoadMode == right.LoadMode &&
-        left.StaleOn.OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
-            .SequenceEqual(right.StaleOn.OrderBy(value => value, StringComparer.OrdinalIgnoreCase),
-                StringComparer.OrdinalIgnoreCase) &&
         left.SupportedProjections.OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .SequenceEqual(
                 right.SupportedProjections.OrderBy(value => value, StringComparer.OrdinalIgnoreCase),

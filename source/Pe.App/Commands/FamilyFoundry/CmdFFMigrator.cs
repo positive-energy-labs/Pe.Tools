@@ -28,7 +28,7 @@ namespace Pe.App.Commands.FamilyFoundry;
 public class CmdFFMigrator : IExternalCommand {
     public const string AddinKey = nameof(CmdFFMigrator);
     public const string DisplayName = "FF Migrator";
-    private static readonly SettingsModuleManifest<FFMigratorProfile> SettingsModule = FFMigratorManifest.Module;
+    private static readonly ISettingsRootBinding<FFMigratorProfile> SettingsRoot = FFMigratorSettingsRegistration.Root;
 
     public Result Execute(
         ExternalCommandData commandData,
@@ -39,7 +39,7 @@ public class CmdFFMigrator : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var window = new FoundryPaletteBuilder<FFMigratorProfile>(DisplayName, SettingsModule, doc, uiDoc)
+            var window = new FoundryPaletteBuilder<FFMigratorProfile>(DisplayName, SettingsRoot, doc, uiDoc)
                 .WithAction("Open Settings Editor", this.HandleOpenSettingsEditor)
                 .WithAction("Open Profile File", this.HandleOpenFile,
                     ctx => ctx.SelectedProfile != null)
@@ -66,7 +66,7 @@ public class CmdFFMigrator : IExternalCommand {
         try {
             var profile = ReadProfile(
                 context.SelectedProfile.TextPrimary,
-                SettingsModule.DefaultRootKey
+                SettingsRoot.RootKey
             );
             var placeResult = PlaceFamiliesCore(context.UiDoc.Application, profile);
             var level = placeResult.Success ? LogEventLevel.Information : LogEventLevel.Error;
@@ -83,7 +83,7 @@ public class CmdFFMigrator : IExternalCommand {
         if (context.SelectedProfile == null) return;
         var result = OpenProfileInDefaultApp(
             context.SelectedProfile.TextPrimary,
-            SettingsModule.DefaultRootKey
+            SettingsRoot.RootKey
         );
         var level = result.Success ? LogEventLevel.Information : LogEventLevel.Warning;
         var message = result.Success
@@ -103,7 +103,7 @@ public class CmdFFMigrator : IExternalCommand {
 
         var profile = ReadProfile(
             ctx.SelectedProfile.TextPrimary,
-            SettingsModule.DefaultRootKey
+            SettingsRoot.RootKey
         );
         var runOutput = RuntimeStorageClient.Default.Module(AddinKey).Output().TimestampedSubDir();
         var selectedFamilies = Pickers.GetSelectedFamilies(ctx.UiDoc);
@@ -133,8 +133,8 @@ public class CmdFFMigrator : IExternalCommand {
     private void HandleOpenSettingsEditor(FoundryContext<FFMigratorProfile> context) {
         var selectedProfileName = context.SelectedProfile?.TextPrimary;
         var launched = SettingsEditorBrowser.TryLaunch(
-            SettingsModule.ModuleKey,
-            SettingsModule.DefaultRootKey,
+            SettingsRoot.Module.ModuleKey,
+            SettingsRoot.RootKey,
             selectedProfileName
         );
         if (launched) {
@@ -279,11 +279,11 @@ public class CmdFFMigrator : IExternalCommand {
     }
 
     private static ModuleStorage<FFMigratorProfile> ResolveStorage() =>
-        RuntimeStorageClient.Default.Module(SettingsModule);
+        RuntimeStorageClient.Default.Root(SettingsRoot);
 
     private static string ResolveRootKey(string? subDirectory) =>
         string.IsNullOrWhiteSpace(subDirectory)
-            ? SettingsModule.DefaultRootKey
+            ? SettingsRoot.RootKey
             : subDirectory;
 }
 

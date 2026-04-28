@@ -1,8 +1,8 @@
-using Autodesk.Revit.Attributes;
+﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Pe.App.Commands.Schedules.Ui;
-using Pe.Revit.Extensions.Schedules;
+using Pe.Revit.DocumentData.Schedules;
 using Pe.Revit.Global.Ui;
 using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.SettingsRuntime.Modules.Schedules;
@@ -29,7 +29,7 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var storage = RuntimeStorageClient.Default.Module(ScheduleManagerSettingsManifest.ModuleKey);
+            var storage = RuntimeStorageClient.Default.Module(ScheduleManagerSettingsRegistration.ModuleKey);
 
             // Collect all schedules in the document
             var serializeItems = new FilteredElementCollector(doc)
@@ -183,3 +183,5 @@ public class ScheduleSerializePreviewData {
     public bool IsValid { get; set; }
     public string? ErrorMessage { get; set; }
 }
+
+// PE_HOT_RELOAD_NUDGE

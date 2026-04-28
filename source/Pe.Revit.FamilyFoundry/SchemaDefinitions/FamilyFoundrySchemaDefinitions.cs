@@ -1,6 +1,8 @@
 using Pe.Revit.FamilyFoundry.Operations;
+using Pe.Revit.SettingsRuntime.Json.FieldOptions;
 using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
 using Pe.Revit.SettingsRuntime.Json.SchemaProviders;
+using Pe.Shared.StorageRuntime.Capabilities;
 using System.Runtime.CompilerServices;
 
 namespace Pe.Revit.FamilyFoundry.SchemaDefinitions;
@@ -14,62 +16,113 @@ internal sealed class MappingDataSchemaDefinition : SettingsSchemaDefinition<Map
                 SchemaProjectionKeys.FamilyParameterNames
             );
         });
-        builder.Property(item => item.NewName, property => property.UseFieldOptions<SharedParameterNamesProvider>());
+        builder.Property(item => item.NewName, property => property.UseFieldOptions(
+            FieldOptionsProviderKeys.SharedParameterNames,
+            SettingsRuntimeMode.LiveDocument
+        ));
     }
 }
 
 internal sealed class IncludeFamiliesSchemaDefinition : SettingsSchemaDefinition<IncludeFamilies> {
     public override void Configure(ISettingsSchemaBuilder<IncludeFamilies> builder) {
-        builder.Property(item => item.Equaling, property => property.UseFieldOptions<FamilyNamesProvider>());
-        builder.Property(item => item.Containing, property => property.UseFieldOptions<FamilyNamesProvider>());
-        builder.Property(item => item.StartingWith, property => property.UseFieldOptions<FamilyNamesProvider>());
+        builder.Property(item => item.Equaling, property => property.UseFieldOptions(
+            FieldOptionsProviderKeys.FamilyNames,
+            SettingsRuntimeMode.LiveDocument
+        ));
+        builder.Property(item => item.Containing, property => property.UseFieldOptions(
+            FieldOptionsProviderKeys.FamilyNames,
+            SettingsRuntimeMode.LiveDocument
+        ));
+        builder.Property(item => item.StartingWith, property => property.UseFieldOptions(
+            FieldOptionsProviderKeys.FamilyNames,
+            SettingsRuntimeMode.LiveDocument
+        ));
     }
 }
 
 internal sealed class ExcludeFamiliesSchemaDefinition : SettingsSchemaDefinition<ExcludeFamilies> {
     public override void Configure(ISettingsSchemaBuilder<ExcludeFamilies> builder) {
-        builder.Property(item => item.Equaling, property => property.UseFieldOptions<FamilyNamesProvider>());
-        builder.Property(item => item.Containing, property => property.UseFieldOptions<FamilyNamesProvider>());
-        builder.Property(item => item.StartingWith, property => property.UseFieldOptions<FamilyNamesProvider>());
+        builder.Property(item => item.Equaling, property => property.UseFieldOptions(
+            FieldOptionsProviderKeys.FamilyNames,
+            SettingsRuntimeMode.LiveDocument
+        ));
+        builder.Property(item => item.Containing, property => property.UseFieldOptions(
+            FieldOptionsProviderKeys.FamilyNames,
+            SettingsRuntimeMode.LiveDocument
+        ));
+        builder.Property(item => item.StartingWith, property => property.UseFieldOptions(
+            FieldOptionsProviderKeys.FamilyNames,
+            SettingsRuntimeMode.LiveDocument
+        ));
     }
 }
 
 internal sealed class IncludeSharedParameterSchemaDefinition : SettingsSchemaDefinition<IncludeSharedParameter> {
     public override void Configure(ISettingsSchemaBuilder<IncludeSharedParameter> builder) {
-        builder.Property(item => item.Equaling, property => property.UseFieldOptions<SharedParameterNamesProvider>());
-        builder.Property(item => item.Containing, property => property.UseFieldOptions<SharedParameterNamesProvider>());
+        builder.Property(item => item.Equaling, property => property.UseFieldOptions(
+            FieldOptionsProviderKeys.SharedParameterNames,
+            SettingsRuntimeMode.LiveDocument
+        ));
+        builder.Property(item => item.Containing, property => property.UseFieldOptions(
+            FieldOptionsProviderKeys.SharedParameterNames,
+            SettingsRuntimeMode.LiveDocument
+        ));
         builder.Property(item => item.StartingWith,
-            property => property.UseFieldOptions<SharedParameterNamesProvider>());
+            property => property.UseFieldOptions(
+                FieldOptionsProviderKeys.SharedParameterNames,
+                SettingsRuntimeMode.LiveDocument
+            ));
     }
 }
 
 internal sealed class ExcludeSharedParameterSchemaDefinition : SettingsSchemaDefinition<ExcludeSharedParameter> {
     public override void Configure(ISettingsSchemaBuilder<ExcludeSharedParameter> builder) {
-        builder.Property(item => item.Equaling, property => property.UseFieldOptions<SharedParameterNamesProvider>());
-        builder.Property(item => item.Containing, property => property.UseFieldOptions<SharedParameterNamesProvider>());
+        builder.Property(item => item.Equaling, property => property.UseFieldOptions(
+            FieldOptionsProviderKeys.SharedParameterNames,
+            SettingsRuntimeMode.LiveDocument
+        ));
+        builder.Property(item => item.Containing, property => property.UseFieldOptions(
+            FieldOptionsProviderKeys.SharedParameterNames,
+            SettingsRuntimeMode.LiveDocument
+        ));
         builder.Property(item => item.StartingWith,
-            property => property.UseFieldOptions<SharedParameterNamesProvider>());
+            property => property.UseFieldOptions(
+                FieldOptionsProviderKeys.SharedParameterNames,
+                SettingsRuntimeMode.LiveDocument
+            ));
     }
 }
 
 internal sealed class
     FilterFamiliesSettingsSchemaDefinition : SettingsSchemaDefinition<BaseProfile.FilterFamiliesSettings> {
-    public override void Configure(ISettingsSchemaBuilder<BaseProfile.FilterFamiliesSettings> builder) =>
+    public override void Configure(ISettingsSchemaBuilder<BaseProfile.FilterFamiliesSettings> builder) {
+        builder.Property(item => item.IncludeCategoriesEqualing,
+            property => property.UseFieldOptions(
+                FieldOptionsProviderKeys.CategoryNames,
+                SettingsRuntimeMode.LiveDocument
+            ));
         builder.Property(item => item.IncludeByCondition,
             property => property.WithDescription(
                 "Optional conditional filter based on family parameter values. Uses schedule filter logic to evaluate parameter conditions. Leave FieldName empty to disable this filter."));
+    }
 }
 
 internal sealed class GlobalParamAssignmentSchemaDefinition : SettingsSchemaDefinition<GlobalParamAssignment> {
     public override void Configure(ISettingsSchemaBuilder<GlobalParamAssignment> builder) =>
         builder.Property(item => item.Parameter,
-            property => property.UseFieldOptions<SharedParameterNamesProvider>());
+            property => property.UseFieldOptions(
+                FieldOptionsProviderKeys.SharedParameterNames,
+                SettingsRuntimeMode.LiveDocument
+            ));
 }
 
 internal sealed class PerTypeAssignmentRowSchemaDefinition : SettingsSchemaDefinition<PerTypeAssignmentRow> {
     public override void Configure(ISettingsSchemaBuilder<PerTypeAssignmentRow> builder) =>
         builder.Property(item => item.Parameter,
-            property => property.UseFieldOptions<SharedParameterNamesProvider>());
+            property => property.UseFieldOptions(
+                FieldOptionsProviderKeys.SharedParameterNames,
+                SettingsRuntimeMode.LiveDocument
+            ));
 }
 
 internal sealed class SetKnownParamsSettingsSchemaDefinition : SettingsSchemaDefinition<SetKnownParamsSettings> {
@@ -98,12 +151,24 @@ internal sealed class MakeElecConnectorParametersSchemaDefinition
     : SettingsSchemaDefinition<MakeElecConnectorSettings.Parameters> {
     public override void Configure(ISettingsSchemaBuilder<MakeElecConnectorSettings.Parameters> builder) {
         builder.Property(item => item.NumberOfPoles,
-            property => property.UseFieldOptions<SharedParameterNamesProvider>());
+            property => property.UseFieldOptions(
+                FieldOptionsProviderKeys.SharedParameterNames,
+                SettingsRuntimeMode.LiveDocument
+            ));
         builder.Property(item => item.ApparentPower,
-            property => property.UseFieldOptions<SharedParameterNamesProvider>());
-        builder.Property(item => item.Voltage, property => property.UseFieldOptions<SharedParameterNamesProvider>());
+            property => property.UseFieldOptions(
+                FieldOptionsProviderKeys.SharedParameterNames,
+                SettingsRuntimeMode.LiveDocument
+            ));
+        builder.Property(item => item.Voltage, property => property.UseFieldOptions(
+            FieldOptionsProviderKeys.SharedParameterNames,
+            SettingsRuntimeMode.LiveDocument
+        ));
         builder.Property(item => item.MinimumCircuitAmpacity,
-            property => property.UseFieldOptions<SharedParameterNamesProvider>());
+            property => property.UseFieldOptions(
+                FieldOptionsProviderKeys.SharedParameterNames,
+                SettingsRuntimeMode.LiveDocument
+            ));
     }
 }
 
@@ -150,4 +215,3 @@ public static class FamilyFoundrySchemaDefinitionBootstrapper {
              StringComparison.OrdinalIgnoreCase)) ||
         (ex.InnerException is not null && IsMissingRevitAssembly(ex.InnerException));
 }
-

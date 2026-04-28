@@ -1,11 +1,12 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using Pe.Shared.HostContracts.SettingsStorage;
 
 namespace Pe.Shared.HostContracts.Protocol;
 
 public static class BridgeProtocol {
     public const string Transport = "named-pipes";
-    public const int ContractVersion = 15;
+    public const int ContractVersion = 16;
     public const string DefaultPipeName = SettingsEditorRuntime.DefaultPipeName;
 }
 
@@ -53,7 +54,15 @@ public record BridgeResponse(
     bool Ok,
     string? PayloadJson,
     string? ErrorMessage,
+    int? StatusCode,
+    List<ValidationIssue>? Issues,
     PerformanceMetrics Metrics
+);
+
+public record BridgeFaultDetails(
+    int StatusCode,
+    string Message,
+    List<ValidationIssue> Issues
 );
 
 public record BridgeEvent(

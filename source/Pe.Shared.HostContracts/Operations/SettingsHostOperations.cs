@@ -1,6 +1,6 @@
-using Pe.Shared.HostContracts.Protocol;
-using Pe.Shared.HostContracts.RevitData;
+﻿using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts.SettingsStorage;
+using Pe.Shared.RevitData;
 
 namespace Pe.Shared.HostContracts.Operations;
 
@@ -17,11 +17,11 @@ public static class GetHostStatusOperationContract {
 
 public static class GetSchemaOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<SchemaRequest, SchemaEnvelopeResponse>(
+        HostOperationDefinition.Create<SchemaRequest, SchemaData>(
             "settings.schema",
             HostHttpVerb.Post,
             "/api/settings/schema",
-            HostExecutionMode.Local,
+            HostExecutionMode.Bridge,
             "Get Schema"
         );
 }
@@ -61,7 +61,7 @@ public static class GetSettingsModuleCatalogBridgeOperationContract {
 
 public static class GetFieldOptionsOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<FieldOptionsRequest, FieldOptionsEnvelopeResponse>(
+        HostOperationDefinition.Create<FieldOptionsRequest, FieldOptionsData>(
             "settings.field-options",
             HostHttpVerb.Post,
             "/api/settings/field-options",
@@ -72,12 +72,11 @@ public static class GetFieldOptionsOperationContract {
 
 public static class GetParameterCatalogOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<ParameterCatalogRequest, ParameterCatalogEnvelopeResponse>(
+        HostOperationDefinition.Create<ParameterCatalogRequest, ParameterCatalogData>(
             "settings.parameter-catalog",
             HostHttpVerb.Post,
             "/api/settings/parameter-catalog",
             HostExecutionMode.Bridge,
-            "Get Parameter Catalog",
-            new HostCachePolicy("parameter-catalog", 300)
+            "Get Parameter Catalog"
         );
 }

@@ -1,4 +1,4 @@
-namespace Pe.Shared.HostContracts.Operations;
+﻿namespace Pe.Shared.HostContracts.Operations;
 
 public enum HostExecutionMode {
     Local,
@@ -10,11 +10,6 @@ public enum HostHttpVerb {
     Post
 }
 
-public sealed record HostCachePolicy(
-    string Name,
-    int? TtlSeconds = null
-);
-
 public sealed record HostOperationDefinition(
     string Key,
     HostHttpVerb Verb,
@@ -22,16 +17,14 @@ public sealed record HostOperationDefinition(
     HostExecutionMode ExecutionMode,
     Type RequestType,
     Type ResponseType,
-    string? DisplayName = null,
-    HostCachePolicy? CachePolicy = null
+    string? DisplayName = null
 ) {
     public static HostOperationDefinition Create<TRequest, TResponse>(
         string key,
         HostHttpVerb verb,
         string route,
         HostExecutionMode executionMode,
-        string? displayName = null,
-        HostCachePolicy? cachePolicy = null
+        string? displayName = null
     ) => new(
         key,
         verb,
@@ -39,20 +32,8 @@ public sealed record HostOperationDefinition(
         executionMode,
         typeof(TRequest),
         typeof(TResponse),
-        displayName,
-        cachePolicy
+        displayName
     );
-}
-
-public interface IHostDataEnvelope {
-    bool Ok { get; }
-    string Message { get; }
-
-    object? GetData();
-}
-
-public interface IHostDataEnvelope<out TData> : IHostDataEnvelope {
-    TData? Data { get; }
 }
 
 public sealed record NoRequest;

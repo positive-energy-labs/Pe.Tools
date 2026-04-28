@@ -1,10 +1,10 @@
-using Autodesk.Revit.Attributes;
+﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Pe.App.Commands.Palette.FamilyPalette;
 using Pe.App.Commands.Schedules.Ui;
 using Pe.Revit.DocumentData.Schedules.Runtime;
-using Pe.Revit.Extensions.Schedules;
+using Pe.Revit.DocumentData.Schedules;
 using Pe.Revit.Global.Ui;
 using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.SettingsRuntime.Json.SchemaProviders;
@@ -35,9 +35,9 @@ public class CmdScheduleManager : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var storage = RuntimeStorageClient.Default.Module(ScheduleManagerSettingsManifest.ModuleKey);
-            var profilesStorage = RuntimeStorageClient.Default.Module(ScheduleManagerSettingsManifest.Profiles);
-            var batchStorage = RuntimeStorageClient.Default.Module(ScheduleManagerSettingsManifest.Batch);
+            var storage = RuntimeStorageClient.Default.Module(ScheduleManagerSettingsRegistration.ModuleKey);
+            var profilesStorage = RuntimeStorageClient.Default.Root(ScheduleManagerSettingsRegistration.Profiles);
+            var batchStorage = RuntimeStorageClient.Default.Root(ScheduleManagerSettingsRegistration.Batch);
 
             // Context for Schedule tabs
             var context = new ScheduleManagerContext {
@@ -649,3 +649,5 @@ public class SchedulePaletteItemWrapper : ISchedulePaletteItem {
     public BitmapImage? Icon => this._inner.Icon;
     public Color? ItemColor => this._inner.ItemColor;
 }
+
+// PE_HOT_RELOAD_NUDGE

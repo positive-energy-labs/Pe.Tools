@@ -19,9 +19,8 @@ proxied Revit workflows.
 - `Services/HostScriptingPipeClientService.cs` - sync proxy from host scripting endpoints to the internal Revit
   scripting pipe.
 - `Services/HostSettingsStorageService.cs` - open/save/validate/sync path for settings documents.
-- `Services/HostSchemaService.cs` - schema caching and structural schema generation.
 - `Services/HostSettingsModuleCatalog.cs` - host-visible module exposure from the registry.
-- `Services/HostEventStreamService.cs` - settings SSE fan-out/invalidation path.
+- `Services/HostEventStreamService.cs` - settings SSE fan-out/freshness path.
 - `Services/LoadedFamiliesFilterSchemaDefinitions.cs` - host-owned special-case schema registration.
 
 ## Validation
@@ -36,17 +35,20 @@ proxied Revit workflows.
 | Term                      | Meaning                                                                      | Prefer / Avoid                                   |
 |---------------------------|------------------------------------------------------------------------------|--------------------------------------------------|
 | **host-only**             | Structural behavior available without a live Revit document                  | Avoid implying smart/live options are available  |
-| **schema envelope**       | The host response wrapper around generated schema data and issues            | Avoid using it as a synonym for raw JSON schema  |
-| **settings event stream** | `/api/settings/events` invalidation SSE for document and host-status changes | Avoid using it for unrelated streaming workflows |
+| **settings event stream** | `/api/settings/events` freshness SSE for document and host-status changes    | Avoid using it for unrelated streaming workflows |
 | **scripting proxy**       | Host-local sync forwarder from `/api/scripting/*` to `Pe.Scripting.Revit`    | Avoid calling it a bridge operation              |
 
 ## Living Memory
 
 - Prefer host-side iteration when possible; unlike Pe.App, host work usually does not consume the active RRD session.
+- `Pe.Host` is a headless local runtime. Do not grow host-owned WPF windows, update dialogs, or dual server/CLI entrypoint behavior here.
 - Keep HTTP as the source of truth for request/response workflows.
-- Keep `/api/settings/events` invalidation-only.
+- Keep `/api/settings/events` focused on host/document freshness only, not route-level invalidation.
+- Supported deployed install is per-user. Installed runtime binaries live under `%LocalAppData%\Positive Energy\Pe.Tools\Host\`.
 - `Pe.Host` should not grow Revit-side fallback logic. If data needs the active document/thread, route it through the
   bridge.
+- Bridge-backed routes now assume exactly one connected Revit session and the active document as the only target.
+- Public HTTP should return raw DTO payloads on success and `ProblemDetails` on failure. Do not reintroduce envelope-style wrappers.
 - Every new endpoint is part of the effective agent tool budget. Add host surfaces sparingly and prefer a few durable
   contracts over one endpoint per raw Revit type or operation.
 - The endpoint bar is not just "is this useful?" but "does this create a stable contract that hides meaningful Revit
@@ -65,8 +67,8 @@ proxied Revit workflows.
   sessions, multiple sessions, or scripting pipe unavailable.
 - Keep the distinction sharp: scripting uses public host HTTP plus an internal scripting-pipe proxy; it is not a
   first-class bridge operation.
-- `HostSchemaService` caches by module key. If schema changes appear stale, verify the requested module key and cache
-  behavior before blaming the schema processors.
+- Settings schemas are bridge-backed and root-scoped. If schema changes appear stale, verify the requested module key,
+  root key, and connected Revit session before blaming the schema processors.
 - `HostSettingsModuleCatalog` is registry-driven, so new manifests should surface here automatically once registered.
 - When documenting the frontend contract, point to the concrete routes and DTOs this project actually exposes, not older
   refactor notes.

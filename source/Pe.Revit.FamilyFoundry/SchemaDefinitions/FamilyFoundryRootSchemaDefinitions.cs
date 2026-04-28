@@ -9,7 +9,6 @@ internal sealed class ProfileFamilyManagerSchemaDefinition : SettingsSchemaDefin
         builder.Data(SchemaDatasetIds.ParameterCatalog, data => {
             data.Provider(SchemaDatasetIds.ParameterCatalog);
             data.Load(SettingsSchemaDatasetLoadMode.Eager);
-            data.StaleOn(SchemaInvalidationKeys.DocumentChanged);
             data.SupportsProjection(SchemaProjectionKeys.FamilyParameterNames);
         });
 }
@@ -19,7 +18,6 @@ internal sealed class ProfileRemapSchemaDefinition : SettingsSchemaDefinition<FF
         builder.Data(SchemaDatasetIds.ParameterCatalog, data => {
             data.Provider(SchemaDatasetIds.ParameterCatalog);
             data.Load(SettingsSchemaDatasetLoadMode.Eager);
-            data.StaleOn(SchemaInvalidationKeys.DocumentChanged);
             data.SupportsProjection(SchemaProjectionKeys.FamilyParameterNames);
         });
 }
@@ -58,4 +56,3 @@ public static class FamilyFoundryRootSchemaDefinitionBootstrapper {
              StringComparison.OrdinalIgnoreCase)) ||
         (ex.InnerException is not null && IsMissingRevitAssembly(ex.InnerException));
 }
-
