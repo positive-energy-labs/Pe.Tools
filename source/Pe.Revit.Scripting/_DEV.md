@@ -16,7 +16,7 @@ source becomes a running `PeScriptContainer`.
       `ScriptExecutionPlan`
 - dependency resolution:
     - `ScriptReferenceResolver` reads `PeScripts.csproj` and produces separate compile-reference and runtime-reference
-      sets
+      sets plus project-level ambient `Using` directives
 - compile/load:
     - `ScriptCompilationService` compiles the normalized source set
     - `ScriptAssemblyLoadService` prepares metadata references and exact-name runtime assembly resolution
@@ -34,6 +34,8 @@ source becomes a running `PeScriptContainer`.
     - create or refresh `Documents\Pe.Scripting\workspace\<key>`
     - regenerate `PeScripts.csproj`
     - preserve user DLL and package references
+    - regenerate supported ambient `Using` entries and repo-runtime references such as `Pe.Revit.Scripting` and
+      `Pe.Revit` when available
     - ensure `README.md`, `AGENTS.md`, `.vscode/settings.json`, and sample source
 - host-backed execute:
     - caller hits `Pe.Host`
@@ -42,6 +44,12 @@ source becomes a running `PeScriptContainer`.
     - the Revit thread returns one final result payload
 - local Revit bootstrap/open:
     - Revit commands can still use the bootstrap/runtime pieces directly without going through host
+
+## Validation Posture
+
+- Plain terminal `dotnet build` now proves the isolated compile lane by default. It does not refresh the live Revit runtime assemblies.
+- If you edit runtime packages and want to validate through `pe-dev revit script ...`, build the package-local interactive outputs first and run `pe-dev revit sync-runtime` before the script command.
+- `pe-dev revit script` no longer hides that runtime-sync step for you.
 
 ## Open Questions
 

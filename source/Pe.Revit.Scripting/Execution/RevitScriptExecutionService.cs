@@ -123,7 +123,11 @@ public sealed class RevitScriptExecutionService(
             }
 
             using (runtimeReferenceScope.ResolverScope) {
-                var compilationResult = this.CompileScript(plan, runtimeReferenceScope.MetadataReferences);
+                var compilationResult = this.CompileScript(
+                    plan,
+                    runtimeReferenceScope.MetadataReferences,
+                    resolvedProject.Usings
+                );
                 Log.Information(
                     "Revit scripting compile completed: ExecutionId={ExecutionId}, Success={Success}, Diagnostics={DiagnosticCount}",
                     executionId,
@@ -312,7 +316,7 @@ public sealed class RevitScriptExecutionService(
             throw new ArgumentException("ScriptContent is required for inline snippets.", nameof(scriptContent));
 
         var fullPath = RevitScriptingStorageLocations.ResolveLastInlineScriptPath(workspaceKey);
-        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         File.WriteAllText(fullPath, scriptContent);
 
         return new ScriptSourceSet([
@@ -367,10 +371,12 @@ public sealed class RevitScriptExecutionService(
 
     private ScriptCompilationResult CompileScript(
         ScriptExecutionPlan plan,
-        IReadOnlyList<MetadataReference> metadataReferences
+        IReadOnlyList<MetadataReference> metadataReferences,
+        IReadOnlyList<string> projectUsings
     ) => this._compilationService.Compile(
         plan.SourceSet,
-        metadataReferences
+        metadataReferences,
+        projectUsings
     );
 
     private RevitScriptContext BuildExecutionContext(

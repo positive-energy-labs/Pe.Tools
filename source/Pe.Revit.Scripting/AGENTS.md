@@ -28,7 +28,7 @@ workspace flow stable and explicit while staying transport-agnostic from the pro
   runs.
 - If you change the supported authoring contract, update the generated workspace templates in
   `Bootstrap/ScriptFileTemplates.cs` in the same pass.
-- For compile verification, prefer `dotnet run -c Debug -- --configuration Debug.R25` from `./build` when a full repo compile check is needed.
+- For live script validation, build the affected runtime package-local outputs, then run `pe-dev revit sync-runtime` before `pe-dev revit script ...`.
 
 ## Shared Language
 
@@ -44,7 +44,7 @@ workspace flow stable and explicit while staying transport-agnostic from the pro
 
 - The supported file flow is workspace-first and single-file only. Multi-file or manifest/package execution is future
   direction, not current behavior.
-- Repo-local callers may implicitly prepare hot reload before script execution. That is a caller concern, not this package's concern.
+- Repo-local callers no longer implicitly prepare hot reload before script execution. Explicit runtime sync is required before live script validation after runtime package edits.
 - Successful compile in `Strict` mode should imply runnable dependency availability. Do not collapse compile assets and
   runtime assets back into one flat list.
 - `WriteLine(...)` is the preferred output path. `Console.WriteLine(...)` is compatibility only and should stay
@@ -55,6 +55,7 @@ workspace flow stable and explicit while staying transport-agnostic from the pro
   request shape is wrong before the Revit API is.
 - Live-document execution is transaction-backed here. Debug Revit-side mutation/rollback behavior in this package, not
   in host callers.
+- The generated script workspace now needs both the scripting runtime surface and selected repo runtime assemblies. Keep the generated ambient usings and generated runtime references aligned with the actual supported script contract.
 - Default script templates already include `Autodesk.Revit.DB.Electrical`; do not make first-pass probes add redundant
   usings unless the template changed.
 - When probing panel schedules in R25, remember `PanelScheduleView.GetPanel()` and `GetTemplate()` return `ElementId`,

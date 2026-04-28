@@ -8,10 +8,8 @@ public sealed class ScriptProjectGenerator(
     CsProjReader csProjReader
 ) {
     private const string RuntimeAssemblyName = "Pe.Revit.Scripting";
-
-    private static readonly HashSet<string> GeneratedPackageNames = new(StringComparer.OrdinalIgnoreCase) {
-        "Nice3point.Revit.Api.RevitAPI", "Nice3point.Revit.Api.RevitAPIUI"
-    };
+    private const string RevitApiAssemblyName = "RevitAPI";
+    private const string RevitApiUiAssemblyName = "RevitAPIUI";
 
     private readonly CsProjReader _csProjReader = csProjReader;
 
@@ -22,88 +20,148 @@ public sealed class ScriptProjectGenerator(
         string targetFramework,
         string runtimeAssemblyPath
     ) {
+        var generatedRuntimeReferences = GetGeneratedRuntimeReferences(runtimeAssemblyPath);
         var existingProject = this._csProjReader.Read(existingProjectContent ?? "<Project />", workspaceRoot);
         var preservedReferences = existingProject.References
-            .Where(reference => !IsGeneratedRuntimeReference(reference, runtimeAssemblyPath))
+            .Where(reference => !IsGeneratedRuntimeReference(reference, generatedRuntimeReferences))
             .GroupBy(reference => reference.HintPath, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .ToList();
         var preservedPackageReferences = existingProject.PackageReferences
-            .Where(reference => !GeneratedPackageNames.Contains(reference.Include))
             .GroupBy(reference => reference.Include, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .ToList();
 
         var builder = new StringBuilder();
-        builder.AppendLine("""<Project Sdk="Microsoft.NET.Sdk">""");
-        builder.AppendLine("  <PropertyGroup>");
-        builder.AppendLine($"    <TargetFramework>{targetFramework}</TargetFramework>");
-        builder.AppendLine("    <LangVersion>latest</LangVersion>");
-        builder.AppendLine("    <PlatformTarget>x64</PlatformTarget>");
-        builder.AppendLine("    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>");
-        builder.AppendLine("    <OutputType>Library</OutputType>");
-        builder.AppendLine("    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>");
-        builder.AppendLine("    <ImplicitUsings>enable</ImplicitUsings>");
-        builder.AppendLine("    <Nullable>disable</Nullable>");
-        builder.AppendLine("  </PropertyGroup>");
-        builder.AppendLine();
-        builder.AppendLine("  <ItemGroup>");
+        _ = builder.AppendLine("""<Project Sdk="Microsoft.NET.Sdk">""");
+        _ = builder.AppendLine("  <PropertyGroup>");
+        _ = builder.AppendLine($"    <TargetFramework>{targetFramework}</TargetFramework>");
+        _ = builder.AppendLine("    <LangVersion>latest</LangVersion>");
+        _ = builder.AppendLine("    <PlatformTarget>x64</PlatformTarget>");
+        _ = builder.AppendLine("    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>");
+        _ = builder.AppendLine("    <OutputType>Library</OutputType>");
+        _ = builder.AppendLine("    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>");
+        _ = builder.AppendLine("    <ImplicitUsings>enable</ImplicitUsings>");
+        _ = builder.AppendLine("    <Nullable>disable</Nullable>");
+        _ = builder.AppendLine("  </PropertyGroup>");
+        _ = builder.AppendLine();
+        _ = builder.AppendLine("  <ItemGroup>");
         foreach (var reference in preservedReferences) {
-            builder.AppendLine(
+            _ = builder.AppendLine(
                 $"    <Reference Include=\"{EscapeXml(string.IsNullOrWhiteSpace(reference.Include) ? Path.GetFileNameWithoutExtension(reference.HintPath) : reference.Include)}\">");
-            builder.AppendLine($"      <HintPath>{EscapeXml(reference.HintPath)}</HintPath>");
-            builder.AppendLine("    </Reference>");
+            _ = builder.AppendLine($"      <HintPath>{EscapeXml(reference.HintPath)}</HintPath>");
+            _ = builder.AppendLine("    </Reference>");
         }
 
-        builder.AppendLine("  </ItemGroup>");
-        builder.AppendLine();
-        builder.AppendLine("  <ItemGroup>");
+        _ = builder.AppendLine("  </ItemGroup>");
+        _ = builder.AppendLine();
+        _ = builder.AppendLine("  <ItemGroup>");
         foreach (var packageReference in preservedPackageReferences) {
             if (string.IsNullOrWhiteSpace(packageReference.Version))
-                builder.AppendLine($"    <PackageReference Include=\"{EscapeXml(packageReference.Include)}\" />");
+                _ = builder.AppendLine($"    <PackageReference Include=\"{EscapeXml(packageReference.Include)}\" />");
             else
-                builder.AppendLine(
+                _ = builder.AppendLine(
                     $"    <PackageReference Include=\"{EscapeXml(packageReference.Include)}\" Version=\"{EscapeXml(packageReference.Version)}\" />");
         }
 
-        builder.AppendLine("  </ItemGroup>");
-        builder.AppendLine();
-        builder.AppendLine("  <ItemGroup>");
-        builder.AppendLine(
-            $"    <PackageReference Include=\"Nice3point.Revit.Api.RevitAPI\" Version=\"{EscapeXml(revitVersion)}.*\" />");
-        builder.AppendLine(
-            $"    <PackageReference Include=\"Nice3point.Revit.Api.RevitAPIUI\" Version=\"{EscapeXml(revitVersion)}.*\" />");
-        builder.AppendLine("  </ItemGroup>");
-        builder.AppendLine();
-        builder.AppendLine("  <ItemGroup>");
-        builder.AppendLine($"    <Reference Include=\"{RuntimeAssemblyName}\">");
-        builder.AppendLine($"      <HintPath>{EscapeXml(runtimeAssemblyPath)}</HintPath>");
-        builder.AppendLine("    </Reference>");
-        builder.AppendLine("  </ItemGroup>");
-        builder.AppendLine();
-        builder.AppendLine("  <ItemGroup>");
+        _ = builder.AppendLine("  </ItemGroup>");
+        _ = builder.AppendLine();
+        _ = builder.AppendLine("  <ItemGroup>");
+        foreach (var runtimeReference in generatedRuntimeReferences) {
+            _ = builder.AppendLine($"    <Reference Include=\"{EscapeXml(runtimeReference.Include)}\">");
+            _ = builder.AppendLine($"      <HintPath>{EscapeXml(runtimeReference.HintPath)}</HintPath>");
+            _ = builder.AppendLine("    </Reference>");
+        }
+
+        _ = builder.AppendLine("  </ItemGroup>");
+        _ = builder.AppendLine();
+        _ = builder.AppendLine("  <ItemGroup>");
         foreach (var @using in ScriptFileTemplates.DefaultUsings)
-            builder.AppendLine($"    <Using Include=\"{EscapeXml(@using)}\" />");
-        builder.AppendLine("  </ItemGroup>");
-        builder.AppendLine("</Project>");
+            _ = builder.AppendLine($"    <Using Include=\"{EscapeXml(@using)}\" />");
+        _ = builder.AppendLine("  </ItemGroup>");
+        _ = builder.AppendLine("</Project>");
 
         return builder.ToString();
     }
 
     private static bool IsGeneratedRuntimeReference(
         ScriptReferenceDeclaration reference,
-        string runtimeAssemblyPath
+        IReadOnlyList<ScriptReferenceDeclaration> generatedRuntimeReferences
     ) {
-        if (reference.Include.Equals(RuntimeAssemblyName, StringComparison.OrdinalIgnoreCase))
+        if (generatedRuntimeReferences.Any(generatedReference =>
+                string.Equals(reference.Include, generatedReference.Include, StringComparison.OrdinalIgnoreCase)))
             return true;
 
-        return string.Equals(
-            Path.GetFullPath(reference.HintPath),
-            Path.GetFullPath(runtimeAssemblyPath),
-            StringComparison.OrdinalIgnoreCase
-        );
+        return generatedRuntimeReferences.Any(generatedReference =>
+            string.Equals(
+                Path.GetFullPath(reference.HintPath),
+                Path.GetFullPath(generatedReference.HintPath),
+                StringComparison.OrdinalIgnoreCase
+            ));
     }
 
     private static string EscapeXml(string value) =>
         SecurityElement.Escape(value) ?? string.Empty;
+
+    private static IReadOnlyList<ScriptReferenceDeclaration> GetGeneratedRuntimeReferences(string runtimeAssemblyPath) {
+        var references = new List<ScriptReferenceDeclaration> {
+            new(RuntimeAssemblyName, runtimeAssemblyPath)
+        };
+        references.AddRange(GetSiblingPeRevitReferences(runtimeAssemblyPath));
+
+        var revitApiAssemblyPath = TryResolveAssemblyPath(RevitApiAssemblyName, runtimeAssemblyPath);
+        if (!string.IsNullOrWhiteSpace(revitApiAssemblyPath))
+            references.Add(new ScriptReferenceDeclaration(RevitApiAssemblyName, revitApiAssemblyPath));
+
+        var revitApiUiAssemblyPath = TryResolveAssemblyPath(RevitApiUiAssemblyName, runtimeAssemblyPath);
+        if (!string.IsNullOrWhiteSpace(revitApiUiAssemblyPath))
+            references.Add(new ScriptReferenceDeclaration(RevitApiUiAssemblyName, revitApiUiAssemblyPath));
+
+        return references
+            .GroupBy(reference => reference.Include, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+    }
+
+    private static IReadOnlyList<ScriptReferenceDeclaration> GetSiblingPeRevitReferences(string runtimeAssemblyPath) {
+        var runtimeDirectory = Path.GetDirectoryName(runtimeAssemblyPath);
+        if (string.IsNullOrWhiteSpace(runtimeDirectory) || !Directory.Exists(runtimeDirectory))
+            return [];
+
+        return Directory
+            .EnumerateFiles(runtimeDirectory, "Pe.Revit*.dll", SearchOption.TopDirectoryOnly)
+            .Where(path => !path.EndsWith("Pe.Revit.Tests.dll", StringComparison.OrdinalIgnoreCase))
+            .Select(path => new ScriptReferenceDeclaration(
+                Path.GetFileNameWithoutExtension(path),
+                path
+            ))
+            .Where(reference =>
+                !string.IsNullOrWhiteSpace(reference.Include)
+                && !string.IsNullOrWhiteSpace(reference.HintPath))
+            .OrderBy(reference => reference.Include, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string? TryResolveAssemblyPath(
+        string assemblyName,
+        string runtimeAssemblyPath
+    ) {
+        var loadedAssemblyPath = AppDomain.CurrentDomain.GetAssemblies()
+            .Where(assembly => !assembly.IsDynamic)
+            .Where(assembly => string.Equals(
+                assembly.GetName().Name,
+                assemblyName,
+                StringComparison.OrdinalIgnoreCase
+            ))
+            .Select(assembly => assembly.Location)
+            .FirstOrDefault(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path));
+        if (!string.IsNullOrWhiteSpace(loadedAssemblyPath))
+            return loadedAssemblyPath;
+
+        var siblingAssemblyPath = Path.Combine(
+            Path.GetDirectoryName(runtimeAssemblyPath) ?? string.Empty,
+            $"{assemblyName}.dll"
+        );
+        return File.Exists(siblingAssemblyPath) ? siblingAssemblyPath : null;
+    }
 }

@@ -150,7 +150,7 @@ public sealed class ScriptAssemblyLoadService {
     ) {
         var directory = Path.GetDirectoryName(assemblyPath);
         if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
-            probeDirectories.Add(directory);
+            _ = probeDirectories.Add(directory);
     }
 
     private static bool IsFrameworkAssemblyName(string assemblyName) =>
