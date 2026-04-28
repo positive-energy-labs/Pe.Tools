@@ -9,11 +9,12 @@ namespace Pe.Revit.Scripting.Execution;
 public sealed class ScriptCompilationService {
     internal ScriptCompilationResult Compile(
         ScriptSourceSet sourceSet,
-        IReadOnlyList<MetadataReference> metadataReferences
+        IReadOnlyList<MetadataReference> metadataReferences,
+        IReadOnlyList<string> projectUsings
     ) {
         var syntaxTrees = new List<SyntaxTree> {
             CSharpSyntaxTree.ParseText(
-                CreateGlobalUsingsSource(),
+                CreateGlobalUsingsSource(projectUsings),
                 new CSharpParseOptions(LanguageVersion.Latest),
                 "__PeScriptUsings.g.cs"
             )
@@ -57,10 +58,12 @@ public sealed class ScriptCompilationService {
         );
     }
 
-    private static string CreateGlobalUsingsSource() {
+    private static string CreateGlobalUsingsSource(IReadOnlyList<string> projectUsings) {
         var builder = new StringBuilder();
-        foreach (var @using in ScriptFileTemplates.DefaultUsings)
-            builder.AppendLine($"global using {@using};");
+        foreach (var @using in ScriptFileTemplates.DefaultUsings
+                     .Concat(projectUsings)
+                     .Distinct(StringComparer.Ordinal))
+            _ = builder.AppendLine($"global using {@using};");
         return builder.ToString();
     }
 }

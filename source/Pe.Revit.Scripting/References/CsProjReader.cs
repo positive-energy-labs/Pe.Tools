@@ -17,7 +17,8 @@ public sealed class CsProjReader {
             projectDirectory,
             this.ReadTargetFramework(document),
             this.ReadReferences(document),
-            this.ReadPackageReferences(document)
+            this.ReadPackageReferences(document),
+            this.ReadUsings(document)
         );
     }
 
@@ -63,5 +64,14 @@ public sealed class CsProjReader {
                 ?? node.Elements().FirstOrDefault(child => child.Name.LocalName == "Version")?.Value?.Trim()
             ))
             .Where(reference => !string.IsNullOrWhiteSpace(reference.Include))
+            .ToList();
+
+    private IReadOnlyList<string> ReadUsings(XDocument document) =>
+        document
+            .Descendants()
+            .Where(node => node.Name.LocalName == "Using")
+            .Select(node => node.Attribute("Include")?.Value?.Trim() ?? string.Empty)
+            .Where(@using => !string.IsNullOrWhiteSpace(@using))
+            .Distinct(StringComparer.Ordinal)
             .ToList();
 }

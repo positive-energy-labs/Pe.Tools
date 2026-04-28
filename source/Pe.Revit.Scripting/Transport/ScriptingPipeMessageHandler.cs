@@ -32,7 +32,7 @@ public sealed class ScriptingPipeMessageHandler : IExternalEventHandler, IDispos
 
         this._disposed = true;
         lock (this._sync) {
-            this._pendingRequest?.Completion.TrySetCanceled();
+            _ = (this._pendingRequest?.Completion.TrySetCanceled());
             this._pendingRequest = null;
         }
 
@@ -56,10 +56,10 @@ public sealed class ScriptingPipeMessageHandler : IExternalEventHandler, IDispos
                 _ => new ScriptingPipeResponse(false,
                     $"Unsupported scripting command '{pendingRequest.Request.Command}'.")
             };
-            pendingRequest.Completion.TrySetResult(response);
+            _ = pendingRequest.Completion.TrySetResult(response);
         } catch (Exception ex) {
             Log.Error(ex, "Revit scripting pipe request failed: Command={Command}", pendingRequest.Request.Command);
-            pendingRequest.Completion.TrySetResult(new ScriptingPipeResponse(false, ex.Message));
+            _ = pendingRequest.Completion.TrySetResult(new ScriptingPipeResponse(false, ex.Message));
         }
     }
 

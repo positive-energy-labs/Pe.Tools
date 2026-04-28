@@ -16,7 +16,8 @@ internal static class ScriptFileTemplates {
         "Autodesk.Revit.DB.Plumbing",
         "Autodesk.Revit.DB.Structure",
         "Autodesk.Revit.UI",
-        "Pe.Revit.Scripting"
+        "Pe.Revit.Scripting",
+        "Pe.Revit.Scripting.Context"
     ];
 
     public static string CreateReadme() =>

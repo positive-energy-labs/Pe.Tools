@@ -67,6 +67,7 @@ public sealed class ScriptReferenceResolver(
                 project.TargetFramework,
                 compileReferencePaths.ToList(),
                 runtimeReferencePaths.ToList(),
+                project.Usings,
                 diagnostics
             );
         } catch (Exception ex) {
@@ -74,7 +75,7 @@ public sealed class ScriptReferenceResolver(
                 "resolve",
                 $"Project resolution failed: {ex.Message}"
             ));
-            return new ResolvedScriptProject(projectContent, string.Empty, [], [], diagnostics);
+            return new ResolvedScriptProject(projectContent, string.Empty, [], [], [], diagnostics);
         }
     }
 
@@ -595,9 +596,14 @@ public sealed class ScriptReferenceResolver(
         var loadedAssemblies = AppDomain.CurrentDomain.GetAssemblies()
             .Where(assembly => !assembly.IsDynamic && !string.IsNullOrWhiteSpace(assembly.Location) &&
                                File.Exists(assembly.Location))
-            .ToDictionary(
+            .GroupBy(
                 assembly => assembly.GetName().Name ?? string.Empty,
-                assembly => assembly.Location,
+                StringComparer.OrdinalIgnoreCase
+            )
+            .Where(group => !string.IsNullOrWhiteSpace(group.Key))
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(assembly => assembly.Location).First(),
                 StringComparer.OrdinalIgnoreCase
             );
 

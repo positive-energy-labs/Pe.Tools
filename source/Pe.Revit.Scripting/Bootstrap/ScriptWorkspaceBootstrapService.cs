@@ -26,10 +26,10 @@ public sealed class ScriptWorkspaceBootstrapService(
         var readmePath = RevitScriptingStorageLocations.ResolveReadmePath(workspaceKey);
         var vscodeSettingsPath = RevitScriptingStorageLocations.ResolveVscodeSettingsPath(workspaceKey);
 
-        Directory.CreateDirectory(workspaceRoot);
-        Directory.CreateDirectory(sourceDirectory);
-        Directory.CreateDirectory(vscodeDirectory);
-        Directory.CreateDirectory(inlineDirectory);
+        _ = Directory.CreateDirectory(workspaceRoot);
+        _ = Directory.CreateDirectory(sourceDirectory);
+        _ = Directory.CreateDirectory(vscodeDirectory);
+        _ = Directory.CreateDirectory(inlineDirectory);
 
         var existingProjectContent = File.Exists(projectFilePath)
             ? File.ReadAllText(projectFilePath)
@@ -66,7 +66,7 @@ public sealed class ScriptWorkspaceBootstrapService(
         if (File.Exists(path))
             return;
 
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, content);
         generatedFiles.Add(path);
     }
@@ -76,7 +76,7 @@ public sealed class ScriptWorkspaceBootstrapService(
         if (string.Equals(existingContent, content, StringComparison.Ordinal))
             return;
 
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, content);
         generatedFiles.Add(path);
     }

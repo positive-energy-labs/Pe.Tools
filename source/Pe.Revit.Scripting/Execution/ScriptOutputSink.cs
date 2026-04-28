@@ -26,7 +26,7 @@ internal sealed class ScriptOutputSink {
             return;
 
         lock (this._sync)
-            this._output.Append(output);
+            _ = this._output.Append(output);
     }
 }
 
@@ -54,7 +54,7 @@ internal sealed class ConsoleCaptureScope : IDisposable {
         public override Encoding Encoding => Encoding.UTF8;
 
         public override void Write(char value) {
-            this._buffer.Append(value);
+            _ = this._buffer.Append(value);
             this.FlushCompletedLines();
         }
 
@@ -62,7 +62,7 @@ internal sealed class ConsoleCaptureScope : IDisposable {
             if (string.IsNullOrEmpty(value))
                 return;
 
-            this._buffer.Append(value);
+            _ = this._buffer.Append(value);
             this.FlushCompletedLines();
         }
 
@@ -79,7 +79,7 @@ internal sealed class ConsoleCaptureScope : IDisposable {
                 return;
 
             this._outputSink.WriteOutput(this._buffer.ToString());
-            this._buffer.Clear();
+            _ = this._buffer.Clear();
         }
 
         private void FlushCompletedLines() {
@@ -90,7 +90,7 @@ internal sealed class ConsoleCaptureScope : IDisposable {
 
                 var length = newlineIndex + Environment.NewLine.Length;
                 var line = this._buffer.ToString(0, length);
-                this._buffer.Remove(0, length);
+                _ = this._buffer.Remove(0, length);
                 this._outputSink.WriteOutput(line);
             }
         }

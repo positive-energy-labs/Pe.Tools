@@ -17,7 +17,8 @@ internal sealed record ScriptProjectFileModel(
     string? ProjectDirectory,
     string TargetFramework,
     IReadOnlyList<ScriptReferenceDeclaration> References,
-    IReadOnlyList<ScriptPackageReference> PackageReferences
+    IReadOnlyList<ScriptPackageReference> PackageReferences,
+    IReadOnlyList<string> Usings
 );
 
 public sealed record ResolvedScriptProject(
@@ -25,6 +26,7 @@ public sealed record ResolvedScriptProject(
     string TargetFramework,
     IReadOnlyList<string> CompileReferencePaths,
     IReadOnlyList<string> RuntimeReferencePaths,
+    IReadOnlyList<string> Usings,
     IReadOnlyList<ScriptDiagnostic> Diagnostics
 ) {
     public bool HasErrors =>
