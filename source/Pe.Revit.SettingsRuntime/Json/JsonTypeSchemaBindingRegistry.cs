@@ -1,11 +1,8 @@
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using NJsonSchema.Generation;
 using NJsonSchema.Generation.TypeMappers;
-using Pe.Revit.SettingsRuntime.Json.FieldOptions;
 using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
-using Pe.Shared.StorageRuntime.Capabilities;
 using System.Collections.Concurrent;
 using System.Reflection;
 
@@ -55,20 +52,6 @@ public sealed class JsonTypeSchemaBindingRegistry {
 
     public void Clear() => this._bindings.Clear();
 
-    public bool TryResolveFieldOptionsSource(PropertyInfo propertyInfo, out IFieldOptionsSource source) {
-        if (propertyInfo == null)
-            throw new ArgumentNullException(nameof(propertyInfo));
-
-        var targetType = ResolveTargetType(propertyInfo.PropertyType);
-        if (!this.TryGet(targetType, out var binding)) {
-            source = null!;
-            return false;
-        }
-
-        source = binding.CreateFieldOptionsSource(propertyInfo)!;
-        return source != null;
-    }
-
     public void ApplyPropertyBindings(
         SchemaProcessorContext context,
         JsonSchemaBuildOptions options
@@ -91,33 +74,6 @@ public sealed class JsonTypeSchemaBindingRegistry {
                 ? propertySchema.Item
                 : propertySchema;
             binding.ConfigurePropertySchema(targetSchema, property, options);
-
-            var source = binding.CreateFieldOptionsSource(property);
-            if (source == null)
-                continue;
-
-            var descriptor = source.Describe();
-            IReadOnlyList<FieldOptionItem>? samples = null;
-            if (options.ResolveFieldOptionSamples &&
-                options.RuntimeMode.Supports(descriptor.RequiredRuntimeMode)) {
-                try {
-                    samples = source.GetOptionsAsync(options.CreateFieldOptionsExecutionContext())
-                        .AsTask()
-                        .GetAwaiter()
-                        .GetResult();
-                } catch {
-                }
-            }
-
-            SchemaMetadataWriter.ApplyFieldOptions(targetSchema, descriptor, samples);
-
-            if (samples == null || samples.Count == 0)
-                continue;
-
-            var orderedSamples = SchemaMetadataWriter.CreateOrderedFieldOptionItems(samples);
-            targetSchema.Enumeration.Clear();
-            foreach (var sample in orderedSamples)
-                targetSchema.Enumeration.Add(JToken.FromObject(sample.Value));
         }
     }
 
@@ -219,4 +175,3 @@ public sealed class JsonTypeSchemaBindingRegistry {
         }
     }
 }
-

@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using TypeGen.Core.TypeAnnotations;
 
@@ -10,6 +10,11 @@ public enum ProjectParameterBindingKind {
     Instance,
     Type
 }
+
+[ExportTsInterface]
+public record ProjectParameterBindingsRequest(
+    LoadedFamiliesFilter? Filter = null
+);
 
 [ExportTsInterface]
 public record ProjectParameterBindingEntry(

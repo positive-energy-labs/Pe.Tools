@@ -1,8 +1,9 @@
-using Pe.Shared.HostContracts.Operations;
+﻿using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Protocol;
-using Pe.Shared.HostContracts.RevitData;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.HostContracts.SettingsStorage;
+using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Schedules;
 
 namespace Pe.Host.Operations;
 
@@ -16,10 +17,8 @@ internal sealed class HostOperationRegistry {
                 static (request, context, cancellationToken) =>
                     Task.FromResult(HostOperations.Local(CreateHostStatusData(context)))
             ),
-            HostOperations.Create<SchemaRequest>(
-                GetSchemaOperationContract.Definition,
-                static async (request, context, cancellationToken) =>
-                    HostOperations.Local(await context.SchemaService.GetSchemaEnvelopeAsync(request, cancellationToken))
+            HostOperations.Bridge<SchemaRequest, SchemaData>(
+                GetSchemaOperationContract.Definition
             ),
             HostOperations.Create<GetSettingsWorkspacesRequest>(
                 GetWorkspacesOperationContract.Definition,
@@ -31,56 +30,54 @@ internal sealed class HostOperationRegistry {
                 static async (request, context, cancellationToken) =>
                     HostOperations.Local(await context.StorageService.DiscoverAsync(request, cancellationToken))
             ),
-            HostOperations.Bridge<FieldOptionsRequest, FieldOptionsEnvelopeResponse>(
+            HostOperations.Bridge<FieldOptionsRequest, FieldOptionsData>(
                 GetFieldOptionsOperationContract.Definition
             ),
-            HostOperations.Bridge<ParameterCatalogRequest, ParameterCatalogEnvelopeResponse>(
+            HostOperations.Bridge<ParameterCatalogRequest, ParameterCatalogData>(
                 GetParameterCatalogOperationContract.Definition
             ),
-            HostOperations.Bridge<ScheduleCatalogRequest, ScheduleCatalogEnvelopeResponse>(
+            HostOperations.Bridge<ScheduleCatalogRequest, ScheduleCatalogData>(
                 GetScheduleCatalogOperationContract.Definition
             ),
-            HostOperations.Bridge<ScheduleProfilesQueryRequest, ScheduleProfilesQueryEnvelopeResponse>(
+            HostOperations.Bridge<ScheduleProfilesQueryRequest, ScheduleProfilesQueryData>(
                 GetScheduleProfilesQueryOperationContract.Definition
             ),
-            HostOperations.Bridge<ScheduleQueryRequest, ScheduleQueryEnvelopeResponse>(
+            HostOperations.Bridge<ScheduleQueryRequest, ScheduleQueryData>(
                 GetScheduleQueryOperationContract.Definition
             ),
-            HostOperations.Create<NoRequest>(
-                GetLoadedFamiliesFilterSchemaOperationContract.Definition,
-                static (request, context, cancellationToken) =>
-                    Task.FromResult(HostOperations.Local(context.SchemaService.GetLoadedFamiliesFilterSchemaEnvelope()))
+            HostOperations.Bridge<NoRequest, SchemaData>(
+                GetLoadedFamiliesFilterSchemaOperationContract.Definition
             ),
-            HostOperations.Bridge<LoadedFamiliesFilterFieldOptionsRequest, FieldOptionsEnvelopeResponse>(
+            HostOperations.Bridge<LoadedFamiliesFilterFieldOptionsRequest, FieldOptionsData>(
                 GetLoadedFamiliesFilterFieldOptionsOperationContract.Definition
             ),
-            HostOperations.Bridge<LoadedFamiliesCatalogRequest, LoadedFamiliesCatalogEnvelopeResponse>(
+            HostOperations.Bridge<LoadedFamiliesCatalogRequest, LoadedFamiliesCatalogData>(
                 GetLoadedFamiliesCatalogOperationContract.Definition
             ),
-            HostOperations.Bridge<LoadedFamiliesMatrixRequest, LoadedFamiliesMatrixEnvelopeResponse>(
+            HostOperations.Bridge<LoadedFamiliesMatrixRequest, LoadedFamiliesMatrixData>(
                 GetLoadedFamiliesMatrixOperationContract.Definition
             ),
-            HostOperations.Bridge<ProjectParameterBindingsRequest, ProjectParameterBindingsEnvelopeResponse>(
+            HostOperations.Bridge<ProjectParameterBindingsRequest, ProjectParameterBindingsData>(
                 GetProjectParameterBindingsOperationContract.Definition
             ),
-            HostOperations.Bridge<ElementContextQueryRequest, ElementContextQueryEnvelopeResponse>(
+            HostOperations.Bridge<ElementContextQueryRequest, ElementContextQueryData>(
                 GetElementContextQueryOperationContract.Definition
             ),
-            HostOperations.Bridge<ElectricalPanelsCatalogRequest, ElectricalPanelsCatalogEnvelopeResponse>(
+            HostOperations.Bridge<ElectricalPanelsCatalogRequest, ElectricalPanelsCatalogData>(
                 GetElectricalPanelsCatalogOperationContract.Definition
             ),
-            HostOperations.Bridge<ElectricalCircuitsCatalogRequest, ElectricalCircuitsCatalogEnvelopeResponse>(
+            HostOperations.Bridge<ElectricalCircuitsCatalogRequest, ElectricalCircuitsCatalogData>(
                 GetElectricalCircuitsCatalogOperationContract.Definition
             ),
-            HostOperations.Bridge<ElectricalPanelSchedulesQueryRequest, ElectricalPanelSchedulesQueryEnvelopeResponse>(
+            HostOperations.Bridge<ElectricalPanelSchedulesQueryRequest, ElectricalPanelSchedulesQueryData>(
                 GetElectricalPanelSchedulesQueryOperationContract.Definition
             ),
             HostOperations
                 .Bridge<ElectricalLoadClassificationsCatalogRequest,
-                    ElectricalLoadClassificationsCatalogEnvelopeResponse>(
+                    ElectricalLoadClassificationsCatalogData>(
                     GetElectricalLoadClassificationsCatalogOperationContract.Definition
                 ),
-            HostOperations.Bridge<RevitDocumentSessionContextRequest, RevitDocumentSessionContextEnvelopeResponse>(
+            HostOperations.Bridge<NoRequest, RevitDocumentSessionContextData>(
                 GetRevitDocumentSessionContextOperationContract.Definition
             ),
             HostOperations.Create<OpenSettingsDocumentRequest>(
@@ -133,6 +130,20 @@ internal sealed class HostOperationRegistry {
         this._operationsByKey.TryGetValue(key, out operation!);
 
     private static void ValidateUniqueDefinitions(IReadOnlyList<IHostOperation> operations) {
+        var definitionKeys = operations
+            .Select(operation => operation.Definition.Key)
+            .ToHashSet(StringComparer.Ordinal);
+        var missingSharedDefinitions = HostOperationsCatalog.All
+            .Where(definition => !definitionKeys.Contains(definition.Key))
+            .Select(definition => definition.Key)
+            .Except([GetSettingsModuleCatalogBridgeOperationContract.Definition.Key], StringComparer.Ordinal)
+            .ToList();
+        if (missingSharedDefinitions.Count != 0) {
+            throw new InvalidOperationException(
+                $"Host operation registry is missing shared host operations: {string.Join(", ", missingSharedDefinitions)}"
+            );
+        }
+
         var duplicateKeys = operations
             .GroupBy(operation => operation.Definition.Key, StringComparer.Ordinal)
             .Where(group => group.Count() > 1)

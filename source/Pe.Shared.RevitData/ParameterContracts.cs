@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using TypeGen.Core.TypeAnnotations;
 
@@ -12,6 +12,12 @@ public enum ParameterIdentityKind {
     ParameterElement,
     NameFallback
 }
+
+[ExportTsInterface]
+public record ParameterCatalogRequest(
+    string ModuleKey,
+    Dictionary<string, string>? ContextValues
+);
 
 [ExportTsInterface]
 public record ParameterIdentity(

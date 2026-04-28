@@ -2,8 +2,11 @@
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
 using Pe.Revit.Global.Services.Host.Operations;
+using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts.SettingsStorage;
+using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Schedules;
 using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
@@ -54,7 +57,7 @@ internal sealed class BridgeAgent : IDisposable {
     private readonly BridgeRequestDispatcher _bridgeRequestDispatcher;
     private readonly BridgeDocumentNotifier _documentNotifier;
     private readonly HostConnectionOptions _hostOptions;
-    private readonly SettingsModuleRegistry _moduleRegistry;
+    private readonly SettingsRuntimeRegistry _moduleRegistry;
     private readonly NamedPipeClientStream _pipeClient;
     private readonly StreamReader _reader;
     private readonly Task _readLoop;
@@ -77,7 +80,7 @@ internal sealed class BridgeAgent : IDisposable {
     private string? _lastAdvertisedDocumentKey;
 
     public BridgeAgent(
-        SettingsModuleRegistry moduleRegistry,
+        SettingsRuntimeRegistry moduleRegistry,
         HostConnectionOptions hostOptions,
         RevitTaskService revitTaskService
     ) {
@@ -94,10 +97,8 @@ internal sealed class BridgeAgent : IDisposable {
             moduleRegistry.GetModules().Count()
         );
         var requestService = new RequestService(revitTaskService, this._moduleRegistry, this._throttleGate);
-        var revitDataCache = new RevitDataCache();
         var revitDataRequestService = new RevitDataRequestService(
             revitTaskService,
-            revitDataCache,
             this.PublishNotification
         );
         var bridgeOperationRegistry = new BridgeOperationRegistry();
@@ -117,10 +118,7 @@ internal sealed class BridgeAgent : IDisposable {
             connectStopwatch.ElapsedMilliseconds);
         this._reader = new StreamReader(this._pipeClient, Encoding.UTF8, false, 4096, true);
         this._writer = new StreamWriter(this._pipeClient, new UTF8Encoding(false), 4096, true) { AutoFlush = true };
-        this._documentNotifier = new BridgeDocumentNotifier(
-            this.PublishDocumentInvalidationAsync,
-            domains => revitDataCache.Invalidate(domains.ToArray())
-        );
+        this._documentNotifier = new BridgeDocumentNotifier(this.PublishDocumentInvalidationAsync);
         Log.Information("Settings editor bridge agent created document notifier.");
 
         var handshakeStopwatch = Stopwatch.StartNew();
@@ -278,6 +276,8 @@ internal sealed class BridgeAgent : IDisposable {
                     true,
                     payloadJson,
                     null,
+                    null,
+                    null,
                     new PerformanceMetrics(
                         totalMs,
                         revitExecutionMs,
@@ -307,6 +307,33 @@ internal sealed class BridgeAgent : IDisposable {
                 request.Method,
                 request.RequestId
             );
+        } catch (BridgeOperationException ex) {
+            var totalMs = (long)(DateTimeOffset.UtcNow - sentAt).TotalMilliseconds;
+            var errorFrame = new BridgeFrame(
+                BridgeFrameKind.Response,
+                Response: new BridgeResponse(
+                    request.RequestId,
+                    false,
+                    null,
+                    ex.Message,
+                    ex.StatusCode,
+                    ex.Issues.ToList(),
+                    new PerformanceMetrics(
+                        totalMs,
+                        totalMs,
+                        0,
+                        request.PayloadBytes,
+                        0
+                    )
+                )
+            );
+            Log.Warning(
+                ex,
+                "Settings editor bridge request failed with expected semantics: Method={Method}, RequestId={RequestId}",
+                request.Method,
+                request.RequestId
+            );
+            await this.WriteFrameAsync(errorFrame, cancellationToken).ConfigureAwait(false);
         } catch (Exception ex) {
             var totalMs = (long)(DateTimeOffset.UtcNow - sentAt).TotalMilliseconds;
             var errorFrame = new BridgeFrame(
@@ -316,6 +343,8 @@ internal sealed class BridgeAgent : IDisposable {
                     false,
                     null,
                     ex.Message,
+                    BridgeOperationExceptions.UnexpectedStatusCode,
+                    null,
                     new PerformanceMetrics(
                         totalMs,
                         totalMs,
@@ -471,11 +500,11 @@ internal sealed class BridgeAgent : IDisposable {
 }
 
 internal static class SettingsModuleAvailability {
-    public static bool IsBridgeDiscoverable(ISettingsModule module) =>
-        module.HostScope != SettingsModuleHostScope.Host && module.SettingsType != typeof(object);
+    public static bool IsBridgeDiscoverable(StructuralSettingsModuleDescriptor module) =>
+        module.HostScope != SettingsModuleHostScope.Host;
 
     public static bool IsAvailableForDocument(
-        ISettingsModule module,
+        StructuralSettingsModuleDescriptor module,
         Autodesk.Revit.DB.Document? activeDocument
     ) {
         if (module.HostScope != SettingsModuleHostScope.ActiveDocument)
@@ -491,7 +520,7 @@ internal static class SettingsModuleAvailability {
         };
     }
 
-    public static HostModuleDescriptor CreateHostModuleDescriptor(ISettingsModule module) =>
+    public static HostModuleDescriptor CreateHostModuleDescriptor(StructuralSettingsModuleDescriptor module) =>
         new(
             module.ModuleKey,
             module.DefaultRootKey,
@@ -507,15 +536,12 @@ internal static class SettingsModuleAvailability {
             }
         );
 
-    public static SettingsModuleDescriptor CreateSettingsModuleDescriptor(ISettingsModuleManifest module) {
+    public static SettingsModuleDescriptor CreateSettingsModuleDescriptor(StructuralSettingsModuleDescriptor module) {
         var hostDescriptor = CreateHostModuleDescriptor(module);
         return new SettingsModuleDescriptor(
             module.ModuleKey,
             module.DefaultRootKey,
-            module.Roots.Select(root => new SettingsRootDescriptor(
-                root.RootKey,
-                root.DisplayName
-            )).ToList(),
+            module.Roots.Select(root => new SettingsRootDescriptor(root.RootKey, root.DisplayName)).ToList(),
             new SettingsModuleStorageOptionsContract(
                 [.. module.StorageOptions.IncludeRoots],
                 [.. module.StorageOptions.PresetRoots]

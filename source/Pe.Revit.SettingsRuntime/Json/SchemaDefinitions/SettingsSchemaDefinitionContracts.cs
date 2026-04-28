@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Pe.Revit.SettingsRuntime.Json.FieldOptions;
 using Pe.Shared.StorageRuntime.Capabilities;
 using System.Linq.Expressions;
@@ -42,13 +42,10 @@ public interface ISettingsSchemaBuilder<TSettings> {
 public interface ISettingsDataBuilder {
     void Provider(string provider);
     void Load(SettingsSchemaDatasetLoadMode loadMode);
-    void StaleOn(params string[] staleOn);
     void SupportsProjection(params string[] projections);
 }
 
 public interface ISettingsPropertyBuilder<TValue> {
-    void UseFieldOptions<TSource>() where TSource : IFieldOptionsSource, new();
-
     void UseFieldOptions(
         string providerKey,
         SettingsRuntimeMode requiredRuntimeMode,
@@ -111,7 +108,6 @@ public sealed class SettingsSchemaDatasetBinding {
     public string Id { get; init; } = string.Empty;
     public string Provider { get; init; } = string.Empty;
     public SettingsSchemaDatasetLoadMode LoadMode { get; init; } = SettingsSchemaDatasetLoadMode.Manual;
-    public IReadOnlyList<string> StaleOn { get; init; } = [];
     public IReadOnlyList<string> SupportedProjections { get; init; } = [];
 }
 
@@ -182,14 +178,6 @@ internal sealed class SettingsPropertyBindingBuilder<TValue>(PropertyInfo proper
     private FieldOptionsDescriptor? _fieldOptions;
     private ISchemaUiDynamicColumnOrderSource? _uiDynamicColumnOrderSource;
     private SchemaUiMetadata? _uiMetadata;
-
-    public void UseFieldOptions<TSource>() where TSource : IFieldOptionsSource, new() {
-        this.ThrowIfOptionsAlreadyConfigured();
-        var source = new TSource();
-        var descriptor = source.Describe();
-        FieldOptionsProviderRegistry.Shared.Register(descriptor.Key, static () => new TSource());
-        this._fieldOptions = descriptor;
-    }
 
     public void UseFieldOptions(
         string providerKey,
@@ -330,13 +318,15 @@ internal sealed class SettingsPropertyBindingBuilder<TValue>(PropertyInfo proper
             x.Scope == y.Scope &&
             string.Equals(x.Key, y.Key, StringComparison.OrdinalIgnoreCase);
 
-        public int GetHashCode((SettingsOptionsDependencyScope Scope, string Key) obj) =>
-            HashCode.Combine(obj.Scope, StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Key));
+        public int GetHashCode((SettingsOptionsDependencyScope Scope, string Key) obj) {
+            unchecked {
+                return ((int)obj.Scope * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Key);
+            }
+        }
     }
 }
 
 internal sealed class SettingsSchemaDataBindingBuilder(string id) : ISettingsDataBuilder {
-    private readonly List<string> _staleOn = [];
     private readonly List<string> _supportedProjections = [];
     private SettingsSchemaDatasetLoadMode _loadMode = SettingsSchemaDatasetLoadMode.Manual;
     private string? _provider;
@@ -344,16 +334,6 @@ internal sealed class SettingsSchemaDataBindingBuilder(string id) : ISettingsDat
     public void Provider(string provider) => this._provider = string.IsNullOrWhiteSpace(provider) ? null : provider;
 
     public void Load(SettingsSchemaDatasetLoadMode loadMode) => this._loadMode = loadMode;
-
-    public void StaleOn(params string[] staleOn) {
-        if (staleOn == null)
-            return;
-
-        foreach (var value in staleOn.Where(value => !string.IsNullOrWhiteSpace(value))) {
-            if (!this._staleOn.Contains(value, StringComparer.OrdinalIgnoreCase))
-                this._staleOn.Add(value);
-        }
-    }
 
     public void SupportsProjection(params string[] projections) {
         if (projections == null)
@@ -369,7 +349,6 @@ internal sealed class SettingsSchemaDataBindingBuilder(string id) : ISettingsDat
         Id = id,
         Provider = this._provider ?? throw new InvalidOperationException($"Dataset '{id}' must declare a provider."),
         LoadMode = this._loadMode,
-        StaleOn = this._staleOn.ToList(),
         SupportedProjections = this._supportedProjections.ToList()
     };
 }
@@ -498,3 +477,5 @@ internal sealed class SchemaUiBehaviorBuilder : ISchemaUiBehaviorBuilder {
     }
 }
 
+
+// PE_HOT_RELOAD_NUDGE

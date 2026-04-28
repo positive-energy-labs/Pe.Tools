@@ -1,4 +1,6 @@
+﻿using Microsoft.AspNetCore.Mvc;
 using Pe.Shared.HostContracts.Operations;
+using Pe.Shared.HostContracts.SettingsStorage;
 using System.Diagnostics;
 
 namespace Pe.Host.Operations;
@@ -17,8 +19,6 @@ internal sealed class HostOperationExecutor(
         var stopwatch = Stopwatch.StartNew();
         try {
             var executionResult = await operation.ExecuteAsync(request, context, cancellationToken);
-            var response = executionResult.Response;
-            var payload = UnwrapHttpPayload(response);
 
             this._logger.LogInformation(
                 "Host operation completed: Key={Key}, Route={Route}, Verb={Verb}, Mode={Mode}, ExecutionPath={ExecutionPath}, RequestType={RequestType}, ResponseType={ResponseType}, ElapsedMs={ElapsedMs}",
@@ -31,9 +31,20 @@ internal sealed class HostOperationExecutor(
                 operation.Definition.ResponseType.Name,
                 stopwatch.ElapsedMilliseconds
             );
-            return payload.ReturnNoContent
+            return executionResult.Response == null
                 ? Results.NoContent()
-                : Results.Ok(payload.Value);
+                : Results.Ok(executionResult.Response);
+        } catch (HostOperationException ex) {
+            this._logger.LogWarning(
+                ex,
+                "Host operation failed with expected semantics: Key={Key}, Route={Route}, Mode={Mode}, RequestType={RequestType}, ElapsedMs={ElapsedMs}",
+                operation.Definition.Key,
+                operation.Definition.Route,
+                operation.Definition.ExecutionMode,
+                operation.Definition.RequestType.Name,
+                stopwatch.ElapsedMilliseconds
+            );
+            return CreateProblemResult(ex.StatusCode, ex.Message, ex.Issues);
         } catch (InvalidOperationException ex) {
             this._logger.LogWarning(
                 ex,
@@ -44,7 +55,7 @@ internal sealed class HostOperationExecutor(
                 operation.Definition.RequestType.Name,
                 stopwatch.ElapsedMilliseconds
             );
-            return Results.Problem(statusCode: StatusCodes.Status409Conflict, detail: ex.Message);
+            return CreateProblemResult(StatusCodes.Status409Conflict, ex.Message, null);
         } catch (Exception ex) {
             this._logger.LogError(
                 ex,
@@ -55,25 +66,22 @@ internal sealed class HostOperationExecutor(
                 operation.Definition.RequestType.Name,
                 stopwatch.ElapsedMilliseconds
             );
-            return Results.Problem(statusCode: StatusCodes.Status500InternalServerError, detail: ex.Message);
+            return CreateProblemResult(StatusCodes.Status500InternalServerError, ex.Message, null);
         }
     }
 
-    private static HttpPayload UnwrapHttpPayload(object? response) {
-        if (response is not IHostDataEnvelope envelope)
-            return new HttpPayload(response, false);
+    private static IResult CreateProblemResult(
+        int statusCode,
+        string detail,
+        IReadOnlyList<ValidationIssue>? issues
+    ) {
+        var problem = new ProblemDetails {
+            Detail = detail,
+            Status = statusCode
+        };
+        if (issues is { Count: > 0 })
+            problem.Extensions["issues"] = issues;
 
-        if (!envelope.Ok)
-            throw new InvalidOperationException(envelope.Message);
-
-        var data = envelope.GetData();
-        if (data == null)
-            return HttpPayload.NoContent();
-
-        return new HttpPayload(data, false);
-    }
-
-    private readonly record struct HttpPayload(object? Value, bool ReturnNoContent) {
-        public static HttpPayload NoContent() => new(null, true);
+        return Results.Problem(problem);
     }
 }

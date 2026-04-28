@@ -3,11 +3,10 @@ using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
 using Pe.Shared.RevitData.Schedules;
 using Pe.Shared.StorageRuntime.Capabilities;
 using System.Runtime.CompilerServices;
-using ScheduleProfile = Pe.Revit.DocumentData.Schedules.Runtime.ScheduleProfile;
 
 namespace Pe.Revit.SettingsRuntime.Modules.Schedules.Authored;
 
-internal sealed class AuthoredScheduleProfileSchemaDefinition : SettingsSchemaDefinition<ScheduleProfile> {
+internal sealed class ScheduleProfileSchemaDefinition : SettingsSchemaDefinition<ScheduleProfile> {
     public override void Configure(ISettingsSchemaBuilder<ScheduleProfile> builder) {
         builder.Property(
             item => item.CategoryName,
@@ -27,7 +26,7 @@ internal sealed class AuthoredScheduleProfileSchemaDefinition : SettingsSchemaDe
     }
 }
 
-internal sealed class AuthoredScheduleFieldSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleFieldSpec> {
+internal sealed class ScheduleFieldSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleFieldSpec> {
     public override void Configure(ISettingsSchemaBuilder<ScheduleFieldSpec> builder) {
         builder.Property(item => item.ParameterName, property => {
             property.DependsOnSibling(nameof(ScheduleProfile.CategoryName));
@@ -46,7 +45,7 @@ internal sealed class AuthoredScheduleFieldSpecSchemaDefinition : SettingsSchema
     }
 }
 
-internal sealed class AuthoredCombinedParameterSpecSchemaDefinition : SettingsSchemaDefinition<CombinedParameterSpec> {
+internal sealed class CombinedParameterSpecSchemaDefinition : SettingsSchemaDefinition<CombinedParameterSpec> {
     public override void Configure(ISettingsSchemaBuilder<CombinedParameterSpec> builder) =>
         builder.Property(item => item.ParameterName, property => {
             property.DependsOnSibling(nameof(ScheduleProfile.CategoryName));
@@ -57,7 +56,7 @@ internal sealed class AuthoredCombinedParameterSpecSchemaDefinition : SettingsSc
         });
 }
 
-internal sealed class AuthoredScheduleFilterSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleFilterSpec> {
+internal sealed class ScheduleFilterSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleFilterSpec> {
     public override void Configure(ISettingsSchemaBuilder<ScheduleFilterSpec> builder) =>
         builder.Property(item => item.FieldName, property => {
             property.DependsOnSibling(nameof(ScheduleProfile.CategoryName));
@@ -68,7 +67,7 @@ internal sealed class AuthoredScheduleFilterSpecSchemaDefinition : SettingsSchem
         });
 }
 
-internal sealed class AuthoredScheduleSortGroupSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleSortGroupSpec> {
+internal sealed class ScheduleSortGroupSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleSortGroupSpec> {
     public override void Configure(ISettingsSchemaBuilder<ScheduleSortGroupSpec> builder) =>
         builder.Property(item => item.FieldName, property => {
             property.DependsOnSibling(nameof(ScheduleProfile.CategoryName));
@@ -80,13 +79,13 @@ internal sealed class AuthoredScheduleSortGroupSpecSchemaDefinition : SettingsSc
 }
 
 internal sealed class
-    AuthoredScheduleTitleStyleSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleTitleStyleSpec> {
+    ScheduleTitleStyleSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleTitleStyleSpec> {
     public override void Configure(ISettingsSchemaBuilder<ScheduleTitleStyleSpec> builder) {
     }
 }
 
 internal sealed class
-    AuthoredScheduleTitleBorderSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleTitleBorderSpec> {
+    ScheduleTitleBorderSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleTitleBorderSpec> {
     public override void Configure(ISettingsSchemaBuilder<ScheduleTitleBorderSpec> builder) {
         builder.Property(
             item => item.TopLineStyleName,
@@ -119,7 +118,7 @@ internal sealed class
     }
 }
 
-internal sealed class AuthoredBatchScheduleSettingsSchemaDefinition : SettingsSchemaDefinition<BatchScheduleSettings> {
+internal sealed class BatchScheduleSettingsSchemaDefinition : SettingsSchemaDefinition<BatchScheduleSettings> {
     public override void Configure(ISettingsSchemaBuilder<BatchScheduleSettings> builder) =>
         builder.Property(item => item.ScheduleFiles, property => property.UseStaticExamples(
             "equipment/air-handlers.json",
@@ -128,7 +127,7 @@ internal sealed class AuthoredBatchScheduleSettingsSchemaDefinition : SettingsSc
         ));
 }
 
-public static class AuthoredScheduleSchemaDefinitionBootstrapper {
+public static class ScheduleSchemaDefinitionBootstrapper {
     private static readonly object SyncRoot = new();
     private static bool _registered;
 
@@ -143,17 +142,16 @@ public static class AuthoredScheduleSchemaDefinitionBootstrapper {
             if (_registered)
                 return;
 
-            SettingsSchemaDefinitionRegistry.Shared.Register(new AuthoredScheduleProfileSchemaDefinition());
-            SettingsSchemaDefinitionRegistry.Shared.Register(new AuthoredScheduleFieldSpecSchemaDefinition());
-            SettingsSchemaDefinitionRegistry.Shared.Register(new AuthoredCombinedParameterSpecSchemaDefinition());
-            SettingsSchemaDefinitionRegistry.Shared.Register(new AuthoredScheduleFilterSpecSchemaDefinition());
-            SettingsSchemaDefinitionRegistry.Shared.Register(new AuthoredScheduleSortGroupSpecSchemaDefinition());
-            SettingsSchemaDefinitionRegistry.Shared.Register(new AuthoredScheduleTitleStyleSpecSchemaDefinition());
-            SettingsSchemaDefinitionRegistry.Shared.Register(new AuthoredScheduleTitleBorderSpecSchemaDefinition());
-            SettingsSchemaDefinitionRegistry.Shared.Register(new AuthoredBatchScheduleSettingsSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new ScheduleProfileSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new ScheduleFieldSpecSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new CombinedParameterSpecSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new ScheduleFilterSpecSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new ScheduleSortGroupSpecSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new ScheduleTitleStyleSpecSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new ScheduleTitleBorderSpecSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new BatchScheduleSettingsSchemaDefinition());
             _registered = true;
         }
     }
 }
-
 

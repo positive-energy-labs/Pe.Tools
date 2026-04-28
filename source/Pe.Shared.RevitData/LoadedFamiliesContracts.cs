@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using TypeGen.Core.TypeAnnotations;
 
@@ -46,6 +46,23 @@ public enum ExcludedParameterReason {
     UnresolvedClassification,
     ProjectObservedBuiltIn
 }
+
+[ExportTsInterface]
+public record LoadedFamiliesFilterFieldOptionsRequest(
+    string PropertyPath,
+    string SourceKey,
+    Dictionary<string, string>? ContextValues
+);
+
+[ExportTsInterface]
+public record LoadedFamiliesCatalogRequest(
+    LoadedFamiliesFilter? Filter
+);
+
+[ExportTsInterface]
+public record LoadedFamiliesMatrixRequest(
+    LoadedFamiliesFilter? Filter
+);
 
 [ExportTsInterface]
 public record LoadedFamiliesFilter {

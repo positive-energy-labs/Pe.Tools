@@ -14,7 +14,7 @@ public sealed class ModuleDocumentStorage {
         SettingsStorageModuleOptions storageOptions,
         SettingsRuntimeMode runtimeMode = SettingsRuntimeMode.HostOnly,
         string? basePath = null,
-        IReadOnlyDictionary<string, SettingsStorageModuleDefinition>? moduleDefinitionsByModuleKey = null
+        IReadOnlyDictionary<string, SettingsStorageModuleRuntimeDefinition>? moduleDefinitionsByModuleKey = null
     ) {
         this.ModuleKey = string.IsNullOrWhiteSpace(moduleKey)
             ? throw new ArgumentException("Module key is required.", nameof(moduleKey))
@@ -112,11 +112,11 @@ public sealed class ModuleDocumentStorage {
             nameof(relativePath)
         );
 
-    private static IReadOnlyDictionary<string, SettingsStorageModuleDefinition> CreateDefaultModuleDefinitions(
+    private static IReadOnlyDictionary<string, SettingsStorageModuleRuntimeDefinition> CreateDefaultModuleDefinitions(
         string moduleKey,
         string defaultRootKey,
         SettingsStorageModuleOptions storageOptions
-    ) => new Dictionary<string, SettingsStorageModuleDefinition>(StringComparer.OrdinalIgnoreCase) {
-        [moduleKey] = SettingsStorageModuleDefinition.CreateSingleRoot(defaultRootKey, storageOptions)
+    ) => new Dictionary<string, SettingsStorageModuleRuntimeDefinition>(StringComparer.OrdinalIgnoreCase) {
+        [moduleKey] = SettingsStorageModuleRuntimeDefinition.CreateSingleRoot(defaultRootKey, storageOptions)
     };
 }

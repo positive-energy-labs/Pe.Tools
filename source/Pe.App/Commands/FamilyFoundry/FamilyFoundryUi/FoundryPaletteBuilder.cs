@@ -28,19 +28,19 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new()
     private readonly string _commandName;
     private readonly Document _doc;
 
-    private readonly ISettingsModule<TProfile> _settingsModule;
+    private readonly ISettingsRootBinding<TProfile> _settingsRoot;
     private readonly UIDocument _uiDoc;
     private Action<FoundryContext<TProfile>, List<string>>? _postProcess;
     private Func<TProfile, List<SharedParameterDefinition>, OperationQueue>? _queueBuilder;
 
     public FoundryPaletteBuilder(
         string displayName,
-        ISettingsModule<TProfile> settingsModule,
+        ISettingsRootBinding<TProfile> settingsRoot,
         Document doc,
         UIDocument uiDoc
     ) {
         this._commandName = displayName;
-        this._settingsModule = settingsModule;
+        this._settingsRoot = settingsRoot;
         this._doc = doc;
         this._uiDoc = uiDoc;
     }
@@ -90,8 +90,8 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new()
             throw new InvalidOperationException("Queue builder must be set via WithQueueBuilder()");
 
         // Setup storage and settings
-        var storage = RuntimeStorageClient.Default.Module(this._settingsModule);
-        var persistence = RuntimeStorageClient.Default.Module(((ISettingsModule)this._settingsModule).ModuleKey);
+        var storage = RuntimeStorageClient.Default.Root(this._settingsRoot);
+        var persistence = RuntimeStorageClient.Default.Module(this._settingsRoot.Module.ModuleKey);
         var documents = storage.Documents();
         var settings = storage.State().Json<BaseSettings<TProfile>>("settings").Read();
         var profilesRootDirectory = documents.ResolveRootDirectory();

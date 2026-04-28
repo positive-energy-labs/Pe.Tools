@@ -13,15 +13,20 @@ and the decision about whether work stays local, crosses the Revit bridge, or pr
 - live document queries go through `BridgeServer`.
 - scripting is public through host HTTP, but the implementation currently proxies to `Pe.Scripting.Revit` over a local
   named pipe.
-- `/api/settings/events` remains invalidation-only and is not part of the scripting lane.
+- `/api/settings/events` is the host/document freshness stream and is not part of the scripting lane.
 
 ## Key Flows
 
 - structural settings work:
     - schema, workspaces, tree, open, validate, save
-    - no live Revit dependency
+    - workspaces, tree, open, validate, and save stay host-local
+    - Revit-authored schema and field option routes are bridge-backed
 - bridge-backed live data:
-    - host selects a bridge session and forwards the request into Revit
+    - host requires exactly one connected Revit session
+    - host forwards requests into Revit without target-selection semantics
+    - the active document is the only live-document target
+    - success returns the raw DTO payload
+    - expected user-actionable failures return `409 ProblemDetails`
 - scripting v1:
     - host requires exactly one connected Revit bridge session
     - host sends one pipe request to `Pe.Scripting.Revit`

@@ -9,7 +9,6 @@ internal sealed class LoadedFamiliesFilterSchemaDefinition
         builder.Data(SchemaDatasetIds.LoadedFamiliesCatalog, data => {
             data.Provider(SchemaDatasetIds.LoadedFamiliesCatalog);
             data.Load(SettingsSchemaDatasetLoadMode.Eager);
-            data.StaleOn(SchemaInvalidationKeys.DocumentChanged);
             data.SupportsProjection(SchemaProjectionKeys.FamilyNames, SchemaProjectionKeys.CategoryNames);
         });
 
@@ -53,4 +52,3 @@ internal static class LoadedFamiliesFilterSchemaDefinitionBootstrapper {
              StringComparison.OrdinalIgnoreCase)) ||
         (ex.InnerException is not null && IsMissingRevitAssembly(ex.InnerException));
 }
-

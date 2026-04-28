@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using Pe.Host.Operations;
 using Pe.Host.Services;
 using Pe.Shared.HostContracts.Protocol;
 using System.Collections.Concurrent;
@@ -49,8 +50,7 @@ public sealed class BridgeServer(
         TRequest request,
         CancellationToken cancellationToken = default
     ) {
-        var target = (request as IBridgeSessionRequest)?.Target;
-        var connectedSession = this.ResolveSessionOrThrow(target);
+        var connectedSession = this.ResolveDefaultSessionOrThrow();
         var requestId = Guid.NewGuid().ToString("N");
         var payloadJson = JsonConvert.SerializeObject(request, this._serializerSettings);
         var payloadBytes = Encoding.UTF8.GetByteCount(payloadJson);
@@ -83,7 +83,11 @@ public sealed class BridgeServer(
             using var registration = cancellationToken.Register(() => completion.TrySetCanceled(cancellationToken));
             var response = await completion.Task;
             if (!response.Ok)
-                throw new InvalidOperationException(response.ErrorMessage ?? "Bridge request failed.");
+                throw new HostOperationException(
+                    response.StatusCode ?? StatusCodes.Status409Conflict,
+                    response.ErrorMessage ?? "Bridge request failed.",
+                    response.Issues
+                );
 
             if (string.IsNullOrWhiteSpace(response.PayloadJson))
                 throw new InvalidOperationException("Bridge returned an empty payload.");
@@ -290,39 +294,15 @@ public sealed class BridgeServer(
         }
     }
 
-    private ConnectedBridgeSession ResolveSessionOrThrow(BridgeSessionSelector? target) {
+    private ConnectedBridgeSession ResolveDefaultSessionOrThrow() {
         lock (this._sessionSync) {
             if (this._sessionsById.Count == 0)
-                throw new InvalidOperationException("No Revit agent is currently connected.");
+                throw new InvalidOperationException("No connected Revit session. Connect one Revit session to Pe.Host and try again.");
 
-            if (!string.IsNullOrWhiteSpace(target?.SessionId)) {
-                if (this._sessionsById.TryGetValue(target.SessionId, out var exactSession))
-                    return exactSession;
-
-                throw new InvalidOperationException(
-                    $"No connected Revit session matched session ID '{target.SessionId}'.");
-            }
-
-            IEnumerable<ConnectedBridgeSession> candidateSessions = this._sessionsById.Values;
-            if (!string.IsNullOrWhiteSpace(target?.RevitVersion)) {
-                candidateSessions = candidateSessions.Where(session =>
-                    string.Equals(
-                        session.Snapshot.RevitVersion,
-                        target.RevitVersion,
-                        StringComparison.OrdinalIgnoreCase
-                    ));
-            }
-
-            var resolvedSession = candidateSessions
+            return this._sessionsById.Values
                 .OrderByDescending(session => session.Snapshot.ConnectedAtUnixMs)
                 .ThenBy(session => session.Snapshot.SessionId, StringComparer.Ordinal)
-                .FirstOrDefault();
-
-            if (resolvedSession != null)
-                return resolvedSession;
-
-            throw new InvalidOperationException(
-                $"No connected Revit session matched target '{FormatTarget(target)}'.");
+                .First();
         }
     }
 
@@ -534,19 +514,6 @@ public sealed class BridgeServer(
 
         if (string.IsNullOrWhiteSpace(handshake.SessionId))
             throw new InvalidOperationException("Bridge handshake did not include a session ID.");
-    }
-
-    private static string FormatTarget(BridgeSessionSelector? target) {
-        if (target == null)
-            return "default";
-
-        if (!string.IsNullOrWhiteSpace(target.SessionId))
-            return $"session:{target.SessionId}";
-
-        if (!string.IsNullOrWhiteSpace(target.RevitVersion))
-            return $"revit:{target.RevitVersion}";
-
-        return "default";
     }
 
     internal sealed class BridgeSession : IDisposable {

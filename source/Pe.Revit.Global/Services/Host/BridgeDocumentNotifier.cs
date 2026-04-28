@@ -1,4 +1,4 @@
-using Autodesk.Revit.DB.Events;
+﻿using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI.Events;
 using Pe.Shared.HostContracts.Protocol;
 using Serilog;
@@ -10,7 +10,6 @@ namespace Pe.Revit.Global.Services.Host;
 /// </summary>
 internal sealed class BridgeDocumentNotifier : IDisposable {
     private static readonly TimeSpan DocumentChangedMinInterval = TimeSpan.FromMilliseconds(750);
-    private readonly Action<IReadOnlyList<HostInvalidationDomain>>? _invalidateDomains;
     private readonly Func<DocumentInvalidationEvent, Task> _publishAsync;
     private readonly object _sync = new();
     private bool _disposed;
@@ -19,13 +18,8 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
     private DateTime _lastDocumentChangedNotificationUtc = DateTime.MinValue;
     private bool _lastHasActiveDocument;
 
-    public BridgeDocumentNotifier(
-        Func<DocumentInvalidationEvent, Task> publishAsync,
-        Action<IReadOnlyList<HostInvalidationDomain>>? invalidateDomains = null
-    ) {
+    public BridgeDocumentNotifier(Func<DocumentInvalidationEvent, Task> publishAsync) =>
         this._publishAsync = publishAsync;
-        this._invalidateDomains = invalidateDomains;
-    }
 
     public void Dispose() {
         lock (this._sync) {
@@ -109,23 +103,6 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
         var activeDocumentCloudModelGuid = activeDocument == null ? null : activeDocument.GetCloudModelGuid();
         var activeDocumentCloudModelUrn = activeDocument == null ? null : activeDocument.GetCloudModelUrn();
         var openDocumentCount = uiApp.GetOpenDocuments().Count();
-        var invalidatedDomains = new List<HostInvalidationDomain> {
-            HostInvalidationDomain.SettingsFieldOptions,
-            HostInvalidationDomain.SettingsParameterCatalog,
-            HostInvalidationDomain.ScheduleCatalog,
-            HostInvalidationDomain.ScheduleProfilesQuery,
-            HostInvalidationDomain.ScheduleQuery,
-            HostInvalidationDomain.LoadedFamiliesCatalog,
-            HostInvalidationDomain.LoadedFamiliesMatrix,
-            HostInvalidationDomain.ProjectParameterBindings,
-            HostInvalidationDomain.LoadedFamiliesFilterFieldOptions,
-            HostInvalidationDomain.ElementContextQuery,
-            HostInvalidationDomain.ElectricalPanelsCatalog,
-            HostInvalidationDomain.ElectricalCircuitsCatalog,
-            HostInvalidationDomain.ElectricalPanelSchedulesQuery,
-            HostInvalidationDomain.ElectricalLoadClassificationsCatalog
-        };
-        this._invalidateDomains?.Invoke(invalidatedDomains);
         return new DocumentInvalidationEvent(
             reason,
             activeDocument?.Title,
@@ -139,8 +116,7 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
             activeDocumentCloudModelUrn,
             activeDocument != null,
             openDocumentCount,
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            invalidatedDomains
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
         );
     }
 

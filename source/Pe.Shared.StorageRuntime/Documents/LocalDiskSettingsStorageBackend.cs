@@ -12,15 +12,15 @@ namespace Pe.Shared.StorageRuntime.Documents;
 public sealed class LocalDiskSettingsStorageBackend(
     string? basePath = null,
     SettingsRuntimeMode runtimeMode = SettingsRuntimeMode.HostOnly,
-    IReadOnlyDictionary<string, SettingsStorageModuleDefinition>? moduleDefinitionsByModuleKey = null
+    IReadOnlyDictionary<string, SettingsStorageModuleRuntimeDefinition>? moduleDefinitionsByModuleKey = null
 ) {
     private readonly string _basePath = string.IsNullOrWhiteSpace(basePath)
         ? SettingsStorageLocations.GetDefaultBasePath()
         : Path.GetFullPath(basePath);
 
-    private readonly IReadOnlyDictionary<string, SettingsStorageModuleDefinition> _moduleDefinitionsByModuleKey =
+    private readonly IReadOnlyDictionary<string, SettingsStorageModuleRuntimeDefinition> _moduleDefinitionsByModuleKey =
         moduleDefinitionsByModuleKey ??
-        new Dictionary<string, SettingsStorageModuleDefinition>(StringComparer.OrdinalIgnoreCase);
+        new Dictionary<string, SettingsStorageModuleRuntimeDefinition>(StringComparer.OrdinalIgnoreCase);
 
     private readonly SettingsRuntimeMode _runtimeMode = runtimeMode;
 
@@ -188,7 +188,7 @@ public sealed class LocalDiskSettingsStorageBackend(
     private MaterializedDocument MaterializeDocument(
         SettingsDocumentId documentId,
         string rawContent,
-        SettingsStorageModuleDefinition moduleDefinition,
+        SettingsStorageModuleRuntimeDefinition moduleDefinition,
         bool includeComposedOutput
     ) {
         try {
@@ -212,7 +212,7 @@ public sealed class LocalDiskSettingsStorageBackend(
         SettingsDocumentId documentId,
         string rawContent,
         JObject rawObject,
-        SettingsStorageModuleDefinition moduleDefinition,
+        SettingsStorageModuleRuntimeDefinition moduleDefinition,
         bool includeComposedOutput
     ) {
         var dependencies = new List<SettingsDocumentDependency>();
@@ -253,8 +253,9 @@ public sealed class LocalDiskSettingsStorageBackend(
             ));
         }
 
-        if (issues.Count == 0 && moduleDefinition.Validator != null) {
-            var validatorResult = moduleDefinition.Validator.Validate(
+        var validator = ResolveRootValidator(moduleDefinition, documentId.RootKey);
+        if (issues.Count == 0 && validator != null) {
+            var validatorResult = validator.Validate(
                 documentId,
                 rawContent,
                 composedObject == null
@@ -276,7 +277,7 @@ public sealed class LocalDiskSettingsStorageBackend(
     private SettingsValidationResult ValidateCore(
         SettingsDocumentId documentId,
         string rawContent,
-        SettingsStorageModuleDefinition moduleDefinition,
+        SettingsStorageModuleRuntimeDefinition moduleDefinition,
         bool includeComposedContent
     ) {
         try {
@@ -300,14 +301,14 @@ public sealed class LocalDiskSettingsStorageBackend(
 
     private JsonCompositionPipeline CreateCompositionPipeline(
         SettingsDocumentId documentId,
-        SettingsStorageModuleDefinition moduleDefinition
+        SettingsStorageModuleRuntimeDefinition moduleDefinition
     ) => new(
         this.ResolveRootDirectory(documentId.ModuleKey, documentId.RootKey),
         moduleDefinition.StorageOptions.IncludeRoots,
         moduleDefinition.StorageOptions.PresetRoots
     );
 
-    private SettingsStorageModuleDefinition ResolveRequiredModuleDefinition(string moduleKey, string rootKey) {
+    private SettingsStorageModuleRuntimeDefinition ResolveRequiredModuleDefinition(string moduleKey, string rootKey) {
         if (!this._moduleDefinitionsByModuleKey.TryGetValue(moduleKey, out var definition)) {
             throw new InvalidOperationException(
                 $"Storage module '{moduleKey}' is not configured."
@@ -414,11 +415,13 @@ public sealed class LocalDiskSettingsStorageBackend(
 
     private IReadOnlyDictionary<string, string> BuildCapabilityHints(
         bool includeComposedContent,
-        SettingsStorageModuleDefinition moduleDefinition
+        SettingsStorageModuleRuntimeDefinition moduleDefinition
     ) => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
         ["backend"] = "local-disk",
         ["availableCapabilities"] = JsonConvert.SerializeObject(this._runtimeMode.ToMetadata()),
-        ["schemaValidation"] = moduleDefinition.Validator == null ? "not-configured" : "configured",
+        ["schemaValidation"] = ResolveRootValidator(moduleDefinition, moduleDefinition.DefaultRootKey) == null
+            ? "not-configured"
+            : "configured",
         ["compositionPolicy"] = includeComposedContent ? "module-scoped" : "not-requested",
         ["dependencyScopes"] = "local,global"
     };
@@ -446,6 +449,19 @@ public sealed class LocalDiskSettingsStorageBackend(
     private static SettingsValidationResult CreateValidationResult(IReadOnlyList<SettingsValidationIssue> issues) {
         var hasErrors = issues.Any(issue => string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase));
         return new SettingsValidationResult(!hasErrors, issues);
+    }
+
+    private static ISettingsDocumentValidator? ResolveRootValidator(
+        SettingsStorageModuleRuntimeDefinition moduleDefinition,
+        string rootKey
+    ) {
+        if (moduleDefinition.RootValidators.TryGetValue(rootKey, out var validator))
+            return validator;
+
+        if (moduleDefinition.RootValidators.TryGetValue(moduleDefinition.DefaultRootKey, out validator))
+            return validator;
+
+        return null;
     }
 
 

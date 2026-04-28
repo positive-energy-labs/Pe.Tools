@@ -3,7 +3,6 @@ using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using NJsonSchema.Generation.TypeMappers;
 using Pe.Revit.SettingsRuntime.Json;
-using Pe.Revit.SettingsRuntime.Json.FieldOptions;
 using Pe.Shared.StorageRuntime.Capabilities;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -26,8 +25,6 @@ internal sealed class PlaneRefOrInlinePlaneSchemaBinding : IJsonTypeSchemaBindin
     public JsonObjectType SchemaType => JsonObjectType.None;
 
     public JsonConverter? CreateConverter(PropertyInfo propertyInfo) => null;
-
-    public IFieldOptionsSource? CreateFieldOptionsSource(PropertyInfo propertyInfo) => null;
 
     public void ConfigureTypeSchema(JsonSchema schema, TypeMapperContext context) => ApplyUnionSchema(schema);
 
@@ -64,8 +61,6 @@ internal sealed class PlanePairOrInlineSpanSchemaBinding : IJsonTypeSchemaBindin
     public JsonObjectType SchemaType => JsonObjectType.None;
 
     public JsonConverter? CreateConverter(PropertyInfo propertyInfo) => null;
-
-    public IFieldOptionsSource? CreateFieldOptionsSource(PropertyInfo propertyInfo) => null;
 
     public void ConfigureTypeSchema(JsonSchema schema, TypeMapperContext context) => ApplyUnionSchema(schema);
 
@@ -123,4 +118,3 @@ internal static class AuthoredParamDrivenSolidsSchemaFragments {
         return JsonSchema.FromJsonAsync(schemaObject.ToString(Formatting.None)).GetAwaiter().GetResult();
     }
 }
-

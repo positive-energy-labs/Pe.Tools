@@ -1,22 +1,23 @@
-using Pe.Shared.HostContracts.RevitData;
-using Pe.Shared.HostContracts.SettingsStorage;
+﻿using Pe.Shared.HostContracts.SettingsStorage;
+using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Schedules;
 
 namespace Pe.Shared.HostContracts.Operations;
 
 public static class GetLoadedFamiliesFilterSchemaOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<NoRequest, SchemaEnvelopeResponse>(
+        HostOperationDefinition.Create<NoRequest, SchemaData>(
             "revit-data.loaded-families.filter-schema",
             HostHttpVerb.Get,
             "/api/revit-data/loaded-families/filter/schema",
-            HostExecutionMode.Local,
+            HostExecutionMode.Bridge,
             "Get Loaded Families Filter Schema"
         );
 }
 
 public static class GetLoadedFamiliesFilterFieldOptionsOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<LoadedFamiliesFilterFieldOptionsRequest, FieldOptionsEnvelopeResponse>(
+        HostOperationDefinition.Create<LoadedFamiliesFilterFieldOptionsRequest, FieldOptionsData>(
             "revit-data.loaded-families.filter-field-options",
             HostHttpVerb.Post,
             "/api/revit-data/loaded-families/filter/field-options",
@@ -27,55 +28,51 @@ public static class GetLoadedFamiliesFilterFieldOptionsOperationContract {
 
 public static class GetScheduleCatalogOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<ScheduleCatalogRequest, ScheduleCatalogEnvelopeResponse>(
+        HostOperationDefinition.Create<ScheduleCatalogRequest, ScheduleCatalogData>(
             "revit-data.schedule-catalog",
             HostHttpVerb.Post,
             "/api/revit-data/schedules/catalog",
             HostExecutionMode.Bridge,
-            "Get Schedule Catalog",
-            new HostCachePolicy("schedule-catalog", 10)
+            "Get Schedule Catalog"
         );
 }
 
 public static class GetScheduleProfilesQueryOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<ScheduleProfilesQueryRequest, ScheduleProfilesQueryEnvelopeResponse>(
+        HostOperationDefinition.Create<ScheduleProfilesQueryRequest, ScheduleProfilesQueryData>(
             "revit-data.schedule-profiles-query",
             HostHttpVerb.Post,
             "/api/revit-data/schedules/profiles/query",
             HostExecutionMode.Bridge,
-            "Get Schedule Profiles Query",
-            new HostCachePolicy("schedule-profiles-query", 10)
+            "Get Schedule Profiles Query"
         );
 }
 
 public static class GetScheduleQueryOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<ScheduleQueryRequest, ScheduleQueryEnvelopeResponse>(
+        HostOperationDefinition.Create<ScheduleQueryRequest, ScheduleQueryData>(
             "revit-data.schedule-query",
             HostHttpVerb.Post,
             "/api/revit-data/schedules/query",
             HostExecutionMode.Bridge,
-            "Get Schedule Query",
-            new HostCachePolicy("schedule-query", 10)
+            "Get Schedule Query"
         );
 }
 
 public static class GetLoadedFamiliesCatalogOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<LoadedFamiliesCatalogRequest, LoadedFamiliesCatalogEnvelopeResponse>(
+        HostOperationDefinition.Create<LoadedFamiliesCatalogRequest, LoadedFamiliesCatalogData>(
             "revit-data.loaded-families.catalog",
             HostHttpVerb.Post,
             "/api/revit-data/loaded-families/catalog",
             HostExecutionMode.Bridge,
-            "Get Loaded Families Catalog",
-            new HostCachePolicy("loaded-families-catalog", 10)
+            "Get Loaded Families Catalog"
         );
 }
 
 public static class GetLoadedFamiliesMatrixOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<LoadedFamiliesMatrixRequest, LoadedFamiliesMatrixEnvelopeResponse>(
+        HostOperationDefinition.Create<LoadedFamiliesMatrixRequest, LoadedFamiliesMatrixData>(
             "revit-data.loaded-families.matrix",
             HostHttpVerb.Post,
             "/api/revit-data/loaded-families/matrix",
@@ -86,12 +83,11 @@ public static class GetLoadedFamiliesMatrixOperationContract {
 
 public static class GetProjectParameterBindingsOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<ProjectParameterBindingsRequest, ProjectParameterBindingsEnvelopeResponse>(
+        HostOperationDefinition.Create<ProjectParameterBindingsRequest, ProjectParameterBindingsData>(
             "revit-data.project-parameter-bindings",
             HostHttpVerb.Post,
             "/api/revit-data/project-parameter-bindings",
             HostExecutionMode.Bridge,
-            "Get Project Parameter Bindings",
-            new HostCachePolicy("project-parameter-bindings", 10)
+            "Get Project Parameter Bindings"
         );
 }

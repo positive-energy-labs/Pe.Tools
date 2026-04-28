@@ -1,6 +1,7 @@
-using Pe.Shared.HostContracts.Operations;
-using Pe.Shared.HostContracts.RevitData;
+﻿using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.SettingsStorage;
+using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Schedules;
 
 namespace Pe.Revit.Global.Services.Host.Operations;
 
@@ -9,101 +10,102 @@ internal sealed class BridgeOperationRegistry {
 
     public BridgeOperationRegistry() {
         this.Operations = [
-            BridgeOperations.Create<FieldOptionsRequest, FieldOptionsEnvelopeResponse>(
+            BridgeOperations.Create<SchemaRequest, SchemaData>(
+                GetSchemaOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RequestService.GetSchemaAsync(request)
+            ),
+            BridgeOperations.Create<FieldOptionsRequest, FieldOptionsData>(
                 GetFieldOptionsOperationContract.Definition,
                 static (request, context, cancellationToken) =>
-                    context.RequestService.GetFieldOptionsEnvelopeAsync(request)
+                    context.RequestService.GetFieldOptionsAsync(request)
             ),
             BridgeOperations.Create<GetSettingsModuleCatalogBridgeRequest, GetSettingsModuleCatalogBridgeResponse>(
                 GetSettingsModuleCatalogBridgeOperationContract.Definition,
                 static (request, context, cancellationToken) =>
                     context.RequestService.GetSettingsModuleCatalogAsync(request)
             ),
-            BridgeOperations.Create<ParameterCatalogRequest, ParameterCatalogEnvelopeResponse>(
+            BridgeOperations.Create<ParameterCatalogRequest, ParameterCatalogData>(
                 GetParameterCatalogOperationContract.Definition,
                 static (request, context, cancellationToken) =>
-                    context.RequestService.GetParameterCatalogEnvelopeAsync(request)
+                    context.RequestService.GetParameterCatalogAsync(request)
             ),
-            BridgeOperations.Create<LoadedFamiliesFilterFieldOptionsRequest, FieldOptionsEnvelopeResponse>(
+            BridgeOperations.Create<LoadedFamiliesFilterFieldOptionsRequest, FieldOptionsData>(
                 GetLoadedFamiliesFilterFieldOptionsOperationContract.Definition,
                 static (request, context, cancellationToken) =>
-                    context.RequestService.GetLoadedFamiliesFilterFieldOptionsEnvelopeAsync(request)
+                    context.RequestService.GetLoadedFamiliesFilterFieldOptionsAsync(request)
             ),
-            BridgeOperations.Create<ScheduleCatalogRequest, ScheduleCatalogEnvelopeResponse>(
+            BridgeOperations.Create<NoRequest, SchemaData>(
+                GetLoadedFamiliesFilterSchemaOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RequestService.GetLoadedFamiliesFilterSchemaAsync()
+            ),
+            BridgeOperations.Create<ScheduleCatalogRequest, ScheduleCatalogData>(
                 GetScheduleCatalogOperationContract.Definition,
                 static (request, context, cancellationToken) =>
-                    context.RevitDataRequestService.GetScheduleCatalogEnvelopeAsync(request)
+                    context.RevitDataRequestService.GetScheduleCatalogAsync(request)
             ),
-            BridgeOperations.Create<ScheduleProfilesQueryRequest, ScheduleProfilesQueryEnvelopeResponse>(
+            BridgeOperations.Create<ScheduleProfilesQueryRequest, ScheduleProfilesQueryData>(
                 GetScheduleProfilesQueryOperationContract.Definition,
                 static (request, context, cancellationToken) =>
-                    context.RevitDataRequestService.GetScheduleProfilesQueryEnvelopeAsync(request)
+                    context.RevitDataRequestService.GetScheduleProfilesQueryAsync(request)
             ),
-            BridgeOperations.Create<ScheduleQueryRequest, ScheduleQueryEnvelopeResponse>(
+            BridgeOperations.Create<ScheduleQueryRequest, ScheduleQueryData>(
                 GetScheduleQueryOperationContract.Definition,
                 static (request, context, cancellationToken) =>
-                    context.RevitDataRequestService.GetScheduleQueryEnvelopeAsync(request)
+                    context.RevitDataRequestService.GetScheduleQueryAsync(request)
             ),
-            BridgeOperations.Create<LoadedFamiliesCatalogRequest, LoadedFamiliesCatalogEnvelopeResponse>(
+            BridgeOperations.Create<LoadedFamiliesCatalogRequest, LoadedFamiliesCatalogData>(
                 GetLoadedFamiliesCatalogOperationContract.Definition,
                 static (request, context, cancellationToken) =>
-                    context.RevitDataRequestService.GetLoadedFamiliesCatalogEnvelopeAsync(request)
+                    context.RevitDataRequestService.GetLoadedFamiliesCatalogAsync(request)
             ),
-            BridgeOperations.Create<LoadedFamiliesMatrixRequest, LoadedFamiliesMatrixEnvelopeResponse>(
+            BridgeOperations.Create<LoadedFamiliesMatrixRequest, LoadedFamiliesMatrixData>(
                 GetLoadedFamiliesMatrixOperationContract.Definition,
                 static (request, context, cancellationToken) =>
-                    context.RevitDataRequestService.GetLoadedFamiliesMatrixEnvelopeAsync(request)
+                    context.RevitDataRequestService.GetLoadedFamiliesMatrixAsync(request)
             ),
-            BridgeOperations.Create<ProjectParameterBindingsRequest, ProjectParameterBindingsEnvelopeResponse>(
+            BridgeOperations.Create<ProjectParameterBindingsRequest, ProjectParameterBindingsData>(
                 GetProjectParameterBindingsOperationContract.Definition,
                 static (request, context, cancellationToken) =>
-                    context.RevitDataRequestService.GetProjectParameterBindingsEnvelopeAsync(request)
+                    context.RevitDataRequestService.GetProjectParameterBindingsAsync(request)
             ),
-            BridgeOperations.Create<ElementContextQueryRequest, ElementContextQueryEnvelopeResponse>(
+            BridgeOperations.Create<ElementContextQueryRequest, ElementContextQueryData>(
                 GetElementContextQueryOperationContract.Definition,
                 static (request, context, cancellationToken) =>
-                    context.RevitDataRequestService.GetElementContextQueryEnvelopeAsync(request)
+                    context.RevitDataRequestService.GetElementContextQueryAsync(request)
             ),
-            BridgeOperations.Create<ElectricalPanelsCatalogRequest, ElectricalPanelsCatalogEnvelopeResponse>(
+            BridgeOperations.Create<ElectricalPanelsCatalogRequest, ElectricalPanelsCatalogData>(
                 GetElectricalPanelsCatalogOperationContract.Definition,
                 static (request, context, cancellationToken) =>
-                    context.RevitDataRequestService.GetElectricalPanelsCatalogEnvelopeAsync(request)
+                    context.RevitDataRequestService.GetElectricalPanelsCatalogAsync(request)
             ),
-            BridgeOperations.Create<ElectricalCircuitsCatalogRequest, ElectricalCircuitsCatalogEnvelopeResponse>(
+            BridgeOperations.Create<ElectricalCircuitsCatalogRequest, ElectricalCircuitsCatalogData>(
                 GetElectricalCircuitsCatalogOperationContract.Definition,
                 static (request, context, cancellationToken) =>
-                    context.RevitDataRequestService.GetElectricalCircuitsCatalogEnvelopeAsync(request)
+                    context.RevitDataRequestService.GetElectricalCircuitsCatalogAsync(request)
             ),
             BridgeOperations
-                .Create<ElectricalPanelSchedulesQueryRequest, ElectricalPanelSchedulesQueryEnvelopeResponse>(
+                .Create<ElectricalPanelSchedulesQueryRequest, ElectricalPanelSchedulesQueryData>(
                     GetElectricalPanelSchedulesQueryOperationContract.Definition,
                     static (request, context, cancellationToken) =>
-                        context.RevitDataRequestService.GetElectricalPanelSchedulesQueryEnvelopeAsync(request)
+                        context.RevitDataRequestService.GetElectricalPanelSchedulesQueryAsync(request)
                 ),
             BridgeOperations
                 .Create<ElectricalLoadClassificationsCatalogRequest,
-                    ElectricalLoadClassificationsCatalogEnvelopeResponse>(
+                    ElectricalLoadClassificationsCatalogData>(
                     GetElectricalLoadClassificationsCatalogOperationContract.Definition,
                     static (request, context, cancellationToken) =>
-                        context.RevitDataRequestService.GetElectricalLoadClassificationsCatalogEnvelopeAsync(request)
+                        context.RevitDataRequestService.GetElectricalLoadClassificationsCatalogAsync(request)
                 ),
-            BridgeOperations.Create<RevitDocumentSessionContextRequest, RevitDocumentSessionContextEnvelopeResponse>(
+            BridgeOperations.Create<NoRequest, RevitDocumentSessionContextData>(
                 GetRevitDocumentSessionContextOperationContract.Definition,
                 static (request, context, cancellationToken) =>
-                    context.RevitDataRequestService.GetRevitDocumentSessionContextEnvelopeAsync(request)
+                    context.RevitDataRequestService.GetRevitDocumentSessionContextAsync()
             )
         ];
 
-        var duplicateKeys = this.Operations
-            .GroupBy(operation => operation.Definition.Key, StringComparer.Ordinal)
-            .Where(group => group.Count() > 1)
-            .Select(group => group.Key)
-            .ToList();
-        if (duplicateKeys.Count != 0) {
-            throw new InvalidOperationException(
-                $"Duplicate bridge operation keys detected: {string.Join(", ", duplicateKeys)}"
-            );
-        }
+        ValidateDefinitions(this.Operations);
 
         this._operationsByKey = this.Operations.ToDictionary(
             operation => operation.Definition.Key,
@@ -115,4 +117,40 @@ internal sealed class BridgeOperationRegistry {
 
     public bool TryGet(string key, out IBridgeOperation operation) =>
         this._operationsByKey.TryGetValue(key, out operation!);
+
+    private static void ValidateDefinitions(IReadOnlyList<IBridgeOperation> operations) {
+        var duplicateKeys = operations
+            .GroupBy(operation => operation.Definition.Key, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToList();
+        if (duplicateKeys.Count != 0) {
+            throw new InvalidOperationException(
+                $"Duplicate bridge operation keys detected: {string.Join(", ", duplicateKeys)}"
+            );
+        }
+
+        var missingDefinitions = HostOperationsCatalog.All
+            .Where(definition => operations.All(operation => operation.Definition.Key != definition.Key))
+            .Select(definition => definition.Key)
+            .Except(
+                [
+                    GetHostStatusOperationContract.Definition.Key,
+                    GetWorkspacesOperationContract.Definition.Key,
+                    DiscoverSettingsTreeOperationContract.Definition.Key,
+                    OpenSettingsDocumentOperationContract.Definition.Key,
+                    ValidateSettingsDocumentOperationContract.Definition.Key,
+                    SaveSettingsDocumentOperationContract.Definition.Key,
+                    GetScriptWorkspaceBootstrapOperationContract.Definition.Key,
+                    ExecuteRevitScriptOperationContract.Definition.Key
+                ],
+                StringComparer.Ordinal
+            )
+            .ToList();
+        if (missingDefinitions.Count != 0) {
+            throw new InvalidOperationException(
+                $"Bridge operation registry is missing shared host operations: {string.Join(", ", missingDefinitions)}"
+            );
+        }
+    }
 }

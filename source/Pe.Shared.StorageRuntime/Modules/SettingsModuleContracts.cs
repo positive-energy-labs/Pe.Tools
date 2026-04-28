@@ -9,15 +9,22 @@ public sealed record SettingsStorageModuleOptions(
     public static SettingsStorageModuleOptions Empty { get; } = new([], []);
 }
 
-public sealed record SettingsStorageModuleDefinition(
+public sealed record SettingsStorageModuleRuntimeDefinition(
     string DefaultRootKey,
     IReadOnlyCollection<string> AllowedRootKeys,
     SettingsStorageModuleOptions StorageOptions,
-    ISettingsDocumentValidator? Validator = null
+    IReadOnlyDictionary<string, ISettingsDocumentValidator?> RootValidators
 ) {
-    public static SettingsStorageModuleDefinition CreateSingleRoot(
+    public static SettingsStorageModuleRuntimeDefinition CreateSingleRoot(
         string defaultRootKey,
         SettingsStorageModuleOptions storageOptions,
         ISettingsDocumentValidator? validator = null
-    ) => new(defaultRootKey, [defaultRootKey], storageOptions, validator);
+    ) => new(
+        defaultRootKey,
+        [defaultRootKey],
+        storageOptions,
+        new Dictionary<string, ISettingsDocumentValidator?>(StringComparer.OrdinalIgnoreCase) {
+            [defaultRootKey] = validator
+        }
+    );
 }

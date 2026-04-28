@@ -1,4 +1,4 @@
-using Pe.Shared.HostContracts.Operations;
+﻿using Pe.Shared.HostContracts.Operations;
 
 namespace Pe.Host.Operations;
 
@@ -39,12 +39,11 @@ internal static class HostOperations {
         Func<TRequest, HostOperationContext, CancellationToken, Task<HostOperationResult>> handler
     ) => new DelegatingHostOperation<TRequest>(definition, handler);
 
-    public static IHostOperation Bridge<TRequest, TEnvelope>(HostOperationDefinition definition)
-        where TEnvelope : class =>
+    public static IHostOperation Bridge<TRequest, TResponse>(HostOperationDefinition definition) =>
         Create<TRequest>(
             definition,
             async (request, context, cancellationToken) => Path(
-                await context.BridgeServer.InvokeAsync<TRequest, TEnvelope>(
+                await context.BridgeServer.InvokeAsync<TRequest, TResponse>(
                     definition.Key,
                     request,
                     cancellationToken

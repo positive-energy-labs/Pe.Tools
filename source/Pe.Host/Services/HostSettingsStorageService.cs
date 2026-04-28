@@ -1,7 +1,7 @@
-using Pe.Shared.HostContracts.Protocol;
-using Pe.Shared.SettingsLayout;
+﻿using Pe.Shared.SettingsLayout;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Documents;
 using Pe.Shared.StorageRuntime.Modules;
 using HostOpenRequest = Pe.Shared.HostContracts.SettingsStorage.OpenSettingsDocumentRequest;
 using HostSaveRequest = Pe.Shared.HostContracts.SettingsStorage.SaveSettingsDocumentRequest;
@@ -22,19 +22,22 @@ namespace Pe.Host.Services;
 /// </summary>
 public sealed class HostSettingsStorageService {
     private readonly string _basePath;
+    private readonly BridgeServer _bridgeServer;
     private readonly IHostSettingsModuleCatalog _moduleCatalog;
     private readonly SettingsRuntimeMode _runtimeMode;
 
-    public HostSettingsStorageService(IHostSettingsModuleCatalog moduleCatalog)
-        : this(moduleCatalog, null) {
+    public HostSettingsStorageService(IHostSettingsModuleCatalog moduleCatalog, BridgeServer bridgeServer)
+        : this(moduleCatalog, bridgeServer, null) {
     }
 
     public HostSettingsStorageService(
         IHostSettingsModuleCatalog moduleCatalog,
+        BridgeServer bridgeServer,
         string? basePath = null,
         SettingsRuntimeMode runtimeMode = SettingsRuntimeMode.HostOnly
     ) {
         this._moduleCatalog = moduleCatalog;
+        this._bridgeServer = bridgeServer;
         this._basePath = basePath ?? SettingsStorageLocations.GetDefaultBasePath();
         this._runtimeMode = runtimeMode;
     }
@@ -43,7 +46,7 @@ public sealed class HostSettingsStorageService {
         HostTreeRequest request,
         CancellationToken cancellationToken = default
     ) {
-        var module = await this.ResolveModuleAsync(request.ModuleKey, request.Target, cancellationToken);
+        var module = await this.ResolveModuleAsync(request.ModuleKey, cancellationToken);
         var discovery = await this.CreateDocuments(module).DiscoverAsync(
             new SettingsDiscoveryOptions(
                 request.SubDirectory,
@@ -62,7 +65,7 @@ public sealed class HostSettingsStorageService {
         CancellationToken cancellationToken = default
     ) {
         var documents = this.CreateDocuments(
-            await this.ResolveModuleAsync(request.DocumentId.ModuleKey, request.Target, cancellationToken)
+            await this.ResolveModuleAsync(request.DocumentId.ModuleKey, cancellationToken)
         );
         return (await documents.OpenAsync(
             request.DocumentId.RelativePath,
@@ -77,7 +80,7 @@ public sealed class HostSettingsStorageService {
         CancellationToken cancellationToken = default
     ) {
         var documents = this.CreateDocuments(
-            await this.ResolveModuleAsync(request.DocumentId.ModuleKey, request.Target, cancellationToken)
+            await this.ResolveModuleAsync(request.DocumentId.ModuleKey, cancellationToken)
         );
         return (await documents.SaveAsync(
             request.DocumentId.RelativePath,
@@ -95,7 +98,7 @@ public sealed class HostSettingsStorageService {
         CancellationToken cancellationToken = default
     ) {
         var documents = this.CreateDocuments(
-            await this.ResolveModuleAsync(request.DocumentId.ModuleKey, request.Target, cancellationToken)
+            await this.ResolveModuleAsync(request.DocumentId.ModuleKey, cancellationToken)
         );
         return (await documents.ValidateAsync(
             request.DocumentId.RelativePath,
@@ -108,14 +111,13 @@ public sealed class HostSettingsStorageService {
     public Task<HostWorkspacesData> GetWorkspacesAsync(
         HostWorkspacesRequest request,
         CancellationToken cancellationToken = default
-    ) => this._moduleCatalog.GetWorkspacesAsync(request.Target, cancellationToken);
+    ) => this._moduleCatalog.GetWorkspacesAsync(cancellationToken);
 
     private async Task<StructuralSettingsModuleDescriptor> ResolveModuleAsync(
         string moduleKey,
-        BridgeSessionSelector? target,
         CancellationToken cancellationToken
     ) {
-        var module = await this._moduleCatalog.TryGetModuleAsync(moduleKey, target, cancellationToken);
+        var module = await this._moduleCatalog.TryGetModuleAsync(moduleKey, cancellationToken);
         return module ?? throw new InvalidOperationException($"Unknown settings module '{moduleKey}'.");
     }
 
@@ -126,12 +128,29 @@ public sealed class HostSettingsStorageService {
             module.StorageOptions,
             this._runtimeMode,
             this._basePath,
-            new Dictionary<string, SettingsStorageModuleDefinition>(StringComparer.OrdinalIgnoreCase) {
+            new Dictionary<string, SettingsStorageModuleRuntimeDefinition>(StringComparer.OrdinalIgnoreCase) {
                 [module.ModuleKey] = new(
                     module.DefaultRootKey,
                     module.Roots.Select(root => root.RootKey).ToList(),
-                    module.StorageOptions
+                    module.StorageOptions,
+                    this.CreateRootValidators(module)
                 )
             }
         );
+
+    private IReadOnlyDictionary<string, ISettingsDocumentValidator?> CreateRootValidators(
+        StructuralSettingsModuleDescriptor module
+    ) => module.Roots.ToDictionary(
+        root => root.RootKey,
+        root => this.CreateValidator(module, root.RootKey),
+        StringComparer.OrdinalIgnoreCase
+    );
+
+    private ISettingsDocumentValidator? CreateValidator(
+        StructuralSettingsModuleDescriptor module,
+        string rootKey
+    ) =>
+        module.HostScope == SettingsModuleHostScope.Host
+            ? null
+            : new BridgeSchemaSettingsDocumentValidator(this._bridgeServer, module.ModuleKey, rootKey);
 }

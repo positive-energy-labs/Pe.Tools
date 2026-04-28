@@ -21,7 +21,7 @@ namespace Pe.App.Commands.FamilyFoundry;
 public class CmdFFManager : IExternalCommand {
     public const string AddinKey = nameof(CmdFFManager);
     public const string DisplayName = "FF Manager";
-    private static readonly SettingsModuleManifest<FFManagerProfile> SettingsModule = FFManagerManifest.Module;
+    private static readonly ISettingsRootBinding<FFManagerProfile> SettingsRoot = FFManagerSettingsRegistration.Root;
 
     public Result Execute(
         ExternalCommandData commandData,
@@ -32,7 +32,7 @@ public class CmdFFManager : IExternalCommand {
         var doc = uiDoc.Document;
 
         try {
-            var window = new FoundryPaletteBuilder<FFManagerProfile>(DisplayName, SettingsModule, doc, uiDoc)
+            var window = new FoundryPaletteBuilder<FFManagerProfile>(DisplayName, SettingsRoot, doc, uiDoc)
                 .WithAction("Apply Profile", this.HandleApplyProfile,
                     ctx => ctx.PreviewData?.IsValid == true)
                 .WithQueueBuilder(BuildQueue)

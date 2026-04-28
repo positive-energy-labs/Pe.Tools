@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using TypeGen.Core.TypeAnnotations;
 
@@ -40,6 +40,16 @@ public record ScheduleCatalogRequest {
     public List<ScheduleCustomParameterFilter> CustomParameterFilters { get; init; } = [];
     public bool IncludeTemplates { get; init; }
 }
+
+[ExportTsInterface]
+public record ScheduleProfilesQueryRequest(
+    ScheduleProfilesQuery? Query = null
+);
+
+[ExportTsInterface]
+public record ScheduleQueryRequest(
+    ScheduleQuery? Query = null
+);
 
 [ExportTsInterface]
 public record ScheduleOnFinishSettings(
@@ -224,16 +234,21 @@ public record ScheduleQuery(
 public record ScheduleRenderedColumn(
     int ColumnNumber,
     string HeaderText,
-    string Key
+    string Key,
+    string FieldName,
+    int ProfileFieldIndex
 );
 
 [ExportTsInterface]
-public record ScheduleVisibleInstanceEntry(
-    long InstanceId,
-    string InstanceUniqueId,
-    string FamilyName,
-    string FamilyTypeName,
-    string? CategoryName
+public record ScheduleRenderedSubject(
+    long SubjectId,
+    string SubjectUniqueId,
+    string Kind,
+    string? CategoryName,
+    string DisplayName,
+    long? FamilyId,
+    string? FamilyName,
+    string? FamilyTypeName
 );
 
 [JsonConverter(typeof(StringEnumConverter))]
@@ -243,12 +258,50 @@ public enum ScheduleRenderedRowKind {
     GroupFooter
 }
 
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum ScheduleRenderedRowBindingKind {
+    None,
+    SingleSubject,
+    MultipleSubjects
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum ScheduleRenderedRowSubjectResolutionStatus {
+    NotApplicable,
+    NonBindable,
+    Unbound,
+    Bound
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum ScheduleRenderedRowSubjectResolutionReason {
+    None,
+    NonDataRow,
+    NoVisibleSubjects,
+    NoComparableValues,
+    HeuristicMismatch
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum ScheduleRenderedBindingStatus {
+    None,
+    Partial,
+    Complete
+}
+
 [ExportTsInterface]
 public record ScheduleRenderedRow(
     int RowNumber,
     ScheduleRenderedRowKind Kind,
     List<string> Values,
-    List<long> InstanceIds
+    ScheduleRenderedRowBindingKind BindingKind,
+    ScheduleRenderedRowSubjectResolutionStatus ResolutionStatus,
+    ScheduleRenderedRowSubjectResolutionReason ResolutionReason,
+    List<long> SubjectIds
 );
 
 [ExportTsInterface]
@@ -260,11 +313,16 @@ public record ScheduleRenderedScheduleEntry(
     bool IsTemplate,
     bool IsPlacedOnSheet,
     List<ScheduleCatalogSheetPlacement> SheetPlacements,
+    bool IsEmpty,
+    ScheduleRenderedBindingStatus BindingStatus,
+    int NotApplicableRowCount,
+    int NonBindableRowCount,
+    int BindableRowCount,
+    int BoundRowCount,
+    int UnboundRowCount,
     int VisibleBodyRowCount,
-    int VisibleFamilyCount,
-    int VisibleInstanceCount,
-    List<ScheduleVisibleFamilyEntry> VisibleFamilies,
-    List<ScheduleVisibleInstanceEntry> VisibleInstances,
+    int SubjectCount,
+    List<ScheduleRenderedSubject> Subjects,
     List<ScheduleRenderedColumn> Columns,
     List<ScheduleRenderedRow> Rows
 );

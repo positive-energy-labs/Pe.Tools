@@ -1,8 +1,13 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using TypeGen.Core.TypeAnnotations;
 
 namespace Pe.Shared.RevitData;
+
+[ExportTsInterface]
+public record ElementContextQueryRequest(
+    ElementContextQuery? Query = null
+);
 
 [ExportTsInterface]
 public record ElementContextQuery(

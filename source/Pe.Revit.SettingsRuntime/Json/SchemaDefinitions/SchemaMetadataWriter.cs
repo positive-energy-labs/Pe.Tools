@@ -136,7 +136,6 @@ internal static class SchemaMetadataWriter {
             datasetPayload[dataset.Id] = new JObject {
                 ["provider"] = dataset.Provider,
                 ["load"] = dataset.LoadMode.ToString(),
-                ["staleOn"] = new JArray(dataset.StaleOn),
                 ["supportedProjections"] = new JArray(dataset.SupportedProjections)
             };
         }

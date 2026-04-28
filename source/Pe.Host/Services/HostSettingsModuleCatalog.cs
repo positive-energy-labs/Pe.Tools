@@ -1,4 +1,4 @@
-using Pe.Shared.HostContracts.Operations;
+﻿using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.SettingsLayout;
@@ -14,18 +14,15 @@ namespace Pe.Host.Services;
 
 public interface IHostSettingsModuleCatalog {
     Task<IReadOnlyList<StructuralSettingsModuleDescriptor>> GetModulesAsync(
-        BridgeSessionSelector? target = null,
         CancellationToken cancellationToken = default
     );
 
     Task<HostWorkspacesData> GetWorkspacesAsync(
-        BridgeSessionSelector? target = null,
         CancellationToken cancellationToken = default
     );
 
     Task<StructuralSettingsModuleDescriptor?> TryGetModuleAsync(
         string moduleKey,
-        BridgeSessionSelector? target = null,
         CancellationToken cancellationToken = default
     );
 }
@@ -38,7 +35,6 @@ public sealed class HostSettingsModuleCatalog(
     private readonly BridgeServer _bridgeServer = bridgeServer;
 
     public async Task<IReadOnlyList<StructuralSettingsModuleDescriptor>> GetModulesAsync(
-        BridgeSessionSelector? target = null,
         CancellationToken cancellationToken = default
     ) {
         var modules = StorageRuntimeStructuralModules.All.ToDictionary(
@@ -46,7 +42,7 @@ public sealed class HostSettingsModuleCatalog(
             StringComparer.OrdinalIgnoreCase
         );
 
-        if (!TryResolveTarget(target, this._bridgeCapabilityService.GetSnapshot(), out var resolvedTarget))
+        if (!this._bridgeCapabilityService.GetSnapshot().BridgeIsConnected)
             return modules.Values.ToList();
 
         var response = await this._bridgeServer.InvokeAsync<
@@ -54,7 +50,7 @@ public sealed class HostSettingsModuleCatalog(
             GetSettingsModuleCatalogBridgeResponse
         >(
             GetSettingsModuleCatalogBridgeOperationContract.Definition.Key,
-            new GetSettingsModuleCatalogBridgeRequest(resolvedTarget),
+            new GetSettingsModuleCatalogBridgeRequest(),
             cancellationToken
         );
 
@@ -67,10 +63,9 @@ public sealed class HostSettingsModuleCatalog(
     }
 
     public async Task<HostWorkspacesData> GetWorkspacesAsync(
-        BridgeSessionSelector? target = null,
         CancellationToken cancellationToken = default
     ) {
-        var modules = await this.GetModulesAsync(target, cancellationToken);
+        var modules = await this.GetModulesAsync(cancellationToken);
         return new HostWorkspacesData([
             new HostWorkspaceDescriptor(
                 "default",
@@ -89,9 +84,8 @@ public sealed class HostSettingsModuleCatalog(
 
     public async Task<StructuralSettingsModuleDescriptor?> TryGetModuleAsync(
         string moduleKey,
-        BridgeSessionSelector? target = null,
         CancellationToken cancellationToken = default
-    ) => (await this.GetModulesAsync(target, cancellationToken))
+    ) => (await this.GetModulesAsync(cancellationToken))
         .FirstOrDefault(module => string.Equals(module.ModuleKey, moduleKey, StringComparison.OrdinalIgnoreCase));
 
     public static IReadOnlyList<HostSettingsModuleDescriptor> GetCatalogDescriptors(BridgeRuntimeSnapshot snapshot) {
@@ -105,43 +99,6 @@ public sealed class HostSettingsModuleCatalog(
         }
 
         return descriptors.Values.ToList();
-    }
-
-    private static bool TryResolveTarget(
-        BridgeSessionSelector? requestedTarget,
-        BridgeRuntimeSnapshot snapshot,
-        out BridgeSessionSelector? resolvedTarget
-    ) {
-        resolvedTarget = null;
-
-        if (snapshot.Sessions.Count == 0)
-            return false;
-
-        if (!string.IsNullOrWhiteSpace(requestedTarget?.SessionId)) {
-            var exactSession = snapshot.Sessions.FirstOrDefault(session =>
-                string.Equals(session.SessionId, requestedTarget.SessionId, StringComparison.Ordinal));
-            if (exactSession == null)
-                return false;
-
-            resolvedTarget = new BridgeSessionSelector(exactSession.SessionId, null);
-            return true;
-        }
-
-        if (!string.IsNullOrWhiteSpace(requestedTarget?.RevitVersion)) {
-            var versionSession = snapshot.Sessions.FirstOrDefault(session =>
-                string.Equals(session.RevitVersion, requestedTarget.RevitVersion, StringComparison.OrdinalIgnoreCase));
-            if (versionSession == null)
-                return false;
-
-            resolvedTarget = new BridgeSessionSelector(versionSession.SessionId, null);
-            return true;
-        }
-
-        if (snapshot.DefaultSessionId == null)
-            return false;
-
-        resolvedTarget = new BridgeSessionSelector(snapshot.DefaultSessionId, null);
-        return true;
     }
 
     private static StructuralSettingsModuleDescriptor ToStructuralDescriptor(SettingsModuleDescriptor module) =>

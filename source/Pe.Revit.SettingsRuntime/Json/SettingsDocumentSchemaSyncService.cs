@@ -56,7 +56,7 @@ public sealed class SettingsDocumentSchemaSyncService(
             throw new ArgumentException("Document path is required.", nameof(documentPath));
         if (string.IsNullOrWhiteSpace(schemaDirectory))
             throw new ArgumentException("Schema directory is required.", nameof(schemaDirectory));
-        if (string.IsNullOrWhiteSpace(rawContent) || settingsType == typeof(object))
+        if (string.IsNullOrWhiteSpace(rawContent))
             return rawContent;
 
         JObject rootObject;
@@ -85,7 +85,7 @@ public sealed class SettingsDocumentSchemaSyncService(
             throw new ArgumentException("Document path is required.", nameof(documentPath));
         if (string.IsNullOrWhiteSpace(schemaDirectory))
             throw new ArgumentException("Schema directory is required.", nameof(schemaDirectory));
-        if (string.IsNullOrWhiteSpace(rawContent) || settingsType == typeof(object))
+        if (string.IsNullOrWhiteSpace(rawContent))
             return rawContent;
 
         JObject rootObject;

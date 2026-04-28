@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Shared.HostContracts.Operations;
 using TypeGen.Core.TypeAnnotations;
@@ -74,36 +74,7 @@ public static class HttpRoutes {
 [ExportTsClass]
 public static class HostProtocol {
     public const string Transport = "http+sse";
-    public const int ContractVersion = 29;
-}
-
-public interface IBridgeSessionRequest {
-    BridgeSessionSelector? Target { get; }
-}
-
-[ExportTsInterface]
-public record BridgeSessionSelector(
-    string? SessionId,
-    string? RevitVersion
-);
-
-[JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
-public enum HostInvalidationDomain {
-    SettingsFieldOptions,
-    SettingsParameterCatalog,
-    ScheduleCatalog,
-    ScheduleProfilesQuery,
-    ScheduleQuery,
-    LoadedFamiliesCatalog,
-    LoadedFamiliesMatrix,
-    ProjectParameterBindings,
-    LoadedFamiliesFilterFieldOptions,
-    ElementContextQuery,
-    ElectricalPanelsCatalog,
-    ElectricalCircuitsCatalog,
-    ElectricalPanelSchedulesQuery,
-    ElectricalLoadClassificationsCatalog
+    public const int ContractVersion = 30;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
@@ -218,7 +189,6 @@ public record DocumentInvalidationEvent(
     bool HasActiveDocument,
     int OpenDocumentCount,
     long DocumentObservedAtUnixMs,
-    List<HostInvalidationDomain> InvalidatedDomains,
     string? SessionId = null,
     string? RevitVersion = null
 );

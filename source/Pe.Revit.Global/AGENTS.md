@@ -19,7 +19,7 @@ before higher packages copy it.
   `UIApplication` document-session helpers.
 - `Services/Document/DocumentManager.cs` - session-aware document/open/active/MRU coordination.
 - `Services/Host/RevitDataRequestService.cs` - bridge-backed document query and summary shaping.
-- `Services/Host/BridgeDocumentNotifier.cs` - active/open document invalidation payloads.
+- `Services/Host/BridgeDocumentNotifier.cs` - active/open document freshness payloads for the host SSE stream.
 - `Revit/Lib/` - reusable collectors and Revit-domain helpers that should stay broader than one caller.
 
 ## Validation
@@ -36,7 +36,7 @@ before higher packages copy it.
 |----------------------|--------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------|
 | **document-owned**   | Behavior derivable from a specific `Document` without active/open UI session state               | Prefer extension methods or small document-centric helpers; avoid putting it behind session singletons     |
 | **document session** | Open/active/UI-tab state for documents in the current Revit process                              | Prefer `DocumentManager` or `UIApplication`-adjacent helpers; avoid mixing it into pure `Document` helpers |
-| **document key**     | Canonical identity string for an open Revit document used by host payloads, caches, and matching | Prefer one shared implementation; avoid per-caller variations                                              |
+| **document key**     | Canonical identity string for an open Revit document used by host payloads and matching           | Prefer one shared implementation; avoid per-caller variations                                              |
 
 ## Living Memory
 
@@ -51,3 +51,5 @@ before higher packages copy it.
   than one feature.
 - Reusable collectors belong here only when the concept is stable across features. Feature-specific semantics still
   belong with the owning feature package.
+- Bridge-backed host work should assume exactly one connected Revit session and the active document as the only target.
+- Do not reintroduce route-level cache invalidation or target-document resolution into the bridge contract.
