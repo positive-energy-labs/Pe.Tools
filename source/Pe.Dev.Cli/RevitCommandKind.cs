@@ -7,6 +7,8 @@ internal enum RevitCommandKind {
     HotReload,
     Logs,
     Session,
+    SyncRuntime,
+    Test,
     Script,
     InternalApproveWorker
 }

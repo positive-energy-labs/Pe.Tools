@@ -8,9 +8,16 @@ public sealed class RiderHotReloadService(RevitProcessSessionSelector sessionSel
 
     private readonly RevitProcessSessionSelector _sessionSelector = sessionSelector;
 
-    public async Task<RevitHotReloadResult> RunAsync(string repoRoot, CancellationToken cancellationToken) {
+    public async Task<RevitHotReloadResult> RunAsync(string repoRoot, CancellationToken cancellationToken) =>
+        await this.RunAsync(repoRoot, null, cancellationToken);
+
+    public async Task<RevitHotReloadResult> RunAsync(
+        string repoRoot,
+        int? revitYear,
+        CancellationToken cancellationToken
+    ) {
         try {
-            var session = this._sessionSelector.SelectNewestVisibleSession();
+            var session = this._sessionSelector.SelectNewestVisibleSession(revitYear);
             if (session is null)
                 return new RevitHotReloadResult(RevitHotReloadResultKind.NoSession, "No Revit sessions found.", []);
 

@@ -13,8 +13,7 @@ internal static class DevCliProgram {
                                         pe-dev revit automation probe-access --region <US|EMEA> --project-guid <guid> --model-guid <guid> [--expected-title <title>] [--engine <engine>] [--timeout-seconds <seconds>] [--debug <true|false>] [--mask <true|false>] [--json]
                                         pe-dev revit automation workitem-status --workitem-id <id> [--include-report <true|false>] [--mask <true|false>] [--json]
                                         pe-dev revit hot-reload
-                                        pe-dev revit logs <host|app|all> [--tail <count>]
-                                        pe-dev revit session
+                                        pe-dev revit test [--filter <expr>] [--no-build] [--configuration <config> | --revit-year <year>] [--allow-deployed-addin]
                                         pe-dev revit script new <script-name-or-workspace-path>
                                         pe-dev revit script <workspace-relative-script.cs>
                                         pe-dev revit script --workspace <key> --path <workspace-relative-script.cs>

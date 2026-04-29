@@ -160,10 +160,8 @@ if !WinWaitActive(riderSelector, , 2) {
 Sleep 250
 originals := NudgeFiles(targetFiles)
 Sleep 250
-RunRiderAction("Reload All From Disk")
-Sleep 350
+RunRiderAction("Auto HR")
+Sleep 3000
 RestoreFiles(originals)
-Sleep 500
-RunRiderAction("Apply Changes")
 Sleep 250
 ExitApp 0

@@ -1,5 +1,6 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text.RegularExpressions;
+using System.Runtime.InteropServices;
 
 namespace Pe.Dev.RevitAutomation;
 
@@ -27,6 +28,14 @@ internal static class RevitProcessIdentityResolver {
         return TryParseYear(executablePath);
     }
 
+    public static bool IsHung(Process process) {
+        try {
+            return process.MainWindowHandle != IntPtr.Zero && IsHungAppWindow(process.MainWindowHandle);
+        } catch {
+            return false;
+        }
+    }
+
     private static int? TryParseYear(string? value) {
         if (string.IsNullOrWhiteSpace(value))
             return null;
@@ -44,4 +53,7 @@ internal static class RevitProcessIdentityResolver {
             return null;
         }
     }
+
+    [DllImport("user32.dll")]
+    private static extern bool IsHungAppWindow(IntPtr hWnd);
 }
