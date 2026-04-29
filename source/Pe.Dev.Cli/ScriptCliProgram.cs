@@ -2,7 +2,6 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Pe.Dev.RevitAutomation;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts.Scripting;
 
@@ -10,7 +9,6 @@ namespace Pe.Dev.Cli;
 
 internal static class ScriptCliProgram {
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
-    private static readonly RiderHotReloadService HotReloadService = new(new RevitProcessSessionSelector());
 
     public static async Task<int> RunAsync(
         string[] args,
@@ -55,8 +53,6 @@ internal static class ScriptCliProgram {
             return 0;
         }
 
-        await TryPrepareHotReloadAsync(repoRootOverride, cancellationToken);
-
         ExecuteRevitScriptRequest request;
         try {
             request = await BuildRequestAsync(options, cancellationToken);
@@ -91,31 +87,6 @@ internal static class ScriptCliProgram {
         }
 
         return MapExitCode(result.Status);
-    }
-
-    private static async Task TryPrepareHotReloadAsync(string? repoRootOverride, CancellationToken cancellationToken) {
-        string? repoRoot = null;
-        if (!string.IsNullOrWhiteSpace(repoRootOverride)) {
-            try {
-                repoRoot = RepoRootResolver.Resolve(repoRootOverride);
-            } catch {
-                repoRoot = null;
-            }
-        } else {
-            repoRoot = RepoRootResolver.TryResolve();
-        }
-
-        if (string.IsNullOrWhiteSpace(repoRoot))
-            return;
-
-        var result = await HotReloadService.RunAsync(repoRoot, cancellationToken);
-        switch (result.Kind) {
-        case RevitHotReloadResultKind.NoSession:
-        case RevitHotReloadResultKind.Triggered:
-        case RevitHotReloadResultKind.Failed:
-            Console.Error.WriteLine(result.Message);
-            break;
-        }
     }
 
     private static async Task<ExecuteRevitScriptRequest> BuildRequestAsync(

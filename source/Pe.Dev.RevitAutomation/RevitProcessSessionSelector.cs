@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 namespace Pe.Dev.RevitAutomation;
 
 public sealed class RevitProcessSessionSelector {
@@ -19,7 +19,9 @@ public sealed class RevitProcessSessionSelector {
                         process.Id,
                         process.StartTime.ToUniversalTime(),
                         title,
-                        parsedYear
+                        parsedYear,
+                        process.Responding,
+                        RevitProcessIdentityResolver.IsHung(process)
                     )
                 );
             } catch {

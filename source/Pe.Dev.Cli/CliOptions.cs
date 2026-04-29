@@ -59,6 +59,8 @@ internal sealed record DevCliOptions(
             "hot-reload" => RevitCommandKind.HotReload,
             "logs" => RevitCommandKind.Logs,
             "session" => RevitCommandKind.Session,
+            "sync-runtime" => RevitCommandKind.SyncRuntime,
+            "test" => RevitCommandKind.Test,
             "script" => RevitCommandKind.Script,
             _ => RevitCommandKind.Unknown
         };

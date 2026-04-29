@@ -4,5 +4,7 @@ public sealed record RevitProcessSessionIdentity(
     int ProcessId,
     DateTime ProcessStartUtc,
     string MainWindowTitle,
-    int? RevitYear
+    int? RevitYear,
+    bool Responding,
+    bool Hung
 );

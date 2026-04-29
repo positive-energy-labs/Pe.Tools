@@ -45,6 +45,23 @@
 - `source/Pe.App/Pe.App.csproj` build hooks continue using repo-local `PeStableCliPath`.
 - `source/Pe.App/SettingsEditor/SettingsEditorHostLauncher.cs` still prefers `PE_SETTINGS_EDITOR_HOST_EXECUTABLE_PATH` before installed-path probing.
 
+## Assembly Control
+
+- RRD is the only lane where Rider hot reload can patch already-loaded `Pe.App` runtime assemblies.
+- Plain terminal `dotnet build` now writes isolated outputs under `.artifacts/...`; that lane is compile-safe but does not refresh assemblies already loaded into any running Revit process.
+- Rider builds and explicit `/p:PeIsolatedBuild=false` shell builds write package-local interactive outputs; those outputs are the baseline Rider hot reload and live desktop debugging work against.
+- The deployed `%AppData%\Autodesk\Revit\Addins\<year>\Pe.App.addin` path controls normal desktop add-in bootstrap for that Revit year.
+- `pe-dev revit script ...` and raw `.Tests` runs do not become fresh just because the isolated lane rebuilt. If the probe depends on changed runtime packages, the RRD lane still needs explicit `pe-dev revit sync-runtime` first.
+- `pe-dev revit test ...` intentionally avoids RRD. It quarantines the deployed `Pe.App` add-in for the selected year, launches a dedicated test-controlled Revit process, and runs against the freshly built isolated `.Tests` graph instead of the deployed desktop add-in graph.
+- The Revit window left behind by `pe-dev revit test` is useful for inspection, but not as a freshness-safe reusable host for `Pe.App` graph changes. Under the current `ricaun.RevitTest` execution model, the next test run should recycle that owned session instead of attaching to it.
+
+## Freshness Rules
+
+- Isolated build freshness means: the files under `.artifacts/...` are current.
+- RRD freshness means: Rider hot reload or a Rider-driven Revit restart has updated the live in-memory desktop runtime.
+- Dedicated test freshness means: `pe-dev revit test` launched a fresh test-controlled Revit process for the selected year after hiding the deployed desktop add-in for that year.
+- These freshness states are not interchangeable. One can be fresh while the others are stale.
+
 ## Update Ownership
 
 - No auto-update or silent update in this slice.

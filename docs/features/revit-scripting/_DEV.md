@@ -50,6 +50,7 @@ Default workspace root:
 
 - Start with `GET /api/settings/host-status`.
 - Confirm `hostRunning=true` and exactly one connected bridge session before debugging script content.
+- If runtime packages changed, build the package-local interactive outputs and run `pe-dev revit sync-runtime` before the first script probe.
 - Use `POST /api/scripting/execute` first; it is the shortest live-document probe loop.
 - Treat transport/session failures as more likely than compile failures on first contact.
 
@@ -73,6 +74,8 @@ Default workspace root:
 ## Useful Probe Facts
 
 - The default generated script templates already include `Autodesk.Revit.DB.Electrical`.
+- The generated script workspace now carries ambient scripting usings plus repo runtime references such as `Pe.Revit.Scripting` and `Pe.Revit` when available.
+- `pe-dev revit script` no longer auto-runs hot reload. Explicit runtime sync is part of the live-probe contract now.
 - In R25, `PanelScheduleView.GetPanel()` and `GetTemplate()` return `ElementId`; callers must `doc.GetElement(...)`.
 - A live probe can look wrong because of document/view state, not API failure. Panel-template edit mode was one real example.
 
@@ -85,3 +88,5 @@ Default workspace root:
 - no multi-file execution
 - no package/source-bundle execution
 - no arbitrary external local file execution
+
+Future package-format exploration is saved in `docs/context/revit-scripting-package-format-sketch.md`.
