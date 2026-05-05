@@ -1,4 +1,4 @@
-﻿namespace Pe.Dev.RevitAutomation;
+namespace Pe.Dev.RevitAutomation;
 
 public sealed class ProbeAccessResult {
     public bool Succeeded { get; init; }

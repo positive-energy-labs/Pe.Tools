@@ -1,4 +1,4 @@
-using Pe.Shared.Aps;
+using Pe.Aps.Auth;
 
 namespace Pe.Dev.RevitAutomation;
 
@@ -9,11 +9,9 @@ public sealed class RevitAutomationWorkItemInspectorService {
         AutomationWorkItemInspectOptions options,
         CancellationToken cancellationToken
     ) {
-        var authProvider = new StoredApsWebAuthTokenProvider();
-        var aps = new Aps(authProvider);
-        var automationClient = aps.Automation();
+        var designAutomation = new ApsCredentialSource().CreateAps().DesignAutomation();
 
-        var status = await automationClient.GetWorkItemStatusAsync(options.WorkItemId, cancellationToken)
+        var status = await designAutomation.GetStatusAsync(options.WorkItemId, cancellationToken)
             .ConfigureAwait(false);
 
         var result = new AutomationWorkItemInspectResult {
@@ -23,9 +21,9 @@ public sealed class RevitAutomationWorkItemInspectorService {
         if (!options.IncludeReport || string.IsNullOrWhiteSpace(status.ReportUrl))
             return result;
 
-        var report = await automationClient.GetWorkItemReportAsync(status.ReportUrl, cancellationToken)
+        var reportContent = await designAutomation.GetReportContentAsync(status.ReportUrl, cancellationToken)
             .ConfigureAwait(false);
-        var parsed = this._reportParser.Parse(report.ReportContent);
+        var parsed = this._reportParser.Parse(reportContent);
         return new AutomationWorkItemInspectResult {
             WorkItemId = status.Id ?? options.WorkItemId,
             Status = status.Status,

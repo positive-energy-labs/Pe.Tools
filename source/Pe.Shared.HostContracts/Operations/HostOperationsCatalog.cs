@@ -2,6 +2,10 @@
 
 public static class HostOperationsCatalog {
     public static IReadOnlyList<HostOperationDefinition> All { get; } = [
+        GetApsAuthStatusOperationContract.Definition,
+        LoginApsOperationContract.Definition,
+        LogoutApsOperationContract.Definition,
+        AcquireApsAccessTokenOperationContract.Definition,
         GetHostStatusOperationContract.Definition,
         GetSchemaOperationContract.Definition,
         GetWorkspacesOperationContract.Definition,

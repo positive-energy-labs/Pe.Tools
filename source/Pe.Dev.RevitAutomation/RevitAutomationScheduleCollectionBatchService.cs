@@ -1,6 +1,10 @@
-using Pe.Shared.Aps;
-using Pe.Shared.Aps.Core;
-using Pe.Shared.Aps.Models;
+using Pe.Shared.RevitAutomation;
+using Pe.Shared.ApsAuth;
+using Pe.Aps;
+using Pe.Aps.Auth;
+using Pe.Aps.Core;
+using Pe.Aps.DesignAutomation;
+using Pe.Shared.RevitData.Schedules;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -8,8 +12,10 @@ using System.Net.Http;
 namespace Pe.Dev.RevitAutomation;
 
 public sealed class RevitAutomationScheduleCollectionBatchService {
-    private readonly RevitAutomationWorkerBundleBuilder _bundleBuilder = new();
-    private readonly AutomationJobReportParser _reportParser = new();
+    private readonly AutomationShellDeploymentService _shellDeployment = new();
+    private readonly DesignAutomationBatchWorkItemRunner _batchRunner = new();
+    private readonly DesignAutomationWorkItemRunner _workItemRunner = new();
+    private readonly AutomationArtifactFinalizer _artifactFinalizer = new();
 
     public async Task<ScheduleCollectionBatchResult> RunAsync(
         string manifestPath,
@@ -19,293 +25,346 @@ public sealed class RevitAutomationScheduleCollectionBatchService {
     ) {
         var repoRoot = RepoRootResolver.Resolve(repoRootOverride);
         var manifest = ScheduleCollectionBatchManifest.LoadFromFile(manifestPath);
-        var authProvider = new StoredApsWebAuthTokenProvider();
-        var settings = RevitAutomationSettings.Load(authProvider.GetClientId());
-        var aps = new Aps(authProvider);
+        var credentialSource = new ApsCredentialSource();
+        var settings = RevitAutomationSettings.Load(credentialSource.GetConfiguredWebClientId());
+        var resolvedEntries = ResolveEntries(manifest, settings);
+        var aps = credentialSource.CreateAps();
+        var createAutomationClient = aps.Automation;
+        var userTokenLease = new RefreshingApsTokenLease(
+            () => aps.GetTokenResult(ApsTokenRequest.ForAutomationUserContext())
+        );
+        var artifactTokenLease = new RefreshingApsTokenLease(
+            () => aps.GetTokenResult(ApsTokenRequest.ForAutomationArtifactStorage())
+        );
 
         try {
             log?.Invoke("Auth: acquiring management token");
             _ = aps.GetTokenResult(ApsTokenRequest.ForAutomationManagement());
         } catch (Exception ex) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
-                ScheduleCollectionClassification.ManagementTokenFailed, manifest, ex.Message);
+            return BuildPreflightFailure(manifestPath, resolvedEntries, ScheduleCollectionClassification.ManagementTokenFailed, ex.Message);
         }
 
-        ApsTokenResult userToken;
         try {
             log?.Invoke("Auth: acquiring delegated user token");
-            userToken = aps.GetTokenResult(ApsTokenRequest.ForAutomationUserContext());
+            _ = userTokenLease.GetTokenResult();
         } catch (Exception ex) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
-                ScheduleCollectionClassification.UserTokenFailed, manifest, ex.Message);
+            return BuildPreflightFailure(manifestPath, resolvedEntries, ScheduleCollectionClassification.UserTokenFailed, ex.Message);
         }
 
-        ApsTokenResult artifactToken;
         try {
             log?.Invoke("Auth: acquiring artifact token");
-            artifactToken = aps.GetTokenResult(new ApsTokenRequest {
-                FlowKind = ApsAuthFlowKind.TwoLegged,
-                ExplicitScopes = ["bucket:create", "bucket:read", "data:read", "data:write"]
-            });
+            _ = artifactTokenLease.GetTokenResult();
         } catch (Exception ex) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
-                ScheduleCollectionClassification.ArtifactTokenFailed, manifest, ex.Message);
+            return BuildPreflightFailure(manifestPath, resolvedEntries, ScheduleCollectionClassification.ArtifactTokenFailed, ex.Message);
         }
 
-        WorkerBundleArtifact bundle;
-        try {
-            bundle = await this._bundleBuilder.BuildAsync(repoRoot, manifest.Engine, log, cancellationToken)
-                .ConfigureAwait(false);
-        } catch (Exception ex) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
-                ScheduleCollectionClassification.WorkItemSubmissionFailed, manifest, ex.Message);
-        }
-
-        var automationClient = aps.Automation();
-        try {
-            await RevitAutomationParameterCollectionService.EnsureShellReadyAsync(
-                    automationClient,
-                    settings,
-                    manifest.Engine,
-                    bundle.PackageContents,
-                    log,
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
-        } catch (HttpRequestException ex) when
-            (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
-                ScheduleCollectionClassification.WorkItemSubmissionUnauthorized, manifest, ex.Message);
-        } catch (Exception ex) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
-                ScheduleCollectionClassification.WorkItemSubmissionFailed, manifest, ex.Message);
-        }
-
-        var objectStorage = new AutomationObjectStorageClient(artifactToken.AccessToken);
         var bucketKey = settings.BuildArtifactBucketKey();
+
         try {
             log?.Invoke($"Artifacts: ensuring OSS bucket {bucketKey}");
-            await objectStorage.EnsureTransientBucketAsync(bucketKey, cancellationToken).ConfigureAwait(false);
+            await new ObjectStorageApiClient(artifactTokenLease.GetAccessToken())
+                .EnsureTransientBucketAsync(bucketKey, cancellationToken)
+                .ConfigureAwait(false);
         } catch (Exception ex) {
-            return BuildPreflightFailure(manifestPath, manifest.Models.Count,
-                ScheduleCollectionClassification.ArtifactTokenFailed, manifest, ex.Message);
+            return BuildPreflightFailure(manifestPath, resolvedEntries, ScheduleCollectionClassification.ArtifactTokenFailed, ex.Message);
         }
 
-        var pending = new Queue<ScheduleCollectionBatchEntry>(manifest.Models);
-        var active = new Dictionary<string, BatchTracker>(StringComparer.Ordinal);
         var results = new List<ScheduleCollectionResult>();
-        var maxConcurrency = Math.Max(1, manifest.MaxConcurrency);
+        foreach (var yearGroup in resolvedEntries.GroupBy(entry => entry.Spec.Year).OrderBy(group => group.Key)) {
+            var groupEntries = yearGroup.ToArray();
+            var spec = groupEntries[0].Spec;
+            var shellIds = groupEntries[0].ShellIds;
 
-        while ((pending.Count > 0 || active.Count > 0) && !cancellationToken.IsCancellationRequested) {
-            while (pending.Count > 0 && active.Count < maxConcurrency) {
-                var entry = pending.Dequeue();
-                var tracker = await this.SubmitAsync(
-                        entry,
-                        manifest,
+            try {
+                await this._shellDeployment.EnsureReadyAsync(
                         repoRoot,
-                        bucketKey,
-                        artifactToken.AccessToken,
-                        userToken.AccessToken,
-                        settings,
-                        automationClient,
+                        shellIds,
+                        spec,
+                        createAutomationClient,
                         log,
                         cancellationToken
                     )
                     .ConfigureAwait(false);
-
-                if (tracker.SubmissionFailure != null) {
-                    results.Add(tracker.SubmissionFailure);
-                    continue;
-                }
-
-                if (!string.IsNullOrWhiteSpace(tracker.WorkItemId))
-                    active[tracker.WorkItemId] = tracker;
-            }
-
-            if (active.Count == 0)
+            } catch (HttpRequestException ex) when (AutomationDevRunHelpers.HasStatusCode(ex, HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden)) {
+                results.AddRange(BuildGroupFailure(groupEntries, ScheduleCollectionClassification.WorkItemSubmissionUnauthorized, ex.Message));
                 continue;
-
-            await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken).ConfigureAwait(false);
-            var statuses = await automationClient.GetWorkItemStatusesAsync(active.Keys.ToArray(), cancellationToken)
-                .ConfigureAwait(false);
-            foreach (var status in statuses) {
-                if (string.IsNullOrWhiteSpace(status.Id) || !active.TryGetValue(status.Id, out var tracker))
-                    continue;
-
-                if (!RevitAutomationParameterCollectionService.IsTerminal(status.Status))
-                    continue;
-
-                var finalized = await this.FinalizeAsync(
-                        tracker,
-                        status,
-                        objectStorage,
-                        automationClient,
-                        cancellationToken
-                    )
-                    .ConfigureAwait(false);
-                results.Add(finalized);
-                active.Remove(status.Id);
+            } catch (Exception ex) {
+                results.AddRange(BuildGroupFailure(groupEntries, ScheduleCollectionClassification.WorkItemSubmissionFailed, ex.Message));
+                continue;
             }
+
+            await this.RunGroupAsync(
+                    groupEntries,
+                    manifest,
+                    repoRoot,
+                    bucketKey,
+                    createAutomationClient,
+                    artifactTokenLease,
+                    userTokenLease,
+                    log,
+                    results,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
         }
 
         return new ScheduleCollectionBatchResult {
             ManifestPath = manifestPath,
-            TotalModelCount = manifest.Models.Count,
+            TotalModelCount = resolvedEntries.Count,
             SuccessCount = results.Count(result => result.Succeeded),
             FailureCount = results.Count(result => !result.Succeeded),
             Results = results
         };
     }
 
-    private async Task<BatchTracker> SubmitAsync(
-        ScheduleCollectionBatchEntry entry,
+    private async Task RunGroupAsync(
+        IReadOnlyList<ResolvedAutomationBatchEntry<ScheduleCollectionBatchEntry, ScheduleCollectionOptions>> groupEntries,
         ScheduleCollectionBatchManifest manifest,
         string repoRoot,
         string bucketKey,
-        string artifactAccessToken,
-        string userAccessToken,
-        RevitAutomationSettings settings,
-        AutomationApiClient automationClient,
+        Func<AutomationApiClient> createAutomationClient,
+        RefreshingApsTokenLease artifactTokenLease,
+        RefreshingApsTokenLease userTokenLease,
+        Action<string>? log,
+        List<ScheduleCollectionResult> results,
+        CancellationToken cancellationToken
+    ) =>
+        await this._batchRunner.RunGroupAsync(
+                groupEntries,
+                manifest.MaxConcurrency,
+                manifest.TimeoutSeconds,
+                resolved => this.SubmitAsync(
+                    resolved,
+                    manifest,
+                    repoRoot,
+                    bucketKey,
+                    createAutomationClient,
+                    artifactTokenLease,
+                    userTokenLease,
+                    log,
+                    cancellationToken
+                ),
+                (tracker, status) => this.FinalizeSafelyAsync(
+                    tracker,
+                    status,
+                    createAutomationClient,
+                    artifactTokenLease,
+                    log,
+                    cancellationToken
+                ),
+                BuildTimedOutResult,
+                createAutomationClient,
+                log,
+                results,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+
+    private async Task<DesignAutomationBatchSubmission<BatchTracker, ScheduleCollectionResult>> SubmitAsync(
+        ResolvedAutomationBatchEntry<ScheduleCollectionBatchEntry, ScheduleCollectionOptions> resolved,
+        ScheduleCollectionBatchManifest manifest,
+        string repoRoot,
+        string bucketKey,
+        Func<AutomationApiClient> createAutomationClient,
+        RefreshingApsTokenLease artifactTokenLease,
+        RefreshingApsTokenLease userTokenLease,
         Action<string>? log,
         CancellationToken cancellationToken
     ) {
-        var options = entry.ToOptions(manifest);
+        var options = resolved.Options;
         var runId = Guid.NewGuid().ToString("D");
-        var objectKey = BuildArtifactObjectKey(entry, runId);
-        var artifactPath = BuildArtifactLocalPath(repoRoot, manifest.Engine, objectKey);
+        var objectKey = BuildArtifactObjectKey(resolved.Entry, runId);
+        var artifactPath = AutomationDevRunHelpers.BuildArtifactLocalPath(repoRoot, resolved.Spec.Year, objectKey);
         var input = new AutomationJobInput {
             JobType = AutomationJobType.ScheduleCollection,
-            Engine = manifest.Engine,
-            Region = entry.Region,
-            ProjectGuid = entry.ProjectGuid,
-            ModelGuid = entry.ModelGuid,
+            Engine = options.Engine,
+            Region = options.Region,
+            ProjectGuid = options.ProjectGuid,
+            ModelGuid = options.ModelGuid,
             RunId = runId,
-            ExpectedTitle = entry.ExpectedTitle,
+            ExpectedTitle = options.ExpectedTitle,
             ScheduleCollection = options.Request ?? ScheduleCollectionDefaults.CreateDefaultRequest()
         };
 
         try {
-            log?.Invoke($"Automation: submitting batch schedule workitem for {entry.ModelGuid}");
-            var submission = await automationClient.SubmitWorkItemAsync(
+            var artifactToken = artifactTokenLease.GetAccessToken();
+            var submittedAtUtc = DateTime.UtcNow;
+            var submission = await this._workItemRunner.SubmitAsync(
+                    createAutomationClient,
                     new AutomationWorkItemSpec {
-                        ActivityId = $"{settings.Namespace}.{settings.ActivityId}+{settings.AliasId}",
+                        ActivityId = resolved.ShellIds.QualifiedActivityAlias,
                         LimitProcessingTimeSec = manifest.TimeoutSeconds,
                         Debug = manifest.Debug,
-                        Arguments = new Dictionary<string, object>(StringComparer.Ordinal) {
-                            ["inputParams"] =
-                                new Dictionary<string, object>(StringComparer.Ordinal) {
-                                    ["url"] = RevitAutomationParameterCollectionService.BuildJsonDataUrl(input.ToJson())
-                                },
-                            ["resultJson"] = new Dictionary<string, object>(StringComparer.Ordinal) {
-                                ["verb"] = "put",
-                                ["url"] = $"urn:adsk.objects:os.object:{bucketKey}/{Uri.EscapeDataString(objectKey)}",
-                                ["headers"] = new Dictionary<string, string>(StringComparer.Ordinal) {
-                                    ["Authorization"] = $"Bearer {artifactAccessToken}"
-                                }
-                            },
-                            ["adsk3LeggedToken"] = userAccessToken
-                        }
+                        Arguments = AutomationRunOrchestrator.BuildWorkItemArguments(
+                            input,
+                            bucketKey,
+                            objectKey,
+                            artifactToken,
+                            userTokenLease.GetAccessToken()
+                        )
                     },
+                    $"Automation: submitting batch schedule workitem for {resolved.Entry.ModelGuid} ({resolved.Spec.Year})",
+                    log,
                     cancellationToken
                 )
                 .ConfigureAwait(false);
 
-            if (string.IsNullOrWhiteSpace(submission.Id)) {
-                return new BatchTracker {
-                    SubmissionFailure = new ScheduleCollectionResult {
-                        Succeeded = false,
-                        Classification = ScheduleCollectionClassification.WorkItemSubmissionFailed,
-                        Engine = options.Engine,
-                        Region = options.Region,
-                        ProjectGuid = options.ProjectGuid,
-                        ModelGuid = options.ModelGuid,
-                        ArtifactBucketKey = bucketKey,
-                        ArtifactObjectKey = objectKey,
-                        ArtifactLocalPath = artifactPath,
-                        FailureMessage = "Automation workitem submission did not return an id."
-                    }
-                };
-            }
-
-            return new BatchTracker {
+            return DesignAutomationBatchSubmission<BatchTracker, ScheduleCollectionResult>.Submitted(new BatchTracker {
                 Options = options,
                 WorkItemId = submission.Id,
+                SubmittedAtUtc = submittedAtUtc,
+                DeadlineUtc = DesignAutomationRunHelpers.ComputeDeadlineUtc(submittedAtUtc, manifest.TimeoutSeconds),
                 ArtifactBucketKey = bucketKey,
                 ArtifactObjectKey = objectKey,
                 ArtifactLocalPath = artifactPath
-            };
-        } catch (HttpRequestException ex) when
-            (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) {
-            return new BatchTracker {
-                SubmissionFailure = new ScheduleCollectionResult {
-                    Succeeded = false,
-                    Classification = ScheduleCollectionClassification.WorkItemSubmissionUnauthorized,
-                    Engine = options.Engine,
-                    Region = options.Region,
-                    ProjectGuid = options.ProjectGuid,
-                    ModelGuid = options.ModelGuid,
-                    ArtifactBucketKey = bucketKey,
-                    ArtifactObjectKey = objectKey,
-                    ArtifactLocalPath = artifactPath,
-                    FailureMessage = ex.Message
-                }
-            };
+            });
+        } catch (HttpRequestException ex) when (AutomationDevRunHelpers.HasStatusCode(ex, HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden)) {
+            return DesignAutomationBatchSubmission<BatchTracker, ScheduleCollectionResult>.Failed(new ScheduleCollectionResult {
+                Succeeded = false,
+                Classification = ScheduleCollectionClassification.WorkItemSubmissionUnauthorized,
+                Engine = options.Engine,
+                Region = options.Region,
+                ProjectGuid = options.ProjectGuid,
+                ModelGuid = options.ModelGuid,
+                ArtifactBucketKey = bucketKey,
+                ArtifactObjectKey = objectKey,
+                ArtifactLocalPath = artifactPath,
+                FailureMessage = ex.Message
+            });
         } catch (Exception ex) {
-            return new BatchTracker {
-                SubmissionFailure = new ScheduleCollectionResult {
-                    Succeeded = false,
-                    Classification = ScheduleCollectionClassification.WorkItemSubmissionFailed,
-                    Engine = options.Engine,
-                    Region = options.Region,
-                    ProjectGuid = options.ProjectGuid,
-                    ModelGuid = options.ModelGuid,
-                    ArtifactBucketKey = bucketKey,
-                    ArtifactObjectKey = objectKey,
-                    ArtifactLocalPath = artifactPath,
-                    FailureMessage = ex.Message
-                }
-            };
+            return DesignAutomationBatchSubmission<BatchTracker, ScheduleCollectionResult>.Failed(new ScheduleCollectionResult {
+                Succeeded = false,
+                Classification = ScheduleCollectionClassification.WorkItemSubmissionFailed,
+                Engine = options.Engine,
+                Region = options.Region,
+                ProjectGuid = options.ProjectGuid,
+                ModelGuid = options.ModelGuid,
+                ArtifactBucketKey = bucketKey,
+                ArtifactObjectKey = objectKey,
+                ArtifactLocalPath = artifactPath,
+                FailureMessage = ex.Message
+            });
+        }
+    }
+
+    private async Task<ScheduleCollectionResult> FinalizeSafelyAsync(
+        BatchTracker tracker,
+        AutomationWorkItemStatus status,
+        Func<AutomationApiClient> createAutomationClient,
+        RefreshingApsTokenLease artifactTokenLease,
+        Action<string>? log,
+        CancellationToken cancellationToken
+    ) {
+        try {
+            return await this.FinalizeAsync(
+                    tracker,
+                    status,
+                    createAutomationClient,
+                    artifactTokenLease,
+                    log,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        } catch (Exception ex) {
+            log?.Invoke($"Automation: finalization failed for workitem {tracker.WorkItemId}. {ex.Message}");
+            return BuildFinalizeFailureResult(tracker, ex.Message);
         }
     }
 
     private async Task<ScheduleCollectionResult> FinalizeAsync(
         BatchTracker tracker,
         AutomationWorkItemStatus status,
-        AutomationObjectStorageClient objectStorage,
-        AutomationApiClient automationClient,
+        Func<AutomationApiClient> createAutomationClient,
+        RefreshingApsTokenLease artifactTokenLease,
+        Action<string>? log,
         CancellationToken cancellationToken
     ) {
-        var report = await automationClient.GetWorkItemReportAsync(status.ReportUrl, cancellationToken)
+        var finalized = await this._artifactFinalizer.FinalizeAsync<ScheduleCollectionArtifact>(
+                tracker.WorkItemId,
+                status,
+                createAutomationClient,
+                artifactTokenLease,
+                tracker.ArtifactBucketKey,
+                tracker.ArtifactObjectKey,
+                tracker.ArtifactLocalPath,
+                "Downloaded schedule collection artifact was unreadable JSON.",
+                log,
+                cancellationToken
+            )
             .ConfigureAwait(false);
-        var parsedReport = this._reportParser.Parse(report.ReportContent);
-        if (!string.Equals(status.Status, "success", StringComparison.OrdinalIgnoreCase))
-            return BuildFailureResult(tracker, parsedReport, ScheduleCollectionClassification.CollectionFailed);
 
-        try {
-            await objectStorage.DownloadObjectAsync(
-                    tracker.ArtifactBucketKey,
-                    tracker.ArtifactObjectKey,
-                    tracker.ArtifactLocalPath,
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
-        } catch (Exception ex) {
-            return new ScheduleCollectionResult {
-                Succeeded = false,
-                Classification = ScheduleCollectionClassification.ArtifactDownloadFailed,
-                WorkItemId = tracker.WorkItemId,
-                Engine = tracker.Options.Engine,
-                Region = tracker.Options.Region,
-                ProjectGuid = tracker.Options.ProjectGuid,
-                ModelGuid = tracker.Options.ModelGuid,
-                DocumentTitle = parsedReport.DocumentTitle,
-                FailureMessage = ex.Message,
-                RawReportExcerpt = parsedReport.RawExcerpt,
-                ArtifactBucketKey = tracker.ArtifactBucketKey,
-                ArtifactObjectKey = tracker.ArtifactObjectKey,
-                ArtifactLocalPath = tracker.ArtifactLocalPath
-            };
-        }
+        return finalized.Status switch {
+            AutomationArtifactFinalizationStatus.ReportFetchFailed =>
+                BuildFinalizeFailureResult(tracker, finalized.FailureMessage),
+            AutomationArtifactFinalizationStatus.ReportedFailure =>
+                BuildFailureResult(tracker, finalized.ParsedReport ?? new ParsedAutomationJobReport(), ScheduleCollectionClassification.CollectionFailed),
+            AutomationArtifactFinalizationStatus.ArtifactDownloadFailed =>
+                BuildArtifactFailureResult(tracker, finalized.ParsedReport, ScheduleCollectionClassification.ArtifactDownloadFailed, finalized.FailureMessage),
+            AutomationArtifactFinalizationStatus.ArtifactValidationFailed =>
+                BuildArtifactFailureResult(tracker, finalized.ParsedReport, ScheduleCollectionClassification.ArtifactValidationFailed, finalized.FailureMessage),
+            AutomationArtifactFinalizationStatus.Success =>
+                BuildSuccessResult(tracker, finalized),
+            _ => BuildFinalizeFailureResult(tracker, "Unexpected automation artifact finalization status.")
+        };
+    }
+
+    private static List<ResolvedAutomationBatchEntry<ScheduleCollectionBatchEntry, ScheduleCollectionOptions>> ResolveEntries(
+        ScheduleCollectionBatchManifest manifest,
+        RevitAutomationSettings settings
+    ) =>
+        manifest.Models.Select(entry => {
+            var spec = entry.ResolveSpec(manifest.Engine);
+            return new ResolvedAutomationBatchEntry<ScheduleCollectionBatchEntry, ScheduleCollectionOptions>(
+                entry,
+                entry.ToOptions(manifest, spec.DesignAutomationEngine),
+                spec,
+                RevitAutomationShellDefinitions.ForYear(settings, spec.Year)
+            );
+        }).ToList();
+
+    private static IReadOnlyList<ScheduleCollectionResult> BuildGroupFailure(
+        IEnumerable<ResolvedAutomationBatchEntry<ScheduleCollectionBatchEntry, ScheduleCollectionOptions>> entries,
+        ScheduleCollectionClassification classification,
+        string? failureMessage
+    ) =>
+        entries.Select(resolved => new ScheduleCollectionResult {
+            Succeeded = false,
+            Classification = classification,
+            Engine = resolved.Options.Engine,
+            Region = resolved.Options.Region,
+            ProjectGuid = resolved.Options.ProjectGuid,
+            ModelGuid = resolved.Options.ModelGuid,
+            FailureMessage = failureMessage
+        }).ToArray();
+
+    private static ScheduleCollectionResult BuildArtifactFailureResult(
+        BatchTracker tracker,
+        ParsedAutomationJobReport? parsedReport,
+        ScheduleCollectionClassification classification,
+        string? failureMessage
+    ) =>
+        new() {
+            Succeeded = false,
+            Classification = classification,
+            WorkItemId = tracker.WorkItemId,
+            Engine = tracker.Options.Engine,
+            Region = tracker.Options.Region,
+            ProjectGuid = tracker.Options.ProjectGuid,
+            ModelGuid = tracker.Options.ModelGuid,
+            DocumentTitle = parsedReport?.DocumentTitle,
+            FailureMessage = failureMessage,
+            RawReportExcerpt = parsedReport?.RawExcerpt,
+            ArtifactBucketKey = tracker.ArtifactBucketKey,
+            ArtifactObjectKey = tracker.ArtifactObjectKey,
+            ArtifactLocalPath = tracker.ArtifactLocalPath
+        };
+
+    private static ScheduleCollectionResult BuildSuccessResult(
+        BatchTracker tracker,
+        AutomationArtifactFinalization<ScheduleCollectionArtifact> finalized
+    ) {
+        if (finalized.Artifact == null)
+            return BuildFinalizeFailureResult(tracker, "Automation artifact finalization did not return an artifact.");
 
         return new ScheduleCollectionResult {
             Succeeded = true,
@@ -315,8 +374,8 @@ public sealed class RevitAutomationScheduleCollectionBatchService {
             Region = tracker.Options.Region,
             ProjectGuid = tracker.Options.ProjectGuid,
             ModelGuid = tracker.Options.ModelGuid,
-            DocumentTitle = parsedReport.DocumentTitle,
-            RawReportExcerpt = parsedReport.RawExcerpt,
+            DocumentTitle = finalized.ParsedReport?.DocumentTitle ?? finalized.Artifact.DocumentTitle,
+            RawReportExcerpt = finalized.ParsedReport?.RawExcerpt,
             ArtifactBucketKey = tracker.ArtifactBucketKey,
             ArtifactObjectKey = tracker.ArtifactObjectKey,
             ArtifactLocalPath = tracker.ArtifactLocalPath
@@ -333,6 +392,8 @@ public sealed class RevitAutomationScheduleCollectionBatchService {
                 ScheduleCollectionClassification.CloudModelUnauthorized,
             nameof(ProbeAccessClassification.CloudModelNotFound) or "CloudModelNotFound" =>
                 ScheduleCollectionClassification.CloudModelNotFound,
+            nameof(ProbeAccessClassification.ExpectedTitleMismatch) or "ExpectedTitleMismatch" =>
+                ScheduleCollectionClassification.ExpectedTitleMismatch,
             _ => defaultClassification
         };
 
@@ -353,50 +414,75 @@ public sealed class RevitAutomationScheduleCollectionBatchService {
         };
     }
 
+    private static ScheduleCollectionResult BuildFinalizeFailureResult(BatchTracker tracker, string? failureMessage) =>
+        new() {
+            Succeeded = false,
+            Classification = ScheduleCollectionClassification.CollectionFailed,
+            WorkItemId = tracker.WorkItemId,
+            Engine = tracker.Options.Engine,
+            Region = tracker.Options.Region,
+            ProjectGuid = tracker.Options.ProjectGuid,
+            ModelGuid = tracker.Options.ModelGuid,
+            FailureMessage = failureMessage,
+            ArtifactBucketKey = tracker.ArtifactBucketKey,
+            ArtifactObjectKey = tracker.ArtifactObjectKey,
+            ArtifactLocalPath = tracker.ArtifactLocalPath
+        };
+
     private static ScheduleCollectionBatchResult BuildPreflightFailure(
         string manifestPath,
-        int totalModelCount,
+        IReadOnlyList<ResolvedAutomationBatchEntry<ScheduleCollectionBatchEntry, ScheduleCollectionOptions>> entries,
         ScheduleCollectionClassification classification,
-        ScheduleCollectionBatchManifest manifest,
         string? failureMessage
     ) =>
         new() {
             ManifestPath = manifestPath,
-            TotalModelCount = totalModelCount,
+            TotalModelCount = entries.Count,
             SuccessCount = 0,
-            FailureCount = totalModelCount,
-            Results = manifest.Models
-                .Select(entry => new ScheduleCollectionResult {
-                    Succeeded = false,
-                    Classification = classification,
-                    Engine = manifest.Engine,
-                    Region = entry.Region,
-                    ProjectGuid = entry.ProjectGuid,
-                    ModelGuid = entry.ModelGuid,
-                    FailureMessage = failureMessage
-                })
-                .ToList()
+            FailureCount = entries.Count,
+            Results = entries.Select(resolved => new ScheduleCollectionResult {
+                Succeeded = false,
+                Classification = classification,
+                Engine = resolved.Options.Engine,
+                Region = resolved.Options.Region,
+                ProjectGuid = resolved.Options.ProjectGuid,
+                ModelGuid = resolved.Options.ModelGuid,
+                FailureMessage = failureMessage
+            }).ToList()
         };
 
     private static string BuildArtifactObjectKey(ScheduleCollectionBatchEntry entry, string runId) =>
-        $"schedule-collections/{DateTime.UtcNow:yyyy/MM/dd}/{entry.Region.Trim().ToUpperInvariant()}/{entry.ProjectGuid.Trim().ToLowerInvariant()}/{entry.ModelGuid.Trim().ToLowerInvariant()}/{runId}.json";
-
-    private static string BuildArtifactLocalPath(string repoRoot, string engine, string objectKey) =>
-        Path.Combine(
-            repoRoot,
-            ".artifacts",
-            "automation",
-            "results",
-            RevitAutomationParameterCollectionService.ResolveEngineYear(engine).ToString(),
-            Path.GetFileName(objectKey)
+        AutomationRunOrchestrator.BuildArtifactObjectKey(
+            AutomationJobType.ScheduleCollection,
+            entry.Region,
+            entry.ProjectGuid,
+            entry.ModelGuid,
+            runId
         );
 
-    private sealed class BatchTracker {
+    private static ScheduleCollectionResult BuildTimedOutResult(BatchTracker tracker, int timeoutSeconds) =>
+        new() {
+            Succeeded = false,
+            Classification = ScheduleCollectionClassification.TimedOut,
+            WorkItemId = tracker.WorkItemId,
+            Engine = tracker.Options.Engine,
+            Region = tracker.Options.Region,
+            ProjectGuid = tracker.Options.ProjectGuid,
+            ModelGuid = tracker.Options.ModelGuid,
+            ArtifactBucketKey = tracker.ArtifactBucketKey,
+            ArtifactObjectKey = tracker.ArtifactObjectKey,
+            ArtifactLocalPath = tracker.ArtifactLocalPath,
+            FailureMessage = $"Automation workitem '{tracker.WorkItemId}' timed out after {timeoutSeconds} seconds."
+        };
+
+    private sealed class BatchTracker : IDesignAutomationBatchWorkItemTracker {
         public ScheduleCollectionOptions Options { get; init; } = null!;
         public string WorkItemId { get; init; } = "";
+        public DateTime SubmittedAtUtc { get; init; }
+        public DateTime DeadlineUtc { get; init; }
         public string ArtifactBucketKey { get; init; } = "";
         public string ArtifactObjectKey { get; init; } = "";
         public string ArtifactLocalPath { get; init; } = "";
-        public ScheduleCollectionResult? SubmissionFailure { get; init; }
     }
 }
+

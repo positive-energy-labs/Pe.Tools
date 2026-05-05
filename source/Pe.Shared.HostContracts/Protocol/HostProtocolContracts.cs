@@ -17,9 +17,14 @@ public static class HostRuntimeEventNames {
 
 [ExportTsClass]
 public static class HttpRoutes {
+    public const string ApsBase = "/api/aps";
     public const string SettingsBase = "/api/settings";
     public const string RevitDataBase = "/api/revit-data";
     public const string ScriptingBase = "/api/scripting";
+    public static readonly string ApsAuthStatus = GetApsAuthStatusOperationContract.Definition.Route;
+    public static readonly string ApsAuthLogin = LoginApsOperationContract.Definition.Route;
+    public static readonly string ApsAuthLogout = LogoutApsOperationContract.Definition.Route;
+    public static readonly string ApsAuthToken = AcquireApsAccessTokenOperationContract.Definition.Route;
     public static readonly string HostStatus = GetHostStatusOperationContract.Definition.Route;
     public static readonly string Schema = GetSchemaOperationContract.Definition.Route;
     public static readonly string Workspaces = GetWorkspacesOperationContract.Definition.Route;
@@ -74,7 +79,7 @@ public static class HttpRoutes {
 [ExportTsClass]
 public static class HostProtocol {
     public const string Transport = "http+sse";
-    public const int ContractVersion = 30;
+    public const int ContractVersion = 31;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

@@ -15,7 +15,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Pe.Shared.Aps\Pe.Shared.Aps.csproj"/>
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj"/>
         <ProjectReference Include="..\Pe.Revit.SettingsRuntime\Pe.Revit.SettingsRuntime.csproj"/>

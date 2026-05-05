@@ -1,4 +1,4 @@
-﻿using Pe.Shared.SettingsLayout;
+using Pe.Shared.SettingsLayout;
 using System.IO;
 
 namespace Pe.Dev.RevitAutomation;

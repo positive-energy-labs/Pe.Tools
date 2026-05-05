@@ -166,20 +166,12 @@ public sealed class ButtonRegistry {
                               """,
             Container = new ButtonContainer.Panel("Tools")
         }),
-        Register(new ButtonRegistration<CmdApsAuthPKCE> {
-            Text = "OAuth PKCE",
+        Register(new ButtonRegistration<CmdApsAuth> {
+            Text = "APS Auth",
             SmallImage = "id-card16.png",
             LargeImage = "id-card32.png",
             ToolTip =
-                "Get an access token from Autodesk Platform Services. This is primarily for testing purposes, but running it will not hurt anything.",
-            Container = new ButtonContainer.PullDown("General", "Manage")
-        }),
-        Register(new ButtonRegistration<CmdApsAuthNormal> {
-            Text = "OAuth Normal",
-            SmallImage = "id-card16.png",
-            LargeImage = "id-card32.png",
-            ToolTip =
-                "Get an access token from Autodesk Platform Services. This is primarily for testing purposes, but running it will not hurt anything.",
+                "Authenticate to Autodesk Platform Services through Pe.Host using the shared persisted token flow.",
             Container = new ButtonContainer.PullDown("General", "Manage")
         }),
         Register(new ButtonRegistration<CmdCacheParametersService> {

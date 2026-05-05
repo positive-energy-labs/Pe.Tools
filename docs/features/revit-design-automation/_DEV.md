@@ -1,194 +1,83 @@
 # Revit Design Automation
 
-This feature is no longer just an auth-first cloud-open spike. It now has a general-purpose DA shell, a shared operator CLI surface, a diagnostic cloud-open workload, and a first production workload for parameter collection.
-
 ## Mental Model
 
-- `pe-dev revit automation ...` is the operator surface.
-- `Pe.Dev.Cli` parses arguments and prints human or JSON output.
-- `Pe.Dev.RevitAutomation` does everything local and out-of-proc: read credentials, acquire APS tokens, build/package the worker, upsert appbundle/activity, submit workitems, inspect status, download artifacts, and classify failures.
-- `Pe.Dev.RevitAutomation.Worker` is the in-engine automation shell: read the common job payload, open the cloud model, dispatch to a typed workload handler, write artifacts, emit shell markers, close the document, exit.
-- `Pe.Revit.Global.Services.Aps` is the shared APS/auth seam.
-- `Pe.Revit.Global` owns DA-safe document collectors and contracts that both desktop and automation shells can share.
+Think of the current DA lane as a schedule-audit operator workflow, not a generalized workload platform.
 
-## Current Workloads
+- `pe-dev revit automation ...` is the public operator surface.
+- `Pe.Dev.Cli` owns parse/print behavior only.
+- `Pe.Dev.RevitAutomation` owns persisted auth, repo-local cache, sticky browse context, manifest management, appbundle/activity readiness, workitem submission, receipt inspection, and artifact download.
+- `Pe.Dev.RevitAutomation.Worker` is still the thin in-engine shell that opens a cloud model, runs a typed job, and writes artifacts.
 
-### Diagnostic workload
+The important shift is that operators now work with human-readable ACC names and model paths first. GUIDs, region, and Revit year are resolved late.
 
-- Command: `pe-dev revit automation probe-access ...`
-- Purpose: prove APS auth, worker load, and cloud model open against a known model.
-- Output: classification plus marker excerpt.
+## Architecture
 
-### Production workload
+### Public operator lanes
 
-- Command: `pe-dev revit automation collect-parameters ...`
-- Purpose: open a cloud model and emit a structured parameter collection artifact.
-- Output: JSON artifact with provenance plus a parsed workitem summary.
+- `auth`
+  - persisted 3-legged refresh-token-backed login status
+- `browse`
+  - sticky hub/project/path context plus cached ACC traversal
+- `manifest`
+  - readable schedule manifest create/update/validate flow
+- `submit schedules`
+  - resolve manifest entries, ensure shell readiness by year, submit one workitem per model, write a receipt, return immediately
+- `inspect`
+  - re-open a receipt later, refresh workitem status, parse reports, optionally download artifacts
+- `cache`
+  - inspect or clear the repo-local best-effort cache
 
-### Batch submission
+### Local state
 
-- Command: `pe-dev revit automation collect-parameters-batch --manifest <path>`
-- Purpose: submit one parameter-collection workitem per cloud model from a manifest.
-- Output: per-model submission and status summary plus downloaded artifacts for successful runs.
+- repo-local cache:
+  - `.artifacts/automation/cache/`
+- repo-local browse context:
+  - `.artifacts/automation/state/browse-context.json`
+- repo-local submission receipts:
+  - `.artifacts/automation/receipts/*.json`
+- user-local persisted APS auth:
+  - `%LocalAppData%/Positive Energy/Pe.Tools/ApsAuth/tokens.json`
 
-### Inspection
+### Shell split
 
-- Command: `pe-dev revit automation workitem-status --workitem-id <id>`
-- Purpose: inspect an existing workitem without resubmitting it.
+- desktop shell:
+  - `Pe.App`
+- automation shell:
+  - `Pe.Dev.RevitAutomation.Worker`
 
-## Cross-Package Shape
+These remain sibling shells over shared DA-safe runtime packages. DA still does not run desktop startup.
 
-- `source/Pe.Dev.Cli`
-  - `AutomationCliProgram.cs`
-  - `AutomationProbeAccessCliOptions.cs`
-  - `AutomationParameterCollectionCliOptions.cs`
-  - `AutomationParameterCollectionBatchCliOptions.cs`
-  - `AutomationWorkItemCliOptions.cs`
-- `source/Pe.Dev.RevitAutomation`
-  - `RevitAutomationProbeService.cs`
-  - `RevitAutomationParameterCollectionService.cs`
-  - `RevitAutomationParameterCollectionBatchService.cs`
-  - `RevitAutomationWorkerBundleBuilder.cs`
-  - `RevitAutomationShellDefinitions.cs`
-  - `RevitAutomationWorkItemInspectorService.cs`
-  - `AutomationObjectStorageClient.cs`
-  - `StoredApsWebAuthTokenProvider.cs`
-  - `GlobalSettingsFileReader.cs`
-- `source/Pe.Dev.RevitAutomation.Worker`
-  - `RevitAutomationShellApp.cs`
-- `source/Pe.Revit.Global/Services/Aps`
-  - `Aps.cs`
-  - `Core/OAuth.cs`
-  - `Core/OAuthHandler.cs`
-  - `Core/AutomationApiClient.cs`
-  - `Models/Automation*`
-- `source/Pe.Revit.Global/Revit/Lib/Parameters`
-  - `ParameterCollectionArtifactCollector.cs`
-- `source/Pe.Shared.HostContracts/RevitData`
-  - `ParameterCollectionContracts.cs`
+## Key Flows
 
-## Shell Split
+### Browse and inventory
 
-### Desktop shell
+1. `auth login`
+2. `browse hubs`
+3. `browse use-hub ...`
+4. `browse projects`
+5. `browse use-project ...`
+6. `browse ls` / `browse cd` / `browse models`
 
-- `Pe.App`
-- owns UI startup, ribbon, bridge, scripting host, and other interactive session concerns
+The browse service reuses cached APS discovery unless `--refresh` is passed.
 
-### Automation shell
+### Manifest authoring
 
-- `Pe.Dev.RevitAutomation.Worker`
-- owns the headless `IExternalDBApplication` entrypoint
-- subscribes to `DesignAutomationReadyEvent`
-- reads the common DA job input
-- opens the document
-- dispatches a workload
-- writes artifacts
+1. `manifest create --path <path>`
+2. `manifest add --path <path> --project <project-name> --model-path <project-root-model-path>`
+3. `manifest validate --path <path>`
 
-The important rule is: these are sibling shells over shared runtime packages. DA does not run `Pe.App` startup.
+The manifest stays human-readable. It stores project names and canonical model paths, not GUIDs or year metadata.
 
-## Dependency Direction
+### Submit now, inspect later
 
-- Both shells may depend on DA-safe runtime packages such as `Pe.Revit.Global`, `Pe.Revit.Extensions`, shared contracts, and document-owned collectors.
-- Shared packages must not depend back on either shell.
-- DA-safe collector paths must not depend on `UIApplication`, WPF, ribbon helpers, host bridge logic, or interactive session services.
-- If a useful behavior currently hangs off desktop startup or a UI session helper, lift the reusable part downward into a DA-safe package before wiring it into the automation shell.
+1. `submit schedules --manifest <path>`
+2. receive a receipt path immediately
+3. `inspect receipt --receipt latest --download-artifacts true`
 
-One real example: formula collection previously reached through a UI-session helper to find open family docs. That had to be refactored to use a document/application-owned headless seam before parameter collection could succeed in DA.
+The submit command validates and resolves manifest entries, ensures the right appbundle/activity for each discovered year, submits one workitem per model, writes a receipt, and exits without polling for final DA status.
 
-## Auth Split
+## Open Questions
 
-The Design Automation flow intentionally uses two APS tokens.
-
-### Management token
-
-- flow kind: `ApsAuthFlowKind.TwoLegged`
-- request factory: `ApsTokenRequest.ForAutomationManagement()`
-- used for appbundle CRUD, activity CRUD, workitem submission, and status/report access
-
-### User-context token
-
-- flow kind: `ApsAuthFlowKind.ThreeLeggedConfidential`
-- request factory: `ApsTokenRequest.ForAutomationUserContext()`
-- passed into the workitem as `adsk3LeggedToken`
-- consumed by Revit/DA while opening the cloud model inside the worker
-
-## Operator Commands
-
-### Build the CLI lane
-
-```powershell
-dotnet build source\Pe.Dev.Cli\Pe.Dev.Cli.csproj -c Debug.R25 /p:WarningLevel=0
-```
-
-### Submit the cloud-open probe
-
-```powershell
-dotnet exec source\Pe.Dev.Cli\bin\Debug.R25\net8.0-windows\pe-dev.dll revit automation probe-access --region US --project-guid <project-guid> --model-guid <model-guid> --expected-title "<expected-title>" --mask false --timeout-seconds 600
-```
-
-### Submit bounded parameter collection
-
-Use a narrow category first. Full family matrix collection is multi-minute.
-
-```powershell
-dotnet exec source\Pe.Dev.Cli\bin\Debug.R25\net8.0-windows\pe-dev.dll revit automation collect-parameters --region US --project-guid <project-guid> --model-guid <model-guid> --expected-title "<expected-title>" --category-name "Duct Accessories" --mask false --timeout-seconds 600
-```
-
-### Submit batch parameter collection
-
-```powershell
-dotnet exec source\Pe.Dev.Cli\bin\Debug.R25\net8.0-windows\pe-dev.dll revit automation collect-parameters-batch --manifest <path> --json
-```
-
-### Inspect an existing workitem
-
-```powershell
-dotnet exec source\Pe.Dev.Cli\bin\Debug.R25\net8.0-windows\pe-dev.dll revit automation workitem-status --workitem-id <workitem-id> --mask false
-```
-
-## Artifact Strategy
-
-- The DA shell produces artifacts, not just stdout markers.
-- Parameter collection writes one machine-readable JSON artifact per model.
-- Artifact names should be deterministic and provenance-rich.
-- Download happens through the APS signed object storage flow and lands under local automation artifact storage.
-- Marker text still matters, but it is for diagnosis and classification, not the primary data contract.
-
-## Build and Packaging
-
-`./build pack` is now the shared packaging surface for both shells.
-
-- desktop bundle output: `output/Pe.App.bundle.zip`
-- automation appbundle output: `output/automation/Pe.Dev.RevitAutomation.Worker.<year>.appbundle.zip`
-
-The automation packaging lane is still distinct from desktop packaging. Shared packaging surface does not mean identical artifact shape.
-
-## Status and Scale
-
-- One workitem per cloud model is the default batch strategy.
-- Multi-model orchestration belongs in `Pe.Dev.RevitAutomation`, not in the worker.
-- Status inspection should prefer the reduced-call APS status path for batches instead of naive tight-loop `GET workitems/{id}` polling.
-
-## Known Good Proof Point
-
-The current implementation has already proven:
-
-- successful cloud-open probe against a real ACC model
-- successful bounded parameter collection against `Duct Accessories`
-- emitted artifact shape from the DA shell after removing UI-only dependencies from the collector path
-
-## Architecture Review
-
-### Strong parts
-
-- CLI parse/printing stays in `Pe.Dev.Cli`
-- APS orchestration stays in `Pe.Dev.RevitAutomation`
-- in-engine behavior stays in `Pe.Dev.RevitAutomation.Worker`
-- the worker is still thin even after becoming a general-purpose shell
-- shared document collectors are now driving real DA output rather than a probe-only spike
-
-### Shape debt worth watching
-
-- Do not let CLI presentation flags leak too deeply into service-layer models as more workloads appear.
-- The current shell supports multiple workloads, but a larger workload catalog may justify a cleaner job-definition registry.
-- More DA-safe code likely needs to be peeled away from UI-era packages over time.
+- The internal DA code still contains older parameter-collection and probe-oriented services. They are no longer the public operator model, but deeper code deletion can continue in later cleanup passes.
+- Revit year resolution still depends on APS discovery metadata. If APS omits that metadata for a model, live resolution remains the fallback.

@@ -1,10 +1,12 @@
+using Pe.Shared.ApsAuth;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Pe.App.SettingsEditor;
 using Pe.Revit.Global.Services.Aps;
-using Pe.Shared.Aps;
-using Pe.Shared.Aps.Models;
+using Pe.Revit.Global.Services.Host;
+using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.SettingsLayout;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Json;
@@ -24,35 +26,56 @@ public class CmdCacheParametersService : IExternalCommand {
         ExternalCommandData commandData,
         ref string message,
         ElementSet elements) {
-        var cacheFilename = "parameters-service-cache";
-        var globalState = StorageClient.Default.Global().State();
-        var apsParamsCache = globalState.Json<ParametersApi.Parameters>(cacheFilename);
-        var cacheFilePath = ((JsonReader<ParametersApi.Parameters>)apsParamsCache).FilePath;
+        try {
+            var hostLaunchResult = SettingsEditorHostLauncher.EnsureRunning();
+            if (!hostLaunchResult.Success)
+                throw new InvalidOperationException(hostLaunchResult.Message);
 
-        var tokenProvider = new CacheParametersService();
-        var svcAps = new Aps(tokenProvider);
-        var parameters = Task.Run(async () =>
-            await CreateParametersClient(svcAps, tokenProvider).GetParameters(
-                apsParamsCache, false)
-        ).Result;
+            var cacheFilename = "parameters-service-cache";
+            var globalState = StorageClient.Default.Global().State();
+            var apsParamsCache = globalState.Json<ParametersApi.Parameters>(cacheFilename);
+            var cacheFilePath = ((JsonReader<ParametersApi.Parameters>)apsParamsCache).FilePath;
 
-        var additionalFormatPaths = WriteAdditionalFormats(parameters, cacheFilename, globalState.DirectoryPath);
-        Log.Information(
-            "[APS Cache] Wrote {ParameterCount} APS parameters to {JsonPath}. Additional artifacts: {AdditionalFormatPaths}",
-            parameters?.Results?.Count ?? 0,
-            cacheFilePath,
-            additionalFormatPaths);
+            var tokenProvider = new CacheParametersServiceSettings();
+            var tokenResult = Task.Run(async () =>
+                    await new HostLocalOperationClient().ExecuteAsync<ApsTokenRequest, ApsTokenResult>(
+                        AcquireApsAccessTokenOperationContract.Definition,
+                        ApsTokenRequest.ForParameterService()
+                    )
+                )
+                .GetAwaiter()
+                .GetResult();
+            var parameters = Task.Run(async () =>
+                    await CreateParametersClient(tokenResult.AccessToken, tokenProvider).GetParameters(
+                        apsParamsCache,
+                        false
+                    )
+                )
+                .GetAwaiter()
+                .GetResult();
 
-        return Result.Succeeded;
+            var additionalFormatPaths = WriteAdditionalFormats(parameters, cacheFilename, globalState.DirectoryPath);
+            Log.Information(
+                "[APS Cache] Wrote {ParameterCount} APS parameters to {JsonPath}. Additional artifacts: {AdditionalFormatPaths}",
+                parameters?.Results?.Count ?? 0,
+                cacheFilePath,
+                additionalFormatPaths
+            );
+
+            return Result.Succeeded;
+        } catch (Exception ex) {
+            Log.Error(ex, "[APS Cache] Failed to cache the parameters service payload.");
+            message = ex.Message;
+            return Result.Failed;
+        }
     }
 
-    private static Parameters CreateParametersClient(Aps aps, TokenProviders.IParameters tokenProvider) {
+    private static Parameters CreateParametersClient(string accessToken, IParametersTokenProvider tokenProvider) {
         var httpClient = new HttpClient {
             BaseAddress = new Uri("https://developer.api.autodesk.com/"),
             DefaultRequestHeaders = {
                 Accept = { new MediaTypeWithQualityHeaderValue("application/json") },
-                Authorization =
-                    new AuthenticationHeaderValue("Bearer", aps.GetToken(ApsTokenRequest.ForParameterService()))
+                Authorization = new AuthenticationHeaderValue("Bearer", accessToken)
             }
         };
 
@@ -339,14 +362,7 @@ public class EnrichedParameterData {
     }
 }
 
-public class CacheParametersService : Aps.IOAuthTokenProvider, TokenProviders.IParameters {
-#if DEBUG
-    public string GetClientId() => ReadGlobalSettings().ApsWebClientId1;
-    public string GetClientSecret() => ReadGlobalSettings().ApsWebClientSecret1;
-#else
-    public string GetClientId() => ReadGlobalSettings().ApsDesktopClientId1;
-    public string GetClientSecret() => null;
-#endif
+public class CacheParametersServiceSettings : IParametersTokenProvider {
     public string GetAccountId() => ReadGlobalSettings().Bim360AccountId;
     public string GetGroupId() => ReadGlobalSettings().ParamServiceGroupId;
     public string GetCollectionId() => ReadGlobalSettings().ParamServiceCollectionId;

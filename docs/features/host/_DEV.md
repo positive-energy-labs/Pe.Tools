@@ -5,9 +5,10 @@ This document describes the browser-facing and tool-facing host contract exposed
 ## Mental Model
 
 - HTTP owns request/response workflows.
-- `/api/settings/events` stays invalidation-only for settings/document status.
+- `/api/settings/events` is the freshness stream for host/document status changes.
 - Revit-backed data flows through the named-pipe bridge.
 - Revit scripting is also public through host HTTP, but scripting is sync-only in v1 and does not use SSE.
+- Every bridge-backed route requires exactly one connected Revit session and uses that session's active document.
 
 ## Public Transport
 
@@ -32,6 +33,7 @@ This document describes the browser-facing and tool-facing host contract exposed
 - settings/status/schema/storage:
   - `GET /api/settings/host-status`
   - `POST /api/settings/schema`
+    Request includes both `moduleKey` and `rootKey`.
   - `POST /api/settings/workspaces`
   - `POST /api/settings/tree`
   - `POST /api/settings/document/open`
@@ -39,8 +41,10 @@ This document describes the browser-facing and tool-facing host contract exposed
   - `POST /api/settings/document/save`
 - bridge-backed settings/revit data:
   - `POST /api/settings/field-options`
+    Request includes both `moduleKey` and `rootKey`.
   - `POST /api/settings/parameter-catalog`
   - `POST /api/revit-data/element-context/query`
+  - `GET /api/revit-data/documents/session-context`
   - `GET /api/revit-data/loaded-families/filter/schema`
   - `POST /api/revit-data/loaded-families/filter/field-options`
   - `POST /api/revit-data/schedules/catalog`
@@ -57,12 +61,20 @@ This document describes the browser-facing and tool-facing host contract exposed
   - `POST /api/scripting/workspace/bootstrap`
   - `POST /api/scripting/execute`
 
-## Structural Host Mode
+## Bridge-Backed Schema
 
-- During the current settings runtime split, Revit-authored schema routes intentionally degrade on host.
-- `POST /api/settings/schema` returns `409 Conflict` for Revit-backed modules such as `Schedule Manager`.
-- `GET /api/revit-data/loaded-families/filter/schema` currently also returns `409 Conflict` in structural host mode.
-- Bridge-backed data and field-options routes still work when a matching Revit session is connected.
+- Revit-authored schema routes are bridge-backed.
+- `POST /api/settings/schema` resolves the requested `(moduleKey, rootKey)` against the connected Revit runtime.
+- `GET /api/revit-data/loaded-families/filter/schema` is also bridge-backed.
+- Bridge-backed schema, data, and field-options routes require exactly one connected Revit session.
+- Bridge-backed routes do not support target selection. The active document is the only live-document target.
+
+## Response Shape
+
+- successful bridge-backed routes return the concrete DTO payload directly
+- expected user-actionable failures return `409 ProblemDetails`
+- validation-style failures include `extensions.issues`
+- unexpected host/runtime faults return `500 ProblemDetails`
 
 ## Element Context Query
 

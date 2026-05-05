@@ -27,8 +27,10 @@ public enum ScheduleCollectionClassification {
     WorkItemSubmissionFailed,
     CloudModelUnauthorized,
     CloudModelNotFound,
+    ExpectedTitleMismatch,
     CollectionFailed,
     ArtifactDownloadFailed,
+    ArtifactValidationFailed,
     TimedOut
 }
 

@@ -81,6 +81,7 @@ public sealed class HostOperationExecutorTests {
             null!,
             null!,
             null!,
+            null!,
             NullLoggerFactory.Instance
         );
 
