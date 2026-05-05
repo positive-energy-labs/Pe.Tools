@@ -43,10 +43,20 @@ public sealed class HostScriptingV1Tests {
         );
         var capturedRequest = await serverTask;
 
-        Assert.That(capturedRequest.Command, Is.EqualTo(ScriptingPipeCommand.BootstrapWorkspace));
-        Assert.That(capturedRequest.WorkspaceKey, Is.EqualTo("default"));
-        Assert.That(capturedRequest.CreateSampleScript, Is.False);
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.Multiple(() => {
+            Assert.That(capturedRequest.Command, Is.EqualTo(ScriptingPipeCommand.BootstrapWorkspace));
+            Assert.That(capturedRequest.WorkspaceKey, Is.EqualTo("default"));
+            Assert.That(capturedRequest.CreateSampleScript, Is.False);
+            Assert.That(result.WorkspaceKey, Is.EqualTo(expected.WorkspaceKey));
+            Assert.That(result.WorkspaceRootPath, Is.EqualTo(expected.WorkspaceRootPath));
+            Assert.That(result.ProjectFilePath, Is.EqualTo(expected.ProjectFilePath));
+            Assert.That(result.SampleScriptPath, Is.EqualTo(expected.SampleScriptPath));
+            Assert.That(result.ReadmePath, Is.EqualTo(expected.ReadmePath));
+            Assert.That(result.RevitVersion, Is.EqualTo(expected.RevitVersion));
+            Assert.That(result.TargetFramework, Is.EqualTo(expected.TargetFramework));
+            Assert.That(result.RuntimeAssemblyPath, Is.EqualTo(expected.RuntimeAssemblyPath));
+            Assert.That(result.GeneratedFiles, Is.EqualTo(expected.GeneratedFiles));
+        });
     }
 
     [Test]
@@ -79,12 +89,20 @@ public sealed class HostScriptingV1Tests {
         );
         var capturedRequest = await serverTask;
 
-        Assert.That(capturedRequest.Command, Is.EqualTo(ScriptingPipeCommand.ExecuteScript));
-        Assert.That(capturedRequest.SourceKind, Is.EqualTo(ScriptExecutionSourceKind.InlineSnippet));
-        Assert.That(capturedRequest.ScriptContent, Is.EqualTo("WriteLine(\"hi\");"));
-        Assert.That(capturedRequest.ProjectContent, Is.EqualTo("<Project />"));
-        Assert.That(capturedRequest.SourceName, Is.EqualTo("SmokeScript.cs"));
-        Assert.That(result, Is.EqualTo(expected));
+        Assert.Multiple(() => {
+            Assert.That(capturedRequest.Command, Is.EqualTo(ScriptingPipeCommand.ExecuteScript));
+            Assert.That(capturedRequest.SourceKind, Is.EqualTo(ScriptExecutionSourceKind.InlineSnippet));
+            Assert.That(capturedRequest.ScriptContent, Is.EqualTo("WriteLine(\"hi\");"));
+            Assert.That(capturedRequest.ProjectContent, Is.EqualTo("<Project />"));
+            Assert.That(capturedRequest.SourceName, Is.EqualTo("SmokeScript.cs"));
+            Assert.That(result.Status, Is.EqualTo(expected.Status));
+            Assert.That(result.Output, Is.EqualTo(expected.Output));
+            Assert.That(result.Diagnostics, Is.EqualTo(expected.Diagnostics));
+            Assert.That(result.RevitVersion, Is.EqualTo(expected.RevitVersion));
+            Assert.That(result.TargetFramework, Is.EqualTo(expected.TargetFramework));
+            Assert.That(result.ContainerTypeName, Is.EqualTo(expected.ContainerTypeName));
+            Assert.That(result.ExecutionId, Is.EqualTo(expected.ExecutionId));
+        });
     }
 
     [Test]
@@ -202,6 +220,7 @@ public sealed class HostScriptingV1Tests {
         var runtimeStateService = new HostSettingsRuntimeStateService(new FakeBridgeCapabilityService(snapshot));
 
         return new HostOperationContext(
+            null!,
             null!,
             scriptingPipeClientService,
             runtimeStateService,

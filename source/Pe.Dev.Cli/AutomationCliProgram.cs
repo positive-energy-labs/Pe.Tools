@@ -1,633 +1,606 @@
-﻿using System.Text.Json;
+using Pe.Shared.ApsAuth;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Pe.Aps.Auth;
 using Pe.Dev.RevitAutomation;
+using Pe.Shared.RevitData.Schedules;
 
 namespace Pe.Dev.Cli;
 
 internal static class AutomationCliProgram {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
-    private static readonly TimeSpan MinimumProbeLifetime = TimeSpan.FromMinutes(5);
-    private static readonly TimeSpan ProbeTimeoutBuffer = TimeSpan.FromMinutes(2);
+    private static readonly JsonSerializerOptions JsonOptions = new() {
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
 
-    public static async Task<int> RunAsync(
+    public static Task<int> RunAsync(
         IReadOnlyList<string> args,
         string? repoRootOverride,
         CancellationToken cancellationToken
     ) =>
         args.Count == 0
-            ? WriteAutomationUsageAndReturn()
+            ? Task.FromResult(WriteAutomationUsageAndReturn())
             : args[0].ToLowerInvariant() switch {
-                "collect-parameters" => await RunCollectParametersAsync(args, repoRootOverride, cancellationToken),
-                "collect-parameters-batch" => await RunCollectParametersBatchAsync(args, repoRootOverride, cancellationToken),
-                "collect-schedules" => await RunCollectSchedulesAsync(args, repoRootOverride, cancellationToken),
-                "collect-schedules-batch" => await RunCollectSchedulesBatchAsync(args, repoRootOverride, cancellationToken),
-                "discover-models" => await RunDiscoverModelsAsync(args, repoRootOverride, cancellationToken),
-                "list-contents" => await RunListContentsAsync(args, cancellationToken),
-                "list-hubs" => await RunListHubsAsync(args, cancellationToken),
-                "list-projects" => await RunListProjectsAsync(args, cancellationToken),
-                "probe-access" => await RunProbeAccessAsync(args, repoRootOverride, cancellationToken),
-                "workitem-status" => await RunWorkItemStatusAsync(args, cancellationToken),
-                _ => WriteAutomationUsageAndReturn()
+                "auth" => RunAuthAsync(args, cancellationToken),
+                "browse" => RunBrowseAsync(args, repoRootOverride, cancellationToken),
+                "manifest" => RunManifestAsync(args, repoRootOverride, cancellationToken),
+                "submit" => RunSubmitAsync(args, repoRootOverride, cancellationToken),
+                "inspect" => RunInspectAsync(args, repoRootOverride, cancellationToken),
+                "workitem-status" => RunWorkItemStatusAliasAsync(args, cancellationToken),
+                "cache" => RunCacheAsync(args, repoRootOverride),
+                _ => Task.FromResult(WriteAutomationUsageAndReturn())
             };
 
-    private static async Task<int> RunListHubsAsync(
+    private static Task<int> RunAuthAsync(
         IReadOnlyList<string> args,
         CancellationToken cancellationToken
     ) {
-        AutomationListHubsCliOptions options;
+        if (args.Count < 2)
+            return Task.FromResult(WriteAutomationUsageAndReturn());
+
+        var json = args.Contains("--json", StringComparer.OrdinalIgnoreCase);
+        var service = new ApsAuthService(new ApsCredentialSource());
+        var request = ApsTokenRequest.ForAutomationUserContext();
         try {
-            options = AutomationListHubsCliOptions.Parse(args);
+            switch (args[1].ToLowerInvariant()) {
+            case "login": {
+                    var result = service.Login(request, message => WriteAutomationProgress(message, json));
+                    WriteResult(result, json);
+                    return Task.FromResult(0);
+                }
+            case "status":
+                WriteResult(service.GetStatus(request), json);
+                return Task.FromResult(0);
+            case "logout":
+                service.Logout();
+                if (json)
+                    Console.WriteLine("{\"loggedOut\":true}");
+                else
+                    Console.WriteLine("Persisted APS auth cleared.");
+                return Task.FromResult(0);
+            default:
+                return Task.FromResult(WriteAutomationUsageAndReturn());
+            }
         } catch (Exception ex) {
             Console.Error.WriteLine(ex.Message);
-            WriteAutomationUsage();
-            return 10;
+            return Task.FromResult(14);
         }
-
-        var service = new RevitAutomationModelDiscoveryService();
-        AutomationHubCatalogResult result;
-        try {
-            result = await service.ListHubsAsync(
-                message => {
-                    if (!options.Json)
-                        Console.WriteLine(message);
-                },
-                cancellationToken
-            );
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            return 14;
-        }
-
-        if (options.Json)
-            Console.WriteLine(JsonSerializer.Serialize(result, JsonOptions));
-        else
-            WriteHumanResult(result);
-
-        return 0;
     }
 
-    private static async Task<int> RunListProjectsAsync(
-        IReadOnlyList<string> args,
-        CancellationToken cancellationToken
-    ) {
-        AutomationListProjectsCliOptions options;
-        try {
-            options = AutomationListProjectsCliOptions.Parse(args);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            WriteAutomationUsage();
-            return 10;
-        }
-
-        var service = new RevitAutomationModelDiscoveryService();
-        AutomationProjectCatalogResult result;
-        try {
-            result = await service.ListProjectsAsync(
-                options.ToOptions(),
-                message => {
-                    if (!options.Json)
-                        Console.WriteLine(message);
-                },
-                cancellationToken
-            );
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            return 14;
-        }
-
-        if (options.Json)
-            Console.WriteLine(JsonSerializer.Serialize(result, JsonOptions));
-        else
-            WriteHumanResult(result);
-
-        return 0;
-    }
-
-    private static async Task<int> RunListContentsAsync(
-        IReadOnlyList<string> args,
-        CancellationToken cancellationToken
-    ) {
-        AutomationListContentsCliOptions options;
-        try {
-            options = AutomationListContentsCliOptions.Parse(args);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            WriteAutomationUsage();
-            return 10;
-        }
-
-        var service = new RevitAutomationModelDiscoveryService();
-        AutomationContentCatalogResult result;
-        try {
-            result = await service.ListContentsAsync(
-                options.ToOptions(),
-                message => {
-                    if (!options.Json)
-                        Console.WriteLine(message);
-                },
-                cancellationToken
-            );
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            return 14;
-        }
-
-        if (options.Json)
-            Console.WriteLine(JsonSerializer.Serialize(result, JsonOptions));
-        else
-            WriteHumanResult(result);
-
-        return 0;
-    }
-
-    private static async Task<int> RunDiscoverModelsAsync(
+    private static async Task<int> RunBrowseAsync(
         IReadOnlyList<string> args,
         string? repoRootOverride,
         CancellationToken cancellationToken
     ) {
-        AutomationDiscoverModelsCliOptions options;
+        if (args.Count < 2)
+            return WriteAutomationUsageAndReturn();
+
+        var repoRoot = RepoRootResolver.Resolve(repoRootOverride);
+        var service = new AutomationBrowseService();
+        var json = args.Contains("--json", StringComparer.OrdinalIgnoreCase);
+        var refresh = args.Contains("--refresh", StringComparer.OrdinalIgnoreCase);
+
         try {
-            options = AutomationDiscoverModelsCliOptions.Parse(args);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            WriteAutomationUsage();
-            return 10;
-        }
-
-        var service = new RevitAutomationModelDiscoveryService();
-        ModelDiscoveryResult result;
-        try {
-            result = await service.DiscoverModelsAsync(
-                options.ToOptions(),
-                repoRootOverride,
-                message => {
-                    if (!options.Json)
-                        Console.WriteLine(message);
-                },
-                cancellationToken
-            );
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            return 14;
-        }
-
-        if (options.Json)
-            Console.WriteLine(JsonSerializer.Serialize(result, JsonOptions));
-        else
-            WriteHumanResult(result);
-
-        return 0;
-    }
-
-    private static async Task<int> RunCollectParametersAsync(
-        IReadOnlyList<string> args,
-        string? repoRootOverride,
-        CancellationToken cancellationToken
-    ) {
-        AutomationParameterCollectionCliOptions options;
-        try {
-            options = AutomationParameterCollectionCliOptions.Parse(args);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            WriteAutomationUsage();
-            return 10;
-        }
-
-        var service = new RevitAutomationParameterCollectionService();
-        ParameterCollectionResult result;
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(GetProbeLifetime(options.TimeoutSeconds));
-        try {
-            result = await service.RunAsync(
-                options.ToOptions(),
-                repoRootOverride,
-                message => {
-                    if (!options.Json)
-                        Console.WriteLine(message);
-                },
-                timeoutCts.Token
-            );
-        } catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested) {
-            result = new ParameterCollectionResult {
-                Succeeded = false,
-                Classification = ParameterCollectionClassification.TimedOut,
-                Engine = options.Engine,
-                Region = options.Region,
-                ProjectGuid = options.ProjectGuid,
-                ModelGuid = options.ModelGuid,
-                FailureMessage =
-                    $"Automation parameter collection exceeded the process timeout of {(int)GetProbeLifetime(options.TimeoutSeconds).TotalSeconds} seconds and was cancelled."
-            };
-        } catch (Exception ex) {
-            result = new ParameterCollectionResult {
-                Succeeded = false,
-                Classification = ParameterCollectionClassification.WorkItemSubmissionFailed,
-                Engine = options.Engine,
-                Region = options.Region,
-                ProjectGuid = options.ProjectGuid,
-                ModelGuid = options.ModelGuid,
-                FailureMessage = ex.Message
-            };
-        }
-
-        if (options.Json)
-            Console.WriteLine(JsonSerializer.Serialize(result, JsonOptions));
-        else
-            WriteHumanResult(result);
-
-        return GetExitCode(result.Classification);
-    }
-
-    private static async Task<int> RunCollectParametersBatchAsync(
-        IReadOnlyList<string> args,
-        string? repoRootOverride,
-        CancellationToken cancellationToken
-    ) {
-        AutomationParameterCollectionBatchCliOptions options;
-        try {
-            options = AutomationParameterCollectionBatchCliOptions.Parse(args);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            WriteAutomationUsage();
-            return 10;
-        }
-
-        var service = new RevitAutomationParameterCollectionBatchService();
-        ParameterCollectionBatchResult result;
-        try {
-            result = await service.RunAsync(
-                options.ManifestPath,
-                repoRootOverride,
-                message => {
-                    if (!options.Json)
-                        Console.WriteLine(message);
-                },
-                cancellationToken
-            );
+            switch (args[1].ToLowerInvariant()) {
+            case "status":
+                WriteResult(service.GetContext(repoRoot), json);
+                return 0;
+            case "hubs":
+                WriteResult(
+                    await service.GetHubsAsync(repoRoot, refresh, message => WriteAutomationProgress(message, json), cancellationToken)
+                        .ConfigureAwait(false),
+                    json
+                );
+                return 0;
+            case "use-hub":
+                WriteResult(
+                    await service.UseHubAsync(
+                            repoRoot,
+                            RequirePositional(args, 2, "hub selector"),
+                            refresh,
+                            message => WriteAutomationProgress(message, json),
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false),
+                    json
+                );
+                return 0;
+            case "projects":
+                WriteResult(
+                    await service.GetProjectsAsync(repoRoot, refresh, message => WriteAutomationProgress(message, json), cancellationToken)
+                        .ConfigureAwait(false),
+                    json
+                );
+                return 0;
+            case "use-project":
+                WriteResult(
+                    await service.UseProjectAsync(
+                            repoRoot,
+                            RequirePositional(args, 2, "project selector"),
+                            refresh,
+                            message => WriteAutomationProgress(message, json),
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false),
+                    json
+                );
+                return 0;
+            case "pwd":
+                if (json)
+                    Console.WriteLine(JsonSerializer.Serialize(new { scopePath = service.GetWorkingPath(repoRoot) }, JsonOptions));
+                else
+                    Console.WriteLine(string.IsNullOrWhiteSpace(service.GetWorkingPath(repoRoot)) ? "/" : service.GetWorkingPath(repoRoot));
+                return 0;
+            case "ls": {
+                    var scopePath = TryReadOptionalPositional(args, 2);
+                    var result = await service.ListContentsAsync(
+                            repoRoot,
+                            scopePath,
+                            refresh,
+                            message => WriteAutomationProgress(message, json),
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false);
+                    WriteResult(result, json);
+                    return 0;
+                }
+            case "cd":
+                WriteResult(
+                    await service.ChangeDirectoryAsync(
+                            repoRoot,
+                            RequirePositional(args, 2, "folder name"),
+                            refresh,
+                            message => WriteAutomationProgress(message, json),
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false),
+                    json
+                );
+                return 0;
+            case "up":
+                WriteResult(service.MoveUp(repoRoot), json);
+                return 0;
+            case "models":
+                WriteResult(
+                    await service.ListModelsAsync(
+                            repoRoot,
+                            ReadOptionValue(args, "--name-contains"),
+                            ReadBooleanOption(args, "--recurse", true),
+                            refresh,
+                            ReadOptionValue(args, "--out"),
+                            message => WriteAutomationProgress(message, json),
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false),
+                    json
+                );
+                return 0;
+            default:
+                return WriteAutomationUsageAndReturn();
+            }
         } catch (Exception ex) {
             Console.Error.WriteLine(ex.Message);
             return 14;
         }
-
-        if (options.Json)
-            Console.WriteLine(JsonSerializer.Serialize(result, JsonOptions));
-        else
-            WriteHumanResult(result);
-
-        return result.FailureCount == 0 ? 0 : 24;
     }
 
-    private static async Task<int> RunCollectSchedulesAsync(
+    private static async Task<int> RunManifestAsync(
         IReadOnlyList<string> args,
         string? repoRootOverride,
         CancellationToken cancellationToken
     ) {
-        AutomationScheduleCollectionCliOptions options;
+        if (args.Count < 2)
+            return WriteAutomationUsageAndReturn();
+
+        var repoRoot = RepoRootResolver.Resolve(repoRootOverride);
+        var service = new AutomationManifestService();
+        var json = args.Contains("--json", StringComparer.OrdinalIgnoreCase);
+        var refresh = args.Contains("--refresh", StringComparer.OrdinalIgnoreCase);
         try {
-            options = AutomationScheduleCollectionCliOptions.Parse(args);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            WriteAutomationUsage();
-            return 10;
-        }
+            switch (args[1].ToLowerInvariant()) {
+            case "create":
+                WriteResult(service.Create(repoRoot, RequireOptionValue(args, "--path")), json);
+                return 0;
+            case "show":
+                WriteResult(service.Load(repoRoot, RequireOptionValue(args, "--path")), json);
+                return 0;
+            case "list": {
+                    var manifest = service.Load(repoRoot, RequireOptionValue(args, "--path"));
+                    if (json) {
+                        Console.WriteLine(JsonSerializer.Serialize(manifest.Models, JsonOptions));
+                    } else {
+                        Console.WriteLine($"Hub: {manifest.Hub}");
+                        Console.WriteLine($"Models: {manifest.Models.Count}");
+                        foreach (var model in manifest.Models)
+                            Console.WriteLine($"- {model.Project} :: {model.ModelPath}");
+                    }
 
-        var service = new RevitAutomationScheduleCollectionService();
-        ScheduleCollectionResult result;
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(GetProbeLifetime(options.TimeoutSeconds));
-        try {
-            result = await service.RunAsync(
-                options.ToOptions(),
-                repoRootOverride,
-                message => {
-                    if (!options.Json)
-                        Console.WriteLine(message);
-                },
-                timeoutCts.Token
-            );
-        } catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested) {
-            result = new ScheduleCollectionResult {
-                Succeeded = false,
-                Classification = ScheduleCollectionClassification.TimedOut,
-                Engine = options.Engine,
-                Region = options.Region,
-                ProjectGuid = options.ProjectGuid,
-                ModelGuid = options.ModelGuid,
-                FailureMessage =
-                    $"Automation schedule collection exceeded the process timeout of {(int)GetProbeLifetime(options.TimeoutSeconds).TotalSeconds} seconds and was cancelled."
-            };
-        } catch (Exception ex) {
-            result = new ScheduleCollectionResult {
-                Succeeded = false,
-                Classification = ScheduleCollectionClassification.WorkItemSubmissionFailed,
-                Engine = options.Engine,
-                Region = options.Region,
-                ProjectGuid = options.ProjectGuid,
-                ModelGuid = options.ModelGuid,
-                FailureMessage = ex.Message
-            };
-        }
-
-        if (options.Json)
-            Console.WriteLine(JsonSerializer.Serialize(result, JsonOptions));
-        else
-            WriteHumanResult(result);
-
-        return GetExitCode(result.Classification);
-    }
-
-    private static async Task<int> RunCollectSchedulesBatchAsync(
-        IReadOnlyList<string> args,
-        string? repoRootOverride,
-        CancellationToken cancellationToken
-    ) {
-        AutomationScheduleCollectionBatchCliOptions options;
-        try {
-            options = AutomationScheduleCollectionBatchCliOptions.Parse(args);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            WriteAutomationUsage();
-            return 10;
-        }
-
-        var service = new RevitAutomationScheduleCollectionBatchService();
-        ScheduleCollectionBatchResult result;
-        try {
-            result = await service.RunAsync(
-                options.ManifestPath,
-                repoRootOverride,
-                message => {
-                    if (!options.Json)
-                        Console.WriteLine(message);
-                },
-                cancellationToken
-            );
+                    return 0;
+                }
+            case "add":
+                WriteResult(
+                    service.AddModel(
+                        repoRoot,
+                        RequireOptionValue(args, "--path"),
+                        RequireOptionValue(args, "--project"),
+                        RequireOptionValue(args, "--model-path"),
+                        refresh,
+                        message => WriteAutomationProgress(message, json),
+                        cancellationToken
+                    ),
+                    json
+                );
+                return 0;
+            case "remove":
+                WriteResult(
+                    service.RemoveModel(
+                        repoRoot,
+                        RequireOptionValue(args, "--path"),
+                        RequireOptionValue(args, "--model-path")
+                    ),
+                    json
+                );
+                return 0;
+            case "set-request": {
+                    var request = BuildScheduleRequest(args);
+                    WriteResult(
+                        service.SetRequest(repoRoot, RequireOptionValue(args, "--path"), request),
+                        json
+                    );
+                    return 0;
+                }
+            case "validate":
+                WriteResult(
+                    await service.ValidateAsync(
+                            repoRoot,
+                            RequireOptionValue(args, "--path"),
+                            refresh,
+                            message => WriteAutomationProgress(message, json),
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false),
+                    json
+                );
+                return 0;
+            default:
+                return WriteAutomationUsageAndReturn();
+            }
         } catch (Exception ex) {
             Console.Error.WriteLine(ex.Message);
             return 14;
         }
-
-        if (options.Json)
-            Console.WriteLine(JsonSerializer.Serialize(result, JsonOptions));
-        else
-            WriteHumanResult(result);
-
-        return result.FailureCount == 0 ? 0 : 24;
     }
 
-    private static async Task<int> RunProbeAccessAsync(
+    private static async Task<int> RunSubmitAsync(
         IReadOnlyList<string> args,
         string? repoRootOverride,
         CancellationToken cancellationToken
     ) {
-        AutomationProbeAccessCliOptions options;
+        if (args.Count < 2 || !string.Equals(args[1], "schedules", StringComparison.OrdinalIgnoreCase))
+            return WriteAutomationUsageAndReturn();
+
+        var json = args.Contains("--json", StringComparer.OrdinalIgnoreCase);
+        var service = new AutomationScheduleSubmissionService();
         try {
-            options = AutomationProbeAccessCliOptions.Parse(args);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            WriteAutomationUsage();
-            return 10;
-        }
-
-        var service = new RevitAutomationProbeService();
-        ProbeAccessResult result;
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(GetProbeLifetime(options.TimeoutSeconds));
-        try {
-            result = await service.RunAsync(
-                options.ToProbeAccessOptions(),
-                repoRootOverride,
-                message => {
-                    if (!options.Json)
-                        Console.WriteLine(message);
-                },
-                timeoutCts.Token
-            );
-        } catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested) {
-            result = new ProbeAccessResult {
-                Succeeded = false,
-                Classification = ProbeAccessClassification.TimedOut,
-                Engine = options.Engine,
-                Region = options.Region,
-                ProjectGuid = options.ProjectGuid,
-                ModelGuid = options.ModelGuid,
-                FailureMessage =
-                    $"Automation probe exceeded the process timeout of {(int)GetProbeLifetime(options.TimeoutSeconds).TotalSeconds} seconds and was cancelled."
-            };
-        } catch (Exception ex) {
-            result = new ProbeAccessResult {
-                Succeeded = false,
-                Classification = ProbeAccessClassification.WorkItemSubmissionFailed,
-                Engine = options.Engine,
-                Region = options.Region,
-                ProjectGuid = options.ProjectGuid,
-                ModelGuid = options.ModelGuid,
-                FailureMessage = ex.Message
-            };
-        }
-
-        if (options.Json)
-            Console.WriteLine(JsonSerializer.Serialize(result, JsonOptions));
-        else
-            WriteHumanResult(result, options.Mask);
-
-        return GetExitCode(result.Classification);
-    }
-
-    private static async Task<int> RunWorkItemStatusAsync(
-        IReadOnlyList<string> args,
-        CancellationToken cancellationToken
-    ) {
-        AutomationWorkItemCliOptions options;
-        try {
-            options = AutomationWorkItemCliOptions.Parse(args);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            WriteAutomationUsage();
-            return 10;
-        }
-
-        var service = new RevitAutomationWorkItemInspectorService();
-        AutomationWorkItemInspectResult result;
-        try {
-            result = await service.RunAsync(options.ToInspectOptions(), cancellationToken);
+            var result = await service.RunAsync(
+                    RequireOptionValue(args, "--manifest"),
+                    ReadOptionValue(args, "--receipt"),
+                    args.Contains("--refresh", StringComparer.OrdinalIgnoreCase),
+                    repoRootOverride,
+                    message => WriteAutomationProgress(message, json),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            WriteResult(result, json);
+            return result.FailureCount == 0 ? 0 : 24;
         } catch (Exception ex) {
             Console.Error.WriteLine(ex.Message);
             return 14;
         }
-
-        if (options.Json)
-            Console.WriteLine(JsonSerializer.Serialize(result, JsonOptions));
-        else
-            WriteHumanResult(result, options.Mask);
-
-        return 0;
     }
 
-    private static TimeSpan GetProbeLifetime(int timeoutSeconds) {
-        var requestedLifetime = TimeSpan.FromSeconds(timeoutSeconds) + ProbeTimeoutBuffer;
-        return requestedLifetime > MinimumProbeLifetime ? requestedLifetime : MinimumProbeLifetime;
-    }
+    private static async Task<int> RunInspectAsync(
+        IReadOnlyList<string> args,
+        string? repoRootOverride,
+        CancellationToken cancellationToken
+    ) {
+        if (args.Count < 2)
+            return WriteAutomationUsageAndReturn();
 
-    private static void WriteHumanResult(ProbeAccessResult result, bool mask) {
-        Console.WriteLine($"Classification: {result.Classification}");
-        Console.WriteLine($"Engine: {result.Engine}");
-        Console.WriteLine($"Region: {result.Region}");
-        Console.WriteLine($"Project: {DisplayGuid(result.ProjectGuid, mask)}");
-        Console.WriteLine($"Model: {DisplayGuid(result.ModelGuid, mask)}");
-        if (!string.IsNullOrWhiteSpace(result.WorkItemId))
-            Console.WriteLine($"Workitem: {result.WorkItemId}");
-        if (!string.IsNullOrWhiteSpace(result.DocumentTitle))
-            Console.WriteLine($"Document: {result.DocumentTitle}");
-        if (!string.IsNullOrWhiteSpace(result.FailureMessage))
-            Console.WriteLine($"Failure: {result.FailureMessage}");
-        if (!string.IsNullOrWhiteSpace(result.RawReportExcerpt)) {
-            Console.WriteLine("Report:");
-            Console.WriteLine(result.RawReportExcerpt);
+        var json = args.Contains("--json", StringComparer.OrdinalIgnoreCase);
+        var service = new AutomationReceiptInspectionService();
+        try {
+            switch (args[1].ToLowerInvariant()) {
+            case "receipt": {
+                    var result = await service.InspectReceiptAsync(
+                            RequireOptionValue(args, "--receipt"),
+                            args.Contains("--refresh", StringComparer.OrdinalIgnoreCase),
+                            ReadBooleanOption(args, "--download-artifacts", true),
+                            repoRootOverride,
+                            message => WriteAutomationProgress(message, json),
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false);
+                    if (json)
+                        Console.WriteLine(JsonSerializer.Serialize(new { result.ReceiptPath, result.Receipt }, JsonOptions));
+                    else
+                        WriteHumanResult(result.ReceiptPath, result.Receipt);
+                    return 0;
+                }
+            case "workitem":
+                WriteResult(
+                    await service.InspectWorkItemAsync(
+                            RequireOptionValue(args, "--workitem-id"),
+                            ReadBooleanOption(args, "--include-report", true),
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false),
+                    json
+                );
+                return 0;
+            default:
+                return WriteAutomationUsageAndReturn();
+            }
+        } catch (Exception ex) {
+            Console.Error.WriteLine(ex.Message);
+            return 14;
         }
     }
 
-    private static void WriteHumanResult(AutomationWorkItemInspectResult result, bool mask) {
-        Console.WriteLine($"Workitem: {DisplayId(result.WorkItemId, mask)}");
-        Console.WriteLine($"Status: {result.Status ?? "(unknown)"}");
-        if (!string.IsNullOrWhiteSpace(result.ReportUrl))
-            Console.WriteLine($"ReportUrl: {result.ReportUrl}");
-        if (result.Classification is not null)
-            Console.WriteLine($"Classification: {result.Classification}");
-        if (!string.IsNullOrWhiteSpace(result.DocumentTitle))
-            Console.WriteLine($"Document: {result.DocumentTitle}");
-        if (!string.IsNullOrWhiteSpace(result.FailureMessage))
-            Console.WriteLine($"Failure: {result.FailureMessage}");
-        if (!string.IsNullOrWhiteSpace(result.ArtifactLocalName))
-            Console.WriteLine($"ArtifactLocalName: {result.ArtifactLocalName}");
-        if (!string.IsNullOrWhiteSpace(result.RawReportExcerpt)) {
-            Console.WriteLine("Report:");
-            Console.WriteLine(result.RawReportExcerpt);
+    private static async Task<int> RunWorkItemStatusAliasAsync(
+        IReadOnlyList<string> args,
+        CancellationToken cancellationToken
+    ) {
+        var json = args.Contains("--json", StringComparer.OrdinalIgnoreCase);
+        var includeReport = ReadBooleanOption(args, "--include-report", defaultValue: false);
+
+        try {
+            var service = new AutomationReceiptInspectionService();
+            var result = await service.InspectWorkItemAsync(
+                    RequireOptionValue(args, "--workitem-id"),
+                    includeReport,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            WriteResult(result, json);
+            return 0;
+        } catch (Exception ex) {
+            Console.Error.WriteLine(ex.Message);
+            return 14;
         }
     }
 
-    private static void WriteHumanResult(ParameterCollectionResult result) {
-        Console.WriteLine($"Classification: {result.Classification}");
-        Console.WriteLine($"Engine: {result.Engine}");
-        Console.WriteLine($"Region: {result.Region}");
-        Console.WriteLine($"Project: {result.ProjectGuid}");
-        Console.WriteLine($"Model: {result.ModelGuid}");
-        if (!string.IsNullOrWhiteSpace(result.WorkItemId))
-            Console.WriteLine($"Workitem: {result.WorkItemId}");
-        if (!string.IsNullOrWhiteSpace(result.DocumentTitle))
-            Console.WriteLine($"Document: {result.DocumentTitle}");
-        if (!string.IsNullOrWhiteSpace(result.ArtifactLocalPath))
-            Console.WriteLine($"Artifact: {result.ArtifactLocalPath}");
-        if (!string.IsNullOrWhiteSpace(result.FailureMessage))
-            Console.WriteLine($"Failure: {result.FailureMessage}");
-        if (!string.IsNullOrWhiteSpace(result.RawReportExcerpt)) {
-            Console.WriteLine("Report:");
-            Console.WriteLine(result.RawReportExcerpt);
+    private static Task<int> RunCacheAsync(
+        IReadOnlyList<string> args,
+        string? repoRootOverride
+    ) {
+        if (args.Count < 2)
+            return Task.FromResult(WriteAutomationUsageAndReturn());
+
+        var repoRoot = RepoRootResolver.Resolve(repoRootOverride);
+        var service = new AutomationBrowseService();
+        var json = args.Contains("--json", StringComparer.OrdinalIgnoreCase);
+
+        try {
+            switch (args[1].ToLowerInvariant()) {
+            case "status":
+                WriteResult(service.GetCacheStatus(repoRoot), json);
+                return Task.FromResult(0);
+            case "clear": {
+                    var scope = (ReadOptionValue(args, "--scope") ?? "").ToLowerInvariant() switch {
+                        "" => AutomationCacheScope.All,
+                        "hubs" => AutomationCacheScope.Hubs,
+                        "projects" => AutomationCacheScope.Projects,
+                        "contents" => AutomationCacheScope.Contents,
+                        "models" => AutomationCacheScope.Models,
+                        var value => throw new InvalidOperationException($"Unknown cache scope '{value}'.")
+                    };
+                    service.ClearCache(repoRoot, scope);
+                    if (json)
+                        Console.WriteLine(JsonSerializer.Serialize(new { cleared = scope.ToString() }, JsonOptions));
+                    else
+                        Console.WriteLine($"Cleared cache scope: {scope}");
+                    return Task.FromResult(0);
+                }
+            default:
+                return Task.FromResult(WriteAutomationUsageAndReturn());
+            }
+        } catch (Exception ex) {
+            Console.Error.WriteLine(ex.Message);
+            return Task.FromResult(14);
         }
     }
 
-    private static void WriteHumanResult(ParameterCollectionBatchResult result) {
-        Console.WriteLine($"Manifest: {result.ManifestPath}");
-        Console.WriteLine($"Models: {result.TotalModelCount}");
-        Console.WriteLine($"Succeeded: {result.SuccessCount}");
-        Console.WriteLine($"Failed: {result.FailureCount}");
-        foreach (var item in result.Results) {
+    private static ScheduleCollectionBatchRequest BuildScheduleRequest(IReadOnlyList<string> args) {
+        var includeTemplates = ReadBooleanOption(args, "--include-templates", false);
+        var primaryParameterName = ReadOptionValue(args, "--primary-parameter-name") ?? ScheduleCollectionDefaults.DefaultPrimaryParameterName;
+        var primaryValue = ReadOptionValue(args, "--primary-value") ?? ScheduleCollectionDefaults.DefaultPrimaryParameterValue;
+        var primaryCategoryNames = ReadRepeatedOptionValues(args, "--primary-category-name");
+        var primaryScheduleNames = ReadRepeatedOptionValues(args, "--primary-schedule-name");
+        var fallbackCategoryNames = ReadRepeatedOptionValues(args, "--fallback-category-name");
+        var fallbackScheduleNames = ReadRepeatedOptionValues(args, "--fallback-schedule-name");
+
+        if (fallbackCategoryNames.Count == 0)
+            fallbackCategoryNames.AddRange(ScheduleCollectionDefaults.CreateDefaultFallbackCatalogRequest().CategoryNames);
+
+        return new ScheduleCollectionBatchRequest {
+            PrimaryCatalogRequest = new ScheduleCatalogBatchRequest {
+                CategoryNames = primaryCategoryNames,
+                ScheduleNames = primaryScheduleNames,
+                CustomParameterFilters = string.IsNullOrWhiteSpace(primaryParameterName) || string.IsNullOrWhiteSpace(primaryValue)
+                    ? []
+                    : [
+                        new ScheduleCustomParameterFilter(
+                            primaryParameterName,
+                            primaryValue,
+                            ScheduleCustomParameterMatchKind.Equals
+                        )
+                    ],
+                IncludeTemplates = includeTemplates
+            },
+            FallbackCatalogRequest = new ScheduleCatalogBatchRequest {
+                CategoryNames = fallbackCategoryNames,
+                ScheduleNames = fallbackScheduleNames,
+                IncludeTemplates = includeTemplates
+            }
+        };
+    }
+
+    private static string RequireOptionValue(IReadOnlyList<string> args, string optionName) =>
+        ReadOptionValue(args, optionName)
+        ?? throw new ArgumentException($"Missing required argument `{optionName}`.");
+
+    private static string? ReadOptionValue(IReadOnlyList<string> args, string optionName) {
+        for (var i = 0; i < args.Count - 1; i++) {
+            if (string.Equals(args[i], optionName, StringComparison.OrdinalIgnoreCase))
+                return args[i + 1];
+        }
+
+        return null;
+    }
+
+    private static List<string> ReadRepeatedOptionValues(IReadOnlyList<string> args, string optionName) {
+        var values = new List<string>();
+        for (var i = 0; i < args.Count - 1; i++) {
+            if (string.Equals(args[i], optionName, StringComparison.OrdinalIgnoreCase))
+                values.Add(args[i + 1]);
+        }
+
+        return values;
+    }
+
+    private static bool ReadBooleanOption(IReadOnlyList<string> args, string optionName, bool defaultValue) {
+        for (var i = 0; i < args.Count; i++) {
+            if (!string.Equals(args[i], optionName, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (i + 1 >= args.Count || args[i + 1].StartsWith("--", StringComparison.Ordinal))
+                return defaultValue;
+
+            return bool.Parse(args[i + 1]);
+        }
+
+        return defaultValue;
+    }
+
+    private static string RequirePositional(IReadOnlyList<string> args, int index, string label) =>
+        index < args.Count && !args[index].StartsWith("--", StringComparison.Ordinal)
+            ? args[index]
+            : throw new ArgumentException($"Missing required {label}.");
+
+    private static string? TryReadOptionalPositional(IReadOnlyList<string> args, int index) =>
+        index < args.Count && !args[index].StartsWith("--", StringComparison.Ordinal) ? args[index] : null;
+
+    private static void WriteResult(object value, bool json) {
+        if (json) {
+            Console.WriteLine(JsonSerializer.Serialize(value, JsonOptions));
+            return;
+        }
+
+        switch (value) {
+        case ApsPersistedTokenStatus status:
+            Console.WriteLine($"Persisted auth: {(status.Exists ? "present" : "missing")}");
+            Console.WriteLine($"Flow: {status.FlowKind}");
+            Console.WriteLine($"Scope: {status.ScopeProfile}");
+            Console.WriteLine($"Has refresh token: {status.HasRefreshToken}");
+            Console.WriteLine($"Expires at (UTC): {(status.ExpiresAtUtc.HasValue ? status.ExpiresAtUtc.Value.ToString("O") : "(unknown)")}");
+            break;
+        case AutomationBrowseContext context:
+            Console.WriteLine($"Hub: {context.HubName ?? "(none)"}");
+            Console.WriteLine($"Project: {context.ProjectName ?? "(none)"}");
+            Console.WriteLine($"Path: {(string.IsNullOrWhiteSpace(context.ScopePath) ? "/" : context.ScopePath)}");
+            break;
+        case AutomationHubCatalogResult hubs:
+            foreach (var hub in hubs.Hubs)
+                Console.WriteLine($"{hub.Name} [{hub.Id}]");
+            break;
+        case AutomationProjectCatalogResult projects:
+            foreach (var project in projects.Projects)
+                Console.WriteLine($"{project.Name} [{project.Id}]");
+            break;
+        case AutomationContentCatalogResult contents:
+            Console.WriteLine($"Scope: {contents.ScopeName}");
+            foreach (var entry in contents.Entries)
+                Console.WriteLine($"{(entry.IsFolder ? "dir " : "file")} {entry.Name}");
+            break;
+        case AutomationModelInventoryResult inventory:
+            Console.WriteLine($"Project: {inventory.ProjectName}");
+            Console.WriteLine($"Scope: {(string.IsNullOrWhiteSpace(inventory.ScopePath) ? "/" : inventory.ScopePath)}");
+            Console.WriteLine($"Models: {inventory.Models.Count}");
+            foreach (var model in inventory.Models)
+                Console.WriteLine($"- {model.ModelPath} [year {model.RevitYear?.ToString() ?? "?"}]");
+            break;
+        case ScheduleAuditManifest manifest:
+            Console.WriteLine($"Hub: {manifest.Hub}");
+            Console.WriteLine($"Models: {manifest.Models.Count}");
+            break;
+        case AutomationManifestValidationResult validation:
+            Console.WriteLine($"Manifest: {validation.ManifestPath}");
+            Console.WriteLine($"Valid: {validation.IsValid}");
+            foreach (var entry in validation.Entries) {
+                Console.WriteLine(
+                    entry.IsValid
+                        ? $"+ {entry.Project} :: {entry.ModelPath} -> source {entry.SourceRevitYear} ({entry.YearResolutionSource}), exec {entry.ExecutionRevitYear}, {entry.ProcessingMode}"
+                        : $"- {entry.Project} :: {entry.ModelPath} :: {entry.FailureMessage}"
+                );
+            }
+
+            break;
+        case AutomationScheduleSubmitResult submit:
+            Console.WriteLine($"Receipt: {submit.ReceiptPath}");
+            Console.WriteLine($"Submitted: {submit.SubmittedCount}");
+            Console.WriteLine($"Submission failures: {submit.FailureCount}");
+            foreach (var entry in submit.Receipt.Entries) {
+                Console.WriteLine(
+                    $"{entry.Project} :: {entry.ModelPath} :: {entry.Status}" +
+                    (entry.ExecutionRevitYear.HasValue ? $" [exec {entry.ExecutionRevitYear}]" : "") +
+                    (entry.ProcessingMode.HasValue ? $" [{entry.ProcessingMode}]" : "") +
+                    (string.IsNullOrWhiteSpace(entry.WorkItemId) ? "" : $" [workitem {entry.WorkItemId}]")
+                );
+            }
+
+            break;
+        case AutomationWorkItemInspectResult inspect:
+            Console.WriteLine($"Workitem: {inspect.WorkItemId}");
+            Console.WriteLine($"Status: {inspect.Status}");
+            if (!string.IsNullOrWhiteSpace(inspect.Classification))
+                Console.WriteLine($"Classification: {inspect.Classification}");
+            if (!string.IsNullOrWhiteSpace(inspect.DocumentTitle))
+                Console.WriteLine($"DocumentTitle: {inspect.DocumentTitle}");
+            if (!string.IsNullOrWhiteSpace(inspect.FailureMessage))
+                Console.WriteLine($"Failure: {inspect.FailureMessage}");
+            break;
+        case AutomationCacheStatus cache:
+            Console.WriteLine($"Root: {cache.RootPath}");
+            Console.WriteLine($"Hubs cached: {cache.HubsExists}");
+            Console.WriteLine($"Project cache files: {cache.ProjectCacheFileCount}");
+            Console.WriteLine($"Content cache files: {cache.ContentsCacheFileCount}");
+            Console.WriteLine($"Model cache files: {cache.ModelsCacheFileCount}");
+            break;
+        default:
+            Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(value, Newtonsoft.Json.Formatting.Indented));
+            break;
+        }
+    }
+
+    private static void WriteHumanResult(string receiptPath, AutomationRunReceipt receipt) {
+        Console.WriteLine($"Receipt: {receiptPath}");
+        foreach (var entry in receipt.Entries) {
             Console.WriteLine(
-                $"{item.Classification}: {item.Region} {DisplayId(item.ProjectGuid, true)} {DisplayId(item.ModelGuid, true)}" +
-                (string.IsNullOrWhiteSpace(item.ArtifactLocalPath) ? "" : $" -> {item.ArtifactLocalPath}")
+                $"{entry.Project} :: {entry.ModelPath} :: {entry.Status}" +
+                (entry.ExecutionRevitYear.HasValue ? $" [exec {entry.ExecutionRevitYear}]" : "") +
+                (entry.ProcessingMode.HasValue ? $" [{entry.ProcessingMode}]" : "") +
+                (string.IsNullOrWhiteSpace(entry.WorkItemId) ? "" : $" [workitem {entry.WorkItemId}]") +
+                (string.IsNullOrWhiteSpace(entry.ArtifactLocalPath) ? "" : $" -> {entry.ArtifactLocalPath}")
             );
         }
     }
 
-    private static void WriteHumanResult(ScheduleCollectionResult result) {
-        Console.WriteLine($"Classification: {result.Classification}");
-        Console.WriteLine($"Engine: {result.Engine}");
-        Console.WriteLine($"Region: {result.Region}");
-        Console.WriteLine($"Project: {result.ProjectGuid}");
-        Console.WriteLine($"Model: {result.ModelGuid}");
-        if (!string.IsNullOrWhiteSpace(result.WorkItemId))
-            Console.WriteLine($"Workitem: {result.WorkItemId}");
-        if (!string.IsNullOrWhiteSpace(result.DocumentTitle))
-            Console.WriteLine($"Document: {result.DocumentTitle}");
-        if (!string.IsNullOrWhiteSpace(result.ArtifactLocalPath))
-            Console.WriteLine($"Artifact: {result.ArtifactLocalPath}");
-        if (!string.IsNullOrWhiteSpace(result.FailureMessage))
-            Console.WriteLine($"Failure: {result.FailureMessage}");
-        if (!string.IsNullOrWhiteSpace(result.RawReportExcerpt)) {
-            Console.WriteLine("Report:");
-            Console.WriteLine(result.RawReportExcerpt);
-        }
-    }
-
-    private static void WriteHumanResult(ScheduleCollectionBatchResult result) {
-        Console.WriteLine($"Manifest: {result.ManifestPath}");
-        Console.WriteLine($"Models: {result.TotalModelCount}");
-        Console.WriteLine($"Succeeded: {result.SuccessCount}");
-        Console.WriteLine($"Failed: {result.FailureCount}");
-        foreach (var item in result.Results) {
-            Console.WriteLine(
-                $"{item.Classification}: {item.Region} {DisplayId(item.ProjectGuid, true)} {DisplayId(item.ModelGuid, true)}" +
-                (string.IsNullOrWhiteSpace(item.ArtifactLocalPath) ? "" : $" -> {item.ArtifactLocalPath}")
-            );
-        }
-    }
-
-    private static void WriteHumanResult(AutomationHubCatalogResult result) {
-        Console.WriteLine($"Hubs: {result.Hubs.Count}");
-        foreach (var hub in result.Hubs)
-            Console.WriteLine($"{hub.Id} [{hub.Region ?? "?"}] {hub.Name}");
-    }
-
-    private static void WriteHumanResult(AutomationProjectCatalogResult result) {
-        Console.WriteLine($"Hub: {result.HubId}");
-        Console.WriteLine($"Projects: {result.Projects.Count}");
-        foreach (var project in result.Projects)
-            Console.WriteLine($"{project.Id} {project.Name}");
-    }
-
-    private static void WriteHumanResult(AutomationContentCatalogResult result) {
-        Console.WriteLine($"Hub: {result.HubId}");
-        Console.WriteLine($"Project: {result.ProjectId}");
-        Console.WriteLine($"Scope: {result.ScopeName}");
-        Console.WriteLine($"Entries: {result.Entries.Count}");
-        foreach (var entry in result.Entries) {
-            var kind = entry.IsFolder ? "Folder" : "Item";
-            Console.WriteLine($"{kind}: {entry.Id} {entry.Name}");
-        }
-    }
-
-    private static void WriteHumanResult(ModelDiscoveryResult result) {
-        Console.WriteLine($"Hub: {result.HubName} ({result.HubId})");
-        Console.WriteLine($"Project: {result.ProjectName} ({result.ProjectId})");
-        Console.WriteLine($"Region: {result.Region}");
-        Console.WriteLine($"Scope: {result.ScopePath}");
-        Console.WriteLine($"Recursive: {result.Recursive}");
-        if (!string.IsNullOrWhiteSpace(result.NameContains))
-            Console.WriteLine($"NameContains: {result.NameContains}");
-        Console.WriteLine($"Models: {result.ModelCount}");
-        if (!string.IsNullOrWhiteSpace(result.ManifestPath))
-            Console.WriteLine($"Manifest: {result.ManifestPath}");
-        foreach (var model in result.Models) {
-            Console.WriteLine(
-                $"{model.DisplayName} | {model.ProjectGuid} | {model.ModelGuid} | {model.FolderPath}" +
-                (string.IsNullOrWhiteSpace(model.SuggestedExpectedTitle)
-                    ? ""
-                    : $" | expectedTitle={model.SuggestedExpectedTitle}")
-            );
-        }
-    }
-
-    private static string DisplayGuid(string value, bool mask) {
-        if (!mask || value.Length <= 12)
-            return value;
-
-        return $"{value[..8]}...{value[^4..]}";
-    }
-
-    private static string DisplayId(string value, bool mask) {
-        if (!mask || value.Length <= 12)
-            return value;
-
-        return $"{value[..8]}...{value[^4..]}";
+    private static void WriteAutomationProgress(string message, bool json) {
+        if (json)
+            Console.Error.WriteLine(message);
+        else
+            Console.WriteLine(message);
     }
 
     private static int WriteAutomationUsageAndReturn() {
@@ -636,61 +609,36 @@ internal static class AutomationCliProgram {
     }
 
     private static void WriteAutomationUsage() {
-        Console.Error.WriteLine(AutomationListHubsCliOptions.UsageText);
-        Console.Error.WriteLine(AutomationListProjectsCliOptions.UsageText);
-        Console.Error.WriteLine(AutomationListContentsCliOptions.UsageText);
-        Console.Error.WriteLine(AutomationDiscoverModelsCliOptions.UsageText);
-        Console.Error.WriteLine(AutomationParameterCollectionCliOptions.UsageText);
-        Console.Error.WriteLine(AutomationParameterCollectionBatchCliOptions.UsageText);
-        Console.Error.WriteLine(AutomationScheduleCollectionCliOptions.UsageText);
-        Console.Error.WriteLine(AutomationScheduleCollectionBatchCliOptions.UsageText);
-        Console.Error.WriteLine(AutomationProbeAccessCliOptions.UsageText);
-        Console.Error.WriteLine(AutomationWorkItemCliOptions.UsageText);
+        Console.Error.WriteLine(
+            """
+            Usage:
+              pe-dev revit automation auth login [--json]
+              pe-dev revit automation auth status [--json]
+              pe-dev revit automation auth logout
+              pe-dev revit automation browse status [--json]
+              pe-dev revit automation browse hubs [--refresh] [--json]
+              pe-dev revit automation browse use-hub <hub-name-or-id> [--refresh] [--json]
+              pe-dev revit automation browse projects [--refresh] [--json]
+              pe-dev revit automation browse use-project <project-name-or-id> [--refresh] [--json]
+              pe-dev revit automation browse pwd [--json]
+              pe-dev revit automation browse ls [<path>] [--refresh] [--json]
+              pe-dev revit automation browse cd <folder-name> [--refresh] [--json]
+              pe-dev revit automation browse up [--json]
+              pe-dev revit automation browse models [--name-contains <text>] [--recurse <true|false>] [--refresh] [--out <path>] [--json]
+              pe-dev revit automation manifest create --path <manifest-path> [--json]
+              pe-dev revit automation manifest show --path <manifest-path> [--json]
+              pe-dev revit automation manifest list --path <manifest-path> [--json]
+              pe-dev revit automation manifest add --path <manifest-path> --project <project-name> --model-path <project-root-model-path> [--refresh] [--json]
+              pe-dev revit automation manifest remove --path <manifest-path> --model-path <project-root-model-path> [--json]
+              pe-dev revit automation manifest set-request --path <manifest-path> [--primary-parameter-name <name>] [--primary-value <value>] [--primary-category-name <name>]... [--primary-schedule-name <name>]... [--fallback-category-name <name>]... [--fallback-schedule-name <name>]... [--include-templates <true|false>] [--json]
+              pe-dev revit automation manifest validate --path <manifest-path> [--refresh] [--json]
+              pe-dev revit automation submit schedules --manifest <manifest-path> [--receipt <receipt-path>] [--refresh] [--json]
+              pe-dev revit automation inspect receipt --receipt <path|latest> [--refresh] [--download-artifacts <true|false>] [--json]
+              pe-dev revit automation inspect workitem --workitem-id <id> [--include-report <true|false>] [--json]
+              pe-dev revit automation workitem-status --workitem-id <id> [--include-report <true|false>] [--json]
+              pe-dev revit automation cache status [--json]
+              pe-dev revit automation cache clear [--scope hubs|projects|contents|models] [--json]
+            """
+        );
     }
-
-    private static int GetExitCode(ProbeAccessClassification classification) =>
-        classification switch {
-            ProbeAccessClassification.Success => 0,
-            ProbeAccessClassification.ManagementTokenFailed => 11,
-            ProbeAccessClassification.UserTokenFailed => 12,
-            ProbeAccessClassification.WorkItemSubmissionUnauthorized => 13,
-            ProbeAccessClassification.WorkItemSubmissionFailed => 14,
-            ProbeAccessClassification.CloudModelUnauthorized => 21,
-            ProbeAccessClassification.CloudModelNotFound => 22,
-            ProbeAccessClassification.CloudModelOpenFailed => 23,
-            ProbeAccessClassification.TimedOut => 24,
-            _ => 1
-        };
-
-    private static int GetExitCode(ParameterCollectionClassification classification) =>
-        classification switch {
-            ParameterCollectionClassification.Success => 0,
-            ParameterCollectionClassification.ManagementTokenFailed => 11,
-            ParameterCollectionClassification.UserTokenFailed => 12,
-            ParameterCollectionClassification.ArtifactTokenFailed => 13,
-            ParameterCollectionClassification.WorkItemSubmissionUnauthorized => 14,
-            ParameterCollectionClassification.WorkItemSubmissionFailed => 15,
-            ParameterCollectionClassification.CloudModelUnauthorized => 21,
-            ParameterCollectionClassification.CloudModelNotFound => 22,
-            ParameterCollectionClassification.CollectionFailed => 23,
-            ParameterCollectionClassification.ArtifactDownloadFailed => 24,
-            ParameterCollectionClassification.TimedOut => 25,
-            _ => 1
-        };
-
-    private static int GetExitCode(ScheduleCollectionClassification classification) =>
-        classification switch {
-            ScheduleCollectionClassification.Success => 0,
-            ScheduleCollectionClassification.ManagementTokenFailed => 11,
-            ScheduleCollectionClassification.UserTokenFailed => 12,
-            ScheduleCollectionClassification.ArtifactTokenFailed => 13,
-            ScheduleCollectionClassification.WorkItemSubmissionUnauthorized => 14,
-            ScheduleCollectionClassification.WorkItemSubmissionFailed => 15,
-            ScheduleCollectionClassification.CloudModelUnauthorized => 21,
-            ScheduleCollectionClassification.CloudModelNotFound => 22,
-            ScheduleCollectionClassification.CollectionFailed => 23,
-            ScheduleCollectionClassification.ArtifactDownloadFailed => 24,
-            ScheduleCollectionClassification.TimedOut => 25,
-            _ => 1
-        };
 }

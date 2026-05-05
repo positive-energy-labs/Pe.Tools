@@ -1,4 +1,5 @@
-﻿using Autodesk.PackageBuilder;
+using Autodesk.PackageBuilder;
+using Pe.Shared.RevitVersions;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
@@ -17,8 +18,8 @@ internal sealed class RevitAutomationWorkerBundleBuilder {
         Action<string>? log,
         CancellationToken cancellationToken
     ) {
-        var buildConfiguration = ResolveBuildConfiguration(engine);
-        var revitYear = ResolveRevitYear(engine);
+        var spec = RevitVersionCatalog.RequireByAutomationEngine(engine);
+        var buildConfiguration = $"Debug.{spec.ConfigurationSuffix}";
         var projectPath = Path.Combine(repoRoot, WorkerProjectPath);
         if (!File.Exists(projectPath))
             throw new FileNotFoundException($"Worker project was not found at '{projectPath}'.", projectPath);
@@ -26,14 +27,15 @@ internal sealed class RevitAutomationWorkerBundleBuilder {
         log?.Invoke($"Building worker project ({buildConfiguration})");
         await RunDotNetBuildAsync(projectPath, buildConfiguration, repoRoot, cancellationToken).ConfigureAwait(false);
 
-        var targetFramework = revitYear >= 2025 ? "net8.0-windows" : "net48";
         var outputDirectory = Path.Combine(
             repoRoot,
-            "source",
-            "Pe.Dev.RevitAutomation.Worker",
+            ".artifacts",
+            "build",
+            WorkerAssemblyName,
+            buildConfiguration,
             "bin",
             buildConfiguration,
-            targetFramework
+            spec.TargetFramework
         );
 
         var workerAssemblyPath = Path.Combine(outputDirectory, $"{WorkerAssemblyName}.dll");
@@ -43,7 +45,7 @@ internal sealed class RevitAutomationWorkerBundleBuilder {
                 workerAssemblyPath
             );
 
-        var artifactsRoot = Path.Combine(repoRoot, ".artifacts", "automation", $"{revitYear}");
+        var artifactsRoot = Path.Combine(repoRoot, ".artifacts", "automation", $"{spec.Year}");
         _ = Directory.CreateDirectory(artifactsRoot);
         var bundleRoot = Path.Combine(artifactsRoot, $"{WorkerAssemblyName}.bundle");
         var contentsDirectory = Path.Combine(bundleRoot, "Contents");
@@ -51,7 +53,7 @@ internal sealed class RevitAutomationWorkerBundleBuilder {
             Directory.Delete(bundleRoot, true);
 
         _ = Directory.CreateDirectory(contentsDirectory);
-        BuildPackageContents(Path.Combine(bundleRoot, "PackageContents.xml"), revitYear);
+        BuildPackageContents(Path.Combine(bundleRoot, "PackageContents.xml"), spec.Year);
         BuildAddinManifest(Path.Combine(contentsDirectory, $"{WorkerAssemblyName}.addin"));
 
         foreach (var filePath in Directory.EnumerateFiles(outputDirectory)) {
@@ -92,13 +94,17 @@ internal sealed class RevitAutomationWorkerBundleBuilder {
         startInfo.ArgumentList.Add(projectPath);
         startInfo.ArgumentList.Add("-c");
         startInfo.ArgumentList.Add(configuration);
+        startInfo.ArgumentList.Add("/p:PeIsolatedBuild=true");
         startInfo.ArgumentList.Add("/p:WarningLevel=0");
 
         using var process = Process.Start(startInfo)
                             ?? throw new InvalidOperationException("Failed to start dotnet build.");
+        var standardOutputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var standardErrorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+
         await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        var standardOutput = await process.StandardOutput.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
-        var standardError = await process.StandardError.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        var standardOutput = await standardOutputTask.ConfigureAwait(false);
+        var standardError = await standardErrorTask.ConfigureAwait(false);
 
         if (process.ExitCode != 0)
             throw new InvalidOperationException(
@@ -106,22 +112,6 @@ internal sealed class RevitAutomationWorkerBundleBuilder {
                 standardOutput + Environment.NewLine + standardError
             );
     }
-
-    private static int ResolveRevitYear(string engine) {
-        if (engine.Contains("2026", StringComparison.Ordinal))
-            return 2026;
-        if (engine.Contains("2025", StringComparison.Ordinal))
-            return 2025;
-
-        throw new InvalidOperationException($"Unsupported Revit automation engine '{engine}'.");
-    }
-
-    private static string ResolveBuildConfiguration(string engine) =>
-        ResolveRevitYear(engine) switch {
-            2025 => "Debug.R25",
-            2026 => "Debug.R26",
-            _ => throw new InvalidOperationException($"Unsupported Revit automation engine '{engine}'.")
-        };
 
     private static void BuildPackageContents(string packageContentsPath, int revitYear) => _ = BuilderUtils.Build<PackageContentsBuilder>(builder => {
         _ = builder.ApplicationPackage.Create()

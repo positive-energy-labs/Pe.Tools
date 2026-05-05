@@ -1,12 +1,18 @@
-using Pe.Shared.Aps;
-using Pe.Shared.Aps.Models;
+using Pe.Shared.RevitAutomation;
+using Pe.Shared.ApsAuth;
+using Pe.Aps;
+using Pe.Aps.Auth;
+using Pe.Aps.Core;
+using Pe.Aps.DesignAutomation;
+using Pe.Shared.RevitVersions;
 using System.Net;
 using System.Net.Http;
 
 namespace Pe.Dev.RevitAutomation;
 
 public sealed class RevitAutomationProbeService {
-    private readonly RevitAutomationWorkerBundleBuilder _bundleBuilder = new();
+    private readonly AutomationShellDeploymentService _shellDeployment = new();
+    private readonly DesignAutomationWorkItemRunner _workItemRunner = new();
     private readonly AutomationJobReportParser _reportParser = new();
 
     public async Task<ProbeAccessResult> RunAsync(
@@ -16,9 +22,14 @@ public sealed class RevitAutomationProbeService {
         CancellationToken cancellationToken
     ) {
         var repoRoot = RepoRootResolver.Resolve(repoRootOverride);
-        var authProvider = new StoredApsWebAuthTokenProvider();
-        var settings = RevitAutomationSettings.Load(authProvider.GetClientId());
-        var aps = new Aps(authProvider);
+        var spec = RevitVersionCatalog.RequireByAutomationEngine(options.Engine);
+        var credentialSource = new ApsCredentialSource();
+        var settings = RevitAutomationSettings.Load(credentialSource.GetConfiguredWebClientId());
+        var aps = credentialSource.CreateAps();
+        var createAutomationClient = aps.Automation;
+        var userTokenLease = new RefreshingApsTokenLease(
+            () => aps.GetTokenResult(ApsTokenRequest.ForAutomationUserContext())
+        );
 
         try {
             log?.Invoke("Auth: acquiring management token");
@@ -27,35 +38,26 @@ public sealed class RevitAutomationProbeService {
             return BuildFailure(options, ProbeAccessClassification.ManagementTokenFailed, ex.Message);
         }
 
-        ApsTokenResult userToken;
         try {
             log?.Invoke("Auth: acquiring delegated user token");
-            userToken = aps.GetTokenResult(ApsTokenRequest.ForAutomationUserContext());
+            _ = userTokenLease.GetTokenResult();
         } catch (Exception ex) {
             return BuildFailure(options, ProbeAccessClassification.UserTokenFailed, ex.Message);
         }
 
-        WorkerBundleArtifact bundle;
+        ResolvedAutomationShellIds shellIds;
         try {
-            bundle = await this._bundleBuilder.BuildAsync(repoRoot, options.Engine, log, cancellationToken)
-                .ConfigureAwait(false);
-        } catch (Exception ex) {
-            return BuildFailure(options, ProbeAccessClassification.WorkItemSubmissionFailed, ex.Message);
-        }
-
-        var automationClient = aps.Automation();
-        try {
-            await RevitAutomationParameterCollectionService.EnsureShellReadyAsync(
-                    automationClient,
+            shellIds = await this._shellDeployment.EnsureReadyAsync(
+                    repoRoot,
                     settings,
-                    options.Engine,
-                    bundle.PackageContents,
+                    spec,
+                    createAutomationClient,
                     log,
                     cancellationToken
                 )
                 .ConfigureAwait(false);
         } catch (HttpRequestException ex) when
-            (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) {
+            (AutomationDevRunHelpers.HasStatusCode(ex, HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden)) {
             return BuildFailure(options, ProbeAccessClassification.WorkItemSubmissionUnauthorized, ex.Message);
         } catch (Exception ex) {
             return BuildFailure(options, ProbeAccessClassification.WorkItemSubmissionFailed, ex.Message);
@@ -70,46 +72,44 @@ public sealed class RevitAutomationProbeService {
             options.ExpectedTitle
         );
 
-        AutomationWorkItemStatus submission;
+        SubmittedDesignAutomationWorkItem submission;
         try {
-            log?.Invoke("Automation: submitting workitem");
-            submission = await automationClient.SubmitWorkItemAsync(
+            submission = await this._workItemRunner.SubmitAsync(
+                    createAutomationClient,
                     new AutomationWorkItemSpec {
-                        ActivityId = $"{settings.Namespace}.{settings.ActivityId}+{settings.AliasId}",
+                        ActivityId = shellIds.QualifiedActivityAlias,
                         LimitProcessingTimeSec = options.TimeoutSeconds,
                         Debug = options.Debug,
                         Arguments = new Dictionary<string, object>(StringComparer.Ordinal) {
                             ["inputParams"] = new Dictionary<string, object>(StringComparer.Ordinal) {
                                 ["url"] =
-                                    RevitAutomationParameterCollectionService.BuildJsonDataUrl(probeInput.ToJson())
+                                    DesignAutomationWorkItemArguments.BuildJsonDataUrl(probeInput.ToJson())
                             },
-                            ["adsk3LeggedToken"] = userToken.AccessToken
+                            ["adsk3LeggedToken"] = userTokenLease.GetAccessToken()
                         }
                     },
+                    "Automation: submitting workitem",
+                    log,
                     cancellationToken
                 )
                 .ConfigureAwait(false);
         } catch (HttpRequestException ex) when
-            (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) {
+            (AutomationDevRunHelpers.HasStatusCode(ex, HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden)) {
             return BuildFailure(options, ProbeAccessClassification.WorkItemSubmissionUnauthorized, ex.Message);
         } catch (Exception ex) {
             return BuildFailure(options, ProbeAccessClassification.WorkItemSubmissionFailed, ex.Message);
         }
 
-        if (string.IsNullOrWhiteSpace(submission.Id))
-            return BuildFailure(options, ProbeAccessClassification.WorkItemSubmissionFailed,
-                "Automation workitem submission did not return an id.");
-
-        log?.Invoke($"Automation: workitem {submission.Id}");
         var deadline = DateTime.UtcNow.AddSeconds(options.TimeoutSeconds);
-        var status = submission;
-        while (!IsTerminal(status.Status) && DateTime.UtcNow < deadline) {
-            await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
-            status = await automationClient.GetWorkItemStatusAsync(submission.Id, cancellationToken)
-                .ConfigureAwait(false);
-        }
+        var status = await this._workItemRunner.WaitForTerminalAsync(
+                createAutomationClient,
+                submission,
+                deadline,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
 
-        if (!IsTerminal(status.Status)) {
+        if (!DesignAutomationRunHelpers.IsTerminal(status.Status)) {
             return new ProbeAccessResult {
                 Succeeded = false,
                 Classification = ProbeAccessClassification.TimedOut,
@@ -123,15 +123,17 @@ public sealed class RevitAutomationProbeService {
             };
         }
 
-        var report = await automationClient.GetWorkItemReportAsync(status.ReportUrl, cancellationToken)
+        var reportContent = await aps.DesignAutomation().GetReportContentAsync(status.ReportUrl, cancellationToken)
             .ConfigureAwait(false);
-        var parsedReport = this._reportParser.Parse(report.ReportContent);
+        var parsedReport = this._reportParser.Parse(reportContent);
         var classification = parsedReport.Classification switch {
             nameof(ProbeAccessClassification.Success) or "Success" => ProbeAccessClassification.Success,
             nameof(ProbeAccessClassification.CloudModelUnauthorized) or "CloudModelUnauthorized" =>
                 ProbeAccessClassification.CloudModelUnauthorized,
             nameof(ProbeAccessClassification.CloudModelNotFound) or "CloudModelNotFound" =>
                 ProbeAccessClassification.CloudModelNotFound,
+            nameof(ProbeAccessClassification.ExpectedTitleMismatch) or "ExpectedTitleMismatch" =>
+                ProbeAccessClassification.ExpectedTitleMismatch,
             _ => ProbeAccessClassification.CloudModelOpenFailed
         };
         return new ProbeAccessResult {
@@ -163,13 +165,4 @@ public sealed class RevitAutomationProbeService {
             FailureMessage = failureMessage
         };
 
-    private static bool IsTerminal(string? status) =>
-        status is not null &&
-        (
-            status.Equals("success", StringComparison.OrdinalIgnoreCase) ||
-            status.Equals("failed", StringComparison.OrdinalIgnoreCase) ||
-            status.StartsWith("failed", StringComparison.OrdinalIgnoreCase) ||
-            status.Equals("cancelled", StringComparison.OrdinalIgnoreCase) ||
-            status.Equals("timeout", StringComparison.OrdinalIgnoreCase)
-        );
 }

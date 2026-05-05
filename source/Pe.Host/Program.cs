@@ -1,4 +1,5 @@
-﻿using Pe.Host;
+using Pe.Aps.Auth;
+using Pe.Host;
 using Pe.Host.Operations;
 using Pe.Host.Services;
 using Pe.Shared.HostContracts.Protocol;
@@ -24,6 +25,8 @@ var hostLogFile = new ManagedLogFile(
 builder.Logging.AddProvider(new HostFileLoggerProvider(hostLogFile));
 
 builder.Services.AddSingleton(options);
+builder.Services.AddSingleton<ApsCredentialSource>();
+builder.Services.AddSingleton<ApsAuthService>();
 builder.Services.AddSingleton<BridgeServer>();
 builder.Services.AddSingleton<HostActivityService>();
 builder.Services.AddSingleton<HostEventStreamService>();
@@ -35,7 +38,8 @@ builder.Services.AddSingleton<IHostSettingsModuleCatalog, HostSettingsModuleCata
 builder.Services.AddSingleton<HostSettingsRuntimeStateService>();
 builder.Services.AddSingleton(sp => new HostSettingsStorageService(
     sp.GetRequiredService<IHostSettingsModuleCatalog>(),
-    sp.GetRequiredService<BridgeServer>()));
+    sp.GetRequiredService<BridgeServer>()
+));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BridgeServer>());
 builder.Services.AddHostedService<HostIdleMonitorService>();
 builder.Services.ConfigureHttpJsonOptions(jsonOptions => {
@@ -48,7 +52,8 @@ builder.Services.AddCors(corsOptions => corsOptions.AddDefaultPolicy(policy => p
     .WithOrigins(options.AllowedOrigins.ToArray())
     .AllowAnyHeader()
     .AllowAnyMethod()
-    .AllowCredentials()));
+    .AllowCredentials()
+));
 
 var app = builder.Build();
 

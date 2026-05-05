@@ -1,4 +1,4 @@
-﻿namespace Pe.Dev.RevitAutomation;
+namespace Pe.Dev.RevitAutomation;
 
 public enum ProbeAccessClassification {
     Success,
@@ -9,5 +9,6 @@ public enum ProbeAccessClassification {
     CloudModelUnauthorized,
     CloudModelNotFound,
     CloudModelOpenFailed,
+    ExpectedTitleMismatch,
     TimedOut
 }

@@ -31,15 +31,20 @@ internal sealed class AutomationJobReportParser {
                 break;
             case "OPEN_FAIL_UNAUTHORIZED":
                 result.Classification = nameof(ProbeAccessClassification.CloudModelUnauthorized);
-                result.FailureMessage = ReadJsonField(line, "message");
+                result.FailureMessage = ReadFailureMessage(line);
                 break;
             case "OPEN_FAIL_NOT_FOUND":
                 result.Classification = nameof(ProbeAccessClassification.CloudModelNotFound);
-                result.FailureMessage = ReadJsonField(line, "message");
+                result.FailureMessage = ReadFailureMessage(line);
+                break;
+            case "OPEN_FAIL_TITLE_MISMATCH":
+                result.Classification = nameof(ProbeAccessClassification.ExpectedTitleMismatch);
+                result.DocumentTitle ??= ReadJsonField(line, "documentTitle");
+                result.FailureMessage = ReadFailureMessage(line);
                 break;
             case "OPEN_FAIL_OTHER":
                 result.Classification = nameof(ProbeAccessClassification.CloudModelOpenFailed);
-                result.FailureMessage = ReadJsonField(line, "message");
+                result.FailureMessage = ReadFailureMessage(line);
                 break;
             case "DOCUMENT_OPENED":
                 result.DocumentTitle ??= ReadJsonField(line, "title") ?? ReadJsonField(line, "documentTitle");
@@ -52,26 +57,46 @@ internal sealed class AutomationJobReportParser {
             case "JOB_FAIL_UNAUTHORIZED":
                 result.JobSucceeded = false;
                 result.Classification ??= "CloudModelUnauthorized";
-                result.FailureMessage ??= ReadJsonField(line, "message");
+                result.FailureMessage ??= ReadFailureMessage(line);
                 break;
             case "JOB_FAIL_NOT_FOUND":
                 result.JobSucceeded = false;
                 result.Classification ??= "CloudModelNotFound";
-                result.FailureMessage ??= ReadJsonField(line, "message");
+                result.FailureMessage ??= ReadFailureMessage(line);
+                break;
+            case "JOB_FAIL_TITLE_MISMATCH":
+                result.JobSucceeded = false;
+                result.Classification ??= nameof(ProbeAccessClassification.ExpectedTitleMismatch);
+                result.DocumentTitle ??= ReadJsonField(line, "documentTitle");
+                result.FailureMessage ??= ReadFailureMessage(line);
                 break;
             case "JOB_FAIL_ASSEMBLY_LOAD":
                 result.JobSucceeded = false;
                 result.Classification ??= "AssemblyLoadFailed";
-                result.FailureMessage ??= ReadJsonField(line, "message");
+                result.FailureMessage ??= ReadFailureMessage(line);
                 break;
             case "JOB_FAIL_OTHER":
                 result.JobSucceeded = false;
                 result.Classification ??= "JobFailed";
-                result.FailureMessage ??= ReadJsonField(line, "message");
+                result.FailureMessage ??= ReadFailureMessage(line);
                 break;
             case "ARTIFACT_WRITTEN":
                 result.ArtifactLocalName = ReadJsonField(line, "localName");
                 break;
+            }
+        }
+
+        if (result.Classification == null) {
+            var titleMismatchLine = lines.LastOrDefault(line =>
+                line.Contains("JOB_FAIL_TITLE_MISMATCH", StringComparison.Ordinal) ||
+                line.Contains("OPEN_FAIL_TITLE_MISMATCH", StringComparison.Ordinal)
+            );
+
+            if (titleMismatchLine != null) {
+                result.Classification = nameof(ProbeAccessClassification.ExpectedTitleMismatch);
+                result.DocumentTitle ??=
+                    ReadJsonField(titleMismatchLine, "documentTitle") ?? ReadJsonField(titleMismatchLine, "title");
+                result.FailureMessage ??= ReadFailureMessage(titleMismatchLine);
             }
         }
 
@@ -116,6 +141,19 @@ internal sealed class AutomationJobReportParser {
         } catch {
             return null;
         }
+    }
+
+    private static string? ReadFailureMessage(string line) {
+        var message = ReadJsonField(line, "message") ?? ReadJsonField(line, "detail");
+        if (!string.IsNullOrWhiteSpace(message))
+            return message;
+
+        var documentTitle = ReadJsonField(line, "documentTitle") ?? ReadJsonField(line, "title");
+        var expectedTitle = ReadJsonField(line, "expectedTitle");
+        if (!string.IsNullOrWhiteSpace(documentTitle) && !string.IsNullOrWhiteSpace(expectedTitle))
+            return $"Opened document title '{documentTitle}' did not match expected title '{expectedTitle}'.";
+
+        return null;
     }
 
     private static string BuildExcerpt(IReadOnlyList<string> markerLines, string fullReport) {

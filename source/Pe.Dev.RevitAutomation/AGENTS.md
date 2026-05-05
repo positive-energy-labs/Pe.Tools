@@ -2,24 +2,27 @@
 
 ## Scope
 
-Owns dev-side Revit Design Automation orchestration, APS auth/bootstrap helpers, appbundle packaging, workitem submission and status, artifact download, and local iteration services used by `pe-dev revit automation ...`.
+Owns local/operator workflows used by `pe-dev revit automation ...`: manifests, receipts, browse cache, repo-local paths, worker bundle building from local source, and CLI-facing orchestration. APS auth, Data Management, Object Storage, and Design Automation mechanics live in `Pe.Aps`.
 
 ## Purpose
 
-`Pe.Dev.RevitAutomation` is the local orchestration package for fragile APS and Revit Design Automation work. Keep APS CRUD, token policy, bundle packaging, workitem submission, status polling, batch status, and report/artifact handling here. Keep `Pe.Dev.Cli` focused on command parsing and stdout/stderr behavior, and keep the worker package thin enough that DA failures are easy to localize.
+`Pe.Dev.RevitAutomation` is the dev adapter around Revit automation workflows. Keep operator UX here and push reusable APS mechanics into `Pe.Aps`. Keep `Pe.Dev.Cli` focused on command parsing and stdout/stderr behavior, and keep the worker package focused on the headless Revit execution entrypoint.
 
 ## Critical Entry Points
 
-- `RevitAutomationProbeService.cs` - diagnostic cloud-open orchestration.
-- `RevitAutomationParameterCollectionService.cs` - single-model parameter collection orchestration.
-- `RevitAutomationParameterCollectionBatchService.cs` - manifest-driven multi-model submission and status aggregation.
-- `RevitAutomationWorkerBundleBuilder.cs` - worker build plus Autodesk appbundle assembly. This decides the `.bundle` root, `PackageContents.xml`, `.addin`, and zip shape.
-- `RevitAutomationShellDefinitions.cs` - activity and appbundle definitions for the DA shell.
-- `RevitAutomationWorkItemInspectorService.cs` - read-only workitem status/report inspection.
-- `AutomationObjectStorageClient.cs` - APS object storage and signed download handling for result artifacts.
-- `StoredApsWebAuthTokenProvider.cs` and `GlobalSettingsFileReader.cs` - APS credential loading from `Global/settings.json`.
+- `AutomationBrowseService.cs` - sticky browse context, repo cache, and human-readable model navigation.
+- `AutomationManifestService.cs` - readable schedule manifest create/update/validate flow.
+- `AutomationScheduleRunServices.cs` - schedule submit-now / inspect-later orchestration and receipt handling.
+- `RevitAutomationModelDiscoveryService.cs` - thin adapter from operator discovery options to `Pe.Aps.DataManagement.ApsCloudModelCatalog`.
+- `AutomationShellDeploymentService.cs` - local worker bundle build plus shell-specific appbundle/activity definitions; delegates DA deployment mechanics to `Pe.Aps.DesignAutomation`.
+- `RevitAutomationWorkerBundleBuilder.cs` - local worker build plus Autodesk appbundle assembly. This decides the `.bundle` root, `PackageContents.xml`, `.addin`, and zip shape.
+- `RevitAutomationShellDefinitions.cs` - Revit automation shell appbundle/activity identity and parameter definitions.
+- `AutomationArtifactFinalizer.cs` - dev/domain adapter that maps generic `Pe.Aps.DesignAutomation` artifact finalization plus raw DA reports into Revit automation result classifications.
+- `../Pe.Aps/DesignAutomation/` - generic DA appbundle/activity/workitem/status/artifact mechanics.
+- `../Pe.Aps/DataManagement/` - APS cloud model catalog, folder traversal, region normalization, version selection, and source download.
+- `../Pe.Aps/Core/ObjectStorageApiClient.cs` - APS object storage and signed download/upload handling for staged inputs and result artifacts.
+- `../Pe.Aps/Auth/ApsCredentialSource.cs` - APS credential loading from `Global/settings.json`.
 - `../Pe.Dev.RevitAutomation.Worker/RevitAutomationShellApp.cs` - in-engine DA shell entrypoint.
-- `../Pe.Revit.Global/Services/Aps/Core/AutomationApiClient.cs` - thin APS Design Automation REST client shared by this package.
 
 ## Validation
 
@@ -30,10 +33,13 @@ Cheap compile loop:
 
 Primary operator commands:
 
-- `dotnet exec source\Pe.Dev.Cli\bin\Debug.R25\net8.0-windows\pe-dev.dll revit automation probe-access --region <US|EMEA> --project-guid <guid> --model-guid <guid> [--expected-title <title>] --mask false --timeout-seconds 600`
-- `dotnet exec source\Pe.Dev.Cli\bin\Debug.R25\net8.0-windows\pe-dev.dll revit automation collect-parameters --region <US|EMEA> --project-guid <guid> --model-guid <guid> [--category-name <name>]... [--family-name <name>]... [--placement-scope <AllLoaded|PlacedOnly|UnplacedOnly>] --mask false`
-- `dotnet exec source\Pe.Dev.Cli\bin\Debug.R25\net8.0-windows\pe-dev.dll revit automation collect-parameters-batch --manifest <path> [--json]`
-- `dotnet exec source\Pe.Dev.Cli\bin\Debug.R25\net8.0-windows\pe-dev.dll revit automation workitem-status --workitem-id <id> --mask false`
+- `pe-dev revit automation auth login`
+- `pe-dev revit automation browse hubs`
+- `pe-dev revit automation browse models --recurse true --out <path>`
+- `pe-dev revit automation manifest validate --path <path>`
+- `pe-dev revit automation submit schedules --manifest <path> [--receipt <path>] [--json]`
+- `pe-dev revit automation inspect receipt --receipt latest [--download-artifacts true] [--json]`
+- `pe-dev revit automation workitem-status --workitem-id <id> [--include-report <true|false>] [--json]`
 
 Focused test coverage currently lives in:
 
@@ -42,7 +48,7 @@ Focused test coverage currently lives in:
 - `source/Pe.Revit.Tests/AutomationProbeCliTests.cs`
 - `source/Pe.Revit.Tests/AutomationProbeSettingsTests.cs`
 
-When validating live parameter collection, prefer a narrow category such as `Duct Accessories` before broadening to multi-minute family matrices.
+When validating the current DA lane, prefer a tiny schedule manifest first so submit/inspect flow, bundle readiness, and artifact download can be checked without waiting on a full scrape.
 
 ## Shared Language
 
@@ -54,15 +60,18 @@ When validating live parameter collection, prefer a narrow category such as `Duc
 | **job input** | The common DA payload envelope rooted in `AutomationJobInput` | Prefer this over ad hoc probe-only payloads |
 | **artifact** | A durable output file produced by a workitem, usually JSON | Prefer this over treating stdout as the primary result contract |
 | **status lane** | Read-only workitem inspection and status aggregation | Prefer this over resubmitting work just to inspect it |
+| **operator adapter** | Local UX layer around APS/Revit automation mechanics: manifests, receipts, cache, repo paths, and CLI logging | Avoid putting reusable APS mechanics here |
 
 ## Living Memory
 
-- The DA shell is now a general-purpose worker host. `probe-access` is a diagnostic workload, not the core abstraction.
-- `collect-parameters` is the first production workload. Keep new workloads behind the same shell/job contract instead of forking new workers casually.
-- The appbundle zip must include the `*.bundle` directory itself at zip root. If the raw report says `Could not find *.bundle in AppBundle`, suspect packaging before anything else.
+- The current public DA surface is intentionally audit-focused: auth, browse, manifest, submit, inspect, cache.
+- Human-readable `(hub, project, modelPath)` identity is the operator input. Resolve GUIDs and year metadata late from cache/live APS data instead of forcing users to carry them around.
+- Persistent auth and repo-local cache are UX features, not hard state. They must be safe to delete and safe to recover from corruption.
+- The appbundle zip must include the `*.bundle` directory itself at zip root. If the raw report says `Could not find *.bundle in AppBundle`, suspect local worker packaging before APS mechanics.
 - The worker must stay headless. Do not let `UIApplication`, WPF, ribbon helpers, or interactive session services leak into collector paths that DA uses.
-- APS credentials come from `Global/settings.json` via the shared settings-root resolver. OneDrive-vs-Documents drift is still a real failure mode.
+- APS credentials and persisted auth come from `Pe.Aps`. OneDrive-vs-Documents drift in `Global/settings.json` is still a real failure mode.
 - Full root-cause detail usually lives in the raw `reportUrl`, not just the parsed summary.
+- Revit/domain artifact result shapes stay out of `Pe.Aps`; keep `ParameterCollectionArtifact` and `ScheduleCollectionArtifact` in shared Revit data contracts.
 - Result artifacts download through the APS signed S3 flow. Do not assume legacy direct object fetch URLs will stay valid.
-- Batch status should use the reduced-call APS status path, not naive per-workitem `GET workitems/{id}` polling at scale.
+- The public schedule submit path should return quickly. Long-lived polling belongs in explicit inspect commands, not the primary submit command.
 - Activity `settings` must stay current with APS behavior. Do not reintroduce reserved keys such as `dasOpenNetwork`.

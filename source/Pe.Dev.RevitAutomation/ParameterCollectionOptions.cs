@@ -27,8 +27,10 @@ public enum ParameterCollectionClassification {
     WorkItemSubmissionFailed,
     CloudModelUnauthorized,
     CloudModelNotFound,
+    ExpectedTitleMismatch,
     CollectionFailed,
     ArtifactDownloadFailed,
+    ArtifactValidationFailed,
     TimedOut
 }
 

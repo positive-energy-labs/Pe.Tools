@@ -1,10 +1,9 @@
 using Newtonsoft.Json;
-using Pe.Shared.Aps.Models;
 using Pe.Shared.StorageRuntime.Json;
 
 namespace Pe.Revit.Global.Services.Aps;
 
-public class Parameters(HttpClient httpClient, TokenProviders.IParameters tokenProvider) {
+public class Parameters(HttpClient httpClient, IParametersTokenProvider tokenProvider) {
     private const string Suffix = "parameters/v1/accounts/";
 
     private static async Task<T?> DeserializeToType<T>(HttpResponseMessage res) {

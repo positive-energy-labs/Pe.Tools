@@ -12,9 +12,13 @@
         <PackageReference Include="ricaun.RevitTest.TestAdapter" Version="1.11.0" />
         <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitVersion).*" />
         <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*" />
+        <PackageReference Include="Autodesk.DataManagement" Version="2.1.3" />
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\Pe.Aps\Pe.Aps.csproj" />
+        <ProjectReference Include="..\Pe.Shared.ApsAuth\Pe.Shared.ApsAuth.csproj" />
+        <ProjectReference Include="..\Pe.Shared.RevitAutomation\Pe.Shared.RevitAutomation.csproj" />
         <ProjectReference Include="..\Pe.App\Pe.App.csproj" />
         <ProjectReference Include="..\Pe.Dev.Cli\Pe.Dev.Cli.csproj" />
         <ProjectReference Include="..\Pe.Host\Pe.Host.csproj" />
@@ -51,7 +55,18 @@
     <PropertyGroup>
         <PeStableCliConfiguration
         >$([System.String]::Copy('$(Configuration)').Replace('.Tests', ''))</PeStableCliConfiguration>
+        <PeRevitRawDotNetTestWarningSuppressed Condition="'$(PeRevitRawDotNetTestWarningSuppressed)' == '' and '$(PE_REVIT_TEST_ORCHESTRATED)' == '1'">true</PeRevitRawDotNetTestWarningSuppressed>
+        <PeRevitRawDotNetTestWarningSuppressed Condition="'$(PeRevitRawDotNetTestWarningSuppressed)' == ''">false</PeRevitRawDotNetTestWarningSuppressed>
     </PropertyGroup>
+    <Target
+            Name="WarnAboutRawDotNetTestUsage"
+            BeforeTargets="VSTest"
+            Condition="'$(PeRevitRawDotNetTestWarningSuppressed)' != 'true'"
+    >
+        <Warning
+                Text="Generally `dotnet test` against `Pe.Revit.Tests` with or without a configuration is discouraged in this repo. The default choice should be `pe-dev revit test ...` because it handles auto year selection, approval automation, deployed add-in quarantine, and owned test-session recycling. To target a specific Revit year directly, run one of the `.Tests` configurations such as `dotnet test source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests --filter &quot;Name~SomeFocusedTest&quot;`. You may target a running RRD instance through the raw lane, but `pe-dev revit sync-runtime` or manual `pe-dev revit hot-reload` must be called before performing tests or running scripts that depend on fresh runtime packages."
+        />
+    </Target>
     <!--
       TODO: decide whether to run hot-reload before VSTest target.
       `.Tests` outputs are isolated and RRD-safe. This pre-test hook is only a

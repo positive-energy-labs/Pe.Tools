@@ -12,6 +12,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\Pe.Shared.ApsAuth\Pe.Shared.ApsAuth.csproj"/>
         <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj"/>
         <ProjectReference Include="..\Pe.Shared.SettingsLayout\Pe.Shared.SettingsLayout.csproj"/>
     </ItemGroup>

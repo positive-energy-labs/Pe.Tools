@@ -1,4 +1,4 @@
-﻿namespace Pe.Dev.RevitAutomation;
+namespace Pe.Dev.RevitAutomation;
 
 public sealed record RevitProcessSessionIdentity(
     int ProcessId,

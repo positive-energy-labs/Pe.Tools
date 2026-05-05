@@ -9,6 +9,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\Pe.Aps\Pe.Aps.csproj"/>
         <ProjectReference Include="..\Pe.Dev.RevitAutomation\Pe.Dev.RevitAutomation.csproj"/>
         <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj"/>
     </ItemGroup>

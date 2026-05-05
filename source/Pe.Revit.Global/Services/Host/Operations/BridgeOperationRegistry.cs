@@ -1,4 +1,4 @@
-﻿using Pe.Shared.HostContracts.Operations;
+using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
@@ -135,6 +135,10 @@ internal sealed class BridgeOperationRegistry {
             .Select(definition => definition.Key)
             .Except(
                 [
+                    GetApsAuthStatusOperationContract.Definition.Key,
+                    LoginApsOperationContract.Definition.Key,
+                    LogoutApsOperationContract.Definition.Key,
+                    AcquireApsAccessTokenOperationContract.Definition.Key,
                     GetHostStatusOperationContract.Definition.Key,
                     GetWorkspacesOperationContract.Definition.Key,
                     DiscoverSettingsTreeOperationContract.Definition.Key,

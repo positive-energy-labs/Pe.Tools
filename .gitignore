@@ -10,3 +10,4 @@ riderModule.iml
 *.sln.DotSettings.user
 install/output
 /output
+.env

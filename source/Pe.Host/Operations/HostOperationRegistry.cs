@@ -1,4 +1,5 @@
-﻿using Pe.Shared.HostContracts.Operations;
+using Pe.Shared.ApsAuth;
+using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.HostContracts.SettingsStorage;
@@ -12,6 +13,28 @@ internal sealed class HostOperationRegistry {
 
     public HostOperationRegistry() {
         this.Operations = [
+            HostOperations.Create<ApsTokenRequest>(
+                GetApsAuthStatusOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    Task.FromResult(HostOperations.Local(context.ApsAuthService.GetStatus(request)))
+            ),
+            HostOperations.Create<ApsTokenRequest>(
+                LoginApsOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    Task.FromResult(HostOperations.Local(context.ApsAuthService.Login(request)))
+            ),
+            HostOperations.Create<NoRequest>(
+                LogoutApsOperationContract.Definition,
+                static (request, context, cancellationToken) => {
+                    context.ApsAuthService.Logout();
+                    return Task.FromResult(HostOperations.Local(new ApsLogoutResult(true)));
+                }
+            ),
+            HostOperations.Create<ApsTokenRequest>(
+                AcquireApsAccessTokenOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    Task.FromResult(HostOperations.Local(context.ApsAuthService.AcquireAccessToken(request)))
+            ),
             HostOperations.Create<NoRequest>(
                 GetHostStatusOperationContract.Definition,
                 static (request, context, cancellationToken) =>

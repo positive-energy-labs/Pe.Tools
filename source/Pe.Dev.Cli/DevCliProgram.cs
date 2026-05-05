@@ -3,15 +3,17 @@
 internal static class DevCliProgram {
     internal const string UsageText = """
                                       Usage:
+                                        pe-dev revit automation auth <login|status|logout> ...
+                                        pe-dev revit automation browse <status|hubs|use-hub|projects|use-project|pwd|ls|cd|up|models> ...
+                                        pe-dev revit automation manifest <create|show|list|add|remove|set-request|validate> ...
+                                        pe-dev revit automation submit schedules --manifest <path> [--receipt <path>] [--refresh] [--json]
+                                        pe-dev revit automation inspect <receipt|workitem> ...
+                                        pe-dev revit automation workitem-status --workitem-id <id> [--include-report <true|false>] [--json]
+                                        pe-dev revit automation cache <status|clear> ...
+                                        pe-dev revit session [--json]
+                                        pe-dev revit logs <host|app|all> [--tail <count>]
+                                        pe-dev revit sync-runtime
                                         pe-dev revit approve [--revit-year <year>] [--timeout-seconds <seconds>] [--skip-if-session-exists]
-                                        pe-dev revit automation list-hubs [--json]
-                                        pe-dev revit automation list-projects --hub-id <id> [--json]
-                                        pe-dev revit automation list-contents --hub-id <id> --project-id <id> [--folder-id <id> | --folder-path <path>] [--json]
-                                        pe-dev revit automation discover-models --hub-id <id> --project-id <id> [--folder-id <id> | --folder-path <path>] [--name-contains <text>] [--recurse <true|false>] [--exclude-path-glob <pattern>]... [--region <US|EMEA>] [--out-manifest <path>] [--engine <engine>] [--timeout-seconds <seconds>] [--max-concurrency <count>] [--debug <true|false>] [--mask <true|false>] [--family-name <name>]... [--category-name <name>]... [--placement-scope <AllLoaded|PlacedOnly|UnplacedOnly>] [--json]
-                                        pe-dev revit automation collect-parameters --region <US|EMEA> --project-guid <guid> --model-guid <guid> [--expected-title <title>] [--engine <engine>] [--timeout-seconds <seconds>] [--debug <true|false>] [--mask <true|false>] [--family-name <name>]... [--category-name <name>]... [--placement-scope <AllLoaded|PlacedOnly|UnplacedOnly>] [--json]
-                                        pe-dev revit automation collect-parameters-batch --manifest <path> [--json]
-                                        pe-dev revit automation probe-access --region <US|EMEA> --project-guid <guid> --model-guid <guid> [--expected-title <title>] [--engine <engine>] [--timeout-seconds <seconds>] [--debug <true|false>] [--mask <true|false>] [--json]
-                                        pe-dev revit automation workitem-status --workitem-id <id> [--include-report <true|false>] [--mask <true|false>] [--json]
                                         pe-dev revit hot-reload
                                         pe-dev revit test [--filter <expr>] [--no-build] [--configuration <config> | --revit-year <year>] [--allow-deployed-addin]
                                         pe-dev revit script new <script-name-or-workspace-path>
