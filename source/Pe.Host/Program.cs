@@ -3,7 +3,9 @@ using Pe.Host;
 using Pe.Host.Operations;
 using Pe.Host.Services;
 using Pe.Shared.HostContracts.Protocol;
+using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.SettingsLayout;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -68,6 +70,26 @@ app.Use(async (httpContext, next) => {
     }
 });
 HostEndpointMapper.MapOperations(app);
+app.MapPost("/api/dev/mastracode-agent/start", () => {
+    var agentDirectory = ResolveMastraCodeAgentDirectory();
+    var workspaceRoot = ScriptingWorkspaceLocations.ResolveWorkspaceRoot("agent-poc");
+    Directory.CreateDirectory(workspaceRoot);
+
+    var command = $"cd /d \"{agentDirectory}\" && set PE_SCRIPT_WORKSPACE_ROOT={workspaceRoot}&& set PE_SCRIPT_WORKSPACE=agent-poc&& set PE_HOST_URL={options.HostBaseUrl}&& pnpm start";
+    Process.Start(new ProcessStartInfo {
+        FileName = "cmd.exe",
+        Arguments = $"/c start \"Revit Agent POC\" cmd /k \"{command}\"",
+        UseShellExecute = false,
+        CreateNoWindow = true
+    });
+
+    return Results.Ok(new {
+        message = "Started Revit Agent POC terminal.",
+        agentDirectory,
+        workspaceRoot,
+        hostBaseUrl = options.HostBaseUrl
+    });
+});
 app.MapGet(HttpRoutes.Events, async (
     HttpContext httpContext,
     HostEventStreamService eventStreamService,
@@ -109,3 +131,22 @@ app.Logger.LogInformation(
 app.Logger.LogInformation("Host file logging enabled at {LogFilePath}", hostLogFile.FilePath);
 
 app.Run(options.HostBaseUrl);
+
+static string ResolveMastraCodeAgentDirectory() {
+    var configuredPath = Environment.GetEnvironmentVariable("PE_MASTRACODE_AGENT_DIR");
+    if (!string.IsNullOrWhiteSpace(configuredPath) && Directory.Exists(configuredPath))
+        return Path.GetFullPath(configuredPath);
+
+    var current = new DirectoryInfo(Directory.GetCurrentDirectory());
+    while (current != null) {
+        var candidate = Path.Combine(current.FullName, "source", "mastra-agent-test");
+        if (Directory.Exists(candidate))
+            return candidate;
+
+        current = current.Parent;
+    }
+
+    throw new DirectoryNotFoundException(
+        "Could not find source/mastra-agent-test. Set PE_MASTRACODE_AGENT_DIR to the POC agent directory."
+    );
+}

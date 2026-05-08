@@ -1,0 +1,19 @@
+{
+  "name": "mastra-agent-test",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "tsx main.ts",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mastra/core": "latest",
+    "mastracode": "^0.17.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {},
+  "packageManager": "pnpm@10.33.4"
+}
