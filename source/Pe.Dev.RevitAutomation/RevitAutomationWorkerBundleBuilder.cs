@@ -24,9 +24,6 @@ internal sealed class RevitAutomationWorkerBundleBuilder {
         if (!File.Exists(projectPath))
             throw new FileNotFoundException($"Worker project was not found at '{projectPath}'.", projectPath);
 
-        log?.Invoke($"Building worker project ({buildConfiguration})");
-        await RunDotNetBuildAsync(projectPath, buildConfiguration, repoRoot, cancellationToken).ConfigureAwait(false);
-
         var outputDirectory = Path.Combine(
             repoRoot,
             ".artifacts",
@@ -39,6 +36,13 @@ internal sealed class RevitAutomationWorkerBundleBuilder {
         );
 
         var workerAssemblyPath = Path.Combine(outputDirectory, $"{WorkerAssemblyName}.dll");
+        if (File.Exists(workerAssemblyPath)) {
+            log?.Invoke($"Using existing worker build ({buildConfiguration})");
+        } else {
+            log?.Invoke($"Building worker project ({buildConfiguration})");
+            await RunDotNetBuildAsync(projectPath, buildConfiguration, repoRoot, cancellationToken).ConfigureAwait(false);
+        }
+
         if (!File.Exists(workerAssemblyPath))
             throw new FileNotFoundException(
                 $"Worker assembly '{workerAssemblyPath}' was not produced by the build.",
@@ -94,6 +98,8 @@ internal sealed class RevitAutomationWorkerBundleBuilder {
         startInfo.ArgumentList.Add(projectPath);
         startInfo.ArgumentList.Add("-c");
         startInfo.ArgumentList.Add(configuration);
+        if (File.Exists(Path.Combine(repoRoot, ".artifacts", "build", WorkerAssemblyName, configuration, "obj", "project.assets.json")))
+            startInfo.ArgumentList.Add("--no-restore");
         startInfo.ArgumentList.Add("/p:PeIsolatedBuild=true");
         startInfo.ArgumentList.Add("/p:WarningLevel=0");
 
