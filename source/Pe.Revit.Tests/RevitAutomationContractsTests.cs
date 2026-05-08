@@ -785,7 +785,7 @@ public sealed class RevitAutomationContractsTests {
             LocalModelPath = RevitAutomationShellDefinitions.InputModelLocalName,
             RunId = Guid.NewGuid().ToString("D"),
             ExpectedTitle = "Model",
-            ScheduleCollection = Pe.Shared.RevitData.Schedules.ScheduleCollectionDefaults.CreateDefaultRequest()
+            ScheduleCollection = ScheduleCollectionDefaults.CreateDefaultRequest()
         };
         var inputModel = DesignAutomationWorkItemArguments.BuildObjectGetArgument(
             "pe-tools-test",
