@@ -1,11 +1,11 @@
+using Pe.Aps;
 using Pe.Aps.Auth;
 using Pe.Host;
 using Pe.Host.Operations;
 using Pe.Host.Services;
 using Pe.Shared.HostContracts.Protocol;
-using Pe.Shared.HostContracts.Scripting;
-using Pe.Shared.SettingsLayout;
-using System.Diagnostics;
+using Pe.Shared.Product;
+using Pe.Shared.StorageRuntime;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -19,7 +19,7 @@ if (singletonHandle == null)
 
 var builder = WebApplication.CreateBuilder(args);
 var hostLogFile = new ManagedLogFile(
-    GlobalStorageLocations.ResolveHostLogPath(),
+    ProductRuntimeLayout.ForCurrentUser().Logs.HostLogPath,
     HostProcessLogMaxLines,
     HostLogTrimThresholdBytes
 );
@@ -27,17 +27,17 @@ var hostLogFile = new ManagedLogFile(
 builder.Logging.AddProvider(new HostFileLoggerProvider(hostLogFile));
 
 builder.Services.AddSingleton(options);
-builder.Services.AddSingleton<ApsCredentialSource>();
+builder.Services.AddSingleton<IApsCredentialProvider>(_ => {
+    var credentials = new ApsCredentialSource().ReadCredentials();
+    return new Aps.StaticAuthTokenProvider(credentials.WebClientId, credentials.WebClientSecret);
+});
 builder.Services.AddSingleton<ApsAuthService>();
 builder.Services.AddSingleton<BridgeServer>();
 builder.Services.AddSingleton<HostActivityService>();
 builder.Services.AddSingleton<HostEventStreamService>();
 builder.Services.AddSingleton<HostOperationRegistry>();
 builder.Services.AddSingleton<HostOperationExecutor>();
-builder.Services.AddSingleton<IHostBridgeCapabilityService, HostBridgeCapabilityService>();
-builder.Services.AddSingleton<IHostScriptingPipeClientService, HostScriptingPipeClientService>();
 builder.Services.AddSingleton<IHostSettingsModuleCatalog, HostSettingsModuleCatalog>();
-builder.Services.AddSingleton<HostSettingsRuntimeStateService>();
 builder.Services.AddSingleton(sp => new HostSettingsStorageService(
     sp.GetRequiredService<IHostSettingsModuleCatalog>(),
     sp.GetRequiredService<BridgeServer>()
@@ -60,6 +60,7 @@ builder.Services.AddCors(corsOptions => corsOptions.AddDefaultPolicy(policy => p
 var app = builder.Build();
 
 app.UseCors();
+app.UseWebSockets();
 app.Use(async (httpContext, next) => {
     var activityService = httpContext.RequestServices.GetRequiredService<HostActivityService>();
     activityService.OnRequestStarted();
@@ -70,25 +71,19 @@ app.Use(async (httpContext, next) => {
     }
 });
 HostEndpointMapper.MapOperations(app);
-app.MapPost("/api/dev/mastracode-agent/start", () => {
-    var agentDirectory = ResolveMastraCodeAgentDirectory();
-    var workspaceRoot = ScriptingWorkspaceLocations.ResolveWorkspaceRoot("agent-poc");
-    Directory.CreateDirectory(workspaceRoot);
+app.Map(HttpRoutes.Bridge, async (
+    HttpContext httpContext,
+    BridgeServer bridgeServer,
+    CancellationToken cancellationToken
+) => {
+    if (!httpContext.WebSockets.IsWebSocketRequest) {
+        httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
+        await httpContext.Response.WriteAsync("Expected WebSocket bridge request.", cancellationToken);
+        return;
+    }
 
-    var command = $"cd /d \"{agentDirectory}\" && set PE_SCRIPT_WORKSPACE_ROOT={workspaceRoot}&& set PE_SCRIPT_WORKSPACE=agent-poc&& set PE_HOST_URL={options.HostBaseUrl}&& pnpm start";
-    Process.Start(new ProcessStartInfo {
-        FileName = "cmd.exe",
-        Arguments = $"/c start \"Revit Agent POC\" cmd /k \"{command}\"",
-        UseShellExecute = false,
-        CreateNoWindow = true
-    });
-
-    return Results.Ok(new {
-        message = "Started Revit Agent POC terminal.",
-        agentDirectory,
-        workspaceRoot,
-        hostBaseUrl = options.HostBaseUrl
-    });
+    using var webSocket = await httpContext.WebSockets.AcceptWebSocketAsync();
+    await bridgeServer.RunWebSocketSessionAsync(webSocket, httpContext.RequestAborted);
 });
 app.MapGet(HttpRoutes.Events, async (
     HttpContext httpContext,
@@ -122,31 +117,12 @@ app.MapGet(HttpRoutes.Events, async (
     }
 });
 app.Logger.LogInformation(
-    "Host listening on {BaseUrl} using pipe {PipeName}. IdleShutdownEnabled={IdleShutdownEnabled}, IdleShutdownTimeoutMinutes={IdleShutdownTimeoutMinutes}",
+    "Host listening on {BaseUrl} using private bridge {BridgePath}. IdleShutdownEnabled={IdleShutdownEnabled}, IdleShutdownTimeoutMinutes={IdleShutdownTimeoutMinutes}",
     options.HostBaseUrl,
-    options.PipeName,
+    HttpRoutes.Bridge,
     options.IdleShutdownEnabled,
     options.IdleShutdownTimeout.TotalMinutes
 );
 app.Logger.LogInformation("Host file logging enabled at {LogFilePath}", hostLogFile.FilePath);
 
 app.Run(options.HostBaseUrl);
-
-static string ResolveMastraCodeAgentDirectory() {
-    var configuredPath = Environment.GetEnvironmentVariable("PE_MASTRACODE_AGENT_DIR");
-    if (!string.IsNullOrWhiteSpace(configuredPath) && Directory.Exists(configuredPath))
-        return Path.GetFullPath(configuredPath);
-
-    var current = new DirectoryInfo(Directory.GetCurrentDirectory());
-    while (current != null) {
-        var candidate = Path.Combine(current.FullName, "source", "mastra-agent-test");
-        if (Directory.Exists(candidate))
-            return candidate;
-
-        current = current.Parent;
-    }
-
-    throw new DirectoryNotFoundException(
-        "Could not find source/mastra-agent-test. Set PE_MASTRACODE_AGENT_DIR to the POC agent directory."
-    );
-}

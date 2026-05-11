@@ -1,8 +1,9 @@
 using Pe.Shared.ApsAuth;
 using Pe.Aps.Auth;
-using Pe.Revit.Global.Services.Host;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Protocol;
+using Pe.Shared.HostContracts;
+using Pe.Shared.Product;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -32,13 +33,13 @@ public sealed class ApsAuthBoundaryTests {
     public void Aps_host_contracts_are_local_and_use_expected_routes() {
         Assert.Multiple(() => {
             Assert.That(GetApsAuthStatusOperationContract.Definition.ExecutionMode, Is.EqualTo(HostExecutionMode.Local));
-            Assert.That(GetApsAuthStatusOperationContract.Definition.Route, Is.EqualTo(HttpRoutes.ApsAuthStatus));
+            Assert.That(GetApsAuthStatusOperationContract.Definition.Route, Is.EqualTo("/api/aps/auth/status"));
             Assert.That(LoginApsOperationContract.Definition.ExecutionMode, Is.EqualTo(HostExecutionMode.Local));
-            Assert.That(LoginApsOperationContract.Definition.Route, Is.EqualTo(HttpRoutes.ApsAuthLogin));
+            Assert.That(LoginApsOperationContract.Definition.Route, Is.EqualTo("/api/aps/auth/login"));
             Assert.That(LogoutApsOperationContract.Definition.ExecutionMode, Is.EqualTo(HostExecutionMode.Local));
-            Assert.That(LogoutApsOperationContract.Definition.Route, Is.EqualTo(HttpRoutes.ApsAuthLogout));
+            Assert.That(LogoutApsOperationContract.Definition.Route, Is.EqualTo("/api/aps/auth/logout"));
             Assert.That(AcquireApsAccessTokenOperationContract.Definition.ExecutionMode, Is.EqualTo(HostExecutionMode.Local));
-            Assert.That(AcquireApsAccessTokenOperationContract.Definition.Route, Is.EqualTo(HttpRoutes.ApsAuthToken));
+            Assert.That(AcquireApsAccessTokenOperationContract.Definition.Route, Is.EqualTo("/api/aps/auth/token"));
             Assert.That(GetApsAuthStatusOperationContract.Definition.Route, Does.StartWith(HttpRoutes.ApsBase));
         });
     }
@@ -90,7 +91,7 @@ public sealed class ApsAuthBoundaryTests {
     }
 
     [Test]
-    public async Task Host_local_operation_client_posts_json_and_deserializes_auth_response() {
+    public async Task Pe_host_client_posts_json_and_deserializes_auth_response() {
         var captured = new CapturedRequest();
         using var httpClient = new HttpClient(new StubHttpMessageHandler((request, cancellationToken) => {
             captured.Method = request.Method;
@@ -116,11 +117,11 @@ public sealed class ApsAuthBoundaryTests {
             };
         }));
 
-        var priorBaseUrl = Environment.GetEnvironmentVariable(SettingsEditorRuntime.HostBaseUrlVariable);
-        Environment.SetEnvironmentVariable(SettingsEditorRuntime.HostBaseUrlVariable, "http://localhost:7777");
+        var priorBaseUrl = Environment.GetEnvironmentVariable(HostProcessIdentity.HostBaseUrlVariable);
+        Environment.SetEnvironmentVariable(HostProcessIdentity.HostBaseUrlVariable, "http://localhost:7777");
 
         try {
-            using var client = new HostLocalOperationClient(httpClient);
+            using var client = new PeHostClient(httpClient);
             var result = await client.ExecuteAsync<ApsTokenRequest, ApsPersistedTokenStatus>(
                 GetApsAuthStatusOperationContract.Definition,
                 ApsTokenRequest.ForParameterService()
@@ -137,12 +138,12 @@ public sealed class ApsAuthBoundaryTests {
                 Assert.That(result.FlowKind, Is.EqualTo(ApsAuthFlowKind.ThreeLeggedConfidential));
             });
         } finally {
-            Environment.SetEnvironmentVariable(SettingsEditorRuntime.HostBaseUrlVariable, priorBaseUrl);
+            Environment.SetEnvironmentVariable(HostProcessIdentity.HostBaseUrlVariable, priorBaseUrl);
         }
     }
 
     [Test]
-    public void Host_local_operation_client_surfaces_problem_detail_messages() {
+    public void Pe_host_client_surfaces_problem_detail_messages() {
         using var httpClient = new HttpClient(new StubHttpMessageHandler((request, cancellationToken) =>
             new HttpResponseMessage(HttpStatusCode.Conflict) {
                 Content = new StringContent(
@@ -156,9 +157,9 @@ public sealed class ApsAuthBoundaryTests {
                 )
             }
         ));
-        using var client = new HostLocalOperationClient(httpClient);
+        using var client = new PeHostClient(httpClient);
 
-        var ex = Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = Assert.ThrowsAsync<PeHostClientException>(() =>
             client.ExecuteAsync<ApsTokenRequest, ApsPersistedTokenStatus>(
                 GetApsAuthStatusOperationContract.Definition,
                 ApsTokenRequest.ForParameterService()

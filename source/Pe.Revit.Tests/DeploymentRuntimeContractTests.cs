@@ -1,8 +1,10 @@
 using Pe.Dev.Cli;
 using Pe.Dev.RevitAutomation;
+using Pe.Shared.HostContracts.Bridge;
 using Pe.Shared.HostContracts.Protocol;
+using Pe.Shared.HostContracts;
 using Pe.Shared.HostContracts.Scripting;
-using Pe.Shared.SettingsLayout;
+using Pe.Shared.Product;
 using Pe.Shared.StorageRuntime;
 
 namespace Pe.Revit.Tests;
@@ -15,31 +17,66 @@ public sealed class DeploymentRuntimeContractTests {
 
         try {
             Assert.That(
-                SettingsStorageLocations.GetDefaultBasePath().EndsWith(Path.Combine("Pe.App"), StringComparison.OrdinalIgnoreCase),
+                SettingsStorageLocations.GetDefaultBasePath().EndsWith(Path.Combine("Pe.Tools", "settings"), StringComparison.OrdinalIgnoreCase),
                 Is.True
             );
             Assert.That(
-                ScriptingWorkspaceLocations.GetDefaultBasePath().EndsWith(Path.Combine("Pe.Scripting"), StringComparison.OrdinalIgnoreCase),
+                ScriptingWorkspaceLocations.GetDefaultBasePath().EndsWith(Path.Combine("Pe.Tools", "scripting"), StringComparison.OrdinalIgnoreCase),
                 Is.True
             );
             Assert.That(
-                DeploymentRuntimeLocations.GetStateRootPath(localAppData),
-                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "State"))
+                ProductUserContentLayout.ForCurrentUser().Output.RootPath.EndsWith(Path.Combine("Pe.Tools", "output"), StringComparison.OrdinalIgnoreCase),
+                Is.True
+            );
+            var runtime = ProductRuntimeLayout.ForCurrentUser(localAppData);
+            Assert.That(
+                runtime.State.RootPath,
+                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "state"))
             );
             Assert.That(
-                DeploymentRuntimeLocations.GetLogRootPath(localAppData),
-                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "Logs"))
+                runtime.Logs.RootPath,
+                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "logs"))
             );
             Assert.That(
-                GlobalStorageLocations.ResolveHostLogPath(localAppData),
-                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "Logs", "host.log.txt"))
+                runtime.Logs.HostLogPath,
+                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "logs", "host.log.txt"))
             );
             Assert.That(
-                GlobalStorageLocations.ResolveRevitAppLogPath(localAppData),
-                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "Logs", "revit.log.txt"))
+                runtime.Logs.RevitAppLogPath,
+                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "logs", "revit.log.txt"))
             );
         } finally {
             TryDeleteDirectory(localAppData);
+        }
+    }
+
+    [Test]
+    public void Storage_runtime_splits_settings_state_and_output_roots() {
+        var moduleKey = $"TestModule-{Guid.NewGuid():N}";
+        var settingsBasePath = Path.Combine(Path.GetTempPath(), $"pe-settings-{Guid.NewGuid():N}");
+        var moduleStorage = new ModuleStorage(moduleKey, settingsBasePath);
+
+        try {
+            Assert.That(
+                moduleStorage.DirectoryPath,
+                Is.EqualTo(Path.Combine(Path.GetFullPath(settingsBasePath), moduleKey))
+            );
+            Assert.That(
+                moduleStorage.State().DirectoryPath,
+                Is.EqualTo(ProductRuntimeLayout.ForCurrentUser().State.ResolveModuleStatePath(moduleKey))
+            );
+            Assert.That(
+                moduleStorage.Output().DirectoryPath,
+                Is.EqualTo(ProductUserContentLayout.ForCurrentUser().Output.ResolveModuleOutputPath(moduleKey))
+            );
+            Assert.That(
+                new GlobalStorage(settingsBasePath).Output().DirectoryPath,
+                Is.EqualTo(ProductUserContentLayout.ForCurrentUser().Output.GlobalOutputPath)
+            );
+        } finally {
+            TryDeleteDirectory(settingsBasePath);
+            TryDeleteDirectory(ProductRuntimeLayout.ForCurrentUser().State.ResolveModuleStatePath(moduleKey));
+            TryDeleteDirectory(ProductUserContentLayout.ForCurrentUser().Output.ResolveModuleOutputPath(moduleKey));
         }
     }
 
@@ -88,12 +125,93 @@ public sealed class DeploymentRuntimeContractTests {
     public void Revit_log_paths_resolve_to_local_app_data_runtime_logs() {
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 
-        Assert.That(DevLogPathResolver.HostLogPath, Is.EqualTo(GlobalStorageLocations.ResolveHostLogPath()));
-        Assert.That(DevLogPathResolver.RevitAppLogPath, Is.EqualTo(GlobalStorageLocations.ResolveRevitAppLogPath()));
+        var logs = ProductRuntimeLayout.ForCurrentUser().Logs;
+        Assert.That(DevLogPathResolver.HostLogPath, Is.EqualTo(logs.HostLogPath));
+        Assert.That(DevLogPathResolver.RevitAppLogPath, Is.EqualTo(logs.RevitAppLogPath));
         Assert.That(
-            DevLogPathResolver.HostLogPath.StartsWith(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "Logs"), StringComparison.OrdinalIgnoreCase),
+            DevLogPathResolver.HostLogPath.StartsWith(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "logs"), StringComparison.OrdinalIgnoreCase),
             Is.True
         );
+    }
+
+    [Test]
+    public void Development_runtime_layout_keeps_host_in_dev_root_and_pe_dev_in_path_friendly_bin_root() {
+        var localAppData = Path.Combine(Path.GetTempPath(), $"pe-dev-layout-{Guid.NewGuid():N}");
+
+        try {
+            var developmentRuntime = ProductDevelopmentRuntimeLayout.ForCurrentUser(localAppData);
+
+            Assert.That(
+                developmentRuntime.RootPath,
+                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "dev"))
+            );
+            Assert.That(
+                developmentRuntime.Binaries.HostDirectoryPath,
+                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "dev", "bin", "host"))
+            );
+            Assert.That(
+                developmentRuntime.Binaries.PeDevDirectoryPath,
+                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "bin", "pe-dev"))
+            );
+        } finally {
+            TryDeleteDirectory(localAppData);
+        }
+    }
+
+    [Test]
+    public void Runtime_authority_resolves_lane_specific_host_and_stable_cli_paths() {
+        var localAppData = Path.Combine(Path.GetTempPath(), $"pe-runtime-authority-{Guid.NewGuid():N}");
+
+        try {
+            var devResolution = ProductRuntimeAuthority.ResolveForCurrentMachine(ProductRuntimeLane.Dev, localAppData);
+            var installedResolution = ProductRuntimeAuthority.ResolveForCurrentMachine(ProductRuntimeLane.Installed, localAppData);
+
+            Assert.That(
+                devResolution.HostExecutablePath,
+                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "dev", "bin", "host", "Pe.Host.exe"))
+            );
+            Assert.That(
+                installedResolution.HostExecutablePath,
+                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "bin", "host", "Pe.Host.exe"))
+            );
+            Assert.That(devResolution.PeDevDllPath, Is.EqualTo(installedResolution.PeDevDllPath));
+            Assert.That(devResolution.PeaLauncherPath, Is.EqualTo(installedResolution.PeaLauncherPath));
+        } finally {
+            TryDeleteDirectory(localAppData);
+        }
+    }
+
+    [Test]
+    public void Runtime_descriptor_roundtrips_and_drives_resolution_for_executing_pe_app_assembly() {
+        var rootPath = Path.Combine(Path.GetTempPath(), $"pe-runtime-descriptor-{Guid.NewGuid():N}");
+        var assemblyDirectory = Path.Combine(rootPath, "Pe.App");
+        var assemblyPath = Path.Combine(assemblyDirectory, "Pe.App.dll");
+        Directory.CreateDirectory(assemblyDirectory);
+        File.WriteAllText(assemblyPath, string.Empty);
+        var descriptorPath = RevitDeploymentIdentity.ResolveRuntimeDescriptorPathForAssembly(assemblyPath);
+        File.WriteAllText(
+            descriptorPath,
+            """
+            {
+              "schemaVersion": 1,
+              "productName": "Pe.Tools",
+              "runtimeLane": "Dev",
+              "configuration": "Debug.R25"
+            }
+            """
+        );
+
+        try {
+            var descriptor = PeAppRuntimeDeploymentDescriptor.Load(descriptorPath);
+            var resolution = ProductRuntimeAuthority.ResolveForExecutingPeAppAssembly(assemblyPath);
+
+            Assert.That(descriptor.RuntimeLane, Is.EqualTo(ProductRuntimeLane.Dev));
+            Assert.That(resolution.RuntimeLane, Is.EqualTo(ProductRuntimeLane.Dev));
+            Assert.That(resolution.DescriptorPath, Is.EqualTo(descriptorPath));
+            Assert.That(resolution.Source, Is.EqualTo("runtime-descriptor"));
+        } finally {
+            TryDeleteDirectory(rootPath);
+        }
     }
 
     [Test]
@@ -105,84 +223,55 @@ public sealed class DeploymentRuntimeContractTests {
 
     [Test]
     public void Session_exit_code_is_nonzero_when_no_host_or_process_sessions_exist() {
-        var report = RevitCommandRunner.CreateSessionReport([], null);
+        var report = RevitCommandRunner.CreateSessionReport([], null, null);
 
         Assert.That(RevitCommandRunner.GetSessionExitCode(report), Is.EqualTo(3));
     }
 
     [Test]
-    public void Session_exit_code_is_zero_when_host_has_connected_sessions() {
-        var report = RevitCommandRunner.CreateSessionReport([], CreateHostStatusData(sessionCount: 1));
+    public void Session_exit_code_is_zero_when_host_bridge_is_connected() {
+        var report = RevitCommandRunner.CreateSessionReport(
+            [],
+            CreateHostProbeData(isConnected: true),
+            CreateHostSessionSummaryData(isConnected: true)
+        );
 
         Assert.That(RevitCommandRunner.GetSessionExitCode(report), Is.EqualTo(0));
     }
 
     [Test]
-    public void Session_report_preserves_multiple_host_sessions() {
-        var hostStatus = CreateHostStatusData(sessionCount: 2);
-        var report = RevitCommandRunner.CreateSessionReport([], hostStatus);
+    public void Session_report_preserves_host_status() {
+        var report = RevitCommandRunner.CreateSessionReport(
+            [],
+            CreateHostProbeData(isConnected: true),
+            CreateHostSessionSummaryData(isConnected: true)
+        );
 
         Assert.That(report.HostReachable, Is.True);
-        Assert.That(report.HostStatus?.Sessions.Count, Is.EqualTo(2));
+        Assert.That(report.HostSessionSummary?.BridgeIsConnected, Is.True);
     }
 
-    private static HostStatusData CreateHostStatusData(int sessionCount) {
-        var sessions = Enumerable.Range(1, sessionCount)
-            .Select(index => new HostSessionData(
-                $"session-{index}",
-                "2025",
-                1000 + index,
-                false,
-                null,
-                null,
-                null,
-                false,
-                false,
-                false,
-                null,
-                null,
-                null,
-                0,
-                0,
-                "net8.0-windows",
-                BridgeProtocol.ContractVersion,
-                BridgeProtocol.Transport,
-                [],
-                0
-            ))
-            .ToList();
-
-        return new HostStatusData(
-            true,
-            sessionCount != 0,
-            false,
-            null,
-            null,
-            null,
-            false,
-            false,
-            false,
-            null,
-            null,
-            null,
-            0,
-            0,
-            "2025",
-            "net8.0-windows",
+    private static HostProbeData CreateHostProbeData(bool isConnected) =>
+        new(
+            HostProcessIdentity.RuntimeIdentity,
             HostProtocol.ContractVersion,
-            HostProtocol.Transport,
-            SettingsEditorRuntime.RuntimeIdentity,
-            SettingsEditorRuntime.DefaultPipeName,
-            "1.0.0",
             BridgeProtocol.ContractVersion,
-            BridgeProtocol.Transport,
-            [],
-            null,
-            sessions.FirstOrDefault()?.SessionId,
-            0,
-            sessions
+            HttpRoutes.Bridge,
+            isConnected,
+            null
         );
-    }
+
+    private static HostSessionSummaryData CreateHostSessionSummaryData(bool isConnected) =>
+        new(
+            isConnected,
+            isConnected ? "revit-123" : null,
+            isConnected ? 123 : null,
+            isConnected ? "2025" : null,
+            isConnected ? ".NET Framework 4.8" : null,
+            0,
+            null,
+            []
+        );
 
     private static void TryDeleteDirectory(string path) {
         try {

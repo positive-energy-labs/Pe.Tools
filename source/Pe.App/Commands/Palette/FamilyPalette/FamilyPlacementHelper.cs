@@ -168,7 +168,7 @@ public static class FamilyPlacementHelper {
             .Select(name => {
                 // Remove .rfa extension if present
                 var nameWithoutExtension = name.EndsWith(".rfa", StringComparison.OrdinalIgnoreCase)
-                    ? name[..^4]
+                    ? name.Substring(0, name.Length - 4)
                     : name;
 
                 // Try to find family by exact match first, then by name without extension

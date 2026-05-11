@@ -30,10 +30,6 @@ public static class HostRevitAssemblyResolver {
             .Distinct(StringComparer.OrdinalIgnoreCase);
 
     private static IEnumerable<string> GetCandidateDirectories(AssemblyName assemblyName) {
-        var explicitDirectory = Environment.GetEnvironmentVariable("PE_HOST_REVIT_ASSEMBLY_DIR");
-        if (!string.IsNullOrWhiteSpace(explicitDirectory))
-            yield return explicitDirectory;
-
         var versionedDirectory = TryGetVersionedInstallDirectory(assemblyName.Version);
         if (!string.IsNullOrWhiteSpace(versionedDirectory))
             yield return versionedDirectory;

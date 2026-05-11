@@ -1,9 +1,12 @@
 using Pe.Shared.ApsAuth;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Pe.Aps;
 using Pe.Aps.Auth;
 using Pe.Dev.RevitAutomation;
 using Pe.Shared.RevitData.Schedules;
+using Pe.Shared.StorageRuntime;
+using static Pe.Aps.Aps;
 
 namespace Pe.Dev.Cli;
 
@@ -21,7 +24,7 @@ internal static class AutomationCliProgram {
         args.Count == 0
             ? Task.FromResult(WriteAutomationUsageAndReturn())
             : args[0].ToLowerInvariant() switch {
-                "auth" => RunAuthAsync(args, cancellationToken),
+                "auth" => RunAuthAsync(args),
                 "browse" => RunBrowseAsync(args, repoRootOverride, cancellationToken),
                 "manifest" => RunManifestAsync(args, repoRootOverride, cancellationToken),
                 "submit" => RunSubmitAsync(args, repoRootOverride, cancellationToken),
@@ -32,22 +35,22 @@ internal static class AutomationCliProgram {
             };
 
     private static Task<int> RunAuthAsync(
-        IReadOnlyList<string> args,
-        CancellationToken cancellationToken
+        IReadOnlyList<string> args
     ) {
         if (args.Count < 2)
             return Task.FromResult(WriteAutomationUsageAndReturn());
 
         var json = args.Contains("--json", StringComparer.OrdinalIgnoreCase);
-        var service = new ApsAuthService(new ApsCredentialSource());
+        var credentials = new ApsCredentialSource().ReadCredentials();
+        var service = new ApsAuthService(new StaticAuthTokenProvider(credentials.WebClientId, credentials.WebClientSecret));
         var request = ApsTokenRequest.ForAutomationUserContext();
         try {
             switch (args[1].ToLowerInvariant()) {
             case "login": {
-                    var result = service.Login(request, message => WriteAutomationProgress(message, json));
-                    WriteResult(result, json);
-                    return Task.FromResult(0);
-                }
+                var result = service.Login(request, message => WriteAutomationProgress(message, json));
+                WriteResult(result, json);
+                return Task.FromResult(0);
+            }
             case "status":
                 WriteResult(service.GetStatus(request), json);
                 return Task.FromResult(0);
@@ -132,18 +135,18 @@ internal static class AutomationCliProgram {
                     Console.WriteLine(string.IsNullOrWhiteSpace(service.GetWorkingPath(repoRoot)) ? "/" : service.GetWorkingPath(repoRoot));
                 return 0;
             case "ls": {
-                    var scopePath = TryReadOptionalPositional(args, 2);
-                    var result = await service.ListContentsAsync(
-                            repoRoot,
-                            scopePath,
-                            refresh,
-                            message => WriteAutomationProgress(message, json),
-                            cancellationToken
-                        )
-                        .ConfigureAwait(false);
-                    WriteResult(result, json);
-                    return 0;
-                }
+                var scopePath = TryReadOptionalPositional(args, 2);
+                var result = await service.ListContentsAsync(
+                        repoRoot,
+                        scopePath,
+                        refresh,
+                        message => WriteAutomationProgress(message, json),
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+                WriteResult(result, json);
+                return 0;
+            }
             case "cd":
                 WriteResult(
                     await service.ChangeDirectoryAsync(
@@ -205,18 +208,18 @@ internal static class AutomationCliProgram {
                 WriteResult(service.Load(repoRoot, RequireOptionValue(args, "--path")), json);
                 return 0;
             case "list": {
-                    var manifest = service.Load(repoRoot, RequireOptionValue(args, "--path"));
-                    if (json) {
-                        Console.WriteLine(JsonSerializer.Serialize(manifest.Models, JsonOptions));
-                    } else {
-                        Console.WriteLine($"Hub: {manifest.Hub}");
-                        Console.WriteLine($"Models: {manifest.Models.Count}");
-                        foreach (var model in manifest.Models)
-                            Console.WriteLine($"- {model.Project} :: {model.ModelPath}");
-                    }
-
-                    return 0;
+                var manifest = service.Load(repoRoot, RequireOptionValue(args, "--path"));
+                if (json) {
+                    Console.WriteLine(JsonSerializer.Serialize(manifest.Models, JsonOptions));
+                } else {
+                    Console.WriteLine($"Hub: {manifest.Hub}");
+                    Console.WriteLine($"Models: {manifest.Models.Count}");
+                    foreach (var model in manifest.Models)
+                        Console.WriteLine($"- {model.Project} :: {model.ModelPath}");
                 }
+
+                return 0;
+            }
             case "add":
                 WriteResult(
                     service.AddModel(
@@ -242,13 +245,13 @@ internal static class AutomationCliProgram {
                 );
                 return 0;
             case "set-request": {
-                    var request = BuildScheduleRequest(args);
-                    WriteResult(
-                        service.SetRequest(repoRoot, RequireOptionValue(args, "--path"), request),
-                        json
-                    );
-                    return 0;
-                }
+                var request = BuildScheduleRequest(args);
+                WriteResult(
+                    service.SetRequest(repoRoot, RequireOptionValue(args, "--path"), request),
+                    json
+                );
+                return 0;
+            }
             case "validate":
                 WriteResult(
                     await service.ValidateAsync(
@@ -312,21 +315,21 @@ internal static class AutomationCliProgram {
         try {
             switch (args[1].ToLowerInvariant()) {
             case "receipt": {
-                    var result = await service.InspectReceiptAsync(
-                            RequireOptionValue(args, "--receipt"),
-                            args.Contains("--refresh", StringComparer.OrdinalIgnoreCase),
-                            ReadBooleanOption(args, "--download-artifacts", true),
-                            repoRootOverride,
-                            message => WriteAutomationProgress(message, json),
-                            cancellationToken
-                        )
-                        .ConfigureAwait(false);
-                    if (json)
-                        Console.WriteLine(JsonSerializer.Serialize(new { result.ReceiptPath, result.Receipt }, JsonOptions));
-                    else
-                        WriteHumanResult(result.ReceiptPath, result.Receipt);
-                    return 0;
-                }
+                var result = await service.InspectReceiptAsync(
+                        RequireOptionValue(args, "--receipt"),
+                        args.Contains("--refresh", StringComparer.OrdinalIgnoreCase),
+                        ReadBooleanOption(args, "--download-artifacts", true),
+                        repoRootOverride,
+                        message => WriteAutomationProgress(message, json),
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+                if (json)
+                    Console.WriteLine(JsonSerializer.Serialize(new { result.ReceiptPath, result.Receipt }, JsonOptions));
+                else
+                    WriteHumanResult(result.ReceiptPath, result.Receipt);
+                return 0;
+            }
             case "workitem":
                 WriteResult(
                     await service.InspectWorkItemAsync(
@@ -387,21 +390,21 @@ internal static class AutomationCliProgram {
                 WriteResult(service.GetCacheStatus(repoRoot), json);
                 return Task.FromResult(0);
             case "clear": {
-                    var scope = (ReadOptionValue(args, "--scope") ?? "").ToLowerInvariant() switch {
-                        "" => AutomationCacheScope.All,
-                        "hubs" => AutomationCacheScope.Hubs,
-                        "projects" => AutomationCacheScope.Projects,
-                        "contents" => AutomationCacheScope.Contents,
-                        "models" => AutomationCacheScope.Models,
-                        var value => throw new InvalidOperationException($"Unknown cache scope '{value}'.")
-                    };
-                    service.ClearCache(repoRoot, scope);
-                    if (json)
-                        Console.WriteLine(JsonSerializer.Serialize(new { cleared = scope.ToString() }, JsonOptions));
-                    else
-                        Console.WriteLine($"Cleared cache scope: {scope}");
-                    return Task.FromResult(0);
-                }
+                var scope = (ReadOptionValue(args, "--scope") ?? "").ToLowerInvariant() switch {
+                    "" => AutomationCacheScope.All,
+                    "hubs" => AutomationCacheScope.Hubs,
+                    "projects" => AutomationCacheScope.Projects,
+                    "contents" => AutomationCacheScope.Contents,
+                    "models" => AutomationCacheScope.Models,
+                    var value => throw new InvalidOperationException($"Unknown cache scope '{value}'.")
+                };
+                service.ClearCache(repoRoot, scope);
+                if (json)
+                    Console.WriteLine(JsonSerializer.Serialize(new { cleared = scope.ToString() }, JsonOptions));
+                else
+                    Console.WriteLine($"Cleared cache scope: {scope}");
+                return Task.FromResult(0);
+            }
             default:
                 return Task.FromResult(WriteAutomationUsageAndReturn());
             }

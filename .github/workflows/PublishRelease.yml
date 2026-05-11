@@ -29,6 +29,16 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24.x"
+          cache: "pnpm"
+          cache-dependency-path: "source/pea/app/pnpm-lock.yaml"
+
+      - name: Enable pnpm
+        run: corepack enable
+
       - name: Create release tag
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.version != ''
         shell: bash

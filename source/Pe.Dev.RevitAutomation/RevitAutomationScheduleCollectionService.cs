@@ -26,9 +26,8 @@ public sealed class RevitAutomationScheduleCollectionService {
     ) {
         var repoRoot = RepoRootResolver.Resolve(repoRootOverride);
         var spec = RevitVersionCatalog.RequireByAutomationEngine(options.Engine);
-        var credentialSource = new ApsCredentialSource();
-        var settings = RevitAutomationSettings.Load(credentialSource.GetConfiguredWebClientId());
-        var aps = credentialSource.CreateAps();
+        var settings = RevitAutomationSettings.Load(RevitAutomationApsCredentials.GetConfiguredWebClientId());
+        var aps = RevitAutomationApsCredentials.CreateAps();
         var createAutomationClient = aps.Automation;
         var userTokenLease = new RefreshingApsTokenLease(
             () => aps.GetTokenResult(ApsTokenRequest.ForAutomationUserContext())

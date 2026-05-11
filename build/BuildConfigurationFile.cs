@@ -1,49 +1,47 @@
-﻿using System.Xml.Linq;
+using System.Xml.Linq;
 
 namespace Build;
 
 internal static class BuildConfigurationFile {
-    private const string FilePath = "build/BuildConfiguration.props";
+    private const string FilePath = BuildAuthoredPaths.MatrixFilePath;
 
-    public static BuildMatrix LoadMatrix(string repositoryRoot) {
+    public static BuildMatrixAuthoring LoadAuthoring(string repositoryRoot) {
         var document = LoadDocument(repositoryRoot);
+        var revitYears = document.Descendants()
+            .Where(element => string.Equals(element.Name.LocalName, "PeRevitYear", StringComparison.Ordinal))
+            .Select(ParseRevitYear)
+            .OrderBy(year => year.Year, StringComparer.Ordinal)
+            .ToArray();
 
-        return new BuildMatrix(
+        return new BuildMatrixAuthoring(
             RequireValue(document, "PeDefaultRevitYear"),
-            RequireValue(document, "PeDefaultRevitConfiguration"),
-            RequireValue(document, "PeStableCliConfiguration"),
-            SplitList(RequireValue(document, "PeSupportedRevitYears")),
-            SplitList(RequireValue(document, "PeAutomationSupportedRevitYears")),
-            SplitList(RequireValue(document, "PeRevitDebugConfigurations")),
-            SplitList(RequireValue(document, "PeRevitReleaseConfigurations")),
-            SplitList(RequireValue(document, "PeRevitTestConfigurations")),
-            SplitList(RequireValue(document, "PeCompileRevitConfigurations")),
-            SplitList(RequireValue(document, "PePackConfigurations")),
-            SplitList(RequireValue(document, "PeAutomationPackConfigurations")),
-            SplitList(RequireValue(document, "PeSolutionConfigurations"))
+            RequireValue(document, "PeDefaultBuildKind"),
+            RequireValue(document, "PeSharedNeutralTargetFramework"),
+            RequireValue(document, "PeOutOfProcTargetFramework"),
+            revitYears
         );
     }
 
-    public static BuildLayout LoadLayout(string repositoryRoot) {
-        var artifactsRoot = Path.GetFullPath(Path.Combine(repositoryRoot, ".artifacts"));
-        var packagesRoot = Path.Combine(artifactsRoot, "packages");
-        var buildRoot = Path.Combine(artifactsRoot, "build");
-        var publishRoot = Path.Combine(artifactsRoot, "publish");
-        var toolsRoot = Path.Combine(artifactsRoot, "tools");
+    public static BuildMatrix LoadMatrix(string repositoryRoot) {
+        var authored = LoadAuthoring(repositoryRoot);
+        var defaultYear = authored.RequireDefaultRevitYear();
+        var revitDebugConfigurations = authored.RevitYears
+            .Select(year => $"Debug.{year.ConfigurationSuffix}")
+            .ToArray();
+        var revitReleaseConfigurations = authored.RevitYears
+            .Select(year => $"Release.{year.ConfigurationSuffix}")
+            .ToArray();
+        var revitTestConfigurations = authored.RevitYears
+            .Select(year => $"Debug.{year.ConfigurationSuffix}.Tests")
+            .Concat(authored.RevitYears.Select(year => $"Release.{year.ConfigurationSuffix}.Tests"))
+            .ToArray();
 
-        return new BuildLayout(
-            repositoryRoot,
-            EnsureTrailingSeparator(artifactsRoot),
-            EnsureTrailingSeparator(buildRoot),
-            EnsureTrailingSeparator(publishRoot),
-            EnsureTrailingSeparator(packagesRoot),
-            EnsureTrailingSeparator(Path.Combine(packagesRoot, "bundles")),
-            EnsureTrailingSeparator(Path.Combine(packagesRoot, "automation")),
-            EnsureTrailingSeparator(Path.Combine(packagesRoot, "installers")),
-            EnsureTrailingSeparator(Path.Combine(artifactsRoot, "staging", "automation")),
-            EnsureTrailingSeparator(Path.Combine(publishRoot, "revit")),
-            EnsureTrailingSeparator(Path.Combine(publishRoot, "host")),
-            EnsureTrailingSeparator(toolsRoot)
+        return new BuildMatrix(
+            $"{authored.DefaultBuildKind}.{defaultYear.ConfigurationSuffix}",
+            authored.RevitYears.Where(year => year.SupportsCompile).Select(year => $"Release.{year.ConfigurationSuffix}").ToArray(),
+            authored.RevitYears.Where(year => year.SupportsPack).Select(year => $"Release.{year.ConfigurationSuffix}").ToArray(),
+            authored.RevitYears.Where(year => year.SupportsAutomationPack).Select(year => $"Release.{year.ConfigurationSuffix}").ToArray(),
+            [.. revitDebugConfigurations, .. revitReleaseConfigurations, .. revitTestConfigurations]
         );
     }
 
@@ -51,6 +49,17 @@ internal static class BuildConfigurationFile {
         var path = Path.Combine(repositoryRoot, FilePath);
         return XDocument.Load(path);
     }
+
+    private static BuildRevitYearIdentity ParseRevitYear(XElement element) =>
+        new(
+            RequireAttribute(element, "Include"),
+            RequireAttribute(element, "Suffix"),
+            RequireAttribute(element, "RuntimeTargetFramework"),
+            RequireAttribute(element, "AutomationTargetFramework"),
+            ParseBool(RequireAttribute(element, "SupportsCompile"), "PeRevitYear", "SupportsCompile"),
+            ParseBool(RequireAttribute(element, "SupportsPack"), "PeRevitYear", "SupportsPack"),
+            ParseBool(RequireAttribute(element, "SupportsAutomationPack"), "PeRevitYear", "SupportsAutomationPack")
+        );
 
     private static string RequireValue(XDocument document, string propertyName) {
         var value = document.Descendants()
@@ -63,11 +72,14 @@ internal static class BuildConfigurationFile {
             : value;
     }
 
-    private static IReadOnlyList<string> SplitList(string value) =>
-        value.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+    private static string RequireAttribute(XElement element, string attributeName) =>
+        element.Attribute(attributeName)?.Value
+        ?? throw new InvalidOperationException(
+            $"Element '{element.Name.LocalName}' is missing required attribute '{attributeName}' in {FilePath}.");
 
-    private static string EnsureTrailingSeparator(string path) =>
-        path.EndsWith(Path.DirectorySeparatorChar) || path.EndsWith(Path.AltDirectorySeparatorChar)
-            ? path
-            : path + Path.DirectorySeparatorChar;
+    private static bool ParseBool(string value, string elementName, string attributeName) =>
+        bool.TryParse(value, out var result)
+            ? result
+            : throw new InvalidOperationException(
+                $"Element '{elementName}' has unsupported {attributeName} value '{value}' in {FilePath}.");
 }

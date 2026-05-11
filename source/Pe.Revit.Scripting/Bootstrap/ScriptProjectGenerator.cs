@@ -8,6 +8,10 @@ public sealed class ScriptProjectGenerator(
     CsProjReader csProjReader
 ) {
     private const string RuntimeAssemblyName = "Pe.Revit.Scripting";
+    private static readonly string[] DefaultSupportAssemblyNames = [
+        "Pe.Shared.HostContracts",
+        "Pe.Shared.Product"
+    ];
     private const string RevitApiAssemblyName = "RevitAPI";
     private const string RevitApiUiAssemblyName = "RevitAPIUI";
 
@@ -108,6 +112,7 @@ public sealed class ScriptProjectGenerator(
             new(RuntimeAssemblyName, runtimeAssemblyPath)
         };
         references.AddRange(GetSiblingPeRevitReferences(runtimeAssemblyPath));
+        references.AddRange(GetDefaultSupportReferences(runtimeAssemblyPath));
 
         var revitApiAssemblyPath = TryResolveAssemblyPath(RevitApiAssemblyName, runtimeAssemblyPath);
         if (!string.IsNullOrWhiteSpace(revitApiAssemblyPath))
@@ -141,6 +146,18 @@ public sealed class ScriptProjectGenerator(
             .OrderBy(reference => reference.Include, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
+
+    private static IReadOnlyList<ScriptReferenceDeclaration> GetDefaultSupportReferences(string runtimeAssemblyPath) =>
+        DefaultSupportAssemblyNames
+            .Select(assemblyName => {
+                var assemblyPath = TryResolveAssemblyPath(assemblyName, runtimeAssemblyPath);
+                return string.IsNullOrWhiteSpace(assemblyPath)
+                    ? null
+                    : new ScriptReferenceDeclaration(assemblyName, assemblyPath);
+            })
+            .OfType<ScriptReferenceDeclaration>()
+            .OrderBy(reference => reference.Include, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
     private static string? TryResolveAssemblyPath(
         string assemblyName,

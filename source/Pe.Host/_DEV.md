@@ -3,7 +3,8 @@
 ## Mental Model
 
 `Pe.Host` is the external transport boundary for browser/tool callers. It owns HTTP, settings SSE, route registration,
-and the decision about whether work stays local, crosses the Revit bridge, or proxies to another local transport.
+and the decision about whether work stays local or crosses the Revit bridge.
+The target Host/Revit private bridge and typed-contract direction lives in `docs/features/host-revit-bridge/`.
 
 ## Architecture
 
@@ -11,8 +12,7 @@ and the decision about whether work stays local, crosses the Revit bridge, or pr
 - `HostOperationRegistry` is the host contract surface.
 - host-local settings/document work stays in-process.
 - live document queries go through `BridgeServer`.
-- scripting is public through host HTTP, but the implementation currently proxies to `Pe.Scripting.Revit` over a local
-  named pipe.
+- scripting is public through host HTTP and is forwarded over the private Host/Revit WebSocket bridge.
 - `/api/settings/events` is the host/document freshness stream and is not part of the scripting lane.
 
 ## Key Flows
@@ -29,10 +29,9 @@ and the decision about whether work stays local, crosses the Revit bridge, or pr
     - expected user-actionable failures return `409 ProblemDetails`
 - scripting v1:
     - host requires exactly one connected Revit bridge session
-    - host sends one pipe request to `Pe.Scripting.Revit`
+    - host sends one bridge request into Revit
     - host returns one final result payload
 
 ## Open Questions
 
-- whether scripting should eventually move from host-to-pipe proxying to first-class bridge operations
 - whether a future progressive scripting UX should use polling before SSE

@@ -1,5 +1,4 @@
 using Microsoft.CodeAnalysis;
-using Pe.Dev.Cli;
 using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.Context;
 using Pe.Revit.Scripting.Execution;
@@ -110,15 +109,13 @@ public sealed class RevitScriptingPortTests {
             );
 
             var agentsPath = RevitScriptingStorageLocations.ResolveAgentsPath(workspaceKey);
-            var inlineDirectory = RevitScriptingStorageLocations.ResolveInlineDirectory(workspaceKey);
             Assert.That(File.Exists(agentsPath), Is.True);
             Assert.That(File.ReadAllText(agentsPath),
                 Does.Contain("The script runner discovers exactly one `PeScriptContainer` type"));
             Assert.That(File.ReadAllText(agentsPath), Does.Not.Contain("lane"));
             Assert.That(File.Exists(result.ReadmePath), Is.True);
             Assert.That(File.ReadAllText(result.ReadmePath), Does.Not.Contain("lane"));
-            Assert.That(Directory.Exists(inlineDirectory), Is.True);
-            Assert.That(File.ReadAllText(result.SampleScriptPath), Does.Contain("pe-dev revit script src\\SampleScript.cs"));
+            Assert.That(File.ReadAllText(result.SampleScriptPath), Does.Contain("pea script execute --source-path src\\SampleScript.cs"));
             Assert.That(File.ReadAllText(result.SampleScriptPath),
                 Does.Contain("Define exactly one non-abstract PeScriptContainer"));
             Assert.That(result.GeneratedFiles, Does.Contain(agentsPath));
@@ -128,13 +125,34 @@ public sealed class RevitScriptingPortTests {
     }
 
     [Test]
-    public void Shared_scripting_workspace_locations_use_pe_scripting_root() {
+    public void Generated_project_includes_default_host_client_references_and_usings() {
+        var runtimeAssemblyPath = typeof(PeScriptContainer).Assembly.Location;
+        var generator = CreateProjectGenerator();
+
+        var generated = generator.GenerateProjectContent(
+            null,
+            Path.GetTempPath(),
+            "2025",
+            "net8.0-windows",
+            runtimeAssemblyPath
+        );
+
+        Assert.That(generated, Does.Contain("""<Reference Include="Pe.Shared.HostContracts">"""));
+        Assert.That(generated, Does.Contain("""<Reference Include="Pe.Shared.Product">"""));
+        Assert.That(generated, Does.Contain("""<Using Include="Pe.Shared.HostContracts" />"""));
+    }
+
+    [Test]
+    public void Shared_scripting_workspace_locations_use_product_user_content_root() {
         var basePath = ScriptingWorkspaceLocations.GetDefaultBasePath();
         var workspaceRoot = ScriptingWorkspaceLocations.ResolveWorkspaceRoot("default");
 
-        Assert.That(basePath.EndsWith(Path.Combine("Pe.Scripting"), StringComparison.OrdinalIgnoreCase), Is.True);
         Assert.That(
-            workspaceRoot.EndsWith(Path.Combine("Pe.Scripting", "workspace", "default"),
+            basePath.EndsWith(Path.Combine("Pe.Tools", "scripting"), StringComparison.OrdinalIgnoreCase),
+            Is.True
+        );
+        Assert.That(
+            workspaceRoot.EndsWith(Path.Combine("Pe.Tools", "scripting", "workspace", "default"),
                 StringComparison.OrdinalIgnoreCase),
             Is.True
         );
@@ -149,10 +167,7 @@ public sealed class RevitScriptingPortTests {
             RevitScriptingStorageLocations.ResolveProjectFilePath("default"),
             Is.EqualTo(Path.Combine(workspaceRoot, "PeScripts.csproj"))
         );
-        Assert.That(
-            RevitScriptingStorageLocations.ResolveInlineDirectory("default"),
-            Is.EqualTo(Path.Combine(workspaceRoot, ".inline"))
-        );
+
     }
 
     [Test]
@@ -440,7 +455,7 @@ public sealed class RevitScriptingPortTests {
     }
 
     [Test]
-    public void Request_project_content_overrides_workspace_project_file(UIApplication uiApplication) {
+    public void Inline_execution_ignores_workspace_project_file(UIApplication uiApplication) {
         var workspaceKey = $"test-inline-project-override-{Guid.NewGuid():N}";
         var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
         Directory.CreateDirectory(workspaceRoot);
@@ -472,8 +487,7 @@ public sealed class RevitScriptingPortTests {
                     }
                     """,
                     ScriptExecutionSourceKind.InlineSnippet,
-                    WorkspaceKey: workspaceKey,
-                    ProjectContent: "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>"
+                    WorkspaceKey: workspaceKey
                 ),
                 "test-inline-project-override"
             );
@@ -609,7 +623,7 @@ public sealed class RevitScriptingPortTests {
     }
 
     [Test]
-    public void Inline_snippet_execution_persists_last_inline_file_and_returns_output(UIApplication uiApplication) {
+    public void Inline_snippet_execution_persists_trace_files_without_mutating_workspace_source(UIApplication uiApplication) {
         var workspaceKey = $"test-inline-{Guid.NewGuid():N}";
         var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
         try {
@@ -632,18 +646,18 @@ public sealed class RevitScriptingPortTests {
                 "test-inline-success"
             );
 
-            var lastInlinePath = RevitScriptingStorageLocations.ResolveLastInlineScriptPath(workspaceKey);
+            var inlineTraceDirectory = RevitScriptingStorageLocations.ResolveInlineTraceDirectory();
             Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
             Assert.That(result.Output, Does.Contain("inline script ran"));
-            Assert.That(File.Exists(lastInlinePath), Is.True);
-            Assert.That(File.ReadAllText(lastInlinePath), Does.Contain("InlineScript"));
+            Assert.That(Directory.Exists(inlineTraceDirectory), Is.True);
+            Assert.That(Directory.Exists(Path.Combine(workspaceRoot, "src")), Is.False);
         } finally {
             DeleteWorkspace(workspaceRoot);
         }
     }
 
     [Test]
-    public void Inline_compile_failure_references_last_inline_file(UIApplication uiApplication) {
+    public void Inline_compile_failure_references_submitted_source_name(UIApplication uiApplication) {
         var workspaceKey = $"test-inline-fail-{Guid.NewGuid():N}";
         var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
         try {
@@ -668,7 +682,7 @@ public sealed class RevitScriptingPortTests {
 
             Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.CompilationFailed));
             Assert.That(result.Diagnostics.Any(diagnostic =>
-                    diagnostic.Source != null && diagnostic.Source.Contains("LastInline.cs", StringComparison.Ordinal)),
+                    diagnostic.Source != null && diagnostic.Source.Contains("SmokeInlineFail.cs", StringComparison.Ordinal)),
                 Is.True);
         } finally {
             DeleteWorkspace(workspaceRoot);
@@ -787,7 +801,24 @@ public sealed class RevitScriptingPortTests {
                 {
                     public override void Execute()
                     {
-                        WriteLine("workspace script ran");
+                        WriteLine(WorkspaceHelper.Message);
+                    }
+                }
+                """
+            );
+            File.WriteAllText(
+                Path.Combine(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey), "WorkspaceHelper.cs"),
+                """
+                public static class WorkspaceHelper
+                {
+                    public const string Message = "workspace script ran";
+                }
+
+                public sealed class OtherWorkspaceScript : PeScriptContainer
+                {
+                    public override void Execute()
+                    {
+                        WriteLine("other workspace script ran");
                     }
                 }
                 """
@@ -805,45 +836,10 @@ public sealed class RevitScriptingPortTests {
 
             Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
             Assert.That(result.Output, Does.Contain("workspace script ran"));
+            Assert.That(result.Output, Does.Not.Contain("other workspace script ran"));
         } finally {
             DeleteWorkspace(workspaceRoot);
         }
-    }
-
-    [Test]
-    public void Cli_create_workspace_script_file_defaults_to_src_and_cs_extension() {
-        var workspaceRoot = Path.Combine(Path.GetTempPath(), $"pe-script-cli-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(workspaceRoot);
-
-        try {
-            var result = ScriptCliProgram.CreateWorkspaceScriptFile(workspaceRoot, "MyProbe", false);
-            var createdPath = Path.Combine(workspaceRoot, "src", "MyProbe.cs");
-
-            Assert.That(result.Success, Is.True);
-            Assert.That(File.Exists(createdPath), Is.True);
-            Assert.That(File.ReadAllText(createdPath), Does.Contain("pe-dev revit script src\\MyProbe.cs"));
-            Assert.That(File.ReadAllText(createdPath),
-                Does.Contain("Define exactly one non-abstract PeScriptContainer"));
-            Assert.That(File.ReadAllText(createdPath), Does.Contain("public sealed class MyProbe : PeScriptContainer"));
-            Assert.That(result.WarningMessage, Does.Contain("PeScripts.csproj"));
-        } finally {
-            DeleteWorkspace(workspaceRoot);
-        }
-    }
-
-    [Test]
-    public void Cli_workspace_root_matches_shared_workspace_locations() =>
-        Assert.That(
-            ScriptCliOptions.GetWorkspaceRoot("default"),
-            Is.EqualTo(ScriptingWorkspaceLocations.ResolveWorkspaceRoot("default"))
-        );
-
-    [Test]
-    public void Cli_no_longer_accepts_policy_argument() {
-        var parseResult = ScriptCliOptions.Parse(["--policy", "strict", "src\\Smoke.cs"]);
-
-        Assert.That(parseResult.Success, Is.False);
-        Assert.That(parseResult.ErrorMessage, Does.Contain("Unknown argument '--policy'"));
     }
 
     private static ScriptProjectGenerator CreateProjectGenerator() =>

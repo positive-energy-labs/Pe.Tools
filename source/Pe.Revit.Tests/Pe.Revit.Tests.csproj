@@ -18,6 +18,7 @@
     <ItemGroup>
         <ProjectReference Include="..\Pe.Aps\Pe.Aps.csproj" />
         <ProjectReference Include="..\Pe.Shared.ApsAuth\Pe.Shared.ApsAuth.csproj" />
+        <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj" />
         <ProjectReference Include="..\Pe.Shared.RevitAutomation\Pe.Shared.RevitAutomation.csproj" />
         <ProjectReference Include="..\Pe.App\Pe.App.csproj" />
         <ProjectReference Include="..\Pe.Dev.Cli\Pe.Dev.Cli.csproj" />
@@ -55,16 +56,27 @@
     <PropertyGroup>
         <PeStableCliConfiguration
         >$([System.String]::Copy('$(Configuration)').Replace('.Tests', ''))</PeStableCliConfiguration>
-        <PeRevitRawDotNetTestWarningSuppressed Condition="'$(PeRevitRawDotNetTestWarningSuppressed)' == '' and '$(PE_REVIT_TEST_ORCHESTRATED)' == '1'">true</PeRevitRawDotNetTestWarningSuppressed>
         <PeRevitRawDotNetTestWarningSuppressed Condition="'$(PeRevitRawDotNetTestWarningSuppressed)' == ''">false</PeRevitRawDotNetTestWarningSuppressed>
+        <PeVerifyTarget Condition="'$(PeVerifyTarget)' == '' and '$(PeRevitRawDotNetTestWarningSuppressed)' != 'true' and $([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'">AttachedRrd</PeVerifyTarget>
+        <PeWorkflow Condition="'$(PeRevitRawDotNetTestWarningSuppressed)' != 'true' and $([System.String]::Copy('$(Configuration)').Contains('.Tests')) == 'True'">Verify</PeWorkflow>
+        <PeExecutionPolicy Condition="'$(PeVerifyTarget)' == 'AttachedRrd'">RrdRequired</PeExecutionPolicy>
     </PropertyGroup>
     <Target
-            Name="WarnAboutRawDotNetTestUsage"
+            Name="ValidateDotNetTestUsage"
             BeforeTargets="VSTest"
             Condition="'$(PeRevitRawDotNetTestWarningSuppressed)' != 'true'"
     >
-        <Warning
-                Text="Generally `dotnet test` against `Pe.Revit.Tests` with or without a configuration is discouraged in this repo. The default choice should be `pe-dev revit test ...` because it handles auto year selection, approval automation, deployed add-in quarantine, and owned test-session recycling. To target a specific Revit year directly, run one of the `.Tests` configurations such as `dotnet test source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests --filter &quot;Name~SomeFocusedTest&quot;`. You may target a running RRD instance through the raw lane, but `pe-dev revit sync-runtime` or manual `pe-dev revit hot-reload` must be called before performing tests or running scripts that depend on fresh runtime packages."
+        <Error
+                Condition="$([System.String]::Copy('$(Configuration)').Contains('.Tests')) != 'True'"
+                Text="`dotnet test` for `Pe.Revit.Tests` requires an explicit `.Tests` configuration such as `Debug.R25.Tests`. For `AttachedRrd`, run `pe-dev revit sync-runtime`, then `dotnet test source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests --filter &quot;Name~SomeFocusedTest&quot; --no-build`. For `FreshRevitProcess`, use `pe-dev revit test ...`."
+        />
+        <Error
+                Condition="'$(PeStableCliPath)' == '' or !Exists('$(PeStableCliPath)')"
+                Text="AttachedRrd verification requires `pe-dev`, but no runnable CLI was found at `$(PeStableCliPath)`. Build `source/Pe.Dev.Cli/Pe.Dev.Cli.csproj` with configuration `$(PeStableCliConfiguration)` first."
+        />
+        <Exec
+                Command="dotnet exec &quot;$(PeStableCliPath)&quot; --repo-root &quot;$(MSBuildProjectDirectory)\..\..&quot; revit session --revit-year $(RevitVersion) --require-attached-rrd"
+                Condition="Exists('$(PeStableCliPath)')"
         />
     </Target>
     <!--

@@ -3,11 +3,10 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Pe.App.SettingsEditor;
+using Pe.App.Host;
 using Pe.Revit.Global.Services.Aps;
-using Pe.Revit.Global.Services.Host;
 using Pe.Shared.HostContracts.Operations;
-using Pe.Shared.SettingsLayout;
+using Pe.Shared.HostContracts;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Json;
 using Serilog;
@@ -27,7 +26,7 @@ public class CmdCacheParametersService : IExternalCommand {
         ref string message,
         ElementSet elements) {
         try {
-            var hostLaunchResult = SettingsEditorHostLauncher.EnsureRunning();
+            var hostLaunchResult = PeHostLauncher.EnsureRunning();
             if (!hostLaunchResult.Success)
                 throw new InvalidOperationException(hostLaunchResult.Message);
 
@@ -38,7 +37,7 @@ public class CmdCacheParametersService : IExternalCommand {
 
             var tokenProvider = new CacheParametersServiceSettings();
             var tokenResult = Task.Run(async () =>
-                    await new HostLocalOperationClient().ExecuteAsync<ApsTokenRequest, ApsTokenResult>(
+                    await new PeHostClient().ExecuteAsync<ApsTokenRequest, ApsTokenResult>(
                         AcquireApsAccessTokenOperationContract.Definition,
                         ApsTokenRequest.ForParameterService()
                     )
@@ -270,7 +269,7 @@ public class CmdCacheParametersService : IExternalCommand {
     private static string GetPrefix(string? name, int length) {
         if (string.IsNullOrEmpty(name)) return string.Empty;
         if (length > name.Length) return name;
-        return name[..length];
+        return name.Substring(0, length);
     }
 }
 

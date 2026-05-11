@@ -59,26 +59,24 @@ public sealed class HostOperationExecutorTests {
     }
 
     [Test]
-    public async Task Host_operation_executor_maps_invalid_operation_to_conflict_problem_details() {
+    public async Task Host_operation_executor_maps_expected_faults_to_problem_details() {
         var executor = new HostOperationExecutor(NullLogger<HostOperationExecutor>.Instance);
         var operation = HostOperations.Create<NoRequest>(
             GetScheduleCatalogOperationContract.Definition,
             static (request, context, cancellationToken) =>
-                throw new InvalidOperationException("Exactly one connected Revit session is required.")
+                throw new HostOperationException(StatusCodes.Status503ServiceUnavailable, "No connected Revit bridge session.")
         );
 
         var result = await executor.ExecuteHttpAsync(operation, new NoRequest(), CreateContext(), CancellationToken.None);
         var response = await ExecuteAsync(result);
 
-        Assert.That(response.StatusCode, Is.EqualTo(StatusCodes.Status409Conflict));
+        Assert.That(response.StatusCode, Is.EqualTo(StatusCodes.Status503ServiceUnavailable));
         Assert.That(response.Json.RootElement.GetProperty("detail").GetString(),
-            Is.EqualTo("Exactly one connected Revit session is required."));
+            Is.EqualTo("No connected Revit bridge session."));
     }
 
     private static HostOperationContext CreateContext() =>
         new(
-            null!,
-            null!,
             null!,
             null!,
             null!,

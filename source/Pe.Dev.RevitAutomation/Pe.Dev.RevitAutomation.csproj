@@ -9,9 +9,10 @@
     <ItemGroup>
         <ProjectReference Include="..\Pe.Aps\Pe.Aps.csproj"/>
         <ProjectReference Include="..\Pe.Shared.ApsAuth\Pe.Shared.ApsAuth.csproj"/>
+        <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj"/>
+        <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj"/>
         <ProjectReference Include="..\Pe.Shared.RevitAutomation\Pe.Shared.RevitAutomation.csproj"/>
         <ProjectReference Include="..\Pe.Shared.RevitVersions\Pe.Shared.RevitVersions.csproj"/>
-        <ProjectReference Include="..\Pe.Shared.SettingsLayout\Pe.Shared.SettingsLayout.csproj"/>
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="Autodesk.PackageBuilder" Version="2.0.2"/>

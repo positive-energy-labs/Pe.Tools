@@ -1,10 +1,10 @@
 using Pe.Shared.ApsAuth;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
-using Pe.App.SettingsEditor;
-using Pe.Revit.Global.Services.Host;
+using Pe.App.Host;
 using Pe.Revit.Global.Ui;
 using Pe.Shared.HostContracts.Operations;
+using Pe.Shared.HostContracts;
 using Serilog.Events;
 using System.Diagnostics;
 
@@ -18,12 +18,12 @@ public class CmdApsAuth : IExternalCommand {
         ElementSet elements
     ) {
         try {
-            var hostLaunchResult = SettingsEditorHostLauncher.EnsureRunning();
+            var hostLaunchResult = PeHostLauncher.EnsureRunning();
             if (!hostLaunchResult.Success)
                 throw new InvalidOperationException(hostLaunchResult.Message);
 
             var status = Task.Run(async () =>
-                    await new HostLocalOperationClient().ExecuteAsync<ApsTokenRequest, ApsPersistedTokenStatus>(
+                    await new PeHostClient().ExecuteAsync<ApsTokenRequest, ApsPersistedTokenStatus>(
                         LoginApsOperationContract.Definition,
                         ApsTokenRequest.ForParameterService()
                     )

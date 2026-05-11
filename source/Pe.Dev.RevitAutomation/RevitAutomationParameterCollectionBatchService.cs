@@ -26,10 +26,9 @@ public sealed class RevitAutomationParameterCollectionBatchService {
     ) {
         var repoRoot = RepoRootResolver.Resolve(repoRootOverride);
         var manifest = ParameterCollectionBatchManifest.LoadFromFile(manifestPath);
-        var credentialSource = new ApsCredentialSource();
-        var settings = RevitAutomationSettings.Load(credentialSource.GetConfiguredWebClientId());
+        var settings = RevitAutomationSettings.Load(RevitAutomationApsCredentials.GetConfiguredWebClientId());
         var resolvedEntries = ResolveEntries(manifest, settings);
-        var aps = credentialSource.CreateAps();
+        var aps = RevitAutomationApsCredentials.CreateAps();
         var createAutomationClient = aps.Automation;
         var userTokenLease = new RefreshingApsTokenLease(
             () => aps.GetTokenResult(ApsTokenRequest.ForAutomationUserContext())

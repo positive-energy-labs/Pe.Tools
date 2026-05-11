@@ -28,8 +28,6 @@
         <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitVersion).*"/>
         <PackageReference Include="RevitExplorer.API" Version="2.6.0"/>
         <PackageReference Include="ricaun.Revit.UI.Tasks" Version="1.*"/>
-        <!-- TypeScript Type Generation -->
-        <PackageReference Include="TypeGen" Version="5.0.0"/>
         <!-- Build -->
         <PackageReference Include="ILRepack" Version="2.0.44">
             <IncludeAssets
@@ -75,23 +73,60 @@
         <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj"/>
         <ProjectReference Include="..\Pe.Revit.Ui\Pe.Revit.Ui.csproj"/>
     </ItemGroup>
+    <ItemGroup>
+        <PeInteractiveRuntimeCompanionProject Include="..\Pe.Host\Pe.Host.csproj"/>
+        <PeInteractiveRuntimeCompanionProject Include="..\Pe.Dev.Cli\Pe.Dev.Cli.csproj"/>
+    </ItemGroup>
     <Target
             Name="LaunchAddinApprovalWatcher"
             AfterTargets="DeployAddin"
             Condition="'$(DeployAddin)' == 'true' and '$(LaunchRevit)' == 'true' and '$(DesignTimeBuild)' != 'true'"
     >
+        <PropertyGroup>
+            <PeApprovalWatcherCliPath Condition="Exists('$(PeStableCliLocalPath)')">$(PeStableCliLocalPath)</PeApprovalWatcherCliPath>
+            <PeApprovalWatcherCliPath Condition="'$(PeApprovalWatcherCliPath)' == ''">$(PeStableCliPath)</PeApprovalWatcherCliPath>
+        </PropertyGroup>
         <Message
-                Text="Launching approval watcher via '$(PeStableCliPath)' for Revit $(RevitVersion)."
+                Text="Launching approval watcher via '$(PeApprovalWatcherCliPath)' for Revit $(RevitVersion)."
                 Importance="High"
-                Condition="Exists('$(PeStableCliPath)')"
+                Condition="Exists('$(PeApprovalWatcherCliPath)')"
         />
         <Warning
-                Text="Skipping approval watcher because pe-dev was not found at '$(PeStableCliPath)'. Build source/Pe.Dev.Cli with configuration '$(PeStableCliConfiguration)' to restore the hook."
-                Condition="!Exists('$(PeStableCliPath)')"
+                Text="Skipping approval watcher because pe-dev was not found at '$(PeApprovalWatcherCliPath)'. Build source/Pe.Dev.Cli with configuration '$(PeStableCliConfiguration)' to restore the hook."
+                Condition="!Exists('$(PeApprovalWatcherCliPath)')"
         />
         <Exec
-                Command="dotnet exec &quot;$(PeStableCliPath)&quot; --repo-root &quot;$(MSBuildProjectDirectory)\..\..&quot; revit approve --revit-year $(RevitVersion)"
-                Condition="Exists('$(PeStableCliPath)')"
+                Command="dotnet exec &quot;$(PeApprovalWatcherCliPath)&quot; --repo-root &quot;$(MSBuildProjectDirectory)\..\..&quot; revit approve --revit-year $(RevitVersion)"
+                Condition="Exists('$(PeApprovalWatcherCliPath)')"
+        />
+    </Target>
+    <Target
+            Name="WritePeAppRuntimeDescriptor"
+            AfterTargets="PublishAddin"
+            Condition="'$(PublishAddin)' == 'true' and '$(DesignTimeBuild)' != 'true'"
+    >
+        <PropertyGroup>
+            <PeAppRuntimeDescriptorPublishPath>$(AddinPublishDir)\$(AssemblyName)\$(PeRevitRuntimeDescriptorFileName)</PeAppRuntimeDescriptorPublishPath>
+            <_PeRuntimeDescriptorLaneJson>$([System.String]::Copy('$(PeRuntimeLane)').Replace('\', '/'))</_PeRuntimeDescriptorLaneJson>
+            <_PeRuntimeDescriptorConfigurationJson>$([System.String]::Copy('$(Configuration)').Replace('\', '/'))</_PeRuntimeDescriptorConfigurationJson>
+        </PropertyGroup>
+        <MakeDir Directories="$(AddinPublishDir)\$(AssemblyName)"/>
+        <ItemGroup>
+            <PeAppRuntimeDescriptorLines Include="{" />
+            <PeAppRuntimeDescriptorLines Include="  &quot;schemaVersion&quot;: 1," />
+            <PeAppRuntimeDescriptorLines Include="  &quot;productName&quot;: &quot;$(PeProductName)&quot;," />
+            <PeAppRuntimeDescriptorLines Include="  &quot;runtimeLane&quot;: &quot;$(_PeRuntimeDescriptorLaneJson)&quot;," />
+            <PeAppRuntimeDescriptorLines Include="  &quot;configuration&quot;: &quot;$(_PeRuntimeDescriptorConfigurationJson)&quot;" />
+            <PeAppRuntimeDescriptorLines Include="}" />
+        </ItemGroup>
+        <WriteLinesToFile
+                File="$(PeAppRuntimeDescriptorPublishPath)"
+                Lines="@(PeAppRuntimeDescriptorLines)"
+                Overwrite="true"
+        />
+        <Message
+                Text="Wrote Pe.App runtime descriptor '$(PeAppRuntimeDescriptorPublishPath)' with lane $(PeRuntimeLane)."
+                Importance="High"
         />
     </Target>
     <Target

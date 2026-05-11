@@ -1,3 +1,5 @@
+using Pe.Shared.Product;
+
 namespace Pe.Dev.Cli;
 
 internal sealed class RevitAddinQuarantine : IDisposable {
@@ -12,14 +14,8 @@ internal sealed class RevitAddinQuarantine : IDisposable {
     }
 
     public static RevitAddinQuarantine CreateForPeApp(int revitYear) {
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var stashRoot = Path.Combine(
-            localAppData,
-            "Positive Energy",
-            "Pe.Tools",
-            "State",
-            "revit-test",
-            "quarantine",
+            ProductRuntimeLayout.ForCurrentUser().State.RevitTestQuarantinePath,
             revitYear.ToString(),
             Guid.NewGuid().ToString("N")
         );
@@ -32,10 +28,7 @@ internal sealed class RevitAddinQuarantine : IDisposable {
 
         Directory.CreateDirectory(this._stashRoot);
 
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var addinsRoot = Path.Combine(appData, "Autodesk", "Revit", "Addins", this._revitYear.ToString());
-
-        MoveIfPresent(Path.Combine(addinsRoot, "Pe.App.addin"));
+        MoveIfPresent(RevitDeploymentIdentity.ResolvePerUserAddinManifestPath(this._revitYear));
 
         this._initialized = true;
     }

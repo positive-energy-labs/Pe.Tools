@@ -8,7 +8,7 @@ public static class GetScriptWorkspaceBootstrapOperationContract {
             "scripting.workspace.bootstrap",
             HostHttpVerb.Post,
             "/api/scripting/workspace/bootstrap",
-            HostExecutionMode.Local,
+            HostExecutionMode.Bridge,
             "Bootstrap Script Workspace"
         );
 }
@@ -19,7 +19,7 @@ public static class ExecuteRevitScriptOperationContract {
             "scripting.execute",
             HostHttpVerb.Post,
             "/api/scripting/execute",
-            HostExecutionMode.Local,
+            HostExecutionMode.Bridge,
             "Execute Revit Script"
         );
 }

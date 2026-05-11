@@ -4,18 +4,17 @@ using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Events;
 using Nice3point.Revit.Toolkit.External;
 using Pe.App.Services.AutoTag;
-using Pe.App.SettingsEditor;
+using Pe.App.Host;
 using Pe.App.Tasks;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Global.Services.Host;
-using Pe.Revit.Scripting.Transport;
 using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Revit.SettingsRuntime.Modules.Schedules;
 using Pe.Revit.Ui.Core;
-using Pe.Shared.HostContracts.Protocol;
-using Pe.Shared.SettingsLayout;
+using Pe.Shared.HostContracts;
+using Pe.Shared.Product;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
@@ -37,8 +36,6 @@ public class Application : ExternalApplication {
     /// </summary>
     private static RevitTaskService? _revitTaskService;
 
-    private static ScriptingPipeServer? _scriptingPipeServer;
-
     public override void OnStartup() {
         // Subscribe to ViewActivated event for MRU tracking
         this.Application.ViewActivated += OnViewActivated;
@@ -57,8 +54,8 @@ public class Application : ExternalApplication {
 
         CreateLogger();
 
-        // Initialize the settings editor bridge metadata. Bridge connection remains manual
-        // unless PE_SETTINGS_BRIDGE_AUTO_CONNECT is explicitly enabled.
+        // Initialize the host bridge metadata. Bridge connection remains manual
+        // unless PE_TOOLS_BRIDGE_AUTO_CONNECT is explicitly enabled.
         HostRuntime.Initialize(revitTaskService, registry => {
             registry.RegisterModules(StorageRuntimeStructuralModules.All);
             registry.RegisterModules(RevitSettingsRuntimeRegistration.StructuralModules);
@@ -66,11 +63,6 @@ public class Application : ExternalApplication {
             registry.RegisterModules(FamilyFoundrySettingsRegistration.StructuralModules);
             registry.RegisterRootBindings(FamilyFoundrySettingsRegistration.RootBindings);
         });
-        _scriptingPipeServer = new ScriptingPipeServer(new ScriptingPipeMessageHandler(
-            () => RevitUiSession.CurrentUIApplication,
-            message => Log.Information("Revit scripting notification: {Message}", message)
-        ));
-
         TryAutoConnectBridge();
         this.CreateRibbon();
 
@@ -91,8 +83,6 @@ public class Application : ExternalApplication {
         AutoTagService.Instance.Shutdown();
 
         HostRuntime.Shutdown();
-        _scriptingPipeServer?.Dispose();
-        _scriptingPipeServer = null;
 
         return Result.Succeeded;
     }
@@ -145,14 +135,14 @@ public class Application : ExternalApplication {
 
     private static void TryAutoConnectBridge() {
         var configuredValue =
-            Environment.GetEnvironmentVariable(SettingsEditorRuntime.BridgeAutoConnectEnabledVariable);
+            Environment.GetEnvironmentVariable(HostProcessIdentity.BridgeAutoConnectEnabledVariable);
         if (!bool.TryParse(configuredValue, out var isEnabled) || !isEnabled)
             return;
 
-        var hostLaunchResult = SettingsEditorHostLauncher.EnsureRunning();
+        var hostLaunchResult = PeHostLauncher.EnsureRunning();
         if (!hostLaunchResult.Success) {
             Log.Warning(
-                "Settings editor bridge auto-connect skipped because host startup failed: {Message}",
+                "Host bridge auto-connect skipped because host startup failed: {Message}",
                 hostLaunchResult.Message
             );
             return;
@@ -160,11 +150,11 @@ public class Application : ExternalApplication {
 
         var connectResult = HostRuntime.Connect();
         if (connectResult.Success) {
-            Log.Information("Settings editor bridge auto-connect succeeded: {Message}", connectResult.Message);
+            Log.Information("Host bridge auto-connect succeeded: {Message}", connectResult.Message);
             return;
         }
 
-        Log.Warning("Settings editor bridge auto-connect failed: {Message}", connectResult.Message);
+        Log.Warning("Host bridge auto-connect failed: {Message}", connectResult.Message);
     }
 
     private static void CreateLogger() {

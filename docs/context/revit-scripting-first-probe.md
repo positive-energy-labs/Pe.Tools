@@ -13,7 +13,7 @@ Short saved context for an agent starting from zero and trying to use the live R
 ## What Turned Out To Matter
 
 - Host HTTP is the public entrypoint.
-- Host scripting still proxies through the internal named pipe.
+- Host scripting forwards over the private Host/Revit WebSocket bridge.
 - Scripting requires exactly one connected bridge session.
 - The fastest first probe is an inline snippet, not workspace bootstrap.
 - The Revit runtime executes one non-abstract `PeScriptContainer`.

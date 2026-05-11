@@ -2,7 +2,7 @@ namespace Pe.Shared.RevitVersions;
 
 public static class RevitVersionCatalog {
     private static readonly IReadOnlyList<RevitVersionSpec> Specs = [
-        new(2023, "R23", "Autodesk.Revit+2023", "2023.0.1", "net48", true),
+        new(2023, "R23", "Autodesk.Revit+2023", "2023.0.1", "net48", false),
         new(2024, "R24", "Autodesk.Revit+2024", "2024.0.2", "net48", true),
         new(2025, "R25", "Autodesk.Revit+2025", "2025.0.1", "net8.0-windows", true),
         new(2026, "R26", "Autodesk.Revit+2026", "2026.0.0", "net8.0-windows", true)

@@ -399,13 +399,13 @@ internal static class PracticalBenchmarks {
     private static OutputStorage CreateTemporaryWorkingOutput(string benchmarkName) {
         var shortSegment = SanitizePathSegment(benchmarkName);
         if (shortSegment.Length > 24)
-            shortSegment = shortSegment[..24];
+            shortSegment = shortSegment.Substring(0, 24);
 
         var path = Path.Combine(
             Path.GetTempPath(),
             "pe-benchmarks",
             shortSegment,
-            Guid.NewGuid().ToString("N")[..8]);
+            Guid.NewGuid().ToString("N").Substring(0, 8));
         Directory.CreateDirectory(path);
         return OutputStorage.ExactDir(path);
     }

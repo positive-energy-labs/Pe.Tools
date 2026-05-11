@@ -1,17 +1,28 @@
-﻿using Pe.Shared.HostContracts.Protocol;
+using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
 
 namespace Pe.Shared.HostContracts.Operations;
 
-public static class GetHostStatusOperationContract {
+public static class GetHostProbeOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<NoRequest, HostStatusData>(
-            "settings.host-status",
+        HostOperationDefinition.Create<NoRequest, HostProbeData>(
+            "settings.host-probe",
             HostHttpVerb.Get,
-            "/api/settings/host-status",
+            $"{HttpRoutes.SettingsBase}/host-probe",
             HostExecutionMode.Local,
-            "Get Host Status"
+            "Get Host Probe"
+        );
+}
+
+public static class GetHostSessionSummaryOperationContract {
+    public static readonly HostOperationDefinition Definition =
+        HostOperationDefinition.Create<NoRequest, HostSessionSummaryData>(
+            "settings.session-summary",
+            HostHttpVerb.Get,
+            $"{HttpRoutes.SettingsBase}/session-summary",
+            HostExecutionMode.Local,
+            "Get Host Session Summary"
         );
 }
 
@@ -50,10 +61,8 @@ public static class DiscoverSettingsTreeOperationContract {
 
 public static class GetSettingsModuleCatalogBridgeOperationContract {
     public static readonly HostOperationDefinition Definition =
-        HostOperationDefinition.Create<GetSettingsModuleCatalogBridgeRequest, GetSettingsModuleCatalogBridgeResponse>(
+        HostOperationDefinition.CreateInternal<GetSettingsModuleCatalogBridgeRequest, GetSettingsModuleCatalogBridgeResponse>(
             "settings.module-catalog",
-            HostHttpVerb.Post,
-            "/_internal/settings/module-catalog",
             HostExecutionMode.Bridge,
             "Get Settings Module Catalog"
         );

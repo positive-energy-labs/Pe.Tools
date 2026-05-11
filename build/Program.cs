@@ -1,17 +1,30 @@
-﻿using Build;
+using Build;
 using Build.Modules;
 using Build.Options;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using ModularPipelines;
+using ModularPipelines.Enums;
 using ModularPipelines.Extensions;
+using ModularPipelines.Logging;
 
 var parsedArgs = BuildCliArguments.Parse(args);
+var environment = WindowsDotnetEnvironment.Snapshot();
 var builder = Pipeline.CreateBuilder();
+builder.Options.ExecutionMode = ModularPipelines.Options.ExecutionMode.StopOnFirstException;
+builder.Options.PrintDependencyChains = false;
+builder.Options.PrintLogo = false;
+builder.Options.PrintResults = true;
+builder.Options.ShowProgressInConsole = true;
+builder.Options.ThrowOnPipelineFailure = false;
 
 builder.Configuration.AddJsonFile("appsettings.json");
 builder.Configuration.AddUserSecrets<Program>();
 builder.Configuration.AddEnvironmentVariables();
+builder.Services.Replace(ServiceDescriptor.Singleton<IExceptionOutputFormatter, BuildExceptionOutputFormatter>());
+builder.Services.AddLogging(logging => logging.AddFilter("ModularPipelines", LogLevel.Critical));
 
 builder.Services.AddOptions<BuildOptions>().Bind(builder.Configuration.GetSection("Build"));
 builder.Services.AddOptions<BundleOptions>().Bind(builder.Configuration.GetSection("Bundle"));
@@ -20,25 +33,179 @@ builder.Services.AddOptions<PublishOptions>().Bind(builder.Configuration.GetSect
 builder.Services.PostConfigure<BuildOptions>(options =>
     options.Configuration = parsedArgs.Configuration ?? options.Configuration);
 
+if (parsedArgs.Commands.Overlaps(["pack", "publish", "sync-contracts"]))
+    _ = builder.Services.AddModule<SyncBuildContractsModule>();
+
 if (parsedArgs.Commands.Contains("pack")) {
     _ = builder.Services.AddModule<CleanProjectModule>();
     _ = builder.Services.AddModule<CreateBundleModule>();
     _ = builder.Services.AddModule<CreateAutomationBundleModule>();
+    _ = builder.Services.AddModule<CreatePeaPayloadModule>();
     _ = builder.Services.AddModule<CreateInstallerModule>();
 }
 
 if (parsedArgs.Commands.Contains("publish"))
     _ = builder.Services.AddModule<PublishGithubModule>();
 
-await builder.Build().RunAsync();
+var pipeline = builder.Build();
+
+if (environment.IsUnsafe) {
+    var loggerProvider = pipeline.RootServices.GetRequiredService<IModuleLoggerProvider>();
+    using var logger = loggerProvider.GetLogger();
+    WindowsDotnetEnvironment.WriteFailure(logger, environment);
+    Environment.ExitCode = 1;
+    return;
+}
+
+try {
+    var summary = await pipeline.RunAsync();
+    if (summary.Status is not (Status.Successful or Status.UsedHistory))
+        Environment.ExitCode = 1;
+} catch (Exception exception) {
+    var loggerProvider = pipeline.RootServices.GetRequiredService<IModuleLoggerProvider>();
+    using var logger = loggerProvider.GetLogger();
+    BuildFailureLogger.Write(logger, exception);
+    Environment.ExitCode = 1;
+}
 
 namespace Build {
+    internal sealed class BuildExceptionOutputFormatter : IExceptionOutputFormatter {
+        public void FormatAndOutput(IEnumerable<string> exceptionOutput) {
+        }
+    }
+
+    internal sealed record WindowsDotnetEnvironment(
+        string? ProgramFiles,
+        string? ProgramFilesX86,
+        string? AppData,
+        string? LocalAppData,
+        string? UserProfile,
+        string? SystemRoot,
+        string? ComSpec
+    ) {
+        public bool IsUnsafe => OperatingSystem.IsWindows() && Values.Any(string.IsNullOrWhiteSpace);
+
+        private IEnumerable<string?> Values => [ProgramFiles, ProgramFilesX86, AppData, LocalAppData, UserProfile, SystemRoot, ComSpec];
+
+        public static WindowsDotnetEnvironment Snapshot() => new(
+            Environment.GetEnvironmentVariable("ProgramFiles"),
+            Environment.GetEnvironmentVariable("ProgramFiles(x86)"),
+            Environment.GetEnvironmentVariable("APPDATA"),
+            Environment.GetEnvironmentVariable("LOCALAPPDATA"),
+            Environment.GetEnvironmentVariable("USERPROFILE"),
+            Environment.GetEnvironmentVariable("SystemRoot"),
+            Environment.GetEnvironmentVariable("ComSpec")
+        );
+
+        public static void WriteFailure(IModuleLogger logger, WindowsDotnetEnvironment environment) {
+            logger.LogError("Unsafe Windows dotnet environment. Missing Windows environment variables can poison NuGet/MSBuild build servers and cause restore failures like 'Value cannot be null. (Parameter path1)'.");
+            logger.LogError("ProgramFiles='{ProgramFiles}', ProgramFiles(x86)='{ProgramFilesX86}', APPDATA='{AppData}', LOCALAPPDATA='{LocalAppData}', USERPROFILE='{UserProfile}', SystemRoot='{SystemRoot}', ComSpec='{ComSpec}'",
+                environment.ProgramFiles,
+                environment.ProgramFilesX86,
+                environment.AppData,
+                environment.LocalAppData,
+                environment.UserProfile,
+                environment.SystemRoot,
+                environment.ComSpec);
+            WritePathFailureHint(logger);
+        }
+
+        public static void WritePathFailureHint(IModuleLogger logger) {
+            logger.LogError("Recovery: run 'dotnet build-server shutdown' from a healthy shell, or use '.\\tools\\dotnet-sandbox-safe.ps1 <dotnet arguments>' for sandbox recovery.");
+        }
+    }
+
+    internal static class BuildFailureLogger {
+        public static void Write(IModuleLogger logger, Exception exception) {
+            var rootCause = GetRootCause(exception);
+            logger.LogError("Build failed.");
+            logger.LogError("Pipeline error: {ErrorType}: {ErrorMessage}", exception.GetType().Name, FirstLine(exception.Message));
+
+            if (!ReferenceEquals(rootCause, exception))
+                logger.LogError("Root cause: {ErrorType}: {ErrorMessage}", rootCause.GetType().Name, FirstLine(rootCause.Message));
+
+            var input = ExtractBlock(rootCause.Message, "Input:");
+            if (!string.IsNullOrWhiteSpace(input))
+                logger.LogError("Command: {Command}", SingleLine(input));
+
+            var errors = ExtractErrorLines(rootCause.Message).Take(8).ToArray();
+            if (errors.Length > 0) {
+                logger.LogError("Errors:");
+                foreach (var error in errors)
+                    logger.LogError("{Error}", error);
+            }
+
+            if (MentionsNuGetPathFailure(exception))
+                WindowsDotnetEnvironment.WritePathFailureHint(logger);
+
+            logger.LogError("Re-run with the same arguments after fixing the root cause.");
+        }
+
+        private static bool MentionsNuGetPathFailure(Exception exception) => exception.ToString().Contains("Value cannot be null. (Parameter 'path1')", StringComparison.OrdinalIgnoreCase)
+            || exception.ToString().Contains("Value cannot be null. (Parameter path1)", StringComparison.OrdinalIgnoreCase);
+
+        private static Exception GetRootCause(Exception exception) {
+            while (exception.InnerException is not null)
+                exception = exception.InnerException;
+
+            return exception;
+        }
+
+        private static string FirstLine(string value) => value
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault()
+            ?.Trim() ?? string.Empty;
+
+        private static string SingleLine(string value) => string.Join(
+            " ",
+            value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                .Select(part => part.Trim())
+                .Where(part => part.Length > 0)
+        );
+
+        private static string? ExtractBlock(string message, string label) {
+            var lines = message.Split(['\r', '\n'], StringSplitOptions.None);
+            var startIndex = Array.FindIndex(lines, line => line.StartsWith(label, StringComparison.Ordinal));
+            if (startIndex < 0)
+                return null;
+
+            var block = new List<string> { lines[startIndex][label.Length..].Trim() };
+            for (var index = startIndex + 1; index < lines.Length; index++) {
+                var line = lines[index];
+                if (string.IsNullOrWhiteSpace(line) || line.EndsWith(":", StringComparison.Ordinal))
+                    break;
+
+                block.Add(line);
+            }
+
+            return string.Join(Environment.NewLine, block);
+        }
+
+        private static IEnumerable<string> ExtractErrorLines(string message) => message
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Trim())
+            .Where(IsUsefulErrorLine)
+            .Select(TrimBuildLine);
+
+        private static bool IsUsefulErrorLine(string line) {
+            if (line.StartsWith("Exit Code:", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            var normalizedLine = TrimBuildLine(line);
+            return normalizedLine.Contains(": error ", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string TrimBuildLine(string line) => line.StartsWith("Error:", StringComparison.OrdinalIgnoreCase)
+            ? line["Error:".Length..].Trim()
+            : line;
+    }
+
     internal sealed record BuildCliArguments(
         string? Configuration,
         HashSet<string> Commands
     ) {
         private static readonly HashSet<string> SupportedCommands =
-            ["pack", "publish"];
+            ["pack", "publish", "sync-contracts"];
 
         public static BuildCliArguments Parse(IReadOnlyList<string> args) {
             string? configuration = null;
@@ -60,7 +227,7 @@ namespace Build {
             }
 
             if (commands.Count == 0)
-                throw new ArgumentException("Expected at least one command. Supported commands: pack, publish.");
+                throw new ArgumentException("Expected at least one command. Supported commands: pack, publish, sync-contracts.");
 
             var unsupportedCommands = commands
                 .Where(command => !SupportedCommands.Contains(command))
@@ -68,7 +235,7 @@ namespace Build {
                 .ToArray();
             if (unsupportedCommands.Length > 0)
                 throw new ArgumentException(
-                    $"Unsupported command(s): {string.Join(", ", unsupportedCommands)}. Supported commands: pack, publish.");
+                    $"Unsupported command(s): {string.Join(", ", unsupportedCommands)}. Supported commands: pack, publish, sync-contracts.");
 
             return new BuildCliArguments(configuration, commands);
         }

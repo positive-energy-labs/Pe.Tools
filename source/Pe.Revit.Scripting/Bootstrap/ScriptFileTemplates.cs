@@ -17,7 +17,8 @@ internal static class ScriptFileTemplates {
         "Autodesk.Revit.DB.Structure",
         "Autodesk.Revit.UI",
         "Pe.Revit.Scripting",
-        "Pe.Revit.Scripting.Context"
+        "Pe.Revit.Scripting.Context",
+        "Pe.Shared.HostContracts"
     ];
 
     public static string CreateReadme() =>
@@ -28,13 +29,12 @@ internal static class ScriptFileTemplates {
 
         Current supported execution:
 
-        - single-file workspace scripts under `src/`
+        - workspace-path execution for scripts under `src/`
         - inline snippets
         - sync execution through `Pe.Host` from the CLI or frontend
 
         Current non-goals:
 
-        - no multi-file execution
         - no package/source-bundle execution
         - no arbitrary local file execution outside the workspace
         - no scripting SSE or async execution sessions
@@ -43,9 +43,10 @@ internal static class ScriptFileTemplates {
 
         - Put container scripts under `src/`.
         - Derive exactly one non-abstract type from `PeScriptContainer`.
-        - Run scripts from the CLI with `pe-dev revit script src\MyProbe.cs`.
+        - Run scripts from the CLI with `pea script execute --source-path src\MyProbe.cs`.
         - The CLI posts to `Pe.Host`, and the host forwards the request into Revit.
         - Add local DLL refs and `PackageReference` items in `PeScripts.csproj`.
+        - `PeHostClient` is available by default through the generated shared runtime references.
         - Prefer `WriteLine(...)` for output. `Console.WriteLine(...)` is supported as a compatibility path.
         - Bootstrap can regenerate the project file without deleting your custom references.
 
@@ -60,7 +61,7 @@ internal static class ScriptFileTemplates {
 
         ## Scope
 
-        Agent guidance for the generated `Pe.Revit.Scripting` authoring workspace under `Documents\Pe.Scripting`.
+        Agent guidance for the generated `Pe.Revit.Scripting` authoring workspace under `Documents\Pe.Tools\scripting\workspace`.
 
         ## Purpose
 
@@ -77,7 +78,7 @@ internal static class ScriptFileTemplates {
         ## Validation
 
         - Derive exactly one non-abstract type from `PeScriptContainer` per execute request.
-        - The daily product path is workspace-first single-file execution. Keep supported scripts under `src/` and run them with `pe-dev revit script <workspace-relative-script.cs>`.
+        - The daily product path is workspace-first execution. Keep supported scripts under `src/` and run them with `pea script execute --source-path src\YourScript.cs`.
         - The script runner discovers exactly one `PeScriptContainer` type per request and executes that container.
         - Prefer explicit `WriteLine(...)` output for diagnostics you want returned to the caller.
         - `Console.WriteLine(...)` is supported as a compatibility path, not the preferred API.
@@ -87,9 +88,10 @@ internal static class ScriptFileTemplates {
         ## Living Memory
 
         - This setup is container-only. Top-level statements and Launchpad globals are intentionally not supported.
-        - Current supported file execution is single-file only. Multi-file/source-package execution is future-facing and intentionally unsupported in this slice.
+        - Current workspace execution compiles the whole `src/` tree and executes the selected file's single concrete `PeScriptContainer`. Source-package execution is future-facing and intentionally unsupported in this slice.
+        - `PeHostClient` is part of the default generated scripting references. Use it directly instead of hand-rolling host HTTP calls in script code.
         - Keep assembly references explicit by default. Ambient probing of already-loaded Revit-process assemblies is an advanced troubleshooting path, not the normal authoring contract.
-        - The public scripting surface is `Pe.Host`, but runtime execution still happens inside Revit through the internal scripting pipe.
+        - The public scripting surface is `Pe.Host`; runtime execution happens inside Revit through the private Host/Revit bridge.
         - Host scripting currently requires exactly one connected Revit bridge session.
         - If runtime behavior diverges from source during RRD, stale deployed assemblies are a plausible cause.
         - The generated project preserves user-authored DLL and package references across bootstrap regeneration, but it does not preserve arbitrary project-file customization beyond the supported workspace/project flow.
@@ -110,7 +112,7 @@ internal static class ScriptFileTemplates {
     public static string CreateSampleScript() =>
         """
         // Run from this workspace root:
-        // pe-dev revit script src\SampleScript.cs
+        // pea script execute --source-path src\SampleScript.cs
         //
         // IntelliSense tip:
         // Define exactly one non-abstract PeScriptContainer per execute request.

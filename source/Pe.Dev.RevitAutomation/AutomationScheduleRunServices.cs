@@ -52,9 +52,8 @@ public sealed class AutomationScheduleSubmissionService {
         }
 
         var manifest = this._manifestService.Load(repoRoot, fullManifestPath);
-        var credentialSource = new ApsCredentialSource();
-        var settings = RevitAutomationSettings.Load(credentialSource.GetConfiguredWebClientId());
-        var aps = credentialSource.CreateAps();
+        var settings = RevitAutomationSettings.Load(RevitAutomationApsCredentials.GetConfiguredWebClientId());
+        var aps = RevitAutomationApsCredentials.CreateAps();
         var createAutomationClient = aps.Automation;
         var userTokenLease = new RefreshingApsTokenLease(
             () => aps.GetTokenResult(ApsTokenRequest.ForAutomationUserContext())
@@ -290,9 +289,8 @@ public sealed class AutomationReceiptInspectionService {
         var repoRoot = RepoRootResolver.Resolve(repoRootOverride);
         var receiptPath = ResolveReceiptPath(repoRoot, receiptSelector);
         var receipt = AutomationRunReceipt.LoadFromFile(receiptPath);
-        var credentialSource = new ApsCredentialSource();
-        var settings = RevitAutomationSettings.Load(credentialSource.GetConfiguredWebClientId());
-        var aps = credentialSource.CreateAps();
+        var settings = RevitAutomationSettings.Load(RevitAutomationApsCredentials.GetConfiguredWebClientId());
+        var aps = RevitAutomationApsCredentials.CreateAps();
         var designAutomation = aps.DesignAutomation();
         var artifactTokenLease = new RefreshingApsTokenLease(
             () => aps.GetTokenResult(ApsTokenRequest.ForAutomationArtifactStorage())

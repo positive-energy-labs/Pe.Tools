@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using TypeGen.Core.TypeAnnotations;
 
@@ -29,7 +29,6 @@ public record ExecuteRevitScriptRequest(
     ScriptExecutionSourceKind SourceKind = ScriptExecutionSourceKind.InlineSnippet,
     string? SourcePath = null,
     string WorkspaceKey = "default",
-    string? ProjectContent = null,
     string? SourceName = null
 );
 
@@ -77,33 +76,3 @@ public record ScriptDiagnostic(
     string? Source = null
 );
 
-[JsonConverter(typeof(StringEnumConverter))]
-[ExportTsEnum]
-public enum ScriptingPipeCommand {
-    ExecuteScript,
-    BootstrapWorkspace
-}
-
-[ExportTsInterface]
-public record ScriptingPipeRequest(
-    ScriptingPipeCommand Command,
-    string WorkspaceKey = "default",
-    bool CreateSampleScript = true,
-    ScriptExecutionSourceKind SourceKind = ScriptExecutionSourceKind.WorkspacePath,
-    string? SourcePath = null,
-    string? ScriptContent = null,
-    string? ProjectContent = null,
-    string? SourceName = null
-);
-
-[ExportTsInterface]
-public record ScriptingPipeResponse(
-    bool Success,
-    string Message,
-    ExecuteRevitScriptData? Result = null,
-    ScriptWorkspaceBootstrapData? Bootstrap = null
-);
-
-public static class ScriptingPipeProtocol {
-    public const string PipeName = "Pe.Scripting.Revit";
-}

@@ -14,17 +14,12 @@ namespace Pe.Revit.Global.Services.Host;
 /// <summary>
 ///     Bridge-backed read-only Revit data requests for browser routes.
 /// </summary>
-internal sealed class RevitDataRequestService {
-    private readonly Action<string>? _notificationSink;
-    private readonly RevitTaskService _revitTaskService;
-
-    public RevitDataRequestService(
-        RevitTaskService revitTaskService,
-        Action<string>? notificationSink = null
+internal sealed class RevitDataRequestService(
+    RevitTaskService revitTaskService,
+    Action<string>? notificationSink = null
     ) {
-        this._revitTaskService = revitTaskService;
-        this._notificationSink = notificationSink;
-    }
+    private readonly Action<string>? _notificationSink = notificationSink;
+    private readonly RevitTaskService _revitTaskService = revitTaskService;
 
     public Task<LoadedFamiliesCatalogData> GetLoadedFamiliesCatalogAsync(
         LoadedFamiliesCatalogRequest request

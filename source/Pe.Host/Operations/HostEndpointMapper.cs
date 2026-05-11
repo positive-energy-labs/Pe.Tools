@@ -12,7 +12,7 @@ internal static class HostEndpointMapper {
     public static void MapOperations(WebApplication app) {
         var registry = app.Services.GetRequiredService<HostOperationRegistry>();
 
-        foreach (var operation in registry.Operations) {
+        foreach (var operation in registry.Operations.Where(operation => operation.Definition.IsPublicHttp)) {
             _ = operation.Definition.Verb switch {
                 HostHttpVerb.Get => app.MapGet(
                     operation.Definition.Route,

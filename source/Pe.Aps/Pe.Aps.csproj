@@ -21,7 +21,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Pe.Shared.ApsAuth\Pe.Shared.ApsAuth.csproj"/>
-        <ProjectReference Include="..\Pe.Shared.SettingsLayout\Pe.Shared.SettingsLayout.csproj"/>
+        <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj"/>
     </ItemGroup>
 
 </Project>

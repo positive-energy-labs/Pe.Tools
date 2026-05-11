@@ -32,10 +32,17 @@ internal static class RevitTestExecutionPlanner {
         }
 
         var ownedSession = ownedSessions.FirstOrDefault(session => session.RevitYear == revitYear);
-        var runningSession = sessions.FirstOrDefault(session => session.RevitYear == revitYear);
-        if (runningSession is not null && ownedSession is null) {
+        var ownedProcessIds = ownedSessions
+            .Where(session => session.RevitYear == revitYear)
+            .Select(session => session.ProcessId)
+            .ToHashSet();
+        var nonOwnedRunningSession = sessions.FirstOrDefault(session =>
+            session.RevitYear == revitYear &&
+            !ownedProcessIds.Contains(session.ProcessId)
+        );
+        if (nonOwnedRunningSession is not null) {
             throw new InvalidOperationException(
-                $"Revit {revitYear} already has a running session that is not owned by `pe-dev revit test`. Close that session or choose a different year."
+                $"Revit {revitYear} already has a running session that is not owned by `pe-dev revit test` (pid={nonOwnedRunningSession.ProcessId}). Close that session or choose a different year."
             );
         }
 

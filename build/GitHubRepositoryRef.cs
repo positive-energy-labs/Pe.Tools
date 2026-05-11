@@ -17,6 +17,9 @@ internal sealed record GitHubRepositoryRef(string Owner, string Name) {
         }
 
         var repositoryInfo = context.GitHub().RepositoryInfo;
+        if (string.IsNullOrWhiteSpace(repositoryInfo.Owner) || string.IsNullOrWhiteSpace(repositoryInfo.RepositoryName))
+            throw new InvalidOperationException("GitHub repository owner/name could not be resolved from GITHUB_REPOSITORY or the pipeline context.");
+
         return new GitHubRepositoryRef(repositoryInfo.Owner, repositoryInfo.RepositoryName);
     }
 }

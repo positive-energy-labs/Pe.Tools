@@ -1,26 +1,33 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
 using Pe.Revit.Global.Services.Host.Operations;
+using Pe.Shared.HostContracts.Bridge;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Protocol;
+using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.HostContracts.SettingsStorage;
+using Pe.Shared.HostContracts;
+using Pe.Revit.Scripting.Transport;
+using Pe.Shared.Product;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
-using System.IO.Pipes;
+using System.Net.WebSockets;
 using System.Runtime.InteropServices;
 
 namespace Pe.Revit.Global.Services.Host;
 
 internal sealed class BridgeOperationContext(
     RequestService requestService,
-    RevitDataRequestService revitDataRequestService
+    RevitDataRequestService revitDataRequestService,
+    ScriptingBridgeMessageHandler scriptingMessageHandler
 ) {
     public RequestService RequestService { get; } = requestService;
     public RevitDataRequestService RevitDataRequestService { get; } = revitDataRequestService;
+    public ScriptingBridgeMessageHandler ScriptingMessageHandler { get; } = scriptingMessageHandler;
 }
 
 internal sealed class BridgeRequestDispatcher(
@@ -58,8 +65,8 @@ internal sealed class BridgeAgent : IDisposable {
     private readonly BridgeDocumentNotifier _documentNotifier;
     private readonly HostConnectionOptions _hostOptions;
     private readonly SettingsRuntimeRegistry _moduleRegistry;
-    private readonly NamedPipeClientStream _pipeClient;
-    private readonly StreamReader _reader;
+    private readonly BridgeTransportSession _transportSession;
+    private readonly ClientWebSocket _webSocket;
     private readonly Task _readLoop;
 
     private readonly JsonSerializerSettings _serializerSettings = new() {
@@ -74,10 +81,9 @@ internal sealed class BridgeAgent : IDisposable {
 
     private readonly CancellationTokenSource _shutdown = new();
     private readonly ThrottleGate _throttleGate = new();
-    private readonly SemaphoreSlim _writeLock = new(1, 1);
-    private readonly StreamWriter _writer;
+    private readonly object _requestExecutionSync = new();
     private bool _disposed;
-    private string? _lastAdvertisedDocumentKey;
+    private string? _inFlightOperationKey;
 
     public BridgeAgent(
         SettingsRuntimeRegistry moduleRegistry,
@@ -90,8 +96,8 @@ internal sealed class BridgeAgent : IDisposable {
         this._moduleRegistry = moduleRegistry;
         this._hostOptions = hostOptions;
         Log.Information(
-            "Settings editor bridge agent starting: Pipe={PipeName}, ConnectTimeoutMs={ConnectTimeoutMs}, ActiveDocument={ActiveDocumentTitle}, Modules={ModuleCount}",
-            hostOptions.PipeName,
+            "Host bridge agent starting: BridgeUri={BridgeUri}, ConnectTimeoutMs={ConnectTimeoutMs}, ActiveDocument={ActiveDocumentTitle}, Modules={ModuleCount}",
+            hostOptions.BridgeUri,
             hostOptions.ConnectTimeoutMs,
             activeDocument?.Title,
             moduleRegistry.GetModules().Count()
@@ -102,49 +108,54 @@ internal sealed class BridgeAgent : IDisposable {
             this.PublishNotification
         );
         var bridgeOperationRegistry = new BridgeOperationRegistry();
+        var scriptingMessageHandler = new ScriptingBridgeMessageHandler(
+            () => RevitUiSession.CurrentUIApplication,
+            message => Log.Information("Revit scripting notification: {Message}", message)
+        );
         this._bridgeOperationContext = new BridgeOperationContext(
             requestService,
-            revitDataRequestService
+            revitDataRequestService,
+            scriptingMessageHandler
         );
         this._bridgeRequestDispatcher =
             new BridgeRequestDispatcher(bridgeOperationRegistry, this._serializerSettings);
 
-        this._pipeClient =
-            new NamedPipeClientStream(".", hostOptions.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        this._webSocket = new ClientWebSocket();
         var connectStopwatch = Stopwatch.StartNew();
-        Log.Information("Settings editor bridge agent connecting named pipe: Pipe={PipeName}", hostOptions.PipeName);
-        this._pipeClient.Connect(hostOptions.ConnectTimeoutMs);
-        Log.Information("Settings editor bridge agent connected named pipe in {ElapsedMs} ms.",
-            connectStopwatch.ElapsedMilliseconds);
-        this._reader = new StreamReader(this._pipeClient, Encoding.UTF8, false, 4096, true);
-        this._writer = new StreamWriter(this._pipeClient, new UTF8Encoding(false), 4096, true) { AutoFlush = true };
-        this._documentNotifier = new BridgeDocumentNotifier(this.PublishDocumentInvalidationAsync);
-        Log.Information("Settings editor bridge agent created document notifier.");
+        Log.Information("Host bridge agent connecting WebSocket: BridgeUri={BridgeUri}", hostOptions.BridgeUri);
+        using (var connectTimeout = new CancellationTokenSource(hostOptions.ConnectTimeoutMs)) {
+            this._webSocket.ConnectAsync(hostOptions.BridgeUri, connectTimeout.Token).GetAwaiter().GetResult();
+        }
 
-        var handshakeStopwatch = Stopwatch.StartNew();
-        Log.Information(
-            "Settings editor bridge agent sending handshake: Modules={ModuleCount}, HasActiveDocument={HasActiveDocument}, ActiveDocument={ActiveDocumentTitle}",
-            this._moduleRegistry.GetModules().Count(),
-            activeDocument != null,
-            activeDocument?.Title
+        Log.Information("Host bridge agent connected WebSocket in {ElapsedMs} ms.",
+            connectStopwatch.ElapsedMilliseconds);
+        this._transportSession = new BridgeTransportSession(
+            this._webSocket,
+            this._serializerSettings
         );
-        this.SendHandshake();
-        Log.Information("Settings editor bridge agent sent handshake in {ElapsedMs} ms.",
-            handshakeStopwatch.ElapsedMilliseconds);
+        this._documentNotifier = new BridgeDocumentNotifier(this.PublishDocumentInvalidationAsync);
+        Log.Information("Host bridge agent created document notifier.");
+
+        var registrationStopwatch = Stopwatch.StartNew();
+        this.SendRegistrationAndAwaitAck();
+        Log.Information(
+            "Host bridge agent registration accepted in {ElapsedMs} ms.",
+            registrationStopwatch.ElapsedMilliseconds
+        );
         this._documentNotifier.InitializeSubscriptions();
-        Log.Information("Settings editor bridge agent initialized document notifier subscriptions.");
+        Log.Information("Host bridge agent initialized document notifier subscriptions.");
         this._readLoop = Task.Run(() => this.RunReadLoopAsync(this._shutdown.Token));
-        Log.Information("Settings editor bridge agent started read loop.");
+        Log.Information("Host bridge agent started read loop.");
         _ = this._documentNotifier.PublishInitialStateAsync();
-        Log.Information("Settings editor bridge agent queued initial document state publish.");
+        Log.Information("Host bridge agent queued initial document state publish.");
 
         this.IsConnected = true;
         this.RuntimeFramework = RuntimeInformation.FrameworkDescription;
         this.RevitVersion = Revit.Utils.Utils.GetRevitVersion();
         Log.Information(
-            "Settings editor bridge connected in {ElapsedMs} ms: Pipe={PipeName}, RevitVersion={RevitVersion}, Runtime={RuntimeFramework}, Modules={ModuleCount}",
+            "Host bridge connected in {ElapsedMs} ms: BridgeUri={BridgeUri}, RevitVersion={RevitVersion}, Runtime={RuntimeFramework}, Modules={ModuleCount}",
             startupStopwatch.ElapsedMilliseconds,
-            this._hostOptions.PipeName,
+            this._hostOptions.BridgeUri,
             this.RevitVersion,
             this.RuntimeFramework,
             this._moduleRegistry.GetModules().Count()
@@ -163,7 +174,7 @@ internal sealed class BridgeAgent : IDisposable {
         var disposeStopwatch = Stopwatch.StartNew();
         this._disposed = true;
         this.IsConnected = false;
-        Log.Information("Settings editor bridge disconnecting: Pipe={PipeName}", this._hostOptions.PipeName);
+        Log.Information("Host bridge disconnecting: BridgeUri={BridgeUri}", this._hostOptions.BridgeUri);
 
         try {
             _ = this.SendDisconnectAsync();
@@ -173,23 +184,22 @@ internal sealed class BridgeAgent : IDisposable {
 
         this._shutdown.Cancel();
         Log.Information(
-            "Settings editor bridge dispose canceled read loop token. Disposing pipe resources to unblock reads.");
+            "Host bridge dispose canceled read loop token. Disposing WebSocket resources to unblock reads.");
 
         this.SafeDispose("document notifier", this._documentNotifier.Dispose);
-        this.SafeDispose("reader", this._reader.Dispose);
-        this.SafeDispose("writer", this._writer.Dispose);
-        this.SafeDispose("pipe client", this._pipeClient.Dispose);
+        this.SafeDispose("scripting message handler", this._bridgeOperationContext.ScriptingMessageHandler.Dispose);
+        this.SafeDispose("transport session", this._transportSession.Dispose);
+        this.SafeDispose("websocket", this._webSocket.Dispose);
 
         if (this._readLoop.IsCompleted)
-            Log.Information("Settings editor bridge read loop already exited during dispose.");
+            Log.Information("Host bridge read loop already exited during dispose.");
         else {
             Log.Information(
-                "Settings editor bridge dispose is not waiting on read loop completion to avoid blocking the Revit UI thread.");
+                "Host bridge dispose is not waiting on read loop completion to avoid blocking the Revit UI thread.");
         }
 
-        this.SafeDispose("write lock", this._writeLock.Dispose);
         this.SafeDispose("shutdown token", this._shutdown.Dispose);
-        Log.Information("Settings editor bridge dispose completed in {ElapsedMs} ms.",
+        Log.Information("Host bridge dispose completed in {ElapsedMs} ms.",
             disposeStopwatch.ElapsedMilliseconds);
     }
 
@@ -197,7 +207,7 @@ internal sealed class BridgeAgent : IDisposable {
         new(
             true,
             this.IsConnected,
-            this._hostOptions.PipeName,
+            this._hostOptions.BridgeUri.ToString(),
             this._hostOptions.SessionId,
             this._hostOptions.ProcessId,
             RevitUiSession.CurrentUIApplication.GetActiveDocument() != null,
@@ -209,34 +219,32 @@ internal sealed class BridgeAgent : IDisposable {
         );
 
     private async Task RunReadLoopAsync(CancellationToken cancellationToken) {
-        Log.Information("Settings editor bridge read loop entered.");
+        Log.Information("Host bridge read loop entered.");
         try {
-            while (!cancellationToken.IsCancellationRequested && this._pipeClient.IsConnected) {
-                var line = await this._reader.ReadLineAsync().ConfigureAwait(false);
-                if (line == null)
+            while (!cancellationToken.IsCancellationRequested && this._transportSession.IsConnected) {
+                var frame = await this._transportSession.ReadAsync(cancellationToken).ConfigureAwait(false);
+                if (frame == null)
                     break;
-
-                var frame = JsonConvert.DeserializeObject<BridgeFrame>(line, this._serializerSettings);
                 if (frame?.Request == null || frame.Kind != BridgeFrameKind.Request) {
-                    Log.Debug("Settings editor bridge read loop ignored frame: Kind={Kind}", frame?.Kind);
+                    Log.Debug("Host bridge read loop ignored frame: Kind={Kind}", frame?.Kind);
                     continue;
                 }
 
-                Log.Information("Settings editor bridge received request: Method={Method}, RequestId={RequestId}",
+                Log.Information("Host bridge received request: Method={Method}, RequestId={RequestId}",
                     frame.Request.Method, frame.Request.RequestId);
                 await this.HandleRequestAsync(frame.Request, cancellationToken).ConfigureAwait(false);
             }
         } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
             // Expected on shutdown.
         } catch (ObjectDisposedException) when (this._disposed || cancellationToken.IsCancellationRequested) {
-            // Expected when dispose closes the pipe to unblock ReadLineAsync.
+            // Expected when dispose closes the WebSocket to unblock reads.
         } catch (Exception ex) {
             this.LastError = ex.Message;
-            Log.Warning(ex, "SettingsEditor bridge agent disconnected unexpectedly.");
+            Log.Warning(ex, "Host bridge agent disconnected unexpectedly.");
         } finally {
             this.IsConnected = false;
-            Log.Information("Settings editor bridge read loop exiting: Pipe={PipeName}, Disposed={Disposed}",
-                this._hostOptions.PipeName, this._disposed);
+            Log.Information("Host bridge read loop exiting: BridgeUri={BridgeUri}, Disposed={Disposed}",
+                this._hostOptions.BridgeUri, this._disposed);
         }
     }
 
@@ -245,8 +253,27 @@ internal sealed class BridgeAgent : IDisposable {
         var sentAt = DateTimeOffset.FromUnixTimeMilliseconds(request.SentAtUnixMs);
 
         try {
+            lock (this._requestExecutionSync) {
+                if (this._inFlightOperationKey != null) {
+                    throw new BridgeOperationException(
+                        423,
+                        $"Revit is busy executing '{this._inFlightOperationKey}'. Retry '{request.Method}' after the current request completes.",
+                        [
+                            BridgeOperationExceptions.Issue(
+                                "$",
+                                "RevitBusy",
+                                $"Revit is already executing '{this._inFlightOperationKey}'.",
+                                "Retry the request after the current bridge operation finishes."
+                            )
+                        ]
+                    );
+                }
+
+                this._inFlightOperationKey = request.Method;
+            }
+
             Log.Information(
-                "Settings editor bridge dispatch starting: Method={Method}, RequestId={RequestId}",
+                "Host bridge dispatch starting: Method={Method}, RequestId={RequestId}",
                 request.Method,
                 request.RequestId
             );
@@ -257,7 +284,7 @@ internal sealed class BridgeAgent : IDisposable {
                 cancellationToken
             ).ConfigureAwait(false);
             Log.Information(
-                "Settings editor bridge dispatch completed: Method={Method}, RequestId={RequestId}",
+                "Host bridge dispatch completed: Method={Method}, RequestId={RequestId}",
                 request.Method,
                 request.RequestId
             );
@@ -296,14 +323,14 @@ internal sealed class BridgeAgent : IDisposable {
                 responseBytes
             );
             Log.Information(
-                "Settings editor bridge writing response frame: Method={Method}, RequestId={RequestId}, ResponseBytes={ResponseBytes}",
+                "Host bridge writing response frame: Method={Method}, RequestId={RequestId}, ResponseBytes={ResponseBytes}",
                 request.Method,
                 request.RequestId,
                 responseBytes
             );
             await this.WriteFrameAsync(frame, cancellationToken).ConfigureAwait(false);
             Log.Information(
-                "Settings editor bridge wrote response frame: Method={Method}, RequestId={RequestId}",
+                "Host bridge wrote response frame: Method={Method}, RequestId={RequestId}",
                 request.Method,
                 request.RequestId
             );
@@ -329,7 +356,7 @@ internal sealed class BridgeAgent : IDisposable {
             );
             Log.Warning(
                 ex,
-                "Settings editor bridge request failed with expected semantics: Method={Method}, RequestId={RequestId}",
+                "Host bridge request failed with expected semantics: Method={Method}, RequestId={RequestId}",
                 request.Method,
                 request.RequestId
             );
@@ -356,11 +383,16 @@ internal sealed class BridgeAgent : IDisposable {
             );
             Log.Error(
                 ex,
-                "Settings editor bridge request failed: Method={Method}, RequestId={RequestId}",
+                "Host bridge request failed: Method={Method}, RequestId={RequestId}",
                 request.Method,
                 request.RequestId
             );
             await this.WriteFrameAsync(errorFrame, cancellationToken).ConfigureAwait(false);
+        } finally {
+            lock (this._requestExecutionSync) {
+                if (string.Equals(this._inFlightOperationKey, request.Method, StringComparison.Ordinal))
+                    this._inFlightOperationKey = null;
+            }
         }
     }
 
@@ -377,9 +409,7 @@ internal sealed class BridgeAgent : IDisposable {
             Event: new BridgeEvent(SettingsHostEventNames.DocumentChanged, payloadJson)
         );
         await this.WriteFrameAsync(frame, this._shutdown.Token).ConfigureAwait(false);
-
-        if (!string.Equals(this._lastAdvertisedDocumentKey, payload.DocumentKey, StringComparison.OrdinalIgnoreCase))
-            this.SendHandshake();
+        await this.SendStateSyncAsync(this._shutdown.Token).ConfigureAwait(false);
     }
 
     private void PublishNotification(string message) {
@@ -390,7 +420,7 @@ internal sealed class BridgeAgent : IDisposable {
             try {
                 await this.PublishNotificationAsync(message).ConfigureAwait(false);
             } catch (Exception ex) {
-                Log.Debug(ex, "Settings editor bridge notification publish failed.");
+                Log.Debug(ex, "Host bridge notification publish failed.");
             }
         });
     }
@@ -404,7 +434,41 @@ internal sealed class BridgeAgent : IDisposable {
         await this.WriteFrameAsync(frame, this._shutdown.Token).ConfigureAwait(false);
     }
 
-    private void SendHandshake() {
+    private void SendRegistrationAndAwaitAck() {
+        var registration = new BridgeRegistrationRequest(
+            BridgeProtocol.ContractVersion,
+            this._hostOptions.SessionId,
+            this._hostOptions.ProcessId,
+            this.BuildStateSnapshot()
+        );
+        this._transportSession.Write(new BridgeFrame(
+            BridgeFrameKind.Registration,
+            Registration: registration
+        ));
+
+        using var timeout = new CancellationTokenSource(this._hostOptions.RegistrationTimeoutMs);
+        var ackFrame = this._transportSession.ReadAsync(timeout.Token).GetAwaiter().GetResult();
+        var ack = ackFrame?.RegistrationAck;
+        if (ackFrame?.Kind != BridgeFrameKind.RegistrationAck || ack == null)
+            throw new InvalidOperationException("Host did not acknowledge Revit bridge registration.");
+        if (!ack.Accepted)
+            throw new InvalidOperationException(ack.ErrorMessage ?? "Host rejected Revit bridge registration.");
+    }
+
+    private async Task SendStateSyncAsync(CancellationToken cancellationToken) {
+        if (!this._transportSession.IsConnected)
+            return;
+
+        await this.WriteFrameAsync(
+            new BridgeFrame(
+                BridgeFrameKind.StateSync,
+                StateSync: new BridgeStateSync(this.BuildStateSnapshot())
+            ),
+            cancellationToken
+        ).ConfigureAwait(false);
+    }
+
+    private BridgeStateSnapshot BuildStateSnapshot() {
         var activeDocument = RevitUiSession.CurrentUIApplication.GetActiveDocument();
         var availableModules = this._moduleRegistry.GetModules()
             .Where(SettingsModuleAvailability.IsBridgeDiscoverable)
@@ -413,15 +477,11 @@ internal sealed class BridgeAgent : IDisposable {
             .Select(SettingsModuleAvailability.CreateHostModuleDescriptor)
             .ToList();
         Log.Debug(
-            "Settings editor bridge handshake module snapshot: ActiveDocument={ActiveDocumentTitle}, ModuleCount={ModuleCount}",
+            "Host bridge state snapshot: ActiveDocument={ActiveDocumentTitle}, ModuleCount={ModuleCount}",
             activeDocument?.Title,
             availableModules.Count
         );
-        var handshake = new BridgeHandshake(
-            BridgeProtocol.ContractVersion,
-            BridgeProtocol.Transport,
-            this._hostOptions.SessionId,
-            this._hostOptions.ProcessId,
+        return new BridgeStateSnapshot(
             Revit.Utils.Utils.GetRevitVersion() ?? "unknown",
             RuntimeInformation.FrameworkDescription,
             activeDocument != null,
@@ -438,20 +498,10 @@ internal sealed class BridgeAgent : IDisposable {
             RevitUiSession.CurrentUIApplication.GetOpenDocuments().Count(),
             availableModules
         );
-        this._lastAdvertisedDocumentKey = handshake.ActiveDocumentKey;
-
-        var frame = new BridgeFrame(
-            BridgeFrameKind.Handshake,
-            handshake
-        );
-
-        // Startup runs on the Revit UI thread, so avoid sync-over-async during the initial bridge handshake.
-        var json = JsonConvert.SerializeObject(frame, this._serializerSettings);
-        this._writer.WriteLine(json);
     }
 
     private async Task SendDisconnectAsync() {
-        if (!this._pipeClient.IsConnected)
+        if (!this._transportSession.IsConnected)
             return;
 
         await this.WriteFrameAsync(new BridgeFrame(
@@ -461,15 +511,8 @@ internal sealed class BridgeAgent : IDisposable {
             CancellationToken.None).ConfigureAwait(false);
     }
 
-    private async Task WriteFrameAsync(BridgeFrame frame, CancellationToken cancellationToken) {
-        var json = JsonConvert.SerializeObject(frame, this._serializerSettings);
-        await this._writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try {
-            await this._writer.WriteLineAsync(json).ConfigureAwait(false);
-        } finally {
-            _ = this._writeLock.Release();
-        }
-    }
+    private Task WriteFrameAsync(BridgeFrame frame, CancellationToken cancellationToken) =>
+        this._transportSession.WriteAsync(frame, cancellationToken);
 
     private static long GetElapsedMilliseconds(long startedTimestamp) {
         var elapsedTicks = Stopwatch.GetTimestamp() - startedTimestamp;
@@ -482,18 +525,18 @@ internal sealed class BridgeAgent : IDisposable {
         } catch (IOException ex) {
             Log.Warning(
                 ex,
-                "Settings editor bridge dispose ignored broken I/O while disposing {ResourceName}: Pipe={PipeName}",
+                "Host bridge dispose ignored broken I/O while disposing {ResourceName}: BridgeUri={BridgeUri}",
                 resourceName,
-                this._hostOptions.PipeName
+                this._hostOptions.BridgeUri
             );
         } catch (ObjectDisposedException) {
             // Resource already disposed elsewhere.
         } catch (Exception ex) {
             Log.Warning(
                 ex,
-                "Settings editor bridge dispose ignored unexpected failure while disposing {ResourceName}: Pipe={PipeName}",
+                "Host bridge dispose ignored unexpected failure while disposing {ResourceName}: BridgeUri={BridgeUri}",
                 resourceName,
-                this._hostOptions.PipeName
+                this._hostOptions.BridgeUri
             );
         }
     }
@@ -553,51 +596,36 @@ internal static class SettingsModuleAvailability {
 }
 
 internal sealed record HostConnectionOptions(
-    string PipeName,
     string HostBaseUrl,
     string SessionId,
     int ProcessId,
     int ConnectTimeoutMs,
     int RegistrationTimeoutMs
 ) {
+    public Uri BridgeUri { get; } = CreateBridgeUri(HostBaseUrl);
+
     public static HostConnectionOptions FromEnvironment() =>
         new(
-            GetValueOrDefault(SettingsEditorRuntime.PipeNameVariable, BridgeProtocol.DefaultPipeName),
-            GetValueOrDefault(
-                SettingsEditorRuntime.HostBaseUrlVariable,
-                SettingsEditorRuntime.DefaultHostBaseUrl
-            ),
+            HostProcessIdentity.ResolveHostBaseUrl(),
             GetSessionId(),
             Process.GetCurrentProcess().Id,
-            GetPipeConnectTimeoutMs(),
+            GetBridgeConnectTimeoutMs(),
             GetHostRegistrationTimeoutMs()
         );
 
     private static string GetSessionId() {
-        var configuredValue = Environment.GetEnvironmentVariable(SettingsEditorRuntime.SessionIdVariable);
-        if (!string.IsNullOrWhiteSpace(configuredValue))
-            return configuredValue;
-
         using var process = Process.GetCurrentProcess();
         return $"revit-{process.Id}-{process.StartTime.ToUniversalTime().Ticks}";
     }
 
-    private static int GetPipeConnectTimeoutMs() {
-        var raw = Environment.GetEnvironmentVariable(SettingsEditorRuntime.PipeConnectTimeoutMsVariable);
-        return int.TryParse(raw, out var timeoutMs) && timeoutMs > 0
-            ? timeoutMs
-            : SettingsEditorRuntime.DefaultPipeConnectTimeoutMs;
-    }
+    private static int GetBridgeConnectTimeoutMs() => HostRuntimeDefaults.DefaultBridgeConnectTimeoutMs;
 
-    private static int GetHostRegistrationTimeoutMs() {
-        var raw = Environment.GetEnvironmentVariable(SettingsEditorRuntime.HostRegistrationTimeoutMsVariable);
-        return int.TryParse(raw, out var timeoutMs) && timeoutMs > 0
-            ? timeoutMs
-            : SettingsEditorRuntime.DefaultHostRegistrationTimeoutMs;
-    }
+    private static int GetHostRegistrationTimeoutMs() => HostRuntimeDefaults.DefaultHostRegistrationTimeoutMs;
 
-    private static string GetValueOrDefault(string variableName, string defaultValue) {
-        var value = Environment.GetEnvironmentVariable(variableName);
-        return string.IsNullOrWhiteSpace(value) ? defaultValue : value;
+    private static Uri CreateBridgeUri(string hostBaseUrl) {
+        var builder = new UriBuilder(hostBaseUrl.TrimEnd('/') + HttpRoutes.Bridge) {
+            Scheme = hostBaseUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ? "wss" : "ws"
+        };
+        return builder.Uri;
     }
 }

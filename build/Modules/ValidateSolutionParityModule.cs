@@ -33,7 +33,7 @@ public sealed class ValidateSolutionParityModule : Module {
 
         HandleParityIssue(
             context,
-            $"Pe.Tools.slnx is missing build configurations declared in build/BuildConfiguration.props: {string.Join(", ", missingConfigurations)}");
+            $"Pe.Tools.slnx is missing build configurations derived from {BuildAuthoredPaths.MatrixFilePath}: {string.Join(", ", missingConfigurations)}");
     }
 
     private static void HandleParityIssue(IModuleContext context, string message) {

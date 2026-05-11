@@ -3,7 +3,7 @@ using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 using Pe.App.Commands.Palette.FamilyPalette;
-using Pe.App.SettingsEditor;
+using Pe.App.Host;
 using Pe.Revit;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.OperationGroups;
@@ -14,7 +14,8 @@ using Pe.Revit.Global;
 using Pe.Revit.Global.Lib;
 using Pe.Revit.Global.Ui;
 using Pe.Revit.SettingsRuntime.Modules;
-using Pe.Shared.HostContracts.Protocol;
+using Pe.Shared.HostContracts;
+using Pe.Shared.Product;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Modules;
 using Serilog.Events;
@@ -40,7 +41,7 @@ public class CmdFFMigrator : IExternalCommand {
 
         try {
             var window = new FoundryPaletteBuilder<FFMigratorProfile>(DisplayName, SettingsRoot, doc, uiDoc)
-                .WithAction("Open Settings Editor", this.HandleOpenSettingsEditor)
+                .WithAction("Open Pe Tools", this.HandleOpenPeTools)
                 .WithAction("Open Profile File", this.HandleOpenFile,
                     ctx => ctx.SelectedProfile != null)
                 .WithAction("Process Families", this.HandleProcessFamilies,
@@ -130,9 +131,9 @@ public class CmdFFMigrator : IExternalCommand {
         }
     }
 
-    private void HandleOpenSettingsEditor(FoundryContext<FFMigratorProfile> context) {
+    private void HandleOpenPeTools(FoundryContext<FFMigratorProfile> context) {
         var selectedProfileName = context.SelectedProfile?.TextPrimary;
-        var launched = SettingsEditorBrowser.TryLaunch(
+        var launched = PeToolsBrowser.TryLaunch(
             SettingsRoot.Module.ModuleKey,
             SettingsRoot.RootKey,
             selectedProfileName
@@ -142,7 +143,7 @@ public class CmdFFMigrator : IExternalCommand {
                 .Add(
                     LogEventLevel.Information,
                     new StackFrame(),
-                    "Opened FF Migrator external settings-editor route in your default browser."
+                    "Opened FF Migrator external Pe Tools route in your default browser."
                 )
                 .Show();
             return;
@@ -152,7 +153,7 @@ public class CmdFFMigrator : IExternalCommand {
             .Add(
                 LogEventLevel.Warning,
                 new StackFrame(),
-                $"Could not open external settings-editor route. Check {SettingsEditorRuntime.FrontendBaseUrlVariable}."
+                $"Could not open external Pe Tools route. Check {HostProcessIdentity.FrontendBaseUrlVariable}."
             )
             .Show();
     }

@@ -20,7 +20,6 @@ public sealed class ScriptWorkspaceBootstrapService(
         var projectFilePath = RevitScriptingStorageLocations.ResolveProjectFilePath(workspaceKey);
         var sourceDirectory = RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey);
         var vscodeDirectory = RevitScriptingStorageLocations.ResolveGeneratedDirectory(workspaceKey);
-        var inlineDirectory = RevitScriptingStorageLocations.ResolveInlineDirectory(workspaceKey);
         var sampleScriptPath = RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey);
         var agentsPath = RevitScriptingStorageLocations.ResolveAgentsPath(workspaceKey);
         var readmePath = RevitScriptingStorageLocations.ResolveReadmePath(workspaceKey);
@@ -29,7 +28,6 @@ public sealed class ScriptWorkspaceBootstrapService(
         _ = Directory.CreateDirectory(workspaceRoot);
         _ = Directory.CreateDirectory(sourceDirectory);
         _ = Directory.CreateDirectory(vscodeDirectory);
-        _ = Directory.CreateDirectory(inlineDirectory);
 
         var existingProjectContent = File.Exists(projectFilePath)
             ? File.ReadAllText(projectFilePath)

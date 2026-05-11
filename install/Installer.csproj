@@ -5,7 +5,7 @@
         <Nullable>enable</Nullable>
         <LangVersion>latest</LangVersion>
         <ImplicitUsings>true</ImplicitUsings>
-        <TargetFramework>net10.0-windows</TargetFramework>
+        <TargetFramework>net8.0-windows</TargetFramework>
     </PropertyGroup>
 
     <ItemGroup>
@@ -14,10 +14,12 @@
         <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.0"/>
         <PackageReference Include="WixSharp.Core" Version="2.12.3"/>
         <PackageReference Include="WixSharp.Msi.Core" Version="2.12.3"/>
+        <PackageReference Include="WixToolset.Dtf.WindowsInstaller" Version="4.0.4"/>
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\source\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj"/>
+        <ProjectReference Include="..\source\Pe.Shared.Product\Pe.Shared.Product.csproj"/>
     </ItemGroup>
 
 </Project>

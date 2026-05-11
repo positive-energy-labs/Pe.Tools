@@ -2,14 +2,14 @@
 
 ## Mental Model
 
-This package is the settings infrastructure layer. It gives the repo one explicit way to describe settings modules,
-compose JSON documents, generate schemas, validate authored files, and resolve smart field metadata without hardcoding
-every feature into the host or Revit command layer.
+This package is the storage/runtime infrastructure layer. It gives the repo one explicit way to compose authored settings, runtime state, user output, JSON documents, schemas, validation, and smart field metadata without hardcoding every feature into the host or Revit command layer.
 
 ## Architecture
 
 - `Modules/` defines settings-module identity, storage conventions, and registration.
-- `Documents/` owns filesystem-backed document IO contracts.
+- `ModuleStorage` and `GlobalStorage` compose authored settings, LocalAppData state, and user output roots.
+- `StateStorage` owns mutable runtime state files; `OutputStorage` owns user-facing command artifacts.
+- `Documents/` owns filesystem-backed authored settings document IO contracts.
 - `Validation/` owns schema-backed structural validation.
 - `Json/JsonSchemaFactory.cs` builds authoring/editor/fragment schemas through one pipeline.
 - `Json/SchemaDefinitions/` adds explicit per-type metadata and UI/field-option wiring.
@@ -26,6 +26,13 @@ every feature into the host or Revit command layer.
 3. Include/preset processors add composition support.
 4. Schema definitions attach descriptions, UI metadata, datasets, and field options.
 5. Editor transforms reshape the authoring schema for the external editor.
+
+### Root composition
+
+1. Authored settings resolve through `Pe.Shared.StorageRuntime` over `ProductUserContentLayout.Settings`.
+2. Runtime state resolves through `ProductRuntimeLayout.State`.
+3. User-facing command output resolves through `ProductUserContentLayout.Output`.
+4. Legacy module-local `state` folders are migration sources only, not the current state root.
 
 ### Document open/save
 

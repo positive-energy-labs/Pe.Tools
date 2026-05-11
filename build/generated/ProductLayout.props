@@ -1,0 +1,35 @@
+<Project>
+  <!-- Generated from Pe.Shared.Product product layout projection. Do not edit by hand. -->
+  <PropertyGroup>
+    <PeProductVendorName>Positive Energy</PeProductVendorName>
+    <PeProductName>Pe.Tools</PeProductName>
+    <PeRuntimeRootRelativePath>Positive Energy\Pe.Tools</PeRuntimeRootRelativePath>
+    <PeRuntimeBinRelativePath>Positive Energy\Pe.Tools\bin</PeRuntimeBinRelativePath>
+    <PeRuntimeHostDirectoryRelativePath>Positive Energy\Pe.Tools\bin\host</PeRuntimeHostDirectoryRelativePath>
+    <PeRuntimeHostExecutableRelativePath>Positive Energy\Pe.Tools\bin\host\Pe.Host.exe</PeRuntimeHostExecutableRelativePath>
+    <PeRuntimeHostDllRelativePath>Positive Energy\Pe.Tools\bin\host\Pe.Host.dll</PeRuntimeHostDllRelativePath>
+    <PeRuntimePeaDirectoryRelativePath>Positive Energy\Pe.Tools\bin\pea</PeRuntimePeaDirectoryRelativePath>
+    <PeRuntimePeaLauncherRelativePath>Positive Energy\Pe.Tools\bin\pea\pea.cmd</PeRuntimePeaLauncherRelativePath>
+    <PeRuntimePeaCurrentVersionRelativePath>Positive Energy\Pe.Tools\bin\pea\current.txt</PeRuntimePeaCurrentVersionRelativePath>
+    <PeRuntimePeaVersionsRelativePath>Positive Energy\Pe.Tools\bin\pea\versions</PeRuntimePeaVersionsRelativePath>
+    <PeRuntimePeaPackagesRelativePath>Positive Energy\Pe.Tools\bin\pea\packages</PeRuntimePeaPackagesRelativePath>
+    <PeDevCliDirectoryRelativePath>Positive Energy\Pe.Tools\bin\pe-dev</PeDevCliDirectoryRelativePath>
+    <PeDevCliExecutableRelativePath>Positive Energy\Pe.Tools\bin\pe-dev\pe-dev.exe</PeDevCliExecutableRelativePath>
+    <PeDevCliDllRelativePath>Positive Energy\Pe.Tools\bin\pe-dev\pe-dev.dll</PeDevCliDllRelativePath>
+    <PeRuntimeStateRelativePath>Positive Energy\Pe.Tools\state</PeRuntimeStateRelativePath>
+    <PeRuntimeLogsRelativePath>Positive Energy\Pe.Tools\logs</PeRuntimeLogsRelativePath>
+    <PeRuntimeCacheRelativePath>Positive Energy\Pe.Tools\cache</PeRuntimeCacheRelativePath>
+    <PeDevRuntimeRootRelativePath>Positive Energy\Pe.Tools\dev</PeDevRuntimeRootRelativePath>
+    <PeDevRuntimeBinRelativePath>Positive Energy\Pe.Tools\dev\bin</PeDevRuntimeBinRelativePath>
+    <PeDevRuntimeHostDirectoryRelativePath>Positive Energy\Pe.Tools\dev\bin\host</PeDevRuntimeHostDirectoryRelativePath>
+    <PeDevRuntimeHostExecutableRelativePath>Positive Energy\Pe.Tools\dev\bin\host\Pe.Host.exe</PeDevRuntimeHostExecutableRelativePath>
+    <PeDevRuntimeHostDllRelativePath>Positive Energy\Pe.Tools\dev\bin\host\Pe.Host.dll</PeDevRuntimeHostDllRelativePath>
+    <PeUserContentRootRelativePath>Pe.Tools</PeUserContentRootRelativePath>
+    <PeUserSettingsRelativePath>Pe.Tools\settings</PeUserSettingsRelativePath>
+    <PeUserScriptingRelativePath>Pe.Tools\scripting</PeUserScriptingRelativePath>
+    <PeUserOutputRelativePath>Pe.Tools\output</PeUserOutputRelativePath>
+    <PeRevitAddinsRelativePath>Autodesk\Revit\Addins</PeRevitAddinsRelativePath>
+    <PeRevitAddinManifestFileName>Pe.App.addin</PeRevitAddinManifestFileName>
+    <PeRevitRuntimeDescriptorFileName>Pe.App.runtime.json</PeRevitRuntimeDescriptorFileName>
+  </PropertyGroup>
+</Project>

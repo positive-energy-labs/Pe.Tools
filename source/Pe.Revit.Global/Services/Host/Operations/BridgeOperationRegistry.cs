@@ -1,4 +1,5 @@
 using Pe.Shared.HostContracts.Operations;
+using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
@@ -102,6 +103,14 @@ internal sealed class BridgeOperationRegistry {
                 GetRevitDocumentSessionContextOperationContract.Definition,
                 static (request, context, cancellationToken) =>
                     context.RevitDataRequestService.GetRevitDocumentSessionContextAsync()
+            ),
+            BridgeOperations.Create<ScriptWorkspaceBootstrapRequest, ScriptWorkspaceBootstrapData>(
+                GetScriptWorkspaceBootstrapOperationContract.Definition,
+                ExecuteScriptWorkspaceBootstrapAsync
+            ),
+            BridgeOperations.Create<ExecuteRevitScriptRequest, ExecuteRevitScriptData>(
+                ExecuteRevitScriptOperationContract.Definition,
+                ExecuteRevitScriptAsync
             )
         ];
 
@@ -118,6 +127,19 @@ internal sealed class BridgeOperationRegistry {
     public bool TryGet(string key, out IBridgeOperation operation) =>
         this._operationsByKey.TryGetValue(key, out operation!);
 
+
+    private static async Task<ScriptWorkspaceBootstrapData> ExecuteScriptWorkspaceBootstrapAsync(
+        ScriptWorkspaceBootstrapRequest request,
+        BridgeOperationContext context,
+        CancellationToken cancellationToken
+    ) => await context.ScriptingMessageHandler.BootstrapWorkspaceAsync(request, cancellationToken);
+
+    private static async Task<ExecuteRevitScriptData> ExecuteRevitScriptAsync(
+        ExecuteRevitScriptRequest request,
+        BridgeOperationContext context,
+        CancellationToken cancellationToken
+    ) => await context.ScriptingMessageHandler.ExecuteAsync(request, cancellationToken);
+
     private static void ValidateDefinitions(IReadOnlyList<IBridgeOperation> operations) {
         var duplicateKeys = operations
             .GroupBy(operation => operation.Definition.Key, StringComparer.Ordinal)
@@ -131,25 +153,9 @@ internal sealed class BridgeOperationRegistry {
         }
 
         var missingDefinitions = HostOperationsCatalog.All
+            .Where(definition => definition.ExecutionMode == HostExecutionMode.Bridge)
             .Where(definition => operations.All(operation => operation.Definition.Key != definition.Key))
             .Select(definition => definition.Key)
-            .Except(
-                [
-                    GetApsAuthStatusOperationContract.Definition.Key,
-                    LoginApsOperationContract.Definition.Key,
-                    LogoutApsOperationContract.Definition.Key,
-                    AcquireApsAccessTokenOperationContract.Definition.Key,
-                    GetHostStatusOperationContract.Definition.Key,
-                    GetWorkspacesOperationContract.Definition.Key,
-                    DiscoverSettingsTreeOperationContract.Definition.Key,
-                    OpenSettingsDocumentOperationContract.Definition.Key,
-                    ValidateSettingsDocumentOperationContract.Definition.Key,
-                    SaveSettingsDocumentOperationContract.Definition.Key,
-                    GetScriptWorkspaceBootstrapOperationContract.Definition.Key,
-                    ExecuteRevitScriptOperationContract.Definition.Key
-                ],
-                StringComparer.Ordinal
-            )
             .ToList();
         if (missingDefinitions.Count != 0) {
             throw new InvalidOperationException(

@@ -400,7 +400,8 @@ public sealed class RevitAutomationContractsTests {
     [Test]
     public void Revit_version_catalog_resolves_supported_design_automation_years() {
         Assert.Multiple(() => {
-            Assert.That(RevitVersionCatalog.RequireByYear(2023).DesignAutomationEngine, Is.EqualTo("Autodesk.Revit+2023"));
+            Assert.That(RevitVersionCatalog.GetSupportedAutomationYears(), Is.EqualTo(new[] { 2024, 2025, 2026 }));
+            Assert.That(() => RevitVersionCatalog.RequireByYear(2023), Throws.InstanceOf<InvalidOperationException>());
             Assert.That(RevitVersionCatalog.RequireByYear(2024).TargetFramework, Is.EqualTo("net48"));
             Assert.That(RevitVersionCatalog.RequireByYear(2025).ConfigurationSuffix, Is.EqualTo("R25"));
             Assert.That(RevitVersionCatalog.RequireByAutomationEngine("Autodesk.Revit+2026").Year, Is.EqualTo(2026));

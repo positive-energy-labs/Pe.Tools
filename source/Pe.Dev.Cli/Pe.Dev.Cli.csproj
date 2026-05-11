@@ -5,35 +5,15 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <AssemblyName>pe-dev</AssemblyName>
         <RootNamespace>Pe.Dev.Cli</RootNamespace>
-        <PeDevCliLocalBinDir>$([System.IO.Path]::Combine($([System.Environment]::GetFolderPath(System.Environment+SpecialFolder.LocalApplicationData)), 'Positive Energy', 'Pe.Tools', 'Bin', 'pe-dev'))</PeDevCliLocalBinDir>
+        <PeMirrorRuntimeToLocalBin>true</PeMirrorRuntimeToLocalBin>
+        <PeMirrorRuntimeRelativePath>$(PeDevCliDirectoryRelativePath)</PeMirrorRuntimeRelativePath>
     </PropertyGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\Pe.Aps\Pe.Aps.csproj"/>
         <ProjectReference Include="..\Pe.Dev.RevitAutomation\Pe.Dev.RevitAutomation.csproj"/>
         <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj"/>
+        <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj"/>
     </ItemGroup>
 
-    <Target
-            Name="CopyPeDevToStableLocalBin"
-            AfterTargets="Build"
-            Condition="'$(DesignTimeBuild)' != 'true' and '$(IsCrossTargetingBuild)' != 'true'"
-    >
-        <Message
-                Text="Copying pe-dev to stable local bin '$(PeDevCliLocalBinDir)'."
-                Importance="High"
-        />
-        <RemoveDir
-                Directories="$(PeDevCliLocalBinDir)"
-                Condition="Exists('$(PeDevCliLocalBinDir)')"
-        />
-        <MakeDir Directories="$(PeDevCliLocalBinDir)"/>
-        <ItemGroup>
-            <PeDevCliOutputFiles Include="$(TargetDir)**\*.*"/>
-        </ItemGroup>
-        <Copy
-                SourceFiles="@(PeDevCliOutputFiles)"
-                DestinationFiles="@(PeDevCliOutputFiles->'$(PeDevCliLocalBinDir)\%(RecursiveDir)%(Filename)%(Extension)')"
-        />
-    </Target>
 </Project>

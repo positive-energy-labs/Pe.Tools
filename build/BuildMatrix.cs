@@ -1,14 +1,7 @@
 ﻿namespace Build;
 
 public sealed record BuildMatrix(
-    string DefaultRevitYear,
     string DefaultRevitConfiguration,
-    string StableCliConfiguration,
-    IReadOnlyList<string> SupportedRevitYears,
-    IReadOnlyList<string> AutomationSupportedRevitYears,
-    IReadOnlyList<string> RevitDebugConfigurations,
-    IReadOnlyList<string> RevitReleaseConfigurations,
-    IReadOnlyList<string> RevitTestConfigurations,
     IReadOnlyList<string> CompileRevitConfigurations,
     IReadOnlyList<string> PackConfigurations,
     IReadOnlyList<string> AutomationPackConfigurations,

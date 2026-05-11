@@ -1,6 +1,6 @@
 ﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
-using Pe.App.SettingsEditor;
+using Pe.App.Host;
 using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.Context;
 using Pe.Revit.Scripting.References;
@@ -44,7 +44,7 @@ public class CmdScriptingWorkspace : IExternalCommand {
     }
 
     private static void EnsureBridgeConnected() {
-        var connectResult = SettingsEditorBridgeConnector.EnsureConnected();
+        var connectResult = HostBridgeConnector.EnsureConnected();
         if (connectResult.Success) {
             Log.Information(
                 "Revit scripting workspace ensured host bridge connection: AlreadyConnected={AlreadyConnected}, Message={Message}",

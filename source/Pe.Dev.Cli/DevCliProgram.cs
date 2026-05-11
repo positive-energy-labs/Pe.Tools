@@ -16,10 +16,10 @@ internal static class DevCliProgram {
                                         pe-dev revit approve [--revit-year <year>] [--timeout-seconds <seconds>] [--skip-if-session-exists]
                                         pe-dev revit hot-reload
                                         pe-dev revit test [--filter <expr>] [--no-build] [--configuration <config> | --revit-year <year>] [--allow-deployed-addin]
-                                        pe-dev revit script new <script-name-or-workspace-path>
-                                        pe-dev revit script <workspace-relative-script.cs>
-                                        pe-dev revit script --workspace <key> --path <workspace-relative-script.cs>
-                                        pe-dev revit script --stdin --name <fileName>
+                                          FreshRevitProcess helper only. Use explicit-year dotnet test for AttachedRrd.
+                                        pe-dev revit sync-pea-host-client [--check]
+                                        pe-dev runtime status [--json]
+                                        pe-dev pea sync-runtime
 
                                       Global options:
                                         --repo-root <path>   Override repo root discovery.

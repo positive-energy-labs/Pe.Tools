@@ -1,4 +1,5 @@
-﻿using Pe.Shared.SettingsLayout;
+﻿using Pe.Shared.Product;
+using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Modules;
 
@@ -21,11 +22,14 @@ public sealed class ModuleStorage(string moduleKey, string basePath) {
     public string DirectoryPath => SettingsStorageLocations.ResolveModuleDirectory(this.BasePath, this.ModuleKey);
 
     public StateStorage State() => StateStorage.ExactDir(
-        DeploymentRuntimeLocations.GetModuleStatePath(this.ModuleKey),
+        ProductRuntimeLayout.ForCurrentUser().State.ResolveModuleStatePath(this.ModuleKey),
         Path.Combine(this.DirectoryPath, "state")
     );
 
-    public OutputStorage Output() => new(this.DirectoryPath);
+    public OutputStorage Output() => new(
+        ProductUserContentLayout.ForCurrentUser().Output.RootPath,
+        this.ModuleKey
+    );
 
     private static string NormalizeModuleKey(string moduleKey) {
         if (string.IsNullOrWhiteSpace(moduleKey))

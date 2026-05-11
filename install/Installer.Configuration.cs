@@ -1,10 +1,10 @@
-﻿using Microsoft.Extensions.Configuration;
-using Pe.Shared.HostContracts.Protocol;
+using Microsoft.Extensions.Configuration;
+using Pe.Shared.Product;
 
 namespace Installer;
 
 public static class InstallerConfiguration {
-    public static ResolvedInstallerConfiguration Load() {
+    public static ResolvedInstallerConfiguration Load(string outputDirectory) {
         var repositoryRoot = FindRepositoryRoot();
         var configuration = new ConfigurationBuilder()
             .AddJsonFile(Path.Combine(repositoryRoot, "build", "appsettings.json"), false)
@@ -14,22 +14,21 @@ public static class InstallerConfiguration {
         var installerOptions = configuration.GetRequiredSection("Installer").Get<InstallerConfigurationSection>()
                                ?? throw new InvalidOperationException("Installer configuration could not be loaded.");
 
+        var layoutProjection = ProductBuildLayoutProjection.CreateDefault();
         return new ResolvedInstallerConfiguration {
-            ProductName = SettingsEditorRuntime.ProductName,
+            ProductName = ProductIdentity.ProductName,
             UpgradeCode = ParseGuid(RequireValue(installerOptions.UpgradeCode, "Installer:UpgradeCode"), "Installer:UpgradeCode"),
-            OutputDirectory = ResolveInstallerOutputDirectory(repositoryRoot),
+            OutputDirectory = Path.GetFullPath(outputDirectory),
             BannerImagePath = ResolveRepositoryPath(repositoryRoot,
                 RequireValue(installerOptions.BannerImagePath, "Installer:BannerImagePath")),
             BackgroundImagePath = ResolveRepositoryPath(repositoryRoot,
                 RequireValue(installerOptions.BackgroundImagePath, "Installer:BackgroundImagePath")),
             ProductIconPath = ResolveRepositoryPath(repositoryRoot,
                 RequireValue(installerOptions.ProductIconPath, "Installer:ProductIconPath")),
-            Manufacturer = SettingsEditorRuntime.VendorName
+            Manufacturer = ProductIdentity.VendorName,
+            LayoutProjection = layoutProjection
         };
     }
-
-    private static string ResolveInstallerOutputDirectory(string repositoryRoot) =>
-        Path.Combine(repositoryRoot, ".artifacts", "packages", "installers");
 
     private static string FindRepositoryRoot() {
         var startingDirectories = new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory }
@@ -39,7 +38,7 @@ public static class InstallerConfiguration {
         foreach (var startingDirectory in startingDirectories) {
             for (var current = startingDirectory; current is not null; current = current.Parent) {
                 var appSettingsPath = Path.Combine(current.FullName, "build", "appsettings.json");
-                if (File.Exists(appSettingsPath))
+                if (System.IO.File.Exists(appSettingsPath))
                     return current.FullName;
             }
         }
@@ -72,8 +71,19 @@ public sealed record ResolvedInstallerConfiguration {
     public required string BackgroundImagePath { get; init; }
     public required string ProductIconPath { get; init; }
     public required string Manufacturer { get; init; }
+    public required ProductBuildLayoutProjection LayoutProjection { get; init; }
 
-    public string GetSingleUserHostInstallDirectory() => SettingsEditorRuntime.GetSingleUserHostInstallDirectory();
+    public string GetSingleUserHostInstallDirectory() =>
+        ToWixFolderPath("%LocalAppDataFolder%", this.LayoutProjection.Runtime.Binaries.HostDirectoryRelativePath);
+
+    public string GetSingleUserPeaInstallDirectory() =>
+        ToWixFolderPath("%LocalAppDataFolder%", this.LayoutProjection.Runtime.Binaries.PeaDirectoryRelativePath);
+
+    public string GetSingleUserRevitAddinsInstallDirectory() =>
+        ToWixFolderPath("%AppDataFolder%", this.LayoutProjection.Revit.AddinsRootRelativePath);
+
+    private static string ToWixFolderPath(string wixFolder, string relativePath) =>
+        $@"{wixFolder}\{relativePath.Replace('/', '\\')}";
 }
 
 public sealed record InstallerConfigurationSection {

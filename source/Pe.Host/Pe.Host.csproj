@@ -4,13 +4,16 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>Pe.Host</RootNamespace>
+        <PeMirrorRuntimeToLocalBin>true</PeMirrorRuntimeToLocalBin>
+        <PeMirrorRuntimeRelativePath>$(PeDevRuntimeHostDirectoryRelativePath)</PeMirrorRuntimeRelativePath>
     </PropertyGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\Pe.Aps\Pe.Aps.csproj"/>
         <ProjectReference Include="..\Pe.Shared.ApsAuth\Pe.Shared.ApsAuth.csproj"/>
         <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj"/>
-        <ProjectReference Include="..\Pe.Shared.SettingsLayout\Pe.Shared.SettingsLayout.csproj"/>
+        <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj"/>
+
         <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj"/>
     </ItemGroup>
 

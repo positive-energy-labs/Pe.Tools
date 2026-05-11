@@ -1,6 +1,5 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Pe.Shared.HostContracts.Operations;
 using TypeGen.Core.TypeAnnotations;
 
 namespace Pe.Shared.HostContracts.Protocol;
@@ -8,7 +7,7 @@ namespace Pe.Shared.HostContracts.Protocol;
 [ExportTsClass]
 public static class SettingsHostEventNames {
     public const string DocumentChanged = "document-changed";
-    public const string HostStatusChanged = "host-status-changed";
+    public const string SessionConnectionChanged = "session-connection-changed";
 }
 
 public static class HostRuntimeEventNames {
@@ -21,73 +20,23 @@ public static class HttpRoutes {
     public const string SettingsBase = "/api/settings";
     public const string RevitDataBase = "/api/revit-data";
     public const string ScriptingBase = "/api/scripting";
-    public static readonly string ApsAuthStatus = GetApsAuthStatusOperationContract.Definition.Route;
-    public static readonly string ApsAuthLogin = LoginApsOperationContract.Definition.Route;
-    public static readonly string ApsAuthLogout = LogoutApsOperationContract.Definition.Route;
-    public static readonly string ApsAuthToken = AcquireApsAccessTokenOperationContract.Definition.Route;
-    public static readonly string HostStatus = GetHostStatusOperationContract.Definition.Route;
-    public static readonly string Schema = GetSchemaOperationContract.Definition.Route;
-    public static readonly string Workspaces = GetWorkspacesOperationContract.Definition.Route;
-    public static readonly string Tree = DiscoverSettingsTreeOperationContract.Definition.Route;
-    public static readonly string FieldOptions = GetFieldOptionsOperationContract.Definition.Route;
-    public static readonly string ParameterCatalog = GetParameterCatalogOperationContract.Definition.Route;
-    public static readonly string OpenDocument = OpenSettingsDocumentOperationContract.Definition.Route;
-    public static readonly string ValidateDocument = ValidateSettingsDocumentOperationContract.Definition.Route;
-    public static readonly string SaveDocument = SaveSettingsDocumentOperationContract.Definition.Route;
-    public static readonly string Events = SettingsBase + "/events";
-
-    public static readonly string LoadedFamiliesFilterSchema =
-        GetLoadedFamiliesFilterSchemaOperationContract.Definition.Route;
-
-    public static readonly string LoadedFamiliesFilterFieldOptions =
-        GetLoadedFamiliesFilterFieldOptionsOperationContract.Definition.Route;
-
-    public static readonly string ScheduleCatalog = GetScheduleCatalogOperationContract.Definition.Route;
-    public static readonly string ScheduleProfilesQuery = GetScheduleProfilesQueryOperationContract.Definition.Route;
-    public static readonly string ScheduleQuery = GetScheduleQueryOperationContract.Definition.Route;
-    public static readonly string LoadedFamiliesCatalog = GetLoadedFamiliesCatalogOperationContract.Definition.Route;
-    public static readonly string LoadedFamiliesMatrix = GetLoadedFamiliesMatrixOperationContract.Definition.Route;
-
-    public static readonly string ProjectParameterBindings =
-        GetProjectParameterBindingsOperationContract.Definition.Route;
-
-    public static readonly string ElementContextQuery =
-        GetElementContextQueryOperationContract.Definition.Route;
-
-    public static readonly string ElectricalPanelsCatalog =
-        GetElectricalPanelsCatalogOperationContract.Definition.Route;
-
-    public static readonly string ElectricalCircuitsCatalog =
-        GetElectricalCircuitsCatalogOperationContract.Definition.Route;
-
-    public static readonly string ElectricalPanelSchedulesQuery =
-        GetElectricalPanelSchedulesQueryOperationContract.Definition.Route;
-
-    public static readonly string ElectricalLoadClassificationsCatalog =
-        GetElectricalLoadClassificationsCatalogOperationContract.Definition.Route;
-
-    public static readonly string DocumentContext =
-        GetRevitDocumentSessionContextOperationContract.Definition.Route;
-
-    public static readonly string ScriptingWorkspaceBootstrap =
-        GetScriptWorkspaceBootstrapOperationContract.Definition.Route;
-
-    public static readonly string ScriptingExecute =
-        ExecuteRevitScriptOperationContract.Definition.Route;
+    public const string Bridge = "/api/bridge";
+    public const string Events = SettingsBase + "/events";
 }
 
 [ExportTsClass]
 public static class HostProtocol {
     public const string Transport = "http+sse";
-    public const int ContractVersion = 31;
+    public const int ContractVersion = 33;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
 [ExportTsEnum]
-public enum HostStatusChangedReason {
-    BridgeConnected,
+public enum HostSessionConnectionChangeReason {
+    BridgeRegistered,
+    BridgeRejected,
     BridgeDisconnected,
-    BridgeHandshakeRefreshed,
+    BridgeStateSynchronized,
     ActiveDocumentChanged
 }
 
@@ -124,59 +73,39 @@ public record HostModuleDescriptor(
 );
 
 [ExportTsInterface]
-public record HostSessionData(
-    string SessionId,
-    string RevitVersion,
-    int ProcessId,
-    bool HasActiveDocument,
-    string? ActiveDocumentTitle,
-    string? ActiveDocumentKey,
-    string? ActiveDocumentPath,
-    bool ActiveDocumentIsFamilyDocument,
-    bool ActiveDocumentIsWorkshared,
-    bool ActiveDocumentIsModelInCloud,
-    string? ActiveDocumentCloudProjectGuid,
-    string? ActiveDocumentCloudModelGuid,
-    string? ActiveDocumentCloudModelUrn,
-    long ActiveDocumentObservedAtUnixMs,
-    int OpenDocumentCount,
-    string? RuntimeFramework,
-    int BridgeContractVersion,
-    string BridgeTransport,
-    List<HostModuleDescriptor> AvailableModules,
-    long ConnectedAtUnixMs
+public record HostActiveDocumentSummary(
+    string? Title,
+    string? Key,
+    string? Path,
+    bool IsFamilyDocument,
+    bool IsWorkshared,
+    bool IsModelInCloud,
+    string? CloudProjectGuid,
+    string? CloudModelGuid,
+    string? CloudModelUrn,
+    long ObservedAtUnixMs
 );
 
 [ExportTsInterface]
-public record HostStatusData(
-    bool HostIsRunning,
+public record HostProbeData(
+    string RuntimeIdentity,
+    int HostContractVersion,
+    int BridgeContractVersion,
+    string BridgePath,
     bool BridgeIsConnected,
-    bool HasActiveDocument,
-    string? ActiveDocumentTitle,
-    string? ActiveDocumentKey,
-    string? ActiveDocumentPath,
-    bool ActiveDocumentIsFamilyDocument,
-    bool ActiveDocumentIsWorkshared,
-    bool ActiveDocumentIsModelInCloud,
-    string? ActiveDocumentCloudProjectGuid,
-    string? ActiveDocumentCloudModelGuid,
-    string? ActiveDocumentCloudModelUrn,
-    long ActiveDocumentObservedAtUnixMs,
-    int OpenDocumentCount,
+    string? DisconnectReason
+);
+
+[ExportTsInterface]
+public record HostSessionSummaryData(
+    bool BridgeIsConnected,
+    string? SessionId,
+    int? ProcessId,
     string? RevitVersion,
     string? RuntimeFramework,
-    int HostContractVersion,
-    string HostTransport,
-    string RuntimeIdentity,
-    string PipeName,
-    string? ServerVersion,
-    int BridgeContractVersion,
-    string BridgeTransport,
-    List<HostModuleDescriptor> CatalogModules,
-    string? DisconnectReason,
-    string? DefaultSessionId,
-    long HostObservedAtUnixMs,
-    List<HostSessionData> Sessions
+    int OpenDocumentCount,
+    HostActiveDocumentSummary? ActiveDocument,
+    IReadOnlyList<HostModuleDescriptor> AvailableModules
 );
 
 [ExportTsInterface]
@@ -199,21 +128,13 @@ public record DocumentInvalidationEvent(
 );
 
 [ExportTsInterface]
-public record HostStatusChangedEvent(
-    HostStatusChangedReason Reason,
-    bool HasActiveDocument,
-    string? DocumentTitle,
-    string? DocumentKey,
-    string? DocumentPath,
-    bool DocumentIsFamilyDocument,
-    bool DocumentIsWorkshared,
-    bool DocumentIsModelInCloud,
-    string? DocumentCloudProjectGuid,
-    string? DocumentCloudModelGuid,
-    string? DocumentCloudModelUrn,
+public record HostSessionConnectionChangedEvent(
+    HostSessionConnectionChangeReason Reason,
+    bool BridgeIsConnected,
+    string? SessionId,
+    int? ProcessId,
+    string? RevitVersion,
+    string? RuntimeFramework,
     int OpenDocumentCount,
-    long DocumentObservedAtUnixMs,
-    string? SessionId = null,
-    string? RevitVersion = null,
-    int ConnectedSessionCount = 0
+    string? DisconnectReason = null
 );
