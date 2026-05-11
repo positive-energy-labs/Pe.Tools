@@ -6,8 +6,8 @@ Saved context from DA planning discussion on 2026-04-21.
 
 - `Pe.Dev.RevitAutomation.Worker` already works as a general DA shell with typed workload dispatch.
 - Single-model cloud open and schedule collection are already proven in this repo's current direction.
-- Root build/config already knows about `R23` through `R26`, but the DA worker build/package path still hardcodes only `2025` and `2026`.
-- Model discovery and batch manifests still assume one manifest-level `engine`, not per-model routing.
+- Root build/config knows about `R23` through `R26`; Design Automation packaging starts at `R24` because R23 DA targeting is no longer supported.
+- Model discovery and batch manifests now carry per-model routing fields; keep future DA work grouped by execution engine year rather than one batch-wide engine assumption.
 
 ## Multi-year DA direction
 

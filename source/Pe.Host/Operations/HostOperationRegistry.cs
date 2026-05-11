@@ -1,10 +1,10 @@
 using Pe.Shared.ApsAuth;
+using Pe.Shared.HostContracts.Bridge;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Protocol;
-using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.HostContracts.SettingsStorage;
-using Pe.Shared.RevitData;
-using Pe.Shared.RevitData.Schedules;
+using Pe.Shared.HostContracts;
+using Pe.Shared.Product;
 
 namespace Pe.Host.Operations;
 
@@ -12,7 +12,7 @@ internal sealed class HostOperationRegistry {
     private readonly IReadOnlyDictionary<string, IHostOperation> _operationsByKey;
 
     public HostOperationRegistry() {
-        this.Operations = [
+        IHostOperation[] localOperations = [
             HostOperations.Create<ApsTokenRequest>(
                 GetApsAuthStatusOperationContract.Definition,
                 static (request, context, cancellationToken) =>
@@ -36,12 +36,19 @@ internal sealed class HostOperationRegistry {
                     Task.FromResult(HostOperations.Local(context.ApsAuthService.AcquireAccessToken(request)))
             ),
             HostOperations.Create<NoRequest>(
-                GetHostStatusOperationContract.Definition,
+                GetHostProbeOperationContract.Definition,
                 static (request, context, cancellationToken) =>
-                    Task.FromResult(HostOperations.Local(CreateHostStatusData(context)))
+                    Task.FromResult(HostOperations.Local(CreateHostProbeData(context)))
             ),
-            HostOperations.Bridge<SchemaRequest, SchemaData>(
-                GetSchemaOperationContract.Definition
+            HostOperations.Create<NoRequest>(
+                GetHostSessionSummaryOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    Task.FromResult(HostOperations.Local(CreateHostSessionSummaryData(context)))
+            ),
+            HostOperations.Create<HostLogsRequest>(
+                GetHostLogsOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    Task.FromResult(HostOperations.Local(CreateHostLogsData(request)))
             ),
             HostOperations.Create<GetSettingsWorkspacesRequest>(
                 GetWorkspacesOperationContract.Definition,
@@ -52,56 +59,6 @@ internal sealed class HostOperationRegistry {
                 DiscoverSettingsTreeOperationContract.Definition,
                 static async (request, context, cancellationToken) =>
                     HostOperations.Local(await context.StorageService.DiscoverAsync(request, cancellationToken))
-            ),
-            HostOperations.Bridge<FieldOptionsRequest, FieldOptionsData>(
-                GetFieldOptionsOperationContract.Definition
-            ),
-            HostOperations.Bridge<ParameterCatalogRequest, ParameterCatalogData>(
-                GetParameterCatalogOperationContract.Definition
-            ),
-            HostOperations.Bridge<ScheduleCatalogRequest, ScheduleCatalogData>(
-                GetScheduleCatalogOperationContract.Definition
-            ),
-            HostOperations.Bridge<ScheduleProfilesQueryRequest, ScheduleProfilesQueryData>(
-                GetScheduleProfilesQueryOperationContract.Definition
-            ),
-            HostOperations.Bridge<ScheduleQueryRequest, ScheduleQueryData>(
-                GetScheduleQueryOperationContract.Definition
-            ),
-            HostOperations.Bridge<NoRequest, SchemaData>(
-                GetLoadedFamiliesFilterSchemaOperationContract.Definition
-            ),
-            HostOperations.Bridge<LoadedFamiliesFilterFieldOptionsRequest, FieldOptionsData>(
-                GetLoadedFamiliesFilterFieldOptionsOperationContract.Definition
-            ),
-            HostOperations.Bridge<LoadedFamiliesCatalogRequest, LoadedFamiliesCatalogData>(
-                GetLoadedFamiliesCatalogOperationContract.Definition
-            ),
-            HostOperations.Bridge<LoadedFamiliesMatrixRequest, LoadedFamiliesMatrixData>(
-                GetLoadedFamiliesMatrixOperationContract.Definition
-            ),
-            HostOperations.Bridge<ProjectParameterBindingsRequest, ProjectParameterBindingsData>(
-                GetProjectParameterBindingsOperationContract.Definition
-            ),
-            HostOperations.Bridge<ElementContextQueryRequest, ElementContextQueryData>(
-                GetElementContextQueryOperationContract.Definition
-            ),
-            HostOperations.Bridge<ElectricalPanelsCatalogRequest, ElectricalPanelsCatalogData>(
-                GetElectricalPanelsCatalogOperationContract.Definition
-            ),
-            HostOperations.Bridge<ElectricalCircuitsCatalogRequest, ElectricalCircuitsCatalogData>(
-                GetElectricalCircuitsCatalogOperationContract.Definition
-            ),
-            HostOperations.Bridge<ElectricalPanelSchedulesQueryRequest, ElectricalPanelSchedulesQueryData>(
-                GetElectricalPanelSchedulesQueryOperationContract.Definition
-            ),
-            HostOperations
-                .Bridge<ElectricalLoadClassificationsCatalogRequest,
-                    ElectricalLoadClassificationsCatalogData>(
-                    GetElectricalLoadClassificationsCatalogOperationContract.Definition
-                ),
-            HostOperations.Bridge<NoRequest, RevitDocumentSessionContextData>(
-                GetRevitDocumentSessionContextOperationContract.Definition
             ),
             HostOperations.Create<OpenSettingsDocumentRequest>(
                 OpenSettingsDocumentOperationContract.Definition,
@@ -117,30 +74,15 @@ internal sealed class HostOperationRegistry {
                 SaveSettingsDocumentOperationContract.Definition,
                 static async (request, context, cancellationToken) =>
                     HostOperations.Local(await context.StorageService.SaveAsync(request, cancellationToken))
-            ),
-            HostOperations.Create<ScriptWorkspaceBootstrapRequest>(
-                GetScriptWorkspaceBootstrapOperationContract.Definition,
-                static async (request, context, cancellationToken) => {
-                    EnsureSingleConnectedScriptingSession(context);
-                    return HostOperations.Path(
-                        await context.ScriptingPipeClientService.BootstrapWorkspaceAsync(request, cancellationToken),
-                        "scripting-pipe"
-                    );
-                }
-            ),
-            HostOperations.Create<ExecuteRevitScriptRequest>(
-                ExecuteRevitScriptOperationContract.Definition,
-                static async (request, context, cancellationToken) => {
-                    EnsureSingleConnectedScriptingSession(context);
-                    return HostOperations.Path(
-                        await context.ScriptingPipeClientService.ExecuteAsync(request, cancellationToken),
-                        "scripting-pipe"
-                    );
-                }
             )
         ];
 
-        ValidateUniqueDefinitions(this.Operations);
+        this.Operations = [
+            .. localOperations,
+            .. HostOperationsCatalog.Bridge.Select(definition => HostOperations.Bridge(definition))
+        ];
+
+        ValidateDefinitions(this.Operations);
         this._operationsByKey = this.Operations.ToDictionary(
             operation => operation.Definition.Key,
             StringComparer.Ordinal
@@ -152,18 +94,52 @@ internal sealed class HostOperationRegistry {
     public bool TryGetByKey(string key, out IHostOperation operation) =>
         this._operationsByKey.TryGetValue(key, out operation!);
 
-    private static void ValidateUniqueDefinitions(IReadOnlyList<IHostOperation> operations) {
-        var definitionKeys = operations
-            .Select(operation => operation.Definition.Key)
-            .ToHashSet(StringComparer.Ordinal);
+    private static HostLogsData CreateHostLogsData(HostLogsRequest request) {
+        if (request.TailLineCount <= 0)
+            throw new ArgumentOutOfRangeException(nameof(request), "TailLineCount must be greater than zero.");
+
+        var logs = ProductRuntimeLayout.ForCurrentUser().Logs;
+        HostLogFileData[] files = request.Target switch {
+            HostLogTarget.Host => [CreateHostLogFile("host", logs.HostLogPath, request.TailLineCount)],
+            HostLogTarget.Revit => [CreateHostLogFile("revit", logs.RevitAppLogPath, request.TailLineCount)],
+            HostLogTarget.All => [
+                CreateHostLogFile("host", logs.HostLogPath, request.TailLineCount),
+                CreateHostLogFile("revit", logs.RevitAppLogPath, request.TailLineCount)
+            ],
+            _ => throw new InvalidOperationException($"Unsupported log target '{request.Target}'.")
+        };
+
+        return new HostLogsData(files);
+    }
+
+    private static HostLogFileData CreateHostLogFile(string label, string filePath, int tailLineCount) {
+        var lines = File.Exists(filePath)
+            ? File.ReadAllLines(filePath)
+            : [];
+        var startIndex = Math.Max(0, lines.Length - tailLineCount);
+        return new HostLogFileData(label, filePath, [.. lines.Skip(startIndex)]);
+    }
+
+    private static void ValidateDefinitions(IReadOnlyList<IHostOperation> operations) {
+        var definitionKeys = operations.Select(operation => operation.Definition.Key).ToHashSet(StringComparer.Ordinal);
         var missingSharedDefinitions = HostOperationsCatalog.All
             .Where(definition => !definitionKeys.Contains(definition.Key))
             .Select(definition => definition.Key)
-            .Except([GetSettingsModuleCatalogBridgeOperationContract.Definition.Key], StringComparer.Ordinal)
             .ToList();
         if (missingSharedDefinitions.Count != 0) {
             throw new InvalidOperationException(
                 $"Host operation registry is missing shared host operations: {string.Join(", ", missingSharedDefinitions)}"
+            );
+        }
+
+        var extraDefinitions = operations
+            .Where(operation => !HostOperationsCatalog.All.Any(definition =>
+                string.Equals(definition.Key, operation.Definition.Key, StringComparison.Ordinal)))
+            .Select(operation => operation.Definition.Key)
+            .ToList();
+        if (extraDefinitions.Count != 0) {
+            throw new InvalidOperationException(
+                $"Host operation registry contains operations missing from the shared catalog: {string.Join(", ", extraDefinitions)}"
             );
         }
 
@@ -179,6 +155,7 @@ internal sealed class HostOperationRegistry {
         }
 
         var duplicateRoutes = operations
+            .Where(operation => operation.Definition.IsPublicHttp)
             .GroupBy(operation => $"{operation.Definition.Verb}:{operation.Definition.Route}", StringComparer.Ordinal)
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
@@ -190,79 +167,43 @@ internal sealed class HostOperationRegistry {
         }
     }
 
-    private static HostStatusData CreateHostStatusData(HostOperationContext context) {
-        var runtimeState = context.RuntimeStateService.GetState();
-        var snapshot = runtimeState.BridgeSnapshot;
-        var defaultSession = snapshot.DefaultSession;
-        var hostObservedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-        return new HostStatusData(
-            true,
-            snapshot.BridgeIsConnected,
-            defaultSession?.HasActiveDocument ?? false,
-            defaultSession?.ActiveDocumentTitle,
-            defaultSession?.ActiveDocumentKey,
-            defaultSession?.ActiveDocumentPath,
-            defaultSession?.ActiveDocumentIsFamilyDocument ?? false,
-            defaultSession?.ActiveDocumentIsWorkshared ?? false,
-            defaultSession?.ActiveDocumentIsModelInCloud ?? false,
-            defaultSession?.ActiveDocumentCloudProjectGuid,
-            defaultSession?.ActiveDocumentCloudModelGuid,
-            defaultSession?.ActiveDocumentCloudModelUrn,
-            defaultSession?.ActiveDocumentObservedAtUnixMs ?? 0,
-            defaultSession?.OpenDocumentCount ?? 0,
-            defaultSession?.RevitVersion,
-            defaultSession?.RuntimeFramework,
+    private static HostProbeData CreateHostProbeData(HostOperationContext context) {
+        var snapshot = context.BridgeServer.GetSnapshot();
+        return new HostProbeData(
+            HostProcessIdentity.RuntimeIdentity,
             HostProtocol.ContractVersion,
-            HostProtocol.Transport,
-            SettingsEditorRuntime.RuntimeIdentity,
-            snapshot.PipeName,
-            typeof(BridgeServer).Assembly.GetName().Version?.ToString(),
-            defaultSession?.BridgeContractVersion ?? BridgeProtocol.ContractVersion,
-            defaultSession?.BridgeTransport ?? BridgeProtocol.Transport,
-            [.. runtimeState.CatalogModules],
-            snapshot.DisconnectReason,
-            snapshot.DefaultSessionId,
-            hostObservedAtUnixMs,
-            snapshot.Sessions
-                .Select(session => new HostSessionData(
-                    session.SessionId,
-                    session.RevitVersion,
-                    session.ProcessId,
-                    session.HasActiveDocument,
-                    session.ActiveDocumentTitle,
-                    session.ActiveDocumentKey,
-                    session.ActiveDocumentPath,
-                    session.ActiveDocumentIsFamilyDocument,
-                    session.ActiveDocumentIsWorkshared,
-                    session.ActiveDocumentIsModelInCloud,
-                    session.ActiveDocumentCloudProjectGuid,
-                    session.ActiveDocumentCloudModelGuid,
-                    session.ActiveDocumentCloudModelUrn,
-                    session.ActiveDocumentObservedAtUnixMs,
-                    session.OpenDocumentCount,
-                    session.RuntimeFramework,
-                    session.BridgeContractVersion,
-                    session.BridgeTransport,
-                    [.. session.AvailableModules],
-                    session.ConnectedAtUnixMs
-                ))
-                .ToList()
+            BridgeProtocol.ContractVersion,
+            snapshot.BridgePath,
+            snapshot.BridgeIsConnected,
+            snapshot.DisconnectReason
         );
     }
 
-    private static void EnsureSingleConnectedScriptingSession(HostOperationContext context) {
-        var sessions = context.RuntimeStateService.GetState().BridgeSnapshot.Sessions;
-        if (sessions.Count == 0) {
-            throw new InvalidOperationException(
-                "Revit scripting requires exactly one connected Revit session. Connect one Revit session to Pe.Host and try again."
-            );
-        }
-
-        if (sessions.Count > 1) {
-            throw new InvalidOperationException(
-                "Revit scripting v1 supports exactly one connected Revit session. Disconnect the extra sessions and try again."
-            );
-        }
+    private static HostSessionSummaryData CreateHostSessionSummaryData(HostOperationContext context) {
+        var snapshot = context.BridgeServer.GetSnapshot();
+        var connectedSession = snapshot.ConnectedSession;
+        return new HostSessionSummaryData(
+            snapshot.BridgeIsConnected,
+            connectedSession?.SessionId,
+            connectedSession?.ProcessId,
+            connectedSession?.RevitVersion,
+            connectedSession?.RuntimeFramework,
+            connectedSession?.OpenDocumentCount ?? 0,
+            connectedSession == null
+                ? null
+                : new HostActiveDocumentSummary(
+                    connectedSession.ActiveDocumentTitle,
+                    connectedSession.ActiveDocumentKey,
+                    connectedSession.ActiveDocumentPath,
+                    connectedSession.ActiveDocumentIsFamilyDocument,
+                    connectedSession.ActiveDocumentIsWorkshared,
+                    connectedSession.ActiveDocumentIsModelInCloud,
+                    connectedSession.ActiveDocumentCloudProjectGuid,
+                    connectedSession.ActiveDocumentCloudModelGuid,
+                    connectedSession.ActiveDocumentCloudModelUrn,
+                    connectedSession.ActiveDocumentObservedAtUnixMs
+                ),
+            connectedSession?.AvailableModules ?? []
+        );
     }
 }

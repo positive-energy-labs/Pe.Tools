@@ -6,13 +6,17 @@ using System.Threading.Channels;
 namespace Pe.Host.Services;
 
 public sealed class HostEventStreamService {
+    private const int SubscriberBufferCapacity = 256;
+
     private readonly JsonSerializerSettings _serializerSettings = HostJson.CreateSerializerSettings();
     private readonly ConcurrentDictionary<Guid, Channel<HostEventStreamMessage>> _subscribers = new();
 
     public ChannelReader<HostEventStreamMessage> Subscribe(CancellationToken cancellationToken) {
         var subscriberId = Guid.NewGuid();
-        var channel = Channel.CreateUnbounded<HostEventStreamMessage>(new UnboundedChannelOptions {
-            SingleReader = true, SingleWriter = false
+        var channel = Channel.CreateBounded<HostEventStreamMessage>(new BoundedChannelOptions(SubscriberBufferCapacity) {
+            FullMode = BoundedChannelFullMode.DropOldest,
+            SingleReader = true,
+            SingleWriter = false
         });
 
         this._subscribers[subscriberId] = channel;
@@ -25,10 +29,10 @@ public sealed class HostEventStreamService {
         CancellationToken cancellationToken = default
     ) => this.PublishAsync(SettingsHostEventNames.DocumentChanged, payload, cancellationToken);
 
-    public Task PublishHostStatusChangedAsync(
-        HostStatusChangedEvent payload,
+    public Task PublishSessionConnectionChangedAsync(
+        HostSessionConnectionChangedEvent payload,
         CancellationToken cancellationToken = default
-    ) => this.PublishAsync(SettingsHostEventNames.HostStatusChanged, payload, cancellationToken);
+    ) => this.PublishAsync(SettingsHostEventNames.SessionConnectionChanged, payload, cancellationToken);
 
     public Task PublishAsync<TPayload>(
         string eventName,

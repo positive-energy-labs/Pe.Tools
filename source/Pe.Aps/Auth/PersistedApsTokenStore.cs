@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Pe.Shared.Product;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -17,14 +18,10 @@ internal sealed class PersistedApsTokenStore {
             return;
         }
 
-        var root = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Positive Energy",
-            "Pe.Tools",
-            "ApsAuth"
-        );
-        Directory.CreateDirectory(root);
-        this._filePath = Path.Combine(root, "tokens.json");
+        this._filePath = ProductRuntimeLayout.ForCurrentUser().State.ApsTokenStorePath;
+        var root = Path.GetDirectoryName(this._filePath);
+        if (!string.IsNullOrWhiteSpace(root))
+            Directory.CreateDirectory(root);
     }
 
     public PersistedTokenRecord? Load(string key) {

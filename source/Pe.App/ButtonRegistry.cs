@@ -3,9 +3,9 @@ using Pe.App.Commands;
 using Pe.App.Commands.AutoTag;
 using Pe.App.Commands.FamilyFoundry;
 using Pe.App.Commands.Palette;
+using Pe.App.Commands.PeTools;
 using Pe.App.Commands.Schedules;
 using Pe.App.Commands.Scripting;
-using Pe.App.Commands.SettingsEditor;
 
 namespace Pe.App;
 
@@ -200,18 +200,18 @@ public sealed class ButtonRegistry {
                               """,
             Container = new ButtonContainer.PullDown("General", "Manage")
         }),
-        Register(new ButtonRegistration<CmdSettingsEditor> {
-            Text = "Settings Editor",
+        Register(new ButtonRegistration<CmdPeTools> {
+            Text = "Pe Tools",
             SmallImage = "monitor-down16.png",
             LargeImage = "monitor-down32.png",
-            ToolTip = "Manually connect or disconnect this Revit session from the external settings editor host.",
+            ToolTip = "Manually connect or disconnect this Revit session from the external host.",
             LongDescription = """
-                              The external settings editor runs out of process.
+                              The external Pe Tools frontend runs out of process.
 
                               Use this command to:
                               - connect this Revit session to the manually launched host
                               - disconnect when you want zero bridge activity
-                              - open the browser-based settings editor
+                              - open the browser-based Pe Tools frontend
                               """,
             Container = new ButtonContainer.PullDown("General", "Manage")
         }),

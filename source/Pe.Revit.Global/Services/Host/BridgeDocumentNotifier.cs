@@ -129,7 +129,7 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
 
             await this._publishAsync(payload);
         } catch (Exception ex) {
-            Log.Warning(ex, "SettingsEditor bridge failed to publish document invalidation event.");
+            Log.Warning(ex, "Host bridge failed to publish document invalidation event.");
         }
     }
 }

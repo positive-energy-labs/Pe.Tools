@@ -3,8 +3,7 @@
 namespace Pe.Host.Operations;
 
 internal sealed record HostOperationResult(
-    object? Response,
-    string ExecutionPath
+    object? Response
 );
 
 internal interface IHostOperation {
@@ -17,7 +16,7 @@ internal interface IHostOperation {
     );
 }
 
-internal sealed class DelegatingHostOperation<TRequest>(
+internal sealed class BaseHostOperation<TRequest>(
     HostOperationDefinition definition,
     Func<TRequest, HostOperationContext, CancellationToken, Task<HostOperationResult>> handler
 ) : IHostOperation {
@@ -37,22 +36,24 @@ internal static class HostOperations {
     public static IHostOperation Create<TRequest>(
         HostOperationDefinition definition,
         Func<TRequest, HostOperationContext, CancellationToken, Task<HostOperationResult>> handler
-    ) => new DelegatingHostOperation<TRequest>(definition, handler);
+    ) => new BaseHostOperation<TRequest>(definition, handler);
 
-    public static IHostOperation Bridge<TRequest, TResponse>(HostOperationDefinition definition) =>
-        Create<TRequest>(
+    public static IHostOperation Bridge(HostOperationDefinition definition) {
+        if (definition.ExecutionMode != HostExecutionMode.Bridge)
+            throw new InvalidOperationException(
+                $"Host operation '{definition.Key}' is not a bridge operation."
+            );
+
+        return Create<object>(
             definition,
-            async (request, context, cancellationToken) => Path(
-                await context.BridgeServer.InvokeAsync<TRequest, TResponse>(
-                    definition.Key,
-                    request,
-                    cancellationToken
-                ),
-                "bridge"
+            async (request, context, cancellationToken) => new HostOperationResult(
+                await context.BridgeServer.InvokeAsync(definition, request, cancellationToken)
             )
         );
+    }
 
-    public static HostOperationResult Local(object? response) => new(response, "local");
+    public static IHostOperation Bridge<TRequest, TResponse>(HostOperationDefinition definition) =>
+        Bridge(definition);
 
-    public static HostOperationResult Path(object? response, string executionPath) => new(response, executionPath);
+    public static HostOperationResult Local(object? response) => new(response);
 }

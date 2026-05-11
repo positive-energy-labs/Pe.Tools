@@ -23,10 +23,12 @@ internal static class RevitCommandRunner {
             RevitCommandKind.InternalApproveWorker => RunApproveWorkerAsync(options.CommandArguments, cancellationToken),
             RevitCommandKind.HotReload => RunHotReloadAsync(options.RepoRoot, options.CommandArguments, cancellationToken),
             RevitCommandKind.Logs => Task.FromResult(RunLogs(options.CommandArguments)),
+            RevitCommandKind.PeaSyncRuntime => PeaRuntimeSyncCli.RunAsync(options.CommandArguments, options.RepoRoot, cancellationToken),
+            RevitCommandKind.RuntimeStatus => Task.FromResult(RuntimeStatusCli.Run(options.CommandArguments)),
             RevitCommandKind.Session => Task.FromResult(RunSession(options.CommandArguments)),
             RevitCommandKind.SyncRuntime => RunSyncRuntimeAsync(options.RepoRoot, options.CommandArguments, cancellationToken),
             RevitCommandKind.Test => RunTestAsync(options.RepoRoot, options.CommandArguments, cancellationToken),
-            RevitCommandKind.Script => ScriptCliProgram.RunAsync(options.CommandArguments.ToArray(), options.RepoRoot, cancellationToken),
+            RevitCommandKind.SyncPeaHostClient => PeaHostClientSyncCli.RunAsync(options.CommandArguments, options.RepoRoot, cancellationToken),
             _ => Task.FromResult(10)
         };
 
@@ -148,18 +150,19 @@ internal static class RevitCommandRunner {
 
         var initialReport = CreateSessionReport(
             SessionSelector.DiscoverSessions().ToList(),
-            RevitSessionHostClient.TryGetStatus()
+            RevitSessionHostClient.TryGetProbe(),
+            RevitSessionHostClient.TryGetSessionSummary()
         );
 
         if (initialReport.SelectedProcessSession is null) {
-            WriteHostStatusSummary(initialReport.HostStatus);
+            WriteHostStatusSummary(initialReport);
             Console.Error.WriteLine("No visible local Revit process sessions found.");
             return GetSessionExitCode(initialReport);
         }
 
         var selectedSession = initialReport.SelectedProcessSession;
         Console.Out.WriteLine($"sync-runtime {FormatSessionRecord("selected", selectedSession)}");
-        WriteHostStatusSummary(initialReport.HostStatus);
+        WriteHostStatusSummary(initialReport);
 
         if (!selectedSession.Responding || selectedSession.Hung) {
             Console.Error.WriteLine(
@@ -174,16 +177,17 @@ internal static class RevitCommandRunner {
 
         var postReport = CreateSessionReport(
             SessionSelector.DiscoverSessions().ToList(),
-            RevitSessionHostClient.TryGetStatus()
+            RevitSessionHostClient.TryGetProbe(),
+            RevitSessionHostClient.TryGetSessionSummary()
         );
         if (postReport.SelectedProcessSession is null) {
-            WriteHostStatusSummary(postReport.HostStatus);
+            WriteHostStatusSummary(postReport);
             Console.Error.WriteLine("Revit session was not visible after hot reload completed.");
             return 2;
         }
 
         Console.Out.WriteLine($"post-sync {FormatSessionRecord("selected", postReport.SelectedProcessSession)}");
-        WriteHostStatusSummary(postReport.HostStatus);
+        WriteHostStatusSummary(postReport);
 
         if (!postReport.SelectedProcessSession.Responding || postReport.SelectedProcessSession.Hung) {
             Console.Error.WriteLine(
@@ -235,23 +239,6 @@ internal static class RevitCommandRunner {
         Console.Out.WriteLine(
             $"revit test configuration={plan.Configuration} revitYear={plan.RevitYear} noBuild={plan.NoBuild} deployedAddin={(plan.AllowDeployedAddin ? "allowed" : "quarantined")} reason={plan.Reason}");
 
-        RevitTestOutputLayout outputLayout;
-        if (plan.NoBuild) {
-            try {
-                outputLayout = RevitTestOutputLayout.Resolve(repoRoot, plan.Configuration);
-            } catch (Exception ex) {
-                Console.Error.WriteLine(ex.Message);
-                return 10;
-            }
-
-            if (!File.Exists(outputLayout.AssemblyPath)) {
-                Console.Error.WriteLine(
-                    $"`pe-dev revit test --no-build` expected an existing test assembly at '{outputLayout.AssemblyPath}', but it was not found. Re-run without `--no-build` or build configuration '{plan.Configuration}' first."
-                );
-                return 10;
-            }
-        }
-
         if (!plan.NoBuild) {
             var buildStartInfo = CreateDotNetStartInfo(
                 repoRoot,
@@ -266,6 +253,7 @@ internal static class RevitCommandRunner {
                 return buildExitCode;
         }
 
+        RevitTestOutputLayout outputLayout;
         try {
             outputLayout = RevitTestOutputLayout.Resolve(repoRoot, plan.Configuration);
         } catch (Exception ex) {
@@ -315,14 +303,15 @@ internal static class RevitCommandRunner {
             testStartInfo.ArgumentList.Add("--filter");
             testStartInfo.ArgumentList.Add(plan.Filter);
         }
+        testStartInfo.ArgumentList.Add("/p:PeRevitRawDotNetTestWarningSuppressed=true");
+        testStartInfo.ArgumentList.Add("/p:PeVerifyTarget=FreshRevitProcess");
 
         testStartInfo.Environment["RICAUN_REVITTEST_TESTADAPTER_NUNIT_VERSION"] =
             plan.RevitYear.ToString(CultureInfo.InvariantCulture);
         testStartInfo.Environment["RICAUN_REVITTEST_TESTADAPTER_NUNIT_OPEN"] =
             bool.TrueString;
         testStartInfo.Environment["RICAUN_REVITTEST_TESTADAPTER_NUNIT_CLOSE"] =
-            bool.FalseString;
-        testStartInfo.Environment["PE_REVIT_TEST_ORCHESTRATED"] = "1";
+            bool.TrueString;
 
         var baselineSessionIds = SessionSelector.DiscoverSessions(plan.RevitYear)
             .Select(session => session.ProcessId)
@@ -344,14 +333,25 @@ internal static class RevitCommandRunner {
             }
         }
 
-        var testExitCode = await ForegroundProcessRunner.RunAsync(testStartInfo, cancellationToken);
-        PersistOwnedTestSession(
+        using var ownedSessionTrackingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var ownedSessionTracker = TrackFreshOwnedSessionAsync(
             plan.RevitYear,
             plan.Configuration,
             runtimeFingerprint,
-            baselineSessionIds
+            baselineSessionIds,
+            ownedSessionTrackingCts.Token
         );
-        return testExitCode;
+
+        int testExitCode;
+        try {
+            testExitCode = await ForegroundProcessRunner.RunAsync(testStartInfo, cancellationToken);
+        } finally {
+            ownedSessionTrackingCts.Cancel();
+            await ownedSessionTracker;
+        }
+
+        var closeExitCode = CloseFreshTestSessions(plan.RevitYear, baselineSessionIds);
+        return closeExitCode != 0 ? closeExitCode : testExitCode;
     }
 
     private static int RunSession(IReadOnlyList<string> forwardedArguments) {
@@ -365,45 +365,53 @@ internal static class RevitCommandRunner {
 
         var report = CreateSessionReport(
             SessionSelector.DiscoverSessions().ToList(),
-            RevitSessionHostClient.TryGetStatus()
+            RevitSessionHostClient.TryGetProbe(),
+            RevitSessionHostClient.TryGetSessionSummary()
         );
-        if (options.JsonOutput) {
-            Console.WriteLine(JsonSerializer.Serialize(report, JsonOptions));
-            return GetSessionExitCode(report);
+        if (options.RequireAttachedRrd) {
+            var failure = TryResolveAttachedRrdFailure(report, options.RevitYear!.Value);
+            if (failure is not null) {
+                Console.Error.WriteLine(failure);
+                return 3;
+            }
         }
 
-        if (report.HostStatus != null) {
+        if (options.JsonOutput) {
+            Console.WriteLine(JsonSerializer.Serialize(report, JsonOptions));
+            return options.RequireAttachedRrd ? 0 : GetSessionExitCode(report);
+        }
+
+        if (report.HostProbe != null) {
+            var summary = report.HostSessionSummary;
             Console.WriteLine(
-                $"host reachable bridgeConnected={report.HostStatus.BridgeIsConnected} connectedSessions={report.HostStatus.Sessions.Count} defaultSessionId={(report.HostStatus.DefaultSessionId ?? "none")} activeDocument=\"{report.HostStatus.ActiveDocumentTitle ?? "None"}\"");
-            foreach (var hostSession in report.HostStatus.Sessions) {
-                Console.WriteLine(
-                    $"host-session sessionId={hostSession.SessionId} pid={hostSession.ProcessId} revitVersion={hostSession.RevitVersion} activeDocument=\"{hostSession.ActiveDocumentTitle ?? "None"}\" openDocuments={hostSession.OpenDocumentCount}");
-            }
+                $"host reachable bridgeConnected={(summary?.BridgeIsConnected ?? report.HostProbe.BridgeIsConnected)} activeDocument=\"{summary?.ActiveDocument?.Title ?? "None"}\" revitVersion={(summary?.RevitVersion ?? "unknown")}");
         } else {
             Console.WriteLine($"host unreachable baseUrl={RevitSessionHostClient.GetHostBaseUrl()}");
         }
 
         if (report.SelectedProcessSession is null) {
             Console.WriteLine("No visible local Revit process sessions found.");
-            return GetSessionExitCode(report);
+            return options.RequireAttachedRrd ? 0 : GetSessionExitCode(report);
         }
 
         Console.WriteLine(FormatSessionRecord("selected", report.SelectedProcessSession));
         foreach (var session in report.ProcessSessions)
             Console.WriteLine(FormatSessionRecord("candidate", session));
 
-        return GetSessionExitCode(report);
+        return options.RequireAttachedRrd ? 0 : GetSessionExitCode(report);
     }
 
     internal static RevitSessionReport CreateSessionReport(
         IReadOnlyList<RevitProcessSessionIdentity> processSessions,
-        HostStatusData? hostStatus
+        HostProbeData? hostProbe,
+        HostSessionSummaryData? hostSessionSummary
     ) {
         var orderedSessions = processSessions
             .OrderByDescending(session => session.ProcessStartUtc)
             .ToList();
         return new RevitSessionReport(
-            hostStatus,
+            hostProbe,
+            hostSessionSummary,
             orderedSessions,
             orderedSessions.FirstOrDefault()
         );
@@ -414,14 +422,15 @@ internal static class RevitCommandRunner {
     private static string FormatSessionRecord(string label, RevitProcessSessionIdentity session) =>
         $"{label} pid={session.ProcessId} startUtc={session.ProcessStartUtc:O} revitYear={(session.RevitYear?.ToString(CultureInfo.InvariantCulture) ?? "unknown")} responding={session.Responding} hung={session.Hung} title=\"{session.MainWindowTitle}\"";
 
-    private static void WriteHostStatusSummary(HostStatusData? hostStatus) {
-        if (hostStatus == null) {
+    private static void WriteHostStatusSummary(RevitSessionReport report) {
+        if (report.HostProbe == null) {
             Console.Out.WriteLine($"host unreachable baseUrl={RevitSessionHostClient.GetHostBaseUrl()}");
             return;
         }
 
+        var summary = report.HostSessionSummary;
         Console.Out.WriteLine(
-            $"host reachable bridgeConnected={hostStatus.BridgeIsConnected} connectedSessions={hostStatus.Sessions.Count} defaultSessionId={(hostStatus.DefaultSessionId ?? "none")} activeDocument=\"{hostStatus.ActiveDocumentTitle ?? "None"}\"");
+            $"host reachable bridgeConnected={(summary?.BridgeIsConnected ?? report.HostProbe.BridgeIsConnected)} activeDocument=\"{summary?.ActiveDocument?.Title ?? "None"}\" revitVersion={(summary?.RevitVersion ?? "unknown")}");
     }
 
     private static void WriteHotReloadResult(RevitHotReloadResult result) {
@@ -455,6 +464,39 @@ internal static class RevitCommandRunner {
         return 0;
     }
 
+    private static string? TryResolveAttachedRrdFailure(RevitSessionReport report, int requiredRevitYear) {
+        if (report.HostProbe is null) {
+            return
+                $"AttachedRrd verification for Revit {requiredRevitYear} requires a live Rider-driven `Pe.App` session, but `Pe.Host` was unreachable. Start the matching RRD session, run `pe-dev revit sync-runtime`, and retry.";
+        }
+
+        var summary = report.HostSessionSummary;
+        var bridgeConnected = summary?.BridgeIsConnected ?? report.HostProbe.BridgeIsConnected;
+        if (!bridgeConnected) {
+            return
+                $"AttachedRrd verification for Revit {requiredRevitYear} requires the live `Pe.App` bridge to be connected. Start the matching RRD session, run `pe-dev revit sync-runtime`, and retry.";
+        }
+
+        if (!int.TryParse(summary?.RevitVersion, NumberStyles.None, CultureInfo.InvariantCulture, out var bridgedYear)) {
+            return
+                $"AttachedRrd verification for Revit {requiredRevitYear} requires host session metadata with the active Revit year. Start the matching RRD session, confirm `pe-dev revit session` reports a bridged Revit version, then retry.";
+        }
+
+        if (bridgedYear != requiredRevitYear) {
+            return
+                $"AttachedRrd verification requested Revit {requiredRevitYear}, but the live bridged RRD session is Revit {bridgedYear}. Start or retarget the matching Rider-driven session, run `pe-dev revit sync-runtime`, and retry.";
+        }
+
+        var matchingVisibleSession = report.ProcessSessions.FirstOrDefault(session =>
+            session.RevitYear == requiredRevitYear &&
+            session.Responding &&
+            !session.Hung
+        );
+        return matchingVisibleSession is null
+            ? $"AttachedRrd verification requested Revit {requiredRevitYear}, but no healthy visible local Revit {requiredRevitYear} session was found. Start the matching RRD session, run `pe-dev revit sync-runtime`, and retry."
+            : null;
+    }
+
     private static ProcessStartInfo CreateDotNetStartInfo(string workingDirectory, params string[] arguments) {
         var startInfo = new ProcessStartInfo("dotnet") {
             WorkingDirectory = workingDirectory,
@@ -469,36 +511,49 @@ internal static class RevitCommandRunner {
         return startInfo;
     }
 
-    private static void PersistOwnedTestSession(
+    private static async Task TrackFreshOwnedSessionAsync(
         int revitYear,
         string configuration,
         string runtimeFingerprint,
-        ISet<int>? baselineSessionIds
+        ISet<int> baselineSessionIds,
+        CancellationToken cancellationToken
     ) {
-        var sessions = SessionSelector.DiscoverSessions(revitYear);
-        if (sessions.Count == 0) {
-            RevitTestOwnedSessionStore.Delete(revitYear);
-            return;
+        try {
+            while (true) {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var ownedSession = SessionSelector.DiscoverSessions(revitYear)
+                    .Where(session =>
+                        !baselineSessionIds.Contains(session.ProcessId) &&
+                        session.Responding &&
+                        !session.Hung
+                    )
+                    .OrderByDescending(session => session.ProcessStartUtc)
+                    .FirstOrDefault();
+                if (ownedSession is not null) {
+                    RevitTestOwnedSessionStore.Save(
+                        new RevitTestOwnedSessionState(
+                            revitYear,
+                            ownedSession.ProcessId,
+                            ownedSession.ProcessStartUtc,
+                            configuration,
+                            runtimeFingerprint,
+                            DateTime.UtcNow
+                        )
+                    );
+
+                    Console.Out.WriteLine(
+                        $"owned-test-session {FormatSessionRecord("selected", ownedSession)} runtimeFingerprint={runtimeFingerprint[..Math.Min(12, runtimeFingerprint.Length)]}");
+                    return;
+                }
+
+                await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+            }
+        } catch (OperationCanceledException) {
+        } catch (Exception ex) {
+            Console.Error.WriteLine(
+                $"Failed to record owned Revit test session for Revit {revitYear}: {ex.Message}");
         }
-
-        var selectedSession = baselineSessionIds is null
-            ? sessions.FirstOrDefault()
-            : sessions.FirstOrDefault(session => !baselineSessionIds.Contains(session.ProcessId)) ?? sessions.FirstOrDefault();
-        if (selectedSession is null)
-            return;
-
-        RevitTestOwnedSessionStore.Save(
-            new RevitTestOwnedSessionState(
-                revitYear,
-                selectedSession.ProcessId,
-                selectedSession.ProcessStartUtc,
-                configuration,
-                runtimeFingerprint,
-                DateTime.UtcNow
-            )
-        );
-
-        Console.Out.WriteLine($"owned-test-session {FormatSessionRecord("selected", selectedSession)}");
     }
 
     private static void TerminateOwnedTestSession(RevitTestOwnedSessionState sessionState) {
@@ -518,6 +573,59 @@ internal static class RevitCommandRunner {
         Console.Out.WriteLine(
             $"recycled owned test Revit pid={sessionState.ProcessId} revitYear={sessionState.RevitYear}"
         );
+    }
+
+    private static int CloseFreshTestSessions(int revitYear, ISet<int> baselineSessionIds) {
+        var visibleSessions = SessionSelector.DiscoverSessions(revitYear)
+            .ToArray();
+        var ownedSession = RevitTestOwnedSessionStore.TryGetLiveState(revitYear, visibleSessions);
+        if (ownedSession is not null) {
+            try {
+                TerminateOwnedTestSession(ownedSession);
+                RevitTestOwnedSessionStore.Delete(revitYear);
+                return 0;
+            } catch (Exception ex) {
+                Console.Error.WriteLine(
+                    $"Failed to close owned fresh test Revit session pid={ownedSession.ProcessId} revitYear={revitYear}: {ex.Message}");
+                return 1;
+            }
+        }
+
+        var sessionsToClose = visibleSessions
+            .Where(session => !baselineSessionIds.Contains(session.ProcessId))
+            .OrderByDescending(session => session.ProcessStartUtc)
+            .ToArray();
+        if (sessionsToClose.Length == 0) {
+            RevitTestOwnedSessionStore.Delete(revitYear);
+            return 0;
+        }
+
+        if (sessionsToClose.Length > 1) {
+            Console.Error.WriteLine(
+                $"Unable to close fresh test Revit sessions for Revit {revitYear} because no owned-session record was available and multiple new sessions were found: {string.Join(", ", sessionsToClose.Select(session => $"pid={session.ProcessId} startUtc={session.ProcessStartUtc:O}"))}");
+            return 1;
+        }
+
+        var inferredSession = sessionsToClose[0];
+        try {
+            using var process = Process.GetProcessById(inferredSession.ProcessId);
+            if (process.HasExited) {
+                RevitTestOwnedSessionStore.Delete(revitYear);
+                return 0;
+            }
+
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit(10000);
+            RevitTestOwnedSessionStore.Delete(revitYear);
+            Console.Out.WriteLine(
+                $"closed inferred fresh test Revit pid={inferredSession.ProcessId} revitYear={revitYear}");
+        } catch (Exception ex) {
+            Console.Error.WriteLine(
+                $"Failed to close inferred fresh test Revit session pid={inferredSession.ProcessId} revitYear={revitYear}: {ex.Message}");
+            return 1;
+        }
+
+        return 0;
     }
 
     private static JsonSerializerOptions CreateJsonOptions() {

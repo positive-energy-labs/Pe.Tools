@@ -1,4 +1,5 @@
 using Pe.Dev.RevitAutomation;
+using Pe.Shared.Product;
 using System.Text.Json;
 
 namespace Pe.Dev.Cli;
@@ -23,18 +24,8 @@ internal sealed class RevitTestOwnedSessionStateStore {
         this._stateRoot = stateRoot;
     }
 
-    public static RevitTestOwnedSessionStateStore CreateDefault() {
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var stateRoot = Path.Combine(
-            localAppData,
-            "Positive Energy",
-            "Pe.Tools",
-            "State",
-            "revit-test",
-            "sessions"
-        );
-        return new RevitTestOwnedSessionStateStore(stateRoot);
-    }
+    public static RevitTestOwnedSessionStateStore CreateDefault() =>
+        new(ProductRuntimeLayout.ForCurrentUser().State.RevitTestSessionStatePath);
 
     public RevitTestOwnedSessionState? TryGetLiveState(
         int revitYear,

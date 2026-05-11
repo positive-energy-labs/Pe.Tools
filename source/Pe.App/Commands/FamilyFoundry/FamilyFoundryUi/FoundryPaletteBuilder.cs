@@ -306,7 +306,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new()
 
         var typeId = dataType.TypeId;
         var lastDash = typeId.LastIndexOf('-');
-        return lastDash >= 0 ? typeId[(lastDash + 1)..] : typeId;
+        return lastDash >= 0 ? typeId.Substring(lastDash + 1) : typeId;
     }
 
     private static PreviewData CreateValidationErrorPreview(ProfileListItem profileItem, JsonValidationException ex) =>

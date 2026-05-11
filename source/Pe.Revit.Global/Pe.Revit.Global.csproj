@@ -47,12 +47,4 @@
         <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj"/>
         <ProjectReference Include="..\Toon\Toon.csproj"/>
     </ItemGroup>
-
-    <!-- Generate TypeScript types after build, takes a long time unfortunately -->
-    <!-- <Target Name="GenerateTypeScriptTypes" AfterTargets="Build">
-        <Message Text="Generating TypeScript types with TypeGen..." Importance="high" />
-        <Exec Command="dotnet typegen generate" WorkingDirectory="$(ProjectDir)" />
-        <Message Text="TypeScript types generated successfully!" Importance="high" />
-    </Target> -->
-
 </Project>

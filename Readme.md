@@ -19,9 +19,9 @@ add-in assembly.
 
 Current supported path:
 
-- bootstrap a persistent workspace under `Documents\Pe.Scripting\workspace`
+- bootstrap a persistent workspace under `Documents\Pe.Tools\scripting\workspace`
 - author single-file container scripts under `src/`
-- run them from the CLI with `pe-script src\MyProbe.cs`
+- run them from the CLI with `pea script src\MyProbe.cs`
 - or call `Pe.Host` over HTTP:
     - `POST /api/scripting/workspace/bootstrap`
     - `POST /api/scripting/execute`
@@ -30,8 +30,8 @@ Current supported path:
 Transport posture:
 
 - `Pe.Host` is the public scripting surface for frontend and CLI callers
-- `Pe.Scripting.Cli` posts to host HTTP
-- `Pe.Host` forwards scripting requests to the internal `Pe.Scripting.Revit` named pipe
+- `pea` posts to host HTTP
+- `Pe.Host` forwards scripting requests over the private Host/Revit WebSocket bridge
 - the Revit runtime executes through `ExternalEvent`
 - scripting v1 requires exactly one connected Revit bridge session
 

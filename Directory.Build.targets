@@ -1,4 +1,48 @@
 <Project>
+    <Import Project="build\generated\BuildTaxonomy.Validation.targets" />
+
+    <Target
+            Name="ValidateWindowsDotnetEnvironment"
+            BeforeTargets="CollectPackageReferences;PrepareForBuild"
+            Condition="'$(PeWindowsDotnetEnvironmentUnsafe)' == 'true' and '$(DesignTimeBuild)' != 'true'"
+    >
+        <Error Text="Unsafe Windows dotnet environment for project '$(MSBuildProjectName)': ProgramFiles='$(PeProgramFiles)', ProgramFiles(x86)='$(PeProgramFilesX86)', APPDATA='$(PeAppData)', LOCALAPPDATA='$(PeLocalAppData)', USERPROFILE='$(PeUserProfile)', SystemRoot='$(PeSystemRoot)', ComSpec='$(PeComSpec)'. Missing Windows environment variables can poison NuGet/MSBuild build servers and cause 'Value cannot be null. (Parameter path1)'. Run 'dotnet build-server shutdown' from a healthy shell, or use '.\tools\dotnet-sandbox-safe.ps1 &lt;dotnet arguments&gt;' for sandbox recovery." />
+    </Target>
+
+    <Target
+            Name="ValidatePeWorkflowPolicy"
+            BeforeTargets="PrepareForBuild"
+            Condition="'$(DesignTimeBuild)' != 'true' and !$([System.String]::Copy('$(MSBuildProjectName)').EndsWith('_wpftmp')) and '$(MSBuildProjectName)' != 'Installer.aot'"
+    >
+        <Error
+                Condition="'$(PeIsolatedBuild)' == 'true' and ('$(DeployAddin)' == 'true' or '$(LaunchRevit)' == 'true')"
+                Text="Project '$(MSBuildProjectName)' is running in isolated build mode, which is always NoRrdContact. DeployAddin/LaunchRevit must stay disabled." />
+        <Error
+                Condition="'$(PeWorkflow)' == 'Build' and '$(PeExecutionPolicy)' != 'NoRrdContact'"
+                Text="Project '$(MSBuildProjectName)' has workflow Build but execution policy '$(PeExecutionPolicy)'. Ordinary dotnet build must stay NoRrdContact." />
+        <Error
+                Condition="('$(PeWorkflow)' == 'Package' or '$(PeWorkflow)' == 'Publish') and '$(PeExecutionPolicy)' != 'NoRrdContact'"
+                Text="Project '$(MSBuildProjectName)' has workflow $(PeWorkflow) but execution policy '$(PeExecutionPolicy)'. Packaging and publishing must stay NoRrdContact." />
+        <Error
+                Condition="'$(PeWorkflow)' == 'Verify' and '$(PeVerifyTarget)' == ''"
+                Text="Project '$(MSBuildProjectName)' entered workflow Verify without an explicit PeVerifyTarget. Use AttachedRrd or FreshRevitProcess." />
+        <Error
+                Condition="'$(PeVerifyTarget)' != '' and '$(PeWorkflow)' != 'Verify'"
+                Text="Project '$(MSBuildProjectName)' requested verify target '$(PeVerifyTarget)' but workflow '$(PeWorkflow)'. Verify targets must execute under workflow Verify." />
+        <Error
+                Condition="'$(PeVerifyTarget)' != '' and '$(PeVerifyTarget)' != 'AttachedRrd' and '$(PeVerifyTarget)' != 'FreshRevitProcess'"
+                Text="Project '$(MSBuildProjectName)' requested unsupported verify target '$(PeVerifyTarget)'. Use AttachedRrd or FreshRevitProcess." />
+        <Error
+                Condition="'$(PeVerifyTarget)' == 'AttachedRrd' and '$(PeExecutionPolicy)' != 'RrdRequired'"
+                Text="AttachedRrd verification for project '$(MSBuildProjectName)' must use execution policy RrdRequired." />
+        <Error
+                Condition="'$(PeVerifyTarget)' == 'FreshRevitProcess' and '$(PeExecutionPolicy)' != 'NoRrdContact'"
+                Text="FreshRevitProcess verification for project '$(MSBuildProjectName)' must use execution policy NoRrdContact." />
+        <Error
+                Condition="'$(PublishAddin)' == 'true' and '$(PeIsolatedBuild)' != 'true' and '$(DeployAddin)' != 'true'"
+                Text="PublishAddin without DeployAddin is a packaging workflow and must run in isolated build mode." />
+    </Target>
+
     <Target Name="ValidateSharedNeutralReferences" BeforeTargets="ResolveReferences" Condition="'$(IsSharedNeutralProject)' == 'true'">
         <ItemGroup>
             <_ForbiddenSharedNeutralPackageReference
@@ -13,9 +57,56 @@
 
         <Error
                 Condition="'@(_ForbiddenSharedNeutralPackageReference)' != ''"
-                Text="SharedNeutral package '$(MSBuildProjectName)' cannot reference Revit packages: @(_ForbiddenSharedNeutralPackageReference->'%(Identity)', ', ')"/>
+                Text="SharedNeutral package '$(MSBuildProjectName)' cannot reference Revit packages: @(_ForbiddenSharedNeutralPackageReference->'%(Identity)', ', ')" />
         <Error
                 Condition="'@(_ForbiddenSharedNeutralProjectReference)' != ''"
-                Text="SharedNeutral package '$(MSBuildProjectName)' cannot reference Revit projects: @(_ForbiddenSharedNeutralProjectReference->'%(Identity)', ', ')"/>
+                Text="SharedNeutral package '$(MSBuildProjectName)' cannot reference Revit projects: @(_ForbiddenSharedNeutralProjectReference->'%(Identity)', ', ')" />
+    </Target>
+
+    <Target
+            Name="BuildInteractiveRuntimeCompanions"
+            BeforeTargets="DeployAddin"
+            Condition="'@(PeInteractiveRuntimeCompanionProject)' != '' and '$(PeIsolatedBuild)' != 'true' and '$(DesignTimeBuild)' != 'true'"
+    >
+        <Message
+                Text="Building interactive runtime companions for $(MSBuildProjectName): @(PeInteractiveRuntimeCompanionProject->'%(Identity)', ', ')."
+                Importance="High"
+        />
+        <MSBuild
+                Projects="@(PeInteractiveRuntimeCompanionProject)"
+                Targets="Build"
+                Properties="Configuration=$(Configuration);PeIsolatedBuild=false;DeployAddin=false;LaunchRevit=false;WarningLevel=$(WarningLevel)"
+                BuildInParallel="true"
+        />
+    </Target>
+
+    <Target
+            Name="MirrorInteractiveRuntimeToLocalBin"
+            AfterTargets="Build"
+            Condition="'$(PeMirrorRuntimeToLocalBin)' == 'true' and '$(PeIsolatedBuild)' != 'true' and '$(DesignTimeBuild)' != 'true' and '$(IsCrossTargetingBuild)' != 'true'"
+    >
+        <PropertyGroup>
+            <PeResolvedMirrorRuntimeDirectory Condition="'$(PeResolvedMirrorRuntimeDirectory)' == '' and '$(PeMirrorRuntimeDirectory)' != ''">$(PeMirrorRuntimeDirectory)</PeResolvedMirrorRuntimeDirectory>
+            <PeResolvedMirrorRuntimeDirectory Condition="'$(PeResolvedMirrorRuntimeDirectory)' == '' and '$(PeMirrorRuntimeRelativePath)' != ''">$([System.IO.Path]::Combine($([System.Environment]::GetFolderPath(System.Environment+SpecialFolder.LocalApplicationData)), '$(PeMirrorRuntimeRelativePath)'))</PeResolvedMirrorRuntimeDirectory>
+        </PropertyGroup>
+        <Error
+                Condition="'$(PeResolvedMirrorRuntimeDirectory)' == ''"
+                Text="Project '$(MSBuildProjectName)' enabled PeMirrorRuntimeToLocalBin but did not set PeMirrorRuntimeDirectory or PeMirrorRuntimeRelativePath." />
+        <Message
+                Text="Mirroring $(MSBuildProjectName) to local runtime directory '$(PeResolvedMirrorRuntimeDirectory)'."
+                Importance="High"
+        />
+        <RemoveDir
+                Directories="$(PeResolvedMirrorRuntimeDirectory)"
+                Condition="Exists('$(PeResolvedMirrorRuntimeDirectory)')"
+        />
+        <MakeDir Directories="$(PeResolvedMirrorRuntimeDirectory)"/>
+        <ItemGroup>
+            <PeMirrorRuntimeOutputFiles Include="$(TargetDir)**\*.*"/>
+        </ItemGroup>
+        <Copy
+                SourceFiles="@(PeMirrorRuntimeOutputFiles)"
+                DestinationFiles="@(PeMirrorRuntimeOutputFiles->'$(PeResolvedMirrorRuntimeDirectory)\%(RecursiveDir)%(Filename)%(Extension)')"
+        />
     </Target>
 </Project>

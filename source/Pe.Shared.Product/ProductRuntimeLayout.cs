@@ -1,0 +1,96 @@
+namespace Pe.Shared.Product;
+
+public sealed record ProductRuntimeLayout(
+    string RootPath,
+    ProductRuntimeBinaryLayout Binaries,
+    ProductRuntimeStateLayout State,
+    ProductRuntimeLogLayout Logs,
+    ProductRuntimeCacheLayout Cache
+) {
+    public static ProductRuntimeLayout ForCurrentUser(string? localAppData = null) {
+        var rootPath = Path.Combine(
+            ProductPathing.ResolveLocalAppData(localAppData),
+            ProductIdentity.VendorName,
+            ProductIdentity.ProductName
+        );
+        var binRootPath = Path.Combine(rootPath, ProductPathNames.BinDirectoryName);
+        var stateRootPath = Path.Combine(rootPath, ProductPathNames.StateDirectoryName);
+        var logsRootPath = Path.Combine(rootPath, ProductPathNames.LogsDirectoryName);
+        var cacheRootPath = Path.Combine(rootPath, ProductPathNames.CacheDirectoryName);
+
+        return new ProductRuntimeLayout(
+            rootPath,
+            new ProductRuntimeBinaryLayout(
+                binRootPath,
+                Path.Combine(binRootPath, HostProcessIdentity.DirectoryName),
+                Path.Combine(binRootPath, HostProcessIdentity.DirectoryName, HostProcessIdentity.ExecutableName),
+                Path.Combine(binRootPath, HostProcessIdentity.DirectoryName, HostProcessIdentity.DllName),
+                Path.Combine(binRootPath, PeaCliIdentity.DirectoryName),
+                Path.Combine(binRootPath, PeaCliIdentity.DirectoryName, PeaCliIdentity.LauncherName),
+                Path.Combine(binRootPath, PeaCliIdentity.DirectoryName, PeaCliIdentity.CurrentVersionFileName),
+                Path.Combine(binRootPath, PeaCliIdentity.DirectoryName, PeaCliIdentity.VersionsDirectoryName),
+                Path.Combine(binRootPath, PeaCliIdentity.DirectoryName, PeaCliIdentity.PackagesDirectoryName),
+                Path.Combine(binRootPath, PeDevCliIdentity.DirectoryName),
+                Path.Combine(binRootPath, PeDevCliIdentity.DirectoryName, PeDevCliIdentity.ExecutableName),
+                Path.Combine(binRootPath, PeDevCliIdentity.DirectoryName, PeDevCliIdentity.DllName)
+            ),
+            new ProductRuntimeStateLayout(stateRootPath),
+            new ProductRuntimeLogLayout(logsRootPath),
+            new ProductRuntimeCacheLayout(cacheRootPath)
+        );
+    }
+}
+
+public sealed record ProductRuntimeBinaryLayout(
+    string RootPath,
+    string HostDirectoryPath,
+    string HostExecutablePath,
+    string HostDllPath,
+    string PeaDirectoryPath,
+    string PeaLauncherPath,
+    string PeaCurrentVersionPath,
+    string PeaVersionsDirectoryPath,
+    string PeaPackagesDirectoryPath,
+    string PeDevDirectoryPath,
+    string PeDevExecutablePath,
+    string PeDevDllPath
+) {
+    public string ResolvePeaVersionDirectoryPath(string version) =>
+        ProductPathing.ResolveSafeSubDirectoryPath(
+            this.PeaVersionsDirectoryPath,
+            PeaCliIdentity.NormalizePayloadVersion(version),
+            nameof(version)
+        );
+
+    public string ResolvePeaPackageArchivePath(string version) =>
+        Path.Combine(this.PeaPackagesDirectoryPath, PeaCliIdentity.CreatePayloadArchiveFileName(version));
+
+    public string ResolvePeaPackageManifestPath(string version) =>
+        Path.Combine(this.PeaPackagesDirectoryPath, PeaCliIdentity.CreatePayloadManifestFileName(version));
+
+    public string ResolvePeaVersionNodeExecutablePath(string version) =>
+        Path.Combine(this.ResolvePeaVersionDirectoryPath(version), PeaCliIdentity.NodeExecutableName);
+}
+
+public sealed record ProductRuntimeStateLayout(string RootPath) {
+    public string GlobalStatePath => Path.Combine(this.RootPath, ProductPathNames.GlobalDirectoryName);
+    public string ApsAuthStatePath => Path.Combine(this.RootPath, "aps-auth");
+    public string ApsTokenStorePath => Path.Combine(this.ApsAuthStatePath, "tokens.json");
+    public string RevitTestStatePath => Path.Combine(this.RootPath, "revit-test");
+    public string RevitTestSessionStatePath => Path.Combine(this.RevitTestStatePath, "sessions");
+    public string RevitTestQuarantinePath => Path.Combine(this.RevitTestStatePath, "quarantine");
+
+    public string ResolveModuleStatePath(string moduleKey) =>
+        ProductPathing.ResolveSafeSubDirectoryPath(this.RootPath, moduleKey, nameof(moduleKey));
+}
+
+public sealed record ProductRuntimeLogLayout(string RootPath) {
+    public string HostLogPath => Path.Combine(this.RootPath, "host.log.txt");
+    public string RevitAppLogPath => Path.Combine(this.RootPath, "revit.log.txt");
+    public string RevitApprovalWatcherLogPath => Path.Combine(this.RootPath, "revit-approval-watcher.log.txt");
+}
+
+public sealed record ProductRuntimeCacheLayout(string RootPath) {
+    public string ResolveModuleCachePath(string moduleKey) =>
+        ProductPathing.ResolveSafeSubDirectoryPath(this.RootPath, moduleKey, nameof(moduleKey));
+}

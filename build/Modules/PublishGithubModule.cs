@@ -1,4 +1,4 @@
-﻿using EnumerableAsyncProcessor.Extensions;
+using EnumerableAsyncProcessor.Extensions;
 using Microsoft.Extensions.Logging;
 using ModularPipelines.Attributes;
 using ModularPipelines.Context;
@@ -32,8 +32,8 @@ public sealed class PublishGithubModule : Module {
         var layout = layoutResult.ValueOrDefault!;
         var changelog = changelogResult.ValueOrDefault!;
 
-        Directory.CreateDirectory(layout.PackagesRoot);
-        var outputFolder = new Folder(layout.PackagesRoot);
+        Directory.CreateDirectory(layout.Artifacts.PackagesRoot);
+        var outputFolder = new Folder(layout.Artifacts.PackagesRoot);
         var targetFiles = EnumerateReleaseArtifacts(outputFolder, versioning.Version).ToArray();
         targetFiles.ShouldNotBeEmpty("No artifacts were found to create the Release");
 
@@ -83,6 +83,9 @@ public sealed class PublishGithubModule : Module {
         foreach (var path in Directory.EnumerateFiles(outputFolder.Path, "*", SearchOption.AllDirectories)) {
             var file = new File(path);
             if (file.Extension == ".zip")
+                yield return file;
+
+            if (file.Extension == ".json" && file.Name.Contains(".pea.", StringComparison.OrdinalIgnoreCase))
                 yield return file;
 
             if (file.Extension == ".msi" && file.Name.Contains(version, StringComparison.OrdinalIgnoreCase))

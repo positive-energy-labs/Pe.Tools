@@ -2,8 +2,8 @@ using Pe.Shared.ApsAuth;
 
 namespace Pe.Aps.Auth;
 
-public sealed class ApsAuthService(ApsCredentialSource credentialSource) {
-    private readonly ApsCredentialSource _credentialSource = credentialSource;
+public sealed class ApsAuthService(IApsCredentialProvider credentialProvider) {
+    private readonly IApsCredentialProvider _credentialProvider = credentialProvider;
 
     public ApsPersistedTokenStatus GetStatus(ApsTokenRequest request) {
         var aps = this.CreateAps();
@@ -28,5 +28,5 @@ public sealed class ApsAuthService(ApsCredentialSource credentialSource) {
     public ApsTokenResult AcquireAccessToken(ApsTokenRequest request) =>
         this.CreateAps().GetTokenResult(request);
 
-    private global::Pe.Aps.Aps CreateAps() => this._credentialSource.CreateAps();
+    private global::Pe.Aps.Aps CreateAps() => new(this._credentialProvider);
 }

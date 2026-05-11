@@ -1,9 +1,12 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Pe.Host.Operations;
 using Pe.Host.Services;
+using Pe.Shared.HostContracts.Bridge;
+using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Protocol;
+using Pe.Shared.HostContracts.SettingsStorage;
 using System.Collections.Concurrent;
-using System.IO.Pipes;
+using System.Net.WebSockets;
 using System.Text;
 
 namespace Pe.Host;
@@ -18,29 +21,21 @@ public sealed class BridgeServer(
     private readonly BridgeHostOptions _options = options;
     private readonly ConcurrentDictionary<string, PendingBridgeRequest> _pending = new(StringComparer.Ordinal);
     private readonly JsonSerializerSettings _serializerSettings = HostJson.CreateSerializerSettings();
-    private readonly Dictionary<string, ConnectedBridgeSession> _sessionsById = new(StringComparer.Ordinal);
+    private readonly object _requestAdmissionSync = new();
     private readonly object _sessionSync = new();
-    private readonly ConcurrentDictionary<string, Task> _sessionTasks = new(StringComparer.Ordinal);
+    private InFlightBridgeRequest? _inFlightRequest;
+    private ConnectedBridgeSession? _session;
     private string? _lastDisconnectReason;
 
     public bool IsConnected => this.GetSnapshot().BridgeIsConnected;
 
     public BridgeRuntimeSnapshot GetSnapshot() {
         lock (this._sessionSync) {
-            var sessions = this._sessionsById.Values
-                .Select(entry => entry.Snapshot with { AvailableModules = [.. entry.Snapshot.AvailableModules] })
-                .OrderByDescending(session => session.ConnectedAtUnixMs)
-                .ThenBy(session => session.SessionId, StringComparer.Ordinal)
-                .ToList();
-            var defaultSession = sessions.FirstOrDefault();
-
             return new BridgeRuntimeSnapshot(
-                sessions.Count != 0,
-                this._options.PipeName,
-                defaultSession?.SessionId,
-                defaultSession,
-                sessions,
-                sessions.Count == 0 ? this._lastDisconnectReason : null
+                this._session != null,
+                HttpRoutes.Bridge,
+                this._session?.Snapshot.DeepCopy(),
+                this._session == null ? this._lastDisconnectReason : null
             );
         }
     }
@@ -49,9 +44,34 @@ public sealed class BridgeServer(
         string method,
         TRequest request,
         CancellationToken cancellationToken = default
+    ) => (TResponse)await this.InvokeAsync(
+        method,
+        request,
+        typeof(TResponse),
+        cancellationToken
+    );
+
+    public Task<object> InvokeAsync(
+        HostOperationDefinition operation,
+        object request,
+        CancellationToken cancellationToken = default
+    ) => this.InvokeAsync(
+        operation.Key,
+        request,
+        operation.ResponseType,
+        cancellationToken
+    );
+
+    private async Task<object> InvokeAsync(
+        string method,
+        object? request,
+        Type responseType,
+        CancellationToken cancellationToken
     ) {
-        var connectedSession = this.ResolveDefaultSessionOrThrow();
+        var connectedSession = this.ResolveSessionOrThrow();
         var requestId = Guid.NewGuid().ToString("N");
+        var startedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
         var payloadJson = JsonConvert.SerializeObject(request, this._serializerSettings);
         var payloadBytes = Encoding.UTF8.GetByteCount(payloadJson);
         var requestFrame = new BridgeFrame(
@@ -60,131 +80,92 @@ public sealed class BridgeServer(
                 requestId,
                 method,
                 payloadJson,
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                startedAtUnixMs,
                 payloadBytes
             )
         );
 
-        var completion = new TaskCompletionSource<BridgeResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var pendingRequest = new PendingBridgeRequest(connectedSession.ConnectionId, completion);
-        if (!this._pending.TryAdd(requestId, pendingRequest))
-            throw new InvalidOperationException($"Duplicate bridge request ID '{requestId}'.");
+        var inFlightRequest = new InFlightBridgeRequest(requestId, method, startedAtUnixMs);
+        this.AdmitBridgeRequestOrThrow(inFlightRequest);
 
+        var completion = new TaskCompletionSource<BridgeResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
         try {
-            this._logger.LogInformation(
-                "Bridge request dispatch starting: Method={Method}, RequestId={RequestId}, RequestBytes={RequestBytes}, SessionId={SessionId}, RevitVersion={RevitVersion}",
-                method,
-                requestId,
-                payloadBytes,
-                connectedSession.Snapshot.SessionId,
-                connectedSession.Snapshot.RevitVersion
-            );
+            if (!this._pending.TryAdd(requestId, new PendingBridgeRequest(connectedSession.ConnectionId, completion)))
+                throw new InvalidOperationException($"Duplicate bridge request ID '{requestId}'.");
+
             await connectedSession.TransportSession.WriteAsync(requestFrame, cancellationToken);
-            using var registration = cancellationToken.Register(() => completion.TrySetCanceled(cancellationToken));
             var response = await completion.Task;
-            if (!response.Ok)
+            if (!response.Ok) {
                 throw new HostOperationException(
-                    response.StatusCode ?? StatusCodes.Status409Conflict,
+                    response.StatusCode ?? StatusCodes.Status500InternalServerError,
                     response.ErrorMessage ?? "Bridge request failed.",
                     response.Issues
                 );
+            }
 
             if (string.IsNullOrWhiteSpace(response.PayloadJson))
                 throw new InvalidOperationException("Bridge returned an empty payload.");
 
-            this._logger.LogDebug(
-                "Bridge response: Method={Method}, RequestId={RequestId}, RoundTripMs={RoundTripMs}, RevitExecutionMs={RevitExecutionMs}, RequestBytes={RequestBytes}, ResponseBytes={ResponseBytes}, SessionId={SessionId}",
-                method,
-                requestId,
-                response.Metrics.RoundTripMs,
-                response.Metrics.RevitExecutionMs,
-                response.Metrics.RequestBytes,
-                response.Metrics.ResponseBytes,
-                connectedSession.Snapshot.SessionId
-            );
-
-            return JsonConvert.DeserializeObject<TResponse>(response.PayloadJson, this._serializerSettings)
+            return JsonConvert.DeserializeObject(response.PayloadJson, responseType, this._serializerSettings)
                    ?? throw new InvalidOperationException($"Failed to deserialize bridge response for '{method}'.");
         } finally {
             _ = this._pending.TryRemove(requestId, out _);
+            this.ReleaseBridgeRequest(requestId);
         }
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
-        try {
-            while (!stoppingToken.IsCancellationRequested) {
-                var stream = new NamedPipeServerStream(
-                    this._options.PipeName,
-                    PipeDirection.InOut,
-                    NamedPipeServerStream.MaxAllowedServerInstances,
-                    PipeTransmissionMode.Byte,
-                    PipeOptions.Asynchronous
-                );
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.CompletedTask;
 
-                try {
-                    this._logger.LogInformation("Waiting for Revit bridge clients on pipe '{PipeName}'",
-                        this._options.PipeName);
-                    await stream.WaitForConnectionAsync(stoppingToken);
-                } catch {
-                    stream.Dispose();
-                    throw;
-                }
+    public Task RunWebSocketSessionAsync(WebSocket webSocket, CancellationToken cancellationToken) =>
+        this.RunSessionAsync(new BridgeTransportSession(webSocket, this._serializerSettings), cancellationToken);
 
-                var taskId = Guid.NewGuid().ToString("N");
-                var sessionTask = this.RunSessionAsync(stream, stoppingToken);
-                this._sessionTasks[taskId] = sessionTask;
-                _ = sessionTask.ContinueWith(
-                    completedSessionTask => {
-                        _ = this._sessionTasks.TryRemove(taskId, out var removedSessionTask);
-                    },
-                    CancellationToken.None,
-                    TaskContinuationOptions.ExecuteSynchronously,
-                    TaskScheduler.Default
-                );
-            }
-        } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
-            // Expected on shutdown.
-        } finally {
-            var sessionTasks = this._sessionTasks.Values.ToArray();
-            if (sessionTasks.Length != 0)
-                await Task.WhenAll(sessionTasks);
-        }
-    }
-
-    private async Task RunSessionAsync(NamedPipeServerStream stream, CancellationToken cancellationToken) {
-        var transportSession = new BridgeSession(stream, this._serializerSettings);
+    private async Task RunSessionAsync(
+        BridgeTransportSession transportSession,
+        CancellationToken cancellationToken
+    ) {
         BridgeSessionSnapshot? connectedSnapshot = null;
         var disconnectReason = "bridge disconnected";
 
         try {
-            this._logger.LogInformation("Bridge server accepted pipe client. Waiting for handshake.");
-            var handshakeFrame = await transportSession.ReadAsync(cancellationToken);
-            var handshake = handshakeFrame?.Handshake;
-            if (handshakeFrame?.Kind != BridgeFrameKind.Handshake || handshake == null)
-                throw new InvalidOperationException("Expected handshake frame from Revit bridge client.");
+            var registrationFrame = await transportSession.ReadAsync(cancellationToken);
+            var registration = registrationFrame?.Registration;
+            if (registrationFrame?.Kind != BridgeFrameKind.Registration || registration == null)
+                throw new InvalidOperationException("Expected registration frame from Revit bridge client.");
 
-            ValidateHandshake(handshake);
-            connectedSnapshot = this.RegisterSession(transportSession, handshake);
-            await this.PublishHostStatusChangedAsync(
-                HostStatusChangedReason.BridgeConnected,
-                connectedSnapshot,
+            ValidateRegistration(registration);
+            var registrationResult = this.TryRegisterSession(transportSession, registration);
+            connectedSnapshot = registrationResult.Session;
+
+            await transportSession.WriteAsync(
+                new BridgeFrame(
+                    BridgeFrameKind.RegistrationAck,
+                    RegistrationAck: registrationResult.Ack
+                ),
                 cancellationToken
             );
-            this._logger.LogInformation(
-                "Revit bridge connected: SessionId={SessionId}, ProcessId={ProcessId}, RevitVersion={RevitVersion}, Runtime={RuntimeFramework}, Modules={ModuleCount}, HasActiveDocument={HasActiveDocument}, ActiveDocumentTitle={ActiveDocumentTitle}",
-                connectedSnapshot.SessionId,
-                connectedSnapshot.ProcessId,
-                connectedSnapshot.RevitVersion,
-                connectedSnapshot.RuntimeFramework,
-                connectedSnapshot.AvailableModules.Count,
-                connectedSnapshot.HasActiveDocument,
-                connectedSnapshot.ActiveDocumentTitle
+
+            if (!registrationResult.Ack.Accepted) {
+                await this.PublishSessionConnectionChangedAsync(
+                    HostSessionConnectionChangeReason.BridgeRejected,
+                    this.GetSnapshot().ConnectedSession,
+                    registrationResult.Ack.ErrorMessage,
+                    cancellationToken
+                );
+                disconnectReason = registrationResult.Ack.ErrorMessage ?? "bridge registration rejected";
+                return;
+            }
+
+            await this.PublishSessionConnectionChangedAsync(
+                HostSessionConnectionChangeReason.BridgeRegistered,
+                connectedSnapshot,
+                null,
+                cancellationToken
             );
 
-            while (!cancellationToken.IsCancellationRequested && stream.IsConnected) {
+            while (!cancellationToken.IsCancellationRequested && transportSession.IsConnected) {
                 var frame = await transportSession.ReadAsync(cancellationToken);
                 if (frame == null) {
-                    disconnectReason = "bridge client closed the pipe";
+                    disconnectReason = "bridge client closed the websocket";
                     break;
                 }
 
@@ -192,8 +173,9 @@ public sealed class BridgeServer(
                 case BridgeFrameKind.Response:
                     if (frame.Response != null &&
                         this._pending.TryRemove(frame.Response.RequestId, out var pending) &&
-                        string.Equals(pending.ConnectionId, transportSession.ConnectionId, StringComparison.Ordinal))
+                        pending.ConnectionId == transportSession.ConnectionId) {
                         _ = pending.Completion.TrySetResult(frame.Response);
+                    }
 
                     break;
                 case BridgeFrameKind.Event:
@@ -207,19 +189,18 @@ public sealed class BridgeServer(
                     }
 
                     break;
-                case BridgeFrameKind.Handshake:
-                    if (frame.Handshake != null) {
-                        ValidateHandshake(frame.Handshake);
-                        connectedSnapshot = this.UpdateHandshake(transportSession.ConnectionId, frame.Handshake);
+                case BridgeFrameKind.StateSync:
+                    if (frame.StateSync != null) {
+                        connectedSnapshot = this.UpdateStateSnapshot(
+                            transportSession.ConnectionId,
+                            frame.StateSync
+                        );
                         if (connectedSnapshot != null) {
-                            await this.PublishHostStatusChangedAsync(
-                                HostStatusChangedReason.BridgeHandshakeRefreshed,
+                            await this.PublishSessionConnectionChangedAsync(
+                                HostSessionConnectionChangeReason.BridgeStateSynchronized,
                                 connectedSnapshot,
+                                null,
                                 cancellationToken
-                            );
-                            this._logger.LogInformation(
-                                "Revit bridge handshake refreshed: SessionId={SessionId}",
-                                connectedSnapshot.SessionId
                             );
                         }
                     }
@@ -227,13 +208,7 @@ public sealed class BridgeServer(
                     break;
                 case BridgeFrameKind.Disconnect:
                     disconnectReason = frame.DisconnectReason ?? "bridge client requested disconnect";
-                    this._logger.LogInformation(
-                        "Revit bridge requested disconnect: SessionId={SessionId}, Reason={Reason}",
-                        connectedSnapshot?.SessionId, disconnectReason);
                     return;
-                default:
-                    this._logger.LogDebug("Bridge server ignored frame kind {FrameKind}.", frame.Kind);
-                    break;
                 }
             }
         } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
@@ -269,9 +244,10 @@ public sealed class BridgeServer(
                 };
 
                 await this._eventStreamService.PublishDocumentChangedAsync(sessionAwarePayload, cancellationToken);
-                await this.PublishHostStatusChangedAsync(
-                    HostStatusChangedReason.ActiveDocumentChanged,
+                await this.PublishSessionConnectionChangedAsync(
+                    HostSessionConnectionChangeReason.ActiveDocumentChanged,
                     updatedSession,
+                    null,
                     cancellationToken
                 );
             }
@@ -280,114 +256,113 @@ public sealed class BridgeServer(
         }
 
         if (string.Equals(bridgeEvent.EventName, HostRuntimeEventNames.Notification, StringComparison.Ordinal)) {
-            var message = JsonConvert.DeserializeObject<string>(
-                bridgeEvent.PayloadJson,
-                this._serializerSettings
+            var message = JsonConvert.DeserializeObject<string>(bridgeEvent.PayloadJson, this._serializerSettings);
+            if (!string.IsNullOrWhiteSpace(message))
+                await this._eventStreamService.PublishAsync(HostRuntimeEventNames.Notification, message, cancellationToken);
+        }
+    }
+
+    private ConnectedBridgeSession ResolveSessionOrThrow() {
+        lock (this._sessionSync) {
+            if (this._session != null)
+                return this._session;
+        }
+
+        var detail = string.IsNullOrWhiteSpace(this._lastDisconnectReason)
+            ? "No connected Revit bridge session."
+            : $"No connected Revit bridge session. Last disconnect reason: {this._lastDisconnectReason}";
+        throw new HostOperationException(StatusCodes.Status503ServiceUnavailable, detail);
+    }
+
+    private void AdmitBridgeRequestOrThrow(InFlightBridgeRequest request) {
+        lock (this._requestAdmissionSync) {
+            if (this._inFlightRequest == null) {
+                this._inFlightRequest = request;
+                return;
+            }
+
+            var elapsedMs = Math.Max(
+                0,
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - this._inFlightRequest.StartedAtUnixMs
             );
-            if (!string.IsNullOrWhiteSpace(message)) {
-                await this._eventStreamService.PublishAsync(
-                    HostRuntimeEventNames.Notification,
-                    message,
-                    cancellationToken
-                );
+            throw new HostOperationException(
+                StatusCodes.Status423Locked,
+                $"Revit bridge is busy executing '{this._inFlightRequest.Method}' for {elapsedMs} ms. Retry after the current operation completes.",
+                [
+                    new ValidationIssue(
+                        "$",
+                        null,
+                        "RevitBridgeBusy",
+                        "error",
+                        $"The Revit bridge is already executing '{this._inFlightRequest.Method}'.",
+                        "Retry after the current operation completes."
+                    )
+                ]
+            );
+        }
+    }
+
+    private void ReleaseBridgeRequest(string requestId) {
+        lock (this._requestAdmissionSync) {
+            if (this._inFlightRequest != null &&
+                string.Equals(this._inFlightRequest.RequestId, requestId, StringComparison.Ordinal)) {
+                this._inFlightRequest = null;
             }
         }
     }
 
-    private ConnectedBridgeSession ResolveDefaultSessionOrThrow() {
+    private BridgeRegistrationResult TryRegisterSession(
+        BridgeTransportSession transportSession,
+        BridgeRegistrationRequest registration
+    ) {
+        var snapshot = BridgeSessionSnapshot.Create(registration);
+
         lock (this._sessionSync) {
-            if (this._sessionsById.Count == 0)
-                throw new InvalidOperationException("No connected Revit session. Connect one Revit session to Pe.Host and try again.");
+            if (this._session != null) {
+                var existing = this._session.Snapshot;
+                return new BridgeRegistrationResult(
+                    null,
+                    new BridgeRegistrationAck(
+                        false,
+                        $"A Revit bridge session is already connected (SessionId={existing.SessionId}, ProcessId={existing.ProcessId}).",
+                        existing.SessionId,
+                        existing.ProcessId
+                    )
+                );
+            }
 
-            return this._sessionsById.Values
-                .OrderByDescending(session => session.Snapshot.ConnectedAtUnixMs)
-                .ThenBy(session => session.Snapshot.SessionId, StringComparer.Ordinal)
-                .First();
-        }
-    }
-
-    private BridgeSessionSnapshot RegisterSession(BridgeSession transportSession, BridgeHandshake handshake) {
-        var snapshot = new BridgeSessionSnapshot(
-            handshake.SessionId,
-            handshake.RevitVersion,
-            handshake.ProcessId,
-            handshake.HasActiveDocument,
-            handshake.ActiveDocumentTitle,
-            handshake.ActiveDocumentKey,
-            handshake.ActiveDocumentPath,
-            handshake.ActiveDocumentIsFamilyDocument,
-            handshake.ActiveDocumentIsWorkshared,
-            handshake.ActiveDocumentIsModelInCloud,
-            handshake.ActiveDocumentCloudProjectGuid,
-            handshake.ActiveDocumentCloudModelGuid,
-            handshake.ActiveDocumentCloudModelUrn,
-            handshake.ActiveDocumentObservedAtUnixMs,
-            handshake.OpenDocumentCount,
-            handshake.RuntimeFramework,
-            handshake.ContractVersion,
-            handshake.Transport,
-            [.. handshake.AvailableModules],
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-        );
-
-        ConnectedBridgeSession? replacedSession = null;
-        lock (this._sessionSync) {
-            if (this._sessionsById.TryGetValue(snapshot.SessionId, out replacedSession) &&
-                string.Equals(replacedSession.ConnectionId, transportSession.ConnectionId, StringComparison.Ordinal))
-                replacedSession = null;
-
-            this._sessionsById[snapshot.SessionId] = new ConnectedBridgeSession(
+            this._session = new ConnectedBridgeSession(
                 transportSession.ConnectionId,
                 transportSession,
                 snapshot
             );
             this._lastDisconnectReason = null;
-        }
-
-        if (replacedSession != null) {
-            this._logger.LogWarning(
-                "Replacing existing bridge session: SessionId={SessionId}, PreviousConnectionId={PreviousConnectionId}, NewConnectionId={NewConnectionId}",
-                snapshot.SessionId,
-                replacedSession.ConnectionId,
-                transportSession.ConnectionId
+            return new BridgeRegistrationResult(
+                snapshot,
+                new BridgeRegistrationAck(
+                    true,
+                    null,
+                    snapshot.SessionId,
+                    snapshot.ProcessId
+                )
             );
-            replacedSession.TransportSession.Dispose();
-            this.FailPendingRequests(replacedSession.ConnectionId, "bridge session was replaced by a newer connection");
         }
-
-        return snapshot;
     }
 
-    private BridgeSessionSnapshot? UpdateHandshake(string connectionId, BridgeHandshake handshake) {
+    private BridgeSessionSnapshot? UpdateStateSnapshot(
+        string connectionId,
+        BridgeStateSync stateSync
+    ) {
         lock (this._sessionSync) {
-            if (!this._sessionsById.TryGetValue(handshake.SessionId, out var session) ||
-                !string.Equals(session.ConnectionId, connectionId, StringComparison.Ordinal))
+            if (this._session == null || this._session.ConnectionId != connectionId)
                 return null;
 
-            var updatedSession = session with {
-                Snapshot = session.Snapshot with {
-                    RevitVersion = handshake.RevitVersion,
-                    ProcessId = handshake.ProcessId,
-                    HasActiveDocument = handshake.HasActiveDocument,
-                    ActiveDocumentTitle = handshake.ActiveDocumentTitle,
-                    ActiveDocumentKey = handshake.ActiveDocumentKey,
-                    ActiveDocumentPath = handshake.ActiveDocumentPath,
-                    ActiveDocumentIsFamilyDocument = handshake.ActiveDocumentIsFamilyDocument,
-                    ActiveDocumentIsWorkshared = handshake.ActiveDocumentIsWorkshared,
-                    ActiveDocumentIsModelInCloud = handshake.ActiveDocumentIsModelInCloud,
-                    ActiveDocumentCloudProjectGuid = handshake.ActiveDocumentCloudProjectGuid,
-                    ActiveDocumentCloudModelGuid = handshake.ActiveDocumentCloudModelGuid,
-                    ActiveDocumentCloudModelUrn = handshake.ActiveDocumentCloudModelUrn,
-                    ActiveDocumentObservedAtUnixMs = handshake.ActiveDocumentObservedAtUnixMs,
-                    OpenDocumentCount = handshake.OpenDocumentCount,
-                    RuntimeFramework = handshake.RuntimeFramework,
-                    BridgeContractVersion = handshake.ContractVersion,
-                    BridgeTransport = handshake.Transport,
-                    AvailableModules = [.. handshake.AvailableModules]
+            this._session = this._session with {
+                Snapshot = this._session.Snapshot with {
+                    State = this.CloneState(stateSync.State)
                 }
             };
-            this._sessionsById[handshake.SessionId] = updatedSession;
-            return updatedSession.Snapshot;
+            return this._session.Snapshot.DeepCopy();
         }
     }
 
@@ -397,61 +372,58 @@ public sealed class BridgeServer(
         DocumentInvalidationEvent payload
     ) {
         lock (this._sessionSync) {
-            if (!this._sessionsById.TryGetValue(sessionId, out var session) ||
-                !string.Equals(session.ConnectionId, connectionId, StringComparison.Ordinal))
+            if (this._session == null ||
+                this._session.ConnectionId != connectionId ||
+                !string.Equals(this._session.Snapshot.SessionId, sessionId, StringComparison.Ordinal)) {
                 return null;
+            }
 
-            var updatedSession = session with {
-                Snapshot = session.Snapshot with {
-                    HasActiveDocument = payload.HasActiveDocument,
-                    ActiveDocumentTitle = payload.DocumentTitle,
-                    ActiveDocumentKey = payload.DocumentKey,
-                    ActiveDocumentPath = payload.DocumentPath,
-                    ActiveDocumentIsFamilyDocument = payload.DocumentIsFamilyDocument,
-                    ActiveDocumentIsWorkshared = payload.DocumentIsWorkshared,
-                    ActiveDocumentIsModelInCloud = payload.DocumentIsModelInCloud,
-                    ActiveDocumentCloudProjectGuid = payload.DocumentCloudProjectGuid,
-                    ActiveDocumentCloudModelGuid = payload.DocumentCloudModelGuid,
-                    ActiveDocumentCloudModelUrn = payload.DocumentCloudModelUrn,
-                    ActiveDocumentObservedAtUnixMs = payload.DocumentObservedAtUnixMs,
-                    OpenDocumentCount = payload.OpenDocumentCount
+            var state = this._session.Snapshot.State;
+            this._session = this._session with {
+                Snapshot = this._session.Snapshot with {
+                    State = state with {
+                        HasActiveDocument = payload.HasActiveDocument,
+                        ActiveDocumentTitle = payload.DocumentTitle,
+                        ActiveDocumentKey = payload.DocumentKey,
+                        ActiveDocumentPath = payload.DocumentPath,
+                        ActiveDocumentIsFamilyDocument = payload.DocumentIsFamilyDocument,
+                        ActiveDocumentIsWorkshared = payload.DocumentIsWorkshared,
+                        ActiveDocumentIsModelInCloud = payload.DocumentIsModelInCloud,
+                        ActiveDocumentCloudProjectGuid = payload.DocumentCloudProjectGuid,
+                        ActiveDocumentCloudModelGuid = payload.DocumentCloudModelGuid,
+                        ActiveDocumentCloudModelUrn = payload.DocumentCloudModelUrn,
+                        ActiveDocumentObservedAtUnixMs = payload.DocumentObservedAtUnixMs,
+                        OpenDocumentCount = payload.OpenDocumentCount,
+                        AvailableModules = [.. state.AvailableModules]
+                    }
                 }
             };
-            this._sessionsById[sessionId] = updatedSession;
-            return updatedSession.Snapshot;
+            return this._session.Snapshot.DeepCopy();
         }
     }
 
     private void ResetSession(
-        BridgeSession transportSession,
+        BridgeTransportSession transportSession,
         BridgeSessionSnapshot? connectedSnapshot,
         string reason
     ) {
         BridgeSessionSnapshot? removedSnapshot = null;
         lock (this._sessionSync) {
-            if (connectedSnapshot != null &&
-                this._sessionsById.TryGetValue(connectedSnapshot.SessionId, out var currentSession) &&
-                string.Equals(currentSession.ConnectionId, transportSession.ConnectionId, StringComparison.Ordinal)) {
-                removedSnapshot = currentSession.Snapshot;
-                this._sessionsById.Remove(connectedSnapshot.SessionId);
-                if (this._sessionsById.Count == 0)
-                    this._lastDisconnectReason = reason;
+            if (this._session != null && this._session.ConnectionId == transportSession.ConnectionId) {
+                removedSnapshot = this._session.Snapshot;
+                this._session = null;
+                this._lastDisconnectReason = reason;
             }
         }
 
-        this._logger.LogInformation(
-            "Bridge server resetting session: SessionId={SessionId}, ConnectionId={ConnectionId}, Reason={Reason}",
-            connectedSnapshot?.SessionId,
-            transportSession.ConnectionId,
-            reason
-        );
         transportSession.Dispose();
         this.FailPendingRequests(transportSession.ConnectionId, reason);
 
         if (removedSnapshot != null) {
-            _ = this.PublishHostStatusChangedAsync(
-                HostStatusChangedReason.BridgeDisconnected,
+            _ = this.PublishSessionConnectionChangedAsync(
+                HostSessionConnectionChangeReason.BridgeDisconnected,
                 removedSnapshot,
+                reason,
                 CancellationToken.None
             );
         }
@@ -459,105 +431,51 @@ public sealed class BridgeServer(
 
     private void FailPendingRequests(string connectionId, string reason) {
         foreach (var pending in this._pending.ToArray()) {
-            if (!string.Equals(pending.Value.ConnectionId, connectionId, StringComparison.Ordinal))
+            if (pending.Value.ConnectionId != connectionId)
                 continue;
 
             if (this._pending.TryRemove(pending.Key, out var completion)) {
                 _ = completion.Completion.TrySetException(
-                    new InvalidOperationException($"Revit bridge disconnected: {reason}")
+                    new HostOperationException(
+                        StatusCodes.Status503ServiceUnavailable,
+                        $"Revit bridge disconnected: {reason}"
+                    )
                 );
             }
         }
     }
 
-    private Task PublishHostStatusChangedAsync(
-        HostStatusChangedReason reason,
+    private Task PublishSessionConnectionChangedAsync(
+        HostSessionConnectionChangeReason reason,
         BridgeSessionSnapshot? sessionSnapshot,
+        string? disconnectReason,
         CancellationToken cancellationToken
-    ) => this._eventStreamService.PublishHostStatusChangedAsync(
-        new HostStatusChangedEvent(
+    ) => this._eventStreamService.PublishSessionConnectionChangedAsync(
+        new HostSessionConnectionChangedEvent(
             reason,
-            sessionSnapshot?.HasActiveDocument ?? false,
-            sessionSnapshot?.ActiveDocumentTitle,
-            sessionSnapshot?.ActiveDocumentKey,
-            sessionSnapshot?.ActiveDocumentPath,
-            sessionSnapshot?.ActiveDocumentIsFamilyDocument ?? false,
-            sessionSnapshot?.ActiveDocumentIsWorkshared ?? false,
-            sessionSnapshot?.ActiveDocumentIsModelInCloud ?? false,
-            sessionSnapshot?.ActiveDocumentCloudProjectGuid,
-            sessionSnapshot?.ActiveDocumentCloudModelGuid,
-            sessionSnapshot?.ActiveDocumentCloudModelUrn,
-            sessionSnapshot?.OpenDocumentCount ?? 0,
-            sessionSnapshot?.ActiveDocumentObservedAtUnixMs ?? 0,
+            sessionSnapshot != null,
             sessionSnapshot?.SessionId,
+            sessionSnapshot?.ProcessId,
             sessionSnapshot?.RevitVersion,
-            this.GetConnectedSessionCount()
+            sessionSnapshot?.RuntimeFramework,
+            sessionSnapshot?.OpenDocumentCount ?? 0,
+            disconnectReason
         ),
         cancellationToken
     );
 
-    private int GetConnectedSessionCount() {
-        lock (this._sessionSync)
-            return this._sessionsById.Count;
-    }
-
-    private static void ValidateHandshake(BridgeHandshake handshake) {
-        if (!string.Equals(handshake.Transport, BridgeProtocol.Transport, StringComparison.Ordinal)) {
+    private static void ValidateRegistration(BridgeRegistrationRequest registration) {
+        if (registration.ContractVersion != BridgeProtocol.ContractVersion) {
             throw new InvalidOperationException(
-                $"Unsupported bridge transport '{handshake.Transport}'. Expected '{BridgeProtocol.Transport}'.");
+                $"Unsupported bridge contract version '{registration.ContractVersion}'. Expected '{BridgeProtocol.ContractVersion}'.");
         }
 
-        if (handshake.ContractVersion != BridgeProtocol.ContractVersion) {
-            throw new InvalidOperationException(
-                $"Unsupported bridge contract version '{handshake.ContractVersion}'. Expected '{BridgeProtocol.ContractVersion}'.");
-        }
-
-        if (string.IsNullOrWhiteSpace(handshake.SessionId))
-            throw new InvalidOperationException("Bridge handshake did not include a session ID.");
+        if (string.IsNullOrWhiteSpace(registration.SessionId))
+            throw new InvalidOperationException("Bridge registration did not include a session ID.");
     }
 
-    internal sealed class BridgeSession : IDisposable {
-        private readonly StreamReader _reader;
-        private readonly JsonSerializerSettings _serializerSettings;
-        private readonly Stream _stream;
-        private readonly SemaphoreSlim _writeLock = new(1, 1);
-        private readonly StreamWriter _writer;
-
-        public BridgeSession(Stream stream, JsonSerializerSettings serializerSettings) {
-            this.ConnectionId = Guid.NewGuid().ToString("N");
-            this._stream = stream;
-            this._serializerSettings = serializerSettings;
-            this._reader = new StreamReader(stream, Encoding.UTF8, false, 4096, true);
-            this._writer = new StreamWriter(stream, new UTF8Encoding(false), 4096, true) { AutoFlush = true };
-        }
-
-        public string ConnectionId { get; }
-
-        public void Dispose() {
-            this._writeLock.Dispose();
-            this._reader.Dispose();
-            this._writer.Dispose();
-            this._stream.Dispose();
-        }
-
-        public async Task<BridgeFrame?> ReadAsync(CancellationToken cancellationToken) {
-            var line = await this._reader.ReadLineAsync(cancellationToken);
-            if (line == null)
-                return null;
-
-            return JsonConvert.DeserializeObject<BridgeFrame>(line, this._serializerSettings);
-        }
-
-        public async Task WriteAsync(BridgeFrame frame, CancellationToken cancellationToken) {
-            var json = JsonConvert.SerializeObject(frame, this._serializerSettings);
-            await this._writeLock.WaitAsync(cancellationToken);
-            try {
-                await this._writer.WriteLineAsync(json);
-            } finally {
-                _ = this._writeLock.Release();
-            }
-        }
-    }
+    private BridgeStateSnapshot CloneState(BridgeStateSnapshot state) =>
+        state with { AvailableModules = [.. state.AvailableModules] };
 }
 
 internal sealed record PendingBridgeRequest(
@@ -565,40 +483,64 @@ internal sealed record PendingBridgeRequest(
     TaskCompletionSource<BridgeResponse> Completion
 );
 
+internal sealed record InFlightBridgeRequest(
+    string RequestId,
+    string Method,
+    long StartedAtUnixMs
+);
+
 internal sealed record ConnectedBridgeSession(
     string ConnectionId,
-    BridgeServer.BridgeSession TransportSession,
+    BridgeTransportSession TransportSession,
     BridgeSessionSnapshot Snapshot
+);
+
+internal sealed record BridgeRegistrationResult(
+    BridgeSessionSnapshot? Session,
+    BridgeRegistrationAck Ack
 );
 
 public sealed record BridgeRuntimeSnapshot(
     bool BridgeIsConnected,
-    string PipeName,
-    string? DefaultSessionId,
-    BridgeSessionSnapshot? DefaultSession,
-    List<BridgeSessionSnapshot> Sessions,
+    string BridgePath,
+    BridgeSessionSnapshot? ConnectedSession,
     string? DisconnectReason
 );
 
 public sealed record BridgeSessionSnapshot(
     string SessionId,
-    string RevitVersion,
     int ProcessId,
-    bool HasActiveDocument,
-    string? ActiveDocumentTitle,
-    string? ActiveDocumentKey,
-    string? ActiveDocumentPath,
-    bool ActiveDocumentIsFamilyDocument,
-    bool ActiveDocumentIsWorkshared,
-    bool ActiveDocumentIsModelInCloud,
-    string? ActiveDocumentCloudProjectGuid,
-    string? ActiveDocumentCloudModelGuid,
-    string? ActiveDocumentCloudModelUrn,
-    long ActiveDocumentObservedAtUnixMs,
-    int OpenDocumentCount,
-    string? RuntimeFramework,
+    string RevitVersion,
+    string RuntimeFramework,
     int BridgeContractVersion,
-    string BridgeTransport,
-    List<HostModuleDescriptor> AvailableModules,
+    BridgeStateSnapshot State,
     long ConnectedAtUnixMs
-);
+) {
+    public bool HasActiveDocument => this.State.HasActiveDocument;
+    public string? ActiveDocumentTitle => this.State.ActiveDocumentTitle;
+    public string? ActiveDocumentKey => this.State.ActiveDocumentKey;
+    public string? ActiveDocumentPath => this.State.ActiveDocumentPath;
+    public bool ActiveDocumentIsFamilyDocument => this.State.ActiveDocumentIsFamilyDocument;
+    public bool ActiveDocumentIsWorkshared => this.State.ActiveDocumentIsWorkshared;
+    public bool ActiveDocumentIsModelInCloud => this.State.ActiveDocumentIsModelInCloud;
+    public string? ActiveDocumentCloudProjectGuid => this.State.ActiveDocumentCloudProjectGuid;
+    public string? ActiveDocumentCloudModelGuid => this.State.ActiveDocumentCloudModelGuid;
+    public string? ActiveDocumentCloudModelUrn => this.State.ActiveDocumentCloudModelUrn;
+    public long ActiveDocumentObservedAtUnixMs => this.State.ActiveDocumentObservedAtUnixMs;
+    public int OpenDocumentCount => this.State.OpenDocumentCount;
+    public List<HostModuleDescriptor> AvailableModules => this.State.AvailableModules;
+
+    public BridgeSessionSnapshot DeepCopy() =>
+        this with { State = this.State with { AvailableModules = [.. this.State.AvailableModules] } };
+
+    public static BridgeSessionSnapshot Create(BridgeRegistrationRequest registration) =>
+        new(
+            registration.SessionId,
+            registration.ProcessId,
+            registration.State.RevitVersion,
+            registration.State.RuntimeFramework,
+            registration.ContractVersion,
+            registration.State with { AvailableModules = [.. registration.State.AvailableModules] },
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+        );
+}

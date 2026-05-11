@@ -1,7 +1,7 @@
 ﻿using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts.SettingsStorage;
-using Pe.Shared.SettingsLayout;
+using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Modules;
 using HostSettingsModuleDescriptor = Pe.Shared.HostContracts.Protocol.HostModuleDescriptor;
 using HostRootDescriptor = Pe.Shared.HostContracts.SettingsStorage.SettingsRootDescriptor;
@@ -28,10 +28,8 @@ public interface IHostSettingsModuleCatalog {
 }
 
 public sealed class HostSettingsModuleCatalog(
-    BridgeServer bridgeServer,
-    IHostBridgeCapabilityService bridgeCapabilityService
+    BridgeServer bridgeServer
 ) : IHostSettingsModuleCatalog {
-    private readonly IHostBridgeCapabilityService _bridgeCapabilityService = bridgeCapabilityService;
     private readonly BridgeServer _bridgeServer = bridgeServer;
 
     public async Task<IReadOnlyList<StructuralSettingsModuleDescriptor>> GetModulesAsync(
@@ -42,7 +40,7 @@ public sealed class HostSettingsModuleCatalog(
             StringComparer.OrdinalIgnoreCase
         );
 
-        if (!this._bridgeCapabilityService.GetSnapshot().BridgeIsConnected)
+        if (!this._bridgeServer.GetSnapshot().BridgeIsConnected)
             return modules.Values.ToList();
 
         var response = await this._bridgeServer.InvokeAsync<
@@ -93,7 +91,7 @@ public sealed class HostSettingsModuleCatalog(
             .Select(CreateTransportDescriptor)
             .ToDictionary(descriptor => descriptor.ModuleKey, StringComparer.OrdinalIgnoreCase);
 
-        foreach (var module in snapshot.DefaultSession?.AvailableModules ?? []) {
+        foreach (var module in snapshot.ConnectedSession?.AvailableModules ?? []) {
             if (!descriptors.ContainsKey(module.ModuleKey))
                 descriptors[module.ModuleKey] = module;
         }

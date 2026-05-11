@@ -1,6 +1,8 @@
 ﻿using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.Context;
 using Pe.Revit.Scripting.Diagnostics;
@@ -152,7 +154,8 @@ public sealed class RevitScriptExecutionService(
                 var executionContext = this.BuildExecutionContext(plan, outputSink);
                 var containerResult = this.InstantiateContainer(
                     compilationResult.AssemblyBytes,
-                    executionContext
+                    executionContext,
+                    plan
                 );
                 Log.Information(
                     "Revit scripting instantiate completed: ExecutionId={ExecutionId}, Status={Status}, ContainerType={ContainerTypeName}, Diagnostics={DiagnosticCount}",
@@ -252,21 +255,18 @@ public sealed class RevitScriptExecutionService(
 
         try {
             var sourceSet = request.SourceKind switch {
-                ScriptExecutionSourceKind.InlineSnippet => this.MaterializeInlineSnippet(workspaceKey,
-                    request.ScriptContent),
+                ScriptExecutionSourceKind.InlineSnippet => this.MaterializeInlineSnippet(
+                    request.ScriptContent,
+                    request.SourceName,
+                    executionId
+                ),
                 ScriptExecutionSourceKind.WorkspacePath => this.LoadWorkspaceSource(workspaceKey, request.SourcePath),
                 _ => throw new InvalidOperationException($"Unsupported source kind '{request.SourceKind}'.")
             };
 
-            if (sourceSet.Files.Count != 1) {
-                diagnostics.Add(ScriptDiagnosticFactory.Error(
-                    "normalize",
-                    $"Exactly one user source file is required. Found {sourceSet.Files.Count}."
-                ));
-                return (null, ScriptExecutionStatus.Rejected, diagnostics);
-            }
-
-            var projectSeed = request.ProjectContent ?? ReadFileIfExists(workspaceProjectPath);
+            var projectSeed = request.SourceKind == ScriptExecutionSourceKind.InlineSnippet
+                ? null
+                : ReadFileIfExists(workspaceProjectPath);
             var canonicalProjectContent = this._projectGenerator.GenerateProjectContent(
                 projectSeed,
                 workspaceRoot,
@@ -285,7 +285,8 @@ public sealed class RevitScriptExecutionService(
                     workspaceKey,
                     workspaceRoot,
                     sourceSet,
-                    canonicalProjectContent
+                    canonicalProjectContent,
+                    request.SourceKind == ScriptExecutionSourceKind.InlineSnippet
                 ),
                 ScriptExecutionStatus.Succeeded,
                 diagnostics
@@ -311,44 +312,117 @@ public sealed class RevitScriptExecutionService(
         }
     }
 
-    private ScriptSourceSet MaterializeInlineSnippet(string workspaceKey, string? scriptContent) {
+    private ScriptSourceSet MaterializeInlineSnippet(string? scriptContent, string? sourceName, string executionId) {
         if (string.IsNullOrWhiteSpace(scriptContent))
             throw new ArgumentException("ScriptContent is required for inline snippets.", nameof(scriptContent));
 
-        var fullPath = RevitScriptingStorageLocations.ResolveLastInlineScriptPath(workspaceKey);
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-        File.WriteAllText(fullPath, scriptContent);
+        sourceName = string.IsNullOrWhiteSpace(sourceName) ? "InlineSnippet.cs" : Path.GetFileName(sourceName);
+        if (!sourceName.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+            sourceName += ".cs";
+
+        this.PersistInlineTrace(scriptContent, sourceName, executionId);
 
         return new ScriptSourceSet([
             new ScriptSourceFile(
-                Path.GetFileName(fullPath),
-                scriptContent,
-                fullPath
+                sourceName,
+                scriptContent
             )
-        ]);
+        ], sourceName);
     }
 
+    private void PersistInlineTrace(string scriptContent, string sourceName, string executionId) {
+        try {
+            var traceDirectory = RevitScriptingStorageLocations.ResolveInlineTraceDirectory();
+            Directory.CreateDirectory(traceDirectory);
+
+            var timestamp = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss-fff");
+            var fileName = $"{timestamp}-{SanitizeFileName(executionId)}-{SanitizeFileName(sourceName)}";
+            File.WriteAllText(Path.Combine(traceDirectory, fileName), scriptContent);
+            TrimInlineTraces(traceDirectory);
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException) {
+            Log.Warning(ex, "Failed to persist inline script trace.");
+        }
+    }
+
+    private static void TrimInlineTraces(string traceDirectory) {
+        var traces = Directory.GetFiles(traceDirectory, "*.cs")
+            .Select(path => new FileInfo(path))
+            .OrderByDescending(file => file.CreationTimeUtc)
+            .ThenByDescending(file => file.Name, StringComparer.OrdinalIgnoreCase)
+            .Skip(50)
+            .ToList();
+
+        foreach (var trace in traces) {
+            try {
+                trace.Delete();
+            } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException) {
+                Log.Warning(ex, "Failed to trim inline script trace {TracePath}.", trace.FullName);
+            }
+        }
+    }
+
+    private static string SanitizeFileName(string value) {
+        var sanitized = new string(value.Select(ch => Path.GetInvalidFileNameChars().Contains(ch) ? '-' : ch).ToArray());
+        return string.IsNullOrWhiteSpace(sanitized) ? "inline" : sanitized;
+    }
+
+    private static string GetRelativePath(string relativeTo, string path) {
+        var relativeToUri = new Uri(AppendDirectorySeparator(Path.GetFullPath(relativeTo)));
+        var pathUri = new Uri(Path.GetFullPath(path));
+        return Uri.UnescapeDataString(relativeToUri.MakeRelativeUri(pathUri).ToString())
+            .Replace('/', Path.DirectorySeparatorChar);
+    }
+
+    private static string AppendDirectorySeparator(string path) =>
+        path.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ||
+        path.EndsWith(Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+            ? path
+            : path + Path.DirectorySeparatorChar;
+
     private ScriptSourceSet LoadWorkspaceSource(string workspaceKey, string? sourcePath) {
-        var fullPath = RevitScriptingStorageLocations.ResolveWorkspaceSourceFilePath(
-            workspaceKey,
-            sourcePath ?? throw new ArgumentException("SourcePath is required for workspace file execution.",
-                nameof(sourcePath))
+        var normalizedSourcePath = sourcePath ?? throw new ArgumentException(
+            "SourcePath is required for workspace file execution.",
+            nameof(sourcePath)
         );
-        if (Directory.Exists(fullPath))
+        if (!normalizedSourcePath.StartsWith($"{RevitScriptingStorageLocations.SourceDirectoryName}/",
+                StringComparison.OrdinalIgnoreCase) &&
+            !normalizedSourcePath.StartsWith($"{RevitScriptingStorageLocations.SourceDirectoryName}\\",
+                StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Workspace source path must be under src/.", nameof(sourcePath));
+
+        var selectedPath = RevitScriptingStorageLocations.ResolveWorkspaceSourceFilePath(
+            workspaceKey,
+            normalizedSourcePath
+        );
+        if (Directory.Exists(selectedPath))
             throw new ArgumentException("Workspace source path must point to a .cs file, not a directory.",
                 nameof(sourcePath));
-        if (!fullPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+        if (!selectedPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Workspace source path must point to a .cs file.", nameof(sourcePath));
-        if (!File.Exists(fullPath))
-            throw new IOException($"Workspace source file does not exist: {fullPath}");
+        if (!File.Exists(selectedPath))
+            throw new IOException($"Workspace source file does not exist: {selectedPath}");
 
-        return new ScriptSourceSet([
-            new ScriptSourceFile(
-                Path.GetFileName(fullPath),
-                File.ReadAllText(fullPath),
-                fullPath
-            )
-        ]);
+        var sourceDirectory = RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey);
+        if (!Directory.Exists(sourceDirectory))
+            throw new IOException($"Workspace source directory does not exist: {sourceDirectory}");
+
+        var sourceFiles = Directory.EnumerateFiles(sourceDirectory, "*.cs", SearchOption.AllDirectories)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .Select(path => new ScriptSourceFile(
+                GetRelativePath(sourceDirectory, path),
+                File.ReadAllText(path),
+                path
+            ))
+            .ToList();
+
+        var selectedFullPath = Path.GetFullPath(selectedPath);
+        var selectedSource = sourceFiles.FirstOrDefault(file =>
+            file.FullPath != null && string.Equals(Path.GetFullPath(file.FullPath), selectedFullPath,
+                StringComparison.OrdinalIgnoreCase));
+        if (selectedSource == null)
+            throw new IOException($"Workspace source file is not under src/: {selectedPath}");
+
+        return new ScriptSourceSet(sourceFiles, selectedSource.Name);
     }
 
     private ResolvedScriptProject ResolveProject(ScriptExecutionPlan plan) =>
@@ -400,7 +474,8 @@ public sealed class RevitScriptExecutionService(
 
     private ScriptContainerResolutionResult InstantiateContainer(
         byte[] assemblyBytes,
-        RevitScriptContext context
+        RevitScriptContext context,
+        ScriptExecutionPlan plan
     ) {
         try {
             var assembly = Assembly.Load(assemblyBytes);
@@ -421,7 +496,39 @@ public sealed class RevitScriptExecutionService(
                 );
             }
 
-            if (containerTypes.Count > 1) {
+            var entryPointTypeNames = ResolveEntryPointContainerTypeNames(plan);
+            if (entryPointTypeNames.Count == 0) {
+                return new ScriptContainerResolutionResult(
+                    ScriptExecutionStatus.Rejected,
+                    null,
+                    null,
+                    [
+                        ScriptDiagnosticFactory.Error(
+                            "instantiate",
+                            $"No non-abstract PeScriptContainer type was found in {plan.SourceSet.EntryPointSourceName}.",
+                            plan.SourceSet.EntryPointSourceName
+                        )
+                    ]
+                );
+            }
+
+            if (entryPointTypeNames.Count > 1) {
+                var typeNames = string.Join(", ", entryPointTypeNames);
+                return new ScriptContainerResolutionResult(
+                    ScriptExecutionStatus.Rejected,
+                    null,
+                    null,
+                    [
+                        ScriptDiagnosticFactory.Error(
+                            "instantiate",
+                            $"Multiple PeScriptContainer types were found in {plan.SourceSet.EntryPointSourceName}: {typeNames}.",
+                            plan.SourceSet.EntryPointSourceName
+                        )
+                    ]
+                );
+            }
+
+            if (plan.RequireSingleContainer && containerTypes.Count > 1) {
                 var typeNames = string.Join(", ", containerTypes.Select(type => type.FullName ?? type.Name));
                 return new ScriptContainerResolutionResult(
                     ScriptExecutionStatus.Rejected,
@@ -436,7 +543,24 @@ public sealed class RevitScriptExecutionService(
                 );
             }
 
-            var containerType = containerTypes[0];
+            var entryPointTypeName = entryPointTypeNames[0];
+            var containerType = containerTypes.FirstOrDefault(type =>
+                string.Equals(type.FullName, entryPointTypeName, StringComparison.Ordinal) ||
+                string.Equals(type.Name, entryPointTypeName, StringComparison.Ordinal));
+            if (containerType == null) {
+                return new ScriptContainerResolutionResult(
+                    ScriptExecutionStatus.Rejected,
+                    null,
+                    null,
+                    [
+                        ScriptDiagnosticFactory.Error(
+                            "instantiate",
+                            $"Entry point container '{entryPointTypeName}' was not found after compilation.",
+                            plan.SourceSet.EntryPointSourceName
+                        )
+                    ]
+                );
+            }
             var instance = (PeScriptContainer?)Activator.CreateInstance(containerType);
             if (instance == null) {
                 return new ScriptContainerResolutionResult(
@@ -473,6 +597,44 @@ public sealed class RevitScriptExecutionService(
                 ]
             );
         }
+    }
+
+    private static IReadOnlyList<string> ResolveEntryPointContainerTypeNames(ScriptExecutionPlan plan) {
+        var entryPointSource = plan.SourceSet.Files.FirstOrDefault(file =>
+            string.Equals(file.Name, plan.SourceSet.EntryPointSourceName, StringComparison.OrdinalIgnoreCase));
+        if (entryPointSource == null)
+            return [];
+
+        var root = CSharpSyntaxTree.ParseText(entryPointSource.Content).GetCompilationUnitRoot();
+        return root.DescendantNodes()
+            .OfType<ClassDeclarationSyntax>()
+            .Where(IsPeScriptContainerDeclaration)
+            .Select(GetFullTypeName)
+            .ToList();
+    }
+
+    private static bool IsPeScriptContainerDeclaration(ClassDeclarationSyntax declaration) =>
+        declaration.Modifiers.Any(SyntaxKind.AbstractKeyword) == false &&
+        declaration.BaseList?.Types.Any(type =>
+            type.Type.ToString().Equals("PeScriptContainer", StringComparison.Ordinal) ||
+            type.Type.ToString().EndsWith(".PeScriptContainer", StringComparison.Ordinal)) == true;
+
+    private static string GetFullTypeName(ClassDeclarationSyntax declaration) {
+        var names = new Stack<string>();
+        names.Push(declaration.Identifier.ValueText);
+
+        for (SyntaxNode? node = declaration.Parent; node != null; node = node.Parent) {
+            switch (node) {
+            case BaseNamespaceDeclarationSyntax namespaceDeclaration:
+                names.Push(namespaceDeclaration.Name.ToString());
+                break;
+            case ClassDeclarationSyntax containingClass:
+                names.Push(containingClass.Identifier.ValueText);
+                break;
+            }
+        }
+
+        return string.Join(".", names);
     }
 
     private void ExecuteContainer(

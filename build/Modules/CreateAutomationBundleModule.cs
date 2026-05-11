@@ -1,11 +1,9 @@
-﻿using Autodesk.PackageBuilder;
+using Autodesk.PackageBuilder;
 using Build.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ModularPipelines.Attributes;
 using ModularPipelines.Context;
-using ModularPipelines.DotNet.Extensions;
-using ModularPipelines.DotNet.Options;
 using ModularPipelines.Git.Extensions;
 using ModularPipelines.Modules;
 using Pe.Shared.RevitVersions;
@@ -16,6 +14,7 @@ namespace Build.Modules;
 
 [DependsOn<ResolveVersioningModule>]
 [DependsOn<ResolveBuildMatrixModule>]
+[DependsOn<ResolveBuildTaxonomyModule>]
 [DependsOn<ResolveBuildLayoutModule>]
 [DependsOn<PublishRevitAddinModule>]
 [DependsOn<CleanProjectModule>(Optional = true)]
@@ -28,10 +27,13 @@ public sealed partial class CreateAutomationBundleModule(IOptions<BuildOptions> 
     protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
         var versioningResult = await context.GetModule<ResolveVersioningModule>();
         var matrixResult = await context.GetModule<ResolveBuildMatrixModule>();
+        var taxonomyResult = await context.GetModule<ResolveBuildTaxonomyModule>();
         var layoutResult = await context.GetModule<ResolveBuildLayoutModule>();
         var versioning = versioningResult.ValueOrDefault!;
         var matrix = matrixResult.ValueOrDefault!;
+        var taxonomy = taxonomyResult.ValueOrDefault!;
         var layout = layoutResult.ValueOrDefault!;
+        taxonomy.RequireProductClass(WorkerAssemblyName, ProductClass.AutomationRuntime);
         var configurations = matrix.ResolveConfigurations(BuildConfigurationGroup.AutomationPack, buildOptions.Value.Configuration);
 
         if (configurations.Length == 0) {
@@ -39,10 +41,11 @@ public sealed partial class CreateAutomationBundleModule(IOptions<BuildOptions> 
             return;
         }
 
-        Directory.CreateDirectory(layout.AutomationPackagesRoot);
+        Directory.CreateDirectory(layout.Artifacts.AutomationPackagesRoot);
 
         foreach (var configuration in configurations) {
             await context.SubModule(configuration, async () => {
+                context.Logger.LogInformation("Building automation worker for {Configuration}.", configuration);
                 await BuildWorkerAsync(context, versioning, configuration, cancellationToken).ConfigureAwait(false);
                 CreateBundleArtifact(layout, configuration, versioning.Version, context);
             });
@@ -54,18 +57,20 @@ public sealed partial class CreateAutomationBundleModule(IOptions<BuildOptions> 
         ResolveVersioningResult versioning,
         string configuration,
         CancellationToken cancellationToken
-    ) => context.DotNet().Build(new DotNetBuildOptions {
-        ProjectSolution = Path.Combine(context.Git().RootDirectory.Path, WorkerProjectPath),
-        Configuration = configuration,
-        Properties = [
+    ) => BuildDotNetCli.BuildQuietAsync(
+        context,
+        Path.Combine(context.Git().RootDirectory.Path, WorkerProjectPath),
+        configuration,
+        [
             ("PeIsolatedBuild", "true"),
             ("VersionPrefix", versioning.VersionPrefix),
             ("VersionSuffix", versioning.VersionSuffix!)
-        ]
-    }, cancellationToken: cancellationToken);
+        ],
+        cancellationToken
+    );
 
     private static void CreateBundleArtifact(
-        BuildLayout layout,
+        ProductLayoutAuthority layout,
         string configuration,
         string version,
         IModuleContext context
@@ -74,7 +79,7 @@ public sealed partial class CreateAutomationBundleModule(IOptions<BuildOptions> 
             throw new InvalidOperationException(
                 $"Automation bundle packaging does not support configuration '{configuration}'.");
 
-        var outputDirectory = layout.GetProjectBinDirectory(WorkerAssemblyName, configuration, spec.TargetFramework);
+        var outputDirectory = layout.Artifacts.GetProjectBinDirectory(WorkerAssemblyName, configuration, spec.TargetFramework);
         var workerAssemblyPath = Path.Combine(outputDirectory, $"{WorkerAssemblyName}.dll");
         if (!File.Exists(workerAssemblyPath))
             throw new FileNotFoundException(
@@ -99,7 +104,7 @@ public sealed partial class CreateAutomationBundleModule(IOptions<BuildOptions> 
             File.Copy(filePath, Path.Combine(contentsDirectory, Path.GetFileName(filePath)), true);
         }
 
-        var zipPath = Path.Combine(layout.AutomationPackagesRoot, $"{WorkerAssemblyName}.{spec.Year}.appbundle.zip");
+        var zipPath = Path.Combine(layout.Artifacts.AutomationPackagesRoot, $"{WorkerAssemblyName}.{spec.Year}.appbundle.zip");
         if (File.Exists(zipPath))
             File.Delete(zipPath);
 

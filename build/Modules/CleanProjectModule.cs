@@ -1,4 +1,4 @@
-﻿using ModularPipelines.Attributes;
+using ModularPipelines.Attributes;
 using ModularPipelines.Conditions;
 using ModularPipelines.Context;
 using ModularPipelines.Modules;
@@ -15,9 +15,9 @@ public sealed class CleanProjectModule : Module {
         var layoutResult = await context.GetModule<ResolveBuildLayoutModule>();
         var layout = layoutResult.ValueOrDefault!;
         var cleanTargets = new[] {
-            layout.ArtifactsRoot,
-            layout.PackagesRoot,
-            layout.PublishRoot
+            layout.Artifacts.ArtifactsRoot,
+            layout.Artifacts.PackagesRoot,
+            layout.Artifacts.PublishRoot
         }.Distinct(StringComparer.OrdinalIgnoreCase);
 
         foreach (var path in cleanTargets) {

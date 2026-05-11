@@ -18,10 +18,6 @@ public static class RepoRootResolver {
     }
 
     public static string? TryResolve() {
-        var environmentRoot = Environment.GetEnvironmentVariable("PE_TOOLS_REPO_ROOT");
-        if (!string.IsNullOrWhiteSpace(environmentRoot) && TryValidateRepoRoot(environmentRoot, out var validatedEnvironmentRoot))
-            return validatedEnvironmentRoot;
-
         foreach (var candidate in EnumerateProbeRoots()) {
             if (FindRepoRoot(candidate) is { } discoveredRoot)
                 return discoveredRoot;

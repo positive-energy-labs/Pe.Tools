@@ -129,7 +129,7 @@ public sealed class RevitAutomationModelDiscoveryService {
     }
 
     private static ApsCloudModelCatalog CreateCloudModelCatalog(Action<string>? log) {
-        var aps = new ApsCredentialSource().CreateAps();
+        var aps = RevitAutomationApsCredentials.CreateAps();
         log?.Invoke("Auth: acquiring data-management token");
         _ = aps.GetTokenResult(ApsTokenRequest.ForParameterService());
         return aps.CloudModels();

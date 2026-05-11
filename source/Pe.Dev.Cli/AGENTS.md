@@ -8,6 +8,8 @@ Owns the single dev-facing and operator-facing CLI surface for local Revit itera
 
 `Pe.Dev.Cli` exists to centralize fragile repo workflows behind one stable executable: `pe-dev`. Keep this package focused on command parsing, human/JSON output, and dispatch into shared runtime and automation seams instead of re-growing sidecar executables.
 
+`pe-dev` is an operator helper surface, not a replacement for standard `dotnet build`. Ordinary compile and test workflows should stay on standard `dotnet` entrypoints whenever the platform allows it.
+
 ## Critical Entry Points
 
 - `Program.cs` - `pe-dev` entrypoint.
@@ -46,25 +48,25 @@ Live runtime validation loop:
 
 - build the affected runtime package-local outputs
 - run `pe-dev revit sync-runtime`
-- then run `pe-dev revit script ...` or the matching validation command
+- then run `pea script ...` or the matching validation command
 - do not assume a successful `./build` isolated compile made the live RRD session fresh
 
 ## Shared Language
 
 | Term | Meaning | Prefer / Avoid |
 | --- | --- | --- |
-| **single executable** | The repo should teach one CLI surface: `pe-dev` | Avoid reviving `pe-script` or separate automation executables |
-| **operator surface** | The command families humans and agents should actually learn and run | Prefer extending `pe-dev` over hidden scripts |
-| **automation lane** | `pe-dev revit automation ...` | Prefer this over talking about DA as a separate tool |
-| **browse lane** | the sticky-context ACC discovery commands under `revit automation browse ...` | Prefer this over copy-pasting ids through one-off list commands |
-| **status lane** | `inspect receipt`, `inspect workitem`, and low-level `workitem-status` fallback | Prefer inspection over rerunning jobs when you already have a receipt or id |
+| **dev CLI** | The repo-local developer/operator surface is `pe-dev` | Avoid reviving `pe-script` or separate automation executables |
+| **operator surface** | The command families humans and agents should actually learn and run | Prefer `pe-dev` for repo/dev operations and `pea script` for user scripting |
+| **automation workflow** | `pe-dev revit automation ...` | Prefer this over talking about DA as a separate tool |
+| **browse workflow** | the sticky-context ACC discovery commands under `revit automation browse ...` | Prefer this over copy-pasting ids through one-off list commands |
+| **status workflow** | `inspect receipt`, `inspect workitem`, and low-level `workitem-status` fallback | Prefer inspection over rerunning jobs when you already have a receipt or id |
 | **JSON mode** | `--json` output intended for downstream tooling or scripting | Prefer this for machine consumption instead of scraping human text |
 
 ## Living Memory
 
-- `Pe.Dev.Cli` is the only CLI humans and agents should learn in this repo.
-- The deployed CLI is installed beside `Pe.Host` under `%LocalAppData%\Positive Energy\Pe.Tools\Host\`. Do not rely on PATH registration for that copy.
-- Local `Pe.Dev.Cli` builds now mirror the runnable CLI output to `%LocalAppData%\Positive Energy\Pe.Tools\Bin\pe-dev\`. If the user wants `pe-dev` on `PATH`, that mirrored bin directory is the intended dev-facing path to register.
+- `Pe.Dev.Cli` is the only CLI humans and agents should learn for repo-local development/operator work.
+- `Pe.Dev.Cli` is not installed by the MSI; deployed agent/user workflows use `pea` instead.
+- Local `Pe.Dev.Cli` builds now mirror the runnable CLI output to `%LocalAppData%\Positive Energy\Pe.Tools\bin\pe-dev\`. If the user wants `pe-dev` on `PATH`, that mirrored bin directory is the intended dev-facing path to register.
 - `revit script` and `revit automation` are both first-class command families, not sidecars.
 - Build hooks must consume the built CLI output through `dotnet exec`, not `dotnet run`.
 - `revit approve` is background-only and intentionally relaunches an internal worker so MSBuild does not block.
@@ -72,7 +74,9 @@ Live runtime validation loop:
 - `revit sync-runtime` is the operator-facing pre-live-validation command. Keep it explicit, health-aware, and thin over the lower-level HR path.
 - `revit script` no longer auto-runs hot reload before execution. Explicit `revit sync-runtime` is the preferred pre-live-validation step after runtime package edits.
 - `revit session` is the unified local status surface. It should stay CLI-first, pull in host-status when available, and keep `--json` honest for tooling.
-- `revit test` is the deterministic Revit-backed test lane for runtime freshness. By default it auto-selects a safe Revit year in the same runtime family that is not already running, then forces a dedicated test Revit process and temporarily hides the deployed `Pe.App` add-in for that year unless the operator opts out.
-- The Revit window left behind by `revit test` is an owned inspect/debug session, not a freshness-safe attach target. The next `revit test` run should recycle that owned session before launching again.
+- `revit test` is an explicit Revit-backed verification helper, not the semantic center of repo testing. Keep it thin, deterministic, and honest about the behavior it owns.
+- `revit test` currently provides the dedicated `FreshRevitProcess` helper. By default it auto-selects a safe Revit year in the same runtime family that is not already running, then forces a dedicated test Revit process, temporarily hides the deployed `Pe.App` add-in for that year unless the operator opts out, and closes the fresh process after the run.
+- `revit test` should record the owned fresh Revit session as soon as it appears, recycle that exact owned process on the next run when needed, and prefer failing over broad same-year process kills if ownership becomes ambiguous.
 - `revit test` should also start the approval watcher for its target year before launching a fresh test-controlled Revit process, otherwise unsigned add-in approval can stall unattended startup.
+- Do not hide `revit test` behind ordinary `dotnet build` or bare `dotnet test` flows. If a workflow needs this helper, require explicit intent.
 - Keep CLI models honest: parse flags here, but keep APS policy, packaging, worker definitions, and report/artifact handling in `Pe.Dev.RevitAutomation`.

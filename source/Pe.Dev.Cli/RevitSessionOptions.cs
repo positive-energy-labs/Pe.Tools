@@ -1,79 +1,75 @@
-﻿using Pe.Dev.RevitAutomation;
+using Pe.Dev.RevitAutomation;
 using Pe.Shared.HostContracts.Protocol;
-using System.Net.Http;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using Pe.Shared.HostContracts;
 
 namespace Pe.Dev.Cli;
 
 internal sealed record RevitSessionOptions(
-    bool JsonOutput
+    bool JsonOutput,
+    int? RevitYear,
+    bool RequireAttachedRrd
 ) {
     public static RevitSessionOptions Parse(IReadOnlyList<string> args) {
         var jsonOutput = false;
+        int? revitYear = null;
+        var requireAttachedRrd = false;
 
-        foreach (var arg in args) {
-            switch (arg.ToLowerInvariant()) {
+        for (var i = 0; i < args.Count; i++) {
+            switch (args[i].ToLowerInvariant()) {
             case "--json":
                 jsonOutput = true;
                 break;
+            case "--revit-year":
+                if (i + 1 >= args.Count)
+                    throw new ArgumentException("Missing value for --revit-year.");
+
+                revitYear = RevitTestCliOptions.ParseYear(args[++i]);
+                break;
+            case "--require-attached-rrd":
+                requireAttachedRrd = true;
+                break;
             default:
-                throw new ArgumentException($"Unknown argument '{arg}' for session.");
+                throw new ArgumentException($"Unknown argument '{args[i]}' for session.");
             }
         }
 
-        return new RevitSessionOptions(jsonOutput);
+        if (requireAttachedRrd && !revitYear.HasValue)
+            throw new ArgumentException("`revit session --require-attached-rrd` also requires --revit-year <year>.");
+
+        return new RevitSessionOptions(jsonOutput, revitYear, requireAttachedRrd);
     }
 }
 
 internal sealed record RevitSessionReport(
-    HostStatusData? HostStatus,
+    HostProbeData? HostProbe,
+    HostSessionSummaryData? HostSessionSummary,
     IReadOnlyList<RevitProcessSessionIdentity> ProcessSessions,
     RevitProcessSessionIdentity? SelectedProcessSession
 ) {
-    public bool HostReachable => this.HostStatus != null;
-    public bool HasAnySessions => (this.HostStatus?.Sessions.Count ?? 0) != 0 || this.ProcessSessions.Count != 0;
+    public bool HostReachable => this.HostProbe != null;
+    public bool HasAnySessions => (this.HostSessionSummary?.BridgeIsConnected ?? false) || this.ProcessSessions.Count != 0;
 }
 
 internal static class RevitSessionHostClient {
-    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
+    public static HostProbeData? TryGetProbe() =>
+        HostReachability.TryGetProbe(
+            hostBaseUrl: null,
+            out var probe,
+            out _,
+            HostRuntimeDefaults.DefaultHostProbeTimeoutMs
+        )
+            ? probe
+            : null;
 
-    public static HostStatusData? TryGetStatus() {
-        try {
-            using var client = new HttpClient { Timeout = TimeSpan.FromMilliseconds(GetProbeTimeoutMs()) };
-            using var response = client.GetAsync($"{GetHostBaseUrl().TrimEnd('/')}{HttpRoutes.HostStatus}")
-                .GetAwaiter()
-                .GetResult();
-            if (!response.IsSuccessStatusCode)
-                return null;
+    public static HostSessionSummaryData? TryGetSessionSummary() =>
+        HostReachability.TryGetSessionSummary(
+            hostBaseUrl: null,
+            out var sessionSummary,
+            out _,
+            HostRuntimeDefaults.DefaultHostProbeTimeoutMs
+        )
+            ? sessionSummary
+            : null;
 
-            var payloadJson = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-            return JsonSerializer.Deserialize<HostStatusData>(payloadJson, JsonOptions);
-        } catch {
-            return null;
-        }
-    }
-
-    public static string GetHostBaseUrl() {
-        var configuredValue = Environment.GetEnvironmentVariable(SettingsEditorRuntime.HostBaseUrlVariable);
-        return string.IsNullOrWhiteSpace(configuredValue)
-            ? SettingsEditorRuntime.DefaultHostBaseUrl
-            : configuredValue;
-    }
-
-    private static int GetProbeTimeoutMs() {
-        var configuredValue = Environment.GetEnvironmentVariable(SettingsEditorRuntime.HostProbeTimeoutVariable);
-        return int.TryParse(configuredValue, out var timeoutMs) && timeoutMs > 0
-            ? timeoutMs
-            : SettingsEditorRuntime.DefaultHostProbeTimeoutMs;
-    }
-
-    private static JsonSerializerOptions CreateJsonOptions() {
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web) {
-            PropertyNameCaseInsensitive = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-        };
-        options.Converters.Add(new JsonStringEnumConverter());
-        return options;
-    }
+    public static string GetHostBaseUrl() => Pe.Shared.Product.HostProcessIdentity.ResolveHostBaseUrl();
 }

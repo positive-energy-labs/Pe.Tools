@@ -1,11 +1,12 @@
-﻿using Autodesk.PackageBuilder;
+using Autodesk.PackageBuilder;
 using Build.Options;
 using Microsoft.Extensions.Options;
 using ModularPipelines.Attributes;
 using ModularPipelines.Context;
 using ModularPipelines.FileSystem;
 using ModularPipelines.Modules;
-using Pe.Shared.HostContracts.Protocol;
+using Pe.Shared.HostContracts;
+using Pe.Shared.Product;
 using Shouldly;
 using Sourcy.DotNet;
 using System.Diagnostics.CodeAnalysis;
@@ -41,9 +42,13 @@ public sealed partial class CreateBundleModule(
 
         targetDirectories.ShouldNotBeEmpty("No content were found to create a bundle");
 
-        Directory.CreateDirectory(layout.BundlePackagesRoot);
-        var outputFolder = new Folder(layout.BundlePackagesRoot);
-        var bundleFolder = outputFolder.CreateFolder($"{bundleTarget.NameWithoutExtension}.bundle");
+        Directory.CreateDirectory(layout.Artifacts.BundlePackagesRoot);
+        var outputFolder = new Folder(layout.Artifacts.BundlePackagesRoot);
+        var bundleFolder = outputFolder.GetFolder($"{bundleTarget.NameWithoutExtension}.bundle");
+        if (bundleFolder.Exists)
+            await bundleFolder.DeleteAsync(cancellationToken);
+
+        bundleFolder = outputFolder.CreateFolder(bundleFolder.Name);
         var contentFolder = bundleFolder.CreateFolder("Contents");
         var manifestFile = bundleFolder.GetFile("PackageContents.xml");
 
@@ -51,6 +56,9 @@ public sealed partial class CreateBundleModule(
         this.GenerateManifest(bundleTarget, targetDirectories, manifestFile, versioning);
 
         var outputFile = outputFolder.GetFile($"{bundleFolder.Name}.zip");
+        if (outputFile.Exists)
+            await outputFile.DeleteAsync(cancellationToken);
+
         context.Files.Zip.ZipFolder(bundleFolder, outputFile.Path);
         await bundleFolder.DeleteAsync(cancellationToken);
 
@@ -86,7 +94,7 @@ public sealed partial class CreateBundleModule(
             .Name(bundleTarget.NameWithoutExtension)
             .AppVersion(versioning.Version);
 
-        builder.CompanyDetails.Create(SettingsEditorRuntime.VendorName)
+        builder.CompanyDetails.Create(ProductIdentity.VendorName)
             .Email(bundleOptions.Value.VendorEmail)
             .Url(bundleOptions.Value.VendorUrl);
 

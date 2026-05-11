@@ -6,9 +6,11 @@ internal enum RevitCommandKind {
     Automation,
     HotReload,
     Logs,
+    PeaSyncRuntime,
+    RuntimeStatus,
     Session,
     SyncRuntime,
     Test,
-    Script,
+    SyncPeaHostClient,
     InternalApproveWorker
 }

@@ -1,19 +1,28 @@
 {
-  "name": "mastra-agent-test",
-  "version": "1.0.0",
+  "name": "pea",
+  "version": "0.1.0",
   "type": "module",
   "private": true,
+  "bin": {
+    "pea": "./dist/main.js"
+  },
   "scripts": {
+    "pea": "tsx main.ts",
     "start": "tsx main.ts",
-    "check": "tsc --noEmit"
+    "agent": "tsx main.ts agent",
+    "status": "tsx main.ts host status",
+    "bootstrap": "tsx main.ts script bootstrap",
+    "execute": "tsx main.ts script execute",
+    "check": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
     "@mastra/core": "latest",
+    "gunshi": "^0.29.5",
     "mastracode": "^0.17.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "zod": "^4.3.6"
   },
-  "devDependencies": {},
   "packageManager": "pnpm@10.33.4"
 }

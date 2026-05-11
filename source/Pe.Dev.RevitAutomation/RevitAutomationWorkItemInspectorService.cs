@@ -9,7 +9,7 @@ public sealed class RevitAutomationWorkItemInspectorService {
         AutomationWorkItemInspectOptions options,
         CancellationToken cancellationToken
     ) {
-        var designAutomation = new ApsCredentialSource().CreateAps().DesignAutomation();
+        var designAutomation = RevitAutomationApsCredentials.CreateAps().DesignAutomation();
 
         var status = await designAutomation.GetStatusAsync(options.WorkItemId, cancellationToken)
             .ConfigureAwait(false);

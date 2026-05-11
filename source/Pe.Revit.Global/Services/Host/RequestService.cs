@@ -1,4 +1,4 @@
-﻿using Pe.Revit.DocumentData.Parameters;
+using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Global.Services.Document;
 using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.SettingsRuntime.Json.FieldOptions;
@@ -263,13 +263,13 @@ public class RequestService {
 
     private async Task<T> EnqueueAsync<T>(Func<T> action) {
         var queueStopwatch = Stopwatch.StartNew();
-        Log.Information("Settings editor request queue starting: ResultType={ResultType}", typeof(T).Name);
+        Log.Information("Host request queue starting: ResultType={ResultType}", typeof(T).Name);
         T? result = default;
         Exception? failure = null;
         var completed = false;
         _ = await this._revitTaskService.Run(async () => {
             Log.Information(
-                "Settings editor request queue running on Revit thread after {ElapsedMs} ms: ResultType={ResultType}",
+                "Host request queue running on Revit thread after {ElapsedMs} ms: ResultType={ResultType}",
                 queueStopwatch.ElapsedMilliseconds,
                 typeof(T).Name
             );
@@ -295,7 +295,7 @@ public class RequestService {
         }
 
         Log.Information(
-            "Settings editor request queue completed in {ElapsedMs} ms: ResultType={ResultType}",
+            "Host request queue completed in {ElapsedMs} ms: ResultType={ResultType}",
             queueStopwatch.ElapsedMilliseconds,
             typeof(T).Name
         );

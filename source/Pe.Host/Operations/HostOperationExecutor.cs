@@ -21,12 +21,11 @@ internal sealed class HostOperationExecutor(
             var executionResult = await operation.ExecuteAsync(request, context, cancellationToken);
 
             this._logger.LogInformation(
-                "Host operation completed: Key={Key}, Route={Route}, Verb={Verb}, Mode={Mode}, ExecutionPath={ExecutionPath}, RequestType={RequestType}, ResponseType={ResponseType}, ElapsedMs={ElapsedMs}",
+                "Host operation completed: Key={Key}, Route={Route}, Verb={Verb}, Mode={Mode}, RequestType={RequestType}, ResponseType={ResponseType}, ElapsedMs={ElapsedMs}",
                 operation.Definition.Key,
                 operation.Definition.Route,
                 operation.Definition.Verb,
                 operation.Definition.ExecutionMode,
-                executionResult.ExecutionPath,
                 operation.Definition.RequestType.Name,
                 operation.Definition.ResponseType.Name,
                 stopwatch.ElapsedMilliseconds
@@ -45,17 +44,6 @@ internal sealed class HostOperationExecutor(
                 stopwatch.ElapsedMilliseconds
             );
             return CreateProblemResult(ex.StatusCode, ex.Message, ex.Issues);
-        } catch (InvalidOperationException ex) {
-            this._logger.LogWarning(
-                ex,
-                "Host operation failed with conflict semantics: Key={Key}, Route={Route}, Mode={Mode}, RequestType={RequestType}, ElapsedMs={ElapsedMs}",
-                operation.Definition.Key,
-                operation.Definition.Route,
-                operation.Definition.ExecutionMode,
-                operation.Definition.RequestType.Name,
-                stopwatch.ElapsedMilliseconds
-            );
-            return CreateProblemResult(StatusCodes.Status409Conflict, ex.Message, null);
         } catch (Exception ex) {
             this._logger.LogError(
                 ex,

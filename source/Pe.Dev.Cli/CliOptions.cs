@@ -50,31 +50,68 @@ internal sealed record DevCliOptions(
             );
         }
 
-        if (positionals.Count < 2 || !string.Equals(positionals[0], "revit", StringComparison.OrdinalIgnoreCase))
-            return DevCliParseResult.Failure("Expected a `revit` command.", true);
+        if (positionals.Count >= 2 && string.Equals(positionals[0], "revit", StringComparison.OrdinalIgnoreCase)) {
+            var commandKind = positionals[1].ToLowerInvariant() switch {
+                "approve" => RevitCommandKind.Approve,
+                "automation" => RevitCommandKind.Automation,
+                "hot-reload" => RevitCommandKind.HotReload,
+                "logs" => RevitCommandKind.Logs,
+                "session" => RevitCommandKind.Session,
+                "sync-runtime" => RevitCommandKind.SyncRuntime,
+                "test" => RevitCommandKind.Test,
+                "sync-pea-host-client" => RevitCommandKind.SyncPeaHostClient,
+                _ => RevitCommandKind.Unknown
+            };
 
-        var commandKind = positionals[1].ToLowerInvariant() switch {
-            "approve" => RevitCommandKind.Approve,
-            "automation" => RevitCommandKind.Automation,
-            "hot-reload" => RevitCommandKind.HotReload,
-            "logs" => RevitCommandKind.Logs,
-            "session" => RevitCommandKind.Session,
-            "sync-runtime" => RevitCommandKind.SyncRuntime,
-            "test" => RevitCommandKind.Test,
-            "script" => RevitCommandKind.Script,
-            _ => RevitCommandKind.Unknown
-        };
+            if (commandKind == RevitCommandKind.Unknown)
+                return DevCliParseResult.Failure($"Unknown command '{positionals[1]}'.", true);
 
-        if (commandKind == RevitCommandKind.Unknown)
-            return DevCliParseResult.Failure($"Unknown command '{positionals[1]}'.", true);
+            return DevCliParseResult.SuccessResult(
+                new DevCliOptions(
+                    repoRoot,
+                    commandKind,
+                    positionals.Skip(2).ToArray()
+                )
+            );
+        }
 
-        return DevCliParseResult.SuccessResult(
-            new DevCliOptions(
-                repoRoot,
-                commandKind,
-                positionals.Skip(2).ToArray()
-            )
-        );
+        if (positionals.Count >= 2 && string.Equals(positionals[0], "runtime", StringComparison.OrdinalIgnoreCase)) {
+            var commandKind = positionals[1].ToLowerInvariant() switch {
+                "status" => RevitCommandKind.RuntimeStatus,
+                _ => RevitCommandKind.Unknown
+            };
+
+            if (commandKind == RevitCommandKind.Unknown)
+                return DevCliParseResult.Failure($"Unknown runtime command '{positionals[1]}'.", true);
+
+            return DevCliParseResult.SuccessResult(
+                new DevCliOptions(
+                    repoRoot,
+                    commandKind,
+                    positionals.Skip(2).ToArray()
+                )
+            );
+        }
+
+        if (positionals.Count >= 2 && string.Equals(positionals[0], "pea", StringComparison.OrdinalIgnoreCase)) {
+            var commandKind = positionals[1].ToLowerInvariant() switch {
+                "sync-runtime" => RevitCommandKind.PeaSyncRuntime,
+                _ => RevitCommandKind.Unknown
+            };
+
+            if (commandKind == RevitCommandKind.Unknown)
+                return DevCliParseResult.Failure($"Unknown pea command '{positionals[1]}'.", true);
+
+            return DevCliParseResult.SuccessResult(
+                new DevCliOptions(
+                    repoRoot,
+                    commandKind,
+                    positionals.Skip(2).ToArray()
+                )
+            );
+        }
+
+        return DevCliParseResult.Failure("Expected a `revit`, `runtime`, or `pea` command.", true);
     }
 
     private static string RequireValue(IReadOnlyList<string> args, ref int index, string optionName) {

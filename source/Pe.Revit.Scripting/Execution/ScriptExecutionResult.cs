@@ -12,7 +12,8 @@ internal sealed record ScriptSourceFile(
 );
 
 internal sealed record ScriptSourceSet(
-    IReadOnlyList<ScriptSourceFile> Files
+    IReadOnlyList<ScriptSourceFile> Files,
+    string EntryPointSourceName
 );
 
 internal sealed record ScriptExecutionPlan(
@@ -24,7 +25,8 @@ internal sealed record ScriptExecutionPlan(
     string WorkspaceKey,
     string WorkspaceRoot,
     ScriptSourceSet SourceSet,
-    string ProjectContent
+    string ProjectContent,
+    bool RequireSingleContainer
 );
 
 internal sealed record ScriptCompilationResult(

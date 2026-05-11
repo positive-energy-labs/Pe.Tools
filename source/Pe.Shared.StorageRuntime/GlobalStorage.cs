@@ -1,4 +1,5 @@
-﻿using Pe.Shared.SettingsLayout;
+﻿using Pe.Shared.Product;
+using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Json;
 
 namespace Pe.Shared.StorageRuntime;
@@ -9,13 +10,15 @@ public sealed class GlobalStorage(string basePath) {
     );
 
     public StateStorage State() => StateStorage.ExactDir(
-        DeploymentRuntimeLocations.GetGlobalStatePath(),
+        ProductRuntimeLayout.ForCurrentUser().State.GlobalStatePath,
         Path.Combine(this.DirectoryPath, "state")
     );
 
-    public OutputStorage Output() => new(this.DirectoryPath);
+    public OutputStorage Output() => OutputStorage.ExactDir(
+        ProductUserContentLayout.ForCurrentUser().Output.GlobalOutputPath
+    );
 
-    public GlobalLogStorage Log() => new(DeploymentRuntimeLocations.GetLogRootPath());
+    public GlobalLogStorage Log() => new(ProductRuntimeLayout.ForCurrentUser().Logs.RootPath);
 
     public ManagedLogFile HostLog() => this.Log().HostLog();
 

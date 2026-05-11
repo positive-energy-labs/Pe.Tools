@@ -7,7 +7,7 @@ internal sealed record RevitTestBuildMatrix(
     IReadOnlyList<int> SupportedRevitYears,
     IReadOnlyList<string> TestConfigurations
 ) {
-    private const string FilePath = "build/BuildConfiguration.props";
+    private const string FilePath = "build/authored/BuildMatrix.props";
 
     public static RevitTestBuildMatrix Load(string repositoryRoot) {
         var path = Path.Combine(repositoryRoot, FilePath);
@@ -15,8 +15,23 @@ internal sealed record RevitTestBuildMatrix(
 
         return new RevitTestBuildMatrix(
             ParseYear(RequireValue(document, "PeDefaultRevitYear")),
-            SplitList(RequireValue(document, "PeSupportedRevitYears")).Select(ParseYear).ToArray(),
-            SplitList(RequireValue(document, "PeRevitTestConfigurations"))
+            document.Descendants()
+                .Where(element => string.Equals(element.Name.LocalName, "PeRevitYear", StringComparison.Ordinal))
+                .Select(element => new {
+                    Year = ParseYear(RequireAttribute(element, "Include")),
+                    Suffix = RequireAttribute(element, "Suffix")
+                })
+                .OrderBy(element => element.Year)
+                .Select(element => element.Year)
+                .ToArray(),
+            document.Descendants()
+                .Where(element => string.Equals(element.Name.LocalName, "PeRevitYear", StringComparison.Ordinal))
+                .Select(element => RequireAttribute(element, "Suffix"))
+                .Select(suffix => $"Debug.{suffix}.Tests")
+                .Concat(document.Descendants()
+                    .Where(element => string.Equals(element.Name.LocalName, "PeRevitYear", StringComparison.Ordinal))
+                    .Select(element => $"Release.{RequireAttribute(element, "Suffix")}.Tests"))
+                .ToArray()
         );
     }
 
@@ -56,8 +71,13 @@ internal sealed record RevitTestBuildMatrix(
             : value;
     }
 
-    private static IReadOnlyList<string> SplitList(string value) =>
-        value.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+    private static string RequireAttribute(XElement element, string attributeName) {
+        var value = element.Attribute(attributeName)?.Value?.Trim();
+
+        return string.IsNullOrWhiteSpace(value)
+            ? throw new InvalidOperationException($"Required attribute '{attributeName}' was not found in {FilePath}.")
+            : value;
+    }
 
     private static int ParseYear(string value) => RevitTestCliOptions.ParseYear(value);
 }

@@ -1,15 +1,11 @@
-﻿using Pe.Shared.HostContracts.Protocol;
-using System.Text.Json;
+using Pe.Shared.HostContracts;
+using Pe.Shared.Product;
 
 namespace Pe.Host.Services;
 
 internal static class HostSingletonGuard {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) {
-        PropertyNameCaseInsensitive = true
-    };
-
     public static IDisposable? TryAcquireOrExit(BridgeHostOptions options) {
-        var mutex = new Mutex(true, SettingsEditorRuntime.HostSingletonMutexName, out var createdNew);
+        var mutex = new Mutex(true, HostProcessIdentity.HostSingletonMutexName, out var createdNew);
         if (createdNew)
             return mutex;
 
@@ -24,14 +20,19 @@ internal static class HostSingletonGuard {
         }
 
         throw new InvalidOperationException(
-            $"Another process already holds mutex '{SettingsEditorRuntime.HostSingletonMutexName}', but no compatible {SettingsEditorRuntime.ProductName} host responded at '{options.HostBaseUrl}'."
+            $"Another process already holds mutex '{HostProcessIdentity.HostSingletonMutexName}', but no compatible {ProductIdentity.ProductName} host responded at '{options.HostBaseUrl}'."
         );
     }
 
     private static bool WaitForCompatibleHost(BridgeHostOptions options) {
         var deadlineUtc = DateTime.UtcNow.AddMilliseconds(GetProbeTimeoutMs());
         while (DateTime.UtcNow < deadlineUtc) {
-            if (TryGetCompatibleHostStatus(options))
+            if (HostReachability.TryGetCompatibleProbe(
+                    options.HostBaseUrl,
+                    out _,
+                    out _,
+                    GetHostProbeTimeoutMs()
+                ))
                 return true;
 
             Thread.Sleep(250);
@@ -40,39 +41,6 @@ internal static class HostSingletonGuard {
         return false;
     }
 
-    private static int GetProbeTimeoutMs() {
-        var configuredValue = Environment.GetEnvironmentVariable(SettingsEditorRuntime.HostStartupTimeoutVariable);
-        return int.TryParse(configuredValue, out var timeoutMs) && timeoutMs > 0
-            ? timeoutMs
-            : SettingsEditorRuntime.DefaultHostStartupTimeoutMs;
-    }
-
-    private static bool TryGetCompatibleHostStatus(BridgeHostOptions options) {
-        try {
-            using var client = new HttpClient { Timeout = TimeSpan.FromMilliseconds(GetHostProbeTimeoutMs()) };
-            using var response = client.GetAsync($"{options.HostBaseUrl.TrimEnd('/')}{HttpRoutes.HostStatus}")
-                .GetAwaiter()
-                .GetResult();
-            if (!response.IsSuccessStatusCode)
-                return false;
-
-            var payloadJson = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-            var status = JsonSerializer.Deserialize<HostStatusData>(payloadJson, JsonOptions);
-            return status != null &&
-                   string.Equals(status.RuntimeIdentity, SettingsEditorRuntime.RuntimeIdentity,
-                       StringComparison.Ordinal) &&
-                   status.HostContractVersion == HostProtocol.ContractVersion &&
-                   status.BridgeContractVersion == BridgeProtocol.ContractVersion &&
-                   string.Equals(status.PipeName, options.PipeName, StringComparison.Ordinal);
-        } catch {
-            return false;
-        }
-    }
-
-    private static int GetHostProbeTimeoutMs() {
-        var configuredValue = Environment.GetEnvironmentVariable(SettingsEditorRuntime.HostProbeTimeoutVariable);
-        return int.TryParse(configuredValue, out var timeoutMs) && timeoutMs > 0
-            ? timeoutMs
-            : SettingsEditorRuntime.DefaultHostProbeTimeoutMs;
-    }
+    private static int GetProbeTimeoutMs() => HostRuntimeDefaults.DefaultHostStartupTimeoutMs;
+    private static int GetHostProbeTimeoutMs() => HostRuntimeDefaults.DefaultHostProbeTimeoutMs;
 }

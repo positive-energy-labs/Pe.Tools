@@ -1,0 +1,15 @@
+<Project>
+    <PropertyGroup>
+        <PeDefaultRevitYear>2025</PeDefaultRevitYear>
+        <PeDefaultBuildKind>Debug</PeDefaultBuildKind>
+        <PeSharedNeutralTargetFramework>netstandard2.0</PeSharedNeutralTargetFramework>
+        <PeOutOfProcTargetFramework>net8.0-windows</PeOutOfProcTargetFramework>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PeRevitYear Include="2023" Suffix="R23" RuntimeTargetFramework="net48" AutomationTargetFramework="net48" SupportsCompile="true" SupportsPack="true" SupportsAutomationPack="false" />
+        <PeRevitYear Include="2024" Suffix="R24" RuntimeTargetFramework="net48" AutomationTargetFramework="net48" SupportsCompile="true" SupportsPack="true" SupportsAutomationPack="true" />
+        <PeRevitYear Include="2025" Suffix="R25" RuntimeTargetFramework="net8.0-windows" AutomationTargetFramework="net8.0-windows" SupportsCompile="true" SupportsPack="true" SupportsAutomationPack="true" />
+        <PeRevitYear Include="2026" Suffix="R26" RuntimeTargetFramework="net8.0-windows" AutomationTargetFramework="net8.0-windows" SupportsCompile="true" SupportsPack="true" SupportsAutomationPack="true" />
+    </ItemGroup>
+</Project>
