@@ -1,104 +1,119 @@
 # TAXONOMY
 
-This file is a living record of the taxonomy we are converging on. It focuses on authority, workflow, runtime shape, and boundary language rather than file-by-file history. This is constantly in flux and this should be incrimentally updated.
+Living vocabulary for build/runtime/deployment decisions. Use this to translate "how do I..." into the right lane, workflow, command surface, and safety policy.
 
-## Core Axes
+## Decision Axes
 
-| Axis | Question it answers | Canonical values | Notes |
+| Axis | Question | Values |
+| --- | --- | --- |
+| **module taxonomy** | What kind of code package is this? | `BuildTool`, `InstallerTool`, `DesktopShell`, `RevitRuntime`, `TestHarness`, `AutomationShell`, `OperatorSurface`, `HostService`, `SharedNeutral`, `ExternalIntegration` |
+| **product taxonomy** | What durable product/runtime shape is produced? | `BuildInfrastructure`, `DesktopAddin`, `HostRuntime`, `DevTooling`, `AutomationRuntime`, `RevitRuntime`, `TestHarness`, `SharedLibrary`, `ExternalIntegration` |
+| **installer component taxonomy** | What MSI-visible/install-owned slice is this? | `RevitAddin`, `HostRuntime`, `PeaCli`, `PeDevCli`, `RuntimeState`, `UserContent`, `AutomationBundle` |
+| **workflow taxonomy** | What is the operator doing? | `Build`, `Verify`, `Package`, `Publish` |
+| **runtime lane** | Which local machine lane owns the running binaries/state? | `Dev`, `Install` |
+| **execution policy** | May this touch live Rider-driven Revit? | `NoRrdContact`, `RrdRequired` |
+| **build mode** | Where do compiler outputs go? | `Isolated`, `Interactive` |
+| **verify target** | What Revit host is verifying behavior? | `AttachedRrd`, `FreshRevitProcess` |
+| **target framework class** | Which TFM family should resolve? | `Explicit`, `SharedNeutral`, `OutOfProcNet8`, `RevitRuntime`, `RevitTest`, `AutomationWorker` |
+
+## How-do-I Mapping
+
+| If you ask... | Workflow | Lane | Execution policy | Default surface |
+| --- | --- | --- | --- | --- |
+| "Compile this safely" | `Build` | none | `NoRrdContact` | `dotnet build <package>.csproj -c Debug.R25` |
+| "Check generated contracts" | `Verify` | none | `NoRrdContact` | `pe-dev codegen check` |
+| "Update generated contracts" | `Verify`/source update | `Dev` | `NoRrdContact` | `pe-dev codegen sync ...` |
+| "Use current source in live RRD" | `Verify` | `Dev` | `RrdRequired` | Rider build, then `pe-dev revit sync-runtime` |
+| "Run a script against live Revit" | `Verify` | `Dev` | `RrdRequired` | `pea script ...` after sync |
+| "Run attached Revit tests" | `Verify` | `Dev` | `RrdRequired` | sync, then explicit-year `dotnet test` |
+| "Run fresh Revit tests" | `Verify` | `Dev` | `NoRrdContact` | `pe-dev revit test fresh ...` |
+| "Package product artifacts" | `Package` | none | `NoRrdContact` | `dotnet run --project build/Build.csproj -- pack` |
+| "Build the installer" | `Package` | none | `NoRrdContact` | `pack` creates MSI under `.artifacts/packages/installers` |
+| "Validate installed product" | `Verify` | `Install` | `NoRrdContact` unless explicitly opening RRD | install MSI, run installed `pea`/host paths |
+| "Work on pe-dev/pea tooling" | `Build`/`Verify` | `Dev` | `NoRrdContact` | `dotnet build Pe.Dev.Cli`, `pe-dev pea install-dev` |
+| "Publish release artifacts" | `Publish` | none | `NoRrdContact` | `dotnet run --project build/Build.csproj -- pack publish` |
+
+## Runtime Lanes
+
+| Lane | Purpose | Roots | Owner |
 | --- | --- | --- | --- |
-| **module taxonomy** | What kind of package is this code unit? | (see below) | This is about package role, not deployment output. |
-| **product taxonomy** | What durable output or deployed shape does this workflow produce? | (see below) | This is about the resulting product/runtime shape, not the code organization. |
-| **workflow taxonomy** | What is the operator trying to do? | `Build`, `Verify`, `Package`, `Publish` | Prefer this over overloading configuration strings. |
-| **execution policy** | Is this workflow allowed to touch `RRD`? | `NoRrdContact`, `RrdRequired` | This is the safety boundary around the live Rider-driven Revit session. |
-| **build mode** | Where do outputs go, and are they part of the live hot-reload loop? | `Isolated`, `Interactive` | `Isolated` writes under `.artifacts/...`; `Interactive` writes package-local outputs for Rider/HR. |
-| **verify target** | What kind of verification host is being requested? | `AttachedRrd`, `FreshRevitProcess` | Only meaningful under workflow `Verify`. |
-| **target framework class** | Which target-framework family should this package resolve through? | `Explicit`, `SharedNeutral`, `OutOfProcNet8`, `RevitRuntime`, `RevitTest`, `AutomationWorker` | Compatibility vocabulary, not orchestration authority. |
+| **Dev** | Repo/operator iteration. May mirror CLI/dev host outputs for local work. | `%LocalAppData%\Positive Energy\Pe.Tools\dev\...`, `%LocalAppData%\Positive Energy\Pe.Tools\bin\pe-dev\`, `%LocalAppData%\Positive Energy\Pe.Tools\bin\pea\` during dev install | `Pe.Dev.Cli`, Rider, explicit dev commands |
+| **Install** | Product-shaped installed runtime for user validation/release behavior. | `%LocalAppData%\Positive Energy\Pe.Tools\bin\host\`, `bin\pea\`, optional `bin\pe-dev\` | MSI / installer custom actions |
+
+Do not blur lanes: Dev commands may prepare operator tooling; Install validation should use installed product roots and MSI ownership.
+
+## Build Modes And RRD Safety
+
+| Mode | Outputs | Default trigger | RRD posture |
+| --- | --- | --- | --- |
+| **Isolated** | `.artifacts/build/...` | plain terminal `dotnet build`, CI, `./build` | `NoRrdContact`; safe default |
+| **Interactive** | package-local `bin/obj` | Rider/IDE build | can feed Rider hot reload; protect RRD |
+
+`/p:PeIsolatedBuild=false` forces terminal interactive output. Treat it as an escape hatch, not runbook guidance: it can clobber Rider's package-local baseline and recreate the HR/RRD fragility this split exists to avoid. Prefer Rider for interactive outputs when RRD is alive.
 
 ## Module Classes
 
-| Module class | Meaning | Typical examples |
+| Module class | Meaning | Examples |
 | --- | --- | --- |
-| **BuildTool** | Repo build/orchestration code. | `build/` |
-| **InstallerTool** | MSI authoring and install-time mechanics. | `install/` |
-| **DesktopShell** | The in-proc Revit add-in shell. | `Pe.App` |
-| **RevitRuntime** | Revit-loaded runtime packages shared by desktop and DA-safe flows where possible. | `Pe.Revit.*` |
-| **TestHarness** | Revit-aware verification surface. | `Pe.Revit.Tests` |
-| **AutomationShell** | The headless Design Automation entry shell. | `Pe.Dev.RevitAutomation.Worker` |
-| **OperatorSurface** | Human/agent command surfaces that orchestrate work. | `Pe.Dev.Cli`, `Pe.Dev.RevitAutomation`, `pea` |
-| **HostService** | Out-of-proc runtime service that exposes operations and bridge coordination. | `Pe.Host` |
-| **SharedNeutral** | Pure shared packages that must stay outside Revit/runtime-specific dependency gravity. | `Pe.Shared.*` |
-| **ExternalIntegration** | Vendor or external-system integration packages. | `Pe.Aps` |
+| `BuildTool` | Repo orchestration. | `build/` |
+| `InstallerTool` | MSI authoring/install-time mechanics. | `install/` |
+| `DesktopShell` | In-proc Revit add-in shell. | `Pe.App` |
+| `RevitRuntime` | Revit-loaded runtime packages shared where possible by desktop/DA. | `Pe.Revit.*` |
+| `TestHarness` | Revit-aware verification. | `Pe.Revit.Tests` |
+| `AutomationShell` | Headless Design Automation shell. | `Pe.Dev.RevitAutomation.Worker` |
+| `OperatorSurface` | Human/agent command surfaces. | `Pe.Dev.Cli`, `Pe.Dev.RevitAutomation`, `pea` |
+| `HostService` | Out-of-proc local host service. | `Pe.Host` |
+| `SharedNeutral` | Pure shared packages outside Revit dependency gravity. | `Pe.Shared.*` |
+| `ExternalIntegration` | Vendor/external integration. | `Pe.Aps` |
 
 ## Product Classes
 
-| Product class | Meaning | Typical examples |
+| Product class | Meaning | Examples |
 | --- | --- | --- |
-| **BuildInfrastructure** | Internal build/install machinery. | `Build`, `Installer` |
-| **DesktopAddin** | The deployed Revit add-in product shape. | `Pe.App` |
-| **HostRuntime** | The installed local host process/runtime. | `Pe.Host` |
-| **DevTooling** | Operator-facing tooling rather than end-user runtime. | `Pe.Dev.Cli`, `Pe.Dev.RevitAutomation` |
-| **AutomationRuntime** | The deployed Design Automation worker/runtime. | `Pe.Dev.RevitAutomation.Worker` |
-| **RevitRuntime** | Runtime assemblies loaded for Revit-side behavior. | `Pe.Revit.*` |
-| **TestHarness** | Verification-only runtime shape. | `Pe.Revit.Tests` |
-| **SharedLibrary** | Durable shared code with no standalone deployed shell. | `Pe.Shared.*`, `Toon` |
-| **ExternalIntegration** | Standalone integration surface with outside systems. | `Pe.Aps` |
+| `BuildInfrastructure` | Internal build/install machinery. | `Build`, `Installer` |
+| `DesktopAddin` | Deployed Revit add-in shape. | `Pe.App` |
+| `HostRuntime` | Installed/dev local host process. | `Pe.Host` |
+| `DevTooling` | Operator tooling, not default end-user runtime. | `Pe.Dev.Cli`, `Pe.Dev.RevitAutomation` |
+| `AutomationRuntime` | Deployed Design Automation worker. | `Pe.Dev.RevitAutomation.Worker` |
+| `RevitRuntime` | Revit-side runtime assemblies. | `Pe.Revit.*` |
+| `TestHarness` | Verification-only runtime. | `Pe.Revit.Tests` |
+| `SharedLibrary` | Shared code with no standalone shell. | `Pe.Shared.*`, `Toon` |
+| `ExternalIntegration` | Standalone integration surface. | `Pe.Aps` |
 
-## Authorities And Projections
+Product classes are build/runtime output categories, not MSI features. Installer authoring uses installable components because install appearance, install behavior, uninstall ownership, and maintenance behavior do not map 1:1 to code package product classes.
 
-| Concept | Authority | What it owns | What it should not become |
+## Installer Component Classes
+
+| Installer component | Meaning | Installer ownership |
+| --- | --- | --- |
+| `RevitAddin` | Per-user desktop Revit add-in registration and loaded add-in files. | Owns `Pe.App.addin` and `Pe.App\...` under each selected Revit year; does not own parent Autodesk/Revit/Addins folders. |
+| `HostRuntime` | Installed local host process runtime. | Owns installed files under `%LocalAppData%\Positive Energy\Pe.Tools\bin\host`. |
+| `PeaCli` | User-facing `pea` launcher plus packaged agent payload. | Owns launcher/package files; custom actions own expanded payload versions and current pointer. |
+| `PeDevCli` | Optional development/operator CLI. | Owns installed files under `%LocalAppData%\Positive Energy\Pe.Tools\bin\pe-dev` and its PATH registration. |
+| `RuntimeState` | Mutable state, auth tokens, logs, and cache. | Left behind by normal uninstall unless an explicit purge maintenance action is added. |
+| `UserContent` | User-authored settings, scripting workspaces, and command output. | Never removed by normal uninstall. |
+| `AutomationBundle` | Design Automation appbundle package artifact. | Package artifact only; not MSI-installed. |
+
+## Authorities And Boundaries
+
+| Concept | Authority | Owns | Not owns |
 | --- | --- | --- | --- |
-| **authored build contracts** | `build/authored/*.props` | Human-owned matrix, taxonomy, and package-policy truth | Generated imports or ad hoc duplicated logic |
-| **generated build contracts** | `build/generated/*.props`, `build/generated/*.targets` | MSBuild-facing projections of authored truth | A second source of truth |
-| **build contract sync** | `build/BuildContractSync.cs` | Regeneration of build-facing projections from authored truth and `Pe.Shared.Product` | Manual copy-paste maintenance |
-| **product identity and local layout** | `Pe.Shared.Product` | Product names, executable names, local runtime roots, user-content roots, Revit add-in manifest identity | Routes, host payloads, bridge frames, startup behavior |
-| **build-facing product layout projection** | `ProductBuildLayoutProjection` | Pure relative-path projection of product layout for build and installer consumers | Repo artifact topology or runtime behavior |
-| **repo artifact topology** | `build/BuildArtifactLayout.cs` | `.artifacts/build`, `.artifacts/publish`, `.artifacts/packages`, staging, tools roots | Product install roots or user-content layout |
-| **build/install composition authority** | `build/ProductLayoutAuthority.cs` | Composition of repo root, product layout projection, artifact topology, and installer manifest writing | A replacement for `Pe.Shared.Product` |
-| **installer handoff contract** | `InstallerPayloadManifest` | One pack-to-installer payload description | Long-term runtime state |
-| **pea runtime payload contract** | `PeaPayloadManifest` | Versioned `pea` payload archive identity, hash, size, commit | Installer topology or host protocol |
-| **generated host clients** | `Pe.Shared.HostContracts/Generated/PeHostClient.cs`, `source/pea/app/generated/pe-host-client.ts` | Client projections of the intentional public host-operation slice | The authority for operation definitions |
+| authored build taxonomy | `build/authored/BuildTaxonomy.props` | package taxonomy, Revit awareness, verify support | generated MSBuild logic |
+| generated build contracts | `build/generated/*.props`, `*.targets` | MSBuild projections | source of truth |
+| product identity/layout | `Pe.Shared.Product` | product names, exe names, install/user/runtime relative paths | host routes, Revit behavior |
+| artifact topology | `build/BuildArtifactLayout.cs` | `.artifacts/...` shape | installed/user roots |
+| build/install composition | `build/ProductLayoutAuthority.cs` | repo root + artifact topology + product layout + manifest writing | replacement for `Pe.Shared.Product` |
+| installer handoff | `InstallerPayloadManifest` | pack-to-installer payload paths | runtime state |
+| pea payload | `PeaPayloadManifest` | `pea` archive identity/hash/size/commit | installer topology |
+| host operations | `Pe.Shared.HostContracts` | operation definitions, routes, bridge/script contracts, generated-client slice | host startup/runtime path ownership |
 
 ## Boundary Packages
 
-| Package / area | Owns | Does not own |
+| Area | Owns | Does not own |
 | --- | --- | --- |
-| **`Pe.Shared.Product`** | Product identity, runtime layout, user-content layout, deployment identity, build-facing layout projection | Host routes, bridge frames, storage behavior, Revit version compatibility |
-| **`Pe.Shared.RevitVersions`** | Revit year metadata, configuration suffixes, DA engine IDs, version-to-target-framework facts | Product paths, `.artifacts` topology, workflow policy |
-| **`Pe.Shared.StorageRuntime`** | Storage/document behavior on top of product-owned roots: settings, module storage, state, output, credential reads | Product naming, install topology, host protocol |
-| **`Pe.Shared.HostContracts`** | Operation definitions, HTTP routes, bridge contracts, scripting contracts, generated-client slice | Host startup, browser launching, runtime path ownership |
-| **`build/`** | Packaging orchestration, artifact topology, generated MSBuild contract sync, installer/payload handoff writing | Live runtime freshness or product-local path truth |
-| **`install/`** | MSI authoring and install-time materialization of packaged outputs | Authoring-time product taxonomy or repo build truth |
-
-## Runtime And Deployment Language
-
-| Term | Meaning | Prefer / Avoid |
-| --- | --- | --- |
-| **runtime layout** | Local machine state under `%LocalAppData%\\Positive Energy\\Pe.Tools\\...` | Prefer this for installed binaries, logs, cache, and mutable state |
-| **user-content layout** | User-authored files under `Documents\\Pe.Tools\\...` | Prefer this for settings, scripting workspaces, and durable output |
-| **artifact layout** | Repo-local build outputs under `.artifacts\\...` | Avoid confusing this with installed runtime paths |
-| **projection** | A pure target-shaped description derived from a stronger authority | Prefer this for generated props and build-facing layout objects |
-| **authority** | The place that is allowed to answer a question canonically | Prefer identifying the authority instead of retyping constants |
-| **payload** | A packaged runtime blob intended to be installed or unpacked later | Prefer this for `pea` archives and installer-fed publish outputs |
-| **bootstrap** | The small stable launcher or entry material that locates a versioned payload | Prefer this for the durable `pea.cmd` surface |
-| **staging** | Temporary pack-time layout before the final package artifact is emitted | Avoid treating staging paths as deployed locations |
-
-## Shell Separation
-
-| Shell / surface | Role | Important separation |
-| --- | --- | --- |
-| **desktop shell** | `Pe.App` inside live Revit | Not the authority for DA or host runtime topology |
-| **automation shell** | `Pe.Dev.RevitAutomation.Worker` inside Autodesk DA | Sibling to desktop, not a clone of `Pe.App` startup |
-| **host** | `Pe.Host` out-of-proc HTTP/SSE/WebSocket service | Owns execution/orchestration, not product path identity |
-| **`pe-dev`** | Primary operator CLI for repo and Revit workflows | Prefer extending this over one-off helper executables |
-| **`pea`** | User/agent command surface backed by generated host clients and versioned payloads | Prefer this over reviving bespoke scripting pipes or script-only CLIs |
-
-## Distilled Rules
-
-| Rule | Why it matters |
-| --- | --- |
-| **Do not overload configuration strings to carry every concept.** | Configuration is now only one compatibility surface inside a larger taxonomy. |
-| **Treat authored files as truth and generated files as projections.** | This keeps build mechanics explainable and regenerable. |
-| **Keep product layout and artifact layout separate.** | Installed runtime paths and repo build outputs answer different questions. |
-| **Keep transport contracts separate from local layout identity.** | Routes and payloads evolve for communication; product identity evolves for deployment/runtime shape. |
-| **Use workflow plus execution policy when talking about build behavior.** | That is the actual safety model around `RRD`, not whether a command happens to be `dotnet build`. |
-| **Use module class for package role and product class for output shape.** | That is the key distinction the current diff finally makes explicit. |
+| `Pe.Shared.Product` | identity, layout, deployment names, build-facing layout projection | host protocol, Revit version matrix |
+| `Pe.Shared.RevitVersions` | Revit years/config suffixes/DA engine IDs | product paths, workflow policy |
+| `Pe.Shared.StorageRuntime` | storage behavior on product-owned roots | product naming, install topology |
+| `Pe.Shared.HostContracts` | routes/operations/contracts | host process startup |
+| `build/` | packaging orchestration, artifacts, generated contract sync, installer handoff | live runtime freshness |
+| `install/` | MSI UI/features/custom actions/materialization | build taxonomy or repo artifact truth |

@@ -15,7 +15,6 @@ public sealed class CleanProjectModule : Module {
         var layoutResult = await context.GetModule<ResolveBuildLayoutModule>();
         var layout = layoutResult.ValueOrDefault!;
         var cleanTargets = new[] {
-            layout.Artifacts.ArtifactsRoot,
             layout.Artifacts.PackagesRoot,
             layout.Artifacts.PublishRoot
         }.Distinct(StringComparer.OrdinalIgnoreCase);

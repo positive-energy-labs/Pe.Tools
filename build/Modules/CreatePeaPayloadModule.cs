@@ -51,7 +51,7 @@ public sealed class CreatePeaPayloadModule : Module<PeaPayloadArtifacts> {
 
         context.Logger.LogInformation("Installing pea app dependencies with pnpm: {Directory}", peaAppDirectory.Path);
         await context.Shell.Command.ExecuteCommandLineTool(
-            new GenericCommandLineToolOptions("pnpm") { Arguments = ["install", "--no-frozen-lockfile"] },
+            new GenericCommandLineToolOptions("pnpm") { Arguments = ["install", "--frozen-lockfile"] },
             new CommandExecutionOptions { WorkingDirectory = peaAppDirectory.Path },
             cancellationToken
         );
@@ -70,21 +70,16 @@ public sealed class CreatePeaPayloadModule : Module<PeaPayloadArtifacts> {
             cancellationToken
         );
 
-        System.IO.File.Copy(
-            Path.Combine(peaAppDirectory.Path, "package.json"),
-            Path.Combine(payloadDirectory.Path, "package.json"),
-            true
-        );
-        context.Logger.LogInformation("Installing production pea dependencies into payload staging: {Directory}", payloadDirectory.Path);
+        context.Logger.LogInformation("Deploying production pea dependencies into payload staging: {Directory}", payloadDirectory.Path);
         await context.Shell.Command.ExecuteCommandLineTool(
-            new GenericCommandLineToolOptions("npm") {
-                Arguments = ["install", "--omit=dev", "--ignore-scripts", "--package-lock=false"]
+            new GenericCommandLineToolOptions("pnpm") {
+                Arguments = ["--filter", ".", "deploy", "--legacy", "--prod", payloadDirectory.Path]
             },
-            new CommandExecutionOptions { WorkingDirectory = payloadDirectory.Path },
+            new CommandExecutionOptions { WorkingDirectory = peaAppDirectory.Path },
             cancellationToken
         );
 
-        CopyDirectory(Path.Combine(peaAppDirectory.Path, "dist"), Path.Combine(payloadDirectory.Path, "dist"));
+        PruneDeployOnlyFiles(payloadDirectory.Path);
         System.IO.File.Copy(peaNodeExecutable.Path, Path.Combine(payloadDirectory.Path, PeaCliIdentity.NodeExecutableName), true);
         await System.IO.File.WriteAllTextAsync(
             Path.Combine(bootstrapDirectory.Path, PeaCliIdentity.LauncherName),
@@ -152,21 +147,6 @@ public sealed class CreatePeaPayloadModule : Module<PeaPayloadArtifacts> {
         exit /b %ERRORLEVEL%
         """;
 
-    private static void CopyDirectory(string sourceDirectory, string targetDirectory) {
-        Directory.Exists(sourceDirectory).ShouldBeTrue($"Directory was not found: {sourceDirectory}");
-        Directory.CreateDirectory(targetDirectory);
-
-        foreach (var directory in Directory.EnumerateDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
-            Directory.CreateDirectory(directory.Replace(sourceDirectory, targetDirectory, StringComparison.OrdinalIgnoreCase));
-
-        foreach (var file in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
-            System.IO.File.Copy(
-                file,
-                file.Replace(sourceDirectory, targetDirectory, StringComparison.OrdinalIgnoreCase),
-                true
-            );
-    }
-
     private static void DeleteDirectoryIfExists(string path) {
         if (!Directory.Exists(path))
             return;
@@ -175,6 +155,30 @@ public sealed class CreatePeaPayloadModule : Module<PeaPayloadArtifacts> {
             System.IO.File.SetAttributes(file, FileAttributes.Normal);
 
         Directory.Delete(path, true);
+    }
+
+    private static void PruneDeployOnlyFiles(string payloadDirectory) {
+        Directory.Exists(Path.Combine(payloadDirectory, "dist"))
+            .ShouldBeTrue($"pea deploy did not include compiled output: {Path.Combine(payloadDirectory, "dist")}");
+        Directory.Exists(Path.Combine(payloadDirectory, "node_modules"))
+            .ShouldBeTrue($"pea deploy did not include production dependencies: {Path.Combine(payloadDirectory, "node_modules")}");
+
+        foreach (var fileName in new[] {
+                     "agent.ts",
+                     "host-client-runtime.ts",
+                     "host-client.ts",
+                     "main.ts",
+                     "pe-host.ts",
+                     "README.md",
+                     "tsconfig.build.json",
+                     "tsconfig.json"
+                 }) {
+            var path = Path.Combine(payloadDirectory, fileName);
+            if (System.IO.File.Exists(path))
+                System.IO.File.Delete(path);
+        }
+
+        DeleteDirectoryIfExists(Path.Combine(payloadDirectory, "generated"));
     }
 
     private static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken) {

@@ -46,4 +46,4 @@ Owns the repo-level pack and publish automation.
 - `.slnx`, configuration strings, and generated evaluator imports are compatibility surfaces, not the intended orchestration authority.
 - Regenerate build-facing contract imports with `dotnet run --project build/Build.csproj -c Release -- sync-contracts` after changing anything under `build/authored/` or `Pe.Shared.Product` layout identity.
 - Successful `./build` output does not mean the live Revit session has fresh runtime assemblies.
-- If a human or agent intends to validate through `pea script ...` or `Pe.Revit.Tests`, they must use the interactive build mode and run `pe-dev revit sync-runtime` or manual `pe-dev revit hot-reload` first.
+- If a human or agent intends to validate through `pea script ...` or `Pe.Revit.Tests`, they must use Rider/IDE-owned interactive outputs and run `pe-dev revit sync-runtime` or manual `pe-dev revit hot-reload` first. Do not use `./build` for live runtime freshness.

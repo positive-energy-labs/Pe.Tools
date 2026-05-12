@@ -14,11 +14,7 @@ namespace Pe.Revit.Global.Services.Host;
 /// <summary>
 ///     Bridge-backed read-only Revit data requests for browser routes.
 /// </summary>
-internal sealed class RevitDataRequestService(
-    RevitTaskService revitTaskService,
-    Action<string>? notificationSink = null
-    ) {
-    private readonly Action<string>? _notificationSink = notificationSink;
+internal sealed class RevitDataRequestService(RevitTaskService revitTaskService) {
     private readonly RevitTaskService _revitTaskService = revitTaskService;
 
     public Task<LoadedFamiliesCatalogData> GetLoadedFamiliesCatalogAsync(
@@ -180,11 +176,7 @@ internal sealed class RevitDataRequestService(
         var document = GetActiveProjectDocument();
 
         try {
-            return LoadedFamiliesMatrixCollector.Collect(
-                document,
-                filter,
-                this.PublishLoadedFamilyMatrixProgress
-            );
+            return LoadedFamiliesMatrixCollector.Collect(document, filter);
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "LoadedFamiliesMatrixException",
@@ -392,9 +384,6 @@ internal sealed class RevitDataRequestService(
 
         return result!;
     }
-
-    private void PublishLoadedFamilyMatrixProgress(string message) =>
-        this._notificationSink?.Invoke(message);
 
     private static RevitDocumentSummary CreateDocumentSummary(
         RevitDocument document,

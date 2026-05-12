@@ -10,7 +10,8 @@ using ModularPipelines.Enums;
 using ModularPipelines.Extensions;
 using ModularPipelines.Logging;
 
-var parsedArgs = BuildCliArguments.Parse(args);
+
+
 var environment = WindowsDotnetEnvironment.Snapshot();
 var builder = Pipeline.CreateBuilder();
 builder.Options.ExecutionMode = ModularPipelines.Options.ExecutionMode.StopOnFirstException;
@@ -30,6 +31,9 @@ builder.Services.AddOptions<BuildOptions>().Bind(builder.Configuration.GetSectio
 builder.Services.AddOptions<BundleOptions>().Bind(builder.Configuration.GetSection("Bundle"));
 builder.Services.AddOptions<InstallerOptions>().Bind(builder.Configuration.GetSection("Installer"));
 builder.Services.AddOptions<PublishOptions>().Bind(builder.Configuration.GetSection("Publish"));
+
+var parsedArgs = BuildCliArguments.Parse(args);
+
 builder.Services.PostConfigure<BuildOptions>(options =>
     options.Configuration = parsedArgs.Configuration ?? options.Configuration);
 
@@ -38,19 +42,43 @@ if (parsedArgs.Commands.Overlaps(["pack", "publish", "sync-contracts"]))
 
 if (parsedArgs.Commands.Contains("pack")) {
     _ = builder.Services.AddModule<CleanProjectModule>();
-    _ = builder.Services.AddModule<CreateBundleModule>();
-    _ = builder.Services.AddModule<CreateAutomationBundleModule>();
-    _ = builder.Services.AddModule<CreatePeaPayloadModule>();
-    _ = builder.Services.AddModule<CreateInstallerModule>();
+
+    if (parsedArgs.PackTargets.Contains(PackTarget.Desktop))
+        _ = builder.Services.AddModule<CreateBundleModule>();
+
+    if (parsedArgs.PackTargets.Contains(PackTarget.Automation))
+        _ = builder.Services.AddModule<CreateAutomationBundleModule>();
+
+    if (parsedArgs.PackTargets.Contains(PackTarget.Installer)) {
+        _ = builder.Services.AddModule<CreatePeaPayloadModule>();
+        _ = builder.Services.AddModule<CreateInstallerModule>();
+    }
 }
 
 if (parsedArgs.Commands.Contains("publish"))
     _ = builder.Services.AddModule<PublishGithubModule>();
 
 var pipeline = builder.Build();
+var loggerProvider = pipeline.RootServices.GetRequiredService<IModuleLoggerProvider>();
+
+
+if (parsedArgs.CheckOnly && parsedArgs.Commands.SetEquals(["sync-contracts"])) {
+    var staleFiles = BuildContractSync.CheckAll(Directory.GetCurrentDirectory());
+    using var logger = loggerProvider.GetLogger();
+
+    if (staleFiles.Count == 0) {
+        logger.LogInformation("Generated build contracts are current.");
+        return;
+    }
+
+    logger.LogError("Generated build contracts are stale:");
+    foreach (var staleFile in staleFiles)
+        logger.LogError($"  {Path.GetRelativePath(Directory.GetCurrentDirectory(), staleFile)}");
+    Environment.ExitCode = 1;
+    return;
+}
 
 if (environment.IsUnsafe) {
-    var loggerProvider = pipeline.RootServices.GetRequiredService<IModuleLoggerProvider>();
     using var logger = loggerProvider.GetLogger();
     WindowsDotnetEnvironment.WriteFailure(logger, environment);
     Environment.ExitCode = 1;
@@ -62,11 +90,11 @@ try {
     if (summary.Status is not (Status.Successful or Status.UsedHistory))
         Environment.ExitCode = 1;
 } catch (Exception exception) {
-    var loggerProvider = pipeline.RootServices.GetRequiredService<IModuleLoggerProvider>();
     using var logger = loggerProvider.GetLogger();
     BuildFailureLogger.Write(logger, exception);
     Environment.ExitCode = 1;
 }
+
 
 namespace Build {
     internal sealed class BuildExceptionOutputFormatter : IExceptionOutputFormatter {
@@ -111,7 +139,7 @@ namespace Build {
         }
 
         public static void WritePathFailureHint(IModuleLogger logger) {
-            logger.LogError("Recovery: run 'dotnet build-server shutdown' from a healthy shell, or use '.\\tools\\dotnet-sandbox-safe.ps1 <dotnet arguments>' for sandbox recovery.");
+            logger.LogError("Recovery: use '.\\tools\\dotnet-sandbox-safe.ps1 <dotnet arguments>' for sandbox recovery. See docs/ENVIRONMENT.md.");
         }
     }
 
@@ -202,13 +230,19 @@ namespace Build {
 
     internal sealed record BuildCliArguments(
         string? Configuration,
+        bool CheckOnly,
+        HashSet<PackTarget> PackTargets,
         HashSet<string> Commands
     ) {
         private static readonly HashSet<string> SupportedCommands =
             ["pack", "publish", "sync-contracts"];
+        private static readonly HashSet<string> SupportedPackTargets =
+            new(StringComparer.OrdinalIgnoreCase) { "all", "desktop", "installer", "automation" };
 
         public static BuildCliArguments Parse(IReadOnlyList<string> args) {
             string? configuration = null;
+            var checkOnly = false;
+            var explicitPackTargets = new HashSet<PackTarget>();
             var commands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             for (var i = 0; i < args.Count; i++) {
@@ -220,14 +254,22 @@ namespace Build {
 
                     configuration = args[++i];
                     break;
+                case "--check":
+                    checkOnly = true;
+                    break;
                 default:
-                    commands.Add(arg);
+                    if (SupportedPackTargets.Contains(arg)) {
+                        _ = explicitPackTargets.Add(ParsePackTarget(arg));
+                    } else {
+                        _ = commands.Add(arg);
+                    }
+
                     break;
                 }
             }
 
             if (commands.Count == 0)
-                throw new ArgumentException("Expected at least one command. Supported commands: pack, publish, sync-contracts.");
+                throw new ArgumentException("Expected at least one command. Supported commands: pack, publish, sync-contracts. Pack targets: desktop, installer, automation, all.");
 
             var unsupportedCommands = commands
                 .Where(command => !SupportedCommands.Contains(command))
@@ -235,10 +277,42 @@ namespace Build {
                 .ToArray();
             if (unsupportedCommands.Length > 0)
                 throw new ArgumentException(
-                    $"Unsupported command(s): {string.Join(", ", unsupportedCommands)}. Supported commands: pack, publish, sync-contracts.");
+                    $"Unsupported command(s): {string.Join(", ", unsupportedCommands)}. Supported commands: pack, publish, sync-contracts. Pack targets: desktop, installer, automation, all.");
 
-            return new BuildCliArguments(configuration, commands);
+            if (explicitPackTargets.Count > 0 && !commands.Contains("pack"))
+                throw new ArgumentException("Pack targets require the pack command. Use: pack desktop, pack installer, pack automation, or pack all.");
+
+            var packTargets = ResolvePackTargets(explicitPackTargets);
+
+            return new BuildCliArguments(
+                configuration,
+                checkOnly,
+                packTargets,
+                commands
+            );
         }
+
+        private static PackTarget ParsePackTarget(string value) => value.ToLowerInvariant() switch {
+            "all" => PackTarget.All,
+            "desktop" => PackTarget.Desktop,
+            "installer" => PackTarget.Installer,
+            "automation" => PackTarget.Automation,
+            _ => throw new ArgumentOutOfRangeException(nameof(value), value, null)
+        };
+
+        private static HashSet<PackTarget> ResolvePackTargets(HashSet<PackTarget> explicitPackTargets) {
+            if (explicitPackTargets.Count == 0 || explicitPackTargets.Contains(PackTarget.All))
+                return [PackTarget.Desktop, PackTarget.Installer, PackTarget.Automation];
+
+            return explicitPackTargets;
+        }
+    }
+
+    internal enum PackTarget {
+        All,
+        Desktop,
+        Installer,
+        Automation
     }
 }
 

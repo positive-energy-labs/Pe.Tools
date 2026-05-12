@@ -1,12 +1,13 @@
 # Mental Model
 
-Deployment/runtime has three orthogonal concerns that must stay separate:
+Deployment/runtime has four concerns that must stay separate:
 
 - build taxonomy decides the workflow and execution policy
+- installer product slices decide the user-facing install concerns
 - install layout decides the durable product-owned filesystem shape
 - runtime lane decides which executable distribution a launcher should resolve at runtime
 
-Runtime lane is not a new build taxonomy axis. It is a small runtime-path authority used by launchers such as `Pe.App`, `pe-dev`, and `pea`.
+Runtime lane is not a new build taxonomy axis. Installer product slice is not an MSBuild project taxonomy. They are small product/runtime vocabularies used by launchers, packaging, and MSI authoring.
 
 The current lanes are:
 
@@ -30,6 +31,14 @@ Important asymmetry:
 
 That asymmetry is intentional. Host needs rebuild-friendly separation from the installed runtime. `pe-dev` and `pea` are operator entrypoints and must remain predictable from the terminal.
 
+The installer models user-facing concerns as product slices:
+
+- `desktop-runtime`: Revit add-in files under Addins/year plus the installed shared host runtime
+- `pea-cli-bootstrap`: PATH-visible `pea` launcher plus payload version selection
+- `pe-dev-cli-bootstrap`: PATH-visible `pe-dev` operator CLI
+
+Desktop add-in install intentionally remains in `%AppData%\Autodesk\Revit\Addins\<year>`. The Nice3point SDK local debug workflow deploys to the same Addins/year shape, so prod/dev desktop sessions share provenance and avoid ambiguous loaded-assembly origins.
+
 # Key Flows
 
 ## Interactive/RRD flow
@@ -46,6 +55,7 @@ This keeps repo iteration fast while avoiding file-lock contention against the i
 
 - isolated/package publish writes `Pe.App.runtime.json` with lane `Installed`
 - installer payloads keep the installed runtime shape under `...\Pe.Tools\bin\...`
+- MSI authoring groups concrete components under product slices rather than treating WiX `Feature` as the only product model
 - when the installed add-in launches, `Pe.App` resolves the installed host path through the same authority
 
 This gives installer validation a product-shaped runtime without needing ad hoc cleanup before returning to normal dev work.
@@ -55,7 +65,7 @@ This gives installer validation a product-shaped runtime without needing ad hoc 
 `pea` is intentionally handled differently from `Pe.Host`.
 
 - terminal users expect `pea` to just work from a stable PATH-visible location
-- `pe-dev pea sync-runtime` builds the repo `pea` app and mirrors the dev payload into the installed `pea` runtime root
+- `pe-dev pea install-dev` builds the repo `pea` app and mirrors the dev payload into the installed `pea` runtime root
 - the stable launcher stays at `...\Pe.Tools\bin\pea\pea.cmd`
 - the active payload version is selected by `...\Pe.Tools\bin\pea\current.txt`
 

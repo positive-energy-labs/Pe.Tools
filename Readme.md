@@ -2,6 +2,8 @@
 
 A suite of Revit add-ins and supporting libraries.
 
+For build, verify, test, package, install, publish, and environment recovery commands, start with [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md).
+
 ## Add-ins
 
 - Views Palette, browse all the views in a document, open them, and preview information about them.
@@ -22,9 +24,7 @@ Current supported path:
 - bootstrap a persistent workspace under `Documents\Pe.Tools\scripting\workspace`
 - author single-file container scripts under `src/`
 - run them from the CLI with `pea script src\MyProbe.cs`
-- or call `Pe.Host` over HTTP:
-    - `POST /api/scripting/workspace/bootstrap`
-    - `POST /api/scripting/execute`
+- or call `Pe.Host` through the shared scripting client/contract
 - receive final buffered output and structured diagnostics in one response
 
 Transport posture:

@@ -13,9 +13,10 @@ This should serve both local agents running beside the repo and frontend-exposed
 tools, and it should shape which endpoints we create and how we shape them. Longer term, the host should make meaningful
 agent-driven Revit workflows possible, potentially including carefully controlled code-execution-style capabilities.
 
-`host-status` should stay the cheap, poll-friendly freshness contract for bridge posture and active-document truth.
-Richer document inventory should exist beside it as an explicit document-context surface, not be inferred from stale
-bridge assumptions or ad hoc scripting alone.
+`host-probe` should stay the cheapest reachability/compatibility check. `session-summary` should stay the cheap,
+poll-friendly freshness contract for bridge posture, active-document truth, available modules, and first-pass scripting
+readiness. Richer document inventory should exist beside those as explicit document-context surfaces, not be inferred from
+stale bridge assumptions or ad hoc scripting alone.
 
 ## User Goals
 
@@ -34,15 +35,18 @@ bridge assumptions or ad hoc scripting alone.
 - Make backend metadata rich enough to drive a real frontend runtime: defaults, hints, option sources, dependency
   wiring, and renderer selection should come from the host contract whenever practical.
 - Preserve a clear seam where the host owns structural workflows and the bridge owns live-document behavior.
-- Keep `host-status` small, cheap, and trustworthy enough for frequent agent polling during live work.
+- Keep `host-probe` small enough for reachability and compatibility checks; keep `session-summary` trustworthy enough
+  for frequent agent polling during live work.
 - Keep bridge-backed live-document behavior intentionally narrow: exactly one connected Revit session and the active
   document only.
+- Keep public contract definitions in `Pe.Shared.HostContracts` and route all public HTTP through the operation catalog.
 - Return raw DTO payloads on success and `ProblemDetails` on failure instead of envelope-style wrappers.
 
 ## Integration Goals
 
-- Keep the host as the single browser-facing request/response surface.
+- Keep the host as the single browser-facing, CLI-facing, and agent-facing request/response surface.
 - Keep transport contracts typed, explicit, and backend-owned.
+- Let `PeHostClient`, `pe-dev`, and `pea` consume shared host operation definitions rather than handwritten route maps.
 - Treat schema payloads as frontend-runtime inputs, not just validation artifacts.
 - Allow backend metadata to route frontend rendering toward custom components when generic schema-driven field rendering
   is not enough.
@@ -67,7 +71,7 @@ bridge assumptions or ad hoc scripting alone.
 - Prefer ad hoc scripting for exploratory, investigative, one-off, or still-emerging abstractions.
 - Do not add endpoints that merely mirror raw Revit API calls, mostly wrap direct parameter reads/writes, or expose
   context-specific shapes that are too unstable to trust broadly.
-- Prefer a small number of durable document contracts such as `host-status` freshness and document-context inventory
+- Prefer a small number of durable document contracts such as `session-summary` freshness and document-context inventory
   over one endpoint per raw document-manager capability.
 - Use electrical as the first specialization test: discipline-specific endpoints are justified when the domain object is
   operationally richer than a generic Revit element and when the host can collapse real API awkwardness behind a small
@@ -119,5 +123,7 @@ Future candidates once the shape is proven:
 - Do not let electrical specialization sprawl into one endpoint per raw API type.
 - Do not let narrow target-specific endpoints proliferate by domain when one general element-context surface can carry
   the same context.
-- Do not overload `host-status` with every open-document detail just because it is polled often; keep freshness there
-  and richer document inventory in a sibling surface.
+- Do not overload `host-probe` or `session-summary` with every open-document detail just because they are polled often;
+  keep reachability/freshness there and richer document inventory in sibling surfaces.
+- Do not let `pea` or `pe-dev` independently encode host routes, runtime paths, or bridge mechanics that belong in shared
+  contracts.

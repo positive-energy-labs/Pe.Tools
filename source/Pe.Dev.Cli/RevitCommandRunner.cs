@@ -1,4 +1,4 @@
-﻿using Pe.Dev.RevitAutomation;
+using Pe.Dev.RevitAutomation;
 using Pe.Shared.HostContracts.Protocol;
 using System.Globalization;
 using System.Diagnostics;
@@ -16,51 +16,16 @@ internal static class RevitCommandRunner {
     private static readonly RevitTestOwnedSessionStateStore RevitTestOwnedSessionStore = RevitTestOwnedSessionStateStore.CreateDefault();
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
 
-    public static Task<int> RunAsync(DevCliOptions options, CancellationToken cancellationToken) =>
-        options.CommandKind switch {
-            RevitCommandKind.Approve => Task.FromResult(RunApprove(options.CommandArguments)),
-            RevitCommandKind.Automation => AutomationCliProgram.RunAsync(options.CommandArguments, options.RepoRoot, cancellationToken),
-            RevitCommandKind.InternalApproveWorker => RunApproveWorkerAsync(options.CommandArguments, cancellationToken),
-            RevitCommandKind.HotReload => RunHotReloadAsync(options.RepoRoot, options.CommandArguments, cancellationToken),
-            RevitCommandKind.Logs => Task.FromResult(RunLogs(options.CommandArguments)),
-            RevitCommandKind.PeaSyncRuntime => PeaRuntimeSyncCli.RunAsync(options.CommandArguments, options.RepoRoot, cancellationToken),
-            RevitCommandKind.RuntimeStatus => Task.FromResult(RuntimeStatusCli.Run(options.CommandArguments)),
-            RevitCommandKind.Session => Task.FromResult(RunSession(options.CommandArguments)),
-            RevitCommandKind.SyncRuntime => RunSyncRuntimeAsync(options.RepoRoot, options.CommandArguments, cancellationToken),
-            RevitCommandKind.Test => RunTestAsync(options.RepoRoot, options.CommandArguments, cancellationToken),
-            RevitCommandKind.SyncPeaHostClient => PeaHostClientSyncCli.RunAsync(options.CommandArguments, options.RepoRoot, cancellationToken),
-            _ => Task.FromResult(10)
-        };
+    internal static Task<int> RunApproveWorkerCommandAsync(IReadOnlyList<string> forwardedArguments, CancellationToken cancellationToken) =>
+        RunApproveWorkerAsync(forwardedArguments, cancellationToken);
 
-    private static int RunLogs(IReadOnlyList<string> forwardedArguments) {
-        RevitLogOptions options;
-        try {
-            options = RevitLogOptions.Parse(forwardedArguments);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            return 10;
-        }
+    internal static Task<int> RunSyncRuntimeCommandAsync(string? repoRootOverride, IReadOnlyList<string> forwardedArguments, CancellationToken cancellationToken) =>
+        RunSyncRuntimeAsync(repoRootOverride, forwardedArguments, cancellationToken);
 
-        foreach (var (label, filePath) in options.ResolveLogFiles()) {
-            Console.WriteLine($"== {label} log ==");
-            Console.WriteLine(filePath);
+    internal static Task<int> RunFreshTestCommandAsync(string? repoRootOverride, IReadOnlyList<string> forwardedArguments, CancellationToken cancellationToken) =>
+        RunTestAsync(repoRootOverride, forwardedArguments, cancellationToken);
 
-            var lines = File.Exists(filePath)
-                ? File.ReadAllLines(filePath)
-                : [];
-            var startIndex = Math.Max(0, lines.Length - options.TailLineCount);
-            if (lines.Length == 0)
-                Console.WriteLine("(empty)");
-            else {
-                for (var i = startIndex; i < lines.Length; i++)
-                    Console.WriteLine(lines[i]);
-            }
-
-            Console.WriteLine();
-        }
-
-        return 0;
-    }
+    internal static int RunSessionCommand(IReadOnlyList<string> forwardedArguments) => RunSession(forwardedArguments);
 
     private static int RunApprove(IReadOnlyList<string> forwardedArguments) {
         RevitApproveOptions options;
@@ -107,7 +72,7 @@ internal static class RevitCommandRunner {
         return await ApprovalWatcherService.RunAsync(options.TimeoutSeconds, options.RevitYear, cancellationToken);
     }
 
-    private static async Task<int> RunHotReloadAsync(
+    internal static async Task<int> RunHotReloadCommandAsync(
         string? repoRootOverride,
         IReadOnlyList<string> forwardedArguments,
         CancellationToken cancellationToken

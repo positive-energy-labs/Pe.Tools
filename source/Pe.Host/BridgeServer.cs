@@ -254,12 +254,6 @@ public sealed class BridgeServer(
 
             return;
         }
-
-        if (string.Equals(bridgeEvent.EventName, HostRuntimeEventNames.Notification, StringComparison.Ordinal)) {
-            var message = JsonConvert.DeserializeObject<string>(bridgeEvent.PayloadJson, this._serializerSettings);
-            if (!string.IsNullOrWhiteSpace(message))
-                await this._eventStreamService.PublishAsync(HostRuntimeEventNames.Notification, message, cancellationToken);
-        }
     }
 
     private ConnectedBridgeSession ResolveSessionOrThrow() {

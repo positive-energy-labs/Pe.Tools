@@ -16,12 +16,14 @@ Normal repo work should pick the freshest dev runtime automatically. Installer v
 - `pe-dev` should stay PATH-friendly and always resolve predictably.
 - `pea` should stay easy to invoke from the terminal without requiring PATH churn.
 - Runtime path selection should have one authority and one inspectable story.
-- Build taxonomy should not absorb runtime-lane concerns.
+- Installer product slices should make user-facing install concerns explicit without leaking WiX implementation details into product language.
+- Build taxonomy should not absorb runtime-lane or installer-slice concerns.
 
 # Integration Goals
 
 - `Pe.App`, `Pe.Host`, `pe-dev`, and `pea` should agree on the active runtime lane through shared product/runtime contracts.
 - Packaging and installer authoring should emit the same runtime-lane facts that the live shells consume.
+- Installer authoring should group concrete MSI components under durable product slices such as `desktop-runtime`, `pea-cli-bootstrap`, and `pe-dev-cli-bootstrap`.
 - Runtime status/diagnostic commands should make the active lane and resolved paths visible without code spelunking.
 
 # Non-Goals
@@ -29,3 +31,4 @@ Normal repo work should pick the freshest dev runtime automatically. Installer v
 - One physical runtime root for every dev and installed scenario.
 - Environment-variable-driven deployment selection as the primary workflow contract.
 - Scattered fallback probing such as “try installed, then repo, then anything that exists.”
+- Moving desktop install from Addins/year to Autodesk appbundle format while prod/dev desktop provenance depends on the Nice3point SDK Addins/year debug workflow.

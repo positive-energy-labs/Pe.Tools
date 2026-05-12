@@ -5,9 +5,9 @@ Short saved context for an agent starting from zero and trying to use the live R
 ## First Working Loop
 
 1. ensure `Pe.Host` is running
-2. call `GET /api/settings/host-status`
+2. read session summary through the shared Host client/contract
 3. confirm exactly one connected Revit bridge session
-4. call `POST /api/scripting/execute` with an `InlineSnippet`
+4. call scripting execute with an `InlineSnippet` through the shared Host client
 5. use the result payload before assuming the script failed silently
 
 ## What Turned Out To Matter
@@ -33,7 +33,7 @@ Short saved context for an agent starting from zero and trying to use the live R
 - `Pe.Host` is the public product surface.
 - `Pe.Revit.Scripting` is the Revit-side execution engine.
 - `CmdScriptingWorkspace` is useful for local workspace bootstrapping, but not required for the shortest external probe path.
-- `POST /api/scripting/execute` is the main live-document inspection tool for research work.
+- Scripting execute is the main live-document inspection tool for research work; callers should reach it through shared Host contracts/clients instead of handwritten routes.
 
 ## Minimal Probe Shape
 
@@ -47,7 +47,7 @@ Short saved context for an agent starting from zero and trying to use the live R
 
 ## When To Suspect Context Instead Of Code
 
-- host-status is bad
+- session summary shows a bad bridge/session posture
 - there is not exactly one bridge session
 - the document/view state is unusual
 - the output shape contradicts what Revit visibly shows

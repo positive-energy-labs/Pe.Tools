@@ -8,5 +8,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["*.ts", "generated/**/*.ts"]
+  "include": ["*.ts", "generated/*.ts", "generated/host-types/**/*.ts"]
 }

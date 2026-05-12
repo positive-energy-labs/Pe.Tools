@@ -16,7 +16,6 @@ namespace Build.Modules;
 [DependsOn<ResolveBuildMatrixModule>]
 [DependsOn<ResolveBuildTaxonomyModule>]
 [DependsOn<ResolveBuildLayoutModule>]
-[DependsOn<PublishRevitAddinModule>]
 [DependsOn<CleanProjectModule>(Optional = true)]
 public sealed partial class CreateAutomationBundleModule(IOptions<BuildOptions> buildOptions) : Module {
     private const string WorkerAssemblyName = "Pe.Dev.RevitAutomation.Worker";

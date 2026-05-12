@@ -50,13 +50,54 @@ public static class HostOperationsCatalog {
         .Where(definition => definition.ExecutionMode == HostExecutionMode.Bridge)
         .ToArray();
 
-    public static IReadOnlyList<HostOperationDefinition> PeaClientSlice { get; } = ValidatePeaClientSlice([
-        GetHostProbeOperationContract.Definition,
-        GetHostSessionSummaryOperationContract.Definition,
-        GetHostLogsOperationContract.Definition,
-        GetScriptWorkspaceBootstrapOperationContract.Definition,
-        ExecuteRevitScriptOperationContract.Definition
-    ]);
+    public static HostTypeScriptClientCatalog TypeScriptClient { get; } = ValidateTypeScriptClient(
+        new HostTypeScriptClientCatalog([
+            new HostTypeScriptClientGroup(
+                "host",
+                "host",
+                "HostClient",
+                [
+                    new HostTypeScriptClientOperation(
+                        "getProbe",
+                        GetHostProbeOperationContract.Definition,
+                        HostClientRequestPolicy.None
+                    ),
+                    new HostTypeScriptClientOperation(
+                        "getSessionSummary",
+                        GetHostSessionSummaryOperationContract.Definition,
+                        HostClientRequestPolicy.None
+                    ),
+                    new HostTypeScriptClientOperation(
+                        "getLogs",
+                        GetHostLogsOperationContract.Definition,
+                        HostClientRequestPolicy.Explicit
+                    )
+                ]
+            ),
+            new HostTypeScriptClientGroup(
+                "scripting",
+                "scripting",
+                "ScriptingClient",
+                [
+                    new HostTypeScriptClientOperation(
+                        "bootstrapWorkspace",
+                        GetScriptWorkspaceBootstrapOperationContract.Definition,
+                        HostClientRequestPolicy.Explicit
+                    ),
+                    new HostTypeScriptClientOperation(
+                        "execute",
+                        ExecuteRevitScriptOperationContract.Definition,
+                        HostClientRequestPolicy.Explicit
+                    )
+                ]
+            )
+        ])
+    );
+
+    public static IReadOnlyList<HostOperationDefinition> TypeScriptClientSlice { get; } = TypeScriptClient.Groups
+        .SelectMany(group => group.Operations)
+        .Select(operation => operation.Definition)
+        .ToArray();
 
     private static IReadOnlyList<HostOperationDefinition> Validate(
         IReadOnlyList<HostOperationDefinition> definitions
@@ -103,23 +144,99 @@ public static class HostOperationsCatalog {
         return definitions;
     }
 
-    private static IReadOnlyList<HostOperationDefinition> ValidatePeaClientSlice(
-        IReadOnlyList<HostOperationDefinition> definitions
+    private static HostTypeScriptClientCatalog ValidateTypeScriptClient(
+        HostTypeScriptClientCatalog catalog
     ) {
+        var groups = catalog.Groups;
         var publicHttpKeys = new HashSet<string>(
             PublicHttp.Select(definition => definition.Key),
             StringComparer.Ordinal
         );
-        var missingPublicDefinitions = definitions
-            .Where(definition => !publicHttpKeys.Contains(definition.Key))
-            .Select(definition => definition.Key)
+        var operations = groups.SelectMany(group => group.Operations).ToArray();
+
+        var duplicateGroupKeys = groups
+            .GroupBy(group => group.GroupKey, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToList();
+        if (duplicateGroupKeys.Count != 0)
+            throw new InvalidOperationException(
+                $"Duplicate TypeScript client group keys: {string.Join(", ", duplicateGroupKeys)}"
+            );
+
+        var duplicateClientProperties = groups
+            .GroupBy(group => group.ClientPropertyName, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToList();
+        if (duplicateClientProperties.Count != 0)
+            throw new InvalidOperationException(
+                $"Duplicate TypeScript client property names: {string.Join(", ", duplicateClientProperties)}"
+            );
+
+        var duplicateClientClasses = groups
+            .GroupBy(group => group.ClientClassName, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToList();
+        if (duplicateClientClasses.Count != 0)
+            throw new InvalidOperationException(
+                $"Duplicate TypeScript client class names: {string.Join(", ", duplicateClientClasses)}"
+            );
+
+        var duplicateOperationKeys = operations
+            .GroupBy(operation => operation.Definition.Key, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToList();
+        if (duplicateOperationKeys.Count != 0)
+            throw new InvalidOperationException(
+                $"Duplicate TypeScript client operation keys: {string.Join(", ", duplicateOperationKeys)}"
+            );
+
+        var duplicateMethods = groups
+            .SelectMany(group => group.Operations
+                .GroupBy(operation => operation.MethodName, StringComparer.Ordinal)
+                .Where(methodGroup => methodGroup.Count() > 1)
+                .Select(methodGroup => $"{group.GroupKey}.{methodGroup.Key}"))
+            .ToList();
+        if (duplicateMethods.Count != 0)
+            throw new InvalidOperationException(
+                $"Duplicate TypeScript client methods: {string.Join(", ", duplicateMethods)}"
+            );
+
+        var invalidMethodMetadata = groups
+            .SelectMany(group => group.Operations
+                .Where(operation => string.IsNullOrWhiteSpace(operation.MethodName))
+                .Select(operation => $"{group.GroupKey}.{operation.Definition.Key}"))
+            .ToList();
+        if (invalidMethodMetadata.Count != 0)
+            throw new InvalidOperationException(
+                $"Incomplete TypeScript client method metadata: {string.Join(", ", invalidMethodMetadata)}"
+            );
+
+        var missingPublicDefinitions = operations
+            .Where(operation => !publicHttpKeys.Contains(operation.Definition.Key))
+            .Select(operation => operation.Definition.Key)
             .ToList();
         if (missingPublicDefinitions.Count != 0)
             throw new InvalidOperationException(
-                $"Pea client operations must be public HTTP operations: {string.Join(", ", missingPublicDefinitions)}"
+                $"TypeScript client operations must be public HTTP operations: {string.Join(", ", missingPublicDefinitions)}"
             );
 
-        return Validate(definitions);
+        var invalidRequestPolicies = operations
+            .Where(operation =>
+                (operation.RequestPolicy == HostClientRequestPolicy.None && operation.Definition.RequestType != typeof(NoRequest))
+                || (operation.RequestPolicy == HostClientRequestPolicy.Explicit && operation.Definition.RequestType == typeof(NoRequest)))
+            .Select(operation => $"{operation.Definition.Key} ({operation.RequestPolicy})")
+            .ToList();
+        if (invalidRequestPolicies.Count != 0)
+            throw new InvalidOperationException(
+                $"Invalid TypeScript client request policies: {string.Join(", ", invalidRequestPolicies)}"
+            );
+
+        _ = Validate(operations.Select(operation => operation.Definition).ToArray());
+        return catalog;
     }
 
     private sealed class HttpDescriptorComparer : IEqualityComparer<HostHttpOperationDescriptor> {

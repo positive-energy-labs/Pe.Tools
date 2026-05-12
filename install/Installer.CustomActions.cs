@@ -82,6 +82,29 @@ public static class CustomActions {
         }
     }
 
+    [CustomAction]
+    public static ActionResult RemoveInstalledRevitAddinPaths(Session session) {
+        try {
+            var applicationData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var addinsRoot = RevitDeploymentIdentity.ResolvePerUserAddinsRootPath(applicationData);
+            if (!Directory.Exists(addinsRoot)) {
+                session.Log($"Revit add-ins root does not exist: {addinsRoot}");
+                return ActionResult.Success;
+            }
+
+            foreach (var yearDirectory in Directory.EnumerateDirectories(addinsRoot)
+                         .Where(IsRevitYearDirectory)
+                         .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)) {
+                RemoveInstalledRevitAddinPath(session, yearDirectory);
+            }
+
+            return ActionResult.Success;
+        } catch (Exception ex) {
+            session.Log($"Failed to remove installed Revit add-in paths: {ex}");
+            return ActionResult.Success;
+        }
+    }
+
     private static string RequireInstallPeaPath(Session session) {
         var path = session.CustomActionData.TryGetValue("INSTALLPEA", out var deferredPath)
             ? deferredPath
@@ -142,6 +165,50 @@ public static class CustomActions {
     private static void DeleteIfExists(string path) {
         if (Directory.Exists(path))
             Directory.Delete(path, true);
+    }
+
+    private static void RemoveInstalledRevitAddinPath(Session session, string yearDirectory) {
+        var assemblyDirectory = Path.Combine(yearDirectory, RevitDeploymentIdentity.AddinAssemblyDirectoryName);
+        var manifestPath = Path.Combine(yearDirectory, RevitDeploymentIdentity.AddinManifestFileName);
+        var descriptorPath = Path.Combine(assemblyDirectory, RevitDeploymentIdentity.RuntimeDescriptorFileName);
+
+        if (PeAppRuntimeDeploymentDescriptor.TryLoad(descriptorPath, out var descriptor)
+            && descriptor?.RuntimeLane == ProductRuntimeLane.Dev) {
+            session.Log($"Skipping dev-lane Revit add-in path: {assemblyDirectory}");
+            return;
+        }
+
+        TryDeleteFile(session, manifestPath);
+        TryDeleteDirectory(session, assemblyDirectory);
+    }
+
+    private static bool IsRevitYearDirectory(string path) {
+        var name = Path.GetFileName(path);
+        return name.Length == 4
+               && name.StartsWith("20", StringComparison.Ordinal)
+               && name.All(char.IsDigit);
+    }
+
+    private static void TryDeleteFile(Session session, string path) {
+        try {
+            if (File.Exists(path)) {
+                File.Delete(path);
+                session.Log($"Removed file: {path}");
+            }
+        } catch (Exception ex) {
+            session.Log($"Could not remove file '{path}': {ex.Message}");
+        }
+    }
+
+    private static void TryDeleteDirectory(Session session, string path) {
+        try {
+            if (Directory.Exists(path)) {
+                Directory.Delete(path, true);
+                session.Log($"Removed directory: {path}");
+            }
+        } catch (Exception ex) {
+            session.Log($"Could not remove directory '{path}': {ex.Message}");
+        }
     }
 
     private static string ComputeSha256(string path) {

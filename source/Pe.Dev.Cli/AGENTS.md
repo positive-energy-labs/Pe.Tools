@@ -2,20 +2,22 @@
 
 ## Scope
 
-Owns the single dev-facing and operator-facing CLI surface for local Revit iteration, scripting, logs, approvals, and Design Automation.
+Owns the single dev-facing and operator-facing CLI surface for local Revit iteration, environment diagnostics, codegen, `pea` dev installs, and Design Automation.
 
 ## Purpose
 
 `Pe.Dev.Cli` exists to centralize fragile repo workflows behind one stable executable: `pe-dev`. Keep this package focused on command parsing, human/JSON output, and dispatch into shared runtime and automation seams instead of re-growing sidecar executables.
 
-`pe-dev` is an operator helper surface, not a replacement for standard `dotnet build`. Ordinary compile and test workflows should stay on standard `dotnet` entrypoints whenever the platform allows it.
+`pe-dev` is an operator helper surface, not a replacement for standard `dotnet build`. Ordinary compile and test workflows should stay on standard `dotnet` entrypoints whenever the platform allows it. The repo-level workflow runbook is `docs/ENVIRONMENT.md`.
 
 ## Critical Entry Points
 
 - `Program.cs` - `pe-dev` entrypoint.
 - `DevCliProgram.cs` - top-level usage/help and command dispatch.
-- `RevitCommandRunner.cs` - `revit approve`, `hot-reload`, `sync-runtime`, `logs`, `session`, `test`, and `script` command routing.
-- `AutomationCliProgram.cs` - `revit automation ...` command routing.
+- `Routing/RootCommandRunner.cs` - top-level `env`, `revit`, `pea`, `automation`, `codegen`, and internal dispatch.
+- `RevitCommandRunner.cs` - desktop Revit session, runtime sync, and fresh-process test routing.
+- `Commands/Automation/AutomationCommandRunner.cs` - top-level `automation ...` command routing.
+- `Commands/Codegen/CodegenCommandRunner.cs` - generated build contracts, programmatic Host TypeGen DTOs, and TypeScript Host client check/sync routing.
 - `../Pe.Aps/Auth/ApsAuthService.cs` - persisted APS auth status, login, logout, and token acquisition flow.
 - `../Pe.Dev.RevitAutomation/AutomationBrowseService.cs` - sticky browse context plus repo-local cache-backed ACC discovery.
 - `../Pe.Dev.RevitAutomation/AutomationManifestService.cs` - human-readable schedule manifest create/update/validate flow.
@@ -28,19 +30,19 @@ Cheap validation loop:
 - `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- --help`
 - `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- revit session`
 - `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- revit sync-runtime extra`
-- `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- revit logs all --tail 20`
-- `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- revit test --filter "Name~AssemblyLoadDiagnostics"`
-- `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- revit automation --help`
+- `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- env logs all --tail 20`
+- `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- revit test fresh --filter "Name~AssemblyLoadDiagnostics"`
+- `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- automation --help`
 
 Operator examples:
 
-- `pe-dev revit automation auth login`
-- `pe-dev revit automation browse hubs`
-- `pe-dev revit automation browse use-project "PE 2025 Projects"`
-- `pe-dev revit automation browse models --recurse true --out docs/context/da-fantech-scrape/discovered-model-inventory.json`
-- `pe-dev revit automation manifest create --path docs/context/da-fantech-scrape/fantech-schedule-batch.json`
-- `pe-dev revit automation submit schedules --manifest docs/context/da-fantech-scrape/fantech-schedule-batch.json --json`
-- `pe-dev revit automation inspect receipt --receipt latest --download-artifacts true --json`
+- `pe-dev automation auth login`
+- `pe-dev automation browse hubs`
+- `pe-dev automation browse use-project "PE 2025 Projects"`
+- `pe-dev automation browse models --recurse true --out docs/context/da-fantech-scrape/discovered-model-inventory.json`
+- `pe-dev automation manifest create --path docs/context/da-fantech-scrape/fantech-schedule-batch.json`
+- `pe-dev automation submit schedules --manifest docs/context/da-fantech-scrape/fantech-schedule-batch.json --json`
+- `pe-dev automation inspect receipt --receipt latest --download-artifacts true --json`
 
 Keep `Pe.Dev.Cli` focused on stable command naming, parse/print behavior, and orchestration boundaries. Shared automation logic belongs in `Pe.Dev.RevitAutomation`.
 
@@ -57,9 +59,9 @@ Live runtime validation loop:
 | --- | --- | --- |
 | **dev CLI** | The repo-local developer/operator surface is `pe-dev` | Avoid reviving `pe-script` or separate automation executables |
 | **operator surface** | The command families humans and agents should actually learn and run | Prefer `pe-dev` for repo/dev operations and `pea script` for user scripting |
-| **automation workflow** | `pe-dev revit automation ...` | Prefer this over talking about DA as a separate tool |
+| **automation workflow** | `pe-dev automation ...` | Prefer this over nesting DA under desktop Revit |
 | **browse workflow** | the sticky-context ACC discovery commands under `revit automation browse ...` | Prefer this over copy-pasting ids through one-off list commands |
-| **status workflow** | `inspect receipt`, `inspect workitem`, and low-level `workitem-status` fallback | Prefer inspection over rerunning jobs when you already have a receipt or id |
+| **status workflow** | `inspect receipt` and `inspect workitem` | Prefer inspection over rerunning jobs when you already have a receipt or id |
 | **JSON mode** | `--json` output intended for downstream tooling or scripting | Prefer this for machine consumption instead of scraping human text |
 
 ## Living Memory
@@ -67,16 +69,15 @@ Live runtime validation loop:
 - `Pe.Dev.Cli` is the only CLI humans and agents should learn for repo-local development/operator work.
 - `Pe.Dev.Cli` is not installed by the MSI; deployed agent/user workflows use `pea` instead.
 - Local `Pe.Dev.Cli` builds now mirror the runnable CLI output to `%LocalAppData%\Positive Energy\Pe.Tools\bin\pe-dev\`. If the user wants `pe-dev` on `PATH`, that mirrored bin directory is the intended dev-facing path to register.
-- `revit script` and `revit automation` are both first-class command families, not sidecars.
+- `env`, `revit`, `pea`, `automation`, and `codegen` are first-class root command families; keep implementation plumbing out of public help.
+- `pea script` belongs to the deployed `pea` surface, not `pe-dev`; keep live scripting freshness explicit with `pe-dev revit sync-runtime` before script execution.
 - Build hooks must consume the built CLI output through `dotnet exec`, not `dotnet run`.
-- `revit approve` is background-only and intentionally relaunches an internal worker so MSBuild does not block.
-- `revit hot-reload` exposes no file or year arguments. Session selection, dirty-file discovery, and Rider cache handling are internal policy.
+- Approval and lower-level hot-reload are internal plumbing. Keep public workflow entrypoints on `revit sync-runtime` and `__internal approve-worker`.
 - `revit sync-runtime` is the operator-facing pre-live-validation command. Keep it explicit, health-aware, and thin over the lower-level HR path.
-- `revit script` no longer auto-runs hot reload before execution. Explicit `revit sync-runtime` is the preferred pre-live-validation step after runtime package edits.
-- `revit session` is the unified local status surface. It should stay CLI-first, pull in host-status when available, and keep `--json` honest for tooling.
-- `revit test` is an explicit Revit-backed verification helper, not the semantic center of repo testing. Keep it thin, deterministic, and honest about the behavior it owns.
-- `revit test` currently provides the dedicated `FreshRevitProcess` helper. By default it auto-selects a safe Revit year in the same runtime family that is not already running, then forces a dedicated test Revit process, temporarily hides the deployed `Pe.App` add-in for that year unless the operator opts out, and closes the fresh process after the run.
-- `revit test` should record the owned fresh Revit session as soon as it appears, recycle that exact owned process on the next run when needed, and prefer failing over broad same-year process kills if ownership becomes ambiguous.
-- `revit test` should also start the approval watcher for its target year before launching a fresh test-controlled Revit process, otherwise unsigned add-in approval can stall unattended startup.
-- Do not hide `revit test` behind ordinary `dotnet build` or bare `dotnet test` flows. If a workflow needs this helper, require explicit intent.
+- `env status` and `revit session` split static runtime/install diagnostics from live desktop session diagnostics. It should stay CLI-first, pull in host probe/session-summary facts through shared Host contracts when available, and keep `--json` honest for tooling.
+- `revit test fresh` is an explicit Revit-backed verification helper, not the semantic center of repo testing. Keep it thin, deterministic, and honest about the behavior it owns.
+- `revit test fresh` currently provides the dedicated `FreshRevitProcess` helper. By default it auto-selects a safe Revit year in the same runtime family that is not already running, then forces a dedicated test Revit process, temporarily hides the deployed `Pe.App` add-in for that year unless the operator opts out, and closes the fresh process after the run.
+- `revit test fresh` should record the owned fresh Revit session as soon as it appears, recycle that exact owned process on the next run when needed, and prefer failing over broad same-year process kills if ownership becomes ambiguous.
+- `revit test fresh` should also start the approval watcher for its target year before launching a fresh test-controlled Revit process, otherwise unsigned add-in approval can stall unattended startup.
+- Do not hide `revit test fresh` behind ordinary `dotnet build` or bare `dotnet test` flows. If a workflow needs this helper, require explicit intent.
 - Keep CLI models honest: parse flags here, but keep APS policy, packaging, worker definitions, and report/artifact handling in `Pe.Dev.RevitAutomation`.

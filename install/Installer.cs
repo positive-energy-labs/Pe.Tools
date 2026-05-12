@@ -23,7 +23,10 @@ InstallerLog.WriteLine($"Runtime payload: {installerPayload.RuntimePublishDirect
 InstallerLog.WriteLine($"pea bootstrap payload: {installerPayload.PeaBootstrapDirectory}");
 InstallerLog.WriteLine($"pea payload archive: {installerPayload.PeaPayloadArchivePath}");
 InstallerLog.WriteLine($"pea payload manifest: {installerPayload.PeaPayloadManifestPath}");
+InstallerLog.WriteLine($"pe-dev payload: {installerPayload.PeDevPublishDirectory}");
 InstallerLog.WriteLine($"Revit payloads: {string.Join(", ", installerPayload.RevitPublishDirectories)}");
+var installerContext = new InstallerContext(installerPayload, configuration, resolvedVersioning);
+var installableComponents = InstallerComponentCatalog.CreateDefault();
 var project = new Project {
     OutDir = configuration.OutputDirectory,
     Name = configuration.ProductName,
@@ -40,42 +43,29 @@ var project = new Project {
     ControlPanelInfo = { Manufacturer = configuration.Manufacturer, ProductIcon = configuration.ProductIconPath }
 };
 
-var layout = Generator.GenerateWixEntities(installerPayload);
+InstallerLog.WriteLine(
+    $"Installer product slices: {string.Join(", ", installableComponents.Select(component => component.ProductSlice).DistinctBy(slice => slice.Id).Select(slice => $"{slice.Id}:{slice.Kind}"))}");
+InstallerLog.WriteLine(
+    $"Installer components: {string.Join(", ", installableComponents.Select(component => $"{component.Id}:{component.ComponentKind}:{component.ProductSlice.Id}"))}");
+var installDirectories = installableComponents
+    .SelectMany(component => component.BuildDirectories(installerContext))
+    .ToArray();
+var installActions = installableComponents
+    .SelectMany(component => component.BuildInstallActions(installerContext))
+    .ToArray();
+var uninstallActions = installableComponents
+    .SelectMany(component => component.BuildUninstallActions(installerContext))
+    .ToArray();
 InstallerLog.WriteLine("Installer payload harvest finished.");
 project.RemoveDialogsBetween(NativeDialogs.WelcomeDlg, NativeDialogs.CustomizeDlg);
-project.Actions = [
-    new ManagedAction(
-        CustomActions.RemovePeaPayloadVersions,
-        Return.check,
-        When.After,
-        Step.RemoveFiles,
-        Condition.BeingUninstalled
-    ) {
-        Execute = Execute.deferred,
-        UsesProperties = "INSTALLPEA=[INSTALLPEA]"
-    },
-    new ManagedAction(
-        CustomActions.InstallPeaPayload,
-        Return.check,
-        When.After,
-        Step.InstallFiles,
-        Condition.NOT_Installed
-    ) {
-        Execute = Execute.deferred,
-        UsesProperties = "INSTALLPEA=[INSTALLPEA]"
-    }
-];
+project.Actions = uninstallActions.Concat(installActions).ToArray();
 
 BuildSingleUserMsi();
 
 void BuildSingleUserMsi() {
     project.Scope = InstallScope.perUser;
     project.OutFileName = $"{configuration.ProductName}-{resolvedVersioning.Version}";
-    project.Dirs = [
-        new InstallDir(configuration.GetSingleUserRevitAddinsInstallDirectory(), layout.RevitEntities),
-        new Dir(configuration.GetSingleUserHostInstallDirectory(), layout.HostEntities),
-        new Dir(new Id("INSTALLPEA"), configuration.GetSingleUserPeaInstallDirectory(), layout.PeaEntities)
-    ];
+    project.Dirs = installDirectories;
     var msiPath = Path.Combine(project.OutDir, $"{project.OutFileName}.msi");
     InstallerLog.WriteLine($"Building MSI: {msiPath}");
     var builtMsiPath = project.BuildMsi(msiPath);

@@ -96,7 +96,7 @@
                 Condition="!Exists('$(PeApprovalWatcherCliPath)')"
         />
         <Exec
-                Command="dotnet exec &quot;$(PeApprovalWatcherCliPath)&quot; --repo-root &quot;$(MSBuildProjectDirectory)\..\..&quot; revit approve --revit-year $(RevitVersion)"
+                Command="dotnet exec &quot;$(PeApprovalWatcherCliPath)&quot; --repo-root &quot;$(MSBuildProjectDirectory)\..\..&quot; __internal approve-worker --revit-year $(RevitVersion)"
                 Condition="Exists('$(PeApprovalWatcherCliPath)')"
         />
     </Target>
@@ -134,15 +134,7 @@
             BeforeTargets="PublishAddin"
             Condition="'$(PublishAddin)' == 'true'"
     >
-        <!-- PublishAddin/DeployAddin only copy files. Clearing both roots avoids stale assemblies surviving refactors. -->
-        <RemoveDir
-                Directories="$(AddinPublishDir)\$(AssemblyName)"
-                Condition="Exists('$(AddinPublishDir)\$(AssemblyName)')"
-        />
-        <Delete
-                Files="$(AddinPublishDir)\$(AssemblyName).addin"
-                Condition="Exists('$(AddinPublishDir)\$(AssemblyName).addin')"
-        />
+        <!-- DeployAddin copies staged package output into the live Revit add-ins folder. Keep live deploy cleanup explicit. -->
         <RemoveDir
                 Directories="$(AddinDeployDir)\$(AssemblyName)"
                 Condition="'$(DeployAddin)' == 'true' and Exists('$(AddinDeployDir)\$(AssemblyName)')"

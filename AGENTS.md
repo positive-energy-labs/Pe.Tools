@@ -30,6 +30,8 @@ This repo exists to improve Engineering Designer workflows for MEP firms through
 
 ## Builds and Env
 
+`docs/ENVIRONMENT.md` is the canonical human/operator runbook for build, verify, test, package, install, publish, and environment recovery commands. Keep detailed command menus there; keep this file focused on agent cautions and durable invariants.
+
 Protect the current RRD session aggressively. Breaking it can turn a small edit into a multi-minute restart plus document reopen wait.
 
 The biggest rule: keep terminal compile checks and live-runtime refreshes separate. Plain terminal `dotnet build` is safe by default because it builds into isolated `.artifacts/...` outputs. Rider builds remain interactive and package-local.
@@ -59,7 +61,9 @@ Current repo-wide execution policies:
 The repo currently has two build modes:
 
 - interactive build mode:
-  package-local `bin/obj` outputs for Rider, explicit `/p:PeIsolatedBuild=false` terminal builds, and anything you expect Rider hot reload to patch into the live `RRD` session
+  package-local `bin/obj` outputs owned by Rider/IDE for hot reload into the live `RRD` session
+- terminal interactive override:
+  `/p:PeIsolatedBuild=false` forces package-local outputs from the shell and is an escape hatch, not normal runbook guidance, because it can clobber Rider/RRD hot-reload baselines
 - isolated build mode:
   plain terminal `dotnet build`, `./build`, and CI outputs under `.artifacts/...`; this is the safe compile/package path and does not refresh the live Revit runtime
 
@@ -68,7 +72,7 @@ Critical consequence:
 - plain terminal `dotnet build` is the default compile-verification path
 - `./build` is for orchestration, packaging, and CI parity
 - isolated builds are not proof that the live runtime DLLs loaded by Revit are fresh
-- if you intend to validate through `pea script ...` or `dotnet test source/Pe.Revit.Tests/...`, build the affected runtime package in the interactive build mode and then run `pe-dev revit sync-runtime`
+- if you intend to validate through `pea script ...` or `dotnet test source/Pe.Revit.Tests/...`, build the affected runtime package from Rider/IDE, then run `pe-dev revit sync-runtime`
 - do not assume scripting or `.Tests` runs are seeing fresh code just because an isolated build passed
 
 Prefer these commands:
@@ -87,7 +91,7 @@ dotnet run --project .\build\Build.csproj -c Release -- pack publish
 cd .\source\Pe.Host
 dotnet run
 
-# live test loop after interactive build + sync
+# live test loop after Rider/IDE build + sync
 cd ..\..
 pe-dev revit sync-runtime
 dotnet build .\source\Pe.Revit.Tests\Pe.Revit.Tests.csproj -c Debug.R25.Tests /p:WarningLevel=0
@@ -100,20 +104,13 @@ dotnet test .\source\Pe.Revit.Tests\Pe.Revit.Tests.csproj -c Debug.R25.Tests --f
 - automation appbundle output such as `.artifacts/packages/automation/Pe.Dev.RevitAutomation.Worker.<year>.appbundle.zip`
 - installer output such as `.artifacts/packages/installers/*.msi`
 
-Avoid these as your default loop:
-
-```ps1
-dotnet build .\source\Pe.Revit\Pe.Revit.csproj -c Debug.R25 /p:PeIsolatedBuild=false
-dotnet build .\source\Pe.App\Pe.App.csproj -c Debug.R25 /p:PeIsolatedBuild=false
-```
-
-They still have niche use, but they are not the default validation path during live Revit work.
+Avoid terminal interactive builds as your default live-validation loop. They force package-local outputs from the shell and can clobber Rider/RRD hot-reload baselines. Prefer Rider/IDE build plus `pe-dev revit sync-runtime`; use the override only as an explicit escape hatch.
 
 ### Live Runtime Validation
 
 If you are validating live Revit behavior through scripting or `Pe.Revit.Tests`, use this posture:
 
-1. build the affected runtime package in the interactive build mode
+1. build the affected runtime package from Rider/IDE
 2. run `pe-dev revit sync-runtime`
 3. verify runtime sync actually succeeded
 4. then run `pea script ...` or `dotnet test ...`
@@ -136,35 +133,37 @@ Do not grow a custom build CLI for ordinary compilation. `dotnet build` must rem
 
 The primary command families are:
 
+- `pe-dev env status`
+- `pe-dev env logs all --tail 50`
 - `pe-dev revit session`
-- `pe-dev revit logs all --tail 50`
 - `pe-dev revit sync-runtime`
-- `pe-dev revit hot-reload`
-- `pe-dev revit test --filter "Name~SomeFocusedTest"`
-- `pe-dev revit approve --revit-year 2025`
+- `pe-dev revit test fresh --filter "Name~SomeFocusedTest"`
 - `pea script --stdin --name Probe.cs`
-- `pe-dev revit automation auth login`
-- `pe-dev revit automation browse hubs`
-- `pe-dev revit automation manifest create --path <path>`
-- `pe-dev revit automation submit schedules --manifest <path>`
-- `pe-dev revit automation inspect receipt --receipt latest`
-- `pe-dev revit automation workitem-status --workitem-id <id>`
+- `pe-dev pea install-dev`
+- `pe-dev automation auth login`
+- `pe-dev automation browse hubs`
+- `pe-dev automation manifest create --path <path>`
+- `pe-dev automation submit schedules --manifest <path>`
+- `pe-dev automation inspect receipt --receipt latest`
+- `pe-dev automation inspect workitem --workitem-id <id>`
+- `pe-dev codegen check`
+- `pe-dev codegen sync --target host-client`
 
 ## Testing, Validation, and Exploration
 
 Prefer this order:
 
 1. For compile verification, use plain terminal `dotnet build`.
-2. For live probing in desktop Revit, build the affected runtime package in the interactive build mode, run `pe-dev revit sync-runtime`, then use `pea script ...`, especially `--stdin`.
-3. For `AttachedRrd` verification, build the affected runtime package in the interactive build mode, run `pe-dev revit sync-runtime`, then run focused explicit-year `dotnet test` commands from terminal.
-4. For `FreshRevitProcess` verification, prefer the explicit helper that avoids `RRD` and creates a dedicated fresh test host for the chosen Revit year. Today that helper is `pe-dev revit test ...`.
-5. `pe-dev revit test` should close the fresh owned Revit process after each run. If a stale owned process survives a failure or timeout, the next helper run should recycle it before launching again.
-6. For APS and Design Automation operator flows, use `pe-dev revit automation ...`.
+2. For live probing in desktop Revit, build the affected runtime package from Rider/IDE, run `pe-dev revit sync-runtime`, then use `pea script ...`, especially `--stdin`.
+3. For `AttachedRrd` verification, build the affected runtime package from Rider/IDE, run `pe-dev revit sync-runtime`, then run focused explicit-year `dotnet test` commands from terminal.
+4. For `FreshRevitProcess` verification, prefer the explicit helper that avoids `RRD` and creates a dedicated fresh test host for the chosen Revit year. Today that helper is `pe-dev revit test fresh ...`.
+5. `pe-dev revit test fresh` should close the fresh owned Revit process after each run. If a stale owned process survives a failure or timeout, the next helper run should recycle it before launching again.
+6. For APS and Design Automation operator flows, use `pe-dev automation ...`.
 
 Before assuming source/runtime divergence during desktop work, check:
 
 - `pe-dev revit session`
-- `pe-dev revit logs all --tail 50`
+- `pe-dev env logs all --tail 50`
 
 The default focused `AttachedRrd` loop is:
 
@@ -178,7 +177,7 @@ dotnet test source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests --fil
 For the current `FreshRevitProcess` helper, prefer:
 
 ```powershell
-pe-dev revit test --filter "Name~AssemblyLoadDiagnostics"
+pe-dev revit test fresh --filter "Name~AssemblyLoadDiagnostics"
 ```
 
 When validating the current DA audit workflow, keep the manifest intentionally small. One or two models is the right first pass before broadening to a larger scrape.
@@ -206,8 +205,8 @@ Explicit-year `dotnet test` runs a pre-`VSTest` `AttachedRrd` session check. Tha
 | **package** | A repo-local code unit such as `Pe.Host` or `Pe.Revit.FamilyFoundry` | Prefer this over `project` when discussing one code area |
 | **app** | `Pe.App`, the in-proc desktop Revit add-in runtime | Avoid using `app` to mean the whole repo or product |
 | **automation shell** | The headless DA runtime rooted in `Pe.Dev.RevitAutomation.Worker` | Prefer this over implying `Pe.App` itself runs in DA |
-| **host** | `Pe.Host`, the out-of-proc HTTP/SSE settings backend | Avoid using `host` for the Revit add-in bridge |
-| **bridge** | The Revit-side named-pipe connection to `Pe.Host` | Avoid calling HTTP endpoints the bridge |
+| **host** | `Pe.Host`, the out-of-proc HTTP/SSE backend | Avoid using `host` for the Revit add-in bridge or product identity |
+| **bridge** | The private Host/Revit WebSocket connection | Avoid calling HTTP endpoints the bridge |
 | **document-owned** | Behavior that can be derived from a specific `Document` without needing UI session state | Prefer `Document` extensions for this |
 | **document session** | Open/active/UI-tab state for documents in the current Revit process | Keep this in `UIApplication` or session-aware helpers |
 | **artifact** | A durable machine-readable output produced by a command or DA workitem | Prefer this over vague `report` when the file is the actual output contract |
@@ -236,7 +235,7 @@ Explicit-year `dotnet test` runs a pre-`VSTest` `AttachedRrd` session check. Tha
 - `Pe.Dev.Cli` is the first operator surface to check before adding ad hoc scripts, temporary console apps, or duplicate automation entrypoints.
 - Local `Pe.Dev.Cli` builds now mirror the runnable CLI output to `%LocalAppData%\Positive Energy\Pe.Tools\bin\pe-dev\`. That is the intended PATH-friendly dev bin for repo work. `pea` remains PATH-visible from `%LocalAppData%\Positive Energy\Pe.Tools\bin\pea\`, while the dev-only `Pe.Host` runtime lives separately under `%LocalAppData%\Positive Energy\Pe.Tools\dev\bin\host\`.
 - Explicit runtime sync is part of the live-validation contract now. After editing runtime packages, do not validate through scripting or `Pe.Revit.Tests` until `pe-dev revit sync-runtime` or manual `pe-dev revit hot-reload` has been run and checked.
-- Plain terminal `dotnet build` now defaults to the isolated build mode and `NoRrdContact`. Use `/p:PeIsolatedBuild=false` only when you intentionally want package-local interactive outputs from the shell.
+- Plain terminal `dotnet build` now defaults to the isolated build mode and `NoRrdContact`. Use Rider/IDE for normal interactive outputs; `/p:PeIsolatedBuild=false` is only an explicit shell escape hatch because it can disrupt Rider/RRD hot-reload baselines.
 - `./build` only proves the isolated build mode. It does not update the package-local outputs or deployed in-memory DLLs Rider hot reload works against.
 - Treat desktop and DA as sibling shells over shared DA-safe runtime packages. Do not route DA through `Pe.App` startup.
 - Runtime path, install ownership, and assembly-authority-by-workflow now live in `docs/features/deployment-runtime/_DEV.md` and `_GOALS.md`. Treat those files as the source of truth for deployed install roots, authored content roots, runtime state/log roots, and the intended execution-policy model around loaded assemblies.

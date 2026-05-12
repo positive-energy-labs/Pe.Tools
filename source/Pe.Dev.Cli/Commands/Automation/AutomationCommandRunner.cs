@@ -10,7 +10,7 @@ using static Pe.Aps.Aps;
 
 namespace Pe.Dev.Cli;
 
-internal static class AutomationCliProgram {
+internal static class AutomationCommandRunner {
     private static readonly JsonSerializerOptions JsonOptions = new() {
         WriteIndented = true,
         Converters = { new JsonStringEnumConverter() }
@@ -29,7 +29,6 @@ internal static class AutomationCliProgram {
                 "manifest" => RunManifestAsync(args, repoRootOverride, cancellationToken),
                 "submit" => RunSubmitAsync(args, repoRootOverride, cancellationToken),
                 "inspect" => RunInspectAsync(args, repoRootOverride, cancellationToken),
-                "workitem-status" => RunWorkItemStatusAliasAsync(args, cancellationToken),
                 "cache" => RunCacheAsync(args, repoRootOverride),
                 _ => Task.FromResult(WriteAutomationUsageAndReturn())
             };
@@ -615,32 +614,31 @@ internal static class AutomationCliProgram {
         Console.Error.WriteLine(
             """
             Usage:
-              pe-dev revit automation auth login [--json]
-              pe-dev revit automation auth status [--json]
-              pe-dev revit automation auth logout
-              pe-dev revit automation browse status [--json]
-              pe-dev revit automation browse hubs [--refresh] [--json]
-              pe-dev revit automation browse use-hub <hub-name-or-id> [--refresh] [--json]
-              pe-dev revit automation browse projects [--refresh] [--json]
-              pe-dev revit automation browse use-project <project-name-or-id> [--refresh] [--json]
-              pe-dev revit automation browse pwd [--json]
-              pe-dev revit automation browse ls [<path>] [--refresh] [--json]
-              pe-dev revit automation browse cd <folder-name> [--refresh] [--json]
-              pe-dev revit automation browse up [--json]
-              pe-dev revit automation browse models [--name-contains <text>] [--recurse <true|false>] [--refresh] [--out <path>] [--json]
-              pe-dev revit automation manifest create --path <manifest-path> [--json]
-              pe-dev revit automation manifest show --path <manifest-path> [--json]
-              pe-dev revit automation manifest list --path <manifest-path> [--json]
-              pe-dev revit automation manifest add --path <manifest-path> --project <project-name> --model-path <project-root-model-path> [--refresh] [--json]
-              pe-dev revit automation manifest remove --path <manifest-path> --model-path <project-root-model-path> [--json]
-              pe-dev revit automation manifest set-request --path <manifest-path> [--primary-parameter-name <name>] [--primary-value <value>] [--primary-category-name <name>]... [--primary-schedule-name <name>]... [--fallback-category-name <name>]... [--fallback-schedule-name <name>]... [--include-templates <true|false>] [--json]
-              pe-dev revit automation manifest validate --path <manifest-path> [--refresh] [--json]
-              pe-dev revit automation submit schedules --manifest <manifest-path> [--receipt <receipt-path>] [--refresh] [--json]
-              pe-dev revit automation inspect receipt --receipt <path|latest> [--refresh] [--download-artifacts <true|false>] [--json]
-              pe-dev revit automation inspect workitem --workitem-id <id> [--include-report <true|false>] [--json]
-              pe-dev revit automation workitem-status --workitem-id <id> [--include-report <true|false>] [--json]
-              pe-dev revit automation cache status [--json]
-              pe-dev revit automation cache clear [--scope hubs|projects|contents|models] [--json]
+              pe-dev automation auth login [--json]
+              pe-dev automation auth status [--json]
+              pe-dev automation auth logout
+              pe-dev automation browse status [--json]
+              pe-dev automation browse hubs [--refresh] [--json]
+              pe-dev automation browse use-hub <hub-name-or-id> [--refresh] [--json]
+              pe-dev automation browse projects [--refresh] [--json]
+              pe-dev automation browse use-project <project-name-or-id> [--refresh] [--json]
+              pe-dev automation browse pwd [--json]
+              pe-dev automation browse ls [<path>] [--refresh] [--json]
+              pe-dev automation browse cd <folder-name> [--refresh] [--json]
+              pe-dev automation browse up [--json]
+              pe-dev automation browse models [--name-contains <text>] [--recurse <true|false>] [--refresh] [--out <path>] [--json]
+              pe-dev automation manifest create --path <manifest-path> [--json]
+              pe-dev automation manifest show --path <manifest-path> [--json]
+              pe-dev automation manifest list --path <manifest-path> [--json]
+              pe-dev automation manifest add --path <manifest-path> --project <project-name> --model-path <project-root-model-path> [--refresh] [--json]
+              pe-dev automation manifest remove --path <manifest-path> --model-path <project-root-model-path> [--json]
+              pe-dev automation manifest set-request --path <manifest-path> [--primary-parameter-name <name>] [--primary-value <value>] [--primary-category-name <name>]... [--primary-schedule-name <name>]... [--fallback-category-name <name>]... [--fallback-schedule-name <name>]... [--include-templates <true|false>] [--json]
+              pe-dev automation manifest validate --path <manifest-path> [--refresh] [--json]
+              pe-dev automation submit schedules --manifest <manifest-path> [--receipt <receipt-path>] [--refresh] [--json]
+              pe-dev automation inspect receipt --receipt <path|latest> [--refresh] [--download-artifacts <true|false>] [--json]
+              pe-dev automation inspect workitem --workitem-id <id> [--include-report <true|false>] [--json]
+              pe-dev automation cache status [--json]
+              pe-dev automation cache clear [--scope hubs|projects|contents|models] [--json]
             """
         );
     }
