@@ -20,6 +20,7 @@ using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
 using JsonValidationException = Pe.Revit.Global.JsonValidationException;
 using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
+// TODO: why are we using the shared profile here and for storage, I want the full revit native intellisense experience
 using SharedScheduleProfile = Pe.Shared.RevitData.Schedules.ScheduleProfile;
 
 namespace Pe.App.Commands.Schedules;

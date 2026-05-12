@@ -60,8 +60,12 @@ public class SchedulePreviewPanel : PaletteSidebarPanel<ISchedulePaletteItem, Sc
         var doc = FlowDocumentBuilder.Create()
             .AddHeader(data.ProfileName);
 
+        var fields = data.SafeFields;
+        var sortGroup = data.SafeSortGroup;
+        var remainingErrors = data.SafeRemainingErrors;
+
         // Validation Status Section (if there are errors)
-        if (!data.IsValid || data.RemainingErrors.Any()) AddValidationSection(doc, data);
+        if (!data.IsValid || remainingErrors.Count > 0) AddValidationSection(doc, data);
 
         // Only show details if profile is valid
         if (data.IsValid) {
@@ -84,12 +88,12 @@ public class SchedulePreviewPanel : PaletteSidebarPanel<ISchedulePaletteItem, Sc
             doc.Blocks.Add(summaryPara);
 
             // Fields list with details
-            if (data.Fields.Count > 0) {
+            if (fields.Count > 0) {
                 _ = doc.AddSectionHeader($"Fields ({data.FieldCount})");
 
                 // Build table data
                 _ = doc.AddTable<ScheduleFieldSpec>(
-                    data.Fields,
+                    fields,
                     [
                         ("Name", f => f.ParameterName),
                         ("Header", f => f.ColumnHeaderOverride ?? string.Empty),
@@ -106,11 +110,11 @@ public class SchedulePreviewPanel : PaletteSidebarPanel<ISchedulePaletteItem, Sc
             }
 
             // Sort/Group list with details
-            if (data.SortGroup.Count > 0) {
+            if (sortGroup.Count > 0) {
                 _ = doc.AddSectionHeader($"Sort/Group ({data.SortGroupCount})");
 
                 _ = doc.AddTable<ScheduleSortGroupSpec>(
-                    data.SortGroup,
+                    sortGroup,
                     [
                         ("Field", sg => sg.FieldName),
                         ("Order", sg => sg.SortOrder.ToString()),
@@ -149,6 +153,8 @@ public class SchedulePreviewPanel : PaletteSidebarPanel<ISchedulePaletteItem, Sc
     }
 
     private static void AddValidationSection(FlowDocument doc, SchedulePreviewData data) {
+        var remainingErrors = data.SafeRemainingErrors;
+
         // Status indicator
         var statusPara = new Paragraph { Margin = new Thickness(0, 0, 0, 8) };
 
@@ -165,7 +171,7 @@ public class SchedulePreviewPanel : PaletteSidebarPanel<ISchedulePaletteItem, Sc
         doc.Blocks.Add(statusPara);
 
         // Remaining errors section (red)
-        if (data.RemainingErrors.Any()) {
+        if (remainingErrors.Count > 0) {
             var errorsHeader = new Paragraph(new Run("Validation Errors") { FontWeight = FontWeights.SemiBold }) {
                 Margin = new Thickness(0, 8, 0, 4)
             };
@@ -173,7 +179,7 @@ public class SchedulePreviewPanel : PaletteSidebarPanel<ISchedulePaletteItem, Sc
             doc.Blocks.Add(errorsHeader);
 
             var errorsList = new List { MarkerStyle = TextMarkerStyle.Disc, Margin = new Thickness(16, 0, 0, 12) };
-            foreach (var error in data.RemainingErrors) {
+            foreach (var error in remainingErrors) {
                 var para = new Paragraph(new Run(error));
                 para.SetResourceReference(Paragraph.ForegroundProperty, "SystemFillColorCriticalBrush");
                 var listItem = new ListItem(para);
@@ -192,10 +198,10 @@ public class SchedulePreviewData {
     public string ProfileName { get; init; } = string.Empty;
     public string CategoryName { get; init; } = string.Empty;
     public bool IsItemized { get; init; }
-    public int FieldCount => this.Fields.Count;
-    public int SortGroupCount => this.SortGroup.Count;
-    public List<ScheduleFieldSpec> Fields { get; init; } = [];
-    public List<ScheduleSortGroupSpec> SortGroup { get; init; } = [];
+    public int FieldCount => this.SafeFields.Count;
+    public int SortGroupCount => this.SafeSortGroup.Count;
+    public List<ScheduleFieldSpec>? Fields { get; init; } = [];
+    public List<ScheduleSortGroupSpec>? SortGroup { get; init; } = [];
     public string ProfileJson { get; init; } = string.Empty;
 
     // File metadata (from ScheduleListItem)
@@ -208,5 +214,14 @@ public class SchedulePreviewData {
 
     // Validation status
     public bool IsValid { get; init; } = true;
-    public List<string> RemainingErrors { get; init; } = [];
+    public List<string>? RemainingErrors { get; init; } = [];
+
+    public IReadOnlyList<ScheduleFieldSpec> SafeFields =>
+        this.Fields?.Where(scheduleField => scheduleField != null).ToList() ?? [];
+
+    public IReadOnlyList<ScheduleSortGroupSpec> SafeSortGroup =>
+        this.SortGroup?.Where(sortGroup => sortGroup != null).ToList() ?? [];
+
+    public IReadOnlyList<string> SafeRemainingErrors =>
+        this.RemainingErrors?.Where(error => !string.IsNullOrWhiteSpace(error)).ToList() ?? [];
 }
