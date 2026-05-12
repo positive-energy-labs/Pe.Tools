@@ -4,6 +4,8 @@ This folder is for repo-level docs that do not belong inside a package-local `AG
 
 ## Structure
 
+- `ENVIRONMENT.md`
+  - canonical build, verify, test, package, install, publish, and environment recovery runbook
 - `features/`
   - cross-package feature docs
   - use when one conceptual capability spans multiple packages or ownership seams

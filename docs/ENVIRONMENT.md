@@ -1,0 +1,208 @@
+# Environment and Repo Workflows
+
+Compact runbook for choosing safe repo commands. For vocabulary, see `TAXONOMY.md`.
+
+## Non-negotiable RRD rule
+
+Keep **compile/package verification** separate from **live Revit runtime freshness**.
+
+- Plain terminal `dotnet build` => **isolated**, `.artifacts/...`, `NoRrdContact`.
+- `dotnet run --project .\build\Build.csproj ...` => package/publish orchestration, `NoRrdContact`.
+- Rider/IDE build => **interactive**, package-local outputs that Rider hot reload can reason about.
+- `pe-dev revit sync-runtime` => explicit bridge from fresh interactive outputs into live RRD validation.
+- Do **not** use `/p:PeIsolatedBuild=false` as normal guidance. It forces terminal interactive outputs and can clobber Rider/RRD hot-reload baselines.
+
+## Taxonomy shortcuts
+
+| Question | Taxonomy answer |
+| --- | --- |
+| What am I doing? | workflow: `Build`, `Verify`, `Package`, `Publish` |
+| Which machine lane owns this? | runtime lane: `Dev` or `Install` |
+| Can this touch RRD? | execution policy: `NoRrdContact` or `RrdRequired` |
+| Where do outputs go? | build mode: `Isolated` or `Interactive` |
+| What Revit host verifies it? | verify target: `AttachedRrd` or `FreshRevitProcess` |
+
+## How do I...
+
+### Compile a package safely?
+
+Workflow `Build`; policy `NoRrdContact`; mode `Isolated`.
+
+```powershell
+dotnet build .\source\Pe.Revit\Pe.Revit.csproj -c Debug.R25
+dotnet build .\source\Pe.Host\Pe.Host.csproj -c Debug.R25
+dotnet build .\source\Pe.Dev.Cli\Pe.Dev.Cli.csproj -c Debug.R25
+```
+
+This proves compile correctness only. It does not refresh RRD.
+
+### Recover a poisoned sandbox/dotnet environment?
+
+Use the wrapper only as an escape hatch when `dotnet` reports unsafe Windows env vars or `Value cannot be null. (Parameter 'path1')`.
+
+```powershell
+.\tools\dotnet-sandbox-safe.ps1 build .\source\Pe.Dev.Cli\Pe.Dev.Cli.csproj -c Debug.R25
+```
+
+The script repairs child-process env, shuts down poisoned build servers, and adds `--disable-build-servers` where supported.
+
+### Validate changed runtime code in live RRD?
+
+Workflow `Verify`; lane `Dev`; target `AttachedRrd`; policy `RrdRequired`.
+
+1. Build the affected runtime package from Rider/IDE so package-local outputs and Rider HR baselines stay coherent.
+2. Sync runtime explicitly.
+3. Run the live probe/test.
+
+```powershell
+pe-dev revit sync-runtime
+pea script --stdin --name Probe.cs
+```
+
+If HR reports restart-required changes, restart RRD before trusting behavior.
+
+### Run attached Revit tests?
+
+Same lane/policy as live scripting: first Rider/IDE build affected runtime code, then:
+
+```powershell
+pe-dev revit sync-runtime
+dotnet build .\source\Pe.Revit.Tests\Pe.Revit.Tests.csproj -c Debug.R25.Tests /p:WarningLevel=0
+dotnet test .\source\Pe.Revit.Tests\Pe.Revit.Tests.csproj -c Debug.R25.Tests --filter "Name~SomeFocusedTest" --no-build
+```
+
+The test build is not the runtime freshness step; `sync-runtime` is.
+
+### Run Revit-backed tests without touching RRD?
+
+Workflow `Verify`; lane `Dev`; target `FreshRevitProcess`; policy `NoRrdContact`.
+
+```powershell
+pe-dev revit test fresh --filter "Name~AssemblyLoadDiagnostics"
+```
+
+The helper should own and close its fresh Revit process.
+
+### Inspect current env/session/logs?
+
+```powershell
+pe-dev env status
+pe-dev revit session
+pe-dev env logs all --tail 50
+```
+
+Check these before assuming source/runtime divergence.
+
+### Refresh dev `pea`?
+
+Lane `Dev`; policy `NoRrdContact`.
+
+```powershell
+pe-dev pea install-dev
+pea --help
+```
+
+Dev `pea` is PATH-visible from `%LocalAppData%\Positive Energy\Pe.Tools\bin\pea\`.
+
+### Work on generated contracts?
+
+```powershell
+pe-dev codegen check
+pe-dev codegen sync --target host-client
+pe-dev codegen sync --target host-types
+```
+
+`check` is for verification/CI-style flows. `sync` updates generated projections. Host DTO TypeScript is generated through `pe-dev`/TypeGen and normalized for NodeNext `.js` imports; do not run `dotnet-typegen` or maintain `tgconfig.json` by hand.
+
+### Package bundles, appbundles, and MSI?
+
+Workflow `Package`; policy `NoRrdContact`.
+
+```powershell
+dotnet run --project .\build\Build.csproj -c Release -- pack
+dotnet run --project .\build\Build.csproj -c Release -- pack --configuration Release.R25
+```
+
+Use pack targets when you only need one artifact family:
+
+```powershell
+dotnet run --project .\build\Build.csproj -c Release -- pack desktop --configuration Release.R25
+dotnet run --project .\build\Build.csproj -c Release -- pack installer --configuration Release.R25
+dotnet run --project .\build\Build.csproj -c Release -- pack automation
+dotnet run --project .\build\Build.csproj -c Release -- pack all
+```
+
+`pack` with no explicit target is equivalent to `pack all`. `pack installer` also creates the pea payload because the MSI embeds it.
+
+Outputs:
+
+- desktop bundle: `.artifacts/packages/bundles/Pe.App.bundle.zip`
+- DA appbundle: `.artifacts/packages/automation/Pe.Dev.RevitAutomation.Worker.<year>.appbundle.zip`
+- installer: `.artifacts/packages/installers/*.msi`
+
+### Validate the installed product lane?
+
+Workflow `Verify`; lane `Install`.
+
+```powershell
+dotnet run --project .\build\Build.csproj -c Release -- pack --configuration Release.R25
+```
+
+Then install `.artifacts/packages/installers/*.msi`.
+
+Installed roots are product-shaped and MSI-owned:
+
+```text
+%LocalAppData%\Positive Energy\Pe.Tools\bin\host\
+%LocalAppData%\Positive Energy\Pe.Tools\bin\pea\
+%LocalAppData%\Positive Energy\Pe.Tools\bin\pe-dev\  # optional installer feature
+```
+
+Do not validate installed behavior against the dev host root.
+
+### Publish release artifacts?
+
+Workflow `Publish`; policy `NoRrdContact`.
+
+```powershell
+dotnet run --project .\build\Build.csproj -c Release -- pack publish
+```
+
+### Run APS / Design Automation operator flows?
+
+Lane `Dev`; policy normally `NoRrdContact`.
+
+```powershell
+pe-dev automation auth login
+pe-dev automation browse hubs
+pe-dev automation manifest create --path docs/context/my-run/schedules.json
+pe-dev automation submit schedules --manifest docs/context/my-run/schedules.json
+pe-dev automation inspect receipt --receipt latest --download-artifacts true
+```
+
+Start DA audits with one or two models before widening the manifest.
+
+## Avoid as defaults
+
+Do not make terminal interactive builds part of the normal loop. They force package-local outputs from the shell. For live RRD work, prefer Rider/IDE build + `pe-dev revit sync-runtime`. Use terminal interactive builds only as an explicit escape hatch when you have accepted the RRD/HR baseline risk.
+
+Do not run `install/Installer.csproj` directly unless you already have a generated `InstallerPayloadManifest`. Normal installer path is `pack`.
+
+## One-line decision table
+
+| Goal | Command |
+| --- | --- |
+| safe compile | `dotnet build .\source\<Package>\<Package>.csproj -c Debug.R25` |
+| sandbox recovery | `.\tools\dotnet-sandbox-safe.ps1 <dotnet args>` |
+| live RRD refresh | Rider build, then `pe-dev revit sync-runtime` |
+| live script | `pea script --stdin --name Probe.cs` after sync |
+| attached tests | Rider build + sync + explicit-year `dotnet test` |
+| fresh Revit tests | `pe-dev revit test fresh --filter "Name~..."` |
+| package artifacts/MSI | `dotnet run --project .\build\Build.csproj -c Release -- pack` |
+| package one year | `dotnet run --project .\build\Build.csproj -c Release -- pack --configuration Release.R25` |
+| package desktop bundle only | `dotnet run --project .\build\Build.csproj -c Release -- pack desktop --configuration Release.R25` |
+| package installer only | `dotnet run --project .\build\Build.csproj -c Release -- pack installer --configuration Release.R25` |
+| package automation appbundle only | `dotnet run --project .\build\Build.csproj -c Release -- pack automation` |
+| publish release | `dotnet run --project .\build\Build.csproj -c Release -- pack publish` |
+| refresh `pea` dev payload | `pe-dev pea install-dev` |
+| inspect env/session/logs | `pe-dev env status`, `pe-dev revit session`, `pe-dev env logs all --tail 50` |

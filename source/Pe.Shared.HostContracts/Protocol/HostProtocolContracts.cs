@@ -10,10 +10,6 @@ public static class SettingsHostEventNames {
     public const string SessionConnectionChanged = "session-connection-changed";
 }
 
-public static class HostRuntimeEventNames {
-    public const string Notification = "notification";
-}
-
 [ExportTsClass]
 public static class HttpRoutes {
     public const string ApsBase = "/api/aps";

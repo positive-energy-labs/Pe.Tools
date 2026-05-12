@@ -9,9 +9,10 @@ public sealed record InstallerPayloadManifest(
     string PeaBootstrapDirectory,
     string PeaPayloadArchivePath,
     string PeaPayloadManifestPath,
+    string PeDevPublishDirectory,
     string[] RevitPublishDirectories
 ) {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     public static InstallerPayloadManifest Create(
         string version,
@@ -20,6 +21,7 @@ public sealed record InstallerPayloadManifest(
         string peaBootstrapDirectory,
         string peaPayloadArchivePath,
         string peaPayloadManifestPath,
+        string peDevPublishDirectory,
         IReadOnlyCollection<string> revitPublishDirectories
     ) =>
         new(
@@ -31,6 +33,7 @@ public sealed record InstallerPayloadManifest(
             Path.GetFullPath(peaBootstrapDirectory),
             Path.GetFullPath(peaPayloadArchivePath),
             Path.GetFullPath(peaPayloadManifestPath),
+            Path.GetFullPath(peDevPublishDirectory),
             revitPublishDirectories.Select(Path.GetFullPath).ToArray()
         );
 

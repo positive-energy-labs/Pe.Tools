@@ -2,7 +2,7 @@
 
 ## Scope
 
-Owns local/operator workflows used by `pe-dev revit automation ...`: manifests, receipts, browse cache, repo-local paths, worker bundle building from local source, and CLI-facing orchestration. APS auth, Data Management, Object Storage, and Design Automation mechanics live in `Pe.Aps`.
+Owns local/operator workflows used by `pe-dev automation ...`: manifests, receipts, browse cache, repo-local paths, worker bundle building from local source, and CLI-facing orchestration. APS auth, Data Management, Object Storage, and Design Automation mechanics live in `Pe.Aps`.
 
 ## Purpose
 
@@ -33,13 +33,13 @@ Cheap compile loop:
 
 Primary operator commands:
 
-- `pe-dev revit automation auth login`
-- `pe-dev revit automation browse hubs`
-- `pe-dev revit automation browse models --recurse true --out <path>`
-- `pe-dev revit automation manifest validate --path <path>`
-- `pe-dev revit automation submit schedules --manifest <path> [--receipt <path>] [--json]`
-- `pe-dev revit automation inspect receipt --receipt latest [--download-artifacts true] [--json]`
-- `pe-dev revit automation workitem-status --workitem-id <id> [--include-report <true|false>] [--json]`
+- `pe-dev automation auth login`
+- `pe-dev automation browse hubs`
+- `pe-dev automation browse models --recurse true --out <path>`
+- `pe-dev automation manifest validate --path <path>`
+- `pe-dev automation submit schedules --manifest <path> [--receipt <path>] [--json]`
+- `pe-dev automation inspect receipt --receipt latest [--download-artifacts true] [--json]`
+- `pe-dev automation inspect workitem --workitem-id <id> [--include-report <true|false>] [--json]`
 
 Focused test coverage currently lives in:
 

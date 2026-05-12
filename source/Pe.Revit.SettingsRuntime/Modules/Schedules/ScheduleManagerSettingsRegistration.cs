@@ -7,7 +7,7 @@ using Pe.Shared.StorageRuntime.Modules;
 namespace Pe.Revit.SettingsRuntime.Modules.Schedules;
 
 public static class ScheduleManagerSettingsRegistration {
-    public const string ModuleKey = "Schedule Manager";
+    public const string ModuleKey = "CmdScheduleManager";
 
     public static StructuralSettingsModuleDescriptor Module { get; } = new(
         ModuleKey,

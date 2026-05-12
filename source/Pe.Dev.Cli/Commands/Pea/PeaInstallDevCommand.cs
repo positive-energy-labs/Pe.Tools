@@ -5,14 +5,14 @@ using System.Text.Json;
 
 namespace Pe.Dev.Cli;
 
-internal static class PeaRuntimeSyncCli {
+internal static class PeaInstallDevCommand {
     public static async Task<int> RunAsync(
         IReadOnlyList<string> args,
         string? repoRootOverride,
         CancellationToken cancellationToken
     ) {
         if (args.Count > 0) {
-            Console.Error.WriteLine("`pe-dev pea sync-runtime` does not accept additional arguments.");
+            Console.Error.WriteLine("`pe-dev pea install-dev` does not accept additional arguments.");
             return 10;
         }
 

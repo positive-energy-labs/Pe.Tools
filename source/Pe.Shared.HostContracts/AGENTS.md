@@ -10,8 +10,8 @@ Owns durable host-facing contracts: HTTP route constants, host operation definit
 
 ## Critical Entry Points
 
-- `Protocol/HttpRoutes.cs` and protocol constants - route and contract-version authority.
-- `Operations/` - typed host operation definitions and the public `pea` client catalog slice.
+- `Protocol/HostProtocolContracts.cs` and `Operations/` - route and contract-version authority.
+- `Operations/` - typed host operation definitions and the public `pea` client catalog slice; avoid caller-local route maps.
 - `Scripting/` - scripting HTTP and bridge operation DTOs.
 - `SettingsStorage/` - settings storage DTO contracts.
 - `PeHostClient.cs` - hand-maintained .NET host client that repo callers and scripts can consume directly.
@@ -25,4 +25,4 @@ Owns durable host-facing contracts: HTTP route constants, host operation definit
 
 - Do not recreate a separate host environment package. Product/process identity lives in `Pe.Shared.Product`; host HTTP + WS contract behavior lives here;.
 - Product names, executable names, env var names, default local URLs, and filesystem roots come from `Pe.Shared.Product`.
-- Keep contracts stable and explicit. Avoid adding host implementation services or Revit runtime dependencies here.
+- Keep contracts stable and explicit. Avoid adding host implementation services, caller-local route aliases, or Revit runtime dependencies here.

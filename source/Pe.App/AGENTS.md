@@ -22,9 +22,9 @@ itself.
 
 ## Validation
 
-- Do not build this project during RRD; building during a live Rider/Revit debug session always breaks hot reload.
-- For compile verification, use plain terminal `dotnet build`; note that this will not refresh live-runtime.
-- If you want to validate a changed runtime package through scripting or `Pe.Revit.Tests`, build the affected package-local outputs and run `pe-dev revit hot-reload` manually first.
+- Do not run interactive `Pe.App` builds during RRD; package-local deploy builds can break hot reload and force a costly restart.
+- For compile verification, use plain terminal `dotnet build`; it uses isolated outputs and does not refresh live runtime.
+- If you want to validate a changed runtime package through scripting or `Pe.Revit.Tests`, build the affected package-local outputs and run `pe-dev revit sync-runtime` first.
 - Prefer validating runtime-facing fixes through the smallest affected command or focused `.Tests` configuration when
   possible.
 - If a change should affect bridge behavior, verify both add-in startup wiring and the corresponding `Pe.Host`

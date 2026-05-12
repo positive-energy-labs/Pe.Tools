@@ -12,7 +12,7 @@ Owns the VSTest-based Revit-backed test harness for this repo.
 
 - `Pe.Revit.Tests.csproj` - explicit-year `.Tests` configurations, warning policy, and adapter metadata.
 - `..\Pe.App\Pe.App.csproj` - desktop add-in graph under test.
-- `..\Pe.Dev.Cli\AGENTS.md` - explicit `pe-dev revit test` helper behavior and repo-local operator policy.
+- `..\Pe.Dev.Cli\AGENTS.md` - explicit `pe-dev revit test fresh` helper behavior and repo-local operator policy.
 
 ## Validation
 
@@ -31,7 +31,7 @@ Two verify targets matter here:
   - use when:
     you need a dedicated fresh Revit process that must not reuse `RRD`
   - current helper:
-    `pe-dev revit test ...`
+    `pe-dev revit test fresh ...`
 
 Canonical attached-runtime loop:
 
@@ -44,7 +44,7 @@ dotnet test source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests --fil
 Current dedicated fresh-process helper:
 
 ```powershell
-pe-dev revit test --filter "Name~AssemblyLoadDiagnostics"
+pe-dev revit test fresh --filter "Name~AssemblyLoadDiagnostics"
 ```
 
 Bare `dotnet test source/Pe.Revit.Tests/Pe.Revit.Tests.csproj` with no explicit year/config is invalid and fails with guidance.

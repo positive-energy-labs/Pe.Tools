@@ -3,46 +3,60 @@ using Pe.Shared.Product;
 
 namespace Build;
 
+internal sealed record GeneratedBuildContractFile(string Path, string Content);
+
 internal static class BuildContractSync {
-    public static IReadOnlyList<string> SyncAll(string repositoryRoot) {
+    public static IReadOnlyList<GeneratedBuildContractFile> RenderAll(string repositoryRoot) {
         var matrix = BuildConfigurationFile.LoadAuthoring(repositoryRoot);
         var taxonomy = BuildTaxonomyFile.Load(repositoryRoot);
         var packagePolicies = BuildPackagePolicyFile.Load(repositoryRoot);
         var productLayout = ProductBuildLayoutProjection.CreateDefault();
 
-        var generatedFiles = new List<string>();
-        WriteIfChanged(
-            Path.Combine(repositoryRoot, BuildGeneratedContractPaths.MatrixConfigurationFilePath),
-            RenderMatrixConfiguration(matrix),
-            generatedFiles
-        );
-        WriteIfChanged(
-            Path.Combine(repositoryRoot, BuildGeneratedContractPaths.MatrixTargetFrameworkFilePath),
-            RenderMatrixTargetFramework(matrix),
-            generatedFiles
-        );
-        WriteIfChanged(
-            Path.Combine(repositoryRoot, BuildGeneratedContractPaths.TaxonomyEvaluatorFilePath),
-            RenderTaxonomyEvaluator(taxonomy),
-            generatedFiles
-        );
-        WriteIfChanged(
-            Path.Combine(repositoryRoot, BuildGeneratedContractPaths.TaxonomyValidationTargetsFilePath),
-            RenderTaxonomyValidationTargets(),
-            generatedFiles
-        );
-        WriteIfChanged(
-            Path.Combine(repositoryRoot, BuildGeneratedContractPaths.PackagePolicyFilePath),
-            RenderPackagePolicy(packagePolicies),
-            generatedFiles
-        );
-        WriteIfChanged(
-            Path.Combine(repositoryRoot, BuildGeneratedContractPaths.ProductLayoutFilePath),
-            RenderProductLayout(productLayout),
-            generatedFiles
-        );
+        return [
+            new GeneratedBuildContractFile(
+                Path.Combine(repositoryRoot, BuildGeneratedContractPaths.MatrixConfigurationFilePath),
+                NormalizeContent(RenderMatrixConfiguration(matrix))
+            ),
+            new GeneratedBuildContractFile(
+                Path.Combine(repositoryRoot, BuildGeneratedContractPaths.MatrixTargetFrameworkFilePath),
+                NormalizeContent(RenderMatrixTargetFramework(matrix))
+            ),
+            new GeneratedBuildContractFile(
+                Path.Combine(repositoryRoot, BuildGeneratedContractPaths.TaxonomyEvaluatorFilePath),
+                NormalizeContent(RenderTaxonomyEvaluator(taxonomy))
+            ),
+            new GeneratedBuildContractFile(
+                Path.Combine(repositoryRoot, BuildGeneratedContractPaths.TaxonomyValidationTargetsFilePath),
+                NormalizeContent(RenderTaxonomyValidationTargets())
+            ),
+            new GeneratedBuildContractFile(
+                Path.Combine(repositoryRoot, BuildGeneratedContractPaths.PackagePolicyFilePath),
+                NormalizeContent(RenderPackagePolicy(packagePolicies))
+            ),
+            new GeneratedBuildContractFile(
+                Path.Combine(repositoryRoot, BuildGeneratedContractPaths.ProductLayoutFilePath),
+                NormalizeContent(RenderProductLayout(productLayout))
+            )
+        ];
+    }
 
+    public static IReadOnlyList<string> CheckAll(string repositoryRoot) => RenderAll(repositoryRoot)
+        .Where(file => !File.Exists(file.Path) || !string.Equals(File.ReadAllText(file.Path), file.Content, StringComparison.Ordinal))
+        .Select(file => file.Path)
+        .ToArray();
+
+    public static IReadOnlyList<string> SyncAll(string repositoryRoot) {
+        var generatedFiles = new List<string>();
+        foreach (var file in RenderAll(repositoryRoot))
+            WriteIfChanged(file.Path, file.Content, generatedFiles);
         return generatedFiles;
+    }
+
+    private static string NormalizeContent(string content) {
+        var normalizedContent = content.Replace("\r\n", "\n").Replace("\n", Environment.NewLine);
+        if (!normalizedContent.EndsWith(Environment.NewLine, StringComparison.Ordinal))
+            normalizedContent += Environment.NewLine;
+        return normalizedContent;
     }
 
     private static void WriteIfChanged(string path, string content, ICollection<string> generatedFiles) {

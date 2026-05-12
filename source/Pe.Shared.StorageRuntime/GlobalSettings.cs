@@ -4,11 +4,6 @@ using System.ComponentModel.DataAnnotations;
 namespace Pe.Shared.StorageRuntime;
 
 public sealed class GlobalSettings {
-    [Description(
-        "The desktop-app client id of the Autodesk Platform Services app. If none exists yet, make a 'Desktop App' at https://aps.autodesk.com/hubs/@personal/applications/"
-    )]
-    [Required]
-    public string ApsDesktopClientId1 { get; set; } = "";
 
     [Description(
         "The web-app client id of the Autodesk Platform Services app. If none exists yet, make a 'Traditional Web App' at https://aps.autodesk.com/hubs/@personal/applications/"

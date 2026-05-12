@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 
 namespace Pe.Dev.Cli;
 
-internal static class RuntimeStatusCli {
+internal static class EnvStatusCommand {
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
 
     public static int Run(IReadOnlyList<string> args) {
@@ -16,7 +16,7 @@ internal static class RuntimeStatusCli {
                 jsonOutput = true;
                 break;
             default:
-                Console.Error.WriteLine($"Unknown runtime status option '{arg}'. Supported options: --json.");
+                Console.Error.WriteLine($"Unknown env status option '{arg}'. Supported options: --json.");
                 return 10;
             }
         }

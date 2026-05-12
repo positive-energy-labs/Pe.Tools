@@ -12,13 +12,20 @@ import {
   resolveHostBaseUrl,
   resolveWorkspaceKey,
 } from "./pe-host.js";
-import { PeHostClientError } from "./generated/pe-host-client.js";
+import {
+  HostLogTarget,
+  PeHostClientError,
+  ScriptExecutionSourceKind,
+} from "./host-client.js";
 import type {
   HostLogsData,
-  HostLogTarget,
   HostProbeData,
   HostSessionSummaryData,
-} from "./generated/pe-host-client.js";
+} from "./host-client.js";
+import {
+  peaCliIdentity,
+  productIdentity,
+} from "./generated/product.generated.js";
 
 interface PeHostStatusSnapshot {
   probe: HostProbeData;
@@ -209,7 +216,9 @@ const scriptExecuteCommand = define({
       hostBaseUrl,
       () => createPeHostClient(hostBaseUrl).scripting.execute({
         workspaceKey: ctx.values.workspace,
-        sourceKind: isWorkspacePath ? "WorkspacePath" : "InlineSnippet",
+        sourceKind: isWorkspacePath
+          ? ScriptExecutionSourceKind.WorkspacePath
+          : ScriptExecutionSourceKind.InlineSnippet,
         sourcePath: ctx.values.sourcePath,
         scriptContent,
         sourceName: ctx.values.sourceName,
@@ -390,11 +399,11 @@ async function getPeaRuntimeStatus(): Promise<{
   manifestPath: string | null;
 }> {
   const peaRoot = resolvePeaRoot();
-  const currentVersionPath = join(peaRoot, "current.txt");
+  const currentVersionPath = join(peaRoot, peaCliIdentity.currentVersionFileName);
   const activeVersion = await readOptionalText(currentVersionPath);
   const normalizedVersion = activeVersion?.trim() || null;
-  const activeVersionRoot = normalizedVersion ? join(peaRoot, "versions", normalizedVersion) : null;
-  const manifestPath = activeVersionRoot ? join(activeVersionRoot, "pea-payload.json") : null;
+  const activeVersionRoot = normalizedVersion ? join(peaRoot, peaCliIdentity.versionsDirectoryName, normalizedVersion) : null;
+  const manifestPath = activeVersionRoot ? join(activeVersionRoot, peaCliIdentity.payloadManifestFileName) : null;
   return {
     peaRoot,
     currentVersionPath,
@@ -409,8 +418,8 @@ async function updatePeaRuntime(manifestRef: string): Promise<{
   currentVersionPath: string;
 }> {
   const peaRoot = resolvePeaRoot();
-  const packagesRoot = join(peaRoot, "packages");
-  const versionsRoot = join(peaRoot, "versions");
+  const packagesRoot = join(peaRoot, peaCliIdentity.packagesDirectoryName);
+  const versionsRoot = join(peaRoot, peaCliIdentity.versionsDirectoryName);
   await mkdir(packagesRoot, { recursive: true });
   await mkdir(versionsRoot, { recursive: true });
 
@@ -428,10 +437,10 @@ async function updatePeaRuntime(manifestRef: string): Promise<{
   await rm(versionRoot, { recursive: true, force: true });
   await mkdir(tempRoot, { recursive: true });
   await extractZip(archivePath, tempRoot);
-  await writeFile(join(tempRoot, "pea-payload.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf-8");
+  await writeFile(join(tempRoot, peaCliIdentity.payloadManifestFileName), `${JSON.stringify(manifest, null, 2)}\n`, "utf-8");
   await rename(tempRoot, versionRoot);
 
-  const currentVersionPath = join(peaRoot, "current.txt");
+  const currentVersionPath = join(peaRoot, peaCliIdentity.currentVersionFileName);
   const tempCurrentPath = `${currentVersionPath}.tmp`;
   await writeFile(tempCurrentPath, manifest.version, "utf-8");
   await rename(tempCurrentPath, currentVersionPath);
@@ -463,9 +472,11 @@ async function readPayloadManifest(manifestRef: string): Promise<PeaPayloadManif
 }
 
 function validatePayloadManifest(manifest: PeaPayloadManifest): void {
-  if (manifest.schemaVersion !== 1)
+  if (manifest.schemaVersion !== peaCliIdentity.payloadManifestSchemaVersion)
     throw new Error(`Unsupported pea payload manifest schema ${manifest.schemaVersion}.`);
-  if (manifest.payloadName !== "pea")
+  if (manifest.productName !== productIdentity.productName)
+    throw new Error(`Unsupported product '${manifest.productName}'.`);
+  if (manifest.payloadName !== peaCliIdentity.directoryName)
     throw new Error(`Unsupported payload '${manifest.payloadName}'.`);
   if (!/^[0-9A-Za-z][0-9A-Za-z._-]*$/.test(manifest.version))
     throw new Error(`Invalid payload version '${manifest.version}'.`);
@@ -577,13 +588,13 @@ async function getHostStatus(hostBaseUrl: string): Promise<PeHostStatusSnapshot>
 function parseLogTarget(value: string): HostLogTarget {
   switch (value.toLowerCase()) {
     case "host":
-      return "Host";
+      return HostLogTarget.Host;
     case "revit":
     case "app":
-      return "Revit";
+      return HostLogTarget.Revit;
     case "all":
     case "both":
-      return "All";
+      return HostLogTarget.All;
     default:
       throw new Error("Unknown log target. Expected host, revit, or all.");
   }

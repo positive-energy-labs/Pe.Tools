@@ -1,10 +1,14 @@
-import { PeHostClient } from "./generated/pe-host-client.js";
+import { PeHostClient } from "./host-client.js";
+import {
+  hostProcessIdentity,
+  scriptingWorkspaceIdentity,
+} from "./generated/product.generated.js";
 
-export const defaultHostBaseUrl = "http://localhost:5180";
-export const defaultWorkspaceKey = "default";
+export const defaultHostBaseUrl = hostProcessIdentity.defaultHostBaseUrl;
+export const defaultWorkspaceKey = scriptingWorkspaceIdentity.defaultWorkspaceKey;
 
 export function resolveHostBaseUrl(value?: string): string {
-  return firstNonBlank(value, process.env.PE_TOOLS_HOST_BASE_URL) ?? defaultHostBaseUrl;
+  return firstNonBlank(value, process.env[hostProcessIdentity.hostBaseUrlVariable]) ?? defaultHostBaseUrl;
 }
 
 export function resolveWorkspaceKey(value?: string): string {

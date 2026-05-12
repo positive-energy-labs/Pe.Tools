@@ -1,20 +1,20 @@
-﻿using System.Globalization;
+using System.Globalization;
 
 namespace Pe.Dev.Cli;
 
-internal enum RevitLogTarget {
+internal enum EnvLogTarget {
     Host,
     App,
     All
 }
 
-internal sealed record RevitLogOptions(
-    RevitLogTarget Target,
+internal sealed record EnvLogOptions(
+    EnvLogTarget Target,
     int TailLineCount
 ) {
     private const int DefaultTailLineCount = 200;
 
-    public static RevitLogOptions Parse(IReadOnlyList<string> args) {
+    public static EnvLogOptions Parse(IReadOnlyList<string> args) {
         if (args.Count == 0)
             throw new ArgumentException("Missing log target. Expected `host`, `app`, or `all`.");
 
@@ -38,25 +38,25 @@ internal sealed record RevitLogOptions(
             }
         }
 
-        return new RevitLogOptions(target, tailLineCount);
+        return new EnvLogOptions(target, tailLineCount);
     }
 
     public IReadOnlyList<(string label, string filePath)> ResolveLogFiles() =>
         this.Target switch {
-            RevitLogTarget.Host => [("host", Pe.Dev.RevitAutomation.DevLogPathResolver.HostLogPath)],
-            RevitLogTarget.App => [("app", Pe.Dev.RevitAutomation.DevLogPathResolver.RevitAppLogPath)],
-            RevitLogTarget.All => [
+            EnvLogTarget.Host => [("host", Pe.Dev.RevitAutomation.DevLogPathResolver.HostLogPath)],
+            EnvLogTarget.App => [("app", Pe.Dev.RevitAutomation.DevLogPathResolver.RevitAppLogPath)],
+            EnvLogTarget.All => [
                 ("host", Pe.Dev.RevitAutomation.DevLogPathResolver.HostLogPath),
                 ("app", Pe.Dev.RevitAutomation.DevLogPathResolver.RevitAppLogPath)
             ],
             _ => throw new InvalidOperationException($"Unsupported log target '{this.Target}'.")
         };
 
-    private static RevitLogTarget ParseTarget(string value) =>
+    private static EnvLogTarget ParseTarget(string value) =>
         value.ToLowerInvariant() switch {
-            "host" => RevitLogTarget.Host,
-            "app" or "revit" => RevitLogTarget.App,
-            "all" or "both" => RevitLogTarget.All,
+            "host" => EnvLogTarget.Host,
+            "app" or "revit" => EnvLogTarget.App,
+            "all" or "both" => EnvLogTarget.All,
             _ => throw new ArgumentException($"Unknown log target '{value}'. Expected `host`, `app`, or `all`.")
         };
 

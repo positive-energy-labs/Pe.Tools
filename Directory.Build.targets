@@ -6,7 +6,7 @@
             BeforeTargets="CollectPackageReferences;PrepareForBuild"
             Condition="'$(PeWindowsDotnetEnvironmentUnsafe)' == 'true' and '$(DesignTimeBuild)' != 'true'"
     >
-        <Error Text="Unsafe Windows dotnet environment for project '$(MSBuildProjectName)': ProgramFiles='$(PeProgramFiles)', ProgramFiles(x86)='$(PeProgramFilesX86)', APPDATA='$(PeAppData)', LOCALAPPDATA='$(PeLocalAppData)', USERPROFILE='$(PeUserProfile)', SystemRoot='$(PeSystemRoot)', ComSpec='$(PeComSpec)'. Missing Windows environment variables can poison NuGet/MSBuild build servers and cause 'Value cannot be null. (Parameter path1)'. Run 'dotnet build-server shutdown' from a healthy shell, or use '.\tools\dotnet-sandbox-safe.ps1 &lt;dotnet arguments&gt;' for sandbox recovery." />
+        <Error Text="Unsafe Windows dotnet environment for project '$(MSBuildProjectName)': ProgramFiles='$(PeProgramFiles)', ProgramFiles(x86)='$(PeProgramFilesX86)', APPDATA='$(PeAppData)', LOCALAPPDATA='$(PeLocalAppData)', USERPROFILE='$(PeUserProfile)', SystemRoot='$(PeSystemRoot)', ComSpec='$(PeComSpec)'. Missing Windows environment variables can poison NuGet/MSBuild build servers and cause 'Value cannot be null. (Parameter path1)'. Use '.\tools\dotnet-sandbox-safe.ps1 &lt;dotnet arguments&gt;' for sandbox recovery. See docs/ENVIRONMENT.md." />
     </Target>
 
     <Target

@@ -103,10 +103,7 @@ internal sealed class BridgeAgent : IDisposable {
             moduleRegistry.GetModules().Count()
         );
         var requestService = new RequestService(revitTaskService, this._moduleRegistry, this._throttleGate);
-        var revitDataRequestService = new RevitDataRequestService(
-            revitTaskService,
-            this.PublishNotification
-        );
+        var revitDataRequestService = new RevitDataRequestService(revitTaskService);
         var bridgeOperationRegistry = new BridgeOperationRegistry();
         var scriptingMessageHandler = new ScriptingBridgeMessageHandler(
             () => RevitUiSession.CurrentUIApplication,
@@ -410,28 +407,6 @@ internal sealed class BridgeAgent : IDisposable {
         );
         await this.WriteFrameAsync(frame, this._shutdown.Token).ConfigureAwait(false);
         await this.SendStateSyncAsync(this._shutdown.Token).ConfigureAwait(false);
-    }
-
-    private void PublishNotification(string message) {
-        if (!this.IsConnected || string.IsNullOrWhiteSpace(message))
-            return;
-
-        _ = Task.Run(async () => {
-            try {
-                await this.PublishNotificationAsync(message).ConfigureAwait(false);
-            } catch (Exception ex) {
-                Log.Debug(ex, "Host bridge notification publish failed.");
-            }
-        });
-    }
-
-    private async Task PublishNotificationAsync(string message) {
-        var payloadJson = JsonConvert.SerializeObject(message, this._serializerSettings);
-        var frame = new BridgeFrame(
-            BridgeFrameKind.Event,
-            Event: new BridgeEvent(HostRuntimeEventNames.Notification, payloadJson)
-        );
-        await this.WriteFrameAsync(frame, this._shutdown.Token).ConfigureAwait(false);
     }
 
     private void SendRegistrationAndAwaitAck() {

@@ -7,6 +7,8 @@ import {
   resolveHostBaseUrl,
   resolveWorkspaceKey,
 } from "./pe-host.js";
+import { ScriptExecutionSourceKind } from "./host-client.js";
+import { ensurePeaBetaAuth } from "./beta-auth-bootstrap.js";
 
 export interface PeAgentOptions {
   hostBaseUrl?: string;
@@ -15,6 +17,8 @@ export interface PeAgentOptions {
 }
 
 export async function runPeAgent(options: PeAgentOptions = {}): Promise<void> {
+  await ensurePeaBetaAuth();
+
   const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
   const workspaceKey = resolveWorkspaceKey(options.workspaceKey);
   const hostClient = createPeHostClient(hostBaseUrl);
@@ -39,7 +43,7 @@ export async function runPeAgent(options: PeAgentOptions = {}): Promise<void> {
   const executeRevitScript = createTool({
     id: "execute_revit_script",
     description:
-      "Execute a C# Revit script through Pe.Host /api/scripting/execute. Use inline scriptContent for the quickest POC.",
+      "Execute a C# Revit script through the Pe.Host scripting contract. Use inline scriptContent for the quickest POC.",
     inputSchema: z.object({
       scriptContent: z.string().optional(),
       sourceKind: z
@@ -49,7 +53,15 @@ export async function runPeAgent(options: PeAgentOptions = {}): Promise<void> {
       workspaceKey: z.string().default(workspaceKey),
       sourceName: z.string().default("AgentSnippet.cs"),
     }),
-    execute: async (input) => hostClient.scripting.execute(input),
+    execute: async (input) => hostClient.scripting.execute({
+      scriptContent: input.scriptContent,
+      sourceKind: input.sourceKind === "WorkspacePath"
+        ? ScriptExecutionSourceKind.WorkspacePath
+        : ScriptExecutionSourceKind.InlineSnippet,
+      sourcePath: input.sourcePath,
+      workspaceKey: input.workspaceKey ?? workspaceKey,
+      sourceName: input.sourceName,
+    }),
   });
 
   const { harness, mcpManager, hookManager, authStorage } =

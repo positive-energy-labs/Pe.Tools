@@ -79,6 +79,9 @@ public sealed record ResolvedInstallerConfiguration {
     public string GetSingleUserPeaInstallDirectory() =>
         ToWixFolderPath("%LocalAppDataFolder%", this.LayoutProjection.Runtime.Binaries.PeaDirectoryRelativePath);
 
+    public string GetSingleUserPeDevInstallDirectory() =>
+        ToWixFolderPath("%LocalAppDataFolder%", this.LayoutProjection.Runtime.Binaries.PeDevDirectoryRelativePath);
+
     public string GetSingleUserRevitAddinsInstallDirectory() =>
         ToWixFolderPath("%AppDataFolder%", this.LayoutProjection.Revit.AddinsRootRelativePath);
 

@@ -50,6 +50,7 @@ Runtime files are rooted under:
   bin\
     host\
     pea\
+    pe-dev\
   state\
   logs\
   cache\
