@@ -132,7 +132,8 @@ public sealed class HostSettingsStorageService {
                     module.DefaultRootKey,
                     module.Roots.Select(root => root.RootKey).ToList(),
                     module.StorageOptions,
-                    this.CreateRootValidators(module)
+                    this.CreateRootValidators(module),
+                    new Dictionary<string, SettingsRootBootstrapDocument>(StringComparer.OrdinalIgnoreCase)
                 )
             }
         );

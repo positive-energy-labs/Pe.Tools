@@ -31,7 +31,8 @@ public sealed class StorageClient {
                 [binding.Module.ModuleKey] = SettingsStorageModuleRuntimeDefinition.CreateSingleRoot(
                     binding.RootKey,
                     binding.Module.StorageOptions,
-                    binding.CreateValidator(SettingsRuntimeMode.LiveDocument)
+                    binding.CreateValidator(SettingsRuntimeMode.LiveDocument),
+                    SettingsRootBootstrapDocument.Create<TSettings>()
                 )
             }
         );

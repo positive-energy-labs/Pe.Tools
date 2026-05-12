@@ -33,7 +33,7 @@ public sealed class LocalDiskSettingsStorageBackend(
         cancellationToken.ThrowIfCancellationRequested();
 
         options ??= new SettingsDiscoveryOptions();
-        _ = this.ResolveRequiredModuleDefinition(moduleKey, rootKey);
+        var moduleDefinition = this.ResolveRequiredModuleDefinition(moduleKey, rootKey);
         var rootDirectory = this.ResolveRootDirectory(moduleKey, rootKey);
         var discoveryRootPath = SettingsPathing.ResolveSafeSubDirectoryPath(
             rootDirectory,
@@ -48,12 +48,9 @@ public sealed class LocalDiskSettingsStorageBackend(
             ? rootKey
             : normalizedRootRelativePath.Split('/').Last();
 
-        if (!Directory.Exists(discoveryRootPath)) {
-            return Task.FromResult(new SettingsDiscoveryResult(
-                [],
-                new SettingsDirectoryNode(rootName, normalizedRootRelativePath, [], [])
-            ));
-        }
+        if (!Directory.Exists(discoveryRootPath))
+            _ = Directory.CreateDirectory(discoveryRootPath);
+        this.BootstrapRootDocuments(moduleDefinition, moduleKey, rootKey);
 
         var searchOption = options.Recursive
             ? SearchOption.AllDirectories
@@ -323,6 +320,26 @@ public sealed class LocalDiskSettingsStorageBackend(
         }
 
         return definition;
+    }
+
+    private void BootstrapRootDocuments(
+        SettingsStorageModuleRuntimeDefinition moduleDefinition,
+        string moduleKey,
+        string rootKey
+    ) {
+        if (!moduleDefinition.BootstrapDocuments.TryGetValue(rootKey, out var bootstrapDocument))
+            return;
+
+        var documentId = new SettingsDocumentId(moduleKey, rootKey, bootstrapDocument.RelativePath);
+        var documentPath = this.ResolveDocumentPath(documentId);
+        if (File.Exists(documentPath))
+            return;
+
+        var directory = Path.GetDirectoryName(documentPath);
+        if (!string.IsNullOrWhiteSpace(directory) && !Directory.Exists(directory))
+            _ = Directory.CreateDirectory(directory);
+
+        File.WriteAllText(documentPath, JsonFormatting.NormalizeTrailingNewline(bootstrapDocument.CreateContent()));
     }
 
     private static bool ShouldRunCompositionPreflight(
