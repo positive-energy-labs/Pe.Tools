@@ -13,16 +13,15 @@ const int HostProcessLogMaxLines = 2000;
 const long HostLogTrimThresholdBytes = 1_048_576;
 
 var options = BridgeHostOptions.FromEnvironment();
-using var singletonHandle = HostSingletonGuard.TryAcquireOrExit(options);
-if (singletonHandle == null)
-    return;
-
-var builder = WebApplication.CreateBuilder(args);
 var hostLogFile = new ManagedLogFile(
     ProductRuntimeLayout.ForCurrentUser().Logs.HostLogPath,
     HostProcessLogMaxLines,
     HostLogTrimThresholdBytes
 );
+
+using var singletonLease = AcquireSingletonLease(options, hostLogFile);
+
+var builder = WebApplication.CreateBuilder(args);
 
 builder.Logging.AddProvider(new HostFileLoggerProvider(hostLogFile));
 
@@ -124,5 +123,16 @@ app.Logger.LogInformation(
     options.IdleShutdownTimeout.TotalMinutes
 );
 app.Logger.LogInformation("Host file logging enabled at {LogFilePath}", hostLogFile.FilePath);
+_ = singletonLease.StopWhenTakeoverRequestedAsync(app);
 
 app.Run(options.HostBaseUrl);
+
+static HostSingletonLease AcquireSingletonLease(BridgeHostOptions options, ManagedLogFile hostLogFile) {
+    try {
+        hostLogFile.AppendStructuredEntry("INF", "Pe.Host.Program", $"Starting Pe.Host for {options.HostBaseUrl}.");
+        return HostSingletonGuard.AcquireOrTakeOver(options, hostLogFile);
+    } catch (Exception ex) {
+        hostLogFile.AppendStructuredEntry("CRT", "Pe.Host.Program", "Pe.Host startup failed before web host initialization completed.", exception: ex);
+        throw;
+    }
+}

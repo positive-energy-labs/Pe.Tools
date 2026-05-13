@@ -10,9 +10,8 @@ public static class HostProcessIdentity {
     public const string FrontendBaseUrlVariable = "PE_TOOLS_FRONTEND_BASE_URL";
     public const string HostBaseUrlVariable = "PE_TOOLS_HOST_BASE_URL";
     public const string HostExecutablePathVariable = "PE_TOOLS_HOST_EXECUTABLE_PATH";
-    public const string HostAutoStartEnabledVariable = "PE_TOOLS_HOST_AUTOSTART_ENABLED";
-    public const string BridgeAutoConnectEnabledVariable = "PE_TOOLS_BRIDGE_AUTO_CONNECT";
     public const string HostSingletonMutexName = @"Global\PositiveEnergy.Pe.Tools.Host";
+    public const string HostTakeoverEventName = @"Global\PositiveEnergy.Pe.Tools.Host.Takeover";
 
     public const string DefaultFrontendBaseUrl = "http://localhost:5150";
     public const string DefaultHostBaseUrl = "http://localhost:5180";
