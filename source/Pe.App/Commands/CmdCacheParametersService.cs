@@ -135,17 +135,17 @@ public class CmdCacheParametersService : IExternalCommand {
         if (data.Count == 0) return;
 
         var abridgedData = data.Select(p => new {
-                p.Id,
-                p.Name,
-                p.Description,
-                p.IsInstance,
-                p.ValueTypeId,
-                p.SpecId,
-                p.SpecLabel,
-                p.GroupId,
-                p.GroupLabel,
-                p.CategoryIds
-            }
+            p.Id,
+            p.Name,
+            p.Description,
+            p.IsInstance,
+            p.ValueTypeId,
+            p.SpecId,
+            p.SpecLabel,
+            p.GroupId,
+            p.GroupLabel,
+            p.CategoryIds
+        }
         ).ToList();
 
         var json = JsonConvert.SerializeObject(abridgedData, Formatting.Indented);

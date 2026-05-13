@@ -29,8 +29,6 @@ itself.
   possible.
 - If a change should affect bridge behavior, verify both add-in startup wiring and the corresponding `Pe.Host`
   endpoint/service path.
-- Auto-connect is opt-in through `PE_TOOLS_BRIDGE_AUTO_CONNECT=true`. Do not silently turn the bridge into an
-  always-on startup dependency.
 
 ## Shared Language
 

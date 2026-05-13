@@ -53,15 +53,17 @@ export async function runPeAgent(options: PeAgentOptions = {}): Promise<void> {
       workspaceKey: z.string().default(workspaceKey),
       sourceName: z.string().default("AgentSnippet.cs"),
     }),
-    execute: async (input) => hostClient.scripting.execute({
-      scriptContent: input.scriptContent,
-      sourceKind: input.sourceKind === "WorkspacePath"
-        ? ScriptExecutionSourceKind.WorkspacePath
-        : ScriptExecutionSourceKind.InlineSnippet,
-      sourcePath: input.sourcePath,
-      workspaceKey: input.workspaceKey ?? workspaceKey,
-      sourceName: input.sourceName,
-    }),
+    execute: async (input) =>
+      hostClient.scripting.execute({
+        scriptContent: input.scriptContent,
+        sourceKind:
+          input.sourceKind === "WorkspacePath"
+            ? ScriptExecutionSourceKind.WorkspacePath
+            : ScriptExecutionSourceKind.InlineSnippet,
+        sourcePath: input.sourcePath,
+        workspaceKey: input.workspaceKey ?? workspaceKey,
+        sourceName: input.sourceName,
+      }),
   });
 
   const { harness, mcpManager, hookManager, authStorage } =
@@ -84,8 +86,8 @@ export async function runPeAgent(options: PeAgentOptions = {}): Promise<void> {
     hookManager,
     authStorage,
     mcpManager,
-    appName: "Pe Agent",
-    version: "0.17.2",
+    appName: "Pea (Positive Energy Agent)",
+    version: "0.5.0",
   });
 
   tui.run();

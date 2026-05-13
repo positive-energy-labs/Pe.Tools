@@ -55,6 +55,19 @@ public sealed class RevitAddinComponent : IInstallableComponent {
         ];
     }
 
+    public IReadOnlyCollection<ManagedAction> BuildInstallActions(InstallerContext context) =>
+        [
+            new ManagedAction(
+                CustomActions.RemoveLegacyBetaInstallPaths,
+                Return.check,
+                When.Before,
+                Step.InstallFiles,
+                Condition.NOT_Installed
+            ) {
+                Execute = Execute.deferred
+            }
+        ];
+
     public IReadOnlyCollection<ManagedAction> BuildUninstallActions(InstallerContext context) =>
         [
             new ManagedAction(

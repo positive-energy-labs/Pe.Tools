@@ -54,8 +54,7 @@ public class Application : ExternalApplication {
 
         CreateLogger();
 
-        // Initialize the host bridge metadata. Bridge connection remains manual
-        // unless PE_TOOLS_BRIDGE_AUTO_CONNECT is explicitly enabled.
+        // Initialize the host bridge metadata.
         HostRuntime.Initialize(revitTaskService, registry => {
             registry.RegisterModules(StorageRuntimeStructuralModules.All);
             registry.RegisterModules(RevitSettingsRuntimeRegistration.StructuralModules);
@@ -63,7 +62,7 @@ public class Application : ExternalApplication {
             registry.RegisterModules(FamilyFoundrySettingsRegistration.StructuralModules);
             registry.RegisterRootBindings(FamilyFoundrySettingsRegistration.RootBindings);
         });
-        TryAutoConnectBridge();
+        TryConnectBridge();
         this.CreateRibbon();
 
         // Initialize task registry
@@ -133,28 +132,22 @@ public class Application : ExternalApplication {
 
     private void CreateRibbon() => ButtonRegistry.BuildRibbon(this.Application, "PE TOOLS");
 
-    private static void TryAutoConnectBridge() {
-        var configuredValue =
-            Environment.GetEnvironmentVariable(HostProcessIdentity.BridgeAutoConnectEnabledVariable);
-        if (!bool.TryParse(configuredValue, out var isEnabled) || !isEnabled)
-            return;
-
-        var hostLaunchResult = PeHostLauncher.EnsureRunning();
-        if (!hostLaunchResult.Success) {
+    private static void TryConnectBridge() {
+        var result = HostBridgeConnector.EnsureConnected();
+        if (!result.HostLaunchResult.Success) {
             Log.Warning(
                 "Host bridge auto-connect skipped because host startup failed: {Message}",
-                hostLaunchResult.Message
+                result.HostLaunchResult.Message
             );
             return;
         }
 
-        var connectResult = HostRuntime.Connect();
-        if (connectResult.Success) {
-            Log.Information("Host bridge auto-connect succeeded: {Message}", connectResult.Message);
+        if (result.RuntimeActionResult.Success) {
+            Log.Information("Host bridge auto-connect succeeded: {Message}", result.RuntimeActionResult.Message);
             return;
         }
 
-        Log.Warning("Host bridge auto-connect failed: {Message}", connectResult.Message);
+        Log.Warning("Host bridge auto-connect failed: {Message}", result.RuntimeActionResult.Message);
     }
 
     private static void CreateLogger() {

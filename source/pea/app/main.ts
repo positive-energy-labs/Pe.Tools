@@ -23,6 +23,7 @@ import type {
   HostSessionSummaryData,
 } from "./host-client.js";
 import {
+  hostProcessIdentity,
   peaCliIdentity,
   productIdentity,
 } from "./generated/product.generated.js";
@@ -604,8 +605,79 @@ async function callPeHost<T>(hostBaseUrl: string, action: () => Promise<T>): Pro
   try {
     return await action();
   } catch (error) {
+    if (!(error instanceof PeHostClientError)) {
+      try {
+        await ensurePeHostRunning(hostBaseUrl);
+        return await action();
+      } catch (retryError) {
+        throw new Error(formatPeHostError(hostBaseUrl, retryError));
+      }
+    }
+
     throw new Error(formatPeHostError(hostBaseUrl, error));
   }
+}
+
+async function ensurePeHostRunning(hostBaseUrl: string): Promise<void> {
+  try {
+    await createPeHostClient(hostBaseUrl).host.getProbe();
+    return;
+  } catch (error) {
+    if (error instanceof PeHostClientError)
+      return;
+  }
+
+  const hostExecutablePath = await resolveHostExecutablePath();
+  if (!hostExecutablePath)
+    return;
+
+  const child = spawn(hostExecutablePath, [], {
+    cwd: dirname(hostExecutablePath),
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  child.unref();
+
+  const deadline = Date.now() + 8000;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    await delay(250);
+    try {
+      await createPeHostClient(hostBaseUrl).host.getProbe();
+      return;
+    } catch (error) {
+      lastError = error;
+      if (error instanceof PeHostClientError)
+        return;
+    }
+  }
+
+  const detail = lastError instanceof Error ? lastError.message : String(lastError ?? "unknown error");
+  throw new Error(`Started Pe.Host from ${hostExecutablePath}, but it did not become reachable at ${hostBaseUrl} within 8 seconds. Last probe error: ${detail}`);
+}
+
+async function resolveHostExecutablePath(): Promise<string | null> {
+  const candidates = [
+    process.env[hostProcessIdentity.hostExecutablePathVariable],
+    join(dirname(resolvePeaRoot()), hostProcessIdentity.directoryName, hostProcessIdentity.executableName),
+  ].filter((value): value is string => value != null && value.trim().length > 0);
+
+  for (const candidate of candidates) {
+    try {
+      const resolved = resolve(candidate);
+      const fileStat = await stat(resolved);
+      if (fileStat.isFile())
+        return resolved;
+    } catch {
+    }
+  }
+
+  return null;
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds));
 }
 
 function formatPeHostError(hostBaseUrl: string, error: unknown): string {
@@ -624,7 +696,7 @@ function formatPeHostError(hostBaseUrl: string, error: unknown): string {
   return [
     `Pe.Host is not reachable at ${hostBaseUrl}.`,
     detail,
-    "Start Revit/Pe.Host, or pass --host <url>.",
+    "Check the Pe.Host install path, host logs, or pass --host <url>.",
   ].join("\n");
 }
 

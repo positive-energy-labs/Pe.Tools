@@ -7,6 +7,14 @@ using WixToolset.Dtf.WindowsInstaller;
 namespace Installer;
 
 public static class CustomActions {
+    private static readonly string[] LegacyInstallNames = [
+        "PE_Tools",
+        "Pe.App",
+        "PE Tools",
+        "Pe.Tools",
+        "Positive Energy"
+    ];
+
     [CustomAction]
     public static ActionResult InstallPeaPayload(Session session) {
         try {
@@ -65,6 +73,22 @@ public static class CustomActions {
     }
 
     [CustomAction]
+    public static ActionResult RemoveLegacyBetaInstallPaths(Session session) {
+        try {
+            foreach (var root in ResolveLegacyApplicationPluginRoots())
+                RemoveLegacyApplicationPluginDirectories(session, root);
+
+            foreach (var addinsRoot in ResolveLegacyRevitAddinsRoots())
+                RemoveLegacyRevitAddinPaths(session, addinsRoot);
+
+            return ActionResult.Success;
+        } catch (Exception ex) {
+            session.Log($"Failed to remove legacy beta install paths: {ex}");
+            return ActionResult.Success;
+        }
+    }
+
+    [CustomAction]
     public static ActionResult RemovePeaPayloadVersions(Session session) {
         try {
             var peaRoot = RequireInstallPeaPath(session);
@@ -113,6 +137,103 @@ public static class CustomActions {
             throw new InvalidOperationException("INSTALLPEA was not resolved.");
 
         return Path.GetFullPath(path);
+    }
+
+    private static IEnumerable<string> ResolveLegacyApplicationPluginRoots() {
+        var applicationData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var commonApplicationData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+
+        yield return Path.Combine(applicationData, RevitDeploymentIdentity.AutodeskDirectoryName, "ApplicationPlugins");
+        yield return Path.Combine(commonApplicationData, RevitDeploymentIdentity.AutodeskDirectoryName, "ApplicationPlugins");
+    }
+
+    private static IEnumerable<string> ResolveLegacyRevitAddinsRoots() {
+        var applicationData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var commonApplicationData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+
+        yield return RevitDeploymentIdentity.ResolvePerUserAddinsRootPath(applicationData);
+        yield return Path.Combine(
+            commonApplicationData,
+            RevitDeploymentIdentity.AutodeskDirectoryName,
+            RevitDeploymentIdentity.RevitDirectoryName,
+            RevitDeploymentIdentity.AddinsDirectoryName
+        );
+    }
+
+    private static void RemoveLegacyApplicationPluginDirectories(Session session, string root) {
+        if (!Directory.Exists(root)) {
+            session.Log($"Legacy ApplicationPlugins root does not exist: {root}");
+            return;
+        }
+
+        foreach (var directory in Directory.EnumerateDirectories(root)
+                     .Where(path => IsLegacyInstallName(Path.GetFileName(path)))
+                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)) {
+            TryDeleteDirectory(session, directory);
+        }
+    }
+
+    private static void RemoveLegacyRevitAddinPaths(Session session, string addinsRoot) {
+        if (!Directory.Exists(addinsRoot)) {
+            session.Log($"Legacy Revit add-ins root does not exist: {addinsRoot}");
+            return;
+        }
+
+        foreach (var yearDirectory in Directory.EnumerateDirectories(addinsRoot)
+                     .Where(IsRevitYearDirectory)
+                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)) {
+            RemoveLegacyRevitAddinYearPaths(session, yearDirectory);
+        }
+    }
+
+    private static void RemoveLegacyRevitAddinYearPaths(Session session, string yearDirectory) {
+        var currentShapeDirectory = Path.Combine(yearDirectory, RevitDeploymentIdentity.AddinAssemblyDirectoryName);
+        var hasCurrentShape = IsCurrentRevitAddinShape(currentShapeDirectory);
+
+        foreach (var directory in Directory.EnumerateDirectories(yearDirectory)
+                     .Where(path => IsLegacyInstallName(Path.GetFileName(path)))
+                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)) {
+            if (hasCurrentShape && IsCurrentRevitAddinDirectory(directory)) {
+                session.Log($"Skipping current Revit add-in directory shape: {directory}");
+                continue;
+            }
+
+            TryDeleteDirectory(session, directory);
+        }
+
+        foreach (var addinFile in Directory.EnumerateFiles(yearDirectory, "*.addin", SearchOption.TopDirectoryOnly)
+                     .Where(path => IsLegacyInstallName(Path.GetFileNameWithoutExtension(path)))
+                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)) {
+            if (hasCurrentShape && IsCurrentRevitAddinManifest(addinFile)) {
+                session.Log($"Skipping current Revit add-in manifest shape: {addinFile}");
+                continue;
+            }
+
+            TryDeleteFile(session, addinFile);
+        }
+    }
+
+    private static bool IsLegacyInstallName(string name) =>
+        LegacyInstallNames.Contains(name, StringComparer.OrdinalIgnoreCase);
+
+    private static bool IsCurrentRevitAddinDirectory(string directory) =>
+        string.Equals(
+            Path.GetFileName(directory),
+            RevitDeploymentIdentity.AddinAssemblyDirectoryName,
+            StringComparison.OrdinalIgnoreCase
+        );
+
+    private static bool IsCurrentRevitAddinManifest(string path) =>
+        string.Equals(
+            Path.GetFileName(path),
+            RevitDeploymentIdentity.AddinManifestFileName,
+            StringComparison.OrdinalIgnoreCase
+        );
+
+    private static bool IsCurrentRevitAddinShape(string assemblyDirectory) {
+        var descriptorPath = Path.Combine(assemblyDirectory, RevitDeploymentIdentity.RuntimeDescriptorFileName);
+        return PeAppRuntimeDeploymentDescriptor.TryLoad(descriptorPath, out var descriptor)
+               && descriptor is not null;
     }
 
     private static PeaPayloadManifest ReadManifest(string manifestPath) {

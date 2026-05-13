@@ -34,7 +34,8 @@ public static class HostReachability {
         if (!TryGetProbe(hostBaseUrl, out probe, out errorMessage, timeoutMs))
             return false;
 
-        return HostProbeCompatibility.IsCompatible(probe);
+        errorMessage = HostProbeCompatibility.DescribeIncompatibility(probe);
+        return errorMessage == null;
     }
 
     public static bool TryGetSessionSummary(

@@ -15,9 +15,8 @@ export const hostProcessIdentity = {
   frontendBaseUrlVariable: "PE_TOOLS_FRONTEND_BASE_URL",
   hostBaseUrlVariable: "PE_TOOLS_HOST_BASE_URL",
   hostExecutablePathVariable: "PE_TOOLS_HOST_EXECUTABLE_PATH",
-  hostAutoStartEnabledVariable: "PE_TOOLS_HOST_AUTOSTART_ENABLED",
-  bridgeAutoConnectEnabledVariable: "PE_TOOLS_BRIDGE_AUTO_CONNECT",
   hostSingletonMutexName: "Global\\PositiveEnergy.Pe.Tools.Host",
+  hostTakeoverEventName: "Global\\PositiveEnergy.Pe.Tools.Host.Takeover",
   defaultFrontendBaseUrl: "http://localhost:5150",
   defaultHostBaseUrl: "http://localhost:5180",
 } as const;

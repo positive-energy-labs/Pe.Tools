@@ -25,9 +25,6 @@ internal static class PeHostLauncher {
                 return new PeHostLaunchResult(true, true, false,
                     "Host is already running.");
 
-            if (!IsAutoStartEnabled())
-                return new PeHostLaunchResult(false, false, false, GetAutoStartDisabledMessage());
-
             if (!TryResolveLaunchCommand(out var launchCommand, out var launchArguments, out var workingDirectory)) {
                 return new PeHostLaunchResult(
                     false,
@@ -43,16 +40,17 @@ internal static class PeHostLauncher {
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
-            _ = Process.Start(startInfo);
+            var process = Process.Start(startInfo);
 
             var startupTimeout = TimeSpan.FromMilliseconds(GetStartupTimeoutMs());
             var deadlineUtc = DateTime.UtcNow + startupTimeout;
+            string? lastProbeError = null;
             while (DateTime.UtcNow < deadlineUtc) {
                 Thread.Sleep(250);
                 if (HostReachability.TryGetCompatibleProbe(
                         GetHostBaseUrl(),
                         out _,
-                        out _,
+                        out lastProbeError,
                         GetHostProbeTimeoutMs()
                     )) {
                     return new PeHostLaunchResult(
@@ -68,7 +66,14 @@ internal static class PeHostLauncher {
                 false,
                 false,
                 true,
-                $"Started Pe.Host but it did not become compatible within {startupTimeout.TotalSeconds:0.#} seconds."
+                FormatStartupTimeoutMessage(
+                    startupTimeout,
+                    launchCommand,
+                    launchArguments,
+                    workingDirectory,
+                    process?.Id,
+                    lastProbeError
+                )
             );
         } catch (Exception ex) {
             return new PeHostLaunchResult(false, false, false, ex.Message);
@@ -131,16 +136,28 @@ internal static class PeHostLauncher {
     internal static string GetHostBaseUrl() => HostProcessIdentity.ResolveHostBaseUrl();
     private static int GetStartupTimeoutMs() => HostRuntimeDefaults.DefaultHostStartupTimeoutMs;
     private static int GetHostProbeTimeoutMs() => HostRuntimeDefaults.DefaultHostProbeTimeoutMs;
-    private static bool IsAutoStartEnabled() => HostRuntimeDefaults.ResolveHostAutoStartEnabled(Debugger.IsAttached);
 
-    private static string GetAutoStartDisabledMessage() {
-        var configuredValue = Environment.GetEnvironmentVariable(HostProcessIdentity.HostAutoStartEnabledVariable);
-        if (bool.TryParse(configuredValue, out var isEnabled) && !isEnabled) {
-            return
-                $"Host is not running. Automatic startup is disabled by {HostProcessIdentity.HostAutoStartEnabledVariable}. Start Pe.Host manually or set it to true.";
-        }
-
-        return
-            $"Host is not running. Automatic startup is disabled while debugging. Start Pe.Host manually or set {HostProcessIdentity.HostAutoStartEnabledVariable}=true to re-enable it.";
+    private static string FormatStartupTimeoutMessage(
+        TimeSpan startupTimeout,
+        string launchCommand,
+        string launchArguments,
+        string workingDirectory,
+        int? processId,
+        string? lastProbeError
+    ) {
+        var logPath = ProductRuntimeLayout.ForCurrentUser().Logs.HostLogPath;
+        var processText = processId is int id ? id.ToString() : "unknown";
+        var commandText = string.IsNullOrWhiteSpace(launchArguments)
+            ? launchCommand
+            : $"{launchCommand} {launchArguments}";
+        return string.Join(
+            Environment.NewLine,
+            $"Started Pe.Host but it did not become ready at {GetHostBaseUrl()} within {startupTimeout.TotalSeconds:0.#} seconds.",
+            $"Command: {commandText}",
+            $"Working directory: {workingDirectory}",
+            $"Process id: {processText}",
+            $"Last probe: {lastProbeError ?? "no probe response"}",
+            $"Host log: {logPath}"
+        );
     }
 }
