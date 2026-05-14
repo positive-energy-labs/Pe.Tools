@@ -9,21 +9,9 @@ public static class HostReachability {
         out HostProbeData? probe,
         out string? errorMessage,
         int timeoutMs = HostRuntimeDefaults.DefaultHostProbeTimeoutMs
-    ) {
-        try {
-            using var client = new PeHostClient(
-                new HttpClient { Timeout = TimeSpan.FromMilliseconds(timeoutMs) },
-                hostBaseUrl
-            );
-            probe = client.Host.GetProbeAsync().GetAwaiter().GetResult();
-            errorMessage = null;
-            return true;
-        } catch (Exception ex) {
-            probe = null;
-            errorMessage = ex.Message;
-            return false;
-        }
-    }
+    ) => TryGet(hostBaseUrl, out probe, out errorMessage, timeoutMs, client =>
+        client.Host.GetProbeAsync().GetAwaiter().GetResult()
+    );
 
     public static bool TryGetCompatibleProbe(
         string? hostBaseUrl,
@@ -43,19 +31,33 @@ public static class HostReachability {
         out HostSessionSummaryData? sessionSummary,
         out string? errorMessage,
         int timeoutMs = HostRuntimeDefaults.DefaultHostProbeTimeoutMs
-    ) {
+    ) => TryGet(hostBaseUrl, out sessionSummary, out errorMessage, timeoutMs, client =>
+        client.Host.GetSessionSummaryAsync().GetAwaiter().GetResult()
+    );
+
+    private static bool TryGet<T>(
+        string? hostBaseUrl,
+        out T? result,
+        out string? errorMessage,
+        int timeoutMs,
+        Func<PeHostClient, T> read
+    )
+        where T : class {
         try {
-            using var client = new PeHostClient(
-                new HttpClient { Timeout = TimeSpan.FromMilliseconds(timeoutMs) },
-                hostBaseUrl
-            );
-            sessionSummary = client.Host.GetSessionSummaryAsync().GetAwaiter().GetResult();
+            using var client = CreateClient(hostBaseUrl, timeoutMs);
+            result = read(client);
             errorMessage = null;
             return true;
         } catch (Exception ex) {
-            sessionSummary = null;
+            result = null;
             errorMessage = ex.Message;
             return false;
         }
     }
+
+    private static PeHostClient CreateClient(string? hostBaseUrl, int timeoutMs) =>
+        new(
+            new HttpClient { Timeout = TimeSpan.FromMilliseconds(timeoutMs) },
+            hostBaseUrl
+        );
 }
