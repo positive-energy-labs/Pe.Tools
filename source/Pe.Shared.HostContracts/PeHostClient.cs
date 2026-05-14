@@ -123,7 +123,7 @@ public sealed class PeHostClient : IDisposable {
         var detail = problem?.Detail ?? problem?.Title ?? TryReadProblemDetail(content);
         var message = string.IsNullOrWhiteSpace(detail)
             ? $"Host operation '{definition.Key}' failed with HTTP {(int)statusCode}{(string.IsNullOrWhiteSpace(reasonPhrase) ? string.Empty : $" {reasonPhrase}")}."
-            : detail;
+            : detail!;
         return new PeHostClientException(statusCode, problem, message);
     }
 

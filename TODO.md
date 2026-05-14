@@ -15,4 +15,6 @@
   - add revit api docs mcp
   - add liteparse or markitdown support or LlamaParse
   - install via pnpm
-  -
+  - set default provider/model for all modes, observer and reflector, and make bespoke/agents. We want to posture more towards revit agent than coding agent.
+  - set other defaults like yolo, and om threshholds.
+  - write to our own settings path: `createMastraCode() loads settings at startup via loadSettings(config?.settingsPath)`

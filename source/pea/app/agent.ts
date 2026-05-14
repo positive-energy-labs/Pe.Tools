@@ -68,7 +68,7 @@ export async function runPeAgent(options: PeAgentOptions = {}): Promise<void> {
 
   const { harness, mcpManager, hookManager, authStorage } =
     await createMastraCode({
-      cwd,
+      cwd, // TODO: need to figure out a good fs and permissions model
       extraTools: {
         get_pe_host_status: getPeHostStatus,
         execute_revit_script: executeRevitScript,
