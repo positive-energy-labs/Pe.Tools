@@ -1,5 +1,4 @@
 using Pe.Revit.DocumentData.Schedules.Apply;
-using Pe.Revit.DocumentData.Schedules.Runtime;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 
@@ -37,7 +36,7 @@ public static class ScheduleCatalogCollector {
         List<RevitDataIssue> issues
     ) {
         try {
-            var profile = ScheduleHelper.SerializeSchedule(schedule).ToAuthoredProfile();
+            var profile = ScheduleHelper.SerializeSchedule(schedule);
             var sheetPlacements = ScheduleCollectorSupport.CollectSheetPlacements(doc, schedule);
             var customParameters = ScheduleCollectorSupport.CollectCustomParameters(schedule);
             var visibleFamilyInstances = ScheduleVisibleFamilyCollector.CollectVisibleFamilyInstances(doc, schedule);
@@ -52,11 +51,11 @@ public static class ScheduleCatalogCollector {
                 ScheduleCollectorSupport.GetCategoryName(doc, schedule),
                 schedule.IsTemplate,
                 profile.ViewTemplateName,
-                profile.IsItemized,
-                profile.FilterBySheet,
+                profile.IsItemized ?? true,
+                profile.FilterBySheet ?? false,
                 sheetPlacements.Count != 0,
                 sheetPlacements,
-                profile.Filters,
+                profile.Filters ?? [],
                 ScheduleCollectorSupport.CollectParameterUsages(doc, schedule),
                 customParameters,
                 visibleBodyRowCount,

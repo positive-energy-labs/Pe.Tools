@@ -1,5 +1,5 @@
 ﻿using Newtonsoft.Json;
-using Pe.Revit.SettingsRuntime.Json.FieldOptions;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Shared.StorageRuntime.Capabilities;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -46,12 +46,7 @@ public interface ISettingsDataBuilder {
 }
 
 public interface ISettingsPropertyBuilder<TValue> {
-    void UseFieldOptions(
-        string providerKey,
-        SettingsRuntimeMode requiredRuntimeMode,
-        SettingsOptionsMode mode = SettingsOptionsMode.Suggestion,
-        bool allowsCustomValue = true
-    );
+    void UseValueDomain(string domainKey);
 
     void UseDatasetOptions(
         string datasetRef,
@@ -117,7 +112,7 @@ public sealed class SettingsSchemaDatasetOptionsBinding {
     public string Projection { get; init; } = string.Empty;
     public SettingsOptionsMode Mode { get; init; } = SettingsOptionsMode.Suggestion;
     public bool AllowsCustomValue { get; init; } = true;
-    public IReadOnlyList<FieldOptionsDependency> DependsOn { get; init; } = [];
+    public IReadOnlyList<SettingsOptionsDependency> DependsOn { get; init; } = [];
 }
 
 public sealed class SettingsSchemaPropertyBinding {
@@ -125,7 +120,7 @@ public sealed class SettingsSchemaPropertyBinding {
     public IReadOnlyList<string> StaticExamples { get; init; } = [];
     public string? Description { get; init; }
     public string? DisplayName { get; init; }
-    public FieldOptionsDescriptor? FieldOptions { get; init; }
+    public SettingsValueDomainDescriptor? ValueDomain { get; init; }
     public SettingsSchemaDatasetOptionsBinding? DatasetOptions { get; init; }
     public SchemaUiMetadata? Ui { get; init; }
     internal ISchemaUiDynamicColumnOrderSource? UiDynamicColumnOrderSource { get; init; }
@@ -170,33 +165,26 @@ internal sealed class SettingsSchemaBuilder<TSettings> : ISettingsSchemaBuilder<
 
 internal sealed class SettingsPropertyBindingBuilder<TValue>(PropertyInfo propertyInfo)
     : ISettingsPropertyBuilder<TValue> {
-    private readonly List<FieldOptionsDependency> _dependsOn = [];
+    private readonly List<SettingsOptionsDependency> _dependsOn = [];
     private readonly List<string> _staticExamples = [];
     private SettingsSchemaDatasetOptionsBinding? _datasetOptions;
     private string? _description;
     private string? _displayName;
-    private FieldOptionsDescriptor? _fieldOptions;
+    private SettingsValueDomainDescriptor? _valueDomain;
     private ISchemaUiDynamicColumnOrderSource? _uiDynamicColumnOrderSource;
     private SchemaUiMetadata? _uiMetadata;
 
-    public void UseFieldOptions(
-        string providerKey,
-        SettingsRuntimeMode requiredRuntimeMode,
-        SettingsOptionsMode mode = SettingsOptionsMode.Suggestion,
-        bool allowsCustomValue = true
-    ) {
+    public void UseValueDomain(string domainKey) {
         this.ThrowIfOptionsAlreadyConfigured();
-        if (string.IsNullOrWhiteSpace(providerKey))
-            throw new ArgumentException("Provider key is required.", nameof(providerKey));
+        if (string.IsNullOrWhiteSpace(domainKey))
+            throw new ArgumentException("Value domain key is required.", nameof(domainKey));
+        if (!SettingsValueDomainRegistry.Shared.TryDescribe(domainKey, out var descriptor)) {
+            throw new InvalidOperationException(
+                $"Value domain '{domainKey}' is not registered. Register value domains before schema definitions."
+            );
+        }
 
-        this._fieldOptions = new FieldOptionsDescriptor(
-            providerKey,
-            SettingsOptionsResolverKind.Remote,
-            mode,
-            allowsCustomValue,
-            this._dependsOn.ToList(),
-            requiredRuntimeMode
-        );
+        this._valueDomain = descriptor;
     }
 
     public void UseDatasetOptions(
@@ -252,9 +240,9 @@ internal sealed class SettingsPropertyBindingBuilder<TValue>(PropertyInfo proper
     }
 
     private void ThrowIfOptionsAlreadyConfigured() {
-        if (this._fieldOptions != null || this._datasetOptions != null) {
+        if (this._valueDomain != null || this._datasetOptions != null) {
             throw new InvalidOperationException(
-                $"Property '{propertyInfo.Name}' cannot configure both remote and dataset-backed field options."
+                $"Property '{propertyInfo.Name}' cannot configure both value-domain and dataset-backed options."
             );
         }
     }
@@ -267,7 +255,7 @@ internal sealed class SettingsPropertyBindingBuilder<TValue>(PropertyInfo proper
             if (!this._dependsOn.Any(item =>
                     string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase) &&
                     item.Scope == scope))
-                this._dependsOn.Add(new FieldOptionsDependency(key, scope));
+                this._dependsOn.Add(new SettingsOptionsDependency(key, scope));
         }
     }
 
@@ -276,9 +264,9 @@ internal sealed class SettingsPropertyBindingBuilder<TValue>(PropertyInfo proper
         StaticExamples = this._staticExamples.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
         Description = this._description,
         DisplayName = this._displayName,
-        FieldOptions = this._fieldOptions == null
+        ValueDomain = this._valueDomain == null
             ? null
-            : this._fieldOptions with { DependsOn = MergeDependencies(this._fieldOptions.DependsOn, this._dependsOn) },
+            : this._valueDomain with { DependsOn = MergeDependencies(this._valueDomain.DependsOn, this._dependsOn) },
         DatasetOptions = this._datasetOptions == null
             ? null
             : new SettingsSchemaDatasetOptionsBinding {
@@ -293,9 +281,9 @@ internal sealed class SettingsPropertyBindingBuilder<TValue>(PropertyInfo proper
         UiDynamicColumnOrderSource = this._uiDynamicColumnOrderSource
     };
 
-    private static IReadOnlyList<FieldOptionsDependency> MergeDependencies(
-        IReadOnlyList<FieldOptionsDependency> descriptorDependencies,
-        IReadOnlyList<FieldOptionsDependency> builderDependencies
+    private static IReadOnlyList<SettingsOptionsDependency> MergeDependencies(
+        IReadOnlyList<SettingsOptionsDependency> descriptorDependencies,
+        IReadOnlyList<SettingsOptionsDependency> builderDependencies
     ) =>
         descriptorDependencies
             .Concat(builderDependencies)

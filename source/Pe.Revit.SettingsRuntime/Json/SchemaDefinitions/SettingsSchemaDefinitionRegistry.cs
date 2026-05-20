@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+﻿using Pe.Revit.SettingsRuntime.Json.ValueDomains;
+using System.Collections.Concurrent;
 
 namespace Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
 
@@ -42,6 +43,7 @@ public sealed class SettingsSchemaDefinitionRegistry : ISettingsSchemaDefinition
     public void Register(ISettingsSchemaDefinition definition) {
         if (definition == null)
             throw new ArgumentNullException(nameof(definition));
+        SettingsValueDomainBootstrap.RegisterDefaults();
         var descriptor = definition.Build();
         this._definitions[descriptor.SettingsType] = descriptor;
     }

@@ -1,4 +1,4 @@
-using Pe.Revit.SettingsRuntime.Json.FieldOptions;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
 using Pe.Shared.StorageRuntime.Capabilities;
 using System.Runtime.CompilerServices;
@@ -8,20 +8,11 @@ namespace Pe.Revit.SettingsRuntime.Modules.AutoTag;
 internal sealed class AutoTagConfigurationSchemaDefinition : SettingsSchemaDefinition<AutoTagConfiguration> {
     public override void Configure(ISettingsSchemaBuilder<AutoTagConfiguration> builder) {
         builder.Property(config => config.BuiltInCategory,
-            property => property.UseFieldOptions(
-                FieldOptionsProviderKeys.CategoryNames,
-                SettingsRuntimeMode.LiveDocument
-            ));
+            property => property.UseValueDomain(ValueDomainKeys.CategoryNames));
         builder.Property(config => config.TagFamilyName,
-            property => property.UseFieldOptions(
-                FieldOptionsProviderKeys.AnnotationTagFamilyNames,
-                SettingsRuntimeMode.LiveDocument
-            ));
+            property => property.UseValueDomain(ValueDomainKeys.AnnotationTagFamilyNames));
         builder.Property(config => config.TagTypeName,
-            property => property.UseFieldOptions(
-                FieldOptionsProviderKeys.AnnotationTagTypeNames,
-                SettingsRuntimeMode.LiveDocument
-            ));
+            property => property.UseValueDomain(ValueDomainKeys.AnnotationTagTypeNames));
     }
 }
 

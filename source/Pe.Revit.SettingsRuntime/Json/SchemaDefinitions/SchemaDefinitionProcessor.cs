@@ -2,7 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using NJsonSchema.Generation;
-using Pe.Revit.SettingsRuntime.Json.FieldOptions;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Shared.StorageRuntime.Capabilities;
 
 namespace Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
@@ -56,19 +56,19 @@ public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : 
                 continue;
             }
 
-            if (binding.FieldOptions == null)
+            if (binding.ValueDomain == null)
                 continue;
 
-            var descriptor = binding.FieldOptions;
-            IReadOnlyList<FieldOptionItem>? samples = null;
-            if (this._options.ResolveFieldOptionSamples &&
+            var descriptor = binding.ValueDomain;
+            IReadOnlyList<ValueDomainOptionItem>? samples = null;
+            if (this._options.ResolveValueDomainSamples &&
                 this._options.RuntimeMode.Supports(descriptor.RequiredRuntimeMode)) {
                 try {
-                    if (!FieldOptionsProviderRegistry.Shared.TryCreate(descriptor.Key, out var source))
-                        throw new InvalidOperationException("Field options provider is not registered.");
+                    if (!SettingsValueDomainRegistry.Shared.TryCreate(descriptor.Key, out var domain))
+                        throw new InvalidOperationException("Value domain is not registered.");
 
-                    samples = source
-                        .GetOptionsAsync(this._options.CreateFieldOptionsExecutionContext())
+                    samples = domain
+                        .GetOptionsAsync(this._options.CreateValueDomainExecutionContext())
                         .AsTask()
                         .GetAwaiter()
                         .GetResult();
@@ -76,7 +76,7 @@ public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : 
                 }
             }
 
-            SchemaMetadataWriter.ApplyFieldOptions(targetSchema, descriptor, samples);
+            SchemaMetadataWriter.ApplyValueDomain(targetSchema, descriptor, samples);
         }
     }
 
@@ -151,7 +151,7 @@ public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : 
 
         try {
             return source
-                .GetValuesAsync(options.CreateFieldOptionsExecutionContext())
+                .GetValuesAsync(options.CreateValueDomainExecutionContext())
                 .AsTask()
                 .GetAwaiter()
                 .GetResult();

@@ -60,7 +60,7 @@ public sealed class SchemaBackedSettingsDocumentValidator(
         SettingsRuntimeMode runtimeMode
     ) => JsonSchemaFactory.BuildAuthoringSchema(
         settingsType,
-        new JsonSchemaBuildOptions(runtimeMode) { ResolveFieldOptionSamples = false }
+        new JsonSchemaBuildOptions(runtimeMode) { ResolveValueDomainSamples = false }
     );
 
     private static string MaterializeDefaults(string candidateContent, Type settingsType) {

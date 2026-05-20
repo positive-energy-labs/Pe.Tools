@@ -105,12 +105,13 @@ public class ScheduleSerializePreviewPanel : UserControl, ISidebarPanel<IPalette
                     ("Name", f => f.ParameterName),
                     ("Header", f => f.ColumnHeaderOverride ?? string.Empty),
                     ("Display",
-                        f => !string.Equals(f.DisplayType, "Standard", StringComparison.OrdinalIgnoreCase)
-                            ? f.DisplayType
+                        f => f.DisplayType is { } displayType &&
+                             displayType != ScheduleAuthoredFieldDisplayType.Standard
+                            ? displayType.ToString()
                             : string.Empty),
                     ("Width", f => f.ColumnWidth.HasValue ? f.ColumnWidth.Value.ToString("F2") : string.Empty),
-                    ("Type", f => f.CalculatedType ?? string.Empty),
-                    ("Hidden", f => f.IsHidden ? "Yes" : string.Empty)
+                    ("Type", f => f.CalculatedType?.ToString() ?? string.Empty),
+                    ("Hidden", f => f.IsHidden == true ? "Yes" : string.Empty)
                 ],
                 9
             );
@@ -123,10 +124,10 @@ public class ScheduleSerializePreviewPanel : UserControl, ISidebarPanel<IPalette
                 data.SortGroup,
                 [
                     ("Field", sg => sg.FieldName),
-                    ("Order", sg => sg.SortOrder),
-                    ("Header", sg => sg.ShowHeader ? "Yes" : string.Empty),
-                    ("Footer", sg => sg.ShowFooter ? "Yes" : string.Empty),
-                    ("Blank Line", sg => sg.ShowBlankLine ? "Yes" : string.Empty)
+                    ("Order", sg => sg.SortOrder?.ToString() ?? string.Empty),
+                    ("Header", sg => sg.ShowHeader == true ? "Yes" : string.Empty),
+                    ("Footer", sg => sg.ShowFooter == true ? "Yes" : string.Empty),
+                    ("Blank Line", sg => sg.ShowBlankLine == true ? "Yes" : string.Empty)
                 ],
                 9
             );

@@ -178,6 +178,17 @@ public sealed class ParamDrivenSolidsJsonContractTests {
     }
 
     [Test]
+    public void PeGrd_base_profile_validates_roundtrip_and_compiles_param_driven_spans() {
+        var contract = RevitFamilyFixtureHarness.LoadProfileFixtureContract("pe-grd-base.json");
+        var compiled = AuthoredParamDrivenSolidsCompiler.Compile(contract.Value.ParamDrivenSolids);
+
+        Assert.That(contract.CanonicalJson, Is.Not.Empty);
+        Assert.That(contract.Value.ParamDrivenSolids.Spans, Has.Count.EqualTo(6));
+        Assert.That(compiled.CanExecute, Is.True,
+            string.Join(Environment.NewLine, compiled.Diagnostics.Select(d => d.ToDisplayMessage())));
+    }
+
+    [Test]
     public void Snapshot_projected_profile_serializes_back_to_canonical_public_shape() {
         var snapshot = new FamilySnapshot {
             FamilyName = "Projected Fixture",

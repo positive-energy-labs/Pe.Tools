@@ -1,4 +1,4 @@
-using Pe.Revit.SettingsRuntime.Json.FieldOptions;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
 using Pe.Shared.RevitData.Schedules;
 using Pe.Shared.StorageRuntime.Capabilities;
@@ -10,78 +10,116 @@ internal sealed class ScheduleProfileSchemaDefinition : SettingsSchemaDefinition
     public override void Configure(ISettingsSchemaBuilder<ScheduleProfile> builder) {
         builder.Property(
             item => item.CategoryName,
-            property => property.UseFieldOptions(
-                FieldOptionsProviderKeys.CategoryNames,
-                SettingsRuntimeMode.LiveDocument
-            )
+            property => {
+                property.WithDescription("Revit category label to schedule, such as 'Air Terminals'.");
+                property.UseValueDomain(ValueDomainKeys.CategoryNames);
+            }
         );
         builder.Property(
             item => item.ViewTemplateName,
-            property => property.UseFieldOptions(
-                FieldOptionsProviderKeys.ScheduleViewTemplateNames,
-                SettingsRuntimeMode.LiveDocument
-            )
+            property => {
+                property.WithDescription("Optional schedule view template name. Omit to leave the schedule untemplated.");
+                property.UseValueDomain(ValueDomainKeys.ScheduleViewTemplateNames);
+            }
         );
-        builder.Property(item => item.Fields, property => property.WithDisplayName("Fields"));
+        builder.Property(item => item.Fields, property => {
+            property.WithDisplayName("Fields");
+            property.WithDescription("Schedule fields to add. Omit or use an empty array for a schedule with no authored fields.");
+        });
+        builder.Property(
+            item => item.TitleStyle,
+            property => property.WithDescription("Optional title style overrides. Omit to skip title styling.")
+        );
+        builder.Property(
+            item => item.SortGroup,
+            property => property.WithDescription("Optional sort/group rules. Omit to apply no sort/group rules.")
+        );
+        builder.Property(
+            item => item.Filters,
+            property => property.WithDescription("Optional filters. Omit to apply no filters.")
+        );
     }
 }
 
 internal sealed class ScheduleFieldSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleFieldSpec> {
     public override void Configure(ISettingsSchemaBuilder<ScheduleFieldSpec> builder) {
         builder.Property(item => item.ParameterName, property => {
+            property.WithDescription("Schedule field parameter name.");
             property.DependsOnSibling(nameof(ScheduleProfile.CategoryName));
-            property.UseFieldOptions(
-                FieldOptionsProviderKeys.ScheduleFieldNames,
-                SettingsRuntimeMode.LiveDocument
-            );
+            property.UseValueDomain(ValueDomainKeys.ScheduleFieldNames);
         });
         builder.Property(item => item.PercentageOfField, property => {
+            property.WithDescription("Required only when CalculatedType is Percentage.");
             property.DependsOnSibling(nameof(ScheduleProfile.CategoryName));
-            property.UseFieldOptions(
-                FieldOptionsProviderKeys.ScheduleFieldNames,
-                SettingsRuntimeMode.LiveDocument
-            );
+            property.UseValueDomain(ValueDomainKeys.ScheduleFieldNames);
         });
+        builder.Property(
+            item => item.DisplayType,
+            property => property.WithDescription("Optional display aggregation. Omit for Standard.")
+        );
+        builder.Property(
+            item => item.HorizontalAlignment,
+            property => property.WithDescription("Optional field value alignment. Omit for Center.")
+        );
+        builder.Property(
+            item => item.ColumnWidth,
+            property => property.WithDescription("Optional sheet column width in feet. Omit to keep Revit's default width.")
+        );
+        builder.Property(
+            item => item.IsHidden,
+            property => property.WithDescription("Optional hidden flag. Omit for false.")
+        );
     }
 }
 
 internal sealed class CombinedParameterSpecSchemaDefinition : SettingsSchemaDefinition<CombinedParameterSpec> {
     public override void Configure(ISettingsSchemaBuilder<CombinedParameterSpec> builder) =>
         builder.Property(item => item.ParameterName, property => {
+            property.WithDescription("Parameter name to include in the combined field.");
             property.DependsOnSibling(nameof(ScheduleProfile.CategoryName));
-            property.UseFieldOptions(
-                FieldOptionsProviderKeys.ScheduleFieldNames,
-                SettingsRuntimeMode.LiveDocument
-            );
+            property.UseValueDomain(ValueDomainKeys.ScheduleFieldNames);
         });
 }
 
 internal sealed class ScheduleFilterSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleFilterSpec> {
-    public override void Configure(ISettingsSchemaBuilder<ScheduleFilterSpec> builder) =>
+    public override void Configure(ISettingsSchemaBuilder<ScheduleFilterSpec> builder) {
         builder.Property(item => item.FieldName, property => {
+            property.WithDescription("Schedule field to filter on.");
             property.DependsOnSibling(nameof(ScheduleProfile.CategoryName));
-            property.UseFieldOptions(
-                FieldOptionsProviderKeys.ScheduleFieldNames,
-                SettingsRuntimeMode.LiveDocument
-            );
+            property.UseValueDomain(ValueDomainKeys.ScheduleFieldNames);
         });
+        builder.Property(
+            item => item.FilterType,
+            property => property.WithDescription("Optional filter comparison. Omit for Equal.")
+        );
+        builder.Property(
+            item => item.Value,
+            property => property.WithDescription("Filter value as authored text. Omit for HasParameter, HasValue, and HasNoValue.")
+        );
+    }
 }
 
 internal sealed class ScheduleSortGroupSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleSortGroupSpec> {
-    public override void Configure(ISettingsSchemaBuilder<ScheduleSortGroupSpec> builder) =>
+    public override void Configure(ISettingsSchemaBuilder<ScheduleSortGroupSpec> builder) {
         builder.Property(item => item.FieldName, property => {
+            property.WithDescription("Schedule field to sort or group by.");
             property.DependsOnSibling(nameof(ScheduleProfile.CategoryName));
-            property.UseFieldOptions(
-                FieldOptionsProviderKeys.ScheduleFieldNames,
-                SettingsRuntimeMode.LiveDocument
-            );
+            property.UseValueDomain(ValueDomainKeys.ScheduleFieldNames);
         });
+        builder.Property(
+            item => item.SortOrder,
+            property => property.WithDescription("Optional sort direction. Omit for Ascending.")
+        );
+    }
 }
 
 internal sealed class
     ScheduleTitleStyleSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleTitleStyleSpec> {
-    public override void Configure(ISettingsSchemaBuilder<ScheduleTitleStyleSpec> builder) {
-    }
+    public override void Configure(ISettingsSchemaBuilder<ScheduleTitleStyleSpec> builder) =>
+        builder.Property(
+            item => item.HorizontalAlignment,
+            property => property.WithDescription("Optional title text alignment. Omit to leave alignment unchanged.")
+        );
 }
 
 internal sealed class
@@ -89,31 +127,31 @@ internal sealed class
     public override void Configure(ISettingsSchemaBuilder<ScheduleTitleBorderSpec> builder) {
         builder.Property(
             item => item.TopLineStyleName,
-            property => property.UseFieldOptions(
-                FieldOptionsProviderKeys.LineStyleNames,
-                SettingsRuntimeMode.LiveDocument
-            )
+            property => {
+                property.WithDescription("Optional top border line style name.");
+                property.UseValueDomain(ValueDomainKeys.LineStyleNames);
+            }
         );
         builder.Property(
             item => item.BottomLineStyleName,
-            property => property.UseFieldOptions(
-                FieldOptionsProviderKeys.LineStyleNames,
-                SettingsRuntimeMode.LiveDocument
-            )
+            property => {
+                property.WithDescription("Optional bottom border line style name.");
+                property.UseValueDomain(ValueDomainKeys.LineStyleNames);
+            }
         );
         builder.Property(
             item => item.LeftLineStyleName,
-            property => property.UseFieldOptions(
-                FieldOptionsProviderKeys.LineStyleNames,
-                SettingsRuntimeMode.LiveDocument
-            )
+            property => {
+                property.WithDescription("Optional left border line style name.");
+                property.UseValueDomain(ValueDomainKeys.LineStyleNames);
+            }
         );
         builder.Property(
             item => item.RightLineStyleName,
-            property => property.UseFieldOptions(
-                FieldOptionsProviderKeys.LineStyleNames,
-                SettingsRuntimeMode.LiveDocument
-            )
+            property => {
+                property.WithDescription("Optional right border line style name.");
+                property.UseValueDomain(ValueDomainKeys.LineStyleNames);
+            }
         );
     }
 }

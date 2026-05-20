@@ -1,7 +1,6 @@
 using Newtonsoft.Json;
 using NJsonSchema;
 using NJsonSchema.Generation.TypeMappers;
-using Pe.Revit.SettingsRuntime.Json.FieldOptions;
 using System.Reflection;
 
 namespace Pe.Revit.SettingsRuntime.Json;

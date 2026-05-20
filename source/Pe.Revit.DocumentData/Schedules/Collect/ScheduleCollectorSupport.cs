@@ -1,11 +1,8 @@
 ﻿using Pe.Revit.DocumentData.Parameters;
+using Pe.Revit.DocumentData.Schedules.Authored;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Parameters;
 using Pe.Shared.RevitData.Schedules;
-using ContractCombinedParameterSpec = Pe.Shared.RevitData.Schedules.CombinedParameterSpec;
-using ContractScheduleFilterSpec = Pe.Shared.RevitData.Schedules.ScheduleFilterSpec;
-using InternalCombinedParameterSpec = Pe.Revit.DocumentData.Schedules.Runtime.Fields.CombinedParameterSpec;
-using InternalScheduleFilterSpec = Pe.Revit.DocumentData.Schedules.Runtime.Filters.ScheduleFilterSpec;
 using System.Globalization;
 using System.Text;
 
@@ -75,11 +72,6 @@ internal static class ScheduleCollectorSupport {
 
         return true;
     }
-
-    public static List<ScheduleFilterSpec> ToContractFilters(IEnumerable<InternalScheduleFilterSpec> filters) =>
-        filters
-            .Select(ToContractFilter)
-            .ToList();
 
     public static List<ScheduleParameterUsageEntry> CollectParameterUsages(
         Document doc,
@@ -376,21 +368,6 @@ internal static class ScheduleCollectorSupport {
             ParameterIdentityEngine.GetParameterKey(doc, schedulableField.ParameterId, fieldName)
         );
     }
-
-    private static ContractCombinedParameterSpec ToContractCombinedParameter(InternalCombinedParameterSpec spec) =>
-        new(
-            spec.ParameterName,
-            spec.Prefix,
-            spec.Suffix,
-            spec.Separator
-        );
-
-    private static ContractScheduleFilterSpec ToContractFilter(InternalScheduleFilterSpec spec) =>
-        new(
-            spec.FieldName,
-            spec.FilterType.ToString(),
-            spec.Value
-        );
 
     private static bool IsNonBuiltInParameter(Parameter parameter) =>
         RevitParameterIdentityFactory.FromParameter(parameter).Kind != RevitParameterIdentityKind.BuiltInParameter;

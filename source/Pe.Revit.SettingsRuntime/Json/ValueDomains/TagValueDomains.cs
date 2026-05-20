@@ -1,87 +1,14 @@
-using Pe.Revit.SettingsRuntime.Json.FieldOptions;
 using Pe.Revit.SettingsRuntime.Modules.AutoTag;
 using Pe.Shared.StorageRuntime.Capabilities;
 
-namespace Pe.Revit.SettingsRuntime.Json.SchemaProviders;
+namespace Pe.Revit.SettingsRuntime.Json.ValueDomains;
 
-/// <summary>
-///     Provides category names that can be auto-tagged.
-/// </summary>
-public class TaggableCategoryNamesProvider : IFieldOptionsSource {
-    public FieldOptionsDescriptor Describe() => new(
-        nameof(TaggableCategoryNamesProvider),
-        SettingsOptionsResolverKind.Remote,
-        SettingsOptionsMode.Suggestion,
-        true,
-        [],
-        SettingsRuntimeMode.LiveDocument
-    );
-
-    public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
-        FieldOptionsExecutionContext context,
-        CancellationToken cancellationToken = default
+public sealed class AnnotationTagFamilyNamesValueDomain()
+    : SettingsValueDomainBase(
+        ValueDomainKeys.AnnotationTagFamilyNames,
+        SettingsRuntimeMode.LiveDocument,
+        [new SettingsOptionsDependency(ValueDomainContextKeys.CategoryName, SettingsOptionsDependencyScope.Sibling)]
     ) {
-        try {
-            var doc = context.GetActiveDocument();
-            if (doc == null)
-                return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
-
-            var items = CategoryTagMapping.GetTaggableCategories()
-                .Select(category => CategoryTagMapping.GetCategoryName(doc, category))
-                .Where(name => !string.IsNullOrWhiteSpace(name))
-                .Cast<string>()
-                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-                .Select(value => new FieldOptionItem(value, value, null))
-                .ToList();
-            return new ValueTask<IReadOnlyList<FieldOptionItem>>(items);
-        } catch {
-            return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
-        }
-    }
-}
-
-/// <summary>
-///     Provides multi-category tag family names available in the current document.
-/// </summary>
-public class MultiCategoryTagProvider : IFieldOptionsSource {
-    public FieldOptionsDescriptor Describe() => new(
-        nameof(MultiCategoryTagProvider),
-        SettingsOptionsResolverKind.Remote,
-        SettingsOptionsMode.Suggestion,
-        true,
-        [],
-        SettingsRuntimeMode.LiveDocument
-    );
-
-    public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
-        FieldOptionsExecutionContext context,
-        CancellationToken cancellationToken = default
-    ) {
-        try {
-            var doc = context.GetActiveDocument();
-            if (doc == null)
-                return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
-
-            var items = new FilteredElementCollector(doc)
-                .OfClass(typeof(FamilySymbol))
-                .OfCategory(BuiltInCategory.OST_MultiCategoryTags)
-                .Cast<FamilySymbol>()
-                .Select(symbol => symbol.FamilyName)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-                .Select(value => new FieldOptionItem(value, value, null))
-                .ToList();
-            return new ValueTask<IReadOnlyList<FieldOptionItem>>(items);
-        } catch {
-            return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
-        }
-    }
-}
-
-/// <summary>
-///     Provides annotation tag family names available in the current document.
-/// </summary>
-public class AnnotationTagFamilyNamesProvider : IFieldOptionsSource {
     public static readonly BuiltInCategory[] TagCategories = [
         BuiltInCategory.OST_CaseworkTags,
         BuiltInCategory.OST_CeilingTags,
@@ -150,24 +77,15 @@ public class AnnotationTagFamilyNamesProvider : IFieldOptionsSource {
         BuiltInCategory.OST_WireTags
     ];
 
-    public FieldOptionsDescriptor Describe() => new(
-        nameof(AnnotationTagFamilyNamesProvider),
-        SettingsOptionsResolverKind.Remote,
-        SettingsOptionsMode.Suggestion,
-        true,
-        [new FieldOptionsDependency(OptionContextKeys.CategoryName, SettingsOptionsDependencyScope.Sibling)],
-        SettingsRuntimeMode.LiveDocument
-    );
-
-    public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
-        FieldOptionsExecutionContext context,
+    public override ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+        ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     ) {
         var doc = context.GetActiveDocument();
         if (doc == null)
-            return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
+            return ToItems([]);
 
-        var categoryName = context.TryGetContextValue(OptionContextKeys.CategoryName, out var selectedCategoryName)
+        var categoryName = context.TryGetContextValue(ValueDomainContextKeys.CategoryName, out var selectedCategoryName)
             ? selectedCategoryName
             : null;
         if (string.IsNullOrWhiteSpace(categoryName))
@@ -175,17 +93,16 @@ public class AnnotationTagFamilyNamesProvider : IFieldOptionsSource {
 
         var elementCategory = CategoryTagMapping.GetBuiltInCategoryFromName(doc, categoryName);
         if (elementCategory == BuiltInCategory.INVALID)
-            return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
+            return ToItems([]);
 
         var tagCategory = CategoryTagMapping.GetTagCategory(elementCategory);
-        var items = new FilteredElementCollector(doc)
+        return ToItems(new FilteredElementCollector(doc)
             .OfClass(typeof(FamilySymbol))
             .OfCategory(tagCategory)
             .Cast<FamilySymbol>()
             .Select(symbol => symbol.FamilyName)
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
-        return ToItems(items);
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase));
     }
 
     private static IEnumerable<string> GetAllTagFamilyNames(Document doc) {
@@ -205,40 +122,28 @@ public class AnnotationTagFamilyNamesProvider : IFieldOptionsSource {
 
         return familyNames.OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
     }
-
-    private static ValueTask<IReadOnlyList<FieldOptionItem>> ToItems(IEnumerable<string> values) =>
-        new(
-            values.Select(value => new FieldOptionItem(value, value, null)).ToList()
-        );
 }
 
-/// <summary>
-///     Provides tag type names for annotation tags in the current document.
-/// </summary>
-public class AnnotationTagTypeNamesProvider : IFieldOptionsSource {
-    public FieldOptionsDescriptor Describe() => new(
-        nameof(AnnotationTagTypeNamesProvider),
-        SettingsOptionsResolverKind.Remote,
-        SettingsOptionsMode.Suggestion,
-        true,
-        [new FieldOptionsDependency(OptionContextKeys.TagFamilyName, SettingsOptionsDependencyScope.Sibling)],
-        SettingsRuntimeMode.LiveDocument
-    );
-
-    public ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
-        FieldOptionsExecutionContext context,
+public sealed class AnnotationTagTypeNamesValueDomain()
+    : SettingsValueDomainBase(
+        ValueDomainKeys.AnnotationTagTypeNames,
+        SettingsRuntimeMode.LiveDocument,
+        [new SettingsOptionsDependency(ValueDomainContextKeys.TagFamilyName, SettingsOptionsDependencyScope.Sibling)]
+    ) {
+    public override ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+        ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     ) {
         var doc = context.GetActiveDocument();
         if (doc == null)
-            return new ValueTask<IReadOnlyList<FieldOptionItem>>([]);
+            return ToItems([]);
 
-        var familyName = context.TryGetContextValue(OptionContextKeys.TagFamilyName, out var selectedFamilyName)
+        var familyName = context.TryGetContextValue(ValueDomainContextKeys.TagFamilyName, out var selectedFamilyName)
             ? selectedFamilyName
             : null;
         var typeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var category in AnnotationTagFamilyNamesProvider.TagCategories) {
+        foreach (var category in AnnotationTagFamilyNamesValueDomain.TagCategories) {
             try {
                 var symbols = new FilteredElementCollector(doc)
                     .OfClass(typeof(FamilySymbol))
@@ -257,10 +162,4 @@ public class AnnotationTagTypeNamesProvider : IFieldOptionsSource {
 
         return ToItems(typeNames.OrderBy(name => name, StringComparer.OrdinalIgnoreCase));
     }
-
-    private static ValueTask<IReadOnlyList<FieldOptionItem>> ToItems(IEnumerable<string> values) =>
-        new(
-            values.Select(value => new FieldOptionItem(value, value, null)).ToList()
-        );
 }
-

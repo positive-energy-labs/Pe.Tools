@@ -16,6 +16,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using Toon;
+using Pe.Revit.Extensions.Id;
 
 namespace Pe.App.Commands;
 
@@ -347,7 +348,7 @@ public class EnrichedParameterData {
             return string.Empty;
 
         try {
-            return new ForgeTypeId(forgeTypeId).ToLabel();
+            return new ForgeTypeId(forgeTypeId).ToReadableLabel();
         } catch (Exception ex) {
             Log.Debug(
                 ex,
@@ -355,7 +356,6 @@ public class EnrichedParameterData {
                 metadataKind,
                 parameterName,
                 forgeTypeId);
-            Debug.WriteLine($"{metadataKind} label derivation failed: ForgeTypeId: {forgeTypeId}");
             return string.Empty;
         }
     }

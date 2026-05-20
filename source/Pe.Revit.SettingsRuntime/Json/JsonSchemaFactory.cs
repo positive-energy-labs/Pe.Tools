@@ -4,7 +4,7 @@ using Newtonsoft.Json.Linq;
 using NJsonSchema;
 using NJsonSchema.Generation;
 using NJsonSchema.NewtonsoftJson.Generation;
-using Pe.Revit.SettingsRuntime.Json.FieldOptions;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
 using Pe.Revit.SettingsRuntime.Json.SchemaProcessors;
 using Pe.Shared.StorageRuntime.Capabilities;
@@ -21,9 +21,9 @@ public sealed class JsonSchemaBuildOptions(
 ) {
     public SettingsRuntimeMode RuntimeMode { get; } = runtimeMode;
 
-    public bool ResolveFieldOptionSamples { get; init; } = true;
+    public bool ResolveValueDomainSamples { get; init; } = true;
 
-    public FieldOptionsExecutionContext CreateFieldOptionsExecutionContext(
+    public ValueDomainExecutionContext CreateValueDomainExecutionContext(
         IReadOnlyDictionary<string, string>? fieldValues = null
     ) => new(
         this.RuntimeMode,

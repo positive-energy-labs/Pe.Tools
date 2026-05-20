@@ -1,4 +1,4 @@
-using Pe.Revit.SettingsRuntime.Json.FieldOptions;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
 using Pe.Shared.StorageRuntime.Capabilities;
 
@@ -10,7 +10,7 @@ public sealed class FamilyManagerTypesSchemaUiDynamicColumnOrderSource : ISchema
     public SettingsRuntimeMode RequiredRuntimeMode => SettingsRuntimeMode.LiveDocument;
 
     public ValueTask<IReadOnlyList<string>> GetValuesAsync(
-        FieldOptionsExecutionContext context,
+        ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     ) {
         var document = context.GetActiveDocument();

@@ -1,4 +1,4 @@
-using Pe.Revit.SettingsRuntime.Json.FieldOptions;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Shared.StorageRuntime.Capabilities;
 using TypeGen.Core.TypeAnnotations;
 
@@ -40,7 +40,7 @@ public interface ISchemaUiDynamicColumnOrderSource {
     SettingsRuntimeMode RequiredRuntimeMode { get; }
 
     ValueTask<IReadOnlyList<string>> GetValuesAsync(
-        FieldOptionsExecutionContext context,
+        ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     );
 }

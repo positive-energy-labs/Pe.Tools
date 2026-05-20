@@ -1,5 +1,5 @@
 using Newtonsoft.Json;
-using Pe.Revit.SettingsRuntime.Json.SchemaProviders;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 
 namespace Pe.Revit.SettingsRuntime.Json.Converters;
 
@@ -8,7 +8,7 @@ namespace Pe.Revit.SettingsRuntime.Json.Converters;
 /// </summary>
 public class BuiltInCategoryConverter : JsonConverter<BuiltInCategory> {
     private static readonly Lazy<Dictionary<string, BuiltInCategory>> LabelMap =
-        new(() => CategoryNamesProvider.GetLabelToBuiltInCategoryMap());
+        new(() => CategoryNamesValueDomain.GetLabelToBuiltInCategoryMap());
 
     public override void WriteJson(JsonWriter writer, BuiltInCategory value, JsonSerializer serializer) {
         if (value == BuiltInCategory.INVALID) {
@@ -16,7 +16,7 @@ public class BuiltInCategoryConverter : JsonConverter<BuiltInCategory> {
             return;
         }
 
-        writer.WriteValue(CategoryNamesProvider.GetLabelForBuiltInCategory(value));
+        writer.WriteValue(CategoryNamesValueDomain.GetLabelForBuiltInCategory(value));
     }
 
     public override BuiltInCategory ReadJson(

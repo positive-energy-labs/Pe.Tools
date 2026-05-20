@@ -3,7 +3,7 @@ using Autodesk.Revit.UI;
 using Newtonsoft.Json;
 using Pe.App.Services.AutoTag;
 using Pe.Revit.SettingsRuntime.Json;
-using Pe.Revit.SettingsRuntime.Json.SchemaProviders;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Revit.SettingsRuntime.Modules.AutoTag;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Capabilities;
@@ -353,7 +353,7 @@ public class CmdAutoTag : IExternalCommand {
     }
 
     private static string GetCategoryLabel(BuiltInCategory category) =>
-        CategoryNamesProvider.GetLabelForBuiltInCategory(category);
+        CategoryNamesValueDomain.GetLabelForBuiltInCategory(category);
 
     private static bool IsElementTagged(Document doc, Element element, View view) {
         var tags = new FilteredElementCollector(doc, view.Id)

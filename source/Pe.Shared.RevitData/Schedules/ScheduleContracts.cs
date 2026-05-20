@@ -56,18 +56,80 @@ public record ScheduleOnFinishSettings(
     bool OpenScheduleOnFinish
 );
 
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum ScheduleTitleHorizontalAlignment {
+    Left,
+    Center,
+    Right
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum ScheduleFieldHorizontalAlignment {
+    Left,
+    Center,
+    Right
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum ScheduleAuthoredFieldDisplayType {
+    Standard,
+    Totals,
+    MinMax,
+    Max,
+    Min
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum ScheduleAuthoredCalculatedFieldType {
+    Formula,
+    Percentage
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum ScheduleAuthoredSortOrder {
+    Ascending,
+    Descending
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum ScheduleAuthoredFilterType {
+    HasParameter,
+    Equal,
+    NotEqual,
+    GreaterThan,
+    GreaterThanOrEqual,
+    LessThan,
+    LessThanOrEqual,
+    Contains,
+    NotContains,
+    BeginsWith,
+    NotBeginsWith,
+    EndsWith,
+    NotEndsWith,
+    IsAssociatedWithGlobalParameter,
+    IsNotAssociatedWithGlobalParameter,
+    HasValue,
+    HasNoValue
+}
+
 [ExportTsInterface]
 public record ScheduleTitleBorderSpec(
-    string? TopLineStyleName,
-    string? BottomLineStyleName,
-    string? LeftLineStyleName,
-    string? RightLineStyleName
+    string? TopLineStyleName = null,
+    string? BottomLineStyleName = null,
+    string? LeftLineStyleName = null,
+    string? RightLineStyleName = null
 );
 
 [ExportTsInterface]
 public record ScheduleTitleStyleSpec(
-    string HorizontalAlignment,
-    ScheduleTitleBorderSpec BorderStyle
+    ScheduleTitleHorizontalAlignment? HorizontalAlignment = null,
+    ScheduleTitleBorderSpec? BorderStyle = null
 );
 
 [ExportTsInterface]
@@ -75,64 +137,64 @@ public record ScheduleFieldFormatSpec(
     string? UnitTypeId,
     string? SymbolTypeId,
     double? Accuracy,
-    bool SuppressTrailingZeros,
-    bool SuppressLeadingZeros,
-    bool UsePlusPrefix,
-    bool UseDigitGrouping,
-    bool SuppressSpaces
+    bool SuppressTrailingZeros = false,
+    bool SuppressLeadingZeros = false,
+    bool UsePlusPrefix = false,
+    bool UseDigitGrouping = false,
+    bool SuppressSpaces = false
 );
 
 [ExportTsInterface]
 public record CombinedParameterSpec(
     string ParameterName,
-    string Prefix,
-    string Suffix,
-    string Separator
+    string? Prefix = null,
+    string? Suffix = null,
+    string? Separator = null
 );
 
 [ExportTsInterface]
 public record ScheduleFieldSpec(
     string ParameterName,
-    string ColumnHeaderOverride,
-    string HeaderGroup,
-    bool IsHidden,
-    string DisplayType,
-    double? ColumnWidth,
-    string HorizontalAlignment,
-    string? CalculatedType,
-    string PercentageOfField,
-    ScheduleFieldFormatSpec? FormatOptions,
-    List<CombinedParameterSpec>? CombinedParameters
+    string? ColumnHeaderOverride = null,
+    string? HeaderGroup = null,
+    bool? IsHidden = null,
+    ScheduleAuthoredFieldDisplayType? DisplayType = null,
+    double? ColumnWidth = null,
+    ScheduleFieldHorizontalAlignment? HorizontalAlignment = null,
+    ScheduleAuthoredCalculatedFieldType? CalculatedType = null,
+    string? PercentageOfField = null,
+    ScheduleFieldFormatSpec? FormatOptions = null,
+    List<CombinedParameterSpec>? CombinedParameters = null
 );
 
 [ExportTsInterface]
 public record ScheduleSortGroupSpec(
     string FieldName,
-    string SortOrder,
-    bool ShowHeader,
-    bool ShowFooter,
-    bool ShowBlankLine
+    ScheduleAuthoredSortOrder? SortOrder = null,
+    bool? ShowHeader = null,
+    bool? ShowFooter = null,
+    bool? ShowBlankLine = null
 );
 
 [ExportTsInterface]
 public record ScheduleFilterSpec(
     string FieldName,
-    string FilterType,
-    string Value
+    ScheduleAuthoredFilterType? FilterType = null,
+    string? Value = null
 );
 
 [ExportTsInterface]
 public record ScheduleProfile(
     string Name,
     string CategoryName,
-    string? ViewTemplateName,
-    ScheduleTitleStyleSpec TitleStyle,
-    bool IsItemized,
-    bool FilterBySheet,
-    List<ScheduleFieldSpec> Fields,
-    List<ScheduleSortGroupSpec> SortGroup,
-    List<ScheduleFilterSpec> Filters,
-    ScheduleOnFinishSettings? OnFinishSettings
+    string? ViewTemplateName = null,
+    ScheduleTitleStyleSpec? TitleStyle = null,
+    bool? IsItemized = null,
+    bool? FilterBySheet = null,
+    List<ScheduleFieldSpec>? Fields = null,
+    List<ScheduleSortGroupSpec>? SortGroup = null,
+    List<ScheduleFilterSpec>? Filters = null,
+    ScheduleOnFinishSettings? OnFinishSettings = null
 );
 
 [ExportTsInterface]

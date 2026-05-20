@@ -1,11 +1,11 @@
 ﻿using Autodesk.Revit.DB;
-using Pe.Revit.DocumentData.Schedules.Runtime;
-using Pe.Revit.DocumentData.Schedules.Runtime.Filters;
 using Pe.Revit.DocumentData.Schedules;
+using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Global;
 using Pe.Revit.Global.Utils.Files;
 using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Json;
+using Pe.Shared.RevitData.Schedules;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using ParamModelRes = Pe.Revit.Global.Services.Aps.ParametersApi.Parameters.ParametersResult;
@@ -81,7 +81,7 @@ public class BaseProfile {
         [Description(
             "Optional conditional filter based on family parameter values. Uses schedule filter logic to evaluate parameter conditions. Leave FieldName empty to disable this filter.")]
         public ScheduleFilterSpec IncludeByCondition { get; init; } =
-            new() { FieldName = "", Value = string.Empty };
+            new(string.Empty, Value: string.Empty);
 
         [Description(
             "Filter families by name inclusion. If any include filters are specified (Equaling, Containing, or StartingWith), only families matching at least one filter will pass. If all include filters are empty, all families pass the include check (exclude filters may still apply).")]
@@ -125,11 +125,11 @@ public class BaseProfile {
             if (string.IsNullOrEmpty(this.IncludeByCondition.FieldName)) return true;
 
             // Use ScheduleHelper to evaluate the filter using Revit's native schedule filtering
-            var scheduleProfile = new ScheduleProfile {
-                Name = "Family Filter",
-                CategoryName = familyBuiltInCategory,
-                Filters = [this.IncludeByCondition]
-            };
+            var scheduleProfile = new ScheduleProfile(
+                "Family Filter",
+                RevitLabelCatalog.GetLabelForBuiltInCategory(familyBuiltInCategory),
+                Filters: [this.IncludeByCondition]
+            );
 
             var matchingFamilies = doc.GetFamiliesMatchingScheduleProfileFilters(scheduleProfile, [f]);
             return matchingFamilies.Contains(f.Name);
