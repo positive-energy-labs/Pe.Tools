@@ -2,7 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using NJsonSchema;
-using Pe.Revit.SettingsRuntime.Json.FieldOptions;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Shared.StorageRuntime.Capabilities;
 
 namespace Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
@@ -23,10 +23,10 @@ internal static class SchemaMetadataWriter {
         targetSchema.ExtensionData["x-data"] = CreateRootDataPayload(datasets);
     }
 
-    public static void ApplyFieldOptions(
+    public static void ApplyValueDomain(
         JsonSchema targetSchema,
-        FieldOptionsDescriptor descriptor,
-        IReadOnlyList<FieldOptionItem>? samples = null
+        SettingsValueDomainDescriptor descriptor,
+        IReadOnlyList<ValueDomainOptionItem>? samples = null
     ) {
         if (targetSchema == null)
             throw new ArgumentNullException(nameof(targetSchema));
@@ -85,7 +85,7 @@ internal static class SchemaMetadataWriter {
         SettingsOptionsResolverKind resolver,
         SettingsOptionsMode mode,
         bool allowsCustomValue,
-        IReadOnlyList<FieldOptionsDependency> dependsOn
+        IReadOnlyList<SettingsOptionsDependency> dependsOn
     ) {
         var serializer = JsonSerializer.CreateDefault(new JsonSerializerSettings {
             Converters = [new StringEnumConverter()]
@@ -117,7 +117,7 @@ internal static class SchemaMetadataWriter {
             .ThenBy(value => value, StringComparer.Ordinal)
             .ToList();
 
-    public static IReadOnlyList<FieldOptionItem> CreateOrderedFieldOptionItems(IEnumerable<FieldOptionItem> items) =>
+    public static IReadOnlyList<ValueDomainOptionItem> CreateOrderedValueDomainOptionItems(IEnumerable<ValueDomainOptionItem> items) =>
         items
             .Where(item => !string.IsNullOrWhiteSpace(item.Value))
             .GroupBy(item => item.Value, ExampleValueComparer)

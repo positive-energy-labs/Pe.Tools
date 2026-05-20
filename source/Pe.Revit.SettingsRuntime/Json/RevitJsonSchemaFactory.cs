@@ -43,5 +43,5 @@ public static class RevitJsonSchemaFactory {
     private static JsonSchemaBuildOptions CreateOptions(
         SettingsRuntimeMode runtimeMode,
         bool resolveFieldOptionSamples
-    ) => new(runtimeMode) { ResolveFieldOptionSamples = resolveFieldOptionSamples };
+    ) => new(runtimeMode) { ResolveValueDomainSamples = resolveFieldOptionSamples };
 }

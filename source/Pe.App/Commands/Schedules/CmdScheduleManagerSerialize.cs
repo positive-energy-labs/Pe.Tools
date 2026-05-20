@@ -83,8 +83,8 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
                 ProfileName = profile.Name,
                 CategoryName = profile.CategoryName,
                 IsItemized = profile.IsItemized,
-                Fields = profile.Fields,
-                SortGroup = profile.SortGroup,
+                Fields = profile.Fields ?? [],
+                SortGroup = profile.SortGroup ?? [],
                 ProfileJson = profileJson,
                 IsValid = true
             };
@@ -115,21 +115,22 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
 
             // Report what was serialized
             _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
-                $"Fields: {profile.Fields.Count} ({profile.Fields.Count(f => f.CalculatedType != null)} calculated)");
+                $"Fields: {profile.Fields?.Count ?? 0} ({profile.Fields?.Count(f => f.CalculatedType != null) ?? 0} calculated)");
 
-            if (profile.SortGroup.Count > 0) {
+            if (profile.SortGroup is { Count: > 0 }) {
                 _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
                     $"Sort/Group: {profile.SortGroup.Count}");
             }
 
-            if (profile.Filters.Count > 0) {
+            if (profile.Filters is { Count: > 0 }) {
                 _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
                     $"Filters: {profile.Filters.Count}");
             }
 
-            var headerGroupCount = profile.Fields.Count(f => !string.IsNullOrEmpty(f.HeaderGroup));
+            var fields = profile.Fields ?? [];
+            var headerGroupCount = fields.Count(f => !string.IsNullOrEmpty(f.HeaderGroup));
             if (headerGroupCount > 0) {
-                var uniqueGroups = profile.Fields
+                var uniqueGroups = fields
                     .Where(f => !string.IsNullOrEmpty(f.HeaderGroup))
                     .Select(f => f.HeaderGroup)
                     .Distinct()

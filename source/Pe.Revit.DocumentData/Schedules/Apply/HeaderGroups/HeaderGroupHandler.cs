@@ -1,4 +1,4 @@
-using Pe.Revit.DocumentData.Schedules.Runtime.Fields;
+using Pe.Shared.RevitData.Schedules;
 
 namespace Pe.Revit.DocumentData.Schedules.Apply.HeaderGroups;
 
@@ -50,7 +50,7 @@ public static class HeaderGroupHandler {
                 for (var tableCol = mergedCell.Left; tableCol <= mergedCell.Right; tableCol++) {
                     var visibleCol = tableCol - bodySection.FirstColumnNumber;
                     if (visibleColToFieldIdx.TryGetValue(visibleCol, out var fieldIdx) && fieldIdx < fieldSpecs.Count)
-                        fieldSpecs[fieldIdx].HeaderGroup = groupName;
+                        fieldSpecs[fieldIdx] = fieldSpecs[fieldIdx] with { HeaderGroup = groupName };
                     _ = processedColumns.Add(tableCol);
                 }
             } else

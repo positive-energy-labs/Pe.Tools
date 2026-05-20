@@ -1,15 +1,15 @@
-using Pe.Revit.SettingsRuntime.Json.FieldOptions;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Shared.RevitData.Parameters;
 
 namespace Pe.Revit.SettingsRuntime.Json.SchemaProviders;
 
 public static class ParameterCatalogOptionFactory {
-    public static List<ParameterCatalogOption> Build(FieldOptionsExecutionContext context) {
+    public static List<ParameterCatalogOption> Build(ValueDomainExecutionContext context) {
         var doc = context.GetActiveDocument();
         if (doc == null)
             return [];
 
-        var selectedFamilyNames = context.TryGetContextValue(OptionContextKeys.SelectedFamilyNames, out var rawNames)
+        var selectedFamilyNames = context.TryGetContextValue(ValueDomainContextKeys.SelectedFamilyNames, out var rawNames)
             ? ParseDelimitedFamilyNames(rawNames)
             : [];
         var apsGuids = ApsParameterCacheReader.ReadEntries()

@@ -1,5 +1,4 @@
 using Pe.Revit.DocumentData.Schedules.Apply;
-using Pe.Revit.DocumentData.Schedules.Runtime;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 
@@ -162,7 +161,7 @@ public static class ScheduleProfileQueryCollector {
         List<RevitDataIssue> issues
     ) {
         try {
-            var profile = ScheduleHelper.SerializeSchedule(schedule).ToAuthoredProfile();
+            var profile = ScheduleHelper.SerializeSchedule(schedule);
             return new ScheduleProfileQueryEntry(
                 schedule.Id.Value(),
                 schedule.UniqueId,

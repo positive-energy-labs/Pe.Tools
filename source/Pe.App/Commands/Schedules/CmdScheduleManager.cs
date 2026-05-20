@@ -7,7 +7,7 @@ using Pe.Revit.DocumentData.Schedules.Runtime;
 using Pe.Revit.DocumentData.Schedules;
 using Pe.Revit.Global.Ui;
 using Pe.Revit.SettingsRuntime.Json;
-using Pe.Revit.SettingsRuntime.Json.SchemaProviders;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Revit.SettingsRuntime.Modules.Schedules;
 using Pe.Revit.Ui.Core;
@@ -20,7 +20,6 @@ using System.Windows.Media.Imaging;
 using Color = System.Windows.Media.Color;
 using JsonValidationException = Pe.Revit.Global.JsonValidationException;
 using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
-// TODO: why are we using the shared profile here and for storage, I want the full revit native intellisense experience
 using SharedScheduleProfile = Pe.Shared.RevitData.Schedules.ScheduleProfile;
 
 namespace Pe.App.Commands.Schedules;
@@ -182,9 +181,9 @@ public class CmdScheduleManager : IExternalCommand {
         return new SchedulePreviewData {
             ProfileName = profileItem.TextPrimary,
             CategoryName = categoryLabel,
-            IsItemized = profile.IsItemized,
-            Fields = profile.Fields,
-            SortGroup = profile.SortGroup,
+            IsItemized = profile.IsItemized ?? true,
+            Fields = profile.Fields ?? [],
+            SortGroup = profile.SortGroup ?? [],
             ProfileJson = profileJson,
             FilePath = profileItem.FilePath,
             CreatedDate = profileItem._fileInfo.CreationTime,
@@ -376,7 +375,7 @@ public class CmdScheduleManager : IExternalCommand {
         var profile = context.ProfilesStorage.ReadRequired(context.SelectedProfile.TextPrimary);
 
         // Get families of the schedule's category
-        var category = CategoryNamesProvider.TryFindCategoryByName(context.Doc, profile.CategoryName);
+        var category = CategoryNamesValueDomain.TryFindCategoryByName(context.Doc, profile.CategoryName);
         var categoryLabel = profile.CategoryName;
 
         if (category == null) {

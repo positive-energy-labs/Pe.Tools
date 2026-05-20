@@ -49,9 +49,6 @@ into runnable plans, and pipeline-owned artifacts are the main transparency surf
     - captured or legacy FF shapes such as `MirrorConstraintSnapshot`, `OffsetConstraintSnapshot`,
       `ConstrainedRectangleExtrusionSnapshot`, `ConstrainedCircleExtrusionSnapshot`
     - resolved execution shapes such as `SymmetricPlanePairSpec` and `OffsetPlaneConstraintSpec`
-- `profile` and `spec` are also blurred outside FF less than before:
-  `Pe.Revit.Global.Revit.Documents.Schedules.ScheduleProfile` is a persisted top-level authored profile, while schedule
-  field/filter/sort/title parts remain `Spec` types.
 
 ## Current Naming Debt
 

@@ -1,11 +1,11 @@
 using Newtonsoft.Json;
-using Pe.Revit.SettingsRuntime.Json.SchemaProviders;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 
 namespace Pe.Revit.SettingsRuntime.Json.Converters;
 
 public class SpecTypeConverter : JsonConverter<ForgeTypeId> {
     private static readonly Lazy<Dictionary<string, ForgeTypeId>> LabelMap =
-        new(() => SpecNamesProvider.GetLabelToForgeMap());
+        new(() => SpecNamesValueDomain.GetLabelToForgeMap());
 
     public override void WriteJson(JsonWriter writer, ForgeTypeId? value, JsonSerializer serializer) {
         if (value == null) {

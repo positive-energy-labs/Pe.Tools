@@ -1,5 +1,5 @@
 using Pe.Revit.Global.Ui;
-using Pe.Revit.SettingsRuntime.Json.SchemaProviders;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Revit.SettingsRuntime.Modules.AutoTag;
 using Serilog;
 using Serilog.Events;
@@ -199,7 +199,7 @@ public class AutoTagUpdater : IUpdater {
     }
 
     private static string GetCategoryLabel(BuiltInCategory category) =>
-        CategoryNamesProvider.GetLabelForBuiltInCategory(category);
+        CategoryNamesValueDomain.GetLabelForBuiltInCategory(category);
 
     private void CreateTag(
         Document doc,

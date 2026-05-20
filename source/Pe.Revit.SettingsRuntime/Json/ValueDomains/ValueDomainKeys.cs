@@ -1,6 +1,6 @@
-namespace Pe.Revit.SettingsRuntime.Json.FieldOptions;
+namespace Pe.Revit.SettingsRuntime.Json.ValueDomains;
 
-public static class FieldOptionsProviderKeys {
+public static class ValueDomainKeys {
     public const string AnnotationTagFamilyNames = "annotation-tag-family-names";
     public const string AnnotationTagTypeNames = "annotation-tag-type-names";
     public const string CategoryNames = "category-names";
@@ -12,4 +12,3 @@ public static class FieldOptionsProviderKeys {
     public const string SpecNames = "spec-names";
     public const string LineStyleNames = "line-style-names";
 }
-

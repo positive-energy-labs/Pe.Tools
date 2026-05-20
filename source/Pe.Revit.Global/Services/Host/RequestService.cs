@@ -1,7 +1,7 @@
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Global.Services.Document;
 using Pe.Revit.SettingsRuntime.Json;
-using Pe.Revit.SettingsRuntime.Json.FieldOptions;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
 using Pe.Revit.SettingsRuntime.Json.SchemaProviders;
 using Pe.Shared.HostContracts.SettingsStorage;
@@ -162,8 +162,8 @@ public class RequestService {
     private Task<ParameterCatalogData> GetParameterCatalogCore(ParameterCatalogRequest request) =>
         this.EnqueueAsync(() => {
             try {
-                var providerContext = CreateFieldOptionsContext(request.ContextValues);
-                var doc = providerContext.GetActiveDocument();
+                var valueDomainContext = CreateValueDomainContext(request.ContextValues);
+                var doc = valueDomainContext.GetActiveDocument();
                 if (doc == null) {
                     throw BridgeOperationExceptions.Conflict(
                         "No active document.",
@@ -178,7 +178,7 @@ public class RequestService {
                     );
                 }
 
-                var entries = ParameterCatalogOptionFactory.Build(providerContext)
+                var entries = ParameterCatalogOptionFactory.Build(valueDomainContext)
                     .Select(ToHostParameterCatalogEntry)
                     .ToList();
 
@@ -202,11 +202,11 @@ public class RequestService {
         LoadedFamiliesFilterFieldOptionsRequest request
     ) => this.EnqueueAsync(() => {
         try {
-            var fieldOptions = SettingsFieldOptionsService.Shared.GetOptionsAsync(
+            var fieldOptions = SettingsValueDomainService.Shared.GetOptionsAsync(
                     typeof(LoadedFamiliesFilter),
                     request.PropertyPath,
                     request.SourceKey,
-                    CreateFieldOptionsContext(request.ContextValues)
+                    CreateValueDomainContext(request.ContextValues)
                 )
                 .AsTask()
                 .GetAwaiter()
@@ -224,7 +224,7 @@ public class RequestService {
             throw BridgeOperationExceptions.Unexpected(
                 "FieldOptionsException",
                 ex,
-                "Check provider configuration and request path."
+                "Check value-domain configuration and request path."
             );
         }
     });
@@ -238,11 +238,11 @@ public class RequestService {
                 if (property == null)
                     return EmptyFieldOptionsData(request.SourceKey);
 
-                var fieldOptions = SettingsFieldOptionsService.Shared.GetOptionsAsync(
+                var fieldOptions = SettingsValueDomainService.Shared.GetOptionsAsync(
                         type,
                         request.PropertyPath,
                         request.SourceKey,
-                        CreateFieldOptionsContext(request.ContextValues)
+                        CreateValueDomainContext(request.ContextValues)
                     )
                     .AsTask()
                     .GetAwaiter()
@@ -256,7 +256,7 @@ public class RequestService {
                 throw BridgeOperationExceptions.Unexpected(
                     "FieldOptionsException",
                     ex,
-                    "Check provider configuration and request path."
+                    "Check value-domain configuration and request path."
                 );
             }
         });
@@ -304,12 +304,12 @@ public class RequestService {
 
     private static FieldOptionsData CreateFieldOptionsData(
         string sourceKey,
-        FieldOptionsResult fieldOptions
+        ValueDomainResult fieldOptions
     ) {
-        if (fieldOptions.Kind == FieldOptionsResultKind.Empty)
-            return EmptyFieldOptionsData(sourceKey);
+        if (fieldOptions.Kind == ValueDomainResultKind.Empty)
+            return EmptyFieldOptionsData(sourceKey, fieldOptions.Descriptor);
 
-        if (fieldOptions.Kind == FieldOptionsResultKind.Unsupported) {
+        if (fieldOptions.Kind == ValueDomainResultKind.Unsupported) {
             throw BridgeOperationExceptions.Conflict(
                 fieldOptions.Message,
                 [
@@ -323,7 +323,7 @@ public class RequestService {
             );
         }
 
-        if (fieldOptions.Kind == FieldOptionsResultKind.Failure) {
+        if (fieldOptions.Kind == ValueDomainResultKind.Failure) {
             throw BridgeOperationExceptions.Conflict(
                 fieldOptions.Message,
                 [
@@ -339,21 +339,24 @@ public class RequestService {
 
         return new FieldOptionsData(
             sourceKey,
-            FieldOptionsMode.Suggestion,
-            true,
+            ToHostFieldOptionsMode(fieldOptions.Descriptor?.Mode ?? SettingsOptionsMode.Suggestion),
+            fieldOptions.Descriptor?.AllowsCustomValue ?? true,
             fieldOptions.Items.Select(ToFieldOptionItem).ToList()
         );
     }
 
-    private static FieldOptionsData EmptyFieldOptionsData(string sourceKey) =>
+    private static FieldOptionsData EmptyFieldOptionsData(
+        string sourceKey,
+        SettingsValueDomainDescriptor? descriptor = null
+    ) =>
         new(
             sourceKey,
-            FieldOptionsMode.Suggestion,
-            true,
+            ToHostFieldOptionsMode(descriptor?.Mode ?? SettingsOptionsMode.Suggestion),
+            descriptor?.AllowsCustomValue ?? true,
             []
         );
 
-    private static FieldOptionsExecutionContext CreateFieldOptionsContext(
+    private static ValueDomainExecutionContext CreateValueDomainContext(
         IReadOnlyDictionary<string, string>? contextValues = null
     ) => new(
         SettingsRuntimeMode.LiveDocument,
@@ -371,8 +374,14 @@ public class RequestService {
             entry.TypeNames
         );
 
+    private static FieldOptionsMode ToHostFieldOptionsMode(SettingsOptionsMode mode) =>
+        mode switch {
+            SettingsOptionsMode.Constraint => FieldOptionsMode.Constraint,
+            _ => FieldOptionsMode.Suggestion
+        };
+
     private static FieldOptionItem ToFieldOptionItem(
-        SettingsRuntime.Json.FieldOptions.FieldOptionItem item
+        ValueDomainOptionItem item
     ) => new(
         item.Value,
         item.Label,

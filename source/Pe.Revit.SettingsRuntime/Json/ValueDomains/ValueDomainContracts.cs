@@ -1,33 +1,19 @@
 using Pe.Revit.Extensions.ProjDocument;
 using Pe.Shared.StorageRuntime.Capabilities;
 
-namespace Pe.Revit.SettingsRuntime.Json.FieldOptions;
+namespace Pe.Revit.SettingsRuntime.Json.ValueDomains;
 
-public sealed record FieldOptionsDependency(
-    string Key,
-    SettingsOptionsDependencyScope Scope
-);
-
-public sealed record FieldOptionItem(
+public sealed record ValueDomainOptionItem(
     string Value,
     string Label,
     string? Description
 );
 
-public sealed record FieldOptionsDescriptor(
-    string Key,
-    SettingsOptionsResolverKind Resolver,
-    SettingsOptionsMode Mode,
-    bool AllowsCustomValue,
-    IReadOnlyList<FieldOptionsDependency> DependsOn,
-    SettingsRuntimeMode RequiredRuntimeMode
-);
-
-public sealed record FieldOptionsExecutionContext {
+public sealed record ValueDomainExecutionContext {
     private static readonly IReadOnlyDictionary<string, string> EmptyFieldValues =
         new Dictionary<string, string>(StringComparer.Ordinal);
 
-    public FieldOptionsExecutionContext(
+    public ValueDomainExecutionContext(
         SettingsRuntimeMode runtimeMode,
         IReadOnlyDictionary<string, string>? fieldValues = null
     ) {
@@ -47,25 +33,25 @@ public sealed record FieldOptionsExecutionContext {
         this.TryGetFieldValue(key, out value);
 }
 
-public interface IFieldOptionsSource {
-    FieldOptionsDescriptor Describe();
+public interface ISettingsValueDomain {
+    SettingsValueDomainDescriptor Describe();
 
-    ValueTask<IReadOnlyList<FieldOptionItem>> GetOptionsAsync(
-        FieldOptionsExecutionContext context,
+    ValueTask<IReadOnlyList<ValueDomainOptionItem>> GetOptionsAsync(
+        ValueDomainExecutionContext context,
         CancellationToken cancellationToken = default
     );
 }
 
-public enum FieldOptionsResultKind {
+public enum ValueDomainResultKind {
     Success,
     Empty,
     Unsupported,
     Failure
 }
 
-public sealed record FieldOptionsResult(
-    FieldOptionsResultKind Kind,
+public sealed record ValueDomainResult(
+    ValueDomainResultKind Kind,
     string Message,
-    FieldOptionsDescriptor? Descriptor,
-    IReadOnlyList<FieldOptionItem> Items
+    SettingsValueDomainDescriptor? Descriptor,
+    IReadOnlyList<ValueDomainOptionItem> Items
 );

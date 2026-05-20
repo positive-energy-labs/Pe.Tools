@@ -2,7 +2,7 @@ using Pe.Revit.FamilyFoundry.LookupTables;
 using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.FamilyFoundry.Serialization;
 using Pe.Revit.Global;
-using Pe.Revit.SettingsRuntime.Json.SchemaProviders;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Shared.StorageRuntime;
 using System.Collections;
 using System.Reflection;
@@ -27,10 +27,10 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
         $"{GetInstTypeStr(param)}: {param.Name} ({GetDataTypeLabel(param)})";
 
     private static string GetDataTypeLabel(ParameterSnapshot param) =>
-        SpecNamesProvider.GetLabelForForge(param.DataType);
+        SpecNamesValueDomain.GetLabelForForge(param.DataType);
 
     private static string GetPropGroupLabel(ParameterSnapshot param) =>
-        PropertyGroupNamesProvider.GetLabelForForge(param.PropertiesGroup);
+        PropertyGroupNamesValueDomain.GetLabelForForge(param.PropertiesGroup);
 
     private static string GetInstTypeStr(ParameterSnapshot param) => param.IsInstance ? "INST" : "TYPE";
 

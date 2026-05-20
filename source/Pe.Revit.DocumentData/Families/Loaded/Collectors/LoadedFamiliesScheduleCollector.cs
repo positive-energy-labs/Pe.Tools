@@ -1,7 +1,7 @@
 using Pe.Revit.DocumentData.Families.Loaded.Models;
 using Pe.Revit.DocumentData.Schedules.Apply;
-using Pe.Revit.DocumentData.Schedules.Runtime;
 using Serilog;
+using SharedScheduleProfile = Pe.Shared.RevitData.Schedules.ScheduleProfile;
 
 namespace Pe.Revit.DocumentData.Families.Loaded.Collectors;
 
@@ -29,12 +29,11 @@ public static class LoadedFamiliesScheduleCollector {
             var categoryPlacements = context.GetPlacedInstancesForCategory(categoryGroup.CategoryId).ToList();
             foreach (var schedule in schedules) {
                 var serializeStopwatch = Stopwatch.StartNew();
-                var profile = ScheduleHelper.SerializeSchedule(schedule);
-                profile.FilterBySheet = false;
+                var profile = ScheduleHelper.SerializeSchedule(schedule) with { FilterBySheet = false };
                 var serializeElapsed = serializeStopwatch.Elapsed;
 
                 var evaluateStopwatch = Stopwatch.StartNew();
-                var matchingFamilyIds = profile.Filters.Count == 0
+                var matchingFamilyIds = profile.Filters is not { Count: > 0 }
                     ? categoryGroup.FamilyElements.Select(family => family.Id.Value()).ToList()
                     : EvaluateScheduleAgainstPlacements(doc, schedule, profile, categoryPlacements);
                 var evaluateElapsed = evaluateStopwatch.Elapsed;
@@ -73,8 +72,7 @@ public static class LoadedFamiliesScheduleCollector {
                 continue;
 
             foreach (var schedule in schedules) {
-                var profile = ScheduleHelper.SerializeSchedule(schedule);
-                profile.FilterBySheet = false;
+                var profile = ScheduleHelper.SerializeSchedule(schedule) with { FilterBySheet = false };
                 var matchingFamilyIds = ScheduleHelper.GetFamilyIdsMatchingFiltersAnyType(
                     doc,
                     profile,
@@ -104,7 +102,7 @@ public static class LoadedFamiliesScheduleCollector {
     private static List<long> EvaluateScheduleAgainstPlacements(
         Document doc,
         ViewSchedule sourceSchedule,
-        ScheduleProfile profile,
+        SharedScheduleProfile profile,
         IReadOnlyList<TempPlacedSymbolRecord> placements
     ) {
         if (placements.Count == 0)
