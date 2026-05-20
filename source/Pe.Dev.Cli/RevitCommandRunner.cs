@@ -27,36 +27,6 @@ internal static class RevitCommandRunner {
 
     internal static int RunSessionCommand(IReadOnlyList<string> forwardedArguments) => RunSession(forwardedArguments);
 
-    private static int RunApprove(IReadOnlyList<string> forwardedArguments) {
-        RevitApproveOptions options;
-        try {
-            options = RevitApproveOptions.Parse(forwardedArguments);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            return 10;
-        }
-
-        if (options.SkipIfSessionExists && SessionSelector.SelectNewestVisibleSession(options.RevitYear) is not null) {
-            var scope = options.RevitYear.HasValue
-                ? $"Revit {options.RevitYear.Value}"
-                : "Revit";
-            Console.WriteLine($"Skipped approval watcher because an existing {scope} session is already running.");
-            return 0;
-        }
-
-        var launchResult = CliProcessRelauncher.StartBackground(
-            BuildApproveWorkerArguments(options)
-        );
-
-        if (!launchResult.Success) {
-            Console.Error.WriteLine(launchResult.Message);
-            return launchResult.ExitCode;
-        }
-
-        Console.WriteLine(launchResult.Message);
-        return 0;
-    }
-
     private static async Task<int> RunApproveWorkerAsync(
         IReadOnlyList<string> forwardedArguments,
         CancellationToken cancellationToken
@@ -67,6 +37,17 @@ internal static class RevitCommandRunner {
         } catch (Exception ex) {
             Console.Error.WriteLine(ex.Message);
             return 10;
+        }
+
+        if (!options.RunInline) {
+            var launchResult = CliProcessRelauncher.StartBackground(BuildApproveWorkerArguments(options with { RunInline = true }));
+            if (!launchResult.Success) {
+                Console.Error.WriteLine(launchResult.Message);
+                return launchResult.ExitCode;
+            }
+
+            Console.WriteLine(launchResult.Message);
+            return 0;
         }
 
         return await ApprovalWatcherService.RunAsync(options.TimeoutSeconds, options.RevitYear, cancellationToken);
@@ -411,12 +392,14 @@ internal static class RevitCommandRunner {
             arguments.Add("--revit-year");
             arguments.Add(options.RevitYear.Value.ToString(CultureInfo.InvariantCulture));
         }
+        if (options.RunInline)
+            arguments.Add("--run-inline");
 
         return arguments;
     }
 
     private static int StartApprovalWatcherForFreshLaunch(int revitYear, int timeoutSeconds) {
-        var options = new RevitApproveOptions(timeoutSeconds, revitYear, true);
+        var options = new RevitApproveOptions(timeoutSeconds, revitYear, false);
         var launchResult = CliProcessRelauncher.StartBackground(BuildApproveWorkerArguments(options));
         if (!launchResult.Success) {
             Console.Error.WriteLine(launchResult.Message);

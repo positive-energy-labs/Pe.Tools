@@ -123,8 +123,7 @@ public class CmdPeTools : IExternalCommand {
             ShowActionResult("Scripting Workspace", OpenScriptingWorkspace(uiApplication));
             break;
         case TaskDialogResult.CommandLink2:
-            var peaResult = PeaTerminalLauncher.LaunchAgent();
-            _ = TaskDialog.Show("Pe Tools", peaResult.Message);
+            _ = PeaTerminalLauncher.LaunchAgent();
             break;
         case TaskDialogResult.CommandLink3:
             ShowActionResult("Pe Tools Browser", OpenPeToolsBrowser(sessionId));
