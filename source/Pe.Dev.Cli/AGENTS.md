@@ -72,7 +72,7 @@ Live runtime validation loop:
 - `env`, `revit`, `pea`, `automation`, and `codegen` are first-class root command families; keep implementation plumbing out of public help.
 - `pea script` belongs to the deployed `pea` surface, not `pe-dev`; keep live scripting freshness explicit with `pe-dev revit sync-runtime` before script execution.
 - Build hooks must consume the built CLI output through `dotnet exec`, not `dotnet run`.
-- Approval and lower-level hot-reload are internal plumbing. Keep public workflow entrypoints on `revit sync-runtime` and `__internal approve-worker`.
+- Approval watcher plumbing and lower-level hot-reload are internal. Keep operator-facing runtime entrypoints on `revit sync-runtime`.
 - `revit sync-runtime` is the operator-facing pre-live-validation command. Keep it explicit, health-aware, and thin over the lower-level HR path.
 - `env status` and `revit session` split static runtime/install diagnostics from live desktop session diagnostics. It should stay CLI-first, pull in host probe/session-summary facts through shared Host contracts when available, and keep `--json` honest for tooling.
 - `revit test fresh` is an explicit Revit-backed verification helper, not the semantic center of repo testing. Keep it thin, deterministic, and honest about the behavior it owns.

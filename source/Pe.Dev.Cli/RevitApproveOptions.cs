@@ -5,12 +5,12 @@ namespace Pe.Dev.Cli;
 internal sealed record RevitApproveOptions(
     int TimeoutSeconds,
     int? RevitYear,
-    bool SkipIfSessionExists
+    bool RunInline
 ) {
     public static RevitApproveOptions Parse(IReadOnlyList<string> args) {
         var timeoutSeconds = 60;
         int? revitYear = null;
-        var skipIfSessionExists = false;
+        var runInline = false;
 
         for (var i = 0; i < args.Count; i++) {
             var arg = args[i];
@@ -25,15 +25,15 @@ internal sealed record RevitApproveOptions(
             case "-revityear":
                 revitYear = int.Parse(RequireValue(args, ref i, arg), CultureInfo.InvariantCulture);
                 break;
-            case "--skip-if-session-exists":
-                skipIfSessionExists = true;
+            case "--run-inline":
+                runInline = true;
                 break;
             default:
                 throw new ArgumentException($"Unknown argument '{arg}' for approve.");
             }
         }
 
-        return new RevitApproveOptions(timeoutSeconds, revitYear, skipIfSessionExists);
+        return new RevitApproveOptions(timeoutSeconds, revitYear, runInline);
     }
 
     private static string RequireValue(IReadOnlyList<string> args, ref int index, string optionName) {
