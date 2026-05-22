@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using TypeGen.Core.TypeAnnotations;
 
@@ -23,7 +23,7 @@ public static class HttpRoutes {
 [ExportTsClass]
 public static class HostProtocol {
     public const string Transport = "http+sse";
-    public const int ContractVersion = 33;
+    public const int ContractVersion = 34;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
@@ -93,6 +93,15 @@ public record HostProbeData(
 );
 
 [ExportTsInterface]
+public record HostRuntimeAssemblyData(
+    string Name,
+    string? Version,
+    string? InformationalVersion,
+    string? Location,
+    string ModuleVersionId
+);
+
+[ExportTsInterface]
 public record HostSessionSummaryData(
     bool BridgeIsConnected,
     string? SessionId,
@@ -101,6 +110,7 @@ public record HostSessionSummaryData(
     string? RuntimeFramework,
     int OpenDocumentCount,
     HostActiveDocumentSummary? ActiveDocument,
+    IReadOnlyList<HostRuntimeAssemblyData> RuntimeAssemblies,
     IReadOnlyList<HostModuleDescriptor> AvailableModules
 );
 

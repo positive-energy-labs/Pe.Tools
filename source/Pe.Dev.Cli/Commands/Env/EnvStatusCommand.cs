@@ -21,20 +21,7 @@ internal static class EnvStatusCommand {
             }
         }
 
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var applicationData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var installedRuntime = ProductRuntimeLayout.ForCurrentUser(localAppData);
-        var developmentRuntime = ProductDevelopmentRuntimeLayout.ForCurrentUser(localAppData);
-        var report = new RuntimeStatusReport(
-            installedRuntime.Binaries.HostExecutablePath,
-            developmentRuntime.Binaries.HostExecutablePath,
-            developmentRuntime.Binaries.PeDevDllPath,
-            installedRuntime.Binaries.PeaLauncherPath,
-            File.Exists(installedRuntime.Binaries.PeaCurrentVersionPath)
-                ? File.ReadAllText(installedRuntime.Binaries.PeaCurrentVersionPath).Trim()
-                : null,
-            EnumerateRuntimeDescriptors(applicationData).ToArray()
-        );
+        var report = CreateReport();
 
         if (jsonOutput) {
             Console.WriteLine(JsonSerializer.Serialize(report, JsonOptions));
@@ -58,6 +45,23 @@ internal static class EnvStatusCommand {
         }
 
         return 0;
+    }
+
+    internal static RuntimeStatusReport CreateReport() {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var applicationData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var installedRuntime = ProductRuntimeLayout.ForCurrentUser(localAppData);
+        var developmentRuntime = ProductDevelopmentRuntimeLayout.ForCurrentUser(localAppData);
+        return new RuntimeStatusReport(
+            installedRuntime.Binaries.HostExecutablePath,
+            developmentRuntime.Binaries.HostExecutablePath,
+            developmentRuntime.Binaries.PeDevDllPath,
+            installedRuntime.Binaries.PeaLauncherPath,
+            File.Exists(installedRuntime.Binaries.PeaCurrentVersionPath)
+                ? File.ReadAllText(installedRuntime.Binaries.PeaCurrentVersionPath).Trim()
+                : null,
+            EnumerateRuntimeDescriptors(applicationData).ToArray()
+        );
     }
 
     private static IEnumerable<RuntimeDescriptorStatus> EnumerateRuntimeDescriptors(string applicationData) {
@@ -89,7 +93,7 @@ internal static class EnvStatusCommand {
         return options;
     }
 
-    private sealed record RuntimeStatusReport(
+    internal sealed record RuntimeStatusReport(
         string InstalledHostExecutablePath,
         string DevHostExecutablePath,
         string DevPeDevDllPath,
@@ -98,7 +102,7 @@ internal static class EnvStatusCommand {
         IReadOnlyList<RuntimeDescriptorStatus> RuntimeDescriptors
     );
 
-    private sealed record RuntimeDescriptorStatus(
+    internal sealed record RuntimeDescriptorStatus(
         int RevitYear,
         string DescriptorPath,
         ProductRuntimeLane RuntimeLane,

@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts.SettingsStorage;
@@ -6,7 +6,7 @@ using Pe.Shared.HostContracts.SettingsStorage;
 namespace Pe.Shared.HostContracts.Bridge;
 
 public static class BridgeProtocol {
-    public const int ContractVersion = 18;
+    public const int ContractVersion = 19;
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
@@ -35,6 +35,7 @@ public sealed record BridgeStateSnapshot(
     string? ActiveDocumentCloudModelUrn,
     long ActiveDocumentObservedAtUnixMs,
     int OpenDocumentCount,
+    List<HostRuntimeAssemblyData> RuntimeAssemblies,
     List<HostModuleDescriptor> AvailableModules
 );
 

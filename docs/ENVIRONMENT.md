@@ -9,7 +9,7 @@ Keep **compile/package verification** separate from **live Revit runtime freshne
 - Plain terminal `dotnet build` => **isolated**, `.artifacts/...`, `NoRrdContact`.
 - `dotnet run --project .\build\Build.csproj ...` => package/publish orchestration, `NoRrdContact`.
 - Rider/IDE build => **interactive**, package-local outputs that Rider hot reload can reason about.
-- `pe-dev revit sync-runtime` => explicit bridge from fresh interactive outputs into live RRD validation.
+- `pe-dev sync` => explicit bridge from fresh interactive outputs into live RRD validation.
 - Do **not** use `/p:PeIsolatedBuild=false` as normal guidance. It forces terminal interactive outputs and can clobber Rider/RRD hot-reload baselines.
 
 ## Taxonomy shortcuts
@@ -55,7 +55,7 @@ Workflow `Verify`; lane `Dev`; target `AttachedRrd`; policy `RrdRequired`.
 3. Run the live probe/test.
 
 ```powershell
-pe-dev revit sync-runtime
+pe-dev sync
 pea script --stdin --name Probe.cs
 ```
 
@@ -66,19 +66,19 @@ If HR reports restart-required changes, restart RRD before trusting behavior.
 Same lane/policy as live scripting: first Rider/IDE build affected runtime code, then:
 
 ```powershell
-pe-dev revit sync-runtime
+pe-dev sync
 dotnet build .\source\Pe.Revit.Tests\Pe.Revit.Tests.csproj -c Debug.R25.Tests /p:WarningLevel=0
 dotnet test .\source\Pe.Revit.Tests\Pe.Revit.Tests.csproj -c Debug.R25.Tests --filter "Name~SomeFocusedTest" --no-build
 ```
 
-The test build is not the runtime freshness step; `sync-runtime` is.
+The test build is not the runtime freshness step; `pe-dev sync` is.
 
 ### Run Revit-backed tests without touching RRD?
 
 Workflow `Verify`; lane `Dev`; target `FreshRevitProcess`; policy `NoRrdContact`.
 
 ```powershell
-pe-dev revit test fresh --filter "Name~AssemblyLoadDiagnostics"
+pe-dev test --filter "Name~AssemblyLoadDiagnostics" --timeout-seconds 900
 ```
 
 The helper should own and close its fresh Revit process.
@@ -86,10 +86,22 @@ The helper should own and close its fresh Revit process.
 ### Inspect current env/session/logs?
 
 ```powershell
-pe-dev env status
-pe-dev revit session
+pe-dev doctor --json
+pe-dev doctor
+pe-dev status
+pe-dev status
 pe-dev env logs all --tail 50
 ```
+
+Agent decision flow:
+
+- `pe-dev doctor --json` first when runtime state is unknown; consume `exitCode`, `issues[]`, and `recommendedNextSteps[]`.
+- `exitCode=2`: fix shell/runtime setup before Revit debugging.
+- `exitCode=3`: attached RRD is unavailable for the requested year; start/sync RRD or switch to fresh verification.
+- `exitCode=4`: loaded runtime assemblies look stale; run `pe-dev sync`, restart RRD if still stale, or use `pe-dev test ...`.
+- For autonomous hooks, prefer `--json` on the chosen lane: `doctor --json`, `sync --json`, or `test --json`.
+- For safe smoke checks or command planning, use `pe-dev test --plan --json ...`; this resolves the fresh lane without building, launching Revit, quarantining add-ins, running tests, or cleaning sessions.
+- For real fresh proof runs from agents/hooks, include `--timeout-seconds <seconds>` so Revit launch/test-adapter hangs fail bounded with exit code `124`. Do not use a real fresh run as a cheap CLI smoke test.
 
 Check these before assuming source/runtime divergence.
 
@@ -184,7 +196,7 @@ Start DA audits with one or two models before widening the manifest.
 
 ## Avoid as defaults
 
-Do not make terminal interactive builds part of the normal loop. They force package-local outputs from the shell. For live RRD work, prefer Rider/IDE build + `pe-dev revit sync-runtime`. Use terminal interactive builds only as an explicit escape hatch when you have accepted the RRD/HR baseline risk.
+Do not make terminal interactive builds part of the normal loop. They force package-local outputs from the shell. For live RRD work, prefer Rider/IDE build + `pe-dev sync`. Use terminal interactive builds only as an explicit escape hatch when you have accepted the RRD/HR baseline risk.
 
 Do not run `install/Installer.csproj` directly unless you already have a generated `InstallerPayloadManifest`. Normal installer path is `pack`.
 
@@ -194,10 +206,10 @@ Do not run `install/Installer.csproj` directly unless you already have a generat
 | --- | --- |
 | safe compile | `dotnet build .\source\<Package>\<Package>.csproj -c Debug.R25` |
 | sandbox recovery | `.\tools\dotnet-sandbox-safe.ps1 <dotnet args>` |
-| live RRD refresh | Rider build, then `pe-dev revit sync-runtime` |
+| live RRD refresh | Rider build, then `pe-dev sync` |
 | live script | `pea script --stdin --name Probe.cs` after sync |
 | attached tests | Rider build + sync + explicit-year `dotnet test` |
-| fresh Revit tests | `pe-dev revit test fresh --filter "Name~..."` |
+| fresh Revit tests | `pe-dev test --filter "Name~..." --timeout-seconds 900` |
 | package artifacts/MSI | `dotnet run --project .\build\Build.csproj -c Release -- pack` |
 | package one year | `dotnet run --project .\build\Build.csproj -c Release -- pack --configuration Release.R25` |
 | package desktop bundle only | `dotnet run --project .\build\Build.csproj -c Release -- pack desktop --configuration Release.R25` |
@@ -205,4 +217,4 @@ Do not run `install/Installer.csproj` directly unless you already have a generat
 | package automation appbundle only | `dotnet run --project .\build\Build.csproj -c Release -- pack automation` |
 | publish release | `dotnet run --project .\build\Build.csproj -c Release -- pack publish` |
 | refresh `pea` dev payload | `pe-dev pea install-dev` |
-| inspect env/session/logs | `pe-dev env status`, `pe-dev revit session`, `pe-dev env logs all --tail 50` |
+| inspect env/session/logs | `pe-dev status`, `pe-dev status`, `pe-dev env logs all --tail 50` |

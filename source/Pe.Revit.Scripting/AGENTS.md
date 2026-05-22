@@ -26,7 +26,7 @@ resolution, compile/load/execute, and the bridge-dispatched `ExternalEvent` hand
   runs.
 - If you change the supported authoring contract, update the generated workspace templates in
   `Bootstrap/ScriptFileTemplates.cs` in the same pass.
-- For live script validation, build the affected runtime package-local outputs, then run `pe-dev revit sync-runtime` before `pea script ...`.
+- AGENT GUIDANCE: AttachedRrd scripting uses assemblies already loaded in RRD. If runtime code changed, build the affected package-local outputs, then run `pe-dev sync` before `pea script ...`; an isolated `dotnet build` is not runtime freshness proof.
 
 ## Shared Language
 

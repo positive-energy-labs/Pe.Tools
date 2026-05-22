@@ -1,4 +1,4 @@
-using Pe.Shared.ApsAuth;
+﻿using Pe.Shared.ApsAuth;
 using Pe.Shared.HostContracts.Bridge;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Protocol;
@@ -203,6 +203,7 @@ internal sealed class HostOperationRegistry {
                     connectedSession.ActiveDocumentCloudModelUrn,
                     connectedSession.ActiveDocumentObservedAtUnixMs
                 ),
+            connectedSession?.RuntimeAssemblies ?? [],
             connectedSession?.AvailableModules ?? []
         );
     }
