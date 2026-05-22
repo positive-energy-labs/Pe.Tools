@@ -4,6 +4,7 @@
  */
 
 import type { HostActiveDocumentSummary } from "./host-active-document-summary.js";
+import type { HostRuntimeAssemblyData } from "./host-runtime-assembly-data.js";
 import type { HostModuleDescriptor } from "./host-module-descriptor.js";
 
 export interface HostSessionSummaryData {
@@ -14,5 +15,6 @@ export interface HostSessionSummaryData {
   runtimeFramework?: string;
   openDocumentCount: number;
   activeDocument?: HostActiveDocumentSummary;
+  runtimeAssemblies: HostRuntimeAssemblyData[];
   availableModules: HostModuleDescriptor[];
 }

@@ -5,5 +5,5 @@
 
 export class HostProtocol {
   static readonly transport: string = "http+sse";
-  static readonly contractVersion: number = 33;
+  static readonly contractVersion: number = 34;
 }
