@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Pe.Host.Operations;
 using Pe.Host.Services;
 using Pe.Shared.HostContracts.Bridge;
@@ -469,7 +469,10 @@ public sealed class BridgeServer(
     }
 
     private BridgeStateSnapshot CloneState(BridgeStateSnapshot state) =>
-        state with { AvailableModules = [.. state.AvailableModules] };
+        state with {
+            RuntimeAssemblies = [.. state.RuntimeAssemblies],
+            AvailableModules = [.. state.AvailableModules]
+        };
 }
 
 internal sealed record PendingBridgeRequest(
@@ -522,10 +525,16 @@ public sealed record BridgeSessionSnapshot(
     public string? ActiveDocumentCloudModelUrn => this.State.ActiveDocumentCloudModelUrn;
     public long ActiveDocumentObservedAtUnixMs => this.State.ActiveDocumentObservedAtUnixMs;
     public int OpenDocumentCount => this.State.OpenDocumentCount;
+    public List<HostRuntimeAssemblyData> RuntimeAssemblies => this.State.RuntimeAssemblies;
     public List<HostModuleDescriptor> AvailableModules => this.State.AvailableModules;
 
     public BridgeSessionSnapshot DeepCopy() =>
-        this with { State = this.State with { AvailableModules = [.. this.State.AvailableModules] } };
+        this with {
+            State = this.State with {
+                RuntimeAssemblies = [.. this.State.RuntimeAssemblies],
+                AvailableModules = [.. this.State.AvailableModules]
+            }
+        };
 
     public static BridgeSessionSnapshot Create(BridgeRegistrationRequest registration) =>
         new(
@@ -534,7 +543,10 @@ public sealed record BridgeSessionSnapshot(
             registration.State.RevitVersion,
             registration.State.RuntimeFramework,
             registration.ContractVersion,
-            registration.State with { AvailableModules = [.. registration.State.AvailableModules] },
+            registration.State with {
+                RuntimeAssemblies = [.. registration.State.RuntimeAssemblies],
+                AvailableModules = [.. registration.State.AvailableModules]
+            },
             DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
         );
 }

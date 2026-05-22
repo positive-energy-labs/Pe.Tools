@@ -5,18 +5,12 @@ SetTitleMatchMode 2
 DetectHiddenWindows true
 
 riderSelector := "Pe.Tools ahk_exe rider64.exe"
-fileListPath := ""
 warningSeconds := 3
 skipWarning := false
-mode := "full"
 
 if A_Args.Length >= 1 {
-    fileListPath := A_Args[1]
-}
-
-if A_Args.Length >= 2 {
     try {
-        parsedWarningSeconds := Round(Trim(A_Args[2]) + 0)
+        parsedWarningSeconds := Round(Trim(A_Args[1]) + 0)
         if (parsedWarningSeconds >= 0) {
             warningSeconds := parsedWarningSeconds
         }
@@ -25,24 +19,8 @@ if A_Args.Length >= 2 {
     }
 }
 
-if A_Args.Length >= 3 {
-    skipWarning := Trim(A_Args[3]) = "1"
-}
-
-if A_Args.Length >= 4 {
-    mode := Trim(A_Args[4])
-}
-
-if (mode = "") {
-    mode := "full"
-}
-
-if (mode = "warn") {
-    if !skipWarning {
-        WarnBeforeAutomation(warningSeconds)
-    }
-
-    ExitApp 0
+if A_Args.Length >= 2 {
+    skipWarning := Trim(A_Args[2]) = "1"
 }
 
 if !WinExist(riderSelector) {
@@ -50,52 +28,11 @@ if !WinExist(riderSelector) {
 }
 
 if !WinExist(riderSelector) {
+    riderSelector := "ahk_exe rider.exe"
+}
+
+if !WinExist(riderSelector) {
     ExitApp 1
-}
-
-LoadTargetFiles(path) {
-    if (path = "" || !FileExist(path)) {
-        return []
-    }
-
-    files := []
-    for line in StrSplit(FileRead(path, "UTF-8"), "`n", "`r") {
-        trimmed := Trim(line, " `t`r`n`"")
-        if (trimmed = "") {
-            continue
-        }
-
-        files.Push(trimmed)
-    }
-
-    return files
-}
-
-NudgeFiles(files) {
-    originals := Map()
-
-    for file in files {
-        if !FileExist(file) {
-            continue
-        }
-
-        original := FileRead(file, "UTF-8")
-        originals[file] := original
-
-        handle := FileOpen(file, "w", "UTF-8")
-        handle.Write(original . "`r`n// PE_HOT_RELOAD_NUDGE`r`n")
-        handle.Close()
-    }
-
-    return originals
-}
-
-RestoreFiles(originals) {
-    for file, original in originals {
-        handle := FileOpen(file, "w", "UTF-8")
-        handle.Write(original)
-        handle.Close()
-    }
 }
 
 WarnBeforeAutomation(seconds) {
@@ -112,7 +49,7 @@ WarnBeforeAutomation(seconds) {
     warningWindow.SetFont("s11", "Segoe UI")
     warningWindow.AddText("c1F1F1F w420", "Pe.Tools hot reload automation")
     warningWindow.SetFont("s10", "Segoe UI")
-    warningWindow.AddText("c333333 w420", "Rider will be focused and receive input shortly.")
+    warningWindow.AddText("c333333 w420", "Rider will be focused and receive reload/apply actions shortly.")
     countdown := warningWindow.AddText("c7A5300 w420", "")
     warningWindow.Show("AutoSize Center NoActivate")
 
@@ -126,42 +63,38 @@ WarnBeforeAutomation(seconds) {
     warningWindow.Destroy()
 }
 
+RunRiderAction(actionName, waitMilliseconds) {
+    savedClipboard := A_Clipboard
+    SendEvent "^p"
+    Sleep 1200
+    SendEvent "^a"
+    Sleep 150
+    A_Clipboard := actionName
+    SendEvent "^v"
+    Sleep 1200
+    SendEvent "{Enter}"
+    Sleep waitMilliseconds
+    A_Clipboard := savedClipboard
+}
+
 try {
     WinRestore riderSelector
 } catch {
 }
-
-RunRiderAction(actionName) {
-    global riderSelector
-
-    savedClipboard := A_Clipboard
-    SendEvent "^p"
-    Sleep 100
-    SendEvent "^a"
-    A_Clipboard := actionName
-    SendEvent "^v"
-    Sleep 500
-    SendEvent "{Enter}"
-    Sleep 150
-    A_Clipboard := savedClipboard
-}
-
-targetFiles := LoadTargetFiles(fileListPath)
 
 if !skipWarning {
     WarnBeforeAutomation(warningSeconds)
 }
 
 WinActivate riderSelector
-if !WinWaitActive(riderSelector, , 2) {
+if !WinWaitActive(riderSelector, , 3) {
     ExitApp 2
 }
 
-Sleep 250
-originals := NudgeFiles(targetFiles)
-Sleep 250
-RunRiderAction("Auto HR")
-Sleep 3000
-RestoreFiles(originals)
+Sleep 1500
+; Keep these action names explicit so the pe-dev/Rider contract can be tuned if Rider renames actions.
+RunRiderAction("Reload All from Disk", 2500)
+Sleep 1000
+RunRiderAction("Apply Changes", 6000)
 Sleep 250
 ExitApp 0

@@ -42,47 +42,32 @@ internal sealed record DevCliOptions(
                 : DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, commandKind, positionals.Skip(2).ToArray()));
         }
 
-        if (positionals.Count >= 2 && string.Equals(positionals[0], "env", StringComparison.OrdinalIgnoreCase)) {
-            var commandKind = positionals[1].ToLowerInvariant() switch {
-                "status" => DevCommandKind.EnvStatus,
-                "logs" => DevCommandKind.EnvLogs,
-                _ => DevCommandKind.Unknown
-            };
-            return commandKind == DevCommandKind.Unknown
-                ? DevCliParseResult.Failure($"Unknown env command '{positionals[1]}'.", true)
-                : DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, commandKind, positionals.Skip(2).ToArray()));
-        }
+        if (positionals.Count == 0)
+            return DevCliParseResult.Failure("Expected a `doctor`, `status`, `sync`, `test`, `self-test`, `pea`, `automation`, or `codegen` command.", true);
 
-        if (positionals.Count >= 2 && string.Equals(positionals[0], "revit", StringComparison.OrdinalIgnoreCase)) {
-            var commandKind = positionals[1].ToLowerInvariant() switch {
-                "session" => DevCommandKind.RevitSession,
-                "sync-runtime" => DevCommandKind.RevitSyncRuntime,
-                "test" when positionals.Count >= 3 && string.Equals(positionals[2], "fresh", StringComparison.OrdinalIgnoreCase) => DevCommandKind.RevitTestFresh,
-                _ => DevCommandKind.Unknown
-            };
-            if (commandKind == DevCommandKind.Unknown)
-                return DevCliParseResult.Failure($"Unknown revit command '{positionals[1]}'.", true);
-            var skip = commandKind == DevCommandKind.RevitTestFresh ? 3 : 2;
-            return DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, commandKind, positionals.Skip(skip).ToArray()));
-        }
+        var first = positionals[0].ToLowerInvariant();
+        return first switch {
+            "doctor" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Doctor, positionals.Skip(1).ToArray())),
+            "status" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Status, positionals.Skip(1).ToArray())),
+            "sync" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Sync, positionals.Skip(1).ToArray())),
+            "test" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Test, positionals.Skip(1).ToArray())),
+            "self-test" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.SelfTest, positionals.Skip(1).ToArray())),
+            "pea" when positionals.Count >= 2 => ParsePea(repoRoot, positionals),
+            "automation" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Automation, positionals.Skip(1).ToArray())),
+            "codegen" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Codegen, positionals.Skip(1).ToArray())),
+            "env" or "revit" or "verify" => DevCliParseResult.Failure($"`pe-dev {positionals[0]}` has been removed. Use `pe-dev doctor`, `pe-dev status`, `pe-dev sync`, or `pe-dev test`.", true),
+            _ => DevCliParseResult.Failure($"Unknown command '{positionals[0]}'.", true)
+        };
+    }
 
-        if (positionals.Count >= 2 && string.Equals(positionals[0], "pea", StringComparison.OrdinalIgnoreCase)) {
-            var commandKind = positionals[1].ToLowerInvariant() switch {
-                "install-dev" => DevCommandKind.PeaInstallDev,
-                _ => DevCommandKind.Unknown
-            };
-            return commandKind == DevCommandKind.Unknown
-                ? DevCliParseResult.Failure($"Unknown pea command '{positionals[1]}'.", true)
-                : DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, commandKind, positionals.Skip(2).ToArray()));
-        }
-
-        if (positionals.Count >= 1 && string.Equals(positionals[0], "automation", StringComparison.OrdinalIgnoreCase))
-            return DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Automation, positionals.Skip(1).ToArray()));
-
-        if (positionals.Count >= 1 && string.Equals(positionals[0], "codegen", StringComparison.OrdinalIgnoreCase))
-            return DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Codegen, positionals.Skip(1).ToArray()));
-
-        return DevCliParseResult.Failure("Expected an `env`, `revit`, `pea`, `automation`, or `codegen` command.", true);
+    private static DevCliParseResult ParsePea(string? repoRoot, IReadOnlyList<string> positionals) {
+        var commandKind = positionals[1].ToLowerInvariant() switch {
+            "install-dev" => DevCommandKind.PeaInstallDev,
+            _ => DevCommandKind.Unknown
+        };
+        return commandKind == DevCommandKind.Unknown
+            ? DevCliParseResult.Failure($"Unknown pea command '{positionals[1]}'.", true)
+            : DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, commandKind, positionals.Skip(2).ToArray()));
     }
 
     private static string RequireValue(IReadOnlyList<string> args, ref int index, string optionName) {

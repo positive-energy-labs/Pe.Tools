@@ -23,10 +23,10 @@ Living vocabulary for build/runtime/deployment decisions. Use this to translate 
 | "Compile this safely" | `Build` | none | `NoRrdContact` | `dotnet build <package>.csproj -c Debug.R25` |
 | "Check generated contracts" | `Verify` | none | `NoRrdContact` | `pe-dev codegen check` |
 | "Update generated contracts" | `Verify`/source update | `Dev` | `NoRrdContact` | `pe-dev codegen sync ...` |
-| "Use current source in live RRD" | `Verify` | `Dev` | `RrdRequired` | Rider build, then `pe-dev revit sync-runtime` |
+| "Use current source in live RRD" | `Verify` | `Dev` | `RrdRequired` | Rider build, then `pe-dev verify revit sync` |
 | "Run a script against live Revit" | `Verify` | `Dev` | `RrdRequired` | `pea script ...` after sync |
 | "Run attached Revit tests" | `Verify` | `Dev` | `RrdRequired` | sync, then explicit-year `dotnet test` |
-| "Run fresh Revit tests" | `Verify` | `Dev` | `NoRrdContact` | `pe-dev revit test fresh ...` |
+| "Run fresh Revit tests" | `Verify` | `Dev` | `NoRrdContact` | `pe-dev verify revit fresh ...` |
 | "Package product artifacts" | `Package` | none | `NoRrdContact` | `dotnet run --project build/Build.csproj -- pack` |
 | "Build the installer" | `Package` | none | `NoRrdContact` | `pack` creates MSI under `.artifacts/packages/installers` |
 | "Validate installed product" | `Verify` | `Install` | `NoRrdContact` unless explicitly opening RRD | install MSI, run installed `pea`/host paths |

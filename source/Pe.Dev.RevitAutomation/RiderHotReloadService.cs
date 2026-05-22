@@ -5,6 +5,7 @@ namespace Pe.Dev.RevitAutomation;
 
 public sealed class RiderHotReloadService(RevitProcessSessionSelector sessionSelector) {
     private const int DefaultWarningSeconds = 3;
+    private const string SignalFileRelativePath = @"source\Pe.Revit.Global\HotReload\PeHotReloadSignal.cs";
 
     private readonly RevitProcessSessionSelector _sessionSelector = sessionSelector;
 
@@ -21,23 +22,21 @@ public sealed class RiderHotReloadService(RevitProcessSessionSelector sessionSel
             if (session is null)
                 return new RevitHotReloadResult(RevitHotReloadResultKind.NoSession, "No Revit sessions found.", []);
 
-            var unstagedFiles = await this.GetUnstagedRuntimeFilesAsync(repoRoot, cancellationToken);
+            var signalFilePath = ResolveSignalFilePath(repoRoot);
+            var riderExecutable = TryResolveRiderExecutable()
+                                  ?? throw new InvalidOperationException("Could not locate rider64.exe or rider.exe.");
             var autoHotkeyExecutable = TryResolveAutoHotkeyExecutable()
-                                       ?? throw new InvalidOperationException(
-                                           "Could not locate AutoHotkey64.exe."
-                                       );
+                                       ?? throw new InvalidOperationException("Could not locate AutoHotkey64.exe.");
             var ahkScriptPath = this.ResolveHotReloadScriptPath();
 
-            await this.TriggerHotReloadAsync(autoHotkeyExecutable, ahkScriptPath, unstagedFiles, cancellationToken);
-
-            var message = unstagedFiles.Count == 0
-                ? $"Auto HR was triggered against selected session PID {session.ProcessId}. No unstaged runtime .cs files were nudged."
-                : $"Auto HR was triggered against selected session PID {session.ProcessId} after nudging {unstagedFiles.Count} unstaged runtime file(s).";
+            await MutateSignalFileAsync(signalFilePath, cancellationToken);
+            await OpenSignalFileInRiderAsync(riderExecutable, signalFilePath, cancellationToken);
+            await this.TriggerHotReloadActionsAsync(autoHotkeyExecutable, ahkScriptPath, cancellationToken);
 
             return new RevitHotReloadResult(
                 RevitHotReloadResultKind.Triggered,
-                message,
-                unstagedFiles,
+                $"Rider reload/apply actions completed against selected session PID {session.ProcessId} using signal file '{Path.GetRelativePath(repoRoot, signalFilePath)}'. Rider may still report restart-required changes asynchronously.",
+                [],
                 session
             );
         } catch (Exception ex) {
@@ -49,46 +48,69 @@ public sealed class RiderHotReloadService(RevitProcessSessionSelector sessionSel
         }
     }
 
-    private async Task<IReadOnlyList<string>> GetUnstagedRuntimeFilesAsync(string repoRoot,
-        CancellationToken cancellationToken) {
-        var output = await RunProcessCaptureAsync(
-            "git",
-            ["-C", repoRoot, "status", "--porcelain", "--untracked-files=all"],
-            cancellationToken
-        );
-
-        if (output.ExitCode != 0)
-            throw new InvalidOperationException(output.StandardError.Trim());
-
-        return RiderHotReloadFileDiscovery.ParseUnstagedRuntimeFiles(repoRoot, output.StandardOutput);
+    private static string ResolveSignalFilePath(string repoRoot) {
+        var path = Path.GetFullPath(Path.Combine(repoRoot, SignalFileRelativePath));
+        if (!File.Exists(path))
+            throw new InvalidOperationException($"Hot reload signal file was not found at '{path}'.");
+        return path;
     }
 
-    private async Task TriggerHotReloadAsync(
-        string autoHotkeyExecutable,
-        string ahkScriptPath,
-        IReadOnlyList<string> unstagedFiles,
+    private static async Task MutateSignalFileAsync(string signalFilePath, CancellationToken cancellationToken) {
+        var original = await File.ReadAllTextAsync(signalFilePath, cancellationToken);
+        var stamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+        var updated = ReplaceSignalValue(original, stamp);
+        if (string.Equals(original, updated, StringComparison.Ordinal))
+            updated = original.TrimEnd() + $"\r\n// PE_HOT_RELOAD_SIGNAL {stamp}\r\n";
+        await File.WriteAllTextAsync(signalFilePath, updated, cancellationToken);
+    }
+
+    private static string ReplaceSignalValue(string content, string value) {
+        const string propertyPrefix = "internal static string Value { get; } = \"";
+        var start = content.IndexOf(propertyPrefix, StringComparison.Ordinal);
+        if (start < 0)
+            return content;
+
+        var valueStart = start + propertyPrefix.Length;
+        var valueEnd = content.IndexOf('"', valueStart);
+        if (valueEnd < 0)
+            return content;
+
+        return content[..valueStart] + value + content[valueEnd..];
+    }
+
+    private static async Task OpenSignalFileInRiderAsync(
+        string riderExecutable,
+        string signalFilePath,
         CancellationToken cancellationToken
     ) {
-        var artifactPath = Path.Combine(Path.GetTempPath(), $"pe-rider-hot-reload-files-{Guid.NewGuid():N}.txt");
+        var startInfo = new ProcessStartInfo {
+            FileName = riderExecutable,
+            UseShellExecute = true
+        };
+        startInfo.ArgumentList.Add(signalFilePath);
 
-        try {
-            await File.WriteAllLinesAsync(artifactPath, unstagedFiles, cancellationToken);
+        using var process = Process.Start(startInfo)
+                            ?? throw new InvalidOperationException($"Failed to start '{riderExecutable}'.");
+        await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
+    }
 
-            var result = await RunProcessCaptureAsync(
-                autoHotkeyExecutable,
-                [ahkScriptPath, artifactPath, DefaultWarningSeconds.ToString(), "0"],
-                cancellationToken,
-                false
+    private async Task TriggerHotReloadActionsAsync(
+        string autoHotkeyExecutable,
+        string ahkScriptPath,
+        CancellationToken cancellationToken
+    ) {
+        var result = await RunProcessCaptureAsync(
+            autoHotkeyExecutable,
+            [ahkScriptPath, DefaultWarningSeconds.ToString(), "0"],
+            cancellationToken,
+            false
+        );
+        if (result.ExitCode != 0) {
+            throw new InvalidOperationException(
+                string.IsNullOrWhiteSpace(result.StandardError)
+                    ? $"AutoHotkey exited with code {result.ExitCode}."
+                    : result.StandardError.Trim()
             );
-            if (result.ExitCode != 0) {
-                throw new InvalidOperationException(
-                    string.IsNullOrWhiteSpace(result.StandardError)
-                        ? $"AutoHotkey exited with code {result.ExitCode}."
-                        : result.StandardError.Trim()
-                );
-            }
-        } finally {
-            TryDeleteFile(artifactPath);
         }
     }
 
@@ -106,12 +128,44 @@ public sealed class RiderHotReloadService(RevitProcessSessionSelector sessionSel
         return File.Exists(defaultPath) ? defaultPath : null;
     }
 
-    private static void TryDeleteFile(string path) {
-        try {
-            if (File.Exists(path))
-                File.Delete(path);
-        } catch {
+    private static string? TryResolveRiderExecutable() {
+        var candidates = new[] {
+            "rider64.exe",
+            "rider.exe",
+            @"C:\Program Files\JetBrains\JetBrains Rider 2025.2\bin\rider64.exe",
+            @"C:\Program Files\JetBrains\JetBrains Rider 2025.1\bin\rider64.exe",
+            @"C:\Program Files\JetBrains\JetBrains Rider 2024.3\bin\rider64.exe"
+        };
+
+        foreach (var candidate in candidates) {
+            if (Path.IsPathRooted(candidate)) {
+                if (File.Exists(candidate))
+                    return candidate;
+                continue;
+            }
+
+            if (TryResolveFromPath(candidate) is { } path)
+                return path;
         }
+
+        return null;
+    }
+
+    private static string? TryResolveFromPath(string executableName) {
+        var pathValue = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrWhiteSpace(pathValue))
+            return null;
+
+        foreach (var directory in pathValue.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)) {
+            try {
+                var candidate = Path.Combine(directory.Trim(), executableName);
+                if (File.Exists(candidate))
+                    return candidate;
+            } catch {
+            }
+        }
+
+        return null;
     }
 
     private static async Task<ProcessCaptureResult> RunProcessCaptureAsync(

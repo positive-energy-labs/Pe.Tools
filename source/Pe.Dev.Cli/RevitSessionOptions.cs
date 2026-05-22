@@ -1,4 +1,4 @@
-using Pe.Dev.RevitAutomation;
+﻿using Pe.Dev.RevitAutomation;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts;
 
@@ -34,11 +34,83 @@ internal sealed record RevitSessionOptions(
         }
 
         if (requireAttachedRrd && !revitYear.HasValue)
-            throw new ArgumentException("`revit session --require-attached-rrd` also requires --revit-year <year>.");
+            throw new ArgumentException("AttachedRrd verification requires --revit-year <year>.");
 
         return new RevitSessionOptions(jsonOutput, revitYear, requireAttachedRrd);
     }
 }
+
+internal sealed record RevitFreshTestReport(
+    int SchemaVersion,
+    string Command,
+    string Outcome,
+    int ExitCode,
+    string? Failure,
+    RevitFreshTestPlanSummary? Plan,
+    bool PlanOnly,
+    string? RuntimeFingerprint,
+    int? BuildExitCode,
+    int? TestExitCode,
+    int? CloseExitCode,
+    IReadOnlyList<string> BuildStdoutTail,
+    IReadOnlyList<string> BuildStderrTail,
+    IReadOnlyList<string> TestStdoutTail,
+    IReadOnlyList<string> TestStderrTail
+);
+
+internal sealed record RevitFreshTestPlanSummary(
+    string Configuration,
+    int RevitYear,
+    string? Filter,
+    bool NoBuild,
+    bool AllowDeployedAddin,
+    int? TimeoutSeconds,
+    bool WillBuild,
+    bool WillLaunchFreshRevit,
+    bool WillQuarantineDeployedAddin,
+    string Reason
+);
+
+internal sealed record RevitSyncRuntimeOptions(bool JsonOutput) {
+    public static RevitSyncRuntimeOptions Parse(IReadOnlyList<string> args, string commandDisplayName) {
+        var jsonOutput = false;
+        foreach (var arg in args) {
+            if (string.Equals(arg, "--json", StringComparison.OrdinalIgnoreCase)) {
+                jsonOutput = true;
+                continue;
+            }
+
+            throw new ArgumentException($"`{commandDisplayName}` only accepts --json.");
+        }
+
+        return new RevitSyncRuntimeOptions(jsonOutput);
+    }
+}
+
+internal sealed record RevitSyncRuntimeReport(
+    int SchemaVersion,
+    string Command,
+    string Outcome,
+    int ExitCode,
+    string? Failure,
+    RevitHotReloadSummary? HotReload,
+    RevitSessionReport InitialSession,
+    RevitSessionReport? PostSession,
+    int InitialStaleRuntimeAssemblyCount,
+    int PostStaleRuntimeAssemblyCount
+);
+
+internal sealed record RevitHotReloadSummary(string Kind, string Message);
+
+internal sealed record RevitAttachedPreflightReport(
+    int SchemaVersion,
+    string Command,
+    string Outcome,
+    int ExitCode,
+    int RevitYear,
+    string? Failure,
+    RevitSessionReport Session
+);
 
 internal sealed record RevitSessionReport(
     HostProbeData? HostProbe,

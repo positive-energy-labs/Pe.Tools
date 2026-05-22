@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
 using Pe.Revit.Global.Services.Host.Operations;
@@ -16,6 +16,7 @@ using Pe.Shared.StorageRuntime.Modules;
 using ricaun.Revit.UI.Tasks;
 using Serilog;
 using System.Net.WebSockets;
+using System.Reflection;
 using System.Runtime.InteropServices;
 
 namespace Pe.Revit.Global.Services.Host;
@@ -451,6 +452,7 @@ internal sealed class BridgeAgent : IDisposable {
             .OrderBy(module => module.ModuleKey, StringComparer.OrdinalIgnoreCase)
             .Select(SettingsModuleAvailability.CreateHostModuleDescriptor)
             .ToList();
+        var runtimeAssemblies = CaptureRuntimeAssemblies();
         Log.Debug(
             "Host bridge state snapshot: ActiveDocument={ActiveDocumentTitle}, ModuleCount={ModuleCount}",
             activeDocument?.Title,
@@ -471,7 +473,32 @@ internal sealed class BridgeAgent : IDisposable {
             activeDocument == null ? null : activeDocument.GetCloudModelUrn(),
             DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             RevitUiSession.CurrentUIApplication.GetOpenDocuments().Count(),
+            runtimeAssemblies,
             availableModules
+        );
+    }
+
+    private static List<HostRuntimeAssemblyData> CaptureRuntimeAssemblies() =>
+        AppDomain.CurrentDomain.GetAssemblies()
+            .Where(assembly => IsPeRuntimeAssemblyName(assembly.GetName().Name))
+            .Select(CreateRuntimeAssemblyData)
+            .OrderBy(assembly => assembly.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private static bool IsPeRuntimeAssemblyName(string? assemblyName) =>
+        !string.IsNullOrWhiteSpace(assemblyName)
+        && (assemblyName.StartsWith("Pe.", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(assemblyName, "Toon", StringComparison.OrdinalIgnoreCase));
+
+    private static HostRuntimeAssemblyData CreateRuntimeAssemblyData(Assembly assembly) {
+        var assemblyName = assembly.GetName();
+        var informationalVersion = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        return new HostRuntimeAssemblyData(
+            assemblyName.Name ?? "unknown",
+            assemblyName.Version?.ToString(),
+            informationalVersion,
+            string.IsNullOrWhiteSpace(assembly.Location) ? null : assembly.Location,
+            assembly.ManifestModule.ModuleVersionId.ToString("D")
         );
     }
 

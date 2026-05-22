@@ -48,7 +48,7 @@ source becomes a running `PeScriptContainer`.
 ## Validation Posture
 
 - Plain terminal `dotnet build` now proves the isolated compile lane by default. It does not refresh the live Revit runtime assemblies.
-- If you edit runtime packages and want to validate through `pea script ...`, build the package-local interactive outputs first and run `pe-dev revit sync-runtime` before the script command.
+- AGENT GUIDANCE: AttachedRrd scripting uses assemblies already loaded in RRD. If you edit runtime packages and want to validate through `pea script ...`, build the package-local interactive outputs first and run `pe-dev sync`; an isolated `dotnet build` is not runtime freshness proof.
 - `pea script` no longer hides that runtime-sync step for you.
 
 ## Open Questions

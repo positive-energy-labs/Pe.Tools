@@ -42,7 +42,7 @@ internal static class RevitTestExecutionPlanner {
         );
         if (nonOwnedRunningSession is not null) {
             throw new InvalidOperationException(
-                $"Revit {revitYear} already has a running session that is not owned by `pe-dev revit test` (pid={nonOwnedRunningSession.ProcessId}). Close that session or choose a different year."
+                $"Revit {revitYear} already has a running session that is not owned by `pe-dev test` (pid={nonOwnedRunningSession.ProcessId}). Close that session or choose a different year."
             );
         }
 

@@ -2,11 +2,11 @@ namespace Pe.Dev.Cli;
 
 internal enum DevCommandKind {
     Unknown,
-    EnvLogs,
-    EnvStatus,
-    RevitSession,
-    RevitSyncRuntime,
-    RevitTestFresh,
+    Doctor,
+    Status,
+    Sync,
+    Test,
+    SelfTest,
     PeaInstallDev,
     Automation,
     Codegen,
