@@ -3,9 +3,8 @@
  * Any changes made to this file can be lost when this file is regenerated.
  */
 
-export interface CombinedParameterSpec {
-  parameterName: string;
-  prefix?: string;
-  suffix?: string;
-  separator?: string;
+export enum ScheduleColumnHeaderVerticalAlignment {
+  Top = "Top",
+  Center = "Center",
+  Bottom = "Bottom",
 }

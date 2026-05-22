@@ -3,9 +3,7 @@
  * Any changes made to this file can be lost when this file is regenerated.
  */
 
-export interface CombinedParameterSpec {
-  parameterName: string;
-  prefix?: string;
-  suffix?: string;
-  separator?: string;
+export enum ScheduleAuthoredSortOrder {
+  Ascending = "Ascending",
+  Descending = "Descending",
 }
