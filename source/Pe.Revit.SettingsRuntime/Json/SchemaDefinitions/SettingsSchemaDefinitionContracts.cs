@@ -1,6 +1,7 @@
 ﻿using Newtonsoft.Json;
 using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Shared.StorageRuntime.Capabilities;
+using Pe.Shared.StorageRuntime.Json;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -58,6 +59,8 @@ public interface ISettingsPropertyBuilder<TValue> {
 
     void DependsOnContext(params string[] keys);
     void DependsOnSibling(params string[] keys);
+    void AllowIncludes(IncludableFragmentRoot fragmentRoot);
+    void DisallowNull();
     void UseStaticExamples(params string[] values);
     void WithDescription(string description);
     void WithDisplayName(string displayName);
@@ -122,6 +125,8 @@ public sealed class SettingsSchemaPropertyBinding {
     public string? DisplayName { get; init; }
     public SettingsValueDomainDescriptor? ValueDomain { get; init; }
     public SettingsSchemaDatasetOptionsBinding? DatasetOptions { get; init; }
+    public string? IncludableFragmentRoot { get; init; }
+    public bool DisallowNull { get; init; }
     public SchemaUiMetadata? Ui { get; init; }
     internal ISchemaUiDynamicColumnOrderSource? UiDynamicColumnOrderSource { get; init; }
 }
@@ -170,6 +175,8 @@ internal sealed class SettingsPropertyBindingBuilder<TValue>(PropertyInfo proper
     private SettingsSchemaDatasetOptionsBinding? _datasetOptions;
     private string? _description;
     private string? _displayName;
+    private string? _includableFragmentRoot;
+    private bool _disallowNull;
     private SettingsValueDomainDescriptor? _valueDomain;
     private ISchemaUiDynamicColumnOrderSource? _uiDynamicColumnOrderSource;
     private SchemaUiMetadata? _uiMetadata;
@@ -215,6 +222,11 @@ internal sealed class SettingsPropertyBindingBuilder<TValue>(PropertyInfo proper
 
     public void DependsOnSibling(params string[] keys) =>
         this.AddDependencies(SettingsOptionsDependencyScope.Sibling, keys);
+
+    public void AllowIncludes(IncludableFragmentRoot fragmentRoot) =>
+        this._includableFragmentRoot = IncludableFragmentRoots.ToSchemaName(fragmentRoot);
+
+    public void DisallowNull() => this._disallowNull = true;
 
     public void UseStaticExamples(params string[] values) {
         if (values == null)
@@ -277,6 +289,8 @@ internal sealed class SettingsPropertyBindingBuilder<TValue>(PropertyInfo proper
                 AllowsCustomValue = this._datasetOptions.AllowsCustomValue,
                 DependsOn = this._dependsOn.ToList()
             },
+        IncludableFragmentRoot = this._includableFragmentRoot,
+        DisallowNull = this._disallowNull,
         Ui = this._uiMetadata,
         UiDynamicColumnOrderSource = this._uiDynamicColumnOrderSource
     };

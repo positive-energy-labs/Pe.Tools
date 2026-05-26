@@ -71,7 +71,7 @@ dotnet build .\source\Pe.Revit.Tests\Pe.Revit.Tests.csproj -c Debug.R25.Tests /p
 dotnet test .\source\Pe.Revit.Tests\Pe.Revit.Tests.csproj -c Debug.R25.Tests --filter "Name~SomeFocusedTest" --no-build
 ```
 
-The test build is not the runtime freshness step; `pe-dev sync` is.
+The `.Tests` build output is isolated, but test execution is Revit-backed. For explicit-year `dotnet test`, the default verify target is `AttachedRrd`, so the run uses assemblies already loaded in RRD. The test build is not the runtime freshness step; `pe-dev sync` is.
 
 ### Run Revit-backed tests without touching RRD?
 

@@ -24,7 +24,7 @@ public sealed record ValueDomainExecutionContext {
     public SettingsRuntimeMode RuntimeMode { get; }
     public IReadOnlyDictionary<string, string> FieldValues { get; }
 
-    public Document GetActiveDocument() => RevitUiSession.CurrentUIApplication.GetActiveDocument();
+    public Document GetActiveDocument() => RevitUiSession.CurrentUIApplication.GetActiveDocument()!;
 
     public bool TryGetFieldValue(string key, out string value) =>
         this.FieldValues.TryGetValue(key, out value!);

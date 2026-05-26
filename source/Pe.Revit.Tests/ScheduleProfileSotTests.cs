@@ -22,8 +22,9 @@ public class ScheduleProfileSotTests {
             Assert.That(normalized.Filters, Is.Not.Null);
             Assert.That(normalized.Filters, Is.Empty);
             Assert.That(normalized.TitleStyle, Is.Null);
-            Assert.That(normalized.IsItemized ?? ScheduleProfileDefaults.IsItemized, Is.True);
-            Assert.That(normalized.FilterBySheet ?? ScheduleProfileDefaults.FilterBySheet, Is.False);
+            Assert.That(normalized.ColumnHeaderVerticalAlignment, Is.EqualTo(ScheduleColumnHeaderVerticalAlignment.Bottom));
+            Assert.That(normalized.IsItemized, Is.True);
+            Assert.That(normalized.FilterBySheet, Is.False);
         });
     }
 
@@ -51,6 +52,9 @@ public class ScheduleProfileSotTests {
             Assert.That(
                 ScheduleAuthoredSortOrder.Descending.ToRevit(),
                 Is.EqualTo(ScheduleSortOrder.Descending));
+            Assert.That(
+                ScheduleColumnHeaderVerticalAlignment.Top.ToRevit(),
+                Is.EqualTo(VerticalAlignmentStyle.Top));
             Assert.That(
                 ScheduleAuthoredFilterType.HasNoValue.ToRevit(),
                 Is.EqualTo(ScheduleFilterType.HasNoValue));

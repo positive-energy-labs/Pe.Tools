@@ -1,12 +1,16 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using NJsonSchema;
 using Pe.Shared.StorageRuntime.Capabilities;
+using System.Collections.Concurrent;
 
 namespace Pe.Revit.SettingsRuntime.Json;
 
 public sealed class SettingsDocumentSchemaSyncService(
     SettingsRuntimeMode runtimeMode = SettingsRuntimeMode.HostOnly
 ) {
+    private static readonly ConcurrentDictionary<AuthoringSchemaCacheKey, string> AuthoringSchemaJsonByKey = new();
+
     private readonly SettingsRuntimeMode _runtimeMode = runtimeMode;
 
     public string EnsureSynchronized(
@@ -117,6 +121,7 @@ public sealed class SettingsDocumentSchemaSyncService(
 
         try {
             var metadata = SettingsSchemaSyncMetadataBuilder.Create(settingsType, storageOptions);
+
             var pipeline = new JsonCompositionPipeline(
                 schemaDirectory,
                 metadata.KnownIncludeRoots,
@@ -144,12 +149,20 @@ public sealed class SettingsDocumentSchemaSyncService(
         bool pruneDefaults = false
     ) {
         try {
-            var authoringSchema = RevitJsonSchemaFactory.BuildAuthoringSchema(
-                settingsType,
-                this._runtimeMode);
+            var cacheKey = new AuthoringSchemaCacheKey(settingsType, this._runtimeMode);
+            if (!AuthoringSchemaJsonByKey.TryGetValue(cacheKey, out var authoringSchemaJson)) {
+                var builtSchema = RevitJsonSchemaFactory.BuildAuthoringSchema(
+                    settingsType,
+                    this._runtimeMode);
+                authoringSchemaJson = AuthoringSchemaJsonByKey.GetOrAdd(cacheKey, builtSchema.ToJson());
+            }
+
+            var authoringSchema = JsonSchema.FromJsonAsync(authoringSchemaJson!).GetAwaiter().GetResult();
             SchemaUiDocumentSynchronizer.Synchronize(authoringSchema, rootObject);
+
             if (pruneDefaults)
                 SchemaDefaultDocumentPruner.Prune(authoringSchema, rootObject);
+
             var profileSchemaPath = SettingsPathing.ResolveCentralizedProfileSchemaPath(
                 schemaDirectory,
                 settingsType
@@ -166,6 +179,11 @@ public sealed class SettingsDocumentSchemaSyncService(
             return rawContent;
         }
     }
+
+    private readonly record struct AuthoringSchemaCacheKey(
+        Type SettingsType,
+        SettingsRuntimeMode RuntimeMode
+    );
 
     private static bool ContainsDirectiveMetadata(JToken token) {
         if (token is JObject obj) {

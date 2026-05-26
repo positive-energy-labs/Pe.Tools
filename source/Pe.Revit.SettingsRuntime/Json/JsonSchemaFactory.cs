@@ -19,6 +19,8 @@ namespace Pe.Revit.SettingsRuntime.Json;
 public sealed class JsonSchemaBuildOptions(
     SettingsRuntimeMode runtimeMode
 ) {
+    private readonly ConcurrentDictionary<string, IReadOnlyList<ValueDomainOptionItem>> _valueDomainSampleCache = new(StringComparer.Ordinal);
+
     public SettingsRuntimeMode RuntimeMode { get; } = runtimeMode;
 
     public bool ResolveValueDomainSamples { get; init; } = true;
@@ -29,6 +31,41 @@ public sealed class JsonSchemaBuildOptions(
         this.RuntimeMode,
         fieldValues
     );
+
+    public bool TryGetCachedValueDomainSamples(
+        string domainKey,
+        IReadOnlyDictionary<string, string>? fieldValues,
+        out IReadOnlyList<ValueDomainOptionItem> samples
+    ) => this._valueDomainSampleCache.TryGetValue(
+        CreateValueDomainSampleCacheKey(domainKey, fieldValues),
+        out samples!
+    );
+
+    public IReadOnlyList<ValueDomainOptionItem> CacheValueDomainSamples(
+        string domainKey,
+        IReadOnlyDictionary<string, string>? fieldValues,
+        IReadOnlyList<ValueDomainOptionItem> samples
+    ) {
+        var key = CreateValueDomainSampleCacheKey(domainKey, fieldValues);
+        this._valueDomainSampleCache[key] = samples;
+        return samples;
+    }
+
+    private string CreateValueDomainSampleCacheKey(
+        string domainKey,
+        IReadOnlyDictionary<string, string>? fieldValues
+    ) {
+        if (fieldValues == null || fieldValues.Count == 0)
+            return $"{this.RuntimeMode}:{domainKey}";
+
+        var values = string.Join(
+            "|",
+            fieldValues
+                .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                .Select(pair => $"{pair.Key}={pair.Value}")
+        );
+        return $"{this.RuntimeMode}:{domainKey}:{values}";
+    }
 }
 
 public sealed record JsonSchemaData(
@@ -198,14 +235,20 @@ public static class JsonSchemaFactory {
              branch["$ref"] != null));
     }
 
-    private sealed class SyntheticPropertyInfo(Type propertyType) : PropertyInfo {
-        public override Type PropertyType { get; } = propertyType;
+    private sealed class SyntheticPropertyInfo : PropertyInfo {
+        private readonly Type propertyType;
+
+        private SyntheticPropertyInfo(Type propertyType) {
+            this.propertyType = propertyType;
+        }
+
+        public override Type PropertyType => this.propertyType;
         public override PropertyAttributes Attributes => PropertyAttributes.None;
         public override bool CanRead => false;
         public override bool CanWrite => false;
-        public override string Name => propertyType.Name;
-        public override Type DeclaringType => propertyType;
-        public override Type ReflectedType => propertyType;
+        public override string Name => this.propertyType.Name;
+        public override Type DeclaringType => this.propertyType;
+        public override Type ReflectedType => this.propertyType;
         public static SyntheticPropertyInfo Create(Type propertyType) => new(propertyType);
 
         public override MethodInfo[] GetAccessors(bool nonPublic) => [];

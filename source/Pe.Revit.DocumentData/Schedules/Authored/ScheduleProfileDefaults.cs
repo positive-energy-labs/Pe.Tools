@@ -9,6 +9,7 @@ public static class ScheduleProfileDefaults {
     public const ScheduleAuthoredFieldDisplayType FieldDisplayType = ScheduleAuthoredFieldDisplayType.Standard;
     public const ScheduleFieldHorizontalAlignment FieldHorizontalAlignment = ScheduleFieldHorizontalAlignment.Center;
     public const ScheduleAuthoredSortOrder SortOrder = ScheduleAuthoredSortOrder.Ascending;
+    public const ScheduleColumnHeaderVerticalAlignment ColumnHeaderVerticalAlignment = ScheduleColumnHeaderVerticalAlignment.Bottom;
     public const bool ShowHeader = false;
     public const bool ShowFooter = false;
     public const bool ShowBlankLine = false;

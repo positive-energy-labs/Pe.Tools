@@ -4,10 +4,9 @@ using Pe.Shared.RevitData.Schedules;
 namespace Pe.Revit.DocumentData.Schedules.Authored;
 
 internal static class AuthoredScheduleTitleStyleApplication {
-    public static (bool Applied, string? Warning) ApplyTo(this ScheduleTitleStyleSpec? spec, ViewSchedule schedule) {
-        if (spec == null || !HasAnyTitleStyle(spec))
-            return (false, null);
+    private const string DefaultBottomLineStyleName = "Thin Lines";
 
+    public static (bool Applied, string? Warning) ApplyTo(this ScheduleTitleStyleSpec? spec, ViewSchedule schedule) {
         var tableData = schedule.GetTableData();
         var headerSection = tableData.GetSectionData(SectionType.Header);
 
@@ -26,65 +25,35 @@ internal static class AuthoredScheduleTitleStyleApplication {
         using var cellStyle = headerSection.GetTableCellStyle(titleRow, titleColumn);
         var overrideOptions = cellStyle.GetCellStyleOverrideOptions();
         var warnings = new List<string>();
-        var anyApplied = false;
 
-        if (spec.HorizontalAlignment.HasValue) {
-            overrideOptions.HorizontalAlignment = true;
-            cellStyle.FontHorizontalAlignment = spec.HorizontalAlignment.Value switch {
-                ScheduleTitleHorizontalAlignment.Left => HorizontalAlignmentStyle.Left,
-                ScheduleTitleHorizontalAlignment.Center => HorizontalAlignmentStyle.Center,
-                ScheduleTitleHorizontalAlignment.Right => HorizontalAlignmentStyle.Right,
-                _ => cellStyle.FontHorizontalAlignment
-            };
-            anyApplied = true;
+        overrideOptions.HorizontalAlignment = true;
+        cellStyle.FontHorizontalAlignment = (spec?.HorizontalAlignment ?? ScheduleTitleHorizontalAlignment.Left) switch {
+            ScheduleTitleHorizontalAlignment.Left => HorizontalAlignmentStyle.Left,
+            ScheduleTitleHorizontalAlignment.Center => HorizontalAlignmentStyle.Center,
+            ScheduleTitleHorizontalAlignment.Right => HorizontalAlignmentStyle.Right,
+            _ => HorizontalAlignmentStyle.Left
+        };
+
+        if (spec?.BorderStyle != null) {
+            ApplyBorder(schedule.Document, spec.BorderStyle.TopLineStyleName, "Top", lineStyleId => {
+                overrideOptions.BorderTopLineStyle = true;
+                cellStyle.BorderTopLineStyle = lineStyleId;
+            }, warnings);
+            ApplyBorder(schedule.Document, spec.BorderStyle.BottomLineStyleName, "Bottom", lineStyleId => {
+                overrideOptions.BorderBottomLineStyle = true;
+                cellStyle.BorderBottomLineStyle = lineStyleId;
+            }, warnings);
+            ApplyBorder(schedule.Document, spec.BorderStyle.LeftLineStyleName, "Left", lineStyleId => {
+                overrideOptions.BorderLeftLineStyle = true;
+                cellStyle.BorderLeftLineStyle = lineStyleId;
+            }, warnings);
+            ApplyBorder(schedule.Document, spec.BorderStyle.RightLineStyleName, "Right", lineStyleId => {
+                overrideOptions.BorderRightLineStyle = true;
+                cellStyle.BorderRightLineStyle = lineStyleId;
+            }, warnings);
+        } else {
+            ApplyDefaultTitleBorder(schedule.Document, cellStyle, overrideOptions, warnings);
         }
-
-        var borderStyle = spec.BorderStyle;
-        if (borderStyle != null) {
-            ApplyBorder(
-                schedule.Document,
-                borderStyle.TopLineStyleName,
-                "Top",
-                lineStyleId => {
-                    overrideOptions.BorderTopLineStyle = true;
-                    cellStyle.BorderTopLineStyle = lineStyleId;
-                },
-                warnings,
-                ref anyApplied);
-            ApplyBorder(
-                schedule.Document,
-                borderStyle.BottomLineStyleName,
-                "Bottom",
-                lineStyleId => {
-                    overrideOptions.BorderBottomLineStyle = true;
-                    cellStyle.BorderBottomLineStyle = lineStyleId;
-                },
-                warnings,
-                ref anyApplied);
-            ApplyBorder(
-                schedule.Document,
-                borderStyle.LeftLineStyleName,
-                "Left",
-                lineStyleId => {
-                    overrideOptions.BorderLeftLineStyle = true;
-                    cellStyle.BorderLeftLineStyle = lineStyleId;
-                },
-                warnings,
-                ref anyApplied);
-            ApplyBorder(
-                schedule.Document,
-                borderStyle.RightLineStyleName,
-                "Right",
-                lineStyleId => {
-                    overrideOptions.BorderRightLineStyle = true;
-                    cellStyle.BorderRightLineStyle = lineStyleId;
-                },
-                warnings,
-                ref anyApplied);
-        }
-
-        if (!anyApplied)
-            return (false, "No title style settings were specified to apply.");
 
         cellStyle.SetCellStyleOverrideOptions(overrideOptions);
         headerSection.SetCellStyle(titleRow, titleColumn, cellStyle);
@@ -93,32 +62,38 @@ internal static class AuthoredScheduleTitleStyleApplication {
         return (true, warningMessage);
     }
 
-    private static bool HasAnyTitleStyle(ScheduleTitleStyleSpec spec) =>
-        spec.HorizontalAlignment.HasValue ||
-        spec.BorderStyle is {
-            TopLineStyleName: { Length: > 0 }
-        } or {
-            BottomLineStyleName: { Length: > 0 }
-        } or {
-            LeftLineStyleName: { Length: > 0 }
-        } or {
-            RightLineStyleName: { Length: > 0 }
-        };
+    private static void ApplyDefaultTitleBorder(
+        Document doc,
+        TableCellStyle cellStyle,
+        TableCellStyleOverrideOptions overrideOptions,
+        List<string> warnings) {
+        overrideOptions.BorderTopLineStyle = true;
+        overrideOptions.BorderLeftLineStyle = true;
+        overrideOptions.BorderRightLineStyle = true;
+        cellStyle.BorderTopLineStyle = ElementId.InvalidElementId;
+        cellStyle.BorderLeftLineStyle = ElementId.InvalidElementId;
+        cellStyle.BorderRightLineStyle = ElementId.InvalidElementId;
+
+        ApplyBorder(doc, DefaultBottomLineStyleName, "Bottom", lineStyleId => {
+            overrideOptions.BorderBottomLineStyle = true;
+            cellStyle.BorderBottomLineStyle = lineStyleId;
+        }, warnings);
+    }
 
     private static void ApplyBorder(
         Document doc,
         string? lineStyleName,
         string borderName,
         Action<ElementId> apply,
-        List<string> warnings,
-        ref bool anyApplied) {
-        if (string.IsNullOrWhiteSpace(lineStyleName))
+        List<string> warnings) {
+        if (string.IsNullOrWhiteSpace(lineStyleName)) {
+            apply(ElementId.InvalidElementId);
             return;
+        }
 
         var lineStyleId = ScheduleLineStyleValueDomain.Resolve(doc, lineStyleName);
         if (lineStyleId != null && lineStyleId != ElementId.InvalidElementId) {
             apply(lineStyleId);
-            anyApplied = true;
         } else {
             warnings.Add($"{borderName} line style '{lineStyleName}' not found.");
         }

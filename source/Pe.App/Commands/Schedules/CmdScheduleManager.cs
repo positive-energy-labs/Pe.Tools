@@ -53,36 +53,34 @@ public class CmdScheduleManager : IExternalCommand {
             var batchItems = BatchScheduleListItem.DiscoverProfiles(batchStorage.Settings());
 
             // Create preview panel with injected preview building logic
-            var previewPanel = new SchedulePreviewPanel(async (item, ct) => {
-                if (item == null) return null;
+            var previewPanel = new SchedulePreviewPanel((item, ct) => {
+                if (item == null) return Task.FromResult<SchedulePreviewData?>(null);
 
                 if (item.TabType == ScheduleTabType.Create) {
                     var createItem = item.GetCreateItem();
-                    if (createItem == null || ct.IsCancellationRequested) return null;
+                    if (createItem == null || ct.IsCancellationRequested) return Task.FromResult<SchedulePreviewData?>(null);
 
-                    var previewData = await Task.Run(
-                        () => this.TryLoadPreviewData(createItem, context.ProfilesStorage),
-                        ct);
-                    if (ct.IsCancellationRequested) return null;
+                    var previewData = this.TryLoadPreviewData(createItem, context.ProfilesStorage);
+                    if (ct.IsCancellationRequested) return Task.FromResult<SchedulePreviewData?>(null);
 
                     // Update shared UI context only after background work completes.
                     context.SelectedProfile = createItem;
                     context.PreviewData = previewData;
-                    return previewData;
+                    return Task.FromResult<SchedulePreviewData?>(previewData);
                 }
 
                 if (item.TabType == ScheduleTabType.Batch) {
                     var batchItem = item.GetBatchItem();
-                    if (batchItem == null || ct.IsCancellationRequested) return null;
+                    if (batchItem == null || ct.IsCancellationRequested) return Task.FromResult<SchedulePreviewData?>(null);
 
-                    var previewData = await Task.Run(() => this.BuildBatchPreview(batchItem), ct);
-                    if (ct.IsCancellationRequested) return null;
+                    var previewData = this.BuildBatchPreview(batchItem);
+                    if (ct.IsCancellationRequested) return Task.FromResult<SchedulePreviewData?>(null);
 
                     context.PreviewData = previewData;
-                    return previewData;
+                    return Task.FromResult<SchedulePreviewData?>(previewData);
                 }
 
-                return null;
+                return Task.FromResult<SchedulePreviewData?>(null);
             });
 
             // Create the palette with tabs - each tab defines its own items and actions
@@ -97,17 +95,17 @@ public class CmdScheduleManager : IExternalCommand {
                             () => createItems.Select(i =>
                                 new SchedulePaletteItemWrapper(i, ScheduleTabType.Create)),
                             new PaletteAction<ISchedulePaletteItem> {
-                                Name = "Open Profile File",
-                                Execute = async item => this.HandleOpenFile(item),
-                                CanExecute = item => item.GetCreateItem() != null
-                            },
-                            new PaletteAction<ISchedulePaletteItem> {
                                 Name = "Create Schedule",
                                 Execute = async item => this.HandleCreate(context, item),
                                 CanExecute = item => context.PreviewData?.IsValid == true
                             },
                             new PaletteAction<ISchedulePaletteItem> {
-                                Name = "Place Sample Families",
+                                Name = "Open JSON File",
+                                Execute = async item => this.HandleOpenFile(item),
+                                CanExecute = item => item.GetCreateItem() != null
+                            },
+                            new PaletteAction<ISchedulePaletteItem> {
+                                Name = "Place Matching Families",
                                 Execute = async item => this.HandlePlaceSampleFamilies(context, item),
                                 CanExecute = item =>
                                     item.TabType == ScheduleTabType.Create && context.SelectedProfile != null
@@ -181,7 +179,7 @@ public class CmdScheduleManager : IExternalCommand {
         return new SchedulePreviewData {
             ProfileName = profileItem.TextPrimary,
             CategoryName = categoryLabel,
-            IsItemized = profile.IsItemized ?? true,
+            IsItemized = profile.IsItemized,
             Fields = profile.Fields ?? [],
             SortGroup = profile.SortGroup ?? [],
             ProfileJson = profileJson,
@@ -252,8 +250,14 @@ public class CmdScheduleManager : IExternalCommand {
         var profileItem = item.GetCreateItem();
         if (profileItem == null) return;
 
-        // Update context with selected profile
-        this.BuildPreviewData(profileItem, ctx);
+        // Preview selection already performs schema sync + validation before this action is enabled.
+        var hasCurrentValidPreview = ctx.PreviewData?.IsValid == true &&
+                                     string.Equals(
+                                         ctx.SelectedProfile?.TextPrimary,
+                                         profileItem.TextPrimary,
+                                         StringComparison.OrdinalIgnoreCase);
+        if (!hasCurrentValidPreview)
+            this.BuildPreviewData(profileItem, ctx);
 
         if (ctx.PreviewData?.IsValid != true || ctx.SelectedProfile == null) {
             new Ballogger()
