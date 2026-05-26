@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using NJsonSchema;
 using NJsonSchema.Generation;
 using System.Reflection;
@@ -16,17 +16,10 @@ public class SchemaIncludesProcessor : ISchemaProcessor {
                 continue;
 
             var propertyName = GetJsonPropertyName(property);
-            if (!context.Schema.Properties.TryGetValue(propertyName, out var propSchema) || propSchema.Item == null)
+            if (!context.Schema.Properties.TryGetValue(propertyName, out var propSchema))
                 continue;
 
-            var includeDirectiveSchema = CreateIncludeDirectiveSchema(includableAttr);
-            var originalItemSchema = propSchema.Item;
-
-            var newItemSchema = new JsonSchema();
-            newItemSchema.OneOf.Add(originalItemSchema);
-            newItemSchema.OneOf.Add(includeDirectiveSchema);
-
-            propSchema.Item = newItemSchema;
+            ApplyToCollectionProperty(propSchema, includableAttr.FragmentSchemaName);
         }
     }
 
@@ -48,10 +41,30 @@ public class SchemaIncludesProcessor : ISchemaProcessor {
         return jsonPropAttr?.PropertyName ?? property.Name;
     }
 
-    private static JsonSchema CreateIncludeDirectiveSchema(IncludableAttribute includableAttr) {
-        var fragmentSchemaName = string.IsNullOrWhiteSpace(includableAttr.FragmentSchemaName)
+    public static void ApplyToCollectionProperty(JsonSchemaProperty propertySchema, string? fragmentSchemaName) {
+        if (propertySchema.Item == null || AllowsIncludeDirective(propertySchema.Item))
+            return;
+
+        var includeDirectiveSchema = CreateIncludeDirectiveSchema(fragmentSchemaName);
+        var originalItemSchema = propertySchema.Item;
+
+        var newItemSchema = new JsonSchema();
+        newItemSchema.AnyOf.Add(includeDirectiveSchema);
+        newItemSchema.AnyOf.Add(originalItemSchema);
+
+        propertySchema.Item = newItemSchema;
+    }
+
+    private static bool AllowsIncludeDirective(JsonSchema itemSchema) =>
+        itemSchema.AnyOf.Any(IsIncludeDirectiveSchema) || itemSchema.OneOf.Any(IsIncludeDirectiveSchema);
+
+    private static bool IsIncludeDirectiveSchema(JsonSchema schema) =>
+        schema.Properties.ContainsKey("$include");
+
+    private static JsonSchema CreateIncludeDirectiveSchema(string? rawFragmentSchemaName) {
+        var fragmentSchemaName = string.IsNullOrWhiteSpace(rawFragmentSchemaName)
             ? null
-            : includableAttr.FragmentSchemaName;
+            : rawFragmentSchemaName;
         var normalizedRoot = fragmentSchemaName == null
             ? null
             : IncludableFragmentRoots.NormalizeRoot(fragmentSchemaName);
@@ -71,6 +84,8 @@ public class SchemaIncludesProcessor : ISchemaProcessor {
         }
 
         schema.Properties["$include"] = includeProperty;
+        if (!schema.RequiredProperties.Contains("$include"))
+            schema.RequiredProperties.Add("$include");
 
         return schema;
     }

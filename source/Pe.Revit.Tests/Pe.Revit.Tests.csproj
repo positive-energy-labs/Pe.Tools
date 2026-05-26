@@ -68,21 +68,24 @@
     >
         <Error
                 Condition="$([System.String]::Copy('$(Configuration)').Contains('.Tests')) != 'True'"
-                Text="`dotnet test` for `Pe.Revit.Tests` requires an explicit `.Tests` configuration such as `Debug.R25.Tests`. For `AttachedRrd`, run `pe-dev revit sync-runtime`, then `dotnet test source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests --filter &quot;Name~SomeFocusedTest&quot; --no-build`. For `FreshRevitProcess`, use `pe-dev revit test ...`."
+                Text="`dotnet test` for `Pe.Revit.Tests` requires an explicit `.Tests` configuration such as `Debug.R25.Tests`. AGENT GUIDANCE: AttachedRrd validation uses assemblies already loaded in RRD. If runtime code changed, run `pe-dev sync` before attached `.Tests`; an isolated dotnet build is not runtime freshness proof. Use `pe-dev test ...` when RRD freshness is uncertain or current document state does not matter."
         />
         <Error
                 Condition="'$(PeStableCliPath)' == '' or !Exists('$(PeStableCliPath)')"
-                Text="AttachedRrd verification requires `pe-dev`, but no runnable CLI was found at `$(PeStableCliPath)`. Build `source/Pe.Dev.Cli/Pe.Dev.Cli.csproj` with configuration `$(PeStableCliConfiguration)` first."
+                Text="AttachedRrd verification requires `pe-dev`, but no runnable CLI was found at `$(PeStableCliPath)`. AGENT GUIDANCE: build `source/Pe.Dev.Cli/Pe.Dev.Cli.csproj` with configuration `$(PeStableCliConfiguration)` first. If runtime code changed, run `pe-dev sync` before attached tests; an isolated dotnet build is not runtime freshness proof."
         />
         <Exec
-                Command="dotnet exec &quot;$(PeStableCliPath)&quot; --repo-root &quot;$(MSBuildProjectDirectory)\..\..&quot; revit session --revit-year $(RevitVersion) --require-attached-rrd"
+                Command="dotnet exec &quot;$(PeStableCliPath)&quot; --repo-root &quot;$(MSBuildProjectDirectory)\..\..&quot; doctor --require-attached-rrd --revit-year $(RevitVersion)"
                 Condition="Exists('$(PeStableCliPath)')"
         />
     </Target>
     <!--
-      TODO: decide whether to run hot-reload before VSTest target.
-      `.Tests` outputs are isolated and RRD-safe. This pre-test hook is only a
-      best-effort attempt to align the already-running live runtime with the
-      just-built source immediately before VSTest executes.
+      Do not confuse isolated `.Tests` build outputs with isolated test execution.
+      The build artifacts under `.artifacts/...` are safe to produce without touching
+      RRD, but explicit-year VSTest execution is Revit-backed and defaults to the
+      AttachedRrd verify target unless the repo guardrails are intentionally suppressed.
+      This pre-test hook checks attached session health only; it is not a runtime
+      freshness mechanism. After runtime edits, refresh the already-loaded RRD
+      assemblies with `pe-dev sync` before attached `.Tests` validation.
     -->
 </Project>

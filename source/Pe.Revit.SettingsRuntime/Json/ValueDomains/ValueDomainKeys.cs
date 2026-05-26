@@ -10,5 +10,7 @@ public static class ValueDomainKeys {
     public const string ScheduleViewTemplateNames = "schedule-view-template-names";
     public const string SharedParameterNames = "shared-parameter-names";
     public const string SpecNames = "spec-names";
+    public const string UnitTypeIds = "unit-type-ids";
+    public const string SymbolTypeIds = "symbol-type-ids";
     public const string LineStyleNames = "line-style-names";
 }

@@ -252,12 +252,13 @@ public sealed class LocalDiskSettingsStorageBackend(
 
         var validator = ResolveRootValidator(moduleDefinition, documentId.RootKey);
         if (issues.Count == 0 && validator != null) {
+            var composedValidationContent = composedObject == null
+                ? null
+                : JsonFormatting.NormalizeTrailingNewline(composedObject.ToString(Formatting.Indented));
             var validatorResult = validator.Validate(
                 documentId,
                 rawContent,
-                composedObject == null
-                    ? null
-                    : JsonFormatting.NormalizeTrailingNewline(composedObject.ToString(Formatting.Indented))
+                composedValidationContent
             );
             issues.AddRange(validatorResult.Issues);
         }

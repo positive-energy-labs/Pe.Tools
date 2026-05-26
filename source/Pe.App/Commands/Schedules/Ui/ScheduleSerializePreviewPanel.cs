@@ -45,8 +45,10 @@ public class ScheduleSerializePreviewPanel : UserControl, ISidebarPanel<IPalette
     /// <inheritdoc />
     public void Update(IPaletteListItem? item, CancellationToken ct) {
         if (ct.IsCancellationRequested) return;
+
         var data = this._previewBuilder(item, ct);
         if (ct.IsCancellationRequested) return;
+
         this.UpdateContent(data);
     }
 
@@ -111,7 +113,7 @@ public class ScheduleSerializePreviewPanel : UserControl, ISidebarPanel<IPalette
                             : string.Empty),
                     ("Width", f => f.ColumnWidth.HasValue ? f.ColumnWidth.Value.ToString("F2") : string.Empty),
                     ("Type", f => f.CalculatedType?.ToString() ?? string.Empty),
-                    ("Hidden", f => f.IsHidden == true ? "Yes" : string.Empty)
+                    ("Hidden", f => f.IsHidden ? "Yes" : string.Empty)
                 ],
                 9
             );
@@ -124,10 +126,10 @@ public class ScheduleSerializePreviewPanel : UserControl, ISidebarPanel<IPalette
                 data.SortGroup,
                 [
                     ("Field", sg => sg.FieldName),
-                    ("Order", sg => sg.SortOrder?.ToString() ?? string.Empty),
-                    ("Header", sg => sg.ShowHeader == true ? "Yes" : string.Empty),
-                    ("Footer", sg => sg.ShowFooter == true ? "Yes" : string.Empty),
-                    ("Blank Line", sg => sg.ShowBlankLine == true ? "Yes" : string.Empty)
+                    ("Order", sg => sg.SortOrder.ToString()),
+                    ("Header", sg => sg.ShowHeader ? "Yes" : string.Empty),
+                    ("Footer", sg => sg.ShowFooter ? "Yes" : string.Empty),
+                    ("Blank Line", sg => sg.ShowBlankLine ? "Yes" : string.Empty)
                 ],
                 9
             );

@@ -1,4 +1,5 @@
 using Pe.Revit.DocumentData.Parameters;
+using Pe.Revit.DocumentData.Schedules.Authored.ValueDomains;
 using Pe.Revit.DocumentData.Schedules.Runtime;
 using Pe.Shared.RevitData.Schedules;
 
@@ -40,13 +41,12 @@ internal static class AuthoredScheduleSpecApplication {
         var propertyWarnings = spec.ApplyProperties(field);
         warnings.AddRange(propertyWarnings);
 
-        var displayType = (spec.DisplayType ?? ScheduleProfileDefaults.FieldDisplayType).ToRevit();
-        var horizontalAlignment =
-            (spec.HorizontalAlignment ?? ScheduleProfileDefaults.FieldHorizontalAlignment).ToRevit();
+        var displayType = spec.DisplayType.ToRevit();
+        var horizontalAlignment = spec.HorizontalAlignment.ToRevit();
         var applied = new AppliedFieldInfo {
             ParameterName = spec.ParameterName,
             ColumnHeaderOverride = spec.ColumnHeaderOverride ?? string.Empty,
-            IsHidden = spec.IsHidden ?? ScheduleProfileDefaults.FieldIsHidden,
+            IsHidden = spec.IsHidden,
             ColumnWidth = spec.ColumnWidth,
             DisplayType = displayType,
             HorizontalAlignment = horizontalAlignment
@@ -93,10 +93,10 @@ internal static class AuthoredScheduleSpecApplication {
         if (fieldId == null)
             return (null, $"Field '{spec.FieldName}' not found");
 
-        var sortOrder = (spec.SortOrder ?? ScheduleProfileDefaults.SortOrder).ToRevit();
-        var showHeader = spec.ShowHeader ?? ScheduleProfileDefaults.ShowHeader;
-        var showFooter = spec.ShowFooter ?? ScheduleProfileDefaults.ShowFooter;
-        var showBlankLine = spec.ShowBlankLine ?? ScheduleProfileDefaults.ShowBlankLine;
+        var sortOrder = spec.SortOrder.ToRevit();
+        var showHeader = spec.ShowHeader;
+        var showFooter = spec.ShowFooter;
+        var showBlankLine = spec.ShowBlankLine;
         var sortGroupField = new ScheduleSortGroupField(fieldId, sortOrder) {
             ShowHeader = showHeader,
             ShowFooter = showFooter,
@@ -132,7 +132,7 @@ internal static class AuthoredScheduleSpecApplication {
             return (null, $"Field '{spec.FieldName}' not found", null);
 
         try {
-            var filterType = (spec.FilterType ?? ScheduleProfileDefaults.FilterType).ToRevit();
+            var filterType = spec.FilterType.ToRevit();
             var value = spec.Value ?? string.Empty;
             ScheduleFilter filter;
             string storageTypeStr;
@@ -236,15 +236,14 @@ internal static class AuthoredScheduleSpecApplication {
         if (!string.IsNullOrEmpty(spec.ColumnHeaderOverride))
             field.ColumnHeading = spec.ColumnHeaderOverride;
 
-        field.IsHidden = spec.IsHidden ?? ScheduleProfileDefaults.FieldIsHidden;
+        field.IsHidden = spec.IsHidden;
 
         if (spec.ColumnWidth > 0)
             field.SheetColumnWidth = spec.ColumnWidth.Value;
 
-        field.HorizontalAlignment =
-            (spec.HorizontalAlignment ?? ScheduleProfileDefaults.FieldHorizontalAlignment).ToRevit();
+        field.HorizontalAlignment = spec.HorizontalAlignment.ToRevit();
 
-        var displayType = (spec.DisplayType ?? ScheduleProfileDefaults.FieldDisplayType).ToRevit();
+        var displayType = spec.DisplayType.ToRevit();
         if (displayType != ScheduleFieldDisplayType.Standard) {
             var canApply = displayType switch {
                 ScheduleFieldDisplayType.Totals => field.CanTotal(),
@@ -275,8 +274,12 @@ internal static class AuthoredScheduleSpecApplication {
         try {
             FormatOptions formatOptions;
 
+            ForgeTypeId? unitTypeId = null;
             if (!string.IsNullOrEmpty(spec.UnitTypeId)) {
-                var unitTypeId = new ForgeTypeId(spec.UnitTypeId);
+                unitTypeId = ScheduleFieldFormatValueDomain.ResolveUnit(spec.UnitTypeId);
+                if (unitTypeId == null)
+                    return $"UnitTypeId '{spec.UnitTypeId}' was not recognized for field '{fieldName}'.";
+
                 formatOptions = new FormatOptions(unitTypeId);
             } else {
                 formatOptions = new FormatOptions { UseDefault = false };
@@ -286,8 +289,8 @@ internal static class AuthoredScheduleSpecApplication {
                 formatOptions.Accuracy = spec.Accuracy.Value;
 
             if (!string.IsNullOrEmpty(spec.SymbolTypeId) && formatOptions.CanHaveSymbol()) {
-                var symbolTypeId = new ForgeTypeId(spec.SymbolTypeId);
-                if (formatOptions.IsValidSymbol(symbolTypeId))
+                var symbolTypeId = ScheduleFieldFormatValueDomain.ResolveSymbol(spec.SymbolTypeId, unitTypeId);
+                if (symbolTypeId != null && formatOptions.IsValidSymbol(symbolTypeId))
                     formatOptions.SetSymbolTypeId(symbolTypeId);
             }
 

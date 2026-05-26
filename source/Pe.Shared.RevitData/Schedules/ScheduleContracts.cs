@@ -74,6 +74,14 @@ public enum ScheduleFieldHorizontalAlignment {
 
 [JsonConverter(typeof(StringEnumConverter))]
 [ExportTsEnum]
+public enum ScheduleColumnHeaderVerticalAlignment {
+    Center,
+    Top,
+    Bottom
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
 public enum ScheduleAuthoredFieldDisplayType {
     Standard,
     Totals,
@@ -128,7 +136,7 @@ public record ScheduleTitleBorderSpec(
 
 [ExportTsInterface]
 public record ScheduleTitleStyleSpec(
-    ScheduleTitleHorizontalAlignment? HorizontalAlignment = null,
+    ScheduleTitleHorizontalAlignment HorizontalAlignment = ScheduleTitleHorizontalAlignment.Left,
     ScheduleTitleBorderSpec? BorderStyle = null
 );
 
@@ -157,10 +165,10 @@ public record ScheduleFieldSpec(
     string ParameterName,
     string? ColumnHeaderOverride = null,
     string? HeaderGroup = null,
-    bool? IsHidden = null,
-    ScheduleAuthoredFieldDisplayType? DisplayType = null,
+    bool IsHidden = false,
+    ScheduleAuthoredFieldDisplayType DisplayType = ScheduleAuthoredFieldDisplayType.Standard,
     double? ColumnWidth = null,
-    ScheduleFieldHorizontalAlignment? HorizontalAlignment = null,
+    ScheduleFieldHorizontalAlignment HorizontalAlignment = ScheduleFieldHorizontalAlignment.Center,
     ScheduleAuthoredCalculatedFieldType? CalculatedType = null,
     string? PercentageOfField = null,
     ScheduleFieldFormatSpec? FormatOptions = null,
@@ -170,16 +178,16 @@ public record ScheduleFieldSpec(
 [ExportTsInterface]
 public record ScheduleSortGroupSpec(
     string FieldName,
-    ScheduleAuthoredSortOrder? SortOrder = null,
-    bool? ShowHeader = null,
-    bool? ShowFooter = null,
-    bool? ShowBlankLine = null
+    ScheduleAuthoredSortOrder SortOrder = ScheduleAuthoredSortOrder.Ascending,
+    bool ShowHeader = false,
+    bool ShowFooter = false,
+    bool ShowBlankLine = false
 );
 
 [ExportTsInterface]
 public record ScheduleFilterSpec(
     string FieldName,
-    ScheduleAuthoredFilterType? FilterType = null,
+    ScheduleAuthoredFilterType FilterType = ScheduleAuthoredFilterType.Equal,
     string? Value = null
 );
 
@@ -189,8 +197,9 @@ public record ScheduleProfile(
     string CategoryName,
     string? ViewTemplateName = null,
     ScheduleTitleStyleSpec? TitleStyle = null,
-    bool? IsItemized = null,
-    bool? FilterBySheet = null,
+    bool IsItemized = true,
+    bool FilterBySheet = false,
+    ScheduleColumnHeaderVerticalAlignment ColumnHeaderVerticalAlignment = ScheduleColumnHeaderVerticalAlignment.Bottom,
     List<ScheduleFieldSpec>? Fields = null,
     List<ScheduleSortGroupSpec>? SortGroup = null,
     List<ScheduleFilterSpec>? Filters = null,

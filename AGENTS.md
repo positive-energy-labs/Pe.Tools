@@ -72,8 +72,9 @@ Critical consequence:
 - plain terminal `dotnet build` is the default compile-verification path
 - `./build` is for orchestration, packaging, and CI parity
 - isolated builds are not proof that the live runtime DLLs loaded by Revit are fresh
-- if you intend to validate through `pea script ...` or `dotnet test source/Pe.Revit.Tests/...`, build the affected runtime package from Rider/IDE, then run `pe-dev sync`
-- do not assume scripting or `.Tests` runs are seeing fresh code just because an isolated build passed
+- `.Tests` build outputs are isolated artifacts, but `Pe.Revit.Tests` execution is Revit-backed; explicit-year `dotnet test -c Debug.R25.Tests ...` defaults to `AttachedRrd` unless you use the fresh helper
+- if you intend to validate through `pea script ...` or attached `dotnet test source/Pe.Revit.Tests/...`, build the affected runtime package from Rider/IDE, then run `pe-dev sync`
+- do not assume scripting or `.Tests` runs are seeing fresh loaded assemblies just because an isolated build passed
 
 Prefer these commands:
 
@@ -184,7 +185,7 @@ pe-dev test --filter "Name~AssemblyLoadDiagnostics" --timeout-seconds 900
 
 When validating the current DA audit workflow, keep the manifest intentionally small. One or two models is the right first pass before broadening to a larger scrape.
 
-Explicit-year `dotnet test` runs a pre-`VSTest` `AttachedRrd` session check. That check is not a freshness mechanism. The required posture is still an explicit `pe-dev sync` or manual `pe-dev revit hot-reload` before live scripting or `.Tests` validation.
+Explicit-year `dotnet test` for `Pe.Revit.Tests` is Revit-backed. The `.Tests` output build is isolated, but VSTest execution defaults to `AttachedRrd` and runs against assemblies already loaded in RRD. The pre-`VSTest` check is not a freshness mechanism; the required posture is still explicit `pe-dev sync` before live scripting or attached `.Tests` validation.
 
 ## Shared Language
 

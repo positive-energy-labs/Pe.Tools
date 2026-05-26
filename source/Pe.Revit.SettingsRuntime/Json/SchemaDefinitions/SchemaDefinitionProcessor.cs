@@ -1,7 +1,9 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
+using NJsonSchema;
 using NJsonSchema.Generation;
+using Pe.Revit.SettingsRuntime.Json.SchemaProcessors;
 using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Shared.StorageRuntime.Capabilities;
 
@@ -28,6 +30,9 @@ public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : 
 
             var targetSchema = propertySchema.Item ?? propertySchema;
 
+            if (binding.DisallowNull)
+                DisallowExplicitNull(propertySchema);
+
             if (!string.IsNullOrWhiteSpace(binding.Description))
                 propertySchema.Description = binding.Description;
 
@@ -41,6 +46,9 @@ public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : 
                 targetSchema.ExtensionData["examples"] =
                     SchemaMetadataWriter.CreateOrderedExampleList(binding.StaticExamples);
             }
+
+            if (!string.IsNullOrWhiteSpace(binding.IncludableFragmentRoot))
+                SchemaIncludesProcessor.ApplyToCollectionProperty(propertySchema, binding.IncludableFragmentRoot);
 
             if (binding.Ui != null) {
                 var resolvedUi = ResolveUiMetadata(binding, this._options);
@@ -64,20 +72,33 @@ public sealed class SchemaDefinitionProcessor(JsonSchemaBuildOptions options) : 
             if (this._options.ResolveValueDomainSamples &&
                 this._options.RuntimeMode.Supports(descriptor.RequiredRuntimeMode)) {
                 try {
-                    if (!SettingsValueDomainRegistry.Shared.TryCreate(descriptor.Key, out var domain))
-                        throw new InvalidOperationException("Value domain is not registered.");
+                    if (this._options.TryGetCachedValueDomainSamples(descriptor.Key, null, out var cachedSamples)) {
+                        samples = cachedSamples;
+                    } else {
+                        if (!SettingsValueDomainRegistry.Shared.TryCreate(descriptor.Key, out var domain))
+                            throw new InvalidOperationException("Value domain is not registered.");
 
-                    samples = domain
-                        .GetOptionsAsync(this._options.CreateValueDomainExecutionContext())
-                        .AsTask()
-                        .GetAwaiter()
-                        .GetResult();
+                        samples = domain
+                            .GetOptionsAsync(this._options.CreateValueDomainExecutionContext())
+                            .AsTask()
+                            .GetAwaiter()
+                            .GetResult();
+                        samples = this._options.CacheValueDomainSamples(descriptor.Key, null, samples);
+                    }
                 } catch {
                 }
             }
 
             SchemaMetadataWriter.ApplyValueDomain(targetSchema, descriptor, samples);
         }
+
+    }
+
+    private static void DisallowExplicitNull(JsonSchema schema) {
+        schema.Type &= ~JsonObjectType.Null;
+
+        foreach (var branch in schema.OneOf.Where(branch => branch.Type == JsonObjectType.Null).ToList())
+            _ = schema.OneOf.Remove(branch);
     }
 
     private static void ValidateDatasetOptions(

@@ -24,25 +24,54 @@ internal static class SchemaExampleDefinitionConsolidator {
         }
 
         var groups = candidates
-            .GroupBy(candidate => new { candidate.ProviderKey, candidate.ExamplesSignature })
+            .GroupBy(candidate => new {
+                candidate.DefinitionKind,
+                candidate.DefinitionKey,
+                candidate.ExamplesSignature
+            })
             .ToList();
-        var definitionIndex = 0;
+        var exampleDefinitionIndex = 0;
 
         foreach (var group in groups) {
-            var definitionName = NextDefinitionName(definitions, ref definitionIndex);
-            definitions[definitionName] = new JObject { ["examples"] = group.First().Examples.DeepClone() };
+            var definitionName = group.Key.DefinitionKind == SchemaDefinitionKind.ConstraintEnum
+                ? CreateConstraintDefinitionName(definitions, group.Key.DefinitionKey)
+                : NextExampleDefinitionName(definitions, ref exampleDefinitionIndex);
+            definitions[definitionName] = CreateDefinitionSchema(group.First());
 
             foreach (var candidate in group) {
                 _ = candidate.Schema.Remove("examples");
-                var allOf = candidate.Schema["allOf"] as JArray;
-                if (allOf == null) {
-                    allOf = new JArray();
-                    candidate.Schema["allOf"] = allOf;
-                }
-
-                allOf.Add(new JObject { ["$ref"] = $"#/definitions/{definitionName}" });
+                _ = candidate.Schema.Remove("enum");
+                _ = candidate.Schema.Remove("x-enumNames");
+                AddDefinitionReference(candidate.Schema, definitionName);
             }
         }
+    }
+
+    private static JObject CreateDefinitionSchema(SchemaExampleCandidate candidate) {
+        if (candidate.DefinitionKind == SchemaDefinitionKind.ConstraintEnum) {
+            return new JObject {
+                ["type"] = "string",
+                ["enum"] = candidate.Examples.DeepClone()
+            };
+        }
+
+        return new JObject {
+            ["examples"] = candidate.Examples.DeepClone()
+        };
+    }
+
+    private static void AddDefinitionReference(JObject schema, string definitionName) {
+        var allOf = schema["allOf"] as JArray;
+        if (allOf == null) {
+            allOf = new JArray();
+            schema["allOf"] = allOf;
+        }
+
+        var referencePath = $"#/definitions/{definitionName}";
+        var alreadyReferenced = allOf.Children<JObject>()
+            .Any(candidate => string.Equals(candidate["$ref"]?.Value<string>(), referencePath, StringComparison.Ordinal));
+        if (!alreadyReferenced)
+            allOf.Add(new JObject { ["$ref"] = referencePath });
     }
 
     private static void CollectCandidates(JToken token, ICollection<SchemaExampleCandidate> candidates) {
@@ -67,11 +96,16 @@ internal static class SchemaExampleDefinitionConsolidator {
         candidate = default;
         if (schema["x-options"] is not JObject options ||
             options["key"]?.Value<string>() is not { Length: > 0 } providerKey ||
-            schema["examples"] is not JArray examples)
+            schema["examples"] is not JArray examples) {
             return false;
+        }
 
+        var isConstraintEnum = string.Equals(options["mode"]?.Value<string>(), "Constraint", StringComparison.OrdinalIgnoreCase)
+            && options["allowsCustomValue"]?.Value<bool>() == false;
+        var definitionKind = isConstraintEnum ? SchemaDefinitionKind.ConstraintEnum : SchemaDefinitionKind.Examples;
         candidate = new SchemaExampleCandidate(
             schema,
+            definitionKind,
             providerKey,
             examples,
             examples.ToString(Formatting.None)
@@ -79,7 +113,7 @@ internal static class SchemaExampleDefinitionConsolidator {
         return true;
     }
 
-    private static string NextDefinitionName(JObject definitions, ref int definitionIndex) {
+    private static string NextExampleDefinitionName(JObject definitions, ref int definitionIndex) {
         string definitionName;
         do
             definitionName = $"examples_{++definitionIndex}";
@@ -88,11 +122,38 @@ internal static class SchemaExampleDefinitionConsolidator {
         return definitionName;
     }
 
+    private static string CreateConstraintDefinitionName(JObject definitions, string definitionKey) {
+        var baseName = $"valueDomain_{SanitizeDefinitionKey(definitionKey)}";
+        if (definitions.Property(baseName) == null)
+            return baseName;
+
+        var suffix = 2;
+        while (definitions.Property($"{baseName}_{suffix}") != null)
+            suffix++;
+
+        return $"{baseName}_{suffix}";
+    }
+
+    private static string SanitizeDefinitionKey(string key) {
+        var buffer = new char[key.Length];
+        for (var i = 0; i < key.Length; i++) {
+            var character = key[i];
+            buffer[i] = char.IsLetterOrDigit(character) ? character : '_';
+        }
+
+        return new string(buffer);
+    }
+
+    private enum SchemaDefinitionKind {
+        Examples,
+        ConstraintEnum
+    }
+
     private readonly record struct SchemaExampleCandidate(
         JObject Schema,
-        string ProviderKey,
+        SchemaDefinitionKind DefinitionKind,
+        string DefinitionKey,
         JArray Examples,
         string ExamplesSignature
     );
 }
-

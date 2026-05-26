@@ -270,6 +270,7 @@ public sealed class DeploymentRuntimeContractTests {
             isConnected ? ".NET Framework 4.8" : null,
             0,
             null,
+            [],
             []
         );
 

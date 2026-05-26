@@ -56,7 +56,8 @@ Live runtime validation loop:
 - Use `pe-dev test --plan --json ...` for safe smoke checks and command planning. It resolves the fresh lane but does not build, quarantine add-ins, launch Revit, run tests, or clean up sessions.
 - Use `--timeout-seconds <seconds>` on real `test` proof runs from agents/hooks so a Revit launch or test adapter hang fails bounded with exit code `124`. Keep `--plan` for cheap validation; do not use a real fresh run as a CLI smoke test.
 - `pe-dev self-test` is the cheap no-Revit smoke test for the verify command parser and option contracts.
-- AGENT GUIDANCE: AttachedRrd validation uses assemblies already loaded in RRD. If runtime code changed, run `pe-dev sync` before `pea script ...` or attached `.Tests`; an isolated `dotnet build` / `./build` is not runtime freshness proof.
+- AGENT GUIDANCE: AttachedRrd validation uses assemblies already loaded in RRD. If runtime code changed, run `pe-dev sync` before `pea script ...` or attached `.Tests`; an isolated `dotnet build` / `./build` only proves compilation and is not runtime freshness proof.
+- Keep `Pe.Revit.Tests` messaging precise: `.Tests` build outputs are isolated, but explicit-year `dotnet test` execution is Revit-backed and defaults to the attached RRD lane unless `pe-dev test` is used.
 
 Agent command decision flow:
 

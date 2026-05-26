@@ -17,6 +17,8 @@ public static class SettingsValueDomainBootstrap {
         registry.Register(ValueDomainKeys.ScheduleViewTemplateNames, static () => new ScheduleViewTemplateNamesValueDomain());
         registry.Register(ValueDomainKeys.SharedParameterNames, static () => new SharedParameterNamesValueDomain());
         registry.Register(ValueDomainKeys.SpecNames, static () => new SpecNamesValueDomain());
+        registry.Register(ValueDomainKeys.UnitTypeIds, static () => new UnitTypeIdValueDomain());
+        registry.Register(ValueDomainKeys.SymbolTypeIds, static () => new SymbolTypeIdValueDomain());
         registry.Register(ValueDomainKeys.LineStyleNames, static () => new LineStyleNamesValueDomain());
     }
 }

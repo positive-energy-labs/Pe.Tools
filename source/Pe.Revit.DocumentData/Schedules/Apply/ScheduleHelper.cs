@@ -64,7 +64,10 @@ public static class ScheduleHelper {
         HeaderGroupHandler.SerializeHeaderGroups(schedule, profile.Fields!);
 
         // Serialize title style (borders and alignment)
-        profile = profile with { TitleStyle = SerializeTitleStyle(schedule) };
+        profile = profile with {
+            TitleStyle = SerializeTitleStyle(schedule),
+            ColumnHeaderVerticalAlignment = AuthoredScheduleColumnHeaderStyleApplication.SerializeColumnHeaderVerticalAlignment(schedule) ?? ScheduleProfileDefaults.ColumnHeaderVerticalAlignment
+        };
 
         // Serialize view template
         profile = profile with { ViewTemplateName = ScheduleViewTemplateValueDomain.Serialize(schedule) };
@@ -76,6 +79,7 @@ public static class ScheduleHelper {
     ///     Creates a schedule from a ScheduleProfile.
     /// </summary>
     public static ScheduleCreationResult CreateSchedule(Document doc, SharedScheduleProfile profile) {
+        var profileName = profile.Name;
         profile = ScheduleProfileResolver.Normalize(profile);
         var categoryId = ScheduleProfileResolver.ResolveCategoryId(doc, profile);
         var categoryName = ScheduleProfileResolver.GetCategoryDisplayName(profile);
@@ -88,16 +92,16 @@ public static class ScheduleHelper {
             Schedule = schedule,
             ScheduleName = schedule.Name,
             CategoryName = categoryName,
-            IsItemized = profile.IsItemized ?? ScheduleProfileDefaults.IsItemized
+            IsItemized = profile.IsItemized
         };
 
         // Apply schedule-level settings
         var def = schedule.Definition;
-        def.IsItemized = profile.IsItemized ?? ScheduleProfileDefaults.IsItemized;
+        def.IsItemized = profile.IsItemized;
         def.ClearFields();
 
         // Apply filter-by-sheet setting
-        if (profile.FilterBySheet ?? ScheduleProfileDefaults.FilterBySheet) {
+        if (profile.FilterBySheet) {
             if (def.IsValidCategoryForFilterBySheet()) {
                 try {
                     def.IsFilteredBySheet = true;
@@ -160,10 +164,17 @@ public static class ScheduleHelper {
         result.SkippedHeaderGroups.AddRange(skippedGroups);
         result.Warnings.AddRange(headerWarnings);
 
-        // Apply title style (borders and alignment) - must happen before view templates
+        // Apply title/header style - must happen before view templates
         var (appliedTitleStyle, titleStyleWarning) = profile.TitleStyle.ApplyTo(schedule);
         if (!appliedTitleStyle && titleStyleWarning != null)
             result.Warnings.Add(titleStyleWarning);
+
+        var (appliedColumnHeaderAlignment, columnHeaderAlignmentWarning) =
+            profile.ColumnHeaderVerticalAlignment.ApplyColumnHeaderVerticalAlignmentTo(schedule);
+        if (!appliedColumnHeaderAlignment && columnHeaderAlignmentWarning != null)
+            result.Warnings.Add(columnHeaderAlignmentWarning);
+        else if (columnHeaderAlignmentWarning != null)
+            result.Warnings.Add(columnHeaderAlignmentWarning);
 
         // Apply view template
         var (appliedTemplate, skippedTemplate, templateWarning) =
@@ -554,7 +565,7 @@ public static class ScheduleHelper {
             return null;
 
         return new SharedScheduleTitleStyleSpec(
-            horizontalAlignment,
+            horizontalAlignment ?? ScheduleTitleHorizontalAlignment.Left,
             hasBorder ? new SharedScheduleTitleBorderSpec(top, bottom, left, right) : null
         );
     }
@@ -569,11 +580,11 @@ public static class ScheduleHelper {
             if (formatOptions.CanHaveSymbol()) {
                 var symbolId = formatOptions.GetSymbolTypeId();
                 if (symbolId != null && !symbolId.Empty())
-                    symbolTypeId = symbolId.TypeId;
+                    symbolTypeId = ScheduleFieldFormatValueDomain.SerializeSymbol(symbolId);
             }
 
             return new SharedScheduleFieldFormatSpec(
-                formatOptions.GetUnitTypeId()?.TypeId,
+                ScheduleFieldFormatValueDomain.SerializeUnit(formatOptions.GetUnitTypeId()),
                 symbolTypeId,
                 formatOptions.Accuracy,
                 formatOptions.SuppressTrailingZeros,

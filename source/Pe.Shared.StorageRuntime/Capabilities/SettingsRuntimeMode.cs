@@ -12,10 +12,10 @@ public static class SettingsRuntimeModeExtensions {
     public static IReadOnlyDictionary<string, bool> ToMetadata(this SettingsRuntimeMode runtimeMode) =>
         runtimeMode switch {
             SettingsRuntimeMode.LiveDocument => new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase) {
-                ["hasRevitAssembly"] = true, ["hasRevitApiContext"] = true, ["hasActiveDocument"] = true
+                ["hasRevitApiContext"] = true, ["hasActiveDocument"] = true
             },
             _ => new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase) {
-                ["hasRevitAssembly"] = false, ["hasRevitApiContext"] = false, ["hasActiveDocument"] = false
+                ["hasRevitApiContext"] = false, ["hasActiveDocument"] = false
             }
         };
 }

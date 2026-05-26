@@ -53,9 +53,8 @@ internal static class SchemaMetadataWriter {
             ? enumerableExamples
             : [];
 
-        targetSchema.ExtensionData["examples"] = CreateOrderedExampleList(
-            existingExamples.Concat(samples.Select(sample => sample.Value))
-        );
+        var orderedValues = CreateOrderedExampleList(existingExamples.Concat(samples.Select(sample => sample.Value)));
+        targetSchema.ExtensionData["examples"] = orderedValues;
     }
 
     public static void ApplyDatasetOptions(
@@ -143,4 +142,3 @@ internal static class SchemaMetadataWriter {
         return new JObject { ["datasets"] = datasetPayload };
     }
 }
-

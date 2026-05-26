@@ -24,6 +24,14 @@ public static class ScheduleClosedEnumValueDomain {
     public static ScheduleSortOrder ToRevit(this ScheduleAuthoredSortOrder value) =>
         value == ScheduleAuthoredSortOrder.Descending ? ScheduleSortOrder.Descending : ScheduleSortOrder.Ascending;
 
+    public static VerticalAlignmentStyle ToRevit(this ScheduleColumnHeaderVerticalAlignment value) =>
+        value switch {
+            ScheduleColumnHeaderVerticalAlignment.Top => VerticalAlignmentStyle.Top,
+            ScheduleColumnHeaderVerticalAlignment.Center => VerticalAlignmentStyle.Middle,
+            ScheduleColumnHeaderVerticalAlignment.Bottom => VerticalAlignmentStyle.Bottom,
+            _ => VerticalAlignmentStyle.Bottom
+        };
+
     public static ScheduleFilterType ToRevit(this ScheduleAuthoredFilterType value) =>
         value switch {
             ScheduleAuthoredFilterType.HasParameter => ScheduleFilterType.HasParameter,
@@ -68,6 +76,14 @@ public static class ScheduleClosedEnumValueDomain {
         value == ScheduleSortOrder.Descending
             ? ScheduleAuthoredSortOrder.Descending
             : ScheduleAuthoredSortOrder.Ascending;
+
+    public static ScheduleColumnHeaderVerticalAlignment ToAuthored(this VerticalAlignmentStyle value) =>
+        value switch {
+            VerticalAlignmentStyle.Top => ScheduleColumnHeaderVerticalAlignment.Top,
+            VerticalAlignmentStyle.Middle => ScheduleColumnHeaderVerticalAlignment.Center,
+            VerticalAlignmentStyle.Bottom => ScheduleColumnHeaderVerticalAlignment.Bottom,
+            _ => ScheduleColumnHeaderVerticalAlignment.Bottom
+        };
 
     public static ScheduleAuthoredFilterType ToAuthored(this ScheduleFilterType value) =>
         value switch {
