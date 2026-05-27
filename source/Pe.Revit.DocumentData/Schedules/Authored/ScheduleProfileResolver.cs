@@ -5,8 +5,6 @@ using Pe.Shared.RevitData.Schedules;
 namespace Pe.Revit.DocumentData.Schedules.Authored;
 
 public static class ScheduleProfileResolver {
-    public static ScheduleProfile Normalize(ScheduleProfile profile) => ScheduleProfileDefaults.Normalize(profile);
-
     public static ElementId ResolveCategoryId(Document doc, ScheduleProfile profile) =>
         ScheduleCategoryValueDomain.ResolveCategoryId(doc, profile.CategoryName);
 

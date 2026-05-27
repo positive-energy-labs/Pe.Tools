@@ -1,4 +1,4 @@
-using Autodesk.Revit.DB.Structure;
+﻿using Autodesk.Revit.DB.Structure;
 using Pe.Revit.DocumentData.Families.Loaded;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.DocumentData.Schedules.Authored;
@@ -28,45 +28,43 @@ public static class ScheduleHelper {
         var category = Category.GetCategory(schedule.Document, def.CategoryId);
 
         var profile = new SharedScheduleProfile(
-            Name: schedule.Name,
-            CategoryName: category == null
+            schedule.Name,
+            category == null
                 ? BuiltInCategory.INVALID.ToString()
-                : RevitLabelCatalog.GetLabelForBuiltInCategory(category.BuiltInCategory),
-            IsItemized: def.IsItemized,
-            FilterBySheet: def.IsFilteredBySheet,
-            Fields: [],
-            SortGroup: [],
-            Filters: []
-        );
+                : RevitLabelCatalog.GetLabelForBuiltInCategory(category.BuiltInCategory)
+        ) {
+            IsItemized = def.IsItemized,
+            FilterBySheet = def.IsFilteredBySheet
+        };
 
         // Serialize fields
         for (var i = 0; i < def.GetFieldCount(); i++) {
             var field = def.GetField(i);
             var fieldSpec = SerializeField(field, schedule);
-            profile.Fields!.Add(fieldSpec);
+            profile.Fields.Add(fieldSpec);
         }
 
         // Serialize sort/group fields
         for (var i = 0; i < def.GetSortGroupFieldCount(); i++) {
             var sortGroupField = def.GetSortGroupField(i);
             var sortGroupSpec = SerializeSortGroup(sortGroupField, def);
-            profile.SortGroup!.Add(sortGroupSpec);
+            profile.SortGroup.Add(sortGroupSpec);
         }
 
         // Serialize filters
         for (var i = 0; i < def.GetFilterCount(); i++) {
             var filter = def.GetFilter(i);
             var filterSpec = SerializeFilter(filter, def);
-            profile.Filters!.Add(filterSpec);
+            profile.Filters.Add(filterSpec);
         }
 
         // Serialize header groups (updates field profiles in place).
-        HeaderGroupHandler.SerializeHeaderGroups(schedule, profile.Fields!);
+        HeaderGroupHandler.SerializeHeaderGroups(schedule, profile.Fields);
 
         // Serialize title style (borders and alignment)
         profile = profile with {
-            TitleStyle = SerializeTitleStyle(schedule),
-            ColumnHeaderVerticalAlignment = AuthoredScheduleColumnHeaderStyleApplication.SerializeColumnHeaderVerticalAlignment(schedule) ?? ScheduleProfileDefaults.ColumnHeaderVerticalAlignment
+            TitleStyle = SerializeTitleStyle(schedule) ?? profile.TitleStyle,
+            ColumnHeaderVerticalAlignment = AuthoredScheduleColumnHeaderStyleApplication.SerializeColumnHeaderVerticalAlignment(schedule) ?? profile.ColumnHeaderVerticalAlignment
         };
 
         // Serialize view template
@@ -79,8 +77,6 @@ public static class ScheduleHelper {
     ///     Creates a schedule from a ScheduleProfile.
     /// </summary>
     public static ScheduleCreationResult CreateSchedule(Document doc, SharedScheduleProfile profile) {
-        var profileName = profile.Name;
-        profile = ScheduleProfileResolver.Normalize(profile);
         var categoryId = ScheduleProfileResolver.ResolveCategoryId(doc, profile);
         var categoryName = ScheduleProfileResolver.GetCategoryDisplayName(profile);
 
@@ -117,7 +113,7 @@ public static class ScheduleHelper {
         }
 
         // Apply fields using tuple aggregation
-        foreach (var fieldSpec in profile.Fields!.Where(f => f.CalculatedType is null)) {
+        foreach (var fieldSpec in profile.Fields.Where(f => f.CalculatedType is null)) {
             var (applied, skipped, warnings) = fieldSpec.ApplyTo(
                 schedule,
                 def,
@@ -130,14 +126,14 @@ public static class ScheduleHelper {
         }
 
         // Collect calculated field guidance
-        foreach (var fieldSpec in profile.Fields!.Where(f => f.CalculatedType.HasValue)) {
+        foreach (var fieldSpec in profile.Fields.Where(f => f.CalculatedType.HasValue)) {
             var guidance = fieldSpec.GetCalculatedFieldGuidance();
             if (guidance != null) result.SkippedCalculatedFields.Add(guidance);
         }
 
         // Apply sort/group using tuple aggregation
         def.ClearSortGroupFields();
-        foreach (var sortGroupSpec in profile.SortGroup!) {
+        foreach (var sortGroupSpec in profile.SortGroup) {
             var (applied, skipped) = sortGroupSpec.ApplyTo(def);
             if (applied != null) result.AppliedSortGroups.Add(applied);
             if (skipped != null) result.SkippedSortGroups.Add(skipped);
@@ -145,12 +141,12 @@ public static class ScheduleHelper {
 
         // Apply filters using tuple aggregation
         def.ClearFilters();
-        if (profile.Filters!.Count > 8) {
+        if (profile.Filters.Count > 8) {
             result.Warnings.Add(
                 $"Schedule supports maximum 8 filters, found {profile.Filters.Count}. Only first 8 will be applied.");
         }
 
-        foreach (var filterSpec in profile.Filters!.Take(8)) {
+        foreach (var filterSpec in profile.Filters.Take(8)) {
             var (applied, skipped, warning) = filterSpec.ApplyTo(def);
             if (applied != null) result.AppliedFilters.Add(applied);
             if (skipped != null) result.SkippedFilters.Add(skipped);
@@ -159,7 +155,7 @@ public static class ScheduleHelper {
 
         // Apply header groups
         var (appliedGroups, skippedGroups, headerWarnings) =
-            HeaderGroupHandler.ApplyHeaderGroups(schedule, profile.Fields!);
+            HeaderGroupHandler.ApplyHeaderGroups(schedule, profile.Fields);
         result.AppliedHeaderGroups.AddRange(appliedGroups);
         result.SkippedHeaderGroups.AddRange(skippedGroups);
         result.Warnings.AddRange(headerWarnings);
@@ -231,9 +227,7 @@ public static class ScheduleHelper {
         if (placements.Count == 0)
             return [];
 
-        profile = ScheduleProfileResolver.Normalize(profile);
-
-        if (profile.Filters!.Count == 0) {
+        if (profile.Filters.Count == 0) {
             return placements
                 .Select(placement => placement.FamilyId)
                 .Distinct()
@@ -253,7 +247,6 @@ public static class ScheduleHelper {
         IEnumerable<Family>? families,
         bool evaluateAllTypes
     ) {
-        profile = ScheduleProfileResolver.Normalize(profile);
         var categoryId = ScheduleProfileResolver.ResolveCategoryId(doc, profile);
 
         // Get families to test
@@ -267,7 +260,7 @@ public static class ScheduleHelper {
             return [];
 
         // If no filters, return all family names
-        if (profile.Filters!.Count == 0)
+        if (profile.Filters.Count == 0)
             return familiesToTest;
 
         using var context = LoadedFamiliesTempPlacementEngine.CreateEvaluationContext(
@@ -297,7 +290,6 @@ public static class ScheduleHelper {
     }
 
     internal static ViewSchedule CreateMinimalFilterEvaluationSchedule(Document doc, SharedScheduleProfile sourceSpec) {
-        sourceSpec = ScheduleProfileResolver.Normalize(sourceSpec);
         var categoryId = ScheduleProfileResolver.ResolveCategoryId(doc, sourceSpec);
 
         var schedule = ViewSchedule.CreateSchedule(doc, categoryId);
@@ -309,12 +301,11 @@ public static class ScheduleHelper {
     }
 
     internal static void ApplyFilterFieldsAndFilters(ViewSchedule schedule, SharedScheduleProfile sourceSpec) {
-        sourceSpec = ScheduleProfileResolver.Normalize(sourceSpec);
         var def = schedule.Definition;
         def.ClearFields();
         def.ClearFilters();
 
-        foreach (var fieldName in sourceSpec.Filters!
+        foreach (var fieldName in sourceSpec.Filters
                      .Select(filter => filter.FieldName)
                      .Where(fieldName => !string.IsNullOrWhiteSpace(fieldName))
                      .Distinct(StringComparer.OrdinalIgnoreCase)) {
@@ -328,7 +319,7 @@ public static class ScheduleHelper {
             );
         }
 
-        foreach (var filterSpec in sourceSpec.Filters!.Take(8)) {
+        foreach (var filterSpec in sourceSpec.Filters.Take(8)) {
             var (_, skipped, warning) = filterSpec.ApplyTo(def);
             if (skipped != null) {
                 Log.Warning(
@@ -447,15 +438,14 @@ public static class ScheduleHelper {
             ? field.GetSchedulableField().GetName(schedule.Document)
             : fieldName;
 
-        var spec = new SharedScheduleFieldSpec(
-            fieldName,
-            field.ColumnHeading != originalParamName ? field.ColumnHeading : null,
-            IsHidden: field.IsHidden,
-            DisplayType: field.DisplayType.ToAuthored(),
-            ColumnWidth: field.SheetColumnWidth,
-            HorizontalAlignment: field.HorizontalAlignment.ToAuthored(),
-            FormatOptions: SerializeFormatOptions(field)
-        );
+        var spec = new SharedScheduleFieldSpec(fieldName) {
+            ColumnHeaderOverride = field.ColumnHeading != originalParamName ? field.ColumnHeading : null,
+            IsHidden = field.IsHidden,
+            DisplayType = field.DisplayType.ToAuthored(),
+            ColumnWidth = field.SheetColumnWidth,
+            HorizontalAlignment = field.HorizontalAlignment.ToAuthored(),
+            FormatOptions = SerializeFormatOptions(field)
+        };
 
         if (field.IsCalculatedField) {
             var calculatedType = field.FieldType == ScheduleFieldType.Formula
@@ -496,13 +486,12 @@ public static class ScheduleHelper {
         ScheduleSortGroupField sortGroupField,
         ScheduleDefinition def) {
         var field = def.GetField(sortGroupField.FieldId);
-        return new SharedScheduleSortGroupSpec(
-            field.GetName(),
-            sortGroupField.SortOrder.ToAuthored(),
-            sortGroupField.ShowHeader,
-            sortGroupField.ShowFooter,
-            sortGroupField.ShowBlankLine
-        );
+        return new SharedScheduleSortGroupSpec(field.GetName()) {
+            SortOrder = sortGroupField.SortOrder.ToAuthored(),
+            ShowHeader = sortGroupField.ShowHeader,
+            ShowFooter = sortGroupField.ShowFooter,
+            ShowBlankLine = sortGroupField.ShowBlankLine
+        };
     }
 
     private static SharedScheduleFilterSpec SerializeFilter(ScheduleFilter filter, ScheduleDefinition def) {
@@ -517,7 +506,10 @@ public static class ScheduleHelper {
         else if (filter.IsElementIdValue)
             value = filter.GetElementIdValue().Value().ToString();
 
-        return new SharedScheduleFilterSpec(field.GetName(), filter.FilterType.ToAuthored(), value);
+        return new SharedScheduleFilterSpec(field.GetName()) {
+            FilterType = filter.FilterType.ToAuthored(),
+            Value = value
+        };
     }
 
     private static SharedScheduleTitleStyleSpec? SerializeTitleStyle(ViewSchedule schedule) {
@@ -564,10 +556,20 @@ public static class ScheduleHelper {
         if (!horizontalAlignment.HasValue && !hasBorder)
             return null;
 
-        return new SharedScheduleTitleStyleSpec(
-            horizontalAlignment ?? ScheduleTitleHorizontalAlignment.Left,
-            hasBorder ? new SharedScheduleTitleBorderSpec(top, bottom, left, right) : null
-        );
+        var titleStyle = new SharedScheduleTitleStyleSpec {
+            BorderStyle = hasBorder
+                ? new SharedScheduleTitleBorderSpec {
+                    TopLineStyleName = top,
+                    BottomLineStyleName = bottom,
+                    LeftLineStyleName = left,
+                    RightLineStyleName = right
+                }
+                : null
+        };
+
+        return horizontalAlignment.HasValue
+            ? titleStyle with { HorizontalAlignment = horizontalAlignment.Value }
+            : titleStyle;
     }
 
     private static SharedScheduleFieldFormatSpec? SerializeFormatOptions(ScheduleField field) {
@@ -583,16 +585,16 @@ public static class ScheduleHelper {
                     symbolTypeId = ScheduleFieldFormatValueDomain.SerializeSymbol(symbolId);
             }
 
-            return new SharedScheduleFieldFormatSpec(
-                ScheduleFieldFormatValueDomain.SerializeUnit(formatOptions.GetUnitTypeId()),
-                symbolTypeId,
-                formatOptions.Accuracy,
-                formatOptions.SuppressTrailingZeros,
-                formatOptions.SuppressLeadingZeros,
-                formatOptions.UsePlusPrefix,
-                formatOptions.UseDigitGrouping,
-                formatOptions.SuppressSpaces
-            );
+            return new SharedScheduleFieldFormatSpec {
+                UnitTypeId = ScheduleFieldFormatValueDomain.SerializeUnit(formatOptions.GetUnitTypeId()),
+                SymbolTypeId = symbolTypeId,
+                Accuracy = formatOptions.Accuracy,
+                SuppressTrailingZeros = formatOptions.SuppressTrailingZeros,
+                SuppressLeadingZeros = formatOptions.SuppressLeadingZeros,
+                UsePlusPrefix = formatOptions.UsePlusPrefix,
+                UseDigitGrouping = formatOptions.UseDigitGrouping,
+                SuppressSpaces = formatOptions.SuppressSpaces
+            };
         } catch {
             return null;
         }
@@ -602,11 +604,12 @@ public static class ScheduleHelper {
         TableCellCombinedParameterData combinedParam,
         Document doc) =>
         new(
-            ScheduleFieldNameValueDomain.SerializeParameterName(doc, combinedParam.ParamId),
-            combinedParam.Prefix,
-            combinedParam.Suffix,
-            combinedParam.Separator
-        );
+            ScheduleFieldNameValueDomain.SerializeParameterName(doc, combinedParam.ParamId)
+        ) {
+            Prefix = combinedParam.Prefix,
+            Suffix = combinedParam.Suffix,
+            Separator = combinedParam.Separator
+        };
 
     #region Common Helpers
 

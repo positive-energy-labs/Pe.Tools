@@ -1,4 +1,4 @@
-using Pe.Revit.Ui.Core;
+﻿using Pe.Revit.Ui.Core;
 using Pe.Shared.RevitData.Schedules;
 using System.Windows;
 using System.Windows.Controls;
@@ -92,14 +92,14 @@ public class ScheduleSerializePreviewPanel : UserControl, ISidebarPanel<IPalette
         summaryPara.Inlines.Add(new LineBreak());
         summaryPara.Inlines.Add(new Run($"Itemized: {data.IsItemized}"));
         summaryPara.Inlines.Add(new LineBreak());
-        summaryPara.Inlines.Add(new Run($"Fields: {data.Fields?.Count ?? 0}"));
+        summaryPara.Inlines.Add(new Run($"Fields: {data.Fields.Count}"));
         summaryPara.Inlines.Add(new LineBreak());
-        summaryPara.Inlines.Add(new Run($"Sort/Group: {data.SortGroup?.Count ?? 0}"));
+        summaryPara.Inlines.Add(new Run($"Sort/Group: {data.SortGroup.Count}"));
         summaryPara.Margin = new Thickness(0, 0, 0, 12);
         doc.Blocks.Add(summaryPara);
 
         // Fields list with details
-        if (data.Fields != null && data.Fields.Count > 0) {
+        if (data.Fields.Count > 0) {
             _ = doc.AddSectionHeader($"Fields ({data.Fields.Count})");
             _ = doc.AddTable<ScheduleFieldSpec>(
                 data.Fields,

@@ -186,7 +186,7 @@ internal static class AuthoredScheduleSpecApplication {
         try {
             var combinedParamDataList = new List<TableCellCombinedParameterData>();
 
-            foreach (var combinedSpec in spec.CombinedParameters ?? []) {
+            foreach (var combinedSpec in spec.CombinedParameters) {
                 var combinedData = TableCellCombinedParameterData.Create();
                 var paramId = findParameterIdByName(def, schedule.Document, combinedSpec.ParameterName);
                 if (paramId == null || paramId == ElementId.InvalidElementId) {

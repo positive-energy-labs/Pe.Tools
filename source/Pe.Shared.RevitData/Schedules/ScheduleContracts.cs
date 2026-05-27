@@ -52,9 +52,16 @@ public record ScheduleQueryRequest(
 );
 
 [ExportTsInterface]
-public record ScheduleOnFinishSettings(
-    bool OpenScheduleOnFinish
-);
+public record ScheduleOnFinishSettings {
+    public ScheduleOnFinishSettings() {
+    }
+
+    public ScheduleOnFinishSettings(bool openScheduleOnFinish) {
+        this.OpenScheduleOnFinish = openScheduleOnFinish;
+    }
+
+    public bool OpenScheduleOnFinish { get; init; }
+}
 
 [JsonConverter(typeof(StringEnumConverter))]
 [ExportTsEnum]
@@ -127,85 +134,127 @@ public enum ScheduleAuthoredFilterType {
 }
 
 [ExportTsInterface]
-public record ScheduleTitleBorderSpec(
-    string? TopLineStyleName = null,
-    string? BottomLineStyleName = null,
-    string? LeftLineStyleName = null,
-    string? RightLineStyleName = null
-);
+public record ScheduleTitleBorderSpec {
+    public string? TopLineStyleName { get; init; }
+    public string? BottomLineStyleName { get; init; }
+    public string? LeftLineStyleName { get; init; }
+    public string? RightLineStyleName { get; init; }
+}
 
 [ExportTsInterface]
-public record ScheduleTitleStyleSpec(
-    ScheduleTitleHorizontalAlignment HorizontalAlignment = ScheduleTitleHorizontalAlignment.Left,
-    ScheduleTitleBorderSpec? BorderStyle = null
-);
+public record ScheduleTitleStyleSpec {
+    public ScheduleTitleHorizontalAlignment HorizontalAlignment { get; init; } = ScheduleTitleHorizontalAlignment.Left;
+    public ScheduleTitleBorderSpec? BorderStyle { get; init; }
+}
 
 [ExportTsInterface]
-public record ScheduleFieldFormatSpec(
-    string? UnitTypeId,
-    string? SymbolTypeId,
-    double? Accuracy,
-    bool SuppressTrailingZeros = false,
-    bool SuppressLeadingZeros = false,
-    bool UsePlusPrefix = false,
-    bool UseDigitGrouping = false,
-    bool SuppressSpaces = false
-);
+public record ScheduleFieldFormatSpec {
+    public string? UnitTypeId { get; init; }
+    public string? SymbolTypeId { get; init; }
+    public double? Accuracy { get; init; }
+    public bool SuppressTrailingZeros { get; init; }
+    public bool SuppressLeadingZeros { get; init; }
+    public bool UsePlusPrefix { get; init; }
+    public bool UseDigitGrouping { get; init; }
+    public bool SuppressSpaces { get; init; }
+}
 
 [ExportTsInterface]
-public record CombinedParameterSpec(
-    string ParameterName,
-    string? Prefix = null,
-    string? Suffix = null,
-    string? Separator = null
-);
+public record CombinedParameterSpec {
+    public CombinedParameterSpec() {
+    }
+
+    public CombinedParameterSpec(string parameterName) {
+        this.ParameterName = parameterName;
+    }
+
+    public string ParameterName { get; init; } = string.Empty;
+    public string? Prefix { get; init; }
+    public string? Suffix { get; init; }
+    public string? Separator { get; init; } = " ";
+}
 
 [ExportTsInterface]
-public record ScheduleFieldSpec(
-    string ParameterName,
-    string? ColumnHeaderOverride = null,
-    string? HeaderGroup = null,
-    bool IsHidden = false,
-    ScheduleAuthoredFieldDisplayType DisplayType = ScheduleAuthoredFieldDisplayType.Standard,
-    double? ColumnWidth = null,
-    ScheduleFieldHorizontalAlignment HorizontalAlignment = ScheduleFieldHorizontalAlignment.Center,
-    ScheduleAuthoredCalculatedFieldType? CalculatedType = null,
-    string? PercentageOfField = null,
-    ScheduleFieldFormatSpec? FormatOptions = null,
-    List<CombinedParameterSpec>? CombinedParameters = null
-);
+public record ScheduleFieldSpec {
+    public ScheduleFieldSpec() {
+    }
+
+    public ScheduleFieldSpec(string parameterName) {
+        this.ParameterName = parameterName;
+    }
+
+    public string ParameterName { get; init; } = string.Empty;
+    public string? ColumnHeaderOverride { get; init; }
+    public string? HeaderGroup { get; init; }
+    public bool IsHidden { get; init; }
+    public ScheduleAuthoredFieldDisplayType DisplayType { get; init; } = ScheduleAuthoredFieldDisplayType.Standard;
+    public double? ColumnWidth { get; init; }
+    public ScheduleFieldHorizontalAlignment HorizontalAlignment { get; init; } = ScheduleFieldHorizontalAlignment.Center;
+    public ScheduleAuthoredCalculatedFieldType? CalculatedType { get; init; }
+    public string? PercentageOfField { get; init; }
+    public ScheduleFieldFormatSpec? FormatOptions { get; init; }
+    public List<CombinedParameterSpec> CombinedParameters { get; init; } = [];
+}
 
 [ExportTsInterface]
-public record ScheduleSortGroupSpec(
-    string FieldName,
-    ScheduleAuthoredSortOrder SortOrder = ScheduleAuthoredSortOrder.Ascending,
-    bool ShowHeader = false,
-    bool ShowFooter = false,
-    bool ShowBlankLine = false
-);
+public record ScheduleSortGroupSpec {
+    public ScheduleSortGroupSpec() {
+    }
+
+    public ScheduleSortGroupSpec(string fieldName) {
+        this.FieldName = fieldName;
+    }
+
+    public string FieldName { get; init; } = string.Empty;
+    public ScheduleAuthoredSortOrder SortOrder { get; init; } = ScheduleAuthoredSortOrder.Ascending;
+    public bool ShowHeader { get; init; }
+    public bool ShowFooter { get; init; }
+    public bool ShowBlankLine { get; init; }
+}
 
 [ExportTsInterface]
-public record ScheduleFilterSpec(
-    string FieldName,
-    ScheduleAuthoredFilterType FilterType = ScheduleAuthoredFilterType.Equal,
-    string? Value = null
-);
+public record ScheduleFilterSpec {
+    public ScheduleFilterSpec() {
+    }
+
+    public ScheduleFilterSpec(string fieldName) {
+        this.FieldName = fieldName;
+    }
+
+    public string FieldName { get; init; } = string.Empty;
+    public ScheduleAuthoredFilterType FilterType { get; init; } = ScheduleAuthoredFilterType.Equal;
+    public string? Value { get; init; }
+}
 
 [ExportTsInterface]
-public record ScheduleProfile(
-    string Name,
-    string CategoryName,
-    string? ViewTemplateName = null,
-    ScheduleTitleStyleSpec? TitleStyle = null,
-    bool IsItemized = true,
-    bool FilterBySheet = false,
-    ScheduleColumnHeaderVerticalAlignment ColumnHeaderVerticalAlignment = ScheduleColumnHeaderVerticalAlignment.Bottom,
-    List<ScheduleFieldSpec>? Fields = null,
-    List<ScheduleSortGroupSpec>? SortGroup = null,
-    List<ScheduleFilterSpec>? Filters = null,
-    ScheduleOnFinishSettings? OnFinishSettings = null
-);
+public record ScheduleProfile {
+    private const string DefaultTitleBottomLineStyleName = "Thin Lines";
 
+    public ScheduleProfile() {
+    }
+
+    public ScheduleProfile(string name, string categoryName) {
+        this.Name = name;
+        this.CategoryName = categoryName;
+    }
+
+    public string Name { get; init; } = string.Empty;
+    public string CategoryName { get; init; } = string.Empty;
+    public string? ViewTemplateName { get; init; }
+    public ScheduleTitleStyleSpec TitleStyle { get; init; } = CreateDefaultTitleStyle();
+    public bool IsItemized { get; init; } = true;
+    public bool FilterBySheet { get; init; }
+    public ScheduleColumnHeaderVerticalAlignment ColumnHeaderVerticalAlignment { get; init; } = ScheduleColumnHeaderVerticalAlignment.Bottom;
+    public List<ScheduleFieldSpec> Fields { get; init; } = [];
+    public List<ScheduleSortGroupSpec> SortGroup { get; init; } = [];
+    public List<ScheduleFilterSpec> Filters { get; init; } = [];
+    public ScheduleOnFinishSettings? OnFinishSettings { get; init; }
+
+    private static ScheduleTitleStyleSpec CreateDefaultTitleStyle() =>
+        new() {
+            BorderStyle = new ScheduleTitleBorderSpec { BottomLineStyleName = DefaultTitleBottomLineStyleName }
+        };
+}
 [ExportTsInterface]
 public record ScheduleCatalogSheetPlacement(
     string SheetNumber,

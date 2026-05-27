@@ -1,3 +1,6 @@
+using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
+using Pe.Revit.SettingsRuntime.Modules.Schedules.Authored;
+using Pe.Shared.RevitData.Schedules;
 using System.Reflection;
 
 namespace Pe.Revit.SettingsRuntime.Json;
@@ -22,6 +25,8 @@ internal static class SettingsSchemaSyncMetadataBuilder {
         if (settingsType == null)
             throw new ArgumentNullException(nameof(settingsType));
 
+        EnsureSchemaDefinitionsRegistered(settingsType);
+
         var options = storageOptions ?? SettingsModulePolicyResolver.CreateStorageOptions(settingsType);
         var fragmentItemTypesByRoot = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
         var presetObjectTypesByRoot = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
@@ -39,6 +44,11 @@ internal static class SettingsSchemaSyncMetadataBuilder {
         );
     }
 
+    private static void EnsureSchemaDefinitionsRegistered(Type settingsType) {
+        if (settingsType == typeof(ScheduleProfile) || settingsType == typeof(BatchScheduleSettings))
+            ScheduleSchemaDefinitionBootstrapper.EnsureRegistered();
+    }
+
     private static void IndexIncludableRoots(
         Type type,
         HashSet<Type> visitedTypes,
@@ -50,25 +60,51 @@ internal static class SettingsSchemaSyncMetadataBuilder {
 
         foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance)) {
             var includable = property.GetCustomAttribute<IncludableAttribute>();
-            if (includable != null && TryGetCollectionItemType(property.PropertyType, out var itemType)) {
-                var rawRoot = includable.FragmentSchemaName ?? property.Name.ToLowerInvariant();
-                var normalizedRoot = IncludableFragmentRoots.NormalizeRoot(rawRoot);
-                _ = knownIncludeRoots.Add(normalizedRoot);
-
-                if (fragmentItemTypesByRoot.TryGetValue(normalizedRoot, out var existingType) &&
-                    existingType != itemType) {
-                    throw new InvalidOperationException(
-                        $"Includable root '{normalizedRoot}' maps to multiple fragment item types: '{existingType.Name}' and '{itemType!.Name}'."
-                    );
-                }
-
-                fragmentItemTypesByRoot[normalizedRoot] = itemType!;
-            }
+            if (includable != null)
+                IndexIncludableRoot(property, includable.FragmentSchemaName, fragmentItemTypesByRoot, knownIncludeRoots);
 
             var nestedType = UnwrapComplexType(property.PropertyType);
             if (nestedType != null)
                 IndexIncludableRoots(nestedType, visitedTypes, fragmentItemTypesByRoot, knownIncludeRoots);
         }
+
+        if (!SettingsSchemaDefinitionRegistry.Shared.TryGet(type, out var definition))
+            return;
+
+        var propertiesByName = type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic)
+            .ToDictionary(property => property.Name, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (propertyName, binding) in definition.Bindings) {
+            if (string.IsNullOrWhiteSpace(binding.IncludableFragmentRoot))
+                continue;
+            if (!propertiesByName.TryGetValue(propertyName, out var property))
+                continue;
+
+            IndexIncludableRoot(property, binding.IncludableFragmentRoot, fragmentItemTypesByRoot, knownIncludeRoots);
+        }
+    }
+
+    private static void IndexIncludableRoot(
+        PropertyInfo property,
+        string? rawRoot,
+        Dictionary<string, Type> fragmentItemTypesByRoot,
+        HashSet<string> knownIncludeRoots
+    ) {
+        if (!TryGetCollectionItemType(property.PropertyType, out var itemType) || itemType == null)
+            return;
+
+        var resolvedRawRoot = rawRoot ?? property.Name.ToLowerInvariant();
+        var normalizedRoot = IncludableFragmentRoots.NormalizeRoot(resolvedRawRoot);
+        _ = knownIncludeRoots.Add(normalizedRoot);
+
+        if (fragmentItemTypesByRoot.TryGetValue(normalizedRoot, out var existingType) &&
+            existingType != itemType) {
+            throw new InvalidOperationException(
+                $"Includable root '{normalizedRoot}' maps to multiple fragment item types: '{existingType.Name}' and '{itemType.Name}'."
+            );
+        }
+
+        fragmentItemTypesByRoot[normalizedRoot] = itemType;
     }
 
     private static void IndexPresettableRoots(

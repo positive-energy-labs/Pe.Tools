@@ -37,19 +37,19 @@ internal sealed class ScheduleProfileSchemaDefinition : SettingsSchemaDefinition
         );
         builder.Property(
             item => item.ColumnHeaderVerticalAlignment,
-            property => property.WithDescription("Optional vertical alignment applied to all column headers. Use Top, Center, or Bottom. Omit for Bottom.")
+            property => property.WithDescription("Vertical alignment applied to all column headers. Defaults to Bottom.")
         );
         builder.Property(
             item => item.SortGroup,
             property => {
-                property.WithDescription("Optional sort/group rules. Omit to apply no sort/group rules.");
+                property.WithDescription("Sort/group rules. Defaults to an empty list.");
                 property.DisallowNull();
             }
         );
         builder.Property(
             item => item.Filters,
             property => {
-                property.WithDescription("Optional filters. Omit to apply no filters.");
+                property.WithDescription("Filters. Defaults to an empty list.");
                 property.DisallowNull();
             }
         );
@@ -71,11 +71,11 @@ internal sealed class ScheduleFieldSpecSchemaDefinition : SettingsSchemaDefiniti
         });
         builder.Property(
             item => item.DisplayType,
-            property => property.WithDescription("Optional display aggregation. Omit for Standard.")
+            property => property.WithDescription("Display aggregation. Defaults to Standard.")
         );
         builder.Property(
             item => item.HorizontalAlignment,
-            property => property.WithDescription("Optional field value alignment. Omit for Center.")
+            property => property.WithDescription("Field value alignment. Defaults to Center.")
         );
         builder.Property(
             item => item.ColumnHeaderOverride,
@@ -97,7 +97,7 @@ internal sealed class ScheduleFieldSpecSchemaDefinition : SettingsSchemaDefiniti
         );
         builder.Property(
             item => item.IsHidden,
-            property => property.WithDescription("Optional hidden flag. Omit for false.")
+            property => property.WithDescription("Hidden flag. Defaults to false.")
         );
         builder.Property(
             item => item.FormatOptions,
@@ -109,7 +109,7 @@ internal sealed class ScheduleFieldSpecSchemaDefinition : SettingsSchemaDefiniti
         builder.Property(
             item => item.CombinedParameters,
             property => {
-                property.WithDescription("Optional component parameters for a combined schedule field. Omit for a normal single-parameter field.");
+                property.WithDescription("Component parameters for a combined schedule field. Defaults to an empty list for a normal single-parameter field.");
                 property.DisallowNull();
             }
         );
@@ -155,7 +155,7 @@ internal sealed class CombinedParameterSpecSchemaDefinition : SettingsSchemaDefi
             property.DisallowNull();
         });
         builder.Property(item => item.Separator, property => {
-            property.WithDescription("Optional separator after this combined-parameter value. Omit for the default separator.");
+            property.WithDescription("Separator after this combined-parameter value. Defaults to \" / \".");
             property.DisallowNull();
         });
     }
@@ -170,7 +170,7 @@ internal sealed class ScheduleFilterSpecSchemaDefinition : SettingsSchemaDefinit
         });
         builder.Property(
             item => item.FilterType,
-            property => property.WithDescription("Optional filter comparison. Omit for Equal.")
+            property => property.WithDescription("Filter comparison. Defaults to Equal.")
         );
         builder.Property(
             item => item.Value,
@@ -191,7 +191,7 @@ internal sealed class ScheduleSortGroupSpecSchemaDefinition : SettingsSchemaDefi
         });
         builder.Property(
             item => item.SortOrder,
-            property => property.WithDescription("Optional sort direction. Omit for Ascending.")
+            property => property.WithDescription("Sort direction. Defaults to Ascending.")
         );
     }
 }
@@ -201,7 +201,7 @@ internal sealed class
     public override void Configure(ISettingsSchemaBuilder<ScheduleTitleStyleSpec> builder) =>
         builder.Property(
             item => item.HorizontalAlignment,
-            property => property.WithDescription("Optional title text alignment. Omit for Left.")
+            property => property.WithDescription("Title text alignment. Defaults to Left.")
         );
 }
 

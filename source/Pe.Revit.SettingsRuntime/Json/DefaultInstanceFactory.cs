@@ -16,7 +16,13 @@ public static class DefaultInstanceFactory {
                 var parameters = constructor.GetParameters();
                 var paramValues = new object?[parameters.Length];
                 for (var i = 0; i < parameters.Length; i++) {
-                    var paramType = parameters[i].ParameterType;
+                    var parameter = parameters[i];
+                    if (parameter.HasDefaultValue) {
+                        paramValues[i] = parameter.DefaultValue;
+                        continue;
+                    }
+
+                    var paramType = parameter.ParameterType;
                     paramValues[i] = paramType.IsValueType ? Activator.CreateInstance(paramType) : null;
                 }
 
@@ -27,4 +33,3 @@ public static class DefaultInstanceFactory {
         }
     }
 }
-
