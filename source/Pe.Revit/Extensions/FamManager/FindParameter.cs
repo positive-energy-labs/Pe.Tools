@@ -50,7 +50,10 @@ public static class FamilyManagerFindParameter {
     /// <param name="familyManager">The family manager</param>
     /// <param name="name">The name of the parameter to be found</param>
     public static FamilyParameter? FindParameter(this FamilyManager familyManager, string name) {
-        if (name == null) return null;
-        return familyManager.get_Parameter(name);
+        try {
+            return familyManager.get_Parameter(name);
+        } catch (NullReferenceException ex) {
+            throw new Exception($"Failed parameter {name} lookup likely because it was deleted and the document has not regenerated", ex);
+        }
     }
 }
