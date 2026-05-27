@@ -108,6 +108,9 @@ public class MappingData {
     [Required]
     public required string NewName { get; init; }
 
+    [Description("If true, only add the target parameter when at least one current source parameter already exists in the family.")]
+    public bool OnlyAddIfSourceExists { get; init; } = false;
+
     [Description(
         "Coercion strategy to use for the remapping. CoerceByStorageType will be used when none is specified.")]
     public string MappingStrategy { get; init; } = nameof(BuiltInCoercionStrategy.CoerceByStorageType);

@@ -10,6 +10,10 @@ public class FFMigratorProfile : BaseProfile {
     [Required]
     public CleanFamilyDocumentSettings CleanFamilyDocument { get; init; } = new();
 
+    [Description("Settings for explicitly deleting exact-name family parameters.")]
+    [Required]
+    public DeleteParamsSettings DeleteParams { get; init; } = new();
+
     [Description("Settings for parameter mapping (add/replace and remap)")]
     [Required]
     public MapParamsSettings AddAndMapSharedParams { get; init; } = new();

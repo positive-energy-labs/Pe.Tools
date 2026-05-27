@@ -6,6 +6,7 @@ using Pe.App.Commands.Palette.FamilyPalette;
 using Pe.App.Host;
 using Pe.Revit;
 using Pe.Revit.FamilyFoundry;
+using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.Profiles;
@@ -48,7 +49,7 @@ public class CmdFFMigrator : IExternalCommand {
                     ctx => ctx.PreviewData?.IsValid == true)
                 .WithAction("Place Families", this.HandlePlaceFamilies,
                     ctx => ctx.SelectedProfile != null)
-                .WithQueueBuilder(BuildQueueCore)
+                .WithQueueBuilder(FFMigratorQueueBuilder.Build)
                 .WithPostProcess((ctx, familyNames) =>
                     FamilyPlacementHelper.PromptAndPlaceFamilies(ctx.UiDoc.Application, familyNames, DisplayName))
                 .Build();
@@ -184,69 +185,6 @@ public class CmdFFMigrator : IExternalCommand {
         } catch (Exception ex) {
             return new FFMigratorPlaceFamiliesActionResult(false, ex.Message, [], 0);
         }
-    }
-
-    internal static OperationQueue BuildQueueCore(FFMigratorProfile profile,
-        List<SharedParameterDefinition> apsParamData) {
-        var pClone = DeepCloneProfile(profile);
-        var apsParamNames = apsParamData.Select(p => p.ExternalDefinition.Name).ToList();
-        var mappingDataAllNames = pClone.AddAndMapSharedParams.MappingData
-            .SelectMany(m => m.CurrNames)
-            .Concat(apsParamNames);
-        var internalParams = BuildInternalParams(pClone)
-            .Where(internalParam => pClone.AddFamilyParams.Parameters.All(existing =>
-                !string.Equals(existing.Name, internalParam.Name, StringComparison.OrdinalIgnoreCase)))
-            .ToList();
-        pClone.AddFamilyParams.AddParameters(internalParams);
-        var additionalReferences = pClone.MakeElectricalConnector.Enabled
-            ? KnownParamPlanBuilder.CollectReferencedParameterNames(pClone.MakeElectricalConnector)
-            : [];
-        var knownParamPlan = KnownParamPlanBuilder.Compile(
-            pClone.AddFamilyParams,
-            pClone.SetKnownParams,
-            apsParamData,
-            additionalReferences);
-        var apsAndAddedParamNames = apsParamNames
-            .Concat(knownParamPlan.ResolvedFamilyParams.Parameters.Select(p => p.Name))
-            .ToList();
-
-        return new OperationQueue()
-            .Add(new CleanFamilyDocument(pClone.CleanFamilyDocument, mappingDataAllNames))
-            .Add(new AddAndMapSharedParams(pClone.AddAndMapSharedParams, apsParamData))
-            .Add(new AddFamilyParams(knownParamPlan.ResolvedFamilyParams))
-            .Add(new SetKnownParams(knownParamPlan.ResolvedAssignments, knownParamPlan.Catalog))
-            .Add(new MakeElecConnector(pClone.MakeElectricalConnector))
-            .Add(new PurgeParams(pClone.CleanFamilyDocument.ResolvedPurgeParamsSettings, apsAndAddedParamNames))
-            .Add(new SortParams(pClone.SortParams));
-    }
-
-    private static FFMigratorProfile DeepCloneProfile(FFMigratorProfile profile) {
-        var settings = new JsonSerializerSettings {
-            ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-            PreserveReferencesHandling = PreserveReferencesHandling.None,
-            MaxDepth = 128
-        };
-        var json = JsonConvert.SerializeObject(profile, Formatting.None, settings);
-        return JsonConvert.DeserializeObject<FFMigratorProfile>(json, settings)
-               ?? throw new InvalidOperationException("Failed to clone FF migrator profile.");
-    }
-
-    private static List<FamilyParamDefinitionModel> BuildInternalParams(FFMigratorProfile profile) {
-        List<FamilyParamDefinitionModel> paramList = [
-            new() {
-                Name = "_FOUNDRY LAST PROCESSED AT",
-                PropertiesGroup = new ForgeTypeId(""),
-                DataType = SpecTypeId.String.Text,
-                IsInstance = false
-            }
-        ];
-        profile.SetKnownParams.GlobalAssignments.Add(new GlobalParamAssignment {
-            Parameter = "_FOUNDRY LAST PROCESSED AT",
-            Kind = ParamAssignmentKind.Formula,
-            Value = $"\"{DateTime.Now:yyyy_MM_dd HH:mm:ss}\""
-        });
-
-        return paramList;
     }
 
     internal static string ResolveProfileFilePath(string relativePath, string? subDirectory = null) =>

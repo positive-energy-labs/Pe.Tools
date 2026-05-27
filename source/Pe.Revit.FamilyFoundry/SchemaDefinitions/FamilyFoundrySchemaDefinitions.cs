@@ -99,6 +99,12 @@ internal sealed class SetLookupTablesSettingsSchemaDefinition : SettingsSchemaDe
     }
 }
 
+internal sealed class DeleteParamsSettingsSchemaDefinition : SettingsSchemaDefinition<DeleteParamsSettings> {
+    public override void Configure(ISettingsSchemaBuilder<DeleteParamsSettings> builder) =>
+        builder.Property(item => item.Names, property =>
+            property.UseValueDomain(ValueDomainKeys.SharedParameterNames));
+}
+
 internal sealed class MakeElecConnectorParametersSchemaDefinition
     : SettingsSchemaDefinition<MakeElecConnectorSettings.Parameters> {
     public override void Configure(ISettingsSchemaBuilder<MakeElecConnectorSettings.Parameters> builder) {
@@ -137,6 +143,7 @@ public static class FamilyFoundrySchemaDefinitionBootstrapper {
             SettingsSchemaDefinitionRegistry.Shared.Register(new PerTypeAssignmentRowSchemaDefinition());
             SettingsSchemaDefinitionRegistry.Shared.Register(new SetKnownParamsSettingsSchemaDefinition());
             SettingsSchemaDefinitionRegistry.Shared.Register(new SetLookupTablesSettingsSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new DeleteParamsSettingsSchemaDefinition());
             SettingsSchemaDefinitionRegistry.Shared.Register(new MakeElecConnectorParametersSchemaDefinition());
             _registered = true;
         }

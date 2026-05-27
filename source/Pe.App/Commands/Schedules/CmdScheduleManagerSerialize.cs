@@ -115,7 +115,7 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
 
             // Report what was serialized
             _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
-                $"Fields: {profile.Fields?.Count ?? 0} ({profile.Fields?.Count(f => f.CalculatedType != null) ?? 0} calculated)");
+                $"Fields: {profile.Fields.Count} ({profile.Fields.Count(f => f.CalculatedType != null)} calculated)");
 
             if (profile.SortGroup is { Count: > 0 }) {
                 _ = balloon.Add(LogEventLevel.Information, new StackFrame(),
@@ -178,8 +178,8 @@ public class ScheduleSerializePreviewData {
     public string ProfileName { get; set; } = string.Empty;
     public string? CategoryName { get; set; }
     public bool? IsItemized { get; set; }
-    public List<SharedScheduleFieldSpec>? Fields { get; set; }
-    public List<SharedScheduleSortGroupSpec>? SortGroup { get; set; }
+    public List<SharedScheduleFieldSpec> Fields { get; set; } = [];
+    public List<SharedScheduleSortGroupSpec> SortGroup { get; set; } = [];
     public string ProfileJson { get; set; } = string.Empty;
     public bool IsValid { get; set; }
     public string? ErrorMessage { get; set; }
