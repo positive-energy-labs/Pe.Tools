@@ -27,21 +27,45 @@ public sealed class DeleteParams(DeleteParamsSettings settings) : DocOperation<D
         }
 
         var fm = doc.FamilyManager;
+        var stableParameters = new List<FamilyParameter>();
+        var stableParametersByName = new Dictionary<string, FamilyParameter>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var parameter in fm.GetParameters()) {
+            if (parameter == null)
+                continue;
+
+            string? parameterName;
+            try {
+                parameterName = parameter.Definition?.Name;
+            } catch {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(parameterName))
+                continue;
+
+            stableParameters.Add(parameter);
+            stableParametersByName.TryAdd(parameterName, parameter);
+        }
 
         foreach (var targetName in targetNames) {
-            var paramToDelete = fm.FindParameter(targetName);
-
-            if (paramToDelete == null) {
+            if (!stableParametersByName.TryGetValue(targetName, out var paramToDelete)) {
                 logs.Add(new LogEntry(targetName).Skip("Parameter not found."));
                 continue;
             }
-            
+
             if (paramToDelete.IsBuiltInParameter()) {
                 logs.Add(new LogEntry(targetName).Skip("Built-in parameters cannot be deleted."));
                 continue;
             }
 
-            if (paramToDelete.GetDependents(doc.FamilyManager.Parameters).Any(dependent => dependent.HasDirectAssociation(doc))) {
+            var hasBlockingDependentAssociation = stableParameters
+                .Where(candidate => candidate.Id != paramToDelete.Id)
+                .Where(candidate => !candidate.IsBuiltInParameter())
+                .Where(candidate => paramToDelete.IsReferencedIn(candidate.Formula))
+                .Any(candidate => candidate.HasDirectAssociation(doc));
+
+            if (hasBlockingDependentAssociation) {
                 logs.Add(new LogEntry(targetName).Skip("Blocked by dependent parameter association."));
                 continue;
             }
@@ -53,6 +77,8 @@ public sealed class DeleteParams(DeleteParamsSettings settings) : DocOperation<D
 
             try {
                 doc.FamilyManager.RemoveParameter(paramToDelete);
+                stableParameters.RemoveAll(parameter => parameter.Id == paramToDelete.Id);
+                stableParametersByName.Remove(targetName);
                 logs.Add(new LogEntry(targetName).Success("Deleted."));
             } catch (Exception ex) {
                 logs.Add(new LogEntry(targetName).Error(ex));
