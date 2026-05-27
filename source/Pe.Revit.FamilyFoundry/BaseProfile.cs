@@ -81,7 +81,7 @@ public class BaseProfile {
         [Description(
             "Optional conditional filter based on family parameter values. Uses schedule filter logic to evaluate parameter conditions. Leave FieldName empty to disable this filter.")]
         public ScheduleFilterSpec IncludeByCondition { get; init; } =
-            new(string.Empty, Value: string.Empty);
+            new(string.Empty, value: string.Empty);
 
         [Description(
             "Filter families by name inclusion. If any include filters are specified (Equaling, Containing, or StartingWith), only families matching at least one filter will pass. If all include filters are empty, all families pass the include check (exclude filters may still apply).")]
@@ -128,7 +128,7 @@ public class BaseProfile {
             var scheduleProfile = new ScheduleProfile(
                 "Family Filter",
                 RevitLabelCatalog.GetLabelForBuiltInCategory(familyBuiltInCategory),
-                Filters: [this.IncludeByCondition]
+                filters: [this.IncludeByCondition]
             );
 
             var matchingFamilies = doc.GetFamiliesMatchingScheduleProfileFilters(scheduleProfile, [f]);

@@ -141,15 +141,35 @@ public class AddUnmappedSharedParams(
         FamilyProcessingContext processingContext,
         OperationContext groupContext
     ) {
-        // Get already-handled params from GroupContext
         var existingParams = doc.FamilyManager.Parameters
             .OfType<FamilyParameter>()
             .Select(p => p.Definition.Name)
-            .ToHashSet();
+            .ToHashSet(StringComparer.Ordinal);
+        var mappingsByNewName = this.Settings.MappingData
+            .GroupBy(mapping => mapping.NewName, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
         var addParams = sharedParams
-            .Where(p => !existingParams.Contains(p.ExternalDefinition.Name));
+            .Where(p => !existingParams.Contains(p.ExternalDefinition.Name))
+            .Where(p => ShouldAddTarget(p.ExternalDefinition.Name, doc.FamilyManager, mappingsByNewName));
 
         var addSharedParams = new AddSharedParams(addParams) { Name = this.Name };
         return addSharedParams.Execute(doc, processingContext, groupContext);
+    }
+
+    private static bool ShouldAddTarget(
+        string targetName,
+        FamilyManager familyManager,
+        IReadOnlyDictionary<string, MappingData> mappingsByNewName
+    ) {
+        if (!mappingsByNewName.TryGetValue(targetName, out var mapping))
+            return true;
+
+        if (!mapping.OnlyAddIfSourceExists)
+            return true;
+
+        return mapping.CurrNames
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(familyManager.FindParameter)
+            .Any(parameter => parameter != null);
     }
 }

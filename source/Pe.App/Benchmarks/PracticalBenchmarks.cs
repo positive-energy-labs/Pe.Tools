@@ -215,7 +215,7 @@ internal static class PracticalBenchmarks {
         var stagedProjectPath = StageGenericProjectDocument(application, FamilyFoundryMigratorQueueBenchmarkName,
             benchmarkOutput.SubDir("seed"));
         var profile = CreateBenchmarkMigratorProfile();
-        var queue = CmdFFMigrator.BuildQueueCore(profile, []);
+        var queue = FFMigratorQueueBuilder.Build(profile, []);
         var collectorQueue = new SnapshotCapturePipeline()
             .Add(new ParameterSnapshotCollector())
             .Add(new ReferencePlaneSnapshotCollector());
