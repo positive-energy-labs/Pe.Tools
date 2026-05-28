@@ -37,6 +37,6 @@ pnpm run execute -- --source-path src\SampleScript.cs
 
 - `--host`, then `PE_TOOLS_HOST_BASE_URL`, then the local default host URL
 - `--workspace`, then `default`
-- `--workspace-root`, otherwise the root returned by `Pe.Host` workspace bootstrap
+- `pea agent` uses `--workspace-root` as an explicit cwd override; otherwise it starts at the product home returned by `Pe.Host` workspace bootstrap
 
-Prefer host-reported paths over hardcoded TypeScript assumptions. Use `--workspace-root` only as an explicit local override.
+Prefer host-reported paths over hardcoded TypeScript assumptions. Use `--workspace-root` only as an explicit local override for narrower agent scope.

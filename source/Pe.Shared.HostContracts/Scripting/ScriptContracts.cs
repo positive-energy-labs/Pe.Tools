@@ -13,10 +13,14 @@ public record ScriptWorkspaceBootstrapRequest(
 [ExportTsInterface]
 public record ScriptWorkspaceBootstrapData(
     string WorkspaceKey,
+    string ProductHomePath,
+    string ProductAgentsPath,
+    string ProductReadmePath,
     string WorkspaceRootPath,
+    string WorkspaceAgentsPath,
+    string WorkspaceReadmePath,
     string ProjectFilePath,
     string SampleScriptPath,
-    string ReadmePath,
     string RevitVersion,
     string TargetFramework,
     string RuntimeAssemblyPath,
@@ -75,4 +79,3 @@ public record ScriptDiagnostic(
     string Message,
     string? Source = null
 );
-

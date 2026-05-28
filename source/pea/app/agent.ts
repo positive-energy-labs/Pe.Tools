@@ -22,7 +22,7 @@ export async function runPeAgent(options: PeAgentOptions = {}): Promise<void> {
   const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
   const workspaceKey = resolveWorkspaceKey(options.workspaceKey);
   const hostClient = createPeHostClient(hostBaseUrl);
-  const cwd = await resolveAgentWorkspaceRoot(
+  const cwd = await resolveAgentCwd(
     hostClient,
     hostBaseUrl,
     workspaceKey,
@@ -68,7 +68,7 @@ export async function runPeAgent(options: PeAgentOptions = {}): Promise<void> {
 
   const { harness, mcpManager, hookManager, authStorage } =
     await createMastraCode({
-      cwd, // TODO: need to figure out a good fs and permissions model
+      cwd,
       extraTools: {
         get_pe_host_status: getPeHostStatus,
         execute_revit_script: executeRevitScript,
@@ -93,7 +93,7 @@ export async function runPeAgent(options: PeAgentOptions = {}): Promise<void> {
   tui.run();
 }
 
-async function resolveAgentWorkspaceRoot(
+async function resolveAgentCwd(
   hostClient: ReturnType<typeof createPeHostClient>,
   hostBaseUrl: string,
   workspaceKey: string,
@@ -107,11 +107,11 @@ async function resolveAgentWorkspaceRoot(
       workspaceKey,
       createSampleScript: true,
     });
-    return bootstrap.workspaceRootPath;
+    return bootstrap.productHomePath;
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `Unable to resolve Pe scripting workspace through Pe.Host at ${hostBaseUrl}: ${detail}`,
+      `Unable to resolve Pe.Tools product home through Pe.Host at ${hostBaseUrl}: ${detail}`,
     );
   }
 }

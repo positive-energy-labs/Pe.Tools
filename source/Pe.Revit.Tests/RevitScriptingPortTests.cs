@@ -113,12 +113,15 @@ public sealed class RevitScriptingPortTests {
             Assert.That(File.ReadAllText(agentsPath),
                 Does.Contain("The script runner discovers exactly one `PeScriptContainer` type"));
             Assert.That(File.ReadAllText(agentsPath), Does.Not.Contain("lane"));
-            Assert.That(File.Exists(result.ReadmePath), Is.True);
-            Assert.That(File.ReadAllText(result.ReadmePath), Does.Not.Contain("lane"));
+            Assert.That(File.Exists(result.ProductAgentsPath), Is.True);
+            Assert.That(File.Exists(result.ProductReadmePath), Is.True);
+            Assert.That(File.Exists(result.WorkspaceReadmePath), Is.True);
+            Assert.That(File.ReadAllText(result.WorkspaceReadmePath), Does.Not.Contain("lane"));
             Assert.That(File.ReadAllText(result.SampleScriptPath), Does.Contain("pea script execute --source-path src\\SampleScript.cs"));
             Assert.That(File.ReadAllText(result.SampleScriptPath),
                 Does.Contain("Define exactly one non-abstract PeScriptContainer"));
             Assert.That(result.GeneratedFiles, Does.Contain(agentsPath));
+            Assert.That(result.GeneratedFiles, Does.Contain(result.ProductAgentsPath));
         } finally {
             DeleteWorkspace(workspaceRoot);
         }
@@ -148,11 +151,11 @@ public sealed class RevitScriptingPortTests {
         var workspaceRoot = ScriptingWorkspaceLocations.ResolveWorkspaceRoot("default");
 
         Assert.That(
-            basePath.EndsWith(Path.Combine("Pe.Tools", "scripting"), StringComparison.OrdinalIgnoreCase),
+            basePath.EndsWith(Path.Combine("Pe.Tools", "workspaces"), StringComparison.OrdinalIgnoreCase),
             Is.True
         );
         Assert.That(
-            workspaceRoot.EndsWith(Path.Combine("Pe.Tools", "scripting", "workspace", "default"),
+            workspaceRoot.EndsWith(Path.Combine("Pe.Tools", "workspaces", "default"),
                 StringComparison.OrdinalIgnoreCase),
             Is.True
         );
@@ -166,6 +169,10 @@ public sealed class RevitScriptingPortTests {
         Assert.That(
             RevitScriptingStorageLocations.ResolveProjectFilePath("default"),
             Is.EqualTo(Path.Combine(workspaceRoot, "PeScripts.csproj"))
+        );
+        Assert.That(
+            RevitScriptingStorageLocations.ResolveInlineTraceDirectory().EndsWith(Path.Combine("Pe.Tools", "inline-scripts"), StringComparison.OrdinalIgnoreCase),
+            Is.True
         );
 
     }

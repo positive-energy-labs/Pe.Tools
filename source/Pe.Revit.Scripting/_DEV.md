@@ -14,7 +14,7 @@ source becomes a running `PeScriptContainer`.
 - source normalization:
     - `RevitScriptExecutionService` turns either an inline snippet or a workspace-relative `.cs` path into a
       `ScriptExecutionPlan`
-    - inline snippets stay isolated from workspace `src/` files but still persist shared trace files for visibility/debugging/education
+    - inline snippets stay isolated from workspace `src/` files but still persist shared trace files under `Documents\Pe.Tools\inline-scripts` for visibility/debugging/education
 - dependency resolution:
     - `ScriptReferenceResolver` reads `PeScripts.csproj` and produces separate compile-reference and runtime-reference
       sets plus project-level ambient `Using` directives
@@ -31,7 +31,8 @@ source becomes a running `PeScriptContainer`.
 
 - workspace bootstrap:
     - resolve active Revit version and target framework
-    - create or refresh `Documents\Pe.Tools\scripting\workspace\<key>`
+    - ensure product-home guidance files exist under `Documents\Pe.Tools`
+    - create or refresh `Documents\Pe.Tools\workspaces\<key>`
     - regenerate `PeScripts.csproj`
     - preserve user DLL and package references
     - regenerate supported ambient `Using` entries and repo-runtime references such as `Pe.Revit.Scripting` and

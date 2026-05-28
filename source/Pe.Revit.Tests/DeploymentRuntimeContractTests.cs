@@ -21,7 +21,11 @@ public sealed class DeploymentRuntimeContractTests {
                 Is.True
             );
             Assert.That(
-                ScriptingWorkspaceLocations.GetDefaultBasePath().EndsWith(Path.Combine("Pe.Tools", "scripting"), StringComparison.OrdinalIgnoreCase),
+                ScriptingWorkspaceLocations.GetDefaultBasePath().EndsWith(Path.Combine("Pe.Tools", "workspaces"), StringComparison.OrdinalIgnoreCase),
+                Is.True
+            );
+            Assert.That(
+                ProductUserContentLayout.ForCurrentUser().InlineScripts.RootPath.EndsWith(Path.Combine("Pe.Tools", "inline-scripts"), StringComparison.OrdinalIgnoreCase),
                 Is.True
             );
             Assert.That(

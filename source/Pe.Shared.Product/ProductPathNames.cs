@@ -9,8 +9,10 @@ public static class ProductPathNames {
     public const string LogsDirectoryName = "logs";
     public const string CacheDirectoryName = "cache";
     public const string SettingsDirectoryName = "settings";
-    public const string ScriptingDirectoryName = "scripting";
+    public const string WorkspacesDirectoryName = "workspaces";
+    public const string InlineScriptsDirectoryName = "inline-scripts";
     public const string OutputDirectoryName = "output";
-    public const string WorkspaceDirectoryName = "workspace";
     public const string GlobalDirectoryName = "Global";
+    public const string AgentInstructionsFileName = "AGENTS.md";
+    public const string ReadmeFileName = "README.md";
 }

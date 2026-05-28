@@ -70,7 +70,8 @@ public sealed record ProductBuildLayoutProjection(
             new ProductBuildUserContentProjection(
                 userContentRootRelativePath,
                 Path.Combine(userContentRootRelativePath, ProductPathNames.SettingsDirectoryName),
-                Path.Combine(userContentRootRelativePath, ProductPathNames.ScriptingDirectoryName),
+                Path.Combine(userContentRootRelativePath, ProductPathNames.WorkspacesDirectoryName),
+                Path.Combine(userContentRootRelativePath, ProductPathNames.InlineScriptsDirectoryName),
                 Path.Combine(userContentRootRelativePath, ProductPathNames.OutputDirectoryName)
             ),
             new ProductBuildRevitProjection(
@@ -122,7 +123,8 @@ public sealed record ProductBuildDevelopmentBinaryProjection(
 public sealed record ProductBuildUserContentProjection(
     string RootRelativePath,
     string SettingsRelativePath,
-    string ScriptingRelativePath,
+    string WorkspacesRelativePath,
+    string InlineScriptsRelativePath,
     string OutputRelativePath
 );
 

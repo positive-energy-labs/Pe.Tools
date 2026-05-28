@@ -60,10 +60,27 @@ User-authored files are rooted under:
 
 ```text
 Documents\Pe.Tools\
+  AGENTS.md
+  README.md
   settings\
-  scripting\
+    <module>\
+      <root>\
+    Global\
+      settings.json
+      fragments\
+      schemas\
+  workspaces\
+    <key>\
+      AGENTS.md
+      README.md
+      PeScripts.csproj
+      src\
+      .vscode\
+  inline-scripts\
   output\
 ```
+
+Settings are flattened as `settings/<module>/<root>/`; do not reintroduce `settings/<module>/settings/<root>/`.
 
 Revit add-in manifests still live in Autodesk's per-user add-in folder:
 
