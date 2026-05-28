@@ -29,13 +29,13 @@ MyBundle.zip
 After import, the bundle is just a normal workspace under:
 
 ```text
-Documents\Pe.Tools\scripting\workspace\<workspaceKey>\
+Documents\Pe.Tools\workspaces\<workspaceKey>\
 ```
 
 Run it through the normal command shape:
 
 ```powershell
-pea script --workspace connector-audit src\Main.cs
+pea script execute --workspace connector-audit --source-path src\Main.cs
 ```
 
 ## Execution Contract
@@ -101,7 +101,7 @@ If this gets implemented, the first slice should be intentionally small:
 ```powershell
 pea script export --workspace connector-audit connector-audit.zip
 pea script import connector-audit.zip --workspace connector-audit
-pea script --workspace connector-audit src\Main.cs
+pea script execute --workspace connector-audit --source-path src\Main.cs
 ```
 
 That unlocks shareable multi-file authoring without committing to a full plugin ecosystem.

@@ -3,17 +3,16 @@ namespace Pe.Shared.Product;
 public sealed record ScriptingWorkspaceLayout(string RootPath) {
     public const string DefaultWorkspaceKey = "default";
     public const string ProjectFileName = "PeScripts.csproj";
-    public const string AgentInstructionsFileName = "AGENTS.md";
-    public const string ReadmeFileName = "README.md";
+    public const string AgentInstructionsFileName = ProductPathNames.AgentInstructionsFileName;
+    public const string ReadmeFileName = ProductPathNames.ReadmeFileName;
     public const string SourceDirectoryName = "src";
-    public const string InlineDirectoryName = ".inline";
     public const string SampleScriptFileName = "SampleScript.cs";
     public const string VsCodeDirectoryName = ".vscode";
     public const string VsCodeSettingsFileName = "settings.json";
 
     public string ResolveWorkspaceRoot(string? workspaceKey) =>
         ProductPathing.ResolveSafeSubDirectoryPath(
-            Path.Combine(this.RootPath, ProductPathNames.WorkspaceDirectoryName),
+            this.RootPath,
             NormalizeWorkspaceKey(workspaceKey),
             nameof(workspaceKey)
         );
@@ -29,9 +28,6 @@ public sealed record ScriptingWorkspaceLayout(string RootPath) {
 
     public string ResolveSourceDirectoryPath(string? workspaceKey) =>
         Path.Combine(this.ResolveWorkspaceRoot(workspaceKey), SourceDirectoryName);
-
-    public string ResolveInlineDirectoryPath(string? workspaceKey) =>
-        Path.Combine(this.ResolveWorkspaceRoot(workspaceKey), InlineDirectoryName);
 
     public string ResolveSampleScriptPath(string? workspaceKey) =>
         Path.Combine(this.ResolveSourceDirectoryPath(workspaceKey), SampleScriptFileName);

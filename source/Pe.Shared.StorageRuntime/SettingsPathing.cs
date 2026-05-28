@@ -227,40 +227,19 @@ public static class SettingsPathing {
 
     /// <summary>
     ///     Attempts to resolve the shared global fragments directory for a settings root.
-    ///     Expected storage shape: {BasePath}/{Addin}/settings and {BasePath}/Global/fragments.
+    ///     Expected storage shape: {BasePath}/{Module}/{Root} and {BasePath}/Global/fragments.
     /// </summary>
     public static string? TryResolveGlobalFragmentsDirectory(string settingsRootPath) {
         var normalizedRoot = Path.GetFullPath(settingsRootPath);
-        var rootName = Path.GetFileName(
-            normalizedRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        var globalAncestor = FindNamedAncestor(normalizedRoot, "Global");
+        if (globalAncestor?.Parent != null)
+            return Path.Combine(globalAncestor.FullName, "fragments");
 
-        if (string.Equals(rootName, "Global", StringComparison.OrdinalIgnoreCase))
-            return Path.Combine(normalizedRoot, "fragments");
-
-        DirectoryInfo? settingsDirectory = null;
-        if (string.Equals(rootName, "settings", StringComparison.OrdinalIgnoreCase))
-            settingsDirectory = new DirectoryInfo(normalizedRoot);
-        else {
-            var current = new DirectoryInfo(normalizedRoot);
-            while (current != null) {
-                if (string.Equals(current.Name, "settings", StringComparison.OrdinalIgnoreCase)) {
-                    settingsDirectory = current;
-                    break;
-                }
-
-                current = current.Parent;
-            }
-        }
-
+        var settingsDirectory = FindNamedAncestor(normalizedRoot, "settings");
         if (settingsDirectory == null)
             return null;
 
-        var addinDirectory = settingsDirectory.Parent;
-        var baseDirectory = addinDirectory?.Parent;
-        if (baseDirectory == null)
-            return null;
-
-        return Path.Combine(baseDirectory.FullName, "Global", "fragments");
+        return Path.Combine(settingsDirectory.FullName, "Global", "fragments");
     }
 
     private static (string BaseDirectory, string Namespace) TryResolveStorageBaseAndNamespace(string contextDirectory) {
@@ -278,10 +257,9 @@ public static class SettingsPathing {
 
         var settingsAncestor = FindNamedAncestor(contextDirectory, "settings");
         if (settingsAncestor != null) {
-            var addinDirectory = settingsAncestor.Parent;
-            var baseDirectory = addinDirectory?.Parent;
-            if (addinDirectory != null && baseDirectory != null)
-                return (baseDirectory.FullName, NormalizeSchemaKey(addinDirectory.Name));
+            var moduleDirectory = FindDirectChildUnderAncestor(contextDirectory, settingsAncestor);
+            if (moduleDirectory != null)
+                return (settingsAncestor.FullName, NormalizeSchemaKey(moduleDirectory.Name));
         }
 
         var stateAncestor = FindNamedAncestor(contextDirectory, "state");
@@ -303,6 +281,20 @@ public static class SettingsPathing {
             if (string.Equals(current.Name, ancestorName, StringComparison.OrdinalIgnoreCase))
                 return current;
 
+            current = current.Parent;
+        }
+
+        return null;
+    }
+
+    private static DirectoryInfo? FindDirectChildUnderAncestor(string path, DirectoryInfo ancestor) {
+        var current = new DirectoryInfo(path);
+        DirectoryInfo? child = null;
+        while (current != null) {
+            if (string.Equals(current.FullName, ancestor.FullName, StringComparison.OrdinalIgnoreCase))
+                return child;
+
+            child = current;
             current = current.Parent;
         }
 

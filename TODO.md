@@ -26,8 +26,9 @@
   - add log paths to host-status
   - add project-browser organization to host-status??? I think this is kinda essential so agents know what it means when you say "mechanical schedule" or "design view for level 1". I feel like a top-level file-strucutre like output could be useful here. whether in a project or family this will help model get on same page as user. 
     - or maybe make dedicated project-browser endpoint, because being able to see all views and sheets etc (with sorting/organization metadata) could be really useful. adding it in host-status would require a really abbreviated version for it to make sense.
+- ` mastracode: pe-tools-ae8e96592dd3` ffmigrator and greater family foundry needs a better mutation model. right now settings are organized by operation, but it should probably be more like "heres the end state i want, ffmigrator please apply this". relevant shortfalls of the current ffmigrator are: 1. provenance of properties group is loose, 2. similar with datattype, 3. parameter end state depends on a lot of variables spread across different models. I want to create a model that optimizes for *both* a maximally declarative *and* minimally verbose authoring layer. good defaults everywhere, and making metadata provenance clear (remember that parameters service allows u to set default metadat values). keeping our current model mostly intact as the imperative compiled layer is probably desirable and maybe unavoidable. *declarative parameter desired-state authoring, compiled into an explicit migration/reconciliation plan*
 
-
+8118309;8126085;8127529;8133683;8239282;8239283;8248585;8500269;8500787;8500969;8501106;8509937;8509938
 ## pea System Prompt:
 
 ```

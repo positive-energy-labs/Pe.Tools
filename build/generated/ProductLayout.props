@@ -26,7 +26,8 @@
     <PeDevRuntimeHostDllRelativePath>Positive Energy\Pe.Tools\dev\bin\host\Pe.Host.dll</PeDevRuntimeHostDllRelativePath>
     <PeUserContentRootRelativePath>Pe.Tools</PeUserContentRootRelativePath>
     <PeUserSettingsRelativePath>Pe.Tools\settings</PeUserSettingsRelativePath>
-    <PeUserScriptingRelativePath>Pe.Tools\scripting</PeUserScriptingRelativePath>
+    <PeUserWorkspacesRelativePath>Pe.Tools\workspaces</PeUserWorkspacesRelativePath>
+    <PeUserInlineScriptsRelativePath>Pe.Tools\inline-scripts</PeUserInlineScriptsRelativePath>
     <PeUserOutputRelativePath>Pe.Tools\output</PeUserOutputRelativePath>
     <PeRevitAddinsRelativePath>Autodesk\Revit\Addins</PeRevitAddinsRelativePath>
     <PeRevitAddinManifestFileName>Pe.App.addin</PeRevitAddinManifestFileName>

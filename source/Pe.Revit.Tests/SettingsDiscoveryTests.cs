@@ -25,6 +25,7 @@ public sealed class SettingsDiscoveryTests {
             );
 
             Assert.Multiple(() => {
+                Assert.That(rootDirectory, Is.EqualTo(Path.Combine(Path.GetFullPath(basePath), "TestModule", "profiles")));
                 Assert.That(Directory.Exists(rootDirectory), Is.True);
                 Assert.That(result.Files, Is.Empty);
                 Assert.That(result.Root.Name, Is.EqualTo("profiles"));

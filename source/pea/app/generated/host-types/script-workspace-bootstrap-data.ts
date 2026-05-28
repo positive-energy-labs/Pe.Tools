@@ -5,10 +5,14 @@
 
 export interface ScriptWorkspaceBootstrapData {
   workspaceKey: string;
+  productHomePath: string;
+  productAgentsPath: string;
+  productReadmePath: string;
   workspaceRootPath: string;
+  workspaceAgentsPath: string;
+  workspaceReadmePath: string;
   projectFilePath: string;
   sampleScriptPath: string;
-  readmePath: string;
   revitVersion: string;
   targetFramework: string;
   runtimeAssemblyPath: string;

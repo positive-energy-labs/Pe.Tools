@@ -1,9 +1,9 @@
-﻿using Pe.Shared.Product;
+using Pe.Shared.Product;
 
 namespace Pe.Shared.HostContracts.Scripting;
 
 public static class ScriptingWorkspaceLocations {
-    public const string DefaultScriptingDirectoryName = ProductPathNames.ScriptingDirectoryName;
+    public const string DefaultWorkspacesDirectoryName = ProductPathNames.WorkspacesDirectoryName;
 
     public static string GetDefaultBasePath() =>
         ProductUserContentLayout.ForCurrentUser().Scripting.RootPath;

@@ -65,14 +65,14 @@ const agentCommand = define({
     ...commonArgs,
     workspaceRoot: {
       type: "string",
-      description: "Explicit scripting workspace root path. Defaults to the path returned by Pe.Host bootstrap.",
+      description: "Explicit agent cwd override. Defaults to the product home returned by Pe.Host bootstrap.",
     },
   },
   toKebab: true,
   examples: [
     "pea agent",
     "pea agent --workspace default",
-    "pea agent --workspace-root C:\\Users\\you\\Documents\\Pe.Tools\\scripting\\workspace\\default",
+    "pea agent --workspace-root C:\\Users\\you\\Documents\\Pe.Tools\\workspaces\\default",
   ].join("\n"),
   run: async (ctx) => {
     const { runPeAgent } = await import("./agent.js");
@@ -276,10 +276,11 @@ const scriptBootstrapCommand = define({
       return;
     }
 
-    console.log(`workspace ${bootstrap.workspaceKey}`);
-    console.log(`root      ${bootstrap.workspaceRootPath}`);
-    console.log(`project   ${bootstrap.projectFilePath}`);
-    console.log(`sample    ${bootstrap.sampleScriptPath}`);
+    console.log(`workspace key ${bootstrap.workspaceKey}`);
+    console.log(`product home ${bootstrap.productHomePath}`);
+    console.log(`workspace    ${bootstrap.workspaceRootPath}`);
+    console.log(`project      ${bootstrap.projectFilePath}`);
+    console.log(`sample       ${bootstrap.sampleScriptPath}`);
   },
 });
 

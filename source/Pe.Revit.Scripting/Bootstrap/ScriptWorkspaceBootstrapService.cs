@@ -1,4 +1,4 @@
-﻿using Pe.Revit.Scripting.Storage;
+using Pe.Revit.Scripting.Storage;
 using Pe.Shared.HostContracts.Scripting;
 
 namespace Pe.Revit.Scripting.Bootstrap;
@@ -16,6 +16,9 @@ public sealed class ScriptWorkspaceBootstrapService(
         string runtimeAssemblyPath
     ) {
         var generatedFiles = new List<string>();
+        var productHomePath = RevitScriptingStorageLocations.ResolveProductHomePath();
+        var productAgentsPath = RevitScriptingStorageLocations.ResolveProductAgentsPath();
+        var productReadmePath = RevitScriptingStorageLocations.ResolveProductReadmePath();
         var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
         var projectFilePath = RevitScriptingStorageLocations.ResolveProjectFilePath(workspaceKey);
         var sourceDirectory = RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey);
@@ -25,6 +28,7 @@ public sealed class ScriptWorkspaceBootstrapService(
         var readmePath = RevitScriptingStorageLocations.ResolveReadmePath(workspaceKey);
         var vscodeSettingsPath = RevitScriptingStorageLocations.ResolveVscodeSettingsPath(workspaceKey);
 
+        _ = Directory.CreateDirectory(productHomePath);
         _ = Directory.CreateDirectory(workspaceRoot);
         _ = Directory.CreateDirectory(sourceDirectory);
         _ = Directory.CreateDirectory(vscodeDirectory);
@@ -41,6 +45,8 @@ public sealed class ScriptWorkspaceBootstrapService(
         );
         WriteIfChanged(projectFilePath, generatedProjectContent, generatedFiles);
 
+        EnsureFile(productAgentsPath, ScriptFileTemplates.CreateProductAgents(), generatedFiles);
+        EnsureFile(productReadmePath, ScriptFileTemplates.CreateProductReadme(), generatedFiles);
         EnsureFile(agentsPath, ScriptFileTemplates.CreateAgents(), generatedFiles);
         EnsureFile(readmePath, ScriptFileTemplates.CreateReadme(), generatedFiles);
         EnsureFile(vscodeSettingsPath, ScriptFileTemplates.CreateVscodeSettings(), generatedFiles);
@@ -49,10 +55,14 @@ public sealed class ScriptWorkspaceBootstrapService(
 
         return new ScriptWorkspaceBootstrapData(
             workspaceKey,
+            productHomePath,
+            productAgentsPath,
+            productReadmePath,
             workspaceRoot,
+            agentsPath,
+            readmePath,
             projectFilePath,
             sampleScriptPath,
-            readmePath,
             revitVersion,
             targetFramework,
             runtimeAssemblyPath,

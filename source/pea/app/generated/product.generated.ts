@@ -38,7 +38,6 @@ export const scriptingWorkspaceIdentity = {
   agentInstructionsFileName: "AGENTS.md",
   readmeFileName: "README.md",
   sourceDirectoryName: "src",
-  inlineDirectoryName: ".inline",
   sampleScriptFileName: "SampleScript.cs",
   vsCodeDirectoryName: ".vscode",
   vsCodeSettingsFileName: "settings.json",

@@ -1,4 +1,6 @@
-﻿namespace Pe.Revit.Scripting.Bootstrap;
+using Pe.Shared.Product;
+
+namespace Pe.Revit.Scripting.Bootstrap;
 
 internal static class ScriptFileTemplates {
     public static readonly IReadOnlyList<string> DefaultUsings = [
@@ -21,6 +23,49 @@ internal static class ScriptFileTemplates {
         "Pe.Shared.HostContracts"
     ];
 
+    public static string CreateProductReadme() =>
+        $$"""
+        # Pe.Tools
+
+        This folder is the user-authored Pe.Tools content home.
+
+        ## Folders
+
+        - `{{ProductPathNames.SettingsDirectoryName}}/` - authored settings grouped by module.
+        - `{{ProductPathNames.WorkspacesDirectoryName}}/` - Revit scripting workspaces.
+        - `{{ProductPathNames.InlineScriptsDirectoryName}}/` - saved inline script traces from quick executions.
+        - `{{ProductPathNames.OutputDirectoryName}}/` - generated user-visible command output.
+
+        Runtime state, logs, caches, and installed binaries live under Local AppData, not this folder.
+        """;
+
+    public static string CreateProductAgents() =>
+        $$"""
+        # Pe.Tools User Content
+
+        ## Scope
+
+        Agent guidance for the Pe.Tools user-authored content home.
+
+        ## Purpose
+
+        This folder is for editable settings, Revit scripting workspaces, visible inline script traces, and generated user output. Keep runtime state, logs, caches, and installed binaries out of this tree.
+
+        ## Critical Entry Points
+
+        - `{{ProductPathNames.SettingsDirectoryName}}/` - authored settings by module; shared global files live under `{{ProductPathNames.SettingsDirectoryName}}/{{ProductPathNames.GlobalDirectoryName}}/`.
+        - `{{ProductPathNames.WorkspacesDirectoryName}}/<key>/` - source-first Revit scripting workspaces.
+        - `{{ProductPathNames.InlineScriptsDirectoryName}}/` - retained inline snippet traces for review and promotion into a workspace.
+        - `{{ProductPathNames.OutputDirectoryName}}/` - durable user-visible command output.
+
+        ## Living Memory
+
+        - Prefer workspace-relative script execution from `{{ProductPathNames.WorkspacesDirectoryName}}/<key>/src/` for anything durable.
+        - Treat `{{ProductPathNames.InlineScriptsDirectoryName}}/` as trace history, not the primary authoring surface.
+        - Settings are flattened as `{{ProductPathNames.SettingsDirectoryName}}/<module>/<root>/`; do not recreate `{{ProductPathNames.SettingsDirectoryName}}/<module>/settings/<root>/`.
+        - Shared settings fragments and schemas belong under `{{ProductPathNames.SettingsDirectoryName}}/{{ProductPathNames.GlobalDirectoryName}}/`.
+        """;
+
     public static string CreateReadme() =>
         """
         # Pe Revit Scripting
@@ -30,7 +75,7 @@ internal static class ScriptFileTemplates {
         Current supported execution:
 
         - workspace-path execution for scripts under `src/`
-        - inline snippets
+        - inline snippets, saved visibly in the product `inline-scripts/` folder
         - sync execution through `Pe.Host` from the CLI or frontend
 
         Current non-goals:
@@ -56,12 +101,12 @@ internal static class ScriptFileTemplates {
         """;
 
     public static string CreateAgents() =>
-        """
+        $$"""
         # Revit Scripting Workspace
 
         ## Scope
 
-        Agent guidance for the generated `Pe.Revit.Scripting` authoring workspace under `Documents\Pe.Tools\scripting\workspace`.
+        Agent guidance for a generated `Pe.Revit.Scripting` authoring workspace under product `{{ProductPathNames.WorkspacesDirectoryName}}/<key>/`.
 
         ## Purpose
 
@@ -72,7 +117,7 @@ internal static class ScriptFileTemplates {
         - `PeScripts.csproj` - preserved local DLL references, `PackageReference` items, and runtime assembly reference.
         - `src/` - author container scripts here.
         - `src/SampleScript.cs` - minimal executable example for the current runtime contract.
-        - `AiGeneratedSnippets/` - intended landing area for generated or shared snippets.
+        - `.vscode/settings.json` - generated editor hint for this workspace.
         - `README.md` - short human-facing bootstrap notes.
 
         ## Validation

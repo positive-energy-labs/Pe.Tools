@@ -33,7 +33,7 @@ resolution, compile/load/execute, and the bridge-dispatched `ExternalEvent` hand
 | Term                 | Meaning                                                                                        | Prefer / Avoid                                                                       |
 |----------------------|------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
 | **inline snippet**   | Submitted source content compiled for one request without touching workspace files             | Prefer this for fast probes; avoid relying on workspace state                        |
-| **workspace path**   | A workspace-relative `.cs` file resolved under `Documents\Pe.Tools\scripting\workspace\<key>`                | Prefer this for the product path; avoid implying arbitrary local paths are supported |
+| **workspace path**   | A workspace-relative `.cs` file resolved under `Documents\Pe.Tools\workspaces\<key>`                        | Prefer this for the product path; avoid implying arbitrary local paths are supported |
 | **strict**           | Default assembly posture using only explicit refs/packages/runtime defaults                    | Prefer this as the only supported authoring posture                                  |
 | **execution**        | One scripting request that returns one final result payload                                    | Avoid using it as a synonym for a bridge session                                     |
 
@@ -45,7 +45,7 @@ resolution, compile/load/execute, and the bridge-dispatched `ExternalEvent` hand
   runtime assets back into one flat list.
 - `WriteLine(...)` is the preferred output path. `Console.WriteLine(...)` is compatibility only and should stay
   obviously second-class in docs and samples.
-- Inline snippets should compile submitted source only, stay isolated from broken workspace files, and keep writing shared trace files for visibility/debugging/education.
+- Inline snippets should compile submitted source only, stay isolated from broken workspace files, and keep writing shared trace files under `Documents\Pe.Tools\inline-scripts` for visibility/debugging/education.
 - Each request must resolve to exactly one non-abstract `PeScriptContainer`. If discovery finds none or many, the
   request shape is wrong before the Revit API is.
 - Live-document execution is transaction-backed here. Debug Revit-side mutation/rollback behavior in this package, not
