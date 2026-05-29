@@ -1,12 +1,11 @@
-import path from "node:path";
-import { createMastraCode } from "mastracode";
-import { mastra } from "mastracode/tui";
+import path, { dirname } from "node:path";
+import type { createMastraCode as createMastraCodeFunction } from "mastracode";
 import {
   createPeHostClient,
   resolveHostBaseUrl,
   resolveWorkspaceKey,
 } from "./pe-host.js";
-import { ensurePeaBetaAuth } from "./beta-auth-bootstrap.js";
+import { ensurePeaBetaAuth, resolveDefaultPeaMastraAuthPath } from "./beta-auth-bootstrap.js";
 import { ensureBundledPeaSkills } from "./bundled-skills.js";
 import { createPeaContextProvider } from "./pea-context-seed.js";
 import { createPeaAgent } from "./pea-agent.js";
@@ -29,6 +28,7 @@ export interface PeAgentOptions {
   hostBaseUrl?: string;
   workspaceKey?: string;
   workspaceRoot?: string;
+  allowOauthBetaAuth?: boolean;
 }
 
 export interface PeaRuntimeWorkspace {
@@ -37,7 +37,9 @@ export interface PeaRuntimeWorkspace {
   workspaceKey: string;
 }
 
-export type PeaRuntime = Awaited<ReturnType<typeof createMastraCode>> & {
+type CreateMastraCode = typeof createMastraCodeFunction;
+
+export type PeaRuntime = Awaited<ReturnType<CreateMastraCode>> & {
   workspace: PeaRuntimeWorkspace;
   defaults: PeaRuntimeDefaultsSummary;
   policy: PeaRuntimePolicy;
@@ -46,7 +48,11 @@ export type PeaRuntime = Awaited<ReturnType<typeof createMastraCode>> & {
 export async function createPeaRuntime(
   options: PeAgentOptions = {},
 ): Promise<PeaRuntime> {
-  await ensurePeaBetaAuth();
+  const mastraAuthPath = await resolveDefaultPeaMastraAuthPath();
+  await ensurePeaBetaAuth({
+    allowOAuth: options.allowOauthBetaAuth,
+    mastraAuthPath,
+  });
 
   const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
   const workspaceKey = resolveWorkspaceKey(options.workspaceKey);
@@ -59,6 +65,12 @@ export async function createPeaRuntime(
   );
 
   process.chdir(cwd);
+
+  process.env.APPDATA = dirname(dirname(mastraAuthPath));
+  const [{ createMastraCode }, { mastra }] = await Promise.all([
+    import("mastracode"),
+    import("mastracode/tui"),
+  ]);
 
   await ensureBundledPeaSkills(cwd);
   const defaults = await ensurePeaRuntimeDefaults(cwd);
@@ -100,6 +112,14 @@ export async function createPeaRuntime(
     },
   });
 
+  const switchModel = mastraCode.harness.switchModel.bind(mastraCode.harness);
+  mastraCode.harness.switchModel = (async (request) => {
+    await switchModel({
+      ...request,
+      modelId: normalizePeaModelId(request.modelId),
+    });
+  }) as typeof mastraCode.harness.switchModel;
+
   return {
     ...mastraCode,
     workspace: {
@@ -110,6 +130,18 @@ export async function createPeaRuntime(
     defaults,
     policy: peaRuntimePolicy,
   };
+}
+
+function normalizePeaModelId(modelId: string): string {
+  switch (modelId) {
+    case "openai/gpt-5.5":
+    case "openai/gpt-5.4":
+      return defaultPeaAgentModelId;
+    case "openai/gpt-5.4-mini":
+      return defaultPeaOmModelId;
+    default:
+      return modelId;
+  }
 }
 
 async function resolveAgentCwd(

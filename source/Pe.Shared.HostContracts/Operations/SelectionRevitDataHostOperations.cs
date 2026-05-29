@@ -1,14 +1,21 @@
-﻿using Pe.Shared.RevitData;
+using Pe.Shared.RevitData;
 
 namespace Pe.Shared.HostContracts.Operations;
 
 public static class GetElementContextQueryOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<ElementContextQueryRequest, ElementContextQueryData>(
-            "revit-data.element-context.query",
+            "revit.detail.elements",
             HostHttpVerb.Post,
-            "/api/revit-data/element-context/query",
+            "/api/revit/detail/elements",
             HostExecutionMode.Bridge,
-            "Get Element Context Query"
+            "Get Element Context Query",
+            HostOperationAgentMetadata.Create(
+                "revit",
+                "Read element context, selection, and nearby document facts from connected Revit.",
+                new[] { "elements", "selection", "context", "query" },
+                requiresBridge: true,
+                requiresActiveDocument: true
+            )
         );
 }

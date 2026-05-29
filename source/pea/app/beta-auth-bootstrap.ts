@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 const openAiEnvName = "OPENAI_API_KEY";
+const allowOAuthBetaAuthEnvName = "PEA_ALLOW_OAUTH_BETA_AUTH";
 const mastraAppDirectoryName = "mastracode";
 const peProductDirectoryName = "Pe.Tools";
 const bootstrapScriptPath =
@@ -19,15 +20,26 @@ interface AuthProbe {
   source?: string;
 }
 
-export async function ensurePeaBetaAuth(): Promise<void> {
-  const initialProbe = await probePeaBetaBootstrap();
+export interface PeaBetaAuthOptions {
+  allowOAuth?: boolean;
+  mastraAuthPath?: string;
+}
+
+export async function resolveDefaultPeaMastraAuthPath(): Promise<string> {
+  return join(await resolvePeProductHomePath(), ".pea", mastraAppDirectoryName, "auth.json");
+}
+
+export async function ensurePeaBetaAuth(
+  options: PeaBetaAuthOptions = {},
+): Promise<void> {
+  const initialProbe = await probePeaBetaBootstrap(options);
   if (initialProbe.isConfigured) return;
 
   writeBootstrapInstructions(initialProbe.missing);
 
   while (true) {
     await delay(bootstrapWaitIntervalMs);
-    const probe = await probePeaBetaBootstrap();
+    const probe = await probePeaBetaBootstrap(options);
     if (probe.isConfigured) {
       console.log("\nPe Agent beta bootstrap is configured.\n");
       return;
@@ -42,10 +54,17 @@ interface BootstrapProbe {
   missing: string[];
 }
 
-async function probePeaBetaBootstrap(): Promise<BootstrapProbe> {
+async function probePeaBetaBootstrap(
+  options: PeaBetaAuthOptions,
+): Promise<BootstrapProbe> {
   const missing: string[] = [];
-  const openAi = await probeOpenAiAuth();
-  if (!openAi.isConfigured) missing.push("OpenAI API key");
+  const allowOAuth = options.allowOAuth === true || isTruthyEnv(allowOAuthBetaAuthEnvName);
+  const openAi = await probeOpenAiAuth(allowOAuth, options.mastraAuthPath);
+  if (!openAi.isConfigured) {
+    missing.push(
+      allowOAuth ? "OpenAI API key or Codex OAuth login" : "OpenAI API key",
+    );
+  }
 
   const peSettings = await probePeGlobalSettings();
   if (!peSettings.isConfigured) missing.push("Pe.Tools global APS settings");
@@ -56,14 +75,28 @@ async function probePeaBetaBootstrap(): Promise<BootstrapProbe> {
   };
 }
 
-async function probeOpenAiAuth(): Promise<AuthProbe> {
+async function probeOpenAiAuth(
+  allowOAuth: boolean,
+  mastraAuthPath?: string,
+): Promise<AuthProbe> {
   const processValue = firstNonBlank(process.env[openAiEnvName]);
   if (processValue) return { isConfigured: true, source: openAiEnvName };
 
-  const mastraAuthValue = await readMastraOpenAiKey();
-  if (mastraAuthValue) {
-    process.env[openAiEnvName] = mastraAuthValue;
+  const mastraAuth = await readMastraOpenAiAuth(
+    mastraAuthPath ?? await resolveDefaultPeaMastraAuthPath(),
+  );
+  if (mastraAuth.apiKey) {
+    process.env[openAiEnvName] = mastraAuth.apiKey;
     return { isConfigured: true, source: "MastraCode auth.json" };
+  }
+
+  if (allowOAuth) {
+    return {
+      isConfigured: true,
+      source: mastraAuth.hasOAuth
+        ? "Pea MastraCode Codex OAuth"
+        : "dev OAuth beta auth escape hatch",
+    };
   }
 
   const userEnvValue = await readWindowsUserEnvironmentValue(openAiEnvName);
@@ -100,22 +133,28 @@ async function probePeGlobalSettings(): Promise<AuthProbe> {
   }
 }
 
-async function readMastraOpenAiKey(): Promise<string | undefined> {
-  const appData = firstNonBlank(process.env.APPDATA);
-  if (!appData) return undefined;
+interface MastraOpenAiAuth {
+  apiKey?: string;
+  hasOAuth: boolean;
+}
 
-  const authPath = join(appData, mastraAppDirectoryName, "auth.json");
+async function readMastraOpenAiAuth(authPath: string): Promise<MastraOpenAiAuth> {
   try {
     const raw = await readFile(authPath, "utf-8");
     const parsed = parseJsonObject(raw);
-    return firstNonBlank(
-      readApiKeyCredential(parsed["openai-codex"]),
-      readApiKeyCredential(parsed["apikey:openai-codex"]),
-      readApiKeyCredential(parsed["openai"]),
-      readApiKeyCredential(parsed["apikey:openai"]),
-    );
+    const credentials = [
+      parsed["openai-codex"],
+      parsed["apikey:openai-codex"],
+      parsed["openai"],
+      parsed["apikey:openai"],
+    ];
+
+    return {
+      apiKey: firstNonBlank(...credentials.map(readApiKeyCredential)),
+      hasOAuth: credentials.some(isOAuthCredential),
+    };
   } catch {
-    return undefined;
+    return { hasOAuth: false };
   }
 }
 
@@ -126,6 +165,11 @@ function readApiKeyCredential(value: unknown): string | undefined {
     return undefined;
 
   return firstNonBlank(credential.key);
+}
+
+function isOAuthCredential(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  return (value as { type?: unknown }).type === "oauth";
 }
 
 async function readWindowsUserEnvironmentValue(
@@ -150,25 +194,25 @@ async function readWindowsUserEnvironmentValue(
 }
 
 async function resolvePeGlobalSettingsPath(): Promise<string | undefined> {
+  const productHomePath = await resolvePeProductHomePath();
+  return join(productHomePath, "settings", "Global", "settings.json");
+}
+
+async function resolvePeProductHomePath(): Promise<string> {
   const documentsPaths = uniqueNonBlank([
     await readWindowsUserShellFolder("Personal"),
     await readWindowsDocumentsPath(),
     ...getFallbackDocumentsPaths(),
   ]);
 
-  const candidateSettingsPaths = documentsPaths.map((documentsPath) =>
-    join(
-      documentsPath,
-      peProductDirectoryName,
-      "settings",
-      "Global",
-      "settings.json",
-    ),
+  const candidateProductHomePaths = documentsPaths.map((documentsPath) =>
+    join(documentsPath, peProductDirectoryName),
   );
 
   return (
-    candidateSettingsPaths.find((candidate) => existsSync(candidate)) ??
-    candidateSettingsPaths[0]
+    candidateProductHomePaths.find((candidate) => existsSync(candidate)) ??
+    candidateProductHomePaths[0] ??
+    join(process.cwd(), peProductDirectoryName)
   );
 }
 
@@ -273,6 +317,11 @@ function delay(ms: number): Promise<void> {
 
 function parseJsonObject(raw: string): Record<string, unknown> {
   return JSON.parse(raw.replace(/^\uFEFF/, "")) as Record<string, unknown>;
+}
+
+function isTruthyEnv(name: string): boolean {
+  const value = firstNonBlank(process.env[name]);
+  return value === "1" || value?.toLowerCase() === "true";
 }
 
 function firstNonBlank(

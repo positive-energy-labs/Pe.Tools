@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using TypeGen.Core.TypeAnnotations;
 
@@ -33,12 +33,39 @@ public record ScheduleCustomParameterFilter(
     ScheduleCustomParameterMatchKind MatchKind
 );
 
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum SchedulePlacementScope {
+    All,
+    PlacedOnly,
+    UnplacedOnly
+}
+
+[ExportTsInterface]
+public record ScheduleCatalogProjection {
+    public RevitDataResultView View { get; init; } = RevitDataResultView.Summary;
+    public bool IncludeFilters { get; init; }
+    public bool IncludeParameterUsages { get; init; }
+    public bool IncludeCustomParameters { get; init; }
+    public bool IncludeVisibleFamilies { get; init; }
+    public bool IncludeSheetPlacements { get; init; } = true;
+}
+
 [ExportTsInterface]
 public record ScheduleCatalogRequest {
     public List<string> CategoryNames { get; init; } = [];
     public List<string> ScheduleNames { get; init; } = [];
+    public string? ScheduleNameContains { get; init; }
+    public string? ScheduleNamePrefix { get; init; }
+    public SchedulePlacementScope PlacementScope { get; init; } = SchedulePlacementScope.All;
+    public string? SheetNumberContains { get; init; }
+    public string? SheetNameContains { get; init; }
+    public bool? IsEmpty { get; init; }
     public List<ScheduleCustomParameterFilter> CustomParameterFilters { get; init; } = [];
+    public ProjectBrowserFilter? BrowserFilter { get; init; }
     public bool IncludeTemplates { get; init; }
+    public ScheduleCatalogProjection? Projection { get; init; }
+    public RevitDataOutputBudget? Budget { get; init; }
 }
 
 [ExportTsInterface]
@@ -258,7 +285,10 @@ public record ScheduleProfile {
 [ExportTsInterface]
 public record ScheduleCatalogSheetPlacement(
     string SheetNumber,
-    string SheetName
+    string SheetName,
+    bool IsIssuedLikeSheet,
+    bool IsWorkingLikeSheet,
+    string SheetRole
 );
 
 [ExportTsInterface]
@@ -302,13 +332,15 @@ public record ScheduleCatalogEntry(
     int VisibleBodyRowCount,
     int VisibleFamilyCount,
     int VisibleInstanceCount,
-    List<ScheduleVisibleFamilyEntry> VisibleFamilies
+    List<ScheduleVisibleFamilyEntry> VisibleFamilies,
+    List<ProjectBrowserPath> BrowserPaths
 );
 
 [ExportTsInterface]
 public record ScheduleCatalogData(
     List<ScheduleCatalogEntry> Entries,
-    List<RevitDataIssue> Issues
+    List<RevitDataIssue> Issues,
+    RevitDataResultPage? Page = null
 );
 
 [ExportTsInterface]
@@ -343,11 +375,31 @@ public record ScheduleProfilesQueryData(
 );
 
 [ExportTsInterface]
+public record ScheduleRequiredFieldAudit {
+    public List<string> FieldNames { get; init; } = [];
+    public bool TreatZeroAsDefault { get; init; }
+    public bool TreatDashAsBlank { get; init; } = true;
+}
+
+[ExportTsInterface]
+public record ScheduleQueryProjection {
+    public RevitDataResultView View { get; init; } = RevitDataResultView.Summary;
+    public bool IncludeColumns { get; init; }
+    public bool IncludeSubjects { get; init; }
+    public bool IncludeCellValues { get; init; }
+    public bool IncludeRows { get; init; }
+    public bool IncludeOnlyRowsWithIssues { get; init; }
+    public ScheduleRequiredFieldAudit? RequiredFieldAudit { get; init; }
+}
+
+[ExportTsInterface]
 public record ScheduleQuery(
     ScheduleQueryKind Kind = ScheduleQueryKind.ScheduleReferences,
     List<long>? ScheduleIds = null,
     List<string>? ScheduleUniqueIds = null,
-    List<string>? ScheduleNames = null
+    List<string>? ScheduleNames = null,
+    ScheduleQueryProjection? Projection = null,
+    RevitDataOutputBudget? Budget = null
 );
 
 [ExportTsInterface]
@@ -414,6 +466,16 @@ public enum ScheduleRenderedBindingStatus {
 }
 
 [ExportTsInterface]
+public record ScheduleRenderedCellIssue(
+    int RowNumber,
+    int ColumnNumber,
+    string FieldName,
+    string HeaderText,
+    string Code,
+    string Message
+);
+
+[ExportTsInterface]
 public record ScheduleRenderedRow(
     int RowNumber,
     ScheduleRenderedRowKind Kind,
@@ -421,7 +483,8 @@ public record ScheduleRenderedRow(
     ScheduleRenderedRowBindingKind BindingKind,
     ScheduleRenderedRowSubjectResolutionStatus ResolutionStatus,
     ScheduleRenderedRowSubjectResolutionReason ResolutionReason,
-    List<long> SubjectIds
+    List<long> SubjectIds,
+    List<ScheduleRenderedCellIssue>? Issues = null
 );
 
 [ExportTsInterface]
@@ -444,7 +507,8 @@ public record ScheduleRenderedScheduleEntry(
     int SubjectCount,
     List<ScheduleRenderedSubject> Subjects,
     List<ScheduleRenderedColumn> Columns,
-    List<ScheduleRenderedRow> Rows
+    List<ScheduleRenderedRow> Rows,
+    List<ScheduleRenderedCellIssue>? RowIssues = null
 );
 
 [ExportTsInterface]
@@ -454,5 +518,6 @@ public record ScheduleQueryData(
     int RequestedScheduleCount,
     int ResolvedScheduleCount,
     List<ScheduleRenderedScheduleEntry> Entries,
-    List<RevitDataIssue> Issues
+    List<RevitDataIssue> Issues,
+    RevitDataResultPage? Page = null
 );

@@ -1,8 +1,14 @@
-﻿using Autodesk.Revit.DB.Electrical;
+using Autodesk.Revit.DB.Electrical;
+using Pe.Revit.DocumentData.AgentContext;
 using Pe.Revit.DocumentData.Electrical;
 using Pe.Revit.DocumentData.Families.Loaded.Collectors;
+using Pe.Revit.DocumentData.Parameters;
+using Pe.Revit.DocumentData.ProjectBrowser;
+using Pe.Revit.DocumentData.ProjectIndex;
 using Pe.Revit.DocumentData.Schedules.Collect;
 using Pe.Revit.DocumentData.Selection;
+using Pe.Revit.DocumentData.Sheets;
+using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 using ricaun.Revit.UI.Tasks;
@@ -29,6 +35,18 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         ScheduleProfilesQueryRequest request
     ) => this.EnqueueAsync(() => this.GetScheduleProfilesQueryCore(request));
 
+    public Task<ProjectBrowserData> GetProjectBrowserAsync(
+        ProjectBrowserRequest request
+    ) => this.EnqueueAsync(() => this.GetProjectBrowserCore(request));
+
+    public Task<ProjectIndexData> GetProjectIndexAsync(
+        ProjectIndexRequest request
+    ) => this.EnqueueAsync(() => this.GetProjectIndexCore(request));
+
+    public Task<SheetDetailData> GetSheetDetailsAsync(
+        SheetDetailRequest request
+    ) => this.EnqueueAsync(() => this.GetSheetDetailsCore(request));
+
     public Task<ScheduleQueryData> GetScheduleQueryAsync(
         ScheduleQueryRequest request
     ) => this.EnqueueAsync(() => this.GetScheduleQueryCore(request));
@@ -36,6 +54,14 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     public Task<LoadedFamiliesMatrixData> GetLoadedFamiliesMatrixAsync(
         LoadedFamiliesMatrixRequest request
     ) => this.EnqueueAsync(() => this.GetLoadedFamiliesMatrixCore(request));
+
+    public Task<ScheduleCoverageData> GetScheduleCoverageAsync(
+        ScheduleCoverageRequest request
+    ) => this.EnqueueAsync(() => this.GetScheduleCoverageCore(request));
+
+    public Task<ParameterCoverageData> GetParameterCoverageAsync(
+        ParameterCoverageRequest request
+    ) => this.EnqueueAsync(() => this.GetParameterCoverageCore(request));
 
     public Task<ProjectParameterBindingsData> GetProjectParameterBindingsAsync(
         ProjectParameterBindingsRequest request
@@ -64,11 +90,22 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     public Task<RevitDocumentSessionContextData> GetRevitDocumentSessionContextAsync() =>
         this.EnqueueAsync(this.GetRevitDocumentSessionContextCore);
 
+    public Task<RevitAgentContextSummaryData> GetRevitAgentContextSummaryAsync() =>
+        this.EnqueueAsync(this.GetRevitAgentContextSummaryCore);
+
+    public Task<RevitAgentContextResolveData> ResolveRevitAgentContextAsync(
+        RevitAgentContextResolveRequest request
+    ) => this.EnqueueAsync(() => this.ResolveRevitAgentContextCore(request));
+
+    public Task<RevitAgentVisibleContextData> GetRevitAgentVisibleContextAsync(
+        RevitAgentVisibleContextRequest request
+    ) => this.EnqueueAsync(() => this.GetRevitAgentVisibleContextCore(request));
+
     private LoadedFamiliesCatalogData GetLoadedFamiliesCatalogCore(LoadedFamiliesCatalogRequest request) {
         var document = GetActiveProjectDocument();
 
         try {
-            return LoadedFamiliesCatalogCollector.Collect(document, request.Filter);
+            return LoadedFamiliesCatalogCollector.Collect(document, request.Filter, request.Projection, request.Budget);
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "LoadedFamiliesCatalogException",
@@ -86,6 +123,48 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "ScheduleCatalogException",
+                ex,
+                "Verify the active document is a project document and retry."
+            );
+        }
+    }
+
+    private ProjectBrowserData GetProjectBrowserCore(ProjectBrowserRequest request) {
+        var document = GetActiveProjectDocument();
+
+        try {
+            return ProjectBrowserCollector.Collect(document, request);
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "ProjectBrowserException",
+                ex,
+                "Verify the active document is a project document and retry."
+            );
+        }
+    }
+
+    private ProjectIndexData GetProjectIndexCore(ProjectIndexRequest request) {
+        var document = GetActiveProjectDocument();
+
+        try {
+            return ProjectIndexCollector.Collect(document, request);
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "ProjectIndexException",
+                ex,
+                "Verify the active document is a project document and retry."
+            );
+        }
+    }
+
+    private SheetDetailData GetSheetDetailsCore(SheetDetailRequest request) {
+        var document = GetActiveProjectDocument();
+
+        try {
+            return SheetDetailCollector.Collect(document, RevitUiSession.CurrentUIApplication.GetActiveView(), request);
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "SheetDetailsException",
                 ex,
                 "Verify the active document is a project document and retry."
             );
@@ -176,7 +255,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         var document = GetActiveProjectDocument();
 
         try {
-            return LoadedFamiliesMatrixCollector.Collect(document, filter);
+            return LoadedFamiliesMatrixCollector.Collect(document, filter, budget: request.Budget);
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "LoadedFamiliesMatrixException",
@@ -186,13 +265,94 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         }
     }
 
+    private ScheduleCoverageData GetScheduleCoverageCore(ScheduleCoverageRequest request) {
+        var document = GetActiveProjectDocument();
+
+        try {
+            return ScheduleCoverageCollector.Collect(document, request);
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "ScheduleCoverageException",
+                ex,
+                "Verify the active document is a project document and retry."
+            );
+        }
+    }
+
+    private ParameterCoverageData GetParameterCoverageCore(ParameterCoverageRequest request) {
+        var validationIssues = ValidateParameterCoverageRequest(request);
+        if (validationIssues.Count != 0) {
+            throw BridgeOperationExceptions.BadRequest(
+                "Parameter coverage request is invalid.",
+                validationIssues
+            );
+        }
+
+        var document = GetActiveProjectDocument();
+
+        try {
+            return ParameterCoverageCollector.Collect(
+                document,
+                request,
+                RevitUiSession.CurrentUIApplication.GetActiveUIDocument()?.Selection.GetElementIds().ToList()
+            );
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "ParameterCoverageException",
+                ex,
+                "Verify the active document is a project document and retry."
+            );
+        }
+    }
+
+    private static List<ValidationIssue> ValidateParameterCoverageRequest(ParameterCoverageRequest request) {
+        var issues = new List<ValidationIssue>();
+        var parameterNames = request.ParameterNames ?? [];
+        var sharedGuids = request.SharedGuids ?? [];
+        var elementIds = request.ElementIds ?? [];
+        var elementUniqueIds = request.ElementUniqueIds ?? [];
+
+        if (parameterNames.Count == 0 && sharedGuids.Count == 0) {
+            issues.Add(BridgeOperationExceptions.Issue(
+                "$.parameterNames",
+                "ParameterCoverageNoParametersRequested",
+                "Request at least one parameter name or shared GUID.",
+                "Set parameterNames, for example [\"Mark\"], or sharedGuids with valid GUID strings. Optional arrays may be omitted. Allowed scope values: All, ActiveViewVisible, CurrentSelection, ExplicitHandles. Allowed lookupPreference values: InstanceThenType, InstanceOnly, TypeOnly."
+            ));
+        }
+
+        if (request.Scope == RevitElementScope.ExplicitHandles &&
+            elementIds.Count == 0 &&
+            elementUniqueIds.Count == 0) {
+            issues.Add(BridgeOperationExceptions.Issue(
+                "$.scope",
+                "ParameterCoverageExplicitHandlesRequired",
+                "ExplicitHandles scope requires elementIds or elementUniqueIds.",
+                "Use CurrentSelection/ActiveViewVisible, or provide elementIds/elementUniqueIds from a prior handle result. Allowed scope values: All, ActiveViewVisible, CurrentSelection, ExplicitHandles."
+            ));
+        }
+
+        for (var i = 0; i < sharedGuids.Count; i++) {
+            if (!Guid.TryParse(sharedGuids[i], out _)) {
+                issues.Add(BridgeOperationExceptions.Issue(
+                    $"$.sharedGuids[{i}]",
+                    "ParameterCoverageInvalidSharedGuid",
+                    $"'{sharedGuids[i]}' is not a valid GUID.",
+                    "Use canonical shared parameter GUID strings such as 00000000-0000-0000-0000-000000000000."
+                ));
+            }
+        }
+
+        return issues;
+    }
+
     private ProjectParameterBindingsData GetProjectParameterBindingsCore(
         ProjectParameterBindingsRequest request
     ) {
         var document = GetActiveProjectDocument();
 
         try {
-            return ProjectParameterBindingsCollector.Collect(document, request.Filter);
+            return ProjectParameterBindingsCollector.Collect(document, request.Filter, request.BindingFilter, request.Projection, request.Budget);
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "ProjectParameterBindingsException",
@@ -307,28 +467,71 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
 
     private RevitDocumentSessionContextData GetRevitDocumentSessionContextCore() {
         try {
-            var uiApp = RevitUiSession.CurrentUIApplication;
-            var activeDocument = uiApp.GetActiveDocument();
-            var openDocuments = uiApp.GetOpenDocuments()
-                .ToList();
-            var openDocumentSummaries = openDocuments
-                .Select(doc => CreateDocumentSummary(doc, activeDocument))
-                .OrderByDescending(doc => doc.IsActive)
-                .ThenBy(doc => doc.Title, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            var activeDocumentSummary = openDocumentSummaries.FirstOrDefault(doc => doc.IsActive);
-
-            return new RevitDocumentSessionContextData(
-                activeDocumentSummary != null,
-                activeDocumentSummary,
-                openDocumentSummaries.Count,
-                openDocumentSummaries
-            );
+            return CreateDocumentSessionContext();
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "RevitDocumentSessionContextException",
                 ex,
                 "Verify the Revit session is open and retry."
+            );
+        }
+    }
+
+    private RevitAgentContextSummaryData GetRevitAgentContextSummaryCore() {
+        try {
+            var document = GetActiveDocument();
+            var uiApp = RevitUiSession.CurrentUIApplication;
+            return RevitAgentContextCollector.CollectSummary(
+                document,
+                CreateDocumentSessionContext(),
+                uiApp.GetActiveView(),
+                uiApp.GetActiveUIDocument()?.Selection.GetElementIds().ToList()
+            );
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "RevitAgentContextSummaryException",
+                ex,
+                "Verify a Revit document is active and retry."
+            );
+        }
+    }
+
+    private RevitAgentContextResolveData ResolveRevitAgentContextCore(
+        RevitAgentContextResolveRequest request
+    ) {
+        var document = GetActiveDocument();
+        try {
+            var uiApp = RevitUiSession.CurrentUIApplication;
+            return RevitAgentContextCollector.Resolve(
+                document,
+                uiApp.GetActiveView(),
+                uiApp.GetActiveUIDocument()?.Selection.GetElementIds().ToList(),
+                request
+            );
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "RevitAgentContextResolveException",
+                ex,
+                "Verify a Revit document is active and retry."
+            );
+        }
+    }
+
+    private RevitAgentVisibleContextData GetRevitAgentVisibleContextCore(
+        RevitAgentVisibleContextRequest request
+    ) {
+        var document = GetActiveDocument();
+        try {
+            return RevitAgentContextCollector.CollectVisibleContext(
+                document,
+                RevitUiSession.CurrentUIApplication.GetActiveView(),
+                request
+            );
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "RevitAgentVisibleContextException",
+                ex,
+                "Verify a Revit document and active view are available, then retry."
             );
         }
     }
@@ -383,6 +586,26 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         }
 
         return result!;
+    }
+
+    private static RevitDocumentSessionContextData CreateDocumentSessionContext() {
+        var uiApp = RevitUiSession.CurrentUIApplication;
+        var activeDocument = uiApp.GetActiveDocument();
+        var openDocuments = uiApp.GetOpenDocuments()
+            .ToList();
+        var openDocumentSummaries = openDocuments
+            .Select(doc => CreateDocumentSummary(doc, activeDocument))
+            .OrderByDescending(doc => doc.IsActive)
+            .ThenBy(doc => doc.Title, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var activeDocumentSummary = openDocumentSummaries.FirstOrDefault(doc => doc.IsActive);
+
+        return new RevitDocumentSessionContextData(
+            activeDocumentSummary != null,
+            activeDocumentSummary,
+            openDocumentSummaries.Count,
+            openDocumentSummaries
+        );
     }
 
     private static RevitDocumentSummary CreateDocumentSummary(

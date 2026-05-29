@@ -37,6 +37,11 @@ public static class GetHostLogsOperationContract {
             HostHttpVerb.Get,
             "/api/settings/logs",
             HostExecutionMode.Local,
-            "Get Host Logs"
+            "Get Host Logs",
+            HostOperationAgentMetadata.Create(
+                "host",
+                "Read bounded host and Revit log tails for diagnosis.",
+                new[] { "logs", "diagnostics", "host", "revit" }
+            )
         );
 }

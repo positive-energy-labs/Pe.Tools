@@ -11,7 +11,12 @@ public static class GetHostProbeOperationContract {
             HostHttpVerb.Get,
             $"{HttpRoutes.SettingsBase}/host-probe",
             HostExecutionMode.Local,
-            "Get Host Probe"
+            "Get Host Probe",
+            HostOperationAgentMetadata.Create(
+                "host",
+                "Read Pe.Host health, version, and compatibility facts.",
+                new[] { "status", "health", "probe", "compatibility" }
+            )
         );
 }
 
@@ -22,7 +27,12 @@ public static class GetHostSessionSummaryOperationContract {
             HostHttpVerb.Get,
             $"{HttpRoutes.SettingsBase}/session-summary",
             HostExecutionMode.Local,
-            "Get Host Session Summary"
+            "Get Host Session Summary",
+            HostOperationAgentMetadata.Create(
+                "host",
+                "Read current host, bridge, session, active document, and workspace summary facts.",
+                new[] { "status", "session", "bridge", "active-document", "workspace" }
+            )
         );
 }
 
@@ -33,7 +43,14 @@ public static class GetSchemaOperationContract {
             HostHttpVerb.Post,
             "/api/settings/schema",
             HostExecutionMode.Bridge,
-            "Get Schema"
+            "Get Schema",
+            HostOperationAgentMetadata.Create(
+                "settings",
+                "Read a settings schema from the connected Revit runtime.",
+                new[] { "schema", "settings", "profile", "profiles", "module", "family-foundry" },
+                requiresBridge: true,
+                requiresActiveDocument: true
+            )
         );
 }
 
@@ -44,7 +61,12 @@ public static class GetWorkspacesOperationContract {
             HostHttpVerb.Post,
             "/api/settings/workspaces",
             HostExecutionMode.Local,
-            "Get Workspaces"
+            "Get Workspaces",
+            HostOperationAgentMetadata.Create(
+                "settings",
+                "Read available settings workspaces and storage roots.",
+                new[] { "settings", "workspace", "storage", "roots" }
+            )
         );
 }
 
@@ -55,7 +77,12 @@ public static class DiscoverSettingsTreeOperationContract {
             HostHttpVerb.Post,
             "/api/settings/tree",
             HostExecutionMode.Local,
-            "Discover Settings Tree"
+            "Discover Settings Tree",
+            HostOperationAgentMetadata.Create(
+                "settings",
+                "Read the local settings tree for profiles, modules, and documents.",
+                new[] { "settings", "tree", "discover", "documents", "profiles", "family-foundry" }
+            )
         );
 }
 
@@ -64,7 +91,14 @@ public static class GetSettingsModuleCatalogBridgeOperationContract {
         HostOperationDefinition.CreateInternal<GetSettingsModuleCatalogBridgeRequest, GetSettingsModuleCatalogBridgeResponse>(
             "settings.module-catalog",
             HostExecutionMode.Bridge,
-            "Get Settings Module Catalog"
+            "Get Settings Module Catalog",
+            HostOperationAgentMetadata.Create(
+                "settings",
+                "Read the settings module catalog from Revit for bridge-side schema work.",
+                new[] { "settings", "module", "catalog", "schema" },
+                requiresBridge: true,
+                requiresActiveDocument: true
+            )
         );
 }
 
@@ -75,7 +109,14 @@ public static class GetFieldOptionsOperationContract {
             HostHttpVerb.Post,
             "/api/settings/field-options",
             HostExecutionMode.Bridge,
-            "Get Field Options"
+            "Get Field Options",
+            HostOperationAgentMetadata.Create(
+                "settings",
+                "Read document-specific field option values for a settings module.",
+                new[] { "settings", "field-options", "schema", "document" },
+                requiresBridge: true,
+                requiresActiveDocument: true
+            )
         );
 }
 
@@ -86,6 +127,13 @@ public static class GetParameterCatalogOperationContract {
             HostHttpVerb.Post,
             "/api/settings/parameter-catalog",
             HostExecutionMode.Bridge,
-            "Get Parameter Catalog"
+            "Get Parameter Catalog",
+            HostOperationAgentMetadata.Create(
+                "settings",
+                "Read Revit parameter definitions and available parameter facts from the active document for settings authoring.",
+                new[] { "parameters", "catalog", "settings", "document" },
+                requiresBridge: true,
+                requiresActiveDocument: true
+            )
         );
 }

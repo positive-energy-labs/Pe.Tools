@@ -69,11 +69,17 @@ const agentCommand = define({
       type: "string",
       description: "Explicit agent cwd override. Defaults to the product home returned by Pe.Host bootstrap.",
     },
+    allowOauthBetaAuth: {
+      type: "boolean",
+      description: "Dev escape hatch: allow stored MastraCode Codex OAuth auth instead of requiring OPENAI_API_KEY for beta startup.",
+      default: false,
+    },
   },
   toKebab: true,
   examples: [
     "pea agent",
     "pea agent --workspace default",
+    "pea agent --allow-oauth-beta-auth",
     "pea agent --workspace-root C:\\Users\\you\\Documents\\Pe.Tools\\workspaces\\default",
   ].join("\n"),
   run: async (ctx) => {
@@ -82,6 +88,7 @@ const agentCommand = define({
       hostBaseUrl: ctx.values.host,
       workspaceKey: ctx.values.workspace,
       workspaceRoot: ctx.values.workspaceRoot,
+      allowOauthBetaAuth: ctx.values.allowOauthBetaAuth,
     });
   },
 });
@@ -174,6 +181,10 @@ const operationSearchArgs = {
     description: "Output size: compact, hints, or full. Use full with --json only when full shapes/routes are needed.",
     default: "compact",
   },
+  visibility: {
+    type: "string",
+    description: "Optional visibility filter: DefaultVisible, EscalationVisible, or ExpertOnly.",
+  },
   json: {
     type: "boolean",
     description: "Print operation search results as JSON.",
@@ -187,6 +198,7 @@ function runOperationSearch(values: {
   intent?: string;
   limit?: number;
   verbosity?: string;
+  visibility?: string;
   json?: boolean;
 }): void {
   const results = searchHostOperations({
@@ -195,6 +207,7 @@ function runOperationSearch(values: {
     intent: parseOperationIntent(values.intent),
     limit: values.limit,
     verbosity: parseOperationVerbosity(values.verbosity),
+    visibility: parseOperationVisibility(values.visibility),
   });
   if (values.json) {
     console.log(JSON.stringify(results, null, 2));
@@ -592,7 +605,7 @@ const entryCommand = define({
 });
 
 try {
-  await cli(process.argv.slice(2), entryCommand, {
+  await cli(normalizeCliArgs(process.argv.slice(2)), entryCommand, {
     name: "pea",
     version: "0.1.0",
     description: `Pe Agent command surface. Defaults: host=${defaultHostBaseUrl}, workspace=${defaultWorkspaceKey}.`,
@@ -851,6 +864,25 @@ function parseOperationIntent(value: string | undefined): "Read" | "Mutate" | un
   }
 }
 
+function parseOperationVisibility(value: string | undefined): "DefaultVisible" | "EscalationVisible" | "ExpertOnly" | undefined {
+  if (!value)
+    return undefined;
+
+  switch (value.toLowerCase()) {
+    case "defaultvisible":
+    case "default":
+      return "DefaultVisible";
+    case "escalationvisible":
+    case "escalation":
+      return "EscalationVisible";
+    case "expertonly":
+    case "expert":
+      return "ExpertOnly";
+    default:
+      throw new Error("Unknown operation visibility. Expected DefaultVisible, EscalationVisible, or ExpertOnly.");
+  }
+}
+
 function parseOperationVerbosity(value: string | undefined): "compact" | "hints" | "full" {
   if (!value)
     return "compact";
@@ -1003,8 +1035,13 @@ function writeOperationSearchResults(results: ReturnType<typeof searchHostOperat
     console.log(`${result.key}`);
     console.log(`  ${result.summary}`);
     console.log(`  family=${result.family ?? "-"} layer=${result.revitLayer ?? "-"} domain=${result.domainNoun ?? "-"} grain=${result.resultGrain ?? "-"} cost=${result.costTier ?? "-"}`);
+    console.log(`  visibility=${result.visibility ?? "-"} intentVerb=${result.intentVerb ?? "-"} requestShape=${result.requestShapeKind ?? "-"}`);
     console.log(`  request=${result.requestTypeName} response=${result.responseTypeName}`);
     console.log(`  hint ${result.requestHint}`);
+    if (result.canonicalUse)
+      console.log(`  use ${result.canonicalUse}`);
+    if (result.safeDefaultRequestJson)
+      console.log(`  safe-default ${compactJsonLiteral(result.safeDefaultRequestJson)}`);
     if (result.bestRequestExample) {
       console.log(`  example ${result.bestRequestExample.name}: ${result.bestRequestExample.description}`);
       console.log(`  json ${compactJsonLiteral(result.bestRequestExample.json)}`);
@@ -1016,6 +1053,14 @@ function writeOperationSearchResults(results: ReturnType<typeof searchHostOperat
     for (const hint of result.preflightHints)
       console.log(`  preflight ${hint}`);
     if ("boundedExpansionHints" in result) {
+      for (const hint of result.useWhen)
+        console.log(`  use-when ${hint}`);
+      for (const hint of result.doNotUseWhen)
+        console.log(`  avoid ${hint}`);
+      for (const next of result.nextOperations ?? [])
+        console.log(`  next-op ${next}`);
+      if (result.ambiguityBehavior)
+        console.log(`  ambiguity ${result.ambiguityBehavior}`);
       for (const hint of result.boundedExpansionHints)
         console.log(`  expand ${hint}`);
     }
@@ -1048,6 +1093,16 @@ function writeOperationCallResult(result: HostOperationCallResult): void {
   if (result.operation)
     console.log(`operation ${result.operation.summary}`);
   console.log(JSON.stringify(result.response, null, 2));
+}
+
+function normalizeCliArgs(args: string[]): string[] {
+  const separatorIndex = args.indexOf("--");
+  if (separatorIndex <= 0) return args;
+
+  return [
+    ...args.slice(0, separatorIndex),
+    ...args.slice(separatorIndex + 1),
+  ];
 }
 
 function writeLogs(logs: HostLogsData): void {

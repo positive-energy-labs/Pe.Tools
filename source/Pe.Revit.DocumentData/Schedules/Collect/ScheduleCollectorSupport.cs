@@ -1,4 +1,4 @@
-﻿using Pe.Revit.DocumentData.Parameters;
+using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.DocumentData.Schedules.Authored;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Parameters;
@@ -31,8 +31,30 @@ internal static class ScheduleCollectorSupport {
             .Select(group => group.First())
             .OrderBy(sheet => sheet.SheetNumber, StringComparer.OrdinalIgnoreCase)
             .ThenBy(sheet => sheet.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(sheet => new ScheduleCatalogSheetPlacement(sheet.SheetNumber, sheet.Name))
+            .Select(ToSheetPlacement)
             .ToList();
+
+    public static ScheduleCatalogSheetPlacement ToSheetPlacement(ViewSheet sheet) {
+        var sheetNumber = sheet.SheetNumber ?? string.Empty;
+        var sheetName = sheet.Name ?? string.Empty;
+        var role = ClassifySheetRole(sheetNumber, sheetName);
+        return new ScheduleCatalogSheetPlacement(
+            sheetNumber,
+            sheetName,
+            string.Equals(role, "Issued", StringComparison.Ordinal),
+            string.Equals(role, "Working", StringComparison.Ordinal),
+            role
+        );
+    }
+
+    private static string ClassifySheetRole(string sheetNumber, string sheetName) {
+        var text = $"{sheetNumber} {sheetName}".Trim();
+        if (text.StartsWith("-", StringComparison.Ordinal) || text.Contains(" WIP", StringComparison.OrdinalIgnoreCase) || text.Contains("working", StringComparison.OrdinalIgnoreCase))
+            return "Working";
+        if (text.StartsWith("x", StringComparison.OrdinalIgnoreCase) || text.Contains("archive", StringComparison.OrdinalIgnoreCase) || text.Contains("audit", StringComparison.OrdinalIgnoreCase))
+            return "Archive";
+        return "Issued";
+    }
 
     public static List<ScheduleCatalogCustomParameterValue> CollectCustomParameters(ViewSchedule schedule) =>
         schedule.Parameters

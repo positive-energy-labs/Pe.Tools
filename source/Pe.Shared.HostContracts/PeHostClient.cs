@@ -5,7 +5,10 @@ using Newtonsoft.Json.Serialization;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Protocol;
 using Pe.Shared.HostContracts.Scripting;
+using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.Product;
+using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Schedules;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -31,10 +34,12 @@ public sealed class PeHostClient : IDisposable {
             ));
 
         this.Host = new PeHostStatusClient(this._httpClient);
+        this.Revit = new PeHostRevitClient(this._httpClient);
         this.Scripting = new PeHostScriptingClient(this._httpClient);
     }
 
     public PeHostStatusClient Host { get; }
+    public PeHostRevitClient Revit { get; }
     public PeHostScriptingClient Scripting { get; }
 
     public Task<TResponse> ExecuteAsync<TRequest, TResponse>(
@@ -216,6 +221,201 @@ public sealed class PeHostStatusClient(HttpClient httpClient) {
     ) => PeHostClient.SendAsync<HostLogsRequest, HostLogsData>(
         this._httpClient,
         GetHostLogsOperationContract.Definition,
+        request,
+        cancellationToken
+    );
+}
+
+public sealed class PeHostRevitClient(HttpClient httpClient) {
+    public PeHostRevitContextClient Context { get; } = new(httpClient);
+    public PeHostRevitCatalogClient Catalog { get; } = new(httpClient);
+    public PeHostRevitMatrixClient Matrix { get; } = new(httpClient);
+    public PeHostRevitDetailClient Detail { get; } = new(httpClient);
+    public PeHostRevitResolveClient Resolve { get; } = new(httpClient);
+}
+
+public sealed class PeHostRevitContextClient(HttpClient httpClient) {
+    private readonly HttpClient _httpClient = httpClient;
+
+    public Task<RevitAgentContextSummaryData> GetSummaryAsync(
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<NoRequest, RevitAgentContextSummaryData>(
+        this._httpClient,
+        GetRevitAgentContextSummaryOperationContract.Definition,
+        new NoRequest(),
+        cancellationToken
+    );
+
+    public Task<RevitDocumentSessionContextData> GetDocumentSessionAsync(
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<NoRequest, RevitDocumentSessionContextData>(
+        this._httpClient,
+        GetRevitDocumentSessionContextOperationContract.Definition,
+        new NoRequest(),
+        cancellationToken
+    );
+
+    public Task<RevitAgentVisibleContextData> GetVisibleSummaryAsync(
+        RevitAgentVisibleContextRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<RevitAgentVisibleContextRequest, RevitAgentVisibleContextData>(
+        this._httpClient,
+        GetRevitAgentVisibleContextOperationContract.Definition,
+        request,
+        cancellationToken
+    );
+}
+
+public sealed class PeHostRevitResolveClient(HttpClient httpClient) {
+    private readonly HttpClient _httpClient = httpClient;
+
+    public Task<RevitAgentContextResolveData> ReferencesAsync(
+        RevitAgentContextResolveRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<RevitAgentContextResolveRequest, RevitAgentContextResolveData>(
+        this._httpClient,
+        ResolveRevitAgentContextOperationContract.Definition,
+        request,
+        cancellationToken
+    );
+}
+
+public sealed class PeHostRevitCatalogClient(HttpClient httpClient) {
+    private readonly HttpClient _httpClient = httpClient;
+
+    public Task<LoadedFamiliesCatalogData> GetLoadedFamiliesAsync(
+        LoadedFamiliesCatalogRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<LoadedFamiliesCatalogRequest, LoadedFamiliesCatalogData>(
+        this._httpClient,
+        GetLoadedFamiliesCatalogOperationContract.Definition,
+        request,
+        cancellationToken
+    );
+
+    public Task<SchemaData> GetLoadedFamilyFilterSchemaAsync(
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<NoRequest, SchemaData>(
+        this._httpClient,
+        GetLoadedFamiliesFilterSchemaOperationContract.Definition,
+        new NoRequest(),
+        cancellationToken
+    );
+
+    public Task<FieldOptionsData> GetLoadedFamilyFilterFieldOptionsAsync(
+        LoadedFamiliesFilterFieldOptionsRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<LoadedFamiliesFilterFieldOptionsRequest, FieldOptionsData>(
+        this._httpClient,
+        GetLoadedFamiliesFilterFieldOptionsOperationContract.Definition,
+        request,
+        cancellationToken
+    );
+
+    public Task<ProjectParameterBindingsData> GetParameterBindingsAsync(
+        ProjectParameterBindingsRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<ProjectParameterBindingsRequest, ProjectParameterBindingsData>(
+        this._httpClient,
+        GetProjectParameterBindingsOperationContract.Definition,
+        request,
+        cancellationToken
+    );
+
+    public Task<ScheduleCatalogData> GetSchedulesAsync(
+        ScheduleCatalogRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<ScheduleCatalogRequest, ScheduleCatalogData>(
+        this._httpClient,
+        GetScheduleCatalogOperationContract.Definition,
+        request,
+        cancellationToken
+    );
+
+    public Task<ElectricalPanelsCatalogData> GetElectricalPanelsAsync(
+        ElectricalPanelsCatalogRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<ElectricalPanelsCatalogRequest, ElectricalPanelsCatalogData>(
+        this._httpClient,
+        GetElectricalPanelsCatalogOperationContract.Definition,
+        request,
+        cancellationToken
+    );
+
+    public Task<ElectricalCircuitsCatalogData> GetElectricalCircuitsAsync(
+        ElectricalCircuitsCatalogRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<ElectricalCircuitsCatalogRequest, ElectricalCircuitsCatalogData>(
+        this._httpClient,
+        GetElectricalCircuitsCatalogOperationContract.Definition,
+        request,
+        cancellationToken
+    );
+
+    public Task<ElectricalLoadClassificationsCatalogData> GetElectricalLoadClassificationsAsync(
+        ElectricalLoadClassificationsCatalogRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<ElectricalLoadClassificationsCatalogRequest, ElectricalLoadClassificationsCatalogData>(
+        this._httpClient,
+        GetElectricalLoadClassificationsCatalogOperationContract.Definition,
+        request,
+        cancellationToken
+    );
+}
+
+public sealed class PeHostRevitMatrixClient(HttpClient httpClient) {
+    private readonly HttpClient _httpClient = httpClient;
+
+    public Task<LoadedFamiliesMatrixData> GetLoadedFamiliesAsync(
+        LoadedFamiliesMatrixRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<LoadedFamiliesMatrixRequest, LoadedFamiliesMatrixData>(
+        this._httpClient,
+        GetLoadedFamiliesMatrixOperationContract.Definition,
+        request,
+        cancellationToken
+    );
+
+    public Task<ScheduleProfilesQueryData> GetScheduleProfilesAsync(
+        ScheduleProfilesQueryRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<ScheduleProfilesQueryRequest, ScheduleProfilesQueryData>(
+        this._httpClient,
+        GetScheduleProfilesQueryOperationContract.Definition,
+        request,
+        cancellationToken
+    );
+}
+
+public sealed class PeHostRevitDetailClient(HttpClient httpClient) {
+    private readonly HttpClient _httpClient = httpClient;
+
+    public Task<ElementContextQueryData> GetElementsAsync(
+        ElementContextQueryRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<ElementContextQueryRequest, ElementContextQueryData>(
+        this._httpClient,
+        GetElementContextQueryOperationContract.Definition,
+        request,
+        cancellationToken
+    );
+
+    public Task<ScheduleQueryData> GetSchedulesAsync(
+        ScheduleQueryRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<ScheduleQueryRequest, ScheduleQueryData>(
+        this._httpClient,
+        GetScheduleQueryOperationContract.Definition,
+        request,
+        cancellationToken
+    );
+
+    public Task<ElectricalPanelSchedulesQueryData> GetElectricalPanelSchedulesAsync(
+        ElectricalPanelSchedulesQueryRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<ElectricalPanelSchedulesQueryRequest, ElectricalPanelSchedulesQueryData>(
+        this._httpClient,
+        GetElectricalPanelSchedulesQueryOperationContract.Definition,
         request,
         cancellationToken
     );

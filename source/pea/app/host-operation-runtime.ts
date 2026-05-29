@@ -1,4 +1,4 @@
-import { sendJson, PeHostClientError, type HostExecutionMode, type HostOperationCostTier, type HostOperationDefinition, type HostOperationFamily, type HostOperationIntent, type HostOperationRequestExample, type HostOperationResultGrain, type HostTypeShapeField, type PeHostClientOptions, type RevitOperationLayer } from "./host-client-runtime.js";
+import { sendJson, PeHostClientError, type HostExecutionMode, type HostOperationCostTier, type HostOperationDefinition, type HostOperationFamily, type HostOperationIntent, type HostOperationIntentVerb, type HostOperationRequestExample, type HostOperationRequestShapeKind, type HostOperationResultGrain, type HostOperationVisibility, type HostTypeShapeField, type PeHostClientOptions, type RevitOperationLayer } from "./host-client-runtime.js";
 import { hostOperations, type HostOperationKey } from "./generated/host-operations.generated.js";
 
 export type HostOperationVerbosity = "compact" | "hints" | "full";
@@ -12,6 +12,7 @@ export interface HostOperationSearchOptions {
   requiresActiveDocument?: boolean;
   limit?: number;
   verbosity?: HostOperationVerbosity;
+  visibility?: HostOperationVisibility;
 }
 
 export interface HostOperationCompactResult {
@@ -23,6 +24,12 @@ export interface HostOperationCompactResult {
   domainNoun?: string;
   resultGrain?: HostOperationResultGrain;
   costTier?: HostOperationCostTier;
+  visibility?: HostOperationVisibility;
+  canonicalUse?: string;
+  intentVerb?: HostOperationIntentVerb;
+  requestShapeKind?: HostOperationRequestShapeKind;
+  safeDefaultRequestJson?: string | null;
+  nextOperations?: readonly string[];
   requestTypeName: string;
   responseTypeName: string;
   requestHint: string;
@@ -42,6 +49,16 @@ export interface HostOperationHintResult extends HostOperationCompactResult {
   strictRequestValidation?: boolean;
   boundedExpansionHints: readonly string[];
   requestExamples: readonly HostOperationRequestExample[];
+  useWhen: readonly string[];
+  doNotUseWhen: readonly string[];
+  usuallyBefore: readonly string[];
+  usuallyAfter: readonly string[];
+  answersQuestionTypes: readonly string[];
+  doesNotAnswer: readonly string[];
+  primaryNouns: readonly string[];
+  supportedScopes: readonly string[];
+  capabilities: readonly string[];
+  ambiguityBehavior?: string | null;
 }
 
 export interface HostOperationFullResult extends HostOperationHintResult {
@@ -89,7 +106,7 @@ export function searchHostOperations(options: HostOperationSearchOptions = {}): 
   return listHostOperations()
     .filter((operation) => matchesFilters(operation, options))
     .map((operation) => ({ operation, score: scoreOperation(operation, queryTerms) }))
-    .filter((entry) => queryTerms.length === 0 || entry.score > 0)
+    .filter((entry) => isVisibleForSearch(entry.operation, queryTerms, options) && (queryTerms.length === 0 || entry.score > 0))
     .sort((left, right) => right.score - left.score || left.operation.key.localeCompare(right.operation.key))
     .slice(0, limit)
     .map((entry) => toSearchResult(entry.operation, verbosity));
@@ -173,7 +190,8 @@ function matchesFilters(operation: HostOperationDefinition, options: HostOperati
     && (!options.executionMode || operation.executionMode === options.executionMode)
     && (!options.intent || operation.intent === options.intent)
     && (options.requiresBridge == null || operation.requiresBridge === options.requiresBridge)
-    && (options.requiresActiveDocument == null || operation.requiresActiveDocument === options.requiresActiveDocument);
+    && (options.requiresActiveDocument == null || operation.requiresActiveDocument === options.requiresActiveDocument)
+    && (!options.visibility || operation.visibility === options.visibility);
 }
 
 function scoreOperation(operation: HostOperationDefinition, queryTerms: string[]): number {
@@ -194,8 +212,24 @@ function scoreOperation(operation: HostOperationDefinition, queryTerms: string[]
     operation.costTier,
     operation.singleFlightGroup ?? undefined,
     operation.handleProvenanceNotes ?? undefined,
+    operation.visibility,
+    operation.canonicalUse,
+    operation.intentVerb,
+    operation.requestShapeKind,
+    operation.safeDefaultRequestJson ?? undefined,
+    operation.ambiguityBehavior ?? undefined,
     ...(operation.tags ?? []),
     ...(operation.boundedExpansionHints ?? []),
+    ...(operation.useWhen ?? []),
+    ...(operation.doNotUseWhen ?? []),
+    ...(operation.usuallyBefore ?? []),
+    ...(operation.usuallyAfter ?? []),
+    ...(operation.nextOperations ?? []),
+    ...(operation.answersQuestionTypes ?? []),
+    ...(operation.doesNotAnswer ?? []),
+    ...(operation.primaryNouns ?? []),
+    ...(operation.supportedScopes ?? []),
+    ...(operation.capabilities ?? []),
     ...(operation.requestExamples ?? []).flatMap((example) => [example.name, example.description, example.json]),
   ].filter((value): value is string => value != null);
 
@@ -214,15 +248,74 @@ function scoreOperation(operation: HostOperationDefinition, queryTerms: string[]
       score += 2;
   }
 
+  if (operation.visibility === "DefaultVisible")
+    score += 2;
+  if (operation.visibility === "ExpertOnly" && !queryNamesEscalation(operation, queryTerms))
+    score -= 4;
+  if (operation.visibility === "EscalationVisible" && !queryNamesEscalation(operation, queryTerms))
+    score -= 1;
+  if (operation.revitLayer === "Catalog" && queryNamesAny(queryTerms, ["schedule", "schedules", "family", "families", "parameter", "parameters", "binding", "bindings", "browser", "sheet", "sheets", "view", "views"]))
+    score += 2;
+  if (operation.key === "revit.catalog.schedules" && queryNamesAny(queryTerms, ["missing", "coverage", "covered", "scheduled", "schedules", "rows", "fields"]))
+    score += 3;
+  if (operation.key === "revit.matrix.schedule-coverage" && queryNamesAny(queryTerms, ["missing", "coverage", "covered", "scheduled", "schedules"]))
+    score += 4;
+  if ((operation.revitLayer === "Matrix" || operation.revitLayer === "Detail") && queryNamesAny(queryTerms, ["audit", "coverage", "missing", "blank", "default", "row", "rows", "detail", "matrix"]))
+    score += 2;
+  if (operation.revitLayer === "Detail" && !queryNamesAny(queryTerms, ["row", "rows", "cell", "cells", "detail", "known", "id", "ids"]))
+    score -= 3;
+
   return score;
 }
 
+function isVisibleForSearch(
+  operation: HostOperationDefinition,
+  queryTerms: string[],
+  options: HostOperationSearchOptions,
+): boolean {
+  if (options.visibility)
+    return true;
+  if (queryTerms.length === 0)
+    return operation.visibility !== "ExpertOnly";
+  if (isBroadRevitOrientationQuery(queryTerms))
+    return operation.visibility === "DefaultVisible";
+  if (operation.visibility === "DefaultVisible")
+    return true;
+  return queryNamesEscalation(operation, queryTerms);
+}
+
+function isBroadRevitOrientationQuery(queryTerms: string[]): boolean {
+  const broadTerms = new Set(["current", "doing", "going", "happening", "model", "revit", "state"]);
+  return queryTerms.length !== 0 && queryTerms.every((term) => broadTerms.has(term));
+}
+
+function queryNamesEscalation(operation: HostOperationDefinition, queryTerms: string[]): boolean {
+  return queryNamesAny(queryTerms, [
+    operation.domainNoun,
+    operation.revitLayer,
+    operation.intentVerb,
+    operation.requestShapeKind,
+    ...(operation.tags ?? []),
+    ...(operation.primaryNouns ?? []),
+    ...(operation.capabilities ?? []),
+    ...(operation.nextOperations ?? []),
+  ]);
+}
+
+function queryNamesAny(queryTerms: string[], values: readonly (string | undefined | null)[]): boolean {
+  const normalizedValues = values
+    .filter((value): value is string => value != null)
+    .flatMap((value) => normalizeQuery(value));
+  return queryTerms.some((term) => normalizedValues.some((value) => value === term || (term.length >= 4 && value.includes(term)) || (value.length >= 4 && term.includes(value))));
+}
+
 function normalizeQuery(query: string | undefined): string[] {
+  const stopWords = new Set(["a", "an", "and", "are", "for", "in", "is", "me", "of", "on", "or", "the", "this", "that", "to", "what", "with"]);
   return (query ?? "")
     .toLowerCase()
-    .split(/\s+/)
+    .split(/[^a-z0-9]+/)
     .map((term) => term.trim())
-    .filter(Boolean);
+    .filter((term) => term.length > 1 && !stopWords.has(term));
 }
 
 function matchesText(value: string | undefined, expected: string | undefined): boolean {
@@ -246,6 +339,12 @@ function toSearchResult(operation: HostOperationDefinition, verbosity: HostOpera
     domainNoun: hintResult.domainNoun,
     resultGrain: hintResult.resultGrain,
     costTier: hintResult.costTier,
+    visibility: hintResult.visibility,
+    canonicalUse: hintResult.canonicalUse,
+    intentVerb: hintResult.intentVerb,
+    requestShapeKind: hintResult.requestShapeKind,
+    safeDefaultRequestJson: hintResult.safeDefaultRequestJson,
+    nextOperations: hintResult.nextOperations,
     requestTypeName: hintResult.requestTypeName,
     responseTypeName: hintResult.responseTypeName,
     requestHint: hintResult.requestHint,
@@ -271,6 +370,12 @@ function toHintSearchResult(operation: HostOperationDefinition): HostOperationHi
     domainNoun: operation.domainNoun,
     resultGrain: operation.resultGrain,
     costTier: operation.costTier,
+    visibility: operation.visibility,
+    canonicalUse: operation.canonicalUse,
+    intentVerb: operation.intentVerb,
+    requestShapeKind: operation.requestShapeKind,
+    safeDefaultRequestJson: operation.safeDefaultRequestJson,
+    nextOperations: operation.nextOperations ?? [],
     singleFlightGroup: operation.singleFlightGroup,
     strictRequestValidation: operation.strictRequestValidation,
     requiresBridge: operation.requiresBridge ?? operation.executionMode === "Bridge",
@@ -283,6 +388,16 @@ function toHintSearchResult(operation: HostOperationDefinition): HostOperationHi
     usageHint: createUsageHint(operation, bestRequestExample, requestHint),
     boundedExpansionHints: operation.boundedExpansionHints ?? [],
     requestExamples: operation.requestExamples ?? [],
+    useWhen: operation.useWhen ?? [],
+    doNotUseWhen: operation.doNotUseWhen ?? [],
+    usuallyBefore: operation.usuallyBefore ?? [],
+    usuallyAfter: operation.usuallyAfter ?? [],
+    answersQuestionTypes: operation.answersQuestionTypes ?? [],
+    doesNotAnswer: operation.doesNotAnswer ?? [],
+    primaryNouns: operation.primaryNouns ?? [],
+    supportedScopes: operation.supportedScopes ?? [],
+    capabilities: operation.capabilities ?? [],
+    ambiguityBehavior: operation.ambiguityBehavior,
   };
 }
 
@@ -303,6 +418,8 @@ function createRequestHint(operation: HostOperationDefinition): string {
   const example = getBestRequestExample(operation);
   if (example)
     return `${operation.requestTypeName ?? "request object"}; best example '${example.name}'`;
+  if (operation.safeDefaultRequestJson)
+    return `${operation.requestTypeName ?? "request object"}; safe default ${operation.safeDefaultRequestJson}`;
 
   const fields = formatShape(operation.requestShape ?? []);
   return fields.length === 0
@@ -320,6 +437,8 @@ function createUsageHint(
 
   if (example)
     return `host_operation_call key=${operation.key} requestJson=${example.json}`;
+  if (operation.safeDefaultRequestJson)
+    return `host_operation_call key=${operation.key} requestJson=${operation.safeDefaultRequestJson}`;
 
   return `host_operation_call key=${operation.key} request=${requestHint}`;
 }
@@ -343,6 +462,10 @@ function createPreflightHints(operation: HostOperationDefinition): string[] {
     hints.push("Requires an active Revit document before calling.");
   if (operation.costTier === "Expensive")
     hints.push("Expensive projection; prefer context/catalog/resolve operations first and keep filters bounded.");
+  if (operation.requestShapeKind)
+    hints.push(`Request shape: ${operation.requestShapeKind}.`);
+  if (operation.safeDefaultRequestJson)
+    hints.push(`Safe default request: ${operation.safeDefaultRequestJson}`);
   if (operation.strictRequestValidation)
     hints.push("Strict request validation; unknown or nonsensical fields fail instead of silently broadening results.");
   if (operation.intent === "Mutate")

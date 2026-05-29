@@ -46,6 +46,21 @@ internal sealed class BridgeOperationRegistry {
                 static (request, context, cancellationToken) =>
                     context.RevitDataRequestService.GetScheduleCatalogAsync(request)
             ),
+            BridgeOperations.Create<ProjectBrowserRequest, ProjectBrowserData>(
+                GetProjectBrowserOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RevitDataRequestService.GetProjectBrowserAsync(request)
+            ),
+            BridgeOperations.Create<ProjectIndexRequest, ProjectIndexData>(
+                GetProjectIndexOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RevitDataRequestService.GetProjectIndexAsync(request)
+            ),
+            BridgeOperations.Create<SheetDetailRequest, SheetDetailData>(
+                GetSheetDetailsOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RevitDataRequestService.GetSheetDetailsAsync(request)
+            ),
             BridgeOperations.Create<ScheduleProfilesQueryRequest, ScheduleProfilesQueryData>(
                 GetScheduleProfilesQueryOperationContract.Definition,
                 static (request, context, cancellationToken) =>
@@ -65,6 +80,16 @@ internal sealed class BridgeOperationRegistry {
                 GetLoadedFamiliesMatrixOperationContract.Definition,
                 static (request, context, cancellationToken) =>
                     context.RevitDataRequestService.GetLoadedFamiliesMatrixAsync(request)
+            ),
+            BridgeOperations.Create<ScheduleCoverageRequest, ScheduleCoverageData>(
+                GetScheduleCoverageOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RevitDataRequestService.GetScheduleCoverageAsync(request)
+            ),
+            BridgeOperations.Create<ParameterCoverageRequest, ParameterCoverageData>(
+                GetParameterCoverageOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RevitDataRequestService.GetParameterCoverageAsync(request)
             ),
             BridgeOperations.Create<ProjectParameterBindingsRequest, ProjectParameterBindingsData>(
                 GetProjectParameterBindingsOperationContract.Definition,
@@ -103,6 +128,21 @@ internal sealed class BridgeOperationRegistry {
                 GetRevitDocumentSessionContextOperationContract.Definition,
                 static (request, context, cancellationToken) =>
                     context.RevitDataRequestService.GetRevitDocumentSessionContextAsync()
+            ),
+            BridgeOperations.Create<NoRequest, RevitAgentContextSummaryData>(
+                GetRevitAgentContextSummaryOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RevitDataRequestService.GetRevitAgentContextSummaryAsync()
+            ),
+            BridgeOperations.Create<RevitAgentContextResolveRequest, RevitAgentContextResolveData>(
+                ResolveRevitAgentContextOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RevitDataRequestService.ResolveRevitAgentContextAsync(request)
+            ),
+            BridgeOperations.Create<RevitAgentVisibleContextRequest, RevitAgentVisibleContextData>(
+                GetRevitAgentVisibleContextOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RevitDataRequestService.GetRevitAgentVisibleContextAsync(request)
             ),
             BridgeOperations.Create<ScriptWorkspaceBootstrapRequest, ScriptWorkspaceBootstrapData>(
                 GetScriptWorkspaceBootstrapOperationContract.Definition,
