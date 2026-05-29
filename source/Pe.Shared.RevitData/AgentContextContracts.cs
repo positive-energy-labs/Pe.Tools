@@ -39,6 +39,14 @@ public enum RevitAgentVisibleContextScope {
     ViewReferences
 }
 
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum RevitAgentVisibleProjection {
+    Counts,
+    Handles,
+    Samples
+}
+
 [ExportTsInterface]
 public record RevitAgentContextHandle(
     RevitAgentContextHandleKind Kind,
@@ -191,7 +199,8 @@ public record RevitAgentVisibleContextRequest(
     List<string>? ViewUniqueIds = null,
     int MaxViews = 10,
     int MaxElementHandlesPerCategory = 0,
-    bool ReturnElementHandlesOnly = false
+    bool ReturnElementHandlesOnly = false,
+    RevitAgentVisibleProjection Projection = RevitAgentVisibleProjection.Counts
 );
 
 [ExportTsInterface]

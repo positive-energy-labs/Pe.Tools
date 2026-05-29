@@ -1,14 +1,15 @@
 ﻿using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.Context;
-using Pe.Revit.Scripting.Diagnostics;
 using Pe.Revit.Scripting.References;
 using Pe.Revit.Scripting.Storage;
 using Pe.Shared.HostContracts.Scripting;
+using Pe.Shared.Scripting.Analysis;
+using Pe.Shared.Scripting.Diagnostics;
+using Pe.Shared.Scripting.Execution;
+using Pe.Shared.Scripting.Policy;
 using Serilog;
 using System.Reflection;
 
@@ -24,6 +25,8 @@ public sealed class RevitScriptExecutionService(
 ) {
     private readonly ScriptAssemblyLoadService _assemblyLoadService = assemblyLoadService;
     private readonly ScriptCompilationService _compilationService = compilationService;
+    private readonly ScriptEntryPointResolver _entryPointResolver = new(nameof(PeScriptContainer));
+    private readonly ScriptPolicyAnalyzer _policyAnalyzer = ScriptPolicyAnalyzer.CreateDefault();
     private readonly Action<string>? _notificationSink = notificationSink;
     private readonly ScriptProjectGenerator _projectGenerator = projectGenerator;
     private readonly ScriptReferenceResolver _referenceResolver = referenceResolver;
@@ -74,12 +77,43 @@ public sealed class RevitScriptExecutionService(
             revitVersion = plan.RevitVersion;
             targetFramework = plan.TargetFramework;
             Log.Information(
-                "Revit scripting plan ready: ExecutionId={ExecutionId}, RevitVersion={RevitVersion}, TargetFramework={TargetFramework}, SourceFiles={SourceFileCount}",
+                "Revit scripting plan ready: ExecutionId={ExecutionId}, RevitVersion={RevitVersion}, TargetFramework={TargetFramework}, SourceFiles={SourceFileCount}, PermissionMode={PermissionMode}",
                 executionId,
                 revitVersion,
                 targetFramework,
-                plan.SourceSet.Files.Count
+                plan.SourceSet.Files.Count,
+                plan.PermissionMode
             );
+
+            var policyDiagnostics = this._policyAnalyzer.Analyze(plan.SourceSet, plan.PermissionMode);
+            foreach (var diagnostic in policyDiagnostics)
+                AppendDiagnostic(diagnostics, diagnostic);
+            if (policyDiagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error)) {
+                return CreateResult(
+                    ScriptExecutionStatus.PolicyRejected,
+                    outputSink,
+                    diagnostics,
+                    revitVersion,
+                    targetFramework,
+                    containerTypeName,
+                    executionId
+                );
+            }
+
+            var permissionDiagnostics = ValidatePermissionMode(plan);
+            foreach (var diagnostic in permissionDiagnostics)
+                AppendDiagnostic(diagnostics, diagnostic);
+            if (permissionDiagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error)) {
+                return CreateResult(
+                    ScriptExecutionStatus.Rejected,
+                    outputSink,
+                    diagnostics,
+                    revitVersion,
+                    targetFramework,
+                    containerTypeName,
+                    executionId
+                );
+            }
 
             var resolvedProject = this.ResolveProject(plan);
             Log.Information(
@@ -186,7 +220,7 @@ public sealed class RevitScriptExecutionService(
                         executionId,
                         containerTypeName
                     );
-                    this.ExecuteContainer(containerResult.Container, executionContext, outputSink);
+                    this.ExecuteContainer(containerResult.Container, executionContext, outputSink, plan.PermissionMode);
                     Log.Information(
                         "Revit scripting container execute completed: ExecutionId={ExecutionId}, ContainerType={ContainerTypeName}",
                         executionId,
@@ -199,7 +233,30 @@ public sealed class RevitScriptExecutionService(
                         revitVersion,
                         targetFramework,
                         containerTypeName,
-                        executionId
+                        executionId,
+                        executionContext.Artifacts.Artifacts
+                    );
+                } catch (RevitScriptTransactionException ex) {
+                    AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Error(
+                        "transaction",
+                        ex.Message,
+                        containerTypeName
+                    ));
+                    Log.Error(
+                        ex,
+                        "Revit scripting host transaction failed: ExecutionId={ExecutionId}, ContainerType={ContainerTypeName}",
+                        executionId,
+                        containerTypeName
+                    );
+                    return CreateResult(
+                        ex.Status,
+                        outputSink,
+                        diagnostics,
+                        revitVersion,
+                        targetFramework,
+                        containerTypeName,
+                        executionId,
+                        executionContext.Artifacts.Artifacts
                     );
                 } catch (Exception ex) {
                     AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Error(
@@ -220,7 +277,8 @@ public sealed class RevitScriptExecutionService(
                         revitVersion,
                         targetFramework,
                         containerTypeName,
-                        executionId
+                        executionId,
+                        executionContext.Artifacts.Artifacts
                     );
                 }
             }
@@ -284,6 +342,8 @@ public sealed class RevitScriptExecutionService(
                     runtimeAssemblyPath,
                     workspaceKey,
                     workspaceRoot,
+                    request.ArtifactRunName,
+                    request.PermissionMode,
                     sourceSet,
                     canonicalProjectContent,
                     request.SourceKind == ScriptExecutionSourceKind.InlineSnippet
@@ -425,6 +485,32 @@ public sealed class RevitScriptExecutionService(
         return new ScriptSourceSet(sourceFiles, selectedSource.Name);
     }
 
+    private static IReadOnlyList<ScriptDiagnostic> ValidatePermissionMode(ScriptExecutionPlan plan) {
+        if (plan.PermissionMode == ScriptPermissionMode.ReadOnly)
+            return [];
+
+        var document = plan.UiApplication.ActiveUIDocument?.Document;
+        if (document == null) {
+            return [
+                ScriptDiagnosticFactory.Error(
+                    "permission",
+                    "WriteTransaction scripts require an active document."
+                )
+            ];
+        }
+
+        if (document.IsReadOnly) {
+            return [
+                ScriptDiagnosticFactory.Error(
+                    "permission",
+                    "WriteTransaction scripts require a writable active document; the active document is read-only."
+                )
+            ];
+        }
+
+        return [];
+    }
+
     private ResolvedScriptProject ResolveProject(ScriptExecutionPlan plan) =>
         this._referenceResolver.Resolve(
             plan.ProjectContent,
@@ -467,6 +553,7 @@ public sealed class RevitScriptExecutionService(
             document,
             selection,
             plan.RevitVersion,
+            new ScriptArtifactWriter(plan.ExecutionId, plan.ArtifactRunName),
             outputSink.WriteLine,
             this._notificationSink
         );
@@ -496,7 +583,7 @@ public sealed class RevitScriptExecutionService(
                 );
             }
 
-            var entryPointTypeNames = ResolveEntryPointContainerTypeNames(plan);
+            var entryPointTypeNames = this._entryPointResolver.ResolveEntryPointContainerTypeNames(plan.SourceSet);
             if (entryPointTypeNames.Count == 0) {
                 return new ScriptContainerResolutionResult(
                     ScriptExecutionStatus.Rejected,
@@ -599,66 +686,92 @@ public sealed class RevitScriptExecutionService(
         }
     }
 
-    private static IReadOnlyList<string> ResolveEntryPointContainerTypeNames(ScriptExecutionPlan plan) {
-        var entryPointSource = plan.SourceSet.Files.FirstOrDefault(file =>
-            string.Equals(file.Name, plan.SourceSet.EntryPointSourceName, StringComparison.OrdinalIgnoreCase));
-        if (entryPointSource == null)
-            return [];
-
-        var root = CSharpSyntaxTree.ParseText(entryPointSource.Content).GetCompilationUnitRoot();
-        return root.DescendantNodes()
-            .OfType<ClassDeclarationSyntax>()
-            .Where(IsPeScriptContainerDeclaration)
-            .Select(GetFullTypeName)
-            .ToList();
-    }
-
-    private static bool IsPeScriptContainerDeclaration(ClassDeclarationSyntax declaration) =>
-        declaration.Modifiers.Any(SyntaxKind.AbstractKeyword) == false &&
-        declaration.BaseList?.Types.Any(type =>
-            type.Type.ToString().Equals("PeScriptContainer", StringComparison.Ordinal) ||
-            type.Type.ToString().EndsWith(".PeScriptContainer", StringComparison.Ordinal)) == true;
-
-    private static string GetFullTypeName(ClassDeclarationSyntax declaration) {
-        var names = new Stack<string>();
-        names.Push(declaration.Identifier.ValueText);
-
-        for (SyntaxNode? node = declaration.Parent; node != null; node = node.Parent) {
-            switch (node) {
-            case BaseNamespaceDeclarationSyntax namespaceDeclaration:
-                names.Push(namespaceDeclaration.Name.ToString());
-                break;
-            case ClassDeclarationSyntax containingClass:
-                names.Push(containingClass.Identifier.ValueText);
-                break;
-            }
-        }
-
-        return string.Join(".", names);
-    }
-
     private void ExecuteContainer(
         PeScriptContainer container,
         RevitScriptContext context,
-        ScriptOutputSink outputSink
+        ScriptOutputSink outputSink,
+        ScriptPermissionMode permissionMode
     ) {
         using var consoleCapture = outputSink.CreateConsoleCaptureScope();
-        this.ExecuteWithTransactionPolicy(container, context);
+        this.ExecuteWithTransactionPolicy(container, context, permissionMode);
     }
 
-    private void ExecuteWithTransactionPolicy(PeScriptContainer container, RevitScriptContext context) {
-        if (context.Document == null) {
+    private void ExecuteWithTransactionPolicy(
+        PeScriptContainer container,
+        RevitScriptContext context,
+        ScriptPermissionMode permissionMode
+    ) {
+        if (permissionMode == ScriptPermissionMode.ReadOnly) {
             container.Execute();
             return;
         }
 
+        this.ExecuteInHostOwnedTransaction(container, context);
+    }
+
+    private void ExecuteInHostOwnedTransaction(PeScriptContainer container, RevitScriptContext context) {
+        var document = context.Document ?? throw new RevitScriptTransactionException(
+            ScriptExecutionStatus.Rejected,
+            "WriteTransaction scripts require an active writable document."
+        );
+        if (document.IsReadOnly) {
+            throw new RevitScriptTransactionException(
+                ScriptExecutionStatus.Rejected,
+                "WriteTransaction scripts require a writable document; the active document is read-only."
+            );
+        }
+
+        using var transaction = new Transaction(document, "Pe Script Execution");
+        TransactionStatus startStatus;
         try {
-            using var transaction = new Transaction(context.Document, "Pe Script Execution");
-            _ = transaction.Start();
+            startStatus = transaction.Start();
+        } catch (Exception ex) {
+            throw new RevitScriptTransactionException(
+                ScriptExecutionStatus.RuntimeFailed,
+                $"Failed to start the host-owned Revit transaction: {ex.Message}",
+                ex
+            );
+        }
+
+        if (startStatus != TransactionStatus.Started) {
+            throw new RevitScriptTransactionException(
+                ScriptExecutionStatus.RuntimeFailed,
+                $"Failed to start the host-owned Revit transaction: {startStatus}."
+            );
+        }
+
+        try {
             container.Execute();
-            _ = transaction.Commit();
-        } catch (Exception ex) when (IsNestedTransactionConflict(ex)) {
-            container.Execute();
+        } catch {
+            TryRollBack(transaction);
+            throw;
+        }
+
+        try {
+            var commitStatus = transaction.Commit();
+            if (commitStatus != TransactionStatus.Committed) {
+                throw new RevitScriptTransactionException(
+                    ScriptExecutionStatus.RuntimeFailed,
+                    $"The host-owned Revit transaction did not commit successfully: {commitStatus}."
+                );
+            }
+        } catch (RevitScriptTransactionException) {
+            throw;
+        } catch (Exception ex) {
+            throw new RevitScriptTransactionException(
+                ScriptExecutionStatus.RuntimeFailed,
+                $"Failed to commit the host-owned Revit transaction: {ex.Message}",
+                ex
+            );
+        }
+    }
+
+    private static void TryRollBack(Transaction transaction) {
+        try {
+            if (transaction.HasStarted() && !transaction.HasEnded())
+                _ = transaction.RollBack();
+        } catch (Exception ex) {
+            Log.Warning(ex, "Failed to roll back Revit scripting transaction after runtime failure.");
         }
     }
 
@@ -669,7 +782,8 @@ public sealed class RevitScriptExecutionService(
         string revitVersion,
         string targetFramework,
         string? containerTypeName,
-        string executionId
+        string executionId,
+        IReadOnlyList<ScriptArtifactData>? artifacts = null
     ) => new(
         status,
         outputSink.GetBufferedOutput(),
@@ -677,7 +791,8 @@ public sealed class RevitScriptExecutionService(
         revitVersion,
         targetFramework,
         containerTypeName,
-        executionId
+        executionId,
+        artifacts?.ToList() ?? []
     );
 
     private static void AppendDiagnostic(
@@ -685,10 +800,13 @@ public sealed class RevitScriptExecutionService(
         ScriptDiagnostic diagnostic
     ) => diagnostics.Add(diagnostic);
 
-    private static bool IsNestedTransactionConflict(Exception ex) =>
-        ex.Message.Contains("Starting a new transaction is not permitted", StringComparison.OrdinalIgnoreCase)
-        || ex.Message.Contains("transaction already started", StringComparison.OrdinalIgnoreCase)
-        || ex.Message.Contains("cannot start a new transaction", StringComparison.OrdinalIgnoreCase);
+    private sealed class RevitScriptTransactionException(
+        ScriptExecutionStatus status,
+        string message,
+        Exception? innerException = null
+    ) : Exception(message, innerException) {
+        public ScriptExecutionStatus Status { get; } = status;
+    }
 
     private static string? ReadFileIfExists(string path) =>
         File.Exists(path) ? File.ReadAllText(path) : null;

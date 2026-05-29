@@ -1,3 +1,4 @@
+using Pe.Revit.DocumentData.ProjectBrowser;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 using Serilog;
@@ -6,7 +7,12 @@ using System.Diagnostics;
 namespace Pe.Revit.DocumentData.Schedules.Collect;
 
 public static class ScheduleCoverageCollector {
-    public static ScheduleCoverageData Collect(Document doc, ScheduleCoverageRequest request, View? activeView = null) {
+    public static ScheduleCoverageData Collect(
+        Document doc,
+        ScheduleCoverageRequest request,
+        View? activeView = null,
+        IProjectBrowserIndexProvider? browserIndexProvider = null
+    ) {
         var totalStopwatch = Stopwatch.StartNew();
         var issues = new List<RevitDataIssue>();
         var budget = RevitDataOutputBudgets.WithDefaults(request.Budget, maxEntries: 50);
@@ -36,7 +42,7 @@ public static class ScheduleCoverageCollector {
             },
             Budget = budget
         };
-        var catalog = TimePhase("schedule-catalog", () => ScheduleCatalogCollector.Collect(doc, scheduleFilter));
+        var catalog = TimePhase("schedule-catalog", () => ScheduleCatalogCollector.Collect(doc, scheduleFilter, browserIndexProvider));
         issues.AddRange(catalog.Issues);
 
         var subjectHits = TimePhase(
@@ -78,6 +84,7 @@ public static class ScheduleCoverageCollector {
                 .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                 .ToList()
             : null;
+        var roleSummaries = CreateRoleSummaries(entries);
         var truncated = returned.Count < entries.Count && includeSamples;
         if (truncated) {
             issues.Add(new RevitDataIssue(
@@ -97,7 +104,8 @@ public static class ScheduleCoverageCollector {
             RevitDataOutputBudgets.ProjectIssues(issues, budget),
             new RevitDataResultPage(entries.Count, returned.Count, truncated),
             missingHandles,
-            matchedScheduleNames
+            matchedScheduleNames,
+            roleSummaries
         );
     }
 
@@ -302,6 +310,35 @@ public static class ScheduleCoverageCollector {
         }
 
         return new ScheduleSubjectHitIndex(hitsByElementId, keptScheduleCount);
+    }
+
+    private static List<ScheduleCoverageRoleSummary> CreateRoleSummaries(IReadOnlyList<ScheduleCoverageElementEntry> entries) => entries
+        .SelectMany(entry => entry.MatchingSchedules.Select(schedule => new {
+            Entry = entry,
+            Schedule = schedule,
+            Role = GetCoverageRole(schedule)
+        }))
+        .GroupBy(item => item.Role, StringComparer.OrdinalIgnoreCase)
+        .Select(group => new ScheduleCoverageRoleSummary(
+            group.Key,
+            group.Select(item => item.Schedule.ScheduleId).Distinct().Count(),
+            group.Select(item => item.Entry.Element.ElementId).Distinct().Count(),
+            group.Select(item => item.Schedule.ScheduleName)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .ToList()
+        ))
+        .OrderBy(summary => summary.Role, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    private static string GetCoverageRole(ScheduleCoverageScheduleHit hit) {
+        if (hit.SheetPlacements.Any(placement => string.Equals(placement.SheetRole, "Issued", StringComparison.OrdinalIgnoreCase) || placement.IsIssuedLikeSheet))
+            return "Issued";
+        if (hit.SheetPlacements.Any(placement => string.Equals(placement.SheetRole, "Working", StringComparison.OrdinalIgnoreCase) || placement.IsWorkingLikeSheet))
+            return "Working";
+        if (hit.SheetPlacements.Any(placement => string.Equals(placement.SheetRole, "Archive", StringComparison.OrdinalIgnoreCase)))
+            return "Archive";
+        return hit.IsPlacedOnSheet ? "PlacedOther" : "Unplaced";
     }
 
     private static T TimePhase<T>(string phase, Func<T> action) {

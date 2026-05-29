@@ -1,6 +1,6 @@
 ﻿using Microsoft.CodeAnalysis;
-using Pe.Revit.Scripting.Diagnostics;
 using Pe.Shared.HostContracts.Scripting;
+using Pe.Shared.Scripting.Diagnostics;
 using System.Reflection;
 #if NET5_0_OR_GREATER
 using System.Runtime.Loader;

@@ -11,7 +11,7 @@ import {
   toolInputArgSchemas,
   toolOutputSchemas,
 } from "./types.js";
-import { HostLogTarget, ScriptExecutionSourceKind } from "./host-client.js";
+import { HostLogTarget, ScriptExecutionSourceKind, ScriptPermissionMode } from "./host-client.js";
 import { extractRvtDocsText } from "./lib/extractDocs.js";
 import { searchWrapper } from "./lib/searchDocs.js";
 import {
@@ -35,7 +35,7 @@ const hostOperationSearchInputSchema = z.object({
     .string()
     .optional()
     .describe(
-      "Natural-language or keyword query, such as this view, selected equipment, loaded families, schedule rows, printed sheets, parameter presence, settings validate, or electrical panels.",
+      "Natural-language or keyword query describing the capability you need.",
     ),
   domain: z
     .string()
@@ -58,7 +58,7 @@ const hostOperationSearchInputSchema = z.object({
 export const peStatus = createTool({
   id: "pe_status",
   description:
-    "Read explicit fresh Pe.Host status. Automatic per-turn checks only detect meaningful status changes; use pe_status when you need current host, bridge, session, active-document, workspace, or log-location facts. Defaults to compact orientation: bridge health, contract versions, active document, open-doc count, and module count. Use verbosity=full only when you need the full probe/session DTO.",
+    "Read fresh Pe.Host status: host, bridge/session, active document, workspace, and log-location facts. Use compact for orientation and full for the raw probe/session DTOs.",
   inputSchema: z.object({
     verbosity: z.enum(["compact", "full"]).default("compact"),
   }),
@@ -118,7 +118,7 @@ export const peLogs = createTool({
 export const hostOperationSearch = createTool({
   id: "host_operation_search",
   description:
-    "Search generated public Pe.Host operations by capability, top-level family/domain, mutability, bridge requirement, and active-document requirement. Defaults to compact cards so search stays cheap. Use verbosity=hints for request examples and bounded-expansion guidance; use verbosity=full only when composing an unfamiliar request and needing full shapes/routes. Revit context operations like revit.context.summary and revit.context.visible-summary provide semantic Revit context, not host/session status.",
+    "Search generated public Pe.Host operations by capability and filters. Use compact for discovery, hints for examples, and full for routes plus request/response shapes.",
   inputSchema: hostOperationSearchInputSchema,
   execute: async (input) => searchHostOperations(input),
 });
@@ -126,7 +126,7 @@ export const hostOperationSearch = createTool({
 export const hostOperationCall = createTool({
   id: "host_operation_call",
   description:
-    "Call a generated public Pe.Host operation by key with a JSON request object. Use revit.context.summary for fresh current Revit user context such as active view/sheet, selection, browser counts, and compact visible-category context; automatic status checks do not call bridge-backed Revit context operations. Successful calls default to { ok, key, requestId, elapsedMs, response } without repeating operation metadata. Use verbosity=hints/full only when metadata is needed in the response. Prefer compact revit.context/catalog/resolve operations before expensive revit.matrix/detail calls, do not run bridge-backed operations in parallel when metadata shows singleFlightGroup=revit, and inspect pe_logs with requestId before retrying a timed-out bridge call. Omit request for NoRequest operations. Failures include operation metadata and suggested next steps.",
+    "Call a generated public Pe.Host operation by key with a JSON request object. Omit request for NoRequest operations. Compact successes return the response plus request timing; hints/full add metadata. Failures include operation metadata and suggested next steps. Bridge-backed operations are serialized when metadata assigns a single-flight group.",
   inputSchema: z.object({
     key: z
       .string()
@@ -145,7 +145,7 @@ export const hostOperationCall = createTool({
         "Successful-call metadata size. Compact omits operation metadata; hints/full include increasingly verbose metadata. Failures always include full metadata.",
       ),
     timeoutSeconds: z.number().min(5).max(900).default(300).describe(
-      "Client-side timeout for this host call. Keep the default for broad Revit work; lower it only for cheap/status-like calls. If it times out, inspect pe_logs before retrying bridge-backed work.",
+      "Client-side timeout for this host call, in seconds.",
     ),
   }),
   execute: async (input) =>
@@ -160,7 +160,7 @@ export const hostOperationCall = createTool({
 export const scriptExecute = createTool({
   id: "script_execute",
   description:
-    "Execute a C# Revit script through the Pe.Host scripting contract. Prefer host_operation_search/host_operation_call first. Use inline scriptContent only for tiny probes; for non-trivial work, write a workspace .cs file, call script_bootstrap first if paths/references are unknown, then execute with sourceKind=WorkspacePath.",
+    "Execute a C# Revit script through the Pe.Host scripting contract. Use inline scriptContent for tiny probes and workspace .cs files for durable or multi-step work. Call script_bootstrap when paths or references are unknown.",
   inputSchema: z.object({
     scriptContent: z.string().optional(),
     sourceKind: z
@@ -169,6 +169,10 @@ export const scriptExecute = createTool({
     sourcePath: z.string().optional(),
     workspaceKey: z.string().default(resolveWorkspaceKey()),
     sourceName: z.string().default("AgentSnippet.cs"),
+    permissionMode: z
+      .enum(["ReadOnly", "WriteTransaction"])
+      .default("ReadOnly")
+      .describe("Defaults to ReadOnly. Use WriteTransaction only for explicit mutations; the host owns the transaction."),
   }),
   execute: async (input) =>
     hostClient.scripting.execute({
@@ -180,13 +184,17 @@ export const scriptExecute = createTool({
       sourcePath: input.sourcePath,
       workspaceKey: input.workspaceKey ?? resolveWorkspaceKey(),
       sourceName: input.sourceName,
+      permissionMode:
+        input.permissionMode === "WriteTransaction"
+          ? ScriptPermissionMode.WriteTransaction
+          : ScriptPermissionMode.ReadOnly,
     }),
 });
 
 export const scriptBootstrap = createTool({
   id: "script_bootstrap",
   description:
-    "Create or update a Pe.Revit scripting workspace through Pe.Host and return host-owned paths/references. Use this before authoring workspace C# scripts or when script diagnostics indicate missing generated references. This preserves user-authored files and writes only Pe.Host-owned workspace files.",
+    "Create or update a Pe.Revit scripting workspace through Pe.Host and return host-owned paths/references. Preserves user-authored files and writes only Pe.Host-owned workspace files.",
   inputSchema: z.object({
     workspaceKey: z.string().default(resolveWorkspaceKey()),
     createSampleScript: z
@@ -207,7 +215,7 @@ export const scriptBootstrap = createTool({
 export const revitApiSearch = createTool({
   id: "revit_api_search",
   description:
-    "Search Revit API documentation for exact API entities. Query formats should look like `FilteredElementCollector`, `Element.LookupParameter`, or `FamilyCreate.NewExtrusion(bool, CurveArrArray, SketchPlane, double)`. For questions about the current model/session/document state, use pe_status, host_operation_search/host_operation_call, or scripts instead of docs search.",
+    "Search Revit API documentation for exact API entities, signatures, members, and remarks. Use live host operations or scripts for current model/session/document state.",
   inputSchema: revitApiQueryInputSchema,
   outputSchema: toolOutputSchemas.searchResultsSchema,
   execute: async (input) => {

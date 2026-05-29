@@ -13,7 +13,8 @@ public static class ProjectIndexCollector {
 
     public static ProjectIndexData Collect(
         Document document,
-        ProjectIndexRequest? request = null
+        ProjectIndexRequest? request = null,
+        IProjectBrowserIndexProvider? browserIndexProvider = null
     ) {
         request ??= new ProjectIndexRequest();
         var projection = request.Projection ?? new RevitDataProjectionRequest();
@@ -36,7 +37,8 @@ public static class ProjectIndexCollector {
         var browserIndex = TimePhase(
             "browser-index",
             () => request.IncludeBrowserProvenance
-                ? ProjectBrowserCollector.CollectIndex(document, browserSections, maxSamples, ProjectBrowserResultView.Folders, request.BrowserFilter, issues)
+                ? browserIndexProvider?.GetProjectBrowserIndex(document, browserSections, maxSamples, ProjectBrowserResultView.Folders, request.BrowserFilter, issues)
+                  ?? ProjectBrowserCollector.CollectIndex(document, browserSections, maxSamples, ProjectBrowserResultView.Folders, request.BrowserFilter, issues)
                 : ProjectBrowserCollectedIndex.Empty
         );
 
@@ -84,7 +86,7 @@ public static class ProjectIndexCollector {
             },
             Budget = new RevitDataOutputBudget { MaxEntries = maxEntries, IncludeDiagnostics = true }
         };
-        var scheduleCatalog = TimePhase("schedule-catalog", () => ScheduleCatalogCollector.Collect(document, scheduleRequest));
+        var scheduleCatalog = TimePhase("schedule-catalog", () => ScheduleCatalogCollector.Collect(document, scheduleRequest, browserIndexProvider));
         issues.AddRange(scheduleCatalog.Issues);
         var scheduleEntries = scheduleCatalog.Entries
             .Where(schedule => request.IncludeUnplacedSchedules || schedule.IsPlacedOnSheet)

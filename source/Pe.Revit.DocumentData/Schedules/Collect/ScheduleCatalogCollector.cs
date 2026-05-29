@@ -12,7 +12,8 @@ public static class ScheduleCatalogCollector {
 
     public static ScheduleCatalogData Collect(
         Document doc,
-        ScheduleCatalogRequest? request = null
+        ScheduleCatalogRequest? request = null,
+        IProjectBrowserIndexProvider? browserIndexProvider = null
     ) {
         var categoryNames = ScheduleCollectorSupport.ToFilterSet(request?.CategoryNames);
         var scheduleNames = ScheduleCollectorSupport.ToFilterSet(request?.ScheduleNames);
@@ -25,14 +26,22 @@ public static class ScheduleCatalogCollector {
         var totalStopwatch = Stopwatch.StartNew();
         var shouldCollectBrowserIndex = request?.BrowserFilter != null || projection.View is RevitDataResultView.Handles or RevitDataResultView.Rows or RevitDataResultView.Full;
         var browserIndex = TimePhase("browser-index", () => shouldCollectBrowserIndex
-            ? ProjectBrowserCollector.CollectIndex(
-                doc,
-                new HashSet<ProjectBrowserSection> { ProjectBrowserSection.Schedules },
-                Math.Max(0, budget.MaxSamplesPerEntry ?? 5),
-                ProjectBrowserResultView.Items,
-                request?.BrowserFilter == null ? null : request.BrowserFilter with { Section = ProjectBrowserSection.Schedules },
-                issues
-            )
+            ? browserIndexProvider?.GetProjectBrowserIndex(
+                  doc,
+                  new HashSet<ProjectBrowserSection> { ProjectBrowserSection.Schedules },
+                  Math.Max(0, budget.MaxSamplesPerEntry ?? 5),
+                  ProjectBrowserResultView.Folders,
+                  request?.BrowserFilter == null ? null : request.BrowserFilter with { Section = ProjectBrowserSection.Schedules },
+                  issues
+              )
+              ?? ProjectBrowserCollector.CollectIndex(
+                  doc,
+                  new HashSet<ProjectBrowserSection> { ProjectBrowserSection.Schedules },
+                  Math.Max(0, budget.MaxSamplesPerEntry ?? 5),
+                  ProjectBrowserResultView.Folders,
+                  request?.BrowserFilter == null ? null : request.BrowserFilter with { Section = ProjectBrowserSection.Schedules },
+                  issues
+              )
             : ProjectBrowserCollectedIndex.Empty);
         var requireVisibleBodyRows = request?.IsEmpty != null;
 

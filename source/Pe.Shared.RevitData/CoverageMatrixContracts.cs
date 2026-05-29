@@ -75,6 +75,14 @@ public record ScheduleCoverageElementEntry(
 );
 
 [ExportTsInterface]
+public record ScheduleCoverageRoleSummary(
+    string Role,
+    int ScheduleCount,
+    int CoveredElementCount,
+    List<string> ScheduleNames
+);
+
+[ExportTsInterface]
 public record ScheduleCoverageData(
     int TotalElements,
     int CoveredElements,
@@ -84,7 +92,8 @@ public record ScheduleCoverageData(
     List<RevitDataIssue> Issues,
     RevitDataResultPage? Page = null,
     List<RevitElementHandle>? MissingHandles = null,
-    List<string>? MatchedScheduleNames = null
+    List<string>? MatchedScheduleNames = null,
+    List<ScheduleCoverageRoleSummary>? RoleSummaries = null
 );
 
 [ExportTsInterface]

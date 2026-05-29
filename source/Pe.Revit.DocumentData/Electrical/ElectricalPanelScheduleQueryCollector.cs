@@ -10,9 +10,11 @@ public static class ElectricalPanelScheduleQueryCollector {
         View? activeView = null
     ) {
         var issues = new List<RevitDataIssue>();
-        var resolution = ResolveQuery(doc, query, activeView, issues);
+        var effectiveQuery = query ?? new ElectricalPanelSchedulesQuery();
+        var resolution = ResolveQuery(doc, effectiveQuery, activeView, issues);
+        var projection = effectiveQuery.Projection ?? new ElectricalPanelScheduleProjectionOptions();
         var entries = resolution.Schedules
-            .Select(schedule => TryCollectProjection(doc, schedule, issues))
+            .Select(schedule => TryCollectProjection(doc, schedule, projection, issues))
             .Where(entry => entry != null)
             .Cast<ElectricalPanelScheduleProjection>()
             .ToList();
@@ -225,6 +227,7 @@ public static class ElectricalPanelScheduleQueryCollector {
     private static ElectricalPanelScheduleProjection? TryCollectProjection(
         Document doc,
         PanelScheduleView schedule,
+        ElectricalPanelScheduleProjectionOptions projection,
         List<RevitDataIssue> issues
     ) {
         try {
@@ -242,7 +245,7 @@ public static class ElectricalPanelScheduleQueryCollector {
                 template?.UniqueId,
                 template?.Name,
                 ElectricalCollectorSupport.SafeGet(() => template?.GetPanelScheduleType().ToString()),
-                CollectSections(schedule)
+                CollectSections(schedule, projection, issues)
             );
         } catch (Exception ex) {
             issues.Add(ElectricalCollectorSupport.Warning(
@@ -254,17 +257,36 @@ public static class ElectricalPanelScheduleQueryCollector {
         }
     }
 
-    private static List<ElectricalPanelScheduleSectionProjection> CollectSections(PanelScheduleView schedule) => [
-        CollectSection(schedule, ElectricalPanelScheduleSectionType.Header, SectionType.Header),
-        CollectSection(schedule, ElectricalPanelScheduleSectionType.Body, SectionType.Body),
-        CollectSection(schedule, ElectricalPanelScheduleSectionType.Summary, SectionType.Summary),
-        CollectSection(schedule, ElectricalPanelScheduleSectionType.Footer, SectionType.Footer)
-    ];
+    private static List<ElectricalPanelScheduleSectionProjection> CollectSections(
+        PanelScheduleView schedule,
+        ElectricalPanelScheduleProjectionOptions projection,
+        List<RevitDataIssue> issues
+    ) {
+        var sections = projection.View == ElectricalPanelScheduleProjectionView.RowsOnly
+            ? [CollectSection(schedule, ElectricalPanelScheduleSectionType.Body, SectionType.Body, projection)]
+            : new List<ElectricalPanelScheduleSectionProjection> {
+                CollectSection(schedule, ElectricalPanelScheduleSectionType.Header, SectionType.Header, projection),
+                CollectSection(schedule, ElectricalPanelScheduleSectionType.Body, SectionType.Body, projection),
+                CollectSection(schedule, ElectricalPanelScheduleSectionType.Summary, SectionType.Summary, projection),
+                CollectSection(schedule, ElectricalPanelScheduleSectionType.Footer, SectionType.Footer, projection)
+            };
+        var hasFilters = projection.CircuitNumbers.Count != 0 || projection.LoadNameContains.Count != 0;
+        if (hasFilters && sections.SelectMany(section => section.Rows).Count(row => row.IsCircuitTableRow) == 0) {
+            issues.Add(ElectricalCollectorSupport.Warning(
+                "ElectricalPanelScheduleRowsNotFound",
+                $"No circuit-table rows matched the requested panel schedule row filters for '{schedule.Name}'.",
+                schedule.Name
+            ));
+        }
+
+        return sections;
+    }
 
     private static ElectricalPanelScheduleSectionProjection CollectSection(
         PanelScheduleView schedule,
         ElectricalPanelScheduleSectionType contractSectionType,
-        SectionType revitSectionType
+        SectionType revitSectionType,
+        ElectricalPanelScheduleProjectionOptions projection
     ) {
         if (!schedule.IsValidSectionType(revitSectionType)) {
             return new ElectricalPanelScheduleSectionProjection(
@@ -337,12 +359,17 @@ public static class ElectricalPanelScheduleQueryCollector {
                 ));
             }
 
-            rows.Add(new ElectricalPanelScheduleRowProjection(
+            var rowProjection = new ElectricalPanelScheduleRowProjection(
                 row,
                 revitSectionType == SectionType.Body && schedule.IsRowInCircuitTable(row),
                 cells
-            ));
+            );
+            if (ShouldIncludeRow(rowProjection, projection))
+                rows.Add(rowProjection);
         }
+
+        if (projection.MaxRows is > 0)
+            rows = rows.Take(projection.MaxRows.Value).ToList();
 
         return new ElectricalPanelScheduleSectionProjection(
             contractSectionType,
@@ -355,6 +382,23 @@ public static class ElectricalPanelScheduleQueryCollector {
             section.NumberOfColumns,
             rows
         );
+    }
+
+    private static bool ShouldIncludeRow(
+        ElectricalPanelScheduleRowProjection row,
+        ElectricalPanelScheduleProjectionOptions projection
+    ) {
+        var hasCircuitFilters = projection.CircuitNumbers.Count != 0;
+        var hasLoadFilters = projection.LoadNameContains.Count != 0;
+        if (!hasCircuitFilters && !hasLoadFilters)
+            return true;
+        if (!row.IsCircuitTableRow)
+            return false;
+
+        var rowText = string.Join(" ", row.Cells.Select(cell => $"{cell.DisplayText} {cell.ParameterText} {cell.CombinedText} {cell.CalculatedValueText}"));
+        var circuitMatched = !hasCircuitFilters || projection.CircuitNumbers.Any(value => !string.IsNullOrWhiteSpace(value) && rowText.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase));
+        var loadMatched = !hasLoadFilters || projection.LoadNameContains.Any(value => !string.IsNullOrWhiteSpace(value) && rowText.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase));
+        return circuitMatched && loadMatched;
     }
 
     private static Dictionary<int, string?> CollectBodyColumnHeaders(PanelScheduleView schedule) {

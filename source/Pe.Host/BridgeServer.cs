@@ -34,6 +34,7 @@ public sealed class BridgeServer(
         method,
         request,
         typeof(TResponse),
+        null,
         cancellationToken
     );
 
@@ -45,6 +46,7 @@ public sealed class BridgeServer(
         operation.Key,
         request,
         operation.ResponseType,
+        operation,
         cancellationToken
     );
 
@@ -52,12 +54,13 @@ public sealed class BridgeServer(
         string method,
         object? request,
         Type responseType,
+        HostOperationDefinition? operation,
         CancellationToken cancellationToken
     ) {
+        var payloadJson = JsonConvert.SerializeObject(request, this._serializerSettings);
+        var connectedSession = this._sessionManager.ResolveSessionOrThrow();
         var requestId = Guid.NewGuid().ToString("N");
         var startedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-        var payloadJson = JsonConvert.SerializeObject(request, this._serializerSettings);
         var payloadBytes = Encoding.UTF8.GetByteCount(payloadJson);
         var requestFrame = new BridgeFrame(
             BridgeFrameKind.Request,
@@ -72,7 +75,6 @@ public sealed class BridgeServer(
 
         using var lease = this._requestGate.Admit(requestId, method, startedAtUnixMs);
         try {
-            var connectedSession = this._sessionManager.ResolveSessionOrThrow();
             var completion = this._requestGate.Track(connectedSession.ConnectionId, requestId);
 
             await connectedSession.TransportSession.WriteAsync(requestFrame, cancellationToken);

@@ -20,7 +20,11 @@ public sealed record ProjectBrowserCollectedIndex(
 public static class ProjectBrowserCollector {
     private static readonly StringComparer IgnoreCase = StringComparer.OrdinalIgnoreCase;
 
-    public static ProjectBrowserData Collect(Document document, ProjectBrowserRequest? request = null) {
+    public static ProjectBrowserData Collect(
+        Document document,
+        ProjectBrowserRequest? request = null,
+        IProjectBrowserIndexProvider? browserIndexProvider = null
+    ) {
         request ??= new ProjectBrowserRequest();
         var budget = RevitDataOutputBudgets.WithDefaults(request.Budget, maxEntries: 100, maxSamplesPerEntry: 5);
         var issues = new List<RevitDataIssue>();
@@ -30,7 +34,8 @@ public static class ProjectBrowserCollector {
         if (request.Filter?.Section is { } filterSection)
             sections = [filterSection];
 
-        var index = CollectIndex(document, sections, Math.Max(0, budget.MaxSamplesPerEntry ?? 5), request.View, request.Filter, issues);
+        var index = browserIndexProvider?.GetProjectBrowserIndex(document, sections, Math.Max(0, budget.MaxSamplesPerEntry ?? 5), request.View, request.Filter, issues)
+                    ?? CollectIndex(document, sections, Math.Max(0, budget.MaxSamplesPerEntry ?? 5), request.View, request.Filter, issues);
         var items = request.View == ProjectBrowserResultView.Items
             ? Page(index.Items, budget.MaxEntries, issues, "ProjectBrowserItemsTruncated")
             : [];

@@ -74,6 +74,7 @@ public sealed class ScriptProjectGenerator(
         foreach (var runtimeReference in generatedRuntimeReferences) {
             _ = builder.AppendLine($"    <Reference Include=\"{EscapeXml(runtimeReference.Include)}\">");
             _ = builder.AppendLine($"      <HintPath>{EscapeXml(runtimeReference.HintPath)}</HintPath>");
+            _ = builder.AppendLine("      <Private>false</Private>");
             _ = builder.AppendLine("    </Reference>");
         }
 

@@ -26,6 +26,7 @@ public sealed class ScriptWorkspaceBootstrapService(
         var sampleScriptPath = RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey);
         var agentsPath = RevitScriptingStorageLocations.ResolveAgentsPath(workspaceKey);
         var readmePath = RevitScriptingStorageLocations.ResolveReadmePath(workspaceKey);
+        var joinGuidePath = RevitScriptingStorageLocations.ResolveJoinGuidePath(workspaceKey);
         var vscodeSettingsPath = RevitScriptingStorageLocations.ResolveVscodeSettingsPath(workspaceKey);
 
         _ = Directory.CreateDirectory(productHomePath);
@@ -49,6 +50,7 @@ public sealed class ScriptWorkspaceBootstrapService(
         EnsureFile(productReadmePath, ScriptFileTemplates.CreateProductReadme(), generatedFiles);
         EnsureFile(agentsPath, ScriptFileTemplates.CreateAgents(), generatedFiles);
         EnsureFile(readmePath, ScriptFileTemplates.CreateReadme(), generatedFiles);
+        EnsureFile(joinGuidePath, ScriptFileTemplates.CreateJoinGuide(), generatedFiles);
         EnsureFile(vscodeSettingsPath, ScriptFileTemplates.CreateVscodeSettings(), generatedFiles);
         if (createSampleScript)
             EnsureFile(sampleScriptPath, ScriptFileTemplates.CreateSampleScript(), generatedFiles);

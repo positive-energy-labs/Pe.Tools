@@ -77,12 +77,12 @@ public static class GetRevitAgentVisibleContextOperationContract {
                         "resolved printed view references",
                         "Use view ids or unique ids returned by revit.resolve.references; sheet ids expand to their placed views.",
                         """
-                        { "scope": "ViewReferences", "viewIds": [12345, 67890], "categoryNames": ["Mechanical Equipment"], "maxViews": 10, "maxElementHandlesPerCategory": 500, "returnElementHandlesOnly": true }
+                        { "scope": "ViewReferences", "viewIds": [12345, 67890], "categoryNames": ["Mechanical Equipment"], "projection": "Handles", "maxViews": 10, "maxElementHandlesPerCategory": 500 }
                         """
                     )
                 ],
                 boundedExpansionHints: [
-                    "For visible/current/printed equipment audits, resolve the view or sheet phrase once, then call this with ViewReferences and returnElementHandlesOnly=true to get exact visible handles and visible-in-view provenance.",
+                    "For visible/current/printed equipment audits, resolve the view or sheet phrase once, then call this with ViewReferences and projection=Handles to get exact visible handles and visible-in-view provenance.",
                     "Feed returned element handles into revit.matrix.schedule-coverage with ExplicitHandles or revit.detail.elements for electrical/tag facts.",
                     "Set categoryNames and maxElementHandlesPerCategory deliberately; a complete handle set is indicated by isReturnedElementSetComplete."
                 ],

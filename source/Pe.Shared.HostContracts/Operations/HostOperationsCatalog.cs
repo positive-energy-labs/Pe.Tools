@@ -1,4 +1,5 @@
 using System.Linq;
+using Pe.Shared.RevitData;
 
 namespace Pe.Shared.HostContracts.Operations;
 
@@ -106,6 +107,11 @@ public static class HostOperationsCatalog {
         .SelectMany(group => group.Operations)
         .Select(operation => operation.Definition)
         .ToArray();
+
+    public static IReadOnlyList<Type> TypeScriptClientExtraTypeRoots { get; } = [
+        typeof(RevitAgentContextSummaryData),
+        typeof(RevitAgentVisibleCategorySummary)
+    ];
 
     private static IReadOnlyList<HostOperationDefinition> Validate(
         IReadOnlyList<HostOperationDefinition> definitions

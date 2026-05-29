@@ -6,7 +6,12 @@ namespace Pe.Revit.DocumentData.Sheets;
 public static class SheetDetailCollector {
     private static readonly StringComparer IgnoreCase = StringComparer.OrdinalIgnoreCase;
 
-    public static SheetDetailData Collect(Document document, View? activeView, SheetDetailRequest? request = null) {
+    public static SheetDetailData Collect(
+        Document document,
+        View? activeView,
+        SheetDetailRequest? request = null,
+        IProjectBrowserIndexProvider? browserIndexProvider = null
+    ) {
         request ??= new SheetDetailRequest();
         var references = request.References ?? new SheetReferenceRequest { CurrentActiveSheet = true };
         var projection = request.Projection ?? new SheetDetailProjection();
@@ -28,12 +33,20 @@ public static class SheetDetailCollector {
         }
 
         var browserIssues = new List<RevitDataIssue>();
-        var browserIndex = ProjectBrowserCollector.CollectIndex(
-            document,
-            new HashSet<ProjectBrowserSection> { ProjectBrowserSection.Sheets },
-            Math.Max(0, budget.MaxSamplesPerEntry ?? 5),
-            browserIssues
-        );
+        var browserIndex = browserIndexProvider?.GetProjectBrowserIndex(
+                               document,
+                               new HashSet<ProjectBrowserSection> { ProjectBrowserSection.Sheets },
+                               Math.Max(0, budget.MaxSamplesPerEntry ?? 5),
+                               ProjectBrowserResultView.Folders,
+                               null,
+                               browserIssues
+                           )
+                           ?? ProjectBrowserCollector.CollectIndex(
+                               document,
+                               new HashSet<ProjectBrowserSection> { ProjectBrowserSection.Sheets },
+                               Math.Max(0, budget.MaxSamplesPerEntry ?? 5),
+                               browserIssues
+                           );
         issues.AddRange(browserIssues);
 
         var entries = pageSheets

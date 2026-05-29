@@ -64,6 +64,7 @@ internal sealed class BridgeAgent : IDisposable {
     private readonly BridgeOperationContext _bridgeOperationContext;
     private readonly BridgeRequestDispatcher _bridgeRequestDispatcher;
     private readonly BridgeDocumentNotifier _documentNotifier;
+    private readonly RevitDataRequestService _revitDataRequestService;
     private readonly Action<string?>? _onDisconnected;
     private readonly HostConnectionOptions _hostOptions;
     private readonly SettingsRuntimeRegistry _moduleRegistry;
@@ -107,7 +108,7 @@ internal sealed class BridgeAgent : IDisposable {
             moduleRegistry.GetModules().Count()
         );
         var requestService = new RequestService(revitTaskService, this._moduleRegistry, this._throttleGate);
-        var revitDataRequestService = new RevitDataRequestService(revitTaskService);
+        this._revitDataRequestService = new RevitDataRequestService(revitTaskService);
         var bridgeOperationRegistry = new BridgeOperationRegistry();
         var scriptingMessageHandler = new ScriptingBridgeMessageHandler(
             () => RevitUiSession.CurrentUIApplication,
@@ -115,7 +116,7 @@ internal sealed class BridgeAgent : IDisposable {
         );
         this._bridgeOperationContext = new BridgeOperationContext(
             requestService,
-            revitDataRequestService,
+            this._revitDataRequestService,
             scriptingMessageHandler
         );
         this._bridgeRequestDispatcher =
@@ -401,6 +402,7 @@ internal sealed class BridgeAgent : IDisposable {
     }
 
     private async Task PublishDocumentInvalidationAsync(DocumentInvalidationEvent payload) {
+        this._revitDataRequestService.InvalidateCollectionCache(payload.Reason.ToString());
         if (!this.IsConnected)
             return;
 

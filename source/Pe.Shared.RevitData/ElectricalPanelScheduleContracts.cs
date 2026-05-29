@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using TypeGen.Core.TypeAnnotations;
 
@@ -31,6 +31,21 @@ public enum ElectricalPanelScheduleCellSourceKind {
     Calculated
 }
 
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum ElectricalPanelScheduleProjectionView {
+    FullSections,
+    RowsOnly
+}
+
+[ExportTsInterface]
+public record ElectricalPanelScheduleProjectionOptions {
+    public ElectricalPanelScheduleProjectionView View { get; init; } = ElectricalPanelScheduleProjectionView.FullSections;
+    public List<string> CircuitNumbers { get; init; } = [];
+    public List<string> LoadNameContains { get; init; } = [];
+    public int? MaxRows { get; init; }
+}
+
 [ExportTsInterface]
 public record ElectricalPanelSchedulesQueryRequest(
     ElectricalPanelSchedulesQuery? Query = null
@@ -43,7 +58,8 @@ public record ElectricalPanelSchedulesQuery(
     List<string>? ScheduleUniqueIds = null,
     List<long>? PanelIds = null,
     List<string>? PanelUniqueIds = null,
-    List<string>? PanelNames = null
+    List<string>? PanelNames = null,
+    ElectricalPanelScheduleProjectionOptions? Projection = null
 );
 
 [ExportTsInterface]

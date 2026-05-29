@@ -132,6 +132,24 @@ export async function callHostOperation(
 
   const requestId = options.requestId ?? createRequestId();
   const startedAt = Date.now();
+  const localRequestProblem = createLocalRequestProblem(operation, request);
+  if (localRequestProblem) {
+    return {
+      ok: false,
+      key: operation.key,
+      requestId,
+      elapsedMs: Date.now() - startedAt,
+      operation: toFullSearchResult(operation),
+      status: 400,
+      message: localRequestProblem,
+      bestRequestExample: getBestRequestExample(operation),
+      nextSteps: [
+        localRequestProblem,
+        `Check the JSON request against ${createRequestHint(operation)}${formatBestExampleReference(operation)}.`,
+      ],
+    };
+  }
+
   const runStartedAt = { value: startedAt };
   try {
     const response = await runWithSingleFlight(operation, async () => {
@@ -215,6 +233,19 @@ function getSingleFlightGroup(operation: HostOperationDefinition): string | unde
   if (operation.singleFlightGroup)
     return operation.singleFlightGroup;
   return operation.executionMode === "Bridge" && operation.key.startsWith("revit.") ? "revit" : undefined;
+}
+
+function createLocalRequestProblem(operation: HostOperationDefinition, request: unknown): string | undefined {
+  if (operation.key !== "revit.resolve.references" || request == null || typeof request !== "object" || Array.isArray(request))
+    return undefined;
+
+  const fields = request as Record<string, unknown>;
+  if ("phrases" in fields)
+    return "revit.resolve.references accepts one referenceText string, not phrases[].";
+  if (!("referenceText" in fields) && !("ReferenceText" in fields))
+    return "revit.resolve.references requires referenceText. Use operation metadata for optional filters and examples.";
+
+  return undefined;
 }
 
 function normalizeRequest(operation: HostOperationDefinition, request: unknown): unknown {

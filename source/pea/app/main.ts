@@ -16,6 +16,7 @@ import {
   HostLogTarget,
   PeHostClientError,
   ScriptExecutionSourceKind,
+  ScriptPermissionMode,
 } from "./host-client.js";
 import type { PeaAuthSource } from "./beta-auth-bootstrap.js";
 import type {
@@ -365,6 +366,11 @@ const scriptExecuteCommand = define({
       description: "Display name for inline source content.",
       default: "AgentSnippet.cs",
     },
+    permissionMode: {
+      type: "string",
+      description: "Script permission mode: ReadOnly or WriteTransaction. Defaults to ReadOnly.",
+      default: ScriptPermissionMode.ReadOnly,
+    },
     json: {
       type: "boolean",
       description: "Print the raw execution DTO as JSON.",
@@ -399,6 +405,7 @@ const scriptExecuteCommand = define({
         sourcePath: ctx.values.sourcePath,
         scriptContent,
         sourceName: ctx.values.sourceName,
+        permissionMode: parseScriptPermissionMode(ctx.values.permissionMode),
       }),
     );
 
@@ -950,6 +957,21 @@ function parseLogTarget(value: string): HostLogTarget {
       return HostLogTarget.All;
     default:
       throw new Error("Unknown log target. Expected host, revit, or all.");
+  }
+}
+
+function parseScriptPermissionMode(value: string): ScriptPermissionMode {
+  switch (value.toLowerCase()) {
+    case "readonly":
+    case "read-only":
+    case "read_only":
+      return ScriptPermissionMode.ReadOnly;
+    case "writetransaction":
+    case "write-transaction":
+    case "write_transaction":
+      return ScriptPermissionMode.WriteTransaction;
+    default:
+      throw new Error("Unknown script permission mode. Expected ReadOnly or WriteTransaction.");
   }
 }
 
