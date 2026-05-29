@@ -14,12 +14,12 @@ export interface ScheduleProfile {
   name: string;
   categoryName: string;
   viewTemplateName?: string;
-  titleStyle?: ScheduleTitleStyleSpec;
-  isItemized?: boolean;
-  filterBySheet?: boolean;
-  columnHeaderVerticalAlignment?: ScheduleColumnHeaderVerticalAlignment;
-  fields?: ScheduleFieldSpec[];
-  sortGroup?: ScheduleSortGroupSpec[];
-  filters?: ScheduleFilterSpec[];
+  titleStyle: ScheduleTitleStyleSpec;
+  isItemized: boolean;
+  filterBySheet: boolean;
+  columnHeaderVerticalAlignment: ScheduleColumnHeaderVerticalAlignment;
+  fields: ScheduleFieldSpec[];
+  sortGroup: ScheduleSortGroupSpec[];
+  filters: ScheduleFilterSpec[];
   onFinishSettings?: ScheduleOnFinishSettings;
 }

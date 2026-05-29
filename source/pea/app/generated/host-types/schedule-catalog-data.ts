@@ -5,8 +5,10 @@
 
 import type { ScheduleCatalogEntry } from "./schedule-catalog-entry.js";
 import type { RevitDataIssue } from "./revit-data-issue.js";
+import type { RevitDataResultPage } from "./revit-data-result-page.js";
 
 export interface ScheduleCatalogData {
   entries: ScheduleCatalogEntry[];
   issues: RevitDataIssue[];
+  page?: RevitDataResultPage;
 }

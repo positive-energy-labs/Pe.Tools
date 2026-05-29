@@ -8,6 +8,7 @@ import type { ScheduleFilterSpec } from "./schedule-filter-spec.js";
 import type { ScheduleParameterUsageEntry } from "./schedule-parameter-usage-entry.js";
 import type { ScheduleCatalogCustomParameterValue } from "./schedule-catalog-custom-parameter-value.js";
 import type { ScheduleVisibleFamilyEntry } from "./schedule-visible-family-entry.js";
+import type { ProjectBrowserPath } from "./project-browser-path.js";
 
 export interface ScheduleCatalogEntry {
   scheduleId: number;
@@ -27,4 +28,5 @@ export interface ScheduleCatalogEntry {
   visibleFamilyCount: number;
   visibleInstanceCount: number;
   visibleFamilies: ScheduleVisibleFamilyEntry[];
+  browserPaths: ProjectBrowserPath[];
 }

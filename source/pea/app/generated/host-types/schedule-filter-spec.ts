@@ -7,6 +7,6 @@ import type { ScheduleAuthoredFilterType } from "./schedule-authored-filter-type
 
 export interface ScheduleFilterSpec {
   fieldName: string;
-  filterType?: ScheduleAuthoredFilterType;
+  filterType: ScheduleAuthoredFilterType;
   value?: string;
 }

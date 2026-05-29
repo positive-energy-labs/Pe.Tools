@@ -13,12 +13,12 @@ export interface ScheduleFieldSpec {
   parameterName: string;
   columnHeaderOverride?: string;
   headerGroup?: string;
-  isHidden?: boolean;
-  displayType?: ScheduleAuthoredFieldDisplayType;
+  isHidden: boolean;
+  displayType: ScheduleAuthoredFieldDisplayType;
   columnWidth?: number;
-  horizontalAlignment?: ScheduleFieldHorizontalAlignment;
+  horizontalAlignment: ScheduleFieldHorizontalAlignment;
   calculatedType?: ScheduleAuthoredCalculatedFieldType;
   percentageOfField?: string;
   formatOptions?: ScheduleFieldFormatSpec;
-  combinedParameters?: CombinedParameterSpec[];
+  combinedParameters: CombinedParameterSpec[];
 }

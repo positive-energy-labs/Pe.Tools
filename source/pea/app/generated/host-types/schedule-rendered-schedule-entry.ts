@@ -8,6 +8,7 @@ import type { ScheduleRenderedBindingStatus } from "./schedule-rendered-binding-
 import type { ScheduleRenderedSubject } from "./schedule-rendered-subject.js";
 import type { ScheduleRenderedColumn } from "./schedule-rendered-column.js";
 import type { ScheduleRenderedRow } from "./schedule-rendered-row.js";
+import type { ScheduleRenderedCellIssue } from "./schedule-rendered-cell-issue.js";
 
 export interface ScheduleRenderedScheduleEntry {
   scheduleId: number;
@@ -29,4 +30,5 @@ export interface ScheduleRenderedScheduleEntry {
   subjects: ScheduleRenderedSubject[];
   columns: ScheduleRenderedColumn[];
   rows: ScheduleRenderedRow[];
+  rowIssues?: ScheduleRenderedCellIssue[];
 }

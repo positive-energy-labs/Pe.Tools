@@ -5,8 +5,10 @@
 
 import type { LoadedFamilyMatrixFamily } from "./loaded-family-matrix-family.js";
 import type { RevitDataIssue } from "./revit-data-issue.js";
+import type { RevitDataResultPage } from "./revit-data-result-page.js";
 
 export interface LoadedFamiliesMatrixData {
   families: LoadedFamilyMatrixFamily[];
   issues: RevitDataIssue[];
+  page?: RevitDataResultPage;
 }

@@ -4,7 +4,9 @@
  */
 
 import type { LoadedFamiliesFilter } from "./loaded-families-filter.js";
+import type { RevitDataOutputBudget } from "./revit-data-output-budget.js";
 
 export interface LoadedFamiliesMatrixRequest {
   filter?: LoadedFamiliesFilter;
+  budget?: RevitDataOutputBudget;
 }

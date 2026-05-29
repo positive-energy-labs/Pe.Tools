@@ -7,6 +7,7 @@ import type { ScheduleRenderedRowKind } from "./schedule-rendered-row-kind.js";
 import type { ScheduleRenderedRowBindingKind } from "./schedule-rendered-row-binding-kind.js";
 import type { ScheduleRenderedRowSubjectResolutionStatus } from "./schedule-rendered-row-subject-resolution-status.js";
 import type { ScheduleRenderedRowSubjectResolutionReason } from "./schedule-rendered-row-subject-resolution-reason.js";
+import type { ScheduleRenderedCellIssue } from "./schedule-rendered-cell-issue.js";
 
 export interface ScheduleRenderedRow {
   rowNumber: number;
@@ -16,4 +17,5 @@ export interface ScheduleRenderedRow {
   resolutionStatus: ScheduleRenderedRowSubjectResolutionStatus;
   resolutionReason: ScheduleRenderedRowSubjectResolutionReason;
   subjectIds: number[];
+  issues?: ScheduleRenderedCellIssue[];
 }

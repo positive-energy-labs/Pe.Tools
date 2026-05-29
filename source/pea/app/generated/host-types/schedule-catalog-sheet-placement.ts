@@ -6,4 +6,7 @@
 export interface ScheduleCatalogSheetPlacement {
   sheetNumber: string;
   sheetName: string;
+  isIssuedLikeSheet: boolean;
+  isWorkingLikeSheet: boolean;
+  sheetRole: string;
 }

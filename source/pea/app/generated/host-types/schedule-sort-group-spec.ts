@@ -7,8 +7,8 @@ import type { ScheduleAuthoredSortOrder } from "./schedule-authored-sort-order.j
 
 export interface ScheduleSortGroupSpec {
   fieldName: string;
-  sortOrder?: ScheduleAuthoredSortOrder;
-  showHeader?: boolean;
-  showFooter?: boolean;
-  showBlankLine?: boolean;
+  sortOrder: ScheduleAuthoredSortOrder;
+  showHeader: boolean;
+  showFooter: boolean;
+  showBlankLine: boolean;
 }
