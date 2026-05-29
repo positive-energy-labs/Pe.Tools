@@ -150,7 +150,7 @@ export const hostOperationCall = createTool({
   }),
   execute: async (input) =>
     callHostOperation(
-      { baseUrl: resolveHostBaseUrl(), timeoutMs: input.timeoutSeconds * 1000 },
+      { baseUrl: resolveHostBaseUrl(), timeoutMs: (input.timeoutSeconds ?? 300) * 1000 },
       input.key,
       input.request,
       input.verbosity,

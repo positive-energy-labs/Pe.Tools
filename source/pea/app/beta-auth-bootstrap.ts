@@ -332,6 +332,8 @@ function expandWindowsEnvironmentVariables(
 }
 
 function writeBootstrapInstructions(missing: string[]): void {
+  const bootstrapCommand = `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; & ${quotePowerShellString(bootstrapScriptPath)}`;
+
   console.log(
     [
       "",
@@ -342,8 +344,8 @@ function writeBootstrapInstructions(missing: string[]): void {
         ? `Found the PE Team Folder: ${teamFolderPath}`
         : `The PE Team Folder was not found at ${teamFolderPath}. Google Drive may still be syncing or mounted differently.`,
       "",
-      "Double-click this setup script, then return here:",
-      bootstrapScriptPath,
+      "Open PowerShell, paste this setup command, then return here:",
+      bootstrapCommand,
       "",
       "Waiting for setup to finish. Press Ctrl+C to cancel.",
       "",
@@ -351,6 +353,10 @@ function writeBootstrapInstructions(missing: string[]): void {
       .filter((line) => line !== undefined)
       .join("\n"),
   );
+}
+
+function quotePowerShellString(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
 }
 
 function delay(ms: number): Promise<void> {
