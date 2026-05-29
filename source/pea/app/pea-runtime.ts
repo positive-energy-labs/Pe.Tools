@@ -5,10 +5,14 @@ import {
   resolveHostBaseUrl,
   resolveWorkspaceKey,
 } from "./pe-host.js";
-import { ensurePeaBetaAuth, resolveDefaultPeaMastraAuthPath } from "./beta-auth-bootstrap.js";
+import {
+  ensurePeaBetaAuth,
+  resolveDefaultPeaMastraAuthPath,
+  type PeaAuthSource,
+} from "./beta-auth-bootstrap.js";
 import { ensureBundledPeaSkills } from "./bundled-skills.js";
 import { createPeaContextProvider } from "./pea-context-seed.js";
-import { createPeaAgent } from "./pea-agent.js";
+import { createPeaAgent, createPeaModelArgument } from "./pea-agent.js";
 import {
   defaultPeaAgentModelId,
   defaultPeaObservationThreshold,
@@ -29,6 +33,7 @@ export interface PeAgentOptions {
   workspaceKey?: string;
   workspaceRoot?: string;
   allowOauthBetaAuth?: boolean;
+  authSource?: PeaAuthSource;
 }
 
 export interface PeaRuntimeWorkspace {
@@ -48,9 +53,11 @@ export type PeaRuntime = Awaited<ReturnType<CreateMastraCode>> & {
 export async function createPeaRuntime(
   options: PeAgentOptions = {},
 ): Promise<PeaRuntime> {
-  const mastraAuthPath = await resolveDefaultPeaMastraAuthPath();
+  const authSource = options.authSource ?? "api-key";
+  const mastraAuthPath = await resolveDefaultPeaMastraAuthPath(authSource);
   await ensurePeaBetaAuth({
     allowOAuth: options.allowOauthBetaAuth,
+    authSource,
     mastraAuthPath,
   });
 
@@ -111,6 +118,9 @@ export async function createPeaRuntime(
       omScope: "thread",
     },
   });
+
+  (peaAgent as unknown as { __updateModel?: (request: { model: unknown }) => void })
+    .__updateModel?.({ model: createPeaModelArgument(mastraCode.resolveModel) });
 
   const switchModel = mastraCode.harness.switchModel.bind(mastraCode.harness);
   mastraCode.harness.switchModel = (async (request) => {

@@ -17,6 +17,7 @@ import {
   PeHostClientError,
   ScriptExecutionSourceKind,
 } from "./host-client.js";
+import type { PeaAuthSource } from "./beta-auth-bootstrap.js";
 import type {
   HostLogsData,
   HostProbeData,
@@ -74,11 +75,18 @@ const agentCommand = define({
       description: "Dev escape hatch: allow stored MastraCode Codex OAuth auth instead of requiring OPENAI_API_KEY for beta startup.",
       default: false,
     },
+    authSource: {
+      type: "string",
+      description: "Model auth source: api-key, oauth, or auto. Defaults to the siloed API-key profile.",
+      default: "api-key",
+    },
   },
   toKebab: true,
   examples: [
     "pea agent",
     "pea agent --workspace default",
+    "pea agent --auth-source api-key",
+    "pea agent --auth-source oauth",
     "pea agent --allow-oauth-beta-auth",
     "pea agent --workspace-root C:\\Users\\you\\Documents\\Pe.Tools\\workspaces\\default",
   ].join("\n"),
@@ -89,6 +97,7 @@ const agentCommand = define({
       workspaceKey: ctx.values.workspace,
       workspaceRoot: ctx.values.workspaceRoot,
       allowOauthBetaAuth: ctx.values.allowOauthBetaAuth,
+      authSource: parsePeaAuthSource(ctx.values.authSource),
     });
   },
 });
@@ -861,6 +870,24 @@ function parseOperationIntent(value: string | undefined): "Read" | "Mutate" | un
       return "Mutate";
     default:
       throw new Error("Unknown operation intent. Expected Read or Mutate.");
+  }
+}
+
+function parsePeaAuthSource(value: string | undefined): PeaAuthSource {
+  if (!value)
+    return "api-key";
+
+  switch (value.toLowerCase()) {
+    case "auto":
+      return "auto";
+    case "api-key":
+    case "apikey":
+    case "key":
+      return "api-key";
+    case "oauth":
+      return "oauth";
+    default:
+      throw new Error("Unknown auth source. Expected auto, api-key, or oauth.");
   }
 }
 
