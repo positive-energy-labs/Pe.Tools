@@ -6,26 +6,165 @@ export interface BundledPeaSkill {
 export const bundledPeaSkills: readonly BundledPeaSkill[] = [
   {
     name: "audit-visible-revit-equipment",
-    content: "---\nname: audit-visible-revit-equipment\ndescription: Audit visible/current-view Revit equipment against schedules, tags, electrical circuits, panels, and load names through bounded host operations before scripting. Use when the user asks about printed/current/lower-level/visible equipment alignment or missing schedule/electrical facts.\nmetadata:\n  goal: true\n---\n\n# Audit Visible Revit Equipment\n\nUse this when the user asks whether equipment visible in a view/sheet/current area is scheduled, tagged, connected, panelized, or load-name aligned.\n\n## Posture\n\n- Host operations before scripts. Script only after naming the missing operation/join.\n- Resolve the target view/sheet scope before collecting equipment facts.\n- Prefer exact handles over family/type/name heuristics.\n- Treat panel schedules as downstream detail after panel/circuit candidates are known, not as the first element-to-load join.\n\n## Tools\n\n- `pe_status`\n- `host_operation_search`\n- `host_operation_call` with `revit.context.summary`, `revit.resolve.references`, `revit.context.visible-summary`, `revit.matrix.schedule-coverage`, `revit.detail.elements`, `revit.catalog.electrical-circuits`, and `revit.detail.electrical-panel-schedules`\n- `script_bootstrap` / `script_execute` only for confirmed endpoint gaps\n- `pe_logs` only after host/Revit failures\n\n## Workflow\n\n1. Run `pe_status`; confirm host, bridge, and active document readiness.\n2. Call `revit.context.summary` to identify active view/sheet, selection, and current document provenance.\n3. Resolve user wording such as `this view`, `lower level`, `printed NE`, or `selected equipment` with `revit.resolve.references` once per phrase/scope. Reuse returned handles for the rest of the turn unless status/context changes or the result is ambiguous.\n4. If the audit is active-view scoped, call `revit.matrix.schedule-coverage` with `scope: \"ActiveViewVisible\"`, narrow `categoryNames`, schedule filters, issued/working role scope, samples, and a small budget.\n5. If exact handles are available from visible-summary, schedule coverage, detail, or a narrow script, call `revit.matrix.schedule-coverage` with `scope: \"ExplicitHandles\"` and those handles.\n6. Call `revit.detail.elements` on the selected/missing/suspicious equipment handles with requested parameters such as `Mark`, `Panel`, `Circuit Number`, and `Load Name`. Use its electrical, connector, circuit, panel, load-classification, and requested-parameter facts for the per-instance join.\n7. Use `revit.catalog.electrical-circuits` only after exact element context suggests panel/circuit/load candidates or proxy-like equipment needs nearby context. Enable nearby-proxy options only when exact connected elements are absent or proxy-like.\n8. Use `revit.detail.electrical-panel-schedules` only after known panel references or panel schedule references exist. Compare row/cell detail to the element/circuit facts.\n9. Script only for a confirmed host-operation gap; keep the script handle-scoped and report the gap that forced it.\n10. Summarize scheduled/unscheduled, aligned/misaligned, and uncertain items separately. Surface binding/correlation diagnostics instead of confident heuristic claims.\n\n## Output\n\nReturn operation keys used, resolved view/sheet/document provenance, request scopes, counts, sample handles, artifact paths for wide tables, schedule/electrical alignment findings, uncertainty diagnostics, and any named endpoint gap that required scripting.\n",
+    content: String.raw`---
+name: audit-visible-revit-equipment
+description: Orient an equipment visibility/schedule/electrical review without prescribing a fixed endpoint chain. Use when the user asks about equipment visible in a Revit view, sheet, or current context.
+metadata:
+  goal: true
+---
+
+# Audit Visible Revit Equipment
+
+Use this as orientation, not a recipe.
+
+## Posture
+
+- Establish the scope and freshness requirements.
+- Let generated host-operation metadata identify useful context, catalog, matrix, detail, or scripting surfaces.
+- Prefer exact provenance over confident inference.
+- Use artifacts for broad rows or evidence.
+- Name uncertainty, API gaps, or missing model references directly.
+
+## Useful Resources
+
+- pe_status for current host/Revit readiness.
+- host_operation_search and host_operation_call for public capabilities.
+- script_bootstrap and script_execute when code is the clearer path.
+- pe_logs after host/Revit failures.
+
+## Output
+
+Report the scope, evidence used, findings, uncertainty, artifacts, and remaining blockers.
+`,
   },
   {
     name: "write-revit-csharp-script",
-    content: "---\nname: write-revit-csharp-script\ndescription: Author and run a C# Revit script through the Pe scripting workspace. Use when the user needs a one-off Revit probe, document mutation, or Revit API experiment not already covered by a generated host operation.\nmetadata:\n  goal: true\n---\n\n# Write Revit C# Script\n\nUse this as an executable loop for C# scripts run by `pea` through Pe.Host.\n\n## Trigger\n\nUse when the task needs live Revit API behavior, current document inspection, or a bounded document mutation that is easier as C# than as an existing host operation.\n\n## Posture\n\n- Search generated host operations first; do not script around a public operation that already exists.\n- Use the generated C# host client/bootstrap references inside workspace scripts when host/client helpers are available.\n- Prefer workspace `.cs` files for anything beyond a tiny probe so diagnostics point at stable file/line locations.\n- Treat compiler diagnostics as steering feedback: fix, rerun, and keep the script small.\n\n## Tools\n\n- `pe_status` first when Revit/session state matters.\n- `host_operation_search` before scripting; use an existing operation when it fits.\n- `script_bootstrap` to create/update the workspace and learn host-owned paths/references.\n- Normal file tools to author workspace-relative `.cs` files.\n- `script_execute` with `sourceKind=WorkspacePath` for durable scripts or `scriptContent` for tiny probes.\n- `pe_logs` only after a host/Revit failure.\n\n## Workflow\n\n1. Check status and confirm bridge/document readiness when the script needs Revit.\n2. Search host operations for the capability. If one exists, call it instead of writing script.\n3. Bootstrap the scripting workspace.\n4. Inspect existing sample/generated workspace files if client/helper usage is unclear.\n5. Create or edit a small workspace-relative script. Keep execution linear and print concise proof output.\n6. Execute the script.\n7. If compile/runtime diagnostics appear, fix the script and rerun.\n8. For mutations, run a follow-up read operation or script to prove the result.\n9. Summarize the script path, what ran, diagnostics, and observed result.\n\n## Output\n\nReturn: script path or inline name, execution status, artifact paths when produced, key output lines, any diagnostics, operation/script proof used, and verification result.\n",
+    content: String.raw`---
+name: write-revit-csharp-script
+description: Author and run a C# Revit script through the Pe scripting workspace. Use when code is the clearest way to inspect, author, mutate, or experiment against Revit.
+metadata:
+  goal: true
+---
+
+# Write Revit C# Script
+
+Use this as orientation for scripting work.
+
+## Posture
+
+- Choose script execution when code is clearer than an existing public host operation.
+- Bootstrap the workspace when paths or references are unknown.
+- Use inline snippets for tiny probes and workspace files for durable or multi-step work.
+- Default to ReadOnly; use WriteTransaction only for explicit mutations.
+- Treat compiler/runtime diagnostics as steering feedback.
+- Keep terminal output compact and write artifacts for broad evidence.
+
+## Output
+
+Report the script path or inline name, permission mode, diagnostics, key output, artifacts, and verification result.
+`,
   },
   {
     name: "inspect-active-revit-document",
-    content: "---\nname: inspect-active-revit-document\ndescription: Inspect the current connected Revit document using status, generated host operations, and bounded scripts. Use when the user asks what is open, selected, loaded, scheduled, or present in the active model.\nmetadata:\n  goal: true\n---\n\n# Inspect Active Revit Document\n\nUse host operations first; write scripts only for gaps.\n\n## Trigger\n\nUse when the user asks about the active/open Revit document, selection, schedules, loaded families, parameters, electrical data, or document context.\n\n## Tools\n\n- `pe_status`\n- `host_operation_search`\n- `host_operation_call`\n- `script_bootstrap` / `script_execute` only when no host operation covers the question\n- `pe_logs` only after failures\n\n## Workflow\n\n1. Run `pe_status` and read bridge, active document, open document count, and workspace facts.\n2. Search operations for the domain: active document, element context, loaded families, schedule fields, electrical panels, parameters, bindings, or settings options.\n3. Call the most specific read operation with a small request shaped from `requestHint` / `requestShape`.\n4. If the request shape is unclear, keep optional fields omitted and required collections small.\n5. Use a C# script only when the generated host catalog has no suitable read operation.\n6. Cross-check surprising results with a second read path when practical.\n7. Summarize facts with document title/path/provenance when available.\n\n## Output\n\nReturn concise findings, operation keys used, request assumptions, and any uncertainty or follow-up probe needed.\n",
+    content: String.raw`---
+name: inspect-active-revit-document
+description: Inspect the connected Revit document using status, generated host operations, scripts, and artifacts as appropriate.
+metadata:
+  goal: true
+---
+
+# Inspect Active Revit Document
+
+Use this as orientation when the user asks what is open, selected, loaded, visible, scheduled, or present in the active model.
+
+## Posture
+
+- Confirm current host/Revit state when freshness matters.
+- Use generated operation metadata to choose the smallest useful public capability.
+- Script only when code is the clearer way to answer or verify the question.
+- Preserve document/view/selection provenance in the answer.
+- Write artifacts for broad inventories.
+
+## Output
+
+Report observed scope, operations or scripts used, findings, artifacts, and any uncertainty.
+`,
   },
   {
     name: "author-family-foundry-profile",
-    content: "---\nname: author-family-foundry-profile\ndescription: Author or revise a Family Foundry profile/settings document using filesystem edits plus settings validation. Use when the user wants a Family Foundry profile, template, or desired-state family generation config.\nmetadata:\n  goal: true\n---\n\n# Author Family Foundry Profile\n\nTreat profiles as authored settings documents: edit directly, validate, fix diagnostics, repeat.\n\n## Mental Model\n\nFamily Foundry profiles describe intent. Queues and operations execute that intent. Snapshots, projections, diffs, family reports, and run summaries prove what actually happened. Keep authored intent, captured state, and runtime execution plans distinct.\n\n## Trigger\n\nUse when creating or revising Family Foundry settings, family generation profiles, type catalogs, param-driven solids, connector definitions, or desired-state family authoring inputs.\n\n## Tools\n\n- Normal file read/write/edit tools for profile files.\n- `host_operation_search` for settings schema, settings document open/save/validate, field options, parameter catalogs, loaded family data, and schedule/profile data.\n- `host_operation_call` for `settings.document.validate` and related settings operations.\n- `pe_status` when Revit-derived options or active document context matter.\n- `script_bootstrap` / `script_execute` only when generated operations cannot expose the needed live fact.\n\n## Workflow\n\n1. Locate or create the target settings/profile file in the user workspace.\n2. Search for settings document and Family Foundry-related host operations.\n3. If a schema or existing document is available, read it before editing.\n4. Make direct file edits; keep the document explicit and avoid inventing fields not present in schema/diagnostics.\n5. Validate through `settings.document.validate` via `host_operation_call` when available.\n6. Fix diagnostics and revalidate until clean or until a real product gap is found.\n7. If Revit-derived options are needed, call field/parameter/family operations instead of guessing.\n8. For geometry, explicitly state assumed family orientation and distinguish air-path faces from service-connection faces.\n9. Summarize changed paths, validation status, and remaining assumptions.\n\n## Output\n\nReturn changed file paths, validation result, diagnostics resolved, proof operations used, and the exact remaining blockers if validation cannot pass.\n",
+    content: String.raw`---
+name: author-family-foundry-profile
+description: Author or revise a Family Foundry profile/settings document using files, schemas, validators, and diagnostics.
+metadata:
+  goal: true
+---
+
+# Author Family Foundry Profile
+
+Use this as orientation for profile authoring.
+
+## Posture
+
+- Treat profiles as authored settings documents.
+- Edit files directly in the workspace.
+- Use available schemas and validators as the contract.
+- Let diagnostics drive repair.
+- Keep generated proof artifacts separate from source profiles.
+
+## Output
+
+Report changed files, validation result, diagnostics fixed or remaining, and any generated artifacts.
+`,
   },
   {
     name: "debug-family-foundry-artifacts",
-    content: "---\nname: debug-family-foundry-artifacts\ndescription: Debug a Family Foundry run through its proof artifacts before changing profiles or scripts. Use when the user has FF run outputs, failed family processing, unexpected generated geometry, or snapshot/projection differences.\nmetadata:\n  goal: true\n---\n\n# Debug Family Foundry Artifacts\n\nFamily Foundry is an authored-workflow and proof system. Start from artifacts, not guesses.\n\n## Trigger\n\nUse when a Family Foundry run failed, generated the wrong family behavior, produced unexpected parameters/connectors/geometry, or emitted artifact paths such as `run-summary.json`, `family-report.json`, `snapshot-diff.json`, or `logs-detailed.json`.\n\n## Debugging Ladder\n\nRead in this order:\n\n1. `run-summary.json` for run-level triage and failed/skipped family list.\n2. `family-report.json` for one family's top-level proof packet and artifact manifest.\n3. `snapshot-diff.json` for structural pre/post differences.\n4. `logs-detailed.json` for operation order, skip/defer/error messages, and transaction sequencing.\n5. Supporting artifacts only after narrowing scope: `input-profile.json`, `profile-summary.json`, `operation-plan.json`, `snapshot-pre.json`, `snapshot-post.json`, projected snapshot profiles, parameter/lookuptable/refplane/param-driven-solids snapshots, and compiled plan artifacts.\n\n## Triage Questions\n\n- Is this a semantic/compiler validation issue?\n- Is the authored profile/layout wrong?\n- Did an operation-time Revit API call or helper fail?\n- Did transaction commit/failure processing alter the outcome?\n- Is the snapshot, projection, or reverse-inference evidence wrong?\n\n## Workflow\n\n1. Locate the artifact root or ask for it if none is available.\n2. Open the ladder artifacts in order; avoid raw snapshot spelunking until a family and subsystem are identified.\n3. Preserve the distinction between authored profile, compiled/runtime plan, captured snapshot, derived projection, and final report.\n4. Compare intended authored fields against operation plan and snapshot diff before changing profile content.\n5. Prefer targeted logs, snapshots, validators, or proof artifacts over speculative fixes.\n6. If live Revit state is needed, use `pe_status`, then generated read operations or a bounded script.\n7. Summarize the likely failure layer and the smallest next fix/proof loop.\n\n## Output\n\nReturn the artifact files read, family/run scope, suspected failure layer, evidence lines or fields, recommended fix, and the verification artifact expected to change.\n",
+    content: String.raw`---
+name: debug-family-foundry-artifacts
+description: Debug a Family Foundry run from produced artifacts, diagnostics, and profile inputs.
+metadata:
+  goal: true
+---
+
+# Debug Family Foundry Artifacts
+
+Use this as orientation for artifact-first debugging.
+
+## Posture
+
+- Start from produced artifacts and diagnostics before changing profiles or scripts.
+- Preserve the distinction between authored intent, generated output, and runtime proof.
+- Use focused repros or scripts only when artifacts do not explain the issue.
+- Keep conclusions tied to evidence.
+
+## Output
+
+Report artifacts inspected, suspected cause, evidence, changes made if any, and verification result.
+`,
   },
   {
     name: "validate-pe-settings-workspace",
-    content: "---\nname: validate-pe-settings-workspace\ndescription: Validate Pe settings workspace documents with host operations and repair diagnostics. Use when the user asks to check settings, profiles, schemas, or workspace health.\nmetadata:\n  goal: true\n---\n\n# Validate Pe Settings Workspace\n\nUse validators as the steering loop; do not replace normal file agency.\n\n## Trigger\n\nUse when settings/profile files may be stale, invalid, missing schema fields, or need migration/cleanup.\n\n## Tools\n\n- `pe_status` for host/workspace roots.\n- `host_operation_search` to find settings tree, document open, document validate, schema, field options, and save operations.\n- `host_operation_call` to run validators using generated request hints.\n- Normal file tools to inspect and edit settings documents.\n\n## Workflow\n\n1. Run `pe_status` if workspace roots or host readiness are unknown.\n2. Search for settings workspace/tree/document validation operations.\n3. Discover the settings tree or open the target document.\n4. Validate the document and read diagnostics as the source of truth.\n5. Edit files directly to resolve diagnostics.\n6. Re-run validation after each meaningful fix.\n7. Save through a host operation only when the operation is intentionally part of the workflow; otherwise keep file edits explicit.\n8. Summarize final validation status and changed files.\n\n## Output\n\nReturn validated document paths, final pass/fail status, diagnostics fixed, and remaining user-actionable issues.\n",
+    content: String.raw`---
+name: validate-pe-settings-workspace
+description: Validate Pe settings workspace documents and repair diagnostics.
+metadata:
+  goal: true
+---
+
+# Validate Pe Settings Workspace
+
+Use this as orientation for settings/profile validation.
+
+## Posture
+
+- Use host-reported workspace paths and available schemas.
+- Edit settings files directly.
+- Use validators as the source of truth.
+- Repair diagnostics and revalidate.
+- Keep ordinary file work ordinary; use host operations for schema and validation capabilities.
+
+## Output
+
+Report files checked, validation status, diagnostics fixed or remaining, and any follow-up needed.
+`,
   },
 ];

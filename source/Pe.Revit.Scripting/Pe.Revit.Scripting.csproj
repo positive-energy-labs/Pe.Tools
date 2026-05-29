@@ -19,6 +19,7 @@
     <ItemGroup>
         <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj"/>
         <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj"/>
+        <ProjectReference Include="..\Pe.Shared.Scripting\Pe.Shared.Scripting.csproj"/>
         <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj"/>
     </ItemGroup>
 </Project>

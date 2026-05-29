@@ -21,7 +21,10 @@ namespace Pe.Revit.Global.Services.Host;
 ///     Bridge-backed read-only Revit data requests for browser routes.
 /// </summary>
 internal sealed class RevitDataRequestService(RevitTaskService revitTaskService) {
+    private readonly RevitDataCollectionContext _collectionContext = new();
     private readonly RevitTaskService _revitTaskService = revitTaskService;
+
+    public void InvalidateCollectionCache(string reason) => this._collectionContext.Invalidate(reason);
 
     public Task<LoadedFamiliesCatalogData> GetLoadedFamiliesCatalogAsync(
         LoadedFamiliesCatalogRequest request
@@ -119,7 +122,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         var document = GetActiveProjectDocument();
 
         try {
-            return ScheduleCatalogCollector.Collect(document, request);
+            return ScheduleCatalogCollector.Collect(document, request, this._collectionContext);
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "ScheduleCatalogException",
@@ -133,7 +136,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         var document = GetActiveProjectDocument();
 
         try {
-            return ProjectBrowserCollector.Collect(document, request);
+            return ProjectBrowserCollector.Collect(document, request, this._collectionContext);
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "ProjectBrowserException",
@@ -147,7 +150,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         var document = GetActiveProjectDocument();
 
         try {
-            return ProjectIndexCollector.Collect(document, request);
+            return ProjectIndexCollector.Collect(document, request, this._collectionContext);
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "ProjectIndexException",
@@ -161,7 +164,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         var document = GetActiveProjectDocument();
 
         try {
-            return SheetDetailCollector.Collect(document, RevitUiSession.CurrentUIApplication.GetActiveView(), request);
+            return SheetDetailCollector.Collect(document, RevitUiSession.CurrentUIApplication.GetActiveView(), request, this._collectionContext);
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "SheetDetailsException",
@@ -272,7 +275,8 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
             return ScheduleCoverageCollector.Collect(
                 document,
                 request,
-                RevitUiSession.CurrentUIApplication.GetActiveView()
+                RevitUiSession.CurrentUIApplication.GetActiveView(),
+                this._collectionContext
             );
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(

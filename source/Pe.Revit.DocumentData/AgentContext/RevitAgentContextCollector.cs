@@ -56,6 +56,8 @@ public static class RevitAgentContextCollector {
             nameof(RevitAgentVisibleContextRequest.MaxSampleElementsPerCategory),
             issues
         );
+        var returnHandlesOnly = request.ReturnElementHandlesOnly || request.Projection == RevitAgentVisibleProjection.Handles;
+        var returnSamples = request.Projection == RevitAgentVisibleProjection.Samples;
         var maxElementHandles = BoundRequestedCount(
             request.MaxElementHandlesPerCategory,
             0,
@@ -63,8 +65,10 @@ public static class RevitAgentContextCollector {
             nameof(RevitAgentVisibleContextRequest.MaxElementHandlesPerCategory),
             issues
         );
-        if (request.ReturnElementHandlesOnly && maxElementHandles == 0)
+        if (returnHandlesOnly && maxElementHandles == 0)
             maxElementHandles = 1000;
+        if (!returnSamples)
+            maxSampleElements = 0;
         var maxViews = BoundRequestedCount(
             request.MaxViews,
             1,
@@ -92,8 +96,8 @@ public static class RevitAgentContextCollector {
             maxCategories,
             issues,
             request.CategoryNames ?? [],
-            request.ReturnElementHandlesOnly ? maxElementHandles : Math.Max(maxSampleElements, maxElementHandles),
-            request.ReturnElementHandlesOnly
+            returnHandlesOnly ? maxElementHandles : Math.Max(maxSampleElements, maxElementHandles),
+            returnHandlesOnly
         );
         var viewSummaries = CreateVisibleViewSummaries(document, visibleViews, visibleEntries);
         return new RevitAgentVisibleContextData(

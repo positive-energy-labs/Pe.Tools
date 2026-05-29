@@ -1,20 +1,23 @@
-﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using Pe.Revit.Scripting.Bootstrap;
-using Pe.Revit.Scripting.Diagnostics;
+using Pe.Shared.Scripting.Diagnostics;
 using System.Text;
 
-namespace Pe.Revit.Scripting.Execution;
+namespace Pe.Shared.Scripting.Execution;
 
-public sealed class ScriptCompilationService {
-    internal ScriptCompilationResult Compile(
+public sealed class ScriptCompilationService(
+    IReadOnlyList<string> defaultUsings
+) {
+    private readonly IReadOnlyList<string> _defaultUsings = defaultUsings;
+
+    public ScriptCompilationResult Compile(
         ScriptSourceSet sourceSet,
         IReadOnlyList<MetadataReference> metadataReferences,
         IReadOnlyList<string> projectUsings
     ) {
         var syntaxTrees = new List<SyntaxTree> {
             CSharpSyntaxTree.ParseText(
-                CreateGlobalUsingsSource(projectUsings),
+                CreateGlobalUsingsSource(this._defaultUsings, projectUsings),
                 new CSharpParseOptions(LanguageVersion.Latest),
                 "__PeScriptUsings.g.cs"
             )
@@ -58,9 +61,12 @@ public sealed class ScriptCompilationService {
         );
     }
 
-    private static string CreateGlobalUsingsSource(IReadOnlyList<string> projectUsings) {
+    public static string CreateGlobalUsingsSource(
+        IReadOnlyList<string> defaultUsings,
+        IReadOnlyList<string> projectUsings
+    ) {
         var builder = new StringBuilder();
-        foreach (var @using in ScriptFileTemplates.DefaultUsings
+        foreach (var @using in defaultUsings
                      .Concat(projectUsings)
                      .Distinct(StringComparer.Ordinal))
             _ = builder.AppendLine($"global using {@using};");

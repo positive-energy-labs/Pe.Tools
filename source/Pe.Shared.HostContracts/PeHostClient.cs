@@ -15,6 +15,14 @@ using System.Text;
 
 namespace Pe.Shared.HostContracts;
 
+/// <summary>
+/// Typed .NET client for Pe.Host HTTP operations.
+/// </summary>
+/// <remarks>
+/// Use this client from C# scripts and repo code when composing host operations. Prefer the
+/// blessed grouped methods under <see cref="Revit"/> for common Revit joins, and use
+/// <see cref="ExecuteAsync{TRequest,TResponse}"/> only for less-common public operations.
+/// </remarks>
 public sealed class PeHostClient : IDisposable {
     private static readonly JsonSerializerSettings JsonSettings = new() {
         ContractResolver = new CamelCasePropertyNamesContractResolver(),
@@ -38,10 +46,28 @@ public sealed class PeHostClient : IDisposable {
         this.Scripting = new PeHostScriptingClient(this._httpClient);
     }
 
+    /// <summary>
+    /// Host-local status, logs, and session health operations.
+    /// </summary>
     public PeHostStatusClient Host { get; }
+
+    /// <summary>
+    /// Revit bridge-backed operations grouped by context, resolve, catalog, matrix, and detail layers.
+    /// </summary>
     public PeHostRevitClient Revit { get; }
+
+    /// <summary>
+    /// Script workspace bootstrap and execution operations.
+    /// </summary>
     public PeHostScriptingClient Scripting { get; }
 
+    /// <summary>
+    /// Executes a public host operation that does not have a blessed wrapper.
+    /// </summary>
+    /// <remarks>
+    /// Prefer grouped methods for common joins because their XML docs carry workflow guidance.
+    /// This method is the escape hatch for advanced or newly-added operation contracts.
+    /// </remarks>
     public Task<TResponse> ExecuteAsync<TRequest, TResponse>(
         HostOperationDefinition definition,
         TRequest request,
@@ -226,17 +252,53 @@ public sealed class PeHostStatusClient(HttpClient httpClient) {
     );
 }
 
+/// <summary>
+/// Revit bridge-backed host operations grouped by the public operation layer.
+/// </summary>
+/// <remarks>
+/// Low-waste joins usually follow this order: context or resolve once, collect handles,
+/// run a matrix operation for coverage, then inspect only exact or missing handles through detail calls.
+/// </remarks>
 public sealed class PeHostRevitClient(HttpClient httpClient) {
+    /// <summary>
+    /// Current-document and current-view orientation surfaces.
+    /// </summary>
     public PeHostRevitContextClient Context { get; } = new(httpClient);
+
+    /// <summary>
+    /// Candidate discovery surfaces. Use these to find schedules, families, parameters, and electrical candidates.
+    /// </summary>
     public PeHostRevitCatalogClient Catalog { get; } = new(httpClient);
+
+    /// <summary>
+    /// Coverage and matrix projections over known scopes.
+    /// </summary>
     public PeHostRevitMatrixClient Matrix { get; } = new(httpClient);
+
+    /// <summary>
+    /// Detail surfaces for exact handles, rows, and electrical facts after candidates are known.
+    /// </summary>
     public PeHostRevitDetailClient Detail { get; } = new(httpClient);
+
+    /// <summary>
+    /// Natural-language reference resolution into stable Revit handles.
+    /// </summary>
     public PeHostRevitResolveClient Resolve { get; } = new(httpClient);
 }
 
+/// <summary>
+/// Current Revit context operations.
+/// </summary>
 public sealed class PeHostRevitContextClient(HttpClient httpClient) {
     private readonly HttpClient _httpClient = httpClient;
 
+    /// <summary>
+    /// Gets compact orientation for the active Revit document, active view/sheet, selection, and visible categories.
+    /// </summary>
+    /// <remarks>
+    /// Start here before deciding whether a script or deeper host operation is needed. Use the returned
+    /// active view, selection, category, and browser context to choose the smallest next scope.
+    /// </remarks>
     public Task<RevitAgentContextSummaryData> GetSummaryAsync(
         CancellationToken cancellationToken = default
     ) => PeHostClient.SendAsync<NoRequest, RevitAgentContextSummaryData>(
@@ -246,6 +308,9 @@ public sealed class PeHostRevitContextClient(HttpClient httpClient) {
         cancellationToken
     );
 
+    /// <summary>
+    /// Gets open/active document session state without collecting model contents.
+    /// </summary>
     public Task<RevitDocumentSessionContextData> GetDocumentSessionAsync(
         CancellationToken cancellationToken = default
     ) => PeHostClient.SendAsync<NoRequest, RevitDocumentSessionContextData>(
@@ -255,6 +320,14 @@ public sealed class PeHostRevitContextClient(HttpClient httpClient) {
         cancellationToken
     );
 
+    /// <summary>
+    /// Gets bounded visible-element context for the active view or explicit view handles.
+    /// </summary>
+    /// <remarks>
+    /// Use this when the user asks about "visible", "current view", or printed view contents. Prefer
+    /// handles-only output for joins: resolve view/sheet handles once, collect visible equipment handles,
+    /// then pass those handles into matrix or detail calls.
+    /// </remarks>
     public Task<RevitAgentVisibleContextData> GetVisibleSummaryAsync(
         RevitAgentVisibleContextRequest request,
         CancellationToken cancellationToken = default
@@ -266,9 +339,20 @@ public sealed class PeHostRevitContextClient(HttpClient httpClient) {
     );
 }
 
+/// <summary>
+/// Natural-language reference resolution operations.
+/// </summary>
 public sealed class PeHostRevitResolveClient(HttpClient httpClient) {
     private readonly HttpClient _httpClient = httpClient;
 
+    /// <summary>
+    /// Resolves fuzzy user phrases such as "M201", "printed lower level", or "selected equipment" to stable handles.
+    /// </summary>
+    /// <remarks>
+    /// Resolve each phrase once per turn and reuse returned handles. For printed-context questions, narrow the
+    /// request to view/sheet handle kinds and require printed context where possible; do not repeat broad fuzzy
+    /// resolution after the scope is known.
+    /// </remarks>
     public Task<RevitAgentContextResolveData> ReferencesAsync(
         RevitAgentContextResolveRequest request,
         CancellationToken cancellationToken = default
@@ -280,9 +364,15 @@ public sealed class PeHostRevitResolveClient(HttpClient httpClient) {
     );
 }
 
+/// <summary>
+/// Revit catalog discovery operations.
+/// </summary>
 public sealed class PeHostRevitCatalogClient(HttpClient httpClient) {
     private readonly HttpClient _httpClient = httpClient;
 
+    /// <summary>
+    /// Discovers loaded families and types with bounded projections.
+    /// </summary>
     public Task<LoadedFamiliesCatalogData> GetLoadedFamiliesAsync(
         LoadedFamiliesCatalogRequest request,
         CancellationToken cancellationToken = default
@@ -293,6 +383,9 @@ public sealed class PeHostRevitCatalogClient(HttpClient httpClient) {
         cancellationToken
     );
 
+    /// <summary>
+    /// Gets the loaded-family filter schema for building valid loaded-family catalog requests.
+    /// </summary>
     public Task<SchemaData> GetLoadedFamilyFilterSchemaAsync(
         CancellationToken cancellationToken = default
     ) => PeHostClient.SendAsync<NoRequest, SchemaData>(
@@ -302,6 +395,9 @@ public sealed class PeHostRevitCatalogClient(HttpClient httpClient) {
         cancellationToken
     );
 
+    /// <summary>
+    /// Gets document-specific loaded-family filter options.
+    /// </summary>
     public Task<FieldOptionsData> GetLoadedFamilyFilterFieldOptionsAsync(
         LoadedFamiliesFilterFieldOptionsRequest request,
         CancellationToken cancellationToken = default
@@ -312,6 +408,9 @@ public sealed class PeHostRevitCatalogClient(HttpClient httpClient) {
         cancellationToken
     );
 
+    /// <summary>
+    /// Gets project parameter binding facts before parameter coverage audits.
+    /// </summary>
     public Task<ProjectParameterBindingsData> GetParameterBindingsAsync(
         ProjectParameterBindingsRequest request,
         CancellationToken cancellationToken = default
@@ -322,6 +421,14 @@ public sealed class PeHostRevitCatalogClient(HttpClient httpClient) {
         cancellationToken
     );
 
+    /// <summary>
+    /// Discovers candidate schedules and schedule handles.
+    /// </summary>
+    /// <remarks>
+    /// Use this for schedule discovery, filtering, and handle provenance. Do not use broad schedule catalog
+    /// calls to answer visible-equipment coverage; use <see cref="PeHostRevitMatrixClient.GetScheduleCoverageAsync"/>
+    /// from resolved view or element handles instead.
+    /// </remarks>
     public Task<ScheduleCatalogData> GetSchedulesAsync(
         ScheduleCatalogRequest request,
         CancellationToken cancellationToken = default
@@ -332,6 +439,13 @@ public sealed class PeHostRevitCatalogClient(HttpClient httpClient) {
         cancellationToken
     );
 
+    /// <summary>
+    /// Discovers electrical panels by known names, marks, or panel filters.
+    /// </summary>
+    /// <remarks>
+    /// Use after context/detail calls identify likely panel names or element handles. Avoid broad electrical
+    /// catalog calls before exact equipment or panel candidates exist.
+    /// </remarks>
     public Task<ElectricalPanelsCatalogData> GetElectricalPanelsAsync(
         ElectricalPanelsCatalogRequest request,
         CancellationToken cancellationToken = default
@@ -342,6 +456,13 @@ public sealed class PeHostRevitCatalogClient(HttpClient httpClient) {
         cancellationToken
     );
 
+    /// <summary>
+    /// Discovers electrical circuits by known panel, circuit number, load name, or nearby proxy context.
+    /// </summary>
+    /// <remarks>
+    /// Use this only after exact element detail or panel schedule inspection yields candidate panel/load/circuit
+    /// values. Feed the discovered values back into narrow filters instead of scanning all circuits.
+    /// </remarks>
     public Task<ElectricalCircuitsCatalogData> GetElectricalCircuitsAsync(
         ElectricalCircuitsCatalogRequest request,
         CancellationToken cancellationToken = default
@@ -352,6 +473,9 @@ public sealed class PeHostRevitCatalogClient(HttpClient httpClient) {
         cancellationToken
     );
 
+    /// <summary>
+    /// Gets electrical load classifications for known electrical workflows.
+    /// </summary>
     public Task<ElectricalLoadClassificationsCatalogData> GetElectricalLoadClassificationsAsync(
         ElectricalLoadClassificationsCatalogRequest request,
         CancellationToken cancellationToken = default
@@ -363,9 +487,15 @@ public sealed class PeHostRevitCatalogClient(HttpClient httpClient) {
     );
 }
 
+/// <summary>
+/// Revit matrix and coverage operations.
+/// </summary>
 public sealed class PeHostRevitMatrixClient(HttpClient httpClient) {
     private readonly HttpClient _httpClient = httpClient;
 
+    /// <summary>
+    /// Gets loaded-family/type matrix facts for bounded family analysis.
+    /// </summary>
     public Task<LoadedFamiliesMatrixData> GetLoadedFamiliesAsync(
         LoadedFamiliesMatrixRequest request,
         CancellationToken cancellationToken = default
@@ -376,6 +506,9 @@ public sealed class PeHostRevitMatrixClient(HttpClient httpClient) {
         cancellationToken
     );
 
+    /// <summary>
+    /// Gets schedule profile projections for known schedules.
+    /// </summary>
     public Task<ScheduleProfilesQueryData> GetScheduleProfilesAsync(
         ScheduleProfilesQueryRequest request,
         CancellationToken cancellationToken = default
@@ -385,11 +518,59 @@ public sealed class PeHostRevitMatrixClient(HttpClient httpClient) {
         request,
         cancellationToken
     );
+
+    /// <summary>
+    /// Audits whether scoped elements are represented by candidate schedules.
+    /// </summary>
+    /// <remarks>
+    /// Best join path for visible equipment audits: resolve view/sheet handles once, collect visible equipment
+    /// handles if needed, call this with <see cref="RevitElementScope.ViewReferences"/> or
+    /// <see cref="RevitElementScope.ExplicitHandles"/>, then inspect only missing handles through
+    /// <see cref="PeHostRevitDetailClient.GetElementsAsync"/>.
+    /// </remarks>
+    public Task<ScheduleCoverageData> GetScheduleCoverageAsync(
+        ScheduleCoverageRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<ScheduleCoverageRequest, ScheduleCoverageData>(
+        this._httpClient,
+        GetScheduleCoverageOperationContract.Definition,
+        request,
+        cancellationToken
+    );
+
+    /// <summary>
+    /// Audits parameter presence, blank values, and default values over scoped elements.
+    /// </summary>
+    /// <remarks>
+    /// Use after parameter binding discovery when the question is about missing/blank/default parameter values.
+    /// Scope by active view, explicit handles, or known categories; inspect samples through detail calls only
+    /// when the matrix result shows a focused problem.
+    /// </remarks>
+    public Task<ParameterCoverageData> GetParameterCoverageAsync(
+        ParameterCoverageRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<ParameterCoverageRequest, ParameterCoverageData>(
+        this._httpClient,
+        GetParameterCoverageOperationContract.Definition,
+        request,
+        cancellationToken
+    );
 }
 
+/// <summary>
+/// Revit detail operations for exact handles, rows, and electrical facts.
+/// </summary>
 public sealed class PeHostRevitDetailClient(HttpClient httpClient) {
     private readonly HttpClient _httpClient = httpClient;
 
+    /// <summary>
+    /// Gets exact element context for selected or explicit element handles.
+    /// </summary>
+    /// <remarks>
+    /// This is the preferred element/electrical join surface. For equipment alignment, request parameters such as
+    /// Mark, Panel, Circuit Number, and Load Name, then use returned panel/circuit/load facts to narrow electrical
+    /// catalog or panel-schedule calls.
+    /// </remarks>
     public Task<ElementContextQueryData> GetElementsAsync(
         ElementContextQueryRequest request,
         CancellationToken cancellationToken = default
@@ -400,6 +581,13 @@ public sealed class PeHostRevitDetailClient(HttpClient httpClient) {
         cancellationToken
     );
 
+    /// <summary>
+    /// Gets rendered row/cell detail for known schedules.
+    /// </summary>
+    /// <remarks>
+    /// Resolve or catalog schedules first, then query exact schedule names/handles. Use row/issue projections
+    /// for schedule data audits instead of dumping broad schedule catalogs.
+    /// </remarks>
     public Task<ScheduleQueryData> GetSchedulesAsync(
         ScheduleQueryRequest request,
         CancellationToken cancellationToken = default
@@ -410,6 +598,13 @@ public sealed class PeHostRevitDetailClient(HttpClient httpClient) {
         cancellationToken
     );
 
+    /// <summary>
+    /// Gets rendered panel-schedule rows/cells for known panel schedules or panel names.
+    /// </summary>
+    /// <remarks>
+    /// Use after exact equipment detail or electrical catalog calls identify candidate panel names, circuit
+    /// numbers, or load names. This is detail, not discovery; keep the query focused.
+    /// </remarks>
     public Task<ElectricalPanelSchedulesQueryData> GetElectricalPanelSchedulesAsync(
         ElectricalPanelSchedulesQueryRequest request,
         CancellationToken cancellationToken = default

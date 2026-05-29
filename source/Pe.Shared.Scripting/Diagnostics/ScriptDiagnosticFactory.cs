@@ -1,9 +1,9 @@
-﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis;
 using Pe.Shared.HostContracts.Scripting;
 
-namespace Pe.Revit.Scripting.Diagnostics;
+namespace Pe.Shared.Scripting.Diagnostics;
 
-internal static class ScriptDiagnosticFactory {
+public static class ScriptDiagnosticFactory {
     public static ScriptDiagnostic Info(string stage, string message, string? source = null) =>
         new(stage, ScriptDiagnosticSeverity.Info, message, source);
 

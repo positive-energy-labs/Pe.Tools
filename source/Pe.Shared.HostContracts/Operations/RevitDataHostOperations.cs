@@ -1,4 +1,4 @@
-﻿using Pe.Shared.HostContracts.SettingsStorage;
+using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 
@@ -389,7 +389,8 @@ public static class GetScheduleCoverageOperationContract {
                     .. RevitDataHostOperationExamples.MatrixExpansionHints,
                     "Resolve the target view/sheet phrase first with revit.context.summary or one narrowed revit.resolve.references call; use ViewReferences or ActiveViewVisible only when that view scope is intended.",
                     "Use ExplicitHandles for handles returned by revit.context.visible-summary, revit.detail.elements, or a script instead of broad model-wide coverage.",
-                    "For audit summaries, request includeMissingElementHandles and includeMatchedScheduleNames before asking for per-element samples."
+                    "For audit summaries, request includeMissingElementHandles, includeMatchedScheduleNames, and read roleSummaries before asking for per-element samples.",
+                    "Do not treat Working or audit-schedule coverage as proof of intended issued/mechanical schedule representation; report the role summary explicitly."
                 ],
                 handleProvenanceNotes: "Coverage samples return stable element handles plus matching schedule handles. Treat coverage as definitive only when schedule subject binding succeeds; issues explain row-binding limitations."
             )

@@ -1,5 +1,5 @@
 import { PeHostClient, type HostProbeData, type HostSessionSummaryData, type RevitAgentContextSummaryData, type RevitAgentVisibleCategorySummary } from "./host-client.js";
-import { callHostOperation, getHostOperation } from "./host-operation-runtime.js";
+import { callHostOperation } from "./host-operation-runtime.js";
 
 export interface PeaContextProviderOptions {
   hostBaseUrl: string;
@@ -218,13 +218,22 @@ function formatSeed(
   const lines = [
     "<pea-startup-context>",
     "Scope: transient thread-start orientation only. Pea checks cheap host/session status each turn internally and only injects a compact invalidation notice when stable status differs.",
-    `workspace: cwd=${q(options.cwd)} workspaceKey=${q(options.workspaceKey)} settingsPath=${q(options.settingsPath)}`,
+    ...formatWorkbenchLines(options),
     ...formatRevitContextLines(revitContext),
-    ...formatOperationLadderLines(),
     "</pea-startup-context>",
   ];
 
   return escapeXmlBlock(lines);
+}
+
+function formatWorkbenchLines(options: PeaContextProviderOptions): string[] {
+  return [
+    `workspace: cwd=${q(options.cwd)} workspaceKey=${q(options.workspaceKey)} settingsPath=${q(options.settingsPath)}`,
+    "scripting-workspace: use script_bootstrap when paths/references are unknown; workspace docs are README.md, AGENTS.md, and JOIN_GUIDE.md; source lives under src/.",
+    "capabilities: use host_operation_search for generated public operations, then host_operation_call when a generated operation fits.",
+    "scripts: use script_execute for tiny inline probes or durable workspace scripts; default ReadOnly and use WriteTransaction only for explicit mutations.",
+    "evidence: prefer diagnostics, follow-up reads, and CSV/JSON/text artifacts over wide terminal output.",
+  ];
 }
 
 function formatStatusChange(): string {
@@ -312,25 +321,6 @@ function formatVisibleCategoriesLine(
     });
 
   return `visible-categories: ${topCategories.join(" | ")}`;
-}
-
-function formatOperationLadderLines(): string[] {
-  const lines = ["use-these-next:"];
-  for (const key of [
-    "revit.context.summary",
-    "revit.context.visible-summary",
-    "revit.resolve.references",
-    "revit.catalog.loaded-families",
-    "revit.detail.elements",
-  ]) {
-    const operation = getHostOperation(key);
-    if (!operation) continue;
-
-    lines.push(`- host_operation_call key=${operation.key}: ${operation.summary ?? operation.displayName ?? "public host operation"}`);
-  }
-
-  lines.push("- host_operation_search query=<intent>: discover current generated operations before writing raw scripts.");
-  return lines;
 }
 
 function createTimeoutFetch(timeoutMs: number): typeof fetch {

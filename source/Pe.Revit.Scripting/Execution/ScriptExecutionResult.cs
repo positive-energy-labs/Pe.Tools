@@ -2,19 +2,9 @@
 using Microsoft.CodeAnalysis;
 using Pe.Revit.Scripting.Context;
 using Pe.Shared.HostContracts.Scripting;
+using Pe.Shared.Scripting.Execution;
 
 namespace Pe.Revit.Scripting.Execution;
-
-internal sealed record ScriptSourceFile(
-    string Name,
-    string Content,
-    string? FullPath = null
-);
-
-internal sealed record ScriptSourceSet(
-    IReadOnlyList<ScriptSourceFile> Files,
-    string EntryPointSourceName
-);
 
 internal sealed record ScriptExecutionPlan(
     UIApplication UiApplication,
@@ -24,15 +14,11 @@ internal sealed record ScriptExecutionPlan(
     string RuntimeAssemblyPath,
     string WorkspaceKey,
     string WorkspaceRoot,
+    string? ArtifactRunName,
+    ScriptPermissionMode PermissionMode,
     ScriptSourceSet SourceSet,
     string ProjectContent,
     bool RequireSingleContainer
-);
-
-internal sealed record ScriptCompilationResult(
-    bool Success,
-    byte[]? AssemblyBytes,
-    IReadOnlyList<ScriptDiagnostic> Diagnostics
 );
 
 internal sealed record ScriptContainerResolutionResult(

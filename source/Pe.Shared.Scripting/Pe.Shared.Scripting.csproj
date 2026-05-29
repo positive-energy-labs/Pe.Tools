@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
     <PropertyGroup>
         <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
@@ -9,14 +8,11 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
-        <PackageReference Include="TypeGen" Version="5.0.0"/>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0"/>
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Pe.Shared.ApsAuth\Pe.Shared.ApsAuth.csproj"/>
+        <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj"/>
         <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj"/>
-        <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj"/>
     </ItemGroup>
-
 </Project>

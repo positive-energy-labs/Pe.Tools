@@ -243,6 +243,17 @@
         <PeSupportsFreshRevitProcess>false</PeSupportsFreshRevitProcess>
       </PropertyGroup>
     </When>
+    <When Condition="'$(MSBuildProjectName)' == 'Pe.Shared.Scripting'">
+      <PropertyGroup>
+        <PeModuleClass>SharedNeutral</PeModuleClass>
+        <PeProductClass>SharedLibrary</PeProductClass>
+        <PeTargetFrameworkClass>SharedNeutral</PeTargetFrameworkClass>
+        <PeIsRevitAwareProject>false</PeIsRevitAwareProject>
+        <PeSupportsRevitYear>false</PeSupportsRevitYear>
+        <PeSupportsAttachedRrd>false</PeSupportsAttachedRrd>
+        <PeSupportsFreshRevitProcess>false</PeSupportsFreshRevitProcess>
+      </PropertyGroup>
+    </When>
     <When Condition="'$(MSBuildProjectName)' == 'Pe.Shared.StorageRuntime'">
       <PropertyGroup>
         <PeModuleClass>SharedNeutral</PeModuleClass>

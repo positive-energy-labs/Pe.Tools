@@ -33,7 +33,18 @@ public record ExecuteRevitScriptRequest(
     ScriptExecutionSourceKind SourceKind = ScriptExecutionSourceKind.InlineSnippet,
     string? SourcePath = null,
     string WorkspaceKey = "default",
-    string? SourceName = null
+    string? SourceName = null,
+    string? ArtifactRunName = null,
+    ScriptPermissionMode PermissionMode = ScriptPermissionMode.ReadOnly
+);
+
+[ExportTsInterface]
+public record ScriptArtifactData(
+    string Name,
+    string RelativePath,
+    string FullPath,
+    string ContentType,
+    long SizeBytes
 );
 
 [ExportTsInterface]
@@ -44,7 +55,8 @@ public record ExecuteRevitScriptData(
     string RevitVersion,
     string TargetFramework,
     string? ContainerTypeName,
-    string ExecutionId
+    string ExecutionId,
+    List<ScriptArtifactData>? Artifacts = null
 );
 
 [JsonConverter(typeof(StringEnumConverter))]
@@ -54,7 +66,15 @@ public enum ScriptExecutionStatus {
     ReferenceResolutionFailed,
     CompilationFailed,
     RuntimeFailed,
-    Rejected
+    Rejected,
+    PolicyRejected
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum ScriptPermissionMode {
+    ReadOnly,
+    WriteTransaction
 }
 
 [JsonConverter(typeof(StringEnumConverter))]

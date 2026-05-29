@@ -1,8 +1,8 @@
 ﻿using NuGet.Frameworks;
 using NuGet.Packaging;
 using NuGet.Versioning;
-using Pe.Revit.Scripting.Diagnostics;
 using Pe.Shared.HostContracts.Scripting;
+using Pe.Shared.Scripting.Diagnostics;
 using System.Text.RegularExpressions;
 
 namespace Pe.Revit.Scripting.References;
