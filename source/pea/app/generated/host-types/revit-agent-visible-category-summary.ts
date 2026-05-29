@@ -6,6 +6,7 @@
 import type { RevitAgentContextHandle } from "./revit-agent-context-handle.js";
 import type { RevitAgentVisibleElementSample } from "./revit-agent-visible-element-sample.js";
 import type { RevitAgentContextProvenance } from "./revit-agent-context-provenance.js";
+import type { RevitAgentVisibleElementHandle } from "./revit-agent-visible-element-handle.js";
 
 export interface RevitAgentVisibleCategorySummary {
   handle: RevitAgentContextHandle;
@@ -14,4 +15,5 @@ export interface RevitAgentVisibleCategorySummary {
   provenance: RevitAgentContextProvenance[];
   returnedElementCount: number;
   isReturnedElementSetComplete: boolean;
+  elementHandles?: RevitAgentVisibleElementHandle[];
 }

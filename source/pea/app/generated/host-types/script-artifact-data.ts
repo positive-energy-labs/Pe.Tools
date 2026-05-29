@@ -3,9 +3,10 @@
  * Any changes made to this file can be lost when this file is regenerated.
  */
 
-export interface SettingsDocumentId {
-  moduleKey: string;
-  rootKey: string;
+export interface ScriptArtifactData {
+  name: string;
   relativePath: string;
-  stableId: string;
+  fullPath: string;
+  contentType: string;
+  sizeBytes: number;
 }

@@ -5,6 +5,7 @@
 
 import type { ScriptExecutionStatus } from "./script-execution-status.js";
 import type { ScriptDiagnostic } from "./script-diagnostic.js";
+import type { ScriptArtifactData } from "./script-artifact-data.js";
 
 export interface ExecuteRevitScriptData {
   status: ScriptExecutionStatus;
@@ -14,4 +15,5 @@ export interface ExecuteRevitScriptData {
   targetFramework: string;
   containerTypeName?: string;
   executionId: string;
+  artifacts?: ScriptArtifactData[];
 }

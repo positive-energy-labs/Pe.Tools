@@ -9,4 +9,5 @@ export enum ScriptExecutionStatus {
   CompilationFailed = "CompilationFailed",
   RuntimeFailed = "RuntimeFailed",
   Rejected = "Rejected",
+  PolicyRejected = "PolicyRejected",
 }
