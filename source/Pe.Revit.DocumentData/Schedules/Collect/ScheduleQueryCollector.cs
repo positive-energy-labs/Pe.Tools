@@ -1,4 +1,4 @@
-﻿using Pe.Shared.RevitData;
+using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 using System.Globalization;
 
@@ -11,12 +11,27 @@ public static class ScheduleQueryCollector {
         View? activeView = null
     ) {
         var issues = new List<RevitDataIssue>();
-        var resolution = ResolveQuery(doc, query, activeView, issues);
-        var entries = resolution.Schedules
-            .Select(schedule => TryCollectProjection(doc, schedule, issues))
+        var effectiveQuery = query ?? new ScheduleQuery();
+        var budget = RevitDataOutputBudgets.WithDefaults(effectiveQuery.Budget, maxEntries: 5, maxRowsPerEntry: 25);
+        effectiveQuery = effectiveQuery with { Budget = budget };
+        var resolution = ResolveQuery(doc, effectiveQuery, activeView, issues);
+        AddResolutionDiagnostics(resolution, issues);
+        var allEntries = resolution.Schedules
+            .Select(schedule => TryCollectProjection(doc, schedule, effectiveQuery, issues))
             .Where(entry => entry != null)
             .Cast<ScheduleRenderedScheduleEntry>()
             .ToList();
+        var maxEntries = effectiveQuery.Budget?.MaxEntries;
+        var entries = maxEntries is > 0
+            ? allEntries.Take(maxEntries.Value).ToList()
+            : allEntries;
+        var truncated = maxEntries is > 0 && allEntries.Count > entries.Count;
+        if (truncated) {
+            issues.Add(ScheduleCollectorSupport.Warning(
+                "ScheduleQueryTruncated",
+                $"Returned {entries.Count} of {allEntries.Count} matching schedule(s). Increase budget.maxEntries to expand."
+            ));
+        }
 
         return new ScheduleQueryData(
             doc.Title,
@@ -24,7 +39,8 @@ public static class ScheduleQueryCollector {
             resolution.RequestedScheduleCount,
             entries.Count,
             entries,
-            issues
+            RevitDataOutputBudgets.ProjectIssues(issues, budget),
+            new RevitDataResultPage(allEntries.Count, entries.Count, truncated)
         );
     }
 
@@ -40,6 +56,29 @@ public static class ScheduleQueryCollector {
             ScheduleQueryKind.ScheduleNames => ResolveScheduleNames(doc, effectiveQuery, issues),
             _ => ResolveScheduleReferences(doc, effectiveQuery, issues)
         };
+    }
+
+    private static void AddResolutionDiagnostics(
+        QueryResolution resolution,
+        List<RevitDataIssue> issues
+    ) {
+        if (resolution.RequestedScheduleCount == 0) {
+            issues.Add(ScheduleCollectorSupport.Warning(
+                "ScheduleQueryNoScheduleReferencesSupplied",
+                resolution.QueryKind switch {
+                    ScheduleQueryKind.ScheduleNames => "Schedule query requested names but no non-blank scheduleNames were supplied.",
+                    ScheduleQueryKind.ScheduleReferences => "Schedule query requested references but no scheduleIds or scheduleUniqueIds were supplied.",
+                    _ => "Schedule query did not include a usable schedule reference."
+                }
+            ));
+        }
+
+        if (resolution.RequestedScheduleCount != 0 && resolution.Schedules.Count == 0) {
+            issues.Add(ScheduleCollectorSupport.Warning(
+                "ScheduleQueryResolvedZeroSchedules",
+                $"Resolved zero schedule(s) from {resolution.RequestedScheduleCount} requested reference(s). Use revit.catalog.schedules to discover valid schedule handles."
+            ));
+        }
     }
 
     private static QueryResolution ResolveCurrentActiveView(
@@ -156,6 +195,7 @@ public static class ScheduleQueryCollector {
     private static ScheduleRenderedScheduleEntry? TryCollectProjection(
         Document doc,
         ViewSchedule schedule,
+        ScheduleQuery query,
         List<RevitDataIssue> issues
     ) {
         try {
@@ -179,6 +219,13 @@ public static class ScheduleQueryCollector {
                 : CollectRows(schedule, bodySection, contexts, contextByColumnNumber, subjectContexts);
             var rows = collectedRows.Select(item => item.Row).ToList();
             var bindingSummary = SummarizeBinding(collectedRows);
+            var projection = query.Projection ?? new ScheduleQueryProjection();
+            var projectedRows = ProjectRows(schedule.Name, rows, contexts, projection, query.Budget, issues);
+            var rowIssues = projectedRows.SelectMany(row => row.Issues ?? []).ToList();
+            var includeAll = projection.View == RevitDataResultView.Full;
+            var includeRows = includeAll || projection.View == RevitDataResultView.Rows || projection.IncludeRows || projection.IncludeOnlyRowsWithIssues;
+            var includeColumns = includeAll || projection.IncludeColumns || includeRows;
+            var includeSubjects = includeAll || projection.View == RevitDataResultView.Handles || projection.IncludeSubjects;
 
             if (subjects.Count != 0) {
                 if (bindingSummary.UnboundRowCount != 0) {
@@ -207,9 +254,10 @@ public static class ScheduleQueryCollector {
                 bindingSummary.UnboundRowCount,
                 rows.Count,
                 subjects.Count,
-                subjects,
-                contexts.Select(context => context.Column).ToList(),
-                rows
+                includeSubjects ? subjects : [],
+                includeColumns ? contexts.Select(context => context.Column).ToList() : [],
+                includeRows ? projectedRows : [],
+                rowIssues
             );
         } catch (Exception ex) {
             issues.Add(ScheduleCollectorSupport.Warning(
@@ -219,6 +267,85 @@ public static class ScheduleQueryCollector {
             ));
             return null;
         }
+    }
+
+
+    private static List<ScheduleRenderedRow> ProjectRows(
+        string scheduleName,
+        IReadOnlyList<ScheduleRenderedRow> rows,
+        IReadOnlyList<ColumnContext> contexts,
+        ScheduleQueryProjection projection,
+        RevitDataOutputBudget? budget,
+        List<RevitDataIssue> issues
+    ) {
+        var auditedRows = projection.RequiredFieldAudit == null
+            ? rows
+            : rows.Select(row => row with { Issues = CollectRequiredFieldIssues(row, contexts, projection.RequiredFieldAudit) }).ToList();
+        if (projection.IncludeOnlyRowsWithIssues)
+            auditedRows = auditedRows.Where(row => row.Issues?.Count > 0).ToList();
+
+        if (projection.RequiredFieldAudit != null && auditedRows.Count == 0) {
+            issues.Add(ScheduleCollectorSupport.Warning(
+                "ScheduleRequiredFieldAuditNoRows",
+                $"Required-field audit produced zero rows for schedule '{scheduleName}'. Check field names or remove includeOnlyRowsWithIssues.",
+                scheduleName
+            ));
+        }
+
+        var maxRows = budget?.MaxRowsPerEntry;
+        var returnedRows = maxRows is > -1
+            ? auditedRows.Take(maxRows.Value).ToList()
+            : auditedRows.ToList();
+        if (maxRows is > -1 && auditedRows.Count > returnedRows.Count) {
+            issues.Add(ScheduleCollectorSupport.Warning(
+                "ScheduleRowsTruncated",
+                $"Returned {returnedRows.Count} of {auditedRows.Count} row(s) for schedule '{scheduleName}'. Increase budget.maxRowsPerEntry to expand.",
+                scheduleName
+            ));
+        }
+
+        if (projection.IncludeCellValues || projection.View == RevitDataResultView.Full)
+            return returnedRows;
+
+        return returnedRows.Select(row => row with { Values = [] }).ToList();
+    }
+
+    private static List<ScheduleRenderedCellIssue> CollectRequiredFieldIssues(
+        ScheduleRenderedRow row,
+        IReadOnlyList<ColumnContext> contexts,
+        ScheduleRequiredFieldAudit audit
+    ) {
+        if (row.Kind != ScheduleRenderedRowKind.Data)
+            return [];
+
+        var fieldNames = ScheduleCollectorSupport.ToFilterSet(audit.FieldNames);
+        var issues = new List<ScheduleRenderedCellIssue>();
+        for (var i = 0; i < contexts.Count && i < row.Values.Count; i++) {
+            var context = contexts[i];
+            if (fieldNames.Count != 0
+                && !fieldNames.Contains(context.Column.FieldName)
+                && !fieldNames.Contains(context.Column.HeaderText))
+                continue;
+
+            var normalized = ScheduleCollectorSupport.NormalizeCellText(row.Values[i]);
+            var isBlank = string.IsNullOrWhiteSpace(normalized)
+                || (audit.TreatDashAsBlank && normalized is "-" or "--" or "—");
+            var isDefault = audit.TreatZeroAsDefault && (normalized == "0" || normalized == "0.0" || normalized == "0.00");
+            if (!isBlank && !isDefault)
+                continue;
+
+            var code = isBlank ? "RequiredScheduleFieldBlank" : "RequiredScheduleFieldDefault";
+            issues.Add(new ScheduleRenderedCellIssue(
+                row.RowNumber,
+                context.Column.ColumnNumber,
+                context.Column.FieldName,
+                context.Column.HeaderText,
+                code,
+                $"{context.Column.HeaderText} is {(isBlank ? "blank" : "default/zero")}."
+            ));
+        }
+
+        return issues;
     }
 
     private static List<ColumnContext> CollectColumnContexts(

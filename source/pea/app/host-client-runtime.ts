@@ -6,6 +6,9 @@ export type HostOperationFamily = "Host" | "Settings" | "Script" | "Revit" | "Ap
 export type RevitOperationLayer = "Context" | "Catalog" | "Matrix" | "Detail" | "Resolve" | "Apply";
 export type HostOperationResultGrain = "Status" | "Summary" | "Schema" | "Catalog" | "Matrix" | "Rows" | "Handles" | "Detail" | "Workspace" | "Document" | "Logs" | "Token" | "Mutation";
 export type HostOperationCostTier = "Cheap" | "Bounded" | "Expensive" | "Mutation";
+export type HostOperationVisibility = "DefaultVisible" | "EscalationVisible" | "ExpertOnly";
+export type HostOperationIntentVerb = "Orient" | "Find" | "Inventory" | "Inspect" | "Audit" | "Script" | "Configure" | "Authenticate" | "Diagnose" | "Mutate";
+export type HostOperationRequestShapeKind = "NoRequest" | "CommonEnvelope" | "QueryWrapper" | "Flat" | "Command" | "LegacyException";
 
 export interface HostTypeShapeField {
   name: string;
@@ -46,6 +49,22 @@ export interface HostOperationDefinition {
   boundedExpansionHints?: readonly string[];
   handleProvenanceNotes?: string | null;
   strictRequestValidation?: boolean;
+  visibility?: HostOperationVisibility;
+  canonicalUse?: string;
+  intentVerb?: HostOperationIntentVerb;
+  requestShapeKind?: HostOperationRequestShapeKind;
+  useWhen?: readonly string[];
+  doNotUseWhen?: readonly string[];
+  usuallyBefore?: readonly string[];
+  usuallyAfter?: readonly string[];
+  nextOperations?: readonly string[];
+  answersQuestionTypes?: readonly string[];
+  doesNotAnswer?: readonly string[];
+  primaryNouns?: readonly string[];
+  supportedScopes?: readonly string[];
+  capabilities?: readonly string[];
+  safeDefaultRequestJson?: string | null;
+  ambiguityBehavior?: string | null;
 }
 
 export interface HostProblemDetails {

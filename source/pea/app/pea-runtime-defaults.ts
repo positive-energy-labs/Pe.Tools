@@ -15,6 +15,11 @@ import { peaRuntimePolicy, type PeaRuntimePolicy } from "./pea-runtime-policy.js
 const peaModelPackName = "Pea OpenAI";
 const peaModelPackId = `custom:${peaModelPackName}`;
 const peaSettingsSchemaVersion = 1;
+const staleOpenAiModelReplacements: Record<string, string> = {
+  "openai/gpt-5.5": defaultPeaAgentModelId,
+  "openai/gpt-5.4": defaultPeaAgentModelId,
+  "openai/gpt-5.4-mini": defaultPeaFastModelId,
+};
 
 export type PeaThemePreference = "auto" | "dark" | "light";
 
@@ -111,15 +116,15 @@ function applyPeaDefaults(settings: JsonObject, defaults: PeaRuntimeDefaultsSumm
       activeModelPackId: stringOrDefault(models.activeModelPackId, defaults.modelPackId),
       modeDefaults: {
         ...asObject(models.modeDefaults),
-        agent: stringOrDefault(asObject(models.modeDefaults).agent, defaults.agentModelId),
-        build: stringOrDefault(asObject(models.modeDefaults).build, defaults.agentModelId),
-        plan: stringOrDefault(asObject(models.modeDefaults).plan, defaults.agentModelId),
-        fast: stringOrDefault(asObject(models.modeDefaults).fast, defaults.fastModelId),
+        agent: modelOrDefault(asObject(models.modeDefaults).agent, defaults.agentModelId),
+        build: modelOrDefault(asObject(models.modeDefaults).build, defaults.agentModelId),
+        plan: modelOrDefault(asObject(models.modeDefaults).plan, defaults.agentModelId),
+        fast: modelOrDefault(asObject(models.modeDefaults).fast, defaults.fastModelId),
       },
       activeOmPackId: stringOrDefault(models.activeOmPackId, "custom"),
-      omModelOverride: stringOrDefault(models.omModelOverride, defaults.observerModelId),
-      observerModelOverride: stringOrDefault(models.observerModelOverride, defaults.observerModelId),
-      reflectorModelOverride: stringOrDefault(models.reflectorModelOverride, defaults.reflectorModelId),
+      omModelOverride: modelOrDefault(models.omModelOverride, defaults.observerModelId),
+      observerModelOverride: modelOrDefault(models.observerModelOverride, defaults.observerModelId),
+      reflectorModelOverride: modelOrDefault(models.reflectorModelOverride, defaults.reflectorModelId),
       omObservationThreshold: numberOrDefault(models.omObservationThreshold, defaults.observationThreshold),
       omReflectionThreshold: numberOrDefault(models.omReflectionThreshold, defaults.reflectionThreshold),
       omCavemanObservations: booleanOrDefault(models.omCavemanObservations, false),
@@ -127,7 +132,7 @@ function applyPeaDefaults(settings: JsonObject, defaults: PeaRuntimeDefaultsSumm
       subagentModels: {
         ...asObject(models.subagentModels),
       },
-      goalJudgeModel: stringOrDefault(models.goalJudgeModel, defaults.goalJudgeModelId),
+      goalJudgeModel: modelOrDefault(models.goalJudgeModel, defaults.goalJudgeModelId),
       goalMaxTurns: numberOrDefault(models.goalMaxTurns, defaults.goalMaxTurns),
     },
     preferences: {
@@ -182,6 +187,11 @@ function isObject(value: unknown): value is JsonObject {
 
 function stringOrDefault(value: unknown, fallback: string): string {
   return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
+function modelOrDefault(value: unknown, fallback: string): string {
+  const model = stringOrDefault(value, fallback);
+  return staleOpenAiModelReplacements[model] ?? model;
 }
 
 function numberOrDefault(value: unknown, fallback: number): number {

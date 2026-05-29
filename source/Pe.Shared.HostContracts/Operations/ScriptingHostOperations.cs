@@ -9,7 +9,14 @@ public static class GetScriptWorkspaceBootstrapOperationContract {
             HostHttpVerb.Post,
             "/api/scripting/workspace/bootstrap",
             HostExecutionMode.Bridge,
-            "Bootstrap Script Workspace"
+            "Bootstrap Script Workspace",
+            HostOperationAgentMetadata.Create(
+                "scripting",
+                "Create or update the host-owned C# Revit scripting workspace files.",
+                new[] { "script", "workspace", "bootstrap", "files" },
+                HostOperationIntent.Mutate,
+                requiresBridge: true
+            )
         );
 }
 
@@ -20,6 +27,14 @@ public static class ExecuteRevitScriptOperationContract {
             HostHttpVerb.Post,
             "/api/scripting/execute",
             HostExecutionMode.Bridge,
-            "Execute Revit Script"
+            "Execute Revit Script",
+            HostOperationAgentMetadata.Create(
+                "scripting",
+                "Execute an inline or workspace-relative C# script in connected Revit.",
+                new[] { "script", "execute", "csharp", "revit" },
+                HostOperationIntent.Mutate,
+                requiresBridge: true,
+                requiresActiveDocument: true
+            )
         );
 }

@@ -12,6 +12,7 @@ public static class ScheduleProfileQueryCollector {
     ) {
         var issues = new List<RevitDataIssue>();
         var resolution = ResolveQuery(doc, query, activeView, issues);
+        AddResolutionDiagnostics(resolution, issues);
         var entries = resolution.Schedules
             .Select(schedule => TryCollectEntry(doc, schedule, issues))
             .Where(entry => entry != null)
@@ -26,6 +27,29 @@ public static class ScheduleProfileQueryCollector {
             entries,
             issues
         );
+    }
+
+    private static void AddResolutionDiagnostics(
+        QueryResolution resolution,
+        List<RevitDataIssue> issues
+    ) {
+        if (resolution.RequestedScheduleCount == 0) {
+            issues.Add(ScheduleCollectorSupport.Warning(
+                "ScheduleProfilesQueryNoScheduleReferencesSupplied",
+                resolution.QueryKind switch {
+                    ScheduleProfilesQueryKind.ScheduleNames => "Schedule profile query requested names but no non-blank scheduleNames were supplied.",
+                    ScheduleProfilesQueryKind.ScheduleReferences => "Schedule profile query requested references but no scheduleIds or scheduleUniqueIds were supplied.",
+                    _ => "Schedule profile query did not include a usable schedule reference."
+                }
+            ));
+        }
+
+        if (resolution.RequestedScheduleCount != 0 && resolution.Schedules.Count == 0) {
+            issues.Add(ScheduleCollectorSupport.Warning(
+                "ScheduleProfilesQueryResolvedZeroSchedules",
+                $"Resolved zero schedule profile(s) from {resolution.RequestedScheduleCount} requested reference(s). Use revit.catalog.schedules to discover valid schedule handles."
+            ));
+        }
     }
 
     private static QueryResolution ResolveQuery(

@@ -12,8 +12,14 @@ internal sealed class BridgeOperationException(
 }
 
 internal static class BridgeOperationExceptions {
+    public const int BadRequestStatusCode = 400;
     public const int ConflictStatusCode = 409;
     public const int UnexpectedStatusCode = 500;
+
+    public static BridgeOperationException BadRequest(
+        string message,
+        IReadOnlyList<ValidationIssue>? issues = null
+    ) => new(BadRequestStatusCode, message, issues);
 
     public static BridgeOperationException Conflict(
         string message,

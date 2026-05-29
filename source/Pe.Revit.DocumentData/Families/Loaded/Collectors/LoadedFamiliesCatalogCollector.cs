@@ -30,16 +30,70 @@ public static class LoadedFamiliesCatalogCollector {
 
     public static LoadedFamiliesCatalogData Collect(
         Document doc,
-        LoadedFamiliesFilter? filter = null
+        LoadedFamiliesFilter? filter = null,
+        RevitDataProjectionRequest? projection = null,
+        RevitDataOutputBudget? budget = null
     ) {
-        var families = CollectCanonical(doc, filter);
+        var effectiveBudget = RevitDataOutputBudgets.WithDefaults(budget, maxEntries: 50, maxSamplesPerEntry: 10);
+        var allFamilies = CollectCanonical(doc);
+        var families = LoadedFamiliesCollectorSupport.ApplyFilter(allFamilies, filter).ToList();
+        var maxFamilies = effectiveBudget.MaxEntries;
+        var truncated = maxFamilies is > 0 && families.Count > maxFamilies.Value;
+        var returnedFamilies = truncated
+            ? families.Take(maxFamilies!.Value).ToList()
+            : families;
+        var maxTypesPerFamily = effectiveBudget.MaxSamplesPerEntry;
+        var includeTypes = projection?.View is RevitDataResultView.Rows or RevitDataResultView.Full
+                          ;
+        var issues = families.SelectMany(family => family.Issues)
+            .Select(LoadedFamiliesCollectorSupport.ToContractIssue)
+            .ToList();
+        AddFilterDiagnostics(filter, allFamilies, families, issues);
+        if (truncated) {
+            issues.Add(new RevitDataIssue(
+                "LoadedFamiliesCatalogTruncated",
+                RevitDataIssueSeverity.Warning,
+                $"Returned {returnedFamilies.Count} of {families.Count} matching loaded familie(s). Increase budget.maxEntries to expand."
+            ));
+        }
+
         return new LoadedFamiliesCatalogData(
-            families.Select(ToCatalogEntry).ToList(),
-            families.SelectMany(family => family.Issues)
-                .Select(LoadedFamiliesCollectorSupport.ToContractIssue)
-                .ToList()
+            new LoadedFamiliesCatalogSummary(
+                families.Count,
+                families.Count(family => family.PlacedInstanceCount > 0),
+                families.Count(family => family.PlacedInstanceCount == 0),
+                families.Sum(family => family.Types.Count),
+                families.Sum(family => family.PlacedInstanceCount),
+                truncated
+            ),
+            returnedFamilies.Select(family => ToCatalogEntry(family, includeTypes, maxTypesPerFamily)).ToList(),
+            RevitDataOutputBudgets.ProjectIssues(issues, effectiveBudget),
+            new RevitDataResultPage(families.Count, returnedFamilies.Count, truncated)
         );
     }
+
+    private static void AddFilterDiagnostics(
+        LoadedFamiliesFilter? filter,
+        IReadOnlyList<CollectedLoadedFamilyRecord> allFamilies,
+        IReadOnlyList<CollectedLoadedFamilyRecord> families,
+        List<RevitDataIssue> issues
+    ) {
+        if (filter == null || !HasFilter(filter) || families.Count != 0)
+            return;
+
+        issues.Add(new RevitDataIssue(
+            "LoadedFamiliesFilterMatchedZeroFamilies",
+            RevitDataIssueSeverity.Warning,
+            $"Loaded-family filter matched zero families out of {allFamilies.Count}. Check family/category names, contains filters, or placementScope."
+        ));
+    }
+
+    private static bool HasFilter(LoadedFamiliesFilter filter) =>
+        filter.FamilyNames.Any(name => !string.IsNullOrWhiteSpace(name))
+        || filter.CategoryNames.Any(name => !string.IsNullOrWhiteSpace(name))
+        || !string.IsNullOrWhiteSpace(filter.FamilyNameContains)
+        || !string.IsNullOrWhiteSpace(filter.CategoryNameContains)
+        || filter.PlacementScope != LoadedFamilyPlacementScope.AllLoaded;
 
     private static List<CollectedLoadedFamilyTypeRecord> GetFamilyTypes(Family family) {
         var symbolIds = family.GetFamilySymbolIds();
@@ -62,14 +116,25 @@ public static class LoadedFamiliesCatalogCollector {
             .GroupBy(instance => instance.Symbol.Family.Id.Value())
             .ToDictionary(group => group.Key, group => group.Count());
 
-    private static LoadedFamilyCatalogEntry ToCatalogEntry(CollectedLoadedFamilyRecord family) =>
-        new(
+    private static LoadedFamilyCatalogEntry ToCatalogEntry(
+        CollectedLoadedFamilyRecord family,
+        bool includeTypes,
+        int? maxTypesPerFamily
+    ) {
+        var types = includeTypes
+            ? family.Types.AsEnumerable()
+            : [];
+        if (maxTypesPerFamily is > 0)
+            types = types.Take(maxTypesPerFamily.Value);
+
+        return new LoadedFamilyCatalogEntry(
             family.FamilyId,
             family.FamilyUniqueId,
             family.FamilyName,
             family.CategoryName,
             family.Types.Count,
             family.PlacedInstanceCount,
-            family.Types.Select(type => new LoadedFamilyTypeEntry(type.TypeName)).ToList()
+            types.Select(type => new LoadedFamilyTypeEntry(type.TypeName)).ToList()
         );
+    }
 }

@@ -1,11 +1,11 @@
-export const defaultPeaAgentModelId = "openai/gpt-5.4";
-export const defaultPeaFastModelId = "openai/gpt-5.4-mini";
+export const defaultPeaAgentModelId = "openai/gpt-5.3";
+export const defaultPeaFastModelId = "openai/gpt-5.1-mini";
 export const defaultPeaOmModelId = defaultPeaFastModelId;
 export const defaultPeaGoalJudgeModelId = defaultPeaAgentModelId;
 
-export const defaultPeaObservationThreshold = 80_000;
-export const defaultPeaReflectionThreshold = 120_000;
-export const defaultPeaGoalMaxTurns = 50;
+export const defaultPeaObservationThreshold = 60_000;
+export const defaultPeaReflectionThreshold = 30_000;
+export const defaultPeaGoalMaxTurns = 10;
 
 export const peaAgentInstructions = `You are Pea, a high-trust Revit/operator agent for Positive Energy tooling.
 

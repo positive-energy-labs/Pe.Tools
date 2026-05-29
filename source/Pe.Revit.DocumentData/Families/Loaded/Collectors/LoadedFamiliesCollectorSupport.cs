@@ -91,12 +91,12 @@ internal static class LoadedFamiliesCollectorSupport {
             _ => LoadedFamilyParameterKind.Unknown
         };
 
-    public static LoadedFamilyParameterScope ToContractParameterScope(CollectedParameterScope scope) =>
+    public static LoadedFamilyParameterPresence ToContractParameterPresence(CollectedParameterScope scope) =>
         scope switch {
-            CollectedParameterScope.Family => LoadedFamilyParameterScope.Family,
-            CollectedParameterScope.FamilyAndProjectBinding => LoadedFamilyParameterScope.FamilyAndProjectBinding,
-            CollectedParameterScope.ProjectBindingOnly => LoadedFamilyParameterScope.ProjectBindingOnly,
-            _ => LoadedFamilyParameterScope.Unresolved
+            CollectedParameterScope.Family => LoadedFamilyParameterPresence.Family,
+            CollectedParameterScope.FamilyAndProjectBinding => LoadedFamilyParameterPresence.FamilyAndProjectBinding,
+            CollectedParameterScope.ProjectBindingOnly => LoadedFamilyParameterPresence.ProjectBindingOnly,
+            _ => LoadedFamilyParameterPresence.Unresolved
         };
 
     public static string GetParameterKey(string name, bool isInstance) =>
@@ -149,8 +149,16 @@ internal static class LoadedFamiliesCollectorSupport {
         if (selectedFamilyNames.Count != 0 && !selectedFamilyNames.Contains(family.FamilyName))
             return false;
 
+        if (!string.IsNullOrWhiteSpace(filter.FamilyNameContains) &&
+            !family.FamilyName.Contains(filter.FamilyNameContains.Trim(), StringComparison.OrdinalIgnoreCase))
+            return false;
+
         if (selectedCategoryNames.Count != 0 &&
             !selectedCategoryNames.Contains(family.CategoryName ?? string.Empty))
+            return false;
+
+        if (!string.IsNullOrWhiteSpace(filter.CategoryNameContains) &&
+            !(family.CategoryName ?? string.Empty).Contains(filter.CategoryNameContains.Trim(), StringComparison.OrdinalIgnoreCase))
             return false;
 
         return filter.PlacementScope switch {

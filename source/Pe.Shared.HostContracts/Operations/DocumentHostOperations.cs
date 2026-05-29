@@ -9,7 +9,12 @@ public static class OpenSettingsDocumentOperationContract {
             HostHttpVerb.Post,
             "/api/settings/document/open",
             HostExecutionMode.Local,
-            "Open Settings Document"
+            "Open Settings Document",
+            HostOperationAgentMetadata.Create(
+                "settings",
+                "Read a settings document snapshot from the local settings workspace.",
+                new[] { "settings", "document", "open", "snapshot", "profile", "profiles", "family-foundry" }
+            )
         );
 }
 
@@ -20,7 +25,12 @@ public static class ValidateSettingsDocumentOperationContract {
             HostHttpVerb.Post,
             "/api/settings/document/validate",
             HostExecutionMode.Local,
-            "Validate Settings Document"
+            "Validate Settings Document",
+            HostOperationAgentMetadata.Create(
+                "settings",
+                "Validate a settings document and return diagnostics without saving it.",
+                new[] { "settings", "document", "validate", "validation", "diagnostics", "profile", "profiles", "family-foundry" }
+            )
         );
 }
 
@@ -31,6 +41,12 @@ public static class SaveSettingsDocumentOperationContract {
             HostHttpVerb.Post,
             "/api/settings/document/save",
             HostExecutionMode.Local,
-            "Save Settings Document"
+            "Save Settings Document",
+            HostOperationAgentMetadata.Create(
+                "settings",
+                "Write a settings document to the local settings workspace.",
+                new[] { "settings", "document", "save", "write", "profile", "profiles", "family-foundry" },
+                HostOperationIntent.Mutate
+            )
         );
 }

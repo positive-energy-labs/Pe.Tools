@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using TypeGen.Core.TypeAnnotations;
 
@@ -33,7 +33,7 @@ public enum LoadedFamilyParameterKind {
 
 [JsonConverter(typeof(StringEnumConverter))]
 [ExportTsEnum]
-public enum LoadedFamilyParameterScope {
+public enum LoadedFamilyParameterPresence {
     Unresolved,
     Family,
     FamilyAndProjectBinding,
@@ -56,18 +56,23 @@ public record LoadedFamiliesFilterFieldOptionsRequest(
 
 [ExportTsInterface]
 public record LoadedFamiliesCatalogRequest(
-    LoadedFamiliesFilter? Filter
+    LoadedFamiliesFilter? Filter,
+    RevitDataProjectionRequest? Projection = null,
+    RevitDataOutputBudget? Budget = null
 );
 
 [ExportTsInterface]
 public record LoadedFamiliesMatrixRequest(
-    LoadedFamiliesFilter? Filter
+    LoadedFamiliesFilter? Filter,
+    RevitDataOutputBudget? Budget = null
 );
 
 [ExportTsInterface]
 public record LoadedFamiliesFilter {
     public List<string> FamilyNames { get; init; } = [];
+    public string? FamilyNameContains { get; init; }
     public List<string> CategoryNames { get; init; } = [];
+    public string? CategoryNameContains { get; init; }
     public LoadedFamilyPlacementScope PlacementScope { get; init; } = LoadedFamilyPlacementScope.AllLoaded;
 }
 
@@ -88,9 +93,21 @@ public record LoadedFamilyCatalogEntry(
 );
 
 [ExportTsInterface]
+public record LoadedFamiliesCatalogSummary(
+    int TotalFamilies,
+    int PlacedFamilies,
+    int UnplacedFamilies,
+    int TotalTypes,
+    int TotalPlacedInstances,
+    bool Truncated
+);
+
+[ExportTsInterface]
 public record LoadedFamiliesCatalogData(
+    LoadedFamiliesCatalogSummary Summary,
     List<LoadedFamilyCatalogEntry> Families,
-    List<RevitDataIssue> Issues
+    List<RevitDataIssue> Issues,
+    RevitDataResultPage? Page = null
 );
 
 [ExportTsInterface]
@@ -98,7 +115,7 @@ public record LoadedFamilyVisibleParameterEntry(
     ParameterIdentity Identity,
     bool IsInstance,
     LoadedFamilyParameterKind Kind,
-    LoadedFamilyParameterScope Scope,
+    LoadedFamilyParameterPresence Presence,
     string StorageType,
     string? DataTypeId,
     string? DataTypeLabel,
@@ -114,7 +131,7 @@ public record LoadedFamilyExcludedParameterEntry(
     ParameterIdentity Identity,
     bool IsInstance,
     LoadedFamilyParameterKind Kind,
-    LoadedFamilyParameterScope Scope,
+    LoadedFamilyParameterPresence Presence,
     ExcludedParameterReason ExcludedReason,
     FormulaState FormulaState,
     string? Formula
@@ -137,5 +154,6 @@ public record LoadedFamilyMatrixFamily(
 [ExportTsInterface]
 public record LoadedFamiliesMatrixData(
     List<LoadedFamilyMatrixFamily> Families,
-    List<RevitDataIssue> Issues
+    List<RevitDataIssue> Issues,
+    RevitDataResultPage? Page = null
 );

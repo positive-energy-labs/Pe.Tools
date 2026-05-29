@@ -9,7 +9,12 @@ public static class GetApsAuthStatusOperationContract {
             HostHttpVerb.Post,
             "/api/aps/auth/status",
             HostExecutionMode.Local,
-            "Get APS Auth Status"
+            "Get APS Auth Status",
+            HostOperationAgentMetadata.Create(
+                "aps",
+                "Read persisted Autodesk Platform Services authentication status.",
+                new[] { "aps", "auth", "status", "token" }
+            )
         );
 }
 
@@ -20,7 +25,13 @@ public static class LoginApsOperationContract {
             HostHttpVerb.Post,
             "/api/aps/auth/login",
             HostExecutionMode.Local,
-            "Login APS"
+            "Login APS",
+            HostOperationAgentMetadata.Create(
+                "aps",
+                "Start or complete Autodesk Platform Services authentication.",
+                new[] { "aps", "auth", "login", "token" },
+                HostOperationIntent.Mutate
+            )
         );
 }
 
@@ -31,7 +42,13 @@ public static class LogoutApsOperationContract {
             HostHttpVerb.Post,
             "/api/aps/auth/logout",
             HostExecutionMode.Local,
-            "Logout APS"
+            "Logout APS",
+            HostOperationAgentMetadata.Create(
+                "aps",
+                "Clear persisted Autodesk Platform Services authentication state.",
+                new[] { "aps", "auth", "logout", "token" },
+                HostOperationIntent.Mutate
+            )
         );
 }
 
@@ -42,7 +59,12 @@ public static class AcquireApsAccessTokenOperationContract {
             HostHttpVerb.Post,
             "/api/aps/auth/token",
             HostExecutionMode.Local,
-            "Acquire APS Access Token"
+            "Acquire APS Access Token",
+            HostOperationAgentMetadata.Create(
+                "aps",
+                "Acquire an Autodesk Platform Services access token for authenticated operations.",
+                new[] { "aps", "auth", "access-token", "token" }
+            )
         );
 }
 

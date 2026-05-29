@@ -14,7 +14,7 @@ public static class SettingsHostEventNames {
 public static class HttpRoutes {
     public const string ApsBase = "/api/aps";
     public const string SettingsBase = "/api/settings";
-    public const string RevitDataBase = "/api/revit-data";
+    public const string RevitBase = "/api/revit";
     public const string ScriptingBase = "/api/scripting";
     public const string Bridge = "/api/bridge";
     public const string Events = SettingsBase + "/events";
