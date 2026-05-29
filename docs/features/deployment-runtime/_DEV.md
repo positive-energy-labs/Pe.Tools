@@ -56,9 +56,10 @@ This keeps repo iteration fast while avoiding file-lock contention against the i
 - isolated/package publish writes `Pe.App.runtime.json` with lane `Installed`
 - installer payloads keep the installed runtime shape under `...\Pe.Tools\bin\...`
 - MSI authoring groups concrete components under product slices rather than treating WiX `Feature` as the only product model
+- the host runtime component stops any running installed `Pe.Host.exe` under `...\Pe.Tools\bin\host` and replaces that product-owned tree before `InstallFiles`
 - when the installed add-in launches, `Pe.App` resolves the installed host path through the same authority
 
-This gives installer validation a product-shaped runtime without needing ad hoc cleanup before returning to normal dev work.
+This gives installer validation a product-shaped runtime without needing ad hoc cleanup before returning to normal dev work. The host tree replacement is deliberate: .NET assemblies currently keep stable file versions, so native MSI file replacement alone can leave a stale installed host contract behind during beta upgrades.
 
 ## `pea` dev freshness
 

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -107,6 +108,26 @@ public static class CustomActions {
     }
 
     [CustomAction]
+    public static ActionResult RemoveInstalledHostRuntime(Session session) {
+        try {
+            var hostRoot = RequireInstallHostPath(session);
+            StopInstalledHostProcesses(session, hostRoot);
+
+            if (Directory.Exists(hostRoot)) {
+                Directory.Delete(hostRoot, true);
+                session.Log($"Removed installed host runtime under {hostRoot}.");
+            } else {
+                session.Log($"Installed host runtime directory does not exist: {hostRoot}");
+            }
+
+            return ActionResult.Success;
+        } catch (Exception ex) {
+            session.Log($"Failed to remove installed host runtime: {ex}");
+            return ActionResult.Failure;
+        }
+    }
+
+    [CustomAction]
     public static ActionResult RemoveInstalledRevitAddinPaths(Session session) {
         try {
             var applicationData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
@@ -139,6 +160,55 @@ public static class CustomActions {
         return Path.GetFullPath(path);
     }
 
+    private static string RequireInstallHostPath(Session session) {
+        var path = session.CustomActionData.TryGetValue("INSTALLHOST", out var deferredPath)
+            ? deferredPath
+            : session["INSTALLHOST"];
+        if (string.IsNullOrWhiteSpace(path))
+            throw new InvalidOperationException("INSTALLHOST was not resolved.");
+
+        return Path.GetFullPath(path);
+    }
+
+    private static void StopInstalledHostProcesses(Session session, string hostRoot) {
+        foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(HostProcessIdentity.ExecutableName))) {
+            using (process) {
+                string? executablePath;
+                try {
+                    executablePath = process.MainModule?.FileName;
+                } catch (Exception ex) {
+                    session.Log($"Could not inspect Pe.Host process {process.Id}: {ex.Message}");
+                    continue;
+                }
+
+                if (!IsPathUnderDirectory(executablePath, hostRoot))
+                    continue;
+
+                session.Log($"Stopping installed Pe.Host process {process.Id}: {executablePath}");
+                try {
+                    process.Kill(true);
+                    if (!process.WaitForExit(5000))
+                        throw new InvalidOperationException($"Pe.Host process {process.Id} did not exit within 5 seconds.");
+
+                    session.Log($"Stopped installed Pe.Host process {process.Id}.");
+                } catch (Exception ex) {
+                    throw new InvalidOperationException($"Could not stop installed Pe.Host process {process.Id} at '{executablePath}'.", ex);
+                }
+            }
+        }
+    }
+
+    private static bool IsPathUnderDirectory(string? path, string directory) {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        var fullPath = Path.GetFullPath(path);
+        var fullDirectory = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var relativePath = Path.GetRelativePath(fullDirectory, fullPath);
+        return !relativePath.StartsWith("..", StringComparison.Ordinal)
+               && !Path.IsPathRooted(relativePath);
+    }
+
     private static IEnumerable<string> ResolveLegacyApplicationPluginRoots() {
         var applicationData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         var commonApplicationData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
@@ -167,7 +237,7 @@ public static class CustomActions {
         }
 
         foreach (var directory in Directory.EnumerateDirectories(root)
-                     .Where(path => IsLegacyInstallName(Path.GetFileName(path)))
+                     .Where(path => IsLegacyApplicationPluginDirectoryName(Path.GetFileName(path)))
                      .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)) {
             TryDeleteDirectory(session, directory);
         }
@@ -211,6 +281,15 @@ public static class CustomActions {
 
             TryDeleteFile(session, addinFile);
         }
+    }
+
+    private static bool IsLegacyApplicationPluginDirectoryName(string name) {
+        if (IsLegacyInstallName(name))
+            return true;
+
+        const string bundleSuffix = ".bundle";
+        return name.EndsWith(bundleSuffix, StringComparison.OrdinalIgnoreCase)
+               && IsLegacyInstallName(name[..^bundleSuffix.Length]);
     }
 
     private static bool IsLegacyInstallName(string name) =>
