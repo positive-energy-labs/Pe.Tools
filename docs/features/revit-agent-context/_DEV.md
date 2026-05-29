@@ -1,4 +1,4 @@
-# Revit Agent Context Alignment
+﻿# Revit Agent Context Alignment
 
 ## Mental Model
 
@@ -66,6 +66,18 @@ For normal Pea work, the intended first pass is:
 4. `revit.resolve.references` when the user's wording is ambiguous or natural, such as `this view` or `selected equipment`.
 5. Domain-specific `revit.catalog.*` calls for inventory, bounded `revit.matrix.schedule-coverage` / `revit.matrix.parameter-coverage` calls for joins, or `revit.detail.*` only after the target is known.
 
+### Visible equipment schedule/electrical audit
+
+For questions like "is the NE lower-level visible equipment tagged, scheduled, and aligned to loads":
+
+1. Use `pe_status` and `revit.context.summary` for active document/view/sheet state.
+2. Resolve target wording such as `this view`, `printed lower level`, or `NE equipment` through `revit.resolve.references` instead of assuming a model-wide scope.
+3. Use `revit.context.visible-summary` for category counts and candidate handles when the active view is the audit scope.
+4. Use `revit.matrix.schedule-coverage` with `scope: "ActiveViewVisible"` for active-view audits or `scope: "ExplicitHandles"` for handles returned by visible summary, detail calls, or a narrow script. Keep `categoryNames`, schedule filters, role scope, samples, and budgets bounded.
+5. Use `revit.detail.elements` on exact equipment handles for tag/load-name/panel/circuit context, including requested parameters such as `Mark`, `Panel`, `Circuit Number`, and `Load Name`.
+6. Use `revit.catalog.electrical-circuits` and `revit.detail.electrical-panel-schedules` only after exact element context identifies panel/circuit candidates or an exact-join gap.
+7. Surface binding/correlation diagnostics separately from facts. Do not infer alignment from family/type names when exact handles or circuit facts are available.
+
 ### Resolve natural references
 
 Natural references should become stable handles:
@@ -90,7 +102,7 @@ Avoid returning full element tables, full parameter bags, all schedule rows, or 
 
 ## Implementation Direction
 
-Current compact projections include context summaries, visible summaries, natural-reference resolution, schedule catalogs/details with budgets, loaded-family catalogs with summaries, project-parameter binding summaries, and bounded schedule/parameter coverage matrices.
+Current compact projections include context summaries, visible summaries, natural-reference resolution, schedule catalogs/details with budgets, loaded-family catalogs with summaries, project-parameter binding summaries, active-view/explicit-handle schedule coverage, exact-handle element electrical context, and bounded schedule/parameter coverage matrices.
 
 Likely next contracts should focus on compact projections for:
 

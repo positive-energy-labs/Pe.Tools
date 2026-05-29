@@ -6,10 +6,12 @@
 import type { RevitAgentContextHandle } from "./revit-agent-context-handle.js";
 import type { RevitAgentVisibleCategorySummary } from "./revit-agent-visible-category-summary.js";
 import type { RevitDataIssue } from "./revit-data-issue.js";
+import type { RevitAgentVisibleViewSummary } from "./revit-agent-visible-view-summary.js";
 
 export interface RevitAgentVisibleContextData {
   activeView?: RevitAgentContextHandle;
   totalVisibleElementCount: number;
   categories: RevitAgentVisibleCategorySummary[];
   issues: RevitDataIssue[];
+  views?: RevitAgentVisibleViewSummary[];
 }

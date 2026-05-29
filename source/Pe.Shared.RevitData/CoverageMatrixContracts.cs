@@ -10,6 +10,7 @@ namespace Pe.Shared.RevitData;
 public enum RevitElementScope {
     All,
     ActiveViewVisible,
+    ViewReferences,
     CurrentSelection,
     ExplicitHandles
 }
@@ -45,10 +46,17 @@ public enum ScheduleRoleScope {
 [ExportTsInterface]
 public record ScheduleCoverageRequest {
     public List<string> CategoryNames { get; init; } = [];
+    public RevitElementScope Scope { get; init; } = RevitElementScope.All;
+    public List<long> ElementIds { get; init; } = [];
+    public List<string> ElementUniqueIds { get; init; } = [];
+    public List<long> ViewIds { get; init; } = [];
+    public List<string> ViewUniqueIds { get; init; } = [];
     public ScheduleCatalogRequest? ScheduleFilter { get; init; }
     public ScheduleRoleScope ScheduleRoleScope { get; init; } = ScheduleRoleScope.All;
     public RevitDataOutputBudget? Budget { get; init; }
     public bool IncludeElementSamples { get; init; }
+    public bool IncludeMissingElementHandles { get; init; }
+    public bool IncludeMatchedScheduleNames { get; init; }
 }
 
 [ExportTsInterface]
@@ -74,7 +82,9 @@ public record ScheduleCoverageData(
     int ScheduleCount,
     List<ScheduleCoverageElementEntry> Elements,
     List<RevitDataIssue> Issues,
-    RevitDataResultPage? Page = null
+    RevitDataResultPage? Page = null,
+    List<RevitElementHandle>? MissingHandles = null,
+    List<string>? MatchedScheduleNames = null
 );
 
 [ExportTsInterface]

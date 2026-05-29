@@ -126,7 +126,7 @@ export const hostOperationSearch = createTool({
 export const hostOperationCall = createTool({
   id: "host_operation_call",
   description:
-    "Call a generated public Pe.Host operation by key with a JSON request object. Use revit.context.summary for fresh current Revit user context such as active view/sheet, selection, browser counts, and compact visible-category context; automatic status checks do not call bridge-backed Revit context operations. Successful calls default to { ok, key, response } without repeating operation metadata. Use verbosity=hints/full only when metadata is needed in the response. Prefer compact revit.context/catalog/resolve operations before expensive revit.matrix/detail calls, and do not run bridge-backed operations in parallel when metadata shows singleFlightGroup=revit. Omit request for NoRequest operations. Failures include operation metadata and suggested next steps.",
+    "Call a generated public Pe.Host operation by key with a JSON request object. Use revit.context.summary for fresh current Revit user context such as active view/sheet, selection, browser counts, and compact visible-category context; automatic status checks do not call bridge-backed Revit context operations. Successful calls default to { ok, key, requestId, elapsedMs, response } without repeating operation metadata. Use verbosity=hints/full only when metadata is needed in the response. Prefer compact revit.context/catalog/resolve operations before expensive revit.matrix/detail calls, do not run bridge-backed operations in parallel when metadata shows singleFlightGroup=revit, and inspect pe_logs with requestId before retrying a timed-out bridge call. Omit request for NoRequest operations. Failures include operation metadata and suggested next steps.",
   inputSchema: z.object({
     key: z
       .string()
@@ -144,10 +144,13 @@ export const hostOperationCall = createTool({
       .describe(
         "Successful-call metadata size. Compact omits operation metadata; hints/full include increasingly verbose metadata. Failures always include full metadata.",
       ),
+    timeoutSeconds: z.number().min(5).max(900).default(300).describe(
+      "Client-side timeout for this host call. Keep the default for broad Revit work; lower it only for cheap/status-like calls. If it times out, inspect pe_logs before retrying bridge-backed work.",
+    ),
   }),
   execute: async (input) =>
     callHostOperation(
-      { baseUrl: resolveHostBaseUrl() },
+      { baseUrl: resolveHostBaseUrl(), timeoutMs: input.timeoutSeconds * 1000 },
       input.key,
       input.request,
       input.verbosity,

@@ -26,7 +26,8 @@ public static class ScheduleCategoryValueDomain {
     }
 
     public static ElementId ResolveCategoryId(Document doc, string? categoryName) {
-        ArgumentNullException.ThrowIfNull(doc);
+        if (doc == null)
+            throw new ArgumentNullException(nameof(doc));
 
         var builtInCategory = ResolveBuiltInCategory(categoryName);
         var category = Category.GetCategory(doc, builtInCategory);

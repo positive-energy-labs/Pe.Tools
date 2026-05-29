@@ -1,4 +1,4 @@
-using Pe.Shared.HostContracts.SettingsStorage;
+﻿using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 
@@ -11,7 +11,7 @@ internal static class RevitDataHostOperationExamples {
     ];
 
     public static readonly IReadOnlyList<string> MatrixExpansionHints = [
-        "Matrix operations are expensive; constrain by category, family, schedule, parameter, or explicit handles.",
+        "Matrix operations are expensive; constrain by category, family, schedule, parameter, visible scope, or explicit handles.",
         "Use budget.maxEntries and budget.maxSamplesPerEntry before requesting wider joins."
     ];
 
@@ -73,7 +73,7 @@ public static class GetScheduleCatalogOperationContract {
             "Get Schedule Catalog",
             HostOperationAgentMetadata.Create(
                 "revit",
-                "Read schedule definitions and field facts from the active document.",
+                "Read schedule definitions and field facts from the active document. Do not use broad schedule catalog discovery for visible equipment coverage when revit.matrix.schedule-coverage can answer from view or element handles.",
                 new[] { "schedules", "catalog", "fields", "document", "sheet-placement", "printed-context" },
                 requiresBridge: true,
                 requiresActiveDocument: true,
@@ -93,7 +93,10 @@ public static class GetScheduleCatalogOperationContract {
                         """
                     )
                 ],
-                boundedExpansionHints: RevitDataHostOperationExamples.CatalogExpansionHints,
+                boundedExpansionHints: [
+                    .. RevitDataHostOperationExamples.CatalogExpansionHints,
+                    "For visible/current/printed equipment coverage, prefer revit.matrix.schedule-coverage with ViewReferences or ExplicitHandles; use this catalog only when schedule candidates themselves are unknown."
+                ],
                 handleProvenanceNotes: "Schedule handles include ids/unique ids plus sheet-placement facts when requested."
             )
         );
@@ -362,21 +365,33 @@ public static class GetScheduleCoverageOperationContract {
             "Get Schedule Coverage Matrix",
             HostOperationAgentMetadata.Create(
                 "revit",
-                "Read bounded element-to-schedule coverage counts and samples from the active document.",
-                new[] { "schedules", "coverage", "matrix", "elements", "handles" },
+                "Read bounded element-to-schedule coverage counts and samples from the active document, including active-view-visible or explicit-handle scopes.",
+                new[] { "schedules", "coverage", "matrix", "elements", "handles", "active-view-visible", "explicit-handles", "visible-equipment", "printed-context" },
                 requiresBridge: true,
                 requiresActiveDocument: true,
                 requestExamples: [
                     RevitDataHostOperationExamples.Example(
-                        "bounded schedule coverage",
-                        "Check whether elements in a category appear in matching schedules.",
+                        "resolved printed view equipment coverage",
+                        "Check whether mechanical equipment visible in resolved printed views appears in issued/working equipment schedules without a separate visible-summary call.",
                         """
-                        { "categoryNames": ["Mechanical Equipment"], "scheduleRoleScope": "IssuedOrWorking", "scheduleFilter": { "scheduleNameContains": "Equipment", "projection": { "view": "Handles" }, "budget": { "maxEntries": 25 } }, "includeElementSamples": true, "budget": { "maxEntries": 50, "maxSamplesPerEntry": 5 } }
+                        { "scope": "ViewReferences", "viewIds": [12345, 67890], "categoryNames": ["Mechanical Equipment"], "scheduleRoleScope": "IssuedOrWorking", "scheduleFilter": { "scheduleNameContains": "Equipment", "placementScope": "PlacedOnly", "projection": { "view": "Handles", "includeSheetPlacements": true }, "budget": { "maxEntries": 25 } }, "includeMissingElementHandles": true, "includeMatchedScheduleNames": true, "budget": { "maxEntries": 250, "maxSamplesPerEntry": 0 } }
+                        """
+                    ),
+                    RevitDataHostOperationExamples.Example(
+                        "explicit handles from visible/detail context",
+                        "Use handles returned by visible-summary, detail.elements, or a narrow script when the audit scope is exact.",
+                        """
+                        { "scope": "ExplicitHandles", "elementIds": [12345, 67890], "categoryNames": ["Mechanical Equipment"], "scheduleRoleScope": "IssuedOrWorking", "scheduleFilter": { "scheduleNameContains": "Equipment", "projection": { "view": "Handles", "includeSheetPlacements": true }, "budget": { "maxEntries": 25 } }, "includeMissingElementHandles": true, "includeMatchedScheduleNames": true, "budget": { "maxEntries": 250, "maxSamplesPerEntry": 0 } }
                         """
                     )
                 ],
-                boundedExpansionHints: RevitDataHostOperationExamples.MatrixExpansionHints,
-                handleProvenanceNotes: "Coverage samples return stable element handles plus matching schedule handles."
+                boundedExpansionHints: [
+                    .. RevitDataHostOperationExamples.MatrixExpansionHints,
+                    "Resolve the target view/sheet phrase first with revit.context.summary or one narrowed revit.resolve.references call; use ViewReferences or ActiveViewVisible only when that view scope is intended.",
+                    "Use ExplicitHandles for handles returned by revit.context.visible-summary, revit.detail.elements, or a script instead of broad model-wide coverage.",
+                    "For audit summaries, request includeMissingElementHandles and includeMatchedScheduleNames before asking for per-element samples."
+                ],
+                handleProvenanceNotes: "Coverage samples return stable element handles plus matching schedule handles. Treat coverage as definitive only when schedule subject binding succeeds; issues explain row-binding limitations."
             )
         );
 }

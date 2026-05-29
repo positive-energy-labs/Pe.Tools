@@ -29,10 +29,24 @@ public static class ResolveRevitAgentContextOperationContract {
             "Resolve Revit Agent Context Reference",
             HostOperationAgentMetadata.Create(
                 "revit",
-                "Resolve natural references like this view, selected equipment, or printed mech Level 1 plan into stable Revit handles with provenance.",
-                new[] { "agent-context", "resolve", "natural-reference", "handles", "provenance" },
+                "Resolve natural references like this view, selected equipment, or printed mech Level 1 plan into stable Revit handles with provenance; narrow by handle kind and printed context when the user already described the scope.",
+                new[] { "agent-context", "resolve", "natural-reference", "handles", "provenance", "printed-context", "view-handles" },
                 requiresBridge: true,
-                requiresActiveDocument: true
+                requiresActiveDocument: true,
+                requestExamples: [
+                    RevitDataHostOperationExamples.Example(
+                        "printed lower-level mechanical views only",
+                        "Use once for M201/M202-style scope, then reuse returned view/sheet handles for visible-summary or schedule-coverage.",
+                        """
+                        { "referenceText": "printed lower level mechanical equipment plans M201 M202", "handleKinds": ["View", "Sheet"], "requirePrintedContext": true, "maxPerHandleKind": 4, "maxResults": 8, "compact": true }
+                        """
+                    )
+                ],
+                boundedExpansionHints: [
+                    "When the user asks about printed/current/lower-level scope, resolve once with handleKinds and requirePrintedContext instead of broad browser resolution.",
+                    "Reuse returned handles for the rest of the turn; call revit.resolve.references again only if context changed or the result was ambiguous."
+                ],
+                handleProvenanceNotes: "Resolve candidates preserve stable view/sheet handles, sheet-placement provenance, and related handles for follow-up visible-summary or matrix calls."
             )
         );
 }
@@ -47,10 +61,32 @@ public static class GetRevitAgentVisibleContextOperationContract {
             "Get Revit Agent Visible Context Summary",
             HostOperationAgentMetadata.Create(
                 "revit",
-                "Read a compact category-count summary of model state visible in the active Revit view without dumping elements.",
-                new[] { "agent-context", "visible", "active-view", "categories", "summary" },
+                "Read compact category counts and bounded visible element handles for the active view or explicit view references.",
+                new[] { "agent-context", "visible", "active-view", "view-references", "categories", "handles", "printed-views", "visible-equipment" },
                 requiresBridge: true,
-                requiresActiveDocument: true
+                requiresActiveDocument: true,
+                requestExamples: [
+                    RevitDataHostOperationExamples.Example(
+                        "active view mechanical equipment handles",
+                        "Use when current/active view visible equipment is the audit scope and exact handles are needed for detail or matrix calls.",
+                        """
+                        { "scope": "ActiveViewVisible", "categoryNames": ["Mechanical Equipment"], "maxCategories": 5, "maxElementHandlesPerCategory": 250 }
+                        """
+                    ),
+                    RevitDataHostOperationExamples.Example(
+                        "resolved printed view references",
+                        "Use view ids or unique ids returned by revit.resolve.references; sheet ids expand to their placed views.",
+                        """
+                        { "scope": "ViewReferences", "viewIds": [12345, 67890], "categoryNames": ["Mechanical Equipment"], "maxViews": 10, "maxElementHandlesPerCategory": 500, "returnElementHandlesOnly": true }
+                        """
+                    )
+                ],
+                boundedExpansionHints: [
+                    "For visible/current/printed equipment audits, resolve the view or sheet phrase once, then call this with ViewReferences and returnElementHandlesOnly=true to get exact visible handles and visible-in-view provenance.",
+                    "Feed returned element handles into revit.matrix.schedule-coverage with ExplicitHandles or revit.detail.elements for electrical/tag facts.",
+                    "Set categoryNames and maxElementHandlesPerCategory deliberately; a complete handle set is indicated by isReturnedElementSetComplete."
+                ],
+                handleProvenanceNotes: "Visible summaries return category counts, bounded element handles, the views each handle is visible in, and view/sheet-placement provenance for explicit view-reference scopes."
             )
         );
 }

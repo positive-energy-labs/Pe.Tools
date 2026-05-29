@@ -3,6 +3,8 @@ using Pe.Revit.DocumentData.ProjectBrowser;
 using Pe.Revit.DocumentData.Schedules.Collect;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
+using Serilog;
+using System.Diagnostics;
 
 namespace Pe.Revit.DocumentData.ProjectIndex;
 
@@ -18,7 +20,7 @@ public static class ProjectIndexCollector {
         var budget = RevitDataOutputBudgets.WithDefaults(request.Budget, maxEntries: 25, maxSamplesPerEntry: 8);
         var issues = new List<RevitDataIssue>();
         var sections = request.Sections.Count == 0
-            ? Enum.GetValues<ProjectIndexSection>().ToHashSet()
+            ? Enum.GetValues(typeof(ProjectIndexSection)).Cast<ProjectIndexSection>().ToHashSet()
             : request.Sections.ToHashSet();
         var view = projection.View;
         var includeHandles = view is RevitDataResultView.Handles or RevitDataResultView.Rows or RevitDataResultView.Full;
@@ -26,13 +28,17 @@ public static class ProjectIndexCollector {
         var maxEntries = budget.MaxEntries;
         var maxSamples = Math.Max(0, budget.MaxSamplesPerEntry ?? 8);
         var browserSections = request.BrowserSections.Count == 0
-            ? Enum.GetValues<ProjectBrowserSection>().ToHashSet()
+            ? Enum.GetValues(typeof(ProjectBrowserSection)).Cast<ProjectBrowserSection>().ToHashSet()
             : request.BrowserSections.ToHashSet();
         if (request.BrowserFilter?.Section is { } browserFilterSection)
             browserSections = [browserFilterSection];
-        var browserIndex = request.IncludeBrowserProvenance
-            ? ProjectBrowserCollector.CollectIndex(document, browserSections, maxSamples, ProjectBrowserResultView.Folders, request.BrowserFilter, issues)
-            : ProjectBrowserCollectedIndex.Empty;
+        var totalStopwatch = Stopwatch.StartNew();
+        var browserIndex = TimePhase(
+            "browser-index",
+            () => request.IncludeBrowserProvenance
+                ? ProjectBrowserCollector.CollectIndex(document, browserSections, maxSamples, ProjectBrowserResultView.Folders, request.BrowserFilter, issues)
+                : ProjectBrowserCollectedIndex.Empty
+        );
 
         var levelNames = ToFilterSet(request.LevelNames);
         var categoryNames = ToFilterSet(request.CategoryNames);
@@ -42,23 +48,24 @@ public static class ProjectIndexCollector {
         var familyNameFilters = ToTrimmedList(request.FamilyNameContains);
         var scheduleNameFilters = ToTrimmedList(request.ScheduleNameContains);
 
-        var levels = new FilteredElementCollector(document)
+        var levels = TimePhase("levels", () => new FilteredElementCollector(document)
             .OfClass(typeof(Level))
             .Cast<Level>()
             .OrderBy(level => level.Elevation)
             .ThenBy(level => level.Name, IgnoreCase)
-            .ToList();
-        var views = new FilteredElementCollector(document)
+            .ToList());
+        var placementIndex = TimePhase("placement-index", () => CreatePlacementIndex(document));
+        var views = TimePhase("views", () => new FilteredElementCollector(document)
             .OfClass(typeof(View))
             .Cast<View>()
             .Where(candidate => !candidate.IsTemplate)
             .Where(candidate => candidate is not ViewSheet and not ViewSchedule)
-            .Where(candidate => request.IncludeUnplacedViews || IsPlacedView(document, candidate))
+            .Where(candidate => request.IncludeUnplacedViews || placementIndex.IsViewPlaced(candidate.Id))
             .Where(candidate => MatchesLevelFilter(candidate.GenLevel?.Name, levelNames))
             .Where(candidate => MatchesSearch(candidate.Name, searchTokens))
             .OrderBy(candidate => candidate.Name, IgnoreCase)
-            .ToList();
-        var sheets = new FilteredElementCollector(document)
+            .ToList());
+        var sheets = TimePhase("sheets", () => new FilteredElementCollector(document)
             .OfClass(typeof(ViewSheet))
             .Cast<ViewSheet>()
             .Where(sheet => !sheet.IsTemplate)
@@ -67,7 +74,7 @@ public static class ProjectIndexCollector {
             .Where(sheet => MatchesSearch($"{sheet.SheetNumber} {sheet.Name}", searchTokens))
             .OrderBy(sheet => sheet.SheetNumber, IgnoreCase)
             .ThenBy(sheet => sheet.Name, IgnoreCase)
-            .ToList();
+            .ToList());
         var scheduleRequest = new ScheduleCatalogRequest {
             IncludeTemplates = false,
             Projection = new ScheduleCatalogProjection {
@@ -77,7 +84,7 @@ public static class ProjectIndexCollector {
             },
             Budget = new RevitDataOutputBudget { MaxEntries = maxEntries, IncludeDiagnostics = true }
         };
-        var scheduleCatalog = ScheduleCatalogCollector.Collect(document, scheduleRequest);
+        var scheduleCatalog = TimePhase("schedule-catalog", () => ScheduleCatalogCollector.Collect(document, scheduleRequest));
         issues.AddRange(scheduleCatalog.Issues);
         var scheduleEntries = scheduleCatalog.Entries
             .Where(schedule => request.IncludeUnplacedSchedules || schedule.IsPlacedOnSheet)
@@ -85,19 +92,19 @@ public static class ProjectIndexCollector {
             .Where(schedule => MatchesAnyContains(schedule.Name, scheduleNameFilters))
             .Where(schedule => MatchesSearch($"{schedule.Name} {schedule.CategoryName} {string.Join(" ", schedule.ParameterUsages.Select(usage => usage.FieldName))}", searchTokens))
             .ToList();
-        var loadedFamilies = LoadedFamiliesCatalogCollector.Collect(
+        var loadedFamilies = TimePhase("loaded-families", () => LoadedFamiliesCatalogCollector.Collect(
             document,
             new LoadedFamiliesFilter { PlacementScope = LoadedFamilyPlacementScope.PlacedOnly },
             new RevitDataProjectionRequest { View = RevitDataResultView.Handles },
             new RevitDataOutputBudget { MaxEntries = maxEntries, IncludeDiagnostics = true }
-        );
+        ));
         issues.AddRange(loadedFamilies.Issues);
         var families = loadedFamilies.Families
             .Where(family => categoryNames.Count == 0 || (!string.IsNullOrWhiteSpace(family.CategoryName) && categoryNames.Contains(family.CategoryName)))
             .Where(family => MatchesAnyContains(family.FamilyName, familyNameFilters))
             .Where(family => MatchesSearch($"{family.FamilyName} {family.CategoryName}", searchTokens))
             .ToList();
-        var instanceCounts = CollectInstanceCounts(document);
+        var instanceCounts = TimePhase("instance-counts", () => CollectInstanceCounts(document));
         var instancesByCategory = instanceCounts.ByCategory;
         var familiesByCategory = families
             .Where(family => !string.IsNullOrWhiteSpace(family.CategoryName))
@@ -110,23 +117,23 @@ public static class ProjectIndexCollector {
 
         var levelEntries = sections.Contains(ProjectIndexSection.Levels)
             ? ProjectPage(levels.Where(level => MatchesLevelFilter(level.Name, levelNames)).ToList(), maxEntries, issues, "ProjectIndexLevelsTruncated")
-                .Select(level => CreateLevelEntry(document, level, views, scheduleEntries, instanceCounts.ByLevelId, includeHandles, maxSamples))
+                .Select(level => CreateLevelEntry(document, level, views, scheduleEntries, instanceCounts.ByLevelId, includeHandles, maxSamples, placementIndex))
                 .ToList()
             : [];
         var includeBrowserPaths = request.IncludeBrowserProvenance;
         var sheetEntries = sections.Contains(ProjectIndexSection.Sheets)
             ? ProjectPage(sheets, maxEntries, issues, "ProjectIndexSheetsTruncated")
-                .Select(sheet => CreateSheetEntry(document, sheet, includeHandles, includeBrowserPaths, maxSamples, browserIndex))
+                .Select(sheet => CreateSheetEntry(document, sheet, includeHandles, includeBrowserPaths, maxSamples, browserIndex, placementIndex))
                 .ToList()
             : [];
         var viewEntries = sections.Contains(ProjectIndexSection.Views)
             ? ProjectPage(views, maxEntries, issues, "ProjectIndexViewsTruncated")
-                .Select(viewElement => CreateViewEntry(document, viewElement, includeHandles, includeBrowserPaths, maxSamples, browserIndex))
+                .Select(viewElement => CreateViewEntry(document, viewElement, includeHandles, includeBrowserPaths, maxSamples, browserIndex, placementIndex))
                 .ToList()
             : [];
         var scheduleIndexEntries = sections.Contains(ProjectIndexSection.Schedules)
             ? ProjectPage(scheduleEntries, maxEntries, issues, "ProjectIndexSchedulesTruncated")
-                .Select(schedule => CreateScheduleEntry(document, schedule, includeHandles, includeSamples, includeBrowserPaths, maxSamples, browserIndex))
+                .Select(schedule => CreateScheduleEntry(document, schedule, includeHandles, includeSamples, includeBrowserPaths, maxSamples, browserIndex, placementIndex))
                 .ToList()
             : [];
         var categoryEntries = sections.Contains(ProjectIndexSection.Categories)
@@ -147,7 +154,7 @@ public static class ProjectIndexCollector {
                          + (sections.Contains(ProjectIndexSection.Families) ? families.Count : 0);
         var truncated = returnedCount < totalCount;
 
-        return new ProjectIndexData(
+        var result = new ProjectIndexData(
             new ProjectIndexSummary(levels.Count, sheets.Count, views.Count, scheduleEntries.Count, CreateCategoryNames(familiesByCategory, schedulesByCategory, instancesByCategory, []).Count, families.Count, truncated),
             levelEntries,
             sheetEntries,
@@ -156,10 +163,12 @@ public static class ProjectIndexCollector {
             categoryEntries,
             familyEntries,
             request.IncludeBrowserProvenance ? browserIndex.Organizations : [],
-            request.IncludeModelContext ? CollectModelContext(document) : null,
+            request.IncludeModelContext ? TimePhase("model-context", () => CollectModelContext(document)) : null,
             RevitDataOutputBudgets.ProjectIssues(issues, budget),
             new RevitDataResultPage(totalCount, returnedCount, truncated)
         );
+        Log.Debug("ProjectIndex collected in {ElapsedMilliseconds} ms: levels={LevelCount}, sheets={SheetCount}, views={ViewCount}, schedules={ScheduleCount}, categories={CategoryCount}, families={FamilyCount}", totalStopwatch.ElapsedMilliseconds, levels.Count, sheets.Count, views.Count, scheduleEntries.Count, CreateCategoryNames(familiesByCategory, schedulesByCategory, instancesByCategory, []).Count, families.Count);
+        return result;
     }
 
     private static ProjectIndexModelContext CollectModelContext(Document document) {
@@ -212,12 +221,13 @@ public static class ProjectIndexCollector {
         IReadOnlyList<ScheduleCatalogEntry> schedules,
         IReadOnlyDictionary<long, int> instanceCountsByLevelId,
         bool includeHandles,
-        int maxSamples
+        int maxSamples,
+        ProjectIndexPlacementIndex placementIndex
     ) {
         var levelViews = views.Where(view => string.Equals(view.GenLevel?.Name, level.Name, StringComparison.OrdinalIgnoreCase)).ToList();
-        var placedViews = levelViews.Where(view => IsPlacedView(document, view)).ToList();
+        var placedViews = levelViews.Where(view => placementIndex.IsViewPlaced(view.Id)).ToList();
         var sheetHandles = includeHandles
-            ? placedViews.SelectMany(view => FindPlacedSheets(document, view)).DistinctByHandle().Take(maxSamples).ToList()
+            ? placedViews.SelectMany(view => placementIndex.GetSheetHandlesForView(view.Id)).DistinctByHandle().Take(maxSamples).ToList()
             : [];
         var levelSchedules = schedules.Where(schedule => string.Equals(FindScheduleLevelName(document, schedule), level.Name, StringComparison.OrdinalIgnoreCase)).ToList();
         return new ProjectIndexLevelEntry(
@@ -234,9 +244,9 @@ public static class ProjectIndexCollector {
         );
     }
 
-    private static ProjectIndexSheetEntry CreateSheetEntry(Document document, ViewSheet sheet, bool includeHandles, bool includeBrowserPaths, int maxSamples, ProjectBrowserCollectedIndex browserIndex) {
-        var placedViews = GetPlacedViews(document, sheet).ToList();
-        var placedSchedules = GetPlacedSchedules(document, sheet).ToList();
+    private static ProjectIndexSheetEntry CreateSheetEntry(Document document, ViewSheet sheet, bool includeHandles, bool includeBrowserPaths, int maxSamples, ProjectBrowserCollectedIndex browserIndex, ProjectIndexPlacementIndex placementIndex) {
+        var placedViews = placementIndex.GetPlacedViews(sheet.Id);
+        var placedSchedules = placementIndex.GetPlacedSchedules(sheet.Id);
         var levelNames = placedViews.Select(view => view.GenLevel?.Name).OfType<string>().Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(IgnoreCase).OrderBy(name => name, IgnoreCase).ToList();
         return new ProjectIndexSheetEntry(
             CreateHandle(document, sheet, RevitAgentContextHandleKind.Sheet, $"{sheet.SheetNumber} - {sheet.Name}"),
@@ -252,8 +262,8 @@ public static class ProjectIndexCollector {
         );
     }
 
-    private static ProjectIndexViewEntry CreateViewEntry(Document document, View view, bool includeHandles, bool includeBrowserPaths, int maxSamples, ProjectBrowserCollectedIndex browserIndex) {
-        var sheetHandles = includeHandles ? FindPlacedSheets(document, view).Take(maxSamples).ToList() : [];
+    private static ProjectIndexViewEntry CreateViewEntry(Document document, View view, bool includeHandles, bool includeBrowserPaths, int maxSamples, ProjectBrowserCollectedIndex browserIndex, ProjectIndexPlacementIndex placementIndex) {
+        var sheetHandles = includeHandles ? placementIndex.GetSheetHandlesForView(view.Id).Take(maxSamples).ToList() : [];
         return new ProjectIndexViewEntry(
             CreateHandle(document, view, RevitAgentContextHandleKind.View, view.Title),
             view.Title,
@@ -275,7 +285,8 @@ public static class ProjectIndexCollector {
         bool includeSamples,
         bool includeBrowserPaths,
         int maxSamples,
-        ProjectBrowserCollectedIndex browserIndex
+        ProjectBrowserCollectedIndex browserIndex,
+        ProjectIndexPlacementIndex placementIndex
     ) => new(
         new RevitAgentContextHandle(RevitAgentContextHandleKind.Schedule, document.GetDocumentKey(), schedule.ScheduleId, schedule.ScheduleUniqueId, schedule.Name, schedule.CategoryName),
         schedule.Name,
@@ -287,10 +298,10 @@ public static class ProjectIndexCollector {
         schedule.VisibleFamilyCount,
         schedule.VisibleInstanceCount,
         includeHandles
-            ? schedule.SheetPlacements.Select(placement => CreateSheetHandleByName(document, placement)).Where(handle => handle != null).Cast<RevitAgentContextHandle>().Take(maxSamples).ToList()
+            ? schedule.SheetPlacements.Select(placementIndex.GetSheetHandle).Where(handle => handle != null).Cast<RevitAgentContextHandle>().Take(maxSamples).ToList()
             : [],
         includeSamples ? schedule.ParameterUsages.Select(usage => usage.FieldName).Distinct(IgnoreCase).Take(maxSamples).ToList() : [],
-        schedule.BrowserPaths.Count != 0 ? schedule.BrowserPaths : browserIndex.Get(ProjectBrowserSection.Schedules, new ElementId(schedule.ScheduleId), includeBrowserPaths),
+        schedule.BrowserPaths.Count != 0 ? schedule.BrowserPaths : browserIndex.Get(ProjectBrowserSection.Schedules, schedule.ScheduleId.ToElementId(), includeBrowserPaths),
         [new RevitAgentContextProvenance(schedule.IsPlacedOnSheet ? RevitAgentContextProvenanceKind.PrintedContext : RevitAgentContextProvenanceKind.BrowserIndex, schedule.IsPlacedOnSheet ? "Schedule is placed on one or more sheets." : "Schedule indexed from project browser.")]
     );
 
@@ -382,58 +393,69 @@ public static class ProjectIndexCollector {
         .OrderBy(category => category, IgnoreCase)
         .ToList();
 
-    private static IEnumerable<RevitAgentContextHandle> FindPlacedSheets(Document document, View view) {
-        if (view is ViewSheet activeSheet) {
-            yield return CreateHandle(document, activeSheet, RevitAgentContextHandleKind.Sheet, $"{activeSheet.SheetNumber} - {activeSheet.Name}");
-            yield break;
-        }
-
-        foreach (var candidateSheet in new FilteredElementCollector(document).OfClass(typeof(ViewSheet)).Cast<ViewSheet>()) {
-            var containsViewport = candidateSheet.GetAllViewports()
-                .Select(document.GetElement)
-                .OfType<Viewport>()
-                .Any(viewport => viewport.ViewId == view.Id);
-            if (containsViewport)
-                yield return CreateHandle(document, candidateSheet, RevitAgentContextHandleKind.Sheet, $"{candidateSheet.SheetNumber} - {candidateSheet.Name}");
-        }
-
-        if (view is not ViewSchedule)
-            yield break;
-
-        foreach (var scheduleSheet in new FilteredElementCollector(document)
-                     .OfClass(typeof(ScheduleSheetInstance))
-                     .Cast<ScheduleSheetInstance>()
-                     .Where(instance => instance.ScheduleId == view.Id)
-                     .Select(instance => document.GetElement(instance.OwnerViewId))
-                     .OfType<ViewSheet>()) {
-            yield return CreateHandle(document, scheduleSheet, RevitAgentContextHandleKind.Sheet, $"{scheduleSheet.SheetNumber} - {scheduleSheet.Name}");
-        }
-    }
-
-    private static bool IsPlacedView(Document document, View view) => view.GetPlacementOnSheetStatus() != ViewPlacementOnSheetStatus.NotPlaced;
-
-    private static IEnumerable<View> GetPlacedViews(Document document, ViewSheet sheet) => sheet.GetAllViewports()
-        .Select(document.GetElement)
-        .OfType<Viewport>()
-        .Select(viewport => document.GetElement(viewport.ViewId))
-        .OfType<View>();
-
-    private static IEnumerable<ViewSchedule> GetPlacedSchedules(Document document, ViewSheet sheet) => new FilteredElementCollector(document)
-        .OfClass(typeof(ScheduleSheetInstance))
-        .Cast<ScheduleSheetInstance>()
-        .Where(instance => instance.OwnerViewId == sheet.Id)
-        .Select(instance => document.GetElement(instance.ScheduleId))
-        .OfType<ViewSchedule>();
-
     private static string? FindScheduleLevelName(Document document, ScheduleCatalogEntry schedule) => null;
 
-    private static RevitAgentContextHandle? CreateSheetHandleByName(Document document, ScheduleCatalogSheetPlacement placement) {
-        var sheet = new FilteredElementCollector(document)
+    private static ProjectIndexPlacementIndex CreatePlacementIndex(Document document) {
+        var sheets = new FilteredElementCollector(document)
             .OfClass(typeof(ViewSheet))
             .Cast<ViewSheet>()
-            .FirstOrDefault(candidate => string.Equals(candidate.SheetNumber, placement.SheetNumber, StringComparison.OrdinalIgnoreCase)
-                                         && string.Equals(candidate.Name, placement.SheetName, StringComparison.OrdinalIgnoreCase));
-        return sheet == null ? null : CreateHandle(document, sheet, RevitAgentContextHandleKind.Sheet, $"{sheet.SheetNumber} - {sheet.Name}");
+            .Where(sheet => !sheet.IsTemplate)
+            .ToList();
+        var placedViewsBySheet = new Dictionary<long, List<View>>();
+        var sheetHandlesByViewId = new Dictionary<long, List<RevitAgentContextHandle>>();
+        var sheetHandlesByName = new Dictionary<string, RevitAgentContextHandle>(IgnoreCase);
+
+        foreach (var sheet in sheets) {
+            var sheetHandle = CreateHandle(document, sheet, RevitAgentContextHandleKind.Sheet, $"{sheet.SheetNumber} - {sheet.Name}");
+            sheetHandlesByName[$"{sheet.SheetNumber}|{sheet.Name}"] = sheetHandle;
+            foreach (var viewport in sheet.GetAllViewports().Select(document.GetElement).OfType<Viewport>()) {
+                if (document.GetElement(viewport.ViewId) is not View view)
+                    continue;
+                Add(placedViewsBySheet, sheet.Id.Value(), view);
+                Add(sheetHandlesByViewId, view.Id.Value(), sheetHandle);
+            }
+        }
+
+        var placedSchedulesBySheet = new Dictionary<long, List<ViewSchedule>>();
+        var sheetHandlesByScheduleId = new Dictionary<long, List<RevitAgentContextHandle>>();
+        foreach (var instance in new FilteredElementCollector(document).OfClass(typeof(ScheduleSheetInstance)).Cast<ScheduleSheetInstance>()) {
+            if (document.GetElement(instance.OwnerViewId) is not ViewSheet sheet || document.GetElement(instance.ScheduleId) is not ViewSchedule schedule)
+                continue;
+            var sheetHandle = CreateHandle(document, sheet, RevitAgentContextHandleKind.Sheet, $"{sheet.SheetNumber} - {sheet.Name}");
+            Add(placedSchedulesBySheet, sheet.Id.Value(), schedule);
+            Add(sheetHandlesByScheduleId, schedule.Id.Value(), sheetHandle);
+        }
+
+        return new ProjectIndexPlacementIndex(placedViewsBySheet, placedSchedulesBySheet, sheetHandlesByViewId, sheetHandlesByScheduleId, sheetHandlesByName);
+    }
+
+    private static T TimePhase<T>(string phase, Func<T> action) {
+        var stopwatch = Stopwatch.StartNew();
+        var result = action();
+        Log.Debug("ProjectIndex {Phase} collected in {ElapsedMilliseconds} ms", phase, stopwatch.ElapsedMilliseconds);
+        return result;
+    }
+
+    private static void Add<T>(Dictionary<long, List<T>> dictionary, long key, T value) {
+        if (!dictionary.TryGetValue(key, out var values)) {
+            values = [];
+            dictionary[key] = values;
+        }
+        values.Add(value);
+    }
+
+    private sealed record ProjectIndexPlacementIndex(
+        IReadOnlyDictionary<long, List<View>> PlacedViewsBySheetId,
+        IReadOnlyDictionary<long, List<ViewSchedule>> PlacedSchedulesBySheetId,
+        IReadOnlyDictionary<long, List<RevitAgentContextHandle>> SheetHandlesByViewId,
+        IReadOnlyDictionary<long, List<RevitAgentContextHandle>> SheetHandlesByScheduleId,
+        IReadOnlyDictionary<string, RevitAgentContextHandle> SheetHandlesByName
+    ) {
+        public bool IsViewPlaced(ElementId viewId) => SheetHandlesByViewId.ContainsKey(viewId.Value());
+        public IReadOnlyList<View> GetPlacedViews(ElementId sheetId) => PlacedViewsBySheetId.TryGetValue(sheetId.Value(), out var views) ? views : [];
+        public IReadOnlyList<ViewSchedule> GetPlacedSchedules(ElementId sheetId) => PlacedSchedulesBySheetId.TryGetValue(sheetId.Value(), out var schedules) ? schedules : [];
+        public IReadOnlyList<RevitAgentContextHandle> GetSheetHandlesForView(ElementId viewId) => SheetHandlesByViewId.TryGetValue(viewId.Value(), out var handles) ? handles : [];
+        public RevitAgentContextHandle? GetSheetHandle(ScheduleCatalogSheetPlacement placement) => SheetHandlesByName.TryGetValue($"{placement.SheetNumber}|{placement.SheetName}", out var handle) ? handle : null;
     }
 
     private static RevitAgentContextHandle CreateHandle(Document document, Element element, RevitAgentContextHandleKind kind, string label) => new(

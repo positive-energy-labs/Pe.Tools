@@ -224,12 +224,10 @@ public static class LoadedFamiliesMatrixCollector {
             parameter.GroupTypeLabel,
             LoadedFamiliesCollectorSupport.ToContractFormulaState(parameter.FormulaState),
             parameter.Formula,
-            new Dictionary<string, string?>(
-                maxSamplesPerEntry is > 0
-                    ? parameter.ValuesByType.Take(maxSamplesPerEntry.Value)
-                    : parameter.ValuesByType,
-                StringComparer.Ordinal
-            )
+            (maxSamplesPerEntry is > 0
+                ? parameter.ValuesByType.Take(maxSamplesPerEntry.Value)
+                : parameter.ValuesByType)
+            .ToDictionary(pair => pair.Key, pair => (string?)pair.Value, StringComparer.Ordinal)
         );
 
     private static LoadedFamilyExcludedParameterEntry ToExcludedParameter(CollectedFamilyParameterRecord parameter) =>

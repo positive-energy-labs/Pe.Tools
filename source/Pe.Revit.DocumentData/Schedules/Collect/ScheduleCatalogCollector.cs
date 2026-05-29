@@ -2,10 +2,14 @@ using Pe.Revit.DocumentData.ProjectBrowser;
 using Pe.Revit.DocumentData.Schedules.Apply;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
+using Serilog;
+using System.Diagnostics;
 
 namespace Pe.Revit.DocumentData.Schedules.Collect;
 
 public static class ScheduleCatalogCollector {
+    private const long SlowScheduleCatalogEntryThresholdMs = 150;
+
     public static ScheduleCatalogData Collect(
         Document doc,
         ScheduleCatalogRequest? request = null
@@ -18,8 +22,9 @@ public static class ScheduleCatalogCollector {
         var budget = RevitDataOutputBudgets.WithDefaults(request?.Budget, maxEntries: 25);
         var maxEntries = budget.MaxEntries;
         var issues = new List<RevitDataIssue>();
+        var totalStopwatch = Stopwatch.StartNew();
         var shouldCollectBrowserIndex = request?.BrowserFilter != null || projection.View is RevitDataResultView.Handles or RevitDataResultView.Rows or RevitDataResultView.Full;
-        var browserIndex = shouldCollectBrowserIndex
+        var browserIndex = TimePhase("browser-index", () => shouldCollectBrowserIndex
             ? ProjectBrowserCollector.CollectIndex(
                 doc,
                 new HashSet<ProjectBrowserSection> { ProjectBrowserSection.Schedules },
@@ -28,22 +33,23 @@ public static class ScheduleCatalogCollector {
                 request?.BrowserFilter == null ? null : request.BrowserFilter with { Section = ProjectBrowserSection.Schedules },
                 issues
             )
-            : ProjectBrowserCollectedIndex.Empty;
+            : ProjectBrowserCollectedIndex.Empty);
+        var requireVisibleBodyRows = request?.IsEmpty != null;
 
-        var allEntries = new FilteredElementCollector(doc)
+        var allEntries = TimePhase("entries", () => new FilteredElementCollector(doc)
             .OfClass(typeof(ViewSchedule))
             .Cast<ViewSchedule>()
             .Where(schedule => includeTemplates || !schedule.IsTemplate)
             .Where(schedule => !schedule.Name.Contains("<Revision Schedule>", StringComparison.OrdinalIgnoreCase))
             .Where(schedule => MatchesPreProjectionFilter(schedule, categoryNames, scheduleNames, customParameterFilters, request))
             .OrderBy(schedule => schedule.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(schedule => TryCollectEntry(doc, schedule, projection, issues))
+            .Select(schedule => TryCollectEntry(doc, schedule, projection, issues, requireVisibleBodyRows))
             .Where(entry => entry != null)
             .Cast<ScheduleCatalogEntry>()
             .Select(entry => AttachBrowserPaths(entry, browserIndex, request))
             .Where(entry => MatchesBrowserFilter(entry, request))
             .Where(entry => MatchesPostProjectionFilter(entry, request))
-            .ToList();
+            .ToList());
 
         var entries = maxEntries is > 0
             ? allEntries.Take(maxEntries.Value).ToList()
@@ -56,8 +62,11 @@ public static class ScheduleCatalogCollector {
                 $"Returned {entries.Count} of {allEntries.Count} matching schedule(s). Increase budget.maxEntries to expand."
             ));
         }
-        AddFilterOverlapWarnings(entries, issues);
-        AddSheetFilterDiagnostics(doc, request, projection, browserIndex, allEntries, entries, issues);
+        if (budget.IncludeDiagnostics) {
+            AddFilterOverlapWarnings(entries, issues);
+            AddSheetFilterDiagnostics(doc, request, projection, browserIndex, allEntries, entries, issues);
+        }
+        Log.Debug("ScheduleCatalog collected in {ElapsedMilliseconds} ms with {MatchedCount} matching schedule(s) and {ReturnedCount} returned schedule(s)", totalStopwatch.ElapsedMilliseconds, allEntries.Count, entries.Count);
 
         return new ScheduleCatalogData(
             entries,
@@ -68,7 +77,7 @@ public static class ScheduleCatalogCollector {
 
     private static ScheduleCatalogEntry AttachBrowserPaths(ScheduleCatalogEntry entry, ProjectBrowserCollectedIndex browserIndex, ScheduleCatalogRequest? request) {
         var includeBrowserPaths = request?.BrowserFilter != null || request?.Projection?.View is RevitDataResultView.Handles or RevitDataResultView.Rows or RevitDataResultView.Full;
-        var paths = browserIndex.Get(ProjectBrowserSection.Schedules, new ElementId(entry.ScheduleId), includeBrowserPaths);
+        var paths = browserIndex.Get(ProjectBrowserSection.Schedules, entry.ScheduleId.ToElementId(), includeBrowserPaths);
         return entry with { BrowserPaths = paths };
     }
 
@@ -78,24 +87,89 @@ public static class ScheduleCatalogCollector {
         Document doc,
         ViewSchedule schedule,
         ScheduleCatalogProjection projection,
-        List<RevitDataIssue> issues
+        List<RevitDataIssue> issues,
+        bool requireVisibleBodyRows = false
     ) {
+        var totalStopwatch = Stopwatch.StartNew();
+        long profileMs = 0;
+        long sheetPlacementsMs = 0;
+        long visibleFamilyInstancesMs = 0;
+        long visibleFamiliesMs = 0;
+        long visibleBodyRowCountMs = 0;
+        long parameterUsagesMs = 0;
+        long customParametersMs = 0;
+
         try {
             var includeAll = projection.View == RevitDataResultView.Full;
-            var profile = ScheduleHelper.SerializeSchedule(schedule);
-            var sheetPlacements = ScheduleCollectorSupport.CollectSheetPlacements(doc, schedule);
-            var visibleFamilyInstances = ScheduleVisibleFamilyCollector.CollectVisibleFamilyInstances(doc, schedule);
-            var visibleFamilies = projection.IncludeVisibleFamilies || includeAll
-                ? ScheduleVisibleFamilyCollector.CollectVisibleFamilies(visibleFamilyInstances)
+            var includeProfile = includeAll || projection.View is RevitDataResultView.Rows || projection.IncludeFilters;
+            var categoryName = ScheduleCollectorSupport.GetCategoryName(doc, schedule);
+            var profile = includeProfile
+                ? Measure(
+                    () => ScheduleHelper.SerializeSchedule(schedule),
+                    out profileMs
+                )
+                : new ScheduleProfile(schedule.Name, categoryName ?? string.Empty);
+            var sheetPlacements = Measure(
+                () => ScheduleCollectorSupport.CollectSheetPlacements(doc, schedule),
+                out sheetPlacementsMs
+            );
+            var includeVisibleFamilies = projection.IncludeVisibleFamilies || includeAll;
+            var includeVisibleBodyRowCount = includeVisibleFamilies || requireVisibleBodyRows;
+            var visibleFamilyInstances = includeVisibleFamilies
+                ? Measure(
+                    () => ScheduleVisibleFamilyCollector.CollectVisibleFamilyInstances(doc, schedule),
+                    out visibleFamilyInstancesMs
+                )
                 : [];
-            var visibleBodyRowCount = ScheduleVisibleFamilyCollector.GetVisibleBodyRowCount(doc, schedule);
-            var visibleInstanceCount = visibleFamilyInstances.Count;
+            var visibleFamilies = includeVisibleFamilies
+                ? Measure(
+                    () => ScheduleVisibleFamilyCollector.CollectVisibleFamilies(visibleFamilyInstances),
+                    out visibleFamiliesMs
+                )
+                : [];
+            var visibleBodyRowCount = includeVisibleBodyRowCount
+                ? Measure(
+                    () => ScheduleVisibleFamilyCollector.GetVisibleBodyRowCount(doc, schedule),
+                    out visibleBodyRowCountMs
+                )
+                : 0;
+            var visibleInstanceCount = includeVisibleFamilies ? visibleFamilyInstances.Count : 0;
+            var parameterUsages = projection.IncludeParameterUsages || includeAll
+                ? Measure(
+                    () => ScheduleCollectorSupport.CollectParameterUsages(doc, schedule),
+                    out parameterUsagesMs
+                )
+                : [];
+            var customParameters = projection.IncludeCustomParameters || includeAll
+                ? Measure(
+                    () => ScheduleCollectorSupport.CollectCustomParameters(schedule),
+                    out customParametersMs
+                )
+                : [];
+
+            LogSlowCatalogEntry(
+                schedule,
+                totalStopwatch.ElapsedMilliseconds,
+                profileMs,
+                sheetPlacementsMs,
+                visibleFamilyInstancesMs,
+                visibleFamiliesMs,
+                visibleBodyRowCountMs,
+                parameterUsagesMs,
+                customParametersMs,
+                sheetPlacements.Count,
+                visibleBodyRowCount,
+                visibleFamilyInstances.Count,
+                visibleFamilies.Count,
+                parameterUsages.Count,
+                customParameters.Count
+            );
 
             return new ScheduleCatalogEntry(
                 schedule.Id.Value(),
                 schedule.UniqueId,
                 schedule.Name,
-                ScheduleCollectorSupport.GetCategoryName(doc, schedule),
+                categoryName,
                 schedule.IsTemplate,
                 profile.ViewTemplateName,
                 profile.IsItemized,
@@ -103,8 +177,8 @@ public static class ScheduleCatalogCollector {
                 sheetPlacements.Count != 0,
                 projection.IncludeSheetPlacements || includeAll ? sheetPlacements : [],
                 projection.IncludeFilters || includeAll ? profile.Filters ?? [] : [],
-                projection.IncludeParameterUsages || includeAll ? ScheduleCollectorSupport.CollectParameterUsages(doc, schedule) : [],
-                projection.IncludeCustomParameters || includeAll ? ScheduleCollectorSupport.CollectCustomParameters(schedule) : [],
+                parameterUsages,
+                customParameters,
                 visibleBodyRowCount,
                 visibleFamilies.Count,
                 visibleInstanceCount,
@@ -120,6 +194,47 @@ public static class ScheduleCatalogCollector {
             ));
             return null;
         }
+    }
+
+    private static void LogSlowCatalogEntry(
+        ViewSchedule schedule,
+        long totalMs,
+        long profileMs,
+        long sheetPlacementsMs,
+        long visibleFamilyInstancesMs,
+        long visibleFamiliesMs,
+        long visibleBodyRowCountMs,
+        long parameterUsagesMs,
+        long customParametersMs,
+        int sheetPlacementCount,
+        int visibleBodyRowCount,
+        int visibleInstanceCount,
+        int visibleFamilyCount,
+        int parameterUsageCount,
+        int customParameterCount
+    ) {
+        if (totalMs < SlowScheduleCatalogEntryThresholdMs)
+            return;
+
+        Log.Information(
+            "ScheduleCatalog slow entry: Schedule={ScheduleName}, ScheduleId={ScheduleId}, TotalMs={TotalMs}, ProfileMs={ProfileMs}, SheetPlacementsMs={SheetPlacementsMs}, VisibleFamilyInstancesMs={VisibleFamilyInstancesMs}, VisibleFamiliesMs={VisibleFamiliesMs}, VisibleBodyRowCountMs={VisibleBodyRowCountMs}, ParameterUsagesMs={ParameterUsagesMs}, CustomParametersMs={CustomParametersMs}, SheetPlacements={SheetPlacements}, VisibleBodyRows={VisibleBodyRows}, VisibleInstances={VisibleInstances}, VisibleFamilies={VisibleFamilies}, ParameterUsages={ParameterUsages}, CustomParameters={CustomParameters}",
+            schedule.Name,
+            schedule.Id.Value(),
+            totalMs,
+            profileMs,
+            sheetPlacementsMs,
+            visibleFamilyInstancesMs,
+            visibleFamiliesMs,
+            visibleBodyRowCountMs,
+            parameterUsagesMs,
+            customParametersMs,
+            sheetPlacementCount,
+            visibleBodyRowCount,
+            visibleInstanceCount,
+            visibleFamilyCount,
+            parameterUsageCount,
+            customParameterCount
+        );
     }
 
 
@@ -185,19 +300,23 @@ public static class ScheduleCatalogCollector {
         List<RevitDataIssue> issues
     ) {
         var diagnosticIssues = new List<RevitDataIssue>();
-        return new FilteredElementCollector(doc)
+        var diagnosticProjection = new ScheduleCatalogProjection {
+            View = RevitDataResultView.Handles,
+            IncludeSheetPlacements = true
+        };
+        return TimePhase("sheet-filter-diagnostics", () => new FilteredElementCollector(doc)
             .OfClass(typeof(ViewSchedule))
             .Cast<ViewSchedule>()
             .Where(schedule => request.IncludeTemplates || !schedule.IsTemplate)
             .Where(schedule => !schedule.Name.Contains("<Revision Schedule>", StringComparison.OrdinalIgnoreCase))
             .OrderBy(schedule => schedule.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(schedule => TryCollectEntry(doc, schedule, projection, diagnosticIssues))
+            .Select(schedule => TryCollectEntry(doc, schedule, diagnosticProjection, diagnosticIssues))
             .Where(entry => entry != null)
             .Cast<ScheduleCatalogEntry>()
             .Select(entry => AttachBrowserPaths(entry, browserIndex, request))
             .Where(entry => MatchesSheetOnlyFilter(entry, request))
             .Take(25)
-            .ToList();
+            .ToList());
     }
 
     private static void AddFilterOverlapWarnings(
@@ -308,6 +427,20 @@ public static class ScheduleCatalogCollector {
             return false;
 
         return true;
+    }
+
+    private static T TimePhase<T>(string phase, Func<T> action) {
+        var stopwatch = Stopwatch.StartNew();
+        var result = action();
+        Log.Debug("ScheduleCatalog {Phase} collected in {ElapsedMilliseconds} ms", phase, stopwatch.ElapsedMilliseconds);
+        return result;
+    }
+
+    private static T Measure<T>(Func<T> action, out long elapsedMilliseconds) {
+        var stopwatch = Stopwatch.StartNew();
+        var result = action();
+        elapsedMilliseconds = stopwatch.ElapsedMilliseconds;
+        return result;
     }
 
     private static bool Contains(string? value, string? expected) =>

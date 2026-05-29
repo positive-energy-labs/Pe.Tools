@@ -44,12 +44,22 @@ internal static class HostEndpointMapper {
             return await executor.ExecuteHttpAsync(
                 operation,
                 request,
-                HostOperationContext.Create(httpContext.RequestServices),
+                HostOperationContext.Create(httpContext.RequestServices, ResolveRequestId(httpContext)),
                 cancellationToken
             );
         } catch (HostOperationException ex) {
-            return CreateProblemResult(ex.StatusCode, ex.Message, ex.Issues);
+            return CreateProblemResult(ex.StatusCode, ex.Message, ResolveRequestId(httpContext), ex.Issues);
         }
+    }
+
+    private static string ResolveRequestId(HttpContext httpContext) {
+        if (httpContext.Request.Headers.TryGetValue("X-Pe-Request-Id", out var requestIds)) {
+            var requestId = requestIds.FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(requestId))
+                return requestId.Trim();
+        }
+
+        return httpContext.TraceIdentifier;
     }
 
     private static async Task<object> BindRequestAsync(
@@ -319,12 +329,14 @@ internal static class HostEndpointMapper {
     private static IResult CreateProblemResult(
         int statusCode,
         string detail,
+        string requestId,
         IReadOnlyList<ValidationIssue>? issues
     ) {
         var problem = new Microsoft.AspNetCore.Mvc.ProblemDetails {
             Detail = detail,
             Status = statusCode
         };
+        problem.Extensions["requestId"] = requestId;
         if (issues is { Count: > 0 })
             problem.Extensions["issues"] = issues;
 
