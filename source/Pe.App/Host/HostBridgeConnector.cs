@@ -21,7 +21,7 @@ internal static class HostBridgeConnector {
             );
         }
 
-        var hostLaunchResult = PeHostLauncher.EnsureRunning();
+        var hostLaunchResult = EnsureHostRunning();
         if (!hostLaunchResult.Success) {
             return new HostBridgeConnectResult(
                 false,
@@ -31,7 +31,7 @@ internal static class HostBridgeConnector {
             );
         }
 
-        var connectResult = HostRuntime.Connect();
+        var connectResult = ConnectRuntime();
         return new HostBridgeConnectResult(
             connectResult.Success,
             false,
@@ -39,4 +39,8 @@ internal static class HostBridgeConnector {
             connectResult
         );
     }
+
+    public static PeHostLaunchResult EnsureHostRunning() => PeHostLauncher.EnsureRunning();
+
+    public static RuntimeActionResult ConnectRuntime() => HostRuntime.Connect();
 }

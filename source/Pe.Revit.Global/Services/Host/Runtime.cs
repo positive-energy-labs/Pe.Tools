@@ -36,11 +36,13 @@ public static class HostRuntime {
     private static HostConnectionOptions _connectionOptions = HostConnectionOptions.FromEnvironment();
     private static SettingsRuntimeRegistry? _moduleRegistry;
     private static RevitTaskService? _revitTaskService;
+    private static Action<string?>? _onDisconnected;
     private static string? _lastError;
 
     public static void Initialize(
         RevitTaskService revitTaskService,
-        Action<SettingsRuntimeRegistry>? configureModules = null
+        Action<SettingsRuntimeRegistry>? configureModules = null,
+        Action<string?>? onDisconnected = null
     ) {
         lock (Sync) {
             Log.Information("Host runtime initializing.");
@@ -49,6 +51,7 @@ public static class HostRuntime {
             configureModules?.Invoke(registry);
             _moduleRegistry = registry;
             _revitTaskService = revitTaskService;
+            _onDisconnected = onDisconnected;
             _lastError = null;
             Log.Information(
                 "Host runtime initialized: BridgeUri={BridgeUri}, SessionId={SessionId}, ConnectTimeoutMs={ConnectTimeoutMs}, Modules={ModuleCount}",
@@ -112,7 +115,7 @@ public static class HostRuntime {
             }
 
             var createStopwatch = Stopwatch.StartNew();
-            newAgent = new BridgeAgent(moduleRegistry, connectionOptions, revitTaskService);
+            newAgent = new BridgeAgent(moduleRegistry, connectionOptions, revitTaskService, OnAgentDisconnected);
 
             lock (Sync) {
                 _agent = newAgent;
@@ -172,6 +175,16 @@ public static class HostRuntime {
             Log.Information("Host runtime shutdown completed in {ElapsedMs} ms.",
                 shutdownStopwatch.ElapsedMilliseconds);
         }
+    }
+
+    private static void OnAgentDisconnected(string? reason) {
+        Action<string?>? onDisconnected;
+        lock (Sync) {
+            _lastError = reason;
+            onDisconnected = _onDisconnected;
+        }
+
+        onDisconnected?.Invoke(reason);
     }
 
     public static RuntimeStatus GetStatus() {

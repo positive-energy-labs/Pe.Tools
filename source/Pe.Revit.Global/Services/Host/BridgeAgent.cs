@@ -64,6 +64,7 @@ internal sealed class BridgeAgent : IDisposable {
     private readonly BridgeOperationContext _bridgeOperationContext;
     private readonly BridgeRequestDispatcher _bridgeRequestDispatcher;
     private readonly BridgeDocumentNotifier _documentNotifier;
+    private readonly Action<string?>? _onDisconnected;
     private readonly HostConnectionOptions _hostOptions;
     private readonly SettingsRuntimeRegistry _moduleRegistry;
     private readonly BridgeTransportSession _transportSession;
@@ -89,13 +90,15 @@ internal sealed class BridgeAgent : IDisposable {
     public BridgeAgent(
         SettingsRuntimeRegistry moduleRegistry,
         HostConnectionOptions hostOptions,
-        RevitTaskService revitTaskService
+        RevitTaskService revitTaskService,
+        Action<string?>? onDisconnected = null
     ) {
         var startupStopwatch = Stopwatch.StartNew();
         var uiapp = RevitUiSession.CurrentUIApplication;
         var activeDocument = uiapp.GetActiveDocument();
         this._moduleRegistry = moduleRegistry;
         this._hostOptions = hostOptions;
+        this._onDisconnected = onDisconnected;
         Log.Information(
             "Host bridge agent starting: BridgeUri={BridgeUri}, ConnectTimeoutMs={ConnectTimeoutMs}, ActiveDocument={ActiveDocumentTitle}, Modules={ModuleCount}",
             hostOptions.BridgeUri,
@@ -241,8 +244,11 @@ internal sealed class BridgeAgent : IDisposable {
             Log.Warning(ex, "Host bridge agent disconnected unexpectedly.");
         } finally {
             this.IsConnected = false;
+            var disconnectReason = this.LastError ?? "Host bridge read loop exited.";
             Log.Information("Host bridge read loop exiting: BridgeUri={BridgeUri}, Disposed={Disposed}",
                 this._hostOptions.BridgeUri, this._disposed);
+            if (!this._disposed)
+                this._onDisconnected?.Invoke(disconnectReason);
         }
     }
 

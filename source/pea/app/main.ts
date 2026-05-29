@@ -27,6 +27,8 @@ import {
   peaCliIdentity,
   productIdentity,
 } from "./generated/product.generated.js";
+import { callHostOperation, searchHostOperations, type HostOperationCallResult } from "./host-operation-runtime.js";
+import { ensurePeaRuntimeDefaults, getPeaRuntimeDefaultsSummary, type PeaRuntimeDefaultsSummary } from "./pea-runtime-defaults.js";
 
 interface PeHostStatusSnapshot {
   probe: HostProbeData;
@@ -149,13 +151,165 @@ const hostLogsCommand = define({
   },
 });
 
+const operationSearchArgs = {
+  query: {
+    type: "string",
+    description: "Optional search query.",
+  },
+  domain: {
+    type: "string",
+    description: "Optional exact top-level domain filter, such as revit, host, settings, script, or aps.",
+  },
+  intent: {
+    type: "string",
+    description: "Optional intent filter: Read or Mutate.",
+  },
+  limit: {
+    type: "number",
+    description: "Maximum operations to print. Compact output is capped lower than full output.",
+    default: 8,
+  },
+  verbosity: {
+    type: "string",
+    description: "Output size: compact, hints, or full. Use full with --json only when full shapes/routes are needed.",
+    default: "compact",
+  },
+  json: {
+    type: "boolean",
+    description: "Print operation search results as JSON.",
+    default: false,
+  },
+} as const;
+
+function runOperationSearch(values: {
+  query?: string;
+  domain?: string;
+  intent?: string;
+  limit?: number;
+  verbosity?: string;
+  json?: boolean;
+}): void {
+  const results = searchHostOperations({
+    query: values.query,
+    domain: values.domain,
+    intent: parseOperationIntent(values.intent),
+    limit: values.limit,
+    verbosity: parseOperationVerbosity(values.verbosity),
+  });
+  if (values.json) {
+    console.log(JSON.stringify(results, null, 2));
+    return;
+  }
+
+  writeOperationSearchResults(results);
+}
+
+const hostOperationsCommand = define({
+  name: "operations",
+  description: "List generated public Pe.Host operations available to the agent, including layer/domain/cost/result-grain metadata.",
+  args: operationSearchArgs,
+  examples: [
+    "pea host operations",
+    "pea host operations --query \"loaded families\"",
+    "pea host operations --domain revit --intent Read",
+  ].join("\n"),
+  run: (ctx) => runOperationSearch(ctx.values),
+});
+
+const hostOperationSearchCommand = define({
+  name: "search",
+  description: "Search generated public Pe.Host operations by user intent and operation metadata.",
+  args: operationSearchArgs,
+  examples: [
+    "pea host operation search --query \"this view\"",
+    "pea host operation search --query \"parameter presence\" --json",
+  ].join("\n"),
+  run: (ctx) => runOperationSearch(ctx.values),
+});
+
+const hostOperationCallCommand = define({
+  name: "call",
+  description: "Call a generated public Pe.Host operation by key with JSON request data.",
+  args: {
+    host: commonArgs.host,
+    key: {
+      type: "string",
+      description: "Host operation key, such as revit.context.summary, revit.resolve.references, or settings.document.validate.",
+    },
+    requestJson: {
+      type: "string",
+      description: "JSON request object. Omit for NoRequest operations.",
+    },
+    verbosity: {
+      type: "string",
+      description: "Successful-call metadata size: compact, hints, or full. Failures always include full metadata.",
+      default: "compact",
+    },
+    json: {
+      type: "boolean",
+      description: "Print the raw call result as JSON.",
+      default: false,
+    },
+  },
+  toKebab: true,
+  examples: [
+    "pea host operation call --key revit.context.summary --json",
+    "pea host operation call --key revit.resolve.references --request-json '{\"referenceText\":\"this view\",\"maxResults\":5}' --json",
+  ].join("\n"),
+  run: async (ctx) => {
+    if (!ctx.values.key)
+      throw new Error("Provide --key <operation-key>.");
+
+    const hostBaseUrl = resolveHostBaseUrl(ctx.values.host);
+    const result = await callHostOperation(
+      { baseUrl: hostBaseUrl },
+      ctx.values.key,
+      parseRequestJson(ctx.values.requestJson),
+      parseOperationVerbosity(ctx.values.verbosity),
+    );
+
+    if (ctx.values.json) {
+      console.log(JSON.stringify(result, null, 2));
+      if (!result.ok)
+        process.exitCode = 1;
+      return;
+    }
+
+    writeOperationCallResult(result);
+    if (!result.ok)
+      process.exitCode = 1;
+  },
+});
+
+const hostOperationCommand = define({
+  name: "operation",
+  description: "Search and call generated public Pe.Host operations.",
+  examples: [
+    "pea host operation search --query \"schedule fields\"",
+    "pea host operation call --key revit.context.summary --json",
+  ].join("\n"),
+  subCommands: {
+    search: hostOperationSearchCommand,
+    call: hostOperationCallCommand,
+  },
+  run: () => {
+    console.log("Run `pea host operation --help` to list operation commands.");
+  },
+});
+
 const hostCommand = define({
   name: "host",
   description: "Inspect Pe.Host state.",
-  examples: ["pea host status", "pea host logs --target revit --tail 50"].join("\n"),
+  examples: [
+    "pea host status",
+    "pea host logs --target revit --tail 50",
+    "pea host operations --query \"active document\"",
+  ].join("\n"),
   subCommands: {
     status: hostStatusCommand,
     logs: hostLogsCommand,
+    operations: hostOperationsCommand,
+    operation: hostOperationCommand,
   },
   run: () => {
     console.log("Run `pea host --help` to list host commands.");
@@ -359,6 +513,68 @@ const runtimeCommand = define({
   },
 });
 
+const configDefaultsCommand = define({
+  name: "defaults",
+  description: "Print Pea-owned agent settings path and default model/runtime posture.",
+  args: {
+    ...commonArgs,
+    workspaceRoot: {
+      type: "string",
+      description: "Explicit product/workbench root. Avoids asking Pe.Host to bootstrap the scripting workspace.",
+    },
+    write: {
+      type: "boolean",
+      description: "Seed/update the Pea-owned settings file before printing defaults.",
+      default: false,
+    },
+    json: {
+      type: "boolean",
+      description: "Print defaults as JSON.",
+      default: false,
+    },
+  },
+  toKebab: true,
+  examples: [
+    "pea config defaults",
+    "pea config defaults --write",
+    "pea config defaults --workspace-root C:\\Users\\you\\Documents\\Pe.Tools --json",
+  ].join("\n"),
+  run: async (ctx) => {
+    const hostBaseUrl = resolveHostBaseUrl(ctx.values.host);
+    const workspaceKey = resolveWorkspaceKey(ctx.values.workspace);
+    const productHomePath = await resolveProductHomeForConfig(
+      hostBaseUrl,
+      workspaceKey,
+      ctx.values.workspaceRoot,
+    );
+    const summary = ctx.values.write
+      ? await ensurePeaRuntimeDefaults(productHomePath)
+      : getPeaRuntimeDefaultsSummary(productHomePath);
+
+    if (ctx.values.json) {
+      console.log(JSON.stringify(summary, null, 2));
+      return;
+    }
+
+    writePeaDefaultsSummary(summary);
+  },
+});
+
+const configCommand = define({
+  name: "config",
+  description: "Inspect Pea agent configuration paths and default posture.",
+  examples: [
+    "pea config defaults",
+    "pea config defaults --write --json",
+  ].join("\n"),
+  subCommands: {
+    defaults: configDefaultsCommand,
+  },
+  run: () => {
+    console.log("Run `pea config --help` to list config commands.");
+  },
+});
+
 const entryCommand = define({
   name: "pea",
   description: "Pe Agent command surface.",
@@ -382,6 +598,7 @@ try {
     description: `Pe Agent command surface. Defaults: host=${defaultHostBaseUrl}, workspace=${defaultWorkspaceKey}.`,
     subCommands: {
       agent: agentCommand,
+      config: configCommand,
       host: hostCommand,
       runtime: runtimeCommand,
       script: scriptCommand,
@@ -391,6 +608,38 @@ try {
   const message = error instanceof Error ? error.message : String(error);
   console.error(message);
   process.exitCode = 1;
+}
+
+async function resolveProductHomeForConfig(
+  hostBaseUrl: string,
+  workspaceKey: string,
+  workspaceRoot: string | undefined,
+): Promise<string> {
+  if (workspaceRoot?.trim())
+    return resolve(workspaceRoot.trim());
+
+  const bootstrap = await callPeHost(
+    hostBaseUrl,
+    () => createPeHostClient(hostBaseUrl).scripting.bootstrapWorkspace({
+      workspaceKey,
+      createSampleScript: false,
+    }),
+  );
+  return bootstrap.productHomePath;
+}
+
+function writePeaDefaultsSummary(summary: PeaRuntimeDefaultsSummary): void {
+  console.log(`settings  ${summary.settingsPath}`);
+  console.log(`pack      ${summary.modelPackId}`);
+  console.log(`agent     ${summary.agentModelId}`);
+  console.log(`fast      ${summary.fastModelId}`);
+  console.log(`observer  ${summary.observerModelId}`);
+  console.log(`reflector ${summary.reflectorModelId}`);
+  console.log(`goal      judge=${summary.goalJudgeModelId} maxTurns=${summary.goalMaxTurns}`);
+  console.log(`om        observe=${summary.observationThreshold} reflect=${summary.reflectionThreshold}`);
+  console.log(`ui        theme=${summary.theme} quiet=${summary.quietMode} previewLines=${summary.quietModeMaxToolPreviewLines}`);
+  console.log(`runtime   configDir=${summary.policy.configDir} mcpEnabled=${summary.policy.mcpEnabled}`);
+  console.log(`cache     promptRequired=${summary.policy.promptCachingRequired} openaiResponsesHistoryCompat=${summary.policy.openAiResponsesHistoryCompatEnabled}`);
 }
 
 async function getPeaRuntimeStatus(): Promise<{
@@ -587,6 +836,49 @@ async function getHostStatus(hostBaseUrl: string): Promise<PeHostStatusSnapshot>
   });
 }
 
+function parseOperationIntent(value: string | undefined): "Read" | "Mutate" | undefined {
+  if (!value)
+    return undefined;
+
+  switch (value.toLowerCase()) {
+    case "read":
+      return "Read";
+    case "mutate":
+    case "write":
+      return "Mutate";
+    default:
+      throw new Error("Unknown operation intent. Expected Read or Mutate.");
+  }
+}
+
+function parseOperationVerbosity(value: string | undefined): "compact" | "hints" | "full" {
+  if (!value)
+    return "compact";
+
+  switch (value.toLowerCase()) {
+    case "compact":
+      return "compact";
+    case "hints":
+      return "hints";
+    case "full":
+      return "full";
+    default:
+      throw new Error("Unknown operation verbosity. Expected compact, hints, or full.");
+  }
+}
+
+function parseRequestJson(value: string | undefined): unknown {
+  if (!value || value.trim().length === 0)
+    return undefined;
+
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Invalid --request-json value: ${detail}`);
+  }
+}
+
 function parseLogTarget(value: string): HostLogTarget {
   switch (value.toLowerCase()) {
     case "host":
@@ -699,6 +991,63 @@ function formatPeHostError(hostBaseUrl: string, error: unknown): string {
     detail,
     "Check the Pe.Host install path, host logs, or pass --host <url>.",
   ].join("\n");
+}
+
+function writeOperationSearchResults(results: ReturnType<typeof searchHostOperations>): void {
+  if (results.length === 0) {
+    console.log("No host operations matched.");
+    return;
+  }
+
+  for (const result of results) {
+    console.log(`${result.key}`);
+    console.log(`  ${result.summary}`);
+    console.log(`  family=${result.family ?? "-"} layer=${result.revitLayer ?? "-"} domain=${result.domainNoun ?? "-"} grain=${result.resultGrain ?? "-"} cost=${result.costTier ?? "-"}`);
+    console.log(`  request=${result.requestTypeName} response=${result.responseTypeName}`);
+    console.log(`  hint ${result.requestHint}`);
+    if (result.bestRequestExample) {
+      console.log(`  example ${result.bestRequestExample.name}: ${result.bestRequestExample.description}`);
+      console.log(`  json ${compactJsonLiteral(result.bestRequestExample.json)}`);
+    }
+    if ("executionMode" in result)
+      console.log(`  mode=${result.intent} ${result.executionMode}${result.singleFlightGroup ? ` single-flight=${result.singleFlightGroup}` : ""}`);
+    if ("verb" in result)
+      console.log(`  route=${result.verb} ${result.route}`);
+    for (const hint of result.preflightHints)
+      console.log(`  preflight ${hint}`);
+    if ("boundedExpansionHints" in result) {
+      for (const hint of result.boundedExpansionHints)
+        console.log(`  expand ${hint}`);
+    }
+  }
+}
+
+function compactJsonLiteral(json: string): string {
+  try {
+    return JSON.stringify(JSON.parse(json));
+  } catch {
+    return json.replace(/\s+/g, " ").trim();
+  }
+}
+
+function writeOperationCallResult(result: HostOperationCallResult): void {
+  console.log(`${result.key} ${result.ok ? "ok" : "failed"}`);
+  if (!result.ok) {
+    console.error(result.status ? `status ${result.status}: ${result.message}` : result.message);
+    if (result.problem)
+      console.error(JSON.stringify(result.problem, null, 2));
+    if (result.bestRequestExample) {
+      console.error(`example ${result.bestRequestExample.name}: ${result.bestRequestExample.description}`);
+      console.error(`json ${compactJsonLiteral(result.bestRequestExample.json)}`);
+    }
+    for (const step of result.nextSteps)
+      console.error(`next ${step}`);
+    return;
+  }
+
+  if (result.operation)
+    console.log(`operation ${result.operation.summary}`);
+  console.log(JSON.stringify(result.response, null, 2));
 }
 
 function writeLogs(logs: HostLogsData): void {
