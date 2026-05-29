@@ -9,8 +9,8 @@ public sealed class HostRuntimeComponent : IInstallableComponent {
     public string DisplayName => "Shared Host Runtime";
     public string Description => "Install the shared external host used by connected Revit sessions.";
     public InstallerOwnershipPolicy OwnershipPolicy { get; } = new(
-        InstallerOwnershipPolicyKind.NativeMsi,
-        "MSI owns and removes installed host runtime files."
+        InstallerOwnershipPolicyKind.NativeMsiWithCustomCleanup,
+        "MSI owns installed host runtime files; custom cleanup replaces the product-owned host tree before upgrades."
     );
 
     public IReadOnlyCollection<Dir> BuildDirectories(InstallerContext context) {
@@ -24,9 +24,24 @@ public sealed class HostRuntimeComponent : IInstallableComponent {
 
         return [
             new Dir(
+                new Id("INSTALLHOST"),
                 context.Configuration.GetSingleUserHostInstallDirectory(),
                 new Files(feature, $@"{context.Payload.RuntimePublishDirectory}\*.*")
             )
         ];
     }
+
+    public IReadOnlyCollection<ManagedAction> BuildInstallActions(InstallerContext context) =>
+        [
+            new ManagedAction(
+                CustomActions.RemoveInstalledHostRuntime,
+                Return.check,
+                When.Before,
+                Step.InstallFiles,
+                Condition.NOT_Installed
+            ) {
+                Execute = Execute.deferred,
+                UsesProperties = "INSTALLHOST=[INSTALLHOST]"
+            }
+        ];
 }

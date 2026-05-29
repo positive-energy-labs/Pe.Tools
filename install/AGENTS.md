@@ -38,4 +38,6 @@ The installer is the product bootstrap for local terminal and desktop Revit use.
 - Use installer product slices for user-facing grouping and installer components for implementation details. Do not overload WiX `Feature` as the only architecture vocabulary.
 - PATH registration is part of CLI bootstrap ownership. Keep `pea` and `pe-dev` PATH behavior explicit and local to their bootstrap components.
 - Uninstall cleanup should remove owned/generated install trees, not user runtime state/log/cache by default.
-- Legacy-shape cleanup is a low-priority nicety. If added later, centralize target paths and skip dev-lane Revit add-in paths.
+- MSI upgrades intentionally replace the installed host runtime tree under `%LocalAppData%\Positive Energy\Pe.Tools\bin\host`; the host component may stop a running installed `Pe.Host.exe` before `InstallFiles` so stable .NET file versions cannot leave stale host contracts behind.
+- Never point installed host cleanup at `%LocalAppData%\Positive Energy\Pe.Tools\dev\bin\host`; that dev-lane root is owned by interactive builds/RRD sync, not the MSI.
+- Legacy-shape cleanup removes early beta names such as `PE_Tools` from both per-user and ProgramData `Autodesk\ApplicationPlugins` roots, including `.bundle` directories, and from both per-user and ProgramData `Autodesk\Revit\Addins\<year>` roots. Keep this conservative and product-name based.
