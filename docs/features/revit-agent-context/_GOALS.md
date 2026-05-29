@@ -1,4 +1,4 @@
-# Revit Agent Context Alignment
+﻿# Revit Agent Context Alignment
 
 ## North Star
 
@@ -13,6 +13,7 @@ Expose Revit state maximally through host operations, but keep the Pea-facing to
 - See concise context summaries with stable document/view/element handles and provenance.
 - Move from summary to detail without restating intent or losing the current Revit target.
 - Trust that Pea distinguishes visible/active/selected/open/printed state instead of flattening all model data into one dump.
+- Ask printed/current-view equipment audit questions and get bounded visible/handle-scoped schedule and electrical findings, with binding/correlation uncertainty surfaced instead of confident family/name heuristics.
 
 ## Developer Goals
 

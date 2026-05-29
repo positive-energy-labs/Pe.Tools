@@ -79,6 +79,8 @@ export interface HostProblemDetails {
 export interface PeHostClientOptions {
   baseUrl: string;
   fetch?: typeof fetch;
+  requestId?: string;
+  timeoutMs?: number;
 }
 
 export class PeHostClientError extends Error {
@@ -101,11 +103,34 @@ export async function sendJson<TRequest, TResponse>(
   const route = operation.verb === "GET"
     ? appendQueryString(operation.route, request)
     : operation.route;
-  const response = await fetchImpl(`${trimTrailingSlash(options.baseUrl)}${route}`, {
-    method: operation.verb,
-    headers: operation.verb === "POST" ? { "Content-Type": "application/json" } : undefined,
-    body: operation.verb === "POST" ? JSON.stringify(request) : undefined,
-  });
+  const headers = new Headers();
+  let hasHeaders = false;
+  if (operation.verb === "POST") {
+    headers.set("Content-Type", "application/json");
+    hasHeaders = true;
+  }
+  if (options.requestId) {
+    headers.set("X-Pe-Request-Id", options.requestId);
+    hasHeaders = true;
+  }
+
+  const controller = options.timeoutMs == null ? undefined : new AbortController();
+  const timeout = controller == null
+    ? undefined
+    : setTimeout(() => controller.abort(), Math.max(options.timeoutMs ?? 0, 1));
+
+  let response: Response;
+  try {
+    response = await fetchImpl(`${trimTrailingSlash(options.baseUrl)}${route}`, {
+      method: operation.verb,
+      headers: hasHeaders ? headers : undefined,
+      body: operation.verb === "POST" ? JSON.stringify(request) : undefined,
+      signal: controller?.signal,
+    });
+  } finally {
+    if (timeout != null)
+      clearTimeout(timeout);
+  }
 
   const text = await response.text();
   if (!response.ok) {

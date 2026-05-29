@@ -169,7 +169,7 @@ public static class ParameterCoverageCollector {
         }
         if (request.Scope == RevitElementScope.ExplicitHandles) {
             var byId = request.ElementIds
-                .Select(id => doc.GetElement(new ElementId(id)))
+                .Select(id => doc.GetElement(id.ToElementId()))
                 .Where(element => element != null)
                 .Cast<Element>();
             var byUniqueId = request.ElementUniqueIds
@@ -177,7 +177,8 @@ public static class ParameterCoverageCollector {
                 .Where(element => element != null)
                 .Cast<Element>();
             return byId.Concat(byUniqueId)
-                .DistinctBy(element => element.Id.Value())
+                .GroupBy(element => element.Id.Value())
+                .Select(group => group.First())
                 .Where(element => element.Category != null)
                 .ToList();
         }

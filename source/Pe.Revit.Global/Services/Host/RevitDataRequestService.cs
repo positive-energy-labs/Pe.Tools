@@ -1,4 +1,4 @@
-using Autodesk.Revit.DB.Electrical;
+﻿using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.DocumentData.AgentContext;
 using Pe.Revit.DocumentData.Electrical;
 using Pe.Revit.DocumentData.Families.Loaded.Collectors;
@@ -269,7 +269,11 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         var document = GetActiveProjectDocument();
 
         try {
-            return ScheduleCoverageCollector.Collect(document, request);
+            return ScheduleCoverageCollector.Collect(
+                document,
+                request,
+                RevitUiSession.CurrentUIApplication.GetActiveView()
+            );
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "ScheduleCoverageException",

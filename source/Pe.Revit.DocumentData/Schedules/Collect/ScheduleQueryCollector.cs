@@ -1,10 +1,13 @@
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
+using Serilog;
 using System.Globalization;
 
 namespace Pe.Revit.DocumentData.Schedules.Collect;
 
 public static class ScheduleQueryCollector {
+    private const long SlowScheduleProjectionThresholdMs = 250;
+
     public static ScheduleQueryData Collect(
         Document doc,
         ScheduleQuery? query = null,
@@ -198,29 +201,62 @@ public static class ScheduleQueryCollector {
         ScheduleQuery query,
         List<RevitDataIssue> issues
     ) {
+        var totalStopwatch = Stopwatch.StartNew();
+        long sheetPlacementsMs = 0;
+        long visibleSubjectsMs = 0;
+        long subjectsMs = 0;
+        long bodySectionMs = 0;
+        long columnContextsMs = 0;
+        long subjectContextsMs = 0;
+        long rowsMs = 0;
+        long projectRowsMs = 0;
+
         try {
-            var sheetPlacements = ScheduleCollectorSupport.CollectSheetPlacements(doc, schedule);
-            var subjectElements = ScheduleRenderedSubjectCollector.CollectVisibleSubjects(doc, schedule);
-            var subjects = ScheduleRenderedSubjectCollector.CollectSubjects(subjectElements);
-            var bodySection =
-                ScheduleCollectorSupport.SafeGet(() => schedule.GetTableData().GetSectionData(SectionType.Body));
+            var sheetPlacements = Measure(
+                () => ScheduleCollectorSupport.CollectSheetPlacements(doc, schedule),
+                out sheetPlacementsMs
+            );
+            var subjectElements = Measure(
+                () => ScheduleRenderedSubjectCollector.CollectVisibleSubjects(doc, schedule),
+                out visibleSubjectsMs
+            );
+            var subjects = Measure(
+                () => ScheduleRenderedSubjectCollector.CollectSubjects(subjectElements),
+                out subjectsMs
+            );
+            var bodySection = Measure(
+                () => ScheduleCollectorSupport.SafeGet(() => schedule.GetTableData().GetSectionData(SectionType.Body)),
+                out bodySectionMs
+            );
             var contexts = bodySection == null
                 ? []
-                : CollectColumnContexts(doc, schedule, bodySection);
+                : Measure(
+                    () => CollectColumnContexts(doc, schedule, bodySection),
+                    out columnContextsMs
+                );
             var contextByColumnNumber = contexts.ToDictionary(context => context.Column.ColumnNumber);
             var comparableContexts = contexts
                 .Where(context => context.IsComparable)
                 .ToList();
             var subjectContexts = bodySection == null
                 ? []
-                : CollectSubjectContexts(doc, comparableContexts, subjectElements, subjects);
+                : Measure(
+                    () => CollectSubjectContexts(doc, comparableContexts, subjectElements, subjects),
+                    out subjectContextsMs
+                );
             var collectedRows = bodySection == null
                 ? []
-                : CollectRows(schedule, bodySection, contexts, contextByColumnNumber, subjectContexts);
+                : Measure(
+                    () => CollectRows(schedule, bodySection, contexts, contextByColumnNumber, subjectContexts),
+                    out rowsMs
+                );
             var rows = collectedRows.Select(item => item.Row).ToList();
             var bindingSummary = SummarizeBinding(collectedRows);
             var projection = query.Projection ?? new ScheduleQueryProjection();
-            var projectedRows = ProjectRows(schedule.Name, rows, contexts, projection, query.Budget, issues);
+            var projectedRows = Measure(
+                () => ProjectRows(schedule.Name, rows, contexts, projection, query.Budget, issues),
+                out projectRowsMs
+            );
             var rowIssues = projectedRows.SelectMany(row => row.Issues ?? []).ToList();
             var includeAll = projection.View == RevitDataResultView.Full;
             var includeRows = includeAll || projection.View == RevitDataResultView.Rows || projection.IncludeRows || projection.IncludeOnlyRowsWithIssues;
@@ -236,6 +272,25 @@ public static class ScheduleQueryCollector {
                     ));
                 }
             }
+
+            LogSlowProjection(
+                schedule,
+                totalStopwatch.ElapsedMilliseconds,
+                sheetPlacementsMs,
+                visibleSubjectsMs,
+                subjectsMs,
+                bodySectionMs,
+                columnContextsMs,
+                subjectContextsMs,
+                rowsMs,
+                projectRowsMs,
+                subjectElements.Count,
+                subjects.Count,
+                contexts.Count,
+                rows.Count,
+                projectedRows.Count,
+                bindingSummary
+            );
 
             return new ScheduleRenderedScheduleEntry(
                 schedule.Id.Value(),
@@ -267,6 +322,57 @@ public static class ScheduleQueryCollector {
             ));
             return null;
         }
+    }
+
+    private static void LogSlowProjection(
+        ViewSchedule schedule,
+        long totalMs,
+        long sheetPlacementsMs,
+        long visibleSubjectsMs,
+        long subjectsMs,
+        long bodySectionMs,
+        long columnContextsMs,
+        long subjectContextsMs,
+        long rowsMs,
+        long projectRowsMs,
+        int visibleSubjectElementCount,
+        int subjectCount,
+        int columnCount,
+        int rowCount,
+        int projectedRowCount,
+        BindingSummary bindingSummary
+    ) {
+        if (totalMs < SlowScheduleProjectionThresholdMs)
+            return;
+
+        Log.Information(
+            "ScheduleQuery slow projection: Schedule={ScheduleName}, ScheduleId={ScheduleId}, TotalMs={TotalMs}, SheetPlacementsMs={SheetPlacementsMs}, VisibleSubjectsMs={VisibleSubjectsMs}, SubjectDtosMs={SubjectDtosMs}, BodySectionMs={BodySectionMs}, ColumnContextsMs={ColumnContextsMs}, SubjectContextsMs={SubjectContextsMs}, RowsMs={RowsMs}, ProjectRowsMs={ProjectRowsMs}, VisibleSubjectElements={VisibleSubjectElements}, Subjects={Subjects}, Columns={Columns}, Rows={Rows}, ProjectedRows={ProjectedRows}, BoundRows={BoundRows}, UnboundRows={UnboundRows}",
+            schedule.Name,
+            schedule.Id.Value(),
+            totalMs,
+            sheetPlacementsMs,
+            visibleSubjectsMs,
+            subjectsMs,
+            bodySectionMs,
+            columnContextsMs,
+            subjectContextsMs,
+            rowsMs,
+            projectRowsMs,
+            visibleSubjectElementCount,
+            subjectCount,
+            columnCount,
+            rowCount,
+            projectedRowCount,
+            bindingSummary.BoundRowCount,
+            bindingSummary.UnboundRowCount
+        );
+    }
+
+    private static T Measure<T>(Func<T> action, out long elapsedMilliseconds) {
+        var stopwatch = Stopwatch.StartNew();
+        var result = action();
+        elapsedMilliseconds = stopwatch.ElapsedMilliseconds;
+        return result;
     }
 
 

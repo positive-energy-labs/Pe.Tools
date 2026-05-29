@@ -21,6 +21,7 @@ export interface ProjectIndexRequest {
   includeUnplacedViews: boolean;
   includeUnplacedSchedules: boolean;
   includeBrowserProvenance: boolean;
+  includeModelContext: boolean;
   browserFilter?: ProjectBrowserFilter;
   browserSections: ProjectBrowserSection[];
   projection?: RevitDataProjectionRequest;

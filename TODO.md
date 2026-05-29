@@ -30,3 +30,24 @@
   - [ ] evaluate dedicated `revit.catalog.views` and `revit.catalog.sheets` only after project-browser/project-index/schedule provenance patterns settle
   - [ ] promote repeated `host_operation_call` patterns into convenience tools only after usage proves they earn context
 - `mastracode: pe-tools-ae8e96592dd3` ffmigrator and greater family foundry needs a better mutation model. right now settings are organized by operation, but it should probably be more like "heres the end state i want, ffmigrator please apply this". relevant shortfalls of the current ffmigrator are: 1. provenance of properties group is loose, 2. similar with datatype, 3. parameter end state depends on a lot of variables spread across different models. I want to create a model that optimizes for *both* a maximally declarative *and* minimally verbose authoring layer. good defaults everywhere, and making metadata provenance clear (remember that parameters service allows u to set default metadata values). keeping our current model mostly intact as the imperative compiled layer is probably desirable and maybe unavoidable. *declarative parameter desired-state authoring, compiled into an explicit migration/reconciliation plan*
+
+
+2026-05-29 11:21:05 [INF] Host bridge dispatch completed: Method=revit.context.summary, RequestId=e0aec7bb1e81439c9ef99eee0629a36d
+2026-05-29 11:21:05 [DBG] Bridge request handled: Method=revit.context.summary, RevitExecutionMs=735, RequestBytes=2, ResponseBytes=4022
+2026-05-29 11:21:05 [INF] Host bridge writing response frame: Method=revit.context.summary, RequestId=e0aec7bb1e81439c9ef99eee0629a36d, ResponseBytes=4022
+2026-05-29 11:21:05 [INF] Host bridge wrote response frame: Method=revit.context.summary, RequestId=e0aec7bb1e81439c9ef99eee0629a36d
+2026-05-29 11:21:12 [INF] Host bridge received request: Method=revit.catalog.project-index, RequestId=5cc81c98635b4927b29566c8a3186dc8
+2026-05-29 11:21:12 [INF] Host bridge dispatch starting: Method=revit.catalog.project-index, RequestId=5cc81c98635b4927b29566c8a3186dc8
+2026-05-29 11:21:13 [DBG] ProjectIndex browser-index collected in 489 ms
+2026-05-29 11:21:13 [DBG] ProjectIndex levels collected in 82 ms
+2026-05-29 11:21:13 [DBG] ProjectIndex placement-index collected in 249 ms
+2026-05-29 11:21:13 [DBG] ProjectIndex views collected in 99 ms
+2026-05-29 11:21:13 [DBG] ProjectIndex sheets collected in 58 ms
+2026-05-29 11:25:08 [DBG] ProjectIndex schedule-catalog collected in 234362 ms
+2026-05-29 11:25:08 [DBG] ProjectIndex loaded-families collected in 679 ms
+2026-05-29 11:25:16 [DBG] ProjectIndex instance-counts collected in 7923 ms
+2026-05-29 11:25:16 [DBG] ProjectIndex collected in 244052 ms: levels=7, sheets=203, views=365, schedules=14, categories=119, families=25
+2026-05-29 11:25:16 [INF] Host bridge dispatch completed: Method=revit.catalog.project-index, RequestId=5cc81c98635b4927b29566c8a3186dc8
+2026-05-29 11:25:16 [DBG] Bridge request handled: Method=revit.catalog.project-index, RevitExecutionMs=244238, RequestBytes=427, ResponseBytes=103038
+2026-05-29 11:25:16 [INF] Host bridge writing response frame: Method=revit.catalog.project-index, RequestId=5cc81c98635b4927b29566c8a3186dc8, ResponseBytes=103038
+2026-05-29 11:25:16 [INF] Host bridge wrote response frame: Method=revit.catalog.project-index, RequestId=5cc81c98635b4927b29566c8a3186dc8

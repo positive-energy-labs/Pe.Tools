@@ -1,9 +1,27 @@
 using Pe.Shared.RevitData;
+using Serilog;
+using System.Diagnostics;
 
 namespace Pe.Revit.DocumentData.AgentContext;
 
 public static class RevitAgentContextCollector {
     private static readonly StringComparer IgnoreCase = StringComparer.OrdinalIgnoreCase;
+
+    private sealed record VisibleContextView(
+        View View,
+        List<RevitAgentContextProvenance> Provenance
+    );
+
+    private sealed record VisibleElementEntry(
+        Element Element,
+        VisibleContextView VisibleView
+    );
+
+    private sealed record VisibleCategoryCollectorFilter(
+        HashSet<string> RequestedNames,
+        List<ElementId> CategoryIds,
+        int DocumentCategoryCount
+    );
 
     public static RevitAgentContextSummaryData CollectSummary(
         Document document,
@@ -24,16 +42,6 @@ public static class RevitAgentContextCollector {
         RevitAgentVisibleContextRequest request
     ) {
         var issues = new List<RevitDataIssue>();
-        if (activeView == null) {
-            issues.Add(new RevitDataIssue(
-                "AgentContextNoActiveView",
-                RevitDataIssueSeverity.Warning,
-                "No active view is available.",
-                TypeName: nameof(View)
-            ));
-            return new RevitAgentVisibleContextData(null, 0, [], issues);
-        }
-
         var maxCategories = BoundRequestedCount(
             request.MaxCategories,
             1,
@@ -48,19 +56,52 @@ public static class RevitAgentContextCollector {
             nameof(RevitAgentVisibleContextRequest.MaxSampleElementsPerCategory),
             issues
         );
-        var categories = CollectVisibleCategories(
+        var maxElementHandles = BoundRequestedCount(
+            request.MaxElementHandlesPerCategory,
+            0,
+            1000,
+            nameof(RevitAgentVisibleContextRequest.MaxElementHandlesPerCategory),
+            issues
+        );
+        if (request.ReturnElementHandlesOnly && maxElementHandles == 0)
+            maxElementHandles = 1000;
+        var maxViews = BoundRequestedCount(
+            request.MaxViews,
+            1,
+            25,
+            nameof(RevitAgentVisibleContextRequest.MaxViews),
+            issues
+        );
+        var visibleViews = ResolveVisibleContextViews(document, activeView, request, maxViews, issues);
+        if (visibleViews.Count == 0) {
+            return new RevitAgentVisibleContextData(
+                activeView == null ? null : CreateHandle(document, activeView, RevitAgentContextHandleKind.View, activeView.Title),
+                0,
+                [],
+                issues,
+                []
+            );
+        }
+
+        var categoryFilter = CreateVisibleCategoryCollectorFilter(document, request.CategoryNames ?? []);
+        var visibleEntries = CollectVisibleEntries(document, visibleViews, categoryFilter, issues);
+        var categories = CreateVisibleCategories(
             document,
-            activeView,
+            visibleEntries,
+            visibleViews,
             maxCategories,
             issues,
             request.CategoryNames ?? [],
-            maxSampleElements
+            request.ReturnElementHandlesOnly ? maxElementHandles : Math.Max(maxSampleElements, maxElementHandles),
+            request.ReturnElementHandlesOnly
         );
+        var viewSummaries = CreateVisibleViewSummaries(document, visibleViews, visibleEntries);
         return new RevitAgentVisibleContextData(
-            CreateHandle(document, activeView, RevitAgentContextHandleKind.View, activeView.Title),
+            activeView == null ? null : CreateHandle(document, activeView, RevitAgentContextHandleKind.View, activeView.Title),
             categories.Sum(category => category.ElementCount),
             categories,
-            issues
+            issues,
+            viewSummaries
         );
     }
 
@@ -83,21 +124,50 @@ public static class RevitAgentContextCollector {
             return new RevitAgentContextResolveData(referenceText, 0, [], issues);
         }
 
+        var totalStopwatch = Stopwatch.StartNew();
+        var allowedKinds = (request.HandleKinds ?? [])
+            .Distinct()
+            .ToHashSet();
+        var filterByKind = allowedKinds.Count != 0;
         var candidates = new List<RevitAgentContextCandidate>();
-        if (activeView != null)
-            candidates.AddRange(CreateActiveViewCandidates(document, activeView, tokens));
+        if (activeView != null && (!filterByKind || allowedKinds.Contains(RevitAgentContextHandleKind.View) || allowedKinds.Contains(RevitAgentContextHandleKind.Sheet)))
+            candidates.AddRange(TimePhase("active-view", () => CreateActiveViewCandidates(document, activeView, tokens).ToList()));
+        else if (activeView != null)
+            Log.Debug("RevitAgentContext resolve skipped active-view source because requested handle kinds excluded views and sheets");
 
-        candidates.AddRange(CreateSelectionCandidates(document, currentSelection, tokens));
-        candidates.AddRange(CreateBrowserCandidates(document, tokens));
+        if (!request.RequirePrintedContext && (!filterByKind || allowedKinds.Contains(RevitAgentContextHandleKind.Element)))
+            candidates.AddRange(TimePhase("selection", () => CreateSelectionCandidates(document, currentSelection, tokens).ToList()));
+        else
+            Log.Debug("RevitAgentContext resolve skipped selection source because printed context or handle kind filters excluded elements");
 
-        var maxResults = Math.Clamp(request.MaxResults, 1, 50);
-        var results = candidates
+        if (!filterByKind || allowedKinds.Overlaps([RevitAgentContextHandleKind.View, RevitAgentContextHandleKind.Sheet, RevitAgentContextHandleKind.Family]))
+            candidates.AddRange(TimePhase("browser", () => CreateBrowserCandidates(document, tokens, allowedKinds, request.RequirePrintedContext).ToList()));
+        else
+            Log.Debug("RevitAgentContext resolve skipped browser source because requested handle kinds excluded browser-backed handles");
+
+        var maxResults = Clamp(request.MaxResults, 1, 50);
+        var maxPerHandleKind = request.MaxPerHandleKind is > 0 ? Clamp(request.MaxPerHandleKind.Value, 1, 50) : (int?)null;
+        var filteredCandidates = candidates
             .Where(candidate => candidate.Score > 0)
+            .Where(candidate => !filterByKind || allowedKinds.Contains(candidate.Handle.Kind))
+            .Where(candidate => !request.RequirePrintedContext || IsPrintedContextCandidate(candidate));
+        var dedupedCandidates = filteredCandidates
             .GroupBy(candidate => $"{candidate.Handle.Kind}:{candidate.Handle.DocumentKey}:{candidate.Handle.ElementId}:{candidate.Handle.UniqueId}")
-            .Select(group => group.OrderByDescending(candidate => candidate.Score).First())
+            .Select(group => group.OrderByDescending(candidate => candidate.Score).First());
+        if (maxPerHandleKind != null) {
+            dedupedCandidates = dedupedCandidates
+                .GroupBy(candidate => candidate.Handle.Kind)
+                .SelectMany(group => group
+                    .OrderByDescending(candidate => candidate.Score)
+                    .ThenBy(candidate => candidate.Label, IgnoreCase)
+                    .Take(maxPerHandleKind.Value));
+        }
+
+        var results = dedupedCandidates
             .OrderByDescending(candidate => candidate.Score)
             .ThenBy(candidate => candidate.Label, IgnoreCase)
             .Take(maxResults)
+            .Select(candidate => request.Compact ? CompactCandidate(candidate) : candidate)
             .ToList();
 
         if (results.Count == 0) {
@@ -109,10 +179,18 @@ public static class RevitAgentContextCollector {
             ));
         }
 
+        Log.Debug("RevitAgentContext resolve completed in {ElapsedMilliseconds} ms with {CandidateCount} raw candidate(s) and {ResultCount} result(s)", totalStopwatch.ElapsedMilliseconds, candidates.Count, results.Count);
         return new RevitAgentContextResolveData(referenceText, results.Count, results, issues);
     }
 
-    private static RevitAgentActiveViewContext CreateActiveViewContext(Document document, View view) => new(
+    private static RevitAgentActiveViewContext CreateActiveViewContext(Document document, View view) =>
+        CreateActiveViewContext(document, view, CreateSheetPlacementIndex(document));
+
+    private static RevitAgentActiveViewContext CreateActiveViewContext(
+        Document document,
+        View view,
+        SheetPlacementIndex placementIndex
+    ) => new(
         CreateHandle(document, view, RevitAgentContextHandleKind.View, view.Title),
         view.ViewType.ToString(),
         view.Title,
@@ -125,7 +203,7 @@ public static class RevitAgentContextCollector {
         view.CanBePrinted,
         view is ViewSheet,
         view is ViewSchedule,
-        FindSheetPlacements(document, view).Take(8).ToList(),
+        FindSheetPlacements(document, view, placementIndex).Take(8).ToList(),
         [new RevitAgentContextProvenance(RevitAgentContextProvenanceKind.ActiveView, "Current active Revit view.")]
     );
 
@@ -157,14 +235,61 @@ public static class RevitAgentContextCollector {
         );
     }
 
-    private static RevitAgentVisibleElementSample CreateVisibleElementSample(Document document, Element element) {
+    private static RevitAgentVisibleElementSample CreateVisibleElementSample(
+        Document document,
+        Element element,
+        IReadOnlyCollection<VisibleContextView>? visibleViews = null
+    ) {
         var family = element as FamilyInstance;
+        var viewHandles = (visibleViews ?? [])
+            .Select(visibleView => CreateHandle(document, visibleView.View, RevitAgentContextHandleKind.View, visibleView.View.Title))
+            .GroupBy(handle => $"{handle.DocumentKey}:{handle.ElementId}:{handle.UniqueId}")
+            .Select(group => group.First())
+            .ToList();
+        var provenance = (visibleViews ?? [])
+            .Select(visibleView => new RevitAgentContextProvenance(
+                visibleView.Provenance.Any(item => item.Kind == RevitAgentContextProvenanceKind.ActiveView)
+                    ? RevitAgentContextProvenanceKind.VisibleInActiveView
+                    : RevitAgentContextProvenanceKind.VisibleInReferencedView,
+                $"Element is visible in view '{visibleView.View.Title}'."
+            ))
+            .ToList();
+
         return new RevitAgentVisibleElementSample(
             CreateHandle(document, element, RevitAgentContextHandleKind.Element, CreateElementLabel(element, family)),
             element.GetType().Name,
             family?.Symbol?.Family?.Name,
             family?.Symbol?.Name,
-            GetLevelName(document, element)
+            GetLevelName(document, element),
+            provenance,
+            viewHandles
+        );
+    }
+
+
+    private static RevitAgentVisibleElementHandle CreateVisibleElementHandle(
+        Document document,
+        Element element,
+        IReadOnlyCollection<VisibleContextView>? visibleViews = null
+    ) {
+        var viewHandles = (visibleViews ?? [])
+            .Select(visibleView => CreateHandle(document, visibleView.View, RevitAgentContextHandleKind.View, visibleView.View.Title))
+            .GroupBy(handle => $"{handle.DocumentKey}:{handle.ElementId}:{handle.UniqueId}")
+            .Select(group => group.First())
+            .ToList();
+        var provenance = (visibleViews ?? [])
+            .Select(visibleView => new RevitAgentContextProvenance(
+                visibleView.Provenance.Any(item => item.Kind == RevitAgentContextProvenanceKind.ActiveView)
+                    ? RevitAgentContextProvenanceKind.VisibleInActiveView
+                    : RevitAgentContextProvenanceKind.VisibleInReferencedView,
+                $"Element is visible in view '{visibleView.View.Title}'."
+            ))
+            .ToList();
+
+        return new RevitAgentVisibleElementHandle(
+            CreateHandle(document, element, RevitAgentContextHandleKind.Element, $"{element.Category?.Name ?? element.GetType().Name} {element.Id.Value()}"),
+            provenance,
+            viewHandles
         );
     }
 
@@ -183,30 +308,287 @@ public static class RevitAgentContextCollector {
         IReadOnlyCollection<string> requestedCategoryNames,
         int maxSampleElementsPerCategory
     ) {
-        try {
-            var requestedCategories = requestedCategoryNames
-                .Select(name => name.Trim())
-                .Where(name => !string.IsNullOrWhiteSpace(name))
-                .ToHashSet(IgnoreCase);
-            var groupedElements = new FilteredElementCollector(document, activeView.Id)
-                .WhereElementIsNotElementType()
-                .Where(element => element.Category != null)
-                .GroupBy(element => element.Category!.Name, IgnoreCase)
-                .Where(group => requestedCategories.Count == 0 || requestedCategories.Contains(group.Key))
-                .ToList();
+        var visibleViews = new List<VisibleContextView> {
+            new(
+                activeView,
+                [new RevitAgentContextProvenance(RevitAgentContextProvenanceKind.ActiveView, "Current active Revit view.")]
+            )
+        };
+        var categoryFilter = CreateVisibleCategoryCollectorFilter(document, requestedCategoryNames);
+        var visibleEntries = CollectVisibleEntries(document, visibleViews, categoryFilter, issues);
+        return CreateVisibleCategories(
+            document,
+            visibleEntries,
+            visibleViews,
+            maxCategories,
+            issues,
+            requestedCategoryNames,
+            maxSampleElementsPerCategory,
+            false
+        );
+    }
 
-            foreach (var missingCategory in requestedCategories.Except(groupedElements.Select(group => group.Key), IgnoreCase)) {
-                issues.Add(new RevitDataIssue(
-                    "AgentContextVisibleCategoryNotFound",
-                    RevitDataIssueSeverity.Warning,
-                    $"No visible elements in active view '{activeView.Title}' matched requested category '{missingCategory}'.",
-                    TypeName: nameof(Category),
-                    ParameterName: missingCategory
-                ));
+    private static List<VisibleContextView> ResolveVisibleContextViews(
+        Document document,
+        View? activeView,
+        RevitAgentVisibleContextRequest request,
+        int maxViews,
+        List<RevitDataIssue> issues
+    ) {
+        if (request.Scope == RevitAgentVisibleContextScope.ActiveViewVisible) {
+            if (activeView != null) {
+                return [new VisibleContextView(
+                    activeView,
+                    [new RevitAgentContextProvenance(RevitAgentContextProvenanceKind.ActiveView, "Current active Revit view.")]
+                )];
             }
 
-            return groupedElements
-                .Select(group => new RevitAgentVisibleCategorySummary(
+            issues.Add(new RevitDataIssue(
+                "AgentContextNoActiveView",
+                RevitDataIssueSeverity.Warning,
+                "No active view is available.",
+                TypeName: nameof(View)
+            ));
+            return [];
+        }
+
+        var visibleViews = new List<VisibleContextView>();
+        var seenViewIds = new HashSet<long>();
+        var viewIds = (request.ViewIds ?? [])
+            .Distinct()
+            .ToList();
+        var viewUniqueIds = (request.ViewUniqueIds ?? [])
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        foreach (var viewId in viewIds)
+            AddResolvedVisibleView(document, document.GetElement(viewId.ToElementId()), $"view id {viewId}", visibleViews, seenViewIds, issues);
+
+        foreach (var uniqueId in viewUniqueIds)
+            AddResolvedVisibleView(document, document.GetElement(uniqueId), $"view unique id '{uniqueId}'", visibleViews, seenViewIds, issues);
+
+        if (visibleViews.Count == 0) {
+            issues.Add(new RevitDataIssue(
+                "AgentContextViewReferencesRequired",
+                RevitDataIssueSeverity.Warning,
+                "ViewReferences scope requires at least one resolvable view id or unique id.",
+                TypeName: nameof(RevitAgentVisibleContextRequest)
+            ));
+            return [];
+        }
+
+        if (visibleViews.Count > maxViews) {
+            issues.Add(new RevitDataIssue(
+                "AgentContextVisibleViewsTruncated",
+                RevitDataIssueSeverity.Warning,
+                $"Visible context matched {visibleViews.Count} views; returning the first {maxViews}.",
+                TypeName: nameof(View)
+            ));
+        }
+
+        return visibleViews.Take(maxViews).ToList();
+    }
+
+    private static void AddResolvedVisibleView(
+        Document document,
+        Element? element,
+        string referenceLabel,
+        List<VisibleContextView> visibleViews,
+        HashSet<long> seenViewIds,
+        List<RevitDataIssue> issues
+    ) {
+        if (element is ViewSheet sheet) {
+            foreach (var placedView in sheet.GetAllPlacedViews()
+                         .Select(document.GetElement)
+                         .OfType<View>()
+                         .Where(view => !view.IsTemplate)) {
+                if (seenViewIds.Add(placedView.Id.Value())) {
+                    visibleViews.Add(new VisibleContextView(
+                        placedView,
+                        [new RevitAgentContextProvenance(RevitAgentContextProvenanceKind.SheetPlacement, $"View is placed on sheet '{sheet.SheetNumber} - {sheet.Name}' from {referenceLabel}.")]
+                    ));
+                }
+            }
+            return;
+        }
+
+        if (element is not View view) {
+            issues.Add(new RevitDataIssue(
+                "AgentContextVisibleViewReferenceNotFound",
+                RevitDataIssueSeverity.Warning,
+                $"Could not resolve {referenceLabel} to a Revit view.",
+                TypeName: nameof(View)
+            ));
+            return;
+        }
+
+        if (view.IsTemplate) {
+            issues.Add(new RevitDataIssue(
+                "AgentContextVisibleViewReferenceTemplate",
+                RevitDataIssueSeverity.Warning,
+                $"Resolved {referenceLabel} to template view '{view.Title}', which cannot be used for visible element collection.",
+                TypeName: nameof(View)
+            ));
+            return;
+        }
+
+        if (seenViewIds.Add(view.Id.Value())) {
+            visibleViews.Add(new VisibleContextView(
+                view,
+                [new RevitAgentContextProvenance(RevitAgentContextProvenanceKind.ExplicitReference, $"View came from explicit reference {referenceLabel}.")]
+            ));
+        }
+    }
+
+    private static List<VisibleElementEntry> CollectVisibleEntries(
+        Document document,
+        IReadOnlyList<VisibleContextView> visibleViews,
+        VisibleCategoryCollectorFilter categoryFilter,
+        List<RevitDataIssue> issues
+    ) {
+        LogVisibleCategoryCollectorFilter(categoryFilter, visibleViews.Count);
+        if (categoryFilter.RequestedNames.Count != 0 && categoryFilter.CategoryIds.Count == 0)
+            return [];
+
+        var entries = new List<VisibleElementEntry>();
+        foreach (var visibleView in visibleViews) {
+            try {
+                var collector = new FilteredElementCollector(document, visibleView.View.Id)
+                    .WhereElementIsNotElementType();
+                if (categoryFilter.CategoryIds.Count != 0)
+                    collector = collector.WherePasses(new ElementMulticategoryFilter(categoryFilter.CategoryIds));
+
+                entries.AddRange(collector
+                    .Where(element => element.Category != null)
+                    .Select(element => new VisibleElementEntry(element, visibleView)));
+            } catch (Exception ex) {
+                issues.Add(new RevitDataIssue(
+                    "AgentContextVisibleCollectFailed",
+                    RevitDataIssueSeverity.Warning,
+                    $"Failed to collect visible elements from view '{visibleView.View.Title}': {ex.Message}",
+                    TypeName: visibleView.View.GetType().Name
+                ));
+            }
+        }
+
+        return entries;
+    }
+
+    private static VisibleCategoryCollectorFilter CreateVisibleCategoryCollectorFilter(
+        Document document,
+        IReadOnlyCollection<string> requestedCategoryNames
+    ) {
+        var requestedNames = requestedCategoryNames
+            .Select(name => name.Trim())
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(IgnoreCase);
+        var documentCategories = document.Settings.Categories
+            .Cast<Category>()
+            .Where(category => category.Id != ElementId.InvalidElementId)
+            .ToList();
+        var categoryIds = requestedNames.Count == 0
+            ? []
+            : documentCategories
+                .Where(category => requestedNames.Contains(category.Name))
+                .Select(category => category.Id)
+                .GroupBy(id => id.Value())
+                .Select(group => group.First())
+                .ToList();
+
+        return new VisibleCategoryCollectorFilter(requestedNames, categoryIds, documentCategories.Count);
+    }
+
+    private static void LogVisibleCategoryCollectorFilter(
+        VisibleCategoryCollectorFilter categoryFilter,
+        int viewCollectorCount
+    ) {
+        if (categoryFilter.RequestedNames.Count == 0)
+            return;
+
+        var excludedDocumentCategoryCount = Math.Max(0, categoryFilter.DocumentCategoryCount - categoryFilter.CategoryIds.Count);
+        Log.Information(
+            "VisibleSummary category prefilter applied: RequestedCategories={RequestedCategories}, ResolvedCategories={ResolvedCategories}, UnresolvedCategories={UnresolvedCategories}, DocumentCategories={DocumentCategories}, ExcludedDocumentCategories={ExcludedDocumentCategories}, FilteredViewCollectors={FilteredViewCollectors}, AvoidedUnfilteredViewCollectors={AvoidedUnfilteredViewCollectors}",
+            categoryFilter.RequestedNames.Count,
+            categoryFilter.CategoryIds.Count,
+            Math.Max(0, categoryFilter.RequestedNames.Count - categoryFilter.CategoryIds.Count),
+            categoryFilter.DocumentCategoryCount,
+            excludedDocumentCategoryCount,
+            viewCollectorCount,
+            categoryFilter.CategoryIds.Count == 0 ? 0 : viewCollectorCount
+        );
+    }
+
+    private static List<RevitAgentVisibleCategorySummary> CreateVisibleCategories(
+        Document document,
+        IReadOnlyList<VisibleElementEntry> visibleEntries,
+        IReadOnlyList<VisibleContextView> visibleViews,
+        int maxCategories,
+        List<RevitDataIssue> issues,
+        IReadOnlyCollection<string> requestedCategoryNames,
+        int maxReturnedElementsPerCategory,
+        bool returnElementHandlesOnly
+    ) {
+        var requestedCategories = requestedCategoryNames
+            .Select(name => name.Trim())
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(IgnoreCase);
+        var groupedElements = visibleEntries
+            .Where(entry => entry.Element.Category != null)
+            .GroupBy(entry => entry.Element.Category!.Name, IgnoreCase)
+            .Where(group => requestedCategories.Count == 0 || requestedCategories.Contains(group.Key))
+            .ToList();
+
+        foreach (var missingCategory in requestedCategories.Except(groupedElements.Select(group => group.Key), IgnoreCase)) {
+            issues.Add(new RevitDataIssue(
+                "AgentContextVisibleCategoryNotFound",
+                RevitDataIssueSeverity.Warning,
+                $"No visible elements in requested view scope matched category '{missingCategory}'.",
+                TypeName: nameof(Category),
+                ParameterName: missingCategory
+            ));
+        }
+
+        var provenanceKind = visibleViews.Any(view => view.Provenance.Any(item => item.Kind == RevitAgentContextProvenanceKind.ActiveView))
+            ? RevitAgentContextProvenanceKind.VisibleInActiveView
+            : RevitAgentContextProvenanceKind.VisibleInReferencedView;
+        var provenanceDescription = visibleViews.Count == 1
+            ? $"Category has visible elements in view '{visibleViews[0].View.Title}'."
+            : $"Category has visible elements across {visibleViews.Count} referenced views.";
+
+        return groupedElements
+            .Select(group => {
+                var elementGroups = group
+                    .GroupBy(entry => entry.Element.Id.Value())
+                    .Select(elementGroup => elementGroup.ToList())
+                    .OrderBy(elementGroup => returnElementHandlesOnly
+                        ? elementGroup[0].Element.Id.Value().ToString()
+                        : CreateElementLabel(elementGroup[0].Element, elementGroup[0].Element as FamilyInstance), IgnoreCase)
+                    .ToList();
+                var returnedElementGroups = elementGroups
+                    .Take(maxReturnedElementsPerCategory)
+                    .ToList();
+                var returnedElements = returnElementHandlesOnly
+                    ? new List<RevitAgentVisibleElementSample>()
+                    : returnedElementGroups
+                        .Select(elementGroup => CreateVisibleElementSample(
+                            document,
+                            elementGroup[0].Element,
+                            elementGroup.Select(entry => entry.VisibleView).ToList()
+                        ))
+                        .ToList();
+                var returnedHandles = returnElementHandlesOnly
+                    ? returnedElementGroups
+                        .Select(elementGroup => CreateVisibleElementHandle(
+                            document,
+                            elementGroup[0].Element,
+                            elementGroup.Select(entry => entry.VisibleView).ToList()
+                        ))
+                        .ToList()
+                    : null;
+
+                return new RevitAgentVisibleCategorySummary(
                     new RevitAgentContextHandle(
                         RevitAgentContextHandleKind.Category,
                         document.GetDocumentKey(),
@@ -215,34 +597,45 @@ public static class RevitAgentContextCollector {
                         group.Key,
                         group.Key
                     ),
-                    group.Count(),
-                    group
-                        .Take(maxSampleElementsPerCategory)
-                        .Select(element => CreateVisibleElementSample(document, element))
-                        .ToList(),
-                    [new RevitAgentContextProvenance(RevitAgentContextProvenanceKind.VisibleInActiveView, $"Category has visible elements in active view '{activeView.Title}'.")]
-                ))
-                .OrderByDescending(category => category.ElementCount)
-                .ThenBy(category => category.Handle.Label, IgnoreCase)
-                .Take(maxCategories)
-                .ToList();
-        } catch (Exception ex) {
-            issues.Add(new RevitDataIssue(
-                "AgentContextVisibleCollectFailed",
-                RevitDataIssueSeverity.Warning,
-                ex.Message,
-                TypeName: activeView.GetType().Name
-            ));
-            return [];
-        }
+                    elementGroups.Count,
+                    returnedElements,
+                    [new RevitAgentContextProvenance(provenanceKind, provenanceDescription)],
+                    returnElementHandlesOnly ? returnedHandles?.Count ?? 0 : returnedElements.Count,
+                    (returnElementHandlesOnly ? returnedHandles?.Count ?? 0 : returnedElements.Count) == elementGroups.Count,
+                    returnedHandles
+                );
+            })
+            .OrderByDescending(category => category.ElementCount)
+            .ThenBy(category => category.Handle.Label, IgnoreCase)
+            .Take(maxCategories)
+            .ToList();
     }
+
+    private static List<RevitAgentVisibleViewSummary> CreateVisibleViewSummaries(
+        Document document,
+        IReadOnlyList<VisibleContextView> visibleViews,
+        IReadOnlyList<VisibleElementEntry> visibleEntries
+    ) => visibleViews
+        .Select(visibleView => new RevitAgentVisibleViewSummary(
+            CreateHandle(document, visibleView.View, RevitAgentContextHandleKind.View, visibleView.View.Title),
+            visibleView.View.ViewType.ToString(),
+            visibleView.View.Title,
+            visibleEntries
+                .Where(entry => entry.VisibleView.View.Id.Value() == visibleView.View.Id.Value())
+                .Select(entry => entry.Element.Id.Value())
+                .Distinct()
+                .Count(),
+            visibleView.Provenance
+        ))
+        .OrderBy(summary => summary.Title, IgnoreCase)
+        .ToList();
 
     private static IEnumerable<RevitAgentContextCandidate> CreateActiveViewCandidates(
         Document document,
         View activeView,
         IReadOnlyList<string> tokens
     ) {
-        var viewContext = CreateActiveViewContext(document, activeView);
+        var viewContext = CreateActiveViewContext(document, activeView, CreateSheetPlacementIndex(document));
         var activeScore = tokens.Any(token => token is "this" or "active" or "current") ? 3 : 0;
         var viewScore = tokens.Any(token => token is "view" or "plan" or "sheet" or "schedule") ? 3 : 0;
         var labelScore = ScoreText(viewContext.Title, tokens);
@@ -296,10 +689,16 @@ public static class RevitAgentContextCollector {
 
     private static IEnumerable<RevitAgentContextCandidate> CreateBrowserCandidates(
         Document document,
-        IReadOnlyList<string> tokens
+        IReadOnlyList<string> tokens,
+        IReadOnlyCollection<RevitAgentContextHandleKind> allowedKinds,
+        bool requirePrintedContext
     ) {
-        foreach (var view in new FilteredElementCollector(document).OfClass(typeof(View)).Cast<View>().Where(view => !view.IsTemplate)) {
-            var placements = FindSheetPlacements(document, view).ToList();
+        var placementIndex = TimePhase("browser-placement-index", () => CreateSheetPlacementIndex(document));
+        var filterByKind = allowedKinds.Count != 0;
+        if (!filterByKind || allowedKinds.Contains(RevitAgentContextHandleKind.View)) foreach (var view in new FilteredElementCollector(document).OfClass(typeof(View)).Cast<View>().Where(view => !view.IsTemplate)) {
+            var placements = FindSheetPlacements(document, view, placementIndex);
+            if (requirePrintedContext && placements.Count == 0)
+                continue;
             var text = $"{view.Title} {view.ViewType} {view.GenLevel?.Name} {TryRead(() => view.Discipline.ToString())} {string.Join(" ", placements.Select(placement => $"{placement.SheetNumber} {placement.SheetName}"))}";
             var score = ScoreText(text, tokens) + (placements.Count > 0 && tokens.Any(token => token is "printed" or "print" or "sheet") ? 2 : 0);
             if (score > 0) {
@@ -321,12 +720,12 @@ public static class RevitAgentContextCollector {
                     $"{sheet.SheetNumber} - {sheet.Name}",
                     score,
                     [new RevitAgentContextProvenance(RevitAgentContextProvenanceKind.PrintedContext, "Sheet matched printed/browser context.")],
-                    GetPlacedViewHandles(document, sheet)
+                    GetPlacedViewHandles(document, sheet, placementIndex)
                 );
             }
         }
 
-        foreach (var family in new FilteredElementCollector(document).OfClass(typeof(Family)).Cast<Family>()) {
+        if (!requirePrintedContext && (!filterByKind || allowedKinds.Contains(RevitAgentContextHandleKind.Family))) foreach (var family in new FilteredElementCollector(document).OfClass(typeof(Family)).Cast<Family>()) {
             var score = ScoreText(family.Name, tokens) + (tokens.Contains("family") ? 1 : 0);
             if (score > 0) {
                 yield return new RevitAgentContextCandidate(
@@ -340,30 +739,29 @@ public static class RevitAgentContextCollector {
         }
     }
 
-    private static List<RevitAgentViewSheetPlacement> FindSheetPlacements(Document document, View view) {
+
+    private static bool IsPrintedContextCandidate(RevitAgentContextCandidate candidate) =>
+        candidate.Provenance.Any(provenance => provenance.Kind is RevitAgentContextProvenanceKind.PrintedContext or RevitAgentContextProvenanceKind.SheetPlacement)
+        || candidate.RelatedHandles.Any(handle => handle.Kind == RevitAgentContextHandleKind.Sheet);
+
+    private static RevitAgentContextCandidate CompactCandidate(RevitAgentContextCandidate candidate) => new(
+        candidate.Handle,
+        candidate.Label,
+        candidate.Score,
+        candidate.Provenance.Take(1).ToList(),
+        candidate.RelatedHandles
+            .Where(handle => handle.Kind is RevitAgentContextHandleKind.View or RevitAgentContextHandleKind.Sheet)
+            .Take(4)
+            .ToList()
+    );
+
+    private static List<RevitAgentViewSheetPlacement> FindSheetPlacements(Document document, View view, SheetPlacementIndex placementIndex) {
         if (view is ViewSheet activeSheet)
             return [CreateSheetPlacement(document, activeSheet, true)];
 
-        var placements = new List<RevitAgentViewSheetPlacement>();
-        foreach (var candidateSheet in new FilteredElementCollector(document).OfClass(typeof(ViewSheet)).Cast<ViewSheet>()) {
-            var containsViewport = candidateSheet.GetAllViewports()
-                .Select(document.GetElement)
-                .OfType<Viewport>()
-                .Any(viewport => viewport.ViewId == view.Id);
-            if (containsViewport)
-                placements.Add(CreateSheetPlacement(document, candidateSheet, false));
-        }
-
-        if (view is ViewSchedule) {
-            var schedulePlacements = new FilteredElementCollector(document)
-                .OfClass(typeof(ScheduleSheetInstance))
-                .Cast<ScheduleSheetInstance>()
-                .Where(instance => instance.ScheduleId == view.Id)
-                .Select(instance => document.GetElement(instance.OwnerViewId))
-                .OfType<ViewSheet>()
-                .Select(sheet => CreateSheetPlacement(document, sheet, false));
-            placements.AddRange(schedulePlacements);
-        }
+        var placements = placementIndex.SheetPlacementsByViewId.TryGetValue(view.Id.Value(), out var sheetPlacements)
+            ? sheetPlacements
+            : [];
 
         return placements
             .GroupBy(placement => placement.Sheet.ElementId)
@@ -380,13 +778,44 @@ public static class RevitAgentContextCollector {
         isActiveSheet
     );
 
-    private static List<RevitAgentContextHandle> GetPlacedViewHandles(Document document, ViewSheet sheet) => sheet.GetAllViewports()
-        .Select(document.GetElement)
-        .OfType<Viewport>()
-        .Select(viewport => document.GetElement(viewport.ViewId))
-        .OfType<View>()
-        .Select(view => CreateHandle(document, view, RevitAgentContextHandleKind.View, view.Title))
-        .ToList();
+    private static List<RevitAgentContextHandle> GetPlacedViewHandles(Document document, ViewSheet sheet, SheetPlacementIndex placementIndex) =>
+        placementIndex.PlacedViewHandlesBySheetId.TryGetValue(sheet.Id.Value(), out var handles) ? handles : [];
+
+    private static SheetPlacementIndex CreateSheetPlacementIndex(Document document) {
+        var sheetPlacementsByViewId = new Dictionary<long, List<RevitAgentViewSheetPlacement>>();
+        var placedViewHandlesBySheetId = new Dictionary<long, List<RevitAgentContextHandle>>();
+
+        foreach (var sheet in new FilteredElementCollector(document).OfClass(typeof(ViewSheet)).Cast<ViewSheet>().Where(sheet => !sheet.IsTemplate)) {
+            foreach (var viewport in sheet.GetAllViewports().Select(document.GetElement).OfType<Viewport>()) {
+                if (document.GetElement(viewport.ViewId) is not View placedView)
+                    continue;
+                Add(sheetPlacementsByViewId, placedView.Id.Value(), CreateSheetPlacement(document, sheet, false));
+                Add(placedViewHandlesBySheetId, sheet.Id.Value(), CreateHandle(document, placedView, RevitAgentContextHandleKind.View, placedView.Title));
+            }
+        }
+
+        foreach (var instance in new FilteredElementCollector(document).OfClass(typeof(ScheduleSheetInstance)).Cast<ScheduleSheetInstance>()) {
+            if (document.GetElement(instance.OwnerViewId) is not ViewSheet sheet || document.GetElement(instance.ScheduleId) is not ViewSchedule schedule)
+                continue;
+            Add(sheetPlacementsByViewId, schedule.Id.Value(), CreateSheetPlacement(document, sheet, false));
+        }
+
+        return new SheetPlacementIndex(sheetPlacementsByViewId, placedViewHandlesBySheetId);
+    }
+
+    private static void Add<T>(Dictionary<long, List<T>> dictionary, long key, T value) {
+        if (!dictionary.TryGetValue(key, out var values)) {
+            values = [];
+            dictionary[key] = values;
+        }
+
+        values.Add(value);
+    }
+
+    private sealed record SheetPlacementIndex(
+        IReadOnlyDictionary<long, List<RevitAgentViewSheetPlacement>> SheetPlacementsByViewId,
+        IReadOnlyDictionary<long, List<RevitAgentContextHandle>> PlacedViewHandlesBySheetId
+    );
 
     private static RevitAgentContextHandle CreateHandle(
         Document document,
@@ -444,6 +873,13 @@ public static class RevitAgentContextCollector {
         }
     }
 
+    private static T TimePhase<T>(string phase, Func<T> action) {
+        var stopwatch = Stopwatch.StartNew();
+        var result = action();
+        Log.Debug("RevitAgentContext {Phase} collected in {ElapsedMilliseconds} ms", phase, stopwatch.ElapsedMilliseconds);
+        return result;
+    }
+
     private static int ScoreText(string? text, IReadOnlyList<string> tokens) {
         if (string.IsNullOrWhiteSpace(text))
             return 0;
@@ -452,6 +888,8 @@ public static class RevitAgentContextCollector {
         return tokens.Count(token => normalized.Contains(token, StringComparison.OrdinalIgnoreCase));
     }
 
+    private static int Clamp(int value, int min, int max) => Math.Min(Math.Max(value, min), max);
+
     private static int BoundRequestedCount(
         int requested,
         int min,
@@ -459,7 +897,7 @@ public static class RevitAgentContextCollector {
         string propertyName,
         List<RevitDataIssue> issues
     ) {
-        var bounded = Math.Clamp(requested, min, max);
+        var bounded = Clamp(requested, min, max);
         if (bounded != requested) {
             issues.Add(new RevitDataIssue(
                 "AgentContextRequestLimitAdjusted",

@@ -27,8 +27,16 @@ public enum RevitAgentContextProvenanceKind {
     SheetPlacement,
     BrowserIndex,
     VisibleInActiveView,
+    VisibleInReferencedView,
     PrintedContext,
     SearchMatch
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum RevitAgentVisibleContextScope {
+    ActiveViewVisible,
+    ViewReferences
 }
 
 [ExportTsInterface]
@@ -97,7 +105,16 @@ public record RevitAgentVisibleElementSample(
     string ClassName,
     string? FamilyName,
     string? TypeName,
-    string? LevelName
+    string? LevelName,
+    List<RevitAgentContextProvenance>? Provenance = null,
+    List<RevitAgentContextHandle>? VisibleInViews = null
+);
+
+[ExportTsInterface]
+public record RevitAgentVisibleElementHandle(
+    RevitAgentContextHandle Handle,
+    List<RevitAgentContextProvenance>? Provenance = null,
+    List<RevitAgentContextHandle>? VisibleInViews = null
 );
 
 [ExportTsInterface]
@@ -105,6 +122,18 @@ public record RevitAgentVisibleCategorySummary(
     RevitAgentContextHandle Handle,
     int ElementCount,
     List<RevitAgentVisibleElementSample> SampleElements,
+    List<RevitAgentContextProvenance> Provenance,
+    int ReturnedElementCount = 0,
+    bool IsReturnedElementSetComplete = true,
+    List<RevitAgentVisibleElementHandle>? ElementHandles = null
+);
+
+[ExportTsInterface]
+public record RevitAgentVisibleViewSummary(
+    RevitAgentContextHandle Handle,
+    string ViewType,
+    string Title,
+    int ElementCount,
     List<RevitAgentContextProvenance> Provenance
 );
 
@@ -128,7 +157,11 @@ public record RevitAgentContextSummaryData(
 [ExportTsInterface]
 public record RevitAgentContextResolveRequest(
     string ReferenceText,
-    int MaxResults = 10
+    int MaxResults = 10,
+    List<RevitAgentContextHandleKind>? HandleKinds = null,
+    bool RequirePrintedContext = false,
+    int? MaxPerHandleKind = null,
+    bool Compact = false
 );
 
 [ExportTsInterface]
@@ -152,7 +185,13 @@ public record RevitAgentContextResolveData(
 public record RevitAgentVisibleContextRequest(
     int MaxCategories = 12,
     List<string>? CategoryNames = null,
-    int MaxSampleElementsPerCategory = 0
+    int MaxSampleElementsPerCategory = 0,
+    RevitAgentVisibleContextScope Scope = RevitAgentVisibleContextScope.ActiveViewVisible,
+    List<long>? ViewIds = null,
+    List<string>? ViewUniqueIds = null,
+    int MaxViews = 10,
+    int MaxElementHandlesPerCategory = 0,
+    bool ReturnElementHandlesOnly = false
 );
 
 [ExportTsInterface]
@@ -160,5 +199,6 @@ public record RevitAgentVisibleContextData(
     RevitAgentContextHandle? ActiveView,
     int TotalVisibleElementCount,
     List<RevitAgentVisibleCategorySummary> Categories,
-    List<RevitDataIssue> Issues
+    List<RevitDataIssue> Issues,
+    List<RevitAgentVisibleViewSummary>? Views = null
 );

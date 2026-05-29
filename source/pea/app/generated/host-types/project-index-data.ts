@@ -11,6 +11,7 @@ import type { ProjectIndexScheduleEntry } from "./project-index-schedule-entry.j
 import type { ProjectIndexCategoryEntry } from "./project-index-category-entry.js";
 import type { ProjectIndexFamilyEntry } from "./project-index-family-entry.js";
 import type { ProjectBrowserOrganizationSummary } from "./project-browser-organization-summary.js";
+import type { ProjectIndexModelContext } from "./project-index-model-context.js";
 import type { RevitDataIssue } from "./revit-data-issue.js";
 import type { RevitDataResultPage } from "./revit-data-result-page.js";
 
@@ -23,6 +24,7 @@ export interface ProjectIndexData {
   categories: ProjectIndexCategoryEntry[];
   families: ProjectIndexFamilyEntry[];
   browserOrganizations: ProjectBrowserOrganizationSummary[];
+  modelContext?: ProjectIndexModelContext;
   issues: RevitDataIssue[];
   page?: RevitDataResultPage;
 }

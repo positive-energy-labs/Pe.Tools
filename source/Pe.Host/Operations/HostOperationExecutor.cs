@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.SettingsStorage;
 using System.Diagnostics;
@@ -21,7 +21,8 @@ internal sealed class HostOperationExecutor(
             var executionResult = await operation.ExecuteAsync(request, context, cancellationToken);
 
             this._logger.LogInformation(
-                "Host operation completed: Key={Key}, Route={Route}, Verb={Verb}, Mode={Mode}, RequestType={RequestType}, ResponseType={ResponseType}, ElapsedMs={ElapsedMs}",
+                "Host operation completed: RequestId={RequestId}, Key={Key}, Route={Route}, Verb={Verb}, Mode={Mode}, RequestType={RequestType}, ResponseType={ResponseType}, ElapsedMs={ElapsedMs}",
+                context.RequestId,
                 operation.Definition.Key,
                 operation.Definition.Route,
                 operation.Definition.Verb,
@@ -36,37 +37,41 @@ internal sealed class HostOperationExecutor(
         } catch (HostOperationException ex) {
             this._logger.LogWarning(
                 ex,
-                "Host operation failed with expected semantics: Key={Key}, Route={Route}, Mode={Mode}, RequestType={RequestType}, ElapsedMs={ElapsedMs}",
+                "Host operation failed with expected semantics: RequestId={RequestId}, Key={Key}, Route={Route}, Mode={Mode}, RequestType={RequestType}, ElapsedMs={ElapsedMs}",
+                context.RequestId,
                 operation.Definition.Key,
                 operation.Definition.Route,
                 operation.Definition.ExecutionMode,
                 operation.Definition.RequestType.Name,
                 stopwatch.ElapsedMilliseconds
             );
-            return CreateProblemResult(ex.StatusCode, ex.Message, ex.Issues);
+            return CreateProblemResult(ex.StatusCode, ex.Message, context.RequestId, ex.Issues);
         } catch (Exception ex) {
             this._logger.LogError(
                 ex,
-                "Host operation failed: Key={Key}, Route={Route}, Mode={Mode}, RequestType={RequestType}, ElapsedMs={ElapsedMs}",
+                "Host operation failed: RequestId={RequestId}, Key={Key}, Route={Route}, Mode={Mode}, RequestType={RequestType}, ElapsedMs={ElapsedMs}",
+                context.RequestId,
                 operation.Definition.Key,
                 operation.Definition.Route,
                 operation.Definition.ExecutionMode,
                 operation.Definition.RequestType.Name,
                 stopwatch.ElapsedMilliseconds
             );
-            return CreateProblemResult(StatusCodes.Status500InternalServerError, ex.Message, null);
+            return CreateProblemResult(StatusCodes.Status500InternalServerError, ex.Message, context.RequestId, null);
         }
     }
 
     private static IResult CreateProblemResult(
         int statusCode,
         string detail,
+        string requestId,
         IReadOnlyList<ValidationIssue>? issues
     ) {
         var problem = new ProblemDetails {
             Detail = detail,
             Status = statusCode
         };
+        problem.Extensions["requestId"] = requestId;
         if (issues is { Count: > 0 })
             problem.Extensions["issues"] = issues;
 

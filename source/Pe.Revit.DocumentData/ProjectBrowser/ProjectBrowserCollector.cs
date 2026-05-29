@@ -25,7 +25,7 @@ public static class ProjectBrowserCollector {
         var budget = RevitDataOutputBudgets.WithDefaults(request.Budget, maxEntries: 100, maxSamplesPerEntry: 5);
         var issues = new List<RevitDataIssue>();
         var sections = request.Sections.Count == 0
-            ? Enum.GetValues<ProjectBrowserSection>().ToHashSet()
+            ? Enum.GetValues(typeof(ProjectBrowserSection)).Cast<ProjectBrowserSection>().ToHashSet()
             : request.Sections.ToHashSet();
         if (request.Filter?.Section is { } filterSection)
             sections = [filterSection];
@@ -61,7 +61,7 @@ public static class ProjectBrowserCollector {
 
     public static ProjectBrowserCollectedIndex CollectIndex(
         Document document,
-        IReadOnlySet<ProjectBrowserSection> sections,
+        IReadOnlyCollection<ProjectBrowserSection> sections,
         int maxSamples,
         ProjectBrowserResultView view,
         ProjectBrowserFilter? filter,
@@ -85,7 +85,7 @@ public static class ProjectBrowserCollector {
 
     public static ProjectBrowserCollectedIndex CollectIndex(
         Document document,
-        IReadOnlySet<ProjectBrowserSection> sections,
+        IReadOnlyCollection<ProjectBrowserSection> sections,
         int maxSamples,
         List<RevitDataIssue> issues
     ) => CollectIndex(document, sections, maxSamples, ProjectBrowserResultView.Folders, null, issues);

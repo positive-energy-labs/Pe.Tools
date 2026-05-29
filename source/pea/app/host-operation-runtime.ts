@@ -74,12 +74,18 @@ export type HostOperationCallResult =
   | {
       ok: true;
       key: string;
+      requestId: string;
+      elapsedMs: number;
+      queuedMs?: number;
       operation?: HostOperationSearchResult;
       response: unknown;
     }
   | {
       ok: false;
       key: string;
+      requestId: string;
+      elapsedMs: number;
+      queuedMs?: number;
       operation: HostOperationFullResult;
       status?: number;
       message: string;
@@ -87,6 +93,8 @@ export type HostOperationCallResult =
       bestRequestExample?: HostOperationRequestExample;
       nextSteps: readonly string[];
     };
+
+const singleFlightQueues = new Map<string, Promise<void>>();
 
 export function listHostOperations(): HostOperationDefinition[] {
   return Object.values(hostOperations);
@@ -122,20 +130,40 @@ export async function callHostOperation(
   if (!operation)
     throw new Error(`Unknown host operation '${key}'. Use host_operation_search first.`);
 
+  const requestId = options.requestId ?? createRequestId();
+  const startedAt = Date.now();
+  const runStartedAt = { value: startedAt };
   try {
-    const response = await sendJson<unknown, unknown>(options, operation, normalizeRequest(operation, request));
+    const response = await runWithSingleFlight(operation, async () => {
+      runStartedAt.value = Date.now();
+      return sendJson<unknown, unknown>(
+        { ...options, requestId },
+        operation,
+        normalizeRequest(operation, request),
+      );
+    });
+    const elapsedMs = Date.now() - startedAt;
+    const queuedMs = Math.max(0, runStartedAt.value - startedAt);
     return {
       ok: true,
       key: operation.key,
+      requestId,
+      elapsedMs,
+      ...(queuedMs > 0 ? { queuedMs } : {}),
       operation: verbosity === "compact" ? undefined : toSearchResult(operation, verbosity),
       response,
     };
   } catch (error) {
+    const elapsedMs = Date.now() - startedAt;
+    const queuedMs = Math.max(0, runStartedAt.value - startedAt);
     const searchResult = toFullSearchResult(operation);
     if (error instanceof PeHostClientError) {
       return {
         ok: false,
         key: operation.key,
+        requestId,
+        elapsedMs,
+        ...(queuedMs > 0 ? { queuedMs } : {}),
         operation: searchResult,
         status: error.status,
         message: error.message,
@@ -148,12 +176,45 @@ export async function callHostOperation(
     return {
       ok: false,
       key: operation.key,
+      requestId,
+      elapsedMs,
+      ...(queuedMs > 0 ? { queuedMs } : {}),
       operation: searchResult,
       message: error instanceof Error ? error.message : String(error),
       bestRequestExample: getBestRequestExample(operation),
       nextSteps: createFailureNextSteps(operation, error),
     };
   }
+}
+
+
+async function runWithSingleFlight<T>(operation: HostOperationDefinition, action: () => Promise<T>): Promise<T> {
+  const group = getSingleFlightGroup(operation);
+  if (!group)
+    return action();
+
+  const previous = singleFlightQueues.get(group) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const queued = previous.catch(() => undefined).then(() => current);
+  singleFlightQueues.set(group, queued);
+
+  await previous.catch(() => undefined);
+  try {
+    return await action();
+  } finally {
+    release();
+    if (singleFlightQueues.get(group) === queued)
+      singleFlightQueues.delete(group);
+  }
+}
+
+function getSingleFlightGroup(operation: HostOperationDefinition): string | undefined {
+  if (operation.singleFlightGroup)
+    return operation.singleFlightGroup;
+  return operation.executionMode === "Bridge" && operation.key.startsWith("revit.") ? "revit" : undefined;
 }
 
 function normalizeRequest(operation: HostOperationDefinition, request: unknown): unknown {
@@ -166,15 +227,31 @@ function normalizeRequest(operation: HostOperationDefinition, request: unknown):
   return request;
 }
 
+function createRequestId(): string {
+  const random = Math.random().toString(36).slice(2, 10);
+  return `pea-${Date.now().toString(36)}-${random}`;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 function createFailureNextSteps(operation: HostOperationDefinition, error: unknown): string[] {
   const hints = [...createPreflightHints(operation)];
   if (!(error instanceof PeHostClientError)) {
-    hints.unshift("Pe.Host was not reachable. Start Pe.Host or pass the correct host base URL, then retry.");
+    if (isAbortError(error)) {
+      hints.unshift("The host operation timed out client-side. Do not immediately retry broad bridge work; use pe_logs to find the request id and check whether Revit is still finishing it.");
+      hints.unshift("For Revit single-flight operations, wait for the current bridge call to finish before sending another bridge-backed host_operation_call.");
+    } else {
+      hints.unshift("Pe.Host was not reachable. Start Pe.Host or pass the correct host base URL, then retry.");
+    }
     return unique(hints);
   }
 
   if (error.status === 503 && (operation.requiresBridge || operation.executionMode === "Bridge"))
     hints.unshift("Pe.Host is reachable, but this operation needs the Revit bridge. Open Revit and reconnect the bridge; use pe_status only if exact fresh state is needed.");
+  else if (error.status === 409 && (operation.singleFlightGroup || operation.executionMode === "Bridge"))
+    hints.unshift("A bridge/Revit precondition or single-flight conflict blocked the call. Wait for the active Revit operation to finish, inspect pe_status/pe_logs if needed, then retry with a narrower request.");
   else if (error.status === 400)
     hints.unshift(`Check the JSON request against ${createRequestHint(operation)}${formatBestExampleReference(operation)}.`);
   else if (error.status === 404)

@@ -12,6 +12,7 @@ export enum RevitAgentContextProvenanceKind {
   SheetPlacement = "SheetPlacement",
   BrowserIndex = "BrowserIndex",
   VisibleInActiveView = "VisibleInActiveView",
+  VisibleInReferencedView = "VisibleInReferencedView",
   PrintedContext = "PrintedContext",
   SearchMatch = "SearchMatch",
 }
