@@ -6,7 +6,7 @@
 export class HttpRoutes {
   static readonly apsBase: string = "/api/aps";
   static readonly settingsBase: string = "/api/settings";
-  static readonly revitDataBase: string = "/api/revit-data";
+  static readonly revitBase: string = "/api/revit";
   static readonly scriptingBase: string = "/api/scripting";
   static readonly bridge: string = "/api/bridge";
   static readonly events: string = "/api/settings/events";

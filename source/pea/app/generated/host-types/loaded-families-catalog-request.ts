@@ -4,7 +4,11 @@
  */
 
 import type { LoadedFamiliesFilter } from "./loaded-families-filter.js";
+import type { RevitDataProjectionRequest } from "./revit-data-projection-request.js";
+import type { RevitDataOutputBudget } from "./revit-data-output-budget.js";
 
 export interface LoadedFamiliesCatalogRequest {
   filter?: LoadedFamiliesFilter;
+  projection?: RevitDataProjectionRequest;
+  budget?: RevitDataOutputBudget;
 }

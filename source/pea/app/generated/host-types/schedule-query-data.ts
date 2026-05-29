@@ -6,6 +6,7 @@
 import type { ScheduleQueryKind } from "./schedule-query-kind.js";
 import type { ScheduleRenderedScheduleEntry } from "./schedule-rendered-schedule-entry.js";
 import type { RevitDataIssue } from "./revit-data-issue.js";
+import type { RevitDataResultPage } from "./revit-data-result-page.js";
 
 export interface ScheduleQueryData {
   documentTitle: string;
@@ -14,4 +15,5 @@ export interface ScheduleQueryData {
   resolvedScheduleCount: number;
   entries: ScheduleRenderedScheduleEntry[];
   issues: RevitDataIssue[];
+  page?: RevitDataResultPage;
 }

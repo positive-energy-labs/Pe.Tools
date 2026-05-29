@@ -7,6 +7,6 @@ import type { ScheduleTitleHorizontalAlignment } from "./schedule-title-horizont
 import type { ScheduleTitleBorderSpec } from "./schedule-title-border-spec.js";
 
 export interface ScheduleTitleStyleSpec {
-  horizontalAlignment?: ScheduleTitleHorizontalAlignment;
+  horizontalAlignment: ScheduleTitleHorizontalAlignment;
   borderStyle?: ScheduleTitleBorderSpec;
 }

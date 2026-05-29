@@ -7,6 +7,8 @@ import type { LoadedFamilyPlacementScope } from "./loaded-family-placement-scope
 
 export interface LoadedFamiliesFilter {
   familyNames: string[];
+  familyNameContains?: string;
   categoryNames: string[];
+  categoryNameContains?: string;
   placementScope: LoadedFamilyPlacementScope;
 }

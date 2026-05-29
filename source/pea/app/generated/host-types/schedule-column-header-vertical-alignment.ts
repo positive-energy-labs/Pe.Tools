@@ -4,7 +4,7 @@
  */
 
 export enum ScheduleColumnHeaderVerticalAlignment {
-  Top = "Top",
   Center = "Center",
+  Top = "Top",
   Bottom = "Bottom",
 }
