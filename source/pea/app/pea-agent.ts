@@ -1,4 +1,5 @@
 import { Agent } from "@mastra/core/agent";
+import type { RequestContext } from "@mastra/core/request-context";
 import type { AnyWorkspace } from "@mastra/core/workspace";
 import { peaTools } from "./tools.js";
 import {
@@ -8,6 +9,15 @@ import {
 import type { PeaContextProvider } from "./pea-context-seed.js";
 import { createOpenAIResponsesHistoryCompatProcessor } from "./pea-processors.js";
 import { peaRuntimePolicy, type PeaRuntimePolicy } from "./pea-runtime-policy.js";
+
+export type PeaModelResolver = (
+  modelId: string,
+  options?: {
+    thinkingLevel?: "off" | "low" | "medium" | "high" | "xhigh";
+    remapForCodexOAuth?: boolean;
+    requestContext?: RequestContext;
+  },
+) => any;
 
 export function createPeaAgent(
   policy: PeaRuntimePolicy = peaRuntimePolicy,
@@ -36,12 +46,7 @@ export function createPeaAgent(
         return `${peaAgentInstructions}\n\n<pea-startup-context>\nContext seed unavailable: ${detail}. Use pe_status for fresh host/Revit state.\n</pea-startup-context>`;
       }
     },
-    model: ({ requestContext }) => {
-      const harness = requestContext.get("harness") as
-        | PeaHarnessContext
-        | undefined;
-      return harness?.getState?.().currentModelId || defaultPeaAgentModelId;
-    },
+    model: createPeaModelArgument(),
     tools: peaTools,
     workspace: ({ requestContext }) => {
       const harness = requestContext.get("harness") as
@@ -55,11 +60,29 @@ export function createPeaAgent(
   });
 }
 
+export function createPeaModelArgument(resolveModel?: PeaModelResolver) {
+  return ({ requestContext }: { requestContext: RequestContext }) => {
+    const harness = requestContext.get("harness") as
+      | PeaHarnessContext
+      | undefined;
+    const state = harness?.getState?.();
+    const modelId = state?.currentModelId || defaultPeaAgentModelId;
+    return resolveModel
+      ? resolveModel(modelId, {
+        thinkingLevel: state?.thinkingLevel,
+        remapForCodexOAuth: true,
+        requestContext,
+      })
+      : modelId;
+  };
+}
+
 interface PeaHarnessContext {
   threadId?: string;
   workspace?: AnyWorkspace;
   getState?: () => {
     currentModelId?: string;
+    thinkingLevel?: "off" | "low" | "medium" | "high" | "xhigh";
   };
 }
 

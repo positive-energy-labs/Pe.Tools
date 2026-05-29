@@ -1,5 +1,5 @@
-export const defaultPeaAgentModelId = "openai/gpt-5.3";
-export const defaultPeaFastModelId = "openai/gpt-5.1-mini";
+export const defaultPeaAgentModelId = "openai/gpt-5.4";
+export const defaultPeaFastModelId = "openai/gpt-5.4-mini";
 export const defaultPeaOmModelId = defaultPeaFastModelId;
 export const defaultPeaGoalJudgeModelId = defaultPeaAgentModelId;
 

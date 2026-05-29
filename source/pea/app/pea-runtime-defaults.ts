@@ -15,11 +15,7 @@ import { peaRuntimePolicy, type PeaRuntimePolicy } from "./pea-runtime-policy.js
 const peaModelPackName = "Pea OpenAI";
 const peaModelPackId = `custom:${peaModelPackName}`;
 const peaSettingsSchemaVersion = 1;
-const staleOpenAiModelReplacements: Record<string, string> = {
-  "openai/gpt-5.5": defaultPeaAgentModelId,
-  "openai/gpt-5.4": defaultPeaAgentModelId,
-  "openai/gpt-5.4-mini": defaultPeaFastModelId,
-};
+const mastraAppDirectoryName = "mastracode";
 
 export type PeaThemePreference = "auto" | "dark" | "light";
 
@@ -45,7 +41,7 @@ interface JsonObject {
 }
 
 export function getPeaSettingsPath(productHomePath: string): string {
-  return join(productHomePath, ".pea", "settings.json");
+  return join(productHomePath, ".pea", mastraAppDirectoryName, "settings.json");
 }
 
 export function getPeaRuntimeDefaultsSummary(productHomePath: string): PeaRuntimeDefaultsSummary {
@@ -190,8 +186,7 @@ function stringOrDefault(value: unknown, fallback: string): string {
 }
 
 function modelOrDefault(value: unknown, fallback: string): string {
-  const model = stringOrDefault(value, fallback);
-  return staleOpenAiModelReplacements[model] ?? model;
+  return stringOrDefault(value, fallback);
 }
 
 function numberOrDefault(value: unknown, fallback: number): number {

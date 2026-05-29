@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -15,6 +15,8 @@ const bootstrapScriptPath =
 const teamFolderPath = "G:\\Shared drives\\PE Team Folder";
 const bootstrapWaitIntervalMs = 2500;
 
+export type PeaAuthSource = "auto" | "api-key" | "oauth";
+
 interface AuthProbe {
   isConfigured: boolean;
   source?: string;
@@ -22,11 +24,13 @@ interface AuthProbe {
 
 export interface PeaBetaAuthOptions {
   allowOAuth?: boolean;
+  authSource?: PeaAuthSource;
   mastraAuthPath?: string;
 }
 
-export async function resolveDefaultPeaMastraAuthPath(): Promise<string> {
-  return join(await resolvePeProductHomePath(), ".pea", mastraAppDirectoryName, "auth.json");
+export async function resolveDefaultPeaMastraAuthPath(authSource: PeaAuthSource = "api-key"): Promise<string> {
+  const authRoot = authSource === "oauth" ? ".pea-oauth" : ".pea";
+  return join(await resolvePeProductHomePath(), authRoot, mastraAppDirectoryName, "auth.json");
 }
 
 export async function ensurePeaBetaAuth(
@@ -58,11 +62,16 @@ async function probePeaBetaBootstrap(
   options: PeaBetaAuthOptions,
 ): Promise<BootstrapProbe> {
   const missing: string[] = [];
+  const authSource = options.authSource ?? "auto";
   const allowOAuth = options.allowOAuth === true || isTruthyEnv(allowOAuthBetaAuthEnvName);
-  const openAi = await probeOpenAiAuth(allowOAuth, options.mastraAuthPath);
+  const openAi = await probeOpenAiAuth(authSource, allowOAuth, options.mastraAuthPath);
   if (!openAi.isConfigured) {
     missing.push(
-      allowOAuth ? "OpenAI API key or Codex OAuth login" : "OpenAI API key",
+      authSource === "oauth"
+        ? "Codex OAuth login"
+        : allowOAuth && authSource === "auto"
+          ? "OpenAI API key or Codex OAuth login"
+          : "OpenAI API key",
     );
   }
 
@@ -76,21 +85,31 @@ async function probePeaBetaBootstrap(
 }
 
 async function probeOpenAiAuth(
+  authSource: PeaAuthSource,
   allowOAuth: boolean,
   mastraAuthPath?: string,
 ): Promise<AuthProbe> {
-  const processValue = firstNonBlank(process.env[openAiEnvName]);
-  if (processValue) return { isConfigured: true, source: openAiEnvName };
+  const authPath = mastraAuthPath ?? await resolveDefaultPeaMastraAuthPath(authSource);
+  const mastraAuth = await readMastraOpenAiAuth(authPath);
 
-  const mastraAuth = await readMastraOpenAiAuth(
-    mastraAuthPath ?? await resolveDefaultPeaMastraAuthPath(),
-  );
+  if (authSource === "oauth") {
+    return mastraAuth.hasOAuth
+      ? { isConfigured: true, source: "Pea MastraCode Codex OAuth" }
+      : { isConfigured: false };
+  }
+
+  const processValue = firstNonBlank(process.env[openAiEnvName]);
+  if (processValue) {
+    await persistOpenAiApiKeyAuth(authPath, processValue);
+    return { isConfigured: true, source: openAiEnvName };
+  }
+
   if (mastraAuth.apiKey) {
     process.env[openAiEnvName] = mastraAuth.apiKey;
     return { isConfigured: true, source: "MastraCode auth.json" };
   }
 
-  if (allowOAuth) {
+  if (allowOAuth && authSource === "auto") {
     return {
       isConfigured: true,
       source: mastraAuth.hasOAuth
@@ -102,10 +121,33 @@ async function probeOpenAiAuth(
   const userEnvValue = await readWindowsUserEnvironmentValue(openAiEnvName);
   if (userEnvValue) {
     process.env[openAiEnvName] = userEnvValue;
+    await persistOpenAiApiKeyAuth(authPath, userEnvValue);
     return { isConfigured: true, source: `user ${openAiEnvName}` };
   }
 
   return { isConfigured: false };
+}
+
+async function persistOpenAiApiKeyAuth(
+  authPath: string,
+  apiKey: string,
+): Promise<void> {
+  const key = firstNonBlank(apiKey);
+  if (!key) return;
+
+  let parsed: Record<string, unknown> = {};
+  try {
+    parsed = parseJsonObject(await readFile(authPath, "utf-8"));
+  } catch {
+    parsed = {};
+  }
+
+  const nextCredential = { type: "api_key", key };
+  parsed["openai-codex"] = nextCredential;
+  parsed["apikey:openai-codex"] = nextCredential;
+
+  await mkdir(dirname(authPath), { recursive: true });
+  await writeFile(authPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf-8");
 }
 
 async function probePeGlobalSettings(): Promise<AuthProbe> {
