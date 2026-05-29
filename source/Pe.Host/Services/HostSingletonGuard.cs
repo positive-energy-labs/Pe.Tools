@@ -14,9 +14,9 @@ internal sealed class HostSingletonLease : IDisposable {
         this._takeoverEvent = takeoverEvent;
     }
 
-    public Task StopWhenTakeoverRequestedAsync(WebApplication app) => Task.Run(async () => {
+    public Task StopWhenTakeoverRequestedAsync(IHostApplicationLifetime applicationLifetime) => Task.Run(() => {
         this._takeoverEvent.WaitOne();
-        await app.StopAsync();
+        applicationLifetime.StopApplication();
     });
 
     public void Dispose() {
@@ -110,13 +110,13 @@ internal static class HostSingletonGuard {
     }
 
     private static void LogInfo(ManagedLogFile logFile, string message) =>
-        logFile.AppendStructuredEntry("INF", LogSource, message);
+        logFile.AppendDemystifiedEntry("INF", LogSource, message);
 
     private static void LogWarning(ManagedLogFile logFile, string message) =>
-        logFile.AppendStructuredEntry("WRN", LogSource, message);
+        logFile.AppendDemystifiedEntry("WRN", LogSource, message);
 
     private static void LogError(ManagedLogFile logFile, string message, Exception? exception = null) =>
-        logFile.AppendStructuredEntry("ERR", LogSource, message, exception: exception);
+        logFile.AppendDemystifiedEntry("ERR", LogSource, message, exception: exception);
 
     private static int GetProbeTimeoutMs() => HostRuntimeDefaults.DefaultHostStartupTimeoutMs;
     private static int GetHostProbeTimeoutMs() => HostRuntimeDefaults.DefaultHostProbeTimeoutMs;
