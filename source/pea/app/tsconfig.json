@@ -8,5 +8,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["*.ts", "generated/*.ts", "generated/host-types/**/*.ts"]
+  "include": ["*.ts", "bundled-skill-content/**/*.ts", "generated/*.ts", "generated/host-types/**/*.ts"]
 }

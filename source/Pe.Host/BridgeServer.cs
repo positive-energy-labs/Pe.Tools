@@ -68,7 +68,6 @@ public sealed class BridgeServer(
         Type responseType,
         CancellationToken cancellationToken
     ) {
-        var connectedSession = this.ResolveSessionOrThrow();
         var requestId = Guid.NewGuid().ToString("N");
         var startedAtUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
@@ -90,6 +89,7 @@ public sealed class BridgeServer(
 
         var completion = new TaskCompletionSource<BridgeResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
         try {
+            var connectedSession = this.ResolveSessionOrThrow();
             if (!this._pending.TryAdd(requestId, new PendingBridgeRequest(connectedSession.ConnectionId, completion)))
                 throw new InvalidOperationException($"Duplicate bridge request ID '{requestId}'.");
 
@@ -153,6 +153,15 @@ public sealed class BridgeServer(
                 );
                 disconnectReason = registrationResult.Ack.ErrorMessage ?? "bridge registration rejected";
                 return;
+            }
+
+            if (registrationResult.ReplacedSession != null) {
+                await this.PublishSessionConnectionChangedAsync(
+                    HostSessionConnectionChangeReason.BridgeDisconnected,
+                    registrationResult.ReplacedSession,
+                    registrationResult.ReplacedDisconnectReason,
+                    cancellationToken
+                );
             }
 
             await this.PublishSessionConnectionChangedAsync(
@@ -310,37 +319,64 @@ public sealed class BridgeServer(
         BridgeRegistrationRequest registration
     ) {
         var snapshot = BridgeSessionSnapshot.Create(registration);
+        ConnectedBridgeSession? replacedSession = null;
+        string? replacedReason = null;
 
-        lock (this._sessionSync) {
-            if (this._session != null) {
-                var existing = this._session.Snapshot;
-                return new BridgeRegistrationResult(
-                    null,
-                    new BridgeRegistrationAck(
-                        false,
-                        $"A Revit bridge session is already connected (SessionId={existing.SessionId}, ProcessId={existing.ProcessId}).",
-                        existing.SessionId,
-                        existing.ProcessId
+        lock (this._requestAdmissionSync) {
+            lock (this._sessionSync) {
+                if (this._inFlightRequest != null) {
+                    var existing = this._session?.Snapshot;
+                    var elapsedMs = Math.Max(
+                        0,
+                        DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - this._inFlightRequest.StartedAtUnixMs
+                    );
+                    return new BridgeRegistrationResult(
+                        null,
+                        new BridgeRegistrationAck(
+                            false,
+                            $"A Revit bridge session is busy executing '{this._inFlightRequest.Method}' for {elapsedMs} ms. Retry after the current operation completes.",
+                            existing?.SessionId,
+                            existing?.ProcessId
+                        )
+                    );
+                }
+
+                if (this._session != null) {
+                    replacedSession = this._session;
+                    replacedReason = string.Equals(
+                        replacedSession.Snapshot.SessionId,
+                        snapshot.SessionId,
+                        StringComparison.Ordinal
                     )
-                );
-            }
+                        ? $"Bridge session reconnected by SessionId={snapshot.SessionId}, ProcessId={snapshot.ProcessId}."
+                        : $"Bridge session taken over by SessionId={snapshot.SessionId}, ProcessId={snapshot.ProcessId}.";
+                }
 
-            this._session = new ConnectedBridgeSession(
-                transportSession.ConnectionId,
-                transportSession,
-                snapshot
-            );
-            this._lastDisconnectReason = null;
-            return new BridgeRegistrationResult(
-                snapshot,
-                new BridgeRegistrationAck(
-                    true,
-                    null,
-                    snapshot.SessionId,
-                    snapshot.ProcessId
-                )
-            );
+                this._session = new ConnectedBridgeSession(
+                    transportSession.ConnectionId,
+                    transportSession,
+                    snapshot
+                );
+                this._lastDisconnectReason = null;
+            }
         }
+
+        if (replacedSession != null && replacedReason != null) {
+            replacedSession.TransportSession.Dispose();
+            this.FailPendingRequests(replacedSession.ConnectionId, replacedReason);
+        }
+
+        return new BridgeRegistrationResult(
+            snapshot,
+            new BridgeRegistrationAck(
+                true,
+                null,
+                snapshot.SessionId,
+                snapshot.ProcessId
+            ),
+            replacedSession?.Snapshot.DeepCopy(),
+            replacedReason
+        );
     }
 
     private BridgeSessionSnapshot? UpdateStateSnapshot(
@@ -494,7 +530,9 @@ internal sealed record ConnectedBridgeSession(
 
 internal sealed record BridgeRegistrationResult(
     BridgeSessionSnapshot? Session,
-    BridgeRegistrationAck Ack
+    BridgeRegistrationAck Ack,
+    BridgeSessionSnapshot? ReplacedSession = null,
+    string? ReplacedDisconnectReason = null
 );
 
 public sealed record BridgeRuntimeSnapshot(

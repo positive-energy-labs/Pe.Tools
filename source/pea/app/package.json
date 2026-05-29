@@ -17,10 +17,11 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@mastra/core": "latest",
+    "@mastra/core": "1.37.1",
     "gunshi": "^0.29.5",
-    "mastracode": "^0.17.2",
-    "zod": "^4.3.6"
+    "mastracode": "^0.21.1",
+    "parse5": "^8.0.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "tsx": "^4.21.0",

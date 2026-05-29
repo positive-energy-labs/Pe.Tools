@@ -35,6 +35,7 @@ public class Application : ExternalApplication {
     ///     RevitTaskService for executing code in Revit API context from async/WPF contexts.
     /// </summary>
     private static RevitTaskService? _revitTaskService;
+    private static BridgeConnectionSupervisor? _bridgeConnectionSupervisor;
 
     public override void OnStartup() {
         // Subscribe to ViewActivated event for MRU tracking
@@ -55,14 +56,19 @@ public class Application : ExternalApplication {
         CreateLogger();
 
         // Initialize the host bridge metadata.
-        HostRuntime.Initialize(revitTaskService, registry => {
-            registry.RegisterModules(StorageRuntimeStructuralModules.All);
-            registry.RegisterModules(RevitSettingsRuntimeRegistration.StructuralModules);
-            registry.RegisterRootBindings(RevitSettingsRuntimeRegistration.RootBindings);
-            registry.RegisterModules(FamilyFoundrySettingsRegistration.StructuralModules);
-            registry.RegisterRootBindings(FamilyFoundrySettingsRegistration.RootBindings);
-        });
-        TryConnectBridge();
+        HostRuntime.Initialize(
+            revitTaskService,
+            registry => {
+                registry.RegisterModules(StorageRuntimeStructuralModules.All);
+                registry.RegisterModules(RevitSettingsRuntimeRegistration.StructuralModules);
+                registry.RegisterRootBindings(RevitSettingsRuntimeRegistration.RootBindings);
+                registry.RegisterModules(FamilyFoundrySettingsRegistration.StructuralModules);
+                registry.RegisterRootBindings(FamilyFoundrySettingsRegistration.RootBindings);
+            },
+            reason => _bridgeConnectionSupervisor?.RequestReconnect(reason)
+        );
+        _bridgeConnectionSupervisor = new BridgeConnectionSupervisor(revitTaskService);
+        _bridgeConnectionSupervisor.Start();
         this.CreateRibbon();
 
         // Initialize task registry
@@ -76,6 +82,8 @@ public class Application : ExternalApplication {
         app.ViewActivated -= OnViewActivated;
         app.ControlledApplication.DocumentClosing -= OnDocumentClosing;
         app.ControlledApplication.DocumentChanged -= OnDocumentChanged;
+        _bridgeConnectionSupervisor?.Dispose();
+        _bridgeConnectionSupervisor = null;
         _revitTaskService?.Dispose();
 
         // Shutdown AutoTag service
@@ -131,24 +139,6 @@ public class Application : ExternalApplication {
     public override void OnShutdown() => Log.CloseAndFlush();
 
     private void CreateRibbon() => ButtonRegistry.BuildRibbon(this.Application, "PE TOOLS");
-
-    private static void TryConnectBridge() {
-        var result = HostBridgeConnector.EnsureConnected();
-        if (!result.HostLaunchResult.Success) {
-            Log.Warning(
-                "Host bridge auto-connect skipped because host startup failed: {Message}",
-                result.HostLaunchResult.Message
-            );
-            return;
-        }
-
-        if (result.RuntimeActionResult.Success) {
-            Log.Information("Host bridge auto-connect succeeded: {Message}", result.RuntimeActionResult.Message);
-            return;
-        }
-
-        Log.Warning("Host bridge auto-connect failed: {Message}", result.RuntimeActionResult.Message);
-    }
 
     private static void CreateLogger() {
         const string outputTemplate = "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}";

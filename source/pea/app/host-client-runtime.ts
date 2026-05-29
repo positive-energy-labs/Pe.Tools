@@ -1,11 +1,51 @@
 export type HostHttpVerb = "GET" | "POST";
 export type HostExecutionMode = "Local" | "Bridge";
+export type HostOperationExposure = "PublicHttp" | "InternalHostOnly";
+export type HostOperationIntent = "Read" | "Mutate";
+export type HostOperationFamily = "Host" | "Settings" | "Script" | "Revit" | "Aps";
+export type RevitOperationLayer = "Context" | "Catalog" | "Matrix" | "Detail" | "Resolve" | "Apply";
+export type HostOperationResultGrain = "Status" | "Summary" | "Schema" | "Catalog" | "Matrix" | "Rows" | "Handles" | "Detail" | "Workspace" | "Document" | "Logs" | "Token" | "Mutation";
+export type HostOperationCostTier = "Cheap" | "Bounded" | "Expensive" | "Mutation";
+
+export interface HostTypeShapeField {
+  name: string;
+  type: string;
+  required: boolean;
+}
+
+export interface HostOperationRequestExample {
+  name: string;
+  description: string;
+  json: string;
+}
 
 export interface HostOperationDefinition {
   key: string;
   verb: HostHttpVerb;
   route: string;
   executionMode: HostExecutionMode;
+  exposure?: HostOperationExposure;
+  requestTypeName?: string;
+  responseTypeName?: string;
+  requestShape?: readonly HostTypeShapeField[];
+  responseShape?: readonly HostTypeShapeField[];
+  displayName?: string;
+  domain?: string;
+  summary?: string;
+  tags?: readonly string[];
+  intent?: HostOperationIntent;
+  requiresBridge?: boolean;
+  requiresActiveDocument?: boolean;
+  family?: HostOperationFamily;
+  revitLayer?: RevitOperationLayer | null;
+  domainNoun?: string;
+  resultGrain?: HostOperationResultGrain;
+  costTier?: HostOperationCostTier;
+  singleFlightGroup?: string | null;
+  requestExamples?: readonly HostOperationRequestExample[];
+  boundedExpansionHints?: readonly string[];
+  handleProvenanceNotes?: string | null;
+  strictRequestValidation?: boolean;
 }
 
 export interface HostProblemDetails {

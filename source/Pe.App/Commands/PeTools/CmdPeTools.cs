@@ -23,67 +23,61 @@ public class CmdPeTools : IExternalCommand {
     public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements) {
         try {
             var status = HostRuntime.GetStatus();
+            var connectAttempt = EnsureConnectedForButtonOpen(status);
+            status = HostRuntime.GetStatus();
             Log.Information(
-                "Pe Tools command opened: IsConnected={IsConnected}, BridgeUri={BridgeUri}, SessionId={SessionId}, Modules={ModuleCount}, ActiveDocument={ActiveDocumentTitle}",
+                "Pe Tools command opened: IsConnected={IsConnected}, BridgeUri={BridgeUri}, SessionId={SessionId}, Modules={ModuleCount}, ActiveDocument={ActiveDocumentTitle}, ConnectAttempted={ConnectAttempted}, ConnectSuccess={ConnectSuccess}, ConnectMessage={ConnectMessage}",
                 status.IsConnected,
                 status.BridgeUri,
                 status.SessionId,
                 status.AvailableModuleCount,
-                status.ActiveDocumentTitle
+                status.ActiveDocumentTitle,
+                connectAttempt != null,
+                connectAttempt?.Success,
+                connectAttempt?.RuntimeActionResult.Message
             );
             var dialog = new TaskDialog("Pe Tools") {
                 MainInstruction = status.IsConnected
                     ? "Pe Tools Bridge: Connected"
-                    : "Pe Tools Bridge: Disconnected",
-                MainContent = BuildStatusSummary(status),
+                    : "Pe Tools Bridge: Connection Failed",
+                MainContent = BuildStatusSummary(status, connectAttempt?.RuntimeActionResult),
                 CommonButtons = TaskDialogCommonButtons.Close,
-                FooterText = "Revit can start the external host automatically when needed."
+                FooterText = status.IsConnected
+                    ? "The bridge is maintained automatically while Revit is running."
+                    : "Opening Pe Tools attempts to start Pe.Host and reconnect the bridge automatically."
             };
 
             if (status.IsConnected) {
                 dialog.AddCommandLink(
                     TaskDialogCommandLinkId.CommandLink1,
-                    "Disconnect Bridge",
-                    "Stop serving host bridge requests from this Revit session."
+                    "Open Scripting Workspace",
+                    "Bootstrap the default Revit scripting workspace and open it in your default IDE."
                 );
                 dialog.AddCommandLink(
                     TaskDialogCommandLinkId.CommandLink2,
-                    "Launch Pe Tools Apps",
-                    "Open scripting, pea agent, or the Pe Tools browser."
-                );
-            } else {
-                dialog.AddCommandLink(
-                    TaskDialogCommandLinkId.CommandLink1,
-                    "Connect Bridge",
-                    "Connect this Revit session to the manually launched host."
+                    "Open Pea Agent Terminal",
+                    "Launch `pea agent` in a terminal window."
                 );
                 dialog.AddCommandLink(
-                    TaskDialogCommandLinkId.CommandLink2,
-                    "Launch Pe Tools Apps",
-                    "Open scripting, pea agent, or the Pe Tools browser."
+                    TaskDialogCommandLinkId.CommandLink3,
+                    "Open Pe Tools Browser",
+                    "Open the external Pe Tools frontend in your default browser."
                 );
             }
 
             var result = dialog.Show();
+            if (!status.IsConnected)
+                return Result.Succeeded;
+
             switch (result) {
             case TaskDialogResult.CommandLink1:
-                var actionName = status.IsConnected ? "Disconnect Bridge" : "Connect Bridge";
-                var actionStopwatch = Stopwatch.StartNew();
-                Log.Information("Pe Tools command selected action: {ActionName}", actionName);
-                var actionResult = status.IsConnected
-                    ? HostRuntime.Disconnect()
-                    : HostBridgeConnector.EnsureConnected().RuntimeActionResult;
-                Log.Information(
-                    "Pe Tools command action completed: {ActionName}, Success={Success}, ElapsedMs={ElapsedMs}, Message={Message}",
-                    actionName,
-                    actionResult.Success,
-                    actionStopwatch.ElapsedMilliseconds,
-                    actionResult.Message
-                );
-                _ = TaskDialog.Show("Pe Tools", actionResult.Message);
+                ShowActionResult("Scripting Workspace", OpenScriptingWorkspace(commandData.Application));
                 break;
             case TaskDialogResult.CommandLink2:
-                ShowAuxiliaryAppsDialog(commandData.Application, status.SessionId);
+                _ = PeaTerminalLauncher.LaunchAgent();
+                break;
+            case TaskDialogResult.CommandLink3:
+                ShowActionResult("Pe Tools Browser", OpenPeToolsBrowser(status.SessionId));
                 break;
             }
 
@@ -95,40 +89,21 @@ public class CmdPeTools : IExternalCommand {
         }
     }
 
-    private static void ShowAuxiliaryAppsDialog(UIApplication uiApplication, string sessionId) {
-        var dialog = new TaskDialog("Pe Tools Apps") {
-            MainInstruction = "Launch Pe Tools Apps",
-            MainContent = "Choose a host-backed Pe Tools surface to open.",
-            CommonButtons = TaskDialogCommonButtons.Close,
-            FooterText = "Each launcher starts Pe.Host and connects the bridge when that app requires it."
-        };
-        dialog.AddCommandLink(
-            TaskDialogCommandLinkId.CommandLink1,
-            "Open Scripting Workspace",
-            "Bootstrap the default Revit scripting workspace and open it in your default IDE."
-        );
-        dialog.AddCommandLink(
-            TaskDialogCommandLinkId.CommandLink2,
-            "Open Pea Agent Terminal",
-            "Launch `pea agent` in a terminal window."
-        );
-        dialog.AddCommandLink(
-            TaskDialogCommandLinkId.CommandLink3,
-            "Open Pe Tools Browser",
-            "Open the external Pe Tools frontend in your default browser."
-        );
+    private static HostBridgeConnectResult? EnsureConnectedForButtonOpen(RuntimeStatus status) {
+        if (status.IsConnected)
+            return null;
 
-        switch (dialog.Show()) {
-        case TaskDialogResult.CommandLink1:
-            ShowActionResult("Scripting Workspace", OpenScriptingWorkspace(uiApplication));
-            break;
-        case TaskDialogResult.CommandLink2:
-            _ = PeaTerminalLauncher.LaunchAgent();
-            break;
-        case TaskDialogResult.CommandLink3:
-            ShowActionResult("Pe Tools Browser", OpenPeToolsBrowser(sessionId));
-            break;
-        }
+        var actionStopwatch = Stopwatch.StartNew();
+        Log.Information("Pe Tools command attempting host bridge connect on open.");
+        var connectResult = HostBridgeConnector.EnsureConnected();
+        Log.Information(
+            "Pe Tools command host bridge connect on open completed: Success={Success}, AlreadyConnected={AlreadyConnected}, ElapsedMs={ElapsedMs}, Message={Message}",
+            connectResult.Success,
+            connectResult.AlreadyConnected,
+            actionStopwatch.ElapsedMilliseconds,
+            connectResult.RuntimeActionResult.Message
+        );
+        return connectResult;
     }
 
     internal static RuntimeActionResult OpenScriptingWorkspace(UIApplication uiApplication) {
@@ -221,8 +196,11 @@ public class CmdPeTools : IExternalCommand {
         _ = TaskDialog.Show("Pe Tools", result.Message);
     }
 
-    private static string BuildStatusSummary(RuntimeStatus status) {
+    private static string BuildStatusSummary(RuntimeStatus status, RuntimeActionResult? connectAttempt) {
         var sb = new StringBuilder();
+        if (!status.IsConnected)
+            _ = sb.AppendLine($"Status: {connectAttempt?.Message ?? status.LastError ?? "Connection attempt is pending."}");
+
         _ = sb.AppendLine($"Bridge: {status.BridgeUri}");
         _ = sb.AppendLine($"Session: {status.SessionId}");
         _ = sb.AppendLine($"Process: {status.ProcessId}");
@@ -230,6 +208,13 @@ public class CmdPeTools : IExternalCommand {
         _ = sb.AppendLine($"Revit: {status.RevitVersion ?? "Unknown"}");
         _ = sb.AppendLine($"Runtime: {status.RuntimeFramework ?? "Unknown"}");
         _ = sb.AppendLine($"Active document: {status.ActiveDocumentTitle ?? "None"}");
+        if (!status.IsConnected) {
+            _ = sb.AppendLine();
+            _ = sb.AppendLine("Unavailable until connected:");
+            _ = sb.AppendLine("- Open Scripting Workspace");
+            _ = sb.AppendLine("- Open Pea Agent Terminal");
+            _ = sb.AppendLine("- Open Pe Tools Browser");
+        }
 
         if (!string.IsNullOrWhiteSpace(status.LastError)) {
             _ = sb.AppendLine();
