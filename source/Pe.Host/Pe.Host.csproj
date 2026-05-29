@@ -9,6 +9,10 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Ben.Demystifier" Version="0.4.1"/>
+    </ItemGroup>
+
+    <ItemGroup>
         <ProjectReference Include="..\Pe.Aps\Pe.Aps.csproj"/>
         <ProjectReference Include="..\Pe.Shared.ApsAuth\Pe.Shared.ApsAuth.csproj"/>
         <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj"/>

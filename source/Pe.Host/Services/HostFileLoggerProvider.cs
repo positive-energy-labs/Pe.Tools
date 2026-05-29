@@ -33,8 +33,9 @@ internal sealed class HostFileLogger(string categoryName, ManagedLogFile logFile
             return;
 
         try {
-            this._logFile.AppendStructuredEntry(
-                ToShortLevel(logLevel), this._categoryName,
+            this._logFile.AppendDemystifiedEntry(
+                ToShortLevel(logLevel),
+                this._categoryName,
                 message,
                 ResolveEventName(eventId),
                 exception

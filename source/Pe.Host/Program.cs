@@ -31,8 +31,11 @@ builder.Services.AddSingleton<IApsCredentialProvider>(_ => {
     return new Aps.StaticAuthTokenProvider(credentials.WebClientId, credentials.WebClientSecret);
 });
 builder.Services.AddSingleton<ApsAuthService>();
+builder.Services.AddSingleton<BridgeSessionManager>();
+builder.Services.AddSingleton<BridgeRequestGate>();
 builder.Services.AddSingleton<BridgeServer>();
 builder.Services.AddSingleton<HostActivityService>();
+builder.Services.AddSingleton<HostLifecycleCoordinator>();
 builder.Services.AddSingleton<HostEventStreamService>();
 builder.Services.AddSingleton<HostOperationRegistry>();
 builder.Services.AddSingleton<HostOperationExecutor>();
@@ -61,12 +64,12 @@ var app = builder.Build();
 app.UseCors();
 app.UseWebSockets();
 app.Use(async (httpContext, next) => {
-    var activityService = httpContext.RequestServices.GetRequiredService<HostActivityService>();
-    activityService.OnRequestStarted();
+    var lifecycleCoordinator = httpContext.RequestServices.GetRequiredService<HostLifecycleCoordinator>();
+    lifecycleCoordinator.OnRequestStarted();
     try {
         await next();
     } finally {
-        activityService.OnRequestCompleted();
+        lifecycleCoordinator.OnRequestCompleted();
     }
 });
 HostEndpointMapper.MapOperations(app);
@@ -123,16 +126,16 @@ app.Logger.LogInformation(
     options.IdleShutdownTimeout.TotalMinutes
 );
 app.Logger.LogInformation("Host file logging enabled at {LogFilePath}", hostLogFile.FilePath);
-_ = singletonLease.StopWhenTakeoverRequestedAsync(app);
+_ = app.Services.GetRequiredService<HostLifecycleCoordinator>().StopWhenTakeoverRequestedAsync(singletonLease);
 
 app.Run(options.HostBaseUrl);
 
 static HostSingletonLease AcquireSingletonLease(BridgeHostOptions options, ManagedLogFile hostLogFile) {
     try {
-        hostLogFile.AppendStructuredEntry("INF", "Pe.Host.Program", $"Starting Pe.Host for {options.HostBaseUrl}.");
+        hostLogFile.AppendDemystifiedEntry("INF", "Pe.Host.Program", $"Starting Pe.Host for {options.HostBaseUrl}.");
         return HostSingletonGuard.AcquireOrTakeOver(options, hostLogFile);
     } catch (Exception ex) {
-        hostLogFile.AppendStructuredEntry("CRT", "Pe.Host.Program", "Pe.Host startup failed before web host initialization completed.", exception: ex);
+        hostLogFile.AppendDemystifiedEntry("CRT", "Pe.Host.Program", "Pe.Host startup failed before web host initialization completed.", exception: ex);
         throw;
     }
 }
