@@ -6,12 +6,8 @@
 import type { RevitAgentContextHandle } from "./revit-agent-context-handle.js";
 import type { RevitAgentContextProvenance } from "./revit-agent-context-provenance.js";
 
-export interface ProjectIndexCategoryEntry {
+export interface RevitAgentVisibleElementHandle {
   handle: RevitAgentContextHandle;
-  categoryName: string;
-  familyCount: number;
-  placedInstanceCount: number;
-  scheduleCount: number;
-  scheduleHandles: RevitAgentContextHandle[];
-  provenance: RevitAgentContextProvenance[];
+  provenance?: RevitAgentContextProvenance[];
+  visibleInViews?: RevitAgentContextHandle[];
 }

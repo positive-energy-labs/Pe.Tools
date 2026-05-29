@@ -88,8 +88,8 @@ export const scriptingOperations = {
     executionMode: "Bridge",
     requestTypeName: "ExecuteRevitScriptRequest",
     responseTypeName: "ExecuteRevitScriptData",
-    requestShape: [{"name":"scriptContent","type":"string","required":false},{"name":"sourceKind","type":"enum:ScriptExecutionSourceKind","required":true},{"name":"sourceName","type":"string","required":false},{"name":"sourcePath","type":"string","required":false},{"name":"workspaceKey","type":"string","required":true}],
-    responseShape: [{"name":"containerTypeName","type":"string","required":false},{"name":"diagnostics","type":"array\u003CScriptDiagnostic\u003E","required":true},{"name":"executionId","type":"string","required":true},{"name":"output","type":"string","required":true},{"name":"revitVersion","type":"string","required":true},{"name":"status","type":"enum:ScriptExecutionStatus","required":true},{"name":"targetFramework","type":"string","required":true}],
+    requestShape: [{"name":"artifactRunName","type":"string","required":false},{"name":"permissionMode","type":"enum:ScriptPermissionMode","required":true},{"name":"scriptContent","type":"string","required":false},{"name":"sourceKind","type":"enum:ScriptExecutionSourceKind","required":true},{"name":"sourceName","type":"string","required":false},{"name":"sourcePath","type":"string","required":false},{"name":"workspaceKey","type":"string","required":true}],
+    responseShape: [{"name":"artifacts","type":"array\u003CScriptArtifactData\u003E","required":false},{"name":"containerTypeName","type":"string","required":false},{"name":"diagnostics","type":"array\u003CScriptDiagnostic\u003E","required":true},{"name":"executionId","type":"string","required":true},{"name":"output","type":"string","required":true},{"name":"revitVersion","type":"string","required":true},{"name":"status","type":"enum:ScriptExecutionStatus","required":true},{"name":"targetFramework","type":"string","required":true}],
   },
 } as const satisfies Record<string, HostOperationDefinition>;
 

@@ -4,6 +4,7 @@
  */
 
 import type { ScriptExecutionSourceKind } from "./script-execution-source-kind.js";
+import type { ScriptPermissionMode } from "./script-permission-mode.js";
 
 export interface ExecuteRevitScriptRequest {
   scriptContent?: string;
@@ -11,4 +12,6 @@ export interface ExecuteRevitScriptRequest {
   sourcePath?: string;
   workspaceKey: string;
   sourceName?: string;
+  artifactRunName?: string;
+  permissionMode: ScriptPermissionMode;
 }

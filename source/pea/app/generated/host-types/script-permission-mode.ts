@@ -3,6 +3,7 @@
  * Any changes made to this file can be lost when this file is regenerated.
  */
 
-export interface LoadedFamilyTypeEntry {
-  typeName: string;
+export enum ScriptPermissionMode {
+  ReadOnly = "ReadOnly",
+  WriteTransaction = "WriteTransaction",
 }
