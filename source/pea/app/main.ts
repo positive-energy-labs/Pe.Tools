@@ -62,26 +62,36 @@ const commonArgs = {
   },
 } as const;
 
+const agentArgs = {
+  ...commonArgs,
+  workspaceRoot: {
+    type: "string",
+    description: "Explicit Pea cwd override. Defaults to the product home returned by Pe.Host bootstrap.",
+  },
+  allowOauthBetaAuth: {
+    type: "boolean",
+    description: "Dev escape hatch: allow stored MastraCode Codex OAuth auth instead of requiring OPENAI_API_KEY for beta startup.",
+    default: false,
+  },
+  authSource: {
+    type: "string",
+    description: "Model auth source: api-key, oauth, or auto. Defaults to the siloed API-key profile.",
+    default: "api-key",
+  },
+} as const;
+
+const devAgentArgs = {
+  ...commonArgs,
+  workspaceRoot: {
+    type: "string",
+    description: "Repo root for dev-agent. Defaults to the current directory.",
+  },
+} as const;
+
 const agentCommand = define({
   name: "agent",
-  description: "Start the Pe Agent TUI.",
-  args: {
-    ...commonArgs,
-    workspaceRoot: {
-      type: "string",
-      description: "Explicit agent cwd override. Defaults to the product home returned by Pe.Host bootstrap.",
-    },
-    allowOauthBetaAuth: {
-      type: "boolean",
-      description: "Dev escape hatch: allow stored MastraCode Codex OAuth auth instead of requiring OPENAI_API_KEY for beta startup.",
-      default: false,
-    },
-    authSource: {
-      type: "string",
-      description: "Model auth source: api-key, oauth, or auto. Defaults to the siloed API-key profile.",
-      default: "api-key",
-    },
-  },
+  description: "Start Pea, the deployed Revit/operator workbench.",
+  args: agentArgs,
   toKebab: true,
   examples: [
     "pea agent",
@@ -99,6 +109,44 @@ const agentCommand = define({
       workspaceRoot: ctx.values.workspaceRoot,
       allowOauthBetaAuth: ctx.values.allowOauthBetaAuth,
       authSource: parsePeaAuthSource(ctx.values.authSource),
+    });
+  },
+});
+
+const devCommand = define({
+  name: "dev",
+  description: "Start dev-agent, the MastraCode-based Pe.Tools repo coding agent with Pea black-box feedback tools.",
+  args: devAgentArgs,
+  toKebab: true,
+  examples: [
+    "pea dev",
+    "pea dev --workspace-root C:\\Users\\you\\source\\repos\\Pe.Tools",
+  ].join("\n"),
+  run: async (ctx) => {
+    const { runDevAgent } = await import("./dev-agent.js");
+    await runDevAgent({
+      hostBaseUrl: ctx.values.host,
+      workspaceKey: ctx.values.workspace,
+      workspaceRoot: ctx.values.workspaceRoot,
+    });
+  },
+});
+
+const devAgentCommand = define({
+  name: "dev-agent",
+  description: "Compatibility alias for `pea dev`; repo-only, not deployed Pea.",
+  args: devAgentArgs,
+  toKebab: true,
+  examples: [
+    "pea dev-agent",
+    "pea dev-agent --workspace-root C:\\Users\\you\\source\\repos\\Pe.Tools",
+  ].join("\n"),
+  run: async (ctx) => {
+    const { runDevAgent } = await import("./dev-agent.js");
+    await runDevAgent({
+      hostBaseUrl: ctx.values.host,
+      workspaceKey: ctx.values.workspace,
+      workspaceRoot: ctx.values.workspaceRoot,
     });
   },
 });
@@ -606,9 +654,10 @@ const configCommand = define({
 
 const entryCommand = define({
   name: "pea",
-  description: "Pe Agent command surface.",
+  description: "Pea CLI. `pea agent` starts the deployed Revit/operator workbench; `pea dev` starts the repo coding agent.",
   examples: [
     "pea agent",
+    "pea dev",
     "pea host status",
     "pea host logs --target revit --tail 50",
     "pea runtime status",
@@ -616,7 +665,7 @@ const entryCommand = define({
     "pea script execute --source-path src\\SampleScript.cs",
   ].join("\n"),
   run: () => {
-    console.log("Run `pea --help` to list commands, or `pea agent` to start the Pe Agent TUI.");
+    console.log("Run `pea --help` to list commands. Use `pea agent` for deployed Pea; use `pea dev` only for Pe.Tools repo coding.");
   },
 });
 
@@ -624,9 +673,11 @@ try {
   await cli(normalizeCliArgs(process.argv.slice(2)), entryCommand, {
     name: "pea",
     version: "0.1.0",
-    description: `Pe Agent command surface. Defaults: host=${defaultHostBaseUrl}, workspace=${defaultWorkspaceKey}.`,
+    description: `Pea CLI. Pea operator defaults: host=${defaultHostBaseUrl}, workspace=${defaultWorkspaceKey}. dev-agent is repo-only.`,
     subCommands: {
       agent: agentCommand,
+      dev: devCommand,
+      "dev-agent": devAgentCommand,
       config: configCommand,
       host: hostCommand,
       runtime: runtimeCommand,
@@ -1184,4 +1235,9 @@ function writeStatus(status: PeHostStatusSnapshot): void {
     console.log(`open docs ${status.sessionSummary.openDocumentCount}`);
     console.log(`modules   ${status.sessionSummary.availableModules.length}`);
   }
+
+  const parameterResources = status.sessionSummary.workbenchResources.parameters;
+  console.log(`param dir ${parameterResources.globalStateDirectoryPath}`);
+  console.log(`param res ${parameterResources.parameterServiceCacheFiles.map((file) => `${file.label}:${file.exists ? `${file.sizeBytes}b@${file.lastWriteTimeUnixMs}` : "missing"}`).join(" ")}`);
+  console.log(`shared   ${parameterResources.sharedParametersFile.path ? `${parameterResources.sharedParametersFile.path} ${parameterResources.sharedParametersFile.exists ? `${parameterResources.sharedParametersFile.sizeBytes}b@${parameterResources.sharedParametersFile.lastWriteTimeUnixMs}` : "missing"}` : parameterResources.sharedParametersFile.note}`);
 }

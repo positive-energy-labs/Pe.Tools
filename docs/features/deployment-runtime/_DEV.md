@@ -51,6 +51,8 @@ Desktop add-in install intentionally remains in `%AppData%\Autodesk\Revit\Addins
 
 This keeps repo iteration fast while avoiding file-lock contention against the installed host root.
 
+`pe-dev` is also mirrored during interactive builds, but that mirror must be non-destructive. A currently running `pe-dev` process can lock `...\bin\pe-dev\pe-dev.dll`; builds must not remove the whole PATH-visible CLI directory or fail just because the current CLI process owns its loaded assembly. Interactive mirroring copies changed files best-effort and treats locked live CLI files as warnings. Rerunning `pe-dev` is the freshness boundary for CLI changes.
+
 ## Installed/package flow
 
 - isolated/package publish writes `Pe.App.runtime.json` with lane `Installed`
@@ -66,12 +68,11 @@ This gives installer validation a product-shaped runtime without needing ad hoc 
 `pea` is intentionally handled differently from `Pe.Host`.
 
 - terminal users expect `pea` to just work from a stable PATH-visible location
-- `pe-dev pea install-dev` builds the repo `pea` app and mirrors the dev payload into the installed `pea` runtime root
 - the stable launcher stays at `...\Pe.Tools\bin\pea\pea.cmd`
-- the active payload version is selected by `...\Pe.Tools\bin\pea\current.txt`
+- `pe-dev pea link-dev` writes `...\Pe.Tools\bin\pea\dev-source.txt` and updates the launcher
+- when `dev-source.txt` points to a valid repo, the launcher runs `source\pea\app\main.ts` through repo `tsx`, so `pea dev` sees latest source without a payload install
+- `pea --installed ...` forces the installed payload selected by `...\Pe.Tools\bin\pea\current.txt`
+- `pea --dev ...` forces source-linked mode and fails if the dev source is not linked
+- `pe-dev pea install-dev` remains the heavier build-and-copy dev payload path
 
-This keeps `pea` easy to invoke while still allowing installer/user-validation flows to own the installed-shaped bootstrap.
-
-# Open Questions
-
-- Whether `pea` should eventually gain a richer `runtime use-installed` / `runtime use-dev` experience. The current design intentionally stays smaller: installed bootstrap plus explicit dev payload sync.
+This keeps `pea` easy to invoke while preserving an explicit installed-user validation path.

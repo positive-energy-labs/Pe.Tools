@@ -30,6 +30,10 @@ export const searchResultSchema = z.object({
   namespace: z.string().optional(),
   type: z.enum(SearchResultTypes).or(z.string()),
   url: z.string(),
+  extractedText: z
+    .string()
+    .optional()
+    .describe("Extracted markdown from this result's documentation page."),
 });
 
 export const searchResultsSchema = z.array(searchResultSchema);
@@ -111,6 +115,13 @@ export const toolInputArgSchemas = {
     .optional()
     .default(defaultRevitApiMaxResults)
     .describe("Maximum number of search results to return"),
+  extractFirstResult: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      "When true, fetch the first search result's documentation page and attach extractedText to that result only.",
+    ),
   queryTypes: z
     .array(z.enum(SearchResultTypes))
     .optional()

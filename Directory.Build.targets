@@ -97,12 +97,8 @@
                 Condition="'$(PeResolvedMirrorRuntimeDirectory)' == ''"
                 Text="Project '$(MSBuildProjectName)' enabled PeMirrorRuntimeToLocalBin but did not set PeMirrorRuntimeDirectory or PeMirrorRuntimeRelativePath." />
         <Message
-                Text="Mirroring $(MSBuildProjectName) to local runtime directory '$(PeResolvedMirrorRuntimeDirectory)'."
+                Text="Mirroring $(MSBuildProjectName) to local runtime directory '$(PeResolvedMirrorRuntimeDirectory)' without deleting the existing runtime. Locked live CLI files are warnings; rerun the CLI to pick up freshly copied files."
                 Importance="High"
-        />
-        <RemoveDir
-                Directories="$(PeResolvedMirrorRuntimeDirectory)"
-                Condition="Exists('$(PeResolvedMirrorRuntimeDirectory)')"
         />
         <MakeDir Directories="$(PeResolvedMirrorRuntimeDirectory)"/>
         <ItemGroup>
@@ -111,6 +107,8 @@
         <Copy
                 SourceFiles="@(PeMirrorRuntimeOutputFiles)"
                 DestinationFiles="@(PeMirrorRuntimeOutputFiles->'$(PeResolvedMirrorRuntimeDirectory)\%(RecursiveDir)%(Filename)%(Extension)')"
+                SkipUnchangedFiles="true"
+                ContinueOnError="WarnAndContinue"
         />
     </Target>
 </Project>

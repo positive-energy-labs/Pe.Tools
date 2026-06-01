@@ -5,6 +5,7 @@ public static class PeaCliIdentity {
     public const string LauncherName = "pea.cmd";
     public const string NodeExecutableName = "node.exe";
     public const string CurrentVersionFileName = "current.txt";
+    public const string DevSourceFileName = "dev-source.txt";
     public const string VersionsDirectoryName = "versions";
     public const string PackagesDirectoryName = "packages";
     public const string PayloadManifestFileName = "pea-payload.json";
