@@ -480,6 +480,7 @@ internal sealed class BridgeAgent : IDisposable {
             activeDocument == null ? null : activeDocument.GetCloudModelGuid(),
             activeDocument == null ? null : activeDocument.GetCloudModelUrn(),
             DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            RevitUiSession.CurrentUIApplication.Application.SharedParametersFilename,
             RevitUiSession.CurrentUIApplication.GetOpenDocuments().Count(),
             runtimeAssemblies,
             availableModules

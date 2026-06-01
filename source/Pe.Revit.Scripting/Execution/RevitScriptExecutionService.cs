@@ -85,7 +85,13 @@ public sealed class RevitScriptExecutionService(
                 plan.PermissionMode
             );
 
-            var policyDiagnostics = this._policyAnalyzer.Analyze(plan.SourceSet, plan.PermissionMode);
+            AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Info(
+                "normalize",
+                $"Executing {plan.SourceSet.EntryPointSourceName}; compiling {plan.SourceSet.Files.Count} source file(s): {string.Join(", ", plan.SourceSet.Files.Select(file => file.Name))}.",
+                plan.SourceSet.EntryPointSourceName
+            ));
+
+            var policyDiagnostics = this._policyAnalyzer.Analyze(CreateEntryPointOnlySourceSet(plan.SourceSet), plan.PermissionMode);
             foreach (var diagnostic in policyDiagnostics)
                 AppendDiagnostic(diagnostics, diagnostic);
             if (policyDiagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error)) {
@@ -380,15 +386,36 @@ public sealed class RevitScriptExecutionService(
         if (!sourceName.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
             sourceName += ".cs";
 
-        this.PersistInlineTrace(scriptContent, sourceName, executionId);
+        var normalizedContent = NormalizeInlineSnippet(scriptContent);
+        this.PersistInlineTrace(normalizedContent, sourceName, executionId);
 
         return new ScriptSourceSet([
             new ScriptSourceFile(
                 sourceName,
-                scriptContent
+                normalizedContent
             )
         ], sourceName);
     }
+
+    private static string NormalizeInlineSnippet(string scriptContent) {
+        if (scriptContent.Contains(nameof(PeScriptContainer), StringComparison.Ordinal))
+            return scriptContent;
+
+        return $$"""
+               public sealed class InlineScript : PeScriptContainer
+               {
+                   public override void Execute()
+                   {
+               {{IndentInlineSnippet(scriptContent)}}
+                   }
+               }
+               """;
+    }
+
+    private static string IndentInlineSnippet(string scriptContent) => string.Join(
+        Environment.NewLine,
+        scriptContent.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').Select(line => "        " + line)
+    );
 
     private void PersistInlineTrace(string scriptContent, string sourceName, string executionId) {
         try {
@@ -483,6 +510,14 @@ public sealed class RevitScriptExecutionService(
             throw new IOException($"Workspace source file is not under src/: {selectedPath}");
 
         return new ScriptSourceSet(sourceFiles, selectedSource.Name);
+    }
+
+    private static ScriptSourceSet CreateEntryPointOnlySourceSet(ScriptSourceSet sourceSet) {
+        var entryPointFile = sourceSet.Files.FirstOrDefault(file =>
+            string.Equals(file.Name, sourceSet.EntryPointSourceName, StringComparison.OrdinalIgnoreCase));
+        return entryPointFile == null
+            ? sourceSet
+            : new ScriptSourceSet([entryPointFile], sourceSet.EntryPointSourceName);
     }
 
     private static IReadOnlyList<ScriptDiagnostic> ValidatePermissionMode(ScriptExecutionPlan plan) {

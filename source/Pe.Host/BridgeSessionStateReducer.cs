@@ -41,6 +41,7 @@ internal static class BridgeSessionStateReducer {
                 ActiveDocumentCloudModelGuid = payload.DocumentCloudModelGuid,
                 ActiveDocumentCloudModelUrn = payload.DocumentCloudModelUrn,
                 ActiveDocumentObservedAtUnixMs = payload.DocumentObservedAtUnixMs,
+                SharedParametersFilename = state.SharedParametersFilename,
                 OpenDocumentCount = payload.OpenDocumentCount,
                 AvailableModules = [.. state.AvailableModules]
             }

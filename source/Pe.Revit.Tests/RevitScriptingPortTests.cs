@@ -5,6 +5,7 @@ using Pe.Revit.Scripting.Execution;
 using Pe.Revit.Scripting.References;
 using Pe.Revit.Scripting.Storage;
 using Pe.Shared.HostContracts.Scripting;
+using Pe.Shared.Scripting.Execution;
 
 namespace Pe.Revit.Tests;
 
@@ -859,7 +860,7 @@ public sealed class RevitScriptingPortTests {
             projectGenerator,
             new ScriptReferenceResolver(csProjReader),
             new ScriptAssemblyLoadService(),
-            new ScriptCompilationService(),
+            new ScriptCompilationService(ScriptFileTemplates.DefaultUsings),
             () => uiApplication
         );
     }

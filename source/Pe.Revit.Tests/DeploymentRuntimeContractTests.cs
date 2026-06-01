@@ -275,7 +275,12 @@ public sealed class DeploymentRuntimeContractTests {
             0,
             null,
             [],
-            []
+            [],
+            new HostWorkbenchResourcesData(
+                new HostParameterResourceData(
+                    string.Empty,
+                    [],
+                    new HostResourceFileStateData("shared-parameters", null, false, null, null, "test")))
         );
 
     private static void TryDeleteDirectory(string path) {

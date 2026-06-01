@@ -1,3 +1,4 @@
+using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.DocumentData.ProjectBrowser;
 using Pe.Shared.RevitData;
 using Serilog;
@@ -9,6 +10,7 @@ internal sealed class RevitDataCollectionContext : IProjectBrowserIndexProvider 
     private const int MaxEntries = 16;
     private static readonly TimeSpan EntryTtl = TimeSpan.FromSeconds(30);
     private readonly Dictionary<ProjectBrowserIndexCacheKey, ProjectBrowserIndexCacheEntry> _projectBrowserIndexes = [];
+    private readonly Dictionary<ParameterEvidencePrimitiveCacheKey, ParameterEvidencePrimitiveCacheEntry> _parameterEvidencePrimitives = [];
 
     public ProjectBrowserCollectedIndex GetProjectBrowserIndex(
         RevitDocument document,
@@ -61,18 +63,64 @@ internal sealed class RevitDataCollectionContext : IProjectBrowserIndexProvider 
         return index;
     }
 
+    public ParameterEvidencePrimitiveSet GetParameterEvidencePrimitives(
+        RevitDocument document,
+        bool useCache
+    ) {
+        var key = ParameterEvidencePrimitiveCacheKey.Create(document);
+        if (useCache) {
+            lock (this._parameterEvidencePrimitives) {
+                if (this._parameterEvidencePrimitives.TryGetValue(key, out var entry)) {
+                    var age = DateTimeOffset.UtcNow - entry.CreatedAt;
+                    if (age <= EntryTtl) {
+                        Log.Debug(
+                            "Document data cache hit: Primitive={Primitive}, DocumentKey={DocumentKey}, AgeMs={AgeMs}",
+                            nameof(ParameterEvidencePrimitiveSet),
+                            key.DocumentKey,
+                            age.TotalMilliseconds
+                        );
+                        return entry.Primitives with { CacheHit = true };
+                    }
+
+                    this._parameterEvidencePrimitives.Remove(key);
+                }
+            }
+        }
+
+        var primitives = ParameterEvidenceCollector.CollectPrimitives(document);
+        lock (this._parameterEvidencePrimitives) {
+            this.PruneExpiredParameterEvidenceEntries();
+            this._parameterEvidencePrimitives[key] = new ParameterEvidencePrimitiveCacheEntry(primitives, DateTimeOffset.UtcNow);
+            this.PruneOldestParameterEvidenceEntries();
+        }
+
+        Log.Debug(
+            "Document data cache miss: Primitive={Primitive}, DocumentKey={DocumentKey}, ProjectBindingCount={ProjectBindingCount}, ScheduleFieldCount={ScheduleFieldCount}",
+            nameof(ParameterEvidencePrimitiveSet),
+            key.DocumentKey,
+            primitives.ProjectBindings.Count,
+            primitives.ScheduleFields.Count
+        );
+        return primitives;
+    }
+
     public void Invalidate(string reason) {
         lock (this._projectBrowserIndexes) {
-            if (this._projectBrowserIndexes.Count == 0)
-                return;
+            lock (this._parameterEvidencePrimitives) {
+                if (this._projectBrowserIndexes.Count == 0 && this._parameterEvidencePrimitives.Count == 0)
+                    return;
 
-            var count = this._projectBrowserIndexes.Count;
-            this._projectBrowserIndexes.Clear();
-            Log.Debug(
-                "Document data cache invalidated: Reason={Reason}, RemovedProjectBrowserIndexCount={RemovedProjectBrowserIndexCount}",
-                reason,
-                count
-            );
+                var projectBrowserCount = this._projectBrowserIndexes.Count;
+                var parameterEvidenceCount = this._parameterEvidencePrimitives.Count;
+                this._projectBrowserIndexes.Clear();
+                this._parameterEvidencePrimitives.Clear();
+                Log.Debug(
+                    "Document data cache invalidated: Reason={Reason}, RemovedProjectBrowserIndexCount={RemovedProjectBrowserIndexCount}, RemovedParameterEvidencePrimitiveCount={RemovedParameterEvidencePrimitiveCount}",
+                    reason,
+                    projectBrowserCount,
+                    parameterEvidenceCount
+                );
+            }
         }
     }
 
@@ -92,6 +140,25 @@ internal sealed class RevitDataCollectionContext : IProjectBrowserIndexProvider 
                 .OrderBy(entry => entry.Value.CreatedAt)
                 .First();
             this._projectBrowserIndexes.Remove(oldest.Key);
+        }
+    }
+
+    private void PruneExpiredParameterEvidenceEntries() {
+        var cutoff = DateTimeOffset.UtcNow - EntryTtl;
+        foreach (var key in this._parameterEvidencePrimitives
+                     .Where(entry => entry.Value.CreatedAt < cutoff)
+                     .Select(entry => entry.Key)
+                     .ToList()) {
+            this._parameterEvidencePrimitives.Remove(key);
+        }
+    }
+
+    private void PruneOldestParameterEvidenceEntries() {
+        while (this._parameterEvidencePrimitives.Count > MaxEntries) {
+            var oldest = this._parameterEvidencePrimitives
+                .OrderBy(entry => entry.Value.CreatedAt)
+                .First();
+            this._parameterEvidencePrimitives.Remove(oldest.Key);
         }
     }
 }
@@ -118,5 +185,14 @@ internal sealed record ProjectBrowserIndexCacheKey(
 internal sealed record ProjectBrowserIndexCacheEntry(
     ProjectBrowserCollectedIndex Index,
     List<RevitDataIssue> Issues,
+    DateTimeOffset CreatedAt
+);
+
+internal sealed record ParameterEvidencePrimitiveCacheKey(string DocumentKey) {
+    public static ParameterEvidencePrimitiveCacheKey Create(RevitDocument document) => new(document.GetDocumentKey());
+}
+
+internal sealed record ParameterEvidencePrimitiveCacheEntry(
+    ParameterEvidencePrimitiveSet Primitives,
     DateTimeOffset CreatedAt
 );
