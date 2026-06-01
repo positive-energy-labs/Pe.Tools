@@ -1,4 +1,4 @@
-import { PeHostClient, type HostProbeData, type HostSessionSummaryData, type RevitAgentContextSummaryData, type RevitAgentVisibleCategorySummary } from "./host-client.js";
+import { PeHostClient, type HostProbeData, type HostSessionSummaryData, type HostWorkbenchResourcesData, type HostResourceFileStateData, type RevitAgentContextSummaryData, type RevitAgentVisibleCategorySummary } from "./host-client.js";
 import { callHostOperation } from "./host-operation-runtime.js";
 
 export interface PeaContextProviderOptions {
@@ -110,7 +110,7 @@ async function collectAndFormatStartupContext(
     : undefined;
 
   return {
-    text: formatSeed(options, revitContext),
+    text: formatSeed(options, hostFacts.sessionSummary?.workbenchResources, revitContext),
     status: createStatusSnapshot(options.hostBaseUrl, hostFacts),
   };
 }
@@ -195,6 +195,7 @@ function createStatusSnapshot(
         isModelInCloud: activeDocument.isModelInCloud,
       }
       : null,
+    workbenchResources: session?.workbenchResources ?? null,
     errors: hostFacts.errors,
   };
 
@@ -213,12 +214,13 @@ function updateStatusState(
 
 function formatSeed(
   options: PeaContextProviderOptions,
+  workbenchResources: HostWorkbenchResourcesData | undefined,
   revitContext?: RevitAgentContextSummaryData | string,
 ): string {
   const lines = [
     "<pea-startup-context>",
     "Scope: transient thread-start orientation only. Pea checks cheap host/session status each turn internally and only injects a compact invalidation notice when stable status differs.",
-    ...formatWorkbenchLines(options),
+    ...formatWorkbenchLines(options, workbenchResources),
     ...formatRevitContextLines(revitContext),
     "</pea-startup-context>",
   ];
@@ -226,14 +228,41 @@ function formatSeed(
   return escapeXmlBlock(lines);
 }
 
-function formatWorkbenchLines(options: PeaContextProviderOptions): string[] {
+function formatWorkbenchLines(
+  options: PeaContextProviderOptions,
+  workbenchResources: HostWorkbenchResourcesData | undefined,
+): string[] {
   return [
     `workspace: cwd=${q(options.cwd)} workspaceKey=${q(options.workspaceKey)} settingsPath=${q(options.settingsPath)}`,
+    formatParameterResourcesLine(workbenchResources),
     "scripting-workspace: use script_bootstrap when paths/references are unknown; workspace docs are README.md, AGENTS.md, and JOIN_GUIDE.md; source lives under src/.",
     "capabilities: use host_operation_search for generated public operations, then host_operation_call when a generated operation fits.",
     "scripts: use script_execute for tiny inline probes or durable workspace scripts; default ReadOnly and use WriteTransaction only for explicit mutations.",
     "evidence: prefer diagnostics, follow-up reads, and CSV/JSON/text artifacts over wide terminal output.",
   ];
+}
+
+function formatParameterResourcesLine(resources: HostWorkbenchResourcesData | undefined): string {
+  if (!resources)
+    return "parameter-resources: unavailable from host session summary; use pe_status when resource paths or freshness matter.";
+
+  const parameters = resources.parameters;
+  const cacheFiles = parameters.parameterServiceCacheFiles
+    .map((file) => `${file.label.replace("parameters-service-cache.", "")}:${formatFileState(file)}`)
+    .join(" ");
+  const sharedParameters = parameters.sharedParametersFile.path
+    ? `${q(parameters.sharedParametersFile.path)} ${formatFileState(parameters.sharedParametersFile)}`
+    : parameters.sharedParametersFile.note;
+
+  return `parameter-resources: stateDir=${q(parameters.globalStateDirectoryPath)} cache=[${cacheFiles}] sharedParameterFile=${sharedParameters}`;
+}
+
+function formatFileState(file: HostResourceFileStateData): string {
+  const provenance = ` provenance=${q(file.provenance)}`;
+  if (!file.exists)
+    return file.path ? `missing path=${q(file.path)}${provenance}` : `unknown${provenance}`;
+
+  return `exists mtimeMs=${file.lastWriteTimeUnixMs} sizeBytes=${file.sizeBytes} path=${q(file.path ?? "")}${provenance}`;
 }
 
 function formatStatusChange(): string {

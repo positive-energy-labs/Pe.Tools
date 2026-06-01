@@ -1,5 +1,4 @@
-﻿using Pe.Dev.RevitAutomation;
-using Pe.Shared.HostContracts.Protocol;
+using Pe.Dev.RevitAutomation;
 using System.Globalization;
 using System.Diagnostics;
 using System.Text.Encodings.Web;
@@ -12,16 +11,12 @@ internal static class RevitCommandRunner {
     private const int TestApprovalWatcherTimeoutSeconds = 600;
 
     private static readonly RevitProcessSessionSelector SessionSelector = new();
-    private static readonly RiderHotReloadService HotReloadService = new(SessionSelector);
     private static readonly RevitAddinApprovalWatcherService ApprovalWatcherService = new();
     private static readonly RevitTestOwnedSessionStateStore RevitTestOwnedSessionStore = RevitTestOwnedSessionStateStore.CreateDefault();
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
 
     internal static Task<int> RunApproveWorkerCommandAsync(IReadOnlyList<string> forwardedArguments, CancellationToken cancellationToken) =>
         RunApproveWorkerAsync(forwardedArguments, cancellationToken);
-
-    internal static Task<int> RunSyncCommandAsync(string? repoRootOverride, IReadOnlyList<string> forwardedArguments, CancellationToken cancellationToken) =>
-        RunSyncRuntimeAsync(repoRootOverride, forwardedArguments, "pe-dev sync", cancellationToken);
 
     internal static Task<int> RunFreshTestCommandAsync(string? repoRootOverride, IReadOnlyList<string> forwardedArguments, CancellationToken cancellationToken) =>
         RunTestAsync(repoRootOverride, forwardedArguments, cancellationToken);
@@ -52,136 +47,36 @@ internal static class RevitCommandRunner {
         return await ApprovalWatcherService.RunAsync(options.TimeoutSeconds, options.RevitYear, cancellationToken);
     }
 
-    internal static async Task<int> RunHotReloadCommandAsync(
-        string? repoRootOverride,
-        IReadOnlyList<string> forwardedArguments,
-        CancellationToken cancellationToken
-    ) {
-        if (forwardedArguments.Count > 0) {
-            Console.Error.WriteLine("`pe-dev revit hot-reload` does not accept additional arguments.");
-            return 10;
+    private static IReadOnlyList<string> BuildApproveWorkerArguments(RevitApproveOptions options) {
+        var arguments = new List<string> {
+            "__internal",
+            "approve-worker",
+            "--timeout-seconds",
+            options.TimeoutSeconds.ToString(CultureInfo.InvariantCulture)
+        };
+        if (options.RevitYear.HasValue) {
+            arguments.Add("--revit-year");
+            arguments.Add(options.RevitYear.Value.ToString(CultureInfo.InvariantCulture));
         }
-
-        string repoRoot;
-        try {
-            repoRoot = RepoRootResolver.Resolve(repoRootOverride);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            return 10;
-        }
-
-        var result = await HotReloadService.RunAsync(repoRoot, cancellationToken);
-        WriteHotReloadResult(result);
-        return result.Kind == RevitHotReloadResultKind.Failed ? 1 : 0;
+        if (options.RunInline)
+            arguments.Add("--run-inline");
+        return arguments;
     }
 
-    private static async Task<int> RunSyncRuntimeAsync(
-        string? repoRootOverride,
-        IReadOnlyList<string> forwardedArguments,
-        string commandDisplayName,
-        CancellationToken cancellationToken
-    ) {
-        RevitSyncRuntimeOptions options;
-        try {
-            options = RevitSyncRuntimeOptions.Parse(forwardedArguments, commandDisplayName);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            return 10;
+    private static int StartApprovalWatcherForFreshLaunch(int revitYear, int timeoutSeconds, bool quiet) {
+        var launchResult = CliProcessRelauncher.StartBackground(BuildApproveWorkerArguments(new RevitApproveOptions(
+            timeoutSeconds,
+            revitYear,
+            true
+        )));
+        if (!launchResult.Success) {
+            if (!quiet)
+                Console.Error.WriteLine(launchResult.Message);
+            return launchResult.ExitCode;
         }
 
-        string repoRoot;
-        try {
-            repoRoot = RepoRootResolver.Resolve(repoRootOverride);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            return 10;
-        }
-
-        var initialReport = CreateSessionReport(
-            SessionSelector.DiscoverSessions().ToList(),
-            RevitSessionHostClient.TryGetProbe(),
-            RevitSessionHostClient.TryGetSessionSummary()
-        );
-
-        if (initialReport.SelectedProcessSession is null) {
-            const int exitCode = 3;
-            const string failure = "AttachedRrd sync could not find a visible local Revit process session.";
-            if (options.JsonOutput) {
-                WriteSyncJson(exitCode, failure, initialReport, null, null);
-                return exitCode;
-            }
-
-            WriteStatusSummary(initialReport);
-            AgentGuidanceWriter.Write(
-                Console.Error,
-                failure,
-                "Start the Rider-driven RRD session before attached scripting/tests.",
-                "If current document state does not matter, use `pe-dev test ...` instead."
-            );
-            return exitCode;
-        }
-
-        var selectedSession = initialReport.SelectedProcessSession;
-        if (!options.JsonOutput) {
-            Console.Out.WriteLine($"sync lane=AttachedRrd {FormatSessionRecord("selected", selectedSession)}");
-            WriteStatusSummary(initialReport);
-            AgentGuidanceWriter.WriteAttachedRrdScriptingPrimary(Console.Out);
-        }
-
-        if (!selectedSession.Responding || selectedSession.Hung) {
-            var failure = $"Selected Revit session PID {selectedSession.ProcessId} is not healthy enough for hot reload (responding={selectedSession.Responding}, hung={selectedSession.Hung}).";
-            if (options.JsonOutput)
-                WriteSyncJson(2, failure, initialReport, null, null);
-            else
-                Console.Error.WriteLine(failure);
-            return 2;
-        }
-
-        var hotReloadResult = await HotReloadService.RunAsync(repoRoot, cancellationToken);
-        if (!options.JsonOutput)
-            WriteHotReloadResult(hotReloadResult);
-        if (hotReloadResult.Kind != RevitHotReloadResultKind.Triggered) {
-            var exitCode = hotReloadResult.Kind == RevitHotReloadResultKind.NoSession ? 3 : 1;
-            if (options.JsonOutput)
-                WriteSyncJson(exitCode, hotReloadResult.Message, initialReport, null, hotReloadResult);
-            return exitCode;
-        }
-
-        var postReport = CreateSessionReport(
-            SessionSelector.DiscoverSessions().ToList(),
-            RevitSessionHostClient.TryGetProbe(),
-            RevitSessionHostClient.TryGetSessionSummary()
-        );
-        if (postReport.SelectedProcessSession is null) {
-            const int exitCode = 2;
-            const string failure = "Revit session was not visible after hot reload completed.";
-            if (options.JsonOutput)
-                WriteSyncJson(exitCode, failure, initialReport, postReport, hotReloadResult);
-            else {
-                WriteStatusSummary(postReport);
-                Console.Error.WriteLine(failure);
-            }
-            return exitCode;
-        }
-
-        if (!options.JsonOutput) {
-            Console.Out.WriteLine($"post-sync {FormatSessionRecord("selected", postReport.SelectedProcessSession)}");
-            WriteStatusSummary(postReport);
-            WriteRuntimeAssemblyDiskComparison(postReport, writeGuidance: true);
-            WriteHotReloadFingerprintGuidance(initialReport, postReport);
-        }
-
-        if (!postReport.SelectedProcessSession.Responding || postReport.SelectedProcessSession.Hung) {
-            var failure = $"Selected Revit session PID {postReport.SelectedProcessSession.ProcessId} became unhealthy after hot reload (responding={postReport.SelectedProcessSession.Responding}, hung={postReport.SelectedProcessSession.Hung}).";
-            if (options.JsonOutput)
-                WriteSyncJson(2, failure, initialReport, postReport, hotReloadResult);
-            else
-                Console.Error.WriteLine(failure);
-            return 2;
-        }
-
-        if (options.JsonOutput)
-            WriteSyncJson(0, null, initialReport, postReport, hotReloadResult);
+        if (!quiet)
+            Console.Out.WriteLine(launchResult.Message);
         return 0;
     }
 
@@ -408,116 +303,6 @@ internal static class RevitCommandRunner {
         return exitCode;
     }
 
-    private static IReadOnlyList<string> EnsureRequireAttachedRrd(IReadOnlyList<string> forwardedArguments) {
-        var arguments = forwardedArguments.ToList();
-        if (!arguments.Any(argument => string.Equals(argument, "--require-attached-rrd", StringComparison.OrdinalIgnoreCase)))
-            arguments.Add("--require-attached-rrd");
-        return arguments;
-    }
-
-    private static int RunAttachedPreflight(IReadOnlyList<string> forwardedArguments) {
-        RevitSessionOptions options;
-        try {
-            options = RevitSessionOptions.Parse(forwardedArguments);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            return 10;
-        }
-
-        var report = CreateCurrentSessionReport();
-        var failure = TryResolveAttachedRrdFailure(report, options.RevitYear!.Value);
-        var exitCode = failure is null ? 0 : 3;
-        if (options.JsonOutput) {
-            Console.WriteLine(JsonSerializer.Serialize(
-                new RevitAttachedPreflightReport(1, "doctor", exitCode == 0 ? "passed" : "failed", exitCode, options.RevitYear!.Value, failure, report),
-                JsonOptions
-            ));
-            return exitCode;
-        }
-
-        if (failure is not null) {
-            AgentGuidanceWriter.WriteAttachedPreflightFailed(Console.Error, options.RevitYear!.Value, failure);
-            return exitCode;
-        }
-
-        AgentGuidanceWriter.WriteAttachedPreflightPassed(Console.Out, options.RevitYear!.Value);
-        WriteStatusSummary(report);
-        WriteRuntimeAssemblyDiskComparison(report, writeGuidance: false);
-        if (report.SelectedProcessSession is not null) {
-            Console.WriteLine(FormatSessionRecord("selected", report.SelectedProcessSession));
-            foreach (var session in report.ProcessSessions)
-                Console.WriteLine(FormatSessionRecord("candidate", session));
-        }
-
-        return exitCode;
-    }
-
-    private static int RunSession(IReadOnlyList<string> forwardedArguments) {
-        RevitSessionOptions options;
-        try {
-            options = RevitSessionOptions.Parse(forwardedArguments);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            return 10;
-        }
-
-        var report = CreateCurrentSessionReport();
-        if (options.RequireAttachedRrd) {
-            var failure = TryResolveAttachedRrdFailure(report, options.RevitYear!.Value);
-            if (failure is not null) {
-                AgentGuidanceWriter.WriteAttachedPreflightFailed(Console.Error, options.RevitYear!.Value, failure);
-                return 3;
-            }
-
-            if (!options.JsonOutput)
-                AgentGuidanceWriter.WriteAttachedPreflightPassed(Console.Out, options.RevitYear!.Value);
-        }
-
-        if (options.JsonOutput) {
-            Console.WriteLine(JsonSerializer.Serialize(report, JsonOptions));
-            return options.RequireAttachedRrd ? 0 : GetSessionExitCode(report);
-        }
-
-        WriteStatusSummary(report);
-        WriteRuntimeAssemblyDiskComparison(report, writeGuidance: false);
-
-        if (report.SelectedProcessSession is null) {
-            Console.WriteLine("No visible local Revit process sessions found.");
-            return options.RequireAttachedRrd ? 0 : GetSessionExitCode(report);
-        }
-
-        Console.WriteLine(FormatSessionRecord("selected", report.SelectedProcessSession));
-        foreach (var session in report.ProcessSessions)
-            Console.WriteLine(FormatSessionRecord("candidate", session));
-
-        return options.RequireAttachedRrd ? 0 : GetSessionExitCode(report);
-    }
-
-    internal static RevitSessionReport CreateCurrentSessionReport() =>
-        CreateSessionReport(
-            SessionSelector.DiscoverSessions().ToList(),
-            RevitSessionHostClient.TryGetProbe(),
-            RevitSessionHostClient.TryGetSessionSummary()
-        );
-
-    internal static RevitSessionReport CreateSessionReport(
-        IReadOnlyList<RevitProcessSessionIdentity> processSessions,
-        HostProbeData? hostProbe,
-        HostSessionSummaryData? hostSessionSummary
-    ) {
-        var orderedSessions = processSessions
-            .OrderByDescending(session => session.ProcessStartUtc)
-            .ToList();
-        return new RevitSessionReport(
-            hostProbe,
-            hostSessionSummary,
-            orderedSessions,
-            orderedSessions.FirstOrDefault()
-        );
-    }
-
-    internal static int GetSessionExitCode(RevitSessionReport report) => report.HasAnySessions ? 0 : 3;
-
     private static void WriteFreshTestJson(
         int exitCode,
         string? failure,
@@ -563,157 +348,8 @@ internal static class RevitCommandRunner {
         ));
     }
 
-    private static void WriteSyncJson(
-        int exitCode,
-        string? failure,
-        RevitSessionReport initialReport,
-        RevitSessionReport? postReport,
-        RevitHotReloadResult? hotReloadResult
-    ) {
-        Console.WriteLine(JsonSerializer.Serialize(
-            new RevitSyncRuntimeReport(
-                1,
-                "sync",
-                exitCode == 0 ? "passed" : "failed",
-                exitCode,
-                failure,
-                hotReloadResult is null
-                    ? null
-                    : new RevitHotReloadSummary(hotReloadResult.Kind.ToString(), hotReloadResult.Message),
-                initialReport,
-                postReport,
-                RuntimeAssemblyGraph.CompareLoadedToDisk(initialReport.HostSessionSummary).Mismatches.Count,
-                RuntimeAssemblyGraph.CompareLoadedToDisk(postReport?.HostSessionSummary).Mismatches.Count
-            ),
-            JsonOptions
-        ));
-    }
-
     private static string FormatSessionRecord(string label, RevitProcessSessionIdentity session) =>
         $"{label} pid={session.ProcessId} startUtc={session.ProcessStartUtc:O} revitYear={(session.RevitYear?.ToString(CultureInfo.InvariantCulture) ?? "unknown")} responding={session.Responding} hung={session.Hung} title=\"{session.MainWindowTitle}\"";
-
-    internal static void WriteStatusSummary(RevitSessionReport report) {
-        if (report.HostProbe == null) {
-            Console.Out.WriteLine($"host unreachable baseUrl={RevitSessionHostClient.GetHostBaseUrl()}");
-            return;
-        }
-
-        var summary = report.HostSessionSummary;
-        var runtimeFingerprint = RuntimeAssemblyGraph.TryCreateFingerprint(summary);
-        var diskComparison = RuntimeAssemblyGraph.CompareLoadedToDisk(summary);
-        Console.Out.WriteLine(
-            $"host reachable bridgeConnected={(summary?.BridgeIsConnected ?? report.HostProbe.BridgeIsConnected)} activeDocument=\"{summary?.ActiveDocument?.Title ?? "None"}\" revitVersion={(summary?.RevitVersion ?? "unknown")} runtimeAssemblies={(summary?.RuntimeAssemblies?.Count ?? 0)} runtimeFingerprint={(runtimeFingerprint ?? "unknown")} staleAssemblies={diskComparison.Mismatches.Count}");
-    }
-
-    private static void WriteHotReloadResult(RevitHotReloadResult result) {
-        var output = result.Kind is RevitHotReloadResultKind.Failed
-            ? Console.Error
-            : Console.Out;
-        output.WriteLine(result.Message);
-    }
-
-    private static void WriteRuntimeAssemblyDiskComparison(RevitSessionReport report, bool writeGuidance) {
-        var comparison = RuntimeAssemblyGraph.CompareLoadedToDisk(report.HostSessionSummary);
-        if (!comparison.HasComparableAssemblies && comparison.MissingLocations.Count == 0)
-            return;
-
-        foreach (var mismatch in comparison.Mismatches.Take(12)) {
-            Console.Out.WriteLine(
-                $"runtime-stale name={mismatch.Loaded.Name} reason=\"{mismatch.Reason}\" loadedVersion={(mismatch.Loaded.Version ?? "unknown")} diskVersion={(mismatch.Disk?.Version ?? "unknown")} loadedMvid={mismatch.Loaded.ModuleVersionId} diskMvid={(mismatch.Disk?.ModuleVersionId ?? "unknown")} path=\"{mismatch.Loaded.Location ?? mismatch.Disk?.Location ?? "unknown"}\"");
-        }
-
-        foreach (var missing in comparison.MissingLocations.Take(12)) {
-            Console.Out.WriteLine(
-                $"runtime-unchecked name={missing.Name} reason=\"loaded assembly reported no disk location\" loadedVersion={(missing.Version ?? "unknown")} loadedMvid={missing.ModuleVersionId}");
-        }
-
-        if (comparison.Mismatches.Count > 12)
-            Console.Out.WriteLine($"runtime-stale-more count={comparison.Mismatches.Count - 12}");
-        if (comparison.MissingLocations.Count > 12)
-            Console.Out.WriteLine($"runtime-unchecked-more count={comparison.MissingLocations.Count - 12}");
-
-        if (!writeGuidance)
-            return;
-
-        if (comparison.HasMismatches)
-            AgentGuidanceWriter.WriteRuntimeAssembliesStale(Console.Out, comparison.Mismatches.Count);
-        else
-            AgentGuidanceWriter.WriteRuntimeAssembliesMatchDisk(Console.Out);
-    }
-
-    private static void WriteHotReloadFingerprintGuidance(RevitSessionReport initialReport, RevitSessionReport postReport) {
-        var initialFingerprint = RuntimeAssemblyGraph.TryCreateFingerprint(initialReport.HostSessionSummary);
-        var postFingerprint = RuntimeAssemblyGraph.TryCreateFingerprint(postReport.HostSessionSummary);
-        if (initialFingerprint is null || postFingerprint is null) {
-            AgentGuidanceWriter.WriteHotReloadUnproven(Console.Out);
-            return;
-        }
-
-        if (string.Equals(initialFingerprint, postFingerprint, StringComparison.OrdinalIgnoreCase))
-            AgentGuidanceWriter.WriteHotReloadFingerprintUnchanged(Console.Out);
-        else
-            AgentGuidanceWriter.WriteHotReloadFingerprintChanged(Console.Out);
-    }
-
-    private static IReadOnlyList<string> BuildApproveWorkerArguments(RevitApproveOptions options) {
-        var arguments = new List<string> { "__internal", "approve-worker", "--timeout-seconds", options.TimeoutSeconds.ToString(CultureInfo.InvariantCulture) };
-        if (options.RevitYear.HasValue) {
-            arguments.Add("--revit-year");
-            arguments.Add(options.RevitYear.Value.ToString(CultureInfo.InvariantCulture));
-        }
-        if (options.RunInline)
-            arguments.Add("--run-inline");
-
-        return arguments;
-    }
-
-    private static int StartApprovalWatcherForFreshLaunch(int revitYear, int timeoutSeconds, bool quiet = false) {
-        var options = new RevitApproveOptions(timeoutSeconds, revitYear, false);
-        var launchResult = CliProcessRelauncher.StartBackground(BuildApproveWorkerArguments(options));
-        if (!launchResult.Success) {
-            Console.Error.WriteLine(launchResult.Message);
-            return launchResult.ExitCode;
-        }
-
-        if (!quiet)
-            Console.Out.WriteLine(
-                $"Approval watcher started for Revit {revitYear} (timeoutSeconds={timeoutSeconds})."
-            );
-        return 0;
-    }
-
-    internal static string? TryResolveAttachedRrdFailure(RevitSessionReport report, int requiredRevitYear) {
-        if (report.HostProbe is null) {
-            return
-                $"AttachedRrd verification for Revit {requiredRevitYear} requires a live Rider-driven `Pe.App` session, but `Pe.Host` was unreachable. Start the matching RRD session, run `pe-dev sync`, and retry.";
-        }
-
-        var summary = report.HostSessionSummary;
-        var bridgeConnected = summary?.BridgeIsConnected ?? report.HostProbe.BridgeIsConnected;
-        if (!bridgeConnected) {
-            return
-                $"AttachedRrd verification for Revit {requiredRevitYear} requires the live `Pe.App` bridge to be connected. Start the matching RRD session, run `pe-dev sync`, and retry.";
-        }
-
-        if (!int.TryParse(summary?.RevitVersion, NumberStyles.None, CultureInfo.InvariantCulture, out var bridgedYear)) {
-            return
-                $"AttachedRrd verification for Revit {requiredRevitYear} requires host session metadata with the active Revit year. Start the matching RRD session, confirm `pe-dev status` reports a bridged Revit version, then retry.";
-        }
-
-        if (bridgedYear != requiredRevitYear) {
-            return
-                $"AttachedRrd verification requested Revit {requiredRevitYear}, but the live bridged RRD session is Revit {bridgedYear}. Start or retarget the matching Rider-driven session, run `pe-dev sync`, and retry.";
-        }
-
-        var matchingVisibleSession = report.ProcessSessions.FirstOrDefault(session =>
-            session.RevitYear == requiredRevitYear &&
-            session.Responding &&
-            !session.Hung
-        );
-        return matchingVisibleSession is null
-            ? $"AttachedRrd verification requested Revit {requiredRevitYear}, but no healthy visible local Revit {requiredRevitYear} session was found. Start the matching RRD session, run `pe-dev sync`, and retry."
-            : null;
-    }
 
     private static ProcessStartInfo CreateDotNetStartInfo(string workingDirectory, params string[] arguments) {
         var startInfo = new ProcessStartInfo("dotnet") {

@@ -61,9 +61,19 @@ internal static class ProductTypeScriptProjection {
 
         {{RenderConstantObject("productIdentity", typeof(ProductIdentity))}}
 
+        {{RenderConstantObject("productPathNames", typeof(ProductPathNames))}}
+
         {{RenderConstantObject("hostProcessIdentity", typeof(HostProcessIdentity))}}
 
         {{RenderConstantObject("peaCliIdentity", typeof(PeaCliIdentity))}}
+
+        {{RenderConstantObject("peDevCliIdentity", typeof(PeDevCliIdentity))}}
+
+        {{RenderConstantObject("revitDeploymentIdentity", typeof(RevitDeploymentIdentity))}}
+
+        {{RenderConstantObject("peAppRuntimeDeploymentDescriptor", typeof(PeAppRuntimeDeploymentDescriptor))}}
+
+        {{RenderConstantObject("installerPayloadManifest", typeof(InstallerPayloadManifest))}}
 
         {{RenderConstantObject("scriptingWorkspaceIdentity", typeof(ScriptingWorkspaceLayout))}}
         """;

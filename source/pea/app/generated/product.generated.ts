@@ -7,6 +7,23 @@ export const productIdentity = {
   userVisibleProductName: "Pe.Tools",
 } as const;
 
+export const productPathNames = {
+  binDirectoryName: "bin",
+  developmentDirectoryName: "dev",
+  hostDirectoryName: "host",
+  peaDirectoryName: "pea",
+  stateDirectoryName: "state",
+  logsDirectoryName: "logs",
+  cacheDirectoryName: "cache",
+  settingsDirectoryName: "settings",
+  workspacesDirectoryName: "workspaces",
+  inlineScriptsDirectoryName: "inline-scripts",
+  outputDirectoryName: "output",
+  globalDirectoryName: "Global",
+  agentInstructionsFileName: "AGENTS.md",
+  readmeFileName: "README.md",
+} as const;
+
 export const hostProcessIdentity = {
   runtimeIdentity: "pe.tools.host",
   directoryName: "host",
@@ -26,10 +43,34 @@ export const peaCliIdentity = {
   launcherName: "pea.cmd",
   nodeExecutableName: "node.exe",
   currentVersionFileName: "current.txt",
+  devSourceFileName: "dev-source.txt",
   versionsDirectoryName: "versions",
   packagesDirectoryName: "packages",
   payloadManifestFileName: "pea-payload.json",
   payloadManifestSchemaVersion: 1,
+} as const;
+
+export const peDevCliIdentity = {
+  directoryName: "pe-dev",
+  executableName: "pe-dev.exe",
+  dllName: "pe-dev.dll",
+} as const;
+
+export const revitDeploymentIdentity = {
+  addinManifestFileName: "Pe.App.addin",
+  runtimeDescriptorFileName: "Pe.App.runtime.json",
+  addinAssemblyDirectoryName: "Pe.App",
+  autodeskDirectoryName: "Autodesk",
+  revitDirectoryName: "Revit",
+  addinsDirectoryName: "Addins",
+} as const;
+
+export const peAppRuntimeDeploymentDescriptor = {
+  currentSchemaVersion: 1,
+} as const;
+
+export const installerPayloadManifest = {
+  currentSchemaVersion: 2,
 } as const;
 
 export const scriptingWorkspaceIdentity = {

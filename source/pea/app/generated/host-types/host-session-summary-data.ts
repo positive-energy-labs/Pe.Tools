@@ -6,6 +6,7 @@
 import type { HostActiveDocumentSummary } from "./host-active-document-summary.js";
 import type { HostRuntimeAssemblyData } from "./host-runtime-assembly-data.js";
 import type { HostModuleDescriptor } from "./host-module-descriptor.js";
+import type { HostWorkbenchResourcesData } from "./host-workbench-resources-data.js";
 
 export interface HostSessionSummaryData {
   bridgeIsConnected: boolean;
@@ -17,4 +18,5 @@ export interface HostSessionSummaryData {
   activeDocument?: HostActiveDocumentSummary;
   runtimeAssemblies: HostRuntimeAssemblyData[];
   availableModules: HostModuleDescriptor[];
+  workbenchResources: HostWorkbenchResourcesData;
 }

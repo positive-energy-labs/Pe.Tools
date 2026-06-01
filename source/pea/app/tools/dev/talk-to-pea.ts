@@ -1,0 +1,193 @@
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { runWithAttachedRrdSync } from "./attached-rrd-sync.js";
+import { type ExecutionPolicy } from "./pe-dev-workflow/index.js";
+import type {
+  TalkToPeaFrame,
+  TalkToPeaWorkerRequest,
+  TalkToPeaWorkerResponse,
+} from "./talk-to-pea-worker.js";
+
+const defaultTimeoutSeconds = 900;
+const workerResultPrefix = "__PEA_TALK_WORKER_RESULT__";
+const logCursorStore = new Map<string, LogCursor>();
+
+type LogCursorMode = "read" | "reset";
+
+interface LogCursor {
+  checkedAt: string;
+  size: number;
+  lineCount: number;
+}
+
+interface TalkToPeaRequest extends TalkToPeaWorkerRequest {}
+
+export async function talkToPeaHarness(request: TalkToPeaRequest) {
+  const startedAt = Date.now();
+
+  return await runWithAttachedRrdSync(
+    {
+      workflow: "talk_to_pea",
+      stalePolicy: "warn",
+      timeoutSeconds: request.timeoutSeconds,
+    },
+    async (syncResult, syncWarning) => {
+      const workerResponse = await runTalkToPeaWorkerProcess(request);
+
+      return {
+        ...workerResponse,
+        workflow: "talk_to_pea",
+        policy: "DiagnosticsOnly" satisfies ExecutionPolicy,
+        elapsedMs: Date.now() - startedAt,
+        hotReload: {
+          ok: syncResult.ok,
+          warning: syncWarning,
+          sync: syncResult,
+        },
+        proof: proofForTalkToPea(request.frame),
+      };
+    },
+  ).then((synced) => synced.result);
+}
+
+async function runTalkToPeaWorkerProcess(
+  request: TalkToPeaRequest,
+): Promise<TalkToPeaWorkerResponse> {
+  const workerPath = fileURLToPath(new URL("./talk-to-pea-worker.js", import.meta.url));
+  const child = spawn(process.execPath, [workerPath], {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+  });
+
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => {
+    stdout += chunk;
+  });
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+
+  child.stdin.end(JSON.stringify(request));
+
+  const exitCode = await new Promise<number | null>((resolveExit, reject) => {
+    child.on("error", reject);
+    child.on("exit", (code) => resolveExit(code));
+  });
+  const response = parseWorkerResponse(stdout);
+  if (response) {
+    if ("error" in response) {
+      throw new Error(String(response.error));
+    }
+
+    return response;
+  }
+
+  const detail = [
+    `Pea worker exited with code ${exitCode ?? "unknown"}.`,
+    stderr.trim() ? `stderr:\n${stderr.trim()}` : null,
+    stdout.trim() ? `stdout:\n${stdout.trim().slice(-4000)}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  throw new Error(detail);
+}
+
+function parseWorkerResponse(
+  stdout: string,
+): (TalkToPeaWorkerResponse | { ok: false; error: string }) | null {
+  const line = stdout
+    .split(/\r?\n/)
+    .reverse()
+    .find((candidate) => candidate.startsWith(workerResultPrefix));
+  if (!line) return null;
+
+  return JSON.parse(line.slice(workerResultPrefix.length)) as
+    | TalkToPeaWorkerResponse
+    | { ok: false; error: string };
+}
+
+function proofForTalkToPea(frame: TalkToPeaFrame) {
+  switch (frame) {
+    case "feedback":
+      return {
+        interpretation:
+          "Pea was asked for black-box feedback on its product/harness experience.",
+        proves:
+          "Whether Pea can articulate useful operator-facing friction, missing context, and harness affordance feedback from its own thread.",
+        doesNotProve:
+          "Source correctness, host operation schema correctness, or that Pea's suggested product changes are architecturally justified.",
+        nextStep:
+          "Use the feedback as design input, then verify concrete source/runtime changes with focused tools, scripts, or tests.",
+      };
+    case "collaborate":
+      return {
+        interpretation:
+          "Pea was asked to collaborate on a live Revit/project convention investigation.",
+        proves:
+          "Whether Pea can explore project standards and strange conventions through the deployed product surface.",
+        doesNotProve:
+          "That observed conventions generalize across projects or that collector heuristics are complete/correct.",
+        nextStep:
+          "Treat findings as hypotheses for source design, then validate with targeted collectors, scripts, or Revit-backed tests.",
+      };
+    case "operator":
+    default:
+      return {
+        interpretation:
+          "Pea was asked to answer as the deployed user-facing Revit/operator agent.",
+        proves:
+          "Whether Pea can satisfy this operator request with the current Pea persona, context, and product tools.",
+        doesNotProve:
+          "Harness design quality by itself, source correctness, or deterministic Revit data coverage.",
+        nextStep:
+          "If the answer exposes friction, continue the same thread with frame='feedback'.",
+      };
+  }
+}
+
+export async function readLogTailSince(
+  filePath: string,
+  mode: LogCursorMode,
+  maxLines = 200,
+): Promise<{ text: string; cursor: LogCursor | null }> {
+  const fs = await import("node:fs/promises");
+  try {
+    const stat = await fs.stat(filePath);
+    const previous = logCursorStore.get(filePath);
+    const raw = await fs.readFile(filePath, "utf-8");
+    const lines = raw.split(/\r?\n/);
+    const startLine =
+      mode === "read" && previous && stat.size >= previous.size
+        ? previous.lineCount
+        : Math.max(0, lines.length - maxLines);
+    const text = lines.slice(startLine).slice(-maxLines).join("\n");
+    const cursor = {
+      checkedAt: new Date().toISOString(),
+      size: stat.size,
+      lineCount: lines.length,
+    };
+    logCursorStore.set(filePath, cursor);
+    return { text, cursor };
+  } catch {
+    return { text: "", cursor: null };
+  }
+}
+
+export function defaultTalkToPeaRequest(
+  partial: Partial<TalkToPeaRequest> & Pick<TalkToPeaRequest, "prompt">,
+): TalkToPeaRequest {
+  return {
+    frame: partial.frame ?? "operator",
+    prompt: partial.prompt,
+    feedbackPrompt: partial.feedbackPrompt,
+    reviewFrame: partial.reviewFrame,
+    threadId: partial.threadId,
+    timeoutSeconds: partial.timeoutSeconds ?? defaultTimeoutSeconds,
+    maxMessages: partial.maxMessages ?? 12,
+  };
+}

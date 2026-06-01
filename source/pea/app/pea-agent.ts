@@ -1,7 +1,7 @@
 import { Agent } from "@mastra/core/agent";
 import type { RequestContext } from "@mastra/core/request-context";
 import type { AnyWorkspace } from "@mastra/core/workspace";
-import { peaTools } from "./tools.js";
+import { peaProductTools } from "./tools/pea/tools.js";
 import {
   defaultPeaAgentModelId,
   peaAgentInstructions,
@@ -47,7 +47,7 @@ export function createPeaAgent(
       }
     },
     model: createPeaModelArgument(),
-    tools: peaTools,
+    tools: peaProductTools,
     workspace: ({ requestContext }) => {
       const harness = requestContext.get("harness") as
         | PeaHarnessContext

@@ -20,26 +20,18 @@ internal static class VerifySelfTestCommand {
         }
 
         var checks = new[] {
-            CheckRoute("doctor", ["doctor"], DevCommandKind.Doctor, []),
-            CheckRoute("doctor json", ["doctor", "--json"], DevCommandKind.Doctor, ["--json"]),
-            CheckRoute("status", ["status"], DevCommandKind.Status, []),
-            CheckRoute("status json", ["status", "--json"], DevCommandKind.Status, ["--json"]),
-            CheckRoute("sync", ["sync"], DevCommandKind.Sync, []),
-            CheckRoute("sync json", ["sync", "--json"], DevCommandKind.Sync, ["--json"]),
             CheckRoute("test", ["test", "--filter", "Name~AssemblyLoadDiagnostics"], DevCommandKind.Test, ["--filter", "Name~AssemblyLoadDiagnostics"]),
             CheckRoute("test json", ["test", "--json", "--filter", "Name~AssemblyLoadDiagnostics"], DevCommandKind.Test, ["--json", "--filter", "Name~AssemblyLoadDiagnostics"]),
             CheckRoute("test plan json", ["test", "--plan", "--json", "--timeout-seconds", "900", "--filter", "Name~AssemblyLoadDiagnostics"], DevCommandKind.Test, ["--plan", "--json", "--timeout-seconds", "900", "--filter", "Name~AssemblyLoadDiagnostics"]),
             CheckRoute("self-test", ["self-test"], DevCommandKind.SelfTest, []),
             CheckFreshOptions("test accepts plan json timeout", ["--plan", "--json", "--timeout-seconds", "900"], shouldPass: true),
             CheckFreshOptions("test rejects zero timeout", ["--json", "--timeout-seconds", "0"], shouldPass: false),
-            CheckDoctorOptions("doctor accepts json", ["--json"], shouldPass: true),
-            CheckDoctorOptions("doctor requires year with attached requirement", ["--require-attached-rrd"], shouldPass: false),
-            CheckUsageText("usage advertises minimal surface", ["pe-dev doctor", "pe-dev status", "pe-dev sync", "pe-dev test", "pe-dev self-test"]),
+            CheckRemovedRoute("doctor removed", ["doctor"]),
+            CheckRemovedRoute("status removed", ["status"]),
+            CheckRemovedRoute("sync removed", ["sync"]),
+            CheckUsageText("usage advertises minimal surface", ["pe-dev test", "pe-dev self-test", "pe-dev automation", "pe-dev codegen"]),
             CheckUsageText("usage advertises fresh safety options", ["--plan", "--timeout-seconds", "--json"]),
-            CheckGuidanceText("attached failure guidance names sync and test fallback", writer => AgentGuidanceWriter.WriteAttachedPreflightFailed(writer, 2025, "test failure"), ["AGENT GUIDANCE:", "pe-dev sync", "pe-dev test"]),
-            CheckGuidanceText("attached lane guidance warns build is not freshness proof", AgentGuidanceWriter.WriteAttachedRrdScriptingPrimary, ["pe-dev sync", "isolated dotnet build", "not runtime freshness proof"]),
-            CheckGuidanceText("fresh guidance distinguishes proof and attached lanes", writer => AgentGuidanceWriter.WriteFreshOwnedLane(writer, 2025), ["FreshOwnedRevit", "proof-grade", "AttachedRrd scripting"]),
-            CheckGuidanceText("sync stale guidance describes signal-file reload apply", writer => AgentGuidanceWriter.WriteRuntimeAssembliesStale(writer, 1), ["PeHotReloadSignal", "Reload All from Disk", "Apply Changes"])
+            CheckGuidanceText("fresh guidance distinguishes proof and attached lanes", writer => AgentGuidanceWriter.WriteFreshOwnedLane(writer, 2025), ["FreshOwnedRevit", "proof-grade", "AttachedRrd scripting"])
         };
         var report = new VerifySelfTestReport(
             SchemaVersion: 1,
@@ -74,6 +66,13 @@ internal static class VerifySelfTestCommand {
             return new VerifySelfTestCheck(name, false, $"expected forwarded args [{string.Join(", ", expectedForwardedArgs)}], got [{string.Join(", ", parse.Options.CommandArguments)}]");
 
         return new VerifySelfTestCheck(name, true, null);
+    }
+
+    private static VerifySelfTestCheck CheckRemovedRoute(string name, IReadOnlyList<string> args) {
+        var parse = DevCliOptions.Parse(args);
+        return !parse.Success && parse.ErrorMessage?.Contains("has been removed", StringComparison.Ordinal) == true
+            ? new VerifySelfTestCheck(name, true, null)
+            : new VerifySelfTestCheck(name, false, "expected removed-route parse failure");
     }
 
     private static VerifySelfTestCheck CheckFreshOptions(string name, IReadOnlyList<string> args, bool shouldPass) {
@@ -117,19 +116,6 @@ internal static class VerifySelfTestCommand {
         return missing.Length == 0
             ? new VerifySelfTestCheck(name, true, null)
             : new VerifySelfTestCheck(name, false, $"missing expected text: {string.Join(", ", missing)}");
-    }
-
-    private static VerifySelfTestCheck CheckDoctorOptions(string name, IReadOnlyList<string> args, bool shouldPass) {
-        try {
-            VerifyDoctorOptions.Parse(args);
-            return shouldPass
-                ? new VerifySelfTestCheck(name, true, null)
-                : new VerifySelfTestCheck(name, false, "expected parse failure, but parse passed");
-        } catch (Exception ex) {
-            return shouldPass
-                ? new VerifySelfTestCheck(name, false, ex.Message)
-                : new VerifySelfTestCheck(name, true, null);
-        }
     }
 
     private static void WriteHumanReport(VerifySelfTestReport report) {

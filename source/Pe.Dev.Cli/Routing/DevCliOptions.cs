@@ -43,19 +43,16 @@ internal sealed record DevCliOptions(
         }
 
         if (positionals.Count == 0)
-            return DevCliParseResult.Failure("Expected a `doctor`, `status`, `sync`, `test`, `self-test`, `pea`, `automation`, or `codegen` command.", true);
+            return DevCliParseResult.Failure("Expected a `test`, `self-test`, `pea`, `automation`, or `codegen` command.", true);
 
         var first = positionals[0].ToLowerInvariant();
         return first switch {
-            "doctor" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Doctor, positionals.Skip(1).ToArray())),
-            "status" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Status, positionals.Skip(1).ToArray())),
-            "sync" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Sync, positionals.Skip(1).ToArray())),
             "test" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Test, positionals.Skip(1).ToArray())),
             "self-test" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.SelfTest, positionals.Skip(1).ToArray())),
             "pea" when positionals.Count >= 2 => ParsePea(repoRoot, positionals),
             "automation" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Automation, positionals.Skip(1).ToArray())),
             "codegen" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Codegen, positionals.Skip(1).ToArray())),
-            "env" or "revit" or "verify" => DevCliParseResult.Failure($"`pe-dev {positionals[0]}` has been removed. Use `pe-dev doctor`, `pe-dev status`, `pe-dev sync`, or `pe-dev test`.", true),
+            "doctor" or "status" or "sync" or "env" or "revit" or "verify" => DevCliParseResult.Failure($"`pe-dev {positionals[0]}` has been removed. Use the dev-agent `live_loop_context`/`live_rrd_sync` tools for live-loop work, or `pe-dev test` for FreshRevitProcess proof.", true),
             _ => DevCliParseResult.Failure($"Unknown command '{positionals[0]}'.", true)
         };
     }
@@ -63,6 +60,7 @@ internal sealed record DevCliOptions(
     private static DevCliParseResult ParsePea(string? repoRoot, IReadOnlyList<string> positionals) {
         var commandKind = positionals[1].ToLowerInvariant() switch {
             "install-dev" => DevCommandKind.PeaInstallDev,
+            "link-dev" => DevCommandKind.PeaLinkDev,
             _ => DevCommandKind.Unknown
         };
         return commandKind == DevCommandKind.Unknown

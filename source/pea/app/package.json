@@ -10,6 +10,7 @@
     "pea": "tsx main.ts",
     "start": "tsx main.ts",
     "agent": "tsx main.ts agent",
+    "dev-agent": "tsx main.ts dev",
     "status": "tsx main.ts host status",
     "bootstrap": "tsx main.ts script bootstrap",
     "execute": "tsx main.ts script execute",

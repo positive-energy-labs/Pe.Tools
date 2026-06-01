@@ -32,7 +32,7 @@ export const hostOperations = {
     requestTypeName: "NoRequest",
     responseTypeName: "HostSessionSummaryData",
     requestShape: [],
-    responseShape: [{"name":"activeDocument","type":"HostActiveDocumentSummary","required":false},{"name":"availableModules","type":"array\u003CHostModuleDescriptor\u003E","required":true},{"name":"bridgeIsConnected","type":"boolean","required":true},{"name":"openDocumentCount","type":"number","required":true},{"name":"processId","type":"number | null","required":false},{"name":"revitVersion","type":"string","required":false},{"name":"runtimeAssemblies","type":"array\u003CHostRuntimeAssemblyData\u003E","required":true},{"name":"runtimeFramework","type":"string","required":false},{"name":"sessionId","type":"string","required":false}],
+    responseShape: [{"name":"activeDocument","type":"HostActiveDocumentSummary","required":false},{"name":"availableModules","type":"array\u003CHostModuleDescriptor\u003E","required":true},{"name":"bridgeIsConnected","type":"boolean","required":true},{"name":"openDocumentCount","type":"number","required":true},{"name":"processId","type":"number | null","required":false},{"name":"revitVersion","type":"string","required":false},{"name":"runtimeAssemblies","type":"array\u003CHostRuntimeAssemblyData\u003E","required":true},{"name":"runtimeFramework","type":"string","required":false},{"name":"sessionId","type":"string","required":false},{"name":"workbenchResources","type":"HostWorkbenchResourcesData","required":true}],
   },
   getLogs: {
     key: "host.logs",

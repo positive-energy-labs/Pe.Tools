@@ -1,6 +1,6 @@
 # Environment and Repo Workflows
 
-Compact runbook for choosing safe repo commands. For vocabulary, see `TAXONOMY.md`.
+Compact runbook for choosing safe repo commands. This file is the durable home for build/runtime/deployment workflow vocabulary.
 
 ## Non-negotiable RRD rule
 
@@ -59,6 +59,8 @@ pe-dev sync
 pea script --stdin --name Probe.cs
 ```
 
+`pe-dev sync --json` reports `runtimeFreshness.verdict` as `fresh`, `stale`, or `unproven`, plus split evidence fields `loadedGraphVerdict` and `sourceDeltaVerdict`. Treat `loadedGraphVerdict=fresh` as loaded-assembly freshness evidence only; overall `fresh` requires no unproven runtime source delta. If source/runtime files changed and `sourceDeltaVerdict=unproven`, do not claim AttachedRrd proof until Rider Apply Changes/restart or FreshRevitProcess proof resolves it.
+
 If HR reports restart-required changes, restart RRD before trusting behavior.
 
 ### Run attached Revit tests?
@@ -89,8 +91,7 @@ The helper should own and close its fresh Revit process.
 pe-dev doctor --json
 pe-dev doctor
 pe-dev status
-pe-dev status
-pe-dev env logs all --tail 50
+pea host logs --target all --tail 50
 ```
 
 Agent decision flow:
@@ -194,6 +195,28 @@ pe-dev automation inspect receipt --receipt latest --download-artifacts true
 
 Start DA audits with one or two models before widening the manifest.
 
+## Build/runtime/deployment vocabulary
+
+| Term | Meaning |
+| --- | --- |
+| **module taxonomy** | What kind of repo package this is, such as `BuildTool`, `InstallerTool`, `DesktopShell`, `RevitRuntime`, `TestHarness`, `AutomationShell`, `OperatorSurface`, `HostService`, `SharedNeutral`, or `ExternalIntegration`. |
+| **product taxonomy** | What durable output/runtime shape a workflow produces, such as `DesktopAddin`, `HostRuntime`, `DevTooling`, `AutomationRuntime`, `RevitRuntime`, `TestHarness`, `SharedLibrary`, or `ExternalIntegration`. Product classes are build/runtime output categories, not MSI features. |
+| **installer component taxonomy** | MSI-visible/install-owned slices such as `RevitAddin`, `HostRuntime`, `PeaCli`, `PeDevCli`, `RuntimeState`, `UserContent`, and `AutomationBundle`. Installer components capture ownership, uninstall behavior, and materialization boundaries. |
+| **workflow taxonomy** | Operator intent: `Build`, `Verify`, `Package`, or `Publish`. |
+| **runtime lane** | Which local machine lane owns running binaries/state: `Dev` or `Install`. |
+| **execution policy** | Whether a workflow may touch the live Rider-driven Revit session: `NoRrdContact` or `RrdRequired`. |
+| **build mode** | Where compiler outputs go: `Isolated` under `.artifacts/...` or `Interactive` package-local `bin/obj`. |
+| **verify target** | What Revit process verifies behavior: `AttachedRrd` or `FreshRevitProcess`. |
+
+Key authorities:
+
+- `build/authored/BuildTaxonomy.props` owns package taxonomy and Revit-awareness metadata.
+- `build/generated/*.props` and `*.targets` are generated MSBuild projections, not source-of-truth vocabulary.
+- `Pe.Shared.Product` owns product identity, executable names, and install/user/runtime relative paths.
+- `build/BuildArtifactLayout.cs` owns `.artifacts/...` package topology.
+- `build/ProductLayoutAuthority.cs` owns build/install composition and manifest writing.
+- `Pe.Shared.HostContracts` owns host operations, routes, bridge/script contracts, and generated host-client contracts.
+
 ## Avoid as defaults
 
 Do not make terminal interactive builds part of the normal loop. They force package-local outputs from the shell. For live RRD work, prefer Rider/IDE build + `pe-dev sync`. Use terminal interactive builds only as an explicit escape hatch when you have accepted the RRD/HR baseline risk.
@@ -217,4 +240,4 @@ Do not run `install/Installer.csproj` directly unless you already have a generat
 | package automation appbundle only | `dotnet run --project .\build\Build.csproj -c Release -- pack automation` |
 | publish release | `dotnet run --project .\build\Build.csproj -c Release -- pack publish` |
 | refresh `pea` dev payload | `pe-dev pea install-dev` |
-| inspect env/session/logs | `pe-dev status`, `pe-dev status`, `pe-dev env logs all --tail 50` |
+| inspect env/session/logs | `pe-dev status`, `pea host logs --target all --tail 50` |

@@ -1,8 +1,8 @@
-import { createPeaRuntime, type PeAgentOptions } from "./pea-runtime.js";
+import { createPeaRuntime, type PeaAgentOptions } from "./pea-runtime.js";
 
-export type { PeAgentOptions } from "./pea-runtime.js";
+export type { PeaAgentOptions } from "./pea-runtime.js";
 
-export async function runPeAgent(options: PeAgentOptions = {}): Promise<void> {
+export async function runPeAgent(options: PeaAgentOptions = {}): Promise<void> {
   const runtime = await createPeaRuntime(options);
   const { MastraTUI } = await import("mastracode/tui");
   const tui = new MastraTUI({

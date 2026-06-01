@@ -13,6 +13,8 @@ internal static class ForegroundProcessRunner {
         bool echoOutput,
         CancellationToken cancellationToken
     ) {
+        DisableMsBuildNodeReuse(startInfo);
+
         var stdout = new Queue<string>();
         var stderr = new Queue<string>();
         using var process = new Process {
@@ -58,6 +60,11 @@ internal static class ForegroundProcessRunner {
         lines.Enqueue(line);
         while (lines.Count > CapturedLineLimit)
             lines.Dequeue();
+    }
+
+    private static void DisableMsBuildNodeReuse(ProcessStartInfo startInfo) {
+        if (!startInfo.Environment.ContainsKey("MSBUILDDISABLENODEREUSE"))
+            startInfo.Environment["MSBUILDDISABLENODEREUSE"] = "1";
     }
 }
 
