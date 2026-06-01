@@ -34,6 +34,7 @@ public sealed record BridgeStateSnapshot(
     string? ActiveDocumentCloudModelGuid,
     string? ActiveDocumentCloudModelUrn,
     long ActiveDocumentObservedAtUnixMs,
+    string? SharedParametersFilename,
     int OpenDocumentCount,
     List<HostRuntimeAssemblyData> RuntimeAssemblies,
     List<HostModuleDescriptor> AvailableModules

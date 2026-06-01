@@ -104,7 +104,7 @@ public sealed class CreatePeaPayloadModule : Module<PeaPayloadArtifacts> {
         System.IO.File.Copy(peaNodeExecutable.Path, Path.Combine(payloadDirectory.Path, PeaCliIdentity.NodeExecutableName), true);
         await System.IO.File.WriteAllTextAsync(
             Path.Combine(bootstrapDirectory.Path, PeaCliIdentity.LauncherName),
-            CreatePeaLauncherContent(),
+            PeaLauncherContent.Create(),
             cancellationToken
         );
 
@@ -140,33 +140,6 @@ public sealed class CreatePeaPayloadModule : Module<PeaPayloadArtifacts> {
 
         return new PeaPayloadArtifacts(version, bootstrapDirectory, archiveFile, new File(manifestPath));
     }
-
-    private static string CreatePeaLauncherContent() =>
-        """
-        @echo off
-        setlocal
-        set "PEA_ROOT=%~dp0"
-        set "PEA_CURRENT=%PEA_ROOT%current.txt"
-        if not exist "%PEA_CURRENT%" (
-          echo pea is installed, but no active payload version is configured. 1>&2
-          echo Reinstall Pe.Tools or run pea runtime update from a repaired installation. 1>&2
-          exit /b 1
-        )
-        set /p PEA_VERSION=<"%PEA_CURRENT%"
-        set "PEA_VERSION_ROOT=%PEA_ROOT%versions\%PEA_VERSION%"
-        set "PEA_NODE=%PEA_VERSION_ROOT%\node.exe"
-        set "PEA_MAIN=%PEA_VERSION_ROOT%\dist\main.js"
-        if not exist "%PEA_NODE%" (
-          echo pea payload '%PEA_VERSION%' is missing node.exe. 1>&2
-          exit /b 1
-        )
-        if not exist "%PEA_MAIN%" (
-          echo pea payload '%PEA_VERSION%' is missing dist\main.js. 1>&2
-          exit /b 1
-        )
-        "%PEA_NODE%" "%PEA_MAIN%" %*
-        exit /b %ERRORLEVEL%
-        """;
 
     private static void DeleteDirectoryIfExists(string path) {
         if (!Directory.Exists(path))

@@ -10,7 +10,8 @@ public sealed class ScriptProjectGenerator(
     private const string RuntimeAssemblyName = "Pe.Revit.Scripting";
     private static readonly string[] DefaultSupportAssemblyNames = [
         "Pe.Shared.HostContracts",
-        "Pe.Shared.Product"
+        "Pe.Shared.Product",
+        "Pe.Shared.RevitData"
     ];
     private const string RevitApiAssemblyName = "RevitAPI";
     private const string RevitApiUiAssemblyName = "RevitAPIUI";

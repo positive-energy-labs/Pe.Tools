@@ -1,6 +1,7 @@
 using Pe.Shared.HostContracts;
 using Pe.Shared.Product;
 using Pe.Shared.StorageRuntime;
+using System.Diagnostics;
 
 namespace Pe.Host.Services;
 
@@ -69,6 +70,11 @@ internal static class HostSingletonGuard {
                 LogInfo(logFile, "Host singleton mutex acquired after takeover request.");
                 return CreateLease(mutex);
             }
+
+            if (TryTerminateUnresponsiveHostProcesses(options, logFile) && TryWaitForMutex(mutex, GetForcedProcessExitTimeoutMs())) {
+                LogWarning(logFile, "Host singleton mutex acquired after terminating an unresponsive Pe.Host process.");
+                return CreateLease(mutex);
+            }
         } catch (Exception ex) {
             LogError(logFile, "Host singleton mutex wait failed after takeover request.", ex);
             mutex.Dispose();
@@ -87,6 +93,38 @@ internal static class HostSingletonGuard {
         } catch (AbandonedMutexException) {
             return true;
         }
+    }
+
+    private static bool TryTerminateUnresponsiveHostProcesses(BridgeHostOptions options, ManagedLogFile logFile) {
+        if (HostReachability.TryGetCompatibleProbe(options.HostBaseUrl, out _, out _, GetHostProbeTimeoutMs()))
+            return false;
+
+        var currentProcessId = Environment.ProcessId;
+        var terminatedAny = false;
+        foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(HostProcessIdentity.ExecutableName))) {
+            using (process) {
+                if (process.Id == currentProcessId)
+                    continue;
+
+                string? path = null;
+                try {
+                    path = process.MainModule?.FileName;
+                } catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) {
+                    LogWarning(logFile, $"Could not inspect Pe.Host process {process.Id} before forced takeover: {ex.Message}");
+                }
+
+                try {
+                    var pathForLog = path ?? "<unknown>";
+                    LogWarning(logFile, $"Terminating unresponsive Pe.Host process {process.Id} for forced singleton takeover. Path={pathForLog}");
+                    process.Kill(entireProcessTree: true);
+                    terminatedAny = true;
+                } catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) {
+                    LogError(logFile, $"Failed to terminate unresponsive Pe.Host process {process.Id}.", ex);
+                }
+            }
+        }
+
+        return terminatedAny;
     }
 
     private static string FormatTakeoverFailureMessage(BridgeHostOptions options, string reason) {
@@ -119,5 +157,6 @@ internal static class HostSingletonGuard {
         logFile.AppendDemystifiedEntry("ERR", LogSource, message, exception: exception);
 
     private static int GetProbeTimeoutMs() => HostRuntimeDefaults.DefaultHostStartupTimeoutMs;
+    private static int GetForcedProcessExitTimeoutMs() => 5_000;
     private static int GetHostProbeTimeoutMs() => HostRuntimeDefaults.DefaultHostProbeTimeoutMs;
 }
