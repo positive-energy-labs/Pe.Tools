@@ -2,9 +2,9 @@ namespace Pe.Dev.Cli;
 
 internal enum DevCommandKind {
     Unknown,
+    BootstrapPath,
     Test,
     SelfTest,
-    PeaInstallDev,
     PeaLinkDev,
     Automation,
     Codegen,

@@ -20,33 +20,19 @@ itself.
 - `Tasks/TaskInitializer.cs` - task palette registration.
 - `Services/` - add-in-local services such as AutoTag and explorer helpers.
 
-## Validation
-
-- Do not run interactive `Pe.App` builds during RRD; package-local deploy builds can break hot reload and force a costly restart.
-- For compile verification, use plain terminal `dotnet build`; it uses isolated outputs and does not refresh live runtime.
-- AGENT GUIDANCE: AttachedRrd validation uses assemblies already loaded in RRD. If you want to validate a changed runtime package through scripting or attached `Pe.Revit.Tests`, build the affected package-local outputs and run `pe-dev sync` first; an isolated `dotnet build` is not runtime freshness proof.
-- Do not describe `Pe.Revit.Tests` as simply isolated: its `.Tests` build output is isolated, but explicit-year test execution is Revit-backed and defaults to the attached RRD lane unless `pe-dev test` is used.
-- Prefer validating runtime-facing fixes through the smallest affected command or focused `.Tests` configuration when
-  possible.
-- If a change should affect bridge behavior, verify both add-in startup wiring and the corresponding `Pe.Host`
-  endpoint/service path.
-
 ## Shared Language
 
 | Term               | Meaning                                                              | Prefer / Avoid                                                                                   |
 |--------------------|----------------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
-| **runtime add-in** | The deployed Revit add-in assemblies loaded by Revit                 | Avoid confusing this with the `.Tests` configuration                                             |
-| **bridge**         | The Revit-side private WebSocket connection to `Pe.Host`             | Avoid using it for public HTTP/SSE endpoints                                                      |
-| **RRD**            | A live Rider/Revit debug session against the deployed runtime add-in | Prefer this over vague phrases like `live debug` when the Rider+Revit setup specifically matters |
+| **runtime add-in** | The deployed Revit add-in assemblies loaded by Revit                 | Avoid confusing this with the `.Tests` configuration, Design Automation, TS code, or the host                                             |
 | **task**           | A Task Palette action under `Tasks/`                                 | Avoid using it as a synonym for background/async work                                            |
 
 ## Living Memory
 
 - This package's dependency graph owns the live RRD runtime. Be unusually cautious about builds because they will
   *always* force a costly Revit restart.
-- `Pe.App` only owns the post-deploy add-in approval hook now. Do not reintroduce hot-reload or test-run orchestration here.
 - Keep `Pe.App` thin. If logic starts looking reusable or testable outside the command shell, move it into the owning
-  domain/shared package.
+  domain/shared package.Ok
 - `Application.cs` is the startup truth. If a capability depends on bootstrapping, logging, or event subscription,
   verify it there first.
 - `ButtonRegistry.cs` is the ribbon truth. Do not scatter command discovery assumptions across docs.

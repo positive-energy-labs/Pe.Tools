@@ -21,10 +21,11 @@ Owns the repo-level pack and publish automation.
 
 ## Validation
 
+See `../BUILD.md` for the complete build/runtime decision table. This executable is for packaging and release, not ordinary compile proof and not live RRD runtime freshness.
+
 - Build packages: `dotnet run -c Release -- pack`
 - Publish release artifacts from existing packages: `dotnet run -c Release -- publish`
 - Run the full release path in one shot: `dotnet run -c Release -- pack publish`
-- This executable is for packaging and release, not proof of live RRD runtime freshness.
 
 ## Living Memory
 
@@ -46,4 +47,4 @@ Owns the repo-level pack and publish automation.
 - `.slnx`, configuration strings, and generated evaluator imports are compatibility surfaces, not the intended orchestration authority.
 - Regenerate build-facing contract imports with `dotnet run --project build/Build.csproj -c Release -- sync-contracts` after changing anything under `build/authored/` or `Pe.Shared.Product` layout identity.
 - Successful `./build` output does not mean the live Revit session has fresh runtime assemblies.
-- If a human or agent intends to validate through `pea script ...` or `Pe.Revit.Tests`, they must use Rider/IDE-owned interactive outputs and run `pe-dev verify revit sync` or manual `pe-dev revit hot-reload` first. Do not use `./build` for live runtime freshness.
+- AttachedRrd validation belongs to Rider/IDE-owned interactive outputs plus dev-agent live-loop tooling. Do not use `./build` for live runtime freshness.

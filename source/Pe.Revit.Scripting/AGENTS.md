@@ -22,7 +22,7 @@ Owns the Revit-side scripting runtime: workspace bootstrap, source normalization
 
 - Prefer focused scripting tests in `source/Pe.Revit.Tests/RevitScriptingPortTests.cs` before broad Revit runs.
 - If the authoring contract changes, update `Bootstrap/ScriptFileTemplates.cs` in the same pass.
-- AttachedRrd scripting uses assemblies already loaded in RRD. After runtime package edits, build package-local outputs and run `pe-dev sync` before live `pea script ...` validation; isolated `dotnet build` is not runtime freshness proof.
+- AttachedRrd scripting uses assemblies already loaded in RRD. After runtime package edits, build package-local outputs from Rider/IDE and use dev-agent live-loop tooling before live `pea script ...` validation; isolated `dotnet build` is not runtime freshness proof.
 
 ## Shared Language
 

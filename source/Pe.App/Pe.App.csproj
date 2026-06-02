@@ -83,8 +83,7 @@
             Condition="'$(DeployAddin)' == 'true' and '$(LaunchRevit)' == 'true' and '$(DesignTimeBuild)' != 'true'"
     >
         <PropertyGroup>
-            <PeApprovalWatcherCliPath Condition="Exists('$(PeStableCliLocalPath)')">$(PeStableCliLocalPath)</PeApprovalWatcherCliPath>
-            <PeApprovalWatcherCliPath Condition="'$(PeApprovalWatcherCliPath)' == ''">$(PeStableCliPath)</PeApprovalWatcherCliPath>
+            <PeApprovalWatcherCliPath>$(PeStableCliPath)</PeApprovalWatcherCliPath>
         </PropertyGroup>
         <Message
                 Text="Launching approval watcher via '$(PeApprovalWatcherCliPath)' for Revit $(RevitVersion)."

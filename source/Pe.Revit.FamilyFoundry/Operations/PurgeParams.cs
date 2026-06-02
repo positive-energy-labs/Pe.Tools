@@ -97,17 +97,19 @@ public class PurgeParams : DocOperation<PurgeParamsSettings> {
             .ToList();
 
         foreach (var param in parameters) {
+            var parameterName = param.Definition.Name;
+
             // If empty AND DirectDelete is enabled, delete immediately (bypass association checks)
             if (this.Settings.DirectDeleteEmptyParameters
                 && this.IsParameterEmpty(param, processingContext)) {
-                var log = new LogEntry(param.Definition.Name);
+                var log = new LogEntry(parameterName);
                 try {
                     doc.FamilyManager.RemoveParameter(param);
                     _ = log
                         .WithParameterEvent(
                             ParameterEventOutcome.ParameterDeleted,
                             ParameterEventReason.EmptyParameter,
-                            parameterName: param.Definition.Name)
+                            parameterName: parameterName)
                         .Success("Deleted (empty parameter)");
                     deleteCount++;
                 } catch (Exception ex) {
@@ -115,7 +117,7 @@ public class PurgeParams : DocOperation<PurgeParamsSettings> {
                         .WithParameterEvent(
                             ParameterEventOutcome.ParameterDeleteFailed,
                             ParameterEventReason.DeleteParameterError,
-                            parameterName: param.Definition.Name)
+                            parameterName: parameterName)
                         .Error(ex);
                 }
 
@@ -128,14 +130,14 @@ public class PurgeParams : DocOperation<PurgeParamsSettings> {
             if (param.GetDependents(allParams).Any(p => p.HasDirectAssociation(doc))) continue;
             if (param.HasDirectAssociation(doc)) continue;
 
-            var normalLog = new LogEntry(param.Definition.Name);
+            var normalLog = new LogEntry(parameterName);
             try {
                 doc.FamilyManager.RemoveParameter(param);
                 _ = normalLog
                     .WithParameterEvent(
                         ParameterEventOutcome.ParameterDeleted,
                         ParameterEventReason.UnusedParameter,
-                        parameterName: param.Definition.Name)
+                        parameterName: parameterName)
                     .Success("Deleted");
                 deleteCount++;
             } catch (Exception ex) {
@@ -143,7 +145,7 @@ public class PurgeParams : DocOperation<PurgeParamsSettings> {
                     .WithParameterEvent(
                         ParameterEventOutcome.ParameterDeleteFailed,
                         ParameterEventReason.DeleteParameterError,
-                        parameterName: param.Definition.Name)
+                        parameterName: parameterName)
                     .Error(ex);
             }
 

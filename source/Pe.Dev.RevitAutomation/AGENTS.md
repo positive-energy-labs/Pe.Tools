@@ -26,21 +26,6 @@ Owns local/operator workflows used by `pe-dev automation ...`: manifests, receip
 
 ## Validation
 
-Cheap compile loop:
-
-- `dotnet build source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -c Debug.R25 /p:WarningLevel=0`
-- `dotnet build source/Pe.Dev.RevitAutomation.Worker/Pe.Dev.RevitAutomation.Worker.csproj -c Release.R25 /p:WarningLevel=0`
-
-Primary operator commands:
-
-- `pe-dev automation auth login`
-- `pe-dev automation browse hubs`
-- `pe-dev automation browse models --recurse true --out <path>`
-- `pe-dev automation manifest validate --path <path>`
-- `pe-dev automation submit schedules --manifest <path> [--receipt <path>] [--json]`
-- `pe-dev automation inspect receipt --receipt latest [--download-artifacts true] [--json]`
-- `pe-dev automation inspect workitem --workitem-id <id> [--include-report <true|false>] [--json]`
-
 Focused test coverage currently lives in:
 
 - `source/Pe.Revit.Tests/ParameterCollectionArtifactCollectorTests.cs`

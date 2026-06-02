@@ -136,7 +136,7 @@ public sealed class DeploymentRuntimeContractTests {
     }
 
     [Test]
-    public void Development_runtime_layout_keeps_host_in_dev_root_and_pe_dev_in_path_friendly_bin_root() {
+    public void Development_runtime_layout_keeps_only_runtime_host_in_dev_root() {
         var localAppData = Path.Combine(Path.GetTempPath(), $"pe-dev-layout-{Guid.NewGuid():N}");
 
         try {
@@ -150,17 +150,13 @@ public sealed class DeploymentRuntimeContractTests {
                 developmentRuntime.Binaries.HostDirectoryPath,
                 Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "dev", "bin", "host"))
             );
-            Assert.That(
-                developmentRuntime.Binaries.PeDevDirectoryPath,
-                Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "bin", "pe-dev"))
-            );
         } finally {
             TryDeleteDirectory(localAppData);
         }
     }
 
     [Test]
-    public void Runtime_authority_resolves_lane_specific_host_and_stable_cli_paths() {
+    public void Runtime_authority_resolves_lane_specific_host_and_stable_pea_launcher() {
         var localAppData = Path.Combine(Path.GetTempPath(), $"pe-runtime-authority-{Guid.NewGuid():N}");
 
         try {
@@ -175,7 +171,6 @@ public sealed class DeploymentRuntimeContractTests {
                 installedResolution.HostExecutablePath,
                 Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "bin", "host", "Pe.Host.exe"))
             );
-            Assert.That(devResolution.PeDevDllPath, Is.EqualTo(installedResolution.PeDevDllPath));
             Assert.That(devResolution.PeaLauncherPath, Is.EqualTo(installedResolution.PeaLauncherPath));
         } finally {
             TryDeleteDirectory(localAppData);

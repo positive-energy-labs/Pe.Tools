@@ -2,7 +2,7 @@
 
 ## Scope
 
-Owns the VSTest-based Revit-backed test harness for this repo.
+Owns the VSTest-based Revit-backed test harness for this repo. The harness uses `ricaun.RevitTest` from NuGet.
 
 ## Purpose
 
@@ -24,7 +24,7 @@ Two verify targets matter here:
   - use when:
     iterating collaboratively against the already-running Rider-driven desktop session
   - required posture:
-    build interactive outputs, run `pe-dev sync`, then run focused explicit-year `dotnet test`
+    prepare package-local/runtime outputs only when the attached runtime needs them, use dev-agent live-loop tooling for runtime freshness, then run focused explicit-year `dotnet test` as behavior evidence
 - `FreshRevitProcess`
   - execution policy:
     `NoRrdContact`
@@ -35,37 +35,38 @@ Two verify targets matter here:
 
 Canonical attached-runtime loop:
 
+1. Prepare any package-local/runtime outputs only when the attached runtime actually needs them. Do not treat that build as the freshness proof.
+2. Use dev-agent live-loop tooling to establish session state, refresh/restart when needed, and decide whether attached proof is trustworthy.
+3. Run focused explicit-year tests as behavior evidence:
+
 ```powershell
-pe-dev sync
 dotnet build source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests /p:WarningLevel=0
 dotnet test source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests --filter "Name~SomeFocusedTest" --no-build
 ```
 
-Current dedicated fresh-process helper:
+Current dedicated fresh-process helper (routes tests to Revit years based on execution policy):
 
 ```powershell
 pe-dev test --filter "Name~AssemblyLoadDiagnostics" --timeout-seconds 900
 ```
 
-Bare `dotnet test source/Pe.Revit.Tests/Pe.Revit.Tests.csproj` with no explicit year/config is invalid and fails with guidance.
-
 ## Shared Language
 
 | Term | Meaning | Prefer / Avoid |
 | --- | --- | --- |
-| **AttachedRrd** | Verification against the already-running Rider-driven desktop Revit session | Prefer this over vague `live test` phrasing |
+| **AttachedRrd** | Verification against the already-running Rider-driven desktop Revit debug session | Prefer this over vague `live test` phrasing |
 | **FreshRevitProcess** | Verification in a newly launched dedicated Revit process that must not reuse `RRD` | Prefer this over vague `isolated test` phrasing |
 | **test harness** | `Pe.Revit.Tests` owns verification orchestration, not a deployable product | Avoid talking about this package as if it were a shipping artifact |
 
 ## Living Memory
 
 - Tests run inside real Revit, not a fake host.
+- `ricaun.RevitTest` handles Revit process launching. If Revit is already open for the configured year, RevitTest can reuse it by default. That is not conducive to always-fresh assemblies, particularly when the open Revit instance is RRD.
 - Prefer explicit-year `dotnet test`, not raw artifact-path `dotnet vstest`.
-- Keep the wording precise: `.Tests` build outputs are isolated and `RRD`-safe; `.Tests` execution is Revit-backed.
 - Explicit-year `dotnet test -c Debug.R25.Tests ...` defaults to the `AttachedRrd` verify target and runs against assemblies already loaded in RRD unless you use the fresh helper.
 - `.Tests` build artifacts can be fresh while the already-running `RRD` runtime is still stale. The build proves compilation, not loaded-assembly freshness.
 - If the user restarted Revit from Rider by launching the normal `Pe.App` debug configuration, treat the deployed runtime add-in as fresh by default.
-- AGENT GUIDANCE: AttachedRrd validation uses assemblies already loaded in RRD. If runtime code changed, run `pe-dev sync` before attached-runtime `dotnet test`; an isolated `dotnet build` is not runtime freshness proof.
+- AGENT GUIDANCE: AttachedRrd validation uses assemblies already loaded in RRD. If runtime code changed, coordinate package-local/runtime refresh through dev-agent live-loop tooling before attached-runtime `dotnet test`; an isolated `dotnet build` is not runtime freshness proof.
 - Explicit-year raw `.Tests` runs are intentionally modeled as `AttachedRrd` verification, not ordinary `Build`.
 - The pre-`VSTest` hook is an `AttachedRrd` session check only. It is not proof of runtime freshness and not a substitute for the explicit sync step.
 - Raw `dotnet test` still inherits the adapter defaults unless you override them. If you need the runner-opened Revit process to behave like a dedicated fresh controlled host, use the explicit helper instead of assuming the adapter will do the right thing.

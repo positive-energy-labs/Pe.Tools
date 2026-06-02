@@ -12,7 +12,6 @@ public sealed record ProductDevelopmentRuntimeLayout(
         );
         var developmentRootPath = Path.Combine(productRootPath, ProductPathNames.DevelopmentDirectoryName);
         var developmentBinRootPath = Path.Combine(developmentRootPath, ProductPathNames.BinDirectoryName);
-        var installedBinRootPath = Path.Combine(productRootPath, ProductPathNames.BinDirectoryName);
 
         return new ProductDevelopmentRuntimeLayout(
             developmentRootPath,
@@ -20,10 +19,7 @@ public sealed record ProductDevelopmentRuntimeLayout(
                 developmentBinRootPath,
                 Path.Combine(developmentBinRootPath, HostProcessIdentity.DirectoryName),
                 Path.Combine(developmentBinRootPath, HostProcessIdentity.DirectoryName, HostProcessIdentity.ExecutableName),
-                Path.Combine(developmentBinRootPath, HostProcessIdentity.DirectoryName, HostProcessIdentity.DllName),
-                Path.Combine(installedBinRootPath, PeDevCliIdentity.DirectoryName),
-                Path.Combine(installedBinRootPath, PeDevCliIdentity.DirectoryName, PeDevCliIdentity.ExecutableName),
-                Path.Combine(installedBinRootPath, PeDevCliIdentity.DirectoryName, PeDevCliIdentity.DllName)
+                Path.Combine(developmentBinRootPath, HostProcessIdentity.DirectoryName, HostProcessIdentity.DllName)
             )
         );
     }
@@ -33,8 +29,5 @@ public sealed record ProductDevelopmentRuntimeBinaryLayout(
     string RootPath,
     string HostDirectoryPath,
     string HostExecutablePath,
-    string HostDllPath,
-    string PeDevDirectoryPath,
-    string PeDevExecutablePath,
-    string PeDevDllPath
+    string HostDllPath
 );

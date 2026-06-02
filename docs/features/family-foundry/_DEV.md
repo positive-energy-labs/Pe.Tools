@@ -64,6 +64,30 @@ Current supporting artifacts:
 - `parameter-events.json`
 - `input-profile-paramdrivensolids-plan.json` when authored solids are present
 
+## Bulk Migration Verification Harness
+
+The `Old_Template.rvt` bulk harness is the production-readiness proof lane for Family Foundry Migrator behavior. It should mutate only a test-owned project copy, never the checked-in source project, and should prove end state through artifacts rather than transient console output.
+
+Proof ladder:
+
+1. Generate synthetic Mechanical Equipment fixtures in Revit: a SetValue matrix family and a parameter metadata/state family.
+2. Seed those fixtures plus selected real Mechanical Equipment families into the test-owned `Old_Template` copy.
+3. Apply a test-only matrix migrator profile. Do not mutate the real BASE profile just to preserve synthetic harness parameters or alter cleanup behavior.
+4. Assert required artifacts per family, especially `profile-summary.json`, `snapshot-diff.json`, `snapshot-parameters-post.json`, `parameter-events.json`, and `logs-detailed.json`.
+5. Assert post-state from both snapshot artifacts and projected profile artifacts where useful.
+6. Run final all-Mechanical-Equipment coverage through explicit partitions when the full 81-family lane is too slow for one autonomous proof.
+
+Matrix dimensions intentionally covered:
+
+- storage/data-type coercion across string, integer, yes/no, number, length, angle, voltage, and current-like values;
+- global values, per-type values, formula-backed targets, blank-source fallback, and source-candidate ordering;
+- local family parameters, shared family parameters, project-bound shared parameters, tooltip/description metadata, properties group, data type, instance/type, and shared GUID identity;
+- generated family topology for labeled linear/angular/radial dimensions, labeled arrays, and one nested-family parameter association.
+
+Association coverage is deliberately scoped. The matrix proves dimension labels, array labels, and nested-family parameter association because those are the SetValue/parameter surfaces currently needed by FF Manager and Migrator. Other associable Revit elements remain out of scope until product behavior needs them.
+
+`parameter-events.json` should carry structured SetValue/coercion diagnostics in `Details` for mapping and per-type assignment events: mapping strategy, `CanMap`, source/target storage types, source/target data types, source value/value-string, source value CLR type, and target unit type. Console traces are not proof artifacts.
+
 ## Desired-State Compilation
 
 Manager and Migrator profiles are external command shells over the same desired parameter language. The compiler resolves declarations, shared-parameter selection, mapping data, inline assignments, per-type table rows, and param-driven-solids references into an explicit reconciliation plan. Queue builders then lower that plan into internal operation settings for the existing execution layer.

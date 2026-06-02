@@ -52,15 +52,6 @@ public sealed record ProductLayoutAuthority(
             PeaCliIdentity.DirectoryName
         );
 
-    public string GetPeDevPublishDirectory(string configuration) =>
-        Path.Combine(
-            this.Artifacts.PublishRoot,
-            PeDevCliIdentity.DirectoryName,
-            configuration,
-            ProductPathNames.BinDirectoryName,
-            PeDevCliIdentity.DirectoryName
-        );
-
     public string GetAutomationStagingDirectory(string configuration, string bundleName) =>
         Path.Combine(this.Artifacts.AutomationStagingRoot, configuration, $"{bundleName}.bundle");
 
@@ -71,7 +62,6 @@ public sealed record ProductLayoutAuthority(
         string version,
         string runtimePublishDirectory,
         PeaPayloadArtifacts peaPayload,
-        string peDevPublishDirectory,
         IReadOnlyCollection<string> revitPublishDirectories,
         CancellationToken cancellationToken
     ) {
@@ -83,7 +73,6 @@ public sealed record ProductLayoutAuthority(
             peaPayload.BootstrapDirectory.Path,
             peaPayload.ArchiveFile.Path,
             peaPayload.ManifestFile.Path,
-            peDevPublishDirectory,
             revitPublishDirectories
         );
         var manifestPath = this.GetInstallerPayloadManifestPath(version);

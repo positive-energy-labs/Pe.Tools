@@ -13,9 +13,6 @@
     <PeRuntimePeaCurrentVersionRelativePath>Positive Energy\Pe.Tools\bin\pea\current.txt</PeRuntimePeaCurrentVersionRelativePath>
     <PeRuntimePeaVersionsRelativePath>Positive Energy\Pe.Tools\bin\pea\versions</PeRuntimePeaVersionsRelativePath>
     <PeRuntimePeaPackagesRelativePath>Positive Energy\Pe.Tools\bin\pea\packages</PeRuntimePeaPackagesRelativePath>
-    <PeDevCliDirectoryRelativePath>Positive Energy\Pe.Tools\bin\pe-dev</PeDevCliDirectoryRelativePath>
-    <PeDevCliExecutableRelativePath>Positive Energy\Pe.Tools\bin\pe-dev\pe-dev.exe</PeDevCliExecutableRelativePath>
-    <PeDevCliDllRelativePath>Positive Energy\Pe.Tools\bin\pe-dev\pe-dev.dll</PeDevCliDllRelativePath>
     <PeRuntimeStateRelativePath>Positive Energy\Pe.Tools\state</PeRuntimeStateRelativePath>
     <PeRuntimeLogsRelativePath>Positive Energy\Pe.Tools\logs</PeRuntimeLogsRelativePath>
     <PeRuntimeCacheRelativePath>Positive Energy\Pe.Tools\cache</PeRuntimeCacheRelativePath>

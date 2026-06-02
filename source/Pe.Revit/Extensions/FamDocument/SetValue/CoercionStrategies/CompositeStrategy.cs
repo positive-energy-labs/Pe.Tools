@@ -11,17 +11,8 @@ public class CompositeStrategy : ICoercionStrategy {
 
     public CompositeStrategy(params ICoercionStrategy[] strategies) => this._strategies = strategies;
 
-    public bool CanMap(CoercionContext context) {
-        // DEBUG: Log which strategies are being checked
-        foreach (var strategy in this._strategies) {
-            var canMap = strategy.CanMap(context);
-            Console.WriteLine($"[CompositeStrategy] {strategy.GetType().Name}.CanMap = {canMap}");
-            if (canMap) return true;
-        }
-
-        Console.WriteLine("[CompositeStrategy] No strategy could handle the conversion");
-        return false;
-    }
+    public bool CanMap(CoercionContext context) =>
+        this._strategies.Any(strategy => strategy.CanMap(context));
 
     public Result<FamilyParameter> Map(CoercionContext context) {
         // Try each strategy in order until one succeeds

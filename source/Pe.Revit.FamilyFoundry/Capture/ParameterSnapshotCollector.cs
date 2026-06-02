@@ -12,6 +12,7 @@ namespace Pe.Revit.FamilyFoundry.Capture;
 ///     formula-only family-doc pass without iterating family types. Family-doc collection still exists as the
 ///     fallback when only a family document is available or when the project path remains partial.
 /// </summary>
+///
 public class ParameterSnapshotCollector : IProjectSnapshotCollector, IFamilySnapshotCollector {
     // IFamilySnapshotCollector implementation (supplements or provides full collection)
     bool IFamilySnapshotCollector.ShouldCollect(FamilySnapshot snapshot) =>

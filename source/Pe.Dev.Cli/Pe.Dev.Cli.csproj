@@ -5,8 +5,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>pe-dev</AssemblyName>
     <RootNamespace>Pe.Dev.Cli</RootNamespace>
-    <PeMirrorRuntimeToLocalBin>true</PeMirrorRuntimeToLocalBin>
-    <PeMirrorRuntimeRelativePath>$(PeDevCliDirectoryRelativePath)</PeMirrorRuntimeRelativePath>
   </PropertyGroup>
 
   <ItemGroup>

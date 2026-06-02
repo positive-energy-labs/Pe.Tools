@@ -5,15 +5,13 @@ namespace Installer;
 
 public enum InstallerProductSliceKind {
     DesktopRuntime,
-    PeaCliBootstrap,
-    PeDevCliBootstrap
+    PeaCliBootstrap
 }
 
 public enum InstallerComponentKind {
     RevitAddin,
     HostRuntime,
-    PeaCli,
-    PeDevCli
+    PeaCli
 }
 
 public enum InstallerOwnershipPolicyKind {
@@ -49,13 +47,6 @@ public static class InstallerProductSlices {
         "pea CLI Bootstrap",
         "PATH-visible pea launcher and active payload selection state."
     );
-
-    public static readonly InstallerProductSlice PeDevCliBootstrap = new(
-        InstallerProductSliceKind.PeDevCliBootstrap,
-        "pe-dev-cli-bootstrap",
-        "pe-dev CLI Bootstrap",
-        "PATH-visible developer/operator CLI for local repo and Revit workflows."
-    );
 }
 
 public sealed record InstallerContext(
@@ -86,7 +77,6 @@ public static class InstallerComponentCatalog {
         [
             new RevitAddinComponent(),
             new HostRuntimeComponent(),
-            new PeaCliComponent(),
-            new PeDevCliComponent()
+            new PeaCliComponent()
         ];
 }

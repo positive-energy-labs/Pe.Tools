@@ -1,6 +1,9 @@
 import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
-import type { WorkflowCommandResult } from "../pe-dev-workflow/index.js";
+import {
+  runRepoLocalPeDevWorkflow,
+  type WorkflowCommandResult,
+} from "../pe-dev-workflow/index.js";
 import {
   defaultRiderBridgeBaseUrl,
   runRiderBridgeRestartRrdHelper as runRiderBridgeRestartRrdHelper,
@@ -71,12 +74,32 @@ export async function runRiderBridgeRestartRrd(request: {
   const resolvedOpenDocument = await resolveOpenDocumentSelector(request);
   const previousHost = await collectHostContext();
   const previousSession = extractHostSessionFacts(previousHost);
+  const approvalWatcher = await startApprovalWatcherForRestart({
+    expectedRevitVersion: request.expectedRevitVersion,
+    timeoutSeconds: request.timeoutSeconds,
+  });
+  if (approvalWatcher != null && !approvalWatcher.ok) {
+    return {
+      ...approvalWatcher,
+      workflow: "restart_rrd",
+      policy: "RrdRequired",
+      json: {
+        approvalWatcher,
+        previousSession,
+        resolvedOpenDocument,
+      },
+      guidance:
+        "RRD restart was skipped because the unsigned-addin approval watcher could not be started for the requested Revit year.",
+    };
+  }
+
   const result = (await runRiderBridgeRestartRrdHelper({
     repoRoot: await resolveRepoRoot(),
     timeoutSeconds: request.timeoutSeconds,
     riderBridgeBaseUrl: request.riderBridgeBaseUrl,
     project: request.project,
     actionId: request.actionId,
+    expectedRevitVersion: request.expectedRevitVersion,
   })) as WorkflowCommandResult;
 
   const bridgeReadiness = result.ok
@@ -133,6 +156,7 @@ export async function runRiderBridgeRestartRrd(request: {
     exitCode: ok ? 0 : 1,
     json: {
       ...(isRecord(result.json) ? result.json : { riderBridge: result.json }),
+      approvalWatcher,
       previousSession,
       bridgeReadiness,
       resolvedOpenDocument,
@@ -142,6 +166,7 @@ export async function runRiderBridgeRestartRrd(request: {
     stdoutTail: JSON.stringify(
       {
         riderBridge: isRecord(result.json) ? result.json : result.stdoutTail,
+        approvalWatcher,
         previousSession,
         bridgeReadiness,
         resolvedOpenDocument,
@@ -168,6 +193,28 @@ export async function runRiderBridgeRestartRrd(request: {
         : "RRD restart action invoked, Revit bridge connected, and requested/default document was opened. Run an attached script/test/log proof next."
       : "RiderBridge restart was requested, but Pe.Host bridge readiness or document-open proof was not completed before timeout.",
   };
+}
+
+async function startApprovalWatcherForRestart(request: {
+  expectedRevitVersion: string;
+  timeoutSeconds: number;
+}): Promise<WorkflowCommandResult | null> {
+  const revitYear = Number.parseInt(request.expectedRevitVersion, 10);
+  if (!Number.isFinite(revitYear)) return null;
+
+  return runRepoLocalPeDevWorkflow(
+    "restart_rrd:approval-watcher",
+    [
+      "__internal",
+      "approve-worker",
+      "--revit-year",
+      String(revitYear),
+      "--timeout-seconds",
+      String(Math.max(120, Math.min(request.timeoutSeconds, 600))),
+    ],
+    "RrdRequired",
+    30,
+  );
 }
 
 async function resolveOpenDocumentSelector(request: {

@@ -22,11 +22,6 @@ Owns APS-facing mechanics for Pe.Tools: auth, Data Management, Object Storage, a
 
 ## Validation
 
-Cheap compile loop:
-
-- `dotnet build source/Pe.Aps/Pe.Aps.csproj -c Debug.R25 --no-restore`
-- `dotnet build source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -c Debug.R25 --no-restore`
-
 Use a tiny DA manifest before broad APS validation. Data Management and OSS failures can be slow and account-specific, so first prove credentials and catalog browse before submit/download work.
 
 ## Shared Language

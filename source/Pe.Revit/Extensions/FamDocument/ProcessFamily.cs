@@ -62,7 +62,7 @@ public static class FamilyDocumentProcessFamily {
 
             if (suppressWarnings) {
                 var failureOptions = trans.GetFailureHandlingOptions();
-                failureOptions.SetFailuresPreprocessor(new WarningSuppressingFailuresPreprocessor(commitDiagnostics));
+                failureOptions.SetFailuresPreprocessor(new DialogSuppressingFailuresPreprocessor(commitDiagnostics));
                 failureOptions.SetForcedModalHandling(false);
                 trans.SetFailureHandlingOptions(failureOptions);
             }
@@ -193,19 +193,44 @@ public static class FamilyDocumentProcessFamily {
             : throw new InvalidOperationException("Failed to close family document after load error.");
     }
 
-    private sealed class WarningSuppressingFailuresPreprocessor(
+    private sealed class DialogSuppressingFailuresPreprocessor(
         ICollection<(bool IsError, string Message)> diagnostics
     ) : IFailuresPreprocessor {
+        private static readonly FailureResolutionType[] NonModalResolutionPreference = [
+            FailureResolutionType.UnlockConstraints,
+            FailureResolutionType.DetachElements,
+            FailureResolutionType.FixElements,
+            FailureResolutionType.SkipElements
+        ];
+
         public FailureProcessingResult PreprocessFailures(FailuresAccessor failuresAccessor) {
+            var resolvedFailure = false;
+
             foreach (var failureMessage in failuresAccessor.GetFailureMessages()) {
-                if (failureMessage.GetSeverity() != FailureSeverity.Warning)
+                if (failureMessage.GetSeverity() == FailureSeverity.Warning) {
+                    diagnostics.Add((false, $"Suppressed warning: {DescribeFailure(failureMessage)}"));
+                    failuresAccessor.DeleteWarning(failureMessage);
+                    continue;
+                }
+
+                var resolutionType = NonModalResolutionPreference.FirstOrDefault(type =>
+                    failureMessage.HasResolutionOfType(type) &&
+                    failuresAccessor.IsFailureResolutionPermitted(failureMessage, type) &&
+                    !failuresAccessor.GetAttemptedResolutionTypes(failureMessage).Contains(type));
+
+                if (resolutionType == FailureResolutionType.Invalid)
                     continue;
 
-                diagnostics.Add((false, $"Suppressed warning: {DescribeFailure(failureMessage)}"));
-                failuresAccessor.DeleteWarning(failureMessage);
+                failureMessage.SetCurrentResolutionType(resolutionType);
+                failuresAccessor.ResolveFailure(failureMessage);
+                resolvedFailure = true;
+                diagnostics.Add((false,
+                    $"Resolved failure with {resolutionType}: {DescribeFailure(failureMessage)}"));
             }
 
-            return FailureProcessingResult.Continue;
+            return resolvedFailure
+                ? FailureProcessingResult.ProceedWithCommit
+                : FailureProcessingResult.Continue;
         }
     }
 }

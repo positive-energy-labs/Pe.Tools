@@ -1,5 +1,4 @@
 using Pe.Revit.Extensions.FamDocument.SetValue;
-using System.Diagnostics;
 using System.Globalization;
 
 namespace Pe.Revit.Extensions.FamDocument;
@@ -75,6 +74,45 @@ public static class FamilyDocumentSetValue {
         };
     }
 
+    public static IReadOnlyDictionary<string, string> DescribeSetValue(
+        this FamilyDocument famDoc,
+        FamilyParameter targetParam,
+        FamilyParameter sourceParam,
+        string strategyName = nameof(BuiltInCoercionStrategy.Strict)
+    ) {
+        var context = CoercionContext.FromParam(famDoc, sourceParam, targetParam);
+        var strategyInstance = ParamCoercionStrategyRegistry.Get(strategyName);
+        return DescribeContext(context, strategyName, strategyInstance.CanMap(context));
+    }
+
+    public static IReadOnlyDictionary<string, string> DescribeSetValue(
+        this FamilyDocument famDoc,
+        FamilyParameter targetParam,
+        object? sourceValue,
+        string strategyName = nameof(BuiltInCoercionStrategy.Strict)
+    ) {
+        var context = CoercionContext.FromValue(famDoc, sourceValue, targetParam);
+        var strategyInstance = ValueCoercionStrategyRegistry.Get(strategyName);
+        return DescribeContext(context, strategyName, strategyInstance.CanMap(context));
+    }
+
+    private static Dictionary<string, string> DescribeContext(
+        CoercionContext context,
+        string strategyName,
+        bool canMap
+    ) => new() {
+        ["MappingStrategy"] = strategyName,
+        ["CanMap"] = canMap.ToString(),
+        ["SourceStorageType"] = context.SourceStorageType.ToString(),
+        ["SourceDataType"] = context.SourceDataType?.TypeId ?? string.Empty,
+        ["SourceValue"] = context.SourceValue?.ToString() ?? string.Empty,
+        ["SourceValueType"] = context.SourceValue?.GetType().Name ?? string.Empty,
+        ["SourceValueString"] = context.SourceValueString ?? string.Empty,
+        ["TargetStorageType"] = context.TargetStorageType.ToString(),
+        ["TargetDataType"] = context.TargetDataType.TypeId,
+        ["TargetUnitType"] = context.TargetUnitType?.TypeId ?? string.Empty
+    };
+
     /// <summary>
     ///     Set a family's parameter value on the <c>FamilyManager.CurrentType</c> using the specified strategy name.
     ///     If no strategy is specified, uses the <c>Strict</c> strategy.
@@ -98,21 +136,10 @@ public static class FamilyDocumentSetValue {
 
         var strategyInstance = ParamCoercionStrategyRegistry.Get(strategyName);
 
-        // DEBUG: Trace coercion context for troubleshooting
-        Console.WriteLine($"[SetValue] Source='{sourceParam.Definition.Name}', " +
-                          $"SourceStorageType={context.SourceStorageType}, " +
-                          $"SourceDataType={context.SourceDataType?.TypeId ?? "null"}, " +
-                          $"SourceValue='{context.SourceValue}' (type={context.SourceValue?.GetType().Name}), " +
-                          $"Target='{targetParam.Definition.Name}', " +
-                          $"TargetStorageType={context.TargetStorageType}, " +
-                          $"TargetDataType={context.TargetDataType?.TypeId ?? "null"}, " +
-                          $"Strategy={strategyName}");
 
         if (!strategyInstance.CanMap(context)) {
             var targetDataType = targetParam.Definition.GetDataType();
             var dataTypeDisplay = targetDataType?.TypeId ?? "Unknown";
-            Console.WriteLine($"[SetValue] CanMap returned FALSE for strategy '{strategyName}'");
-            // Include detailed context in error message for debugging
             throw new Exception(
                 $"Cannot map '{sourceParam.Definition.Name}' to '{targetParam.Definition.Name}' ({dataTypeDisplay}) using strategy '{strategyName}'. " +
                 $"SourceStorageType={context.SourceStorageType}, SourceDataType={context.SourceDataType?.TypeId ?? "null"}, " +
