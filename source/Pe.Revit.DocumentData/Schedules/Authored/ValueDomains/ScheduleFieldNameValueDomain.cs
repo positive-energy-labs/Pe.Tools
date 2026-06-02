@@ -1,3 +1,5 @@
+using Pe.Revit.DocumentData.Parameters;
+
 namespace Pe.Revit.DocumentData.Schedules.Authored.ValueDomains;
 
 public static class ScheduleFieldNameValueDomain {
@@ -27,34 +29,28 @@ public static class ScheduleFieldNameValueDomain {
             .ToList();
     }
 
-    public static SchedulableField? ResolveSchedulableField(ScheduleDefinition def, Document doc, string parameterName) {
+    public static SchedulableField? ResolveSchedulableField(ScheduleDefinition def, Document doc, ParameterReference parameter) {
+        var references = ParameterReferenceResolver.Resolve([parameter]);
+        if (references.Count == 0)
+            return null;
+
         foreach (var field in def.GetSchedulableFields()) {
-            var name = field.GetName(doc);
-            if (name.Equals(parameterName, StringComparison.OrdinalIgnoreCase))
+            var identity = ParameterIdentityFactory.FromParameterId(doc, field.ParameterId, field.GetName(doc));
+            if (ParameterReferenceResolver.Matches(identity, references))
                 return field;
         }
 
         return null;
     }
 
-    public static ElementId? ResolveParameterId(ScheduleDefinition def, Document doc, string parameterName) {
-        foreach (var field in def.GetSchedulableFields()) {
-            var name = field.GetName(doc);
-            if (name.Equals(parameterName, StringComparison.OrdinalIgnoreCase))
-                return field.ParameterId;
-        }
+    public static ElementId? ResolveParameterId(ScheduleDefinition def, Document doc, ParameterReference parameter) {
+        var field = ResolveSchedulableField(def, doc, parameter);
+        return field?.ParameterId;
+    }
 
-        foreach (BuiltInParameter builtInParameter in Enum.GetValues(typeof(BuiltInParameter))) {
-            try {
-                var label = LabelUtils.GetLabelFor(builtInParameter);
-                if (label.Equals(parameterName, StringComparison.OrdinalIgnoreCase))
-                    return new ElementId(builtInParameter);
-            } catch {
-                // Some built-in parameters do not expose labels.
-            }
-        }
-
-        return null;
+    public static ParameterReference SerializeParameter(Document doc, ElementId parameterId) {
+        var name = SerializeParameterName(doc, parameterId);
+        return ParameterReference.FromIdentity(ParameterIdentityFactory.FromParameterId(doc, parameterId, name));
     }
 
     public static string SerializeParameterName(Document doc, ElementId parameterId) {

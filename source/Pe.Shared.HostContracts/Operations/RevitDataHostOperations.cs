@@ -73,8 +73,8 @@ public static class GetScheduleCatalogOperationContract {
             "Get Schedule Catalog",
             HostOperationAgentMetadata.Create(
                 "revit",
-                "Read schedule definitions and field facts from the active document. Do not use broad schedule catalog discovery for visible equipment coverage when revit.matrix.schedule-coverage can answer from view or element handles.",
-                new[] { "schedules", "catalog", "fields", "document", "sheet-placement", "printed-context" },
+                "Read compact schedule handles, names, sheet placement, optional field metadata, and factual schedule evidence summaries from the active document. Revit-generated duplicate suffixes like '(2)' and 'Copy 1' are normalized out of name summary weighting. Do not use broad schedule catalog discovery for visible equipment coverage when revit.matrix.schedule-coverage can answer from view or element handles.",
+                new[] { "schedules", "catalog", "fields", "columns", "parameters", "document", "sheet-placement", "printed-context" },
                 requiresBridge: true,
                 requiresActiveDocument: true,
                 requestExamples: [
@@ -95,7 +95,9 @@ public static class GetScheduleCatalogOperationContract {
                 ],
                 boundedExpansionHints: [
                     .. RevitDataHostOperationExamples.CatalogExpansionHints,
-                    "For visible/current/printed equipment coverage, prefer revit.matrix.schedule-coverage with ViewReferences or ExplicitHandles; use this catalog only when schedule candidates themselves are unknown."
+                    "For visible/current/printed equipment coverage, prefer revit.matrix.schedule-coverage with ViewReferences or ExplicitHandles; use this catalog only when schedule candidates themselves are unknown.",
+                    "Request parameterUsages explicitly when schedule fields/columns and backing parameter identity are needed for the next join; customParameters describes parameters on the schedule view element itself.",
+                    "Use summary duplicate-normalized name groups, prefix/suffix counts, top scheduled fields, and field fingerprints as evidence only; do not treat them as role, intent, or anomaly labels."
                 ],
                 handleProvenanceNotes: "Schedule handles include ids/unique ids plus sheet-placement facts when requested."
             )
@@ -416,12 +418,85 @@ public static class GetParameterCoverageOperationContract {
                         "bounded parameter coverage",
                         "Check parameter presence/blank/default counts for a category or selection.",
                         """
-                        { "categoryNames": ["Mechanical Equipment"], "scope": "ActiveViewVisible", "parameterNames": ["Mark", "Comments"], "defaultValues": ["0", "-"], "budget": { "maxEntries": 25, "maxSamplesPerEntry": 5 } }
+                        { "categoryNames": ["Mechanical Equipment"], "scope": "ActiveViewVisible", "parameters": [{ "name": "Mark" }, { "name": "Comments" }], "defaultValues": ["0", "-"], "budget": { "maxEntries": 25, "maxSamplesPerEntry": 5 } }
                         """
                     )
                 ],
                 boundedExpansionHints: RevitDataHostOperationExamples.MatrixExpansionHints,
                 handleProvenanceNotes: "Parameter coverage returns canonical parameter identities and bounded sample element handles."
+            )
+        );
+}
+
+public static class GetConceptEvidenceOperationContract {
+    public static readonly HostOperationDefinition Definition =
+        HostOperationDefinition.Create<ConceptEvidenceRequest, ConceptEvidenceData>(
+            "revit.catalog.concept-evidence",
+            HostHttpVerb.Post,
+            "/api/revit/catalog/concept-evidence",
+            HostExecutionMode.Bridge,
+            "Get Concept Evidence",
+            HostOperationAgentMetadata.Create(
+                "revit",
+                "Infer project-specific parameter candidates for operator concepts from factual binding and schedule evidence. Category and subject hints are weak context, not expected-shape rules; use returned reasons and facts before detail or coverage calls.",
+                new[] { "concepts", "parameter-evidence", "project-standards", "bindings", "schedule-fields", "discovery" },
+                requiresBridge: true,
+                requiresActiveDocument: true,
+                requestExamples: [
+                    RevitDataHostOperationExamples.Example(
+                        "equipment coordination concepts",
+                        "Infer project-specific fields for ordinary coordination language without exact parameter names.",
+                        """
+                        { "query": "equipment electrical load circuit panel location", "subjectHints": ["Mechanical Equipment", "Plumbing Equipment"], "budget": { "maxEntries": 5, "maxSamplesPerEntry": 3 } }
+                        """
+                    )
+                ],
+                boundedExpansionHints: [
+                    "Use concept evidence before parameter evidence when the user asks in ordinary project language rather than known parameter identity language.",
+                    "Treat subject hints as weak scoping context; do not assume a category or expected schedule shape is authoritative without supporting schedule/binding facts.",
+                    "Pass returned observed identities or ParameterReference values into revit.catalog.parameter-evidence, revit.matrix.parameter-coverage, or revit.detail.elements for deeper proof."
+                ],
+                handleProvenanceNotes: "Candidates include canonical parameter identities, binding categories, schedule usage counts, filter usage counts, field-position averages, and sample schedule names."
+            )
+        );
+}
+
+public static class GetParameterEvidenceOperationContract {
+    public static readonly HostOperationDefinition Definition =
+        HostOperationDefinition.Create<ParameterEvidenceRequest, ParameterEvidenceData>(
+            "revit.catalog.parameter-evidence",
+            HostHttpVerb.Post,
+            "/api/revit/catalog/parameter-evidence",
+            HostExecutionMode.Bridge,
+            "Get Parameter Evidence",
+            HostOperationAgentMetadata.Create(
+                "revit",
+                "Return factual parameter evidence from project bindings, schedule fields/filters, and scoped element presence. Use this when project-standard parameter names are uncertain; inspect binding categories, schedule usage, counts, and samples, then pass observed parameter identities or named references into detail or matrix calls.",
+                new[] { "parameters", "evidence", "project-bindings", "schedule-fields", "categories", "parameter-usage" },
+                requiresBridge: true,
+                requiresActiveDocument: true,
+                requestExamples: [
+                    RevitDataHostOperationExamples.Example(
+                        "bounded parameter evidence for visible equipment",
+                        "Collect factual binding, schedule, and scoped-element evidence for candidate parameter references.",
+                        """
+                        { "categoryNames": ["Mechanical Equipment"], "scope": "ActiveViewVisible", "candidateParameters": [{ "name": "Mark" }, { "name": "Equipment Tag" }], "budget": { "maxEntries": 10, "maxSamplesPerEntry": 2 } }
+                        """
+                    ),
+                    RevitDataHostOperationExamples.Example(
+                        "rank schedule join fields",
+                        "Use schedule field/filter evidence when the printed schedule context is known.",
+                        """
+                        { "rankingMode": "ScheduleJoin", "categoryNames": ["Mechanical Equipment"], "scheduleNames": ["Equipment Schedule"], "budget": { "maxEntries": 10, "maxSamplesPerEntry": 2 } }
+                        """
+                    )
+                ],
+                boundedExpansionHints: [
+                    "Use parameter evidence before detail/coverage when the project-standard parameter name is uncertain.",
+                    "Keep candidateParameters when you already have observed identities, shared GUIDs, or plausible names; omit them only for bounded category/schedule scopes.",
+                    "Treat scores as ordering aids over factual evidence, not intent labels; prefer binding categories, schedule usages, evidence counts, and samples in user-facing answers."
+                ],
+                handleProvenanceNotes: "Samples may include schedule names and scoped element handles; pass returned ParameterIdentity values into revit.detail.elements or revit.matrix.parameter-coverage."
             )
         );
 }
@@ -436,8 +511,8 @@ public static class GetProjectParameterBindingsOperationContract {
             "Get Project Parameter Bindings",
             HostOperationAgentMetadata.Create(
                 "revit",
-                "Read project parameter bindings from the active document.",
-                new[] { "parameters", "project-parameters", "bindings", "document", "catalog" },
+                "Read project parameter bindings from the active document, using the same canonical parameter identity and shared-GUID string language returned by parameter evidence and coverage operations.",
+                new[] { "parameters", "project-parameters", "bindings", "document", "catalog", "parameter-identity", "shared-guid" },
                 requiresBridge: true,
                 requiresActiveDocument: true,
                 requestExamples: [
@@ -450,13 +525,17 @@ public static class GetProjectParameterBindingsOperationContract {
                     ),
                     RevitDataHostOperationExamples.Example(
                         "filtered project parameter bindings",
-                        "Constrain binding catalog by category, parameter name, and binding level.",
+                        "Constrain binding catalog by category, parameter reference, substring, and binding level.",
                         """
-                        { "bindingFilter": { "categoryNames": ["Mechanical Equipment"], "parameterNameContains": "Asset", "bindingKind": "Instance" }, "budget": { "maxEntries": 25 } }
+                        { "bindingFilter": { "categoryNames": ["Mechanical Equipment"], "parameters": [{ "sharedGuid": "11111111-2222-3333-4444-555555555555" }], "parameterNameContains": "Asset", "bindingKind": "Instance" }, "budget": { "maxEntries": 25 } }
                         """
                     )
                 ],
-                boundedExpansionHints: RevitDataHostOperationExamples.CatalogExpansionHints,
+                boundedExpansionHints: [
+                    .. RevitDataHostOperationExamples.CatalogExpansionHints,
+                    "Use parameters with observed ParameterIdentity values when joining from concept/parameter evidence into binding lookup.",
+                    "Use name-based ParameterReference values only when the user or prior evidence has an exact name; otherwise inspect revit.catalog.parameter-evidence first."
+                ],
                 handleProvenanceNotes: "Binding entries include canonical parameter identities, binding level, and category names."
             )
         );

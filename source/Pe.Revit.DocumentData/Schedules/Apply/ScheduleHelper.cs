@@ -1,4 +1,4 @@
-﻿using Autodesk.Revit.DB.Structure;
+using Autodesk.Revit.DB.Structure;
 using Pe.Revit.DocumentData.Families.Loaded;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.DocumentData.Schedules.Authored;
@@ -424,7 +424,10 @@ public static class ScheduleHelper {
                 return true;
         }
 
-        var schedulableField = ScheduleFieldNameValueDomain.ResolveSchedulableField(def, doc, fieldName);
+        var schedulableField = ScheduleFieldNameValueDomain.ResolveSchedulableField(
+            def,
+            doc,
+            Pe.Shared.RevitData.ParameterReference.FromName(fieldName));
         if (schedulableField == null)
             return false;
 
@@ -603,9 +606,8 @@ public static class ScheduleHelper {
     private static SharedCombinedParameterSpec SerializeCombinedParameter(
         TableCellCombinedParameterData combinedParam,
         Document doc) =>
-        new(
-            ScheduleFieldNameValueDomain.SerializeParameterName(doc, combinedParam.ParamId)
-        ) {
+        new() {
+            Parameter = ScheduleFieldNameValueDomain.SerializeParameter(doc, combinedParam.ParamId),
             Prefix = combinedParam.Prefix,
             Suffix = combinedParam.Suffix,
             Separator = combinedParam.Separator

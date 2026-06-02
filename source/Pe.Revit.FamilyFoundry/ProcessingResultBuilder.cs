@@ -1,3 +1,4 @@
+using Pe.Revit.FamilyFoundry.DesiredState;
 using Pe.Revit.FamilyFoundry.LookupTables;
 using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.FamilyFoundry.Serialization;
@@ -16,6 +17,7 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
     private readonly List<FamilyProcessingContext> _familyContexts = [];
     private readonly OutputStorage _runOutput = runOutput ?? throw new ArgumentNullException(nameof(runOutput));
     private List<(string Name, string Description, string Type, string IsMerged)> _operationMetadata = [];
+    private FamilyMigrationReconciliationPlan? _desiredMigrationPlan;
     private string _profileName = string.Empty;
     private object _profilePayload = new { };
 
@@ -32,7 +34,11 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
     private static string GetPropGroupLabel(ParameterSnapshot param) =>
         PropertyGroupNamesValueDomain.GetLabelForForge(param.PropertiesGroup);
 
-    private static string GetInstTypeStr(ParameterSnapshot param) => param.IsInstance ? "INST" : "TYPE";
+    private static string GetInstTypeStr(ParameterSnapshot param) => param.IsInstance switch {
+        true => "INST",
+        false => "TYPE",
+        null => "UNKNOWN"
+    };
 
     public ProcessingResultBuilder WithProfile<T>(T profile, string profileName) where T : BaseProfile {
         this._profilePayload = profile;
@@ -51,6 +57,11 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
         return this;
     }
 
+    public ProcessingResultBuilder WithDesiredMigrationPlan(FamilyMigrationReconciliationPlan plan) {
+        this._desiredMigrationPlan = plan;
+        return this;
+    }
+
     public string WriteSingleFamilyOutput(FamilyProcessingContext ctx, bool openOnFinish = false) {
         if (!this._familyContexts.Contains(ctx))
             this._familyContexts.Add(ctx);
@@ -61,6 +72,9 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
         var inputProfilePath = familyOutput.Json("input-profile.json").Write(this._profilePayload);
         var operationPlanPath = familyOutput.Json("operation-plan.json").Write(this._operationMetadata
             .Select(op => new { op.Name, op.Description, op.Type, op.IsMerged }).ToList());
+        var desiredMigrationPlanPath = this._desiredMigrationPlan == null
+            ? null
+            : familyOutput.Json("desired-migration-plan.json").Write(this._desiredMigrationPlan);
         var profileSummaryPath =
             familyOutput.Json("profile-summary.json").Write(BuildProfileSummary(this._profilePayload));
         var inputProfilePlanPath = this.WriteInputProfilePlanArtifact(familyOutput, this._profilePayload);
@@ -74,6 +88,7 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
 
         var abridgedPath = familyOutput.Json("logs-abridged.json").Write(BuildAbridged(ctx));
         var detailedPath = familyOutput.Json("logs-detailed.json").Write(this.BuildDetailed(ctx));
+        var parameterEventsPath = familyOutput.Json("parameter-events.json").Write(this.BuildParameterEvents(ctx));
         var parameterDiffPath = familyOutput.Json("snapshot-parameters-diff.json").Write(BuildParameterDiff(ctx));
         var snapshotDiffPath = familyOutput.Json("snapshot-diff.json").Write(BuildSnapshotDiff(ctx));
 
@@ -83,9 +98,11 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
             this.RequiredRelativeToRun(profileSummaryPath),
             this.RequiredRelativeToRun(operationPlanPath),
             this.RelativeToRun(inputProfilePlanPath),
+            this.RelativeToRun(desiredMigrationPlanPath),
             this.RequiredRelativeToRun(abridgedPath),
             this.RequiredRelativeToRun(detailedPath),
             string.Empty,
+            this.RequiredRelativeToRun(parameterEventsPath),
             this.RequiredRelativeToRun(parameterDiffPath),
             this.RequiredRelativeToRun(snapshotDiffPath),
             preSnapshotArtifacts,
@@ -152,6 +169,8 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
                 AbridgedLogs = "logs-abridged.json",
                 FullSnapshot = "snapshot-{phase}.json",
                 SnapshotProjection = "snapshot-profile-{dense|empty-allowed}-{phase}.json",
+                DesiredMigrationPlan = "desired-migration-plan.json",
+                ParameterEvents = "parameter-events.json",
                 SnapshotDiff = "snapshot-diff.json",
                 ParameterDiff = "snapshot-parameters-diff.json"
             },
@@ -221,6 +240,46 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
                     Errors = BuildMessages(log.Entries, LogStatus.Error)
                 };
             }).ToList()
+        };
+    }
+
+    private object BuildParameterEvents(FamilyProcessingContext ctx) {
+        var (logs, err) = ctx.OperationLogs;
+        var operationLogs = err != null ? [] : logs ?? [];
+        var sequence = 0;
+        var events = operationLogs
+            .SelectMany(log => log.Entries
+                .Where(entry => entry.ParameterEvent is not null)
+                .Select(entry => {
+                    var parameterEvent = entry.ParameterEvent!;
+                    sequence++;
+                    return new {
+                        Sequence = sequence,
+                        log.OperationName,
+                        OperationStatus = entry.Status == LogStatus.Pending ? "Deferred" : entry.Status.ToString(),
+                        entry.FamilyTypeName,
+                        LogEntryName = entry.Name,
+                        entry.Message,
+                        Outcome = parameterEvent.Outcome.ToString(),
+                        Reason = parameterEvent.Reason.ToString(),
+                        parameterEvent.SourceParameter,
+                        parameterEvent.TargetParameter,
+                        parameterEvent.ParameterName,
+                        parameterEvent.MappingKey,
+                        parameterEvent.DataType,
+                        parameterEvent.IsInstance,
+                        parameterEvent.Details
+                    };
+                }))
+            .ToList();
+
+        return new {
+            Family = ctx.FamilyName,
+            Profile = this._profileName,
+            Timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+            EventModelVersion = 1,
+            Error = err?.Message,
+            Events = events
         };
     }
 
@@ -374,19 +433,10 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
         string? parameterProfilePath = null;
         if (snapshot.Parameters?.Data != null && snapshot.Parameters.Data.Count > 0) {
             var paramsData = snapshot.Parameters.Data;
-            var sharedParameterNames = paramsData
-                .Select(parameter => parameter.SharedGuid.HasValue ? parameter.Name?.Trim() : null)
-                .OfType<string>()
-                .Where(name => !string.IsNullOrWhiteSpace(name))
-                .ToHashSet(StringComparer.Ordinal);
-
             parameterProfilePath = output.Json($"snapshot-parameters-{phase}.json").Write(
                 FamilyParamProfileAdapter.ProjectSnapshotsToProfile(
                     paramsData,
-                    new FamilyParamProfileExportOptions {
-                        IncludeDefinitionOnlyParameters = true,
-                        IsSharedParameterName = name => sharedParameterNames.Contains(name)
-                    }));
+                    new FamilyParamProfileExportOptions { IncludeDefinitionOnlyParameters = true }));
         }
 
         string? lookupTablesPath = null;
@@ -627,9 +677,11 @@ public sealed record FamilyArtifactManifest(
     string ProfileSummaryPath,
     string OperationPlanPath,
     string? InputProfileParamDrivenSolidsPlanPath,
+    string? DesiredMigrationPlanPath,
     string LogsAbridgedPath,
     string LogsDetailedPath,
     string FamilyReportPath,
+    string ParameterEventsPath,
     string ParameterDiffPath,
     string SnapshotDiffPath,
     SnapshotArtifactManifest? PreSnapshot,

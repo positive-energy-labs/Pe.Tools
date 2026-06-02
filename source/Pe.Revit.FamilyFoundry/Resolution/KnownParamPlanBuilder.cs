@@ -1,5 +1,6 @@
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.Global;
+using Pe.Shared.RevitData;
 using Serilog;
 
 namespace Pe.Revit.FamilyFoundry.Resolution;
@@ -40,7 +41,7 @@ public static class KnownParamPlanBuilder {
             KnownParamResolver.ExtractRequiredFamilyDefinitions(referencedParameterNames, catalog);
         var resolvedFamilyParams = MergeFamilyParamDefinitions(normalizedFamilyParams, requiredFamilyDefinitions);
         var requiredApsParameterNames = referencedParameterNames
-            .Where(KnownParamResolver.IsPeParameterName)
+            .Where(catalog.ContainsSharedParameter)
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -136,7 +137,7 @@ public static class KnownParamPlanBuilder {
     public static AddFamilyParamsSettings BuildFamilyDefinitionsFromSnapshots(
         IEnumerable<ParameterSnapshot> snapshots,
         IEnumerable<string> referencedParameterNames,
-        Func<string, bool>? isSharedParameterName = null
+        Func<ParameterSnapshot, bool>? isSharedParameter = null
     ) {
         var snapshotByName = snapshots
             .Where(snapshot => !string.IsNullOrWhiteSpace(snapshot.Name))
@@ -148,13 +149,14 @@ public static class KnownParamPlanBuilder {
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .Select(name => name.Trim())
             .Distinct(StringComparer.Ordinal)
-            .Where(name => !(isSharedParameterName?.Invoke(name) ?? KnownParamResolver.IsPeParameterName(name)))
+            .Where(name => !IsSharedSnapshotReference(name, snapshotByName, isSharedParameter))
             .Select(name => snapshotByName.TryGetValue(name, out var snapshot)
                 ? new FamilyParamDefinitionModel {
-                    Name = snapshot.Name ?? string.Empty,
-                    IsInstance = snapshot.IsInstance,
-                    PropertiesGroup = snapshot.PropertiesGroup,
-                    DataType = snapshot.DataType
+                    Definition = ParameterDefinitionDescriptorFactory.NameFallback(
+                        snapshot.Name ?? string.Empty,
+                        snapshot.DataType,
+                        snapshot.PropertiesGroup,
+                        snapshot.IsInstance)
                 }
                 : null)
             .Where(definition => definition != null)
@@ -164,6 +166,18 @@ public static class KnownParamPlanBuilder {
         return new AddFamilyParamsSettings { Enabled = familyDefinitions.Count > 0, Parameters = familyDefinitions };
     }
 
+    private static bool IsSharedSnapshotReference(
+        string name,
+        IReadOnlyDictionary<string, ParameterSnapshot> snapshotByName,
+        Func<ParameterSnapshot, bool>? isSharedParameter
+    ) {
+        return snapshotByName.TryGetValue(name, out var snapshot) &&
+               (isSharedParameter?.Invoke(snapshot) == true || IsSharedParameterSnapshot(snapshot));
+    }
+
+    private static bool IsSharedParameterSnapshot(ParameterSnapshot snapshot) =>
+        snapshot.SharedGuid.HasValue || snapshot.Definition.Identity.Kind == ParameterIdentityKind.SharedGuid;
+
     public static AddFamilyParamsSettings MergeFamilyParamDefinitions(
         AddFamilyParamsSettings configuredFamilyParams,
         AddFamilyParamsSettings requiredFamilyParams
@@ -171,7 +185,11 @@ public static class KnownParamPlanBuilder {
         var merged = configuredFamilyParams.Parameters
             .Concat(requiredFamilyParams.Parameters)
             .GroupBy(parameter => parameter.Name.Trim(), StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.First() with { Name = group.Key })
+            .Select(group => group.First() with {
+                Definition = group.First().Definition with {
+                    Identity = group.First().Definition.Identity with { Name = group.Key }
+                }
+            })
             .OrderBy(parameter => parameter.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -183,7 +201,11 @@ public static class KnownParamPlanBuilder {
 
     private static AddFamilyParamsSettings NormalizeFamilyParams(AddFamilyParamsSettings settings) {
         var normalized = settings.Parameters
-            .Select(parameter => parameter with { Name = parameter.Name?.Trim() ?? string.Empty })
+            .Select(parameter => parameter with {
+                Definition = parameter.Definition with {
+                    Identity = parameter.Definition.Identity with { Name = parameter.Name.Trim() }
+                }
+            })
             .ToList();
 
         return new AddFamilyParamsSettings { Enabled = settings.Enabled, Parameters = normalized };

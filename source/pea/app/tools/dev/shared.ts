@@ -1,8 +1,12 @@
 import { createPeHostClient, resolveHostBaseUrl } from "../../pe-host.js";
 
-export async function collectHostContext() {
+const defaultHostContextTimeoutMs = 5_000;
+
+export async function collectHostContext(options: { timeoutMs?: number } = {}) {
   const hostBaseUrl = resolveHostBaseUrl();
-  const hostClient = createPeHostClient(hostBaseUrl);
+  const hostClient = createPeHostClient(hostBaseUrl, {
+    timeoutMs: options.timeoutMs ?? defaultHostContextTimeoutMs,
+  });
   const [probeResult, sessionResult] = await Promise.allSettled([
     hostClient.host.getProbe(),
     hostClient.host.getSessionSummary(),

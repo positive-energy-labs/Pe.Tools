@@ -17,6 +17,17 @@ public class MapParamsSettings : IOperationSettings {
 
     public bool Enabled { get; init; } = true;
 
+    public IReadOnlyDictionary<string, MappingData> GetMappingsByNewName() => this.MappingData
+        .GroupBy(mapping => mapping.NewName, StringComparer.Ordinal)
+        .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+
+    public IEnumerable<(MappingData Mapping, LogEntry Log)> GetIncompleteMappings(OperationContext groupContext) {
+        var mappingsByNewName = this.GetMappingsByNewName();
+        return groupContext.GetAllInComplete()
+            .Where(entry => mappingsByNewName.ContainsKey(entry.Key))
+            .Select(entry => (mappingsByNewName[entry.Key], entry.Value));
+    }
+
     /// <summary>
     ///     Returns current parameters from <paramref name="currNames" /> ranked by data quality and user priority.
     ///     Filters to parameters in FamilyManager with snapshot data, deduplicates by value signature (keeping highest

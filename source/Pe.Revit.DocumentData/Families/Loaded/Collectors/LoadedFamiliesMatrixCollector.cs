@@ -179,14 +179,14 @@ public static class LoadedFamiliesMatrixCollector {
         var visibleParameters = family.Parameters
             .Where(LoadedFamiliesCollectorSupport.IsVisibleInMatrix)
             .Select(parameter => ToVisibleParameter(parameter, maxSamplesPerEntry))
-            .OrderBy(parameter => parameter.Identity.Name, StringComparer.OrdinalIgnoreCase)
-            .ThenByDescending(parameter => parameter.IsInstance)
+            .OrderBy(parameter => parameter.Definition.Identity.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenByDescending(parameter => parameter.Definition.IsInstance)
             .AsEnumerable();
         var excludedParameters = family.Parameters
             .Where(parameter => parameter.ExcludedReason != null)
             .Select(ToExcludedParameter)
-            .OrderBy(parameter => parameter.Identity.Name, StringComparer.OrdinalIgnoreCase)
-            .ThenByDescending(parameter => parameter.IsInstance)
+            .OrderBy(parameter => parameter.Definition.Identity.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenByDescending(parameter => parameter.Definition.IsInstance)
             .AsEnumerable();
         var types = family.Types.Select(type => new LoadedFamilyTypeEntry(type.TypeName)).AsEnumerable();
         var scheduleNames = family.ScheduleNames.AsEnumerable();
@@ -213,15 +213,10 @@ public static class LoadedFamiliesMatrixCollector {
 
     private static LoadedFamilyVisibleParameterEntry ToVisibleParameter(CollectedFamilyParameterRecord parameter, int? maxSamplesPerEntry) =>
         new(
-            ParameterIdentityEngine.FromCanonical(parameter.Identity),
-            parameter.IsInstance,
+            ToDefinition(parameter),
             LoadedFamiliesCollectorSupport.ToContractParameterKind(parameter.Kind),
             LoadedFamiliesCollectorSupport.ToContractParameterPresence(parameter.Scope),
             parameter.StorageType,
-            parameter.DataTypeId,
-            parameter.DataTypeLabel,
-            parameter.GroupTypeId,
-            parameter.GroupTypeLabel,
             LoadedFamiliesCollectorSupport.ToContractFormulaState(parameter.FormulaState),
             parameter.Formula,
             (maxSamplesPerEntry is > 0
@@ -232,8 +227,7 @@ public static class LoadedFamiliesMatrixCollector {
 
     private static LoadedFamilyExcludedParameterEntry ToExcludedParameter(CollectedFamilyParameterRecord parameter) =>
         new(
-            ParameterIdentityEngine.FromCanonical(parameter.Identity),
-            parameter.IsInstance,
+            ToDefinition(parameter),
             LoadedFamiliesCollectorSupport.ToContractParameterKind(parameter.Kind),
             LoadedFamiliesCollectorSupport.ToContractParameterPresence(parameter.Scope),
             LoadedFamiliesCollectorSupport.ToContractExcludedReason(
@@ -241,5 +235,15 @@ public static class LoadedFamiliesMatrixCollector {
             ),
             LoadedFamiliesCollectorSupport.ToContractFormulaState(parameter.FormulaState),
             parameter.Formula
+        );
+
+    private static ParameterDefinitionDescriptor ToDefinition(CollectedFamilyParameterRecord parameter) =>
+        new(
+            ParameterIdentityEngine.FromCanonical(parameter.Identity),
+            parameter.IsInstance,
+            parameter.DataTypeId,
+            parameter.DataTypeLabel,
+            parameter.GroupTypeId,
+            parameter.GroupTypeLabel
         );
 }

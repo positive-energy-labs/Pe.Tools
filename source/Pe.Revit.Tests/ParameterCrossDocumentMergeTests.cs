@@ -1,5 +1,3 @@
-using Pe.Shared.RevitData.Parameters;
-
 namespace Pe.Revit.Tests;
 
 [TestFixture]
@@ -61,12 +59,12 @@ public sealed class ParameterCrossDocumentMergeTests {
 
                 Assert.Multiple(() => {
                     Assert.That(projectProbe.DefinitionType, Is.EqualTo(nameof(InternalDefinition)));
-                    Assert.That(projectProbe.IdentityKind, Is.EqualTo(nameof(RevitParameterIdentityKind.SharedGuid)));
+                    Assert.That(projectProbe.IdentityKind, Is.EqualTo(nameof(ParameterIdentityKind.SharedGuid)));
                     Assert.That(projectProbe.IsInstanceBinding, Is.False, "Project binding should stay type-bound.");
                     Assert.That(projectProbe.GroupTypeId, Is.EqualTo(GroupTypeId.Geometry.TypeId));
 
                     Assert.That(loadedProbe.IsShared, Is.True);
-                    Assert.That(loadedProbe.IdentityKind, Is.EqualTo(nameof(RevitParameterIdentityKind.SharedGuid)));
+                    Assert.That(loadedProbe.IdentityKind, Is.EqualTo(nameof(ParameterIdentityKind.SharedGuid)));
                     Assert.That(loadedProbe.SharedGuid, Is.EqualTo(sharedGuid));
                     Assert.That(loadedProbe.IsInstance, Is.True,
                         "Family instance/type setting can differ from the project binding.");
@@ -294,8 +292,8 @@ public sealed class ParameterCrossDocumentMergeTests {
                     Assert.That(probeB.GroupTypeId, Is.EqualTo(GroupTypeId.IdentityData.TypeId));
                     Assert.That(probeA.IsInstance, Is.False);
                     Assert.That(probeB.IsInstance, Is.True);
-                    Assert.That(probeA.IdentityKind, Is.EqualTo(nameof(RevitParameterIdentityKind.ParameterElement)));
-                    Assert.That(probeB.IdentityKind, Is.EqualTo(nameof(RevitParameterIdentityKind.ParameterElement)));
+                    Assert.That(probeA.IdentityKind, Is.EqualTo(nameof(ParameterIdentityKind.ParameterElement)));
+                    Assert.That(probeB.IdentityKind, Is.EqualTo(nameof(ParameterIdentityKind.ParameterElement)));
                     Assert.That(probeA.ParameterElementId, Is.Not.Null);
                     Assert.That(probeB.ParameterElementId, Is.Not.Null);
                 });

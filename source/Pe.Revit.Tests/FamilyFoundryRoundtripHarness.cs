@@ -87,21 +87,8 @@ internal static class FamilyFoundryRoundtripHarness {
         }
     }
 
-    public static FFManagerProfile ProjectToProfile(FamilySnapshot snapshot) {
-        var sharedParameterNames = snapshot.Parameters?.Data?
-                                       .Select(parameter => parameter.SharedGuid.HasValue
-                                           ? parameter.Name?.Trim()
-                                           : null)
-                                       .Where(name => !string.IsNullOrWhiteSpace(name))
-                                       .Select(name => name!)
-                                       .ToHashSet(StringComparer.Ordinal)
-                                   ?? [];
-
-        return FamilySnapshotProfileProjector.ProjectToProfile(
-            snapshot,
-            "__CURRENT_FAMILY__",
-            name => sharedParameterNames.Contains(name));
-    }
+    public static FFManagerProfile ProjectToProfile(FamilySnapshot snapshot) =>
+        FamilySnapshotProfileProjector.ProjectToProfile(snapshot, "__CURRENT_FAMILY__");
 
     public static IReadOnlyList<(string TypeName, TProbe Result)> EvaluateRoundtripStates<TProbe>(
         Document familyDocument,

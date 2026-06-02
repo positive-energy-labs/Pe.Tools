@@ -1,7 +1,6 @@
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.DocumentData.Schedules.Authored;
 using Pe.Shared.RevitData;
-using Pe.Shared.RevitData.Parameters;
 using Pe.Shared.RevitData.Schedules;
 using System.Globalization;
 using System.Text;
@@ -63,7 +62,7 @@ internal static class ScheduleCollectorSupport {
             .Where(IsNonBuiltInParameter)
             .OrderBy(parameter => parameter.Definition.Name, StringComparer.OrdinalIgnoreCase)
             .Select(parameter => new ScheduleCatalogCustomParameterValue(
-                parameter.Definition.Name,
+                ToParameterDefinition(parameter, isInstance: null),
                 NullIfWhiteSpace(parameter.AsString()) ?? NullIfWhiteSpace(parameter.AsValueString()),
                 NullIfWhiteSpace(parameter.AsValueString()) ?? NullIfWhiteSpace(parameter.AsString()),
                 ToRequestedParameterStorageType(parameter.StorageType)
@@ -74,17 +73,19 @@ internal static class ScheduleCollectorSupport {
         ViewSchedule schedule,
         IEnumerable<ScheduleCustomParameterFilter>? filters
     ) {
-        var requestedFilters = filters?
-            .Where(filter => !string.IsNullOrWhiteSpace(filter.ParameterName))
-            .ToList() ?? [];
+        var requestedFilters = filters?.ToList() ?? [];
         if (requestedFilters.Count == 0)
             return true;
 
-        var customParameters = CollectCustomParameters(schedule);
+        var filterableParameters = CollectFilterableScheduleParameters(schedule);
         foreach (var filter in requestedFilters) {
-            var matchedParameter = customParameters
+            var references = ParameterReferenceResolver.Resolve([filter.Parameter]);
+            if (references.Count == 0)
+                return false;
+
+            var matchedParameter = filterableParameters
                 .FirstOrDefault(parameter =>
-                    string.Equals(parameter.Name, filter.ParameterName, StringComparison.OrdinalIgnoreCase));
+                    ParameterReferenceResolver.Matches(parameter.Definition.Identity, references));
             if (matchedParameter == null)
                 return false;
 
@@ -95,6 +96,19 @@ internal static class ScheduleCollectorSupport {
         return true;
     }
 
+    private static List<ScheduleCatalogCustomParameterValue> CollectFilterableScheduleParameters(ViewSchedule schedule) =>
+        schedule.Parameters
+            .Cast<Parameter>()
+            .Where(parameter => parameter.Definition != null)
+            .OrderBy(parameter => parameter.Definition.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(parameter => new ScheduleCatalogCustomParameterValue(
+                ToParameterDefinition(parameter, isInstance: null),
+                NullIfWhiteSpace(parameter.AsString()) ?? NullIfWhiteSpace(parameter.AsValueString()),
+                NullIfWhiteSpace(parameter.AsValueString()) ?? NullIfWhiteSpace(parameter.AsString()),
+                ToRequestedParameterStorageType(parameter.StorageType)
+            ))
+            .ToList();
+
     public static List<ScheduleParameterUsageEntry> CollectParameterUsages(
         Document doc,
         ViewSchedule schedule
@@ -104,10 +118,60 @@ internal static class ScheduleCollectorSupport {
 
         for (var i = 0; i < definition.GetFieldCount(); i++) {
             var field = definition.GetField(i);
-            usages.AddRange(CollectFieldUsages(doc, field));
+            usages.AddRange(CollectFieldUsages(doc, field, i));
         }
 
         return usages;
+    }
+
+    public static List<ParameterScheduleFieldEvidence> CollectParameterEvidenceFields(
+        Document doc,
+        ViewSchedule schedule
+    ) {
+        var placements = CollectSheetPlacements(doc, schedule);
+        var filterFieldKeys = CollectFilterFieldKeys(schedule.Definition);
+        var categoryName = GetCategoryName(doc, schedule);
+        return CollectParameterUsages(doc, schedule)
+            .Where(usage => usage.Parameter?.Identity != null)
+            .Select(usage => new ParameterScheduleFieldEvidence(
+                schedule.Id.Value(),
+                schedule.UniqueId,
+                schedule.Name,
+                categoryName,
+                placements.Count != 0,
+                placements.Select(placement => placement.SheetNumber).ToList(),
+                placements.Select(placement => placement.SheetName).ToList(),
+                usage.FieldName,
+                usage.ColumnHeading,
+                usage.Parameter!.Definition!,
+                usage.FieldIndex,
+                usage.IsHidden,
+                usage.IsCalculated,
+                usage.IsCombinedParameter,
+                filterFieldKeys.Contains(usage.FieldIndex.ToString(CultureInfo.InvariantCulture)) || filterFieldKeys.Contains(usage.FieldName),
+                usage.Parameter.FieldType,
+                usage.Parameter.SpecTypeId
+            ))
+            .ToList();
+    }
+
+    private static HashSet<string> CollectFilterFieldKeys(ScheduleDefinition definition) {
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < definition.GetFilterCount(); i++) {
+            var filter = definition.GetFilter(i);
+            var field = SafeGet(() => definition.GetField(filter.FieldId));
+            if (field == null)
+                continue;
+
+            keys.Add(field.GetName());
+            for (var fieldIndex = 0; fieldIndex < definition.GetFieldCount(); fieldIndex++) {
+                var candidate = definition.GetField(fieldIndex);
+                if (Equals(candidate.FieldId, field.FieldId))
+                    keys.Add(fieldIndex.ToString(CultureInfo.InvariantCulture));
+            }
+        }
+
+        return keys;
     }
 
     public static RevitDataIssue Warning(string code, string message, string? elementName = null) =>
@@ -145,6 +209,44 @@ internal static class ScheduleCollectorSupport {
         var schedulableField = field.GetSchedulableField();
         return ParameterIdentityEngine.GetParameterKey(doc, schedulableField.ParameterId, fallbackName);
     }
+
+    public static ParameterIdentity BuildFieldIdentity(
+        Document doc,
+        ScheduleField field,
+        string fallbackName
+    ) {
+        if (!field.HasSchedulableField)
+            return ParameterIdentityEngine.FromRaw(fallbackName, null, null, null);
+
+        var schedulableField = field.GetSchedulableField();
+        return ParameterIdentityEngine.FromParameterId(doc, schedulableField.ParameterId, fallbackName);
+    }
+
+    public static string? GetFieldTypeName(ScheduleField field) {
+#if !REVIT2023
+        return SafeGet(() => field.FieldType.ToString());
+#else
+        return null;
+#endif
+    }
+
+    public static string? GetFieldSpecTypeKey(ScheduleField field) =>
+        SafeGet(() => GetFieldSpecTypeId(field)?.TypeId);
+
+    private static ParameterDefinitionDescriptor ToParameterDefinition(Parameter parameter, bool? isInstance) {
+        var definition = parameter.Definition;
+        return new ParameterDefinitionDescriptor(
+            ParameterIdentityEngine.FromCanonical(ParameterIdentityFactory.FromParameter(parameter)),
+            isInstance,
+            NormalizeForgeTypeId(definition.GetDataType()),
+            null,
+            NormalizeForgeTypeId(definition.GetGroupTypeId()),
+            null
+        );
+    }
+
+    private static string? NormalizeForgeTypeId(ForgeTypeId forgeTypeId) =>
+        string.IsNullOrWhiteSpace(forgeTypeId?.TypeId) ? null : forgeTypeId.TypeId;
 
     public static string NormalizeCellText(string? value) =>
         string.IsNullOrWhiteSpace(value)
@@ -363,16 +465,21 @@ internal static class ScheduleCollectorSupport {
 
     private static IEnumerable<ScheduleParameterUsageEntry> CollectFieldUsages(
         Document doc,
-        ScheduleField field
+        ScheduleField field,
+        int fieldIndex
     ) {
         var columnHeading = field.ColumnHeading ?? string.Empty;
         var fieldName = field.GetName();
 
         if (field.IsCombinedParameterField) {
             foreach (var combinedParameter in field.GetCombinedParameters()) {
-                yield return new ScheduleParameterUsageEntry(
+                yield return CreateParameterUsage(
+                    doc,
+                    field,
+                    fieldIndex,
                     fieldName,
                     columnHeading,
+                    combinedParameter.ParamId,
                     ParameterIdentityEngine.GetParameterKey(doc, combinedParameter.ParamId, fieldName)
                 );
             }
@@ -380,19 +487,64 @@ internal static class ScheduleCollectorSupport {
             yield break;
         }
 
-        if (!field.HasSchedulableField)
+        if (!field.HasSchedulableField) {
+            yield return CreateParameterUsage(
+                doc,
+                field,
+                fieldIndex,
+                fieldName,
+                columnHeading,
+                null,
+                BuildFieldKey(doc, field, fieldName)
+            );
             yield break;
+        }
 
         var schedulableField = field.GetSchedulableField();
-        yield return new ScheduleParameterUsageEntry(
+        yield return CreateParameterUsage(
+            doc,
+            field,
+            fieldIndex,
             fieldName,
             columnHeading,
+            schedulableField.ParameterId,
             ParameterIdentityEngine.GetParameterKey(doc, schedulableField.ParameterId, fieldName)
         );
     }
 
+    private static ScheduleParameterUsageEntry CreateParameterUsage(
+        Document doc,
+        ScheduleField field,
+        int fieldIndex,
+        string fieldName,
+        string columnHeading,
+        ElementId? parameterId,
+        string key
+    ) {
+        var identity = parameterId == null
+            ? ParameterIdentityEngine.FromRaw(fieldName, null, null, null)
+            : ParameterIdentityEngine.FromParameterId(doc, parameterId, fieldName);
+        return new ScheduleParameterUsageEntry(fieldName, columnHeading, key) {
+            Parameter = new ScheduleFieldParameterDescriptor(
+                new ParameterDefinitionDescriptor(
+                    identity,
+                    null,
+                    GetFieldSpecTypeKey(field),
+                    null,
+                    null,
+                    null
+                ),
+                GetFieldTypeName(field)
+            ),
+            FieldIndex = fieldIndex,
+            IsHidden = field.IsHidden,
+            IsCalculated = field.IsCalculatedField,
+            IsCombinedParameter = field.IsCombinedParameterField
+        };
+    }
+
     private static bool IsNonBuiltInParameter(Parameter parameter) =>
-        RevitParameterIdentityFactory.FromParameter(parameter).Kind != RevitParameterIdentityKind.BuiltInParameter;
+        ParameterIdentityFactory.FromParameter(parameter).Kind != ParameterIdentityKind.BuiltInParameter;
 
     private static Parameter? ResolveParameter(
         Document doc,

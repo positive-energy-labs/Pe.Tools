@@ -1,3 +1,4 @@
+using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 
 namespace Pe.Dev.RevitAutomation;
@@ -10,7 +11,7 @@ public static class ScheduleCollectionDefaults {
         new() {
             CustomParameterFilters = [
                 new ScheduleCustomParameterFilter(
-                    DefaultPrimaryParameterName,
+                    ParameterReference.FromName(DefaultPrimaryParameterName),
                     DefaultPrimaryParameterValue,
                     ScheduleCustomParameterMatchKind.Equals
                 )

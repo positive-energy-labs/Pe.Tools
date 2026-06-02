@@ -8,13 +8,14 @@ public static class ElectricalPanelsCatalogCollector {
         Document doc,
         ElectricalPanelFilter? filter = null
     ) {
+        var ignoredBlankFilterValues = CollectIgnoredBlankFilterValues(filter);
         var panelNames = ElectricalCollectorSupport.ToFilterSet(filter?.PanelNames);
         var marks = ElectricalCollectorSupport.ToFilterSet(filter?.Marks);
         var issues = new List<RevitDataIssue>();
 
         var panelScheduleStats = BuildPanelScheduleStats(doc, issues);
 
-        var entries = new FilteredElementCollector(doc)
+        var candidates = new FilteredElementCollector(doc)
             .OfClass(typeof(FamilyInstance))
             .Cast<FamilyInstance>()
             .Where(instance => instance.MEPModel is ElectricalEquipment)
@@ -22,6 +23,9 @@ public static class ElectricalPanelsCatalogCollector {
             .Where(entry => entry != null)
             .Cast<ElectricalPanelCatalogEntry>()
             .Where(entry => entry.IsOperationalPanel)
+            .ToList();
+
+        var entries = candidates
             .Where(entry => (panelNames.Count == 0 || panelNames.Contains(entry.PanelName)) &&
                             (marks.Count == 0 ||
                              (!string.IsNullOrWhiteSpace(entry.Mark) && marks.Contains(entry.Mark))))
@@ -29,7 +33,36 @@ public static class ElectricalPanelsCatalogCollector {
             .ThenBy(entry => entry.Mark, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        return new ElectricalPanelsCatalogData(entries, issues);
+        return new ElectricalPanelsCatalogData(
+            entries,
+            issues,
+            new ElectricalCatalogFilterReport(
+                panelNames.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
+                [],
+                [],
+                marks.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
+                ignoredBlankFilterValues,
+                candidates.Count,
+                entries.Count
+            )
+        );
+    }
+
+    private static List<string> CollectIgnoredBlankFilterValues(ElectricalPanelFilter? filter) {
+        var ignored = new List<string>();
+        AddIgnoredBlankValues(ignored, nameof(ElectricalPanelFilter.PanelNames), filter?.PanelNames);
+        AddIgnoredBlankValues(ignored, nameof(ElectricalPanelFilter.Marks), filter?.Marks);
+        return ignored;
+    }
+
+    private static void AddIgnoredBlankValues(List<string> ignored, string propertyName, IReadOnlyList<string>? values) {
+        if (values == null)
+            return;
+
+        for (var i = 0; i < values.Count; i++) {
+            if (string.IsNullOrWhiteSpace(values[i]))
+                ignored.Add($"{propertyName}[{i}]");
+        }
     }
 
     private static ElectricalPanelCatalogEntry? TryCollectEntry(

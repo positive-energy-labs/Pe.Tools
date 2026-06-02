@@ -479,7 +479,21 @@ public static class ScheduleQueryCollector {
                     ScheduleCollectorSupport.BuildFieldKey(doc, field, fieldName),
                     fieldName,
                     fieldIndex
-                ),
+                ) {
+                    Parameter = new ScheduleFieldParameterDescriptor(
+                        new ParameterDefinitionDescriptor(
+                            ScheduleCollectorSupport.BuildFieldIdentity(doc, field, fieldName),
+                            null,
+                            ScheduleCollectorSupport.GetFieldSpecTypeKey(field),
+                            null,
+                            null,
+                            null
+                        ),
+                        ScheduleCollectorSupport.GetFieldTypeName(field)
+                    ),
+                    IsCalculated = field.IsCalculatedField,
+                    IsCombinedParameter = field.IsCombinedParameterField
+                },
                 field,
                 fieldName,
                 headerText,

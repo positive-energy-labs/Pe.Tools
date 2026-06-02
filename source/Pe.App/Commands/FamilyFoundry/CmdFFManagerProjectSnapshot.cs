@@ -4,7 +4,6 @@ using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.LookupTables;
 using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.Extensions.ProjDocument;
-using Pe.Revit.Global.Services.Aps;
 using Pe.Revit.Global.Ui;
 using Pe.Shared.StorageRuntime;
 using Serilog.Events;
@@ -66,25 +65,8 @@ public class CmdFFManagerProjectSnapshot : IExternalCommand {
         }
     }
 
-    private static FamilySnapshotProfileProjection ProjectSnapshotToProfiles(FamilySnapshot snapshot) {
-        var sharedParameterNames = ResolveCachedSharedParameterNames();
-        return FamilySnapshotProfileProjector.ProjectProfiles(
-            snapshot,
-            snapshot.FamilyName,
-            name => sharedParameterNames.Contains(name));
-    }
-
-    private static HashSet<string> ResolveCachedSharedParameterNames() {
-        var cache = RuntimeStorageClient.Default.Global().State()
-            .Json<ParametersApi.Parameters>("parameters-service-cache").Read();
-        return cache.Results?
-                   .Where(parameter => !parameter.IsArchived)
-                   .Select(parameter => parameter.Name?.Trim())
-                   .OfType<string>()
-                   .Where(name => !string.IsNullOrWhiteSpace(name))
-                   .ToHashSet(StringComparer.Ordinal)
-               ?? [];
-    }
+    private static FamilySnapshotProfileProjection ProjectSnapshotToProfiles(FamilySnapshot snapshot) =>
+        FamilySnapshotProfileProjector.ProjectProfiles(snapshot, snapshot.FamilyName);
 
     private static string? ApplyProjectedProfile(
         UIApplication uiApp,

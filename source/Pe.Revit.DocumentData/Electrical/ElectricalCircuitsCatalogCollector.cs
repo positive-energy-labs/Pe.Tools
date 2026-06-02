@@ -1,4 +1,5 @@
 ﻿using Autodesk.Revit.DB.Electrical;
+using Pe.Revit.DocumentData.Parameters;
 using Pe.Shared.RevitData;
 using System.Text.RegularExpressions;
 
@@ -14,35 +15,42 @@ public static class ElectricalCircuitsCatalogCollector {
         ElectricalCircuitFilter? filter = null,
         ElectricalCircuitsCatalogOptions? options = null
     ) {
+        var ignoredBlankFilterValues = CollectIgnoredBlankFilterValues(filter);
         var panelNames = ElectricalCollectorSupport.ToFilterSet(filter?.PanelNames);
         var circuitNumbers = ElectricalCollectorSupport.ToFilterSet(filter?.CircuitNumbers);
         var loadNames = ElectricalCollectorSupport.ToFilterSet(filter?.LoadNames);
         var issues = new List<RevitDataIssue>();
-        var requestedParameterNames = ElectricalCollectorSupport.NormalizeRequestedParameterNames(
+        var requestedParameters = ElectricalCollectorSupport.NormalizeRequestedParameterReferences(
             options?.ParameterQuery,
             issues,
             "ElectricalCircuitsCatalog"
         );
         var wiresBySystemId = BuildWireMap(doc, issues);
         var nearbyCandidatePool = options?.IncludeNearbyProxyContext == true
-            ? BuildNearbyProxyCandidatePool(doc, requestedParameterNames)
+            ? BuildNearbyProxyCandidatePool(doc, requestedParameters)
             : null;
 
-        var entries = new FilteredElementCollector(doc)
+        var candidates = new FilteredElementCollector(doc)
             .OfClass(typeof(ElectricalSystem))
             .Cast<ElectricalSystem>()
+            .ToList();
+
+        var matchedCandidates = candidates
             .Where(circuit => ElectricalCollectorSupport.MatchesCircuitFilter(
                 circuit,
                 panelNames,
                 circuitNumbers,
                 loadNames
             ))
+            .ToList();
+
+        var entries = matchedCandidates
             .OrderBy(circuit => circuit.PanelName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(circuit => circuit.CircuitNumber, StringComparer.OrdinalIgnoreCase)
             .Select(circuit => TryCollectEntry(
                 circuit,
                 wiresBySystemId,
-                requestedParameterNames,
+                requestedParameters,
                 options,
                 nearbyCandidatePool,
                 issues
@@ -51,13 +59,43 @@ public static class ElectricalCircuitsCatalogCollector {
             .Cast<ElectricalCircuitCatalogEntry>()
             .ToList();
 
-        return new ElectricalCircuitsCatalogData(entries, issues);
+        return new ElectricalCircuitsCatalogData(
+            entries,
+            issues,
+            new ElectricalCatalogFilterReport(
+                panelNames.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
+                circuitNumbers.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
+                loadNames.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList(),
+                [],
+                ignoredBlankFilterValues,
+                candidates.Count,
+                entries.Count
+            )
+        );
+    }
+
+    private static List<string> CollectIgnoredBlankFilterValues(ElectricalCircuitFilter? filter) {
+        var ignored = new List<string>();
+        AddIgnoredBlankValues(ignored, nameof(ElectricalCircuitFilter.PanelNames), filter?.PanelNames);
+        AddIgnoredBlankValues(ignored, nameof(ElectricalCircuitFilter.CircuitNumbers), filter?.CircuitNumbers);
+        AddIgnoredBlankValues(ignored, nameof(ElectricalCircuitFilter.LoadNames), filter?.LoadNames);
+        return ignored;
+    }
+
+    private static void AddIgnoredBlankValues(List<string> ignored, string propertyName, IReadOnlyList<string>? values) {
+        if (values == null)
+            return;
+
+        for (var i = 0; i < values.Count; i++) {
+            if (string.IsNullOrWhiteSpace(values[i]))
+                ignored.Add($"{propertyName}[{i}]");
+        }
     }
 
     private static ElectricalCircuitCatalogEntry? TryCollectEntry(
         ElectricalSystem circuit,
         IReadOnlyDictionary<long, List<ElectricalCircuitWireEntry>> wiresBySystemId,
-        IReadOnlyList<string> requestedParameterNames,
+        IReadOnlyList<ResolvedParameterReference> requestedParameters,
         ElectricalCircuitsCatalogOptions? options,
         IReadOnlyList<NearbyProxyCandidate>? nearbyCandidatePool,
         List<RevitDataIssue> issues
@@ -67,7 +105,7 @@ public static class ElectricalCircuitsCatalogCollector {
             var connectedElements = circuit.Elements
                 .Cast<Element>()
                 .Select(element => {
-                    var identity = ElectricalCollectorSupport.CollectElementIdentity(element, requestedParameterNames);
+                    var identity = ElectricalCollectorSupport.CollectElementIdentity(element, requestedParameters);
                     return new ElectricalCircuitConnectedElementEntry(
                         element.Id.Value(),
                         element.UniqueId,
@@ -159,14 +197,14 @@ public static class ElectricalCircuitsCatalogCollector {
 
     private static List<NearbyProxyCandidate> BuildNearbyProxyCandidatePool(
         Document doc,
-        IReadOnlyList<string> requestedParameterNames
+        IReadOnlyList<ResolvedParameterReference> requestedParameters
     ) =>
         new FilteredElementCollector(doc)
             .OfClass(typeof(FamilyInstance))
             .Cast<FamilyInstance>()
             .Select(family => {
                 var role = ElectricalCollectorSupport.DetermineCircuitConnectedElementRole(family);
-                var identity = ElectricalCollectorSupport.CollectElementIdentity(family, requestedParameterNames);
+                var identity = ElectricalCollectorSupport.CollectElementIdentity(family, requestedParameters);
                 var point = ElectricalCollectorSupport.TryGetElementPoint(family);
                 return point == null
                     ? null

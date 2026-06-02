@@ -83,6 +83,29 @@ public record HostActiveDocumentSummary(
 );
 
 [ExportTsInterface]
+public record HostResourceFileStateData(
+    string Label,
+    string? Path,
+    bool Exists,
+    long? LastWriteTimeUnixMs,
+    long? SizeBytes,
+    string Provenance,
+    string? Note = null
+);
+
+[ExportTsInterface]
+public record HostParameterResourceData(
+    string GlobalStateDirectoryPath,
+    IReadOnlyList<HostResourceFileStateData> ParameterServiceCacheFiles,
+    HostResourceFileStateData SharedParametersFile
+);
+
+[ExportTsInterface]
+public record HostWorkbenchResourcesData(
+    HostParameterResourceData Parameters
+);
+
+[ExportTsInterface]
 public record HostProbeData(
     string RuntimeIdentity,
     int HostContractVersion,
@@ -111,7 +134,8 @@ public record HostSessionSummaryData(
     int OpenDocumentCount,
     HostActiveDocumentSummary? ActiveDocument,
     IReadOnlyList<HostRuntimeAssemblyData> RuntimeAssemblies,
-    IReadOnlyList<HostModuleDescriptor> AvailableModules
+    IReadOnlyList<HostModuleDescriptor> AvailableModules,
+    HostWorkbenchResourcesData WorkbenchResources
 );
 
 [ExportTsInterface]

@@ -1,5 +1,6 @@
-﻿using Pe.Revit.SettingsRuntime.Json.ValueDomains;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
+using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 using System.Runtime.CompilerServices;
 
@@ -56,12 +57,29 @@ internal sealed class ScheduleProfileSchemaDefinition : SettingsSchemaDefinition
     }
 }
 
-internal sealed class ScheduleFieldSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleFieldSpec> {
-    public override void Configure(ISettingsSchemaBuilder<ScheduleFieldSpec> builder) {
-        builder.Property(item => item.ParameterName, property => {
-            property.WithDescription("Schedule field parameter name.");
+internal sealed class ParameterReferenceSchemaDefinition : SettingsSchemaDefinition<ParameterReference> {
+    public override void Configure(ISettingsSchemaBuilder<ParameterReference> builder) {
+        builder.Property(item => item.Name, property => {
+            property.WithDescription("Optional parameter display name fallback. Prefer identity or sharedGuid when available.");
             property.DependsOnSibling(nameof(ScheduleProfile.CategoryName));
             property.UseValueDomain(ValueDomainKeys.ScheduleFieldNames);
+            property.DisallowNull();
+        });
+        builder.Property(item => item.SharedGuid, property => {
+            property.WithDescription("Optional shared parameter GUID. Prefer identity when carrying a previously observed parameter.");
+            property.DisallowNull();
+        });
+        builder.Property(item => item.Identity, property => {
+            property.WithDescription("Optional observed parameter identity.");
+            property.DisallowNull();
+        });
+    }
+}
+
+internal sealed class ScheduleFieldSpecSchemaDefinition : SettingsSchemaDefinition<ScheduleFieldSpec> {
+    public override void Configure(ISettingsSchemaBuilder<ScheduleFieldSpec> builder) {
+        builder.Property(item => item.Parameter, property => {
+            property.WithDescription("Schedule field parameter reference. Prefer identity or sharedGuid when available; use name as a fallback.");
         });
         builder.Property(item => item.PercentageOfField, property => {
             property.WithDescription("Required only when CalculatedType is Percentage.");
@@ -141,10 +159,8 @@ internal sealed class ScheduleFieldFormatSpecSchemaDefinition : SettingsSchemaDe
 
 internal sealed class CombinedParameterSpecSchemaDefinition : SettingsSchemaDefinition<CombinedParameterSpec> {
     public override void Configure(ISettingsSchemaBuilder<CombinedParameterSpec> builder) {
-        builder.Property(item => item.ParameterName, property => {
-            property.WithDescription("Parameter name to include in the combined field.");
-            property.DependsOnSibling(nameof(ScheduleProfile.CategoryName));
-            property.UseValueDomain(ValueDomainKeys.ScheduleFieldNames);
+        builder.Property(item => item.Parameter, property => {
+            property.WithDescription("Parameter reference to include in the combined field. Prefer identity or sharedGuid when available; use name as a fallback.");
         });
         builder.Property(item => item.Prefix, property => {
             property.WithDescription("Optional text to add before this combined-parameter value. Omit for no prefix.");
@@ -263,6 +279,7 @@ public static class ScheduleSchemaDefinitionBootstrapper {
             if (_registered)
                 return;
 
+            SettingsSchemaDefinitionRegistry.Shared.Register(new ParameterReferenceSchemaDefinition());
             SettingsSchemaDefinitionRegistry.Shared.Register(new ScheduleProfileSchemaDefinition());
             SettingsSchemaDefinitionRegistry.Shared.Register(new ScheduleFieldSpecSchemaDefinition());
             SettingsSchemaDefinitionRegistry.Shared.Register(new ScheduleFieldFormatSpecSchemaDefinition());

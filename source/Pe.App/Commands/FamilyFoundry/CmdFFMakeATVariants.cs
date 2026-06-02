@@ -5,6 +5,7 @@ using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.Global.Ui;
+using Pe.Shared.RevitData;
 using Pe.Shared.StorageRuntime;
 using Serilog.Events;
 using System.Diagnostics;
@@ -60,7 +61,7 @@ public class CmdFFMakeATVariants : IExternalCommand {
                     // Create variant-specific settings object for serialization
                     var variantSettings = new {
                         VariantName = variantSpec.Name.Trim(),
-                        BaseATSettings = new { settings.SecondLetterDict },
+                        BaseATSettings = new { settings.SecondLetterDict, settings.TagParameterName },
                         SyntheticSetKnownParamsSettings = variantProfile.SyntheticTag
                     };
 
@@ -93,7 +94,7 @@ public class CmdFFMakeATVariants : IExternalCommand {
             _ = resultBuilder.WithCustomProfile(
                 new {
                     Command = "AT Variants",
-                    BaseSettings = settings.SecondLetterDict,
+                    BaseSettings = new { settings.SecondLetterDict, settings.TagParameterName },
                     VariantsProcessed = variantDescriptors.Length
                 }, "AT Variants");
 
@@ -131,8 +132,13 @@ public class ATVariantQueueFactory {
     public VariantSpec CreateVariant(ATVariantDescriptor descriptor) {
         var perTypeValues = this._baseSettings.SecondLetterDict
             .ToDictionary(kv => kv.Key, kv => descriptor.SystemLetter + kv.Value + "X-#", StringComparer.Ordinal);
+        var tagParameterName = this._baseSettings.TagParameterName.Trim();
+        if (string.IsNullOrWhiteSpace(tagParameterName)) {
+            throw new InvalidOperationException(
+                $"{nameof(ATVariantSettings)}.{nameof(ATVariantSettings.TagParameterName)} is required.");
+        }
 
-        var perTypeRow = new PerTypeAssignmentRow { Parameter = "PE_G___TagInstance" };
+        var perTypeRow = new PerTypeAssignmentRow { Parameter = tagParameterName };
 
         foreach (var (typeName, value) in perTypeValues)
             perTypeRow.ValuesByType[typeName] = value;
@@ -140,9 +146,12 @@ public class ATVariantQueueFactory {
         // Build synthetic settings that will be logged
         var syntheticSettings = new SetKnownParamsSettings { PerTypeAssignmentsTable = [perTypeRow] };
         var knownParamCatalog = new KnownParamCatalog(
-            new Dictionary<string, FamilyParamDefinitionModel>(StringComparer.Ordinal),
-            new HashSet<string>(["PE_G___TagInstance"], StringComparer.Ordinal),
-            new Dictionary<string, ForgeTypeId>(StringComparer.Ordinal));
+            new Dictionary<string, FamilyParamDefinitionModel>(StringComparer.Ordinal) {
+                [tagParameterName] = new FamilyParamDefinitionModel {
+                    Definition = ParameterDefinitionDescriptorFactory.NameFallback(tagParameterName)
+                }
+            },
+            new Dictionary<string, ParameterDefinitionDescriptor>(StringComparer.Ordinal));
 
         // Build operation queue
         var queue = new OperationQueue()
@@ -167,6 +176,8 @@ public class ATVariantSettings : BaseProfile {
         { "Louver", 'L' },
         { "Nozzle", 'N' }
     };
+
+    public string TagParameterName { get; init; } = string.Empty;
 
     public SetKnownParamsSettings? SyntheticTag { get; set; }
 

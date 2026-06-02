@@ -1,5 +1,6 @@
 using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.DocumentData.Electrical;
+using Pe.Revit.DocumentData.Parameters;
 using Pe.Shared.RevitData;
 
 namespace Pe.Revit.DocumentData.Selection;
@@ -11,7 +12,7 @@ public static class ElementContextCollector {
         IReadOnlyCollection<ElementId>? currentSelection = null
     ) {
         var issues = new List<RevitDataIssue>();
-        var requestedParameterNames = ElectricalCollectorSupport.NormalizeRequestedParameterNames(
+        var requestedParameters = ElectricalCollectorSupport.NormalizeRequestedParameterReferences(
             query?.ParameterQuery,
             issues,
             "ElementContext"
@@ -24,7 +25,7 @@ public static class ElementContextCollector {
             .ToDictionary(group => group.Key, group => group.Count());
 
         var entries = resolution.Elements
-            .Select(element => TryCollectEntry(doc, element, panelScheduleCounts, requestedParameterNames, issues))
+            .Select(element => TryCollectEntry(doc, element, panelScheduleCounts, requestedParameters, issues))
             .Where(entry => entry != null)
             .Cast<ElementContextEntry>()
             .ToList();
@@ -129,12 +130,12 @@ public static class ElementContextCollector {
         Document doc,
         Element element,
         IReadOnlyDictionary<long, int> panelScheduleCounts,
-        IReadOnlyList<string> requestedParameterNames,
+        IReadOnlyList<ResolvedParameterReference> requestedParameters,
         List<RevitDataIssue> issues
     ) {
         try {
             var family = element as FamilyInstance;
-            var identity = ElectricalCollectorSupport.CollectElementIdentity(element, requestedParameterNames);
+            var identity = ElectricalCollectorSupport.CollectElementIdentity(element, requestedParameters);
             var panelScheduleCount = panelScheduleCounts.TryGetValue(element.Id.Value(), out var count) ? count : 0;
             var panel = TryCollectPanelContext(family, panelScheduleCount);
             var circuit = TryCollectCircuitContext(element);

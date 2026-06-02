@@ -3,6 +3,7 @@ using Autodesk.Revit.UI;
 using Pe.App.Commands.FamilyFoundry.FamilyFoundryUi;
 using Pe.Revit;
 using Pe.Revit.FamilyFoundry;
+using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.Profiles;
@@ -79,102 +80,10 @@ public class CmdFFManager : IExternalCommand {
     }
 
     /// <summary>
-    ///     Builds the operation queue from profile settings and APS parameter data.
-    ///     Manager-specific: includes RefPlane operations and subcategories.
+    ///     Builds the operation queue from the declarative Manager profile.
     /// </summary>
     private static OperationQueue BuildQueue(
         FFManagerProfile profile,
         List<SharedParameterDefinition> apsParamData
-    ) {
-        // Hardcoded reference plane subcategory specs
-        var specs = new List<RefPlaneSubcategorySpec> {
-            new() { Strength = RpStrength.WeakRef, Name = "WeakRef", Color = new Color(217, 124, 0) },
-            new() { Strength = RpStrength.StrongRef, Name = "StrongRef", Color = new Color(255, 0, 0) },
-            new() { Strength = RpStrength.CenterLR, Name = "Center", Color = new Color(115, 0, 253) },
-            new() { Strength = RpStrength.CenterFB, Name = "Center", Color = new Color(115, 0, 253) }
-        };
-
-        var hasProcessedAtParam = profile.AddFamilyParams.Parameters.Any(p =>
-            string.Equals(p.Name, "_FOUNDRY LAST PROCESSED AT", StringComparison.OrdinalIgnoreCase));
-        var hasProcessedAtAssignment = profile.SetKnownParams.GlobalAssignments.Any(assignment =>
-            string.Equals(assignment.Parameter, "_FOUNDRY LAST PROCESSED AT", StringComparison.OrdinalIgnoreCase));
-
-        if (!hasProcessedAtParam) {
-            profile.AddFamilyParams.AddParameters([
-                new FamilyParamDefinitionModel {
-                    Name = "_FOUNDRY LAST PROCESSED AT", DataType = SpecTypeId.String.Text
-                }
-            ]);
-        }
-
-        if (!hasProcessedAtAssignment) {
-            profile.SetKnownParams.GlobalAssignments.Add(new GlobalParamAssignment {
-                Parameter = "_FOUNDRY LAST PROCESSED AT",
-                Kind = ParamAssignmentKind.Formula,
-                Value = $"\"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\""
-            });
-        }
-
-        var compiledSolids = AuthoredParamDrivenSolidsCompiler.Compile(profile.ParamDrivenSolids);
-        if (!compiledSolids.CanExecute) {
-            throw new InvalidOperationException(
-                string.Join(Environment.NewLine,
-                    ParamDrivenSolidsDiagnosticFormatter.ToDisplayMessages(compiledSolids.Diagnostics)));
-        }
-
-        var additionalReferences = KnownParamPlanBuilder
-            .CollectReferencedParameterNames(compiledSolids.RefPlanesAndDims)
-            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.Extrusions))
-            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(compiledSolids.Connectors))
-            .ToList();
-        var knownParamPlan = KnownParamPlanBuilder.Compile(
-            profile.AddFamilyParams,
-            profile.SetKnownParams,
-            apsParamData,
-            additionalReferences);
-
-        var compilerMessages = compiledSolids.Diagnostics
-            .Where(diagnostic => diagnostic.Severity == ParamDrivenDiagnosticSeverity.Warning)
-            .Select(diagnostic => diagnostic.ToDisplayMessage())
-            .ToList();
-
-        var valueFirstAssignments = BuildValueFirstAssignments(knownParamPlan.ResolvedAssignments);
-        var formulaOnlyAssignments = BuildFormulaOnlyAssignments(knownParamPlan.ResolvedAssignments);
-
-        return new OperationQueue()
-            .Add(new AddSharedParams(apsParamData))
-            .Add(new AddFamilyParams(knownParamPlan.ResolvedFamilyParams))
-            .Add(new SetLookupTables(profile.SetLookupTables))
-            .Add(new SetKnownParams(valueFirstAssignments, knownParamPlan.Catalog, true))
-            .Add(new EmitParamDrivenSolidsDiagnostics(new EmitParamDrivenSolidsDiagnosticsSettings {
-                Enabled = compilerMessages.Count > 0,
-                Messages = compilerMessages
-            }))
-            .Add(new MakeParamDrivenPlanesAndDims(compiledSolids.RefPlanesAndDims))
-            .Add(new SetKnownParams(formulaOnlyAssignments, knownParamPlan.Catalog))
-            .Add(new MakeConstrainedExtrusions(compiledSolids.Extrusions))
-            .Add(new MakeParamDrivenConnectors(compiledSolids.Connectors))
-            .Add(new MakeRefPlaneSubcategories(specs))
-            .Add(new SortParams(new SortParamsSettings()));
-    }
-
-    private static SetKnownParamsSettings BuildValueFirstAssignments(SetKnownParamsSettings settings) =>
-        new() {
-            Enabled = settings.Enabled,
-            OverrideExistingValues = settings.OverrideExistingValues,
-            GlobalAssignments = settings.GlobalAssignments
-                .Where(assignment => assignment.Kind == ParamAssignmentKind.Value)
-                .ToList(),
-            PerTypeAssignmentsTable = settings.PerTypeAssignmentsTable
-        };
-
-    private static SetKnownParamsSettings BuildFormulaOnlyAssignments(SetKnownParamsSettings settings) =>
-        new() {
-            Enabled = settings.Enabled,
-            OverrideExistingValues = settings.OverrideExistingValues,
-            GlobalAssignments = settings.GlobalAssignments
-                .Where(assignment => assignment.Kind == ParamAssignmentKind.Formula)
-                .ToList(),
-            PerTypeAssignmentsTable = []
-        };
+    ) => FFManagerQueueBuilder.Build(profile, apsParamData);
 }

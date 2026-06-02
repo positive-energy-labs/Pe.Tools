@@ -1,6 +1,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
+using Pe.Shared.RevitData;
 using Pe.Shared.StorageRuntime.Json;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
@@ -14,13 +15,58 @@ public enum ParamAssignmentKind {
 }
 
 /// <summary>
-///     Family parameter definition metadata used for parameter creation and tooltip configuration.
-///     PE_ parameters are not valid family parameter definitions.
+///     Family parameter definition metadata used for local parameter creation and tooltip configuration.
 /// </summary>
-public sealed record FamilyParamDefinitionModel : ParameterSpec {
+public sealed record FamilyParamDefinitionModel {
+    [Description("Portable parameter definition used to create or configure a family parameter.")]
+    [Required]
+    public ParameterDefinitionDescriptor Definition { get; init; } = ParameterDefinitionDescriptorFactory.NameFallback(string.Empty);
+
     [Description(
         "Tooltip/description shown in Revit UI and properties palette. Only applies to family parameters (not shared or built-in parameters).")]
     public string? Tooltip { get; init; }
+
+    public string Name => this.Definition.Identity.Name;
+    public bool? IsInstance => this.Definition.IsInstance;
+    public ForgeTypeId PropertiesGroup => new(this.Definition.GroupTypeId ?? string.Empty);
+    public ForgeTypeId DataType => string.IsNullOrWhiteSpace(this.Definition.DataTypeId)
+        ? SpecTypeId.String.Text
+        : new ForgeTypeId(this.Definition.DataTypeId);
+}
+
+public static class ParameterDefinitionDescriptorFactory {
+    public static ParameterDefinitionDescriptor NameFallback(
+        string name,
+        ForgeTypeId? dataType = null,
+        ForgeTypeId? propertiesGroup = null,
+        bool? isInstance = true
+    ) => new(
+        new ParameterIdentity($"name:{NormalizeName(name)}", ParameterIdentityKind.NameFallback, name, null, null, null),
+        isInstance,
+        NormalizeForgeTypeId(dataType ?? SpecTypeId.String.Text),
+        null,
+        NormalizeForgeTypeId(propertiesGroup ?? new ForgeTypeId(string.Empty)),
+        null
+    );
+
+    public static ParameterDefinitionDescriptor FromResolved(
+        ParameterIdentity identity,
+        ForgeTypeId dataType,
+        ForgeTypeId propertiesGroup,
+        bool? isInstance
+    ) => new(
+        identity,
+        isInstance,
+        NormalizeForgeTypeId(dataType),
+        null,
+        NormalizeForgeTypeId(propertiesGroup),
+        null
+    );
+
+    private static string NormalizeName(string name) => name.Trim().ToLowerInvariant();
+
+    private static string? NormalizeForgeTypeId(ForgeTypeId? forgeTypeId) =>
+        string.IsNullOrWhiteSpace(forgeTypeId?.TypeId) ? null : forgeTypeId.TypeId;
 }
 
 /// <summary>
@@ -55,9 +101,7 @@ public sealed record PerTypeAssignmentRow {
 }
 
 public sealed class AddFamilyParamsSettings : IOperationSettings {
-    [Description(
-        "Definition metadata for family parameters to create and/or configure. " +
-        "PE_ parameters are invalid here because they must come from APS/shared parameter provisioning.")]
+    [Description("Definition metadata for local family parameters to create and/or configure.")]
     public List<FamilyParamDefinitionModel> Parameters { get; init; } = [];
 
     public bool Enabled { get; init; } = true;

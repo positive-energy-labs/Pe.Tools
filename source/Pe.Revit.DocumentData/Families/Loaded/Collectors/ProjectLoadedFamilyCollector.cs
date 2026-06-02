@@ -1,7 +1,6 @@
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Families;
-
 namespace Pe.Revit.DocumentData.Families.Loaded.Collectors;
 
 public static class ProjectLoadedFamilyCollector {
@@ -183,7 +182,7 @@ public static class ProjectLoadedFamilyCollector {
         ProjectLoadedFamilyRecord familyRecord,
         IReadOnlyList<string> familyTypeNames
     ) {
-        var identity = RevitParameterIdentityFactory.FromParameter(parameter);
+        var identity = ParameterIdentityFactory.FromParameter(parameter);
         var existing = familyRecord.Parameters.FirstOrDefault(candidate =>
             candidate.IsInstance == isInstance &&
             string.Equals(candidate.Identity.Key, identity.Key, StringComparison.Ordinal)
@@ -193,10 +192,14 @@ public static class ProjectLoadedFamilyCollector {
 
         var definition = parameter.Definition ?? throw new InvalidOperationException("Parameter.Definition is null.");
         var created = new ProjectLoadedFamilyParameter {
-            Identity = identity,
-            IsInstance = isInstance,
-            PropertiesGroupKey = NormalizeForgeTypeId(definition.GetGroupTypeId()),
-            DataTypeKey = NormalizeForgeTypeId(definition.GetDataType()),
+            Definition = new ParameterDefinitionDescriptor(
+                identity,
+                isInstance,
+                NormalizeForgeTypeId(definition.GetDataType()),
+                null,
+                NormalizeForgeTypeId(definition.GetGroupTypeId()),
+                null
+            ),
             StorageType = ToRequestedParameterStorageType(parameter.StorageType),
             TypeNames = familyTypeNames.ToList(),
             ValuesByType =

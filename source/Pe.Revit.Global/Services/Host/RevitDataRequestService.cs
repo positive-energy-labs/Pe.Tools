@@ -1,4 +1,4 @@
-﻿using Autodesk.Revit.DB.Electrical;
+using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.DocumentData.AgentContext;
 using Pe.Revit.DocumentData.Electrical;
 using Pe.Revit.DocumentData.Families.Loaded.Collectors;
@@ -66,6 +66,14 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         ParameterCoverageRequest request
     ) => this.EnqueueAsync(() => this.GetParameterCoverageCore(request));
 
+    public Task<ConceptEvidenceData> GetConceptEvidenceAsync(
+        ConceptEvidenceRequest request
+    ) => this.EnqueueAsync(() => this.GetConceptEvidenceCore(request));
+
+    public Task<ParameterEvidenceData> GetParameterEvidenceAsync(
+        ParameterEvidenceRequest request
+    ) => this.EnqueueAsync(() => this.GetParameterEvidenceCore(request));
+
     public Task<ProjectParameterBindingsData> GetProjectParameterBindingsAsync(
         ProjectParameterBindingsRequest request
     ) => this.EnqueueAsync(() => this.GetProjectParameterBindingsCore(request));
@@ -92,6 +100,9 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
 
     public Task<RevitDocumentSessionContextData> GetRevitDocumentSessionContextAsync() =>
         this.EnqueueAsync(this.GetRevitDocumentSessionContextCore);
+
+    public Task<OpenRevitDocumentData> OpenRevitDocumentAsync(OpenRevitDocumentRequest request) =>
+        this.EnqueueAsync(() => this.OpenRevitDocumentCore(request));
 
     public Task<RevitAgentContextSummaryData> GetRevitAgentContextSummaryAsync() =>
         this.EnqueueAsync(this.GetRevitAgentContextSummaryCore);
@@ -313,19 +324,77 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         }
     }
 
+    private ConceptEvidenceData GetConceptEvidenceCore(ConceptEvidenceRequest request) {
+        var document = GetActiveProjectDocument();
+        try {
+            var primitives = this._collectionContext.GetParameterEvidencePrimitives(document, useCache: true);
+            return ConceptEvidenceCollector.Collect(request, primitives);
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "ConceptEvidenceException",
+                ex,
+                "Verify the active document is a project document and retry."
+            );
+        }
+    }
+
+    private ParameterEvidenceData GetParameterEvidenceCore(ParameterEvidenceRequest request) {
+        var validationIssues = ValidateParameterEvidenceRequest(request);
+        if (validationIssues.Count != 0) {
+            throw BridgeOperationExceptions.BadRequest(
+                "Parameter evidence request is invalid.",
+                validationIssues
+            );
+        }
+
+        var document = GetActiveProjectDocument();
+        try {
+            var primitives = this._collectionContext.GetParameterEvidencePrimitives(document, request.UseCache);
+            return ParameterEvidenceCollector.Collect(
+                document,
+                request,
+                primitives,
+                RevitUiSession.CurrentUIApplication.GetActiveUIDocument()?.Selection.GetElementIds().ToList()
+            );
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "ParameterEvidenceException",
+                ex,
+                "Verify the active document is a project document and retry."
+            );
+        }
+    }
+
+    private static List<ValidationIssue> ValidateParameterEvidenceRequest(ParameterEvidenceRequest request) {
+        var issues = new List<ValidationIssue>();
+        if (request.Scope == RevitElementScope.ExplicitHandles &&
+            request.ElementIds.Count == 0 &&
+            request.ElementUniqueIds.Count == 0) {
+            issues.Add(BridgeOperationExceptions.Issue(
+                "$.elementIds",
+                "ParameterEvidenceExplicitHandlesMissing",
+                "ExplicitHandles scope requires at least one element id or unique id.",
+                "Set elementIds or elementUniqueIds, or choose ActiveViewVisible, CurrentSelection, or All."
+            ));
+        }
+
+        ValidateParameterReferences(request.CandidateParameters, "$.candidateParameters", "ParameterEvidence", issues);
+
+        return issues;
+    }
+
     private static List<ValidationIssue> ValidateParameterCoverageRequest(ParameterCoverageRequest request) {
         var issues = new List<ValidationIssue>();
-        var parameterNames = request.ParameterNames ?? [];
-        var sharedGuids = request.SharedGuids ?? [];
+        var parameters = request.Parameters ?? [];
         var elementIds = request.ElementIds ?? [];
         var elementUniqueIds = request.ElementUniqueIds ?? [];
 
-        if (parameterNames.Count == 0 && sharedGuids.Count == 0) {
+        if (parameters.Count == 0) {
             issues.Add(BridgeOperationExceptions.Issue(
-                "$.parameterNames",
+                "$.parameters",
                 "ParameterCoverageNoParametersRequested",
-                "Request at least one parameter name or shared GUID.",
-                "Set parameterNames, for example [\"Mark\"], or sharedGuids with valid GUID strings. Optional arrays may be omitted. Allowed scope values: All, ActiveViewVisible, CurrentSelection, ExplicitHandles. Allowed lookupPreference values: InstanceThenType, InstanceOnly, TypeOnly."
+                "Request at least one parameter reference.",
+                "Set parameters, for example [{\"name\":\"Mark\"}] or [{\"identity\":{...}}] from an observed ParameterIdentity. Allowed scope values: All, ActiveViewVisible, CurrentSelection, ExplicitHandles. Allowed lookupPreference values: InstanceThenType, InstanceOnly, TypeOnly."
             ));
         }
 
@@ -340,16 +409,47 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
             ));
         }
 
-        for (var i = 0; i < sharedGuids.Count; i++) {
-            if (!Guid.TryParse(sharedGuids[i], out _)) {
+        ValidateParameterReferences(parameters, "$.parameters", "ParameterCoverage", issues);
+
+        return issues;
+    }
+
+    private static void ValidateParameterReferences(
+        IReadOnlyList<ParameterReference> parameters,
+        string path,
+        string issuePrefix,
+        List<ValidationIssue> issues
+    ) {
+        for (var i = 0; i < parameters.Count; i++) {
+            var parameter = parameters[i];
+            if (!string.IsNullOrWhiteSpace(parameter.SharedGuid) && !Guid.TryParse(parameter.SharedGuid, out _)) {
                 issues.Add(BridgeOperationExceptions.Issue(
-                    $"$.sharedGuids[{i}]",
-                    "ParameterCoverageInvalidSharedGuid",
-                    $"'{sharedGuids[i]}' is not a valid GUID.",
-                    "Use canonical shared parameter GUID strings such as 00000000-0000-0000-0000-000000000000."
+                    $"{path}[{i}].sharedGuid",
+                    $"{issuePrefix}InvalidSharedGuid",
+                    $"'{parameter.SharedGuid}' is not a valid GUID.",
+                    "Use canonical shared parameter GUID strings from ParameterIdentity.SharedGuid such as 00000000-0000-0000-0000-000000000000."
+                ));
+            }
+
+            if (parameter.Identity?.Kind == ParameterIdentityKind.SharedGuid &&
+                !Guid.TryParse(parameter.Identity.SharedGuid, out _)) {
+                issues.Add(BridgeOperationExceptions.Issue(
+                    $"{path}[{i}].identity.sharedGuid",
+                    $"{issuePrefix}InvalidIdentitySharedGuid",
+                    "SharedGuid parameter identities must include a valid identity.sharedGuid value.",
+                    "Pass the observed ParameterIdentity unchanged, or use the top-level sharedGuid shortcut with a canonical GUID string."
                 ));
             }
         }
+    }
+
+    private static List<ValidationIssue> ValidateProjectParameterBindingsRequest(ProjectParameterBindingsRequest request) {
+        var issues = new List<ValidationIssue>();
+        ValidateParameterReferences(
+            request.BindingFilter?.Parameters ?? [],
+            "$.bindingFilter.parameters",
+            "ProjectParameterBindings",
+            issues);
 
         return issues;
     }
@@ -357,6 +457,14 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     private ProjectParameterBindingsData GetProjectParameterBindingsCore(
         ProjectParameterBindingsRequest request
     ) {
+        var validationIssues = ValidateProjectParameterBindingsRequest(request);
+        if (validationIssues.Count != 0) {
+            throw BridgeOperationExceptions.BadRequest(
+                "Project parameter bindings request is invalid.",
+                validationIssues
+            );
+        }
+
         var document = GetActiveProjectDocument();
 
         try {
@@ -481,6 +589,73 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
                 "RevitDocumentSessionContextException",
                 ex,
                 "Verify the Revit session is open and retry."
+            );
+        }
+    }
+
+    private OpenRevitDocumentData OpenRevitDocumentCore(OpenRevitDocumentRequest request) {
+        if (string.IsNullOrWhiteSpace(request.Path)) {
+            throw BridgeOperationExceptions.BadRequest(
+                "Document path is required.",
+                [
+                    BridgeOperationExceptions.Issue(
+                        "$.path",
+                        "MissingDocumentPath",
+                        "Document path is required.",
+                        "Pass an absolute local Revit model path."
+                    )
+                ]
+            );
+        }
+
+        var path = request.Path.Trim();
+        if (!File.Exists(path)) {
+            throw BridgeOperationExceptions.BadRequest(
+                $"Document path does not exist: {path}",
+                [
+                    BridgeOperationExceptions.Issue(
+                        "$.path",
+                        "DocumentPathNotFound",
+                        $"Document path does not exist: {path}",
+                        "Pass an existing local .rvt, .rfa, or .rte path."
+                    )
+                ]
+            );
+        }
+
+        var uiApp = RevitUiSession.CurrentUIApplication;
+        var alreadyOpen = uiApp.FindOpenDocumentByPath(path);
+        if (alreadyOpen != null)
+            return new OpenRevitDocumentData(
+                CreateDocumentSummary(alreadyOpen, uiApp.GetActiveDocument()),
+                CreateDocumentSessionContext()
+            );
+
+        try {
+            var modelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(path);
+            var uiDocument = uiApp.OpenAndActivateDocument(modelPath, new OpenOptions(), false);
+            var document = uiDocument.Document;
+            return new OpenRevitDocumentData(
+                CreateDocumentSummary(document, document),
+                CreateDocumentSessionContext()
+            );
+        } catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException) {
+            throw BridgeOperationExceptions.Conflict(
+                $"Revit could not open document: {path}",
+                [
+                    BridgeOperationExceptions.Issue(
+                        "$.path",
+                        "OpenRevitDocumentFailed",
+                        ex.Message,
+                        "Verify Revit is idle, no modal dialog or transaction is active, and the model can be opened manually."
+                    )
+                ]
+            );
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "OpenRevitDocumentException",
+                ex,
+                "Verify the path points to a supported local Revit document and retry."
             );
         }
     }

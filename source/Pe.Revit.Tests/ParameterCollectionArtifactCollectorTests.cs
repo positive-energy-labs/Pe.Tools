@@ -87,7 +87,7 @@ public sealed class ParameterCollectionArtifactCollectorTests {
             var collectedFamily = artifact.LoadedFamiliesMatrix.Families
                 .SingleOrDefault(entry => string.Equals(entry.FamilyName, familyName, StringComparison.Ordinal));
             var collectedBinding = artifact.ProjectParameterBindings.Entries
-                .SingleOrDefault(entry => string.Equals(entry.Identity.Name, sharedParameterName, StringComparison.Ordinal));
+                .SingleOrDefault(entry => string.Equals(entry.Definition.Identity.Name, sharedParameterName, StringComparison.Ordinal));
 
             Assert.Multiple(() => {
                 Assert.That(artifact.DocumentTitle, Is.EqualTo(projectDocument.Title));

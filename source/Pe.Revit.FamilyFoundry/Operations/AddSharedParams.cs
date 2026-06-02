@@ -1,14 +1,11 @@
 using Pe.Revit.Extensions.FamDocument;
-using Pe.Revit.Global;
 
 namespace Pe.Revit.FamilyFoundry.Operations;
 
 public class AddSharedParams(
-    IEnumerable<SharedParameterDefinition> sharedParams
+    IEnumerable<SharedParameterMappingTarget> targets
 ) : DocOperation<DefaultOperationSettings>(new DefaultOperationSettings()) {
-    private IEnumerable<SharedParameterDefinition> SharedParams {
-        get;
-    } = sharedParams;
+    private IEnumerable<SharedParameterMappingTarget> Targets { get; } = targets;
 
     public override string Description => "Download and add shared parameters from Autodesk Parameters Service";
 
@@ -16,13 +13,29 @@ public class AddSharedParams(
         FamilyProcessingContext processingContext,
         OperationContext groupContext) {
         var logs = new List<LogEntry>();
-        foreach (var sharedParam in this.SharedParams) {
-            var name = sharedParam.ExternalDefinition.Name;
+        foreach (var target in this.Targets) {
             try {
-                var addedParam = doc.AddSharedParameter(sharedParam);
-                logs.Add(new LogEntry(addedParam.Definition.Name).Success("Added"));
+                var addedParam = doc.AddSharedParameter(target.SharedParameter);
+                logs.Add(new LogEntry(addedParam.Definition.Name)
+                    .WithParameterEvent(
+                        ParameterEventOutcome.TargetAdded,
+                        targetParameter: target.Name,
+                        parameterName: target.Name,
+                        mappingKey: target.Name,
+                        dataType: target.Definition.DataTypeId,
+                        isInstance: target.IsInstance)
+                    .Success("Added"));
             } catch (Exception ex) {
-                logs.Add(new LogEntry(name).Error(ex));
+                logs.Add(new LogEntry(target.Name)
+                    .WithParameterEvent(
+                        ParameterEventOutcome.TargetAddFailed,
+                        ParameterEventReason.AddParameterError,
+                        targetParameter: target.Name,
+                        parameterName: target.Name,
+                        mappingKey: target.Name,
+                        dataType: target.Definition.DataTypeId,
+                        isInstance: target.IsInstance)
+                    .Error(ex));
             }
         }
 

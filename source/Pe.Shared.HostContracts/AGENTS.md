@@ -38,6 +38,7 @@ Owns durable host-facing contracts: route constants, operation definitions, requ
 - Public request contracts should validate strictly. Unknown or nonsensical fields should fail with actionable diagnostics rather than silently broadening or emptying results.
 - High-value operations should include examples and bounded expansion hints when they materially help callers form valid requests.
 - Keep compact defaults and budget metadata aligned with collector behavior.
+- When project-standard parameter identity is uncertain, expose ranked parameter evidence with reasons; callers should pass observed `ParameterIdentity` values or `ParameterReference` objects into downstream detail or matrix requests.
 - `PeHostClient` is hand-maintained by design. Add blessed namespaces/methods for stable high-value operations only; keep generic execution as the escape hatch.
 - Host-client XML docs are an agent-facing contract. Keep docs concise and capability-oriented so normal C# hover can orient callers without a custom LSP proxy.
 - Scripting requests default to `ReadOnly`; `WriteTransaction` is explicit mutation intent. Policy/rule implementation stays in `Pe.Shared.Scripting` or Revit adapters.

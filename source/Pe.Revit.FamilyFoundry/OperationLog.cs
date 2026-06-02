@@ -4,6 +4,73 @@ namespace Pe.Revit.FamilyFoundry;
 
 public enum LogStatus { Pending, Success, Skipped, Error }
 
+public enum ParameterEventOutcome {
+    TargetMissingFromSharedSet,
+    TargetAlreadyExists,
+    SourceMissing,
+    BuiltInMappingSucceeded,
+    TargetAdded,
+    TargetAddFailed,
+    BuiltInSourceSkipped,
+    DirectReplaceSucceeded,
+    DirectReplaceAwaitingCoercion,
+    DirectReplaceBlocked,
+    ReplaceDeferred,
+    TargetMissing,
+    EmptySourceValue,
+    FormulaUnset,
+    ValueMapped,
+    AllSourceCandidatesFailed,
+    PriorOperationHandled,
+    ParameterMissing,
+    AlreadyHasValue,
+    FormulaSet,
+    GlobalValueSet,
+    PerTypeFallbackNeeded,
+    PerTypeValueSet,
+    PerTypeValueSkipped,
+    ParameterDeleted,
+    ParameterDeleteFailed,
+    BacklinkSucceeded,
+    BacklinkFailed
+}
+
+public enum ParameterEventReason {
+    NotApplicable,
+    TargetNotInFilteredSharedSet,
+    TargetAlreadyPresent,
+    SourceParameterMissing,
+    BuiltInParameter,
+    DataTypeMismatch,
+    Exception,
+    TargetParameterMissing,
+    EmptySourceValue,
+    FormulaPresent,
+    PriorOperationHandled,
+    ParameterNotFound,
+    AlreadyHasValue,
+    GlobalValueError,
+    PerTypeValueMissing,
+    EmptyParameter,
+    UnusedParameter,
+    FormulaSetError,
+    AddParameterError,
+    DeleteParameterError,
+    BacklinkFormulaError
+}
+
+public sealed record ParameterLogEvent(
+    ParameterEventOutcome Outcome,
+    ParameterEventReason Reason = ParameterEventReason.NotApplicable,
+    string? SourceParameter = null,
+    string? TargetParameter = null,
+    string? ParameterName = null,
+    string? MappingKey = null,
+    string? DataType = null,
+    bool? IsInstance = null,
+    IReadOnlyDictionary<string, string>? Details = null
+);
+
 /// <summary>
 ///     Log result from an operation execution
 /// </summary>
@@ -36,10 +103,37 @@ public class LogEntry(string name) {
                         _ => $"{i + 1}. {msg}" + $"{(i < this.MessageList.Count - 1 ? "\n" : "")}"
                     }));
 
+    public ParameterLogEvent? ParameterEvent { get; private set; }
+
     public LogStatus Status { get; private set; } = LogStatus.Pending;
     public Exception? Exception { get; private set; }
     public bool IsComplete => this.Status != LogStatus.Pending;
 
+    public LogEntry WithParameterEvent(ParameterLogEvent parameterEvent) {
+        this.ParameterEvent = parameterEvent;
+        return this;
+    }
+
+    public LogEntry WithParameterEvent(
+        ParameterEventOutcome outcome,
+        ParameterEventReason reason = ParameterEventReason.NotApplicable,
+        string? sourceParameter = null,
+        string? targetParameter = null,
+        string? parameterName = null,
+        string? mappingKey = null,
+        string? dataType = null,
+        bool? isInstance = null,
+        IReadOnlyDictionary<string, string>? details = null
+    ) => this.WithParameterEvent(new ParameterLogEvent(
+        outcome,
+        reason,
+        sourceParameter,
+        targetParameter,
+        parameterName,
+        mappingKey,
+        dataType,
+        isInstance,
+        details));
 
     public LogEntry Success(string? message = null) {
         this.EnsurePending();
@@ -93,7 +187,10 @@ public class LogEntry(string name) {
     /// </summary>
     public LogEntry Clone() {
         var clone = new LogEntry(this.Name) {
-            FamilyTypeName = this.FamilyTypeName, Status = this.Status, Exception = this.Exception
+            FamilyTypeName = this.FamilyTypeName,
+            Status = this.Status,
+            Exception = this.Exception,
+            ParameterEvent = this.ParameterEvent
         };
         foreach (var msg in this.MessageList)
             clone.MessageList.Add(msg);
@@ -101,10 +198,13 @@ public class LogEntry(string name) {
     }
 
     /// <summary>
-    ///     Clears all accumulated messages from this entry.
-    ///     Used after TakeSnapshot() to prevent message accumulation across type iterations.
+    ///     Clears accumulated per-snapshot details from this entry.
+    ///     Used after TakeSnapshot() to prevent detail accumulation across type iterations.
     /// </summary>
-    internal void ClearMessages() => this.MessageList.Clear();
+    internal void ClearMessages() {
+        this.MessageList.Clear();
+        this.ParameterEvent = null;
+    }
 
     private void EnsurePending() {
         if (this.IsComplete) {

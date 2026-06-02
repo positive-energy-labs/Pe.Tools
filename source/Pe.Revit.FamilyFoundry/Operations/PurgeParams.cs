@@ -19,8 +19,7 @@ public class PurgeParams : DocOperation<PurgeParamsSettings> {
         if (processingContext == null) return false;
 
         var snapshot = processingContext.PreProcessSnapshot?.Parameters?.Data
-            ?.FirstOrDefault(p => string.Equals(p.Name, param.Definition.Name, StringComparison.Ordinal)
-                                  && p.IsInstance == param.IsInstance);
+            ?.FirstOrDefault(p => p.Matches(param));
 
         if (snapshot == null) return false;
 
@@ -104,10 +103,20 @@ public class PurgeParams : DocOperation<PurgeParamsSettings> {
                 var log = new LogEntry(param.Definition.Name);
                 try {
                     doc.FamilyManager.RemoveParameter(param);
-                    _ = log.Success("Deleted (empty parameter)");
+                    _ = log
+                        .WithParameterEvent(
+                            ParameterEventOutcome.ParameterDeleted,
+                            ParameterEventReason.EmptyParameter,
+                            parameterName: param.Definition.Name)
+                        .Success("Deleted (empty parameter)");
                     deleteCount++;
                 } catch (Exception ex) {
-                    _ = log.Error(ex);
+                    _ = log
+                        .WithParameterEvent(
+                            ParameterEventOutcome.ParameterDeleteFailed,
+                            ParameterEventReason.DeleteParameterError,
+                            parameterName: param.Definition.Name)
+                        .Error(ex);
                 }
 
                 logs.Add(log);
@@ -122,10 +131,20 @@ public class PurgeParams : DocOperation<PurgeParamsSettings> {
             var normalLog = new LogEntry(param.Definition.Name);
             try {
                 doc.FamilyManager.RemoveParameter(param);
-                _ = normalLog.Success("Deleted");
+                _ = normalLog
+                    .WithParameterEvent(
+                        ParameterEventOutcome.ParameterDeleted,
+                        ParameterEventReason.UnusedParameter,
+                        parameterName: param.Definition.Name)
+                    .Success("Deleted");
                 deleteCount++;
             } catch (Exception ex) {
-                _ = normalLog.Error(ex);
+                _ = normalLog
+                    .WithParameterEvent(
+                        ParameterEventOutcome.ParameterDeleteFailed,
+                        ParameterEventReason.DeleteParameterError,
+                        parameterName: param.Definition.Name)
+                    .Error(ex);
             }
 
             logs.Add(normalLog);

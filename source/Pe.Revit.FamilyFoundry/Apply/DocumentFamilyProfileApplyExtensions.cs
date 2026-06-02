@@ -1,8 +1,6 @@
-using Newtonsoft.Json;
+using Pe.Revit.FamilyFoundry.DesiredState;
 using Pe.Revit.FamilyFoundry.OperationGroups;
-using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.Profiles;
-using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.Global;
 using Pe.Revit.Global.Utils.Files;
 using Pe.Shared.StorageRuntime;
@@ -22,12 +20,9 @@ public static class DocumentFamilyProfileApplyExtensions {
             return new FamilyProfileApplyResult(false, "No document provided.", [], 0, null);
 
         try {
-            var apsParamModels = profile.GetFilteredApsParamModels();
-
             using var tempFile = new TempSharedParamFile(doc);
-            var apsParamData = BaseProfile.ConvertToSharedParameterDefinitions(apsParamModels, tempFile);
-
-            var queue = BuildManagerQueue(profile, apsParamData);
+            var apsParamData = ResolveSharedParameterDefinitions(profile, profile, tempFile);
+            var queue = FFManagerQueueBuilder.Build(profile, apsParamData);
             var finishSettings = onFinishSettings ?? new LoadAndSaveOptions {
                 OpenOutputFilesOnCommandFinish = false,
                 LoadFamily = false,
@@ -71,15 +66,16 @@ public static class DocumentFamilyProfileApplyExtensions {
 
         try {
             using var tempFile = new TempSharedParamFile(doc);
-            var apsParamData = BaseProfile.ConvertToSharedParameterDefinitions(
-                profile.GetFilteredApsParamModels(),
-                tempFile
-            );
-            var queue = FFMigratorQueueBuilder.Build(profile, apsParamData);
+            var apsParamData = ResolveSharedParameterDefinitions(profile, profile, tempFile, profile.MappingData);
+            var plan = DesiredParameterCompiler.Compile(profile, profile, apsParamData, profile.MappingData);
+            var compiledProfile = DesiredMigrationPlanLowerer.LowerMigrator(profile, plan);
+            var localMapParams = DesiredMigrationPlanLowerer.BuildLocalMapParams(plan);
+            var queue = FFMigratorQueueBuilder.Build(compiledProfile, apsParamData, localMapParams, profile.ParamDrivenSolids);
             var capturePipeline = new SnapshotCapturePipeline()
                 .Add(new ParameterSnapshotCollector())
                 .Add(new LookupTableSnapshotCollector())
-                .Add(new ReferencePlaneSnapshotCollector());
+                .Add(new ReferencePlaneSnapshotCollector())
+                .Add(new ParamDrivenSolidsSnapshotCollector());
             var finishSettings = onFinishSettings ?? new LoadAndSaveOptions { OpenOutputFilesOnCommandFinish = false };
             var explicitFamilies = selectedFamilies?
                 .Where(family => family != null)
@@ -96,104 +92,106 @@ public static class DocumentFamilyProfileApplyExtensions {
                 capturePipeline,
                 finishSettings,
                 runOutput,
-                profile.ExecutionOptions);
+                profile.ExecutionOptions,
+                plan);
         } catch (Exception ex) {
             return new FamilyMigrationApplyResult(false, ex.Message, runOutput?.DirectoryPath, [], 0, 0);
         }
     }
 
-    private static OperationQueue BuildManagerQueue(
-        FFManagerProfile profile,
-        List<SharedParameterDefinition> apsParamData
+    public static FamilyMigrationApplyResult ApplyDesiredFamilyMigrationProfile(
+        this Document doc,
+        DesiredFamilyMigrationProfile profile,
+        string profileName,
+        IEnumerable<Family>? selectedFamilies = null,
+        LoadAndSaveOptions? onFinishSettings = null,
+        OutputStorage? runOutput = null
     ) {
-        var specs = new List<RefPlaneSubcategorySpec> {
-            new() { Strength = RpStrength.WeakRef, Name = "WeakRef", Color = new Color(217, 124, 0) },
-            new() { Strength = RpStrength.StrongRef, Name = "StrongRef", Color = new Color(255, 0, 0) },
-            new() { Strength = RpStrength.CenterLR, Name = "Center", Color = new Color(115, 0, 253) },
-            new() { Strength = RpStrength.CenterFB, Name = "Center", Color = new Color(115, 0, 253) }
-        };
+        if (doc == null)
+            return new FamilyMigrationApplyResult(false, "No document.", null, [], 0, 0);
 
-        var hasProcessedAtParam = profile.AddFamilyParams.Parameters.Any(parameter =>
-            string.Equals(parameter.Name, "_FOUNDRY LAST PROCESSED AT", StringComparison.OrdinalIgnoreCase));
-        var hasProcessedAtAssignment = profile.SetKnownParams.GlobalAssignments.Any(assignment =>
-            string.Equals(assignment.Parameter, "_FOUNDRY LAST PROCESSED AT", StringComparison.OrdinalIgnoreCase));
+        try {
+            using var tempFile = new TempSharedParamFile(doc);
+            var apsParamData = ResolveSharedParameterDefinitions(profile, profile, tempFile, profile.MappingData);
+            var buildResult = DesiredFamilyMigrationQueueBuilder.Build(profile, apsParamData);
+            var capturePipeline = new SnapshotCapturePipeline()
+                .Add(new ParameterSnapshotCollector())
+                .Add(new LookupTableSnapshotCollector())
+                .Add(new ReferencePlaneSnapshotCollector())
+                .Add(new ParamDrivenSolidsSnapshotCollector());
+            var finishSettings = onFinishSettings ?? new LoadAndSaveOptions { OpenOutputFilesOnCommandFinish = false };
+            var explicitFamilies = selectedFamilies?
+                .Where(family => family != null)
+                .GroupBy(family => family.Id)
+                .Select(group => group.First())
+                .ToList();
 
-        if (!hasProcessedAtParam) {
-            profile.AddFamilyParams.AddParameters([
-                new FamilyParamDefinitionModel {
-                    Name = "_FOUNDRY LAST PROCESSED AT", DataType = SpecTypeId.String.Text
-                }
-            ]);
+            return FamilyProfileApplicator.ApplyMigrationProfile(
+                doc,
+                buildResult.Queue,
+                profile,
+                profileName,
+                () => explicitFamilies is { Count: > 0 } ? explicitFamilies : profile.GetFamilies(doc),
+                capturePipeline,
+                finishSettings,
+                runOutput,
+                profile.ExecutionOptions,
+                buildResult.Plan);
+        } catch (Exception ex) {
+            return new FamilyMigrationApplyResult(false, ex.Message, runOutput?.DirectoryPath, [], 0, 0);
         }
-
-        if (!hasProcessedAtAssignment) {
-            profile.SetKnownParams.GlobalAssignments.Add(new GlobalParamAssignment {
-                Parameter = "_FOUNDRY LAST PROCESSED AT",
-                Kind = ParamAssignmentKind.Formula,
-                Value = $"\"{DateTime.Now:yyyy-MM-dd HH:mm:ss}\""
-            });
-        }
-
-        var solidsPlan = AuthoredParamDrivenSolidsCompiler.Compile(profile.ParamDrivenSolids);
-        if (!solidsPlan.CanExecute) {
-            throw new InvalidOperationException(
-                string.Join(Environment.NewLine,
-                    ParamDrivenSolidsDiagnosticFormatter.ToDisplayMessages(solidsPlan.Diagnostics)));
-        }
-
-        var additionalReferences = KnownParamPlanBuilder.CollectReferencedParameterNames(solidsPlan.RefPlanesAndDims)
-            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(solidsPlan.Extrusions))
-            .Concat(KnownParamPlanBuilder.CollectReferencedParameterNames(solidsPlan.Connectors))
-            .ToList();
-        var knownParamPlan = KnownParamPlanBuilder.Compile(
-            profile.AddFamilyParams,
-            profile.SetKnownParams,
-            apsParamData,
-            additionalReferences
-        );
-
-        var compilerMessages = solidsPlan.Diagnostics
-            .Where(diagnostic => diagnostic.Severity == ParamDrivenDiagnosticSeverity.Warning)
-            .Select(diagnostic => diagnostic.ToDisplayMessage())
-            .ToList();
-
-        var valueFirstAssignments = BuildValueFirstAssignments(knownParamPlan.ResolvedAssignments);
-        var formulaOnlyAssignments = BuildFormulaOnlyAssignments(knownParamPlan.ResolvedAssignments);
-
-        return new OperationQueue()
-            .Add(new AddSharedParams(apsParamData))
-            .Add(new AddFamilyParams(knownParamPlan.ResolvedFamilyParams))
-            .Add(new SetLookupTables(profile.SetLookupTables))
-            .Add(new SetKnownParams(valueFirstAssignments, knownParamPlan.Catalog, true))
-            .Add(new EmitParamDrivenSolidsDiagnostics(new EmitParamDrivenSolidsDiagnosticsSettings {
-                Enabled = compilerMessages.Count > 0, Messages = compilerMessages
-            }))
-            .Add(new MakeParamDrivenPlanesAndDims(solidsPlan.RefPlanesAndDims))
-            .Add(new SetKnownParams(formulaOnlyAssignments, knownParamPlan.Catalog))
-            .Add(new MakeConstrainedExtrusions(solidsPlan.Extrusions))
-            .Add(new MakeParamDrivenConnectors(solidsPlan.Connectors))
-            .Add(new MakeRefPlaneSubcategories(specs))
-            .Add(new SortParams(new SortParamsSettings()));
     }
 
-    private static SetKnownParamsSettings BuildValueFirstAssignments(SetKnownParamsSettings settings) =>
-        new() {
-            Enabled = settings.Enabled,
-            OverrideExistingValues = settings.OverrideExistingValues,
-            GlobalAssignments = settings.GlobalAssignments
-                .Where(assignment => assignment.Kind == ParamAssignmentKind.Value)
-                .ToList(),
-            PerTypeAssignmentsTable = settings.PerTypeAssignmentsTable
-        };
+    private static List<SharedParameterDefinition> ResolveSharedParameterDefinitions(
+        BaseProfile profile,
+        IDesiredParameterProfile parameterProfile,
+        TempSharedParamFile tempFile,
+        IEnumerable<MappingData>? mappingData = null
+    ) {
+        var explicitNames = DesiredParameterCompiler.GetExplicitSharedParameterNames(parameterProfile, mappingData);
+        var requireCache = profile.SharedParameterSelection.HasIncludeFilters;
+        var sharedParameters = BaseProfile.ConvertToSharedParameterDefinitions(
+            profile.GetSelectedApsParamModels(explicitNames, requireCache),
+            tempFile);
+        sharedParameters.AddRange(BuildMissingSharedParameterDefinitions(
+            parameterProfile,
+            mappingData,
+            tempFile,
+            sharedParameters));
+        return sharedParameters;
+    }
 
-    private static SetKnownParamsSettings BuildFormulaOnlyAssignments(SetKnownParamsSettings settings) =>
-        new() {
-            Enabled = settings.Enabled,
-            OverrideExistingValues = settings.OverrideExistingValues,
-            GlobalAssignments = settings.GlobalAssignments
-                .Where(assignment => assignment.Kind == ParamAssignmentKind.Formula)
-                .ToList(),
-            PerTypeAssignmentsTable = []
-        };
+    private static IEnumerable<SharedParameterDefinition> BuildMissingSharedParameterDefinitions(
+        IDesiredParameterProfile parameterProfile,
+        IEnumerable<MappingData>? mappingData,
+        TempSharedParamFile tempFile,
+        IReadOnlyCollection<SharedParameterDefinition> existingDefinitions
+    ) {
+        var existingNames = existingDefinitions
+            .Select(parameter => parameter.ExternalDefinition.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        var declarationsByName = parameterProfile.SharedParameters
+            .Where(parameter => !string.IsNullOrWhiteSpace(parameter.Name))
+            .GroupBy(parameter => parameter.Name.Trim(), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        var requiredNames = DesiredParameterCompiler.GetExplicitSharedParameterNames(parameterProfile, mappingData);
 
+        foreach (var name in requiredNames) {
+            if (existingNames.Contains(name))
+                continue;
+
+            declarationsByName.TryGetValue(name, out var declaration);
+            var options = new ExternalDefinitionCreationOptions(
+                name,
+                declaration?.DataType ?? SpecTypeId.String.Text) {
+                Description = declaration?.Tooltip ?? string.Empty
+            };
+            var definition = tempFile.TempGroup.Definitions.get_Item(name) as ExternalDefinition
+                             ?? (ExternalDefinition)tempFile.TempGroup.Definitions.Create(options);
+            yield return new SharedParameterDefinition(
+                definition,
+                declaration?.PropertiesGroup ?? GroupTypeId.IdentityData,
+                declaration?.IsInstance ?? true);
+        }
+    }
 }

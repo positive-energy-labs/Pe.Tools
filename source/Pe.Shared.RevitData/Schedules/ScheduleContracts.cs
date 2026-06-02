@@ -1,3 +1,4 @@
+using Pe.Shared.RevitData;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using TypeGen.Core.TypeAnnotations;
@@ -28,7 +29,7 @@ public enum ScheduleCustomParameterMatchKind {
 
 [ExportTsInterface]
 public record ScheduleCustomParameterFilter(
-    string ParameterName,
+    ParameterReference Parameter,
     string ExpectedValue,
     ScheduleCustomParameterMatchKind MatchKind
 );
@@ -192,10 +193,10 @@ public record CombinedParameterSpec {
     }
 
     public CombinedParameterSpec(string parameterName) {
-        this.ParameterName = parameterName;
+        this.Parameter = ParameterReference.FromName(parameterName);
     }
 
-    public string ParameterName { get; init; } = string.Empty;
+    public ParameterReference Parameter { get; init; } = new();
     public string? Prefix { get; init; }
     public string? Suffix { get; init; }
     public string? Separator { get; init; } = " ";
@@ -207,10 +208,10 @@ public record ScheduleFieldSpec {
     }
 
     public ScheduleFieldSpec(string parameterName) {
-        this.ParameterName = parameterName;
+        this.Parameter = ParameterReference.FromName(parameterName);
     }
 
-    public string ParameterName { get; init; } = string.Empty;
+    public ParameterReference Parameter { get; init; } = new();
     public string? ColumnHeaderOverride { get; init; }
     public string? HeaderGroup { get; init; }
     public bool IsHidden { get; init; }
@@ -293,11 +294,13 @@ public record ScheduleCatalogSheetPlacement(
 
 [ExportTsInterface]
 public record ScheduleCatalogCustomParameterValue(
-    string Name,
+    ParameterDefinitionDescriptor Definition,
     string? Value,
     string? DisplayValue,
     RequestedParameterStorageType StorageType
-);
+) {
+    public string Name => this.Definition.Identity.Name;
+}
 
 [ExportTsInterface]
 public record ScheduleVisibleFamilyEntry(
@@ -308,11 +311,26 @@ public record ScheduleVisibleFamilyEntry(
 );
 
 [ExportTsInterface]
+public record ScheduleFieldParameterDescriptor(
+    ParameterDefinitionDescriptor? Definition,
+    string? FieldType
+) {
+    public ParameterIdentity? Identity => this.Definition?.Identity;
+    public string? SpecTypeId => this.Definition?.DataTypeId;
+}
+
+[ExportTsInterface]
 public record ScheduleParameterUsageEntry(
     string FieldName,
     string ColumnHeading,
     string Key
-);
+) {
+    public ScheduleFieldParameterDescriptor? Parameter { get; init; }
+    public int FieldIndex { get; init; }
+    public bool IsHidden { get; init; }
+    public bool IsCalculated { get; init; }
+    public bool IsCombinedParameter { get; init; }
+}
 
 [ExportTsInterface]
 public record ScheduleCatalogEntry(
@@ -337,10 +355,52 @@ public record ScheduleCatalogEntry(
 );
 
 [ExportTsInterface]
+public record ScheduleCatalogNameGroup(
+    string NormalizedName,
+    int Count,
+    List<string> Names
+);
+
+[ExportTsInterface]
+public record ScheduleCatalogNameTokenCount(
+    string Token,
+    int Count
+);
+
+[ExportTsInterface]
+public record ScheduleCatalogFieldUsageSummary(
+    string FieldName,
+    int ScheduleCount,
+    double AverageFieldIndex
+);
+
+[ExportTsInterface]
+public record ScheduleCatalogFieldFingerprint(
+    long ScheduleId,
+    string ScheduleName,
+    string NormalizedScheduleName,
+    List<string> FieldSequence,
+    string FieldSetHash,
+    string OrderedFieldHash,
+    Dictionary<string, int> PrefixDistribution
+);
+
+[ExportTsInterface]
+public record ScheduleCatalogSummary(
+    int TotalSchedules,
+    List<ScheduleCatalogNameGroup> DuplicateNormalizedNameGroups,
+    List<ScheduleCatalogNameTokenCount> PrefixCounts,
+    List<ScheduleCatalogNameTokenCount> SuffixCounts,
+    List<ScheduleCatalogFieldUsageSummary> TopScheduledFields,
+    List<ScheduleCatalogFieldFingerprint> FieldFingerprints
+);
+
+[ExportTsInterface]
 public record ScheduleCatalogData(
     List<ScheduleCatalogEntry> Entries,
     List<RevitDataIssue> Issues,
-    RevitDataResultPage? Page = null
+    RevitDataResultPage? Page = null,
+    ScheduleCatalogSummary? Summary = null
 );
 
 [ExportTsInterface]
@@ -409,7 +469,11 @@ public record ScheduleRenderedColumn(
     string Key,
     string FieldName,
     int ProfileFieldIndex
-);
+) {
+    public ScheduleFieldParameterDescriptor? Parameter { get; init; }
+    public bool IsCalculated { get; init; }
+    public bool IsCombinedParameter { get; init; }
+}
 
 [ExportTsInterface]
 public record ScheduleRenderedSubject(

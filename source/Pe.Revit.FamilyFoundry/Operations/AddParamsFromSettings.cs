@@ -26,7 +26,7 @@ public class AddFamilyParams(AddFamilyParamsSettings settings)
                 // Create parameter if it doesn't exist
                 FamilyParameter param;
                 if (existingParam is null) {
-                    param = doc.AddFamilyParameter(p.Name, p.PropertiesGroup, p.DataType, p.IsInstance);
+                    param = doc.AddFamilyParameter(p);
                     if (string.IsNullOrWhiteSpace(p.Tooltip) || param.IsShared || param.IsBuiltInParameter()) {
                         logs.Add(new LogEntry(p.Name).Success("Created as family parameter"));
                         continue;

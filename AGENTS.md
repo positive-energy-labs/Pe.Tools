@@ -18,6 +18,7 @@ This repo exists to improve Engineering Designer workflows for MEP firms through
 - `source/Pe.App/ButtonRegistry.cs` - top-level desktop command and ribbon exposure.
 - `source/Pe.Host/Program.cs` - external settings host, HTTP/SSE entrypoint.
 - `source/Pe.Dev.Cli/Program.cs` and `source/Pe.Dev.Cli/DevCliProgram.cs` - the single operator CLI surface for local Revit work, scripting, logs, and Design Automation.
+- `source/pea/app/` - TypeScript Pea CLI/runtime surface. `pea agent` is the deployed Revit/operator workbench; `pea dev` starts dev-agent, the MastraCode-based repo coding agent with Pea black-box feedback tools.
 - `source/Pe.Dev.RevitAutomation/` - Design Automation appbundle/activity orchestration, workitem submission, status, artifact download, and batch submission over `Pe.Aps` clients.
 - `source/Pe.Dev.RevitAutomation.Worker/RevitAutomationShellApp.cs` - the Autodesk Design Automation shell entrypoint. This is the headless peer to `Pe.App`, not a copy of desktop startup.
 - `source/Pe.Shared.StorageRuntime/` - schema generation, field options, module registration, storage/document validation.
@@ -73,8 +74,8 @@ Critical consequence:
 - `./build` is for orchestration, packaging, and CI parity
 - isolated builds are not proof that the live runtime DLLs loaded by Revit are fresh
 - `.Tests` build outputs are isolated artifacts, but `Pe.Revit.Tests` execution is Revit-backed; explicit-year `dotnet test -c Debug.R25.Tests ...` defaults to `AttachedRrd` unless you use the fresh helper
-- if you intend to validate through `pea script ...` or attached `dotnet test source/Pe.Revit.Tests/...`, build the affected runtime package from Rider/IDE, then run `pe-dev sync`
 - do not assume scripting or `.Tests` runs are seeing fresh loaded assemblies just because an isolated build passed
+- use `dotnet format --verify-no-changes` to surface richer issues
 
 Prefer these commands:
 
@@ -107,21 +108,8 @@ dotnet test .\source\Pe.Revit.Tests\Pe.Revit.Tests.csproj -c Debug.R25.Tests --f
 
 Avoid terminal interactive builds as your default live-validation loop. They force package-local outputs from the shell and can clobber Rider/RRD hot-reload baselines. Prefer Rider/IDE build plus `pe-dev sync`; use the override only as an explicit escape hatch.
 
-### Live Runtime Validation
-
-If you are validating live Revit behavior through scripting or `Pe.Revit.Tests`, use this posture:
-
-1. build the affected runtime package from Rider/IDE
-2. run `pe-dev sync`
-3. verify runtime sync actually succeeded
-4. then run `pea script ...` or `dotnet test ...`
-
 Important details:
 
-- `pea script` no longer auto-runs hot reload beforehand
-- `pe-dev sync` is the preferred explicit wrapper around session-health checks plus `revit hot-reload`
-- `pe-dev revit hot-reload` is still the lower-level command when you want just HR with no extra status framing
-- the pre-`VSTest` `.Tests` hook is best-effort only and must not be treated as the primary refresh step
 - the recent HR break came from interactive non-release builds mutating generated assembly metadata under `*.AssemblyInfo.cs`; non-release builds now pin `AssemblyInformationalVersion` to a stable `dev` value, so recurring `ENC0003` on generated assembly-info files means that drift regressed
 - a common `ENC2014`/missing-MVID failure means Rider lost the baseline assembly for the running module; in this repo that usually means the interactive build graph got clobbered by the wrong build mode or a replaced output
 - if HR reports restart-required changes, or runtime behavior still diverges after a successful HR, restart RRD before debugging deeper
@@ -137,8 +125,7 @@ The primary command families are:
 - `pe-dev doctor --json`
 - `pe-dev doctor`
 - `pe-dev status`
-- `pe-dev env logs all --tail 50`
-- `pe-dev status`
+- `pea host logs --target all --tail 50`
 - `pe-dev sync`
 - `pe-dev test --filter "Name~SomeFocusedTest" --timeout-seconds 900`
 - `pea script --stdin --name Probe.cs`
@@ -157,8 +144,8 @@ The primary command families are:
 Prefer this order:
 
 1. For compile verification, use plain terminal `dotnet build`.
-2. For live probing in desktop Revit, build the affected runtime package from Rider/IDE, run `pe-dev sync`, then use `pea script ...`, especially `--stdin`.
-3. For `AttachedRrd` verification, build the affected runtime package from Rider/IDE, run `pe-dev sync`, then run focused explicit-year `dotnet test` commands from terminal.
+2. For live probing in desktop Revit, build the affected runtime package from Rider/IDE, run `pe-dev sync`, then use `pea script ...`, especially `--stdin`. Read `runtimeFreshness.loadedGraphVerdict` separately from `runtimeFreshness.sourceDeltaVerdict`; loaded graph freshness is not proof that source deltas reached RRD.
+3. For `AttachedRrd` verification, build the affected runtime package from Rider/IDE, run `pe-dev sync`, confirm overall `runtimeFreshness.verdict=fresh` rather than `sourceDeltaVerdict=unproven`, then run focused explicit-year `dotnet test` commands from terminal.
 4. For `FreshRevitProcess` verification, prefer the explicit helper that avoids `RRD` and creates a dedicated fresh test host for the chosen Revit year. Today that helper is `pe-dev test ...`; use `--plan --json` for no-launch command planning/smoke checks and `--timeout-seconds <seconds>` for real agent proof runs.
 5. `pe-dev test` should close the fresh owned Revit process after each run. If a stale owned process survives a failure or timeout, the next helper run should recycle it before launching again.
 6. For APS and Design Automation operator flows, use `pe-dev automation ...`.
@@ -166,7 +153,7 @@ Prefer this order:
 Before assuming source/runtime divergence during desktop work, check:
 
 - `pe-dev status`
-- `pe-dev env logs all --tail 50`
+- `pea host logs --target all --tail 50`
 
 The default focused `AttachedRrd` loop is:
 
@@ -236,6 +223,7 @@ Explicit-year `dotnet test` for `Pe.Revit.Tests` is Revit-backed. The `.Tests` o
 - Keep docs local and current. Remove stale goals, stale paths, and rename-era references rather than preserving history.
 - For docs reshaping or consolidation work, use the `document-project-docs` skill in `C:\Users\kaitp\.agents\skills\document-project-docs`.
 - `Pe.Dev.Cli` is the first operator surface to check before adding ad hoc scripts, temporary console apps, or duplicate automation entrypoints.
+- `source/pea/app` owns two separate TS products: Pea (`pea agent`) is the deployed Revit/operator workbench, while dev-agent (`pea dev`) is the repo coding agent. Do not leak dev-agent repo tools, instructions, or skills into installed Pea.
 - Local `Pe.Dev.Cli` builds now mirror the runnable CLI output to `%LocalAppData%\Positive Energy\Pe.Tools\bin\pe-dev\`. That is the intended PATH-friendly dev bin for repo work. `pea` remains PATH-visible from `%LocalAppData%\Positive Energy\Pe.Tools\bin\pea\`, while the dev-only `Pe.Host` runtime lives separately under `%LocalAppData%\Positive Energy\Pe.Tools\dev\bin\host\`.
 - Explicit runtime sync is part of the live-validation contract now. After editing runtime packages, do not validate through scripting or `Pe.Revit.Tests` until `pe-dev sync` or manual `pe-dev revit hot-reload` has been run and checked.
 - Plain terminal `dotnet build` now defaults to the isolated build mode and `NoRrdContact`. Use Rider/IDE for normal interactive outputs; `/p:PeIsolatedBuild=false` is only an explicit shell escape hatch because it can disrupt Rider/RRD hot-reload baselines.
@@ -250,3 +238,56 @@ Explicit-year `dotnet test` for `Pe.Revit.Tests` is Revit-backed. The `.Tests` o
 ## Outstanding Guidance to Add
 
 - WPF BAML resolution errors that occasionally happen. This remains a major blocker, but cause and durable mitigation are still unknown.
+
+<!-- dev-agent managed instructions:start -->
+# dev-agent
+
+Dev-agent is the MastraCode-based Pe.Tools repo coding agent. Pea is the deployed Revit/operator workbench. Keep the boundary clear: use Pea only as a black-box product harness, never as a repo-source agent.
+
+## Keep the Harness Small
+
+Always-loaded instructions own only invariants and routing. Detailed loops belong in project skills. If a workflow grows large or repeats, route to the matching skill or improve that skill instead of expanding this block.
+
+Core invariants:
+
+- Keep Pea free of repo-source posture, build topology, RRD/Rider assumptions, and repo-only skills.
+- Use ordinary MastraCode source workflows for repo work: inspect code, edit focusedly, verify with the narrowest meaningful proof.
+- Keep terminal compile/package proof separate from live Revit runtime freshness.
+- Capture durable project truth in the nearest Pe doc before implementation when the work changes shared language, boundaries, repeated failure modes, architecture rules, or proof-lane rules.
+
+## Proof Lanes
+
+Name the lane before claiming proof:
+
+- **Source compile**: isolated terminal `dotnet build`; NoRrdContact; proves compilation only.
+- **Package/artifact**: build/pack output; NoRrdContact; proves durable output shape only.
+- **AttachedRrd**: Rider/IDE-built runtime packages synced into the live Rider-driven Revit session; requires live-loop care and behavior/log proof when freshness is uncertain.
+- **FreshRevitProcess**: repo test helper owning a fresh Revit process; default autonomous Revit-backed proof when current UI/RRD state is not required.
+- **Installed lane**: MSI/product-root behavior; do not mix with dev host/runtime roots.
+
+If proof depends on user-owned Rider/Revit/Windows state, say so and coordinate the loop instead of pretending autonomy.
+
+## Routing
+
+Activate the smallest matching skill from natural language:
+
+- **pe-steer**: vague/strategic scope, terminology, philosophy, durable intent, “grill me”, “think this through”.
+- **pe-live-loop**: RRD, Rider, hot reload, active documents, AttachedRrd, visual/manual Revit state, installed-lane coordination.
+- **pe-diagnose**: bugs, regressions, confusing errors, failing build/test/script, source-vs-product mismatch.
+- **pe-tdd**: tests-first work, regression tests, public-seam behavior changes.
+- **pe-architecture**: module seams, product boundaries, desktop vs DA, Pea vs dev-agent, document-owned vs session-owned.
+- **pe-codify-work**: PRDs, RFCs, AFK-ready plans, durable briefs/docs.
+- **pe-handoff**: pause/resume/next-agent context.
+- **pe-write-skill**: create or revise skills, triggers, slash-skill behavior, skill boundaries.
+
+## Context Resolution
+
+Resolve Pe.Tools truth in this order: nearest `AGENTS.md`, relevant `_GOALS.md`, relevant `_DEV.md`, `docs/features/<feature>/`, generated contracts/schemas/host-operation docs, then source. Do not introduce new context-document conventions unless an explicit design pass replaces the Pe-native taxonomy.
+
+## Live Runtime Defaults
+
+- Use `live_loop_context` as the read-only decision packet when AttachedRrd/Rider/Revit state matters.
+- Use `live_rrd_sync` before live scripting or AttachedRrd tests after runtime edits.
+- Prefer FreshRevitProcess tests when Hot Reload risk, stale assembly evidence, member-shape changes, or WPF/BAML/resource changes make AttachedRrd ambiguous.
+- Use Pea product tools (`pe_status`, `pe_logs`, host operations, scripts, Revit API docs, `talk_to_pea`) only for black-box product feedback, not repo source review.
+<!-- dev-agent managed instructions:end -->

@@ -1,5 +1,3 @@
-using Pe.Shared.RevitData.Parameters;
-
 namespace Pe.Revit.Tests;
 
 [TestFixture]
@@ -104,7 +102,7 @@ public sealed class SharedParameterMergeMatrixTests {
                     : testCase.ProjectIsInstance;
 
                 Assert.Multiple(() => {
-                    Assert.That(projectProbe.IdentityKind, Is.EqualTo(nameof(RevitParameterIdentityKind.SharedGuid)),
+                    Assert.That(projectProbe.IdentityKind, Is.EqualTo(nameof(ParameterIdentityKind.SharedGuid)),
                         $"Case '{testCase.Name}' project identity kind");
                     Assert.That(projectProbe.IsInstanceBinding, Is.EqualTo(testCase.ProjectIsInstance),
                         $"Case '{testCase.Name}' project binding scope");
@@ -113,7 +111,7 @@ public sealed class SharedParameterMergeMatrixTests {
                     Assert.That(projectProbe.DataTypeId, Is.EqualTo(testCase.DataType.TypeId),
                         $"Case '{testCase.Name}' project data type");
 
-                    Assert.That(familyProbe.IdentityKind, Is.EqualTo(nameof(RevitParameterIdentityKind.SharedGuid)),
+                    Assert.That(familyProbe.IdentityKind, Is.EqualTo(nameof(ParameterIdentityKind.SharedGuid)),
                         $"Case '{testCase.Name}' family identity kind");
                     Assert.That(familyProbe.SharedGuid, Is.EqualTo(sharedGuid),
                         $"Case '{testCase.Name}' family shared guid");

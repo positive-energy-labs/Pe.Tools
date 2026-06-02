@@ -58,9 +58,10 @@ public sealed class SchemaBackedSettingsDocumentValidator(
     private static JsonSchema CreateSchema(
         Type settingsType,
         SettingsRuntimeMode runtimeMode
-    ) => JsonSchemaFactory.BuildAuthoringSchema(
+    ) => RevitJsonSchemaFactory.BuildAuthoringSchema(
         settingsType,
-        new JsonSchemaBuildOptions(runtimeMode) { ResolveValueDomainSamples = false }
+        runtimeMode,
+        resolveFieldOptionSamples: false
     );
 
     private static string MaterializeDefaults(string candidateContent, Type settingsType) {

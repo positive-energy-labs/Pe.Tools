@@ -39,7 +39,12 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
         foreach (var (parameterName, log) in incomplete) {
             var parameter = fm.FindParameter(parameterName);
             if (parameter is null) {
-                _ = log.Error($"Parameter '{parameterName}' not found");
+                _ = log
+                    .WithParameterEvent(
+                        ParameterEventOutcome.ParameterMissing,
+                        ParameterEventReason.ParameterNotFound,
+                        parameterName: parameterName)
+                    .Error($"Parameter '{parameterName}' not found");
                 continue;
             }
 
@@ -56,19 +61,56 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
                 isFallback = true;
             }
 
-            if (string.IsNullOrWhiteSpace(valueToSet))
+            if (string.IsNullOrWhiteSpace(valueToSet)) {
+                _ = log
+                    .WithParameterEvent(
+                        ParameterEventOutcome.PerTypeValueSkipped,
+                        ParameterEventReason.PerTypeValueMissing,
+                        parameterName: parameterName,
+                        details: currentTypeName is null
+                            ? null
+                            : new Dictionary<string, string> { ["FamilyTypeName"] = currentTypeName })
+                    .Defer("No per-type value for current family type");
                 continue;
+            }
 
             if (!this.Settings.OverrideExistingValues && famDoc.HasValue(parameter)) {
-                _ = log.Skip("Already has value");
+                _ = log
+                    .WithParameterEvent(
+                        ParameterEventOutcome.AlreadyHasValue,
+                        ParameterEventReason.AlreadyHasValue,
+                        parameterName: parameterName,
+                        details: currentTypeName is null
+                            ? null
+                            : new Dictionary<string, string> { ["FamilyTypeName"] = currentTypeName })
+                    .Skip("Already has value");
                 continue;
             }
 
             try {
                 SetValueForCurrentFamType(famDoc, parameter, valueToSet);
-                _ = log.Defer(isFallback ? "Set per-type value (fallback)" : "Set per-type value");
+                _ = log
+                    .WithParameterEvent(
+                        ParameterEventOutcome.PerTypeValueSet,
+                        isFallback ? ParameterEventReason.GlobalValueError : ParameterEventReason.NotApplicable,
+                        parameterName: parameterName,
+                        details: new Dictionary<string, string> {
+                            ["Value"] = valueToSet,
+                            ["IsFallback"] = isFallback.ToString(),
+                            ["FamilyTypeName"] = currentTypeName ?? string.Empty
+                        })
+                    .Defer(isFallback ? "Set per-type value (fallback)" : "Set per-type value");
             } catch (Exception ex) {
-                _ = log.Error(ex);
+                _ = log
+                    .WithParameterEvent(
+                        ParameterEventOutcome.PerTypeValueSet,
+                        ParameterEventReason.Exception,
+                        parameterName: parameterName,
+                        details: new Dictionary<string, string> {
+                            ["Value"] = valueToSet,
+                            ["FamilyTypeName"] = currentTypeName ?? string.Empty
+                        })
+                    .Error(ex);
             }
         }
 

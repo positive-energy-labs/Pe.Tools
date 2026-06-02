@@ -1,20 +1,22 @@
+using Pe.Revit.FamilyFoundry.DesiredState;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
 namespace Pe.Revit.FamilyFoundry.Profiles;
 
-public class FFManagerProfile : BaseProfile {
-    [Description("Settings for explicit family parameter definitions.")]
-    [Required]
-    public AddFamilyParamsSettings AddFamilyParams { get; init; } = new();
+public class FFManagerProfile : BaseProfile, IDesiredParameterProfile {
+    [Description("Shared parameters to add or assign in the current family.")]
+    public List<DesiredSharedParameterDeclaration> SharedParameters { get; init; } = [];
+
+    [Description("Local family parameters to create, synthesize, or assign in the current family.")]
+    public List<DesiredFamilyParameterDeclaration> FamilyParameters { get; init; } = [];
+
+    [Description("Central per-type assignment table. Each row has a Parameter column and dynamic family-type columns.")]
+    public List<DesiredPerTypeAssignmentRow> PerTypeAssignmentsTable { get; init; } = [];
 
     [Description("Settings for authored family lookup tables imported into Revit size tables.")]
     [Required]
     public SetLookupTablesSettings SetLookupTables { get; init; } = new();
-
-    [Description("Settings for setting values/formulas on already-known parameters.")]
-    [Required]
-    public SetKnownParamsSettings SetKnownParams { get; init; } = new();
 
     [Description("Semantic solid authoring and serialization settings.")]
     [Required]

@@ -8,6 +8,7 @@ import {
   type RiderBridgeHotReloadResponse,
 } from "./bridge.js";
 import { collectHostContext } from "../shared.js";
+import { callHostOperation } from "../../../host-operation-runtime.js";
 import { resolveHostBaseUrl } from "../../../pe-host.js";
 
 export { defaultRiderBridgeBaseUrl } from "./bridge.js";
@@ -100,7 +101,10 @@ export async function runRiderBridgeRestartRrd(request: {
 
   const openDocument =
     result.ok && bridgeReadiness.ok && resolvedOpenDocument.path != null
-      ? await openRevitDocument({ path: resolvedOpenDocument.path })
+      ? await openRevitDocument({
+          path: resolvedOpenDocument.path,
+          timeoutSeconds: request.timeoutSeconds,
+        })
       : null;
   const finalReadiness =
     openDocument?.ok === true
@@ -169,6 +173,7 @@ export async function runRiderBridgeRestartRrd(request: {
 async function resolveOpenDocumentSelector(request: {
   openDocument?: OpenDocumentSelector | null;
   harnessStatePath?: string;
+  timeoutSeconds: number;
 }): Promise<{
   source: "explicit" | "harnessState" | "none";
   selector?: OpenDocumentSelector;
@@ -215,7 +220,7 @@ async function resolveOpenDocumentSelector(request: {
     };
   }
 
-  const recent = await findRecentDocument(selector);
+  const recent = await findRecentDocument(selector, request.timeoutSeconds);
   return {
     source,
     selector,
@@ -241,41 +246,43 @@ async function readHarnessState(path?: string): Promise<{
   };
 }
 
-async function findRecentDocument(selector: OpenDocumentSelector): Promise<{
+async function findRecentDocument(selector: OpenDocumentSelector, timeoutSeconds: number): Promise<{
   path?: string;
   reason: string;
   matches: unknown[];
 }> {
-  const response = await fetch(`${resolveHostBaseUrl()}/api/revit/catalog/recent-documents`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+  const timeoutMs = Math.min(Math.max(timeoutSeconds, 5), 30) * 1000;
+  const result = await callHostOperation(
+    { baseUrl: resolveHostBaseUrl(), timeoutMs },
+    "revit.catalog.recent-documents",
+    {
       revitYear: selector.revitYear ?? "2025",
       localFilesOnly: selector.localFilesOnly ?? true,
-    }),
-  });
-  const text = await response.text();
-  const body = text.length > 0 ? tryParseJson(text) : null;
-  if (!response.ok || !isRecord(body) || !Array.isArray(body.documents)) {
+      includeRegistryMru: true,
+    },
+    "compact",
+  );
+  if (!result.ok) {
     return {
-      reason: `Failed to resolve recent Revit document: HTTP ${response.status} ${response.statusText}`,
+      reason: `Failed to resolve recent Revit document through host operation revit.catalog.recent-documents: ${result.message}`,
       matches: [],
     };
   }
 
+  const response = isRecord(result.response) ? result.response : {};
+  const documents = Array.isArray(response.documents)
+    ? response.documents.filter(isRecord)
+    : [];
   const name = selector.name?.trim().toLowerCase() ?? "";
-  const documents = body.documents.filter(isRecord);
   const kind = selector.kind ?? "Any";
   const matches = documents.filter((document) => {
     const path = typeof document.path === "string" ? document.path : "";
     const title = typeof document.title === "string" ? document.title : "";
-    const exists = document.exists !== false;
     const kindMatches =
       kind === "Any" ||
       (kind === "Project" && path.toLowerCase().endsWith(".rvt")) ||
       (kind === "Family" && path.toLowerCase().endsWith(".rfa"));
     return (
-      exists &&
       kindMatches &&
       (title.toLowerCase() === name ||
         path.toLowerCase() === name ||
@@ -286,45 +293,71 @@ async function findRecentDocument(selector: OpenDocumentSelector): Promise<{
 
   if (matches.length === 0) {
     return {
-      reason: `No recent local Revit document matched name '${selector.name}'.`,
+      reason: `No recent Revit document matched name '${selector.name}'.`,
       matches: [],
     };
   }
 
-  const first = matches[0];
-  const path = typeof first.path === "string" ? first.path : undefined;
+  const localMatches = matches.filter((document) => {
+    const path = typeof document.path === "string" ? document.path : "";
+    return document.exists !== false && !isCloudDocumentPath(path, document.pathKind);
+  });
+  const firstLocal = localMatches[0];
+  if (firstLocal != null) {
+    const path = typeof firstLocal.path === "string" ? firstLocal.path : undefined;
+    return {
+      path,
+      reason: `Resolved '${selector.name}' to recent local document '${path}' using host operation revit.catalog.recent-documents.`,
+      matches: matches.slice(0, 5),
+    };
+  }
+
+  const firstMatch = matches[0];
+  const matchedPath = typeof firstMatch.path === "string" ? firstMatch.path : "unknown";
   return {
-    path,
-    reason: `Resolved '${selector.name}' to recent document '${path}'.`,
+    reason: `Matched '${selector.name}' to '${matchedPath}', but the restart-chain opener currently supports local Revit files only. Cloud model paths are preserved by recent-documents for future support but are not opened by revit.document.open.`,
     matches: matches.slice(0, 5),
   };
 }
 
-async function openRevitDocument(request: { path: string }): Promise<{
+async function openRevitDocument(request: {
+  path: string;
+  timeoutSeconds: number;
+}): Promise<{
   ok: boolean;
   reason: string;
   response?: unknown;
 }> {
+  if (isCloudDocumentPath(request.path)) {
+    return {
+      ok: false,
+      reason:
+        "Requested document is a cloud model path, but host operation revit.document.open currently supports local Revit files only.",
+    };
+  }
+
   try {
-    const response = await fetch(`${resolveHostBaseUrl()}/api/revit/document/open`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: request.path }),
-    });
-    const text = await response.text();
-    const body = text.length > 0 ? tryParseJson(text) : null;
-    if (!response.ok) {
+    const result = await callHostOperation(
+      {
+        baseUrl: resolveHostBaseUrl(),
+        timeoutMs: Math.min(Math.max(request.timeoutSeconds, 5), 900) * 1000,
+      },
+      "revit.document.open",
+      { path: request.path },
+      "compact",
+    );
+    if (!result.ok) {
       return {
         ok: false,
-        reason: `Failed to open Revit document: HTTP ${response.status} ${response.statusText}`,
-        response: body ?? text,
+        reason: `Host operation revit.document.open failed: ${result.message}`,
+        response: result,
       };
     }
 
     return {
       ok: true,
-      reason: "Requested Revit document opened.",
-      response: body,
+      reason: "Host operation revit.document.open opened and activated the requested document.",
+      response: result.response,
     };
   } catch (error) {
     return {
@@ -332,6 +365,10 @@ async function openRevitDocument(request: { path: string }): Promise<{
       reason: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+function isCloudDocumentPath(path: string, pathKind?: unknown): boolean {
+  return pathKind === "CloudPath" || path.toLowerCase().startsWith("cld://");
 }
 
 async function pollHostBridgeReadiness(options: {
@@ -544,14 +581,6 @@ function delay(milliseconds: number): Promise<void> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function tryParseJson(text: string): unknown | null {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
 }
 
 async function isFile(path: string): Promise<boolean> {

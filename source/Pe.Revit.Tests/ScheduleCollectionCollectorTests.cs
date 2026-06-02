@@ -1,5 +1,6 @@
 using Autodesk.Revit.DB.Structure;
 using Pe.Revit.DocumentData.Schedules.Collect;
+using Pe.Shared.RevitData;
 using ContractScheduleCatalogRequest = Pe.Shared.RevitData.Schedules.ScheduleCatalogRequest;
 
 namespace Pe.Revit.Tests;
@@ -48,11 +49,12 @@ public sealed class ScheduleCollectionCollectorTests {
                 new ContractScheduleCatalogRequest {
                     CustomParameterFilters = [
                         new ScheduleCustomParameterFilter(
-                            "Discipline",
+                            ParameterReference.FromName("Discipline"),
                             "Mechanical",
                             ScheduleCustomParameterMatchKind.Equals
                         )
-                    ]
+                    ],
+                    Projection = new ScheduleCatalogProjection { IncludeVisibleFamilies = true }
                 }
             );
 
@@ -63,7 +65,7 @@ public sealed class ScheduleCollectionCollectorTests {
                 Assert.That(entry!.VisibleFamilyCount, Is.EqualTo(1));
                 Assert.That(entry.VisibleInstanceCount, Is.EqualTo(1));
                 Assert.That(entry.VisibleBodyRowCount, Is.GreaterThan(0));
-                Assert.That(entry.VisibleFamilies.Select(item => item.FamilyName), Is.EqualTo(new[] { familyName }));
+                Assert.That(entry.VisibleFamilies.Select(item => item.FamilyName), Is.EqualTo(new[] { loadedFamily!.Name }));
             });
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(familyDocument);
@@ -671,7 +673,6 @@ public sealed class ScheduleCollectionCollectorTests {
             _ = transaction.Commit();
         }
 
-        projectDocument.Regenerate();
         return schedule!;
     }
 
@@ -705,15 +706,15 @@ public sealed class ScheduleCollectionCollectorTests {
             sharedDefinition,
             true,
             GroupTypeId.IdentityData,
-            BuiltInCategory.OST_Views
+            BuiltInCategory.OST_Schedules
         );
 
         using var transaction = new Transaction(projectDocument, "Set schedule discipline");
         _ = transaction.Start();
+        projectDocument.Regenerate();
         var parameter = schedule.LookupParameter("Discipline")
                         ?? throw new InvalidOperationException("Discipline parameter was not bound to the schedule.");
         _ = parameter.Set(disciplineValue);
         _ = transaction.Commit();
-        projectDocument.Regenerate();
     }
 }

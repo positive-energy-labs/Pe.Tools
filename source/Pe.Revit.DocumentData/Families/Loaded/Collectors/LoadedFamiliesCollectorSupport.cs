@@ -112,25 +112,20 @@ internal static class LoadedFamiliesCollectorSupport {
         ProjectLoadedFamilyRecord family,
         ProjectLoadedFamilyParameter parameter
     ) {
-        var dataTypeId = parameter.DataTypeKey;
-        var groupTypeId = parameter.PropertiesGroupKey;
+        var definition = parameter.Definition;
+        var dataTypeId = definition.DataTypeId;
+        var groupTypeId = definition.GroupTypeId;
         return new CollectedFamilyParameterRecord {
             FamilyId = family.FamilyId,
             FamilyUniqueId = family.FamilyUniqueId,
             FamilyName = family.FamilyName,
             CategoryName = family.CategoryName,
             TypeNames = parameter.TypeNames.ToList(),
-            Identity = parameter.Identity,
-            IsInstance = parameter.IsInstance,
+            Definition = definition with {
+                DataTypeLabel = dataTypeId == null ? null : RevitLabelCatalog.GetLabelForSpec(new ForgeTypeId(dataTypeId)),
+                GroupTypeLabel = groupTypeId == null ? null : RevitLabelCatalog.GetLabelForPropertyGroup(new ForgeTypeId(groupTypeId))
+            },
             StorageType = parameter.StorageType.ToString(),
-            DataTypeId = dataTypeId,
-            DataTypeLabel =
-                dataTypeId == null ? null : RevitLabelCatalog.GetLabelForSpec(new ForgeTypeId(dataTypeId)),
-            GroupTypeId = groupTypeId,
-            GroupTypeLabel =
-                groupTypeId == null
-                    ? null
-                    : RevitLabelCatalog.GetLabelForPropertyGroup(new ForgeTypeId(groupTypeId)),
             Kind = CollectedParameterKind.Unknown,
             Scope = CollectedParameterScope.Unresolved,
             FormulaState = CollectedFormulaState.Unknown,

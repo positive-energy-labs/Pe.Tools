@@ -1,4 +1,4 @@
-﻿{
+{
   "ExecutionOptions": {
     "SingleTransaction": false
   },
@@ -12,14 +12,60 @@
     },
     "ExcludeNames": {}
   },
-  "FilterApsParams": {
-    "IncludeNames": {
+  "ParamDrivenSolids": {
+    "Frame": "NonHosted",
+    "Planes": {},
+    "Spans": [
+      {
+        "About": "@CenterLR",
+        "By": "param:PE_M_Grd_NeckLength",
+        "Negative": "neck Left",
+        "Positive": "neck Right"
+      },
+      {
+        "About": "@CenterLR",
+        "By": "param:PE_M_Grd_OpenLength",
+        "Negative": "opening Left",
+        "Positive": "opening Right"
+      },
+      {
+        "About": "@CenterLR",
+        "By": "param:PE_M_Grd_DeviceLength",
+        "Negative": "device Left",
+        "Positive": "device Right"
+      },
+      {
+        "About": "@CenterFB",
+        "By": "param:PE_M_Grd_NeckWidth",
+        "Negative": "neck Back",
+        "Positive": "neck Front"
+      },
+      {
+        "About": "@CenterFB",
+        "By": "param:PE_M_Grd_OpenWidth",
+        "Negative": "opening Back",
+        "Positive": "opening Front"
+      },
+      {
+        "About": "@CenterFB",
+        "By": "param:PE_M_Grd_DeviceWidth",
+        "Negative": "device Back",
+        "Positive": "device Front"
+      }
+    ],
+    "Prisms": [],
+    "Cylinders": [],
+    "Connectors": []
+  },
+  "$schema": "../../../../Global/schemas/cmdffmanager/profiles/pe-revit-familyfoundry-profiles-ffmanagerprofile.schema.json",
+  "SharedParameterSelection": {
+    "Include": {
       "StartingWith": [
         "PE_M_Grd_",
         "PE_G___",
         "PE_M___Serves"
       ],
-      "Equaling": [
+      "Names": [
         "PE_G___SoundLevel",
         "PE_G___TagInstance",
         "PE_G___Weight",
@@ -35,8 +81,8 @@
         "PE_M_Grd_RoughOpenWidth"
       ]
     },
-    "ExcludeNames": {
-      "Equaling": [
+    "Exclude": {
+      "Names": [
         "PE_G___Horsepower",
         "PE_G___RefrigerantType",
         "PE_G___FuelType",
@@ -44,63 +90,155 @@
       ]
     }
   },
-  "AddFamilyParams": {
-    "Parameters": [
-      { "Name": "_calc vane half count", "IsInstance": false, "DataType": "Integer" },
-      { "Name": "_clearance", "IsInstance": false, "DataType": "Length (Common)", "Tooltip": "CLEARANCE = (ROUGH - NECK) / 2\r\nClearance around the neck. This parameter controls the suggested rough opening size for a GRD based on its neck dimensions" },
-      { "Name": "_flange size lengthwise", "IsInstance": false, "DataType": "Length (Common)", "Tooltip": "FLANGE = (DEVICE - NECK) / 2\r\nThe size of the mounting flange across the GRD's length. The \"flange\" is the part that usually sits on the wall, opposite of your POV." },
-      { "Name": "_flange size widthwise", "IsInstance": false, "DataType": "Length (Common)", "Tooltip": "FLANGE = (DEVICE - NECK) / 2\r\nThe size of the mounting flange across the GRD's width. The \"flange\" is the part that usually sits on the wall, opposite of your POV." },
-      { "Name": "_flange thickness", "IsInstance": false, "DataType": "Length (Common)", "Tooltip": "The thickness of the flange/device face" },
-      { "Name": "_neck depth", "IsInstance": false, "DataType": "Length (Common)", "Tooltip": "Depth the neck portrudes backward from the device face." },
-      { "Name": "_opening inset lengthwise", "IsInstance": false, "DataType": "Length (Common)", "Tooltip": "INSET = (DEVICE - OPENING) / 2\r\nThe inset of the opening from the device's edge across the GRD's length. In other words the size of the front-facing flange." },
-      { "Name": "_opening inset widthwise", "IsInstance": false, "DataType": "Length (Common)", "Tooltip": "INSET = (DEVICE - OPENING) / 2\r\nThe inset of the opening from the device's edge across the GRD's width. In other words the size of the front-facing flange." },
-      { "Name": "_vane spacing", "IsInstance": false, "DataType": "Length (Common)", "Tooltip": "The center-to-center length between each vane of a GRD" },
-      { "Name": "__PE GRD INSTRUCTIONS", "IsInstance": false, "DataType": "Multiline Text", "Tooltip": "How to use this family" }
-    ]
-  },
-  "SetKnownParams": {
-    "GlobalAssignments": [
-      { "Parameter": "PE_G___SoundLevel", "Kind": "Value", "Value": "-1" },
-      { "Parameter": "PE_G___TagInstance", "Kind": "Value", "Value": "XXX-#.#" },
-      { "Parameter": "PE_G___Weight", "Kind": "Value", "Value": "-1" },
-      { "Parameter": "PE_M_Grd_AirFlow", "Kind": "Value", "Value": "-1 CFM" },
-      { "Parameter": "PE_M_Grd_ExternalStaticPressure", "Kind": "Value", "Value": "-1 in-wg" },
-      { "Parameter": "PE_M_Grd_DeviceLength", "Kind": "Formula", "Value": "PE_M_Grd_NeckLength + _flange size lengthwise * 2" },
-      { "Parameter": "PE_M_Grd_DeviceWidth", "Kind": "Formula", "Value": "PE_M_Grd_NeckWidth + _flange size widthwise * 2" },
-      { "Parameter": "PE_M_Grd_OpenLength", "Kind": "Formula", "Value": "PE_M_Grd_DeviceLength - _opening inset lengthwise * 2" },
-      { "Parameter": "PE_M_Grd_OpenWidth", "Kind": "Formula", "Value": "PE_M_Grd_DeviceWidth - _opening inset widthwise * 2" },
-      { "Parameter": "PE_M_Grd_RoughOpenLength", "Kind": "Formula", "Value": "PE_M_Grd_NeckLength + _clearance * 2" },
-      { "Parameter": "PE_M_Grd_RoughOpenWidth", "Kind": "Formula", "Value": "PE_M_Grd_NeckWidth + _clearance * 2" },
-      { "Parameter": "_calc vane half count", "Kind": "Formula", "Value": "if(_vane spacing = 0', 0, roundup((PE_M_Grd_OpenWidth / 2) / _vane spacing))" },
-      { "Parameter": "_clearance", "Kind": "Value", "Value": "0' - 1\"" },
-      { "Parameter": "_flange size lengthwise", "Kind": "Formula", "Value": "_flange size widthwise" },
-      { "Parameter": "_flange thickness", "Kind": "Value", "Value": "0' - 0 5/32\"" },
-      { "Parameter": "_neck depth", "Kind": "Value", "Value": "0' - 2\"" },
-      { "Parameter": "_opening inset lengthwise", "Kind": "Formula", "Value": "_opening inset widthwise" },
-      { "Parameter": "_opening inset widthwise", "Kind": "Value", "Value": "0' - 1\"" },
-      { "Parameter": "__PE GRD INSTRUCTIONS", "Kind": "Value", "Value": "When modeling:\r\n1. Choose GRD family of correct system type (Exhaust, Intake, Return, Supply)\r\n2. Choose family type matching GRD model you intend to place\r\n3. Set \"PE_G___TagInstance\" according to the location and device type\r\n\r\nGRD model missing:\r\n1. Find GRD family of intended system type (Exhaust, Intake, Return, Supply)\r\n2. Create new family type (e.g. \"Price LBP15A\")\r\n3. Using manufacturer documentation, set parameters:\r\n    - to control neck: \"PE_M_Grd_Neck...\"\r\n    - to control opening: \"_opening inset...\"\r\n    - to control device face: \"_flange size...\"\r\n    - to control rough opening: \"_clearance\"\r\n    - to control vane/blade spacing: \"_vane spacing\"" }
-    ],
-    "PerTypeAssignmentsTable": [
-      { "Parameter": "PE_M_Grd_NeckLength", "Price LBP15A": "2' - 10\"", "Grille": "0' - 10\"", "Bar": "1' - 8\"", "Slot": "4' - 0\"" },
-      { "Parameter": "PE_M_Grd_NeckWidth", "Price LBP15A": "0' - 6\"", "Grille": "1' - 8\"", "Bar": "2' - 5\"", "Slot": "0' - 4\"" },
-      { "Parameter": "_flange size widthwise", "Price LBP15A": "0' - 0\"", "Grille": "0' - 0 1/2\"", "Bar": "0' - 0 1/2\"", "Slot": "0' - 1\"" },
-      { "Parameter": "_vane spacing", "Price LBP15A": "0' - 0\"", "Grille": "0' - 0 3/4\"", "Bar": "0' - 0 3/4\"", "Slot": "0' - 0\"" }
-    ]
-  },
-  "ParamDrivenSolids": {
-    "Frame": "NonHosted",
-    "Planes": {},
-    "Spans": [
-      { "About": "@CenterLR", "By": "param:PE_M_Grd_NeckLength", "Negative": "neck Left", "Positive": "neck Right" },
-      { "About": "@CenterLR", "By": "param:PE_M_Grd_OpenLength", "Negative": "opening Left", "Positive": "opening Right" },
-      { "About": "@CenterLR", "By": "param:PE_M_Grd_DeviceLength", "Negative": "device Left", "Positive": "device Right" },
-      { "About": "@CenterFB", "By": "param:PE_M_Grd_NeckWidth", "Negative": "neck Back", "Positive": "neck Front" },
-      { "About": "@CenterFB", "By": "param:PE_M_Grd_OpenWidth", "Negative": "opening Back", "Positive": "opening Front" },
-      { "About": "@CenterFB", "By": "param:PE_M_Grd_DeviceWidth", "Negative": "device Back", "Positive": "device Front" }
-    ],
-    "Prisms": [],
-    "Cylinders": [],
-    "Connectors": []
-  },
-  "$schema": "../../../../Global/schemas/cmdffmanager/profiles/pe-revit-familyfoundry-profiles-ffmanagerprofile.schema.json"
+  "SharedParameters": [
+    {
+      "Name": "PE_G___SoundLevel",
+      "Value": "-1"
+    },
+    {
+      "Name": "PE_G___TagInstance",
+      "Value": "XXX-#.#"
+    },
+    {
+      "Name": "PE_G___Weight",
+      "Value": "-1"
+    },
+    {
+      "Name": "PE_M_Grd_AirFlow",
+      "Value": "-1 CFM"
+    },
+    {
+      "Name": "PE_M_Grd_DeviceLength",
+      "Formula": "PE_M_Grd_NeckLength + _flange size lengthwise * 2"
+    },
+    {
+      "Name": "PE_M_Grd_DeviceWidth",
+      "Formula": "PE_M_Grd_NeckWidth + _flange size widthwise * 2"
+    },
+    {
+      "Name": "PE_M_Grd_ExternalStaticPressure",
+      "Value": "-1 in-wg"
+    },
+    {
+      "Name": "PE_M_Grd_NeckLength"
+    },
+    {
+      "Name": "PE_M_Grd_NeckWidth"
+    },
+    {
+      "Name": "PE_M_Grd_OpenLength",
+      "Formula": "PE_M_Grd_DeviceLength - _opening inset lengthwise * 2"
+    },
+    {
+      "Name": "PE_M_Grd_OpenWidth",
+      "Formula": "PE_M_Grd_DeviceWidth - _opening inset widthwise * 2"
+    },
+    {
+      "Name": "PE_M_Grd_RoughOpenLength",
+      "Formula": "PE_M_Grd_NeckLength + _clearance * 2"
+    },
+    {
+      "Name": "PE_M_Grd_RoughOpenWidth",
+      "Formula": "PE_M_Grd_NeckWidth + _clearance * 2"
+    }
+  ],
+  "FamilyParameters": [
+    {
+      "Name": "_calc vane half count",
+      "IsInstance": false,
+      "DataType": "Integer",
+      "Formula": "if(_vane spacing = 0', 0, roundup((PE_M_Grd_OpenWidth / 2) / _vane spacing))"
+    },
+    {
+      "Name": "_clearance",
+      "IsInstance": false,
+      "DataType": "Length (Common)",
+      "Tooltip": "CLEARANCE = (ROUGH - NECK) / 2\r\nClearance around the neck. This parameter controls the suggested rough opening size for a GRD based on its neck dimensions",
+      "Value": "0' - 1\""
+    },
+    {
+      "Name": "_flange size lengthwise",
+      "IsInstance": false,
+      "DataType": "Length (Common)",
+      "Tooltip": "FLANGE = (DEVICE - NECK) / 2\r\nThe size of the mounting flange across the GRD's length. The \"flange\" is the part that usually sits on the wall, opposite of your POV.",
+      "Formula": "_flange size widthwise"
+    },
+    {
+      "Name": "_flange size widthwise",
+      "IsInstance": false,
+      "DataType": "Length (Common)",
+      "Tooltip": "FLANGE = (DEVICE - NECK) / 2\r\nThe size of the mounting flange across the GRD's width. The \"flange\" is the part that usually sits on the wall, opposite of your POV."
+    },
+    {
+      "Name": "_flange thickness",
+      "IsInstance": false,
+      "DataType": "Length (Common)",
+      "Tooltip": "The thickness of the flange/device face",
+      "Value": "0' - 0 5/32\""
+    },
+    {
+      "Name": "_neck depth",
+      "IsInstance": false,
+      "DataType": "Length (Common)",
+      "Tooltip": "Depth the neck portrudes backward from the device face.",
+      "Value": "0' - 2\""
+    },
+    {
+      "Name": "_opening inset lengthwise",
+      "IsInstance": false,
+      "DataType": "Length (Common)",
+      "Tooltip": "INSET = (DEVICE - OPENING) / 2\r\nThe inset of the opening from the device's edge across the GRD's length. In other words the size of the front-facing flange.",
+      "Formula": "_opening inset widthwise"
+    },
+    {
+      "Name": "_opening inset widthwise",
+      "IsInstance": false,
+      "DataType": "Length (Common)",
+      "Tooltip": "INSET = (DEVICE - OPENING) / 2\r\nThe inset of the opening from the device's edge across the GRD's width. In other words the size of the front-facing flange.",
+      "Value": "0' - 1\""
+    },
+    {
+      "Name": "_vane spacing",
+      "IsInstance": false,
+      "DataType": "Length (Common)",
+      "Tooltip": "The center-to-center length between each vane of a GRD"
+    },
+    {
+      "Name": "__PE GRD INSTRUCTIONS",
+      "IsInstance": false,
+      "DataType": "Multiline Text",
+      "Tooltip": "How to use this family",
+      "Value": "When modeling:\r\n1. Choose GRD family of correct system type (Exhaust, Intake, Return, Supply)\r\n2. Choose family type matching GRD model you intend to place\r\n3. Set \"PE_G___TagInstance\" according to the location and device type\r\n\r\nGRD model missing:\r\n1. Find GRD family of intended system type (Exhaust, Intake, Return, Supply)\r\n2. Create new family type (e.g. \"Price LBP15A\")\r\n3. Using manufacturer documentation, set parameters:\r\n    - to control neck: \"PE_M_Grd_Neck...\"\r\n    - to control opening: \"_opening inset...\"\r\n    - to control device face: \"_flange size...\"\r\n    - to control rough opening: \"_clearance\"\r\n    - to control vane/blade spacing: \"_vane spacing\""
+    }
+  ],
+  "PerTypeAssignmentsTable": [
+    {
+      "Parameter": "PE_M_Grd_NeckLength",
+      "Price LBP15A": "2' - 10\"",
+      "Grille": "0' - 10\"",
+      "Bar": "1' - 8\"",
+      "Slot": "4' - 0\""
+    },
+    {
+      "Parameter": "PE_M_Grd_NeckWidth",
+      "Price LBP15A": "0' - 6\"",
+      "Grille": "1' - 8\"",
+      "Bar": "2' - 5\"",
+      "Slot": "0' - 4\""
+    },
+    {
+      "Parameter": "_flange size widthwise",
+      "Price LBP15A": "0' - 0\"",
+      "Grille": "0' - 0 1/2\"",
+      "Bar": "0' - 0 1/2\"",
+      "Slot": "0' - 1\""
+    },
+    {
+      "Parameter": "_vane spacing",
+      "Price LBP15A": "0' - 0\"",
+      "Grille": "0' - 0 3/4\"",
+      "Bar": "0' - 0 3/4\"",
+      "Slot": "0' - 0\""
+    }
+  ]
 }

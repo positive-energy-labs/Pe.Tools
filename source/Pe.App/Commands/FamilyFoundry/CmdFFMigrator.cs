@@ -49,7 +49,7 @@ public class CmdFFMigrator : IExternalCommand {
                     ctx => ctx.PreviewData?.IsValid == true)
                 .WithAction("Place Families", this.HandlePlaceFamilies,
                     ctx => ctx.SelectedProfile != null)
-                .WithQueueBuilder(FFMigratorQueueBuilder.Build)
+                .WithQueueBuilder((profile, apsParamData) => FFMigratorQueueBuilder.Build(profile, apsParamData))
                 .WithPostProcess((ctx, familyNames) =>
                     FamilyPlacementHelper.PromptAndPlaceFamilies(ctx.UiDoc.Application, familyNames, DisplayName))
                 .Build();

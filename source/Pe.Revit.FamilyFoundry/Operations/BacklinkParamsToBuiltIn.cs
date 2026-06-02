@@ -6,7 +6,7 @@ namespace Pe.Revit.FamilyFoundry.Operations;
 
 /// <summary>
 ///     Creates backlinks from built-in parameters to their mapped shared parameter targets.
-///     Sets formulas like: Model = PE_G___Model, so the built-in derives from the shared param.
+///     For example, a built-in model parameter can derive from a mapped authored target parameter.
 /// </summary>
 public class BacklinkParamsToBuiltIn(MapParamsSettings settings)
     : DocOperation<MapParamsSettings>(settings) {
@@ -35,8 +35,20 @@ public class BacklinkParamsToBuiltIn(MapParamsSettings settings)
                 var log = new LogEntry($"Backlink {newParam.Definition.Name} → {currParam.Definition.Name}");
                 var successfulLink = doc.TrySetFormulaFast(currParam, newParam.Definition.Name, out var err);
                 logs.Add(successfulLink
-                    ? log.Success("Successfully backlinked")
-                    : log.Error(err ?? "Failed to set formula"));
+                    ? log.WithParameterEvent(
+                            ParameterEventOutcome.BacklinkSucceeded,
+                            sourceParameter: newParam.Definition.Name,
+                            targetParameter: currParam.Definition.Name,
+                            mappingKey: newParam.Definition.Name)
+                        .Success("Successfully backlinked")
+                    : log.WithParameterEvent(
+                            ParameterEventOutcome.BacklinkFailed,
+                            ParameterEventReason.BacklinkFormulaError,
+                            sourceParameter: newParam.Definition.Name,
+                            targetParameter: currParam.Definition.Name,
+                            mappingKey: newParam.Definition.Name,
+                            details: new Dictionary<string, string> { ["Error"] = err ?? string.Empty })
+                        .Error(err ?? "Failed to set formula"));
                 break; // Only backlink first matching built-in per mapping
             }
         }

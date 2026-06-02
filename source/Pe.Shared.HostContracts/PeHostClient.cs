@@ -422,11 +422,41 @@ public sealed class PeHostRevitCatalogClient(HttpClient httpClient) {
     );
 
     /// <summary>
+    /// Ranks task-relevant parameter identities from bindings, schedules, and scoped element evidence.
+    /// </summary>
+    /// <remarks>
+    /// Use this before detail or coverage calls when project standards may use a custom/shared parameter
+    /// instead of a familiar built-in such as Mark. Inspect reasons, then pass observed identities or
+    /// <see cref="ParameterReference"/> values into <see cref="PeHostRevitMatrixClient.GetParameterCoverageAsync"/>
+    /// or <see cref="PeHostRevitDetailClient.GetElementsAsync"/>.
+    /// </remarks>
+    public Task<ConceptEvidenceData> GetConceptEvidenceAsync(
+        ConceptEvidenceRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<ConceptEvidenceRequest, ConceptEvidenceData>(
+        this._httpClient,
+        GetConceptEvidenceOperationContract.Definition,
+        request,
+        cancellationToken
+    );
+
+    public Task<ParameterEvidenceData> GetParameterEvidenceAsync(
+        ParameterEvidenceRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<ParameterEvidenceRequest, ParameterEvidenceData>(
+        this._httpClient,
+        GetParameterEvidenceOperationContract.Definition,
+        request,
+        cancellationToken
+    );
+
+    /// <summary>
     /// Discovers candidate schedules and schedule handles.
     /// </summary>
     /// <remarks>
-    /// Use this for schedule discovery, filtering, and handle provenance. Do not use broad schedule catalog
-    /// calls to answer visible-equipment coverage; use <see cref="PeHostRevitMatrixClient.GetScheduleCoverageAsync"/>
+    /// Use this for schedule discovery, filtering, and handle provenance. Keep default responses compact;
+    /// request <c>parameterUsages</c> only when schedule fields are the next join input. Do not use broad
+    /// schedule catalog calls to answer visible-equipment coverage; use <see cref="PeHostRevitMatrixClient.GetScheduleCoverageAsync"/>
     /// from resolved view or element handles instead.
     /// </remarks>
     public Task<ScheduleCatalogData> GetSchedulesAsync(
@@ -585,8 +615,9 @@ public sealed class PeHostRevitDetailClient(HttpClient httpClient) {
     /// Gets rendered row/cell detail for known schedules.
     /// </summary>
     /// <remarks>
-    /// Resolve or catalog schedules first, then query exact schedule names/handles. Use row/issue projections
-    /// for schedule data audits instead of dumping broad schedule catalogs.
+    /// Resolve or catalog schedules first, then query exact schedule names/handles. Include columns to inspect
+    /// header text, field names, and backing parameter identity before comparing element values. Use row/issue
+    /// projections for schedule data audits instead of dumping broad schedule catalogs.
     /// </remarks>
     public Task<ScheduleQueryData> GetSchedulesAsync(
         ScheduleQueryRequest request,

@@ -1,0 +1,67 @@
+{
+  "ExecutionOptions": {
+    "SingleTransaction": false
+  },
+  "FilterFamilies": {
+    "IncludeCategoriesEqualing": [],
+    "IncludeByCondition": {},
+    "IncludeNames": {},
+    "ExcludeNames": {}
+  },
+  "FamilyParameters": [
+    {
+      "Name": "Desired Width",
+      "IsInstance": false,
+      "DataType": "Length (Common)",
+      "PropertiesGroup": "Dimensions",
+      "Tooltip": "Target width authored as desired state."
+    },
+    {
+      "Name": "Desired Height",
+      "IsInstance": false,
+      "DataType": "Length (Common)",
+      "PropertiesGroup": "Dimensions",
+      "Value": "0' - 6\""
+    },
+    {
+      "Name": "Desired Double Height",
+      "IsInstance": false,
+      "DataType": "Length (Common)",
+      "PropertiesGroup": "Dimensions",
+      "Formula": "Desired Height * 2"
+    },
+    {
+      "Name": "Desired Note",
+      "IsInstance": false,
+      "DataType": "Text",
+      "PropertiesGroup": "Identity Data",
+      "Value": "desired-ok"
+    }
+  ],
+  "SharedParameters": [
+    {
+      "Name": "PE_FF_TestSharedValue",
+      "DataType": "Text",
+      "PropertiesGroup": "Identity Data",
+      "IsInstance": false,
+      "Value": "shared-ok"
+    }
+  ],
+  "PerTypeAssignmentsTable": [
+    {
+      "Parameter": "Desired Width",
+      "Small": "3' - 0\"",
+      "Large": "4' - 0\""
+    }
+  ],
+  "ParamDrivenSolids": {
+    "Spans": [
+      {
+        "About": "@CenterLR",
+        "By": "param:Desired Width",
+        "Negative": "desired Left",
+        "Positive": "desired Right"
+      }
+    ]
+  }
+}

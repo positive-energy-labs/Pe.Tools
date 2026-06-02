@@ -21,27 +21,27 @@ public static class GetElementContextQueryOperationContract {
                         "visible equipment electrical context",
                         "Use element ids returned by revit.context.visible-summary ViewReferences/ActiveViewVisible to inspect exact visible equipment before broad electrical catalog queries.",
                         """
-                        { "query": { "kind": "ElementReferences", "elementIds": [12345, 67890], "parameterQuery": { "parameterNames": ["Mark", "Panel", "Circuit Number", "Load Name"] } } }
+                        { "query": { "kind": "ElementReferences", "elementIds": [12345, 67890], "parameterQuery": { "parameters": [{ "name": "Mark" }, { "name": "Panel" }, { "name": "Circuit Number" }, { "name": "Load Name" }] } } }
                         """
                     ),
                     RevitDataHostOperationExamples.Example(
                         "explicit equipment electrical context by unique id",
                         "Use when prior host operations or scripts returned unique ids rather than numeric ids.",
                         """
-                        { "query": { "kind": "ElementReferences", "elementUniqueIds": ["abcd-1234"], "parameterQuery": { "parameterNames": ["Mark", "Panel", "Circuit Number", "Load Name"] } } }
+                        { "query": { "kind": "ElementReferences", "elementUniqueIds": ["abcd-1234"], "parameterQuery": { "parameters": [{ "name": "Mark" }, { "name": "Panel" }, { "name": "Circuit Number" }, { "name": "Load Name" }] } } }
                         """
                     ),
                     RevitDataHostOperationExamples.Example(
                         "selected equipment context",
                         "Use the current Revit selection as the exact audit scope when the user selected equipment first.",
                         """
-                        { "query": { "kind": "CurrentSelection", "parameterQuery": { "parameterNames": ["Mark", "Panel", "Circuit Number", "Load Name"] } } }
+                        { "query": { "kind": "CurrentSelection", "parameterQuery": { "parameters": [{ "name": "Mark" }, { "name": "Panel" }, { "name": "Circuit Number" }, { "name": "Load Name" }] } } }
                         """
                     )
                 ],
                 boundedExpansionHints: [
                     "For instance-specific electrical alignment, call revit.detail.elements on exact handles from selection, visible-summary, schedule coverage samples, or a narrow script before broad panel schedule or circuit catalog queries.",
-                    "Use parameterQuery.parameterNames for visible tag/load-name fields, then expand to revit.catalog.electrical-circuits or revit.detail.electrical-panel-schedules only after panel/circuit candidates are known.",
+                    "Use parameterQuery.parameters with names or observed ParameterIdentity values for visible tag/load-name fields, then expand to revit.catalog.electrical-circuits or revit.detail.electrical-panel-schedules only after panel/circuit candidates are known.",
                     "If visible provenance matters, carry it from revit.context.visible-summary; this operation proves element facts for the exact handles it receives."
                 ],
                 handleProvenanceNotes: "Element detail returns stable element handles plus effective identity/source, requested parameters, electrical systems, connector counts, circuit, panel, panel-schedule, load-classification, wire, and connected-element facts when available."

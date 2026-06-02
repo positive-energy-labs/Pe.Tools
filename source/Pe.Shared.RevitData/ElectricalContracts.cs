@@ -70,6 +70,17 @@ public record ElectricalCircuitsCatalogOptions(
 );
 
 [ExportTsInterface]
+public record ElectricalCatalogFilterReport(
+    List<string> AppliedPanelNames,
+    List<string> AppliedCircuitNumbers,
+    List<string> AppliedLoadNames,
+    List<string> AppliedMarks,
+    List<string> IgnoredBlankFilterValues,
+    int CandidateCountBeforeFilter,
+    int MatchedCount
+);
+
+[ExportTsInterface]
 public record ElectricalPanelCatalogEntry(
     long PanelId,
     string PanelUniqueId,
@@ -94,7 +105,8 @@ public record ElectricalPanelCatalogEntry(
 [ExportTsInterface]
 public record ElectricalPanelsCatalogData(
     List<ElectricalPanelCatalogEntry> Entries,
-    List<RevitDataIssue> Issues
+    List<RevitDataIssue> Issues,
+    ElectricalCatalogFilterReport? FilterReport = null
 );
 
 [ExportTsInterface]
@@ -192,7 +204,8 @@ public record ElectricalCircuitCatalogEntry(
 [ExportTsInterface]
 public record ElectricalCircuitsCatalogData(
     List<ElectricalCircuitCatalogEntry> Entries,
-    List<RevitDataIssue> Issues
+    List<RevitDataIssue> Issues,
+    ElectricalCatalogFilterReport? FilterReport = null
 );
 
 [ExportTsInterface]

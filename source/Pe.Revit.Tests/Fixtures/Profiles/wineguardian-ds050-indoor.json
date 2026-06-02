@@ -10,176 +10,6 @@
       ]
     }
   },
-  "FilterApsParams": {
-    "IncludeNames": {
-      "Equaling": [
-        "PE_G_Dim_Height1",
-        "PE_G_Dim_Length1",
-        "PE_G_Dim_Width1"
-      ]
-    }
-  },
-  "AddFamilyParams": {
-    "Parameters": [
-      {
-        "Name": "SupplyAirDiameter",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "SupplyAirDepth",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "ReturnAirDiameter",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "ReturnAirDepth",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "ReturnAirCenterElevation",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "ServicePanelOffset",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "ServiceLineHalfSpacing",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "LiquidLineCenterOffset",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "SuctionLineCenterOffset",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "ServiceLineElevation",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "RefrigerantDepth",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "LiquidLineDiameter",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "SuctionLineDiameter",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "DrainDiameter",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "DrainDepth",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "DrainSideOffset",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "DrainElevation",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      }
-    ]
-  },
-  "SetKnownParams": {
-    "OverrideExistingValues": true,
-    "GlobalAssignments": [
-      {
-        "Parameter": "LiquidLineCenterOffset",
-        "Kind": "Formula",
-        "Value": "ServicePanelOffset - ServiceLineHalfSpacing"
-      },
-      {
-        "Parameter": "SuctionLineCenterOffset",
-        "Kind": "Formula",
-        "Value": "ServicePanelOffset + ServiceLineHalfSpacing"
-      }
-    ],
-    "PerTypeAssignmentsTable": [
-      {
-        "Parameter": "PE_G_Dim_Length1",
-        "DS050": "23.81\""
-      },
-      {
-        "Parameter": "PE_G_Dim_Width1",
-        "DS050": "25.04\""
-      },
-      {
-        "Parameter": "PE_G_Dim_Height1",
-        "DS050": "19.65\""
-      },
-      {
-        "Parameter": "SupplyAirDiameter",
-        "DS050": "10\""
-      },
-      {
-        "Parameter": "SupplyAirDepth",
-        "DS050": "6\""
-      },
-      {
-        "Parameter": "ReturnAirDiameter",
-        "DS050": "10\""
-      },
-      {
-        "Parameter": "ReturnAirDepth",
-        "DS050": "6\""
-      },
-      {
-        "Parameter": "ReturnAirCenterElevation",
-        "DS050": "9.84\""
-      },
-      {
-        "Parameter": "ServicePanelOffset",
-        "DS050": "7.50\""
-      },
-      {
-        "Parameter": "ServiceLineHalfSpacing",
-        "DS050": "0.75\""
-      },
-      {
-        "Parameter": "ServiceLineElevation",
-        "DS050": "13.85\""
-      },
-      {
-        "Parameter": "RefrigerantDepth",
-        "DS050": "2\""
-      },
-      {
-        "Parameter": "LiquidLineDiameter",
-        "DS050": "0.25\""
-      },
-      {
-        "Parameter": "SuctionLineDiameter",
-        "DS050": "0.50\""
-      },
-      {
-        "Parameter": "DrainDiameter",
-        "DS050": "0.50\""
-      },
-      {
-        "Parameter": "DrainDepth",
-        "DS050": "2\""
-      },
-      {
-        "Parameter": "DrainSideOffset",
-        "DS050": "8.50\""
-      },
-      {
-        "Parameter": "DrainElevation",
-        "DS050": "1.00\""
-      }
-    ]
-  },
   "ParamDrivenSolids": {
     "Frame": "NonHosted",
     "Planes": {
@@ -362,5 +192,172 @@
         }
       }
     ]
-  }
+  },
+  "SharedParameterSelection": {
+    "Include": {
+      "Names": [
+        "PE_G_Dim_Height1",
+        "PE_G_Dim_Length1",
+        "PE_G_Dim_Width1"
+      ]
+    },
+    "Exclude": {}
+  },
+  "SharedParameters": [
+    {
+      "Name": "PE_G_Dim_Height1"
+    },
+    {
+      "Name": "PE_G_Dim_Length1"
+    },
+    {
+      "Name": "PE_G_Dim_Width1"
+    }
+  ],
+  "FamilyParameters": [
+    {
+      "Name": "SupplyAirDiameter",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    },
+    {
+      "Name": "SupplyAirDepth",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    },
+    {
+      "Name": "ReturnAirDiameter",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    },
+    {
+      "Name": "ReturnAirDepth",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    },
+    {
+      "Name": "ReturnAirCenterElevation",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    },
+    {
+      "Name": "ServicePanelOffset",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    },
+    {
+      "Name": "ServiceLineHalfSpacing",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    },
+    {
+      "Name": "LiquidLineCenterOffset",
+      "DataType": "autodesk.spec.aec:length-2.0.1",
+      "Formula": "ServicePanelOffset - ServiceLineHalfSpacing"
+    },
+    {
+      "Name": "SuctionLineCenterOffset",
+      "DataType": "autodesk.spec.aec:length-2.0.1",
+      "Formula": "ServicePanelOffset + ServiceLineHalfSpacing"
+    },
+    {
+      "Name": "ServiceLineElevation",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    },
+    {
+      "Name": "RefrigerantDepth",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    },
+    {
+      "Name": "LiquidLineDiameter",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    },
+    {
+      "Name": "SuctionLineDiameter",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    },
+    {
+      "Name": "DrainDiameter",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    },
+    {
+      "Name": "DrainDepth",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    },
+    {
+      "Name": "DrainSideOffset",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    },
+    {
+      "Name": "DrainElevation",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    }
+  ],
+  "PerTypeAssignmentsTable": [
+    {
+      "Parameter": "PE_G_Dim_Length1",
+      "DS050": "23.81\""
+    },
+    {
+      "Parameter": "PE_G_Dim_Width1",
+      "DS050": "25.04\""
+    },
+    {
+      "Parameter": "PE_G_Dim_Height1",
+      "DS050": "19.65\""
+    },
+    {
+      "Parameter": "SupplyAirDiameter",
+      "DS050": "10\""
+    },
+    {
+      "Parameter": "SupplyAirDepth",
+      "DS050": "6\""
+    },
+    {
+      "Parameter": "ReturnAirDiameter",
+      "DS050": "10\""
+    },
+    {
+      "Parameter": "ReturnAirDepth",
+      "DS050": "6\""
+    },
+    {
+      "Parameter": "ReturnAirCenterElevation",
+      "DS050": "9.84\""
+    },
+    {
+      "Parameter": "ServicePanelOffset",
+      "DS050": "7.50\""
+    },
+    {
+      "Parameter": "ServiceLineHalfSpacing",
+      "DS050": "0.75\""
+    },
+    {
+      "Parameter": "ServiceLineElevation",
+      "DS050": "13.85\""
+    },
+    {
+      "Parameter": "RefrigerantDepth",
+      "DS050": "2\""
+    },
+    {
+      "Parameter": "LiquidLineDiameter",
+      "DS050": "0.25\""
+    },
+    {
+      "Parameter": "SuctionLineDiameter",
+      "DS050": "0.50\""
+    },
+    {
+      "Parameter": "DrainDiameter",
+      "DS050": "0.50\""
+    },
+    {
+      "Parameter": "DrainDepth",
+      "DS050": "2\""
+    },
+    {
+      "Parameter": "DrainSideOffset",
+      "DS050": "8.50\""
+    },
+    {
+      "Parameter": "DrainElevation",
+      "DS050": "1.00\""
+    }
+  ]
 }

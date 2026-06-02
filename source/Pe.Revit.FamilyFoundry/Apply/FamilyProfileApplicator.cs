@@ -1,3 +1,4 @@
+using Pe.Revit.FamilyFoundry.DesiredState;
 using Pe.Shared.StorageRuntime;
 
 namespace Pe.Revit.FamilyFoundry.Apply;
@@ -58,7 +59,8 @@ public static class FamilyProfileApplicator {
         SnapshotCapturePipeline? capturePipeline,
         LoadAndSaveOptions finishSettings,
         OutputStorage? runOutput,
-        ExecutionOptions executionOptions
+        ExecutionOptions executionOptions,
+        FamilyMigrationReconciliationPlan? desiredMigrationPlan = null
     ) {
         if (doc == null)
             return new FamilyMigrationApplyResult(false, "No document.", null, [], 0, 0);
@@ -69,6 +71,8 @@ public static class FamilyProfileApplicator {
                 : new ProcessingResultBuilder(runOutput)
                     .WithCustomProfile(profilePayload, profileName)
                     .WithOperationMetadata(queue);
+            if (resultBuilder != null && desiredMigrationPlan != null)
+                _ = resultBuilder.WithDesiredMigrationPlan(desiredMigrationPlan);
 
             using var processor = new OperationProcessor(doc, executionOptions);
             if (resultBuilder != null)

@@ -29,10 +29,7 @@ public static class ProjectParameterCatalogCollector {
                 var key = $"{parameter.Identity.Key}|{parameter.IsInstance}";
                 if (!flattened.TryGetValue(key, out var collectedParameter)) {
                     collectedParameter = new ProjectParameterCatalogEntry {
-                        Identity = parameter.Identity,
-                        IsInstance = parameter.IsInstance,
-                        PropertiesGroupKey = parameter.PropertiesGroupKey,
-                        DataTypeKey = parameter.DataTypeKey,
+                        Definition = parameter.Definition,
                         StorageType = parameter.StorageType,
                         ValuesPerType = allTypeNames.ToDictionary(
                             typeName => typeName,

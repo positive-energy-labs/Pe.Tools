@@ -1,8 +1,6 @@
 using Pe.Revit.DocumentData.Families.Loaded.Models;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Extensions.ProjDocument;
-using Pe.Shared.RevitData.Parameters;
-
 namespace Pe.Revit.DocumentData.Families.Loaded.Collectors;
 
 public static class LoadedFamiliesFormulaCollector {
@@ -94,9 +92,12 @@ public static class LoadedFamiliesFormulaCollector {
             if (entry == null)
                 continue;
 
+            if (entry.Metadata.IsInstance == null)
+                continue;
+
             var key = LoadedFamiliesCollectorSupport.GetParameterKey(
                 entry.Metadata.Identity.Name,
-                entry.Metadata.IsInstance
+                entry.Metadata.IsInstance.Value
             );
             if (byNameAndScope.ContainsKey(key)) {
                 issues.Add(new CollectedIssue(
@@ -110,10 +111,9 @@ public static class LoadedFamiliesFormulaCollector {
             } else
                 byNameAndScope[key] = entry;
 
-            if (!entry.Metadata.Identity.SharedGuid.HasValue)
+            if (!Guid.TryParse(entry.Metadata.Identity.SharedGuid, out var sharedGuid))
                 continue;
 
-            var sharedGuid = entry.Metadata.Identity.SharedGuid.Value;
             if (sharedByGuid.ContainsKey(sharedGuid)) {
                 issues.Add(new CollectedIssue(
                     "FamilySharedParameterGuidCollision",
@@ -138,13 +138,19 @@ public static class LoadedFamiliesFormulaCollector {
         List<CollectedIssue> issues
     ) {
         try {
-            var identity = RevitParameterIdentityFactory.FromFamilyParameter(familyParameter);
+            var identity = ParameterIdentityFactory.FromFamilyParameter(familyParameter);
+            var dataType = familyParameter.Definition.GetDataType();
+            var propertiesGroup = familyParameter.Definition.GetGroupTypeId();
             return new FamilyParameterLookupEntry(
                 new RevitFamilyParameterMetadata {
-                    Identity = identity,
-                    IsInstance = familyParameter.IsInstance,
-                    PropertiesGroup = familyParameter.Definition.GetGroupTypeId(),
-                    DataType = familyParameter.Definition.GetDataType()
+                    Definition = new ParameterDefinitionDescriptor(
+                        identity,
+                        familyParameter.IsInstance,
+                        NormalizeForgeTypeId(dataType),
+                        null,
+                        NormalizeForgeTypeId(propertiesGroup),
+                        null
+                    )
                 },
                 familyParameter
             );
@@ -280,9 +286,9 @@ public static class LoadedFamiliesFormulaCollector {
         FamilyParameterLookup familyParameterLookup,
         bool allowNameScopeFallback
     ) {
-        if (observed.Identity.SharedGuid.HasValue) {
+        if (Guid.TryParse(observed.Identity.SharedGuid, out var sharedGuid)) {
             return familyParameterLookup.SharedByGuid.TryGetValue(
-                observed.Identity.SharedGuid.Value,
+                sharedGuid,
                 out var sharedEntry
             )
                 ? sharedEntry
@@ -293,10 +299,13 @@ public static class LoadedFamiliesFormulaCollector {
         // Cross-document family lookup intentionally uses shared GUID only.
         // Non-shared lookup is allowed solely for true NameFallback observations
         // after project binding authority has already had a chance to claim the row.
-        if (!allowNameScopeFallback || observed.Identity.Kind != RevitParameterIdentityKind.NameFallback)
+        if (!allowNameScopeFallback || observed.Identity.Kind != ParameterIdentityKind.NameFallback)
             return null;
 
-        var key = LoadedFamiliesCollectorSupport.GetParameterKey(parameter.Name, parameter.IsInstance);
+        if (parameter.IsInstance == null)
+            return null;
+
+        var key = LoadedFamiliesCollectorSupport.GetParameterKey(parameter.Name, parameter.IsInstance.Value);
         if (!familyParameterLookup.ByNameAndScope.TryGetValue(key, out var familyEntry))
             return null;
 
@@ -379,11 +388,17 @@ public static class LoadedFamiliesFormulaCollector {
             if (categoryNames.Count != 0 && bindingCategories.Count == 0)
                 continue;
 
+            var dataType = definition.GetDataType();
+            var propertiesGroup = definition.GetGroupTypeId();
             lookup.Add(new RevitProjectBindingMetadata {
-                Identity = RevitParameterIdentityFactory.FromDefinition(projectDocument, definition),
-                IsInstance = binding is InstanceBinding,
-                PropertiesGroup = definition.GetGroupTypeId(),
-                DataType = definition.GetDataType(),
+                Definition = new ParameterDefinitionDescriptor(
+                    ParameterIdentityFactory.FromDefinition(projectDocument, definition),
+                    binding is InstanceBinding,
+                    NormalizeForgeTypeId(dataType),
+                    null,
+                    NormalizeForgeTypeId(propertiesGroup),
+                    null
+                ),
                 CategoryNames = bindingCategories
             });
         }
@@ -394,15 +409,8 @@ public static class LoadedFamiliesFormulaCollector {
     private static RevitObservedProjectParameterMetadata CreateObservedProjectParameterMetadata(
         CollectedFamilyParameterRecord parameter
     ) => new() {
-        Identity = parameter.Identity,
-        CategoryName = parameter.CategoryName,
-        IsInstance = parameter.IsInstance,
-        PropertiesGroup = string.IsNullOrWhiteSpace(parameter.GroupTypeId)
-            ? new ForgeTypeId("")
-            : new ForgeTypeId(parameter.GroupTypeId),
-        DataType = string.IsNullOrWhiteSpace(parameter.DataTypeId)
-            ? new ForgeTypeId("")
-            : new ForgeTypeId(parameter.DataTypeId)
+        Definition = parameter.Definition,
+        CategoryName = parameter.CategoryName
     };
 
     private static RevitObservedProjectParameterMetadata CreateFamilyLookupObservedProjectParameterMetadata(
@@ -411,16 +419,18 @@ public static class LoadedFamiliesFormulaCollector {
         // ParameterElementId is only meaningful inside the project document.
         // Once no project binding has claimed the observation, cross-document
         // family lookup must degrade to name/scope for non-shared family params.
-        if (observed.Identity.Kind != RevitParameterIdentityKind.ParameterElement)
+        if (observed.Identity.Kind != ParameterIdentityKind.ParameterElement)
             return observed;
 
         return observed with {
-            Identity = RevitParameterIdentityFactory.FromRaw(
-                observed.Identity.Name,
-                null,
-                null,
-                null
-            )
+            Definition = observed.Definition with {
+                Identity = ParameterIdentityFactory.FromRaw(
+                    observed.Identity.Name,
+                    null,
+                    null,
+                    null
+                )
+            }
         };
     }
 
@@ -432,13 +442,14 @@ public static class LoadedFamiliesFormulaCollector {
         var groupTypeId = NormalizeForgeTypeId(resolved.PropertiesGroup);
 
         return parameter with {
-            Identity = resolved.Identity,
-            IsInstance = resolved.IsInstance,
-            DataTypeId = dataTypeId,
-            DataTypeLabel = dataTypeId == null ? null : RevitLabelCatalog.GetLabelForSpec(resolved.DataType),
-            GroupTypeId = groupTypeId,
-            GroupTypeLabel =
-            groupTypeId == null ? null : RevitLabelCatalog.GetLabelForPropertyGroup(resolved.PropertiesGroup)
+            Definition = new ParameterDefinitionDescriptor(
+                resolved.Identity,
+                resolved.IsInstance,
+                dataTypeId,
+                dataTypeId == null ? null : RevitLabelCatalog.GetLabelForSpec(resolved.DataType),
+                groupTypeId,
+                groupTypeId == null ? null : RevitLabelCatalog.GetLabelForPropertyGroup(resolved.PropertiesGroup)
+            )
         };
     }
 

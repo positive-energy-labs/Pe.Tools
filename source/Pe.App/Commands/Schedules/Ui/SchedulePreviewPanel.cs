@@ -95,7 +95,7 @@ public class SchedulePreviewPanel : PaletteSidebarPanel<ISchedulePaletteItem, Sc
                 _ = doc.AddTable<ScheduleFieldSpec>(
                     fields,
                     [
-                        ("Name", f => f.ParameterName),
+                        ("Name", f => GetParameterLabel(f.Parameter)),
                         ("Header", f => f.ColumnHeaderOverride ?? string.Empty),
                         ("Display",
                             f => f.DisplayType is { } displayType &&
@@ -152,6 +152,12 @@ public class SchedulePreviewPanel : PaletteSidebarPanel<ISchedulePaletteItem, Sc
 
         this._richTextBox.Document = doc;
     }
+
+    private static string GetParameterLabel(Pe.Shared.RevitData.ParameterReference parameter) =>
+        parameter.Name?.Trim() ??
+        parameter.Identity?.Name.Trim() ??
+        parameter.SharedGuid?.Trim() ??
+        string.Empty;
 
     private static void AddValidationSection(FlowDocument doc, SchedulePreviewData data) {
         var remainingErrors = data.SafeRemainingErrors;

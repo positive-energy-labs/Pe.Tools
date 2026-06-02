@@ -1,4 +1,4 @@
-using Pe.Shared.RevitData;
+﻿using Pe.Shared.RevitData;
 
 namespace Pe.Shared.HostContracts.Operations;
 
@@ -12,7 +12,7 @@ public static class GetElectricalPanelsCatalogOperationContract {
             "Get Electrical Panels Catalog",
             HostOperationAgentMetadata.Create(
                 "revit",
-                "Read electrical panel facts, panel names, marks, panel-schedule counts, and connected-load counts from the active Revit document.",
+                "Read electrical panel facts, panel names, marks, panel-schedule counts, connected-load counts, and compact filter diagnostics from the active Revit document.",
                 new[] { "revit", "panels", "catalog", "distribution", "electrical-equipment", "panel-schedule-references", "panel-names" },
                 requiresBridge: true,
                 requiresActiveDocument: true,
@@ -34,7 +34,7 @@ public static class GetElectricalPanelsCatalogOperationContract {
                 ],
                 boundedExpansionHints: [
                     "Use panel names/ids returned here as PanelReferences input to revit.detail.electrical-panel-schedules.",
-                    "For per-equipment alignment, start with revit.detail.elements on exact equipment handles; this catalog is for resolving panel candidates, not proving element ownership."
+                    "For per-equipment alignment, start with revit.detail.elements on exact equipment handles; this catalog is for resolving panel candidates, not proving element ownership. Inspect filterReport when a filtered lookup returns no entries."
                 ],
                 handleProvenanceNotes: "Panel catalog entries carry panel ids, unique ids, panel names, marks, assigned-circuit counts, panel-schedule counts, and connected-load counts."
             )
@@ -51,7 +51,7 @@ public static class GetElectricalCircuitsCatalogOperationContract {
             "Get Electrical Circuits Catalog",
             HostOperationAgentMetadata.Create(
                 "revit",
-                "Read electrical circuit facts, connected load identity, panel names, circuit numbers, and optional nearby proxy context from the active Revit document.",
+                "Read electrical circuit facts, connected load identity, panel names, circuit numbers, optional nearby proxy context, and compact filter diagnostics from the active Revit document.",
                 new[] { "revit", "circuits", "catalog", "loads", "panel", "load-name", "connected-elements", "nearby-proxy", "equipment-alignment" },
                 requiresBridge: true,
                 requiresActiveDocument: true,
@@ -60,20 +60,20 @@ public static class GetElectricalCircuitsCatalogOperationContract {
                         "filter by known panel/load/circuit",
                         "Use after exact element context identifies likely panel, load name, or circuit number candidates.",
                         """
-                        { "filter": { "panelNames": ["C6P"], "loadNames": ["RV-13, DH-7 - Lower Level"], "circuitNumbers": ["1"] }, "options": { "parameterQuery": { "parameterNames": ["Mark", "Panel", "Circuit Number", "Load Name"] } } }
+                        { "filter": { "panelNames": ["C6P"], "loadNames": ["RV-13, DH-7 - Lower Level"], "circuitNumbers": ["1"] }, "options": { "parameterQuery": { "parameters": [{ "name": "Mark" }, { "name": "Panel" }, { "name": "Circuit Number" }, { "name": "Load Name" }] } } }
                         """
                     ),
                     RevitDataHostOperationExamples.Example(
                         "include nearby proxy context",
                         "Enable when exact connected elements are generic/proxy-like and need nearby identity candidates.",
                         """
-                        { "filter": { "panelNames": ["C6P"] }, "options": { "includeNearbyProxyContext": true, "nearbyRadiusFeet": 3, "maxNearbyCandidatesPerElement": 5, "parameterQuery": { "parameterNames": ["Mark", "Load Name"] } } }
+                        { "filter": { "panelNames": ["C6P"] }, "options": { "includeNearbyProxyContext": true, "nearbyRadiusFeet": 3, "maxNearbyCandidatesPerElement": 5, "parameterQuery": { "parameters": [{ "name": "Mark" }, { "name": "Load Name" }] } } }
                         """
                     )
                 ],
                 boundedExpansionHints: [
                     "For per-equipment tag/load alignment, call revit.detail.elements on exact element handles first; use circuit catalog after you know panel/circuit/load candidates.",
-                    "Use returned panel ids/names as PanelReferences input to revit.detail.electrical-panel-schedules when row/cell schedule detail is needed.",
+                    "Use returned panel ids/names as PanelReferences input to revit.detail.electrical-panel-schedules when row/cell schedule detail is needed; inspect filterReport when candidate keys produce zero matches.",
                     "Use options.includeNearbyProxyContext only when connected electrical elements look proxy-like or fail to carry the identity visible in the model."
                 ],
                 handleProvenanceNotes: "Circuit catalog entries include connected element handles, effective identity/source, electrical connector/system counts, roles, panel references, and optional nearby proxy candidates."

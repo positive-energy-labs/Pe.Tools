@@ -1,9 +1,7 @@
-using Pe.Shared.RevitData.Parameters;
-
 namespace Pe.Revit.DocumentData.Parameters;
 
-public static class RevitParameterIdentityFactory {
-    public static RevitParameterIdentity FromParameter(Parameter parameter) {
+public static class ParameterIdentityFactory {
+    public static ParameterIdentity FromParameter(Parameter parameter) {
         if (parameter == null)
             throw new ArgumentNullException(nameof(parameter));
 
@@ -15,7 +13,7 @@ public static class RevitParameterIdentityFactory {
         );
     }
 
-    public static RevitParameterIdentity FromFamilyParameter(FamilyParameter parameter) {
+    public static ParameterIdentity FromFamilyParameter(FamilyParameter parameter) {
         if (parameter == null)
             throw new ArgumentNullException(nameof(parameter));
 
@@ -27,7 +25,7 @@ public static class RevitParameterIdentityFactory {
         );
     }
 
-    public static RevitParameterIdentity FromDefinition(
+    public static ParameterIdentity FromDefinition(
         Document doc,
         Definition definition
     ) {
@@ -67,7 +65,7 @@ public static class RevitParameterIdentityFactory {
         return Create(definition.Name, null, null, null);
     }
 
-    public static RevitParameterIdentity FromParameterId(
+    public static ParameterIdentity FromParameterId(
         Document doc,
         ElementId? parameterId,
         string fallbackName
@@ -98,34 +96,34 @@ public static class RevitParameterIdentityFactory {
         );
     }
 
-    public static RevitParameterIdentity FromRaw(
+    public static ParameterIdentity FromRaw(
         string name,
         int? builtInParameterId,
         Guid? sharedGuid,
         long? parameterElementId
     ) => Create(name, builtInParameterId, sharedGuid, parameterElementId);
 
-    private static RevitParameterIdentity Create(
+    private static ParameterIdentity Create(
         string name,
         int? builtInParameterId,
         Guid? sharedGuid,
         long? parameterElementId
     ) {
         if (sharedGuid.HasValue && sharedGuid.Value != Guid.Empty) {
-            return new RevitParameterIdentity(
+            return new ParameterIdentity(
                 $"shared:{sharedGuid.Value:D}",
-                RevitParameterIdentityKind.SharedGuid,
+                ParameterIdentityKind.SharedGuid,
                 name,
                 builtInParameterId,
-                sharedGuid,
+                sharedGuid.Value.ToString("D"),
                 parameterElementId
             );
         }
 
         if (builtInParameterId.HasValue) {
-            return new RevitParameterIdentity(
+            return new ParameterIdentity(
                 $"builtin:{builtInParameterId.Value}",
-                RevitParameterIdentityKind.BuiltInParameter,
+                ParameterIdentityKind.BuiltInParameter,
                 name,
                 builtInParameterId,
                 null,
@@ -134,9 +132,9 @@ public static class RevitParameterIdentityFactory {
         }
 
         if (parameterElementId.HasValue) {
-            return new RevitParameterIdentity(
+            return new ParameterIdentity(
                 $"parameter-element:{parameterElementId.Value}",
-                RevitParameterIdentityKind.ParameterElement,
+                ParameterIdentityKind.ParameterElement,
                 name,
                 null,
                 null,
@@ -144,9 +142,9 @@ public static class RevitParameterIdentityFactory {
             );
         }
 
-        return new RevitParameterIdentity(
+        return new ParameterIdentity(
             $"name:{NormalizeName(name)}",
-            RevitParameterIdentityKind.NameFallback,
+            ParameterIdentityKind.NameFallback,
             name,
             null,
             null,

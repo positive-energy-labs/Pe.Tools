@@ -4,6 +4,7 @@ using Pe.App.Commands.FamilyFoundry;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamDocument.SetValue;
 using Pe.Revit.FamilyFoundry;
+using Pe.Revit.FamilyFoundry.DesiredState;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.Profiles;
@@ -781,17 +782,13 @@ internal static class PracticalBenchmarks {
                     IncludeNames = new IncludeFamilies { StartingWith = [""] },
                     ExcludeNames = new ExcludeFamilies()
                 },
-            FilterApsParams =
-                new BaseProfile.FilterApsParamsSettings {
-                    IncludeNames = new IncludeSharedParameter(),
-                    ExcludeNames = new ExcludeSharedParameter()
-                },
+            SharedParameterSelection = new SharedParameterSelectionSpec(),
             CleanFamilyDocument = new CleanFamilyDocumentSettings { Enabled = false },
-            AddAndMapSharedParams =
-                new MapParamsSettings { Enabled = false, DisablePerTypeFallback = true, MappingData = [] },
-            AddFamilyParams = new AddFamilyParamsSettings { Enabled = false, Parameters = [] },
-            SetKnownParams = new SetKnownParamsSettings { Enabled = false },
-            MakeElectricalConnector = new MakeElecConnectorSettings { Enabled = false },
+            MappingData = [],
+            SharedParameters = [],
+            FamilyParameters = [],
+            PerTypeAssignmentsTable = [],
+            ParamDrivenSolids = new AuthoredParamDrivenSolidsSettings(),
             SortParams = new SortParamsSettings { Enabled = true }
         };
 

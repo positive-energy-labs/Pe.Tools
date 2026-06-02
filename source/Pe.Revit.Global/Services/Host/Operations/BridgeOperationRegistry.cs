@@ -91,6 +91,16 @@ internal sealed class BridgeOperationRegistry {
                 static (request, context, cancellationToken) =>
                     context.RevitDataRequestService.GetParameterCoverageAsync(request)
             ),
+            BridgeOperations.Create<ConceptEvidenceRequest, ConceptEvidenceData>(
+                GetConceptEvidenceOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RevitDataRequestService.GetConceptEvidenceAsync(request)
+            ),
+            BridgeOperations.Create<ParameterEvidenceRequest, ParameterEvidenceData>(
+                GetParameterEvidenceOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RevitDataRequestService.GetParameterEvidenceAsync(request)
+            ),
             BridgeOperations.Create<ProjectParameterBindingsRequest, ProjectParameterBindingsData>(
                 GetProjectParameterBindingsOperationContract.Definition,
                 static (request, context, cancellationToken) =>
@@ -128,6 +138,11 @@ internal sealed class BridgeOperationRegistry {
                 GetRevitDocumentSessionContextOperationContract.Definition,
                 static (request, context, cancellationToken) =>
                     context.RevitDataRequestService.GetRevitDocumentSessionContextAsync()
+            ),
+            BridgeOperations.Create<OpenRevitDocumentRequest, OpenRevitDocumentData>(
+                OpenRevitDocumentOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RevitDataRequestService.OpenRevitDocumentAsync(request)
             ),
             BridgeOperations.Create<NoRequest, RevitAgentContextSummaryData>(
                 GetRevitAgentContextSummaryOperationContract.Definition,

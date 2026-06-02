@@ -7,7 +7,7 @@ using BCS = Pe.Revit.Extensions.FamDocument.SetValue.BuiltInCoercionStrategy;
 namespace Pe.Revit.FamilyFoundry.Operations;
 
 public class MapReplaceParams : DocOperation<MapParamsSettings> {
-    private readonly Dictionary<string, SharedParameterDefinition> _sharedParamsDict;
+    private readonly IReadOnlyDictionary<string, SharedParameterMappingTarget> _targetsByName;
 
     private readonly List<ForgeTypeId> IgnoreCoercionDataTypes = new() {
         SpecTypeId.Number, SpecTypeId.String.Text, SpecTypeId.Length
@@ -15,8 +15,8 @@ public class MapReplaceParams : DocOperation<MapParamsSettings> {
 
     public MapReplaceParams(
         MapParamsSettings settings,
-        IEnumerable<SharedParameterDefinition> sharedParams
-    ) : base(settings) => this._sharedParamsDict = sharedParams.ToDictionary(p => p.ExternalDefinition.Name);
+        IReadOnlyDictionary<string, SharedParameterMappingTarget> targetsByName
+    ) : base(settings) => this._targetsByName = targetsByName;
 
     public override string Description => "Replace a family's existing parameters with APS shared parameters";
 
@@ -29,46 +29,75 @@ public class MapReplaceParams : DocOperation<MapParamsSettings> {
         }
 
         var fm = doc.FamilyManager;
-        var data = groupContext.GetAllInComplete().Select(e => {
-            var mapping = this.Settings.MappingData.First(m => e.Key == m.NewName);
-            return (mapping, e.Value);
-        });
 
-        foreach (var (mapping, log) in data) {
+        foreach (var (mapping, log) in this.Settings.GetIncompleteMappings(groupContext)) {
             var filteredCurrNames = this.Settings.GetRankedCurrParams(
                 mapping.CurrNames,
                 fm,
                 processingContext
             );
 
-            _ = this._sharedParamsDict.TryGetValue(mapping.NewName, out var sharedParam);
-            if (sharedParam == null) continue;
+            if (!this._targetsByName.TryGetValue(mapping.NewName, out var target)) continue;
 
             // Try each CurrName in priority order until one succeeds
             var foundMatch = false;
             foreach (var currParam in filteredCurrNames.TakeWhile(_ => !foundMatch)) {
                 try {
                     var currParamName = currParam.Definition.Name;
-                    if (currParam.IsBuiltInParameter()) continue;
-                    if (currParam.Definition.GetDataType() != sharedParam.ExternalDefinition.GetDataType()) {
+                    if (currParam.IsBuiltInParameter()) {
+                        _ = log
+                            .WithParameterEvent(
+                                ParameterEventOutcome.BuiltInSourceSkipped,
+                                ParameterEventReason.BuiltInParameter,
+                                sourceParameter: currParamName,
+                                targetParameter: target.Name,
+                                mappingKey: mapping.NewName,
+                                dataType: target.Definition.DataTypeId,
+                                isInstance: target.IsInstance)
+                            .Defer($"Skipped built-in source candidate {currParamName} → {target.Name}");
+                        continue;
+                    }
+
+                    if (!target.HasSameDataType(currParam.Definition.GetDataType())) {
                         // Log a message to show user that their priority is respected.
-                        _ = log.Defer(
-                            $"{sharedParam.ExternalDefinition.Name} cannot replace {currParamName} due to datatype mismatch");
+                        _ = log
+                            .WithParameterEvent(
+                                ParameterEventOutcome.DirectReplaceBlocked,
+                                ParameterEventReason.DataTypeMismatch,
+                                sourceParameter: currParamName,
+                                targetParameter: target.Name,
+                                mappingKey: mapping.NewName,
+                                dataType: target.Definition.DataTypeId,
+                                isInstance: target.IsInstance,
+                                details: new Dictionary<string, string> {
+                                    ["SourceDataType"] = currParam.Definition.GetDataType().TypeId,
+                                    ["TargetDataType"] = target.Definition.DataTypeId ?? string.Empty
+                                })
+                            .Defer($"{target.Name} cannot replace {currParamName} due to datatype mismatch");
                         break;
                     }
 
                     var replaced = fm.ReplaceParameter(
                         currParam,
-                        sharedParam.ExternalDefinition,
-                        sharedParam.GroupTypeId,
-                        sharedParam.IsInstance
+                        target.ExternalDefinition,
+                        target.GroupTypeId,
+                        target.IsInstance
                     );
                     if (replaced == null) continue;
                     foundMatch = true;
-                    this.LogAndUnwrap(doc, log, mapping.MappingStrategy, currParamName, replaced);
+                    this.LogAndUnwrap(doc, log, mapping.MappingStrategy, currParamName, replaced, target, mapping.NewName);
                 } catch {
                     // Not terminated as error because we must allow retrying later
-                    _ = log.Defer($"Failed to map {currParam.Definition.Name} → {mapping.NewName}");
+                    _ = log
+                        .WithParameterEvent(
+                            ParameterEventOutcome.ReplaceDeferred,
+                            ParameterEventReason.Exception,
+                            sourceParameter: currParam.Definition.Name,
+                            targetParameter: mapping.NewName,
+                            mappingKey: mapping.NewName,
+                            dataType: target.Definition.DataTypeId,
+                            isInstance: target.IsInstance)
+                        .Defer($"Failed to map {currParam.Definition.Name} → {mapping.NewName}");
                 }
             }
         }
@@ -84,7 +113,9 @@ public class MapReplaceParams : DocOperation<MapParamsSettings> {
         LogEntry log,
         string mappingStrategy,
         string currParamName,
-        FamilyParameter replaced
+        FamilyParameter replaced,
+        SharedParameterMappingTarget target,
+        string mappingKey
     ) {
         var parameters = doc.FamilyManager.Parameters;
 
@@ -98,8 +129,24 @@ public class MapReplaceParams : DocOperation<MapParamsSettings> {
         var coercibleDataType = this.IgnoreCoercionDataTypes.Contains(replaced.Definition.GetDataType());
         var coercionStrategySimple = mappingStrategy is nameof(BCS.Strict) or nameof(BCS.CoerceByStorageType);
         _ = coercibleDataType && !coercionStrategySimple
-            ? log.Defer($"{msgBase}, awaiting coercion")
-            : log.Success($"{msgBase}");
+            ? log.WithParameterEvent(
+                    ParameterEventOutcome.DirectReplaceAwaitingCoercion,
+                    sourceParameter: currParamName,
+                    targetParameter: replaced.Definition.Name,
+                    mappingKey: mappingKey,
+                    dataType: target.Definition.DataTypeId,
+                    isInstance: target.IsInstance,
+                    details: new Dictionary<string, string> { ["MappingStrategy"] = mappingStrategy })
+                .Defer($"{msgBase}, awaiting coercion")
+            : log.WithParameterEvent(
+                    ParameterEventOutcome.DirectReplaceSucceeded,
+                    sourceParameter: currParamName,
+                    targetParameter: replaced.Definition.Name,
+                    mappingKey: mappingKey,
+                    dataType: target.Definition.DataTypeId,
+                    isInstance: target.IsInstance,
+                    details: new Dictionary<string, string> { ["MappingStrategy"] = mappingStrategy })
+                .Success($"{msgBase}");
         _ = doc.UnsetFormula(replaced);
     }
 }

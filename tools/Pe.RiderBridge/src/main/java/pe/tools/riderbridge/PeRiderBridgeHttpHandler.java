@@ -1,5 +1,9 @@
 package pe.tools.riderbridge;
 
+import com.intellij.execution.ProgramRunnerUtil;
+import com.intellij.execution.RunManager;
+import com.intellij.execution.configurations.RuntimeConfigurationException;
+import com.intellij.execution.executors.DefaultDebugExecutor;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.ActionPlaces;
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -46,10 +50,9 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
         "Debug",
         "Stop"
     };
-    private static final String[] DefaultRestartActions = {
-        "Rerun",
-        "Debug"
-    };
+    private static final String DefaultRestartConfigurationName = "Pe.App";
+    private static final String BridgeVersion = "0.1.0-direct-run-configuration";
+    private static final String RestartStrategy = "rerun-action-then-debug-run-configuration";
 
     @Override
     public boolean isSupported(@NotNull FullHttpRequest request) {
@@ -69,7 +72,7 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
 
         var path = urlDecoder.path();
         if (path.equals(Prefix + "/ping")) {
-            send(context, HttpResponseStatus.OK, "{\"ok\":true,\"bridge\":\"Pe.RiderBridge\"}");
+            send(context, HttpResponseStatus.OK, "{\"ok\":true,\"bridge\":\"Pe.RiderBridge\",\"version\":\"" + json(BridgeVersion) + "\",\"restartStrategy\":\"" + json(RestartStrategy) + "\"}");
             return true;
         }
 
@@ -110,12 +113,10 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
             if (requestedAction != null && !requestedAction.isBlank()) {
                 results.add(invokeAction(requestedAction, project));
             } else {
-                for (var actionId : DefaultRestartActions) {
-                    var result = invokeAction(actionId, project);
-                    results.add(result);
-                    if (result.ok())
-                        break;
-                }
+                var rerun = invokeAction("Rerun", project);
+                results.add(rerun);
+                if (!rerun.ok())
+                    results.add(debugRunConfiguration(DefaultRestartConfigurationName, project));
             }
             send(context, HttpResponseStatus.OK, operationJson("restart-rrd", project, results));
             return true;
@@ -146,6 +147,52 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
                 result.set(new ActionResult(actionId, "invoked", true, null));
             } catch (Throwable ex) {
                 result.set(new ActionResult(actionId, "failed", false, ex.getClass().getSimpleName() + ": " + ex.getMessage()));
+            }
+        });
+
+        return result.get();
+    }
+
+    private static ActionResult debugRunConfiguration(String configurationName, Project project) {
+        var result = new AtomicReference<ActionResult>();
+        ApplicationManager.getApplication().invokeAndWait(() -> {
+            try {
+                var runManager = RunManager.getInstance(project);
+                var settings = runManager.findConfigurationByName(configurationName);
+                if (settings == null) {
+                    result.set(new ActionResult(
+                        "DebugRunConfiguration",
+                        "missing",
+                        false,
+                        "Run configuration '" + configurationName + "' was not found."
+                    ));
+                    return;
+                }
+
+                settings.getConfiguration().checkConfiguration();
+                runManager.setSelectedConfiguration(settings);
+                var executor = DefaultDebugExecutor.getDebugExecutorInstance();
+                ProgramRunnerUtil.executeConfiguration(settings, executor);
+                result.set(new ActionResult(
+                    "DebugRunConfiguration",
+                    "invoked",
+                    true,
+                    "Debug invoked for run configuration '" + configurationName + "'."
+                ));
+            } catch (RuntimeConfigurationException ex) {
+                result.set(new ActionResult(
+                    "DebugRunConfiguration",
+                    "invalid-configuration",
+                    false,
+                    ex.getClass().getSimpleName() + ": " + ex.getMessage()
+                ));
+            } catch (Throwable ex) {
+                result.set(new ActionResult(
+                    "DebugRunConfiguration",
+                    "failed",
+                    false,
+                    ex.getClass().getSimpleName() + ": " + ex.getMessage()
+                ));
             }
         });
 
