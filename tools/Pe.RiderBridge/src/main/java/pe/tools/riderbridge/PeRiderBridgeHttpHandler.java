@@ -1,9 +1,7 @@
 package pe.tools.riderbridge;
 
-import com.intellij.execution.ProgramRunnerUtil;
 import com.intellij.execution.RunManager;
 import com.intellij.execution.configurations.RuntimeConfigurationException;
-import com.intellij.execution.executors.DefaultDebugExecutor;
 import com.intellij.openapi.actionSystem.ActionGroup;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.AnAction;
@@ -56,8 +54,8 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
         "Stop"
     };
     private static final String DefaultRestartConfigurationName = "Pe.App";
-    private static final String BridgeVersion = "0.1.0-solution-config-targeted-restart";
-    private static final String RestartStrategy = "year-targeted-debug-run-configuration";
+    private static final String BridgeVersion = "0.1.0-canonical-pe-app-debug-action";
+    private static final String RestartStrategy = "canonical-pe-app-debug-run-configuration";
 
     @Override
     public boolean isSupported(@NotNull FullHttpRequest request) {
@@ -127,13 +125,21 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
                 var solutionConfiguration = solutionConfigurationName(expectedRevitVersion);
                 var selection = selectSolutionConfiguration(project, solutionConfiguration);
                 results.add(selection);
-                if (selection.ok())
-                    results.add(debugRunConfiguration(restartConfigurationCandidates(expectedRevitVersion), project));
+                if (selection.ok()) {
+                    var runConfiguration = selectRunConfiguration(restartConfigurationCandidates(expectedRevitVersion), project);
+                    results.add(runConfiguration);
+                    if (runConfiguration.ok())
+                        results.add(invokeAction("Debug", project));
+                }
             } else {
                 var rerun = invokeAction("Rerun", project);
                 results.add(rerun);
-                if (!rerun.ok())
-                    results.add(debugRunConfiguration(new String[] { DefaultRestartConfigurationName }, project));
+                if (!rerun.ok()) {
+                    var runConfiguration = selectRunConfiguration(new String[] { DefaultRestartConfigurationName }, project);
+                    results.add(runConfiguration);
+                    if (runConfiguration.ok())
+                        results.add(invokeAction("Debug", project));
+                }
             }
             send(context, HttpResponseStatus.OK, operationJson("restart-rrd", project, results));
             return true;
@@ -171,15 +177,29 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
     }
 
     private static ActionResult selectSolutionConfiguration(Project project, String configurationName) {
+        var request = requestSolutionConfigurationSelection(project, configurationName);
+        if (!request.ok())
+            return request;
+
+        return awaitSelectedSolutionConfiguration(project, configurationName, request.status());
+    }
+
+    private static ActionResult requestSolutionConfigurationSelection(Project project, String configurationName) {
         var result = new AtomicReference<ActionResult>();
         ApplicationManager.getApplication().invokeAndWait(() -> {
             try {
+                var modelSelection = requestSolutionConfigurationSelectionThroughModel(project, configurationName);
+                if (modelSelection != null) {
+                    result.set(modelSelection);
+                    return;
+                }
+
                 var actions = solutionConfigurationActions(project);
                 for (var action : actions) {
                     if (!action.value().equals(configurationName))
                         continue;
 
-                    if (!(action.action() instanceof ToggleAction toggleAction)) {
+                    if (!(action.action() instanceof ToggleAction)) {
                         result.set(new ActionResult(
                             "SelectSolutionConfiguration",
                             "invalid-action",
@@ -199,13 +219,22 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
                         return;
                     }
 
-                    var event = actionEvent(project, action.action());
-                    toggleAction.setSelected(event, true);
+                    if (action.selected()) {
+                        result.set(new ActionResult(
+                            "SelectSolutionConfiguration",
+                            "already-selected",
+                            true,
+                            "Rider solution configuration '" + configurationName + "' was already selected."
+                        ));
+                        return;
+                    }
+
+                    ActionUtil.invokeAction(action.action(), dataContext(project), ActionPlaces.UNKNOWN, null, null);
                     result.set(new ActionResult(
                         "SelectSolutionConfiguration",
-                        "selected",
+                        "selection-requested-action",
                         true,
-                        "Selected Rider solution configuration '" + configurationName + "'."
+                        "Requested Rider solution configuration '" + configurationName + "' through the toolbar action."
                     ));
                     return;
                 }
@@ -227,6 +256,186 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
         });
 
         return result.get();
+    }
+
+    private static ActionResult requestSolutionConfigurationSelectionThroughModel(Project project, String configurationName) {
+        try {
+            var managerClass = Class.forName(
+                "com.jetbrains.rider.projectView.SolutionConfigurationManager",
+                true,
+                riderClassLoader()
+            );
+            var companion = managerClass.getField("Companion").get(null);
+            var manager = companion.getClass().getMethod("tryGetInstance", Project.class).invoke(companion, project);
+            if (manager == null)
+                return null;
+
+            var active = managerClass.getMethod("getActiveConfigurationAndPlatform").invoke(manager);
+            var activeConfiguration = configurationName(active);
+            if (configurationName.equals(activeConfiguration)) {
+                return new ActionResult(
+                    "SelectSolutionConfiguration",
+                    "already-selected-model",
+                    true,
+                    "Rider solution configuration '" + configurationName + "' was already selected."
+                );
+            }
+
+            var target = matchingConfigurationAndPlatform(
+                managerClass,
+                manager,
+                configurationName,
+                active == null ? null : platformName(active)
+            );
+            if (target == null)
+                return null;
+
+            managerClass.getMethod("setActiveConfigurationAndPlatform", target.getClass()).invoke(manager, target);
+            return new ActionResult(
+                "SelectSolutionConfiguration",
+                "selection-requested-model",
+                true,
+                "Requested Rider solution configuration '" + configurationName + "' through SolutionConfigurationManager."
+            );
+        } catch (ClassNotFoundException | NoClassDefFoundError ex) {
+            return null;
+        } catch (Throwable ex) {
+            return new ActionResult(
+                "SelectSolutionConfiguration",
+                "model-selection-failed",
+                false,
+                ex.getClass().getSimpleName() + ": " + ex.getMessage()
+            );
+        }
+    }
+
+    private static Object matchingConfigurationAndPlatform(
+        Class<?> managerClass,
+        Object manager,
+        String configurationName,
+        String preferredPlatform
+    ) throws ReflectiveOperationException {
+        Object fallback = null;
+        var candidates = (List<?>) managerClass.getMethod("getSolutionConfigurationsAndPlatforms").invoke(manager);
+        for (var candidate : candidates) {
+            if (!configurationName.equals(configurationName(candidate)))
+                continue;
+
+            if (preferredPlatform != null && preferredPlatform.equals(platformName(candidate)))
+                return candidate;
+
+            if (fallback == null)
+                fallback = candidate;
+        }
+
+        return fallback;
+    }
+
+    private static String configurationName(Object configurationAndPlatform) throws ReflectiveOperationException {
+        return configurationAndPlatform == null
+            ? null
+            : (String) configurationAndPlatform.getClass().getMethod("getConfiguration").invoke(configurationAndPlatform);
+    }
+
+    private static String platformName(Object configurationAndPlatform) throws ReflectiveOperationException {
+        return configurationAndPlatform == null
+            ? null
+            : (String) configurationAndPlatform.getClass().getMethod("getPlatform").invoke(configurationAndPlatform);
+    }
+
+    private static ActionResult awaitSelectedSolutionConfiguration(Project project, String configurationName, String requestStatus) {
+        var deadline = System.currentTimeMillis() + 5000;
+        String selected = null;
+        while (System.currentTimeMillis() < deadline) {
+            selected = selectedSolutionConfiguration(project, configurationName);
+            if (configurationName.equals(selected)) {
+                var status = requestStatus.equals("already-selected") ? "already-selected" : "selected";
+                return new ActionResult(
+                    "SelectSolutionConfiguration",
+                    status,
+                    true,
+                    "Verified Rider solution configuration '" + configurationName + "' is selected."
+                );
+            }
+
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                return new ActionResult(
+                    "SelectSolutionConfiguration",
+                    "interrupted",
+                    false,
+                    "Interrupted while waiting for Rider solution configuration '" + configurationName + "' to become selected."
+                );
+            }
+        }
+
+        return new ActionResult(
+            "SelectSolutionConfiguration",
+            "verification-failed",
+            false,
+            "Requested Rider solution configuration '" + configurationName + "', but Rider still reports selected configuration '" + (selected == null ? "<none>" : selected) + "'."
+        );
+    }
+
+    private static String selectedSolutionConfiguration(Project project, String preferredConfigurationName) {
+        var result = new AtomicReference<String>();
+        ApplicationManager.getApplication().invokeAndWait(() -> {
+            var modelConfiguration = selectedSolutionConfigurationThroughModel(project);
+            if (modelConfiguration != null) {
+                result.set(modelConfiguration);
+                return;
+            }
+
+            var actions = solutionConfigurationActions(project);
+            for (var action : actions) {
+                if (action.selected() && action.value().equals(preferredConfigurationName)) {
+                    result.set(action.value());
+                    return;
+                }
+            }
+
+            for (var action : actions) {
+                if (action.selected() && isSolutionConfigurationName(action.value())) {
+                    result.set(action.value());
+                    return;
+                }
+            }
+        });
+
+        return result.get();
+    }
+
+    private static String selectedSolutionConfigurationThroughModel(Project project) {
+        try {
+            var managerClass = Class.forName(
+                "com.jetbrains.rider.projectView.SolutionConfigurationManager",
+                true,
+                riderClassLoader()
+            );
+            var companion = managerClass.getField("Companion").get(null);
+            var manager = companion.getClass().getMethod("tryGetInstance", Project.class).invoke(companion, project);
+            if (manager == null)
+                return null;
+
+            var active = managerClass.getMethod("getActiveConfigurationAndPlatform").invoke(manager);
+            var configuration = configurationName(active);
+            return configuration != null && isSolutionConfigurationName(configuration) ? configuration : null;
+        } catch (ClassNotFoundException | NoClassDefFoundError ex) {
+            return null;
+        } catch (Throwable ex) {
+            return null;
+        }
+    }
+
+    private static ClassLoader riderClassLoader() {
+        var action = ActionManager.getInstance().getAction("ActiveConfigurationAndPlatformActionGroup");
+        return action == null ? PeRiderBridgeHttpHandler.class.getClassLoader() : action.getClass().getClassLoader();
+    }
+
+    private static boolean isSolutionConfigurationName(String value) {
+        return value.startsWith("Debug.") || value.startsWith("Release.");
     }
 
     private static String solutionConfigurationName(String expectedRevitVersion) {
@@ -279,7 +488,7 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
         return parts.isEmpty() ? "<none>" : String.join("; ", parts);
     }
 
-    private static ActionResult debugRunConfiguration(String[] configurationNames, Project project) {
+    private static ActionResult selectRunConfiguration(String[] configurationNames, Project project) {
         var result = new AtomicReference<ActionResult>();
         ApplicationManager.getApplication().invokeAndWait(() -> {
             try {
@@ -291,7 +500,7 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
                     .orElse(null);
                 if (settings == null) {
                     result.set(new ActionResult(
-                        "DebugRunConfiguration",
+                        "SelectRunConfiguration",
                         "missing",
                         false,
                         "None of the requested run configurations were found: " + String.join(", ", configurationNames)
@@ -303,24 +512,22 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
                 var configurationName = settings.getName();
                 settings.getConfiguration().checkConfiguration();
                 runManager.setSelectedConfiguration(settings);
-                var executor = DefaultDebugExecutor.getDebugExecutorInstance();
-                ProgramRunnerUtil.executeConfiguration(settings, executor);
                 result.set(new ActionResult(
-                    "DebugRunConfiguration",
-                    "invoked",
+                    "SelectRunConfiguration",
+                    "selected",
                     true,
-                    "Debug invoked for run configuration '" + configurationName + "'."
+                    "Selected run configuration '" + configurationName + "' before invoking Rider's Debug action."
                 ));
             } catch (RuntimeConfigurationException ex) {
                 result.set(new ActionResult(
-                    "DebugRunConfiguration",
+                    "SelectRunConfiguration",
                     "invalid-configuration",
                     false,
                     ex.getClass().getSimpleName() + ": " + ex.getMessage()
                 ));
             } catch (Throwable ex) {
                 result.set(new ActionResult(
-                    "DebugRunConfiguration",
+                    "SelectRunConfiguration",
                     "failed",
                     false,
                     ex.getClass().getSimpleName() + ": " + ex.getMessage()
@@ -335,6 +542,7 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
         var year = expectedRevitVersion.trim();
         var shortYear = year.length() == 4 && year.startsWith("20") ? "R" + year.substring(2) : year;
         return new String[] {
+            DefaultRestartConfigurationName,
             "Pe.App " + shortYear,
             "Pe.App." + shortYear,
             "Pe.App Debug." + shortYear,

@@ -11,12 +11,25 @@ internal static class CliProcessRelauncher {
         startInfo.CreateNoWindow = false;
 
         try {
-            var process = Process.Start(startInfo);
-            return process is null
-                ? BackgroundLaunchResult.Failure("Failed to start approval watcher.", 1)
-                : BackgroundLaunchResult.SuccessResult($"Approval watcher started (PID: {process.Id}).");
+            using var process = Process.Start(startInfo);
+            if (process is null)
+                return BackgroundLaunchResult.Failure("Failed to start approval watcher.", 1);
+
+            return BackgroundLaunchResult.SuccessResult(
+                $"Approval watcher started (PID: {process.Id}).",
+                process.Id,
+                TryGetStartTimeUtc(process)
+            );
         } catch (Exception ex) {
             return BackgroundLaunchResult.Failure($"Failed to start approval watcher: {ex.Message}", 1);
+        }
+    }
+
+    private static DateTime? TryGetStartTimeUtc(Process process) {
+        try {
+            return process.StartTime.ToUniversalTime();
+        } catch {
+            return null;
         }
     }
 
@@ -42,7 +55,10 @@ internal static class CliProcessRelauncher {
     }
 }
 
-internal readonly record struct BackgroundLaunchResult(bool Success, string Message, int ExitCode) {
-    public static BackgroundLaunchResult SuccessResult(string message) => new(true, message, 0);
-    public static BackgroundLaunchResult Failure(string message, int exitCode) => new(false, message, exitCode);
+internal readonly record struct BackgroundLaunchResult(bool Success, string Message, int ExitCode, int? ProcessId, DateTime? ProcessStartUtc) {
+    public static BackgroundLaunchResult SuccessResult(string message, int processId, DateTime? processStartUtc) =>
+        new(true, message, 0, processId, processStartUtc);
+
+    public static BackgroundLaunchResult Failure(string message, int exitCode) =>
+        new(false, message, exitCode, null, null);
 }

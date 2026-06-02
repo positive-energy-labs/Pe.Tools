@@ -87,7 +87,7 @@ export const liveRrdSync = createTool({
 export const liveRrdRestart = createTool({
   id: "live_rrd_re_start",
   description:
-    "Start or restart the Rider-driven RRD session. Use this to manage RRD sessions to resolve assembly freshness issues or when the user asks for an RRD session to be started, no existing Rider, Revit, or host process required.",
+    "Start or restart the Rider-driven RRD session. Use this to manage RRD sessions to resolve assembly freshness issues or when the user asks for an RRD session to be started. No existing Rider, Revit, or host process required.",
   inputSchema: repoCommandInputSchema.extend({
     riderBridgeBaseUrl: z.string().url().default(defaultRiderBridgeBaseUrl),
     project: z.string().default("Pe.Tools"),
@@ -245,7 +245,7 @@ export const test = createTool({
     target: z
       .enum(["FreshRevitProcess", "AttachedRrd"])
       .default("FreshRevitProcess"),
-    filter: z.string().default("Name~AssemblyLoadDiagnostics"),
+    filter: z.string().default("Name~Reports_runtime_assembly_load_paths"),
     planOnly: z
       .boolean()
       .default(false)
@@ -265,7 +265,7 @@ export const test = createTool({
       const args = [
         "test",
         "--filter",
-        input.filter ?? "Name~AssemblyLoadDiagnostics",
+        input.filter ?? "Name~Reports_runtime_assembly_load_paths",
         "--timeout-seconds",
         String(timeoutSeconds),
       ];
@@ -279,7 +279,7 @@ export const test = createTool({
     }
 
     return runAttachedRrdTest({
-      filter: input.filter ?? "Name~AssemblyLoadDiagnostics",
+      filter: input.filter ?? "Name~Reports_runtime_assembly_load_paths",
       syncFirst: input.syncFirst ?? true,
       timeoutSeconds: input.timeoutSeconds ?? defaultTimeoutSeconds,
     });

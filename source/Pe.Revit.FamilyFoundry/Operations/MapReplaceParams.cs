@@ -85,7 +85,10 @@ public class MapReplaceParams : DocOperation<MapParamsSettings> {
                     );
                     if (replaced == null) continue;
                     foundMatch = true;
-                    this.LogAndUnwrap(doc, log, mapping.MappingStrategy, currParamName, replaced, target, mapping.NewName);
+                    var replaceDetails = doc.DescribeSetValue(replaced, replaced, mapping.MappingStrategy)
+                        .ToDictionary(detail => detail.Key, detail => detail.Value, StringComparer.Ordinal);
+                    replaceDetails["SourceParameterBeforeReplace"] = currParamName;
+                    this.LogAndUnwrap(doc, log, mapping.MappingStrategy, currParamName, replaced, target, mapping.NewName, replaceDetails);
                 } catch {
                     // Not terminated as error because we must allow retrying later
                     _ = log
@@ -115,7 +118,8 @@ public class MapReplaceParams : DocOperation<MapParamsSettings> {
         string currParamName,
         FamilyParameter replaced,
         SharedParameterMappingTarget target,
-        string mappingKey
+        string mappingKey,
+        IReadOnlyDictionary<string, string> replaceDetails
     ) {
         var parameters = doc.FamilyManager.Parameters;
 
@@ -136,7 +140,7 @@ public class MapReplaceParams : DocOperation<MapParamsSettings> {
                     mappingKey: mappingKey,
                     dataType: target.Definition.DataTypeId,
                     isInstance: target.IsInstance,
-                    details: new Dictionary<string, string> { ["MappingStrategy"] = mappingStrategy })
+                    details: replaceDetails)
                 .Defer($"{msgBase}, awaiting coercion")
             : log.WithParameterEvent(
                     ParameterEventOutcome.DirectReplaceSucceeded,
@@ -145,7 +149,7 @@ public class MapReplaceParams : DocOperation<MapParamsSettings> {
                     mappingKey: mappingKey,
                     dataType: target.Definition.DataTypeId,
                     isInstance: target.IsInstance,
-                    details: new Dictionary<string, string> { ["MappingStrategy"] = mappingStrategy })
+                    details: replaceDetails)
                 .Success($"{msgBase}");
         _ = doc.UnsetFormula(replaced);
     }

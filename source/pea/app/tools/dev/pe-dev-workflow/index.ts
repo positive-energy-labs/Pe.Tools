@@ -9,6 +9,7 @@ import {
 
 const defaultTimeoutSeconds = 900;
 const outputTailLimit = 16_000;
+const outerTimeoutCleanupGraceSeconds = 5;
 const peDevProjectPath = "source/Pe.Dev.Cli/Pe.Dev.Cli.csproj";
 
 export type ExecutionPolicy =
@@ -315,52 +316,40 @@ async function spawnWorkflowCommand(
     let stdoutTail = "";
     let stderrTail = "";
     let timedOut = false;
+    let settled = false;
+    let forcedTimeout: NodeJS.Timeout | undefined;
     const timeout = setTimeout(() => {
       timedOut = true;
+      stderrTail = appendTail(
+        stderrTail,
+        `\nCommand exceeded outer timeoutSeconds=${request.timeoutSeconds}; requested process-tree termination.\n`,
+      );
       terminateChildProcessTree(child);
+      forcedTimeout = setTimeout(() => {
+        stderrTail = appendTail(
+          stderrTail,
+          `\nCommand did not emit close within ${outerTimeoutCleanupGraceSeconds}s after termination request; returning control while cleanup continues.\n`,
+        );
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        settle(124);
+      }, outerTimeoutCleanupGraceSeconds * 1000);
     }, request.timeoutSeconds * 1000);
 
-    child.stdout?.on("data", (chunk: Buffer) => {
-      stdoutTail = appendTail(stdoutTail, chunk.toString());
-    });
-    child.stderr?.on("data", (chunk: Buffer) => {
-      stderrTail = appendTail(stderrTail, chunk.toString());
-    });
-    child.on("error", (error) => {
+    const settle = (exitCode: number | null, errorMessage?: string) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timeout);
+      if (forcedTimeout) clearTimeout(forcedTimeout);
+
+      if (errorMessage) stderrTail = appendTail(stderrTail, errorMessage);
       const durationMs = Date.now() - startedAt;
-      resolvePromise({
-        ok: false,
-        workflow: request.workflow,
-        policy: request.policy,
-        cwd,
-        executable: {
-          requested: request.requestedExecutable,
-          resolvedPath: executablePath,
-          source: executableSource,
-        },
-        commandLine,
-        args: request.args,
-        exitCode: -1,
-        timedOut,
-        durationMs,
-        stdoutTail,
-        stderrTail: appendTail(stderrTail, error.message),
-        artifactPaths: request.artifactPaths ?? [],
-        proof: proofForResult(
-          request.workflow,
-          request.policy,
-          false,
-          timedOut,
-        ),
-      });
-    });
-    child.on("close", (exitCode) => {
-      clearTimeout(timeout);
-      const durationMs = Date.now() - startedAt;
-      const ok = exitCode === 0;
+      const effectiveExitCode = exitCode ?? (timedOut ? 124 : -1);
+      const resultTimedOut = timedOut || effectiveExitCode === 124;
+      const ok = !resultTimedOut && effectiveExitCode === 0;
       const parsedJson = parseJsonObjectFromTail(stdoutTail);
       const runtimeFreshness = getSyncRuntimeFreshness(parsedJson);
+
       resolvePromise({
         ok,
         workflow: request.workflow,
@@ -373,8 +362,8 @@ async function spawnWorkflowCommand(
         },
         commandLine,
         args: request.args,
-        exitCode,
-        timedOut,
+        exitCode: effectiveExitCode,
+        timedOut: resultTimedOut,
         durationMs,
         stdoutTail,
         stderrTail,
@@ -385,11 +374,20 @@ async function spawnWorkflowCommand(
           request.workflow,
           request.policy,
           ok,
-          timedOut,
+          resultTimedOut,
           parsedJson,
         ),
       });
+    };
+
+    child.stdout?.on("data", (chunk: Buffer) => {
+      if (!settled) stdoutTail = appendTail(stdoutTail, chunk.toString());
     });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      if (!settled) stderrTail = appendTail(stderrTail, chunk.toString());
+    });
+    child.on("error", (error) => settle(-1, error.message));
+    child.on("close", (exitCode) => settle(exitCode));
   });
 }
 
@@ -427,12 +425,9 @@ function getExecutableNames(requestedExecutable: string): string[] {
 
   if (extname(requestedExecutable).length > 0) return [requestedExecutable];
 
-  const pathExt = process.env.PATHEXT?.split(";").filter(Boolean) ?? [
-    ".COM",
-    ".EXE",
-    ".BAT",
-    ".CMD",
-  ];
+  const pathExt = (
+    process.env.PATHEXT?.split(";").filter(Boolean) ?? [".COM", ".EXE"]
+  ).filter((extension) => ![".BAT", ".CMD"].includes(extension.toUpperCase()));
   return [
     requestedExecutable,
     ...pathExt.map(
@@ -641,6 +636,7 @@ function terminateChildProcessTree(child: ReturnType<typeof spawn>): void {
       windowsHide: true,
     });
     killer.on("error", () => child.kill("SIGKILL"));
+    killer.unref();
     return;
   }
 

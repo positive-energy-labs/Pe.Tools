@@ -27,6 +27,8 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         "snapshot-parameters-post.json",
         "snapshot-diff.json",
         "snapshot-parameters-diff.json",
+        "snapshot-profile-dense-post.json",
+        "snapshot-profile-empty-allowed-post.json",
         "parameter-events.json",
         "logs-detailed.json"
     ];
@@ -158,20 +160,46 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             nameof(this.Ff_migrator_bulk_project_profile_reaches_parameter_end_state_for_mechanical_equipment_sample));
 
         try {
+            AppendHarnessLog(run.HarnessLogPath, "selecting-fast-sample-families");
             var selectedFamilyNames = SelectMechanicalEquipmentFamilyNames(run.ProjectDocument, 2);
-            SeedSourceParameterState(run.ProjectDocument, selectedFamilyNames);
+            AppendHarnessLog(run.HarnessLogPath, $"selected-fast-sample-families={string.Join(" | ", selectedFamilyNames)}");
+            SeedSourceParameterState(run.ProjectDocument, selectedFamilyNames, run.HarnessLogPath);
 
+            AppendHarnessLog(run.HarnessLogPath, "loading-real-profile");
             var profile = LoadAndAssertRealMechanicalEquipmentProfile();
+            AppendHarnessLog(run.HarnessLogPath, "applying-real-profile");
             var result = ApplyMigrationProfile(
                 run,
                 profile,
                 selectedFamilyNames,
                 "real-mech-equipment-base-mapping-end-state");
 
+            AppendHarnessLog(run.HarnessLogPath, "asserting-fast-run-summary");
             AssertBulkRunSucceeded(run, result, selectedFamilyNames);
 
-            foreach (var artifacts in LocateFamilyArtifacts(run.OutputDirectory, selectedFamilyNames))
+            AppendHarnessLog(run.HarnessLogPath, "locating-fast-family-artifacts");
+            foreach (var artifacts in LocateFamilyArtifacts(run.OutputDirectory, selectedFamilyNames)) {
+                AppendHarnessLog(run.HarnessLogPath, $"asserting-fast-family-end-state family={artifacts.FamilyName}");
                 AssertBulkFamilyEndState(artifacts);
+            }
+            AppendHarnessLog(run.HarnessLogPath, "fast-smoke-proof-complete");
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(run.ProjectDocument);
+        }
+    }
+
+    [Test]
+    [Explicit("Final all-Mechanical-Equipment scale proof. Do not run while pe-dev timeout enforcement is under diagnosis; prefer one focused wrapper first.")]
+    public void Ff_migrator_bulk_project_profile_reaches_parameter_end_state_for_all_mechanical_equipment_families() {
+        var run = this.CreateBulkMigrationRun(
+            nameof(this.Ff_migrator_bulk_project_profile_reaches_parameter_end_state_for_all_mechanical_equipment_families));
+
+        try {
+            var selectedFamilyNames = SelectMechanicalEquipmentFamilies(run.ProjectDocument)
+                .Select(family => family.Name)
+                .ToList();
+            Assert.That(selectedFamilyNames, Has.Count.EqualTo(81));
+            RunMechanicalEquipmentFamilySubset(run, selectedFamilyNames.ToArray(), "real-mech-equipment-base-mapping-all-families", false);
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(run.ProjectDocument);
         }
@@ -225,6 +253,12 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         this.RunMechanicalEquipmentPartition(10, MechanicalEquipmentFamilyPartitions[9]);
 
     [Test]
+    public void Ff_migrator_bulk_project_profile_reaches_parameter_end_state_for_mechanical_equipment_panasonic_whispergreen_select_fv0511vk2() =>
+        this.RunMechanicalEquipmentFamilySubset(
+            nameof(this.Ff_migrator_bulk_project_profile_reaches_parameter_end_state_for_mechanical_equipment_panasonic_whispergreen_select_fv0511vk2),
+            ["Panasonic - WhisperGreen Select - FV-0511VK2 - Exhaust Fan"]);
+
+    [Test]
     public void Ff_migrator_bulk_project_profile_reaches_parameter_end_state_for_mechanical_equipment_partition_11() =>
         this.RunMechanicalEquipmentPartition(11, MechanicalEquipmentFamilyPartitions[10]);
 
@@ -237,22 +271,41 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
 
         try {
             AssertMechanicalEquipmentPartitionStillMatchesProject(run.ProjectDocument, partitionNumber, selectedFamilyNames);
-            SeedSourceParameterState(run.ProjectDocument, selectedFamilyNames);
-
-            var profile = LoadAndAssertRealMechanicalEquipmentProfile();
-            var result = ApplyMigrationProfile(
-                run,
-                profile,
-                selectedFamilyNames,
-                $"real-mech-equipment-base-mapping-partition-{partitionNumber:00}");
-
-            AssertBulkRunSucceeded(run, result, selectedFamilyNames, assertExactFamilyNames: false);
-
-            foreach (var artifacts in LocateFamilyArtifacts(run.OutputDirectory, result.ProcessedFamilyNames))
-                AssertBulkFamilyEndState(artifacts);
+            RunMechanicalEquipmentFamilySubset(run, selectedFamilyNames, $"real-mech-equipment-base-mapping-partition-{partitionNumber:00}", false);
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(run.ProjectDocument);
         }
+    }
+
+    private void RunMechanicalEquipmentFamilySubset(string testName, string[] selectedFamilyNames) {
+        var run = this.CreateBulkMigrationRun(testName);
+
+        try {
+            RunMechanicalEquipmentFamilySubset(run, selectedFamilyNames, testName, true);
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(run.ProjectDocument);
+        }
+    }
+
+    private static void RunMechanicalEquipmentFamilySubset(
+        BulkMigrationHarnessRun run,
+        string[] selectedFamilyNames,
+        string scenarioName,
+        bool assertExactFamilyNames
+    ) {
+        SeedSourceParameterState(run.ProjectDocument, selectedFamilyNames, run.HarnessLogPath);
+
+        var profile = LoadAndAssertRealMechanicalEquipmentProfile();
+        var result = ApplyMigrationProfile(
+            run,
+            profile,
+            selectedFamilyNames,
+            scenarioName);
+
+        AssertBulkRunSucceeded(run, result, selectedFamilyNames, assertExactFamilyNames);
+
+        foreach (var artifacts in LocateFamilyArtifacts(run.OutputDirectory, result.ProcessedFamilyNames))
+            AssertBulkFamilyEndState(artifacts);
     }
 
     [Test]
@@ -261,13 +314,17 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             nameof(this.Ff_migrator_matrix_profile_proves_synthetic_value_and_metadata_state_for_mechanical_equipment_sample));
 
         try {
+            AppendHarnessLog(run.HarnessLogPath, "selecting-matrix-real-sample-family");
             var realFamilyNames = SelectMechanicalEquipmentFamilyNames(run.ProjectDocument, 1);
-            SeedSourceParameterState(run.ProjectDocument, realFamilyNames);
+            AppendHarnessLog(run.HarnessLogPath, $"selected-matrix-real-sample-family={string.Join(" | ", realFamilyNames)}");
+            SeedSourceParameterState(run.ProjectDocument, realFamilyNames, run.HarnessLogPath);
 
+            AppendHarnessLog(run.HarnessLogPath, "building-loading-setvalue-matrix-family");
             var setValueFamily = FamilyFoundryMatrixFixtureBuilder.BuildAndLoadSetValueMatrixFamily(
                 this._dbApplication,
                 run.ProjectDocument,
                 run.OutputDirectory);
+            AppendHarnessLog(run.HarnessLogPath, "building-loading-metadata-matrix-family");
             var metadataFamily = FamilyFoundryMatrixFixtureBuilder.BuildAndLoadMetadataStateFamily(
                 this._dbApplication,
                 run.ProjectDocument,
@@ -276,7 +333,9 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 .Concat([setValueFamily.Name, metadataFamily.Name])
                 .ToList();
 
+            AppendHarnessLog(run.HarnessLogPath, "building-narrow-matrix-profile");
             var profile = BuildNarrowMatrixMigrationProfile();
+            AppendHarnessLog(run.HarnessLogPath, "applying-narrow-matrix-profile");
             var result = ApplyMigrationProfile(
                 run,
                 profile,
@@ -297,12 +356,52 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
 
     private BulkMigrationHarnessRun CreateBulkMigrationRun(string testName) {
         var outputDirectory = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(testName);
+        var harnessLogPath = CreateHarnessLogPath(testName, outputDirectory);
+        AppendHarnessLog(harnessLogPath, $"output-directory={outputDirectory}");
         var projectCopyPath = CopyProjectFixtureToOutput("Old_Template.rvt", outputDirectory);
+        AppendHarnessLog(harnessLogPath, $"project-copy={projectCopyPath}");
+        AppendHarnessLog(harnessLogPath, "opening-project");
         var projectDocument = this._dbApplication.OpenDocumentFile(projectCopyPath)
                               ?? throw new InvalidOperationException(
                                   $"Failed to open project fixture copy '{projectCopyPath}'.");
+        AppendHarnessLog(harnessLogPath, $"opened-project title={projectDocument.Title}");
 
-        return new BulkMigrationHarnessRun(outputDirectory, projectCopyPath, projectDocument);
+        return new BulkMigrationHarnessRun(outputDirectory, projectCopyPath, projectDocument, harnessLogPath);
+    }
+
+    private static string CreateHarnessLogPath(string testName, string outputDirectory) {
+        var safeTestName = string.Concat(testName.Select(character =>
+            Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
+        var repoRoot = FindRepoRoot();
+        var logDirectory = repoRoot is null
+            ? outputDirectory
+            : Path.Combine(repoRoot, ".artifacts", "logs", "family-foundry-harness");
+        Directory.CreateDirectory(logDirectory);
+        var logPath = Path.Combine(logDirectory, $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{safeTestName}.log");
+        File.WriteAllText(Path.Combine(outputDirectory, "harness-log-path.txt"), logPath);
+        return logPath;
+    }
+
+    private static string? FindRepoRoot() {
+        var assemblyDirectory = Path.GetDirectoryName(typeof(FamilyFoundryBulkMigrationHarnessTests).Assembly.Location);
+        foreach (var candidateRoot in new[] { assemblyDirectory, Directory.GetCurrentDirectory() }) {
+            if (string.IsNullOrWhiteSpace(candidateRoot))
+                continue;
+
+            var directory = new DirectoryInfo(candidateRoot);
+            while (directory != null) {
+                if (File.Exists(Path.Combine(directory.FullName, "Pe.Tools.slnx")))
+                    return directory.FullName;
+                directory = directory.Parent;
+            }
+        }
+
+        return null;
+    }
+
+    private static void AppendHarnessLog(string logPath, string message) {
+        Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+        File.AppendAllText(logPath, $"{DateTime.UtcNow:O} {message}{Environment.NewLine}");
     }
 
     private static string CopyProjectFixtureToOutput(string fixtureFileName, string outputDirectory) {
@@ -359,38 +458,72 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         return selected;
     }
 
-    private static void SeedSourceParameterState(Document projectDocument, IReadOnlyCollection<string> familyNames) {
+    private static void SeedSourceParameterState(
+        Document projectDocument,
+        IReadOnlyCollection<string> familyNames,
+        string harnessLogPath
+    ) {
+        AppendHarnessLog(harnessLogPath, $"seed-source-state-start count={familyNames.Count}");
         foreach (var loadedFamily in SelectFamiliesByName(projectDocument, familyNames)) {
+            var familyName = loadedFamily.Name;
             Document? familyDocument = null;
             try {
+                AppendHarnessLog(harnessLogPath, $"seed-edit-family-start family={familyName}");
                 familyDocument = projectDocument.EditFamily(loadedFamily);
-                SeedFamilyDocument(familyDocument);
-                _ = familyDocument.LoadFamily(projectDocument, new DefaultFamilyLoadOptions());
+                AppendHarnessLog(harnessLogPath, $"seed-edit-family-opened family={familyName} title={familyDocument.Title}");
+                SeedFamilyDocument(familyDocument, harnessLogPath, familyName);
+                AppendHarnessLog(harnessLogPath, $"seed-load-family-start family={familyName}");
+                var loadDiagnostics = new List<(bool IsError, string Message)>();
+                _ = RevitFailureHandling.ExecuteWithFailureHandling(
+                    projectDocument,
+                    () => familyDocument.LoadFamily(projectDocument, new DefaultFamilyLoadOptions()),
+                    loadDiagnostics,
+                    familyDocument);
+                foreach (var diagnostic in loadDiagnostics)
+                    AppendHarnessLog(harnessLogPath, $"seed-load-family-diagnostic family={familyName} isError={diagnostic.IsError} message={diagnostic.Message}");
+                AppendHarnessLog(harnessLogPath, $"seed-load-family-complete family={familyName}");
             } finally {
+                AppendHarnessLog(harnessLogPath, $"seed-close-family-start family={familyName}");
                 RevitFamilyFixtureHarness.CloseDocument(familyDocument);
+                AppendHarnessLog(harnessLogPath, $"seed-close-family-complete family={familyName}");
             }
         }
+        AppendHarnessLog(harnessLogPath, "seed-source-state-complete");
     }
 
-    private static void SeedFamilyDocument(Document familyDocument) {
+    private static void SeedFamilyDocument(Document familyDocument, string harnessLogPath, string familyName) {
         using var transaction = new Transaction(familyDocument, "Seed FF migrator source state");
+        AppendHarnessLog(harnessLogPath, $"seed-transaction-start family={familyName}");
         _ = transaction.Start();
+
+        var commitDiagnostics = new List<(bool IsError, string Message)>();
+        var failureOptions = transaction.GetFailureHandlingOptions();
+        failureOptions.SetFailuresPreprocessor(new HarnessFailurePreprocessor(commitDiagnostics));
+        failureOptions.SetForcedModalHandling(false);
+        transaction.SetFailureHandlingOptions(failureOptions);
 
         var familyDoc = new FamilyDocument(familyDocument);
         var manager = familyDocument.FamilyManager;
         var types = manager.Types.Cast<FamilyType>().ToList();
+        AppendHarnessLog(harnessLogPath, $"seed-types family={familyName} count={types.Count}");
         Assert.That(types, Is.Not.Empty);
 
+        AppendHarnessLog(harnessLogPath, $"seed-ensure-parameters-start family={familyName}");
         var model = EnsureFamilyParameter(familyDocument, "Model", SpecTypeId.String.Text);
         var voltage = EnsureFamilyParameter(familyDocument, "Voltage", SpecTypeId.String.Text);
         var weight = EnsureFamilyParameter(familyDocument, "Weight", SpecTypeId.String.Text);
         var width = EnsureFamilyParameter(familyDocument, "Mech Equip Width", SpecTypeId.String.Text);
         _ = EnsureFamilyParameter(familyDocument, PurgeParameterName, SpecTypeId.String.Text);
+        AppendHarnessLog(harnessLogPath, $"seed-ensure-parameters-complete family={familyName}");
+
+        AppendHarnessLog(harnessLogPath, $"seed-clear-formulas-start family={familyName}");
         ClearFormulaIfPresent(familyDoc, model);
         ClearFormulaIfPresent(familyDoc, voltage);
         ClearFormulaIfPresent(familyDoc, weight);
         ClearFormulaIfPresent(familyDoc, width);
+        AppendHarnessLog(harnessLogPath, $"seed-clear-formulas-complete family={familyName}");
 
+        AppendHarnessLog(harnessLogPath, $"seed-set-values-start family={familyName}");
         foreach (var type in types) {
             manager.CurrentType = type;
             SetFamilyParameterValue(familyDocument, manager, model, "Harness Model");
@@ -398,8 +531,20 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             SetFamilyParameterValue(familyDocument, manager, weight, "187 lb");
             SetFamilyParameterValue(familyDocument, manager, width, "2' - 6\"");
         }
+        AppendHarnessLog(harnessLogPath, $"seed-set-values-complete family={familyName}");
 
+        AppendHarnessLog(harnessLogPath, $"seed-transaction-commit-start family={familyName}");
         _ = transaction.Commit();
+        foreach (var diagnostic in commitDiagnostics)
+            AppendHarnessLog(harnessLogPath, $"seed-transaction-diagnostic family={familyName} isError={diagnostic.IsError} message={diagnostic.Message}");
+        AppendHarnessLog(harnessLogPath, $"seed-transaction-commit-complete family={familyName}");
+    }
+
+    private sealed class HarnessFailurePreprocessor(
+        ICollection<(bool IsError, string Message)> diagnostics
+    ) : IFailuresPreprocessor {
+        public FailureProcessingResult PreprocessFailures(FailuresAccessor failuresAccessor) =>
+            RevitFailureHandling.ResolveFailures(failuresAccessor, diagnostics);
     }
 
     private static FamilyParameter EnsureFamilyParameter(
@@ -544,7 +689,9 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         FamilyFoundryMatrixFixtureBuilder.MetadataLocalInstanceNumber,
         FamilyFoundryMatrixFixtureBuilder.MetadataLocalTooltip,
         FamilyFoundryMatrixFixtureBuilder.MetadataSharedTypeText,
-        FamilyFoundryMatrixFixtureBuilder.MetadataSharedInstanceLength
+        FamilyFoundryMatrixFixtureBuilder.MetadataSharedInstanceLength,
+        FamilyFoundryMatrixFixtureBuilder.MetadataProjectBoundShared,
+        FamilyFoundryMatrixFixtureBuilder.MetadataAppliedLocalText
     ];
 
     private static MappingData CloneMapping(MappingData mapping, bool onlyAddIfSourceExists) => new() {
@@ -594,6 +741,8 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             [FamilyFoundryMatrixFixtureBuilder.SourceArrayCount]);
         yield return Mapping(FamilyFoundryMatrixFixtureBuilder.TargetNestedWidth,
             [FamilyFoundryMatrixFixtureBuilder.SourceNestedWidth]);
+        yield return Mapping(FamilyFoundryMatrixFixtureBuilder.TargetInvalidNumber,
+            [FamilyFoundryMatrixFixtureBuilder.SourceText]);
     }
 
     private static IEnumerable<DesiredSharedParameterDeclaration> BuildMatrixSharedDeclarations() {
@@ -614,6 +763,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetRadialDimension, SpecTypeId.Length, GroupTypeId.Geometry, false);
         yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetArrayCount, SpecTypeId.Int.Integer, GroupTypeId.Geometry, false);
         yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetNestedWidth, SpecTypeId.Length, GroupTypeId.Geometry, true);
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetInvalidNumber, SpecTypeId.Number, GroupTypeId.IdentityData, false);
         yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetGlobalText, SpecTypeId.String.Text, GroupTypeId.Text, false,
             value: "matrix-global-ok");
         yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.MetadataSharedTypeText, SpecTypeId.String.Text, GroupTypeId.Text, false);
@@ -847,16 +997,43 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
 
             AssertParameterHasNoFormula(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.TargetFormulaUnwrappedLength);
             AssertParameterHasNoFormula(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.TargetExistingFormulaLength);
+            AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.TargetText, StorageType.String, SpecTypeId.String.Text, GroupTypeId.Text, false, true);
+            AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.TargetBlankFallbackNumber, StorageType.Double, SpecTypeId.Number, GroupTypeId.IdentityData, false, true);
+            AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.TargetInteger, StorageType.Integer, SpecTypeId.Int.Integer, GroupTypeId.IdentityData, false, true);
+            AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.TargetYesNo, StorageType.Integer, SpecTypeId.Boolean.YesNo, GroupTypeId.IdentityData, false, true);
+            AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.TargetNumber, StorageType.Double, SpecTypeId.Number, GroupTypeId.IdentityData, false, true);
+            AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.TargetLength, StorageType.Double, SpecTypeId.Length, GroupTypeId.Geometry, false, true);
             AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.TargetVoltage, StorageType.Double, SpecTypeId.ElectricalPotential, GroupTypeId.Electrical, false, true);
             AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.TargetCurrent, StorageType.Double, SpecTypeId.Current, GroupTypeId.Electrical, false, true);
+            AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.TargetFormulaUnwrappedLength, StorageType.Double, SpecTypeId.Length, GroupTypeId.Geometry, false, true);
+            AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.TargetExistingFormulaLength, StorageType.Double, SpecTypeId.Length, GroupTypeId.Geometry, false, true);
+            AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.TargetLinearDimension, StorageType.Double, SpecTypeId.Length, GroupTypeId.Geometry, false, true);
+            AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.TargetAngularDimension, StorageType.Double, SpecTypeId.Angle, GroupTypeId.Geometry, false, true);
+            AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.TargetRadialDimension, StorageType.Double, SpecTypeId.Length, GroupTypeId.Geometry, false, true);
+            AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.TargetArrayCount, StorageType.Integer, SpecTypeId.Int.Integer, GroupTypeId.Geometry, false, true);
+            AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.TargetNestedWidth, StorageType.Double, SpecTypeId.Length, GroupTypeId.Geometry, true, true);
+            AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.TargetGlobalText, StorageType.String, SpecTypeId.String.Text, GroupTypeId.Text, false, true);
             AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.TargetPerTypeText, StorageType.String, SpecTypeId.String.Text, GroupTypeId.Text, false, false);
+            AssertParameterHasTypeValues(
+                artifacts.SnapshotPost,
+                FamilyFoundryMatrixFixtureBuilder.TargetPerTypeText,
+                new Dictionary<string, string>(StringComparer.Ordinal) {
+                    [FamilyFoundryMatrixFixtureBuilder.MatrixTypeNames[0]] = "per-type-a",
+                    [FamilyFoundryMatrixFixtureBuilder.MatrixTypeNames[1]] = "per-type-b",
+                    [FamilyFoundryMatrixFixtureBuilder.MatrixTypeNames[2]] = "per-type-c"
+                });
 
-            AssertParameterEvent(artifacts, FamilyFoundryMatrixFixtureBuilder.TargetBlankFallbackNumber, ParameterEventOutcome.ValueMapped);
+            AssertParameterEventsIncludeAll(artifacts, FamilyFoundryMatrixFixtureBuilder.TargetBlankFallbackNumber, ParameterEventOutcome.EmptySourceValue, ParameterEventOutcome.ValueMapped);
             AssertParameterEvent(artifacts, FamilyFoundryMatrixFixtureBuilder.TargetVoltage, ParameterEventOutcome.ValueMapped);
             AssertParameterEvent(artifacts, FamilyFoundryMatrixFixtureBuilder.TargetExistingFormulaLength, ParameterEventOutcome.ValueMapped);
             AssertParameterEvent(artifacts, FamilyFoundryMatrixFixtureBuilder.TargetLinearDimension, ParameterEventOutcome.DirectReplaceSucceeded, ParameterEventOutcome.ValueMapped);
             AssertParameterEvent(artifacts, FamilyFoundryMatrixFixtureBuilder.TargetArrayCount, ParameterEventOutcome.DirectReplaceSucceeded, ParameterEventOutcome.ValueMapped);
             AssertParameterEvent(artifacts, FamilyFoundryMatrixFixtureBuilder.TargetNestedWidth, ParameterEventOutcome.DirectReplaceSucceeded, ParameterEventOutcome.ValueMapped);
+            AssertParameterDiagnosticEventDetails(
+                artifacts,
+                FamilyFoundryMatrixFixtureBuilder.TargetInvalidNumber,
+                ParameterEventOutcome.AllSourceCandidatesFailed,
+                nameof(BuiltInCoercionStrategy.CoerceByStorageType));
             AssertParameterValueEvent(artifacts, FamilyFoundryMatrixFixtureBuilder.TargetPerTypeText, ParameterEventOutcome.PerTypeValueSet);
         });
     }
@@ -868,9 +1045,13 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
 
             AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.MetadataLocalTypeText, StorageType.String, SpecTypeId.String.Text, GroupTypeId.Text, false, false);
             AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.MetadataLocalInstanceNumber, StorageType.Double, SpecTypeId.Number, GroupTypeId.IdentityData, true, false);
+            AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.MetadataLocalTooltip, StorageType.String, SpecTypeId.String.Text, GroupTypeId.IdentityData, true, false);
             AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.MetadataSharedTypeText, StorageType.String, SpecTypeId.String.Text, GroupTypeId.Text, false, true);
             AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.MetadataSharedInstanceLength, StorageType.Double, SpecTypeId.Length, GroupTypeId.Geometry, true, true);
+            AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.MetadataProjectBoundShared, StorageType.String, SpecTypeId.String.Text, GroupTypeId.Electrical, true, true);
             AssertParameterPostMetadata(artifacts.SnapshotPost, FamilyFoundryMatrixFixtureBuilder.MetadataAppliedLocalText, StorageType.String, SpecTypeId.String.Text, GroupTypeId.IdentityData, false, false);
+            AssertParameterProjectedOrHasPostValue(artifacts, FamilyFoundryMatrixFixtureBuilder.MetadataLocalTooltip, "tooltip-backed-value");
+            AssertParameterProjectedOrHasPostValue(artifacts, FamilyFoundryMatrixFixtureBuilder.MetadataProjectBoundShared, "project-bound-family-value");
             AssertParameterProjectedOrHasPostValue(artifacts, FamilyFoundryMatrixFixtureBuilder.MetadataAppliedLocalText, "metadata-applied-local-ok");
             AssertParameterValueEvent(artifacts, FamilyFoundryMatrixFixtureBuilder.MetadataAppliedLocalText, ParameterEventOutcome.GlobalValueSet);
         });
@@ -916,6 +1097,23 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         return Enum.TryParse<StorageType>((string?)token, out var storageType) ? storageType : null;
     }
 
+    private static void AssertParameterHasTypeValues(
+        JObject snapshot,
+        string parameterName,
+        IReadOnlyDictionary<string, string> expectedValuesByType
+    ) {
+        var parameter = FindParameter(snapshot, parameterName);
+        Assert.That(parameter, Is.Not.Null, $"Expected parameter '{parameterName}' in post snapshot.");
+
+        var valuesByType = parameter!["ValuesPerType"];
+        Assert.That(valuesByType?.Type, Is.EqualTo(JTokenType.Object), parameterName);
+        Assert.Multiple(() => {
+            foreach (var expected in expectedValuesByType)
+                Assert.That((string?)valuesByType![expected.Key], Does.Contain(expected.Value),
+                    $"Expected '{parameterName}' type '{expected.Key}' to contain '{expected.Value}'.");
+        });
+    }
+
     private static void AssertParameterHasNoFormula(JObject snapshot, string parameterName) {
         var parameter = FindParameter(snapshot, parameterName);
         Assert.That(parameter, Is.Not.Null, $"Expected parameter '{parameterName}' in post snapshot.");
@@ -935,6 +1133,39 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             .ToList();
         Assert.That(matches, Is.Not.Empty,
             $"Expected parameter-events.json to contain {string.Join("/", outcomeNames)} for mapping '{mappingKey}'.");
+    }
+
+    private static void AssertParameterEventsIncludeAll(
+        BulkFamilyArtifacts artifacts,
+        string mappingKey,
+        params ParameterEventOutcome[] outcomes
+    ) {
+        foreach (var outcome in outcomes)
+            AssertParameterEvent(artifacts, mappingKey, outcome);
+    }
+
+    private static void AssertParameterDiagnosticEventDetails(
+        BulkFamilyArtifacts artifacts,
+        string mappingKey,
+        ParameterEventOutcome outcome,
+        string expectedMappingStrategy
+    ) {
+        var match = artifacts.ParameterEvents["Events"]!
+            .FirstOrDefault(parameterEvent =>
+                string.Equals((string?)parameterEvent["MappingKey"], mappingKey, StringComparison.Ordinal) &&
+                string.Equals((string?)parameterEvent["Outcome"], outcome.ToString(), StringComparison.Ordinal));
+        Assert.That(match, Is.Not.Null,
+            $"Expected parameter-events.json to contain {outcome} for mapping '{mappingKey}'.");
+
+        var details = match!["Details"];
+        Assert.Multiple(() => {
+            Assert.That((string?)details?["MappingStrategy"], Is.EqualTo(expectedMappingStrategy), mappingKey);
+            Assert.That((string?)details?["SourceStorageType"], Is.Not.Null.And.Not.Empty, mappingKey);
+            Assert.That((string?)details?["TargetStorageType"], Is.Not.Null.And.Not.Empty, mappingKey);
+            Assert.That((string?)details?["SourceDataType"], Is.Not.Null.And.Not.Empty, mappingKey);
+            Assert.That((string?)details?["TargetDataType"], Is.Not.Null.And.Not.Empty, mappingKey);
+            Assert.That((string?)details?["CanMap"], Is.EqualTo("False"), mappingKey);
+        });
     }
 
     private static void AssertParameterValueEvent(
@@ -1024,7 +1255,12 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             .FirstOrDefault(parameter =>
                 string.Equals((string?)parameter["Name"], parameterName, StringComparison.Ordinal));
 
-    private sealed record BulkMigrationHarnessRun(string OutputDirectory, string ProjectCopyPath, Document ProjectDocument);
+    private sealed record BulkMigrationHarnessRun(
+        string OutputDirectory,
+        string ProjectCopyPath,
+        Document ProjectDocument,
+        string HarnessLogPath
+    );
 
     private sealed record BulkFamilyArtifacts(
         string FamilyName,

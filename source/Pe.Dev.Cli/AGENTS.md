@@ -33,7 +33,7 @@ Cheap validation loop:
 - `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- --help`
 - `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- self-test`
 - `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -c Debug.R25 -- bootstrap-path`
-- `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- test --plan --json --filter "Name~AssemblyLoadDiagnostics"`
+- `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- test --plan --json --filter "Name~Reports_runtime_assembly_load_paths"`
 - `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- automation --help`
 
 Operator examples:

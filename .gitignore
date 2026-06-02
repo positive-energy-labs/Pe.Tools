@@ -8,6 +8,6 @@ riderModule.iml
 /_ReSharper.Caches/
 *.sln.DotSettings.user
 *.log
-.idea
+.idea/
 .env
 Old_Template.rvt

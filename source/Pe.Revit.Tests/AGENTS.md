@@ -47,7 +47,7 @@ dotnet test source/Pe.Revit.Tests/Pe.Revit.Tests.csproj -c Debug.R25.Tests --fil
 Current dedicated fresh-process helper (routes tests to Revit years based on execution policy):
 
 ```powershell
-pe-dev test --filter "Name~AssemblyLoadDiagnostics" --timeout-seconds 900
+pe-dev test --filter "Name~Reports_runtime_assembly_load_paths" --timeout-seconds 900
 ```
 
 ## Shared Language

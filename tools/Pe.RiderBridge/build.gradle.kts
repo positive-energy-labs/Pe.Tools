@@ -19,7 +19,7 @@ intellijPlatform {
         version = project.version.toString()
         ideaVersion {
             sinceBuild = "252"
-            untilBuild = "253.*"
+            untilBuild = "261.*"
         }
     }
 }

@@ -1,4 +1,4 @@
-using Pe.Dev.RevitAutomation;
+﻿using Pe.Dev.RevitAutomation;
 using System.Globalization;
 using System.Diagnostics;
 using System.Text.Encodings.Web;
@@ -63,7 +63,7 @@ internal static class RevitCommandRunner {
         return arguments;
     }
 
-    private static int StartApprovalWatcherForFreshLaunch(int revitYear, int timeoutSeconds, bool quiet) {
+    private static ApprovalWatcherLaunch StartApprovalWatcherForFreshLaunch(int revitYear, int timeoutSeconds, bool quiet) {
         var launchResult = CliProcessRelauncher.StartBackground(BuildApproveWorkerArguments(new RevitApproveOptions(
             timeoutSeconds,
             revitYear,
@@ -72,13 +72,44 @@ internal static class RevitCommandRunner {
         if (!launchResult.Success) {
             if (!quiet)
                 Console.Error.WriteLine(launchResult.Message);
-            return launchResult.ExitCode;
+            return new ApprovalWatcherLaunch(launchResult.ExitCode, null, null);
         }
-
         if (!quiet)
             Console.Out.WriteLine(launchResult.Message);
-        return 0;
+        return new ApprovalWatcherLaunch(0, launchResult.ProcessId, launchResult.ProcessStartUtc);
     }
+
+    private static void StopApprovalWatcherForFreshLaunch(ApprovalWatcherLaunch launch, RevitTestRunLog runLog, bool quiet) {
+        if (launch.ProcessId is not { } processId) {
+            runLog.Write("approval-watcher stop skipped no-process-id");
+            return;
+        }
+        try {
+            using var process = Process.GetProcessById(processId);
+            if (process.HasExited) {
+                runLog.Write($"approval-watcher already-exited pid={processId}");
+                return;
+            }
+            if (launch.ProcessStartUtc.HasValue) {
+                var processStartUtc = process.StartTime.ToUniversalTime();
+                if (processStartUtc != launch.ProcessStartUtc.Value) {
+                    runLog.Write($"approval-watcher stop skipped pid-reused pid={processId} expectedStartUtc={launch.ProcessStartUtc.Value:O} actualStartUtc={processStartUtc:O}");
+                    return;
+                }
+            }
+            process.Kill(entireProcessTree: true);
+            var exited = process.WaitForExit(5000);
+            runLog.Write($"approval-watcher stopped pid={processId} exited={exited}");
+        } catch (ArgumentException) {
+            runLog.Write($"approval-watcher already-exited pid={processId}");
+        } catch (Exception ex) {
+            runLog.Write($"approval-watcher stop failed pid={processId} {ex}");
+            if (!quiet)
+                Console.Error.WriteLine($"Warning: failed to stop approval watcher pid={processId}: {ex.Message}");
+        }
+    }
+
+    private readonly record struct ApprovalWatcherLaunch(int ExitCode, int? ProcessId, DateTime? ProcessStartUtc);
 
     private static async Task<int> RunTestAsync(
         string? repoRootOverride,
@@ -110,13 +141,26 @@ internal static class RevitCommandRunner {
             return 10;
         }
 
+        using var runLog = RevitTestRunLog.Create(repoRoot, options);
+        if (!options.JsonOutput)
+            Console.Out.WriteLine($"test log={runLog.FilePath}");
+        runLog.Write($"repoRoot={repoRoot}");
+        runLog.Write($"projectPath={projectPath}");
+        runLog.Write($"args={string.Join(" ", forwardedArguments.Select(QuoteArgument))}");
+
         RevitTestExecutionPlan plan;
         try {
             var matrix = RevitTestBuildMatrix.Load(repoRoot);
             var sessions = SessionSelector.DiscoverSessions().ToList();
+            foreach (var session in sessions)
+                runLog.Write($"discovered-session {FormatSessionRecord("session", session)}");
             var ownedSessions = RevitTestOwnedSessionStore.GetLiveStates(matrix.SupportedRevitYears, sessions);
+            foreach (var ownedSession in ownedSessions)
+                runLog.Write($"owned-session year={ownedSession.RevitYear} pid={ownedSession.ProcessId} startUtc={ownedSession.ProcessStartUtc:O} configuration={ownedSession.Configuration} runtimeFingerprint={ownedSession.RuntimeFingerprint}");
             plan = RevitTestExecutionPlanner.Resolve(options, matrix, sessions, ownedSessions);
+            runLog.Write($"plan configuration={plan.Configuration} revitYear={plan.RevitYear} filter={plan.Filter ?? "<none>"} noBuild={plan.NoBuild} deployedAddin={(plan.AllowDeployedAddin ? "allowed" : "quarantined")} planOnly={options.PlanOnly} timeoutSeconds={(options.TimeoutSeconds?.ToString(CultureInfo.InvariantCulture) ?? "none")} reason={plan.Reason}");
         } catch (Exception ex) {
+            runLog.Write($"plan-failed {ex}");
             if (options.JsonOutput)
                 WriteFreshTestJson(10, ex.Message, null, null, null, null, null, null);
             else
@@ -158,7 +202,16 @@ internal static class RevitCommandRunner {
                 "/p:WarningLevel=0"
             );
             try {
-                buildResult = await ForegroundProcessRunner.RunDetailedAsync(buildStartInfo, echoOutput: !options.JsonOutput, runCancellationToken);
+                runLog.WriteProcessStart("build", buildStartInfo);
+                buildResult = await ForegroundProcessRunner.RunDetailedAsync(
+                    buildStartInfo,
+                    echoOutput: !options.JsonOutput,
+                    runCancellationToken,
+                    stdoutLine: line => runLog.Write($"build stdout {line}"),
+                    stderrLine: line => runLog.Write($"build stderr {line}"),
+                    processStarted: process => runLog.Write($"build process-started pid={process.Id}"),
+                    diagnosticLine: line => runLog.Write($"build {line}"));
+                runLog.Write($"build exitCode={buildResult.ExitCode}");
             } catch (OperationCanceledException) when (timedOut()) {
                 if (options.JsonOutput)
                     WriteFreshTestJson(124, $"Fresh Revit verification timed out after {options.TimeoutSeconds} seconds during build.", plan, null, buildResult, null, null, null, timeoutSeconds: options.TimeoutSeconds);
@@ -213,97 +266,122 @@ internal static class RevitCommandRunner {
                 return 1;
             }
         }
-
-        var approvalWatcherExitCode = StartApprovalWatcherForFreshLaunch(
+        var approvalWatcherLaunch = StartApprovalWatcherForFreshLaunch(
             plan.RevitYear,
             TestApprovalWatcherTimeoutSeconds,
             quiet: options.JsonOutput
         );
-        if (approvalWatcherExitCode != 0) {
+        if (approvalWatcherLaunch.ExitCode != 0) {
             if (options.JsonOutput)
-                WriteFreshTestJson(approvalWatcherExitCode, "Failed to start approval watcher for fresh Revit launch.", plan, runtimeFingerprint, buildResult, null, null, null, timeoutSeconds: options.TimeoutSeconds);
-            return approvalWatcherExitCode;
+                WriteFreshTestJson(approvalWatcherLaunch.ExitCode, "Failed to start approval watcher for fresh Revit launch.", plan, runtimeFingerprint, buildResult, null, null, null, timeoutSeconds: options.TimeoutSeconds);
+            return approvalWatcherLaunch.ExitCode;
         }
-
-        var testStartInfo = CreateDotNetStartInfo(
-            repoRoot,
-            "test",
-            projectPath,
-            "-c",
-            plan.Configuration,
-            "--no-build"
-        );
-        if (!string.IsNullOrWhiteSpace(plan.Filter)) {
-            testStartInfo.ArgumentList.Add("--filter");
-            testStartInfo.ArgumentList.Add(plan.Filter);
-        }
-        testStartInfo.ArgumentList.Add("/p:PeRevitRawDotNetTestWarningSuppressed=true");
-        testStartInfo.ArgumentList.Add("/p:PeVerifyTarget=FreshRevitProcess");
-
-        var revitExecutablePath = ResolveRevitExecutablePath(plan.RevitYear);
-        testStartInfo.Environment["RICAUN_REVITTEST_TESTADAPTER_NUNIT_VERSION"] =
-            plan.RevitYear.ToString(CultureInfo.InvariantCulture);
-        testStartInfo.Environment["RICAUN_REVITTEST_TESTADAPTER_NUNIT_APPLICATION"] =
-            revitExecutablePath;
-        testStartInfo.Environment["RICAUN_REVITTEST_TESTADAPTER_NUNIT_OPEN"] =
-            bool.TrueString;
-        testStartInfo.Environment["RICAUN_REVITTEST_TESTADAPTER_NUNIT_CLOSE"] =
-            bool.TrueString;
-
-        var baselineSessionIds = SessionSelector.DiscoverSessions(plan.RevitYear)
-            .Select(session => session.ProcessId)
-            .ToHashSet();
-
-        using var quarantine = !plan.AllowDeployedAddin
-            ? RevitAddinQuarantine.CreateForPeApp(plan.RevitYear)
-            : null;
-
-        if (quarantine is not null) {
-            try {
-                quarantine.Initialize();
-                if (!options.JsonOutput)
-                    Console.Out.WriteLine(quarantine.Describe());
-            } catch (Exception ex) {
-                var failure = $"Failed to quarantine deployed add-in for Revit {plan.RevitYear}: {ex.Message}";
-                if (options.JsonOutput)
-                    WriteFreshTestJson(1, failure, plan, runtimeFingerprint, buildResult, null, null, null, timeoutSeconds: options.TimeoutSeconds);
-                else
-                    Console.Error.WriteLine(failure);
-                return 1;
-            }
-        }
-
-        using var ownedSessionTrackingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var ownedSessionTracker = TrackFreshOwnedSessionAsync(
-            plan.RevitYear,
-            plan.Configuration,
-            runtimeFingerprint,
-            baselineSessionIds,
-            options.JsonOutput,
-            ownedSessionTrackingCts.Token
-        );
-
-        int testExitCode;
-        string? testFailure = null;
-        ForegroundProcessResult? testResult = null;
         try {
-            testResult = await ForegroundProcessRunner.RunDetailedAsync(testStartInfo, echoOutput: !options.JsonOutput, runCancellationToken);
-            testExitCode = testResult.ExitCode;
-        } catch (OperationCanceledException) when (timedOut()) {
-            testExitCode = 124;
-            testFailure = $"Fresh Revit verification timed out after {options.TimeoutSeconds} seconds during test run.";
-            if (!options.JsonOutput)
-                Console.Error.WriteLine(testFailure);
-        } finally {
-            ownedSessionTrackingCts.Cancel();
-            await ownedSessionTracker;
-        }
+            var testStartInfo = CreateDotNetStartInfo(
+                repoRoot,
+                "test",
+                projectPath,
+                "-c",
+                plan.Configuration,
+                "--no-build"
+            );
+            if (!string.IsNullOrWhiteSpace(plan.Filter)) {
+                testStartInfo.ArgumentList.Add("--filter");
+                testStartInfo.ArgumentList.Add(plan.Filter);
+            }
+            testStartInfo.ArgumentList.Add("/p:PeRevitRawDotNetTestWarningSuppressed=true");
+            testStartInfo.ArgumentList.Add("/p:PeVerifyTarget=FreshRevitProcess");
+            var revitExecutablePath = ResolveRevitExecutablePath(plan.RevitYear);
+            runLog.Write($"revitExecutablePath={revitExecutablePath}");
+            testStartInfo.Environment.Remove("RICAUN_REVITTEST_TESTADAPTER_NUNIT_APPLICATION");
+            runLog.Write("revitTestApplication=embedded-console");
+            testStartInfo.Environment["RICAUN_REVITTEST_TESTADAPTER_NUNIT_VERSION"] =
+                plan.RevitYear.ToString(CultureInfo.InvariantCulture);
+            testStartInfo.Environment["RICAUN_REVITTEST_TESTADAPTER_NUNIT_OPEN"] =
+                bool.TrueString;
+            testStartInfo.Environment["RICAUN_REVITTEST_TESTADAPTER_NUNIT_CLOSE"] =
+                bool.TrueString;
 
-        var closeExitCode = CloseFreshTestSessions(plan.RevitYear, baselineSessionIds, quiet: options.JsonOutput);
-        var exitCode = closeExitCode != 0 ? closeExitCode : testExitCode;
-        if (options.JsonOutput)
-            WriteFreshTestJson(exitCode, exitCode == 0 ? null : testFailure ?? "Fresh Revit test run failed.", plan, runtimeFingerprint, buildResult, testResult, testExitCode, closeExitCode, timeoutSeconds: options.TimeoutSeconds);
-        return exitCode;
+            var baselineSessions = SessionSelector.DiscoverSessions(plan.RevitYear);
+            foreach (var session in baselineSessions)
+                runLog.Write($"baseline-session {FormatSessionRecord("baseline", session)}");
+            var baselineSessionIds = baselineSessions
+                .Select(session => session.ProcessId)
+                .ToHashSet();
+
+            using var quarantine = !plan.AllowDeployedAddin
+                ? RevitAddinQuarantine.CreateForPeApp(plan.RevitYear)
+                : null;
+
+            if (quarantine is not null) {
+                try {
+                    quarantine.Initialize();
+                    if (!options.JsonOutput)
+                        Console.Out.WriteLine(quarantine.Describe());
+                } catch (Exception ex) {
+                    var failure = $"Failed to quarantine deployed add-in for Revit {plan.RevitYear}: {ex.Message}";
+                    if (options.JsonOutput)
+                        WriteFreshTestJson(1, failure, plan, runtimeFingerprint, buildResult, null, null, null, timeoutSeconds: options.TimeoutSeconds);
+                    else
+                        Console.Error.WriteLine(failure);
+                    return 1;
+                }
+            }
+
+            using var ownedSessionTrackingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var ownedSessionTracker = TrackFreshOwnedSessionAsync(
+                plan.RevitYear,
+                plan.Configuration,
+                runtimeFingerprint,
+                baselineSessionIds,
+                options.JsonOutput,
+                runLog,
+                ownedSessionTrackingCts.Token
+            );
+
+            int testExitCode;
+            string? testFailure = null;
+            ForegroundProcessResult? testResult = null;
+            try {
+                runLog.WriteProcessStart("test", testStartInfo);
+                testResult = await ForegroundProcessRunner.RunDetailedAsync(
+                    testStartInfo,
+                    echoOutput: !options.JsonOutput,
+                    runCancellationToken,
+                    stdoutLine: line => runLog.Write($"test stdout {line}"),
+                    stderrLine: line => runLog.Write($"test stderr {line}"),
+                    processStarted: process => runLog.Write($"test process-started pid={process.Id}"),
+                    heartbeat: (process, elapsed) => LogTestHeartbeat(
+                        runLog,
+                        plan.RevitYear,
+                        baselineSessionIds,
+                        process,
+                        elapsed),
+                    diagnosticLine: line => runLog.Write($"test {line}"));
+                testExitCode = testResult.ExitCode;
+                runLog.Write($"test exitCode={testExitCode}");
+            } catch (OperationCanceledException) when (timedOut()) {
+                testExitCode = 124;
+                testFailure = $"Fresh Revit verification timed out after {options.TimeoutSeconds} seconds during test run.";
+                runLog.Write($"test timed-out timeoutSeconds={options.TimeoutSeconds}");
+                if (!options.JsonOutput)
+                    Console.Error.WriteLine(testFailure);
+            } finally {
+                ownedSessionTrackingCts.Cancel();
+                await ownedSessionTracker;
+            }
+
+            runLog.Write("closing fresh test sessions");
+            var closeExitCode = CloseFreshTestSessions(plan.RevitYear, baselineSessionIds, quiet: options.JsonOutput);
+            runLog.Write($"close exitCode={closeExitCode}");
+            var exitCode = closeExitCode != 0 ? closeExitCode : testExitCode;
+            runLog.Write($"final exitCode={exitCode}");
+            if (options.JsonOutput)
+                WriteFreshTestJson(exitCode, exitCode == 0 ? null : testFailure ?? "Fresh Revit test run failed.", plan, runtimeFingerprint, buildResult, testResult, testExitCode, closeExitCode, timeoutSeconds: options.TimeoutSeconds);
+            return exitCode;
+        } finally {
+            StopApprovalWatcherForFreshLaunch(approvalWatcherLaunch, runLog, quiet: options.JsonOutput);
+        }
     }
 
     private static void WriteFreshTestJson(
@@ -350,9 +428,30 @@ internal static class RevitCommandRunner {
             JsonOptions
         ));
     }
-
+    private static void LogTestHeartbeat(
+        RevitTestRunLog runLog,
+        int revitYear,
+        ISet<int> baselineSessionIds,
+        Process testProcess,
+        TimeSpan elapsed
+    ) {
+        runLog.Write($"test heartbeat pid={testProcess.Id} elapsedSeconds={(int)elapsed.TotalSeconds} hasExited={testProcess.HasExited}");
+        var visibleSessions = SessionSelector.DiscoverSessions(revitYear).ToList();
+        if (visibleSessions.Count == 0) {
+            runLog.Write($"test heartbeat no-visible-revit-sessions revitYear={revitYear}");
+            return;
+        }
+        foreach (var session in visibleSessions) {
+            var baseline = baselineSessionIds.Contains(session.ProcessId) ? "baseline" : "candidate";
+            runLog.Write($"test heartbeat-visible {FormatSessionRecord(baseline, session)}");
+        }
+    }
     private static string FormatSessionRecord(string label, RevitProcessSessionIdentity session) =>
         $"{label} pid={session.ProcessId} startUtc={session.ProcessStartUtc:O} revitYear={(session.RevitYear?.ToString(CultureInfo.InvariantCulture) ?? "unknown")} responding={session.Responding} hung={session.Hung} title=\"{session.MainWindowTitle}\"";
+    private static string QuoteArgument(string argument) =>
+        argument.Any(char.IsWhiteSpace)
+            ? $"\"{argument.Replace("\"", "\\\"")}\""
+            : argument;
 
     private static string ResolveRevitExecutablePath(int revitYear) {
         var path = Path.Combine(
@@ -387,13 +486,22 @@ internal static class RevitCommandRunner {
         string runtimeFingerprint,
         ISet<int> baselineSessionIds,
         bool quiet,
+        RevitTestRunLog runLog,
         CancellationToken cancellationToken
     ) {
         try {
+            var lastLoggedPollUtc = DateTime.MinValue;
             while (true) {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var ownedSession = SessionSelector.DiscoverSessions(revitYear)
+                var visibleSessions = SessionSelector.DiscoverSessions(revitYear);
+                if (DateTime.UtcNow - lastLoggedPollUtc > TimeSpan.FromSeconds(10)) {
+                    lastLoggedPollUtc = DateTime.UtcNow;
+                    foreach (var session in visibleSessions.Where(session => !baselineSessionIds.Contains(session.ProcessId)))
+                        runLog.Write($"tracker-visible {FormatSessionRecord("candidate", session)}");
+                }
+
+                var ownedSession = visibleSessions
                     .Where(session =>
                         !baselineSessionIds.Contains(session.ProcessId) &&
                         session.Responding &&
@@ -413,6 +521,7 @@ internal static class RevitCommandRunner {
                         )
                     );
 
+                    runLog.Write($"owned-test-session {FormatSessionRecord("selected", ownedSession)} runtimeFingerprint={runtimeFingerprint[..Math.Min(12, runtimeFingerprint.Length)]}");
                     if (!quiet)
                         Console.Out.WriteLine(
                             $"owned-test-session {FormatSessionRecord("selected", ownedSession)} runtimeFingerprint={runtimeFingerprint[..Math.Min(12, runtimeFingerprint.Length)]}");
@@ -422,7 +531,9 @@ internal static class RevitCommandRunner {
                 await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
             }
         } catch (OperationCanceledException) {
+            runLog.Write("owned-session tracker canceled");
         } catch (Exception ex) {
+            runLog.Write($"owned-session tracker failed {ex}");
             Console.Error.WriteLine(
                 $"Failed to record owned Revit test session for Revit {revitYear}: {ex.Message}");
         }
@@ -503,6 +614,60 @@ internal static class RevitCommandRunner {
         }
 
         return 0;
+    }
+
+    private sealed class RevitTestRunLog : IDisposable {
+        private readonly object _gate = new();
+        private readonly StreamWriter _writer;
+
+        private RevitTestRunLog(string filePath) {
+            this.FilePath = filePath;
+            Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+            this._writer = new StreamWriter(File.Open(filePath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite)) {
+                AutoFlush = true
+            };
+            this.Write("log-start");
+        }
+
+        public string FilePath { get; }
+
+        public static RevitTestRunLog Create(string repoRoot, RevitTestCliOptions options) {
+            var root = Path.Combine(repoRoot, ".artifacts", "logs", "pe-dev-test");
+            var timestamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+            var filterSlug = SanitizeFileName(options.Filter ?? "all");
+            var fileName = $"{timestamp}-{filterSlug}.log";
+            return new RevitTestRunLog(Path.Combine(root, fileName));
+        }
+
+        public void WriteProcessStart(string label, ProcessStartInfo startInfo) {
+            this.Write($"{label} command={QuoteArgument(startInfo.FileName)} {string.Join(" ", startInfo.ArgumentList.Select(QuoteArgument))}");
+            foreach (var pair in startInfo.Environment
+                         .Where(pair => pair.Key.StartsWith("RICAUN_REVITTEST_", StringComparison.OrdinalIgnoreCase))
+                         .OrderBy(pair => pair.Key, StringComparer.Ordinal))
+                this.Write($"{label} env {pair.Key}={pair.Value}");
+        }
+
+        public void Write(string message) {
+            lock (this._gate) {
+                this._writer.WriteLine($"{DateTime.UtcNow:O} {message}");
+            }
+        }
+
+        public void Dispose() {
+            this.Write("log-end");
+            this._writer.Dispose();
+        }
+
+        private static string SanitizeFileName(string value) {
+            var invalid = Path.GetInvalidFileNameChars().ToHashSet();
+            var sanitized = new string(value
+                .Select(ch => invalid.Contains(ch) || char.IsWhiteSpace(ch) ? '-' : ch)
+                .ToArray());
+            sanitized = sanitized.Trim('-');
+            if (sanitized.Length == 0)
+                return "all";
+            return sanitized.Length <= 80 ? sanitized : sanitized[..80];
+        }
     }
 
     private static bool ArgsRequestJson(IReadOnlyList<string> args) =>
