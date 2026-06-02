@@ -10,8 +10,8 @@ internal static class AuthoredScheduleSpecApplication {
         this ScheduleFieldSpec spec,
         ViewSchedule schedule,
         ScheduleDefinition def,
-        Func<ScheduleDefinition, Document, string, SchedulableField?> findSchedulableField,
-        Func<ScheduleDefinition, Document, string, ElementId?> findParameterIdByName) {
+        Func<ScheduleDefinition, Document, ParameterReference, SchedulableField?> findSchedulableField,
+        Func<ScheduleDefinition, Document, ParameterReference, ElementId?> findParameterId) {
         var warnings = new List<string>();
 
         if (spec.CalculatedType.HasValue)
@@ -22,21 +22,23 @@ internal static class AuthoredScheduleSpecApplication {
             var (combinedField, skipped, combinedWarnings) = spec.ApplyCombinedField(
                 schedule,
                 def,
-                findParameterIdByName);
+                findParameterId);
             field = combinedField;
             warnings.AddRange(combinedWarnings);
             if (skipped != null)
                 return (null, skipped, warnings);
         } else {
-            var schedulableField = findSchedulableField(def, schedule.Document, spec.ParameterName);
+            var parameterLabel = spec.Parameter.GetDisplayLabel();
+            var schedulableField = findSchedulableField(def, schedule.Document, spec.Parameter);
             if (schedulableField is null)
-                return (null, $"Parameter '{spec.ParameterName}' not found", warnings);
+                return (null, $"Parameter '{parameterLabel}' not found", warnings);
 
             field = def.AddField(schedulableField);
         }
 
+        var fieldLabel = field?.GetName() ?? spec.Parameter.GetDisplayLabel();
         if (field == null)
-            return (null, $"Field '{spec.ParameterName}' could not be created", warnings);
+            return (null, $"Field '{fieldLabel}' could not be created", warnings);
 
         var propertyWarnings = spec.ApplyProperties(field);
         warnings.AddRange(propertyWarnings);
@@ -44,7 +46,7 @@ internal static class AuthoredScheduleSpecApplication {
         var displayType = spec.DisplayType.ToRevit();
         var horizontalAlignment = spec.HorizontalAlignment.ToRevit();
         var applied = new AppliedFieldInfo {
-            ParameterName = spec.ParameterName,
+            ParameterName = fieldLabel,
             ColumnHeaderOverride = spec.ColumnHeaderOverride ?? string.Empty,
             IsHidden = spec.IsHidden,
             ColumnWidth = spec.ColumnWidth,
@@ -60,7 +62,7 @@ internal static class AuthoredScheduleSpecApplication {
             return null;
 
         var guidance = new CalculatedFieldGuidance {
-            FieldName = spec.ParameterName,
+            FieldName = spec.Parameter.GetDisplayLabel(),
             CalculatedType = spec.CalculatedType.ToString() ?? string.Empty
         };
 
@@ -180,7 +182,7 @@ internal static class AuthoredScheduleSpecApplication {
         this ScheduleFieldSpec spec,
         ViewSchedule schedule,
         ScheduleDefinition def,
-        Func<ScheduleDefinition, Document, string, ElementId?> findParameterIdByName) {
+        Func<ScheduleDefinition, Document, ParameterReference, ElementId?> findParameterId) {
         var warnings = new List<string>();
 
         try {
@@ -188,10 +190,11 @@ internal static class AuthoredScheduleSpecApplication {
 
             foreach (var combinedSpec in spec.CombinedParameters) {
                 var combinedData = TableCellCombinedParameterData.Create();
-                var paramId = findParameterIdByName(def, schedule.Document, combinedSpec.ParameterName);
+                var combinedParameterLabel = combinedSpec.Parameter.GetDisplayLabel();
+                var paramId = findParameterId(def, schedule.Document, combinedSpec.Parameter);
                 if (paramId == null || paramId == ElementId.InvalidElementId) {
                     warnings.Add(
-                        $"Parameter '{combinedSpec.ParameterName}' not found for combined field '{spec.ParameterName}'");
+                        $"Parameter '{combinedParameterLabel}' not found for combined field '{spec.Parameter.GetDisplayLabel()}'");
                     combinedData.Dispose();
                     continue;
                 }
@@ -208,7 +211,7 @@ internal static class AuthoredScheduleSpecApplication {
                 if (def.IsValidCombinedParameters(combinedParamDataList)) {
                     var field = def.InsertCombinedParameterField(
                         combinedParamDataList,
-                        spec.ParameterName,
+                        spec.Parameter.GetDisplayLabel(),
                         def.GetFieldCount());
 
                     foreach (var data in combinedParamDataList)
@@ -220,13 +223,13 @@ internal static class AuthoredScheduleSpecApplication {
                 foreach (var data in combinedParamDataList)
                     data.Dispose();
 
-                return (null, $"Combined parameter field '{spec.ParameterName}' has invalid parameters", warnings);
+                return (null, $"Combined parameter field '{spec.Parameter.GetDisplayLabel()}' has invalid parameters", warnings);
             }
 
-            return (null, $"Combined parameter field '{spec.ParameterName}' has no valid parameters", warnings);
+            return (null, $"Combined parameter field '{spec.Parameter.GetDisplayLabel()}' has no valid parameters", warnings);
         } catch (Exception ex) {
-            warnings.Add($"Failed to create combined parameter field '{spec.ParameterName}': {ex.Message}");
-            return (null, $"Exception creating combined field '{spec.ParameterName}'", warnings);
+            warnings.Add($"Failed to create combined parameter field '{spec.Parameter.GetDisplayLabel()}': {ex.Message}");
+            return (null, $"Exception creating combined field '{spec.Parameter.GetDisplayLabel()}'", warnings);
         }
     }
 
@@ -255,11 +258,11 @@ internal static class AuthoredScheduleSpecApplication {
             if (canApply)
                 field.DisplayType = displayType;
             else
-                warnings.Add($"DisplayType '{displayType}' not supported for field '{spec.ParameterName}'");
+                warnings.Add($"DisplayType '{displayType}' not supported for field '{field.GetName()}'");
         }
 
         if (spec.FormatOptions != null) {
-            var formatWarning = ApplyFormatOptions(spec.FormatOptions, field, spec.ParameterName);
+            var formatWarning = ApplyFormatOptions(spec.FormatOptions, field, field.GetName());
             if (formatWarning != null)
                 warnings.Add(formatWarning);
         }
@@ -314,4 +317,10 @@ internal static class AuthoredScheduleSpecApplication {
             return $"Failed to apply format options for field '{fieldName}': {ex.Message}";
         }
     }
+
+    private static string GetDisplayLabel(this ParameterReference reference) =>
+        reference.Name?.Trim() ??
+        reference.Identity?.Name.Trim() ??
+        reference.SharedGuid?.Trim() ??
+        string.Empty;
 }

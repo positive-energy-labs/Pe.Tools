@@ -41,7 +41,7 @@ public class ParameterSnapshotCollector : IProjectSnapshotCollector, IFamilySnap
     /// <summary>
     ///     Supplements partially-collected project data with formulas from the already-open family document.
     ///     The primary project path already tries this through the loaded-families collector stack, but this
-    ///     fallback keeps the snapshot pipeline resilient when formula lookup stayed partial.
+    ///     fallback keeps the snapshot pipeline resilient when formula lookup stayed partial.Please 
     /// </summary>
     private static void SupplementWithFormulas(FamilySnapshot snapshot, FamilyDocument famDoc) {
         if (snapshot.Parameters?.Data == null || snapshot.Parameters.Data.Count == 0)
@@ -197,7 +197,7 @@ public class ParameterSnapshotCollector : IProjectSnapshotCollector, IFamilySnap
 
     // ==================== Helpers ====================
 
-    private static string GetKey(string name, bool isInstance) => $"{name}|{isInstance}";
+    private static string GetKey(string name, bool? isInstance) => $"{name}|{isInstance}";
 
     private static bool IsInternalHelperParameter(string? parameterName) =>
         !string.IsNullOrWhiteSpace(parameterName) &&

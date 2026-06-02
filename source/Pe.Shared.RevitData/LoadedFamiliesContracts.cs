@@ -112,15 +112,10 @@ public record LoadedFamiliesCatalogData(
 
 [ExportTsInterface]
 public record LoadedFamilyVisibleParameterEntry(
-    ParameterIdentity Identity,
-    bool IsInstance,
+    ParameterDefinitionDescriptor Definition,
     LoadedFamilyParameterKind Kind,
     LoadedFamilyParameterPresence Presence,
     string StorageType,
-    string? DataTypeId,
-    string? DataTypeLabel,
-    string? GroupTypeId,
-    string? GroupTypeLabel,
     FormulaState FormulaState,
     string? Formula,
     Dictionary<string, string?> ValuesByType
@@ -128,8 +123,7 @@ public record LoadedFamilyVisibleParameterEntry(
 
 [ExportTsInterface]
 public record LoadedFamilyExcludedParameterEntry(
-    ParameterIdentity Identity,
-    bool IsInstance,
+    ParameterDefinitionDescriptor Definition,
     LoadedFamilyParameterKind Kind,
     LoadedFamilyParameterPresence Presence,
     ExcludedParameterReason ExcludedReason,

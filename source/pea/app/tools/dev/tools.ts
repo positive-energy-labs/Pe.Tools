@@ -87,7 +87,7 @@ export const liveRrdSync = createTool({
 export const liveRrdRestart = createTool({
   id: "live_rrd_restart",
   description:
-    "Ask the installed Pe.RiderBridge plugin to restart or launch the Rider-driven Revit debug session, then poll Pe.Host for bridge/session readiness.",
+    "Start or restart the Rider-driven RRD session. If Rider is not already running, open Pe.Tools in Rider first, wait for project/debug-action readiness, then ask Pe.RiderBridge to launch/rerun the Revit debug session, poll Pe.Host for bridge/session readiness, and optionally open a local Revit document through revit.document.open. Cloud recent-document matches are detected but not opened yet.",
   inputSchema: repoCommandInputSchema.extend({
     riderBridgeBaseUrl: z.string().url().default(defaultRiderBridgeBaseUrl),
     project: z.string().default("Pe.Tools"),
@@ -111,16 +111,24 @@ export const liveRrdRestart = createTool({
       .default("ModulesLoaded"),
     openDocument: z
       .object({
-        path: z.string().min(1).optional(),
+        path: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("Absolute local RVT/RFA path to open through revit.document.open; cld:// cloud paths are detected but not opened yet."),
         name: z.string().min(1).optional(),
         revitYear: z.string().default("2025").optional(),
         kind: z.enum(["Project", "Family", "Any"]).default("Any").optional(),
-        localFilesOnly: z.boolean().default(true).optional(),
+        localFilesOnly: z
+          .boolean()
+          .default(true)
+          .optional()
+          .describe("When resolving by recent-document name, keep true for currently openable local files; false may match cloud entries that are reported as unsupported."),
       })
       .nullable()
       .optional()
       .describe(
-        "Optional Revit document selector to open after RRD reaches module readiness. Explicit null disables any harness state default.",
+        "Optional Revit document selector to open after RRD reaches module readiness through host operation revit.document.open. Local paths are supported; cloud recent-document matches are reported but not opened yet. Explicit null disables any harness state default.",
       ),
     harnessStatePath: z
       .string()

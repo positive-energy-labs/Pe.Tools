@@ -20,7 +20,7 @@
 ## Reader Shortcut
 
 If you are trying to understand this feature quickly:
-1. read `GOALS.md`
+1. read `_GOALS.md`
 2. inspect the Family Foundry compiler/resolution path
 3. inspect the snapshot/reverse-inference path
 4. only then drop into the lower-level operation plumbing

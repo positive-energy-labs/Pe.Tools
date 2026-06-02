@@ -1,4 +1,5 @@
 using Autodesk.Revit.DB.Electrical;
+using Pe.Revit.DocumentData.Parameters;
 using Pe.Shared.RevitData;
 
 namespace Pe.Revit.DocumentData.Electrical;
@@ -46,52 +47,48 @@ internal static class ElectricalCollectorSupport {
 
     public static string? ReadMark(Element element) => ReadString(element, BuiltInParameter.ALL_MODEL_MARK);
 
-    public static List<string> NormalizeRequestedParameterNames(
+    public static List<ResolvedParameterReference> NormalizeRequestedParameterReferences(
         RequestedParameterQuery? parameterQuery,
         List<RevitDataIssue> issues,
         string issueContext
     ) {
-        var requestedNames = (parameterQuery?.ParameterNames ?? [])
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Select(name => name.Trim())
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
+        var requestedParameters = ParameterReferenceResolver.Resolve(parameterQuery?.Parameters).ToList();
 
-        if (requestedNames.Count <= DefaultRequestedParameterLimit)
-            return requestedNames;
+        if (requestedParameters.Count <= DefaultRequestedParameterLimit)
+            return requestedParameters;
 
         issues.Add(Warning(
             $"{issueContext}RequestedParameterLimitExceeded",
-            $"Requested parameter count exceeded {DefaultRequestedParameterLimit}; truncating to the first {DefaultRequestedParameterLimit} names."
+            $"Requested parameter count exceeded {DefaultRequestedParameterLimit}; truncating to the first {DefaultRequestedParameterLimit} references."
         ));
-        return requestedNames.Take(DefaultRequestedParameterLimit).ToList();
+        return requestedParameters.Take(DefaultRequestedParameterLimit).ToList();
     }
 
     public static List<RequestedElementParameterValue>? CollectRequestedParameters(
         Element element,
-        IReadOnlyList<string> requestedParameterNames
+        IReadOnlyList<ResolvedParameterReference> requestedParameters
     ) {
-        if (requestedParameterNames.Count == 0)
+        if (requestedParameters.Count == 0)
             return null;
 
-        return requestedParameterNames
-            .Select(name => ToRequestedParameterValue(element, name))
+        return requestedParameters
+            .Select(reference => ToRequestedParameterValue(element, reference))
             .ToList();
     }
 
     public static CollectedElementIdentity CollectElementIdentity(
         Element element,
-        IReadOnlyList<string> requestedParameterNames
+        IReadOnlyList<ResolvedParameterReference> requestedParameters
     ) {
-        var requestedParameters = CollectRequestedParameters(element, requestedParameterNames);
-        var requestedIdentity = requestedParameters?
+        var requestedParametersValues = CollectRequestedParameters(element, requestedParameters);
+        var requestedIdentity = requestedParametersValues?
             .FirstOrDefault(parameter => parameter.Found && !string.IsNullOrWhiteSpace(parameter.Value))?
             .Value;
         if (!string.IsNullOrWhiteSpace(requestedIdentity)) {
             return new CollectedElementIdentity(
                 requestedIdentity.Trim(),
                 ElementIdentitySource.RequestedParameter,
-                requestedParameters
+                requestedParametersValues
             );
         }
 
@@ -100,14 +97,14 @@ internal static class ElectricalCollectorSupport {
             return new CollectedElementIdentity(
                 mark,
                 ElementIdentitySource.Mark,
-                requestedParameters
+                requestedParametersValues
             );
         }
 
         return new CollectedElementIdentity(
             null,
             ElementIdentitySource.None,
-            requestedParameters
+            requestedParametersValues
         );
     }
 
@@ -283,20 +280,81 @@ internal static class ElectricalCollectorSupport {
         }
     }
 
-    private static RequestedElementParameterValue ToRequestedParameterValue(Element element, string parameterName) {
-        var parameter = element.LookupParameter(parameterName);
+    private static RequestedElementParameterValue ToRequestedParameterValue(Element element, ResolvedParameterReference reference) {
+        var parameter = TryFindRequestedParameter(element, reference, out var source);
+        var value = parameter == null
+            ? null
+            : NullIfWhiteSpace(parameter.AsString()) ?? NullIfWhiteSpace(parameter.AsValueString());
+        var displayValue = parameter == null
+            ? null
+            : NullIfWhiteSpace(parameter.AsValueString()) ?? NullIfWhiteSpace(parameter.AsString());
         return new RequestedElementParameterValue(
-            parameterName,
+            ToRequestedParameterDefinition(reference, parameter, source),
             parameter != null,
-            parameter == null
-                ? null
-                : NullIfWhiteSpace(parameter.AsString()) ?? NullIfWhiteSpace(parameter.AsValueString()),
-            parameter == null
-                ? null
-                : NullIfWhiteSpace(parameter.AsValueString()) ?? NullIfWhiteSpace(parameter.AsString()),
-            ToRequestedParameterStorageType(parameter?.StorageType ?? StorageType.None)
+            parameter == null || (string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(displayValue)),
+            value,
+            displayValue,
+            ToRequestedParameterStorageType(parameter?.StorageType ?? StorageType.None),
+            source
         );
     }
+
+    private static Parameter? TryFindRequestedParameter(
+        Element element,
+        ResolvedParameterReference reference,
+        out RequestedParameterValueSource source
+    ) {
+        var instanceParameter = FindParameter(element, reference);
+        if (instanceParameter != null) {
+            source = RequestedParameterValueSource.Instance;
+            return instanceParameter;
+        }
+
+        var typeId = SafeGet(element.GetTypeId);
+        var typeElement = typeId == null || typeId == ElementId.InvalidElementId
+            ? null
+            : SafeGet(() => element.Document.GetElement(typeId));
+        var typeParameter = typeElement == null ? null : FindParameter(typeElement, reference);
+        source = typeParameter == null ? RequestedParameterValueSource.None : RequestedParameterValueSource.Type;
+        return typeParameter;
+    }
+
+    private static Parameter? FindParameter(Element element, ResolvedParameterReference reference) =>
+        element.Parameters
+            .Cast<Parameter>()
+            .FirstOrDefault(parameter => ParameterReferenceResolver.Matches(
+                ParameterIdentityEngine.FromCanonical(ParameterIdentityFactory.FromParameter(parameter)),
+                reference));
+
+    private static ParameterDefinitionDescriptor ToRequestedParameterDefinition(
+        ResolvedParameterReference reference,
+        Parameter? parameter,
+        RequestedParameterValueSource source
+    ) {
+        if (parameter?.Definition == null) {
+            return new ParameterDefinitionDescriptor(
+                reference.Identity,
+                source == RequestedParameterValueSource.None ? null : source == RequestedParameterValueSource.Instance,
+                null,
+                null,
+                null,
+                null
+            );
+        }
+
+        var definition = parameter.Definition;
+        return new ParameterDefinitionDescriptor(
+            ParameterIdentityEngine.FromCanonical(ParameterIdentityFactory.FromParameter(parameter)),
+            source == RequestedParameterValueSource.None ? null : source == RequestedParameterValueSource.Instance,
+            NormalizeForgeTypeId(definition.GetDataType()),
+            null,
+            NormalizeForgeTypeId(definition.GetGroupTypeId()),
+            null
+        );
+    }
+
+    private static string? NormalizeForgeTypeId(ForgeTypeId forgeTypeId) =>
+        string.IsNullOrWhiteSpace(forgeTypeId?.TypeId) ? null : forgeTypeId.TypeId;
 
     private static RequestedParameterStorageType ToRequestedParameterStorageType(StorageType storageType) =>
         storageType switch {

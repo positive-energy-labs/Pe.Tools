@@ -102,8 +102,7 @@ public record ParameterCoverageRequest {
     public RevitElementScope Scope { get; init; } = RevitElementScope.All;
     public List<long> ElementIds { get; init; } = [];
     public List<string> ElementUniqueIds { get; init; } = [];
-    public List<string> ParameterNames { get; init; } = [];
-    public List<string> SharedGuids { get; init; } = [];
+    public List<ParameterReference> Parameters { get; init; } = [];
     public RevitParameterLookupPreference LookupPreference { get; init; } = RevitParameterLookupPreference.InstanceThenType;
     public bool TreatWhitespaceAsBlank { get; init; } = true;
     public List<string> DefaultValues { get; init; } = [];
@@ -112,7 +111,7 @@ public record ParameterCoverageRequest {
 
 [ExportTsInterface]
 public record ParameterCoverageParameterEntry(
-    ParameterIdentity Identity,
+    ParameterDefinitionDescriptor Definition,
     string? CategoryName,
     int ElementCount,
     int PresentCount,
@@ -120,7 +119,9 @@ public record ParameterCoverageParameterEntry(
     int BlankCount,
     int DefaultCount,
     List<RevitElementHandle> Samples
-);
+) {
+    public ParameterIdentity Identity => this.Definition.Identity;
+}
 
 [ExportTsInterface]
 public record ParameterCoverageData(

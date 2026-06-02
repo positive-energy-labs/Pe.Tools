@@ -1,5 +1,3 @@
-using Pe.Shared.RevitData.Parameters;
-
 namespace Pe.Revit.DocumentData.Families.Loaded.Models;
 
 public sealed record CollectedLoadedFamilyTypeRecord(
@@ -54,13 +52,8 @@ public sealed record CollectedFamilyParameterRecord {
     public string FamilyName { get; init; } = string.Empty;
     public string? CategoryName { get; init; }
     public List<string> TypeNames { get; init; } = [];
-    public required RevitParameterIdentity Identity { get; init; }
-    public bool IsInstance { get; init; }
+    public required ParameterDefinitionDescriptor Definition { get; init; }
     public string StorageType { get; init; } = string.Empty;
-    public string? DataTypeId { get; init; }
-    public string? DataTypeLabel { get; init; }
-    public string? GroupTypeId { get; init; }
-    public string? GroupTypeLabel { get; init; }
     public CollectedParameterKind Kind { get; init; } = CollectedParameterKind.Unknown;
     public CollectedParameterScope Scope { get; init; } = CollectedParameterScope.Unresolved;
     public CollectedFormulaState FormulaState { get; init; }
@@ -68,8 +61,14 @@ public sealed record CollectedFamilyParameterRecord {
     public Dictionary<string, string?> ValuesByType { get; init; } = new(StringComparer.Ordinal);
     public CollectedExcludedParameterReason? ExcludedReason { get; init; }
 
+    public ParameterIdentity Identity => this.Definition.Identity;
+    public bool? IsInstance => this.Definition.IsInstance;
+    public string? DataTypeId => this.Definition.DataTypeId;
+    public string? DataTypeLabel => this.Definition.DataTypeLabel;
+    public string? GroupTypeId => this.Definition.GroupTypeId;
+    public string? GroupTypeLabel => this.Definition.GroupTypeLabel;
     public string Name => this.Identity.Name;
-    public string? SharedGuid => this.Identity.SharedGuid?.ToString("D");
+    public string? SharedGuid => this.Identity.SharedGuid;
     public bool IsBuiltIn => this.Identity.BuiltInParameterId.HasValue;
 }
 
@@ -86,13 +85,15 @@ public sealed record CollectedLoadedFamilyRecord {
 }
 
 public sealed record CollectedProjectParameterBindingRecord {
-    public required RevitParameterIdentity Identity { get; init; }
+    public required ParameterDefinitionDescriptor Definition { get; init; }
     public string BindingKind { get; init; } = string.Empty;
-    public string? DataTypeId { get; init; }
-    public string? DataTypeLabel { get; init; }
-    public string? GroupTypeId { get; init; }
-    public string? GroupTypeLabel { get; init; }
     public List<string> CategoryNames { get; init; } = [];
 
+    public ParameterIdentity Identity => this.Definition.Identity;
+    public bool? IsInstance => this.Definition.IsInstance;
+    public string? DataTypeId => this.Definition.DataTypeId;
+    public string? DataTypeLabel => this.Definition.DataTypeLabel;
+    public string? GroupTypeId => this.Definition.GroupTypeId;
+    public string? GroupTypeLabel => this.Definition.GroupTypeLabel;
     public string Name => this.Identity.Name;
 }

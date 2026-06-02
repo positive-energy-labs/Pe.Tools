@@ -1,13 +1,17 @@
+using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.Global;
+using Pe.Shared.RevitData;
 using System.Text.RegularExpressions;
 
 namespace Pe.Revit.FamilyFoundry.Resolution;
 
 public sealed record KnownParamCatalog(
     IReadOnlyDictionary<string, FamilyParamDefinitionModel> FamilyDefinitions,
-    HashSet<string> SharedParameterNames,
-    IReadOnlyDictionary<string, ForgeTypeId> SharedDefinitions
-);
+    IReadOnlyDictionary<string, ParameterDefinitionDescriptor> SharedDefinitions
+) {
+    public bool ContainsSharedParameter(string parameterName) =>
+        this.SharedDefinitions.ContainsKey(parameterName);
+}
 
 public static class KnownParamResolver {
     public static KnownParamCatalog BuildCatalog(
@@ -19,19 +23,13 @@ public static class KnownParamResolver {
         var familyDefinitions = familyParams.Parameters
             .Where(parameter => !string.IsNullOrWhiteSpace(parameter.Name))
             .ToDictionary(parameter => parameter.Name.Trim(), StringComparer.Ordinal);
-        var sharedParameterNames = sharedParams
-            .Select(sharedParam => sharedParam.ExternalDefinition.Name)
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .ToHashSet(StringComparer.Ordinal);
-        var sharedDefinitions = sharedParams
-            .Where(sharedParam => !string.IsNullOrWhiteSpace(sharedParam.ExternalDefinition.Name))
-            .GroupBy(sharedParam => sharedParam.ExternalDefinition.Name.Trim(), StringComparer.Ordinal)
+        var sharedDefinitions = SharedParameterMappingTargets.ByName(sharedParams)
             .ToDictionary(
-                group => group.Key,
-                group => group.First().ExternalDefinition.GetDataType(),
+                pair => pair.Key,
+                pair => pair.Value.Definition,
                 StringComparer.Ordinal);
 
-        return new KnownParamCatalog(familyDefinitions, sharedParameterNames, sharedDefinitions);
+        return new KnownParamCatalog(familyDefinitions, sharedDefinitions);
     }
 
     public static void ValidateFamilyDefinitions(AddFamilyParamsSettings familyParams) {
@@ -56,16 +54,6 @@ public static class KnownParamResolver {
                 "Each family parameter definition name must appear only once in a profile.");
         }
 
-        var invalidPeNames = familyParams.Parameters
-            .Select(parameter => parameter.Name.Trim())
-            .Where(IsPeParameterName)
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        if (invalidPeNames.Count > 0) {
-            throw new InvalidOperationException(
-                $"AddFamilyParams.Parameters contains PE_ parameters, which are invalid family parameter definitions: {string.Join(", ", invalidPeNames)}. " +
-                "PE_ parameters must come from APS/shared parameter provisioning.");
-        }
     }
 
     public static void ValidateAssignments(
@@ -113,14 +101,8 @@ public static class KnownParamResolver {
                      .Where(name => !string.IsNullOrWhiteSpace(name))
                      .Select(name => name.Trim())
                      .Distinct(StringComparer.Ordinal)) {
-            if (catalog.SharedParameterNames.Contains(parameterName))
+            if (catalog.ContainsSharedParameter(parameterName))
                 continue;
-
-            if (IsPeParameterName(parameterName)) {
-                throw new InvalidOperationException(
-                    $"Referenced parameter '{parameterName}' is a PE_ parameter but is not available from FilterApsParams. " +
-                    "Add it to the APS/shared parameter filter instead of defining it as a family parameter.");
-            }
 
             if (!catalog.FamilyDefinitions.TryGetValue(parameterName, out var familyDefinition)) {
                 throw new InvalidOperationException(
@@ -133,22 +115,12 @@ public static class KnownParamResolver {
         return new AddFamilyParamsSettings { Enabled = familyDefinitions.Count > 0, Parameters = familyDefinitions };
     }
 
-    public static bool IsPeParameterName(string? parameterName) =>
-        !string.IsNullOrWhiteSpace(parameterName)
-        && parameterName.StartsWith("PE_", StringComparison.OrdinalIgnoreCase);
-
     private static void ValidateResolvedParameterName(string parameterName, KnownParamCatalog catalog) {
-        if (catalog.SharedParameterNames.Contains(parameterName))
+        if (catalog.ContainsSharedParameter(parameterName))
             return;
 
         if (catalog.FamilyDefinitions.ContainsKey(parameterName))
             return;
-
-        if (IsPeParameterName(parameterName)) {
-            throw new InvalidOperationException(
-                $"SetKnownParams references PE_ parameter '{parameterName}', but FilterApsParams does not provide it. " +
-                "Add the parameter to the APS/shared parameter filter.");
-        }
 
         throw new InvalidOperationException(
             $"SetKnownParams references parameter '{parameterName}', but it is available in neither AddFamilyParams.Parameters nor FilterApsParams.");
@@ -247,10 +219,13 @@ public static class KnownParamResolver {
         if (catalog.FamilyDefinitions.TryGetValue(parameterName, out var familyDefinition))
             return familyDefinition.DataType;
 
-        return catalog.SharedDefinitions.TryGetValue(parameterName, out var sharedDataType)
-            ? sharedDataType
+        return catalog.SharedDefinitions.TryGetValue(parameterName, out var sharedDefinition)
+            ? ToForgeTypeId(sharedDefinition.DataTypeId)
             : null;
     }
+
+    private static ForgeTypeId? ToForgeTypeId(string? typeId) =>
+        string.IsNullOrWhiteSpace(typeId) ? null : new ForgeTypeId(typeId);
 
     private static bool IsLengthLikeDataType(ForgeTypeId? dataType) {
         if (dataType == null)

@@ -1,5 +1,3 @@
-using Pe.Shared.RevitData.Parameters;
-
 namespace Pe.Revit.Tests;
 
 [TestFixture]
@@ -43,8 +41,8 @@ public sealed class ParameterCollisionMatrixTests {
                     "CollisionMatrix",
                     "Family-side shared parameter with different guid.",
                     Guid.NewGuid()),
-                nameof(RevitParameterIdentityKind.SharedGuid),
-                nameof(RevitParameterIdentityKind.SharedGuid),
+                nameof(ParameterIdentityKind.SharedGuid),
+                nameof(ParameterIdentityKind.SharedGuid),
                 true,
                 true,
                 SpecTypeId.String.Text.TypeId,
@@ -67,8 +65,8 @@ public sealed class ParameterCollisionMatrixTests {
                     "CollisionMatrix",
                     "Family-side shared parameter authored first with different guid.",
                     Guid.NewGuid()),
-                nameof(RevitParameterIdentityKind.SharedGuid),
-                nameof(RevitParameterIdentityKind.SharedGuid),
+                nameof(ParameterIdentityKind.SharedGuid),
+                nameof(ParameterIdentityKind.SharedGuid),
                 true,
                 true,
                 SpecTypeId.String.Text.TypeId,
@@ -90,8 +88,8 @@ public sealed class ParameterCollisionMatrixTests {
                     GroupTypeId.Geometry,
                     false),
                 null,
-                nameof(RevitParameterIdentityKind.SharedGuid),
-                nameof(RevitParameterIdentityKind.ParameterElement),
+                nameof(ParameterIdentityKind.SharedGuid),
+                nameof(ParameterIdentityKind.ParameterElement),
                 false,
                 false,
                 SpecTypeId.String.Text.TypeId,
@@ -113,8 +111,8 @@ public sealed class ParameterCollisionMatrixTests {
                     GroupTypeId.Geometry,
                     false),
                 null,
-                nameof(RevitParameterIdentityKind.SharedGuid),
-                nameof(RevitParameterIdentityKind.ParameterElement),
+                nameof(ParameterIdentityKind.SharedGuid),
+                nameof(ParameterIdentityKind.ParameterElement),
                 false,
                 false,
                 SpecTypeId.String.Text.TypeId,

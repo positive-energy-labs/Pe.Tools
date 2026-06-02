@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
+using Pe.Shared.RevitData;
 using TextElement = System.Windows.Documents.TextElement;
 using WpfUiRichTextBox = Wpf.Ui.Controls.RichTextBox;
 
@@ -273,7 +274,10 @@ public record OperationInfo(string Name, string Description, string Type, string
 /// <summary>
 ///     Parameter info for preview display.
 /// </summary>
-public record ParameterInfo(string Name, bool IsInstance, string DataType);
+public record ParameterInfo(ParameterDefinitionDescriptor Definition, string DataType) {
+    public string Name => this.Definition.Identity.Name;
+    public bool IsInstance => this.Definition.IsInstance == true;
+}
 
 /// <summary>
 ///     Family info for preview display.

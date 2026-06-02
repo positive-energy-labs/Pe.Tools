@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Pe.Aps;
 using Pe.Aps.Auth;
 using Pe.Dev.RevitAutomation;
+using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 using Pe.Shared.StorageRuntime;
 using static Pe.Aps.Aps;
@@ -433,7 +434,7 @@ internal static class AutomationCommandRunner {
                     ? []
                     : [
                         new ScheduleCustomParameterFilter(
-                            primaryParameterName,
+                            ParameterReference.FromName(primaryParameterName),
                             primaryValue,
                             ScheduleCustomParameterMatchKind.Equals
                         )

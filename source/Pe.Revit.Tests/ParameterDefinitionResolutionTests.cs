@@ -1,7 +1,5 @@
 using Pe.Revit.Extensions.FamManager;
 using Pe.Revit.DocumentData.Parameters;
-using Pe.Shared.RevitData.Parameters;
-
 namespace Pe.Revit.Tests;
 
 [TestFixture]
@@ -55,7 +53,7 @@ public sealed class ParameterDefinitionResolutionTests {
             var insertedProbe = probesAfterInsert[0];
             Assert.Multiple(() => {
                 Assert.That(insertedProbe.DefinitionType, Is.EqualTo(nameof(InternalDefinition)));
-                Assert.That(insertedProbe.IdentityKind, Is.EqualTo(nameof(RevitParameterIdentityKind.SharedGuid)));
+                Assert.That(insertedProbe.IdentityKind, Is.EqualTo(nameof(ParameterIdentityKind.SharedGuid)));
                 Assert.That(insertedProbe.IsShared, Is.True);
                 Assert.That(insertedProbe.IsInstanceBinding, Is.True);
                 Assert.That(insertedProbe.GroupTypeId, Is.EqualTo(GroupTypeId.IdentityData.TypeId));
@@ -88,7 +86,7 @@ public sealed class ParameterDefinitionResolutionTests {
             Assert.Multiple(() => {
                 Assert.That(reinsertedProbe.DefinitionType, Is.EqualTo(nameof(InternalDefinition)));
                 Assert.That(reinsertedProbe.IdentityKey, Is.EqualTo(insertedProbe.IdentityKey));
-                Assert.That(reinsertedProbe.IdentityKind, Is.EqualTo(nameof(RevitParameterIdentityKind.SharedGuid)));
+                Assert.That(reinsertedProbe.IdentityKind, Is.EqualTo(nameof(ParameterIdentityKind.SharedGuid)));
                 Assert.That(reinsertedProbe.IsInstanceBinding, Is.False);
                 Assert.That(reinsertedProbe.GroupTypeId, Is.EqualTo(GroupTypeId.Geometry.TypeId));
                 Assert.That(reinsertedProbe.CategoryNames, Is.EqualTo(new[] { "Plumbing Equipment" }));
@@ -123,7 +121,7 @@ public sealed class ParameterDefinitionResolutionTests {
             _ = transaction.Commit();
 
             var resolvedByGuid = RevitFamilyFixtureHarness.FindSharedFamilyParameter(familyDocument, sharedGuid);
-            var identity = RevitParameterIdentityFactory.FromFamilyParameter(familyParameter);
+            var identity = ParameterIdentityFactory.FromFamilyParameter(familyParameter);
 
             Assert.Multiple(() => {
                 Assert.That(familyParameter.IsShared, Is.True);
@@ -131,7 +129,7 @@ public sealed class ParameterDefinitionResolutionTests {
                 Assert.That(resolvedByGuid, Is.Not.Null);
                 Assert.That(resolvedByGuid!.Definition.Name, Is.EqualTo(familyParameter.Definition.Name));
                 Assert.That(resolvedByGuid.IsShared, Is.True);
-                Assert.That(identity.Kind, Is.EqualTo(RevitParameterIdentityKind.SharedGuid));
+                Assert.That(identity.Kind, Is.EqualTo(ParameterIdentityKind.SharedGuid));
                 Assert.That(identity.SharedGuid, Is.EqualTo(sharedGuid));
                 Assert.That(identity.Name, Is.EqualTo(sharedSpec.Name));
             });
@@ -163,13 +161,13 @@ public sealed class ParameterDefinitionResolutionTests {
             }
 
             var resolvedByName = familyDocument.FamilyManager.FindParameter("_PE_FamilyScoped_Plain");
-            var identity = RevitParameterIdentityFactory.FromFamilyParameter(familyParameter);
+            var identity = ParameterIdentityFactory.FromFamilyParameter(familyParameter);
 
             Assert.Multiple(() => {
                 Assert.That(familyParameter.IsShared, Is.False);
                 Assert.That(resolvedByName, Is.Not.Null);
                 Assert.That(resolvedByName!.Definition.Name, Is.EqualTo(familyParameter.Definition.Name));
-                Assert.That(identity.Kind, Is.EqualTo(RevitParameterIdentityKind.ParameterElement));
+                Assert.That(identity.Kind, Is.EqualTo(ParameterIdentityKind.ParameterElement));
                 Assert.That(identity.SharedGuid, Is.Null);
                 Assert.That(identity.Name, Is.EqualTo("_PE_FamilyScoped_Plain"));
             });

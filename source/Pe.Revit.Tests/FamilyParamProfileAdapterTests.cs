@@ -1,4 +1,5 @@
 using Pe.Revit.FamilyFoundry.Serialization;
+using Pe.Shared.RevitData;
 
 namespace Pe.Revit.Tests;
 
@@ -15,10 +16,19 @@ public sealed class FamilyParamProfileAdapterTests {
                 ValuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal) { ["Default"] = null }
             },
             new ParameterSnapshot {
-                Name = "PE_G___TagInstance",
-                IsInstance = true,
-                PropertiesGroup = GroupTypeId.IdentityData,
-                DataType = SpecTypeId.String.Text,
+                Definition = new ParameterDefinitionDescriptor(
+                    new ParameterIdentity(
+                        "shared-guid:11111111-2222-3333-4444-555555555555",
+                        ParameterIdentityKind.SharedGuid,
+                        "SharedTagInstance",
+                        null,
+                        "11111111-2222-3333-4444-555555555555",
+                        null),
+                    true,
+                    SpecTypeId.String.Text.TypeId,
+                    null,
+                    GroupTypeId.IdentityData.TypeId,
+                    null),
                 ValuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal) { ["Default"] = "ST-#" }
             }
         };
@@ -30,10 +40,32 @@ public sealed class FamilyParamProfileAdapterTests {
         Assert.Multiple(() => {
             Assert.That(export.AddFamilyParams.Enabled, Is.True);
             Assert.That(export.AddFamilyParams.Parameters.Select(parameter => parameter.Name), Does.Contain("Width"));
+            Assert.That(export.AddFamilyParams.Parameters.Select(parameter => parameter.Name),
+                Does.Not.Contain("SharedTagInstance"));
             Assert.That(
                 export.SetKnownParams.GlobalAssignments.Select(assignment => assignment.Parameter),
-                Does.Contain("PE_G___TagInstance"));
+                Does.Contain("SharedTagInstance"));
         });
+    }
+
+    [Test]
+    public void ProjectSnapshotsToProfile_treats_prefix_named_parameters_without_shared_identity_as_local() {
+        var snapshots = new[] {
+            new ParameterSnapshot {
+                Name = "PE_LocalOnly",
+                IsInstance = true,
+                PropertiesGroup = GroupTypeId.IdentityData,
+                DataType = SpecTypeId.String.Text,
+                ValuesPerType = new Dictionary<string, string?>(StringComparer.Ordinal) { ["Default"] = "local" }
+            }
+        };
+
+        var export = FamilyParamProfileAdapter.ProjectSnapshotsToProfile(
+            snapshots,
+            new FamilyParamProfileExportOptions { IncludeDefinitionOnlyParameters = true });
+
+        Assert.That(export.AddFamilyParams.Parameters.Select(parameter => parameter.Name),
+            Does.Contain("PE_LocalOnly"));
     }
 
     [Test]

@@ -18,7 +18,6 @@ public class MakeElecConnector(MakeElecConnectorSettings settings) : DocOperatio
         OperationContext groupContext) {
         var logs = new List<LogEntry>();
 
-        // TODO: Figure out PE_E___LoadClassification migration!!!!!!!!!
         // Note: Load Classification (RBS_ELEC_LOAD_CLASSIFICATION) is intentionally NOT mapped here.
         // Load Classification is a Reference type (SpecTypeId.Reference.LoadClassification) that requires
         // an ElementId pointing to an ElectricalLoadClassification element. These elements only exist
@@ -283,15 +282,15 @@ public class MakeElecConnector(MakeElecConnectorSettings settings) : DocOperatio
 
 public class MakeElecConnectorSettings : IOperationSettings {
     public Parameters SourceParameterNames { get; init; } = new();
-    public bool Enabled { get; init; } = true;
+    public bool Enabled { get; init; }
 
     public class Parameters {
-        [Required] public string NumberOfPoles { get; init; } = "PE_E___NumberOfPoles";
+        [Required] public string NumberOfPoles { get; init; } = string.Empty;
 
-        [Required] public string ApparentPower { get; init; } = "PE_E___ApparentPower";
+        [Required] public string ApparentPower { get; init; } = string.Empty;
 
-        [Required] public string Voltage { get; init; } = "PE_E___Voltage";
+        [Required] public string Voltage { get; init; } = string.Empty;
 
-        [Required] public string MinimumCircuitAmpacity { get; init; } = "PE_E___MCA";
+        [Required] public string MinimumCircuitAmpacity { get; init; } = string.Empty;
     }
 }

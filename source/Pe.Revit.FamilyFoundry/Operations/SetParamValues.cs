@@ -34,27 +34,55 @@ public class SetParamValues(SetKnownParamsSettings settings)
 
             var parameter = fm.FindParameter(parameterName);
             if (parameter is null) {
-                _ = log.Error($"Parameter '{parameterName}' not found");
+                _ = log
+                    .WithParameterEvent(
+                        ParameterEventOutcome.ParameterMissing,
+                        ParameterEventReason.ParameterNotFound,
+                        parameterName: parameterName)
+                    .Error($"Parameter '{parameterName}' not found");
                 continue;
             }
 
             if (!this.Settings.OverrideExistingValues && doc.HasValue(parameter)) {
-                _ = log.Skip("Already has value");
+                _ = log
+                    .WithParameterEvent(
+                        ParameterEventOutcome.AlreadyHasValue,
+                        ParameterEventReason.AlreadyHasValue,
+                        parameterName: parameterName)
+                    .Skip("Already has value");
                 continue;
             }
 
             if (assignment.Kind == ParamAssignmentKind.Formula) {
                 var success = doc.TrySetFormula(parameter, assignment.Value, out var errMsg);
                 _ = success
-                    ? log.Success("Set formula")
-                    : log.Error($"Error setting formula: {errMsg}");
+                    ? log.WithParameterEvent(
+                            ParameterEventOutcome.FormulaSet,
+                            parameterName: parameterName,
+                            details: new Dictionary<string, string> { ["Value"] = assignment.Value })
+                        .Success("Set formula")
+                    : log.WithParameterEvent(
+                            ParameterEventOutcome.FormulaSet,
+                            ParameterEventReason.FormulaSetError,
+                            parameterName: parameterName,
+                            details: new Dictionary<string, string> { ["Error"] = errMsg ?? string.Empty })
+                        .Error($"Error setting formula: {errMsg}");
                 continue;
             }
 
             var setValueSuccess = doc.TrySetUnsetFormula(parameter, assignment.Value, out var valueErrMsg);
             _ = setValueSuccess
-                ? log.Success("Set global value")
-                : log.Defer($"Needs per-type fallback, error setting global value: {valueErrMsg}");
+                ? log.WithParameterEvent(
+                        ParameterEventOutcome.GlobalValueSet,
+                        parameterName: parameterName,
+                        details: new Dictionary<string, string> { ["Value"] = assignment.Value })
+                    .Success("Set global value")
+                : log.WithParameterEvent(
+                        ParameterEventOutcome.PerTypeFallbackNeeded,
+                        ParameterEventReason.GlobalValueError,
+                        parameterName: parameterName,
+                        details: new Dictionary<string, string> { ["Error"] = valueErrMsg ?? string.Empty })
+                    .Defer($"Needs per-type fallback, error setting global value: {valueErrMsg}");
         }
 
         return new OperationLog(this.Name, groupContext.TakeSnapshot());

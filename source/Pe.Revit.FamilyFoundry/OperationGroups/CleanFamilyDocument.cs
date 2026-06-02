@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using NJsonSchema.Annotations;
 using Pe.Revit.FamilyFoundry.Operations;
 using System.ComponentModel;
@@ -21,14 +22,23 @@ public class CleanFamilyDocumentSettings : IOperationSettings {
     public PurgeParamsBase PurgeParamsSettings { get; init; } = new();
 
 
-    [JsonSchemaIgnore] public bool ShouldPurgeNestedFamilies => this.Enabled && this.EnablePurgeNestedFamilies;
+    [JsonIgnore]
+    [JsonSchemaIgnore]
+    public bool ShouldPurgeNestedFamilies => this.Enabled && this.EnablePurgeNestedFamilies;
 
-    [JsonSchemaIgnore] public bool ShouldPurgeReferencePlanes => this.Enabled && this.EnablePurgeReferencePlanes;
+    [JsonIgnore]
+    [JsonSchemaIgnore]
+    public bool ShouldPurgeReferencePlanes => this.Enabled && this.EnablePurgeReferencePlanes;
 
-    [JsonSchemaIgnore] public bool ShouldPurgeModelLines => this.Enabled && this.EnablePurgeModelLines;
+    [JsonIgnore]
+    [JsonSchemaIgnore]
+    public bool ShouldPurgeModelLines => this.Enabled && this.EnablePurgeModelLines;
 
-    [JsonSchemaIgnore] public bool ShouldPurgeParams => this.Enabled && this.EnablePurgeParams;
+    [JsonIgnore]
+    [JsonSchemaIgnore]
+    public bool ShouldPurgeParams => this.Enabled && this.EnablePurgeParams;
 
+    [JsonIgnore]
     [JsonSchemaIgnore]
     public PurgeParamsSettings ResolvedPurgeParamsSettings => new() {
         Enabled = this.ShouldPurgeParams,

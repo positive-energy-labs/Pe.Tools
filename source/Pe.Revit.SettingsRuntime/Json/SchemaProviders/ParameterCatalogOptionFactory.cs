@@ -1,5 +1,5 @@
 using Pe.Revit.SettingsRuntime.Json.ValueDomains;
-using Pe.Shared.RevitData.Parameters;
+using Pe.Shared.RevitData;
 
 namespace Pe.Revit.SettingsRuntime.Json.SchemaProviders;
 
@@ -20,11 +20,9 @@ public static class ParameterCatalogOptionFactory {
 
         return ProjectParameterCatalogCollector.Collect(doc, selectedFamilyNames)
             .Select(entry => new ParameterCatalogOption(
-                entry.Identity,
+                entry.Definition,
                 entry.StorageType.ToString(),
-                entry.DataTypeKey,
-                entry.IsInstance,
-                entry.Identity.SharedGuid.HasValue && apsGuids.Contains(entry.Identity.SharedGuid.Value),
+                Guid.TryParse(entry.Identity.SharedGuid, out var sharedGuid) && apsGuids.Contains(sharedGuid),
                 entry.FamilyNames.OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToList(),
                 entry.ValuesPerType.Keys.OrderBy(name => name, StringComparer.Ordinal).ToList()
             ))
@@ -42,12 +40,12 @@ public static class ParameterCatalogOptionFactory {
 }
 
 public sealed record ParameterCatalogOption(
-    RevitParameterIdentity Identity,
+    ParameterDefinitionDescriptor Definition,
     string StorageType,
-    string? DataType,
-    bool IsInstance,
     bool IsParamService,
     List<string> FamilyNames,
     List<string> TypeNames
-);
+) {
+    public ParameterIdentity Identity => this.Definition.Identity;
+}
 

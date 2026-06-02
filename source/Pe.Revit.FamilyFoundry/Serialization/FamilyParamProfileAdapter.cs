@@ -1,4 +1,4 @@
-using Pe.Revit.FamilyFoundry.Resolution;
+using Pe.Shared.RevitData;
 
 namespace Pe.Revit.FamilyFoundry.Serialization;
 
@@ -6,7 +6,7 @@ public sealed record FamilyParamProfileExportOptions {
     public bool IncludeDefinitionOnlyParameters { get; init; }
     public bool OmitBuiltInParameters { get; init; } = true;
     public bool EnabledWhenEmpty { get; init; }
-    public Func<string, bool>? IsSharedParameterName { get; init; }
+    public Func<ParameterSnapshot, bool>? IsSharedParameter { get; init; }
 }
 
 public sealed record FamilyParamProfileExport(
@@ -35,12 +35,13 @@ public static class FamilyParamProfileAdapter {
             var hasReplayableAssignment = globalAssignment is not null || perTypeAssignment is not null;
             var shouldIncludeDefinition = options.IncludeDefinitionOnlyParameters || hasReplayableAssignment;
 
-            if (!IsSharedParameterName(snapshot.Name, options) && shouldIncludeDefinition) {
+            if (!IsSharedParameter(snapshot, options) && shouldIncludeDefinition) {
                 familyParameters.Add(new FamilyParamDefinitionModel {
-                    Name = snapshot.Name,
-                    IsInstance = snapshot.IsInstance,
-                    PropertiesGroup = snapshot.PropertiesGroup,
-                    DataType = snapshot.DataType
+                    Definition = ParameterDefinitionDescriptorFactory.NameFallback(
+                        snapshot.Name ?? string.Empty,
+                        snapshot.DataType,
+                        snapshot.PropertiesGroup,
+                        snapshot.IsInstance)
                 });
             }
 
@@ -77,11 +78,8 @@ public static class FamilyParamProfileAdapter {
             .ToList();
     }
 
-    private static bool IsSharedParameterName(string? parameterName, FamilyParamProfileExportOptions options) {
-        if (string.IsNullOrWhiteSpace(parameterName))
-            return false;
-
-        return options.IsSharedParameterName?.Invoke(parameterName.Trim())
-               ?? KnownParamResolver.IsPeParameterName(parameterName);
-    }
+    private static bool IsSharedParameter(ParameterSnapshot snapshot, FamilyParamProfileExportOptions options) =>
+        options.IsSharedParameter?.Invoke(snapshot) == true ||
+        snapshot.SharedGuid.HasValue ||
+        snapshot.Definition.Identity.Kind == ParameterIdentityKind.SharedGuid;
 }

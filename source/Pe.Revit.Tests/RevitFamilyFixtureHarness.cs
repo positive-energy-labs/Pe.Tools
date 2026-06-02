@@ -1,5 +1,6 @@
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.Profiles;
+using Pe.Revit.FamilyFoundry.DesiredState;
 using Pe.Revit.Global;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Global.Utils.Files;
@@ -200,6 +201,16 @@ internal static class RevitFamilyFixtureHarness {
         var fixturePath = GetProfileFixturePath(fixtureFileName);
         var json = File.ReadAllText(fixturePath);
         return SettingsJsonContract.ValidateAndRoundTrip<FFManagerProfile>(json, fixturePath);
+    }
+
+    public static DesiredFamilyMigrationProfile LoadDesiredMigrationProfileFixture(string fixtureFileName) =>
+        LoadDesiredMigrationProfileFixtureContract(fixtureFileName).Value;
+
+    public static SettingsJsonRoundTripResult<DesiredFamilyMigrationProfile> LoadDesiredMigrationProfileFixtureContract(
+        string fixtureFileName) {
+        var fixturePath = GetProfileFixturePath(fixtureFileName);
+        var json = File.ReadAllText(fixturePath);
+        return SettingsJsonContract.ValidateAndRoundTrip<DesiredFamilyMigrationProfile>(json, fixturePath);
     }
 
     public static void AssertSavedFamilyFileIsOpenable(
@@ -463,8 +474,8 @@ internal static class RevitFamilyFixtureHarness {
             if (iterator.Key is not Definition definition || iterator.Current is not ElementBinding binding)
                 continue;
 
-            var identity = RevitParameterIdentityFactory.FromDefinition(projectDocument, definition);
-            var sharedGuid = identity.SharedGuid;
+            var identity = ParameterIdentityFactory.FromDefinition(projectDocument, definition);
+            var sharedGuid = ParseSharedGuid(identity.SharedGuid);
             var categoryNames = binding.Categories?.Cast<Category>()
                 .Select(category => category.Name)
                 .Where(name => !string.IsNullOrWhiteSpace(name))
@@ -511,13 +522,13 @@ internal static class RevitFamilyFixtureHarness {
         return familyDocument.FamilyManager.Parameters
             .Cast<FamilyParameter>()
             .Select(parameter => {
-                var identity = RevitParameterIdentityFactory.FromFamilyParameter(parameter);
+                var identity = ParameterIdentityFactory.FromFamilyParameter(parameter);
                 return new FamilyParameterProbe(
                     parameter.Definition.Name,
                     parameter.IsShared,
                     parameter.IsInstance,
                     identity.Kind.ToString(),
-                    identity.SharedGuid,
+                    ParseSharedGuid(identity.SharedGuid),
                     identity.ParameterElementId,
                     NormalizeForgeTypeId(parameter.Definition.GetGroupTypeId()),
                     NormalizeForgeTypeId(parameter.Definition.GetDataType()),
@@ -593,6 +604,9 @@ internal static class RevitFamilyFixtureHarness {
 
     private static string? NormalizeForgeTypeId(ForgeTypeId forgeTypeId) =>
         string.IsNullOrWhiteSpace(forgeTypeId?.TypeId) ? null : forgeTypeId.TypeId;
+
+    private static Guid? ParseSharedGuid(string? sharedGuid) =>
+        Guid.TryParse(sharedGuid, out var parsedGuid) ? parsedGuid : null;
 
     public static FamilyType EnsureFamilyType(Document familyDocument, string typeName) {
         if (familyDocument == null)

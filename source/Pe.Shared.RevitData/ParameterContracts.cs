@@ -30,11 +30,30 @@ public record ParameterIdentity(
 );
 
 [ExportTsInterface]
-public record ParameterCatalogEntry(
+public record ParameterReference {
+    public ParameterIdentity? Identity { get; init; }
+    public string? Name { get; init; }
+    public string? SharedGuid { get; init; }
+
+    public static ParameterReference FromIdentity(ParameterIdentity identity) => new() { Identity = identity };
+    public static ParameterReference FromName(string name) => new() { Name = name };
+    public static ParameterReference FromSharedGuid(string sharedGuid) => new() { SharedGuid = sharedGuid };
+}
+
+[ExportTsInterface]
+public record ParameterDefinitionDescriptor(
     ParameterIdentity Identity,
+    bool? IsInstance,
+    string? DataTypeId,
+    string? DataTypeLabel,
+    string? GroupTypeId,
+    string? GroupTypeLabel
+);
+
+[ExportTsInterface]
+public record ParameterCatalogEntry(
+    ParameterDefinitionDescriptor Definition,
     string StorageType,
-    string? DataType,
-    bool IsInstance,
     bool IsParamService,
     List<string> FamilyNames,
     List<string> TypeNames

@@ -14,14 +14,27 @@ public enum ElementIdentitySource {
 
 [ExportTsInterface]
 public record RequestedParameterQuery {
-    public List<string> ParameterNames { get; init; } = [];
+    public List<ParameterReference> Parameters { get; init; } = [];
+}
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum RequestedParameterValueSource {
+    None,
+    Instance,
+    Type
 }
 
 [ExportTsInterface]
 public record RequestedElementParameterValue(
-    string Name,
+    ParameterDefinitionDescriptor Definition,
     bool Found,
+    bool IsBlank,
     string? Value,
     string? DisplayValue,
-    RequestedParameterStorageType StorageType
-);
+    RequestedParameterStorageType StorageType,
+    RequestedParameterValueSource Source
+) {
+    public string Name => this.Definition.Identity.Name;
+    public ParameterIdentity Identity => this.Definition.Identity;
+}

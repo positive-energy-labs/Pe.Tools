@@ -1,4 +1,4 @@
-using Pe.Shared.RevitData.Parameters;
+using Pe.Shared.RevitData;
 
 namespace Pe.Shared.RevitData.Families;
 
@@ -24,13 +24,13 @@ public sealed record ProjectLoadedFamilyIssue(
 );
 
 public sealed record ProjectLoadedFamilyParameter {
-    public required RevitParameterIdentity Identity { get; init; }
-    public bool IsInstance { get; init; }
-    public string? PropertiesGroupKey { get; init; }
-    public string? DataTypeKey { get; init; }
+    public required ParameterDefinitionDescriptor Definition { get; init; }
     public RequestedParameterStorageType StorageType { get; init; }
     public List<string> TypeNames { get; init; } = [];
     public Dictionary<string, string?> ValuesByType { get; init; } = new(StringComparer.Ordinal);
+
+    public ParameterIdentity Identity => this.Definition.Identity;
+    public bool? IsInstance => this.Definition.IsInstance;
 }
 
 public sealed record ProjectLoadedFamilyRecord {
@@ -48,11 +48,11 @@ public sealed record ProjectLoadedFamilyRecord {
 }
 
 public sealed record ProjectParameterCatalogEntry {
-    public required RevitParameterIdentity Identity { get; init; }
-    public bool IsInstance { get; init; }
-    public string? PropertiesGroupKey { get; init; }
-    public string? DataTypeKey { get; init; }
+    public required ParameterDefinitionDescriptor Definition { get; init; }
     public RequestedParameterStorageType StorageType { get; init; }
     public HashSet<string> FamilyNames { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string?> ValuesPerType { get; init; } = new(StringComparer.Ordinal);
+
+    public ParameterIdentity Identity => this.Definition.Identity;
+    public bool? IsInstance => this.Definition.IsInstance;
 }

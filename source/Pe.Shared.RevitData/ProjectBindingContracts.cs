@@ -21,21 +21,16 @@ public record ProjectParameterBindingsRequest(
 
 [ExportTsInterface]
 public record ProjectParameterBindingsFilter {
-    public List<string> ParameterNames { get; init; } = [];
+    public List<ParameterReference> Parameters { get; init; } = [];
     public string? ParameterNameContains { get; init; }
     public List<string> CategoryNames { get; init; } = [];
-    public List<Guid> SharedGuids { get; init; } = [];
     public ProjectParameterBindingKind? BindingKind { get; init; }
 }
 
 [ExportTsInterface]
 public record ProjectParameterBindingEntry(
-    ParameterIdentity Identity,
+    ParameterDefinitionDescriptor Definition,
     ProjectParameterBindingKind BindingKind,
-    string? DataTypeId,
-    string? DataTypeLabel,
-    string? GroupTypeId,
-    string? GroupTypeLabel,
     List<string> CategoryNames
 );
 

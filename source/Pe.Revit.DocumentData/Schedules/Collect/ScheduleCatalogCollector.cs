@@ -4,10 +4,13 @@ using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 using Serilog;
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Pe.Revit.DocumentData.Schedules.Collect;
 
-public static class ScheduleCatalogCollector {
+public static partial class ScheduleCatalogCollector {
     private const long SlowScheduleCatalogEntryThresholdMs = 150;
 
     public static ScheduleCatalogData Collect(
@@ -80,7 +83,8 @@ public static class ScheduleCatalogCollector {
         return new ScheduleCatalogData(
             entries,
             RevitDataOutputBudgets.ProjectIssues(issues, budget),
-            new RevitDataResultPage(allEntries.Count, entries.Count, truncated)
+            new RevitDataResultPage(allEntries.Count, entries.Count, truncated),
+            BuildSummary(allEntries)
         );
     }
 
@@ -451,6 +455,107 @@ public static class ScheduleCatalogCollector {
         elapsedMilliseconds = stopwatch.ElapsedMilliseconds;
         return result;
     }
+
+    private static ScheduleCatalogSummary BuildSummary(IReadOnlyList<ScheduleCatalogEntry> entries) {
+        var duplicateGroups = entries
+            .GroupBy(entry => NormalizeRevitDuplicateName(entry.Name), StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .OrderByDescending(group => group.Count())
+            .ThenBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new ScheduleCatalogNameGroup(
+                group.Key,
+                group.Count(),
+                group.Select(entry => entry.Name).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToList()
+            ))
+            .ToList();
+
+        var normalizedNames = entries.Select(entry => NormalizeRevitDuplicateName(entry.Name)).ToList();
+        var prefixCounts = CountNameTokens(normalizedNames, first: true);
+        var suffixCounts = CountNameTokens(normalizedNames, first: false);
+        var topScheduledFields = entries
+            .SelectMany(entry => entry.ParameterUsages
+                .Where(usage => !string.IsNullOrWhiteSpace(usage.FieldName))
+                .Select(usage => new { usage.FieldName, usage.FieldIndex, entry.ScheduleId }))
+            .GroupBy(item => item.FieldName, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(group => group.Select(item => item.ScheduleId).Distinct().Count())
+            .ThenBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+            .Take(25)
+            .Select(group => new ScheduleCatalogFieldUsageSummary(
+                group.Key,
+                group.Select(item => item.ScheduleId).Distinct().Count(),
+                Math.Round(group.Average(item => item.FieldIndex), 2)
+            ))
+            .ToList();
+        var fingerprints = entries
+            .Where(entry => entry.ParameterUsages.Count != 0)
+            .Select(BuildFieldFingerprint)
+            .ToList();
+
+        return new ScheduleCatalogSummary(
+            entries.Count,
+            duplicateGroups,
+            prefixCounts,
+            suffixCounts,
+            topScheduledFields,
+            fingerprints
+        );
+    }
+
+    private static ScheduleCatalogFieldFingerprint BuildFieldFingerprint(ScheduleCatalogEntry entry) {
+        var fieldSequence = entry.ParameterUsages
+            .OrderBy(usage => usage.FieldIndex)
+            .Select(usage => usage.FieldName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToList();
+        var fieldSet = fieldSequence.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
+        return new ScheduleCatalogFieldFingerprint(
+            entry.ScheduleId,
+            entry.Name,
+            NormalizeRevitDuplicateName(entry.Name),
+            fieldSequence,
+            HashFields(fieldSet),
+            HashFields(fieldSequence),
+            fieldSequence
+                .Select(GetParameterPrefix)
+                .OfType<string>()
+                .GroupBy(prefix => prefix, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(group => group.Count())
+                .ThenBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase)
+        );
+    }
+
+    private static List<ScheduleCatalogNameTokenCount> CountNameTokens(IEnumerable<string> names, bool first) => names
+        .Select(name => SplitNameTokens(name))
+        .Select(tokens => first ? tokens.FirstOrDefault() : tokens.LastOrDefault())
+        .Where(token => !string.IsNullOrWhiteSpace(token))
+        .GroupBy(token => token!, StringComparer.OrdinalIgnoreCase)
+        .OrderByDescending(group => group.Count())
+        .ThenBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+        .Take(25)
+        .Select(group => new ScheduleCatalogNameTokenCount(group.Key, group.Count()))
+        .ToList();
+
+    private static string NormalizeRevitDuplicateName(string name) => RevitDuplicateSuffixRegex()
+        .Replace(name.Trim(), string.Empty)
+        .Trim();
+
+    private static List<string> SplitNameTokens(string name) => name
+        .Split([' ', '-', '_', '/', '\\'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .ToList();
+
+    private static string? GetParameterPrefix(string fieldName) {
+        var index = fieldName.IndexOf('_');
+        return index <= 0 ? null : fieldName[..index];
+    }
+
+    private static string HashFields(IEnumerable<string> fields) {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("\u001f", fields)));
+        return Convert.ToHexString(bytes)[..16];
+    }
+
+    [GeneratedRegex(@"\s+(?:\(\d+\)|Copy\s+\d+)\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex RevitDuplicateSuffixRegex();
 
     private static bool Contains(string? value, string? expected) =>
         string.IsNullOrWhiteSpace(expected)

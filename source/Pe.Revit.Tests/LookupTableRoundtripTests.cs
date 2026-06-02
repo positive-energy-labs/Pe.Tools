@@ -55,9 +55,8 @@ public sealed class LookupTableRoundtripTests {
             var profile = FamilyFoundryRoundtripHarness.ProjectToProfile(snapshot);
             Assert.That(profile.SetLookupTables.Tables, Has.Count.EqualTo(1));
             Assert.That(
-                profile.SetKnownParams.GlobalAssignments.Any(assignment =>
-                    assignment.Kind == ParamAssignmentKind.Formula &&
-                    assignment.Value.Contains("size_lookup(", StringComparison.OrdinalIgnoreCase)),
+                profile.FamilyParameters.Any(parameter =>
+                    parameter.Formula?.Contains("size_lookup(", StringComparison.OrdinalIgnoreCase) == true),
                 Is.True,
                 "Expected projected profile to carry size_lookup formulas.");
 

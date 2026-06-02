@@ -1,3 +1,4 @@
+using Pe.Revit.FamilyFoundry.DesiredState;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
@@ -99,6 +100,46 @@ internal sealed class SetLookupTablesSettingsSchemaDefinition : SettingsSchemaDe
     }
 }
 
+internal sealed class SharedParameterSelectionFilterSchemaDefinition : SettingsSchemaDefinition<SharedParameterSelectionFilter> {
+    public override void Configure(ISettingsSchemaBuilder<SharedParameterSelectionFilter> builder) {
+        builder.Property(item => item.Names, property => property.UseValueDomain(ValueDomainKeys.SharedParameterNames));
+        builder.Property(item => item.Containing, property => property.UseValueDomain(ValueDomainKeys.SharedParameterNames));
+        builder.Property(item => item.StartingWith, property => property.UseValueDomain(ValueDomainKeys.SharedParameterNames));
+    }
+}
+
+internal sealed class DesiredSharedParameterDeclarationSchemaDefinition
+    : SettingsSchemaDefinition<DesiredSharedParameterDeclaration> {
+    public override void Configure(ISettingsSchemaBuilder<DesiredSharedParameterDeclaration> builder) {
+        builder.Property(item => item.Name, property => property.UseValueDomain(ValueDomainKeys.SharedParameterNames));
+        builder.Property(item => item.SourceNames, property => {
+            property.DependsOnContext(ValueDomainContextKeys.SelectedFamilyNames);
+            property.UseDatasetOptions(
+                SchemaDatasetIds.ParameterCatalog,
+                SchemaProjectionKeys.FamilyParameterNames
+            );
+        });
+        builder.Property(item => item.DataType, property => property.UseValueDomain(ValueDomainKeys.SpecNames));
+        builder.Property(item => item.PropertiesGroup,
+            property => property.UseValueDomain(ValueDomainKeys.PropertyGroupNames));
+    }
+}
+
+internal sealed class DesiredFamilyParameterDeclarationSchemaDefinition
+    : SettingsSchemaDefinition<DesiredFamilyParameterDeclaration> {
+    public override void Configure(ISettingsSchemaBuilder<DesiredFamilyParameterDeclaration> builder) {
+        builder.Property(item => item.DataType, property => property.UseValueDomain(ValueDomainKeys.SpecNames));
+        builder.Property(item => item.PropertiesGroup,
+            property => property.UseValueDomain(ValueDomainKeys.PropertyGroupNames));
+    }
+}
+
+internal sealed class DesiredPerTypeAssignmentRowSchemaDefinition : SettingsSchemaDefinition<DesiredPerTypeAssignmentRow> {
+    public override void Configure(ISettingsSchemaBuilder<DesiredPerTypeAssignmentRow> builder) =>
+        builder.Property(item => item.Parameter,
+            property => property.UseValueDomain(ValueDomainKeys.SharedParameterNames));
+}
+
 internal sealed class DeleteParamsSettingsSchemaDefinition : SettingsSchemaDefinition<DeleteParamsSettings> {
     public override void Configure(ISettingsSchemaBuilder<DeleteParamsSettings> builder) =>
         builder.Property(item => item.Names, property =>
@@ -143,6 +184,10 @@ public static class FamilyFoundrySchemaDefinitionBootstrapper {
             SettingsSchemaDefinitionRegistry.Shared.Register(new PerTypeAssignmentRowSchemaDefinition());
             SettingsSchemaDefinitionRegistry.Shared.Register(new SetKnownParamsSettingsSchemaDefinition());
             SettingsSchemaDefinitionRegistry.Shared.Register(new SetLookupTablesSettingsSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new SharedParameterSelectionFilterSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new DesiredSharedParameterDeclarationSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new DesiredFamilyParameterDeclarationSchemaDefinition());
+            SettingsSchemaDefinitionRegistry.Shared.Register(new DesiredPerTypeAssignmentRowSchemaDefinition());
             SettingsSchemaDefinitionRegistry.Shared.Register(new DeleteParamsSettingsSchemaDefinition());
             SettingsSchemaDefinitionRegistry.Shared.Register(new MakeElecConnectorParametersSchemaDefinition());
             _registered = true;

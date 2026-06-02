@@ -17,22 +17,12 @@ public static class ParameterCoverageCollector {
                 .ToList();
         }
 
-        var parameterNames = request.ParameterNames
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Select(name => name.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        var sharedGuids = request.SharedGuids
-            .Select(value => Guid.TryParse(value, out var guid) ? guid : (Guid?)null)
-            .Where(value => value != null)
-            .Select(value => value!.Value)
-            .Distinct()
-            .ToList();
-        if (parameterNames.Count == 0 && sharedGuids.Count == 0) {
+        var parameters = ParameterReferenceResolver.Resolve(request.Parameters);
+        if (parameters.Count == 0) {
             issues.Add(new RevitDataIssue(
                 "ParameterCoverageNoParametersRequested",
                 RevitDataIssueSeverity.Warning,
-                "Request at least one parameter name or shared GUID to compute parameter coverage."
+                "Request at least one parameter reference to compute parameter coverage."
             ));
         }
 
@@ -42,11 +32,8 @@ public static class ParameterCoverageCollector {
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var entries = new List<ParameterCoverageParameterEntry>();
         foreach (var categoryGroup in elements.GroupBy(element => element.Category?.Name ?? string.Empty)) {
-            foreach (var parameterName in parameterNames) {
-                entries.Add(CollectParameterNameCoverage(doc, categoryGroup.Key, categoryGroup.ToList(), parameterName, request, defaultValues, maxSamples));
-            }
-            foreach (var sharedGuid in sharedGuids) {
-                entries.Add(CollectSharedGuidCoverage(doc, categoryGroup.Key, categoryGroup.ToList(), sharedGuid, request, defaultValues, maxSamples));
+            foreach (var parameter in parameters) {
+                entries.Add(CollectParameterCoverage(doc, categoryGroup.Key, categoryGroup.ToList(), parameter, request, defaultValues, maxSamples));
             }
         }
 
@@ -69,11 +56,11 @@ public static class ParameterCoverageCollector {
         );
     }
 
-    private static ParameterCoverageParameterEntry CollectParameterNameCoverage(
+    private static ParameterCoverageParameterEntry CollectParameterCoverage(
         Document doc,
         string? categoryName,
         IReadOnlyList<Element> elements,
-        string parameterName,
+        ResolvedParameterReference parameter,
         ParameterCoverageRequest request,
         HashSet<string> defaultValues,
         int maxSamples
@@ -81,31 +68,13 @@ public static class ParameterCoverageCollector {
         doc,
         categoryName,
         elements,
-        ParameterIdentityEngine.FromRaw(parameterName, null, null, null),
-        element => FindParameterByName(doc, element, parameterName, request.LookupPreference),
+        parameter.Identity,
+        element => FindParameter(doc, element, parameter, request.LookupPreference),
         request,
         defaultValues,
         maxSamples
     );
 
-    private static ParameterCoverageParameterEntry CollectSharedGuidCoverage(
-        Document doc,
-        string? categoryName,
-        IReadOnlyList<Element> elements,
-        Guid sharedGuid,
-        ParameterCoverageRequest request,
-        HashSet<string> defaultValues,
-        int maxSamples
-    ) => CollectCoverage(
-        doc,
-        categoryName,
-        elements,
-        ParameterIdentityEngine.FromRaw(sharedGuid.ToString("D"), null, sharedGuid.ToString("D"), null),
-        element => FindParameterByGuid(doc, element, sharedGuid, request.LookupPreference),
-        request,
-        defaultValues,
-        maxSamples
-    );
 
     private static ParameterCoverageParameterEntry CollectCoverage(
         Document doc,
@@ -142,7 +111,7 @@ public static class ParameterCoverageCollector {
         }
 
         return new ParameterCoverageParameterEntry(
-            identity,
+            BuildDefinition(identity, elements, lookup),
             string.IsNullOrWhiteSpace(categoryName) ? null : categoryName,
             elements.Count,
             present,
@@ -152,6 +121,39 @@ public static class ParameterCoverageCollector {
             samples
         );
     }
+
+    private static ParameterDefinitionDescriptor BuildDefinition(
+        ParameterIdentity requestedIdentity,
+        IReadOnlyList<Element> elements,
+        Func<Element, Parameter?> lookup
+    ) {
+        var firstParameter = elements
+            .Select(lookup)
+            .FirstOrDefault(parameter => parameter?.Definition != null);
+        if (firstParameter == null) {
+            return new ParameterDefinitionDescriptor(
+                requestedIdentity,
+                null,
+                null,
+                null,
+                null,
+                null
+            );
+        }
+
+        var definition = firstParameter.Definition;
+        return new ParameterDefinitionDescriptor(
+            ParameterIdentityEngine.FromCanonical(ParameterIdentityFactory.FromParameter(firstParameter)),
+            null,
+            NormalizeForgeTypeId(definition.GetDataType()),
+            null,
+            NormalizeForgeTypeId(definition.GetGroupTypeId()),
+            null
+        );
+    }
+
+    private static string? NormalizeForgeTypeId(ForgeTypeId forgeTypeId) =>
+        string.IsNullOrWhiteSpace(forgeTypeId?.TypeId) ? null : forgeTypeId.TypeId;
 
     private static List<Element> ResolveElements(
         Document doc,
@@ -203,6 +205,26 @@ public static class ParameterCoverageCollector {
             .ToList();
     }
 
+    private static Parameter? FindParameter(
+        Document doc,
+        Element element,
+        ResolvedParameterReference parameter,
+        RevitParameterLookupPreference preference
+    ) {
+        if (Guid.TryParse(parameter.SharedGuid, out var sharedGuid))
+            return FindParameterByGuid(doc, element, sharedGuid, preference);
+
+        if (parameter.BuiltInParameterId.HasValue)
+            return FindParameterByBuiltInId(doc, element, parameter.BuiltInParameterId.Value, preference);
+
+        if (parameter.ParameterElementId.HasValue)
+            return FindParameterByElementId(doc, element, parameter.ParameterElementId.Value, preference);
+
+        return string.IsNullOrWhiteSpace(parameter.Name)
+            ? null
+            : FindParameterByName(doc, element, parameter.Name, preference);
+    }
+
     private static Parameter? FindParameterByName(
         Document doc,
         Element element,
@@ -226,6 +248,38 @@ public static class ParameterCoverageCollector {
         _ => element.get_Parameter(sharedGuid)
              ?? (doc.GetElement(element.GetTypeId()) as ElementType)?.get_Parameter(sharedGuid)
     };
+
+    private static Parameter? FindParameterByBuiltInId(
+        Document doc,
+        Element element,
+        int builtInParameterId,
+        RevitParameterLookupPreference preference
+    ) {
+        var builtInParameter = (BuiltInParameter)builtInParameterId;
+        return preference switch {
+            RevitParameterLookupPreference.InstanceOnly => element.get_Parameter(builtInParameter),
+            RevitParameterLookupPreference.TypeOnly => (doc.GetElement(element.GetTypeId()) as ElementType)?.get_Parameter(builtInParameter),
+            _ => element.get_Parameter(builtInParameter)
+                 ?? (doc.GetElement(element.GetTypeId()) as ElementType)?.get_Parameter(builtInParameter)
+        };
+    }
+
+    private static Parameter? FindParameterByElementId(
+        Document doc,
+        Element element,
+        long parameterElementId,
+        RevitParameterLookupPreference preference
+    ) => preference switch {
+        RevitParameterLookupPreference.InstanceOnly => FindParameterByElementId(element, parameterElementId),
+        RevitParameterLookupPreference.TypeOnly => FindParameterByElementId(doc.GetElement(element.GetTypeId()) as ElementType, parameterElementId),
+        _ => FindParameterByElementId(element, parameterElementId)
+             ?? FindParameterByElementId(doc.GetElement(element.GetTypeId()) as ElementType, parameterElementId)
+    };
+
+    private static Parameter? FindParameterByElementId(Element? element, long parameterElementId) =>
+        element?.Parameters
+            .Cast<Parameter>()
+            .FirstOrDefault(parameter => parameter.Id.Value() == parameterElementId);
 
     private static void AddSample(Document doc, Element element, List<RevitElementHandle> samples, int maxSamples) {
         if (samples.Count >= maxSamples)

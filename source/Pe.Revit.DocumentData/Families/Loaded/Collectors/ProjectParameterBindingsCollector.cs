@@ -2,7 +2,6 @@ using Pe.Revit.DocumentData.Families.Loaded.Models;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Extensions.ProjDocument;
 using Pe.Shared.RevitData;
-
 namespace Pe.Revit.DocumentData.Families.Loaded.Collectors;
 
 public static class ProjectParameterBindingsCollector {
@@ -81,22 +80,21 @@ public static class ProjectParameterBindingsCollector {
 
             var dataTypeId = NormalizeForgeTypeId(definition.GetDataType());
             var groupTypeId = NormalizeForgeTypeId(definition.GetGroupTypeId());
-            var bindingIdentity = RevitParameterIdentityFactory.FromDefinition(doc, definition);
+            var bindingIdentity = ParameterIdentityFactory.FromDefinition(doc, definition);
 
             return new CollectedProjectParameterBindingRecord {
-                Identity = bindingIdentity,
+                Definition = new ParameterDefinitionDescriptor(
+                    bindingIdentity,
+                    binding is InstanceBinding,
+                    dataTypeId,
+                    dataTypeId == null ? null : RevitLabelCatalog.GetLabelForSpec(definition.GetDataType()),
+                    groupTypeId,
+                    groupTypeId == null ? null : RevitLabelCatalog.GetLabelForPropertyGroup(definition.GetGroupTypeId())
+                ),
                 BindingKind =
                     binding is InstanceBinding
                         ? nameof(ProjectParameterBindingKind.Instance)
                         : nameof(ProjectParameterBindingKind.Type),
-                DataTypeId = dataTypeId,
-                DataTypeLabel =
-                    dataTypeId == null ? null : RevitLabelCatalog.GetLabelForSpec(definition.GetDataType()),
-                GroupTypeId = groupTypeId,
-                GroupTypeLabel =
-                    groupTypeId == null
-                        ? null
-                        : RevitLabelCatalog.GetLabelForPropertyGroup(definition.GetGroupTypeId()),
                 CategoryNames = categoryNames
             };
         } catch (Exception ex) {
@@ -145,10 +143,9 @@ public static class ProjectParameterBindingsCollector {
         || filter.PlacementScope != LoadedFamilyPlacementScope.AllLoaded;
 
     private static bool HasBindingFilter(ProjectParameterBindingsFilter filter) =>
-        filter.ParameterNames.Any(name => !string.IsNullOrWhiteSpace(name))
+        filter.Parameters.Any(parameter => parameter.Identity != null || !string.IsNullOrWhiteSpace(parameter.Name) || !string.IsNullOrWhiteSpace(parameter.SharedGuid))
         || !string.IsNullOrWhiteSpace(filter.ParameterNameContains)
         || filter.CategoryNames.Any(name => !string.IsNullOrWhiteSpace(name))
-        || filter.SharedGuids.Count != 0
         || filter.BindingKind != null;
 
     private static ProjectParameterBindingEntry ToContractEntry(
@@ -156,14 +153,17 @@ public static class ProjectParameterBindingsCollector {
         bool includeCategories
     ) =>
         new(
-            ParameterIdentityEngine.FromCanonical(binding.Identity),
+            new ParameterDefinitionDescriptor(
+                ParameterIdentityEngine.FromCanonical(binding.Identity),
+                string.Equals(binding.BindingKind, nameof(ProjectParameterBindingKind.Instance), StringComparison.Ordinal),
+                binding.DataTypeId,
+                binding.DataTypeLabel,
+                binding.GroupTypeId,
+                binding.GroupTypeLabel
+            ),
             string.Equals(binding.BindingKind, nameof(ProjectParameterBindingKind.Instance), StringComparison.Ordinal)
                 ? ProjectParameterBindingKind.Instance
                 : ProjectParameterBindingKind.Type,
-            binding.DataTypeId,
-            binding.DataTypeLabel,
-            binding.GroupTypeId,
-            binding.GroupTypeLabel,
             includeCategories ? binding.CategoryNames : []
         );
 
@@ -173,13 +173,11 @@ public static class ProjectParameterBindingsCollector {
     ) {
         if (filter == null)
             return true;
-        if (filter.ParameterNames.Count != 0 && !filter.ParameterNames.Contains(binding.Name, StringComparer.OrdinalIgnoreCase))
+        var parameters = ParameterReferenceResolver.Resolve(filter.Parameters);
+        if (parameters.Count != 0 && !ParameterReferenceResolver.Matches(binding.Identity, parameters))
             return false;
         if (!string.IsNullOrWhiteSpace(filter.ParameterNameContains) &&
             !binding.Name.Contains(filter.ParameterNameContains.Trim(), StringComparison.OrdinalIgnoreCase))
-            return false;
-        if (filter.SharedGuids.Count != 0 &&
-            (binding.Identity.SharedGuid == null || !filter.SharedGuids.Contains(binding.Identity.SharedGuid.Value)))
             return false;
         if (filter.BindingKind != null &&
             !string.Equals(binding.BindingKind, filter.BindingKind.Value.ToString(), StringComparison.Ordinal))

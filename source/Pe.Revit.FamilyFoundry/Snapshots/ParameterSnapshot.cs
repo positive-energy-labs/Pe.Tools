@@ -1,4 +1,5 @@
 using Pe.Revit.SettingsRuntime.Json.RevitTypes;
+using Pe.Shared.RevitData;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
@@ -10,21 +11,52 @@ namespace Pe.Revit.FamilyFoundry.Snapshots;
 ///     Contains the minimum information needed to identify or create a parameter.
 /// </summary>
 public record ParameterSpec {
+    private ParameterDefinitionDescriptor _definition = ParameterDefinitionDescriptorFactory.NameFallback(string.Empty);
+
+    [Description("Portable parameter definition used to identify, compare, or recreate the parameter.")]
+    [Required]
+    public ParameterDefinitionDescriptor Definition {
+        get => this._definition;
+        init => this._definition = value;
+    }
+
     [Description("The name of the parameter")]
     [Required]
-    public string Name { get; init; } = string.Empty;
+    public string Name {
+        get => this.Definition.Identity.Name;
+        init => this._definition = this.Definition with {
+            Identity = new ParameterIdentity($"name:{NormalizeName(value)}", ParameterIdentityKind.NameFallback, value, null, null, null)
+        };
+    }
 
     [Description(
         "Whether the parameter is an instance parameter (true) or a type parameter (false). Defaults to true.")]
-    public bool IsInstance { get; init; } = true;
+    public bool? IsInstance {
+        get => this.Definition.IsInstance;
+        init => this._definition = this.Definition with { IsInstance = value };
+    }
 
     [Description("The properties group of the parameter. Defaults to \"Other\" Properties Palette group.")]
     [ForgeKind(ForgeKind.Group)]
-    public ForgeTypeId PropertiesGroup { get; init; } = new("");
+    public ForgeTypeId PropertiesGroup {
+        get => ToForgeTypeId(this.Definition.GroupTypeId) ?? new ForgeTypeId(string.Empty);
+        init => this._definition = this.Definition with { GroupTypeId = NormalizeForgeTypeId(value) };
+    }
 
     [Description("The data type of the parameter")]
     [ForgeKind(ForgeKind.Spec)]
-    public ForgeTypeId DataType { get; init; } = SpecTypeId.String.Text;
+    public ForgeTypeId DataType {
+        get => ToForgeTypeId(this.Definition.DataTypeId) ?? SpecTypeId.String.Text;
+        init => this._definition = this.Definition with { DataTypeId = NormalizeForgeTypeId(value) };
+    }
+
+    private static ForgeTypeId? ToForgeTypeId(string? typeId) =>
+        string.IsNullOrWhiteSpace(typeId) ? null : new ForgeTypeId(typeId);
+
+    private static string? NormalizeForgeTypeId(ForgeTypeId? forgeTypeId) =>
+        string.IsNullOrWhiteSpace(forgeTypeId?.TypeId) ? null : forgeTypeId.TypeId;
+
+    private static string NormalizeName(string? name) => (name ?? string.Empty).Trim().ToLowerInvariant();
 }
 
 /// <summary>

@@ -65,7 +65,7 @@ public sealed class RevitAutomationContractsTests {
                 new ContractScheduleCatalogRequest {
                     CustomParameterFilters = [
                         new ScheduleCustomParameterFilter(
-                            "Discipline",
+                            Pe.Shared.RevitData.ParameterReference.FromName("Discipline"),
                             "Mechanical",
                             ScheduleCustomParameterMatchKind.Equals
                         )
@@ -89,7 +89,7 @@ public sealed class RevitAutomationContractsTests {
             Assert.That(roundTripped.ScheduleCollection.PrimaryCatalogRequest!.CustomParameterFilters.Count,
                 Is.EqualTo(1));
             Assert.That(
-                roundTripped.ScheduleCollection.PrimaryCatalogRequest.CustomParameterFilters[0].ParameterName,
+                roundTripped.ScheduleCollection.PrimaryCatalogRequest.CustomParameterFilters[0].Parameter.Name,
                 Is.EqualTo("Discipline")
             );
             Assert.That(roundTripped.ScheduleCollection.FallbackCatalogRequest, Is.Not.Null);
@@ -189,7 +189,7 @@ public sealed class RevitAutomationContractsTests {
                     "primaryCatalogRequest": {
                       "customParameterFilters": [
                         {
-                          "parameterName": "Discipline",
+                          "parameter": { "name": "Discipline" },
                           "expectedValue": "Mechanical",
                           "matchKind": "Equals"
                         }
@@ -262,7 +262,7 @@ public sealed class RevitAutomationContractsTests {
                     "primaryCatalogRequest": {
                       "customParameterFilters": [
                         {
-                          "parameterName": "Discipline",
+                          "parameter": { "name": "Discipline" },
                           "expectedValue": "Mechanical",
                           "matchKind": "Equals"
                         }
@@ -278,7 +278,7 @@ public sealed class RevitAutomationContractsTests {
                         "primaryCatalogRequest": {
                           "customParameterFilters": [
                             {
-                              "parameterName": "Discipline",
+                              "parameter": { "name": "Discipline" },
                               "expectedValue": "Electrical",
                               "matchKind": "Equals"
                             }

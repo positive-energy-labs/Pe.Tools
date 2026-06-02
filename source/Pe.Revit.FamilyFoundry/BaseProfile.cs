@@ -1,6 +1,7 @@
 ﻿using Autodesk.Revit.DB;
 using Pe.Revit.DocumentData.Schedules;
 using Pe.Revit.DocumentData.Parameters;
+using Pe.Revit.FamilyFoundry.DesiredState;
 using Pe.Revit.Global;
 using Pe.Revit.Global.Utils.Files;
 using Pe.Shared.StorageRuntime;
@@ -21,9 +22,9 @@ public class BaseProfile {
     [Required]
     public FilterFamiliesSettings FilterFamilies { get; init; } = new();
 
-    [Presettable("filter-aps-params")]
+    [Presettable("shared-parameter-selection")]
     [Required]
-    public FilterApsParamsSettings FilterApsParams { get; init; } = new();
+    public SharedParameterSelectionSpec SharedParameterSelection { get; init; } = new();
 
     public List<Family> GetFamilies(Document doc) =>
         new FilteredElementCollector(doc)
@@ -33,17 +34,29 @@ public class BaseProfile {
             .ToList();
 
     /// <summary>
-    ///     Gets filtered APS parameter models (no Revit API dependencies).
-    ///     These can be safely cached and converted to SharedParameterDefinitions later.
+    ///     Gets selected APS parameter models (no Revit API dependencies).
+    ///     Explicit required names are always included; SharedParameterSelection adds bulk name-pattern selection.
     /// </summary>
-    public List<ParamModelRes> GetFilteredApsParamModels() {
-        var apsParams = StorageClient.Default.Global().State().Json<ParamModel>("parameters-service-cache").Read();
-        if (apsParams.Results != null) {
-            return apsParams.Results
-                .Where(this.FilterApsParams.Filter)
-                .Where(p => !p.IsArchived)
-                .ToList();
+    public List<ParamModelRes> GetSelectedApsParamModels(IEnumerable<string>? requiredNames = null, bool requireCache = true) {
+        var required = (requiredNames ?? [])
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name.Trim())
+            .ToHashSet(StringComparer.Ordinal);
+
+        try {
+            var apsParams = StorageClient.Default.Global().State().Json<ParamModel>("parameters-service-cache").Read();
+            if (apsParams.Results != null) {
+                return apsParams.Results
+                    .Where(p => p != null && !p.IsArchived)
+                    .Where(p => required.Contains(p.Name) || this.SharedParameterSelection.Matches(p.Name))
+                    .ToList();
+            }
+        } catch (InvalidOperationException) when (!requireCache) {
+            return [];
         }
+
+        if (!requireCache)
+            return [];
 
         throw new InvalidOperationException(
             $"This Family Foundry command requires cached parameters data, but no cached data exists. " +
@@ -217,5 +230,3 @@ public class BaseProfile {
         }
     }
 }
-
-// PE_HOT_RELOAD_NUDGE

@@ -1,8 +1,5 @@
 using Pe.Dev.Cli;
 using Pe.Dev.RevitAutomation;
-using Pe.Shared.HostContracts.Bridge;
-using Pe.Shared.HostContracts.Protocol;
-using Pe.Shared.HostContracts;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Product;
 using Pe.Shared.StorageRuntime;
@@ -219,69 +216,28 @@ public sealed class DeploymentRuntimeContractTests {
     }
 
     [Test]
-    public void Session_options_accept_json_flag() {
-        var options = RevitSessionOptions.Parse(["--json"]);
+    public void Fresh_test_options_accept_json_plan_and_timeout_flags() {
+        var options = RevitTestCliOptions.Parse(["--json", "--plan", "--timeout-seconds", "900"]);
 
         Assert.That(options.JsonOutput, Is.True);
+        Assert.That(options.PlanOnly, Is.True);
+        Assert.That(options.TimeoutSeconds, Is.EqualTo(900));
     }
 
     [Test]
-    public void Session_exit_code_is_nonzero_when_no_host_or_process_sessions_exist() {
-        var report = RevitCommandRunner.CreateSessionReport([], null, null);
+    public void Fresh_test_options_accept_two_digit_revit_year() {
+        var options = RevitTestCliOptions.Parse(["--revit-year", "25"]);
 
-        Assert.That(RevitCommandRunner.GetSessionExitCode(report), Is.EqualTo(3));
+        Assert.That(options.RevitYearOverride, Is.EqualTo(2025));
     }
 
     [Test]
-    public void Session_exit_code_is_zero_when_host_bridge_is_connected() {
-        var report = RevitCommandRunner.CreateSessionReport(
-            [],
-            CreateHostProbeData(isConnected: true),
-            CreateHostSessionSummaryData(isConnected: true)
-        );
+    public void Fresh_test_options_reject_configuration_and_revit_year_together() {
+        var exception = Assert.Throws<ArgumentException>(() =>
+            RevitTestCliOptions.Parse(["--configuration", "Debug.R25.Tests", "--revit-year", "2025"]));
 
-        Assert.That(RevitCommandRunner.GetSessionExitCode(report), Is.EqualTo(0));
+        Assert.That(exception?.Message, Does.Contain("Specify either --configuration or --revit-year"));
     }
-
-    [Test]
-    public void Session_report_preserves_host_status() {
-        var report = RevitCommandRunner.CreateSessionReport(
-            [],
-            CreateHostProbeData(isConnected: true),
-            CreateHostSessionSummaryData(isConnected: true)
-        );
-
-        Assert.That(report.HostReachable, Is.True);
-        Assert.That(report.HostSessionSummary?.BridgeIsConnected, Is.True);
-    }
-
-    private static HostProbeData CreateHostProbeData(bool isConnected) =>
-        new(
-            HostProcessIdentity.RuntimeIdentity,
-            HostProtocol.ContractVersion,
-            BridgeProtocol.ContractVersion,
-            HttpRoutes.Bridge,
-            isConnected,
-            null
-        );
-
-    private static HostSessionSummaryData CreateHostSessionSummaryData(bool isConnected) =>
-        new(
-            isConnected,
-            isConnected ? "revit-123" : null,
-            isConnected ? 123 : null,
-            isConnected ? "2025" : null,
-            isConnected ? ".NET Framework 4.8" : null,
-            0,
-            null,
-            [],
-            [],
-            new HostWorkbenchResourcesData(
-                new HostParameterResourceData(
-                    string.Empty,
-                    [],
-                    new HostResourceFileStateData("shared-parameters", null, false, null, null, "test")))
-        );
 
     private static void TryDeleteDirectory(string path) {
         try {

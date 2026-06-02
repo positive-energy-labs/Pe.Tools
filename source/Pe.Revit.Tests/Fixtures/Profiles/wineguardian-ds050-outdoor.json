@@ -10,104 +10,6 @@
       ]
     }
   },
-  "FilterApsParams": {
-    "IncludeNames": {
-      "Equaling": [
-        "PE_G_Dim_Height1",
-        "PE_G_Dim_Length1",
-        "PE_G_Dim_Width1"
-      ]
-    }
-  },
-  "AddFamilyParams": {
-    "Parameters": [
-      {
-        "Name": "LiquidLineDiameter",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "SuctionLineDiameter",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "ServiceLineDepth",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "ServicePanelOffset",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "ServiceLineHalfSpacing",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "LiquidLineCenterOffset",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "SuctionLineCenterOffset",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      },
-      {
-        "Name": "ServiceLineElevation",
-        "DataType": "autodesk.spec.aec:length-2.0.1"
-      }
-    ]
-  },
-  "SetKnownParams": {
-    "OverrideExistingValues": true,
-    "GlobalAssignments": [
-      {
-        "Parameter": "LiquidLineCenterOffset",
-        "Kind": "Formula",
-        "Value": "ServicePanelOffset - ServiceLineHalfSpacing"
-      },
-      {
-        "Parameter": "SuctionLineCenterOffset",
-        "Kind": "Formula",
-        "Value": "ServicePanelOffset + ServiceLineHalfSpacing"
-      }
-    ],
-    "PerTypeAssignmentsTable": [
-      {
-        "Parameter": "PE_G_Dim_Length1",
-        "DS050 Cond": "34\""
-      },
-      {
-        "Parameter": "PE_G_Dim_Width1",
-        "DS050 Cond": "12.30\""
-      },
-      {
-        "Parameter": "PE_G_Dim_Height1",
-        "DS050 Cond": "26.07\""
-      },
-      {
-        "Parameter": "LiquidLineDiameter",
-        "DS050 Cond": "0.25\""
-      },
-      {
-        "Parameter": "SuctionLineDiameter",
-        "DS050 Cond": "0.50\""
-      },
-      {
-        "Parameter": "ServiceLineDepth",
-        "DS050 Cond": "2\""
-      },
-      {
-        "Parameter": "ServicePanelOffset",
-        "DS050 Cond": "4\""
-      },
-      {
-        "Parameter": "ServiceLineHalfSpacing",
-        "DS050 Cond": "0.75\""
-      },
-      {
-        "Parameter": "ServiceLineElevation",
-        "DS050 Cond": "14.50\""
-      }
-    ]
-  },
   "ParamDrivenSolids": {
     "Frame": "NonHosted",
     "Planes": {
@@ -205,5 +107,100 @@
         }
       }
     ]
-  }
+  },
+  "SharedParameterSelection": {
+    "Include": {
+      "Names": [
+        "PE_G_Dim_Height1",
+        "PE_G_Dim_Length1",
+        "PE_G_Dim_Width1"
+      ]
+    },
+    "Exclude": {}
+  },
+  "SharedParameters": [
+    {
+      "Name": "PE_G_Dim_Height1"
+    },
+    {
+      "Name": "PE_G_Dim_Length1"
+    },
+    {
+      "Name": "PE_G_Dim_Width1"
+    }
+  ],
+  "FamilyParameters": [
+    {
+      "Name": "LiquidLineDiameter",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    },
+    {
+      "Name": "SuctionLineDiameter",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    },
+    {
+      "Name": "ServiceLineDepth",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    },
+    {
+      "Name": "ServicePanelOffset",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    },
+    {
+      "Name": "ServiceLineHalfSpacing",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    },
+    {
+      "Name": "LiquidLineCenterOffset",
+      "DataType": "autodesk.spec.aec:length-2.0.1",
+      "Formula": "ServicePanelOffset - ServiceLineHalfSpacing"
+    },
+    {
+      "Name": "SuctionLineCenterOffset",
+      "DataType": "autodesk.spec.aec:length-2.0.1",
+      "Formula": "ServicePanelOffset + ServiceLineHalfSpacing"
+    },
+    {
+      "Name": "ServiceLineElevation",
+      "DataType": "autodesk.spec.aec:length-2.0.1"
+    }
+  ],
+  "PerTypeAssignmentsTable": [
+    {
+      "Parameter": "PE_G_Dim_Length1",
+      "DS050 Cond": "34\""
+    },
+    {
+      "Parameter": "PE_G_Dim_Width1",
+      "DS050 Cond": "12.30\""
+    },
+    {
+      "Parameter": "PE_G_Dim_Height1",
+      "DS050 Cond": "26.07\""
+    },
+    {
+      "Parameter": "LiquidLineDiameter",
+      "DS050 Cond": "0.25\""
+    },
+    {
+      "Parameter": "SuctionLineDiameter",
+      "DS050 Cond": "0.50\""
+    },
+    {
+      "Parameter": "ServiceLineDepth",
+      "DS050 Cond": "2\""
+    },
+    {
+      "Parameter": "ServicePanelOffset",
+      "DS050 Cond": "4\""
+    },
+    {
+      "Parameter": "ServiceLineHalfSpacing",
+      "DS050 Cond": "0.75\""
+    },
+    {
+      "Parameter": "ServiceLineElevation",
+      "DS050 Cond": "14.50\""
+    }
+  ]
 }

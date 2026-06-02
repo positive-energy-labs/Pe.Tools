@@ -90,7 +90,7 @@ public static class HeaderGroupHandler {
             if (fieldSpec.CalculatedType.HasValue) continue;
 
             // Skip if field wasn't actually added to schedule
-            if (!fieldIndexMap.TryGetValue(fieldSpec.ParameterName, out var columnIdx)) continue;
+            if (!fieldIndexMap.TryGetValue(GetFieldLabel(fieldSpec), out var columnIdx)) continue;
 
             var headerGroup = fieldSpec.HeaderGroup;
 
@@ -147,4 +147,10 @@ public static class HeaderGroupHandler {
 
         return (applied, skipped, warnings);
     }
+
+    private static string GetFieldLabel(ScheduleFieldSpec spec) =>
+        spec.Parameter.Name?.Trim() ??
+        spec.Parameter.Identity?.Name.Trim() ??
+        spec.Parameter.SharedGuid?.Trim() ??
+        string.Empty;
 }

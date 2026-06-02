@@ -653,5 +653,3 @@ public class SchedulePaletteItemWrapper : ISchedulePaletteItem {
     public BitmapImage? Icon => this._inner.Icon;
     public Color? ItemColor => this._inner.ItemColor;
 }
-
-// PE_HOT_RELOAD_NUDGE

@@ -1,4 +1,4 @@
-﻿using Pe.Revit.Ui.Core;
+using Pe.Revit.Ui.Core;
 using Pe.Shared.RevitData.Schedules;
 using System.Windows;
 using System.Windows.Controls;
@@ -104,7 +104,7 @@ public class ScheduleSerializePreviewPanel : UserControl, ISidebarPanel<IPalette
             _ = doc.AddTable<ScheduleFieldSpec>(
                 data.Fields,
                 [
-                    ("Name", f => f.ParameterName),
+                    ("Name", f => GetParameterLabel(f.Parameter)),
                     ("Header", f => f.ColumnHeaderOverride ?? string.Empty),
                     ("Display",
                         f => f.DisplayType is { } displayType &&
@@ -143,4 +143,10 @@ public class ScheduleSerializePreviewPanel : UserControl, ISidebarPanel<IPalette
 
         this._richTextBox.Document = doc;
     }
+
+    private static string GetParameterLabel(Pe.Shared.RevitData.ParameterReference parameter) =>
+        parameter.Name?.Trim() ??
+        parameter.Identity?.Name.Trim() ??
+        parameter.SharedGuid?.Trim() ??
+        string.Empty;
 }

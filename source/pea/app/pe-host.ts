@@ -1,4 +1,4 @@
-import { PeHostClient } from "./host-client.js";
+import { PeHostClient, type PeHostClientOptions } from "./host-client.js";
 import {
   hostProcessIdentity,
   scriptingWorkspaceIdentity,
@@ -15,8 +15,11 @@ export function resolveWorkspaceKey(value?: string): string {
   return firstNonBlank(value) ?? defaultWorkspaceKey;
 }
 
-export function createPeHostClient(hostBaseUrl?: string): PeHostClient {
-  return new PeHostClient({ baseUrl: resolveHostBaseUrl(hostBaseUrl) });
+export function createPeHostClient(
+  hostBaseUrl?: string,
+  options: Omit<PeHostClientOptions, "baseUrl"> = {},
+): PeHostClient {
+  return new PeHostClient({ ...options, baseUrl: resolveHostBaseUrl(hostBaseUrl) });
 }
 
 function firstNonBlank(...values: Array<string | undefined>): string | undefined {

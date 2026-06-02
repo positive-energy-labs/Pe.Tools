@@ -194,6 +194,13 @@ export async function createDevAgentRuntime(
     cwd,
     extraTools: createDevAgentExtraTools(),
     disabledTools: ["ast_smart_edit", "file_stat", "mkdir"],
+    initialState: {
+      sandboxAllowedPaths: [
+        "C:\\Users\\kaitp\\OneDrive\\Documents\\Pe.Tools\\",
+        "C:\\Users\\kaitp\\source\\repos\\mastra",
+        "C:\\Users\\kaitp\\AppData\\Local\\Positive Energy",
+      ],
+    },
   });
 
   return {

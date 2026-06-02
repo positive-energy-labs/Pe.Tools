@@ -1,6 +1,4 @@
 using Pe.Shared.RevitData;
-using Pe.Shared.RevitData.Parameters;
-
 namespace Pe.Revit.DocumentData.Parameters;
 
 public static class ParameterIdentityEngine {
@@ -8,20 +6,20 @@ public static class ParameterIdentityEngine {
         Document doc,
         ElementId? parameterId,
         string fallbackName
-    ) => RevitParameterIdentityFactory.FromParameterId(doc, parameterId, fallbackName).Key;
+    ) => ParameterIdentityFactory.FromParameterId(doc, parameterId, fallbackName).Key;
 
-    public static ParameterIdentity FromCanonical(RevitParameterIdentity parameter) =>
+    public static ParameterIdentity FromCanonical(ParameterIdentity parameter) =>
         new(
             parameter.Key,
             parameter.Kind switch {
-                RevitParameterIdentityKind.SharedGuid => ParameterIdentityKind.SharedGuid,
-                RevitParameterIdentityKind.BuiltInParameter => ParameterIdentityKind.BuiltInParameter,
-                RevitParameterIdentityKind.ParameterElement => ParameterIdentityKind.ParameterElement,
+                ParameterIdentityKind.SharedGuid => ParameterIdentityKind.SharedGuid,
+                ParameterIdentityKind.BuiltInParameter => ParameterIdentityKind.BuiltInParameter,
+                ParameterIdentityKind.ParameterElement => ParameterIdentityKind.ParameterElement,
                 _ => ParameterIdentityKind.NameFallback
             },
             parameter.Name,
             parameter.BuiltInParameterId,
-            parameter.SharedGuid?.ToString("D"),
+            parameter.SharedGuid,
             parameter.ParameterElementId
         );
 
@@ -30,7 +28,7 @@ public static class ParameterIdentityEngine {
         int? builtInParameterId,
         string? sharedGuid,
         long? parameterElementId
-    ) => FromCanonical(RevitParameterIdentityFactory.FromRaw(
+    ) => FromCanonical(ParameterIdentityFactory.FromRaw(
         name,
         builtInParameterId,
         Guid.TryParse(sharedGuid, out var parsedGuid) ? parsedGuid : null,
@@ -41,5 +39,5 @@ public static class ParameterIdentityEngine {
         Document doc,
         ElementId? parameterId,
         string fallbackName
-    ) => FromCanonical(RevitParameterIdentityFactory.FromParameterId(doc, parameterId, fallbackName));
+    ) => FromCanonical(ParameterIdentityFactory.FromParameterId(doc, parameterId, fallbackName));
 }

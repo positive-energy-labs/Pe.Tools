@@ -53,12 +53,19 @@ public sealed class ButtonRegistry {
             ToolTip = "Process families in a variety of ways from the Family Foundry.",
             Container = new ButtonContainer.Panel("Migration")
         }),
+        Register(new ButtonRegistration<CmdFFDesiredMigrator> {
+            Text = "FF Desired Migrator",
+            SmallImage = "Red_16.png",
+            LargeImage = "Red_32.png",
+            ToolTip = "Process families from declarative desired-state Family Foundry profiles.",
+            Container = new ButtonContainer.Panel("Migration")
+        }),
         Register(new ButtonRegistration<CmdFFMakeATVariants> {
             Text = "Make AT Variants",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip =
-                "Create Air Terminal variants from an air terminal family by prepopulating the PE_G___TagInstance parameter and setting an existing duct connector's connection settings properly.",
+                "Create Air Terminal variants from an air terminal family by prepopulating the configured tag parameter and setting an existing duct connector's connection settings properly.",
             Container = new ButtonContainer.Panel("Migration")
         }),
         Register(new ButtonRegistration<CmdPltCommands> {

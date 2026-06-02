@@ -36,6 +36,8 @@ into runnable plans, and pipeline-owned artifacts are the main transparency surf
   the document-owned `ApplyFamilyProfile(...)` / `ApplyFamilyMigrationProfile(...)` extensions, which build
   `OperationQueue` plans and execute mutation operations such as `SetKnownParams`, `SetLookupTables`,
   `MakeParamDrivenPlanesAndDims`, `MakeConstrainedExtrusions`, and `MakeParamDrivenConnectors`.
+- FF shared/local parameter classification must use `ParameterIdentity`, captured shared GUIDs, injected evidence from the parameter service, or resolved shared definitions.
+  Literal `PE_*` parameter names are project/fixture data only; runtime logic, defaults, projection, and host examples must not treat the prefix as a parameter-authority signal.
 - `create` does not yet exist as a stable caller-facing FF seam. Today it mostly appears inside lower-level helpers and
   operations such as `CreateProjectedFamilyDocument(...)`,
   `ConstrainedExtrusionFactory.CreateRectangle/CreateCircle(...)`, `RefPlaneDimCreator.Create...(...)`, and

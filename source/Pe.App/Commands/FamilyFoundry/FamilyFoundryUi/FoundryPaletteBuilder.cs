@@ -3,14 +3,17 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Pe.Revit;
 using Pe.Revit.FamilyFoundry;
+using Pe.Revit.FamilyFoundry.DesiredState;
 using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.Global;
+using Pe.Revit.Global.Services.Aps;
 using Pe.Revit.Global.Utils.Files;
 using Pe.Revit.SettingsRuntime.Json.ContractResolvers;
 using Pe.Revit.SettingsRuntime.Modules;
 using Pe.Revit.Ui.Core;
 using Pe.Revit.Ui.Core.Services;
+using Pe.Shared.RevitData;
 using Pe.Shared.StorageRuntime.Modules;
 using JsonValidationException = Pe.Revit.Global.JsonValidationException;
 using RuntimeStorageClient = Pe.Shared.StorageRuntime.StorageClient;
@@ -202,7 +205,8 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new()
         }
 
         // Get raw APS parameter models (no Revit API dependencies, safe to store)
-        var apsParamModels = profile.GetFilteredApsParamModels();
+        var requiredSharedNames = GetRequiredSharedParameterNames(profile);
+        var apsParamModels = profile.GetSelectedApsParamModels(requiredSharedNames);
 
         if (ct.IsCancellationRequested) return null;
 
@@ -249,8 +253,7 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new()
 
         // Extract APS parameter info
         var apsParameters = apsParamModels.Select(p => new ParameterInfo(
-            p.Name ?? string.Empty,
-            p.DownloadOptions.IsInstance,
+            ToParameterDefinition(p),
             GetDataTypeName(p.DownloadOptions.GetSpecTypeId())
         )).ToList();
 
@@ -300,6 +303,53 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new()
         };
     }
 
+    private static ParameterDefinitionDescriptor ToParameterDefinition(ParametersApi.Parameters.ParametersResult parameter) {
+        var downloadOptions = parameter.DownloadOptions;
+        var sharedGuid = TryGetSharedGuid(downloadOptions);
+        var name = parameter.Name ?? string.Empty;
+        var identity = sharedGuid.HasValue
+            ? new ParameterIdentity(
+                $"shared-guid:{sharedGuid.Value:D}",
+                ParameterIdentityKind.SharedGuid,
+                name,
+                null,
+                sharedGuid.Value.ToString("D"),
+                null
+            )
+            : new ParameterIdentity(
+                $"name:{NormalizeParameterName(name)}",
+                ParameterIdentityKind.NameFallback,
+                name,
+                null,
+                null,
+                null
+            );
+
+        var specTypeId = downloadOptions.GetSpecTypeId();
+        return new ParameterDefinitionDescriptor(
+            identity,
+            downloadOptions.IsInstance,
+            NormalizeForgeTypeId(specTypeId),
+            GetDataTypeName(specTypeId),
+            NormalizeForgeTypeId(downloadOptions.GetGroupTypeId()),
+            null
+        );
+    }
+
+    private static Guid? TryGetSharedGuid(ParametersApi.Parameters.ParametersResult.ParameterDownloadOpts downloadOptions) {
+        try {
+            return downloadOptions.GetGuid();
+        } catch {
+            return null;
+        }
+    }
+
+    private static string? NormalizeForgeTypeId(ForgeTypeId forgeTypeId) =>
+        string.IsNullOrWhiteSpace(forgeTypeId?.TypeId) ? null : forgeTypeId.TypeId;
+
+    private static string NormalizeParameterName(string name) =>
+        string.IsNullOrWhiteSpace(name) ? string.Empty : name.Trim().ToLowerInvariant();
+
     private static string GetDataTypeName(ForgeTypeId dataType) {
         if (dataType == null || string.IsNullOrEmpty(dataType.TypeId))
             return "Text";
@@ -308,6 +358,13 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new()
         var lastDash = typeId.LastIndexOf('-');
         return lastDash >= 0 ? typeId.Substring(lastDash + 1) : typeId;
     }
+
+    private static IReadOnlyList<string> GetRequiredSharedParameterNames(TProfile profile) =>
+        profile is IDesiredMigrationParameterProfile migrationProfile
+            ? DesiredParameterCompiler.GetExplicitSharedParameterNames(migrationProfile, migrationProfile.MappingData)
+            : profile is IDesiredParameterProfile parameterProfile
+                ? DesiredParameterCompiler.GetExplicitSharedParameterNames(parameterProfile)
+                : [];
 
     private static PreviewData CreateValidationErrorPreview(ProfileListItem profileItem, JsonValidationException ex) =>
         new() {
@@ -357,34 +414,20 @@ public class FoundryPaletteBuilder<TProfile> where TProfile : BaseProfile, new()
             };
         }
 
-        if (ex is InvalidOperationException invalidPeFamilyParam &&
-            invalidPeFamilyParam.Message.Contains("invalid family parameter definitions",
-                StringComparison.OrdinalIgnoreCase)) {
-            return new List<string> {
-                invalidPeFamilyParam.Message,
-                "Fix: remove PE_ parameters from AddFamilyParams.Parameters.",
-                "PE_ parameters must be provided by FilterApsParams and assigned through SetKnownParams."
-            };
-        }
-
         if (ex is InvalidOperationException invalidUnresolved &&
             invalidUnresolved.Message.Contains("SetKnownParams references", StringComparison.OrdinalIgnoreCase)) {
             return new List<string> {
                 invalidUnresolved.Message,
-                "Fix: non-PE assignment targets must be defined in AddFamilyParams.Parameters.",
-                "Fix: PE_ assignment targets must be included by FilterApsParams."
+                "Fix: assignment targets must be defined in AddFamilyParams.Parameters or included by FilterApsParams."
             };
         }
 
         if (ex is InvalidOperationException invalidReferenced &&
-            (invalidReferenced.Message.Contains("must be defined in AddFamilyParams.Parameters before it can be used",
-                 StringComparison.OrdinalIgnoreCase) ||
-             invalidReferenced.Message.Contains("is a PE_ parameter but is not available from FilterApsParams",
-                 StringComparison.OrdinalIgnoreCase))) {
+            invalidReferenced.Message.Contains("must be defined in AddFamilyParams.Parameters before it can be used",
+                StringComparison.OrdinalIgnoreCase)) {
             return new List<string> {
                 invalidReferenced.Message,
-                "Fix: if the referenced parameter is non-PE, add it to AddFamilyParams.Parameters.",
-                "Fix: if the referenced parameter is PE_, include it in FilterApsParams."
+                "Fix: add the referenced local parameter to AddFamilyParams.Parameters, or include the shared parameter through FilterApsParams."
             };
         }
 

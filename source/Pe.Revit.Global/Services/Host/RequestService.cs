@@ -365,10 +365,15 @@ public class RequestService {
 
     private static ParameterCatalogEntry ToHostParameterCatalogEntry(ParameterCatalogOption entry) =>
         new(
-            ParameterIdentityEngine.FromCanonical(entry.Identity),
+            new ParameterDefinitionDescriptor(
+                ParameterIdentityEngine.FromCanonical(entry.Definition.Identity),
+                entry.Definition.IsInstance,
+                entry.Definition.DataTypeId,
+                entry.Definition.DataTypeLabel,
+                entry.Definition.GroupTypeId,
+                entry.Definition.GroupTypeLabel
+            ),
             entry.StorageType,
-            entry.DataType,
-            entry.IsInstance,
             entry.IsParamService,
             entry.FamilyNames,
             entry.TypeNames

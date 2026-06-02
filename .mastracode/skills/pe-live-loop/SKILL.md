@@ -12,9 +12,9 @@ Use when progress depends on human-maintained live state: Rider/IDE builds, RRD 
 ## Dispatch
 
 - If the user asks to product-test Pea against live project questions, preserve the distinction between Pea's unseeded operator behavior and dev-agent's independent verification of model facts.
-- If runtime freshness is unknown and attached proof matters, collect a read-only live_loop_context before mutating anything.
+- If runtime freshness is unknown and attached proof matters, collect a read-only live loop context before mutating anything.
 - If runtime code changed and sync is recommended, call live_rrd_sync explicitly and report whether it proved action invocation only or loaded-runtime freshness.
-- If live_rrd_sync/live_loop_context recommends live_rrd_restart, use the restart primitive and wait for Host/Revit bridge readiness before attached proof.
+- If live_rrd_sync/live loop context recommends live_rrd_restart, use the restart primitive and wait for Host/Revit bridge readiness before attached proof.
 - If the needed action is genuinely user-owned, ask for exactly one manual action and give the expected result.
 - If autonomous proof is enough, prefer FreshRevitProcess and avoid RRD.
 - If the live lane is trustworthy and the remaining problem is a bug, route back to pe-diagnose.
@@ -23,16 +23,17 @@ Use when progress depends on human-maintained live state: Rider/IDE builds, RRD 
 
 1. Identify the changed package, proof lane, RRD health, active document/model, product lane, and last proof.
 2. Read docs/ENVIRONMENT.md and nearest AGENTS.md when command policy or RRD cautions matter.
-3. Use live_loop_context for the read-only live-runtime decision packet.
+3. Use live loop context for the read-only live-runtime decision packet.
 4. Use Pea product tools such as pe_status or pe_logs only when you specifically need a product-facing primitive.
 5. Treat log deltas as correlation evidence, not health proof by themselves.
+6. Tend to feeback loop blockers by managing process, opening documents, etc. Prioritize using host's primitives and diagnostics
 
 ## Loop
 
 1. Name the verification lane: source compile, package/artifact, AttachedRrd, FreshRevitProcess, installed lane, or Pea black-box product test.
-2. Refresh live loop facts with live_loop_context when host/Revit/Rider evidence matters.
-3. When runtime code changed and live_loop_context recommends sync, call live_rrd_sync explicitly. Prefer the direct Pe.RiderBridge lane.
-4. When live_loop_context or sync diagnostics recommend restart, use live_rrd_restart and wait for Host/Revit bridge readiness before attached proof.
+2. Refresh live loop facts with live loop context when host/Revit/Rider evidence matters.
+3. When runtime code changed and live loop context recommends sync, call live_rrd_sync explicitly. Prefer the direct Pe.RiderBridge lane.
+4. When live loop context or sync diagnostics recommend restart, use live_rrd_restart and wait for Host/Revit bridge readiness before attached proof.
 5. State current loop state and uncertainty: changed package, build freshness, sync verdict/action status, RRD health, active document/model, product lane, and last proof.
 6. Split responsibilities:
    - agent-owned: inspect source, edit code, run safe terminal checks, plan commands, prepare scripts/probes, interpret output, maintain environment/log context
@@ -63,7 +64,7 @@ Next agent step after output:
 
 ## Guardrails
 
-- Keep live_loop_context read-only: it can recommend sync, restart, log review, or FreshRevitProcess, but it must not mutate the signal file, invoke Rider, run tests, or restart anything.
+- Keep live loop context read-only: it can recommend sync, restart, log review, or FreshRevitProcess, but it must not mutate the signal file, invoke Rider, run tests, or restart anything.
 - Do not keep retrying live probes when RRD freshness is unknown, stale, unproven, or sync failed. A successful Pe.RiderBridge action sequence is not by itself proof that Revit loaded the changed behavior.
 - Do not use terminal interactive builds unless the user explicitly accepts the RRD/HR baseline risk.
 - Do not claim AttachedRrd proof from isolated builds, package artifacts, docs, stale logs, or a sync result with sourceDeltaVerdict=unproven even when the loaded graph is fresh.
