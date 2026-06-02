@@ -192,7 +192,7 @@ public static class DesiredParameterCompiler {
                 parameter.Tooltip),
             true,
             parameter.GetAssignment(),
-            perTypeAssignments.GetValueOrDefault(name) ?? new Dictionary<string, string?>(StringComparer.Ordinal),
+            GetPerTypeAssignments(perTypeAssignments, name),
             migration,
             new ResolvedParameterMetadataProvenanceSet(
                 sharedParameter == null ? ResolvedParameterMetadataProvenance.FamilyFoundryDefault : ResolvedParameterMetadataProvenance.ParameterService,
@@ -218,7 +218,7 @@ public static class DesiredParameterCompiler {
                 parameter.Tooltip),
             false,
             parameter.GetAssignment(),
-            perTypeAssignments.GetValueOrDefault(name) ?? new Dictionary<string, string?>(StringComparer.Ordinal),
+            GetPerTypeAssignments(perTypeAssignments, name),
             null,
             new ResolvedParameterMetadataProvenanceSet(
                 ResolvedParameterMetadataProvenance.FamilyFoundryDefault,
@@ -228,6 +228,13 @@ public static class DesiredParameterCompiler {
                 string.IsNullOrWhiteSpace(parameter.Tooltip) ? ResolvedParameterMetadataProvenance.Unresolved : ResolvedParameterMetadataProvenance.Authored)
         );
     }
+
+    private static Dictionary<string, string?> GetPerTypeAssignments(
+        IReadOnlyDictionary<string, Dictionary<string, string?>> assignmentsByParameter,
+        string parameterName
+    ) => assignmentsByParameter.TryGetValue(parameterName, out var assignments)
+        ? assignments
+        : new Dictionary<string, string?>(StringComparer.Ordinal);
 
     private static DesiredParameterMigrationSpec? BuildMigration(
         DesiredSharedParameterDeclaration parameter,
@@ -253,7 +260,7 @@ public static class DesiredParameterCompiler {
 
     private static Dictionary<string, Dictionary<string, string?>> BuildPerTypeAssignments(
         IEnumerable<DesiredPerTypeAssignmentRow> rows,
-        IReadOnlySet<string> declaredNames
+        HashSet<string> declaredNames
     ) {
         var valuesByParameter = new Dictionary<string, Dictionary<string, string?>>(StringComparer.Ordinal);
         var rowNumber = 0;

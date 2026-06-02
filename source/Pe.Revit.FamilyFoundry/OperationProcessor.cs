@@ -133,6 +133,9 @@ public class OperationProcessor(
         var saveOpts = loadAndSaveOptions ?? new LoadAndSaveOptions();
 
         foreach (var family in families) {
+            var familyName = family.Name;
+            AppendProcessorTrace(outputFolderPath, familyName, "family-start");
+
             // Reset GroupContexts for each family processing cycle
             queue.ResetAllGroupContexts();
 
@@ -144,23 +147,45 @@ public class OperationProcessor(
                 ? null
                 : namedFamilyFuncs.Select(item => item.Name).ToArray();
 
-            var famDoc = this.OpenDoc
-                .GetFamilyDocument(family)
-                .EnsureDefaultType()
-                .StartPipeline(this.OpenDoc, family, pipeline =>
-                        pipeline
-                            .CollectPreSnapshot(collectorQueue)
-                            .Process(familyFuncs, transactionNames, this._exOpts.SuppressWarnings)
-                            .SaveToPaths(d => GetSavePaths(d, saveOpts, outputFolderPath))
-                            .Load()
-                            .CollectPostSnapshot(collectorQueue),
-                    out var context);
+            var famDoc = this.OpenDoc.GetFamilyDocument(family);
+            AppendProcessorTrace(outputFolderPath, familyName, "edit-family-opened");
+            famDoc = famDoc.EnsureDefaultType();
+            AppendProcessorTrace(outputFolderPath, familyName, "default-type-ready");
+            _ = famDoc.StartPipeline(this.OpenDoc, family, pipeline => {
+                    AppendProcessorTrace(outputFolderPath, familyName, "collect-pre-start");
+                    var current = pipeline.CollectPreSnapshot(collectorQueue);
+                    AppendProcessorTrace(outputFolderPath, familyName, "collect-pre-complete");
 
+                    AppendProcessorTrace(outputFolderPath, familyName, "operations-start");
+                    current = current.Process(familyFuncs, transactionNames, this._exOpts.SuppressWarnings);
+                    AppendProcessorTrace(outputFolderPath, familyName, "operations-complete");
+
+                    AppendProcessorTrace(outputFolderPath, familyName, "save-start");
+                    current = current.SaveToPaths(d => GetSavePaths(d, saveOpts, outputFolderPath));
+                    AppendProcessorTrace(outputFolderPath, familyName, "save-complete");
+
+                    AppendProcessorTrace(outputFolderPath, familyName, "load-start");
+                    current = current.Load();
+                    AppendProcessorTrace(outputFolderPath, familyName, "load-complete");
+
+                    AppendProcessorTrace(outputFolderPath, familyName, "collect-post-start");
+                    _ = current.CollectPostSnapshot(collectorQueue);
+                    AppendProcessorTrace(outputFolderPath, familyName, "collect-post-complete");
+                },
+                out var context);
+            AppendProcessorTrace(outputFolderPath, familyName, "pipeline-complete");
+
+            AppendProcessorTrace(outputFolderPath, familyName, "close-start");
             if (!famDoc.Close(false))
-                throw new InvalidOperationException($"Failed to close family document for {family.Name}");
+                throw new InvalidOperationException($"Failed to close family document for {familyName}");
+            AppendProcessorTrace(outputFolderPath, familyName, "close-complete");
+
             contexts.Add(context);
+            AppendProcessorTrace(outputFolderPath, familyName, "write-artifacts-start");
             this.WriteArtifacts(context);
+            AppendProcessorTrace(outputFolderPath, familyName, "write-artifacts-complete");
             this._perFamilyCallback?.Invoke(context);
+            AppendProcessorTrace(outputFolderPath, familyName, "family-complete");
         }
 
         return contexts;
@@ -335,6 +360,20 @@ public class OperationProcessor(
         }
 
         return savePaths;
+    }
+
+    private static void AppendProcessorTrace(string? outputFolderPath, string familyName, string stage) {
+        if (string.IsNullOrWhiteSpace(outputFolderPath))
+            return;
+
+        try {
+            Directory.CreateDirectory(outputFolderPath);
+            File.AppendAllText(
+                Path.Combine(outputFolderPath, "processor-trace.log"),
+                $"{DateTime.UtcNow:O} family={familyName} stage={stage}{Environment.NewLine}");
+        } catch {
+            // Do not let diagnostic breadcrumbs change processor behavior.
+        }
     }
 
     private void WriteArtifacts(FamilyProcessingContext context) {

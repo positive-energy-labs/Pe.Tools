@@ -366,6 +366,7 @@ public static class ParameterEvidenceCollector {
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         private static IEnumerable<string> SplitCamelCase(string value) => Regex.Matches(value, @"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)|\d+")
+            .Cast<Match>()
             .Select(match => match.Value);
     }
 

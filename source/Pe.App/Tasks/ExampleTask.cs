@@ -8,7 +8,7 @@ namespace Pe.App.Tasks;
 ///     Replace with your own task implementation.
 /// </summary>
 public sealed class ExampleTask : ITask {
-    public string Name => "Example Task";
+    public string Name => "New Example Task";
     public string Description => "A simple example task that prints a message";
     public string Category => "Examples";
 
@@ -17,7 +17,7 @@ public sealed class ExampleTask : ITask {
 
         var doc = uiApp.ActiveUIDocument?.Document;
         if (doc != null)
-            Console.WriteLine($"  TEST TEST Active document: {doc.Title}");
+            Console.WriteLine($"  New TEST Active document: {doc.Title}");
         else 
             Console.WriteLine("  No active document");
 

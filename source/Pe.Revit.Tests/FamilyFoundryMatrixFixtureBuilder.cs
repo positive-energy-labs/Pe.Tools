@@ -189,7 +189,11 @@ internal static class FamilyFoundryMatrixFixtureBuilder {
                 _ = transaction.Commit();
             }
 
-            return nestedDocument.LoadFamily(hostFamilyDocument, new DefaultFamilyLoadOptions());
+            return RevitFailureHandling.ExecuteWithFailureHandling(
+                hostFamilyDocument,
+                () => nestedDocument.LoadFamily(hostFamilyDocument, new DefaultFamilyLoadOptions()),
+                new List<(bool IsError, string Message)>(),
+                nestedDocument);
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(nestedDocument);
         }

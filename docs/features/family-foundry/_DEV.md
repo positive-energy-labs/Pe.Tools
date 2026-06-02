@@ -73,20 +73,20 @@ Proof ladder:
 1. Generate synthetic Mechanical Equipment fixtures in Revit: a SetValue matrix family and a parameter metadata/state family.
 2. Seed those fixtures plus selected real Mechanical Equipment families into the test-owned `Old_Template` copy.
 3. Apply a test-only matrix migrator profile. Do not mutate the real BASE profile just to preserve synthetic harness parameters or alter cleanup behavior.
-4. Assert required artifacts per family, especially `profile-summary.json`, `snapshot-diff.json`, `snapshot-parameters-post.json`, `parameter-events.json`, and `logs-detailed.json`.
-5. Assert post-state from both snapshot artifacts and projected profile artifacts where useful.
-6. Run final all-Mechanical-Equipment coverage through explicit partitions when the full 81-family lane is too slow for one autonomous proof.
+4. Assert required artifacts per family, especially `profile-summary.json`, `snapshot-diff.json`, `snapshot-parameters-post.json`, `snapshot-profile-dense-post.json`, `snapshot-profile-empty-allowed-post.json`, `parameter-events.json`, and `logs-detailed.json`.
+5. Assert post-state from both snapshot artifacts and projected profile artifacts where useful; current `ParameterSnapshot` metadata is sufficient for this slice and should not be widened unless a runtime proof exposes an assertion blind spot.
+6. Run final all-Mechanical-Equipment coverage through explicit partitions when the full 81-family lane is too slow for one autonomous proof. The all-family wrapper remains explicit and should not be used while FreshRevitProcess timeout/cleanup behavior is under diagnosis; use one focused 120-second diagnostic probe first.
 
 Matrix dimensions intentionally covered:
 
 - storage/data-type coercion across string, integer, yes/no, number, length, angle, voltage, and current-like values;
-- global values, per-type values, formula-backed targets, blank-source fallback, and source-candidate ordering;
+- global values, per-type values, formula-backed targets, blank-source fallback, source-candidate ordering, and an intentionally invalid value-mapping cell that must emit structured diagnostics without failing the family run;
 - local family parameters, shared family parameters, project-bound shared parameters, tooltip/description metadata, properties group, data type, instance/type, and shared GUID identity;
 - generated family topology for labeled linear/angular/radial dimensions, labeled arrays, and one nested-family parameter association.
 
-Association coverage is deliberately scoped. The matrix proves dimension labels, array labels, and nested-family parameter association because those are the SetValue/parameter surfaces currently needed by FF Manager and Migrator. Other associable Revit elements remain out of scope until product behavior needs them.
+Association coverage is deliberately scoped. The matrix proves dimension labels, array labels, and nested-family parameter association through generated Revit topology plus parameter/event artifacts; the `snapshot-refplanesanddims-*` artifact is reserved for authored ref-plane constraint snapshots and is not required for this synthetic SetValue topology. ElementId storage remains excluded until a stable, safely-settable family parameter case adds product signal. Other associable Revit elements remain out of scope until product behavior needs them.
 
-`parameter-events.json` should carry structured SetValue/coercion diagnostics in `Details` for mapping and per-type assignment events: mapping strategy, `CanMap`, source/target storage types, source/target data types, source value/value-string, source value CLR type, and target unit type. Console traces are not proof artifacts.
+`parameter-events.json` should carry structured SetValue/coercion diagnostics in `Details` for mapping, direct-replace, and per-type assignment events: mapping strategy, `CanMap`, source/target storage types, source/target data types, source value/value-string, source value CLR type, and target unit type. Console traces are not proof artifacts.
 
 ## Desired-State Compilation
 

@@ -64,6 +64,40 @@ Verified mechanics:
 - `.Tests` configurations force off `DeployAddin` and `LaunchRevit`.
 - Non-release interactive builds pin `AssemblyInformationalVersion` to stable `dev` to reduce hot-reload baseline churn from generated metadata.
 
+## Rider/Nice3point debug launch decision
+
+Rider **run/debug configurations** and MSBuild **solution/build configurations** are different inputs. For desktop Revit debugging, the durable model is:
+
+```text
+canonical Pe.App run/debug configuration
++ active Rider solution configuration such as Debug.R24 / Debug.R25 / Debug.R26
+=> MSBuild Configuration
+=> Directory.Build.props RevitVersion inference
+=> Nice3point TargetFramework, Revit API refs, StartProgram, deploy, and launch behavior
+```
+
+The canonical `Pe.App` run/debug configuration is year-polymorphic. The active Rider solution configuration is the year authority. The repo should share this canonical config as `.run/Pe.App.run.xml` for stability and transparency, while leaving volatile `.idea` workspace state user-local. Cached launcher fields in saved Rider XML, such as `EXE_PATH` or `PROJECT_TFM`, are materialized Rider state and must not be treated as the durable source of truth.
+
+A Rider `Build` before-launch step is part of the valid launch contract for RRD work because it runs the MSBuild/Nice3point path that builds, publishes, deploys the add-in, and triggers year-aware startup helpers. Hardcoded executable-path run/debug configurations may be useful as temporary diagnostics, but they are not the preferred automation contract because they can bypass or obscure the build/deploy path and produce stale RRD sessions.
+
+Therefore automation that restarts RRD should prefer:
+
+```text
+select Debug.R## solution configuration
+verify Rider reports Debug.R## as the selected solution configuration
+select canonical Pe.App run/debug configuration
+invoke Rider's Debug action
+prove bridge/session/document behavior after launch
+```
+
+Invoking Rider's real `Debug` action matters: it produces the same visible launch/build/debug behavior as a manual Rider workflow. Programmatic execution shortcuts can report success without visibly launching Revit or the debugger.
+
+Year-specific run/debug entries should be fallback or diagnostic aids unless a future Rider constraint proves the canonical path impossible.
+
+### RiderBridge package compatibility
+
+`Pe.RiderBridge` packages are capped by JetBrains IDE build metadata in both `tools/Pe.RiderBridge/build.gradle.kts` and `tools/Pe.RiderBridge/src/main/resources/META-INF/plugin.xml`. After a Rider major-build update, such as `RD-261`, bump the `untilBuild` / `until-build` cap and repackage through `tools/Pe.RiderBridge/package.ps1`. The install folder name can lag behind an in-place Rider update; use `product-info.json` for the actual Rider build number.
+
 ## Source compile decision
 
 Use ordinary `dotnet build` when you need compile confidence.
@@ -83,8 +117,8 @@ This proves compile correctness only. It does not refresh RRD, package-local Rid
 Use FreshRevitProcess when the current UI session is not itself under test. The repo helper plans a safe target year/session and uses the Revit test harness to launch/control Revit rather than reusing the current RRD process.
 
 ```powershell
-pe-dev test --filter "Name~AssemblyLoadDiagnostics" --timeout-seconds 900
-pe-dev test --plan --json --filter "Name~AssemblyLoadDiagnostics"
+pe-dev test --filter "Name~Reports_runtime_assembly_load_paths" --timeout-seconds 900
+pe-dev test --plan --json --filter "Name~Reports_runtime_assembly_load_paths"
 ```
 
 `--plan`/`--dry-run` resolves the lane without launching Revit, building, quarantining add-ins, running tests, or cleaning sessions. Real runs should include a bounded timeout because Revit launch and test-adapter hangs are otherwise easy to mistake for agent failure.

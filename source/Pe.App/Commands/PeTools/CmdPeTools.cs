@@ -26,7 +26,7 @@ public class CmdPeTools : IExternalCommand {
             var connectAttempt = EnsureConnectedForButtonOpen(status);
             status = HostRuntime.GetStatus();
             Log.Information(
-                "Pe Tools command opened: IsConnected={IsConnected}, BridgeUri={BridgeUri}, SessionId={SessionId}, Modules={ModuleCount}, ActiveDocument={ActiveDocumentTitle}, ConnectAttempted={ConnectAttempted}, ConnectSuccess={ConnectSuccess}, ConnectMessage={ConnectMessage}",
+                "Pe Tools command opened!!!!!!!!!!!!!!!: IsConnected={IsConnected}, BridgeUri={BridgeUri}, SessionId={SessionId}, Modules={ModuleCount}, ActiveDocument={ActiveDocumentTitle}, ConnectAttempted={ConnectAttempted}, ConnectSuccess={ConnectSuccess}, ConnectMessage={ConnectMessage}",
                 status.IsConnected,
                 status.BridgeUri,
                 status.SessionId,
@@ -36,7 +36,7 @@ public class CmdPeTools : IExternalCommand {
                 connectAttempt?.Success,
                 connectAttempt?.RuntimeActionResult.Message
             );
-            var dialog = new TaskDialog("Pe Tools") {
+            var dialog = new TaskDialog("Pe Tools Launcher") {
                 MainInstruction = status.IsConnected
                     ? "Pe Tools Bridge: Connected"
                     : "Pe Tools Bridge: Connection Failed",

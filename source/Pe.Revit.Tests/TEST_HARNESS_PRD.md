@@ -278,6 +278,31 @@ Tests should make these boundaries explicit.
 
 ---
 
+## Family Foundry bulk value-mapping proof ladder
+
+The `Old_Template` Mechanical Equipment harness should stay a small number of strong proofs, not a broad fixture suite.
+
+Current durable ladder:
+
+1. **Fast real-profile smoke** — run the recognizable real Mechanical Equipment BASE mapping profile against the first bounded sample families from the test-owned `Old_Template` copy.
+2. **Synthetic matrix proof** — add two generated Mechanical Equipment families to that project copy:
+   - SetValue matrix family: text, integer, yes/no, number, length, angle, voltage/current-like strings, blank fallback, formula-backed targets, per-type assignment, invalid/unmappable diagnostic cells, and labeled dimension / array / nested-family parameter topology.
+   - Metadata/state family: local vs shared parameters, type vs instance, properties group, shared GUID identity, tooltip/description-backed definitions where Revit exposes them, and project-binding precedence.
+3. **Artifact-first assertions** — prove state from canonical outputs before falling back to raw snapshots:
+   `family-report.json` → `snapshot-diff.json` / `snapshot-parameters-diff.json` → `snapshot-profile-dense-post.json` / `snapshot-profile-empty-allowed-post.json` → `parameter-events.json` → `snapshot-post.json`.
+4. **Partitioned scale proof** — run explicit Mechanical Equipment partitions one at a time when all-family runtime is too expensive or timeout handling is under diagnosis.
+5. **Explicit all-family endpoint** — keep the 81-family wrapper explicit and run it only after fast and matrix proofs are green and the FreshRevitProcess timeout/cleanup path is trusted.
+
+Accepted exclusions for this slice:
+
+- Association coverage is limited to dimensions, arrays, and nested-family parameter association.
+- The SetValue matrix proves generated topology through Revit-created labels plus parameter/event artifacts; `snapshot-refplanesanddims-*` remains scoped to authored ref-plane constraint snapshots and is not required for arbitrary labeled dimensions or arrays.
+- ElementId storage remains excluded until a stable, safely-settable family parameter case adds product signal without making the generated fixture brittle.
+- Connectors and unrelated associable Revit elements stay out of scope unless a product behavior needs them.
+- Do not widen `ParameterSnapshot` just for theoretical completeness; current fields are enough for storage, data type, group, instance/type, shared GUID, formula, and per-type value assertions. Add snapshot fields only when a real artifact-backed assertion has no durable source.
+
+---
+
 ## Practical implementation guidance
 
 ### Prefer next

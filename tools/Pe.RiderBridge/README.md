@@ -75,4 +75,4 @@ The script emits:
 - `.artifacts/packages/rider/Pe.RiderBridge.0.1.0.zip`
 - `.artifacts/packages/rider/Pe.RiderBridge.0.1.0.jar`
 
-Install the zip from Rider's **Settings > Plugins > Install Plugin from Disk...** and restart Rider when prompted. The plugin descriptor targets Rider 2025.2 through 2025.3 (`since-build="252"`, `until-build="253.*"`).
+Install the zip from Rider's **Settings > Plugins > Install Plugin from Disk...** and restart Rider when prompted. The plugin descriptor currently targets JetBrains builds `252` through `261.*`; check Rider's `product-info.json` after major Rider updates before bumping that cap.

@@ -1,10 +1,10 @@
 using Pe.Revit.DocumentData.ProjectBrowser;
 using Pe.Revit.DocumentData.Schedules.Apply;
+using Pe.Revit.PolyFill;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 using Serilog;
 using System.Diagnostics;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -541,7 +541,7 @@ public static partial class ScheduleCatalogCollector {
         .Trim();
 
     private static List<string> SplitNameTokens(string name) => name
-        .Split([' ', '-', '_', '/', '\\'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .SplitAndTrim([' ', '-', '_', '/', '\\'], BclExtensions.RemoveEmptyAndTrimEntries)
         .ToList();
 
     private static string? GetParameterPrefix(string fieldName) {
@@ -550,12 +550,16 @@ public static partial class ScheduleCatalogCollector {
     }
 
     private static string HashFields(IEnumerable<string> fields) {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("\u001f", fields)));
-        return Convert.ToHexString(bytes)[..16];
+        var bytes = BclExtensions.ComputeSha256Hash(Encoding.UTF8.GetBytes(string.Join("\u001f", fields)));
+        return BclExtensions.ToHexString(bytes)[..16];
     }
 
-    [GeneratedRegex(@"\s+(?:\(\d+\)|Copy\s+\d+)\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex RevitDuplicateSuffixRegex();
+    private static Regex RevitDuplicateSuffixRegex() => DuplicateSuffixRegex;
+
+    private static readonly Regex DuplicateSuffixRegex = new(
+        @"\s+(?:\(\d+\)|Copy\s+\d+)\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+    );
 
     private static bool Contains(string? value, string? expected) =>
         string.IsNullOrWhiteSpace(expected)

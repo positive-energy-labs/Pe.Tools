@@ -504,7 +504,8 @@ function supportsDirectRunConfigurationRestart(ping: unknown): boolean {
 
   const restartStrategy = (ping as { restartStrategy?: unknown }).restartStrategy;
   return restartStrategy === "rerun-action-then-debug-run-configuration" ||
-    restartStrategy === "year-targeted-debug-run-configuration";
+    restartStrategy === "year-targeted-debug-run-configuration" ||
+    restartStrategy === "canonical-pe-app-debug-run-configuration";
 }
 
 function isMissingRestartEndpointError(message: string): boolean {

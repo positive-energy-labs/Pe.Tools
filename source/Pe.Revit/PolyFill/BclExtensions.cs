@@ -9,6 +9,9 @@ using System.Net.Http;
 public static class BclExtensions {
     private const int TrimEntriesFlag = 2;
 
+    public const StringSplitOptions RemoveEmptyAndTrimEntries =
+        StringSplitOptions.RemoveEmptyEntries | (StringSplitOptions)TrimEntriesFlag;
+
     /// <summary>
     ///     Gets a relative path from one path to another.
     ///     Polyfill for Path.GetRelativePath (added in .NET Core 2.0).
@@ -187,6 +190,23 @@ public static class BclExtensions {
     ///     Framework-agnostic wrapper around string.Join.
     /// </summary>
     public static string JoinWith(this IEnumerable<string> values, string separator) => string.Join(separator, values);
+
+    public static byte[] ComputeSha256Hash(byte[] bytes) {
+#if NET48
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        return sha256.ComputeHash(bytes);
+#else
+        return System.Security.Cryptography.SHA256.HashData(bytes);
+#endif
+    }
+
+    public static string ToHexString(byte[] bytes) {
+#if NET48
+        return BitConverter.ToString(bytes).Replace("-", string.Empty);
+#else
+        return Convert.ToHexString(bytes);
+#endif
+    }
 
     private static StringSplitOptions NormalizeSplitOptions(StringSplitOptions options) =>
         (StringSplitOptions)((int)options & ~TrimEntriesFlag);

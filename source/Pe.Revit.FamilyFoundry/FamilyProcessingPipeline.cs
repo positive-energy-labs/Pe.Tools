@@ -206,7 +206,14 @@ public static class FamilyProcessingPipelineExtensions {
         if (pipeline.IsLoaded)
             throw new InvalidOperationException("Load() has already been called on this pipeline.");
 
-        var loadedFamily = pipeline.FamDoc.LoadFamily(pipeline.ProjectDoc, options ?? new DefaultFamilyLoadOptions());
+        var diagnostics = new List<(bool IsError, string Message)>();
+        var loadedFamily = RevitFailureHandling.ExecuteWithFailureHandling(
+            pipeline.ProjectDoc,
+            () => pipeline.FamDoc.LoadFamily(pipeline.ProjectDoc, options ?? new DefaultFamilyLoadOptions()),
+            diagnostics,
+            pipeline.FamDoc.Document);
+        if (diagnostics.Count > 0)
+            AppendLoadDiagnostics(pipeline.Context, diagnostics);
 
         return new FamilyProcessingPipeline(
             pipeline.FamDoc,
@@ -214,6 +221,22 @@ public static class FamilyProcessingPipelineExtensions {
             pipeline.SourceFamily,
             loadedFamily,
             pipeline.Context);
+    }
+
+    private static void AppendLoadDiagnostics(
+        FamilyProcessingContext context,
+        IReadOnlyList<(bool IsError, string Message)> diagnostics
+    ) {
+        var entries = diagnostics
+            .Select((diagnostic, index) => diagnostic.IsError
+                ? new LogEntry($"Commit diagnostic {index + 1}").Error(diagnostic.Message)
+                : new LogEntry($"Commit diagnostic {index + 1}").Skip(diagnostic.Message))
+            .ToList();
+        var loadLog = new OperationLog("LoadFamily: Commit", entries);
+        var (operationLogs, operationLogsError) = context.OperationLogs;
+        context.OperationLogs = operationLogsError is null && operationLogs is not null
+            ? operationLogs.Concat([loadLog]).ToList()
+            : new List<OperationLog> { loadLog };
     }
 
     /// <summary>

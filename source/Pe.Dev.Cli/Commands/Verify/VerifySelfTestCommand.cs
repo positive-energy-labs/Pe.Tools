@@ -20,10 +20,10 @@ internal static class VerifySelfTestCommand {
         }
 
         var checks = new[] {
-            CheckRoute("test", ["test", "--filter", "Name~AssemblyLoadDiagnostics"], DevCommandKind.Test, ["--filter", "Name~AssemblyLoadDiagnostics"]),
-            CheckRoute("test json", ["test", "--json", "--filter", "Name~AssemblyLoadDiagnostics"], DevCommandKind.Test, ["--json", "--filter", "Name~AssemblyLoadDiagnostics"]),
+            CheckRoute("test", ["test", "--filter", "Name~Reports_runtime_assembly_load_paths"], DevCommandKind.Test, ["--filter", "Name~Reports_runtime_assembly_load_paths"]),
+            CheckRoute("test json", ["test", "--json", "--filter", "Name~Reports_runtime_assembly_load_paths"], DevCommandKind.Test, ["--json", "--filter", "Name~Reports_runtime_assembly_load_paths"]),
             CheckRoute("bootstrap-path", ["bootstrap-path"], DevCommandKind.BootstrapPath, []),
-            CheckRoute("test plan json", ["test", "--plan", "--json", "--timeout-seconds", "900", "--filter", "Name~AssemblyLoadDiagnostics"], DevCommandKind.Test, ["--plan", "--json", "--timeout-seconds", "900", "--filter", "Name~AssemblyLoadDiagnostics"]),
+            CheckRoute("test plan json", ["test", "--plan", "--json", "--timeout-seconds", "900", "--filter", "Name~Reports_runtime_assembly_load_paths"], DevCommandKind.Test, ["--plan", "--json", "--timeout-seconds", "900", "--filter", "Name~Reports_runtime_assembly_load_paths"]),
             CheckRoute("self-test", ["self-test"], DevCommandKind.SelfTest, []),
             CheckFreshOptions("test accepts plan json timeout", ["--plan", "--json", "--timeout-seconds", "900"], shouldPass: true),
             CheckFreshOptions("test rejects zero timeout", ["--json", "--timeout-seconds", "0"], shouldPass: false),

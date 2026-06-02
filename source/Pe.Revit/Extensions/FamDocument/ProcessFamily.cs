@@ -196,43 +196,118 @@ public static class FamilyDocumentProcessFamily {
     private sealed class DialogSuppressingFailuresPreprocessor(
         ICollection<(bool IsError, string Message)> diagnostics
     ) : IFailuresPreprocessor {
-        private static readonly FailureResolutionType[] NonModalResolutionPreference = [
-            FailureResolutionType.UnlockConstraints,
-            FailureResolutionType.DetachElements,
-            FailureResolutionType.FixElements,
-            FailureResolutionType.SkipElements
-        ];
+        public FailureProcessingResult PreprocessFailures(FailuresAccessor failuresAccessor) =>
+            RevitFailureHandling.ResolveFailures(failuresAccessor, diagnostics);
+    }
+}
 
-        public FailureProcessingResult PreprocessFailures(FailuresAccessor failuresAccessor) {
-            var resolvedFailure = false;
+public static class RevitFailureHandling {
+    private static readonly FailureResolutionType[] NonModalResolutionPreference = [
+        FailureResolutionType.UnlockConstraints,
+        FailureResolutionType.DetachElements,
+        FailureResolutionType.FixElements,
+        FailureResolutionType.DeleteElements,
+        FailureResolutionType.SkipElements
+    ];
 
-            foreach (var failureMessage in failuresAccessor.GetFailureMessages()) {
-                if (failureMessage.GetSeverity() == FailureSeverity.Warning) {
-                    diagnostics.Add((false, $"Suppressed warning: {DescribeFailure(failureMessage)}"));
-                    failuresAccessor.DeleteWarning(failureMessage);
-                    continue;
-                }
+    public static T ExecuteWithFailureHandling<T>(
+        Document document,
+        Func<T> action,
+        ICollection<(bool IsError, string Message)> diagnostics,
+        params Document[] additionalDocuments
+    ) {
+        var documents = new[] { document }
+            .Concat(additionalDocuments)
+            .Where(candidate => candidate != null)
+            .ToList();
 
-                var resolutionType = NonModalResolutionPreference.FirstOrDefault(type =>
-                    failureMessage.HasResolutionOfType(type) &&
-                    failuresAccessor.IsFailureResolutionPermitted(failureMessage, type) &&
-                    !failuresAccessor.GetAttemptedResolutionTypes(failureMessage).Contains(type));
+        void OnFailuresProcessing(object? _, FailuresProcessingEventArgs args) {
+            var accessor = args.GetFailuresAccessor();
+            var failureDocument = accessor?.GetDocument();
+            if (failureDocument == null || !documents.Any(candidate => candidate.Equals(failureDocument)))
+                return;
 
-                if (resolutionType == FailureResolutionType.Invalid)
-                    continue;
+            args.SetProcessingResult(ResolveFailures(accessor!, diagnostics));
+        }
 
-                failureMessage.SetCurrentResolutionType(resolutionType);
-                failuresAccessor.ResolveFailure(failureMessage);
+        document.Application.FailuresProcessing += OnFailuresProcessing;
+        try {
+            return action();
+        } finally {
+            document.Application.FailuresProcessing -= OnFailuresProcessing;
+        }
+    }
+
+    public static FailureProcessingResult ResolveFailures(
+        FailuresAccessor failuresAccessor,
+        ICollection<(bool IsError, string Message)> diagnostics
+    ) {
+        var resolvedFailure = false;
+
+        foreach (var failureMessage in failuresAccessor.GetFailureMessages()) {
+            if (failureMessage.GetSeverity() == FailureSeverity.Warning) {
+                resolvedFailure = true;
+                diagnostics.Add((false, $"Suppressed warning: {DescribeFailure(failureMessage)}"));
+                failuresAccessor.DeleteWarning(failureMessage);
+                continue;
+            }
+
+            if (TryResolveFailure(failuresAccessor, failureMessage, out var resolutionType)) {
                 resolvedFailure = true;
                 diagnostics.Add((false,
                     $"Resolved failure with {resolutionType}: {DescribeFailure(failureMessage)}"));
             }
-
-            return resolvedFailure
-                ? FailureProcessingResult.ProceedWithCommit
-                : FailureProcessingResult.Continue;
         }
+
+        return resolvedFailure
+            ? FailureProcessingResult.ProceedWithCommit
+            : FailureProcessingResult.Continue;
     }
+
+    private static string DescribeFailure(FailureMessageAccessor failureMessage) {
+        var description = failureMessage.GetDescriptionText();
+        var failureGuid = failureMessage.GetFailureDefinitionId().Guid;
+        if (string.IsNullOrWhiteSpace(description))
+            return failureGuid.ToString();
+
+        return $"{description} [{failureGuid}]";
+    }
+
+    private static bool TryResolveFailure(
+        FailuresAccessor failuresAccessor,
+        FailureMessageAccessor failureMessage,
+        out FailureResolutionType resolutionType
+    ) {
+        resolutionType = ResolvePermittedResolutionType(failuresAccessor, failureMessage);
+        if (resolutionType == FailureResolutionType.Invalid)
+            return false;
+
+        failureMessage.SetCurrentResolutionType(resolutionType);
+        failuresAccessor.ResolveFailure(failureMessage);
+        return true;
+    }
+
+    private static FailureResolutionType ResolvePermittedResolutionType(
+        FailuresAccessor failuresAccessor,
+        FailureMessageAccessor failureMessage
+    ) {
+        var currentResolutionType = failureMessage.GetCurrentResolutionType();
+        if (IsResolutionPermitted(failuresAccessor, failureMessage, currentResolutionType))
+            return currentResolutionType;
+
+        return NonModalResolutionPreference.FirstOrDefault(type =>
+            IsResolutionPermitted(failuresAccessor, failureMessage, type));
+    }
+
+    private static bool IsResolutionPermitted(
+        FailuresAccessor failuresAccessor,
+        FailureMessageAccessor failureMessage,
+        FailureResolutionType resolutionType
+    ) =>
+        resolutionType != FailureResolutionType.Invalid &&
+        failureMessage.HasResolutionOfType(resolutionType) &&
+        failuresAccessor.IsFailureResolutionPermitted(failureMessage, resolutionType) &&
+        !failuresAccessor.GetAttemptedResolutionTypes(failureMessage).Contains(resolutionType);
 }
 
 public class DefaultFamilyLoadOptions : IFamilyLoadOptions {

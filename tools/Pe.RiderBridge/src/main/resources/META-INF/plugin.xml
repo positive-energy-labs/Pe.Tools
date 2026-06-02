@@ -1,12 +1,13 @@
 <idea-plugin>
   <id>pe.tools.riderbridge</id>
   <name>Pe.RiderBridge</name>
+  <version>0.1.0</version>
   <vendor>Positive Energy</vendor>
   <description>Minimal local Rider action bridge for Pe.Tools hot reload experiments.</description>
 
   <depends>com.intellij.modules.platform</depends>
 
-  <idea-version since-build="252" until-build="253.*"/>
+  <idea-version since-build="252" until-build="261.*"/>
 
   <extensions defaultExtensionNs="com.intellij">
     <httpRequestHandler implementation="pe.tools.riderbridge.PeRiderBridgeHttpHandler"/>

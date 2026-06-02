@@ -281,7 +281,11 @@ internal static class RevitFamilyFixtureHarness {
             if (familyDocument == null || !familyDocument.IsFamilyDocument)
                 throw new InvalidOperationException($"Failed to open family document '{familyPath}'.");
 
-            return familyDocument.LoadFamily(projectDocument, loadOptions ?? new DefaultFamilyLoadOptions());
+            return RevitFailureHandling.ExecuteWithFailureHandling(
+                projectDocument,
+                () => familyDocument.LoadFamily(projectDocument, loadOptions ?? new DefaultFamilyLoadOptions()),
+                new List<(bool IsError, string Message)>(),
+                familyDocument);
         } finally {
             CloseDocument(familyDocument);
         }
