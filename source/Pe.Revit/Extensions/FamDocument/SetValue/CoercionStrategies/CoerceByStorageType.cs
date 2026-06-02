@@ -9,19 +9,10 @@ namespace Pe.Revit.Extensions.FamDocument.SetValue.CoercionStrategies;
 /// </summary>
 public class CoerceByStorageType : ICoercionStrategy {
     public bool CanMap(CoercionContext context) {
-        // DEBUG: Log storage types for troubleshooting
-        Console.WriteLine($"[CoerceByStorageType.CanMap] " +
-                          $"SourceStorageType={context.SourceStorageType}, " +
-                          $"TargetStorageType={context.TargetStorageType}");
-
-        // Same storage type - always compatible
-        if (context.SourceStorageType == context.TargetStorageType) {
-            Console.WriteLine("[CoerceByStorageType.CanMap] Same storage type - returning true");
+        if (context.SourceStorageType == context.TargetStorageType)
             return true;
-        }
 
-        // Check cross-storage-type conversions
-        var result = (context.SourceStorageType, context.TargetStorageType) switch {
+        return (context.SourceStorageType, context.TargetStorageType) switch {
             (StorageType.Integer, StorageType.String) => true,
             (StorageType.Integer, StorageType.Double) => true,
             (StorageType.Double, StorageType.String) => true,
@@ -30,9 +21,6 @@ public class CoerceByStorageType : ICoercionStrategy {
             (StorageType.String, StorageType.Double) => CanParseStringToDouble(context),
             _ => false
         };
-
-        Console.WriteLine($"[CoerceByStorageType.CanMap] Pattern match result={result}");
-        return result;
     }
 
     public Result<FamilyParameter> Map(CoercionContext context) {
@@ -116,17 +104,8 @@ public class CoerceByStorageType : ICoercionStrategy {
     private static bool CanParseStringToDouble(CoercionContext context) {
         var stringValue = context.SourceValue?.ToString();
 
-        // DEBUG: Log the actual values for troubleshooting
-        var isMeasurable = context.TargetDataType != null && UnitUtils.IsMeasurableSpec(context.TargetDataType);
-        var regexResult = Regexes.TryExtractDouble(stringValue, out var extractedValue) &&
+        var regexResult = Regexes.TryExtractDouble(stringValue, out _) &&
                           !string.IsNullOrWhiteSpace(stringValue);
-        Console.WriteLine($"[CoerceByStorageType.CanParseStringToDouble] " +
-                          $"stringValue='{stringValue}', " +
-                          $"isNullOrWhitespace={string.IsNullOrWhiteSpace(stringValue)}, " +
-                          $"targetDataType={context.TargetDataType?.TypeId ?? "null"}, " +
-                          $"isMeasurableSpec={isMeasurable}, " +
-                          $"regexCanExtract={regexResult}" +
-                          (regexResult ? $", extractedValue={extractedValue}" : ""));
 
         if (string.IsNullOrWhiteSpace(stringValue)) return false;
 
@@ -136,13 +115,8 @@ public class CoerceByStorageType : ICoercionStrategy {
         // so UnitFormatUtils.TryParse() can't parse it. Use regex extraction instead.
         // Compare TypeId strings since ForgeTypeId == operator may not work as expected
         var isNumberType = dataType?.TypeId == SpecTypeId.Number.TypeId;
-        Console.WriteLine(
-            $"[CoerceByStorageType.CanParseStringToDouble] isNumberType={isNumberType} (comparing {dataType?.TypeId} to {SpecTypeId.Number.TypeId})");
-        if (isNumberType) {
-            Console.WriteLine(
-                $"[CoerceByStorageType.CanParseStringToDouble] Target is Number (unitless), using regex, result={regexResult}");
+        if (isNumberType)
             return regexResult;
-        }
 
         // For measurable specs with actual units, use Revit's parser which understands imperial notation
         if (UnitUtils.IsMeasurableSpec(dataType)) {
@@ -162,13 +136,10 @@ public class CoerceByStorageType : ICoercionStrategy {
                 );
             }
 
-            Console.WriteLine(
-                $"[CoerceByStorageType.CanParseStringToDouble] UnitFormatUtils.TryParse result={parseResult}");
             return parseResult;
         }
 
         // For non-measurable doubles, use simple regex extraction
-        Console.WriteLine($"[CoerceByStorageType.CanParseStringToDouble] Using regex, result={regexResult}");
         return regexResult;
     }
 

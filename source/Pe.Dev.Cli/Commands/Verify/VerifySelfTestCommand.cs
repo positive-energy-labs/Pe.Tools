@@ -22,6 +22,7 @@ internal static class VerifySelfTestCommand {
         var checks = new[] {
             CheckRoute("test", ["test", "--filter", "Name~AssemblyLoadDiagnostics"], DevCommandKind.Test, ["--filter", "Name~AssemblyLoadDiagnostics"]),
             CheckRoute("test json", ["test", "--json", "--filter", "Name~AssemblyLoadDiagnostics"], DevCommandKind.Test, ["--json", "--filter", "Name~AssemblyLoadDiagnostics"]),
+            CheckRoute("bootstrap-path", ["bootstrap-path"], DevCommandKind.BootstrapPath, []),
             CheckRoute("test plan json", ["test", "--plan", "--json", "--timeout-seconds", "900", "--filter", "Name~AssemblyLoadDiagnostics"], DevCommandKind.Test, ["--plan", "--json", "--timeout-seconds", "900", "--filter", "Name~AssemblyLoadDiagnostics"]),
             CheckRoute("self-test", ["self-test"], DevCommandKind.SelfTest, []),
             CheckFreshOptions("test accepts plan json timeout", ["--plan", "--json", "--timeout-seconds", "900"], shouldPass: true),
@@ -29,7 +30,7 @@ internal static class VerifySelfTestCommand {
             CheckRemovedRoute("doctor removed", ["doctor"]),
             CheckRemovedRoute("status removed", ["status"]),
             CheckRemovedRoute("sync removed", ["sync"]),
-            CheckUsageText("usage advertises minimal surface", ["pe-dev test", "pe-dev self-test", "pe-dev automation", "pe-dev codegen"]),
+            CheckUsageText("usage advertises minimal surface", ["pe-dev bootstrap-path", "pe-dev test", "pe-dev self-test", "pe-dev automation", "pe-dev codegen"]),
             CheckUsageText("usage advertises fresh safety options", ["--plan", "--timeout-seconds", "--json"]),
             CheckGuidanceText("fresh guidance distinguishes proof and attached lanes", writer => AgentGuidanceWriter.WriteFreshOwnedLane(writer, 2025), ["FreshOwnedRevit", "proof-grade", "AttachedRrd scripting"])
         };

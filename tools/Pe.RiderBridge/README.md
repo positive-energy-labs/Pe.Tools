@@ -4,7 +4,7 @@ Minimal Rider plugin spike for replacing Pe.Tools hot-reload AHK automation with
 
 ## Why this exists
 
-`pe-dev sync` currently mutates `PeHotReloadSignal.cs`, opens Rider, focuses the Rider window, and sends keystrokes through AutoHotkey. This spike tests whether Rider can perform the same action sequence from inside the IDE without window activation, clipboard use, or keyboard simulation.
+The dev-agent attached-RRD sync flow mutates `PeHotReloadSignal.cs` and asks Rider to apply changes through this localhost-only IDE action bridge. This replaces the old focus/keystroke AutoHotkey path for normal dev-agent use.
 
 The reference macro in `source/Pe.Dev.RevitAutomation/Assets/auto-hr-macro-settings.zip` contains:
 
@@ -52,7 +52,7 @@ The hot-reload and restart responses include action results, lightweight Rider a
 
 ## Dev-agent sync integration
 
-The dev-agent `sync` tool now owns the normal non-focus path:
+The dev-agent `live_rrd_sync` tool owns the normal non-focus path:
 
 1. Resolve the repo root.
 2. Mutate `source/Pe.Revit.Global/HotReload/PeHotReloadSignal.cs`.
@@ -60,7 +60,7 @@ The dev-agent `sync` tool now owns the normal non-focus path:
 4. Invoke `POST /pe-tools/hot-reload?project=Pe.Tools`.
 5. Return the `RiderBridge` lane result and per-action statuses.
 
-The old `pe-dev sync --json` AutoHotkey path still exists as a posterity fallback, but it is not the dev-agent default.
+Removed public `pe-dev sync`/AutoHotkey guidance should not be restored as the default path; attached RRD sync now belongs to dev-agent live-loop tooling.
 
 ## Build/install notes
 

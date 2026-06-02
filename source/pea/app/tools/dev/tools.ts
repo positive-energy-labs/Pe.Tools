@@ -85,9 +85,9 @@ export const liveRrdSync = createTool({
 });
 
 export const liveRrdRestart = createTool({
-  id: "live_rrd_restart",
+  id: "live_rrd_re_start",
   description:
-    "Start or restart the Rider-driven RRD session. If Rider is not already running, open Pe.Tools in Rider first, wait for project/debug-action readiness, then ask Pe.RiderBridge to launch/rerun the Revit debug session, poll Pe.Host for bridge/session readiness, and optionally open a local Revit document through revit.document.open. Cloud recent-document matches are detected but not opened yet.",
+    "Start or restart the Rider-driven RRD session. Use this to manage RRD sessions to resolve assembly freshness issues or when the user asks for an RRD session to be started, no existing Rider, Revit, or host process required.",
   inputSchema: repoCommandInputSchema.extend({
     riderBridgeBaseUrl: z.string().url().default(defaultRiderBridgeBaseUrl),
     project: z.string().default("Pe.Tools"),
@@ -97,8 +97,6 @@ export const liveRrdRestart = createTool({
       .describe(
         "Optional Rider action override. Defaults to trying Rerun, then Debug.",
       ),
-    pollSeconds: z.number().min(0).max(600).default(180),
-    pollIntervalSeconds: z.number().min(1).max(30).default(5),
     expectedRevitVersion: z.string().default("2025"),
     requireNewProcess: z.boolean().default(true),
     readinessLevel: z
@@ -115,7 +113,9 @@ export const liveRrdRestart = createTool({
           .string()
           .min(1)
           .optional()
-          .describe("Absolute local RVT/RFA path to open through revit.document.open; cld:// cloud paths are detected but not opened yet."),
+          .describe(
+            "Absolute local RVT/RFA path to open through revit.document.open; cld:// cloud paths are detected but not opened yet.",
+          ),
         name: z.string().min(1).optional(),
         revitYear: z.string().default("2025").optional(),
         kind: z.enum(["Project", "Family", "Any"]).default("Any").optional(),
@@ -123,7 +123,9 @@ export const liveRrdRestart = createTool({
           .boolean()
           .default(true)
           .optional()
-          .describe("When resolving by recent-document name, keep true for currently openable local files; false may match cloud entries that are reported as unsupported."),
+          .describe(
+            "When resolving by recent-document name, keep true for currently openable local files; false may match cloud entries that are reported as unsupported.",
+          ),
       })
       .nullable()
       .optional()
@@ -144,28 +146,13 @@ export const liveRrdRestart = createTool({
       riderBridgeBaseUrl: input.riderBridgeBaseUrl ?? defaultRiderBridgeBaseUrl,
       project: input.project ?? "Pe.Tools",
       actionId: input.actionId,
-      pollSeconds: input.pollSeconds ?? 180,
-      pollIntervalSeconds: input.pollIntervalSeconds ?? 5,
+      pollSeconds: 180,
+      pollIntervalSeconds: 5,
       expectedRevitVersion: input.expectedRevitVersion ?? "2025",
       requireNewProcess: input.requireNewProcess ?? true,
       readinessLevel: input.readinessLevel ?? "ModulesLoaded",
       openDocument: input.openDocument,
       harnessStatePath: input.harnessStatePath,
-    }),
-});
-
-export const liveHostRefreshSourceRun = createTool({
-  id: "live_host_refresh_source_run",
-  description:
-    "Refresh the dev/source Pe.Host lane by launching `dotnet run` from source/Pe.Host, relying on singleton takeover, then polling Host readiness. Use after Host operation/contract changes before live Host-local or bridge-backed proof.",
-  inputSchema: repoCommandInputSchema.extend({
-    pollSeconds: z.number().min(0).max(600).default(60),
-    pollIntervalSeconds: z.number().min(1).max(30).default(2),
-  }),
-  execute: async (input) =>
-    runHostRefreshSourceRun({
-      pollSeconds: input.pollSeconds ?? 60,
-      pollIntervalSeconds: input.pollIntervalSeconds ?? 2,
     }),
 });
 

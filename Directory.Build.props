@@ -28,13 +28,11 @@
         <PeDevelopmentHostExecutablePath Condition="'$(PeDevelopmentHostExecutablePath)' == ''">$([System.IO.Path]::Combine($([System.Environment]::GetFolderPath(System.Environment+SpecialFolder.LocalApplicationData)), '$(PeDevRuntimeHostExecutableRelativePath)'))</PeDevelopmentHostExecutablePath>
         <PeInstalledHostExecutablePath Condition="'$(PeInstalledHostExecutablePath)' == ''">$([System.IO.Path]::Combine($([System.Environment]::GetFolderPath(System.Environment+SpecialFolder.LocalApplicationData)), '$(PeRuntimeHostExecutableRelativePath)'))</PeInstalledHostExecutablePath>
         <PeInstalledPeaLauncherPath Condition="'$(PeInstalledPeaLauncherPath)' == ''">$([System.IO.Path]::Combine($([System.Environment]::GetFolderPath(System.Environment+SpecialFolder.LocalApplicationData)), '$(PeRuntimePeaLauncherRelativePath)'))</PeInstalledPeaLauncherPath>
-        <PeStableCliLocalPath Condition="'$(PeStableCliLocalPath)' == ''">$([System.IO.Path]::Combine($([System.Environment]::GetFolderPath(System.Environment+SpecialFolder.LocalApplicationData)), '$(PeDevCliDllRelativePath)'))</PeStableCliLocalPath>
         <PeStableCliInteractivePath Condition="'$(PeStableCliInteractivePath)' == ''">$([System.IO.Path]::GetFullPath('$(PeRepositoryRoot)$(PeStableCliRelativePath)'))</PeStableCliInteractivePath>
         <PeStableCliArtifactsPath Condition="'$(PeStableCliArtifactsPath)' == ''">$([System.IO.Path]::GetFullPath('$(PeRepositoryRoot)$(PeStableCliArtifactsRelativePath)'))</PeStableCliArtifactsPath>
-        <PeStableCliPath Condition="'$(PeStableCliPath)' == '' and Exists('$(PeStableCliLocalPath)')">$(PeStableCliLocalPath)</PeStableCliPath>
         <PeStableCliPath Condition="'$(PeStableCliPath)' == '' and Exists('$(PeStableCliInteractivePath)')">$(PeStableCliInteractivePath)</PeStableCliPath>
         <PeStableCliPath Condition="'$(PeStableCliPath)' == '' and Exists('$(PeStableCliArtifactsPath)')">$(PeStableCliArtifactsPath)</PeStableCliPath>
-        <PeStableCliPath Condition="'$(PeStableCliPath)' == ''">$(PeStableCliLocalPath)</PeStableCliPath>
+        <PeStableCliPath Condition="'$(PeStableCliPath)' == ''">$(PeStableCliArtifactsPath)</PeStableCliPath>
 
         <PeIsIdeBuild Condition="'$(PeIsIdeBuild)' == '' and '$(BuildingByReSharper)' == 'true'">true</PeIsIdeBuild>
         <PeIsIdeBuild Condition="'$(PeIsIdeBuild)' == '' and '$(BuildingByReSharper)' == 'True'">true</PeIsIdeBuild>

@@ -240,8 +240,11 @@ internal static class RevitCommandRunner {
         testStartInfo.ArgumentList.Add("/p:PeRevitRawDotNetTestWarningSuppressed=true");
         testStartInfo.ArgumentList.Add("/p:PeVerifyTarget=FreshRevitProcess");
 
+        var revitExecutablePath = ResolveRevitExecutablePath(plan.RevitYear);
         testStartInfo.Environment["RICAUN_REVITTEST_TESTADAPTER_NUNIT_VERSION"] =
             plan.RevitYear.ToString(CultureInfo.InvariantCulture);
+        testStartInfo.Environment["RICAUN_REVITTEST_TESTADAPTER_NUNIT_APPLICATION"] =
+            revitExecutablePath;
         testStartInfo.Environment["RICAUN_REVITTEST_TESTADAPTER_NUNIT_OPEN"] =
             bool.TrueString;
         testStartInfo.Environment["RICAUN_REVITTEST_TESTADAPTER_NUNIT_CLOSE"] =
@@ -350,6 +353,19 @@ internal static class RevitCommandRunner {
 
     private static string FormatSessionRecord(string label, RevitProcessSessionIdentity session) =>
         $"{label} pid={session.ProcessId} startUtc={session.ProcessStartUtc:O} revitYear={(session.RevitYear?.ToString(CultureInfo.InvariantCulture) ?? "unknown")} responding={session.Responding} hung={session.Hung} title=\"{session.MainWindowTitle}\"";
+
+    private static string ResolveRevitExecutablePath(int revitYear) {
+        var path = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            "Autodesk",
+            $"Revit {revitYear}",
+            "Revit.exe"
+        );
+
+        return File.Exists(path)
+            ? path
+            : throw new FileNotFoundException($"Could not find Revit {revitYear} executable at '{path}'.", path);
+    }
 
     private static ProcessStartInfo CreateDotNetStartInfo(string workingDirectory, params string[] arguments) {
         var startInfo = new ProcessStartInfo("dotnet") {

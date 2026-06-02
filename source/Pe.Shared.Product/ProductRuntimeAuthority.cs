@@ -4,8 +4,6 @@ public sealed record ProductRuntimeResolution(
     ProductRuntimeLane RuntimeLane,
     string HostExecutablePath,
     string HostDllPath,
-    string PeDevExecutablePath,
-    string PeDevDllPath,
     string PeaLauncherPath,
     string? DescriptorPath,
     string Source
@@ -32,8 +30,6 @@ public static class ProductRuntimeAuthority {
             runtimeLane,
             hostExecutablePath,
             hostDllPath,
-            developmentRuntime.Binaries.PeDevExecutablePath,
-            developmentRuntime.Binaries.PeDevDllPath,
             installedRuntime.Binaries.PeaLauncherPath,
             descriptorPath,
             source ?? "explicit"

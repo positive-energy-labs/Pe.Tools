@@ -19,7 +19,7 @@ internal static class PeaTerminalLauncher {
         if (!File.Exists(launcherPath)) {
             return new PeaTerminalLaunchResult(
                 false,
-                $"Could not locate pea at '{launcherPath}'. Install {ProductIdentity.ProductName} or run `pe-dev pea install-dev`."
+                $"Could not locate pea at '{launcherPath}'. Install {ProductIdentity.ProductName} or run `pe-dev pea link-dev` from the repo."
             );
         }
 

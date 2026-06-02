@@ -87,18 +87,19 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
                 continue;
             }
 
+            IReadOnlyDictionary<string, string>? setValueDetails = null;
             try {
-                SetValueForCurrentFamType(famDoc, parameter, valueToSet);
+                setValueDetails = SetValueForCurrentFamType(famDoc, parameter, valueToSet);
                 _ = log
                     .WithParameterEvent(
                         ParameterEventOutcome.PerTypeValueSet,
                         isFallback ? ParameterEventReason.GlobalValueError : ParameterEventReason.NotApplicable,
                         parameterName: parameterName,
-                        details: new Dictionary<string, string> {
+                        details: MergeDetails(setValueDetails, new Dictionary<string, string> {
                             ["Value"] = valueToSet,
                             ["IsFallback"] = isFallback.ToString(),
                             ["FamilyTypeName"] = currentTypeName ?? string.Empty
-                        })
+                        }))
                     .Defer(isFallback ? "Set per-type value (fallback)" : "Set per-type value");
             } catch (Exception ex) {
                 _ = log
@@ -106,10 +107,10 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
                         ParameterEventOutcome.PerTypeValueSet,
                         ParameterEventReason.Exception,
                         parameterName: parameterName,
-                        details: new Dictionary<string, string> {
+                        details: MergeDetails(setValueDetails, new Dictionary<string, string> {
                             ["Value"] = valueToSet,
                             ["FamilyTypeName"] = currentTypeName ?? string.Empty
-                        })
+                        }))
                     .Error(ex);
             }
         }
@@ -117,7 +118,7 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
         return new OperationLog(this.Name, groupContext.TakeSnapshot());
     }
 
-    private static void SetValueForCurrentFamType(FamilyDocument famDoc, FamilyParameter parameter, string userValue) {
+    private static IReadOnlyDictionary<string, string> SetValueForCurrentFamType(FamilyDocument famDoc, FamilyParameter parameter, string userValue) {
         var fm = famDoc.FamilyManager;
         var trimmedUserValue = userValue.Trim();
 
@@ -132,7 +133,22 @@ public class SetParamValuesPerType(SetKnownParamsSettings settings)
                 $"Use {nameof(SetKnownParamsSettings.GlobalAssignments)} with Kind=Formula for formulas, not {nameof(SetKnownParamsSettings.PerTypeAssignmentsTable)}.");
         }
 
+        var details = famDoc.DescribeSetValue(parameter, actualValue, nameof(BuiltInCoercionStrategy.CoerceByStorageType));
         _ = famDoc.SetValue(parameter, actualValue, nameof(BuiltInCoercionStrategy.CoerceByStorageType));
+        return details;
+    }
+
+    private static IReadOnlyDictionary<string, string> MergeDetails(
+        IReadOnlyDictionary<string, string>? setValueDetails,
+        Dictionary<string, string> details
+    ) {
+        if (setValueDetails == null)
+            return details;
+
+        foreach (var (key, value) in setValueDetails)
+            details[key] = value;
+
+        return details;
     }
 
     private static bool IsQuotedStringLiteral(string value) {

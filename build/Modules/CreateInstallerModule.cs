@@ -40,7 +40,6 @@ public sealed class CreateInstallerModule(
         var rootDirectory = context.Git().RootDirectory;
 
         var hostProject = rootDirectory.GetFolder("source").GetFolder("Pe.Host").GetFile("Pe.Host.csproj");
-        var peDevProject = rootDirectory.GetFolder("source").GetFolder("Pe.Dev.Cli").GetFile("Pe.Dev.Cli.csproj");
         var wixInstaller = new File(Projects.Installer.FullName);
         context.Logger.LogInformation("Preparing WiX toolchain for installer packaging.");
         var wixToolFolder = await InstallWixAsync(context, layout, cancellationToken);
@@ -84,12 +83,6 @@ public sealed class CreateInstallerModule(
             layout,
             cancellationToken
         );
-        var peDevPublishDirectory = await PublishPeDevAsync(
-            context,
-            peDevProject,
-            layout,
-            cancellationToken
-        );
         Directory.CreateDirectory(layout.Artifacts.InstallerPackagesRoot);
         foreach (var existingInstallerPath in Directory.EnumerateFiles(layout.Artifacts.InstallerPackagesRoot, "*.msi"))
             System.IO.File.Delete(existingInstallerPath);
@@ -98,7 +91,6 @@ public sealed class CreateInstallerModule(
             versioning.Version,
             runtimePublishDirectory.Path,
             peaPayload,
-            peDevPublishDirectory.Path,
             targetDirectories,
             cancellationToken
         );
@@ -173,44 +165,6 @@ public sealed class CreateInstallerModule(
 
         context.Logger.LogInformation("Finished publishing Pe.Host runtime for installer packaging.");
         return runtimePublishDirectory;
-    }
-
-    private static async Task<Folder> PublishPeDevAsync(
-        IModuleContext context,
-        File peDevProject,
-        ProductLayoutAuthority layout,
-        CancellationToken cancellationToken
-    ) {
-        if (Directory.Exists(layout.GetPeDevPublishDirectory("Release")))
-            Directory.Delete(layout.GetPeDevPublishDirectory("Release"), true);
-
-        Directory.CreateDirectory(layout.GetPeDevPublishDirectory("Release"));
-        var peDevPublishDirectory = new Folder(layout.GetPeDevPublishDirectory("Release"));
-
-        context.Logger.LogInformation("Publishing pe-dev for installer packaging: {Output}", peDevPublishDirectory.Path);
-        await BuildDotNetCli.PublishQuietAsync(
-            context,
-            peDevProject.Path,
-            "Release",
-            [
-                "-r",
-                "win-x64",
-                "--self-contained",
-                "false",
-                "-o",
-                peDevPublishDirectory.Path
-            ],
-            [("PeIsolatedBuild", "true")],
-            cancellationToken
-        );
-
-        peDevPublishDirectory.GetFiles(file => file.Exists)
-            .ShouldNotBeEmpty("Failed to publish pe-dev for installer packaging.");
-        peDevPublishDirectory.GetFile(PeDevCliIdentity.ExecutableName).Exists
-            .ShouldBeTrue("Failed to publish pe-dev for installer packaging.");
-
-        context.Logger.LogInformation("Finished publishing pe-dev for installer packaging.");
-        return peDevPublishDirectory;
     }
 
     private static async Task<Folder> InstallWixAsync(

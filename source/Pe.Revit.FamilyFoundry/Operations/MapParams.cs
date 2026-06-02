@@ -46,6 +46,7 @@ public class MapParams(MapParamsSettings settings)
 
             var succeeded = false;
             Exception? lastException = null;
+            IReadOnlyDictionary<string, string>? lastSetValueDetails = null;
             var lastMappingDesc = string.Empty;
 
             foreach (var currParam in prioritizedCurrParams) {
@@ -55,6 +56,8 @@ public class MapParams(MapParamsSettings settings)
                     // Empty string values are common for optional per-type data.
                     // Treat them as "no value for this type" so later types can still map.
                     var sourceValue = doc.GetValue(currParam);
+                    var setValueDetails = doc.DescribeSetValue(tgtParam, currParam, mapping.MappingStrategy);
+                    lastSetValueDetails = setValueDetails;
                     if (sourceValue is string str && string.IsNullOrWhiteSpace(str)) {
                         _ = log
                             .WithParameterEvent(
@@ -63,7 +66,7 @@ public class MapParams(MapParamsSettings settings)
                                 sourceParameter: currParam.Definition.Name,
                                 targetParameter: mapping.NewName,
                                 mappingKey: mapping.NewName,
-                                details: new Dictionary<string, string> { ["MappingStrategy"] = mapping.MappingStrategy })
+                                details: setValueDetails)
                             .Defer($"Skipped empty source value for {mappingDesc}");
                         continue;
                     }
@@ -83,7 +86,7 @@ public class MapParams(MapParamsSettings settings)
                             sourceParameter: currParam.Definition.Name,
                             targetParameter: mapping.NewName,
                             mappingKey: mapping.NewName,
-                            details: new Dictionary<string, string> { ["MappingStrategy"] = mapping.MappingStrategy })
+                            details: setValueDetails)
                         .Defer(tgtParam != currParam
                             ? $"Coerced {mappingDesc} using {mapping.MappingStrategy}"
                             : $"Set {mappingDesc}");
@@ -95,15 +98,16 @@ public class MapParams(MapParamsSettings settings)
                 }
             }
 
-            // Only mark as error if ALL CurrParams failed and entry is still incomplete
+            // Keep uncoercible real-family values visible without turning an optional mapping miss into a family failure.
             if (!succeeded && lastException != null && !log.IsComplete)
                 _ = log
                     .WithParameterEvent(
                         ParameterEventOutcome.AllSourceCandidatesFailed,
                         ParameterEventReason.Exception,
                         targetParameter: mapping.NewName,
-                        mappingKey: mapping.NewName)
-                    .Error(lastMappingDesc, lastException);
+                        mappingKey: mapping.NewName,
+                        details: lastSetValueDetails)
+                    .Defer($"All source candidates failed for {lastMappingDesc}: {lastException.Message}");
         }
 
         return new OperationLog(this.Name, groupContext.TakeSnapshot());

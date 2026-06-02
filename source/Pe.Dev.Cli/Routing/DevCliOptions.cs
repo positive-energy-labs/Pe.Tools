@@ -43,10 +43,11 @@ internal sealed record DevCliOptions(
         }
 
         if (positionals.Count == 0)
-            return DevCliParseResult.Failure("Expected a `test`, `self-test`, `pea`, `automation`, or `codegen` command.", true);
+            return DevCliParseResult.Failure("Expected a `bootstrap-path`, `test`, `self-test`, `pea`, `automation`, or `codegen` command.", true);
 
         var first = positionals[0].ToLowerInvariant();
         return first switch {
+            "bootstrap-path" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.BootstrapPath, positionals.Skip(1).ToArray())),
             "test" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Test, positionals.Skip(1).ToArray())),
             "self-test" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.SelfTest, positionals.Skip(1).ToArray())),
             "pea" when positionals.Count >= 2 => ParsePea(repoRoot, positionals),
@@ -58,8 +59,14 @@ internal sealed record DevCliOptions(
     }
 
     private static DevCliParseResult ParsePea(string? repoRoot, IReadOnlyList<string> positionals) {
-        var commandKind = positionals[1].ToLowerInvariant() switch {
-            "install-dev" => DevCommandKind.PeaInstallDev,
+        var subcommand = positionals[1].ToLowerInvariant();
+        if (subcommand == "install-dev")
+            return DevCliParseResult.Failure(
+                "`pe-dev pea install-dev` has been removed because it mutates the installed pea payload selection. Use `pe-dev pea link-dev` for source-linked dev work and `pea --installed ...` for installed-lane validation.",
+                true
+            );
+
+        var commandKind = subcommand switch {
             "link-dev" => DevCommandKind.PeaLinkDev,
             _ => DevCommandKind.Unknown
         };

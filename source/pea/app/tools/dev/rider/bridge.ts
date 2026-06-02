@@ -41,6 +41,7 @@ export interface RiderBridgeHotReloadResponse {
 
 export interface RiderBridgeRestartRrdRequest extends RiderBridgeSyncRequest {
   actionId?: string;
+  expectedRevitVersion?: string;
 }
 
 interface RiderLaunchResult {
@@ -215,7 +216,7 @@ export async function runRiderBridgeRestartRrdHelper(
   const cwd = request.repoRoot;
   const startedAt = Date.now();
   const bridgeBaseUrl = request.riderBridgeBaseUrl.replace(/\/$/, "");
-  const endpoint = `${bridgeBaseUrl}/pe-tools/restart-rrd?project=${encodeURIComponent(request.project)}${request.actionId ? `&actionId=${encodeURIComponent(request.actionId)}` : ""}`;
+  const endpoint = `${bridgeBaseUrl}/pe-tools/restart-rrd?project=${encodeURIComponent(request.project)}${request.actionId ? `&actionId=${encodeURIComponent(request.actionId)}` : ""}${request.expectedRevitVersion ? `&expectedRevitVersion=${encodeURIComponent(request.expectedRevitVersion)}` : ""}`;
   const args = ["POST", endpoint];
   let ping: unknown;
   let riderLaunch: RiderLaunchResult | null = null;
@@ -498,13 +499,12 @@ async function invokeRestartFallbackActions(
 }
 
 function supportsDirectRunConfigurationRestart(ping: unknown): boolean {
-  return (
-    typeof ping === "object" &&
-    ping != null &&
-    "restartStrategy" in ping &&
-    (ping as { restartStrategy?: unknown }).restartStrategy ===
-      "rerun-action-then-debug-run-configuration"
-  );
+  if (typeof ping !== "object" || ping == null || !("restartStrategy" in ping))
+    return false;
+
+  const restartStrategy = (ping as { restartStrategy?: unknown }).restartStrategy;
+  return restartStrategy === "rerun-action-then-debug-run-configuration" ||
+    restartStrategy === "year-targeted-debug-run-configuration";
 }
 
 function isMissingRestartEndpointError(message: string): boolean {

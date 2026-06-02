@@ -23,7 +23,6 @@ public sealed record ProductBuildLayoutProjection(
             HostProcessIdentity.DirectoryName
         );
         var peaDirectoryRelativePath = Path.Combine(runtimeBinRelativePath, PeaCliIdentity.DirectoryName);
-        var peDevDirectoryRelativePath = Path.Combine(runtimeBinRelativePath, PeDevCliIdentity.DirectoryName);
         var stateRelativePath = Path.Combine(runtimeRootRelativePath, ProductPathNames.StateDirectoryName);
         var logsRelativePath = Path.Combine(runtimeRootRelativePath, ProductPathNames.LogsDirectoryName);
         var cacheRelativePath = Path.Combine(runtimeRootRelativePath, ProductPathNames.CacheDirectoryName);
@@ -46,10 +45,7 @@ public sealed record ProductBuildLayoutProjection(
                     Path.Combine(peaDirectoryRelativePath, PeaCliIdentity.LauncherName),
                     Path.Combine(peaDirectoryRelativePath, PeaCliIdentity.CurrentVersionFileName),
                     Path.Combine(peaDirectoryRelativePath, PeaCliIdentity.VersionsDirectoryName),
-                    Path.Combine(peaDirectoryRelativePath, PeaCliIdentity.PackagesDirectoryName),
-                    peDevDirectoryRelativePath,
-                    Path.Combine(peDevDirectoryRelativePath, PeDevCliIdentity.ExecutableName),
-                    Path.Combine(peDevDirectoryRelativePath, PeDevCliIdentity.DllName)
+                    Path.Combine(peaDirectoryRelativePath, PeaCliIdentity.PackagesDirectoryName)
                 ),
                 stateRelativePath,
                 logsRelativePath,
@@ -61,10 +57,7 @@ public sealed record ProductBuildLayoutProjection(
                     developmentRuntimeBinRelativePath,
                     developmentHostDirectoryRelativePath,
                     Path.Combine(developmentHostDirectoryRelativePath, HostProcessIdentity.ExecutableName),
-                    Path.Combine(developmentHostDirectoryRelativePath, HostProcessIdentity.DllName),
-                    peDevDirectoryRelativePath,
-                    Path.Combine(peDevDirectoryRelativePath, PeDevCliIdentity.ExecutableName),
-                    Path.Combine(peDevDirectoryRelativePath, PeDevCliIdentity.DllName)
+                    Path.Combine(developmentHostDirectoryRelativePath, HostProcessIdentity.DllName)
                 )
             ),
             new ProductBuildUserContentProjection(
@@ -104,20 +97,14 @@ public sealed record ProductBuildBinaryProjection(
     string PeaLauncherRelativePath,
     string PeaCurrentVersionRelativePath,
     string PeaVersionsRelativePath,
-    string PeaPackagesRelativePath,
-    string PeDevDirectoryRelativePath,
-    string PeDevExecutableRelativePath,
-    string PeDevDllRelativePath
+    string PeaPackagesRelativePath
 );
 
 public sealed record ProductBuildDevelopmentBinaryProjection(
     string RootRelativePath,
     string HostDirectoryRelativePath,
     string HostExecutableRelativePath,
-    string HostDllRelativePath,
-    string PeDevDirectoryRelativePath,
-    string PeDevExecutableRelativePath,
-    string PeDevDllRelativePath
+    string HostDllRelativePath
 );
 
 public sealed record ProductBuildUserContentProjection(

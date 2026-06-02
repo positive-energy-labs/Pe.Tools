@@ -2,7 +2,7 @@
 
 ## Scope
 
-Owns the dev-facing `pe-dev` CLI surface for fresh Revit proof runs, `pea` dev installs, codegen, and APS Design Automation operator workflows.
+Owns the dev-facing `pe-dev` CLI surface for fresh Revit proof runs, `pea` source linking, codegen, and APS Design Automation operator workflows.
 
 Attached RRD/live-loop diagnostics and hot reload are no longer public `pe-dev` command groups. Keep those surfaces in the TypeScript dev-agent tools (`live_loop_context`, `live_rrd_sync`, `live_rrd_restart`) and the deployed `pea` CLI where appropriate.
 
@@ -10,13 +10,14 @@ Attached RRD/live-loop diagnostics and hot reload are no longer public `pe-dev` 
 
 `Pe.Dev.Cli` centralizes repo workflows behind one stable executable without re-growing sidecar executables. Keep this package focused on command parsing, human/JSON output, and dispatch into shared runtime and automation seams.
 
-`pe-dev` is not a replacement for standard `dotnet build`. Ordinary compile and package checks should stay on standard `dotnet` / repo build entrypoints. The repo-level workflow runbook is `docs/ENVIRONMENT.md`.
+`pe-dev` is not a replacement for standard `dotnet build`. Ordinary compile and package checks should stay on standard `dotnet` / repo build entrypoints. The repo-level workflow guide is `BUILD.md`.
 
 ## Critical Entry Points
 
 - `Program.cs` - `pe-dev` entrypoint.
 - `DevCliProgram.cs` - top-level usage/help and command dispatch.
-- `Routing/RootCommandRunner.cs` - top-level `test`, `self-test`, `pea`, `automation`, `codegen`, and internal dispatch.
+- `Routing/RootCommandRunner.cs` - top-level `bootstrap-path`, `test`, `self-test`, `pea`, `automation`, `codegen`, and internal dispatch.
+- `Commands/BootstrapPathCommand.cs` - personal PATH bootstrap to the current build output.
 - `RevitCommandRunner.cs` - FreshRevitProcess test routing plus internal unsigned add-in approval watcher launch.
 - `Commands/Automation/AutomationCommandRunner.cs` - top-level `automation ...` command routing.
 - `Commands/Codegen/CodegenCommandRunner.cs` - generated build contracts, programmatic Host TypeGen DTOs, and TypeScript Host client check/sync routing.
@@ -31,6 +32,7 @@ Cheap validation loop:
 
 - `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- --help`
 - `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- self-test`
+- `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -c Debug.R25 -- bootstrap-path`
 - `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- test --plan --json --filter "Name~AssemblyLoadDiagnostics"`
 - `dotnet run --project source/Pe.Dev.Cli/Pe.Dev.Cli.csproj -- automation --help`
 
@@ -71,9 +73,9 @@ Keep `Pe.Dev.Cli` focused on stable command naming, parse/print behavior, and or
 
 ## Living Memory
 
-- `Pe.Dev.Cli` is the repo-local CLI for dev/operator workflows that still belong in C# orchestration: FreshRevitProcess tests, `pea` dev install/link, codegen, and Design Automation.
-- `Pe.Dev.Cli` is not installed by the MSI; deployed agent/user workflows use `pea` instead.
-- Local `Pe.Dev.Cli` builds mirror the runnable CLI output to `%LocalAppData%\Positive Energy\Pe.Tools\bin\pe-dev\`. If the user wants `pe-dev` on `PATH`, that mirrored bin directory is the intended dev-facing path to register.
+- `Pe.Dev.Cli` is the repo-local CLI for dev/operator workflows that still belong in C# orchestration: PATH bootstrap, FreshRevitProcess tests, `pea` source linking, codegen, and Design Automation.
+- `bootstrap-path` is the supported personal setup path for `pe-dev`; it points PATH at the current invocation's build output. Do not restore MSI ownership, local runtime mirroring, or a `pe-dev-cli-bootstrap` installer slice.
+- `pe-dev pea link-dev` is the dev Pea setup path. Do not restore dev payload install commands that rewrite `bin\pea\versions\dev` or `current.txt`; that makes installed-lane validation ambiguous.
 - `doctor`, `status`, `sync`, `env`, `revit`, and `verify` are intentionally removed from the public CLI surface. Do not reintroduce them for live-loop context.
 - `pea script` belongs to the deployed `pea` surface, not `pe-dev`.
 - Build hooks must consume the built CLI output through `dotnet exec`, not `dotnet run`.

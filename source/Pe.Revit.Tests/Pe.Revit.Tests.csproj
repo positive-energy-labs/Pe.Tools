@@ -32,6 +32,7 @@
     <ItemGroup>
         <None Include="Fixtures\Profiles\**\*.json" CopyToOutputDirectory="PreserveNewest" />
         <None Include="Fixtures\Families\**\*.rfa" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="Fixtures\Projects\**\*.rvt" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
     <ItemGroup>

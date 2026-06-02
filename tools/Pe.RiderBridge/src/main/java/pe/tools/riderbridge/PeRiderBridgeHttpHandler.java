@@ -4,11 +4,15 @@ import com.intellij.execution.ProgramRunnerUtil;
 import com.intellij.execution.RunManager;
 import com.intellij.execution.configurations.RuntimeConfigurationException;
 import com.intellij.execution.executors.DefaultDebugExecutor;
+import com.intellij.openapi.actionSystem.ActionGroup;
 import com.intellij.openapi.actionSystem.ActionManager;
+import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.ActionPlaces;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.DataContext;
+import com.intellij.openapi.actionSystem.Separator;
+import com.intellij.openapi.actionSystem.ToggleAction;
 import com.intellij.openapi.actionSystem.ex.ActionUtil;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
@@ -31,6 +35,7 @@ import org.jetbrains.ide.HttpRequestHandler;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -51,8 +56,8 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
         "Stop"
     };
     private static final String DefaultRestartConfigurationName = "Pe.App";
-    private static final String BridgeVersion = "0.1.0-direct-run-configuration";
-    private static final String RestartStrategy = "rerun-action-then-debug-run-configuration";
+    private static final String BridgeVersion = "0.1.0-solution-config-targeted-restart";
+    private static final String RestartStrategy = "year-targeted-debug-run-configuration";
 
     @Override
     public boolean isSupported(@NotNull FullHttpRequest request) {
@@ -71,8 +76,14 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
         }
 
         var path = urlDecoder.path();
+        var query = urlDecoder.parameters();
         if (path.equals(Prefix + "/ping")) {
             send(context, HttpResponseStatus.OK, "{\"ok\":true,\"bridge\":\"Pe.RiderBridge\",\"version\":\"" + json(BridgeVersion) + "\",\"restartStrategy\":\"" + json(RestartStrategy) + "\"}");
+            return true;
+        }
+
+        if (path.equals(Prefix + "/diagnostics")) {
+            send(context, HttpResponseStatus.OK, diagnosticsJson(first(query, "project")));
             return true;
         }
 
@@ -81,7 +92,6 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
             return true;
         }
 
-        var query = urlDecoder.parameters();
         var project = selectProject(first(query, "project"));
         if (project == null) {
             send(context, HttpResponseStatus.NOT_FOUND, "{\"ok\":false,\"error\":\"No open matching project\"}");
@@ -109,14 +119,21 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
 
         if (path.equals(Prefix + "/restart-rrd")) {
             var requestedAction = first(query, "actionId");
+            var expectedRevitVersion = first(query, "expectedRevitVersion");
             var results = new ArrayList<ActionResult>();
             if (requestedAction != null && !requestedAction.isBlank()) {
                 results.add(invokeAction(requestedAction, project));
+            } else if (expectedRevitVersion != null && !expectedRevitVersion.isBlank()) {
+                var solutionConfiguration = solutionConfigurationName(expectedRevitVersion);
+                var selection = selectSolutionConfiguration(project, solutionConfiguration);
+                results.add(selection);
+                if (selection.ok())
+                    results.add(debugRunConfiguration(restartConfigurationCandidates(expectedRevitVersion), project));
             } else {
                 var rerun = invokeAction("Rerun", project);
                 results.add(rerun);
                 if (!rerun.ok())
-                    results.add(debugRunConfiguration(DefaultRestartConfigurationName, project));
+                    results.add(debugRunConfiguration(new String[] { DefaultRestartConfigurationName }, project));
             }
             send(context, HttpResponseStatus.OK, operationJson("restart-rrd", project, results));
             return true;
@@ -153,22 +170,137 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
         return result.get();
     }
 
-    private static ActionResult debugRunConfiguration(String configurationName, Project project) {
+    private static ActionResult selectSolutionConfiguration(Project project, String configurationName) {
+        var result = new AtomicReference<ActionResult>();
+        ApplicationManager.getApplication().invokeAndWait(() -> {
+            try {
+                var actions = solutionConfigurationActions(project);
+                for (var action : actions) {
+                    if (!action.value().equals(configurationName))
+                        continue;
+
+                    if (!(action.action() instanceof ToggleAction toggleAction)) {
+                        result.set(new ActionResult(
+                            "SelectSolutionConfiguration",
+                            "invalid-action",
+                            false,
+                            "Solution configuration '" + configurationName + "' was found but is not selectable."
+                        ));
+                        return;
+                    }
+
+                    if (!action.enabled()) {
+                        result.set(new ActionResult(
+                            "SelectSolutionConfiguration",
+                            "disabled",
+                            false,
+                            "Solution configuration '" + configurationName + "' exists but is disabled."
+                        ));
+                        return;
+                    }
+
+                    var event = actionEvent(project, action.action());
+                    toggleAction.setSelected(event, true);
+                    result.set(new ActionResult(
+                        "SelectSolutionConfiguration",
+                        "selected",
+                        true,
+                        "Selected Rider solution configuration '" + configurationName + "'."
+                    ));
+                    return;
+                }
+
+                result.set(new ActionResult(
+                    "SelectSolutionConfiguration",
+                    "missing",
+                    false,
+                    "Solution configuration '" + configurationName + "' was not found; available groups: " + solutionConfigurationGroupsText(actions)
+                ));
+            } catch (Throwable ex) {
+                result.set(new ActionResult(
+                    "SelectSolutionConfiguration",
+                    "failed",
+                    false,
+                    ex.getClass().getSimpleName() + ": " + ex.getMessage()
+                ));
+            }
+        });
+
+        return result.get();
+    }
+
+    private static String solutionConfigurationName(String expectedRevitVersion) {
+        var year = expectedRevitVersion.trim();
+        var shortYear = year.length() == 4 && year.startsWith("20") ? "R" + year.substring(2) : year;
+        return "Debug." + shortYear;
+    }
+
+    private static List<SolutionConfigurationActionInfo> solutionConfigurationActions(Project project) {
+        var action = ActionManager.getInstance().getAction("ActiveConfigurationAndPlatformActionGroup");
+        if (!(action instanceof ActionGroup group))
+            return List.of();
+
+        var event = actionEvent(project, action);
+        var children = group.getChildren(event);
+        var currentGroup = "";
+        var result = new ArrayList<SolutionConfigurationActionInfo>();
+        for (var child : children) {
+            if (child instanceof Separator) {
+                var text = child.getTemplatePresentation().getText();
+                currentGroup = text == null ? "" : text;
+                continue;
+            }
+
+            var childEvent = actionEvent(project, child);
+            child.update(childEvent);
+            var text = childEvent.getPresentation().getText();
+            if (text == null || text.isBlank())
+                continue;
+
+            var selected = child instanceof ToggleAction toggleAction && toggleAction.isSelected(childEvent);
+            var enabled = childEvent.getPresentation().isEnabled();
+            result.add(new SolutionConfigurationActionInfo(currentGroup, text, selected, enabled, child));
+        }
+        return result;
+    }
+
+    private static AnActionEvent actionEvent(Project project, AnAction action) {
+        var presentation = action.getTemplatePresentation().clone();
+        return AnActionEvent.createFromDataContext(ActionPlaces.UNKNOWN, presentation, dataContext(project));
+    }
+
+    private static String solutionConfigurationGroupsText(List<SolutionConfigurationActionInfo> actions) {
+        var groups = new java.util.LinkedHashMap<String, List<String>>();
+        for (var action : actions)
+            groups.computeIfAbsent(action.groupName(), ignored -> new ArrayList<>()).add(action.value());
+        var parts = new ArrayList<String>();
+        for (var entry : groups.entrySet())
+            parts.add(entry.getKey() + "=[" + String.join(", ", entry.getValue()) + "]");
+        return parts.isEmpty() ? "<none>" : String.join("; ", parts);
+    }
+
+    private static ActionResult debugRunConfiguration(String[] configurationNames, Project project) {
         var result = new AtomicReference<ActionResult>();
         ApplicationManager.getApplication().invokeAndWait(() -> {
             try {
                 var runManager = RunManager.getInstance(project);
-                var settings = runManager.findConfigurationByName(configurationName);
+                var settings = Arrays.stream(configurationNames)
+                    .map(runManager::findConfigurationByName)
+                    .filter(candidate -> candidate != null)
+                    .findFirst()
+                    .orElse(null);
                 if (settings == null) {
                     result.set(new ActionResult(
                         "DebugRunConfiguration",
                         "missing",
                         false,
-                        "Run configuration '" + configurationName + "' was not found."
+                        "None of the requested run configurations were found: " + String.join(", ", configurationNames)
+                            + "; available run configurations: " + availableRunConfigurationNames(runManager)
                     ));
                     return;
                 }
 
+                var configurationName = settings.getName();
                 settings.getConfiguration().checkConfiguration();
                 runManager.setSelectedConfiguration(settings);
                 var executor = DefaultDebugExecutor.getDebugExecutorInstance();
@@ -197,6 +329,33 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
         });
 
         return result.get();
+    }
+
+    private static String[] restartConfigurationCandidates(String expectedRevitVersion) {
+        var year = expectedRevitVersion.trim();
+        var shortYear = year.length() == 4 && year.startsWith("20") ? "R" + year.substring(2) : year;
+        return new String[] {
+            "Pe.App " + shortYear,
+            "Pe.App." + shortYear,
+            "Pe.App Debug." + shortYear,
+            "Pe.App.Debug." + shortYear,
+            "Pe.App: Debug." + shortYear,
+            "Pe.App: Debug" + shortYear,
+            "Pe.App: " + shortYear,
+            "Pe.App (" + shortYear + ")",
+            "Pe.App " + year,
+            "Pe.App." + year,
+            "Pe.App: Debug." + year,
+            "Pe.App: Debug" + year,
+            "Pe.App: " + year
+        };
+    }
+
+    private static String availableRunConfigurationNames(RunManager runManager) {
+        var names = new ArrayList<String>();
+        for (var settings : runManager.getAllSettings())
+            names.add(settings.getName());
+        return names.isEmpty() ? "<none>" : String.join(", ", names);
     }
 
     private static ActionResult inspectAction(String actionId, Project project) {
@@ -276,6 +435,143 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
         response.headers().set(HttpHeaderNames.CONTENT_LENGTH, content.readableBytes());
         response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE);
         context.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+    }
+
+    private static String diagnosticsJson(String requestedProject) {
+        var project = selectProject(requestedProject);
+        var builder = new StringBuilder();
+        builder.append("{\"ok\":true");
+        builder.append(",\"bridge\":\"Pe.RiderBridge\"");
+        builder.append(",\"version\":\"").append(json(BridgeVersion)).append("\"");
+        builder.append(",\"restartStrategy\":\"").append(json(RestartStrategy)).append("\"");
+        builder.append(",\"requestedProject\":\"").append(json(requestedProject)).append("\"");
+        builder.append(",\"openProjects\":").append(openProjectsJson());
+        builder.append(",\"selectedProject\":");
+        if (project == null) {
+            builder.append("null");
+            builder.append(",\"runConfigurations\":[]");
+        } else {
+            builder.append(projectJson(project));
+            builder.append(",\"solutionConfigurationGroups\":").append(solutionConfigurationGroupsJson(project));
+            builder.append(",\"runConfigurations\":").append(runConfigurationsJson(project));
+        }
+        builder.append("}");
+        return builder.toString();
+    }
+
+    private static String openProjectsJson() {
+        var openProjects = ProjectManager.getInstance().getOpenProjects();
+        var builder = new StringBuilder();
+        builder.append('[');
+        for (var i = 0; i < openProjects.length; i++) {
+            if (i > 0)
+                builder.append(',');
+            builder.append(projectJson(openProjects[i]));
+        }
+        builder.append(']');
+        return builder.toString();
+    }
+
+    private static String projectJson(Project project) {
+        return "{\"name\":\"" + json(project.getName()) + "\",\"basePath\":\"" + json(project.getBasePath()) + "\"}";
+    }
+
+    private static String solutionConfigurationGroupsJson(Project project) {
+        var result = new AtomicReference<String>();
+        ApplicationManager.getApplication().invokeAndWait(() -> {
+            try {
+                var actions = solutionConfigurationActions(project);
+                var groups = new java.util.LinkedHashMap<String, List<SolutionConfigurationActionInfo>>();
+                for (var action : actions)
+                    groups.computeIfAbsent(action.groupName(), ignored -> new ArrayList<>()).add(action);
+
+                var builder = new StringBuilder();
+                builder.append('[');
+                var groupIndex = 0;
+                for (var entry : groups.entrySet()) {
+                    if (groupIndex > 0)
+                        builder.append(',');
+                    builder.append("{\"name\":\"").append(json(entry.getKey())).append("\"");
+                    builder.append(",\"values\":[");
+                    var values = entry.getValue();
+                    values.sort((left, right) -> left.value().compareTo(right.value()));
+                    for (var valueIndex = 0; valueIndex < values.size(); valueIndex++) {
+                        if (valueIndex > 0)
+                            builder.append(',');
+                        var value = values.get(valueIndex);
+                        builder.append("{\"value\":\"").append(json(value.value())).append("\"");
+                        builder.append(",\"selected\":").append(value.selected());
+                        builder.append(",\"enabled\":").append(value.enabled());
+                        builder.append('}');
+                    }
+                    builder.append("]}");
+                    groupIndex++;
+                }
+                builder.append(']');
+                result.set(builder.toString());
+            } catch (Throwable ex) {
+                result.set("[{\"error\":\"" + json(ex.getClass().getSimpleName() + ": " + ex.getMessage()) + "\"}]");
+            }
+        });
+        return result.get();
+    }
+
+    private static String runConfigurationsJson(Project project) {
+        var runManager = RunManager.getInstance(project);
+        var selected = runManager.getSelectedConfiguration();
+        var builder = new StringBuilder();
+        builder.append('[');
+        var settings = runManager.getAllSettings();
+        for (var i = 0; i < settings.size(); i++) {
+            if (i > 0)
+                builder.append(',');
+            var item = settings.get(i);
+            var configuration = item.getConfiguration();
+            builder.append("{\"name\":\"").append(json(item.getName())).append("\"");
+            builder.append(",\"configurationClass\":\"").append(json(configuration.getClass().getName())).append("\"");
+            builder.append(",\"selected\":").append(selected != null && selected.getName().equals(item.getName()));
+            builder.append(",\"details\":").append(configurationDetailsJson(configuration));
+            builder.append('}');
+        }
+        builder.append(']');
+        return builder.toString();
+    }
+
+    private static String configurationDetailsJson(Object configuration) {
+        var builder = new StringBuilder();
+        builder.append('{');
+        var count = 0;
+        var methods = configuration.getClass().getMethods();
+        Arrays.sort(methods, (left, right) -> left.getName().compareTo(right.getName()));
+        for (var method : methods) {
+            if (method.getParameterCount() != 0)
+                continue;
+            var name = method.getName();
+            if (!(name.startsWith("get") || name.startsWith("is")))
+                continue;
+            if (name.equals("getClass"))
+                continue;
+            var returnType = method.getReturnType();
+            if (!(returnType.equals(String.class) || returnType.equals(Boolean.TYPE) || returnType.equals(Boolean.class)
+                || returnType.equals(Integer.TYPE) || returnType.equals(Integer.class) || returnType.isEnum()))
+                continue;
+            try {
+                var value = method.invoke(configuration);
+                if (count > 0)
+                    builder.append(',');
+                builder.append("\"").append(json(name)).append("\":");
+                if (value == null)
+                    builder.append("null");
+                else if (value instanceof Boolean || value instanceof Integer)
+                    builder.append(value);
+                else
+                    builder.append("\"").append(json(String.valueOf(value))).append("\"");
+                count++;
+            } catch (Throwable ignored) {
+            }
+        }
+        builder.append('}');
+        return builder.toString();
     }
 
     private static String operationJson(String operation, Project project, List<ActionResult> results) {
@@ -358,6 +654,9 @@ public final class PeRiderBridgeHttpHandler extends HttpRequestHandler {
             .replace("\"", "\\\"")
             .replace("\r", "\\r")
             .replace("\n", "\\n");
+    }
+
+    private record SolutionConfigurationActionInfo(String groupName, String value, boolean selected, boolean enabled, AnAction action) {
     }
 
     private record ActionResult(String actionId, String status, boolean ok, String message) {

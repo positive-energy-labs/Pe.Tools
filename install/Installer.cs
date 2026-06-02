@@ -23,7 +23,6 @@ InstallerLog.WriteLine($"Runtime payload: {installerPayload.RuntimePublishDirect
 InstallerLog.WriteLine($"pea bootstrap payload: {installerPayload.PeaBootstrapDirectory}");
 InstallerLog.WriteLine($"pea payload archive: {installerPayload.PeaPayloadArchivePath}");
 InstallerLog.WriteLine($"pea payload manifest: {installerPayload.PeaPayloadManifestPath}");
-InstallerLog.WriteLine($"pe-dev payload: {installerPayload.PeDevPublishDirectory}");
 InstallerLog.WriteLine($"Revit payloads: {string.Join(", ", installerPayload.RevitPublishDirectories)}");
 var installerContext = new InstallerContext(installerPayload, configuration, resolvedVersioning);
 var installableComponents = InstallerComponentCatalog.CreateDefault();

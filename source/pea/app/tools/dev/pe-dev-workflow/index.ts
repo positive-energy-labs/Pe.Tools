@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
-import { delimiter, extname, isAbsolute, resolve } from "node:path";
+import { delimiter, dirname, extname, isAbsolute, resolve } from "node:path";
 import {
   AttachedRrdFreshnessError,
   runWithAttachedRrdSync,
@@ -99,6 +100,17 @@ export function runPeDevWorkflow(
   );
 }
 
+export function runRepoLocalPeDevWorkflow(
+  workflow: string,
+  args: string[],
+  policy: ExecutionPolicy,
+  timeoutSeconds = defaultTimeoutSeconds,
+): Promise<WorkflowCommandResult> {
+  return runWorkflowCommand(
+    repoLocalPeDevWorkflowCommand(workflow, args, policy, timeoutSeconds),
+  );
+}
+
 function peDevWorkflowCommand(
   workflow: string,
   args: string[],
@@ -112,22 +124,45 @@ function peDevWorkflowCommand(
     args,
     timeoutSeconds,
     fallbackSource: "repo-local-fallback",
-    fallback: {
-      workflow,
-      policy,
-      requestedExecutable: "dotnet",
-      args: [
-        "run",
-        "--project",
-        peDevProjectPath,
-        "-c",
-        "Debug.R25",
-        "--",
-        ...args,
-      ],
-      timeoutSeconds,
-    },
+    fallback: repoLocalPeDevWorkflowCommand(workflow, args, policy, timeoutSeconds),
   };
+}
+
+function repoLocalPeDevWorkflowCommand(
+  workflow: string,
+  args: string[],
+  policy: ExecutionPolicy,
+  timeoutSeconds: number,
+): WorkflowCommandRequest {
+  return {
+    workflow,
+    policy,
+    requestedExecutable: "dotnet",
+    args: [
+      "run",
+      "--project",
+      resolveRepoLocalPeDevProjectPath(),
+      "-c",
+      "Debug.R25",
+      "--",
+      ...args,
+    ],
+    timeoutSeconds,
+  };
+}
+
+function resolveRepoLocalPeDevProjectPath(): string {
+  let directory = process.cwd();
+  for (let depth = 0; depth < 8; depth++) {
+    const candidate = resolve(directory, peDevProjectPath);
+    if (existsSync(candidate)) return candidate;
+
+    const parent = dirname(directory);
+    if (parent === directory) break;
+    directory = parent;
+  }
+
+  return resolve(process.cwd(), peDevProjectPath);
 }
 
 export async function runAttachedRrdTest(request: {
@@ -249,7 +284,7 @@ async function runWorkflowCommand(
       proof: proofForResult(request.workflow, request.policy, false, false),
       guidance:
         request.requestedExecutable === "pe-dev"
-          ? `Install pe-dev with \`pe-dev pea install-dev\` when available, or run the repo-local fallback: dotnet run --project ${peDevProjectPath} -c Debug.R25 -- ${request.args.join(" ")}`
+          ? `Build Pe.Dev.Cli or use the repo-local fallback: dotnet run --project ${peDevProjectPath} -c Debug.R25 -- ${request.args.join(" ")}`
           : undefined,
     };
   }

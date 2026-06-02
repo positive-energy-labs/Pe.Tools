@@ -167,6 +167,20 @@ internal static class RevitFamilyFixtureHarness {
         return fixturePath;
     }
 
+    public static string GetProjectFixturePath(string fixtureFileName) {
+        if (string.IsNullOrWhiteSpace(fixtureFileName))
+            throw new ArgumentException("Fixture file name is required.", nameof(fixtureFileName));
+
+        var assemblyDirectory = Path.GetDirectoryName(typeof(RevitFamilyFixtureHarness).Assembly.Location)
+                                ?? throw new InvalidOperationException(
+                                    "Could not resolve the test assembly directory.");
+        var fixturePath = Path.Combine(assemblyDirectory, "Fixtures", "Projects", fixtureFileName);
+        if (!File.Exists(fixturePath))
+            throw new FileNotFoundException($"Project fixture not found at '{fixturePath}'.", fixturePath);
+
+        return fixturePath;
+    }
+
     public static Document OpenFamilyFixture(
         Application application,
         string fixtureFileName
@@ -211,6 +225,15 @@ internal static class RevitFamilyFixtureHarness {
         var fixturePath = GetProfileFixturePath(fixtureFileName);
         var json = File.ReadAllText(fixturePath);
         return SettingsJsonContract.ValidateAndRoundTrip<DesiredFamilyMigrationProfile>(json, fixturePath);
+    }
+
+    public static FFMigratorProfile LoadMigratorProfileFixture(string fixtureFileName) =>
+        LoadMigratorProfileFixtureContract(fixtureFileName).Value;
+
+    public static SettingsJsonRoundTripResult<FFMigratorProfile> LoadMigratorProfileFixtureContract(string fixtureFileName) {
+        var fixturePath = GetProfileFixturePath(fixtureFileName);
+        var json = File.ReadAllText(fixturePath);
+        return SettingsJsonContract.ValidateAndRoundTrip<FFMigratorProfile>(json, fixturePath);
     }
 
     public static void AssertSavedFamilyFileIsOpenable(

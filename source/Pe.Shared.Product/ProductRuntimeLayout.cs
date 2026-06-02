@@ -29,10 +29,7 @@ public sealed record ProductRuntimeLayout(
                 Path.Combine(binRootPath, PeaCliIdentity.DirectoryName, PeaCliIdentity.LauncherName),
                 Path.Combine(binRootPath, PeaCliIdentity.DirectoryName, PeaCliIdentity.CurrentVersionFileName),
                 Path.Combine(binRootPath, PeaCliIdentity.DirectoryName, PeaCliIdentity.VersionsDirectoryName),
-                Path.Combine(binRootPath, PeaCliIdentity.DirectoryName, PeaCliIdentity.PackagesDirectoryName),
-                Path.Combine(binRootPath, PeDevCliIdentity.DirectoryName),
-                Path.Combine(binRootPath, PeDevCliIdentity.DirectoryName, PeDevCliIdentity.ExecutableName),
-                Path.Combine(binRootPath, PeDevCliIdentity.DirectoryName, PeDevCliIdentity.DllName)
+                Path.Combine(binRootPath, PeaCliIdentity.DirectoryName, PeaCliIdentity.PackagesDirectoryName)
             ),
             new ProductRuntimeStateLayout(stateRootPath),
             new ProductRuntimeLogLayout(logsRootPath),
@@ -50,10 +47,7 @@ public sealed record ProductRuntimeBinaryLayout(
     string PeaLauncherPath,
     string PeaCurrentVersionPath,
     string PeaVersionsDirectoryPath,
-    string PeaPackagesDirectoryPath,
-    string PeDevDirectoryPath,
-    string PeDevExecutablePath,
-    string PeDevDllPath
+    string PeaPackagesDirectoryPath
 ) {
     public string ResolvePeaVersionDirectoryPath(string version) =>
         ProductPathing.ResolveSafeSubDirectoryPath(

@@ -373,8 +373,15 @@ public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollect
             if (center == null)
                 continue;
 
-            var leftName = spec.GetLeftName(center.Normal.Normalize());
-            var rightName = spec.GetRightName(center.Normal.Normalize());
+            string leftName;
+            string rightName;
+            try {
+                leftName = spec.GetLeftName(center.Normal.Normalize());
+                rightName = spec.GetRightName(center.Normal.Normalize());
+            } catch (ArgumentException) {
+                continue;
+            }
+
             var pairNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
                 pair.Plane1 ?? string.Empty, pair.Plane2 ?? string.Empty
             };
