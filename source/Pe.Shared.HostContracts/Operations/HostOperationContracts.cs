@@ -37,6 +37,11 @@ public enum RevitOperationLayer {
     Apply
 }
 
+public enum RevitActiveDocumentKind {
+    Project,
+    Family
+}
+
 public enum HostOperationResultGrain {
     Status,
     Summary,
@@ -101,6 +106,7 @@ public sealed record HostOperationAgentMetadata(
     HostOperationIntent Intent,
     bool RequiresBridge,
     bool RequiresActiveDocument,
+    IReadOnlyList<RevitActiveDocumentKind> SupportedActiveDocumentKinds,
     HostOperationFamily Family,
     RevitOperationLayer? RevitLayer,
     string DomainNoun,
@@ -135,6 +141,7 @@ public sealed record HostOperationAgentMetadata(
         HostOperationIntent intent = HostOperationIntent.Read,
         bool requiresBridge = false,
         bool requiresActiveDocument = false,
+        IReadOnlyList<RevitActiveDocumentKind>? supportedActiveDocumentKinds = null,
         HostOperationFamily? family = null,
         RevitOperationLayer? revitLayer = null,
         string? domainNoun = null,
@@ -168,6 +175,7 @@ public sealed record HostOperationAgentMetadata(
         intent,
         requiresBridge,
         requiresActiveDocument,
+        supportedActiveDocumentKinds ?? Array.Empty<RevitActiveDocumentKind>(),
         family ?? InferFamily(domain),
         revitLayer,
         domainNoun ?? domain,
@@ -303,6 +311,7 @@ public sealed record HostOperationDefinition(
         var family = InferFamilyFromKey(key, metadata.Family);
         return metadata with {
             Family = family,
+            SupportedActiveDocumentKinds = DefaultIfEmpty(metadata.SupportedActiveDocumentKinds, InferSupportedActiveDocumentKinds(key, family, metadata.RequiresActiveDocument)),
             RevitLayer = metadata.RevitLayer ?? InferRevitLayerFromKey(key),
             DomainNoun = InferDomainNounFromKey(key, metadata.DomainNoun, metadata.Domain),
             ResultGrain = InferResultGrainFromKey(key, metadata.ResultGrain),
@@ -326,6 +335,47 @@ public sealed record HostOperationDefinition(
 
     private static IReadOnlyList<string> DefaultIfEmpty(IReadOnlyList<string> current, IReadOnlyList<string> fallback) =>
         current.Count == 0 ? fallback : current;
+
+    private static IReadOnlyList<RevitActiveDocumentKind> DefaultIfEmpty(
+        IReadOnlyList<RevitActiveDocumentKind> current,
+        IReadOnlyList<RevitActiveDocumentKind> fallback
+    ) => current.Count == 0 ? fallback : current;
+
+    private static IReadOnlyList<RevitActiveDocumentKind> InferSupportedActiveDocumentKinds(
+        string key,
+        HostOperationFamily family,
+        bool requiresActiveDocument
+    ) {
+        if (family != HostOperationFamily.Revit || !requiresActiveDocument)
+            return [];
+
+        return key switch {
+            "revit.context.summary" => [RevitActiveDocumentKind.Project, RevitActiveDocumentKind.Family],
+            "revit.catalog.loaded-families.filter-schema" => [RevitActiveDocumentKind.Project],
+            "revit.catalog.loaded-families.filter-field-options" => [RevitActiveDocumentKind.Project],
+            "revit.catalog.schedules" => [RevitActiveDocumentKind.Project],
+            "revit.catalog.project-browser" => [RevitActiveDocumentKind.Project],
+            "revit.detail.sheets" => [RevitActiveDocumentKind.Project],
+            "revit.catalog.project-index" => [RevitActiveDocumentKind.Project],
+            "revit.matrix.schedule-profiles" => [RevitActiveDocumentKind.Project],
+            "revit.detail.schedules" => [RevitActiveDocumentKind.Project],
+            "revit.catalog.loaded-families" => [RevitActiveDocumentKind.Project],
+            "revit.matrix.loaded-families" => [RevitActiveDocumentKind.Project],
+            "revit.matrix.schedule-coverage" => [RevitActiveDocumentKind.Project],
+            "revit.matrix.parameter-coverage" => [RevitActiveDocumentKind.Project],
+            "revit.catalog.concept-evidence" => [RevitActiveDocumentKind.Project],
+            "revit.catalog.parameter-evidence" => [RevitActiveDocumentKind.Project],
+            "revit.catalog.parameter-bindings" => [RevitActiveDocumentKind.Project],
+            "revit.resolve.references" => [RevitActiveDocumentKind.Project],
+            "revit.context.visible-summary" => [RevitActiveDocumentKind.Project],
+            "revit.detail.elements" => [RevitActiveDocumentKind.Project],
+            "revit.catalog.electrical-panels" => [RevitActiveDocumentKind.Project],
+            "revit.catalog.electrical-circuits" => [RevitActiveDocumentKind.Project],
+            "revit.catalog.electrical-load-classifications" => [RevitActiveDocumentKind.Project],
+            "revit.detail.electrical-panel-schedules" => [RevitActiveDocumentKind.Project],
+            _ => [RevitActiveDocumentKind.Project]
+        };
+    }
 
     private static string InferCanonicalUseFromKey(string key, string fallback) => key switch {
         "revit.context.summary" => "Orient to the current Revit document, active view/sheet, selection, and session state.",

@@ -29,12 +29,14 @@ Owns durable host-facing contracts: route constants, operation definitions, requ
 | **result grain** | Metadata describing output shape: summary, catalog, matrix, detail, handles, rows, etc. |
 | **cost tier** | Cheap/bounded/expensive/mutation operation metadata. |
 | **single-flight group** | Metadata telling callers that operations share a serialized execution lane. |
+| **supported active document kind** | Operation metadata/gating for whether a bridge-backed Revit operation supports project documents, family documents, or both. Keep this separate from request scopes such as selection, active view, explicit handles, or parameter presence. |
 
 ## Living Memory
 
 - Keep contracts stable and explicit. Avoid host implementation services, caller-local route aliases, and Revit runtime dependencies here.
 - Product names, executable names, env var names, default local URLs, and filesystem roots come from `Pe.Shared.Product`.
 - Operation metadata is the canonical capability map for Pea, CLI output, generated TypeScript, the hand-maintained .NET client, and future frontend views. Keep task-specific steering close to metadata and examples rather than hardcoding it in prompts.
+- Bridge-backed Revit operation metadata should make active document-kind support explicit when an operation is project-only, family-only, or intentionally overlaps both. Do not encode this as `rvt.*`/`rfa.*` route families or overload `supportedScopes`; keep layer-first `revit.<layer>.<domain>` keys and use document-kind gating/metadata to steer callers.
 - Public request contracts should validate strictly. Unknown or nonsensical fields should fail with actionable diagnostics rather than silently broadening or emptying results.
 - High-value operations should include examples and bounded expansion hints when they materially help callers form valid requests.
 - Keep compact defaults and budget metadata aligned with collector behavior.

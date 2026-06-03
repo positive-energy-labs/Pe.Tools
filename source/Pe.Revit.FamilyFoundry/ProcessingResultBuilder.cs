@@ -1,5 +1,6 @@
 using Pe.Revit.FamilyFoundry.DesiredState;
 using Pe.Revit.FamilyFoundry.LookupTables;
+using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.FamilyFoundry.Serialization;
 using Pe.Revit.Global;
@@ -525,37 +526,15 @@ public class ProcessingResultBuilder(OutputStorage runOutput) {
         if (snapshot == null)
             return null;
 
-        try {
-            var sharedParameterNames = snapshot.Parameters?.Data?
-                                           .Select(parameter => parameter.SharedGuid.HasValue
-                                               ? parameter.Name?.Trim()
-                                               : null)
-                                           .OfType<string>()
-                                           .Where(name => !string.IsNullOrWhiteSpace(name))
-                                           .ToHashSet(StringComparer.Ordinal)
-                                       ?? [];
+        var targetFamilyName = string.IsNullOrWhiteSpace(snapshot.FamilyName)
+            ? "__CURRENT_FAMILY__"
+            : snapshot.FamilyName;
+        var projection = FamilySnapshotProfileProjector.ProjectProfiles(
+            snapshot,
+            targetFamilyName,
+            parameter => parameter.SharedGuid.HasValue);
 
-            var projectorType = Type.GetType(
-                "Pe.Revit.FamilyFoundry.Profiles.FamilySnapshotProfileProjector, Pe.Revit.FamilyFoundry");
-            var projectProfiles = projectorType?.GetMethod(
-                "ProjectProfiles",
-                BindingFlags.Public | BindingFlags.Static);
-            var projection = projectProfiles?.Invoke(
-                null,
-                [
-                    snapshot,
-                    string.IsNullOrWhiteSpace(snapshot.FamilyName) ? "__CURRENT_FAMILY__" : snapshot.FamilyName,
-                    (Func<string, bool>)(name => sharedParameterNames.Contains(name))
-                ]);
-            if (projection == null)
-                return null;
-
-            var denseProfile = projection.GetType().GetProperty("DenseProfile")?.GetValue(projection);
-            var emptyAllowedProfile = projection.GetType().GetProperty("EmptyAllowedProfile")?.GetValue(projection);
-            return new ReflectedSnapshotProjection(denseProfile, emptyAllowedProfile);
-        } catch {
-            return null;
-        }
+        return new ReflectedSnapshotProjection(projection.DenseProfile, projection.EmptyAllowedProfile);
     }
 
     private static SnapshotSummary BuildSnapshotSummary(

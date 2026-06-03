@@ -40,7 +40,8 @@ internal static class PeaLinkDevCommand {
 
         Console.WriteLine($"pea dev source linked to '{repoRoot}'.");
         Console.WriteLine($"PATH-visible launcher updated at '{installedRuntime.Binaries.PeaLauncherPath}'.");
-        Console.WriteLine("Use `pea --installed ...` to force the installed payload.");
+        Console.WriteLine("Use `pea dev` or `pea --dev ...` for source-linked dev Pea.");
+        Console.WriteLine("Use `pea ...` or `pea --installed ...` for the installed payload.");
         return 0;
     }
 }

@@ -8,9 +8,20 @@ alwaysApply: true
 
 Repo-wide agent guidance for conventions, current paths, validation habits, Revit workflow constraints, and cross-package terminology that repeatedly matters across the codebase.
 
-## Purpose and Philosophy
+## The Gist
 
-This repo exists to improve Engineering Designer workflows for MEP firms through strongly typed, debuggable Revit tooling. Optimize for linear execution flow, fail-fast behavior, composable systems, and wrappers around finicky Revit API behavior. This repo is greenfield: move fast, prefer the best long-term shape, and do not preserve compatibility shims unless they are a temporary compile bridge.
+This repo exists to improve Engineering Designer workflows for MEP firms through strongly typed, debuggable Revit tooling. These documents are the lynchpins:
+- `docs/ARCHITECTURE.md` - read before multi module changes, debugging, and code review. Contains target architecture; code should always seek to align. 
+- `docs/BUILD.md` - read before changing anything build, deploy, or dev-loop related. Contians repo tooling justification and explanation. Always prove (or disprove) before changing the document. Information here is mission critical.
+
+This repo is greenfield: move fast, prefer the best long-term shape, and do not preserve compatibility shims unless they are a temporary compile bridge. Code style should optimize for linear execution flow, fail-fast behavior, composable systems, and wrappers around finicky Revit API behavior.
+
+## TLDRs
+`BUILD.md` is the canonical repo guide for build, runtime, package, install, and Revit proof lanes.
+- Keep terminal compile/package proof separate from live-runtime freshness. 
+- Protect the current RRD session aggressively. Breaking it can turn a small edit into a multi-minute restart plus document reopen wait.
+- Use the `pea live <sync/restart/status>` commands for RRD-safe live-looping if harness alternatives are not available.
+
 
 ## Critical Entry Points
 
@@ -18,23 +29,13 @@ This repo exists to improve Engineering Designer workflows for MEP firms through
 - `source/Pe.App/ButtonRegistry.cs` - top-level desktop command and ribbon exposure.
 - `source/Pe.Host/Program.cs` - external settings host, HTTP/SSE entrypoint.
 - `source/pea/app/` - TypeScript Pea CLI/runtime surface. `pea agent` is the deployed Revit/operator workbench; `pea dev` starts dev-agent, the MastraCode-based repo coding agent with Pea black-box feedback tools.
-- `source/Pe.Dev.RevitAutomation/` - Design Automation appbundle/activity orchestration, workitem submission, status, artifact download, and batch submission over `Pe.Aps` clients.
-- `source/Pe.Dev.RevitAutomation.Worker/RevitAutomationShellApp.cs` - the Autodesk Design Automation shell entrypoint. This is the headless peer to `Pe.App`, not a copy of desktop startup.
 - `source/Pe.Shared.StorageRuntime/` - schema generation, field options, module registration, storage/document validation.
 - `source/Pe.Revit.Global/` - document-owned Revit helpers, APS contracts, and DA-safe collector seams that both shells can share.
-- `source/Pe.Revit.Extensions/` - strong primitives such as `FamilyDocument`, value coercion helpers, formula helpers, and parameter lookup helpers.
+- `source/Pe.Revit/Extensions/` - strong primitives such as `FamilyDocument`, value coercion helpers, formula helpers, and parameter lookup helpers.
 - `source/Pe.Revit.FamilyFoundry/OperationProcessor.cs` - main Family Foundry execution orchestrator.
-- `source/Pe.Revit.Tests/AGENTS.md` - runner-specific Revit test workflow.
 - `docs/features/family-foundry/_DEV.md` and `_GOALS.md` - Family Foundry architecture and intent.
-- `source/Pe.Dev.Cli/Program.cs` and `source/Pe.Dev.Cli/DevCliProgram.cs` -  Design Automation.
 
-## Builds and Env
 
-`BUILD.md` is the canonical repo guide for build, runtime, package, install, and Revit proof lanes. Keep detailed command menus there; keep this file focused on durable agent invariants.
-
-Protect the current RRD session aggressively. Breaking it can turn a small edit into a multi-minute restart plus document reopen wait.
-
-Keep terminal compile/package proof separate from live-runtime freshness. Do not grow or restore public `pe-dev` command groups for ordinary compilation or AttachedRrd live-loop work; `BUILD.md` owns the current command/proof-lane details.
 
 ## Shared Language
 

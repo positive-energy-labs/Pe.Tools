@@ -1,8 +1,10 @@
 ﻿using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI;
 using Microsoft.CodeAnalysis;
 using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.Context;
+using Pe.Revit.Scripting.Policy;
 using Pe.Revit.Scripting.References;
 using Pe.Revit.Scripting.Storage;
 using Pe.Shared.HostContracts.Scripting;
@@ -27,6 +29,7 @@ public sealed class RevitScriptExecutionService(
     private readonly ScriptCompilationService _compilationService = compilationService;
     private readonly ScriptEntryPointResolver _entryPointResolver = new(nameof(PeScriptContainer));
     private readonly ScriptPolicyAnalyzer _policyAnalyzer = ScriptPolicyAnalyzer.CreateDefault();
+    private readonly RevitReadOnlyMutationPolicyAnalyzer _readOnlyMutationPolicyAnalyzer = new();
     private readonly Action<string>? _notificationSink = notificationSink;
     private readonly ScriptProjectGenerator _projectGenerator = projectGenerator;
     private readonly ScriptReferenceResolver _referenceResolver = referenceResolver;
@@ -91,7 +94,7 @@ public sealed class RevitScriptExecutionService(
                 plan.SourceSet.EntryPointSourceName
             ));
 
-            var policyDiagnostics = this._policyAnalyzer.Analyze(CreateEntryPointOnlySourceSet(plan.SourceSet), plan.PermissionMode);
+            var policyDiagnostics = this._policyAnalyzer.Analyze(plan.SourceSet, plan.PermissionMode);
             foreach (var diagnostic in policyDiagnostics)
                 AppendDiagnostic(diagnostics, diagnostic);
             if (policyDiagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error)) {
@@ -165,6 +168,25 @@ public sealed class RevitScriptExecutionService(
             }
 
             using (runtimeReferenceScope.ResolverScope) {
+                var readOnlyMutationDiagnostics = this.AnalyzeReadOnlyMutations(
+                    plan,
+                    runtimeReferenceScope.MetadataReferences,
+                    resolvedProject.Usings
+                );
+                foreach (var diagnostic in readOnlyMutationDiagnostics)
+                    AppendDiagnostic(diagnostics, diagnostic);
+                if (readOnlyMutationDiagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error)) {
+                    return CreateResult(
+                        ScriptExecutionStatus.PolicyRejected,
+                        outputSink,
+                        diagnostics,
+                        revitVersion,
+                        targetFramework,
+                        containerTypeName,
+                        executionId
+                    );
+                }
+
                 var compilationResult = this.CompileScript(
                     plan,
                     runtimeReferenceScope.MetadataReferences,
@@ -234,6 +256,28 @@ public sealed class RevitScriptExecutionService(
                     );
                     return CreateResult(
                         ScriptExecutionStatus.Succeeded,
+                        outputSink,
+                        diagnostics,
+                        revitVersion,
+                        targetFramework,
+                        containerTypeName,
+                        executionId,
+                        executionContext.Artifacts.Artifacts
+                    );
+                } catch (RevitScriptMutationException ex) {
+                    AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Error(
+                        "mutation-monitor",
+                        ex.Message,
+                        containerTypeName
+                    ));
+                    Log.Error(
+                        ex,
+                        "Revit scripting read-only mutation monitor detected document changes: ExecutionId={ExecutionId}, ContainerType={ContainerTypeName}",
+                        executionId,
+                        containerTypeName
+                    );
+                    return CreateResult(
+                        ScriptExecutionStatus.RuntimeFailed,
                         outputSink,
                         diagnostics,
                         revitVersion,
@@ -564,6 +608,18 @@ public sealed class RevitScriptExecutionService(
         diagnostics
     );
 
+    private IReadOnlyList<ScriptDiagnostic> AnalyzeReadOnlyMutations(
+        ScriptExecutionPlan plan,
+        IReadOnlyList<MetadataReference> metadataReferences,
+        IReadOnlyList<string> projectUsings
+    ) => plan.PermissionMode == ScriptPermissionMode.ReadOnly
+        ? this._readOnlyMutationPolicyAnalyzer.Analyze(
+            plan.SourceSet,
+            metadataReferences,
+            projectUsings
+        )
+        : [];
+
     private ScriptCompilationResult CompileScript(
         ScriptExecutionPlan plan,
         IReadOnlyList<MetadataReference> metadataReferences,
@@ -737,7 +793,16 @@ public sealed class RevitScriptExecutionService(
         ScriptPermissionMode permissionMode
     ) {
         if (permissionMode == ScriptPermissionMode.ReadOnly) {
-            container.Execute();
+            using var mutationMonitor = new ScriptDocumentMutationMonitor(context.App.Application);
+            try {
+                container.Execute();
+            } catch (Exception ex) when (mutationMonitor.HasChanges) {
+                throw new RevitScriptMutationException(mutationMonitor.CreateSummary(), ex);
+            }
+
+            if (mutationMonitor.HasChanges)
+                throw new RevitScriptMutationException(mutationMonitor.CreateSummary());
+
             return;
         }
 
@@ -842,6 +907,83 @@ public sealed class RevitScriptExecutionService(
     ) : Exception(message, innerException) {
         public ScriptExecutionStatus Status { get; } = status;
     }
+
+    private sealed class RevitScriptMutationException(
+        string message,
+        Exception? innerException = null
+    ) : Exception(message, innerException);
+
+    private sealed class ScriptDocumentMutationMonitor : IDisposable {
+        private readonly Autodesk.Revit.ApplicationServices.Application _application;
+        private readonly List<ScriptDocumentMutationEvent> _events = [];
+        private bool _disposed;
+
+        public ScriptDocumentMutationMonitor(Autodesk.Revit.ApplicationServices.Application application) {
+            this._application = application ?? throw new ArgumentNullException(nameof(application));
+            this._application.DocumentChanged += this.OnDocumentChanged;
+        }
+
+        public bool HasChanges => this._events.Count != 0;
+
+        public void Dispose() {
+            if (this._disposed)
+                return;
+
+            this._disposed = true;
+            this._application.DocumentChanged -= this.OnDocumentChanged;
+        }
+
+        public string CreateSummary() {
+            var events = this._events.ToList();
+            var totalAdded = events.Sum(item => item.AddedCount);
+            var totalModified = events.Sum(item => item.ModifiedCount);
+            var totalDeleted = events.Sum(item => item.DeletedCount);
+            var documentNames = events
+                .Select(item => item.DocumentTitle)
+                .Where(title => !string.IsNullOrWhiteSpace(title))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            var transactionNames = events
+                .SelectMany(item => item.TransactionNames)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            return
+                "ReadOnly script execution changed an open Revit document. " +
+                $"Added={totalAdded}, Modified={totalModified}, Deleted={totalDeleted}. " +
+                $"Documents={FormatList(documentNames)}. " +
+                $"Transactions={FormatList(transactionNames)}.";
+        }
+
+        private void OnDocumentChanged(object? sender, DocumentChangedEventArgs args) {
+            var addedCount = args.GetAddedElementIds().Count;
+            var modifiedCount = args.GetModifiedElementIds().Count;
+            var deletedCount = args.GetDeletedElementIds().Count;
+            if (addedCount == 0 && modifiedCount == 0 && deletedCount == 0)
+                return;
+
+            var document = args.GetDocument();
+            this._events.Add(new ScriptDocumentMutationEvent(
+                document?.Title ?? "<unknown>",
+                addedCount,
+                modifiedCount,
+                deletedCount,
+                args.GetTransactionNames().ToList()
+            ));
+        }
+
+        private static string FormatList(IReadOnlyList<string> values) =>
+            values.Count == 0 ? "<none reported>" : string.Join(", ", values);
+    }
+
+    private sealed record ScriptDocumentMutationEvent(
+        string DocumentTitle,
+        int AddedCount,
+        int ModifiedCount,
+        int DeletedCount,
+        IReadOnlyList<string> TransactionNames
+    );
 
     private static string? ReadFileIfExists(string path) =>
         File.Exists(path) ? File.ReadAllText(path) : null;

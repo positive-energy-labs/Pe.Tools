@@ -10,7 +10,7 @@ import {
   runRiderBridgeSyncHelper as runRiderBridgeSyncHelper,
   type RiderBridgeHotReloadResponse,
 } from "./bridge.js";
-import { collectHostContext } from "../shared.js";
+import { collectHostContext } from "../../shared/host-context.js";
 import { callHostOperation } from "../../../host-operation-runtime.js";
 import { resolveHostBaseUrl } from "../../../pe-host.js";
 

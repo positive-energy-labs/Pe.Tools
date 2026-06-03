@@ -151,6 +151,7 @@ internal static class HostTypeScriptClientProjection {
             _ = builder.AppendLine($"    intent: {ToJsonString(metadata.Intent.ToString())},");
             _ = builder.AppendLine($"    requiresBridge: {ToJsonBool(metadata.RequiresBridge)},");
             _ = builder.AppendLine($"    requiresActiveDocument: {ToJsonBool(metadata.RequiresActiveDocument)},");
+            _ = builder.AppendLine($"    supportedActiveDocumentKinds: {ToJsonString(metadata.SupportedActiveDocumentKinds.Select(kind => kind.ToString()).ToArray())},");
             _ = builder.AppendLine($"    family: {ToJsonString(metadata.Family.ToString())},");
             _ = builder.AppendLine($"    revitLayer: {ToJsonString(metadata.RevitLayer?.ToString())},");
             _ = builder.AppendLine($"    domainNoun: {ToJsonString(metadata.DomainNoun)},");

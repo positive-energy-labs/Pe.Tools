@@ -44,6 +44,16 @@ pnpm run bootstrap
 pnpm run execute -- --source-path src\SampleScript.cs
 ```
 
+## Live-loop commands
+
+`pea live ...` mirrors the shared `live_loop_context` / `live_rrd_sync` / `live_rrd_restart` implementation for humans coordinating AttachedRrd/Rider sessions. It is a repo live-loop surface, not Pea operator-agent context.
+
+```powershell
+pea live status
+pea live sync
+pea live restart
+```
+
 ## Pea configuration
 
 `pea config defaults` prints the Pea-owned settings path, seeded model pack, goal judge, OM thresholds, quiet/TUI posture, and behavior-bearing runtime policy. `pea config defaults --write` seeds or updates the MastraCode-compatible Pea settings file without launching the agent.
@@ -90,6 +100,7 @@ When a capability exists as a public host operation, prefer discovering and call
 
 - Pea product tools for black-box host/Revit/product facts
 - narrow repo verification tools: `live_loop_context`, `live_rrd_sync`, `live_rrd_restart`, `talk_to_pea`, sync-first `script_execute`, and `test`
+- the same live-loop implementation is exposed for humans through `pea live status`, `pea live sync`, and `pea live restart`
 - project-scoped workflow skills under `.mastracode/skills`, including `pe-live-loop` for fragile live Revit/Rider/Windows coordination
 - a managed `.mastracode/AGENTS.md` only when the repo root does not already provide `AGENTS.md`
 

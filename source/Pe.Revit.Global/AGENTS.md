@@ -52,4 +52,5 @@ before higher packages copy it.
 - Reusable collectors belong here only when the concept is stable across features. Feature-specific semantics still
   belong with the owning feature package.
 - Bridge-backed host work should assume exactly one connected Revit session and the active document as the only target.
+- Gate bridge-backed Revit operations by active document kind at the request-service seam with operation-specific diagnostics. Prefer explicit project-only, family-only, or both-kinds helpers over one generic "project document only" failure path once an operation surface intentionally overlaps `.rvt` and `.rfa` semantics.
 - Do not reintroduce route-level cache invalidation or target-document resolution into the bridge contract.

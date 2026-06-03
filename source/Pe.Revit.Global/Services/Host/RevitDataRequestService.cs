@@ -8,6 +8,7 @@ using Pe.Revit.DocumentData.ProjectIndex;
 using Pe.Revit.DocumentData.Schedules.Collect;
 using Pe.Revit.DocumentData.Selection;
 using Pe.Revit.DocumentData.Sheets;
+using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
@@ -116,7 +117,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     ) => this.EnqueueAsync(() => this.GetRevitAgentVisibleContextCore(request));
 
     private LoadedFamiliesCatalogData GetLoadedFamiliesCatalogCore(LoadedFamiliesCatalogRequest request) {
-        var document = GetActiveProjectDocument();
+        var document = GetSupportedActiveDocument(GetLoadedFamiliesCatalogOperationContract.Definition);
 
         try {
             return LoadedFamiliesCatalogCollector.Collect(document, request.Filter, request.Projection, request.Budget);
@@ -130,7 +131,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     }
 
     private ScheduleCatalogData GetScheduleCatalogCore(ScheduleCatalogRequest request) {
-        var document = GetActiveProjectDocument();
+        var document = GetSupportedActiveDocument(GetScheduleCatalogOperationContract.Definition);
 
         try {
             return ScheduleCatalogCollector.Collect(document, request, this._collectionContext);
@@ -144,7 +145,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     }
 
     private ProjectBrowserData GetProjectBrowserCore(ProjectBrowserRequest request) {
-        var document = GetActiveProjectDocument();
+        var document = GetSupportedActiveDocument(GetProjectBrowserOperationContract.Definition);
 
         try {
             return ProjectBrowserCollector.Collect(document, request, this._collectionContext);
@@ -158,7 +159,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     }
 
     private ProjectIndexData GetProjectIndexCore(ProjectIndexRequest request) {
-        var document = GetActiveProjectDocument();
+        var document = GetSupportedActiveDocument(GetProjectIndexOperationContract.Definition);
 
         try {
             return ProjectIndexCollector.Collect(document, request, this._collectionContext);
@@ -172,7 +173,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     }
 
     private SheetDetailData GetSheetDetailsCore(SheetDetailRequest request) {
-        var document = GetActiveProjectDocument();
+        var document = GetSupportedActiveDocument(GetSheetDetailsOperationContract.Definition);
 
         try {
             return SheetDetailCollector.Collect(document, RevitUiSession.CurrentUIApplication.GetActiveView(), request, this._collectionContext);
@@ -186,7 +187,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     }
 
     private ScheduleProfilesQueryData GetScheduleProfilesQueryCore(ScheduleProfilesQueryRequest request) {
-        var document = GetActiveProjectDocument();
+        var document = GetSupportedActiveDocument(GetScheduleProfilesQueryOperationContract.Definition);
         var uiApp = RevitUiSession.CurrentUIApplication;
         if (request.Query?.Kind == ScheduleProfilesQueryKind.CurrentActiveView &&
             uiApp.GetActiveView() is not ViewSchedule) {
@@ -219,7 +220,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     }
 
     private ScheduleQueryData GetScheduleQueryCore(ScheduleQueryRequest request) {
-        var document = GetActiveProjectDocument();
+        var document = GetSupportedActiveDocument(GetScheduleQueryOperationContract.Definition);
         var activeScheduleView = RevitUiSession.CurrentUIApplication.GetActiveView() as ViewSchedule;
         if (request.Query?.Kind == ScheduleQueryKind.CurrentActiveView &&
             activeScheduleView == null) {
@@ -266,7 +267,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
 
     private LoadedFamiliesMatrixData GetLoadedFamiliesMatrixCore(LoadedFamiliesMatrixRequest request) {
         var filter = ValidateMatrixFilter(request);
-        var document = GetActiveProjectDocument();
+        var document = GetSupportedActiveDocument(GetLoadedFamiliesMatrixOperationContract.Definition);
 
         try {
             return LoadedFamiliesMatrixCollector.Collect(document, filter, budget: request.Budget);
@@ -280,7 +281,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     }
 
     private ScheduleCoverageData GetScheduleCoverageCore(ScheduleCoverageRequest request) {
-        var document = GetActiveProjectDocument();
+        var document = GetSupportedActiveDocument(GetScheduleCoverageOperationContract.Definition);
 
         try {
             return ScheduleCoverageCollector.Collect(
@@ -307,7 +308,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
             );
         }
 
-        var document = GetActiveProjectDocument();
+        var document = GetSupportedActiveDocument(GetParameterCoverageOperationContract.Definition);
 
         try {
             return ParameterCoverageCollector.Collect(
@@ -325,7 +326,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     }
 
     private ConceptEvidenceData GetConceptEvidenceCore(ConceptEvidenceRequest request) {
-        var document = GetActiveProjectDocument();
+        var document = GetSupportedActiveDocument(GetConceptEvidenceOperationContract.Definition);
         try {
             var primitives = this._collectionContext.GetParameterEvidencePrimitives(document, useCache: true);
             return ConceptEvidenceCollector.Collect(request, primitives);
@@ -347,7 +348,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
             );
         }
 
-        var document = GetActiveProjectDocument();
+        var document = GetSupportedActiveDocument(GetParameterEvidenceOperationContract.Definition);
         try {
             var primitives = this._collectionContext.GetParameterEvidencePrimitives(document, request.UseCache);
             return ParameterEvidenceCollector.Collect(
@@ -465,7 +466,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
             );
         }
 
-        var document = GetActiveProjectDocument();
+        var document = GetSupportedActiveDocument(GetProjectParameterBindingsOperationContract.Definition);
 
         try {
             return ProjectParameterBindingsCollector.Collect(document, request.Filter, request.BindingFilter, request.Projection, request.Budget);
@@ -481,7 +482,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     private ElementContextQueryData GetElementContextQueryCore(
         ElementContextQueryRequest request
     ) {
-        var document = GetActiveDocument();
+        var document = GetSupportedActiveDocument(GetElementContextQueryOperationContract.Definition);
 
         try {
             return ElementContextCollector.Collect(
@@ -501,7 +502,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     private ElectricalPanelsCatalogData GetElectricalPanelsCatalogCore(
         ElectricalPanelsCatalogRequest request
     ) {
-        var document = GetActiveProjectDocument();
+        var document = GetSupportedActiveDocument(GetElectricalPanelsCatalogOperationContract.Definition);
 
         try {
             return ElectricalPanelsCatalogCollector.Collect(document, request.Filter);
@@ -517,7 +518,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     private ElectricalCircuitsCatalogData GetElectricalCircuitsCatalogCore(
         ElectricalCircuitsCatalogRequest request
     ) {
-        var document = GetActiveProjectDocument();
+        var document = GetSupportedActiveDocument(GetElectricalCircuitsCatalogOperationContract.Definition);
 
         try {
             return ElectricalCircuitsCatalogCollector.Collect(document, request.Filter, request.Options);
@@ -533,7 +534,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     private ElectricalPanelSchedulesQueryData GetElectricalPanelSchedulesQueryCore(
         ElectricalPanelSchedulesQueryRequest request
     ) {
-        var document = GetActiveProjectDocument();
+        var document = GetSupportedActiveDocument(GetElectricalPanelSchedulesQueryOperationContract.Definition);
         var activeView = RevitUiSession.CurrentUIApplication.GetActiveView();
         if (request.Query?.Kind == ElectricalPanelSchedulesQueryKind.CurrentActiveView &&
             activeView is not PanelScheduleView) {
@@ -568,7 +569,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     private ElectricalLoadClassificationsCatalogData GetElectricalLoadClassificationsCatalogCore(
         ElectricalLoadClassificationsCatalogRequest request
     ) {
-        var document = GetActiveProjectDocument();
+        var document = GetSupportedActiveDocument(GetElectricalLoadClassificationsCatalogOperationContract.Definition);
 
         try {
             return ElectricalLoadClassificationsCatalogCollector.Collect(document, request.Filter);
@@ -662,7 +663,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
 
     private RevitAgentContextSummaryData GetRevitAgentContextSummaryCore() {
         try {
-            var document = GetActiveDocument();
+            var document = GetSupportedActiveDocument(GetRevitAgentContextSummaryOperationContract.Definition);
             var uiApp = RevitUiSession.CurrentUIApplication;
             return RevitAgentContextCollector.CollectSummary(
                 document,
@@ -682,7 +683,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     private RevitAgentContextResolveData ResolveRevitAgentContextCore(
         RevitAgentContextResolveRequest request
     ) {
-        var document = GetActiveDocument();
+        var document = GetSupportedActiveDocument(ResolveRevitAgentContextOperationContract.Definition);
         try {
             var uiApp = RevitUiSession.CurrentUIApplication;
             return RevitAgentContextCollector.Resolve(
@@ -703,7 +704,7 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     private RevitAgentVisibleContextData GetRevitAgentVisibleContextCore(
         RevitAgentVisibleContextRequest request
     ) {
-        var document = GetActiveDocument();
+        var document = GetSupportedActiveDocument(GetRevitAgentVisibleContextOperationContract.Definition);
         try {
             return RevitAgentContextCollector.CollectVisibleContext(
                 document,
@@ -832,23 +833,32 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         return document;
     }
 
-    private static RevitDocument GetActiveProjectDocument() {
+    private static RevitDocument GetSupportedActiveDocument(HostOperationDefinition operation) {
         var document = GetActiveDocument();
+        var actualKind = document.IsFamilyDocument
+            ? RevitActiveDocumentKind.Family
+            : RevitActiveDocumentKind.Project;
+        var supportedKinds = operation.AgentMetadata.SupportedActiveDocumentKinds;
+        if (supportedKinds.Contains(actualKind))
+            return document;
 
-        if (document.IsFamilyDocument) {
-            throw BridgeOperationExceptions.Conflict(
-                "These Revit data routes support project documents only.",
-                [
-                    BridgeOperationExceptions.Issue(
-                        "$",
-                        "UnsupportedDocumentType",
-                        "These Revit data routes support project documents only.",
-                        "Activate a project document and retry."
-                    )
-                ]
-            );
-        }
-
-        return document;
+        var supportedKindLabel = string.Join(" or ", supportedKinds.Select(FormatDocumentKind));
+        throw BridgeOperationExceptions.Conflict(
+            $"Operation '{operation.Key}' supports {supportedKindLabel} documents only.",
+            [
+                BridgeOperationExceptions.Issue(
+                    "$",
+                    "UnsupportedActiveDocumentKind",
+                    $"The active document is a {FormatDocumentKind(actualKind)} document, but operation '{operation.Key}' supports {supportedKindLabel} documents only.",
+                    $"Activate a {supportedKindLabel} document and retry."
+                )
+            ]
+        );
     }
+
+    private static string FormatDocumentKind(RevitActiveDocumentKind kind) => kind switch {
+        RevitActiveDocumentKind.Project => "project",
+        RevitActiveDocumentKind.Family => "family",
+        _ => kind.ToString()
+    };
 }

@@ -2,8 +2,10 @@ import { createPeHostClient, resolveHostBaseUrl } from "../../pe-host.js";
 
 const defaultHostContextTimeoutMs = 5_000;
 
-export async function collectHostContext(options: { timeoutMs?: number } = {}) {
-  const hostBaseUrl = resolveHostBaseUrl();
+export async function collectHostContext(
+  options: { hostBaseUrl?: string; timeoutMs?: number } = {},
+) {
+  const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
   const hostClient = createPeHostClient(hostBaseUrl, {
     timeoutMs: options.timeoutMs ?? defaultHostContextTimeoutMs,
   });
@@ -44,10 +46,8 @@ export async function collectHostContext(options: { timeoutMs?: number } = {}) {
                     key: sessionResult.value.activeDocument.key,
                     isFamilyDocument:
                       sessionResult.value.activeDocument.isFamilyDocument,
-                    isWorkshared:
-                      sessionResult.value.activeDocument.isWorkshared,
-                    isModelInCloud:
-                      sessionResult.value.activeDocument.isModelInCloud,
+                    isWorkshared: sessionResult.value.activeDocument.isWorkshared,
+                    isModelInCloud: sessionResult.value.activeDocument.isModelInCloud,
                   },
           }
         : { error: formatUnknownError(sessionResult.reason) },

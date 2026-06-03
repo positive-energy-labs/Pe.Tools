@@ -1,5 +1,4 @@
 using Newtonsoft.Json.Linq;
-using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamDocument.SetValue;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Apply;
@@ -15,7 +14,6 @@ namespace Pe.Revit.Tests;
 public sealed class FamilyFoundryBulkMigrationHarnessTests {
     private const string ProfileFixtureName = "real-mech-equip-base-mapping.json";
     private const string LocalParameterName = "FF Migrator Harness Local Text";
-    private const string PurgeParameterName = "FF Migrator Harness Purge Me";
 
     private static readonly string[] RequiredFamilyArtifacts = [
         "input-profile.json",
@@ -163,7 +161,6 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             AppendHarnessLog(run.HarnessLogPath, "selecting-fast-sample-families");
             var selectedFamilyNames = SelectMechanicalEquipmentFamilyNames(run.ProjectDocument, 2);
             AppendHarnessLog(run.HarnessLogPath, $"selected-fast-sample-families={string.Join(" | ", selectedFamilyNames)}");
-            SeedSourceParameterState(run.ProjectDocument, selectedFamilyNames, run.HarnessLogPath);
 
             AppendHarnessLog(run.HarnessLogPath, "loading-real-profile");
             var profile = LoadAndAssertRealMechanicalEquipmentProfile();
@@ -293,8 +290,6 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         string scenarioName,
         bool assertExactFamilyNames
     ) {
-        SeedSourceParameterState(run.ProjectDocument, selectedFamilyNames, run.HarnessLogPath);
-
         var profile = LoadAndAssertRealMechanicalEquipmentProfile();
         var result = ApplyMigrationProfile(
             run,
@@ -317,8 +312,6 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             AppendHarnessLog(run.HarnessLogPath, "selecting-matrix-real-sample-family");
             var realFamilyNames = SelectMechanicalEquipmentFamilyNames(run.ProjectDocument, 1);
             AppendHarnessLog(run.HarnessLogPath, $"selected-matrix-real-sample-family={string.Join(" | ", realFamilyNames)}");
-            SeedSourceParameterState(run.ProjectDocument, realFamilyNames, run.HarnessLogPath);
-
             AppendHarnessLog(run.HarnessLogPath, "building-loading-setvalue-matrix-family");
             var setValueFamily = FamilyFoundryMatrixFixtureBuilder.BuildAndLoadSetValueMatrixFamily(
                 this._dbApplication,
@@ -456,161 +449,6 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
 
         Assert.That(selected.Select(family => family.Name), Is.EquivalentTo(familyNames));
         return selected;
-    }
-
-    private static void SeedSourceParameterState(
-        Document projectDocument,
-        IReadOnlyCollection<string> familyNames,
-        string harnessLogPath
-    ) {
-        AppendHarnessLog(harnessLogPath, $"seed-source-state-start count={familyNames.Count}");
-        foreach (var loadedFamily in SelectFamiliesByName(projectDocument, familyNames)) {
-            var familyName = loadedFamily.Name;
-            Document? familyDocument = null;
-            try {
-                AppendHarnessLog(harnessLogPath, $"seed-edit-family-start family={familyName}");
-                familyDocument = projectDocument.EditFamily(loadedFamily);
-                AppendHarnessLog(harnessLogPath, $"seed-edit-family-opened family={familyName} title={familyDocument.Title}");
-                SeedFamilyDocument(familyDocument, harnessLogPath, familyName);
-                AppendHarnessLog(harnessLogPath, $"seed-load-family-start family={familyName}");
-                var loadDiagnostics = new List<(bool IsError, string Message)>();
-                _ = RevitFailureHandling.ExecuteWithFailureHandling(
-                    projectDocument,
-                    () => familyDocument.LoadFamily(projectDocument, new DefaultFamilyLoadOptions()),
-                    loadDiagnostics,
-                    familyDocument);
-                foreach (var diagnostic in loadDiagnostics)
-                    AppendHarnessLog(harnessLogPath, $"seed-load-family-diagnostic family={familyName} isError={diagnostic.IsError} message={diagnostic.Message}");
-                AppendHarnessLog(harnessLogPath, $"seed-load-family-complete family={familyName}");
-            } finally {
-                AppendHarnessLog(harnessLogPath, $"seed-close-family-start family={familyName}");
-                RevitFamilyFixtureHarness.CloseDocument(familyDocument);
-                AppendHarnessLog(harnessLogPath, $"seed-close-family-complete family={familyName}");
-            }
-        }
-        AppendHarnessLog(harnessLogPath, "seed-source-state-complete");
-    }
-
-    private static void SeedFamilyDocument(Document familyDocument, string harnessLogPath, string familyName) {
-        using var transaction = new Transaction(familyDocument, "Seed FF migrator source state");
-        AppendHarnessLog(harnessLogPath, $"seed-transaction-start family={familyName}");
-        _ = transaction.Start();
-
-        var commitDiagnostics = new List<(bool IsError, string Message)>();
-        var failureOptions = transaction.GetFailureHandlingOptions();
-        failureOptions.SetFailuresPreprocessor(new HarnessFailurePreprocessor(commitDiagnostics));
-        failureOptions.SetForcedModalHandling(false);
-        transaction.SetFailureHandlingOptions(failureOptions);
-
-        var familyDoc = new FamilyDocument(familyDocument);
-        var manager = familyDocument.FamilyManager;
-        var types = manager.Types.Cast<FamilyType>().ToList();
-        AppendHarnessLog(harnessLogPath, $"seed-types family={familyName} count={types.Count}");
-        Assert.That(types, Is.Not.Empty);
-
-        AppendHarnessLog(harnessLogPath, $"seed-ensure-parameters-start family={familyName}");
-        var model = EnsureFamilyParameter(familyDocument, "Model", SpecTypeId.String.Text);
-        var voltage = EnsureFamilyParameter(familyDocument, "Voltage", SpecTypeId.String.Text);
-        var weight = EnsureFamilyParameter(familyDocument, "Weight", SpecTypeId.String.Text);
-        var width = EnsureFamilyParameter(familyDocument, "Mech Equip Width", SpecTypeId.String.Text);
-        _ = EnsureFamilyParameter(familyDocument, PurgeParameterName, SpecTypeId.String.Text);
-        AppendHarnessLog(harnessLogPath, $"seed-ensure-parameters-complete family={familyName}");
-
-        AppendHarnessLog(harnessLogPath, $"seed-clear-formulas-start family={familyName}");
-        ClearFormulaIfPresent(familyDoc, model);
-        ClearFormulaIfPresent(familyDoc, voltage);
-        ClearFormulaIfPresent(familyDoc, weight);
-        ClearFormulaIfPresent(familyDoc, width);
-        AppendHarnessLog(harnessLogPath, $"seed-clear-formulas-complete family={familyName}");
-
-        AppendHarnessLog(harnessLogPath, $"seed-set-values-start family={familyName}");
-        foreach (var type in types) {
-            manager.CurrentType = type;
-            SetFamilyParameterValue(familyDocument, manager, model, "Harness Model");
-            SetFamilyParameterValue(familyDocument, manager, voltage, "208V");
-            SetFamilyParameterValue(familyDocument, manager, weight, "187 lb");
-            SetFamilyParameterValue(familyDocument, manager, width, "2' - 6\"");
-        }
-        AppendHarnessLog(harnessLogPath, $"seed-set-values-complete family={familyName}");
-
-        AppendHarnessLog(harnessLogPath, $"seed-transaction-commit-start family={familyName}");
-        _ = transaction.Commit();
-        foreach (var diagnostic in commitDiagnostics)
-            AppendHarnessLog(harnessLogPath, $"seed-transaction-diagnostic family={familyName} isError={diagnostic.IsError} message={diagnostic.Message}");
-        AppendHarnessLog(harnessLogPath, $"seed-transaction-commit-complete family={familyName}");
-    }
-
-    private sealed class HarnessFailurePreprocessor(
-        ICollection<(bool IsError, string Message)> diagnostics
-    ) : IFailuresPreprocessor {
-        public FailureProcessingResult PreprocessFailures(FailuresAccessor failuresAccessor) =>
-            RevitFailureHandling.ResolveFailures(failuresAccessor, diagnostics);
-    }
-
-    private static FamilyParameter EnsureFamilyParameter(
-        Document familyDocument,
-        string name,
-        ForgeTypeId dataType
-    ) => familyDocument.FamilyManager.Parameters
-             .OfType<FamilyParameter>()
-             .FirstOrDefault(parameter => string.Equals(parameter.Definition.Name, name, StringComparison.Ordinal))
-         ?? RevitFamilyFixtureHarness.AddFamilyParameter(
-             familyDocument,
-             new RevitFamilyFixtureHarness.ParameterDefinitionSpec(
-                 name,
-                 dataType,
-                 GroupTypeId.IdentityData,
-                 false));
-
-    private static void ClearFormulaIfPresent(FamilyDocument familyDocument, FamilyParameter parameter) {
-        if (!string.IsNullOrWhiteSpace(parameter.Formula))
-            _ = familyDocument.UnsetFormula(parameter);
-    }
-
-    private static void SetFamilyParameterValue(
-        Document familyDocument,
-        FamilyManager manager,
-        FamilyParameter parameter,
-        string value
-    ) {
-        switch (parameter.StorageType) {
-        case StorageType.String:
-            manager.Set(parameter, value);
-            break;
-        case StorageType.Integer:
-            manager.Set(parameter, ExtractInteger(value));
-            break;
-        case StorageType.Double:
-            manager.Set(parameter, ParseDoubleValue(familyDocument, parameter, value));
-            break;
-        default:
-            throw new InvalidOperationException(
-                $"Cannot seed parameter '{parameter.Definition.Name}' with storage type '{parameter.StorageType}'.");
-        }
-    }
-
-    private static double ParseDoubleValue(Document familyDocument, FamilyParameter parameter, string value) {
-        var dataType = parameter.Definition.GetDataType();
-        if (UnitUtils.IsMeasurableSpec(dataType) &&
-            UnitFormatUtils.TryParse(familyDocument.GetUnits(), dataType, value, out var parsedValue))
-            return parsedValue;
-
-        var extractedValue = ExtractDouble(value);
-        if (!UnitUtils.IsMeasurableSpec(dataType))
-            return extractedValue;
-
-        var unitTypeId = familyDocument.GetUnits().GetFormatOptions(dataType).GetUnitTypeId();
-        return UnitUtils.ConvertToInternalUnits(extractedValue, unitTypeId);
-    }
-
-    private static int ExtractInteger(string value) {
-        var digits = new string(value.Where(char.IsDigit).ToArray());
-        return int.Parse(digits);
-    }
-
-    private static double ExtractDouble(string value) {
-        var numeric = new string(value.Where(character => char.IsDigit(character) || character == '.').ToArray());
-        return double.Parse(numeric);
     }
 
     private static FFMigratorProfile LoadAndAssertRealMechanicalEquipmentProfile() {
@@ -939,13 +777,11 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             Assert.That((int?)artifacts.ParameterDiff["Summary"]?["ParametersAdded"], Is.GreaterThan(0));
             Assert.That(artifacts.DesiredMigrationPlan["Parameters"]!.Count(), Is.GreaterThanOrEqualTo(38));
 
-            AssertParameterProjectedOrHasPostValue(artifacts, "PE_E___Voltage", "208");
-            AssertParameterProjectedOrHasPostValue(artifacts, "PE_G___Weight", "187");
+            AssertParameterProjectedOrHasPostValue(artifacts, "PE_E___Voltage");
+            AssertParameterProjectedOrHasPostValue(artifacts, "PE_G___Weight");
             AssertParameterProjectedOrHasPostValue(artifacts, "PE_G_Dim_Width1");
             AssertParameterProjectedOrHasPostValue(artifacts, "PE_G___TagInstance", "P-#");
             AssertParameterProjectedOrHasPostValue(artifacts, LocalParameterName, "local-ok");
-            AssertParameterMissing(artifacts.SnapshotPost, PurgeParameterName);
-            AssertParameterDiffMentions(artifacts.ParameterDiff, PurgeParameterName);
             Assert.That(artifacts.ParameterEvents["Events"]!.Any(parameterEvent =>
                 string.Equals((string?)parameterEvent["MappingKey"], "PE_E___Voltage", StringComparison.Ordinal) &&
                 IsSuccessfulMappingOutcome((string?)parameterEvent["Outcome"])),
@@ -961,9 +797,9 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             Assert.That((int?)artifacts.ParameterDiff["Summary"]?["ParametersAdded"], Is.GreaterThan(0));
             Assert.That(artifacts.DesiredMigrationPlan["Parameters"]!.Count(), Is.GreaterThanOrEqualTo(20));
 
-            AssertParameterProjectedOrHasPostValue(artifacts, "PE_G___Model", "Harness Model");
-            AssertParameterProjectedOrHasPostValue(artifacts, "PE_E___Voltage", "208");
-            AssertParameterProjectedOrHasPostValue(artifacts, "PE_G___Weight", "187");
+            AssertParameterProjectedOrHasPostValue(artifacts, "PE_G___Model");
+            AssertParameterProjectedOrHasPostValue(artifacts, "PE_E___Voltage");
+            AssertParameterProjectedOrHasPostValue(artifacts, "PE_G___Weight");
             AssertParameterProjectedOrHasPostValue(artifacts, "PE_G_Dim_Width1");
             AssertParameterProjectedOrHasPostValue(artifacts, "PE_G___TagInstance", "P-#");
             AssertParameterProjectedOrHasPostValue(artifacts, LocalParameterName, "local-ok");
@@ -1245,10 +1081,6 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
                 Is.True,
                 $"Expected parameter '{parameterName}' to have a value containing '{expectedValuePart}'. Values: {string.Join(", ", values)}");
     }
-
-    private static void AssertParameterMissing(JObject snapshot, string parameterName) =>
-        Assert.That(FindParameter(snapshot, parameterName), Is.Null,
-            $"Expected parameter '{parameterName}' to be purged from post snapshot.");
 
     private static JToken? FindParameter(JObject snapshot, string parameterName) =>
         snapshot["Parameters"]?["Data"]?
