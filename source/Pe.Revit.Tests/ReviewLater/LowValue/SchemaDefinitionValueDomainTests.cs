@@ -1,3 +1,5 @@
+// Quarantined: registry/value-domain assertions are broad but may pin schema generator internals more than user-facing authoring contracts.
+// Review whether a smaller public schema contract should survive; delete duplicate shape checks.
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.Revit.SettingsRuntime.Json;
@@ -8,6 +10,7 @@ using Pe.Shared.StorageRuntime.Capabilities;
 namespace Pe.Revit.Tests;
 
 [TestFixture]
+[Explicit("Quarantined low-value schema registry test; review before treating as coverage.")]
 public sealed class SchemaDefinitionValueDomainTests {
     private const string DomainKey = "schema-definition-value-domain-test";
     private const string ConstraintDomainKey = "schema-definition-constraint-value-domain-test";

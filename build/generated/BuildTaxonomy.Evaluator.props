@@ -265,6 +265,17 @@
         <PeSupportsFreshRevitProcess>false</PeSupportsFreshRevitProcess>
       </PropertyGroup>
     </When>
+    <When Condition="'$(MSBuildProjectName)' == 'Pe.Shared.Tests'">
+      <PropertyGroup>
+        <PeModuleClass>TestHarness</PeModuleClass>
+        <PeProductClass>TestHarness</PeProductClass>
+        <PeTargetFrameworkClass>Explicit</PeTargetFrameworkClass>
+        <PeIsRevitAwareProject>false</PeIsRevitAwareProject>
+        <PeSupportsRevitYear>false</PeSupportsRevitYear>
+        <PeSupportsAttachedRrd>false</PeSupportsAttachedRrd>
+        <PeSupportsFreshRevitProcess>false</PeSupportsFreshRevitProcess>
+      </PropertyGroup>
+    </When>
     <When Condition="'$(MSBuildProjectName)' == 'Toon'">
       <PropertyGroup>
         <PeModuleClass>SharedNeutral</PeModuleClass>

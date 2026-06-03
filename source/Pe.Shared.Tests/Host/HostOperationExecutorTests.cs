@@ -1,11 +1,12 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Pe.Host.Operations;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.SettingsStorage;
 using System.Text.Json;
 
-namespace Pe.Revit.Tests;
+namespace Pe.Shared.Tests;
 
 [TestFixture]
 public sealed class HostOperationExecutorTests {
@@ -53,7 +54,7 @@ public sealed class HostOperationExecutorTests {
         Assert.That(response.StatusCode, Is.EqualTo(StatusCodes.Status409Conflict));
         Assert.That(response.Json.RootElement.GetProperty("detail").GetString(), Is.EqualTo("No active document."));
         Assert.That(response.Json.RootElement.GetProperty("status").GetInt32(), Is.EqualTo(StatusCodes.Status409Conflict));
-        var issues = response.Json.RootElement.GetProperty("extensions").GetProperty("issues");
+        var issues = response.Json.RootElement.GetProperty("issues");
         Assert.That(issues.GetArrayLength(), Is.EqualTo(1));
         Assert.That(issues[0].GetProperty("code").GetString(), Is.EqualTo("NoActiveDocument"));
     }
@@ -112,7 +113,11 @@ public sealed class HostOperationExecutorTests {
         );
 
     private static async Task<(int StatusCode, JsonDocument Json)> ExecuteAsync(IResult result) {
-        var httpContext = new DefaultHttpContext();
+        var services = new ServiceCollection()
+            .AddLogging()
+            .AddProblemDetails()
+            .BuildServiceProvider();
+        var httpContext = new DefaultHttpContext { RequestServices = services };
         httpContext.Response.Body = new MemoryStream();
 
         await result.ExecuteAsync(httpContext);

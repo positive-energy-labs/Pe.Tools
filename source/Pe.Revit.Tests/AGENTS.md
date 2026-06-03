@@ -13,6 +13,12 @@ Owns the VSTest-based Revit-backed test harness for this repo. The harness uses 
 - `Pe.Revit.Tests.csproj` - explicit-year `.Tests` configurations, warning policy, and adapter metadata.
 - `..\Pe.App\Pe.App.csproj` - desktop add-in graph under test.
 - `..\Pe.Dev.Cli\AGENTS.md` - explicit `pe-dev test` helper behavior and repo-local operator policy.
+- `Proofs/` - durable Revit/API behavior observations. These are not ordinary package regression tests.
+- `LibraryBehavior/` - Revit-backed package behavior that needs a real document/session or currently depends on Revit-runtime target frameworks.
+- `Diagnostics/` - operational environment probes and proof-lane diagnostics.
+- `Performance/` - explicit scale/performance loops, not normal coverage.
+- `Harness/` - reusable test fixtures, builders, probes, and assertions.
+- `ReviewLater/` - quarantined tests that are suspect, low-value, or wrong-abstraction until reviewed.
 
 ## Validation
 
@@ -60,6 +66,12 @@ pe-dev test --filter "Name~Reports_runtime_assembly_load_paths" --timeout-second
 
 ## Living Memory
 
+- Tests are guilty until proven useful. Keep a test only when it protects package capability, durable Revit/API proof knowledge, diagnostics, or a performance/proof lane.
+- Delete low-value tests when the decision is clear. Quarantine only when deleting would lose review context.
+- `Proofs/` tests should say they document Revit behavior; do not present them as ordinary package regression coverage.
+- `Diagnostics/` and `Performance/` tests should be `[Explicit]` unless a named proof lane intentionally runs them by default.
+- `ReviewLater/` files must include a short top-level comment explaining why they are suspect and what decision remains.
+- Non-Revit contract/library tests belong in ordinary test packages such as `Pe.Shared.Tests`, not in this Revit-backed harness.
 - Tests run inside real Revit, not a fake host.
 - `ricaun.RevitTest` handles Revit process launching. If Revit is already open for the configured year, RevitTest can reuse it by default. That is not conducive to always-fresh assemblies, particularly when the open Revit instance is RRD.
 - Prefer explicit-year `dotnet test`, not raw artifact-path `dotnet vstest`.

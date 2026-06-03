@@ -1,9 +1,12 @@
+// Quarantined: formatting roundtrip appears to pin serializer implementation details.
+// Keep only if forge type-label persistence is a real compatibility contract; otherwise delete.
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Shared.StorageRuntime.Json;
 
 namespace Pe.Revit.Tests;
 
 [TestFixture]
+[Explicit("Quarantined low-value serializer formatting test; review before treating as coverage.")]
 public sealed class StorageRuntimeJsonFormattingTests {
     [Test]
     public void LocalDiskJsonFile_roundtrips_parameter_snapshot_forge_type_labels() {

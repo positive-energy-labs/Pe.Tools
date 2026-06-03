@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net8.0-windows</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <IsTestProject>true</IsTestProject>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+        <PackageReference Include="NUnit" Version="3.13.3" />
+        <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Pe.Aps\Pe.Aps.csproj" />
+        <ProjectReference Include="..\Pe.Dev.Cli\Pe.Dev.Cli.csproj" />
+        <ProjectReference Include="..\Pe.Dev.RevitAutomation\Pe.Dev.RevitAutomation.csproj" />
+        <ProjectReference Include="..\Pe.Host\Pe.Host.csproj" />
+        <ProjectReference Include="..\Pe.Shared.ApsAuth\Pe.Shared.ApsAuth.csproj" />
+        <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj" />
+        <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj" />
+        <ProjectReference Include="..\Pe.Shared.RevitAutomation\Pe.Shared.RevitAutomation.csproj" />
+        <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj" />
+        <ProjectReference Include="..\Pe.Shared.RevitVersions\Pe.Shared.RevitVersions.csproj" />
+        <ProjectReference Include="..\Pe.Shared.Scripting\Pe.Shared.Scripting.csproj" />
+        <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj" />
+    </ItemGroup>
+</Project>

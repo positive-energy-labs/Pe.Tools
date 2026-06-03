@@ -53,6 +53,7 @@
     <Project Path="source/Pe.Shared.HostContracts/Pe.Shared.HostContracts.csproj" />
     <Project Path="source/Pe.Shared.Product/Pe.Shared.Product.csproj" />
     <Project Path="source/Pe.Shared.ApsAuth/Pe.Shared.ApsAuth.csproj" />
+    <Project Path="source/Pe.Shared.Tests/Pe.Shared.Tests.csproj" />
     <Project Path="source/Pe.Shared.RevitAutomation/Pe.Shared.RevitAutomation.csproj" />
     <Project Path="source/Pe.Shared.RevitData/Pe.Shared.RevitData.csproj" />
     <Project Path="source/Pe.Shared.RevitVersions/Pe.Shared.RevitVersions.csproj" />

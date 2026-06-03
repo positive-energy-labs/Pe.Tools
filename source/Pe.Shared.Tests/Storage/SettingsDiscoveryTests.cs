@@ -1,8 +1,9 @@
+using Pe.Shared.StorageRuntime;
 using Pe.Shared.StorageRuntime.Capabilities;
 using Pe.Shared.StorageRuntime.Documents;
 using Pe.Shared.StorageRuntime.Modules;
 
-namespace Pe.Revit.Tests;
+namespace Pe.Shared.Tests;
 
 [TestFixture]
 public sealed class SettingsDiscoveryTests {

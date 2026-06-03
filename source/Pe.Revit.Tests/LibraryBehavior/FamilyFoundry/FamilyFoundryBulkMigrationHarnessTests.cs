@@ -782,10 +782,12 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
             AssertParameterProjectedOrHasPostValue(artifacts, "PE_G_Dim_Width1");
             AssertParameterProjectedOrHasPostValue(artifacts, "PE_G___TagInstance", "P-#");
             AssertParameterProjectedOrHasPostValue(artifacts, LocalParameterName, "local-ok");
-            Assert.That(artifacts.ParameterEvents["Events"]!.Any(parameterEvent =>
-                string.Equals((string?)parameterEvent["MappingKey"], "PE_E___Voltage", StringComparison.Ordinal) &&
-                IsSuccessfulMappingOutcome((string?)parameterEvent["Outcome"])),
-                Is.True);
+            AssertParameterEvent(
+                artifacts,
+                "PE_E___Voltage",
+                ParameterEventOutcome.DirectReplaceSucceeded,
+                ParameterEventOutcome.ValueMapped,
+                ParameterEventOutcome.TargetAdded);
         });
     }
 
