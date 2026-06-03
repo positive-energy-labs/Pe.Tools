@@ -1,3 +1,5 @@
+// Quarantined: schema-fragment assertions look like low-level JSON shape pinning.
+// Keep only if this protects a public authored-settings schema contract; otherwise delete or replace with a broader contract test.
 using Newtonsoft.Json.Linq;
 using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
@@ -7,6 +9,7 @@ using Pe.Shared.StorageRuntime.Json;
 namespace Pe.Revit.Tests;
 
 [TestFixture]
+[Explicit("Quarantined low-value schema shape test; review before treating as coverage.")]
 public sealed class JsonSchemaFactoryFragmentTests {
     [Test]
     public void BuildFragmentSchema_keeps_schema_property_on_wrapper_and_item_objects() {

@@ -6,9 +6,11 @@ using Pe.Dev.RevitAutomation;
 using Pe.Aps.Core;
 using Pe.Aps.DesignAutomation;
 using Pe.Shared.RevitVersions;
+using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Schedules;
 using ContractScheduleCatalogRequest = Pe.Shared.RevitData.Schedules.ScheduleCatalogRequest;
 
-namespace Pe.Revit.Tests;
+namespace Pe.Shared.Tests;
 
 [TestFixture]
 public sealed class RevitAutomationContractsTests {
