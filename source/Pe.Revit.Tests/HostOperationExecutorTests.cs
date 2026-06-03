@@ -75,6 +75,34 @@ public sealed class HostOperationExecutorTests {
             Is.EqualTo("No connected Revit bridge session."));
     }
 
+    [Test]
+    public void Active_document_revit_operations_declare_supported_document_kinds() {
+        var activeDocumentRevitOperations = HostOperationsCatalog.PublicHttp
+            .Where(operation => operation.AgentMetadata.Family == HostOperationFamily.Revit)
+            .Where(operation => operation.AgentMetadata.RequiresActiveDocument)
+            .ToList();
+
+        Assert.That(activeDocumentRevitOperations, Is.Not.Empty);
+        Assert.That(
+            activeDocumentRevitOperations
+                .Where(operation => operation.AgentMetadata.SupportedActiveDocumentKinds.Count == 0)
+                .Select(operation => operation.Key),
+            Is.Empty);
+    }
+
+    [Test]
+    public void Loaded_families_operations_are_project_document_operations() {
+        var operations = new[] {
+            GetLoadedFamiliesCatalogOperationContract.Definition,
+            GetLoadedFamiliesMatrixOperationContract.Definition
+        };
+
+        foreach (var operation in operations)
+            Assert.That(operation.AgentMetadata.SupportedActiveDocumentKinds,
+                Is.EqualTo(new[] { RevitActiveDocumentKind.Project }),
+                operation.Key);
+    }
+
     private static HostOperationContext CreateContext() =>
         new(
             null!,

@@ -14,6 +14,7 @@ Owns the Revit-side scripting runtime: workspace bootstrap, source normalization
 - `Transport/ScriptingBridgeMessageHandler.cs` - `ExternalEvent` handoff to the Revit thread.
 - `Bootstrap/ScriptWorkspaceBootstrapService.cs` and `Bootstrap/ScriptFileTemplates.cs` - generated workspace shape and guidance.
 - `References/ScriptReferenceResolver.cs` - script project reference/package resolution.
+- `Policy/RevitReadOnlyMutationPolicyAnalyzer.cs` - Revit-semantic read-only mutation guardrails.
 - `Execution/ScriptAssemblyLoadService.cs` - runtime assembly map and load context.
 - `Storage/ScriptArtifactWriter.cs` - path-safe CSV/JSON/text artifacts under product output.
 - `Context/RevitScriptContext.cs` and `Context/PeScriptContainer.cs` - script authoring surface.
@@ -39,6 +40,7 @@ Owns the Revit-side scripting runtime: workspace bootstrap, source normalization
 - Workspace execution compiles the whole `src/` tree and executes the selected file's single concrete `PeScriptContainer`.
 - Each request must resolve to exactly one non-abstract `PeScriptContainer`.
 - `ReadOnly` execution does not open a Revit transaction. `WriteTransaction` requires a writable active document and opens one host-owned transaction.
+- `ReadOnly` also runs Revit-specific semantic mutation policy before compile and subscribes to `Application.DocumentChanged` during execution. Treat the static policy as a curated first-pass blacklist and the event monitor as a loud dirty-document tripwire, not a rollback mechanism.
 - Script-authored `new Transaction(...)`, `new SubTransaction(...)`, and `new TransactionGroup(...)` are rejected by policy in both permission modes.
 - `WriteLine(...)` is the short diagnostic path. `Artifacts.WriteJson(...)`, `WriteCsv(...)`, and `WriteText(...)` are for durable output.
 - Inline snippets should stay isolated from broken workspace files and keep writing trace files for visibility.

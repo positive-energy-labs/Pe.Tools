@@ -21,6 +21,7 @@ YOU MUST READ `./PHILOSOPHY.md`. The gist: ruthlessly and aggresively weigh the 
 - `pea-runtime.ts` - runtime factory boundary around `createMastraCode`.
 - `pea-agent.ts` - deployed Pea operator agent construction.
 - `dev-agent.ts` - repo coding agent construction.
+- `tools/shared/live-loop.ts` - shared live-loop status/sync/restart implementation used by dev-agent tools and `pea live ...`.
 - `dev-agent-skill-content/` - dev-agent-only skill source.
 
 ## Shared Language
@@ -38,3 +39,4 @@ YOU MUST READ `./PHILOSOPHY.md`. The gist: ruthlessly and aggresively weigh the 
 - Prefer explicit product factories over a `kind: "operator" | "repo-dev"` merge that makes dev-agent look like a Pea persona.
 - Keep MastraCode defaults intact for dev-agent unless a product requirement demands a narrow override.
 - Keep dev-agent skills in normal project-scoped MastraCode skill locations for this repo. Keep installed Pea skills under `.pea/skills` only.
+- Keep live-loop status singular: `pea live status` and `live_loop_context` share one implementation; installed payload metadata belongs under `pea runtime payload`.

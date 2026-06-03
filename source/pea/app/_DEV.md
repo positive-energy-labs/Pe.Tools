@@ -15,7 +15,8 @@ dev-agent is the Pe.Tools repo coding agent. It should feel like normal MastraCo
 - `pea-agent.ts` constructs only the deployed Pea operator agent.
 - `dev-agent.ts` constructs the repo coding agent with MastraCode defaults preserved.
 - `tools/pea/tools.ts` exports Pea product tools: status, logs, scripting, Revit API docs, and host-operation search/call.
-- `tools/dev/tools.ts` and `tools/dev/live-rrd.ts` export only narrow dev-agent repo verification wrappers: `live_loop_context`, `live_rrd_sync`, `live_rrd_restart`, `talk_to_pea`, sync-first `script_execute`, and `test`.
+- `tools/shared/live-loop.ts` owns the shared live-loop implementation used by dev-agent tools and the human `pea live status/sync/restart` Gunshi commands.
+- `tools/dev/tools.ts` exports only narrow dev-agent repo verification wrappers: `live_loop_context`, `live_rrd_sync`, `live_rrd_restart`, `talk_to_pea`, sync-first `script_execute`, and `test`.
 - `bundled-skills.ts` and `bundled-skill-content/` install Pea workflow skills into `.pea/skills`.
 - `dev-agent-skill-content/` contains the small dev-agent-only goal skill surface installed into project-scoped MastraCode skill roots: `pe-steer`, `pe-diagnose`, `pe-live-loop`, `pe-tdd`, `pe-architecture`, `pe-codify-work`, `pe-handoff`, and `pe-write-skill`.
 
@@ -27,6 +28,7 @@ dev-agent is the Pe.Tools repo coding agent. It should feel like normal MastraCo
 - Complex multi-step repo practices belong in dev-agent-only skills.
 - Hooks and custom slash commands are not installed by default; hooks are reserved for future narrow unsafe-action guardrails.
 - Repo verification wrappers must report what their result proves and does not prove, especially around NoRrdContact, RrdRequired, sync runtime freshness (`fresh`/`stale`/`unproven`), and FreshRevitProcess.
+- `pea live status` is the single human-facing live-loop status packet; installed payload metadata lives under `pea runtime payload` to avoid competing runtime-status meanings.
 - `pe-dev` is an optional fallback for FreshRevitProcess helper workflows, not a startup gate or live-loop dependency for dev-agent.
 
 ## Key Flows

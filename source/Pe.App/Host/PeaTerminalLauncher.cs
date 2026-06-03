@@ -26,8 +26,11 @@ internal static class PeaTerminalLauncher {
         try {
             var workingDirectory = Path.GetDirectoryName(launcherPath)
                                    ?? throw new InvalidOperationException("Resolved pea path had no directory.");
+            var runtimeFlag = runtimeResolution.RuntimeLane == ProductRuntimeLane.Dev
+                ? "--dev"
+                : "--installed";
             var startInfo = new ProcessStartInfo("cmd.exe") {
-                Arguments = $"/k \"\"{launcherPath}\" agent --workspace {workspaceKey}\"",
+                Arguments = $"/k \"\"{launcherPath}\" {runtimeFlag} agent --workspace {workspaceKey}\"",
                 WorkingDirectory = workingDirectory,
                 UseShellExecute = true,
                 CreateNoWindow = false

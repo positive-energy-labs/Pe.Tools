@@ -631,6 +631,181 @@ public sealed class RevitScriptingPortTests {
     }
 
     [Test]
+    public void ReadOnly_policy_rejects_direct_document_delete(UIApplication uiApplication) {
+        var service = CreateExecutionService(uiApplication);
+
+        var result = service.Execute(new ExecuteRevitScriptRequest(
+            """
+            public sealed class DeleteScript : PeScriptContainer
+            {
+                public override void Execute()
+                {
+                    if (doc == null)
+                        return;
+
+                    doc.Delete(ElementId.InvalidElementId);
+                }
+            }
+            """
+        ), "test-readonly-document-delete");
+
+        AssertPolicyRejected(result, "Autodesk.Revit.DB.Document.Delete");
+    }
+
+    [Test]
+    public void ReadOnly_policy_rejects_helper_file_document_delete(UIApplication uiApplication) {
+        var workspaceKey = $"test-readonly-helper-delete-{Guid.NewGuid():N}";
+        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
+
+        try {
+            File.WriteAllText(
+                RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey),
+                """
+                public sealed class WorkspaceScript : PeScriptContainer
+                {
+                    public override void Execute()
+                    {
+                        MutationHelper.Delete(doc);
+                    }
+                }
+                """
+            );
+            File.WriteAllText(
+                Path.Combine(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey), "MutationHelper.cs"),
+                """
+                public static class MutationHelper
+                {
+                    public static void Delete(Document document)
+                    {
+                        if (document == null)
+                            return;
+
+                        document.Delete(ElementId.InvalidElementId);
+                    }
+                }
+                """
+            );
+
+            var service = CreateExecutionService(uiApplication);
+            var result = service.Execute(
+                new ExecuteRevitScriptRequest(
+                    SourceKind: ScriptExecutionSourceKind.WorkspacePath,
+                    SourcePath: @"src\SampleScript.cs",
+                    WorkspaceKey: workspaceKey
+                ),
+                "test-readonly-helper-delete"
+            );
+
+            AssertPolicyRejected(result, "Autodesk.Revit.DB.Document.Delete");
+        } finally {
+            DeleteWorkspace(workspaceRoot);
+        }
+    }
+
+    [Test]
+    public void ReadOnly_policy_rejects_family_manager_mutator(UIApplication uiApplication) {
+        var service = CreateExecutionService(uiApplication);
+
+        var result = service.Execute(new ExecuteRevitScriptRequest(
+            """
+            public sealed class FamilyManagerScript : PeScriptContainer
+            {
+                public override void Execute()
+                {
+                    if (doc?.IsFamilyDocument != true)
+                        return;
+
+                    doc.FamilyManager.NewType("Blocked");
+                }
+            }
+            """
+        ), "test-readonly-family-manager-mutator");
+
+        AssertPolicyRejected(result, "Autodesk.Revit.DB.FamilyManager.NewType");
+    }
+
+    [Test]
+    public void ReadOnly_policy_rejects_pe_family_wrapper_mutator(UIApplication uiApplication) {
+        var service = CreateExecutionService(uiApplication);
+
+        var result = service.Execute(new ExecuteRevitScriptRequest(
+            """
+            using Pe.Revit.Extensions.FamDocument;
+
+            public sealed class WrapperScript : PeScriptContainer
+            {
+                public override void Execute()
+                {
+                    if (doc?.IsFamilyDocument != true)
+                        return;
+
+                    _ = doc.GetFamilyDocument().EnsureDefaultType();
+                }
+            }
+            """
+        ), "test-readonly-pe-family-wrapper");
+
+        AssertPolicyRejected(result, "EnsureDefaultType");
+    }
+
+    [Test]
+    public void WriteTransaction_policy_still_rejects_script_owned_transaction(UIApplication uiApplication) {
+        var service = CreateExecutionService(uiApplication);
+
+        var result = service.Execute(new ExecuteRevitScriptRequest(
+            """
+            public sealed class TransactionScript : PeScriptContainer
+            {
+                public override void Execute()
+                {
+                    if (doc == null)
+                        return;
+
+                    using var transaction = new Transaction(doc, "Blocked");
+                    _ = transaction.Start();
+                    _ = transaction.Commit();
+                }
+            }
+            """,
+            PermissionMode: ScriptPermissionMode.WriteTransaction
+        ), "test-write-transaction-owned-transaction");
+
+        AssertPolicyRejected(result, "transaction");
+    }
+
+    [Test]
+    public void ReadOnly_policy_allows_harmless_collection(UIApplication uiApplication) {
+        var service = CreateExecutionService(uiApplication);
+
+        var result = service.Execute(new ExecuteRevitScriptRequest(
+            """
+            public sealed class CollectorScript : PeScriptContainer
+            {
+                public override void Execute()
+                {
+                    if (doc == null)
+                    {
+                        WriteLine("No active document.");
+                        return;
+                    }
+
+                    var count = new FilteredElementCollector(doc)
+                        .WhereElementIsNotElementType()
+                        .Take(3)
+                        .Count();
+                    WriteLine($"Collected {count} element(s).");
+                }
+            }
+            """
+        ), "test-readonly-harmless-collection");
+
+        Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
+        Assert.That(result.Diagnostics.Any(diagnostic =>
+            diagnostic.Stage == "policy" && diagnostic.Severity == ScriptDiagnosticSeverity.Error), Is.False);
+    }
+
+    [Test]
     public void Inline_snippet_execution_persists_trace_files_without_mutating_workspace_source(UIApplication uiApplication) {
         var workspaceKey = $"test-inline-{Guid.NewGuid():N}";
         var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
@@ -863,6 +1038,15 @@ public sealed class RevitScriptingPortTests {
             new ScriptCompilationService(ScriptFileTemplates.DefaultUsings),
             () => uiApplication
         );
+    }
+
+    private static void AssertPolicyRejected(ExecuteRevitScriptData result, string expectedDiagnosticText) {
+        Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.PolicyRejected));
+        Assert.That(result.Diagnostics.Any(diagnostic =>
+                diagnostic.Stage == "policy"
+                && diagnostic.Severity == ScriptDiagnosticSeverity.Error
+                && diagnostic.Message.Contains(expectedDiagnosticText, StringComparison.OrdinalIgnoreCase)),
+            Is.True);
     }
 
     private static void DeleteWorkspace(string workspaceRoot) {

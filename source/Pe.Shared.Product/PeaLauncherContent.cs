@@ -16,6 +16,11 @@ public static class PeaLauncherContent {
           shift /1
         )
 
+        if "%PEA_MODE%"=="" (
+          if /i "%~1"=="dev" set "PEA_MODE=dev"
+          if /i "%~1"=="dev-agent" set "PEA_MODE=dev"
+        )
+
         set "PEA_ARGS="
         :collect_args
         if "%~1"=="" goto args_done
@@ -24,8 +29,14 @@ public static class PeaLauncherContent {
         goto collect_args
         :args_done
 
+        if "%PEA_MODE%"=="" set "PEA_MODE=installed"
         if /i "%PEA_MODE%"=="installed" goto installed
+        if /i "%PEA_MODE%"=="dev" goto dev
 
+        echo Unknown pea runtime mode '%PEA_MODE%'. Use --installed, --dev, or PEA_RUNTIME=installed/dev. 1>&2
+        exit /b 1
+
+        :dev
         set "PEA_DEV_SOURCE=%PEA_ROOT%dev-source.txt"
         if exist "%PEA_DEV_SOURCE%" (
           set /p PEA_REPO_ROOT=<"%PEA_DEV_SOURCE%"
@@ -39,10 +50,8 @@ public static class PeaLauncherContent {
           )
         )
 
-        if /i "%PEA_MODE%"=="dev" (
-          echo pea dev source is not linked or is incomplete. Run pe-dev pea link-dev from the repo. 1>&2
-          exit /b 1
-        )
+        echo pea dev source is not linked or is incomplete. Run pe-dev pea link-dev from the repo. 1>&2
+        exit /b 1
 
         :installed
         set "PEA_CURRENT=%PEA_ROOT%current.txt"

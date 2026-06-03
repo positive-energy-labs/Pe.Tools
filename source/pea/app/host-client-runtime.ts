@@ -4,6 +4,7 @@ export type HostOperationExposure = "PublicHttp" | "InternalHostOnly";
 export type HostOperationIntent = "Read" | "Mutate";
 export type HostOperationFamily = "Host" | "Settings" | "Script" | "Revit" | "Aps";
 export type RevitOperationLayer = "Context" | "Catalog" | "Matrix" | "Detail" | "Resolve" | "Apply";
+export type RevitActiveDocumentKind = "Project" | "Family";
 export type HostOperationResultGrain = "Status" | "Summary" | "Schema" | "Catalog" | "Matrix" | "Rows" | "Handles" | "Detail" | "Workspace" | "Document" | "Logs" | "Token" | "Mutation";
 export type HostOperationCostTier = "Cheap" | "Bounded" | "Expensive" | "Mutation";
 export type HostOperationVisibility = "DefaultVisible" | "EscalationVisible" | "ExpertOnly";
@@ -39,6 +40,7 @@ export interface HostOperationDefinition {
   intent?: HostOperationIntent;
   requiresBridge?: boolean;
   requiresActiveDocument?: boolean;
+  supportedActiveDocumentKinds?: readonly RevitActiveDocumentKind[];
   family?: HostOperationFamily;
   revitLayer?: RevitOperationLayer | null;
   domainNoun?: string;

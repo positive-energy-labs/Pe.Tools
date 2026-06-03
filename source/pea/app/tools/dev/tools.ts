@@ -1,45 +1,29 @@
-import { spawn } from "node:child_process";
-import { resolve } from "node:path";
 import { createTool } from "@mastra/core/tools";
 import z from "zod";
-import { HostLogTarget } from "../../host-client.js";
-import { collectHostContext } from "./shared.js";
 import { runWithAttachedRrdSync } from "./attached-rrd-sync.js";
 import {
+  collectRuntimeLoopContext,
+  defaultLiveLoopTimeoutSeconds,
   defaultRiderBridgeBaseUrl,
-  runRiderBridgeSync,
-  summarizeLastSyncResult as summarizeLiveRrdLastSyncResult,
-} from "./rider/index.js";
+  restartLiveRrd,
+  syncLiveRrd,
+} from "../shared/live-loop.js";
 import {
-  isRecord,
-  resolveExecutable,
   runAttachedRrdTest,
   runPeDevWorkflow,
-  type ExecutionPolicy,
 } from "./pe-dev-workflow/index.js";
 
 import {
-  createPeHostClient,
   resolveHostBaseUrl,
   resolveWorkspaceKey,
 } from "../../pe-host.js";
 import { talkToPeaHarness } from "./talk-to-pea.js";
-import { runRiderBridgeRestartRrd } from "./rider/index.js";
 import {
   executeScriptViaHost,
   scriptExecuteInputSchema,
 } from "../shared/scripting.js";
 
-const defaultTimeoutSeconds = 900;
-const logCursorStore = new Map<string, LogCursor>();
-
-type LogCursorMode = "read" | "reset";
-
-interface LogCursor {
-  checkedAt: string;
-  size: number;
-  lineCount: number;
-}
+const defaultTimeoutSeconds = defaultLiveLoopTimeoutSeconds;
 
 const repoCommandInputSchema = z.object({
   timeoutSeconds: z.number().min(5).max(3600).default(defaultTimeoutSeconds),
@@ -77,7 +61,7 @@ export const liveRrdSync = createTool({
     project: z.string().default("Pe.Tools"),
   }),
   execute: async (input) =>
-    runRiderBridgeSync({
+    syncLiveRrd({
       timeoutSeconds: input.timeoutSeconds ?? defaultTimeoutSeconds,
       riderBridgeBaseUrl: input.riderBridgeBaseUrl ?? defaultRiderBridgeBaseUrl,
       project: input.project ?? "Pe.Tools",
@@ -85,7 +69,7 @@ export const liveRrdSync = createTool({
 });
 
 export const liveRrdRestart = createTool({
-  id: "live_rrd_re_start",
+  id: "live_rrd_restart",
   description:
     "Start or restart the Rider-driven RRD session. Use this to manage RRD sessions to resolve assembly freshness issues or when the user asks for an RRD session to be started. No existing Rider, Revit, or host process required.",
   inputSchema: repoCommandInputSchema.extend({
@@ -141,13 +125,11 @@ export const liveRrdRestart = createTool({
       ),
   }),
   execute: async (input) =>
-    runRiderBridgeRestartRrd({
+    restartLiveRrd({
       timeoutSeconds: input.timeoutSeconds ?? defaultTimeoutSeconds,
       riderBridgeBaseUrl: input.riderBridgeBaseUrl ?? defaultRiderBridgeBaseUrl,
       project: input.project ?? "Pe.Tools",
       actionId: input.actionId,
-      pollSeconds: 180,
-      pollIntervalSeconds: 5,
       expectedRevitVersion: input.expectedRevitVersion ?? "2025",
       requireNewProcess: input.requireNewProcess ?? true,
       readinessLevel: input.readinessLevel ?? "ModulesLoaded",
@@ -285,344 +267,3 @@ export const test = createTool({
     });
   },
 });
-
-async function collectRuntimeLoopContext(options: {
-  logTail: number;
-  resetLogCursor: boolean;
-  includeLastSync: boolean;
-  timeoutSeconds: number;
-}) {
-  const [environment, logResult] = await Promise.all([
-    collectLiveLoopEnvironment({ includeHost: true }),
-    readPeaHostLogTails(
-      "all",
-      options.logTail,
-      options.resetLogCursor ? "reset" : "read",
-    ),
-  ]);
-  const syncSummary = options.includeLastSync
-    ? summarizeLiveRrdLastSyncResult()
-    : null;
-  const recommendation = recommendRuntimeLoopNextAction(
-    environment,
-    logResult,
-    syncSummary,
-  );
-
-  return {
-    ok: true,
-    workflow: "live_loop_context",
-    policy: "DiagnosticsOnly" satisfies ExecutionPolicy,
-    checkedAt: new Date().toISOString(),
-    environment,
-    logs: logResult,
-    lastSync: syncSummary,
-    recommendation,
-    limits: [
-      "Read-only packet: does not run sync, tests, scripts, hot reload, or restart Revit/Rider.",
-      "Log deltas are correlation evidence, not health proof by themselves.",
-      "A successful RiderBridge sync proves IDE action invocation only until attached behavior or Revit logs confirm the runtime change.",
-    ],
-  };
-}
-
-function recommendRuntimeLoopNextAction(
-  environment: Awaited<ReturnType<typeof collectLiveLoopEnvironment>>,
-  logResult: Awaited<ReturnType<typeof readPeaHostLogTails>>,
-  syncSummary: ReturnType<typeof summarizeLiveRrdLastSyncResult>,
-) {
-  const host = environment.host;
-  const hostReachable = host?.reachable === true;
-  const bridgeConnected =
-    isRecord(host?.probe) && host.probe.bridgeIsConnected === true;
-  const activeDocument =
-    isRecord(host?.session) && host.session.activeDocument != null;
-  const newLogLineCount = logResult.logs.reduce(
-    (count, log) => count + log.cursor.newLineCountSinceLastCheck,
-    0,
-  );
-
-  if (!hostReachable) {
-    return {
-      lane: "DiagnosticsOnly",
-      nextAction: "read_logs",
-      confidence: "high",
-      reason:
-        "Pe.Host is not reachable from the environment packet; inspect host/Revit logs before attempting attached runtime work.",
-    };
-  }
-
-  if (!bridgeConnected) {
-    return {
-      lane: "AttachedRrd",
-      nextAction: "ask_user",
-      confidence: "high",
-      reason:
-        "Host is reachable but the private Revit bridge is not connected; user-maintained RRD/Revit state is the blocker.",
-    };
-  }
-
-  if (!activeDocument) {
-    return {
-      lane: "AttachedRrd",
-      nextAction: "ask_user",
-      confidence: "medium",
-      reason:
-        "AttachedRrd appears connected but no active document was reported; document-dependent probes need user session setup first.",
-    };
-  }
-
-  if (syncSummary == null) {
-    return {
-      lane: "AttachedRrd",
-      nextAction: "live_rrd_sync",
-      confidence: "medium",
-      reason:
-        "No sync result is known in this dev-agent process; run live_rrd_sync before relying on attached runtime behavior after runtime edits.",
-    };
-  }
-
-  if (!syncSummary.ok || syncSummary.verdict === "stale") {
-    return {
-      lane: "AttachedRrd",
-      nextAction: "live_rrd_restart",
-      confidence: syncSummary.verdict === "stale" ? "high" : "medium",
-      reason: `Last sync via ${syncSummary.lane} failed or reported stale freshness; recover Rider/RRD before trusting attached behavior.`,
-    };
-  }
-
-  if (newLogLineCount > 0) {
-    return {
-      lane: "DiagnosticsOnly",
-      nextAction: "read_logs",
-      confidence: "medium",
-      reason: `${newLogLineCount} new host/Revit log line(s) were observed since the previous cursor; inspect deltas before continuing if they correlate with a failure window.`,
-    };
-  }
-
-  if (syncSummary.verdict === "unproven") {
-    return {
-      lane: "AttachedRrd",
-      nextAction: "continue",
-      confidence: "medium",
-      reason: `Last sync via ${syncSummary.lane} succeeded but freshness is unproven; continue only to an attached operation/script/log proof boundary, or switch to FreshRevitProcess for proof-grade autonomous validation.`,
-    };
-  }
-
-  return {
-    lane: "AttachedRrd",
-    nextAction: "continue",
-    confidence: "high",
-    reason: `Last sync via ${syncSummary.lane} is available and no new log deltas suggest a current runtime incident; continue with the next explicit attached probe.`,
-  };
-}
-
-async function collectLiveLoopEnvironment(options: { includeHost: boolean }) {
-  const dotnetExecutable = await resolveExecutable("dotnet");
-  const host = options.includeHost ? await collectHostContext() : undefined;
-
-  return {
-    ok: true,
-    workflow: "live_loop_environment",
-    policy: "DiagnosticsOnly" satisfies ExecutionPolicy,
-    checkedAt: new Date().toISOString(),
-    cwd: process.cwd(),
-    hostBaseUrl: resolveHostBaseUrl(),
-    executables: {
-      dotnet: dotnetExecutable,
-    },
-    host,
-    guidance: environmentGuidance(host),
-  };
-}
-
-async function runHostRefreshSourceRun(request: {
-  pollSeconds: number;
-  pollIntervalSeconds: number;
-}) {
-  const startedAt = Date.now();
-  const repoRoot = process.cwd();
-  const hostCwd = resolve(repoRoot, "source/Pe.Host");
-  const child = spawn("dotnet", ["run"], {
-    cwd: hostCwd,
-    detached: true,
-    stdio: "ignore",
-    windowsHide: true,
-  });
-  child.unref();
-
-  const readiness = await pollHostReachable({
-    pollSeconds: request.pollSeconds,
-    pollIntervalSeconds: request.pollIntervalSeconds,
-  });
-  const ok = readiness.ok;
-  return {
-    ok,
-    workflow: "host_refresh_source_run",
-    policy: "RrdRequired" satisfies ExecutionPolicy,
-    cwd: repoRoot,
-    commandLine: `cd source/Pe.Host && dotnet run`,
-    processId: child.pid ?? null,
-    timedOut: !ok,
-    durationMs: Date.now() - startedAt,
-    readiness,
-    proof: {
-      interpretation: ok
-        ? "Pe.Host source-run launch was started and Host became reachable after singleton takeover."
-        : "Pe.Host source-run launch was started, but Host did not become reachable before polling timed out.",
-      proves: ok
-        ? "The reachable Host process is responding after a source-run refresh request."
-        : "Only proves the source-run process was launched; inspect Host logs for startup/build failures.",
-      doesNotProve:
-        "Does not prove the Revit bridge is connected or that RRD loaded refreshed in-process assemblies.",
-      nextStep: ok
-        ? "Use live_loop_context or the target Host/Revit operation to prove bridge/session behavior."
-        : "Inspect host logs and rerun with a longer timeout or fix the Host startup failure.",
-    },
-    guidance:
-      "Use this only when intentionally refreshing the dev/source Host lane after Host operation or contract changes; it may build before singleton takeover.",
-  };
-}
-
-async function pollHostReachable(options: {
-  pollSeconds: number;
-  pollIntervalSeconds: number;
-}) {
-  const deadline = Date.now() + options.pollSeconds * 1000;
-  let attempts = 0;
-  let host: Awaited<ReturnType<typeof collectHostContext>> | undefined;
-  do {
-    attempts++;
-    host = await collectHostContext();
-    if (host.reachable)
-      return {
-        ok: true,
-        attempts,
-        reason: "Pe.Host responded to probe/session polling.",
-        host,
-      };
-
-    if (Date.now() >= deadline) break;
-    await delay(options.pollIntervalSeconds * 1000);
-  } while (options.pollSeconds > 0);
-
-  return {
-    ok: false,
-    attempts,
-    reason: "Timed out before Pe.Host responded to probe/session polling.",
-    host,
-  };
-}
-
-function environmentGuidance(
-  host: Awaited<ReturnType<typeof collectHostContext>> | undefined,
-): string[] {
-  const guidance = [
-    "Use source compile/package proof for ordinary source work; use live-loop only when Rider/Revit/Windows session state matters.",
-  ];
-
-  if (host && !host.reachable)
-    guidance.push(
-      "Pe.Host is not reachable. Inspect the live_loop_context log slice before attempting host operations or scripts.",
-    );
-
-  const bridgeConnected =
-    host?.probe &&
-    "bridgeIsConnected" in host.probe &&
-    host.probe.bridgeIsConnected;
-  if (host?.reachable && !bridgeConnected)
-    guidance.push(
-      "Host is reachable but the Revit bridge is not connected; AttachedRrd proof is not available until the live session is healthy.",
-    );
-
-  return guidance;
-}
-
-async function readPeaHostLogTails(
-  target: "all" | "host" | "revit",
-  tailLineCount: number,
-  cursorMode: LogCursorMode,
-) {
-  const checkedAt = new Date().toISOString();
-  try {
-    const response = await createPeHostClient(
-      resolveHostBaseUrl(),
-    ).host.getLogs({
-      target: parseHostLogTarget(target),
-      tailLineCount,
-    });
-    const logs = response.files.map((file) => {
-      const cursorKey = file.filePath.toLowerCase();
-      const storedCursor = logCursorStore.get(cursorKey);
-      const previousCursor = cursorMode === "reset" ? undefined : storedCursor;
-      const invalidated =
-        previousCursor != null && file.lines.length < previousCursor.lineCount;
-      const previousLineCount =
-        previousCursor == null || invalidated
-          ? file.lines.length
-          : previousCursor.lineCount;
-      const newLines =
-        previousCursor == null || invalidated
-          ? []
-          : file.lines.slice(previousLineCount);
-      const nextCursor = {
-        checkedAt,
-        size: file.lines.join("\n").length,
-        lineCount: file.lines.length,
-      } satisfies LogCursor;
-
-      logCursorStore.set(cursorKey, nextCursor);
-      return {
-        label: file.label,
-        path: file.filePath,
-        exists: true,
-        lineCount: file.lines.length,
-        cursor: {
-          mode: cursorMode,
-          previous: storedCursor ?? null,
-          current: nextCursor,
-          invalidated,
-          newLineCountSinceLastCheck: newLines.length,
-        },
-        tail: file.lines.join("\n"),
-        newTail: newLines
-          .slice(Math.max(0, newLines.length - tailLineCount))
-          .join("\n"),
-      };
-    });
-
-    return {
-      ok: true,
-      workflow: "pea_host_logs",
-      policy: "DiagnosticsOnly" satisfies ExecutionPolicy,
-      checkedAt,
-      source: "Pea product host log operation",
-      logs,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      workflow: "pea_host_logs",
-      policy: "DiagnosticsOnly" satisfies ExecutionPolicy,
-      checkedAt,
-      source: "Pea product host log operation",
-      error: error instanceof Error ? error.message : String(error),
-      logs: [],
-    };
-  }
-}
-
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
-}
-
-function parseHostLogTarget(target: "all" | "host" | "revit"): HostLogTarget {
-  switch (target) {
-    case "host":
-      return HostLogTarget.Host;
-    case "revit":
-      return HostLogTarget.Revit;
-    case "all":
-      return HostLogTarget.All;
-  }
-}

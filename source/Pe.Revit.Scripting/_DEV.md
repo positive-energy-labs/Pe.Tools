@@ -10,8 +10,9 @@ This package is the Revit-side execution pipeline for a submitted C# source set.
 - Source normalization turns inline content or a workspace path into a `ScriptExecutionPlan`.
 - Reference resolution reads project references/packages and separates compile/runtime assets.
 - Shared scripting services compile source, produce diagnostics, and find entry-point candidates.
-- Policy runs before compilation and rejects process/shell, unmanaged interop, and script-owned Revit transactions.
+- Policy runs before compilation and rejects process/shell, unmanaged interop, script-owned Revit transactions, and curated read-only Revit document mutation APIs.
 - Execution assigns `RevitScriptContext`, captures output, writes artifacts, and optionally wraps the run in one host-owned transaction.
+- ReadOnly execution subscribes to `Application.DocumentChanged` for the duration of the script and returns a loud runtime failure if any open Revit document reports added, modified, or deleted elements. This is detection, not rollback.
 - Bridge-dispatched requests reach the Revit thread through `ScriptingBridgeMessageHandler` and `ExternalEvent`.
 
 ## Key Flows

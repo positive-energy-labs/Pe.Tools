@@ -195,6 +195,17 @@ Do not validate installed behavior against the dev host root. MSI upgrades inten
 
 `pea` is the product/operator CLI and stays PATH-visible under the installed-shaped `bin\pea` root. The runtime lane may change which Host binary `Pe.App` launches, but the operator entrypoint should not move just because the current workflow is dev, installed, or RRD-oriented.
 
+The clean Pea lane model is:
+
+- Bare `pea ...` means installed payload: `bin\pea\current.txt` selects `bin\pea\versions\<version>`.
+- Bare `pea dev` and `pea dev-agent` are the exception: they are repo-dev entrypoints and auto-select the source-linked dev lane.
+- `pea --installed ...` is the explicit installed-lane selector. Use it in installed-lane validation and scripts where ambiguity would be expensive.
+- `pea --dev ...` is the explicit source-linked selector. It requires `dev-source.txt` and runs `source/pea/app/main.ts` through the repo TypeScript runtime.
+- `PEA_RUNTIME=dev` is a local shell convenience only. Do not use ambient environment selection as proof of lane.
+- `Pe.App` must pass `--dev` or `--installed` when launching Pea from Revit, based on its `Pe.App.runtime.json` descriptor. The Host binary already follows that descriptor; Pea must not silently cross lanes through a linked source file.
+
+This is intentionally stricter than the old "linked source wins by default" model. A `dev-source.txt` file is a capability registration, not a default payload selector for product/operator commands.
+
 `pe-dev` is different by design: it is source/dev-only repo tooling, not an installed product slice. The MSI must not install it, register it on PATH, or harvest a `pe-dev` payload. Developers bootstrap their own PATH entry to the build output they want to use:
 
 ```powershell
@@ -216,13 +227,14 @@ Useful dev-lane refresh commands:
 ```powershell
 pe-dev bootstrap-path
 pe-dev pea link-dev
-pea --help
+pea dev
+pea --dev --help
 pea --installed --help
 ```
 
-`pe-dev pea link-dev` writes `dev-source.txt` next to the PATH-visible `pea.cmd`, causing `pea` to run `source/pea/app/main.ts` through repo `tsx` when source-linked inputs exist. `pea --installed ...` bypasses that source link and forces the active installed payload from `current.txt`.
+`pe-dev pea link-dev` writes `dev-source.txt` next to the PATH-visible `pea.cmd` and refreshes the launcher. It does not mutate `current.txt`, install a `versions\dev` payload, or make product/operator commands source-linked. Use `pea dev` or `pea --dev ...` for source-linked development and `pea ...` / `pea --installed ...` for installed payload behavior.
 
-Do not use a dev command to rewrite the installed-shaped `pea` payload selection. A previous `pe-dev pea install-dev` command was removed because it wrote `versions\dev` and `current.txt` under `bin\pea`, making installed-lane validation ambiguous. Source-linked dev work should use `link-dev`; packaged installed payload validation should use the installer/package lane.
+Do not use a dev command to rewrite the installed-shaped `pea` payload selection. A previous `pe-dev pea install-dev` command was removed because it wrote `versions\dev` and `current.txt` under `bin\pea`, making installed-lane validation ambiguous. Source-linked dev work should use `link-dev` plus `pea dev` / `pea --dev ...`; packaged installed payload validation should use the installer/package lane or `pea --installed ...` against an installed payload.
 
 ## Generated contract decisions
 
@@ -299,6 +311,7 @@ The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. D
 | Package installer only | `dotnet run --project .\build\Build.csproj -c Release -- pack installer --configuration Release.R25` |
 | Package automation appbundle only | `dotnet run --project .\build\Build.csproj -c Release -- pack automation` |
 | Publish GitHub release artifacts | `dotnet run --project .\build\Build.csproj -c Release -- pack publish` |
-| Refresh source-linked `pea` | `pe-dev pea link-dev` |
+| Link source `pea` dev lane | `pe-dev pea link-dev`, then `pea dev` or `pea --dev ...` |
+| Validate installed `pea` lane | `pea --installed ...` |
 | Generated contract check | `pe-dev codegen check` |
 | Generated contract update | `pe-dev codegen sync --target <target>` |

@@ -31,6 +31,15 @@ import {
 } from "./generated/product.generated.js";
 import { callHostOperation, searchHostOperations, type HostOperationCallResult } from "./host-operation-runtime.js";
 import { ensurePeaRuntimeDefaults, getPeaRuntimeDefaultsSummary, type PeaRuntimeDefaultsSummary } from "./pea-runtime-defaults.js";
+import {
+  collectRuntimeLoopContext,
+  defaultLiveLoopTimeoutSeconds,
+  defaultRiderBridgeBaseUrl,
+  restartLiveRrd,
+  syncLiveRrd,
+  type LiveRrdOpenDocumentSelector,
+  type LiveRrdRestartReadinessLevel,
+} from "./tools/shared/live-loop.js";
 
 interface PeHostStatusSnapshot {
   probe: HostProbeData;
@@ -531,13 +540,254 @@ const scriptCommand = define({
   },
 });
 
-const runtimeStatusCommand = define({
+const liveStatusCommand = define({
   name: "status",
-  description: "Print the installed pea runtime payload status.",
+  description: "Print the shared live-loop decision packet for AttachedRrd work.",
+  args: {
+    host: commonArgs.host,
+    logTail: {
+      type: "number",
+      description: "Number of log lines to include per host/Revit log file.",
+      default: 10,
+    },
+    resetLogCursor: {
+      type: "boolean",
+      description: "Reset in-process log cursors after reading.",
+      default: false,
+    },
+    noLastSync: {
+      type: "boolean",
+      description: "Omit the last live_rrd_sync result from the packet.",
+      default: false,
+    },
+    timeoutSeconds: {
+      type: "number",
+      description: "Timeout budget carried in the decision packet.",
+      default: defaultLiveLoopTimeoutSeconds,
+    },
+    json: {
+      type: "boolean",
+      description: "Print the raw live-loop packet as JSON.",
+      default: false,
+    },
+  },
+  toKebab: true,
+  examples: [
+    "pea live status",
+    "pea live status --log-tail 50 --json",
+  ].join("\n"),
+  run: async (ctx) => {
+    const status = await collectRuntimeLoopContext({
+      hostBaseUrl: ctx.values.host,
+      logTail: ctx.values.logTail,
+      resetLogCursor: ctx.values.resetLogCursor,
+      includeLastSync: !ctx.values.noLastSync,
+      timeoutSeconds: ctx.values.timeoutSeconds,
+    });
+
+    if (ctx.values.json) {
+      console.log(JSON.stringify(status, null, 2));
+      return;
+    }
+
+    writeLiveLoopStatus(status);
+  },
+});
+
+const liveSyncCommand = define({
+  name: "sync",
+  description: "Run RiderBridge hot reload for the live Rider-driven RRD session.",
+  args: {
+    riderBridgeBaseUrl: {
+      type: "string",
+      description: "Pe.RiderBridge base URL.",
+      default: defaultRiderBridgeBaseUrl,
+    },
+    project: {
+      type: "string",
+      description: "Rider project name.",
+      default: "Pe.Tools",
+    },
+    timeoutSeconds: {
+      type: "number",
+      description: "Client-side timeout for the RiderBridge sync.",
+      default: defaultLiveLoopTimeoutSeconds,
+    },
+    json: {
+      type: "boolean",
+      description: "Print the raw sync result as JSON.",
+      default: false,
+    },
+  },
+  toKebab: true,
+  examples: [
+    "pea live sync",
+    "pea live sync --rider-bridge-base-url http://127.0.0.1:63342",
+  ].join("\n"),
+  run: async (ctx) => {
+    const result = await syncLiveRrd({
+      riderBridgeBaseUrl: ctx.values.riderBridgeBaseUrl,
+      project: ctx.values.project,
+      timeoutSeconds: ctx.values.timeoutSeconds,
+    });
+
+    if (ctx.values.json) {
+      console.log(JSON.stringify(result, null, 2));
+      if (!result.ok)
+        process.exitCode = 1;
+      return;
+    }
+
+    writeWorkflowResult(result);
+    if (!result.ok)
+      process.exitCode = 1;
+  },
+});
+
+const liveRestartCommand = define({
+  name: "restart",
+  description: "Start or restart the Rider-driven RRD session through Pe.RiderBridge.",
+  args: {
+    riderBridgeBaseUrl: {
+      type: "string",
+      description: "Pe.RiderBridge base URL.",
+      default: defaultRiderBridgeBaseUrl,
+    },
+    project: {
+      type: "string",
+      description: "Rider project name.",
+      default: "Pe.Tools",
+    },
+    actionId: {
+      type: "string",
+      description: "Optional Rider action override. Defaults to trying Rerun, then Debug.",
+    },
+    expectedRevitVersion: {
+      type: "string",
+      description: "Expected connected Revit year after restart.",
+      default: "2025",
+    },
+    requireNewProcess: {
+      type: "boolean",
+      description: "Require the connected Revit process id to change after restart.",
+      default: true,
+    },
+    readinessLevel: {
+      type: "string",
+      description: "Readiness level: BridgeConnected, ModulesLoaded, AnyDocumentOpen, or ActiveDocumentReady.",
+      default: "ModulesLoaded",
+    },
+    openDocumentPath: {
+      type: "string",
+      description: "Absolute local RVT/RFA path to open after module readiness.",
+    },
+    openDocumentName: {
+      type: "string",
+      description: "Recent local Revit document name to resolve and open after module readiness.",
+    },
+    openDocumentKind: {
+      type: "string",
+      description: "Open-document kind filter: Project, Family, or Any.",
+      default: "Any",
+    },
+    openDocumentRevitYear: {
+      type: "string",
+      description: "Revit year used when resolving recent documents by name.",
+      default: "2025",
+    },
+    includeCloudRecentDocuments: {
+      type: "boolean",
+      description: "Allow cloud recent-document matches during name resolution. Local files are still the only opener target.",
+      default: false,
+    },
+    noOpenDocument: {
+      type: "boolean",
+      description: "Disable the explicit or harness-state default open-document step.",
+      default: false,
+    },
+    harnessStatePath: {
+      type: "string",
+      description: "Optional repo-relative or absolute JSON file with revit.defaultOpenDocument.",
+    },
+    timeoutSeconds: {
+      type: "number",
+      description: "Client-side timeout for the RiderBridge restart action.",
+      default: defaultLiveLoopTimeoutSeconds,
+    },
+    pollSeconds: {
+      type: "number",
+      description: "Seconds to poll Pe.Host/Revit bridge readiness after restart.",
+      default: 180,
+    },
+    pollIntervalSeconds: {
+      type: "number",
+      description: "Seconds between readiness polls.",
+      default: 5,
+    },
+    json: {
+      type: "boolean",
+      description: "Print the raw restart result as JSON.",
+      default: false,
+    },
+  },
+  toKebab: true,
+  examples: [
+    "pea live restart",
+    "pea live restart --readiness-level ActiveDocumentReady --open-document-name Sample",
+  ].join("\n"),
+  run: async (ctx) => {
+    const result = await restartLiveRrd({
+      riderBridgeBaseUrl: ctx.values.riderBridgeBaseUrl,
+      project: ctx.values.project,
+      actionId: ctx.values.actionId,
+      expectedRevitVersion: ctx.values.expectedRevitVersion,
+      requireNewProcess: ctx.values.requireNewProcess,
+      readinessLevel: parseLiveReadinessLevel(ctx.values.readinessLevel),
+      openDocument: resolveOpenDocumentOption(ctx.values),
+      harnessStatePath: ctx.values.harnessStatePath,
+      timeoutSeconds: ctx.values.timeoutSeconds,
+      pollSeconds: ctx.values.pollSeconds,
+      pollIntervalSeconds: ctx.values.pollIntervalSeconds,
+    });
+
+    if (ctx.values.json) {
+      console.log(JSON.stringify(result, null, 2));
+      if (!result.ok)
+        process.exitCode = 1;
+      return;
+    }
+
+    writeWorkflowResult(result);
+    if (!result.ok)
+      process.exitCode = 1;
+  },
+});
+
+const liveCommand = define({
+  name: "live",
+  description: "Inspect and manage the live Rider/Revit RRD loop.",
+  examples: [
+    "pea live status",
+    "pea live sync",
+    "pea live restart",
+  ].join("\n"),
+  subCommands: {
+    status: liveStatusCommand,
+    sync: liveSyncCommand,
+    restart: liveRestartCommand,
+  },
+  run: () => {
+    console.log("Run `pea live --help` to list live-loop commands.");
+  },
+});
+
+const runtimePayloadCommand = define({
+  name: "payload",
+  description: "Print installed pea runtime payload metadata.",
   args: {
     json: {
       type: "boolean",
-      description: "Print runtime status as JSON.",
+      description: "Print runtime payload metadata as JSON.",
       default: false,
     },
   },
@@ -578,11 +828,11 @@ const runtimeCommand = define({
   name: "runtime",
   description: "Inspect or update the installed pea runtime payload.",
   examples: [
-    "pea runtime status",
+    "pea runtime payload",
     "pea runtime update --manifest .\\Pe.Tools.pea.0.1.0.json",
   ].join("\n"),
   subCommands: {
-    status: runtimeStatusCommand,
+    payload: runtimePayloadCommand,
     update: runtimeUpdateCommand,
   },
   run: () => {
@@ -660,7 +910,8 @@ const entryCommand = define({
     "pea dev",
     "pea host status",
     "pea host logs --target revit --tail 50",
-    "pea runtime status",
+    "pea live status",
+    "pea runtime payload",
     "pea script bootstrap --workspace default",
     "pea script execute --source-path src\\SampleScript.cs",
   ].join("\n"),
@@ -680,6 +931,7 @@ try {
       "dev-agent": devAgentCommand,
       config: configCommand,
       host: hostCommand,
+      live: liveCommand,
       runtime: runtimeCommand,
       script: scriptCommand,
     },
@@ -1195,9 +1447,186 @@ function writeOperationCallResult(result: HostOperationCallResult): void {
   console.log(JSON.stringify(result.response, null, 2));
 }
 
+type LiveLoopStatus = Awaited<ReturnType<typeof collectRuntimeLoopContext>>;
+
+interface CliWorkflowResult {
+  ok: boolean;
+  workflow: string;
+  policy: string;
+  commandLine?: string | null;
+  exitCode?: number | null;
+  timedOut?: boolean;
+  durationMs?: number;
+  stdoutTail?: string;
+  stderrTail?: string;
+  guidance?: string;
+  runtimeFreshness?: {
+    verdict?: string;
+    loadedGraphVerdict?: string;
+    sourceDeltaVerdict?: string;
+  };
+  proof?: {
+    interpretation?: string;
+    proves?: string;
+    doesNotProve?: string;
+    nextStep?: string | null;
+  };
+}
+
+function writeLiveLoopStatus(status: LiveLoopStatus): void {
+  const host = status.environment.host;
+  const probe: Record<string, unknown> = isRecord(host?.probe) ? host.probe : {};
+  const session: Record<string, unknown> = isRecord(host?.session) ? host.session : {};
+  const recommendation = status.recommendation;
+
+  console.log(`checked   ${status.checkedAt}`);
+  console.log(`host url  ${status.environment.hostBaseUrl}`);
+  console.log(`host      ${host?.reachable ? "reachable" : "unreachable"}`);
+  console.log(`bridge    ${formatConnected(probe.bridgeIsConnected)}`);
+  if (typeof probe.disconnectReason === "string" && probe.disconnectReason.length > 0)
+    console.log(`reason    ${probe.disconnectReason}`);
+  if (typeof session.sessionId === "string")
+    console.log(`session   ${session.sessionId}`);
+  if (typeof session.processId === "number")
+    console.log(`process   ${session.processId}`);
+  if (typeof session.revitVersion === "string")
+    console.log(`revit     ${session.revitVersion}`);
+  if (typeof session.openDocumentCount === "number")
+    console.log(`open docs ${session.openDocumentCount}`);
+  if (typeof session.availableModuleCount === "number")
+    console.log(`modules   ${session.availableModuleCount}`);
+
+  const activeDocument = isRecord(session.activeDocument)
+    ? session.activeDocument.title
+    : session.activeDocument === null
+      ? "none"
+      : undefined;
+  if (typeof activeDocument === "string")
+    console.log(`document  ${activeDocument}`);
+
+  if (status.lastSync) {
+    console.log(`sync      ${status.lastSync.ok ? "ok" : "failed"} verdict=${status.lastSync.verdict} lane=${status.lastSync.lane}`);
+    console.log(`freshness loaded=${status.lastSync.loadedGraphVerdict} source=${status.lastSync.sourceDeltaVerdict}`);
+  } else {
+    console.log("sync      none");
+  }
+
+  if (!status.logs.ok && "error" in status.logs)
+    console.log(`logs      error: ${status.logs.error}`);
+  for (const log of status.logs.logs)
+    console.log(`log       ${log.label} lines=${log.lineCount} new=${log.cursor.newLineCountSinceLastCheck} path=${log.path}`);
+
+  console.log(`lane      ${recommendation.lane}`);
+  console.log(`next      ${recommendation.nextAction} (${recommendation.confidence})`);
+  console.log(`reason    ${recommendation.reason}`);
+}
+
+function writeWorkflowResult(result: CliWorkflowResult): void {
+  console.log(`${result.workflow} ${result.ok ? "ok" : "failed"}`);
+  console.log(`policy    ${result.policy}`);
+  if (result.commandLine)
+    console.log(`command   ${result.commandLine}`);
+  if (typeof result.exitCode === "number" || result.exitCode === null)
+    console.log(`exit      ${result.exitCode ?? "none"}`);
+  if (typeof result.timedOut === "boolean")
+    console.log(`timed out ${result.timedOut}`);
+  if (typeof result.durationMs === "number")
+    console.log(`duration  ${result.durationMs}ms`);
+  if (result.runtimeFreshness)
+    console.log(`freshness verdict=${result.runtimeFreshness.verdict ?? "unknown"} loaded=${result.runtimeFreshness.loadedGraphVerdict ?? "unknown"} source=${result.runtimeFreshness.sourceDeltaVerdict ?? "unknown"}`);
+  if (result.guidance)
+    console.log(`guidance  ${result.guidance}`);
+  if (result.proof?.interpretation)
+    console.log(`proof     ${result.proof.interpretation}`);
+  if (result.proof?.proves)
+    console.log(`proves    ${result.proof.proves}`);
+  if (result.proof?.doesNotProve)
+    console.log(`limits    ${result.proof.doesNotProve}`);
+  if (result.proof?.nextStep)
+    console.log(`next step ${result.proof.nextStep}`);
+  if (result.stdoutTail?.trim())
+    console.log(result.stdoutTail.trimEnd());
+  if (result.stderrTail?.trim())
+    console.error(result.stderrTail.trimEnd());
+}
+
+function parseLiveReadinessLevel(value: string | undefined): LiveRrdRestartReadinessLevel {
+  const normalized = normalizeOption(value ?? "ModulesLoaded");
+  switch (normalized) {
+    case "bridgeconnected":
+      return "BridgeConnected";
+    case "modulesloaded":
+      return "ModulesLoaded";
+    case "anydocumentopen":
+      return "AnyDocumentOpen";
+    case "activedocumentready":
+      return "ActiveDocumentReady";
+    default:
+      throw new Error("Unknown readiness level. Expected BridgeConnected, ModulesLoaded, AnyDocumentOpen, or ActiveDocumentReady.");
+  }
+}
+
+function resolveOpenDocumentOption(values: {
+  noOpenDocument?: boolean;
+  openDocumentPath?: string;
+  openDocumentName?: string;
+  openDocumentKind?: string;
+  openDocumentRevitYear?: string;
+  includeCloudRecentDocuments?: boolean;
+}): LiveRrdOpenDocumentSelector | null | undefined {
+  if (values.noOpenDocument)
+    return null;
+
+  const path = firstNonBlank(values.openDocumentPath);
+  const name = firstNonBlank(values.openDocumentName);
+  if (!path && !name)
+    return undefined;
+
+  return {
+    path,
+    name,
+    kind: parseOpenDocumentKind(values.openDocumentKind),
+    revitYear: firstNonBlank(values.openDocumentRevitYear) ?? "2025",
+    localFilesOnly: !(values.includeCloudRecentDocuments ?? false),
+  };
+}
+
+function parseOpenDocumentKind(value: string | undefined): "Project" | "Family" | "Any" {
+  const normalized = normalizeOption(value ?? "Any");
+  switch (normalized) {
+    case "project":
+      return "Project";
+    case "family":
+      return "Family";
+    case "any":
+      return "Any";
+    default:
+      throw new Error("Unknown open document kind. Expected Project, Family, or Any.");
+  }
+}
+
+function normalizeOption(value: string): string {
+  return value.replace(/[-_\s]/g, "").toLowerCase();
+}
+
+function formatConnected(value: unknown): string {
+  if (typeof value !== "boolean")
+    return "unknown";
+
+  return value ? "connected" : "disconnected";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function firstNonBlank(...values: Array<string | undefined>): string | undefined {
+  return values.find((value) => value != null && value.trim().length > 0)?.trim();
+}
+
 function normalizeCliArgs(args: string[]): string[] {
   const separatorIndex = args.indexOf("--");
-  if (separatorIndex <= 0) return args;
+  if (separatorIndex < 0) return args;
 
   return [
     ...args.slice(0, separatorIndex),
