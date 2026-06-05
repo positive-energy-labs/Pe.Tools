@@ -92,6 +92,15 @@ public sealed class HostOperationExecutorTests {
     }
 
     [Test]
+    public void Context_summary_supports_project_and_family_documents() {
+        var operation = GetRevitAgentContextSummaryOperationContract.Definition;
+
+        Assert.That(operation.AgentMetadata.RequiresActiveDocument, Is.True);
+        Assert.That(operation.AgentMetadata.SupportedActiveDocumentKinds,
+            Is.EqualTo(new[] { RevitActiveDocumentKind.Project, RevitActiveDocumentKind.Family }));
+    }
+
+    [Test]
     public void Loaded_families_operations_are_project_document_operations() {
         var operations = new[] {
             GetLoadedFamiliesCatalogOperationContract.Definition,
@@ -102,6 +111,29 @@ public sealed class HostOperationExecutorTests {
             Assert.That(operation.AgentMetadata.SupportedActiveDocumentKinds,
                 Is.EqualTo(new[] { RevitActiveDocumentKind.Project }),
                 operation.Key);
+    }
+
+    [Test]
+    public void Public_host_operation_metadata_stays_compact_and_routable() {
+        var operationKeys = HostOperationsCatalog.PublicHttp.Select(operation => operation.Key).ToHashSet(StringComparer.Ordinal);
+
+        foreach (var operation in HostOperationsCatalog.PublicHttp) {
+            Assert.That(operation.AgentMetadata.CallGuidance, Has.Count.LessThanOrEqualTo(2), operation.Key);
+            Assert.That(operation.AgentMetadata.RequestExamples, Has.Count.LessThanOrEqualTo(2), operation.Key);
+            Assert.That(operation.Key.Split('.')[0], Is.Not.AnyOf("rvt", "rfa", "rvtrfa"), operation.Key);
+
+            if (operation.Key.StartsWith("revit.", StringComparison.Ordinal)) {
+                var parts = operation.Key.Split('.');
+                Assert.That(parts, Has.Length.InRange(3, 4), operation.Key);
+                Assert.That(parts[1], Is.AnyOf("context", "catalog", "matrix", "detail", "resolve", "apply"), operation.Key);
+            }
+
+            var relatedKeys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var relatedOperation in operation.AgentMetadata.RelatedOperations) {
+                Assert.That(operationKeys, Does.Contain(relatedOperation.Key), operation.Key);
+                Assert.That(relatedKeys.Add($"{relatedOperation.Kind}:{relatedOperation.Key}"), Is.True, operation.Key);
+            }
+        }
     }
 
     private static HostOperationContext CreateContext() =>

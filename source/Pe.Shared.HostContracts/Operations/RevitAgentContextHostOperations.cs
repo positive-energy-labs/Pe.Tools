@@ -14,7 +14,9 @@ public static class GetRevitAgentContextSummaryOperationContract {
                 "revit",
                 "Read compact current document, active view or sheet, selection, browser counts, and visible-category context for Pea orientation.",
                 new[] { "agent-context", "summary", "active-view", "selection", "visible", "browser" },
-                requiresBridge: true
+                requiresBridge: true,
+                requiresActiveDocument: true,
+                supportedActiveDocumentKinds: [RevitActiveDocumentKind.Project, RevitActiveDocumentKind.Family]
             )
         );
 }
@@ -42,11 +44,10 @@ public static class ResolveRevitAgentContextOperationContract {
                         """
                     )
                 ],
-                boundedExpansionHints: [
+                callGuidance: [
                     "When the user asks about printed/current/lower-level scope, resolve once with handleKinds and requirePrintedContext instead of broad browser resolution.",
                     "Reuse returned handles for the rest of the turn; call revit.resolve.references again only if context changed or the result was ambiguous."
-                ],
-                handleProvenanceNotes: "Resolve candidates preserve stable view/sheet handles, sheet-placement provenance, and related handles for follow-up visible-summary or matrix calls."
+                ]
             )
         );
 }
@@ -81,12 +82,10 @@ public static class GetRevitAgentVisibleContextOperationContract {
                         """
                     )
                 ],
-                boundedExpansionHints: [
+                callGuidance: [
                     "For visible/current/printed equipment audits, resolve the view or sheet phrase once, then call this with ViewReferences and projection=Handles to get exact visible handles and visible-in-view provenance.",
                     "Feed returned element handles into revit.matrix.schedule-coverage with ExplicitHandles or revit.detail.elements for electrical/tag facts.",
-                    "Set categoryNames and maxElementHandlesPerCategory deliberately; a complete handle set is indicated by isReturnedElementSetComplete."
-                ],
-                handleProvenanceNotes: "Visible summaries return category counts, bounded element handles, the views each handle is visible in, and view/sheet-placement provenance for explicit view-reference scopes."
+                ]
             )
         );
 }

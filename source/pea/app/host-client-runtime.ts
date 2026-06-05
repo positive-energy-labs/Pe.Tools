@@ -5,11 +5,9 @@ export type HostOperationIntent = "Read" | "Mutate";
 export type HostOperationFamily = "Host" | "Settings" | "Script" | "Revit" | "Aps";
 export type RevitOperationLayer = "Context" | "Catalog" | "Matrix" | "Detail" | "Resolve" | "Apply";
 export type RevitActiveDocumentKind = "Project" | "Family";
-export type HostOperationResultGrain = "Status" | "Summary" | "Schema" | "Catalog" | "Matrix" | "Rows" | "Handles" | "Detail" | "Workspace" | "Document" | "Logs" | "Token" | "Mutation";
 export type HostOperationCostTier = "Cheap" | "Bounded" | "Expensive" | "Mutation";
 export type HostOperationVisibility = "DefaultVisible" | "EscalationVisible" | "ExpertOnly";
-export type HostOperationIntentVerb = "Orient" | "Find" | "Inventory" | "Inspect" | "Audit" | "Script" | "Configure" | "Authenticate" | "Diagnose" | "Mutate";
-export type HostOperationRequestShapeKind = "NoRequest" | "CommonEnvelope" | "QueryWrapper" | "Flat" | "Command" | "LegacyException";
+export type HostOperationRelationKind = "Preflight" | "DrillDown" | "Fallback" | "Alternative";
 
 export interface HostTypeShapeField {
   name: string;
@@ -23,6 +21,12 @@ export interface HostOperationRequestExample {
   json: string;
 }
 
+export interface HostOperationRelatedOperation {
+  key: string;
+  kind: HostOperationRelationKind;
+  note?: string | null;
+}
+
 export interface HostOperationDefinition {
   key: string;
   verb: HostHttpVerb;
@@ -34,39 +38,47 @@ export interface HostOperationDefinition {
   requestShape?: readonly HostTypeShapeField[];
   responseShape?: readonly HostTypeShapeField[];
   displayName?: string;
-  domain?: string;
-  summary?: string;
-  tags?: readonly string[];
-  intent?: HostOperationIntent;
+  description?: string;
+  searchTerms?: readonly string[];
   requiresBridge?: boolean;
   requiresActiveDocument?: boolean;
   supportedActiveDocumentKinds?: readonly RevitActiveDocumentKind[];
-  family?: HostOperationFamily;
-  revitLayer?: RevitOperationLayer | null;
-  domainNoun?: string;
-  resultGrain?: HostOperationResultGrain;
   costTier?: HostOperationCostTier;
+  visibility?: HostOperationVisibility;
   singleFlightGroup?: string | null;
   requestExamples?: readonly HostOperationRequestExample[];
-  boundedExpansionHints?: readonly string[];
-  handleProvenanceNotes?: string | null;
-  strictRequestValidation?: boolean;
-  visibility?: HostOperationVisibility;
-  canonicalUse?: string;
-  intentVerb?: HostOperationIntentVerb;
-  requestShapeKind?: HostOperationRequestShapeKind;
-  useWhen?: readonly string[];
-  doNotUseWhen?: readonly string[];
-  usuallyBefore?: readonly string[];
-  usuallyAfter?: readonly string[];
-  nextOperations?: readonly string[];
-  answersQuestionTypes?: readonly string[];
-  doesNotAnswer?: readonly string[];
-  primaryNouns?: readonly string[];
-  supportedScopes?: readonly string[];
-  capabilities?: readonly string[];
   safeDefaultRequestJson?: string | null;
-  ambiguityBehavior?: string | null;
+  callGuidance?: readonly string[];
+  relatedOperations?: readonly HostOperationRelatedOperation[];
+  strictRequestValidation?: boolean;
+}
+
+export interface HostCapabilityMapRow {
+  key: string;
+  area: string;
+  description: string;
+  safety: string;
+  input: string;
+  output: string;
+  relations: string;
+  terms: string;
+}
+
+export interface HostCapabilityMapSection {
+  id: string;
+  title: string;
+  summary: string;
+  rows: readonly HostCapabilityMapRow[];
+}
+
+export interface HostCapabilityMap {
+  generatedFrom: string;
+  formatVersion: number;
+  rowCount: number;
+  guidance: string;
+  operationKeys: readonly string[];
+  sections: readonly HostCapabilityMapSection[];
+  focusSections: readonly HostCapabilityMapSection[];
 }
 
 export interface HostProblemDetails {

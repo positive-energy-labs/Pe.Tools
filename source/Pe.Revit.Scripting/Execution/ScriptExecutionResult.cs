@@ -17,9 +17,16 @@ internal sealed record ScriptExecutionPlan(
     string? ArtifactRunName,
     ScriptPermissionMode PermissionMode,
     ScriptSourceSet SourceSet,
+    ScriptWorkspaceExecutionMode ExecutionMode,
     string ProjectContent,
     bool RequireSingleContainer
 );
+
+internal enum ScriptWorkspaceExecutionMode {
+    InlineSnippet,
+    LooseWorkspace,
+    Pod
+}
 
 internal sealed record ScriptContainerResolutionResult(
     ScriptExecutionStatus Status,

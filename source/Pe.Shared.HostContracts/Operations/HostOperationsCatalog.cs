@@ -48,7 +48,9 @@ public static class HostOperationsCatalog {
         ValidateSettingsDocumentOperationContract.Definition,
         SaveSettingsDocumentOperationContract.Definition,
         GetScriptWorkspaceBootstrapOperationContract.Definition,
-        ExecuteRevitScriptOperationContract.Definition
+        ExecuteRevitScriptOperationContract.Definition,
+        ImportScriptPodOperationContract.Definition,
+        ExportScriptPodOperationContract.Definition
     ]);
 
     public static IReadOnlyList<HostOperationDefinition> PublicHttp { get; } = All
@@ -100,6 +102,16 @@ public static class HostOperationsCatalog {
                     new HostTypeScriptClientOperation(
                         "execute",
                         ExecuteRevitScriptOperationContract.Definition,
+                        HostClientRequestPolicy.Explicit
+                    ),
+                    new HostTypeScriptClientOperation(
+                        "importPod",
+                        ImportScriptPodOperationContract.Definition,
+                        HostClientRequestPolicy.Explicit
+                    ),
+                    new HostTypeScriptClientOperation(
+                        "exportPod",
+                        ExportScriptPodOperationContract.Definition,
                         HostClientRequestPolicy.Explicit
                     )
                 ]
@@ -159,7 +171,59 @@ public static class HostOperationsCatalog {
                 $"Incomplete host operation definitions: {string.Join(", ", incompleteDefinitions)}"
             );
 
+        ValidateAgentMetadata(definitions);
+
         return definitions;
+    }
+
+    private static void ValidateAgentMetadata(IReadOnlyList<HostOperationDefinition> definitions) {
+        var operationKeys = new HashSet<string>(definitions.Select(definition => definition.Key), StringComparer.Ordinal);
+        var errors = new List<string>();
+
+        foreach (var definition in definitions) {
+            var metadata = definition.AgentMetadata;
+
+            if (metadata.CallGuidance.Count > 2)
+                errors.Add($"{definition.Key}: CallGuidance has {metadata.CallGuidance.Count} entries; max 2.");
+            if (metadata.RequestExamples.Count > 2)
+                errors.Add($"{definition.Key}: RequestExamples has {metadata.RequestExamples.Count} entries; max 2.");
+
+            var duplicateRelations = metadata.RelatedOperations
+                .GroupBy(operation => $"{operation.Kind}:{operation.Key}", StringComparer.Ordinal)
+                .Where(group => group.Count() > 1)
+                .Select(group => group.Key)
+                .ToArray();
+            if (duplicateRelations.Length != 0)
+                errors.Add($"{definition.Key}: duplicate related operations {string.Join(", ", duplicateRelations)}.");
+
+            foreach (var relatedOperation in metadata.RelatedOperations.Where(relatedOperation => !operationKeys.Contains(relatedOperation.Key)))
+                errors.Add($"{definition.Key}: related operation key '{relatedOperation.Key}' does not exist.");
+
+            if (!definition.IsPublicHttp)
+                continue;
+
+            var dotIndex = definition.Key.IndexOf(".", StringComparison.Ordinal);
+            var topLevel = dotIndex < 0 ? definition.Key : definition.Key[..dotIndex];
+            if (topLevel is "rvt" or "rfa" or "rvtrfa")
+                errors.Add($"{definition.Key}: document kind must be metadata, not a top-level route family.");
+
+            if (definition.Key.StartsWith("revit.", StringComparison.Ordinal) && !IsValidPublicRevitKey(definition.Key))
+                errors.Add($"{definition.Key}: Revit public keys must follow revit.<layer>.<noun>[.<variant>].");
+        }
+
+        if (errors.Count != 0)
+            throw new InvalidOperationException($"Invalid host operation metadata:{Environment.NewLine}  {string.Join($"{Environment.NewLine}  ", errors)}");
+    }
+
+    private static bool IsValidPublicRevitKey(string key) {
+        var parts = key.Split('.');
+        if (parts.Length is < 3 or > 4)
+            return false;
+        if (!string.Equals(parts[0], "revit", StringComparison.Ordinal))
+            return false;
+        return parts[1] is "context" or "catalog" or "matrix" or "detail" or "resolve" or "apply"
+            && !string.IsNullOrWhiteSpace(parts[2])
+            && (parts.Length == 3 || !string.IsNullOrWhiteSpace(parts[3]));
     }
 
     private static HostTypeScriptClientCatalog ValidateTypeScriptClient(

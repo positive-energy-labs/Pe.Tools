@@ -35,9 +35,7 @@ public static class GetRevitRecentDocumentsOperationContract {
                 requiresActiveDocument: false,
                 revitLayer: RevitOperationLayer.Catalog,
                 domainNoun: "recent-documents",
-                resultGrain: HostOperationResultGrain.Catalog,
                 costTier: HostOperationCostTier.Cheap,
-                requestShapeKind: HostOperationRequestShapeKind.QueryWrapper,
                 requestExamples: [
                     new HostOperationRequestExample(
                         "recent local files for Revit 2025",
@@ -47,13 +45,9 @@ public static class GetRevitRecentDocumentsOperationContract {
                         """
                     )
                 ],
-                useWhen: [
-                    "A restart/open workflow needs a locally-openable document path before Revit has an active document.",
-                    "A caller needs a cheap host-only list of recent local Revit models or families."
-                ],
-                doNotUseWhen: [
-                    "The target is a cloud-only cld:// model; cloud discovery/opening is intentionally not completed yet.",
-                    "The caller needs live open-document state; use revit.context.document-session instead."
+                callGuidance: [
+                    "Use before Revit has an active document to find locally-openable document paths.",
+                    "Use revit.context.document-session instead for live open-document state."
                 ]
             )
         );
@@ -62,7 +56,7 @@ public static class GetRevitRecentDocumentsOperationContract {
 public static class OpenRevitDocumentOperationContract {
     public static readonly HostOperationDefinition Definition =
         HostOperationDefinition.Create<OpenRevitDocumentRequest, OpenRevitDocumentData>(
-            "revit.document.open",
+            "revit.apply.document.open",
             HostHttpVerb.Post,
             "/api/revit/document/open",
             HostExecutionMode.Bridge,
@@ -76,9 +70,7 @@ public static class OpenRevitDocumentOperationContract {
                 requiresActiveDocument: false,
                 revitLayer: RevitOperationLayer.Apply,
                 domainNoun: "document",
-                resultGrain: HostOperationResultGrain.Document,
                 costTier: HostOperationCostTier.Mutation,
-                requestShapeKind: HostOperationRequestShapeKind.Command,
                 requestExamples: [
                     new HostOperationRequestExample(
                         "open local model",
@@ -88,13 +80,9 @@ public static class OpenRevitDocumentOperationContract {
                         """
                     )
                 ],
-                useWhen: [
-                    "A connected Revit session has no active document and a workflow needs to bootstrap document context.",
-                    "A workflow needs to switch to a known local model path before running document-owned queries."
-                ],
-                doNotUseWhen: [
-                    "The target model is cloud-only and has no local user-visible path; use a future cloud-model opener instead.",
-                    "The current Revit session is blocked by a modal dialog or an open transaction."
+                callGuidance: [
+                    "Use a local RVT/RFA/RTE path to bootstrap or switch active document context.",
+                    "Do not use for cloud-only cld:// targets or while Revit is blocked by a modal dialog."
                 ]
             )
         );

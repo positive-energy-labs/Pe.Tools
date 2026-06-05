@@ -8,9 +8,11 @@ using Pe.Revit.Scripting.Policy;
 using Pe.Revit.Scripting.References;
 using Pe.Revit.Scripting.Storage;
 using Pe.Shared.HostContracts.Scripting;
+using Pe.Shared.Product;
 using Pe.Shared.Scripting.Analysis;
 using Pe.Shared.Scripting.Diagnostics;
 using Pe.Shared.Scripting.Execution;
+using Pe.Shared.Scripting.Pods;
 using Pe.Shared.Scripting.Policy;
 using Serilog;
 using System.Reflection;
@@ -34,6 +36,8 @@ public sealed class RevitScriptExecutionService(
     private readonly ScriptProjectGenerator _projectGenerator = projectGenerator;
     private readonly ScriptReferenceResolver _referenceResolver = referenceResolver;
     private readonly Func<UIApplication?> _uiApplicationAccessor = uiApplicationAccessor;
+
+    private const string AuthoringShapeHint = "Inline scriptContent accepts Execute-body statements such as WriteLine(\"...\"), or a full container class: public sealed class Script : PeScriptContainer { public override void Execute() { WriteLine(\"...\"); } }. Execute() returns void; use WriteLine(...) for console output and Artifacts.* for durable files.";
 
     public ExecuteRevitScriptData Execute(
         ExecuteRevitScriptRequest request,
@@ -90,7 +94,7 @@ public sealed class RevitScriptExecutionService(
 
             AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Info(
                 "normalize",
-                $"Executing {plan.SourceSet.EntryPointSourceName}; compiling {plan.SourceSet.Files.Count} source file(s): {string.Join(", ", plan.SourceSet.Files.Select(file => file.Name))}.",
+                $"{DescribeExecutionMode(plan.ExecutionMode)} Executing {plan.SourceSet.EntryPointSourceName}; compiling {plan.SourceSet.Files.Count} source file(s): {string.Join(", ", plan.SourceSet.Files.Select(file => file.Name))}.",
                 plan.SourceSet.EntryPointSourceName
             ));
 
@@ -202,6 +206,7 @@ public sealed class RevitScriptExecutionService(
                     AppendDiagnostic(diagnostics, diagnostic);
 
                 if (!compilationResult.Success || compilationResult.AssemblyBytes == null) {
+                    AppendAuthoringShapeHint(diagnostics, "compile", plan.SourceSet.EntryPointSourceName);
                     return CreateResult(
                         ScriptExecutionStatus.CompilationFailed,
                         outputSink,
@@ -231,6 +236,8 @@ public sealed class RevitScriptExecutionService(
 
                 containerTypeName = containerResult.ContainerTypeName;
                 if (containerResult.Container == null) {
+                    if (containerResult.Status == ScriptExecutionStatus.Rejected)
+                        AppendAuthoringShapeHint(diagnostics, "instantiate", plan.SourceSet.EntryPointSourceName);
                     return CreateResult(
                         containerResult.Status,
                         outputSink,
@@ -357,20 +364,33 @@ public sealed class RevitScriptExecutionService(
         var revitVersion = uiApplication.Application.VersionNumber ?? "unknown";
         var targetFramework = RevitRuntimeTargetFramework.Resolve(revitVersion);
         var runtimeAssemblyPath = RevitRuntimeTargetFramework.GetRuntimeAssemblyPath();
-        var workspaceKey = string.IsNullOrWhiteSpace(request.WorkspaceKey) ? "default" : request.WorkspaceKey;
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
-        var workspaceProjectPath = RevitScriptingStorageLocations.ResolveProjectFilePath(workspaceKey);
 
         try {
-            var sourceSet = request.SourceKind switch {
-                ScriptExecutionSourceKind.InlineSnippet => this.MaterializeInlineSnippet(
+            var workspaceKey = ScriptingWorkspaceLayout.NormalizeWorkspaceKey(request.WorkspaceKey);
+            var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+            var workspaceProjectPath = RevitScriptingStorageLocations.ResolveProjectFilePath(workspaceKey);
+
+            ScriptSourceSet sourceSet;
+            ScriptWorkspaceExecutionMode executionMode;
+            if (request.SourceKind == ScriptExecutionSourceKind.InlineSnippet) {
+                sourceSet = this.MaterializeInlineSnippet(
                     request.ScriptContent,
                     request.SourceName,
                     executionId
-                ),
-                ScriptExecutionSourceKind.WorkspacePath => this.LoadWorkspaceSource(workspaceKey, request.SourcePath),
-                _ => throw new InvalidOperationException($"Unsupported source kind '{request.SourceKind}'.")
-            };
+                );
+                executionMode = ScriptWorkspaceExecutionMode.InlineSnippet;
+            } else if (request.SourceKind == ScriptExecutionSourceKind.WorkspacePath) {
+                var workspaceSource = this.LoadWorkspaceSource(workspaceKey, request.SourcePath);
+                foreach (var diagnostic in workspaceSource.Diagnostics)
+                    diagnostics.Add(diagnostic);
+                if (workspaceSource.Diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error))
+                    return (null, ScriptExecutionStatus.Rejected, diagnostics);
+
+                sourceSet = workspaceSource.SourceSet;
+                executionMode = workspaceSource.ExecutionMode;
+            } else {
+                throw new InvalidOperationException($"Unsupported source kind '{request.SourceKind}'.");
+            }
 
             var projectSeed = request.SourceKind == ScriptExecutionSourceKind.InlineSnippet
                 ? null
@@ -395,6 +415,7 @@ public sealed class RevitScriptExecutionService(
                     request.ArtifactRunName,
                     request.PermissionMode,
                     sourceSet,
+                    executionMode,
                     canonicalProjectContent,
                     request.SourceKind == ScriptExecutionSourceKind.InlineSnippet
                 ),
@@ -510,17 +531,18 @@ public sealed class RevitScriptExecutionService(
             ? path
             : path + Path.DirectorySeparatorChar;
 
-    private ScriptSourceSet LoadWorkspaceSource(string workspaceKey, string? sourcePath) {
-        var normalizedSourcePath = sourcePath ?? throw new ArgumentException(
-            "SourcePath is required for workspace file execution.",
-            nameof(sourcePath)
-        );
-        if (!normalizedSourcePath.StartsWith($"{RevitScriptingStorageLocations.SourceDirectoryName}/",
-                StringComparison.OrdinalIgnoreCase) &&
-            !normalizedSourcePath.StartsWith($"{RevitScriptingStorageLocations.SourceDirectoryName}\\",
-                StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("Workspace source path must be under src/.", nameof(sourcePath));
+    private static string DescribeExecutionMode(ScriptWorkspaceExecutionMode executionMode) => executionMode switch {
+        ScriptWorkspaceExecutionMode.InlineSnippet => "Inline snippet mode:",
+        ScriptWorkspaceExecutionMode.LooseWorkspace => "Loose workspace mode:",
+        ScriptWorkspaceExecutionMode.Pod => "Pod mode:",
+        _ => "Script mode:"
+    };
 
+    private WorkspaceSourceLoadResult LoadWorkspaceSource(string workspaceKey, string? sourcePath) {
+        if (string.IsNullOrWhiteSpace(sourcePath))
+            throw new ArgumentException("SourcePath is required for workspace file execution.", nameof(sourcePath));
+
+        var normalizedSourcePath = PodManifestValidator.NormalizeSourcePath(sourcePath);
         var selectedPath = RevitScriptingStorageLocations.ResolveWorkspaceSourceFilePath(
             workspaceKey,
             normalizedSourcePath
@@ -536,6 +558,50 @@ public sealed class RevitScriptExecutionService(
         var sourceDirectory = RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey);
         if (!Directory.Exists(sourceDirectory))
             throw new IOException($"Workspace source directory does not exist: {sourceDirectory}");
+
+        var podManifestPath = RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey);
+        if (!File.Exists(podManifestPath)) {
+            var looseSelectedSource = new ScriptSourceFile(
+                GetRelativePath(sourceDirectory, selectedPath),
+                File.ReadAllText(selectedPath),
+                selectedPath
+            );
+            return new WorkspaceSourceLoadResult(
+                new ScriptSourceSet([looseSelectedSource], looseSelectedSource.Name),
+                ScriptWorkspaceExecutionMode.LooseWorkspace,
+                [
+                    ScriptDiagnosticFactory.Info(
+                        "normalize",
+                        "Loose workspace mode: no pod.json was found, so only the requested source file will be compiled and sibling files are ignored.",
+                        looseSelectedSource.Name
+                    )
+                ]
+            );
+        }
+
+        var diagnostics = new List<ScriptDiagnostic>();
+        var manifestResult = PodManifestValidator.ValidateJson(File.ReadAllText(podManifestPath), workspaceKey);
+        diagnostics.AddRange(manifestResult.Diagnostics);
+        if (!manifestResult.Success || manifestResult.Manifest is null)
+            return new WorkspaceSourceLoadResult(
+                new ScriptSourceSet([], string.Empty),
+                ScriptWorkspaceExecutionMode.Pod,
+                diagnostics
+            );
+
+        if (!manifestResult.Manifest.Entrypoints.Any(entrypoint =>
+                string.Equals(entrypoint.SourcePath, normalizedSourcePath, StringComparison.OrdinalIgnoreCase)))
+            diagnostics.Add(ScriptDiagnosticFactory.Error(
+                PodManifestValidator.DiagnosticStage,
+                $"pod.json does not declare '{normalizedSourcePath}' as an entrypoint.",
+                normalizedSourcePath
+            ));
+        if (diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error))
+            return new WorkspaceSourceLoadResult(
+                new ScriptSourceSet([], string.Empty),
+                ScriptWorkspaceExecutionMode.Pod,
+                diagnostics
+            );
 
         var sourceFiles = Directory.EnumerateFiles(sourceDirectory, "*.cs", SearchOption.AllDirectories)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
@@ -553,15 +619,17 @@ public sealed class RevitScriptExecutionService(
         if (selectedSource == null)
             throw new IOException($"Workspace source file is not under src/: {selectedPath}");
 
-        return new ScriptSourceSet(sourceFiles, selectedSource.Name);
-    }
+        diagnostics.Add(ScriptDiagnosticFactory.Info(
+            "normalize",
+            "Pod mode: pod.json was validated, the requested source is a declared entrypoint, and all src/**/*.cs files will be compiled.",
+            selectedSource.Name
+        ));
 
-    private static ScriptSourceSet CreateEntryPointOnlySourceSet(ScriptSourceSet sourceSet) {
-        var entryPointFile = sourceSet.Files.FirstOrDefault(file =>
-            string.Equals(file.Name, sourceSet.EntryPointSourceName, StringComparison.OrdinalIgnoreCase));
-        return entryPointFile == null
-            ? sourceSet
-            : new ScriptSourceSet([entryPointFile], sourceSet.EntryPointSourceName);
+        return new WorkspaceSourceLoadResult(
+            new ScriptSourceSet(sourceFiles, selectedSource.Name),
+            ScriptWorkspaceExecutionMode.Pod,
+            diagnostics
+        );
     }
 
     private static IReadOnlyList<ScriptDiagnostic> ValidatePermissionMode(ScriptExecutionPlan plan) {
@@ -899,6 +967,28 @@ public sealed class RevitScriptExecutionService(
         List<ScriptDiagnostic> diagnostics,
         ScriptDiagnostic diagnostic
     ) => diagnostics.Add(diagnostic);
+
+    private static void AppendAuthoringShapeHint(
+        List<ScriptDiagnostic> diagnostics,
+        string previousStage,
+        string? source = null
+    ) {
+        if (diagnostics.Any(diagnostic =>
+                diagnostic.Stage == "authoring" && diagnostic.Message.Contains(AuthoringShapeHint, StringComparison.Ordinal)))
+            return;
+
+        diagnostics.Add(ScriptDiagnosticFactory.Warning(
+            "authoring",
+            $"Script authoring hint after {previousStage} failure: {AuthoringShapeHint}",
+            source
+        ));
+    }
+
+    private sealed record WorkspaceSourceLoadResult(
+        ScriptSourceSet SourceSet,
+        ScriptWorkspaceExecutionMode ExecutionMode,
+        IReadOnlyList<ScriptDiagnostic> Diagnostics
+    );
 
     private sealed class RevitScriptTransactionException(
         ScriptExecutionStatus status,

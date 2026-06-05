@@ -11,3 +11,4 @@ riderModule.iml
 .idea/
 .env
 Old_Template.rvt
+*_wpftmp.csproj

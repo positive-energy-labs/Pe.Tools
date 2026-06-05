@@ -58,9 +58,41 @@ public sealed class RevitScriptingPortTests {
             runtimeAssemblyPath
         );
 
-        Assert.That(generated, Does.Contain("<EnableDefaultCompileItems>true</EnableDefaultCompileItems>"));
+        Assert.That(generated, Does.Contain("<EnableDefaultCompileItems>false</EnableDefaultCompileItems>"));
+        Assert.That(generated, Does.Contain("""<Compile Include="src/**/*.cs" />"""));
         Assert.That(generated, Does.Contain("<OutputType>Library</OutputType>"));
         Assert.That(generated, Does.Contain("<ProduceReferenceAssembly>false</ProduceReferenceAssembly>"));
+    }
+
+    [Test]
+    public void Portable_project_generation_omits_references_but_preserves_packages_and_usings() {
+        var generator = CreateProjectGenerator();
+        var existingProject = """
+                              <Project Sdk="Microsoft.NET.Sdk">
+                                <PropertyGroup>
+                                  <TargetFramework>net8.0-windows</TargetFramework>
+                                </PropertyGroup>
+                                <ItemGroup>
+                                  <Reference Include="MachineSpecific">
+                                    <HintPath>C:\temp\machine-specific.dll</HintPath>
+                                  </Reference>
+                                  <PackageReference Include="Example.Package" Version="1.2.3" />
+                                  <Using Include="System.Text.Json" />
+                                </ItemGroup>
+                              </Project>
+                              """;
+
+        var generated = generator.GeneratePortableProjectContent(
+            existingProject,
+            Path.GetTempPath(),
+            "net8.0-windows"
+        );
+
+        Assert.That(generated, Does.Contain("""<Compile Include="src/**/*.cs" />"""));
+        Assert.That(generated, Does.Contain("""<PackageReference Include="Example.Package" Version="1.2.3" />"""));
+        Assert.That(generated, Does.Contain("""<Using Include="System.Text.Json" />"""));
+        Assert.That(generated, Does.Not.Contain("machine-specific.dll"));
+        Assert.That(generated, Does.Not.Contain("<Reference Include=\"MachineSpecific\">"));
     }
 
     [Test]
@@ -566,19 +598,24 @@ public sealed class RevitScriptingPortTests {
     }
 
     [Test]
-    public void No_container_type_is_rejected(UIApplication uiApplication) {
+    public void No_container_type_is_rejected_with_authoring_hint(UIApplication uiApplication) {
         var service = CreateExecutionService(uiApplication);
 
         var result = service.Execute(new ExecuteRevitScriptRequest(
             """
             public sealed class NotAContainer
             {
+                private static readonly System.Type ContainerType = typeof(PeScriptContainer);
             }
             """
         ), "test-no-container");
 
         Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Rejected));
         Assert.That(result.Diagnostics.Any(diagnostic => diagnostic.Stage == "instantiate"), Is.True);
+        Assert.That(result.Diagnostics.Any(diagnostic =>
+            diagnostic.Stage == "authoring"
+            && diagnostic.Message.Contains("public override void Execute()", StringComparison.Ordinal)
+            && diagnostic.Message.Contains("WriteLine", StringComparison.Ordinal)), Is.True);
     }
 
     [Test]
@@ -610,16 +647,16 @@ public sealed class RevitScriptingPortTests {
     }
 
     [Test]
-    public void Compilation_errors_are_returned_as_structured_diagnostics(UIApplication uiApplication) {
+    public void Compilation_errors_are_returned_with_authoring_hint(UIApplication uiApplication) {
         var service = CreateExecutionService(uiApplication);
 
         var result = service.Execute(new ExecuteRevitScriptRequest(
             """
             public sealed class BrokenScript : PeScriptContainer
             {
-                public override void Execute()
+                public override string Execute()
                 {
-                    DoesNotExist();
+                    return "wrong shape";
                 }
             }
             """
@@ -628,6 +665,10 @@ public sealed class RevitScriptingPortTests {
         Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.CompilationFailed));
         Assert.That(result.Diagnostics.Any(diagnostic =>
             diagnostic.Stage == "compile" && diagnostic.Severity == ScriptDiagnosticSeverity.Error), Is.True);
+        Assert.That(result.Diagnostics.Any(diagnostic =>
+            diagnostic.Stage == "authoring"
+            && diagnostic.Message.Contains("Execute-body statements", StringComparison.Ordinal)
+            && diagnostic.Message.Contains("Execute() returns void", StringComparison.Ordinal)), Is.True);
     }
 
     [Test]
@@ -686,6 +727,7 @@ public sealed class RevitScriptingPortTests {
                 }
                 """
             );
+            WritePodManifest(workspaceKey, "src/SampleScript.cs");
 
             var service = CreateExecutionService(uiApplication);
             var result = service.Execute(
@@ -971,8 +1013,50 @@ public sealed class RevitScriptingPortTests {
     }
 
     [Test]
-    public void Workspace_path_execution_loads_script_from_workspace_root(UIApplication uiApplication) {
-        var workspaceKey = $"test-{Guid.NewGuid():N}";
+    public void Loose_workspace_execution_ignores_broken_sibling_source(UIApplication uiApplication) {
+        var workspaceKey = $"test-loose-ignore-{Guid.NewGuid():N}";
+        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
+
+        try {
+            File.WriteAllText(
+                RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey),
+                """
+                public sealed class WorkspaceScript : PeScriptContainer
+                {
+                    public override void Execute()
+                    {
+                        WriteLine("loose workspace script ran");
+                    }
+                }
+                """
+            );
+            File.WriteAllText(
+                Path.Combine(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey), "BrokenSibling.cs"),
+                "public sealed class BrokenSibling { public void Nope( }"
+            );
+
+            var service = CreateExecutionService(uiApplication);
+            var result = service.Execute(
+                new ExecuteRevitScriptRequest(
+                    SourceKind: ScriptExecutionSourceKind.WorkspacePath,
+                    SourcePath: @"src\SampleScript.cs",
+                    WorkspaceKey: workspaceKey
+                ),
+                "test-loose-ignore"
+            );
+
+            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
+            Assert.That(result.Output, Does.Contain("loose workspace script ran"));
+            Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("Loose workspace mode"));
+        } finally {
+            DeleteWorkspace(workspaceRoot);
+        }
+    }
+
+    [Test]
+    public void Loose_workspace_execution_cannot_use_helper_source_without_pod(UIApplication uiApplication) {
+        var workspaceKey = $"test-loose-helper-{Guid.NewGuid():N}";
         var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
         Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
 
@@ -996,14 +1080,6 @@ public sealed class RevitScriptingPortTests {
                 {
                     public const string Message = "workspace script ran";
                 }
-
-                public sealed class OtherWorkspaceScript : PeScriptContainer
-                {
-                    public override void Execute()
-                    {
-                        WriteLine("other workspace script ran");
-                    }
-                }
                 """
             );
 
@@ -1014,12 +1090,162 @@ public sealed class RevitScriptingPortTests {
                     SourcePath: @"src\SampleScript.cs",
                     WorkspaceKey: workspaceKey
                 ),
-                "test-workspace-path"
+                "test-loose-helper"
+            );
+
+            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.CompilationFailed));
+            Assert.That(result.Diagnostics.Any(diagnostic =>
+                diagnostic.Stage == "compile" && diagnostic.Message.Contains("WorkspaceHelper", StringComparison.Ordinal)), Is.True);
+        } finally {
+            DeleteWorkspace(workspaceRoot);
+        }
+    }
+
+    [Test]
+    public void Pod_workspace_execution_compiles_all_src_and_uses_helper_files(UIApplication uiApplication) {
+        var workspaceKey = $"test-pod-helper-{Guid.NewGuid():N}";
+        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
+
+        try {
+            File.WriteAllText(
+                RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey),
+                """
+                public sealed class WorkspaceScript : PeScriptContainer
+                {
+                    public override void Execute()
+                    {
+                        WriteLine(WorkspaceHelper.Message);
+                    }
+                }
+                """
+            );
+            File.WriteAllText(
+                Path.Combine(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey), "WorkspaceHelper.cs"),
+                """
+                public static class WorkspaceHelper
+                {
+                    public const string Message = "pod workspace script ran";
+                }
+
+                public sealed class OtherWorkspaceScript : PeScriptContainer
+                {
+                    public override void Execute()
+                    {
+                        WriteLine("other workspace script ran");
+                    }
+                }
+                """
+            );
+            WritePodManifest(workspaceKey, "src/SampleScript.cs");
+
+            var service = CreateExecutionService(uiApplication);
+            var result = service.Execute(
+                new ExecuteRevitScriptRequest(
+                    SourceKind: ScriptExecutionSourceKind.WorkspacePath,
+                    SourcePath: @"src\SampleScript.cs",
+                    WorkspaceKey: workspaceKey
+                ),
+                "test-pod-helper"
             );
 
             Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
-            Assert.That(result.Output, Does.Contain("workspace script ran"));
+            Assert.That(result.Output, Does.Contain("pod workspace script ran"));
             Assert.That(result.Output, Does.Not.Contain("other workspace script ran"));
+            Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("Pod mode"));
+        } finally {
+            DeleteWorkspace(workspaceRoot);
+        }
+    }
+
+    [Test]
+    public void Pod_workspace_execution_fails_when_any_src_file_fails_compilation(UIApplication uiApplication) {
+        var workspaceKey = $"test-pod-broken-{Guid.NewGuid():N}";
+        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
+
+        try {
+            File.WriteAllText(
+                RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey),
+                """
+                public sealed class WorkspaceScript : PeScriptContainer
+                {
+                    public override void Execute()
+                    {
+                        WriteLine("pod workspace script ran");
+                    }
+                }
+                """
+            );
+            File.WriteAllText(
+                Path.Combine(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey), "BrokenSibling.cs"),
+                "public sealed class BrokenSibling { public void Nope( }"
+            );
+            WritePodManifest(workspaceKey, "src/SampleScript.cs");
+
+            var service = CreateExecutionService(uiApplication);
+            var result = service.Execute(
+                new ExecuteRevitScriptRequest(
+                    SourceKind: ScriptExecutionSourceKind.WorkspacePath,
+                    SourcePath: @"src\SampleScript.cs",
+                    WorkspaceKey: workspaceKey
+                ),
+                "test-pod-broken"
+            );
+
+            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.CompilationFailed));
+            Assert.That(result.Diagnostics.Any(diagnostic =>
+                diagnostic.Stage == "compile" && diagnostic.Severity == ScriptDiagnosticSeverity.Error), Is.True);
+        } finally {
+            DeleteWorkspace(workspaceRoot);
+        }
+    }
+
+    [Test]
+    public void Pod_workspace_execution_requires_declared_entrypoint(UIApplication uiApplication) {
+        var workspaceKey = $"test-pod-entrypoint-{Guid.NewGuid():N}";
+        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
+
+        try {
+            File.WriteAllText(
+                RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey),
+                """
+                public sealed class WorkspaceScript : PeScriptContainer
+                {
+                    public override void Execute()
+                    {
+                        WriteLine("pod workspace script ran");
+                    }
+                }
+                """
+            );
+            File.WriteAllText(
+                Path.Combine(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey), "Other.cs"),
+                """
+                public sealed class OtherScript : PeScriptContainer
+                {
+                    public override void Execute()
+                    {
+                    }
+                }
+                """
+            );
+            WritePodManifest(workspaceKey, "src/Other.cs");
+
+            var service = CreateExecutionService(uiApplication);
+            var result = service.Execute(
+                new ExecuteRevitScriptRequest(
+                    SourceKind: ScriptExecutionSourceKind.WorkspacePath,
+                    SourcePath: @"src\SampleScript.cs",
+                    WorkspaceKey: workspaceKey
+                ),
+                "test-pod-entrypoint"
+            );
+
+            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Rejected));
+            Assert.That(result.Diagnostics.Any(diagnostic =>
+                diagnostic.Stage == "pod-manifest" && diagnostic.Message.Contains("does not declare", StringComparison.Ordinal)), Is.True);
         } finally {
             DeleteWorkspace(workspaceRoot);
         }
@@ -1037,6 +1263,26 @@ public sealed class RevitScriptingPortTests {
             new ScriptAssemblyLoadService(),
             new ScriptCompilationService(ScriptFileTemplates.DefaultUsings),
             () => uiApplication
+        );
+    }
+
+    private static void WritePodManifest(string workspaceKey, params string[] entrypointSourcePaths) {
+        var entrypoints = string.Join(",\n", entrypointSourcePaths.Select((sourcePath, index) =>
+            $$"""
+                { "id": "entry-{{index + 1}}", "sourcePath": "{{sourcePath.Replace("\\", "/")}}" }
+              """));
+        File.WriteAllText(
+            RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey),
+            $$"""
+            {
+              "schemaVersion": 1,
+              "id": "{{workspaceKey}}",
+              "name": "{{workspaceKey}}",
+              "entrypoints": [
+            {{entrypoints}}
+              ]
+            }
+            """
         );
     }
 

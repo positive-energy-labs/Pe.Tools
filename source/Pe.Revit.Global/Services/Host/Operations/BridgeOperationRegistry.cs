@@ -166,6 +166,14 @@ internal sealed class BridgeOperationRegistry {
             BridgeOperations.Create<ExecuteRevitScriptRequest, ExecuteRevitScriptData>(
                 ExecuteRevitScriptOperationContract.Definition,
                 ExecuteRevitScriptAsync
+            ),
+            BridgeOperations.Create<ScriptPodImportRequest, ScriptPodImportData>(
+                ImportScriptPodOperationContract.Definition,
+                ImportScriptPodAsync
+            ),
+            BridgeOperations.Create<ScriptPodExportRequest, ScriptPodExportData>(
+                ExportScriptPodOperationContract.Definition,
+                ExportScriptPodAsync
             )
         ];
 
@@ -194,6 +202,18 @@ internal sealed class BridgeOperationRegistry {
         BridgeOperationContext context,
         CancellationToken cancellationToken
     ) => await context.ScriptingMessageHandler.ExecuteAsync(request, cancellationToken);
+
+    private static async Task<ScriptPodImportData> ImportScriptPodAsync(
+        ScriptPodImportRequest request,
+        BridgeOperationContext context,
+        CancellationToken cancellationToken
+    ) => await context.ScriptingMessageHandler.ImportPodAsync(request, cancellationToken);
+
+    private static async Task<ScriptPodExportData> ExportScriptPodAsync(
+        ScriptPodExportRequest request,
+        BridgeOperationContext context,
+        CancellationToken cancellationToken
+    ) => await context.ScriptingMessageHandler.ExportPodAsync(request, cancellationToken);
 
     private static void ValidateDefinitions(IReadOnlyList<IBridgeOperation> operations) {
         var duplicateKeys = operations

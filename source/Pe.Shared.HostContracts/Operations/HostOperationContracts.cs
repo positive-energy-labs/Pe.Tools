@@ -42,22 +42,6 @@ public enum RevitActiveDocumentKind {
     Family
 }
 
-public enum HostOperationResultGrain {
-    Status,
-    Summary,
-    Schema,
-    Catalog,
-    Matrix,
-    Rows,
-    Handles,
-    Detail,
-    Workspace,
-    Document,
-    Logs,
-    Token,
-    Mutation
-}
-
 public enum HostOperationCostTier {
     Cheap,
     Bounded,
@@ -71,26 +55,11 @@ public enum HostOperationVisibility {
     ExpertOnly
 }
 
-public enum HostOperationIntentVerb {
-    Orient,
-    Find,
-    Inventory,
-    Inspect,
-    Audit,
-    Script,
-    Configure,
-    Authenticate,
-    Diagnose,
-    Mutate
-}
-
-public enum HostOperationRequestShapeKind {
-    NoRequest,
-    CommonEnvelope,
-    QueryWrapper,
-    Flat,
-    Command,
-    LegacyException
+public enum HostOperationRelationKind {
+    Preflight,
+    DrillDown,
+    Fallback,
+    Alternative
 }
 
 public sealed record HostOperationRequestExample(
@@ -99,10 +68,16 @@ public sealed record HostOperationRequestExample(
     string Json
 );
 
+public sealed record HostOperationRelatedOperation(
+    string Key,
+    HostOperationRelationKind Kind,
+    string? Note = null
+);
+
 public sealed record HostOperationAgentMetadata(
     string Domain,
-    string Summary,
-    IReadOnlyList<string> Tags,
+    string Description,
+    IReadOnlyList<string> SearchTerms,
     HostOperationIntent Intent,
     bool RequiresBridge,
     bool RequiresActiveDocument,
@@ -110,34 +85,19 @@ public sealed record HostOperationAgentMetadata(
     HostOperationFamily Family,
     RevitOperationLayer? RevitLayer,
     string DomainNoun,
-    HostOperationResultGrain ResultGrain,
     HostOperationCostTier CostTier,
+    HostOperationVisibility Visibility,
     string? SingleFlightGroup,
     IReadOnlyList<HostOperationRequestExample> RequestExamples,
-    IReadOnlyList<string> BoundedExpansionHints,
-    string? HandleProvenanceNotes,
-    bool StrictRequestValidation,
-    HostOperationVisibility Visibility,
-    string CanonicalUse,
-    HostOperationIntentVerb IntentVerb,
-    HostOperationRequestShapeKind RequestShapeKind,
-    IReadOnlyList<string> UseWhen,
-    IReadOnlyList<string> DoNotUseWhen,
-    IReadOnlyList<string> UsuallyBefore,
-    IReadOnlyList<string> UsuallyAfter,
-    IReadOnlyList<string> NextOperations,
-    IReadOnlyList<string> AnswersQuestionTypes,
-    IReadOnlyList<string> DoesNotAnswer,
-    IReadOnlyList<string> PrimaryNouns,
-    IReadOnlyList<string> SupportedScopes,
-    IReadOnlyList<string> Capabilities,
     string? SafeDefaultRequestJson,
-    string? AmbiguityBehavior
+    IReadOnlyList<string> CallGuidance,
+    IReadOnlyList<HostOperationRelatedOperation> RelatedOperations,
+    bool StrictRequestValidation
 ) {
     public static HostOperationAgentMetadata Create(
         string domain,
-        string summary,
-        IReadOnlyList<string>? tags = null,
+        string description,
+        IReadOnlyList<string>? searchTerms = null,
         HostOperationIntent intent = HostOperationIntent.Read,
         bool requiresBridge = false,
         bool requiresActiveDocument = false,
@@ -145,33 +105,18 @@ public sealed record HostOperationAgentMetadata(
         HostOperationFamily? family = null,
         RevitOperationLayer? revitLayer = null,
         string? domainNoun = null,
-        HostOperationResultGrain? resultGrain = null,
         HostOperationCostTier? costTier = null,
+        HostOperationVisibility? visibility = null,
         string? singleFlightGroup = null,
         IReadOnlyList<HostOperationRequestExample>? requestExamples = null,
-        IReadOnlyList<string>? boundedExpansionHints = null,
-        string? handleProvenanceNotes = null,
-        bool strictRequestValidation = true,
-        HostOperationVisibility? visibility = null,
-        string? canonicalUse = null,
-        HostOperationIntentVerb? intentVerb = null,
-        HostOperationRequestShapeKind? requestShapeKind = null,
-        IReadOnlyList<string>? useWhen = null,
-        IReadOnlyList<string>? doNotUseWhen = null,
-        IReadOnlyList<string>? usuallyBefore = null,
-        IReadOnlyList<string>? usuallyAfter = null,
-        IReadOnlyList<string>? nextOperations = null,
-        IReadOnlyList<string>? answersQuestionTypes = null,
-        IReadOnlyList<string>? doesNotAnswer = null,
-        IReadOnlyList<string>? primaryNouns = null,
-        IReadOnlyList<string>? supportedScopes = null,
-        IReadOnlyList<string>? capabilities = null,
         string? safeDefaultRequestJson = null,
-        string? ambiguityBehavior = null
+        IReadOnlyList<string>? callGuidance = null,
+        IReadOnlyList<HostOperationRelatedOperation>? relatedOperations = null,
+        bool strictRequestValidation = true
     ) => new(
         domain,
-        summary,
-        tags ?? Array.Empty<string>(),
+        description,
+        searchTerms ?? Array.Empty<string>(),
         intent,
         requiresBridge,
         requiresActiveDocument,
@@ -179,29 +124,14 @@ public sealed record HostOperationAgentMetadata(
         family ?? InferFamily(domain),
         revitLayer,
         domainNoun ?? domain,
-        resultGrain ?? InferResultGrain(intent),
         costTier ?? InferCostTier(intent, requiresBridge),
+        visibility ?? HostOperationVisibility.EscalationVisible,
         singleFlightGroup ?? (requiresBridge ? "revit" : null),
         requestExamples ?? Array.Empty<HostOperationRequestExample>(),
-        boundedExpansionHints ?? Array.Empty<string>(),
-        handleProvenanceNotes,
-        strictRequestValidation,
-        visibility ?? HostOperationVisibility.EscalationVisible,
-        canonicalUse ?? summary,
-        intentVerb ?? InferIntentVerb(intent),
-        requestShapeKind ?? HostOperationRequestShapeKind.Flat,
-        useWhen ?? Array.Empty<string>(),
-        doNotUseWhen ?? Array.Empty<string>(),
-        usuallyBefore ?? Array.Empty<string>(),
-        usuallyAfter ?? Array.Empty<string>(),
-        nextOperations ?? Array.Empty<string>(),
-        answersQuestionTypes ?? Array.Empty<string>(),
-        doesNotAnswer ?? Array.Empty<string>(),
-        primaryNouns ?? Array.Empty<string>(),
-        supportedScopes ?? Array.Empty<string>(),
-        capabilities ?? Array.Empty<string>(),
         safeDefaultRequestJson,
-        ambiguityBehavior
+        callGuidance ?? Array.Empty<string>(),
+        relatedOperations ?? Array.Empty<HostOperationRelatedOperation>(),
+        strictRequestValidation
     );
 
     private static HostOperationFamily InferFamily(string domain) => domain switch {
@@ -212,16 +142,6 @@ public sealed record HostOperationAgentMetadata(
         "aps" => HostOperationFamily.Aps,
         _ => HostOperationFamily.Host
     };
-
-    private static HostOperationResultGrain InferResultGrain(HostOperationIntent intent) =>
-        intent == HostOperationIntent.Mutate
-            ? HostOperationResultGrain.Mutation
-            : HostOperationResultGrain.Summary;
-
-    private static HostOperationIntentVerb InferIntentVerb(HostOperationIntent intent) =>
-        intent == HostOperationIntent.Mutate
-            ? HostOperationIntentVerb.Mutate
-            : HostOperationIntentVerb.Inspect;
 
     private static HostOperationCostTier InferCostTier(
         HostOperationIntent intent,
@@ -314,22 +234,11 @@ public sealed record HostOperationDefinition(
             SupportedActiveDocumentKinds = DefaultIfEmpty(metadata.SupportedActiveDocumentKinds, InferSupportedActiveDocumentKinds(key, family, metadata.RequiresActiveDocument)),
             RevitLayer = metadata.RevitLayer ?? InferRevitLayerFromKey(key),
             DomainNoun = InferDomainNounFromKey(key, metadata.DomainNoun, metadata.Domain),
-            ResultGrain = InferResultGrainFromKey(key, metadata.ResultGrain),
-            CostTier = InferCostTierFromKey(key, metadata.CostTier),
+            CostTier = InferCostTierFromKey(key, metadata.CostTier, metadata.Intent),
             SingleFlightGroup = metadata.SingleFlightGroup ?? (metadata.RequiresBridge ? "revit" : null),
             Visibility = InferVisibilityFromKey(key, metadata.Visibility),
-            IntentVerb = InferIntentVerbFromKey(key, metadata.IntentVerb),
-            RequestShapeKind = InferRequestShapeKind(metadata.RequestShapeKind, requestType),
-            CanonicalUse = metadata.CanonicalUse == metadata.Summary ? InferCanonicalUseFromKey(key, metadata.CanonicalUse) : metadata.CanonicalUse,
-            UseWhen = DefaultIfEmpty(metadata.UseWhen, InferUseWhenFromKey(key)),
-            DoNotUseWhen = DefaultIfEmpty(metadata.DoNotUseWhen, InferDoNotUseWhenFromKey(key)),
-            UsuallyBefore = DefaultIfEmpty(metadata.UsuallyBefore, InferUsuallyBeforeFromKey(key)),
-            UsuallyAfter = DefaultIfEmpty(metadata.UsuallyAfter, InferUsuallyAfterFromKey(key)),
-            NextOperations = DefaultIfEmpty(metadata.NextOperations, InferNextOperationsFromKey(key)),
-            PrimaryNouns = DefaultIfEmpty(metadata.PrimaryNouns, InferPrimaryNounsFromKey(key)),
-            Capabilities = DefaultIfEmpty(metadata.Capabilities, InferCapabilitiesFromKey(key)),
-            SafeDefaultRequestJson = metadata.SafeDefaultRequestJson ?? InferSafeDefaultRequestJson(key, requestType),
-            AmbiguityBehavior = metadata.AmbiguityBehavior ?? InferAmbiguityBehaviorFromKey(key)
+            SearchTerms = DefaultIfEmpty(metadata.SearchTerms, InferSearchTermsFromKey(key, metadata.Description, metadata.Domain)),
+            SafeDefaultRequestJson = metadata.SafeDefaultRequestJson ?? InferSafeDefaultRequestJson(key, requestType)
         };
     }
 
@@ -377,83 +286,28 @@ public sealed record HostOperationDefinition(
         };
     }
 
-    private static string InferCanonicalUseFromKey(string key, string fallback) => key switch {
-        "revit.context.summary" => "Orient to the current Revit document, active view/sheet, selection, and session state.",
-        "revit.context.visible-summary" => "Inspect visible active-view contents after context.summary shows the active view matters.",
-        "revit.catalog.project-index" => "Build broad semantic model inventory across levels, sheets, views, schedules, categories, and families.",
-        "revit.catalog.project-browser" => "Read Project Browser folder/path organization for human navigation and provenance.",
-        "revit.resolve.references" => "Resolve fuzzy human references to stable Revit handles before detail or matrix calls.",
-        "revit.catalog.schedules" => "Inventory schedules, fields, filters, placements, and sheet role before detail/matrix calls.",
-        "revit.detail.schedules" => "Inspect known schedule rows, cells, values, and row-to-element handles.",
-        "revit.matrix.schedule-coverage" => "Audit element-to-schedule coverage, omissions, duplicates, and reverse membership.",
-        "revit.catalog.loaded-families" => "Inventory loaded families, types, categories, and placed counts.",
-        "revit.matrix.loaded-families" => "Audit family/type placement and parameter-presence matrices after catalog narrowing.",
-        "revit.catalog.parameter-bindings" => "Inventory project/shared parameter bindings and category availability.",
-        "revit.matrix.parameter-coverage" => "Audit missing, blank, default, or present parameter values across scoped elements.",
-        _ => fallback
-    };
-
-    private static IReadOnlyList<string> InferUseWhenFromKey(string key) => key switch {
-        "revit.context.summary" => ["Use first for broad Revit questions, current model context, active view/sheet, selection, or open document state."],
-        "revit.context.visible-summary" => ["Use when the question says visible, current view contents, on screen, in this view, category counts, or samples."],
-        "revit.catalog.project-index" => ["Use for broad semantic inventory: levels, sheets, views, schedules, families, categories, and quick project sense."],
-        "revit.catalog.project-browser" => ["Use when the question asks about Project Browser organization, folders, paths, issued/working/archive navigation, or where a user would find something."],
-        "revit.resolve.references" => ["Use for fuzzy phrases like this view, selected equipment, that schedule, printed mech Level 1, or the equipment schedule."],
-        "revit.catalog.schedules" => ["Use for schedule inventory, definitions, placements, fields, filters, browser paths, and sheet placement."],
-        "revit.detail.schedules" => ["Use for rows, cells, field values, or row data in a known or resolved schedule."],
-        "revit.matrix.schedule-coverage" => ["Use for missing from schedule, scheduled vs unscheduled, covered, duplicated, omitted, or are all elements scheduled questions."],
-        "revit.catalog.loaded-families" => ["Use for families, types, loaded content, placed or unused family inventory."],
-        "revit.matrix.loaded-families" => ["Use for placed vs loaded, unused types, duplicate-looking families/types, or family/type parameter comparisons."],
-        "revit.catalog.parameter-bindings" => ["Use for project/shared parameter binding, category binding, or whether a parameter is available on a category."],
-        "revit.matrix.parameter-coverage" => ["Use for missing, blank, default, or completeness audits for parameters on scoped elements."],
-        _ => []
-    };
-
-    private static IReadOnlyList<string> InferDoNotUseWhenFromKey(string key) => key switch {
-        "revit.context.visible-summary" => ["Do not use for whole-model inventory or when the active sheet is only a printed container."],
-        "revit.catalog.project-browser" => ["Do not infer BIM facts from folder names alone; use semantic catalog/detail/matrix operations for facts."],
-        "revit.detail.schedules" => ["Do not use to discover candidate schedules; use revit.catalog.schedules first."],
-        "revit.matrix.schedule-coverage" => ["Do not use for simple schedule inventory; use revit.catalog.schedules first."],
-        "revit.matrix.loaded-families" => ["Do not use for simple family inventory; use revit.catalog.loaded-families first."],
-        "revit.matrix.parameter-coverage" => ["Do not use to discover whether a parameter is bound; use revit.catalog.parameter-bindings first."],
-        _ => []
-    };
-
-    private static IReadOnlyList<string> InferUsuallyBeforeFromKey(string key) => key switch {
-        "revit.context.summary" => ["revit.context.visible-summary", "revit.catalog.project-index", "revit.resolve.references"],
-        "revit.catalog.project-index" => ["revit.catalog.schedules", "revit.catalog.loaded-families", "revit.catalog.project-browser"],
-        "revit.catalog.schedules" => ["revit.detail.schedules", "revit.matrix.schedule-coverage", "revit.matrix.schedule-profiles"],
-        "revit.catalog.loaded-families" => ["revit.matrix.loaded-families", "revit.detail.elements"],
-        "revit.catalog.parameter-bindings" => ["revit.matrix.parameter-coverage"],
-        _ => []
-    };
-
-    private static IReadOnlyList<string> InferUsuallyAfterFromKey(string key) => key switch {
-        "revit.context.visible-summary" => ["revit.context.summary"],
-        "revit.catalog.project-browser" => ["revit.context.summary", "revit.catalog.project-index"],
-        "revit.detail.schedules" => ["revit.catalog.schedules", "revit.resolve.references"],
-        "revit.matrix.schedule-coverage" => ["revit.catalog.schedules"],
-        "revit.matrix.loaded-families" => ["revit.catalog.loaded-families"],
-        "revit.matrix.parameter-coverage" => ["revit.catalog.parameter-bindings", "revit.detail.elements"],
-        _ => []
-    };
-
-    private static IReadOnlyList<string> InferNextOperationsFromKey(string key) => InferUsuallyBeforeFromKey(key);
-
-    private static IReadOnlyList<string> InferPrimaryNounsFromKey(string key) {
-        var parts = key.Split('.');
-        return parts.Length >= 3 && parts[0] == "revit" ? [parts[2]] : [];
+    private static IReadOnlyList<string> InferSearchTermsFromKey(
+        string key,
+        string description,
+        string domain
+    ) {
+        var terms = new List<string>();
+        AddSplitTerms(terms, key);
+        AddSplitTerms(terms, description);
+        AddSplitTerms(terms, domain);
+        return terms
+            .Where(term => term.Length > 1)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
-    private static IReadOnlyList<string> InferCapabilitiesFromKey(string key) => key switch {
-        "revit.catalog.project-index" => ["semantic-inventory", "levels", "sheets", "views", "schedules", "families", "categories"],
-        "revit.catalog.project-browser" => ["browser-paths", "folder-vocabulary", "navigation-provenance", "nearest-matches"],
-        "revit.catalog.schedules" => ["schedule-fields", "filters", "sheet-placement", "browser-provenance", "row-counts"],
-        "revit.detail.schedules" => ["schedule-rows", "cell-values", "row-element-handles"],
-        "revit.matrix.schedule-coverage" => ["coverage", "reverse-membership", "missing-samples"],
-        "revit.matrix.parameter-coverage" => ["parameter-presence", "blank-values", "default-values", "sample-handles"],
-        _ => []
-    };
+    private static void AddSplitTerms(
+        List<string> terms,
+        string value
+    ) {
+        foreach (var term in value.Split(['.', '-', '_', '/', ' ', ',', ':', ';', '(', ')', '[', ']'], StringSplitOptions.RemoveEmptyEntries))
+            terms.Add(term.Trim().ToLowerInvariant());
+    }
 
     private static string? InferSafeDefaultRequestJson(string key, Type requestType) {
         if (requestType == typeof(NoRequest))
@@ -462,17 +316,21 @@ public sealed record HostOperationDefinition(
             "revit.catalog.project-index" => """{ "projection": { "view": "Summary" }, "budget": { "maxEntries": 10, "maxSamplesPerEntry": 3 } }""",
             "revit.catalog.project-browser" => """{ "view": "Folders", "budget": { "maxSamplesPerEntry": 5 } }""",
             "revit.catalog.schedules" => """{ "projection": { "view": "Summary" }, "budget": { "maxEntries": 25 } }""",
+            "revit.detail.schedules" => """{ "query": { "kind": "CurrentActiveView", "projection": { "view": "Summary", "includeColumns": true }, "budget": { "maxEntries": 1, "maxRowsPerEntry": 0 } } }""",
+            "revit.matrix.schedule-profiles" => """{ "query": { "kind": "CurrentActiveView", "includeTemplates": true } }""",
+            "revit.matrix.schedule-coverage" => """{ "scope": "ActiveViewVisible", "scheduleFilter": { "projection": { "view": "Summary" }, "budget": { "maxEntries": 25 } }, "budget": { "maxEntries": 25, "maxSamplesPerEntry": 5 }, "includeElementSamples": true, "includeMatchedScheduleNames": true }""",
             "revit.catalog.loaded-families" => """{ "filter": { "placementScope": "PlacedOnly" }, "projection": { "view": "Summary" }, "budget": { "maxEntries": 25 } }""",
+            "revit.detail.elements" => """{ "query": { "kind": "CurrentSelection" } }""",
+            "revit.catalog.concept-evidence" => """{ "query": "", "conceptHints": [], "subjectHints": [], "budget": { "maxEntries": 10, "maxSamplesPerEntry": 3 } }""",
             "revit.catalog.parameter-bindings" => """{ "projection": { "view": "Summary" }, "budget": { "maxEntries": 50 } }""",
+            "revit.catalog.parameter-evidence" => """{ "scope": "ActiveViewVisible", "candidateParameters": [], "budget": { "maxEntries": 25, "maxSamplesPerEntry": 5 } }""",
+            "revit.matrix.parameter-coverage" => """{ "parameters": [], "scope": "ActiveViewVisible", "budget": { "maxEntries": 25, "maxSamplesPerEntry": 5 } }""",
+            "settings.schema" => """{ "moduleKey": "CmdScheduleManager", "rootKey": "schedules" }""",
+            "settings.field-options" => """{ "moduleKey": "CmdScheduleManager", "rootKey": "schedules", "propertyPath": "fields[].parameter.name", "sourceKey": "schedule-field-names", "contextValues": {} }""",
+            "settings.parameter-catalog" => """{ "moduleKey": "CmdFFManager", "contextValues": {} }""",
             _ => "{}"
         };
     }
-
-    private static string? InferAmbiguityBehaviorFromKey(string key) => key.StartsWith("revit.resolve.", StringComparison.Ordinal)
-        ? "Return grouped candidates with confidence and provenance; do not guess silently."
-        : key.StartsWith("revit.catalog.project-browser", StringComparison.Ordinal)
-            ? "Return nearest folder/path matches when exact browser filters miss."
-            : null;
 
     private static HostOperationFamily InferFamilyFromKey(
         string key,
@@ -522,35 +380,6 @@ public sealed record HostOperationDefinition(
             : fallback;
     }
 
-    private static HostOperationResultGrain InferResultGrainFromKey(
-        string key,
-        HostOperationResultGrain fallback
-    ) {
-        if (key.Contains(".catalog.", StringComparison.Ordinal)
-            || key.StartsWith("revit.catalog.", StringComparison.Ordinal))
-            return HostOperationResultGrain.Catalog;
-        if (key.Contains(".matrix.", StringComparison.Ordinal)
-            || key.StartsWith("revit.matrix.", StringComparison.Ordinal))
-            return HostOperationResultGrain.Matrix;
-        if (key.Contains(".detail.", StringComparison.Ordinal)
-            || key.StartsWith("revit.detail.", StringComparison.Ordinal))
-            return HostOperationResultGrain.Detail;
-        if (key.Contains(".resolve.", StringComparison.Ordinal)
-            || key.StartsWith("revit.resolve.", StringComparison.Ordinal))
-            return HostOperationResultGrain.Handles;
-        if (key.Contains("summary", StringComparison.Ordinal)
-            || key.StartsWith("revit.context.", StringComparison.Ordinal))
-            return HostOperationResultGrain.Summary;
-        if (key.Contains("schema", StringComparison.Ordinal))
-            return HostOperationResultGrain.Schema;
-        if (key.Contains("logs", StringComparison.Ordinal))
-            return HostOperationResultGrain.Logs;
-        if (key.Contains("token", StringComparison.Ordinal))
-            return HostOperationResultGrain.Token;
-
-        return fallback;
-    }
-
     private static HostOperationVisibility InferVisibilityFromKey(
         string key,
         HostOperationVisibility fallback
@@ -570,50 +399,13 @@ public sealed record HostOperationDefinition(
         return fallback;
     }
 
-    private static HostOperationIntentVerb InferIntentVerbFromKey(
-        string key,
-        HostOperationIntentVerb fallback
-    ) {
-        if (key.StartsWith("revit.context.", StringComparison.Ordinal))
-            return HostOperationIntentVerb.Orient;
-        if (key.StartsWith("revit.resolve.", StringComparison.Ordinal))
-            return HostOperationIntentVerb.Find;
-        if (key.StartsWith("revit.catalog.", StringComparison.Ordinal))
-            return HostOperationIntentVerb.Inventory;
-        if (key.StartsWith("revit.detail.", StringComparison.Ordinal))
-            return HostOperationIntentVerb.Inspect;
-        if (key.StartsWith("revit.matrix.", StringComparison.Ordinal))
-            return HostOperationIntentVerb.Audit;
-        if (key.StartsWith("script.", StringComparison.Ordinal))
-            return HostOperationIntentVerb.Script;
-        if (key.StartsWith("settings.", StringComparison.Ordinal))
-            return HostOperationIntentVerb.Configure;
-        if (key.StartsWith("aps.auth.", StringComparison.Ordinal))
-            return HostOperationIntentVerb.Authenticate;
-        if (key.Contains("logs", StringComparison.Ordinal) || key.StartsWith("host.", StringComparison.Ordinal))
-            return HostOperationIntentVerb.Diagnose;
-
-        return fallback;
-    }
-
-    private static HostOperationRequestShapeKind InferRequestShapeKind(
-        HostOperationRequestShapeKind fallback,
-        Type requestType
-    ) {
-        if (requestType == typeof(NoRequest))
-            return HostOperationRequestShapeKind.NoRequest;
-        var names = new HashSet<string>(requestType.GetProperties().Select(property => property.Name), StringComparer.OrdinalIgnoreCase);
-        if (names.Contains("Projection") || names.Contains("Budget"))
-            return HostOperationRequestShapeKind.CommonEnvelope;
-        if (names.Contains("Query") || names.Contains("Request") || names.Contains("Filter"))
-            return HostOperationRequestShapeKind.QueryWrapper;
-        return fallback;
-    }
-
     private static HostOperationCostTier InferCostTierFromKey(
         string key,
-        HostOperationCostTier fallback
+        HostOperationCostTier fallback,
+        HostOperationIntent intent
     ) {
+        if (intent == HostOperationIntent.Mutate)
+            return HostOperationCostTier.Mutation;
         if (key.StartsWith("revit.matrix.", StringComparison.Ordinal)
             || key.Contains("matrix", StringComparison.Ordinal))
             return HostOperationCostTier.Expensive;

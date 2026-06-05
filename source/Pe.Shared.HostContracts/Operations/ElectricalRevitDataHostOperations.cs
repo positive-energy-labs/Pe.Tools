@@ -32,11 +32,10 @@ public static class GetElectricalPanelsCatalogOperationContract {
                         """
                     )
                 ],
-                boundedExpansionHints: [
+                callGuidance: [
                     "Use panel names/ids returned here as PanelReferences input to revit.detail.electrical-panel-schedules.",
                     "For per-equipment alignment, start with revit.detail.elements on exact equipment handles; this catalog is for resolving panel candidates, not proving element ownership. Inspect filterReport when a filtered lookup returns no entries."
-                ],
-                handleProvenanceNotes: "Panel catalog entries carry panel ids, unique ids, panel names, marks, assigned-circuit counts, panel-schedule counts, and connected-load counts."
+                ]
             )
         );
 }
@@ -71,12 +70,10 @@ public static class GetElectricalCircuitsCatalogOperationContract {
                         """
                     )
                 ],
-                boundedExpansionHints: [
+                callGuidance: [
                     "For per-equipment tag/load alignment, call revit.detail.elements on exact element handles first; use circuit catalog after you know panel/circuit/load candidates.",
                     "Use returned panel ids/names as PanelReferences input to revit.detail.electrical-panel-schedules when row/cell schedule detail is needed; inspect filterReport when candidate keys produce zero matches.",
-                    "Use options.includeNearbyProxyContext only when connected electrical elements look proxy-like or fail to carry the identity visible in the model."
-                ],
-                handleProvenanceNotes: "Circuit catalog entries include connected element handles, effective identity/source, electrical connector/system counts, roles, panel references, and optional nearby proxy candidates."
+                ]
             )
         );
 }
@@ -124,20 +121,6 @@ public static class GetElectricalPanelSchedulesQueryOperationContract {
                             """
                         ),
                         RevitDataHostOperationExamples.Example(
-                            "detail by known panel name",
-                            "Inspect panel schedule rows after element/circuit context or the panel catalog identifies a panel candidate.",
-                            """
-                            { "query": { "kind": "PanelReferences", "panelNames": ["C6P"], "projection": { "view": "RowsOnly", "maxRows": 25 } } }
-                            """
-                        ),
-                        RevitDataHostOperationExamples.Example(
-                            "detail by known panel handle",
-                            "Use panel ids returned by revit.catalog.electrical-panels, revit.detail.elements, or revit.catalog.electrical-circuits.",
-                            """
-                            { "query": { "kind": "PanelReferences", "panelIds": [12345] } }
-                            """
-                        ),
-                        RevitDataHostOperationExamples.Example(
                             "current active panel schedule",
                             "Use when the active Revit view is already the panel schedule the user is asking about.",
                             """
@@ -145,13 +128,10 @@ public static class GetElectricalPanelSchedulesQueryOperationContract {
                             """
                         )
                     ],
-                    boundedExpansionHints: [
+                    callGuidance: [
                         "Safe defaults or empty PanelReferences return no rows; first resolve panels through revit.detail.elements, revit.catalog.electrical-circuits, or revit.catalog.electrical-panels.",
-                        "Start with revit.detail.elements for exact equipment context when the question is per-equipment tag/load alignment.",
-                        "Use row-filtered panel schedule detail after you know panel/circuit/load candidates from element context or circuit catalog.",
                         "Use projection.view=RowsOnly with circuitNumbers, loadNameContains, and maxRows to avoid full panel schedule dumps."
-                    ],
-                    handleProvenanceNotes: "Panel schedule detail returns schedule/panel identity plus row/cell values and cell source metadata; it does not prove which visible equipment instance owns a load unless correlated with exact element/circuit context."
+                    ]
                 )
             );
 }

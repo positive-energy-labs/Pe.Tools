@@ -52,6 +52,35 @@ public sealed class DeploymentRuntimeContractTests {
     }
 
     [Test]
+    public void Scripting_workspace_layout_accepts_only_single_slug_workspace_keys() {
+        var rootPath = Path.Combine(Path.GetTempPath(), $"pe-workspaces-{Guid.NewGuid():N}");
+        var layout = new ScriptingWorkspaceLayout(rootPath);
+
+        Assert.That(layout.ResolveWorkspaceRoot(null), Is.EqualTo(Path.Combine(rootPath, ScriptingWorkspaceLayout.DefaultWorkspaceKey)));
+        Assert.That(layout.ResolveWorkspaceRoot(""), Is.EqualTo(Path.Combine(rootPath, ScriptingWorkspaceLayout.DefaultWorkspaceKey)));
+        Assert.That(layout.ResolveWorkspaceRoot("default"), Is.EqualTo(Path.Combine(rootPath, "default")));
+        Assert.That(layout.ResolveWorkspaceRoot("connector-audit-25"), Is.EqualTo(Path.Combine(rootPath, "connector-audit-25")));
+        Assert.That(layout.ResolvePodManifestPath("connector-audit-25"), Is.EqualTo(Path.Combine(rootPath, "connector-audit-25", "pod.json")));
+
+        foreach (var invalidWorkspaceKey in new[] {
+            "ConnectorAudit",
+            "connector_audit",
+            "connector audit",
+            "connector.audit",
+            "connector/audit",
+            "connector\\audit",
+            "connector--audit",
+            "-connector",
+            "connector-",
+            "..",
+            Path.Combine(rootPath, "connector")
+        }) {
+            var exception = Assert.Throws<ArgumentException>(() => layout.ResolveWorkspaceRoot(invalidWorkspaceKey));
+            Assert.That(exception?.ParamName, Is.EqualTo("workspaceKey"));
+        }
+    }
+
+    [Test]
     public void Storage_runtime_splits_settings_state_and_output_roots() {
         var moduleKey = $"TestModule-{Guid.NewGuid():N}";
         var settingsBasePath = Path.Combine(Path.GetTempPath(), $"pe-settings-{Guid.NewGuid():N}");

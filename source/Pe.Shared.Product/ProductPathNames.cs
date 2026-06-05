@@ -15,4 +15,5 @@ public static class ProductPathNames {
     public const string GlobalDirectoryName = "Global";
     public const string AgentInstructionsFileName = "AGENTS.md";
     public const string ReadmeFileName = "README.md";
+    public const string PodManifestFileName = "pod.json";
 }

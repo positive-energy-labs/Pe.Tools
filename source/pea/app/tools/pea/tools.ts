@@ -21,8 +21,12 @@ import {
 import {
   bootstrapScriptWorkspace,
   executeScriptViaHost,
+  exportScriptPod,
+  importScriptPod,
   scriptBootstrapInputSchema,
   scriptExecuteInputSchema,
+  scriptPodExportInputSchema,
+  scriptPodImportInputSchema,
 } from "../shared/scripting.js";
 
 interface PeaProductToolContext {
@@ -72,7 +76,19 @@ const hostOperationSearchInputSchema = z.object({
   verbosity: toolVerbositySchema
     .default("compact")
     .describe(
-      "Output size. Use compact by default; use hints for examples/expansion hints; use full only when you need route and full request/response shapes.",
+      "Output size for projection=matches. Use compact by default; use hints for examples/expansion hints; use full only when you need route and full request/response shapes.",
+    ),
+  projection: z
+    .enum(["matches", "capability-map"])
+    .default("matches")
+    .describe(
+      "Use matches for ranked operation results. Use capability-map for broad orientation across generated host-operation ladders without adding separate tools.",
+    ),
+  capabilityMapFormat: z
+    .enum(["markdown", "json", "toon"])
+    .default("markdown")
+    .describe(
+      "Capability-map rendering format. Markdown is the default; json returns normalized rows; toon returns an optional TOON-style preview only, not a host response format.",
     ),
 });
 
@@ -140,7 +156,7 @@ export const peLogs = createTool({
 export const hostOperationSearch = createTool({
   id: "host_operation_search",
   description:
-    "Search generated public Pe.Host operations by capability and filters. Use compact for discovery, hints for examples, and full for routes plus request/response shapes.",
+    "Search generated public Pe.Host operations by capability and filters. Use projection=capability-map for broad orientation, compact matches for discovery, hints for examples/call guidance, and full for routes plus request/response shapes. Results are compact: operation keys carry taxonomy; generic bridge, active-document, validation, cost, and mutation safety are summarized rather than repeated as preflight prose.",
   inputSchema: hostOperationSearchInputSchema,
   execute: async (input) => searchHostOperations(input),
 });
@@ -148,7 +164,7 @@ export const hostOperationSearch = createTool({
 export const hostOperationCall = createTool({
   id: "host_operation_call",
   description:
-    "Call a generated public Pe.Host operation by key with a JSON request object. Omit request for NoRequest operations. Compact successes return the response plus request timing; hints/full add metadata. Failures include operation metadata and suggested next steps. Bridge-backed operations are serialized when metadata assigns a single-flight group.",
+    "Call a generated public Pe.Host operation by key with a JSON request object. Omit request for NoRequest operations. Compact successes return the response plus request timing; hints/full add metadata. Bridge-backed operations are serialized when metadata assigns a single-flight group; Revit bridge calls may require an active document, strict request validation rejects unknown/nonsensical fields, expensive/mutating calls should stay bounded, and failures include targeted next steps.",
   inputSchema: z.object({
     key: z
       .string()
@@ -188,7 +204,7 @@ export const hostOperationCall = createTool({
 export const scriptExecute = createTool({
   id: "script_execute",
   description:
-    "Execute a C# Revit script through the Pe.Host scripting contract. Use inline scriptContent for tiny probes and workspace .cs files for durable or multi-step work. Call script_bootstrap when paths or references are unknown.",
+    "Execute a C# Revit script through the Pe.Host scripting contract. For InlineSnippet, prefer Execute-body statements like WriteLine(...); a full PeScriptContainer class with public override void Execute() is also allowed. Use workspace .cs files for durable work. Loose workspaces compile only the requested file; pod.json workspaces compile all src and require a declared entrypoint.",
   inputSchema: scriptExecuteInputSchema,
   execute: async (input) =>
     executeScriptViaHost(input, {
@@ -205,6 +221,30 @@ export const scriptBootstrap = createTool({
   outputSchema: toolOutputSchemas.scriptWorkspaceBootstrapDataSchema,
   execute: async (input) =>
     bootstrapScriptWorkspace(input, {
+      hostBaseUrl: currentHostBaseUrl(),
+      workspaceKey: currentWorkspaceKey(),
+    }),
+});
+
+export const scriptPodImport = createTool({
+  id: "script_pod_import",
+  description:
+    "Import a pod.json-backed Revit scripting workspace from a conservative zip archive. Import hard-fails if the target workspace slug already exists.",
+  inputSchema: scriptPodImportInputSchema,
+  execute: async (input) =>
+    importScriptPod(input, {
+      hostBaseUrl: currentHostBaseUrl(),
+      workspaceKey: currentWorkspaceKey(),
+    }),
+});
+
+export const scriptPodExport = createTool({
+  id: "script_pod_export",
+  description:
+    "Export an existing pod.json-backed Revit scripting workspace as a portable source-first zip archive. Generated/runtime folders and DLL payloads are excluded.",
+  inputSchema: scriptPodExportInputSchema,
+  execute: async (input) =>
+    exportScriptPod(input, {
       hostBaseUrl: currentHostBaseUrl(),
       workspaceKey: currentWorkspaceKey(),
     }),
@@ -259,6 +299,8 @@ export const peaProductTools = {
   [hostOperationCall.id]: hostOperationCall,
   [scriptBootstrap.id]: scriptBootstrap,
   [scriptExecute.id]: scriptExecute,
+  [scriptPodImport.id]: scriptPodImport,
+  [scriptPodExport.id]: scriptPodExport,
   [revitApiSearch.id]: revitApiSearch,
   [revitApiFetch.id]: revitApiFetch,
 };
