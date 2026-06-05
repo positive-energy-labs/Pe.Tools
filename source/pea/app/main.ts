@@ -23,13 +23,16 @@ import type {
   HostLogsData,
   HostProbeData,
   HostSessionSummaryData,
+  ScriptDiagnostic,
+  ScriptPodExportData,
+  ScriptPodImportData,
 } from "./host-client.js";
 import {
   hostProcessIdentity,
   peaCliIdentity,
   productIdentity,
 } from "./generated/product.generated.js";
-import { callHostOperation, searchHostOperations, type HostOperationCallResult } from "./host-operation-runtime.js";
+import { callHostOperation, searchHostOperationMatches, type HostOperationCallResult } from "./host-operation-runtime.js";
 import { ensurePeaRuntimeDefaults, getPeaRuntimeDefaultsSummary, type PeaRuntimeDefaultsSummary } from "./pea-runtime-defaults.js";
 import {
   collectRuntimeLoopContext,
@@ -268,7 +271,7 @@ function runOperationSearch(values: {
   visibility?: string;
   json?: boolean;
 }): void {
-  const results = searchHostOperations({
+  const results = searchHostOperationMatches({
     query: values.query,
     domain: values.domain,
     intent: parseOperationIntent(values.intent),
@@ -398,7 +401,7 @@ const hostCommand = define({
 
 const scriptExecuteCommand = define({
   name: "execute",
-  description: "Execute a C# Revit script through Pe.Host.",
+  description: "Execute a C# Revit script through Pe.Host. Inline content may be Execute-body statements or a full PeScriptContainer class. Loose workspaces compile only the requested file; pod.json workspaces compile all src and require a declared entrypoint.",
   args: {
     ...commonArgs,
     file: {
@@ -412,15 +415,15 @@ const scriptExecuteCommand = define({
     },
     scriptContent: {
       type: "string",
-      description: "Inline script content to execute.",
+      description: "Inline script content. Prefer Execute-body statements such as WriteLine(\"...\"); a full PeScriptContainer class is also allowed.",
     },
     sourcePath: {
       type: "string",
-      description: "Workspace-relative source path to execute.",
+      description: "Workspace-relative source path to execute. In loose workspaces only this file compiles; in Pod mode it must be declared in pod.json and all src/**/*.cs compiles.",
     },
     sourceName: {
       type: "string",
-      description: "Display name for inline source content.",
+      description: "Synthetic source filename used for inline trace files and compile diagnostics.",
       default: "AgentSnippet.cs",
     },
     permissionMode: {
@@ -438,6 +441,7 @@ const scriptExecuteCommand = define({
   examples: [
     "pea script execute --file scratch\\Probe.cs",
     "pea script execute --source-path src\\SampleScript.cs",
+    "pea script execute --workspace panel-audit --source-path src\\Main.cs",
     "Get-Content .\\Probe.cs | pea script execute --stdin --source-name Probe.cs",
   ].join("\n"),
   run: async (ctx) => {
@@ -524,16 +528,110 @@ const scriptBootstrapCommand = define({
   },
 });
 
+const scriptPodImportCommand = define({
+  name: "import",
+  description: "Import a pod.json-backed scripting workspace from a Pod zip archive. Fails if the target workspace already exists.",
+  args: {
+    host: commonArgs.host,
+    archive: {
+      type: "string",
+      description: "Path to the Pod zip archive to import.",
+    },
+    workspace: {
+      type: "string",
+      description: "Optional target workspace slug. Omit to use the pod.json id.",
+    },
+    json: {
+      type: "boolean",
+      description: "Print the raw import DTO as JSON.",
+      default: false,
+    },
+  },
+  toKebab: true,
+  examples: [
+    "pea script import --archive .\\panel-audit.zip",
+    "pea script import --archive .\\panel-audit.zip --workspace panel-audit-copy",
+  ].join("\n"),
+  run: async (ctx) => {
+    const archivePath = firstNonBlank(ctx.values.archive);
+    if (!archivePath)
+      throw new Error("Provide --archive <path.zip>.");
+
+    const hostBaseUrl = resolveHostBaseUrl(ctx.values.host);
+    const result = await callPeHost(
+      hostBaseUrl,
+      () => createPeHostClient(hostBaseUrl).scripting.importPod({
+        archivePath,
+        workspaceKey: firstNonBlank(ctx.values.workspace),
+      }),
+    );
+
+    if (ctx.values.json) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+
+    writeScriptPodImport(result);
+  },
+});
+
+const scriptPodExportCommand = define({
+  name: "export",
+  description: "Export a pod.json-backed scripting workspace as a portable source-first Pod zip archive.",
+  args: {
+    ...commonArgs,
+    output: {
+      type: "string",
+      description: "Output path for the Pod zip archive.",
+    },
+    json: {
+      type: "boolean",
+      description: "Print the raw export DTO as JSON.",
+      default: false,
+    },
+  },
+  toKebab: true,
+  examples: [
+    "pea script export --workspace panel-audit --output .\\panel-audit.zip",
+    "pea script export --output .\\default.zip",
+  ].join("\n"),
+  run: async (ctx) => {
+    const archivePath = firstNonBlank(ctx.values.output);
+    if (!archivePath)
+      throw new Error("Provide --output <path.zip>.");
+
+    const hostBaseUrl = resolveHostBaseUrl(ctx.values.host);
+    const result = await callPeHost(
+      hostBaseUrl,
+      () => createPeHostClient(hostBaseUrl).scripting.exportPod({
+        workspaceKey: ctx.values.workspace,
+        archivePath,
+      }),
+    );
+
+    if (ctx.values.json) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+
+    writeScriptPodExport(result);
+  },
+});
+
 const scriptCommand = define({
   name: "script",
-  description: "Bootstrap and execute Pe.Revit scripts through Pe.Host.",
+  description: "Bootstrap, execute, import, and export Pe.Revit scripting workspaces and Pods through Pe.Host.",
   examples: [
     "pea script bootstrap",
     "pea script execute --source-path src\\SampleScript.cs",
+    "pea script export --workspace panel-audit --output .\\panel-audit.zip",
+    "pea script import --archive .\\panel-audit.zip",
   ].join("\n"),
   subCommands: {
     bootstrap: scriptBootstrapCommand,
     execute: scriptExecuteCommand,
+    export: scriptPodExportCommand,
+    import: scriptPodImportCommand,
   },
   run: () => {
     console.log("Run `pea script --help` to list script commands.");
@@ -914,6 +1012,7 @@ const entryCommand = define({
     "pea runtime payload",
     "pea script bootstrap --workspace default",
     "pea script execute --source-path src\\SampleScript.cs",
+    "pea script export --workspace panel-audit --output .\\panel-audit.zip",
   ].join("\n"),
   run: () => {
     console.log("Run `pea --help` to list commands. Use `pea agent` for deployed Pea; use `pea dev` only for Pe.Tools repo coding.");
@@ -1377,7 +1476,7 @@ function formatPeHostError(hostBaseUrl: string, error: unknown): string {
   ].join("\n");
 }
 
-function writeOperationSearchResults(results: ReturnType<typeof searchHostOperations>): void {
+function writeOperationSearchResults(results: ReturnType<typeof searchHostOperationMatches>): void {
   if (results.length === 0) {
     console.log("No host operations matched.");
     return;
@@ -1385,13 +1484,11 @@ function writeOperationSearchResults(results: ReturnType<typeof searchHostOperat
 
   for (const result of results) {
     console.log(`${result.key}`);
-    console.log(`  ${result.summary}`);
-    console.log(`  family=${result.family ?? "-"} layer=${result.revitLayer ?? "-"} domain=${result.domainNoun ?? "-"} grain=${result.resultGrain ?? "-"} cost=${result.costTier ?? "-"}`);
-    console.log(`  visibility=${result.visibility ?? "-"} intentVerb=${result.intentVerb ?? "-"} requestShape=${result.requestShapeKind ?? "-"}`);
+    console.log(`  ${result.description}`);
+    console.log(`  safety=${result.safety || "-"}`);
+    console.log(`  visibility=${result.visibility ?? "-"}`);
     console.log(`  request=${result.requestTypeName} response=${result.responseTypeName}`);
     console.log(`  hint ${result.requestHint}`);
-    if (result.canonicalUse)
-      console.log(`  use ${result.canonicalUse}`);
     if (result.safeDefaultRequestJson)
       console.log(`  safe-default ${compactJsonLiteral(result.safeDefaultRequestJson)}`);
     if (result.bestRequestExample) {
@@ -1399,22 +1496,14 @@ function writeOperationSearchResults(results: ReturnType<typeof searchHostOperat
       console.log(`  json ${compactJsonLiteral(result.bestRequestExample.json)}`);
     }
     if ("executionMode" in result)
-      console.log(`  mode=${result.intent} ${result.executionMode}${result.singleFlightGroup ? ` single-flight=${result.singleFlightGroup}` : ""}`);
+      console.log(`  mode=${result.executionMode}${result.singleFlightGroup ? ` single-flight=${result.singleFlightGroup}` : ""}`);
     if ("verb" in result)
       console.log(`  route=${result.verb} ${result.route}`);
-    for (const hint of result.preflightHints)
-      console.log(`  preflight ${hint}`);
-    if ("boundedExpansionHints" in result) {
-      for (const hint of result.useWhen)
-        console.log(`  use-when ${hint}`);
-      for (const hint of result.doNotUseWhen)
-        console.log(`  avoid ${hint}`);
-      for (const next of result.nextOperations ?? [])
-        console.log(`  next-op ${next}`);
-      if (result.ambiguityBehavior)
-        console.log(`  ambiguity ${result.ambiguityBehavior}`);
-      for (const hint of result.boundedExpansionHints)
-        console.log(`  expand ${hint}`);
+    if ("callGuidance" in result) {
+      for (const hint of result.callGuidance)
+        console.log(`  guidance ${hint}`);
+      for (const related of result.relatedOperations ?? [])
+        console.log(`  related ${related.kind}:${related.key}${related.note ? ` ${related.note}` : ""}`);
     }
   }
 }
@@ -1443,7 +1532,7 @@ function writeOperationCallResult(result: HostOperationCallResult): void {
   }
 
   if (result.operation)
-    console.log(`operation ${result.operation.summary}`);
+    console.log(`operation ${result.operation.description}`);
   console.log(JSON.stringify(result.response, null, 2));
 }
 
@@ -1548,6 +1637,32 @@ function writeWorkflowResult(result: CliWorkflowResult): void {
     console.log(result.stdoutTail.trimEnd());
   if (result.stderrTail?.trim())
     console.error(result.stderrTail.trimEnd());
+}
+
+function writeScriptPodImport(result: ScriptPodImportData): void {
+  console.log(`workspace key ${result.workspaceKey}`);
+  console.log(`workspace    ${result.workspaceRootPath}`);
+  console.log(`archive      ${result.archivePath}`);
+  console.log(`manifest     ${result.manifest.id} (${result.manifest.name})`);
+  console.log(`entrypoints  ${result.manifest.entrypoints.length}`);
+  console.log(`entries      ${result.archiveEntries.length}`);
+  console.log(`generated    ${result.generatedFiles.length}`);
+  writeScriptDiagnostics(result.diagnostics);
+}
+
+function writeScriptPodExport(result: ScriptPodExportData): void {
+  console.log(`workspace key ${result.workspaceKey}`);
+  console.log(`workspace    ${result.workspaceRootPath}`);
+  console.log(`archive      ${result.archivePath}`);
+  console.log(`manifest     ${result.manifest.id} (${result.manifest.name})`);
+  console.log(`entrypoints  ${result.manifest.entrypoints.length}`);
+  console.log(`entries      ${result.archiveEntries.length}`);
+  writeScriptDiagnostics(result.diagnostics);
+}
+
+function writeScriptDiagnostics(diagnostics: ScriptDiagnostic[]): void {
+  for (const diagnostic of diagnostics)
+    console.error(`${diagnostic.severity} ${diagnostic.stage}: ${diagnostic.message}`);
 }
 
 function parseLiveReadinessLevel(value: string | undefined): LiveRrdRestartReadinessLevel {

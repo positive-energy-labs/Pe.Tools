@@ -669,6 +669,26 @@ public sealed class PeHostScriptingClient(HttpClient httpClient) {
         request,
         cancellationToken
     );
+
+    public Task<ScriptPodImportData> ImportPodAsync(
+        ScriptPodImportRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<ScriptPodImportRequest, ScriptPodImportData>(
+        this._httpClient,
+        ImportScriptPodOperationContract.Definition,
+        request,
+        cancellationToken
+    );
+
+    public Task<ScriptPodExportData> ExportPodAsync(
+        ScriptPodExportRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<ScriptPodExportRequest, ScriptPodExportData>(
+        this._httpClient,
+        ExportScriptPodOperationContract.Definition,
+        request,
+        cancellationToken
+    );
 }
 
 public sealed class PeHostClientException(

@@ -98,7 +98,7 @@ export const liveRrdRestart = createTool({
           .min(1)
           .optional()
           .describe(
-            "Absolute local RVT/RFA path to open through revit.document.open; cld:// cloud paths are detected but not opened yet.",
+            "Absolute local RVT/RFA path to open through revit.apply.document.open; cld:// cloud paths are detected but not opened yet.",
           ),
         name: z.string().min(1).optional(),
         revitYear: z.string().default("2025").optional(),
@@ -114,7 +114,7 @@ export const liveRrdRestart = createTool({
       .nullable()
       .optional()
       .describe(
-        "Optional Revit document selector to open after RRD reaches module readiness through host operation revit.document.open. Local paths are supported; cloud recent-document matches are reported but not opened yet. Explicit null disables any harness state default.",
+        "Optional Revit document selector to open after RRD reaches module readiness through host operation revit.apply.document.open. Local paths are supported; cloud recent-document matches are reported but not opened yet. Explicit null disables any harness state default.",
       ),
     harnessStatePath: z
       .string()

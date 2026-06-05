@@ -93,13 +93,10 @@ public static class GetScheduleCatalogOperationContract {
                         """
                     )
                 ],
-                boundedExpansionHints: [
-                    .. RevitDataHostOperationExamples.CatalogExpansionHints,
+                callGuidance: [
+                    "Start with summary/handles plus maxEntries; only request full catalog facts after filters prove useful.",
                     "For visible/current/printed equipment coverage, prefer revit.matrix.schedule-coverage with ViewReferences or ExplicitHandles; use this catalog only when schedule candidates themselves are unknown.",
-                    "Request parameterUsages explicitly when schedule fields/columns and backing parameter identity are needed for the next join; customParameters describes parameters on the schedule view element itself.",
-                    "Use summary duplicate-normalized name groups, prefix/suffix counts, top scheduled fields, and field fingerprints as evidence only; do not treat them as role, intent, or anomaly labels."
-                ],
-                handleProvenanceNotes: "Schedule handles include ids/unique ids plus sheet-placement facts when requested."
+                ]
             )
         );
 }
@@ -135,11 +132,10 @@ public static class GetProjectBrowserOperationContract {
                         """
                     )
                 ],
-                boundedExpansionHints: [
+                callGuidance: [
                     "Use Folders mode to inspect browser vocabulary before Items mode.",
                     "Browser organization is navigation/provenance for views, sheets, and schedules; use semantic catalog/detail ops for BIM facts."
-                ],
-                handleProvenanceNotes: "Browser items return stable view/sheet/schedule handles plus browser path provenance; invalid paths return nearest-match diagnostics."
+                ]
             )
         );
 }
@@ -174,11 +170,10 @@ public static class GetSheetDetailsOperationContract {
                         """
                     )
                 ],
-                boundedExpansionHints: [
+                callGuidance: [
                     "Use this as a native anchor map for scripts and external extractors; do not treat it as OCR or model vision.",
                     "Start with active sheet or exact sheet numbers, then export/parse artifacts only when semantic anchors are insufficient."
-                ],
-                handleProvenanceNotes: "Sheet anchors preserve Revit handles for sheets, title blocks, viewports, placed schedules, and text notes so parser/vision findings can be correlated back to Revit."
+                ]
             )
         );
 }
@@ -213,8 +208,7 @@ public static class GetProjectIndexOperationContract {
                         """
                     )
                 ],
-                boundedExpansionHints: RevitDataHostOperationExamples.CatalogExpansionHints,
-                handleProvenanceNotes: "Project index entries return stable handles plus sheet/printed/browser provenance for planning deeper Revit calls."
+                callGuidance: RevitDataHostOperationExamples.CatalogExpansionHints
             )
         );
 }
@@ -230,7 +224,7 @@ public static class GetScheduleProfilesQueryOperationContract {
             HostOperationAgentMetadata.Create(
                 "revit",
                 "Read schedule profile projections from the active document.",
-                new[] { "schedules", "profiles", "query", "projection" },
+                new[] { "schedules", "profiles", "query", "projection", "authored-schedule-shape" },
                 requiresBridge: true,
                 requiresActiveDocument: true,
                 requestExamples: [
@@ -249,8 +243,7 @@ public static class GetScheduleProfilesQueryOperationContract {
                         """
                     )
                 ],
-                boundedExpansionHints: RevitDataHostOperationExamples.MatrixExpansionHints,
-                handleProvenanceNotes: "Use revit.catalog.schedules first when the exact schedule name or id is unknown."
+                callGuidance: RevitDataHostOperationExamples.MatrixExpansionHints
             )
         );
 }
@@ -285,8 +278,7 @@ public static class GetScheduleQueryOperationContract {
                         """
                     )
                 ],
-                boundedExpansionHints: RevitDataHostOperationExamples.ScheduleDetailExpansionHints,
-                handleProvenanceNotes: "Schedule rows can include subject element handles when projection requests handles/subjects."
+                callGuidance: RevitDataHostOperationExamples.ScheduleDetailExpansionHints
             )
         );
 }
@@ -321,8 +313,7 @@ public static class GetLoadedFamiliesCatalogOperationContract {
                         """
                     )
                 ],
-                boundedExpansionHints: RevitDataHostOperationExamples.CatalogExpansionHints,
-                handleProvenanceNotes: "Loaded-family catalog rows include family ids, unique ids, category, type counts, and placement counts."
+                callGuidance: RevitDataHostOperationExamples.CatalogExpansionHints
             )
         );
 }
@@ -350,8 +341,7 @@ public static class GetLoadedFamiliesMatrixOperationContract {
                         """
                     )
                 ],
-                boundedExpansionHints: RevitDataHostOperationExamples.MatrixExpansionHints,
-                handleProvenanceNotes: "Matrix rows use parameter presence terminology and canonical parameter identities."
+                callGuidance: RevitDataHostOperationExamples.MatrixExpansionHints
             )
         );
 }
@@ -387,14 +377,10 @@ public static class GetScheduleCoverageOperationContract {
                         """
                     )
                 ],
-                boundedExpansionHints: [
-                    .. RevitDataHostOperationExamples.MatrixExpansionHints,
-                    "Resolve the target view/sheet phrase first with revit.context.summary or one narrowed revit.resolve.references call; use ViewReferences or ActiveViewVisible only when that view scope is intended.",
-                    "Use ExplicitHandles for handles returned by revit.context.visible-summary, revit.detail.elements, or a script instead of broad model-wide coverage.",
-                    "For audit summaries, request includeMissingElementHandles, includeMatchedScheduleNames, and read roleSummaries before asking for per-element samples.",
-                    "Do not treat Working or audit-schedule coverage as proof of intended issued/mechanical schedule representation; report the role summary explicitly."
-                ],
-                handleProvenanceNotes: "Coverage samples return stable element handles plus matching schedule handles. Treat coverage as definitive only when schedule subject binding succeeds; issues explain row-binding limitations."
+                callGuidance: [
+                    "Resolve the target view/sheet phrase first with revit.context.summary or one narrowed revit.resolve.references call; use ViewReferences, ActiveViewVisible, or ExplicitHandles only when that scope is intended.",
+                    "For audit summaries, request includeMissingElementHandles, includeMatchedScheduleNames, and read roleSummaries before asking for per-element samples."
+                ]
             )
         );
 }
@@ -422,8 +408,7 @@ public static class GetParameterCoverageOperationContract {
                         """
                     )
                 ],
-                boundedExpansionHints: RevitDataHostOperationExamples.MatrixExpansionHints,
-                handleProvenanceNotes: "Parameter coverage returns canonical parameter identities and bounded sample element handles."
+                callGuidance: RevitDataHostOperationExamples.MatrixExpansionHints
             )
         );
 }
@@ -451,12 +436,10 @@ public static class GetConceptEvidenceOperationContract {
                         """
                     )
                 ],
-                boundedExpansionHints: [
+                callGuidance: [
                     "Use concept evidence before parameter evidence when the user asks in ordinary project language rather than known parameter identity language.",
                     "Treat subject hints as weak scoping context; do not assume a category or expected schedule shape is authoritative without supporting schedule/binding facts.",
-                    "Pass returned observed identities or ParameterReference values into revit.catalog.parameter-evidence, revit.matrix.parameter-coverage, or revit.detail.elements for deeper proof."
-                ],
-                handleProvenanceNotes: "Candidates include canonical parameter identities, binding categories, schedule usage counts, filter usage counts, field-position averages, and sample schedule names."
+                ]
             )
         );
 }
@@ -491,12 +474,10 @@ public static class GetParameterEvidenceOperationContract {
                         """
                     )
                 ],
-                boundedExpansionHints: [
+                callGuidance: [
                     "Use parameter evidence before detail/coverage when the project-standard parameter name is uncertain.",
                     "Keep candidateParameters when you already have observed identities, shared GUIDs, or plausible names; omit them only for bounded category/schedule scopes.",
-                    "Treat scores as ordering aids over factual evidence, not intent labels; prefer binding categories, schedule usages, evidence counts, and samples in user-facing answers."
-                ],
-                handleProvenanceNotes: "Samples may include schedule names and scoped element handles; pass returned ParameterIdentity values into revit.detail.elements or revit.matrix.parameter-coverage."
+                ]
             )
         );
 }
@@ -531,12 +512,10 @@ public static class GetProjectParameterBindingsOperationContract {
                         """
                     )
                 ],
-                boundedExpansionHints: [
-                    .. RevitDataHostOperationExamples.CatalogExpansionHints,
+                callGuidance: [
+                    "Use catalog operations to discover stable ids/names before detail or matrix calls.",
                     "Use parameters with observed ParameterIdentity values when joining from concept/parameter evidence into binding lookup.",
-                    "Use name-based ParameterReference values only when the user or prior evidence has an exact name; otherwise inspect revit.catalog.parameter-evidence first."
-                ],
-                handleProvenanceNotes: "Binding entries include canonical parameter identities, binding level, and category names."
+                ]
             )
         );
 }

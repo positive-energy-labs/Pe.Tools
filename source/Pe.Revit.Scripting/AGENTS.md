@@ -31,15 +31,17 @@ Owns the Revit-side scripting runtime: workspace bootstrap, source normalization
 | --- | --- |
 | **inline snippet** | Submitted source content compiled for one request outside workspace `src/`. |
 | **workspace path** | A workspace-relative `.cs` file resolved under the host-created workspace. |
+| **loose workspace mode** | No root `pod.json`; compile only the requested source file so quick workspaces can stay messy. |
+| **Pod mode** | Root `pod.json` exists; validate the manifest, compile all `src/**/*.cs`, and execute only a declared entrypoint. |
 | **execution** | One scripting request returning one final result payload. |
 | **ReadOnly** | Default permission mode; no host transaction is opened. |
 | **WriteTransaction** | Explicit mutation mode; this package opens one host-owned Revit transaction. |
 
 ## Living Memory
 
-- Workspace execution compiles the whole `src/` tree and executes the selected file's single concrete `PeScriptContainer`.
+- Workspace execution mode depends on the root manifest: loose workspaces compile only the requested `src/*.cs` file; Pod workspaces validate `pod.json`, require a declared entrypoint, and compile the whole `src/` tree.
 - Each request must resolve to exactly one non-abstract `PeScriptContainer`.
-- `ReadOnly` execution does not open a Revit transaction. `WriteTransaction` requires a writable active document and opens one host-owned transaction.
+- `ReadOnly` execution does not open a Revit transaction. `WriteTransaction` requires a writable active document and opens one host-owned transaction. Pod manifests never grant write permission; permission is request-owned.
 - `ReadOnly` also runs Revit-specific semantic mutation policy before compile and subscribes to `Application.DocumentChanged` during execution. Treat the static policy as a curated first-pass blacklist and the event monitor as a loud dirty-document tripwire, not a rollback mechanism.
 - Script-authored `new Transaction(...)`, `new SubTransaction(...)`, and `new TransactionGroup(...)` are rejected by policy in both permission modes.
 - `WriteLine(...)` is the short diagnostic path. `Artifacts.WriteJson(...)`, `WriteCsv(...)`, and `WriteText(...)` are for durable output.

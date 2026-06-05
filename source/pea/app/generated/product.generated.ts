@@ -22,6 +22,7 @@ export const productPathNames = {
   globalDirectoryName: "Global",
   agentInstructionsFileName: "AGENTS.md",
   readmeFileName: "README.md",
+  podManifestFileName: "pod.json",
 } as const;
 
 export const hostProcessIdentity = {
@@ -70,7 +71,7 @@ export const peAppRuntimeDeploymentDescriptor = {
 } as const;
 
 export const installerPayloadManifest = {
-  currentSchemaVersion: 2,
+  currentSchemaVersion: 3,
 } as const;
 
 export const scriptingWorkspaceIdentity = {
@@ -78,6 +79,7 @@ export const scriptingWorkspaceIdentity = {
   projectFileName: "PeScripts.csproj",
   agentInstructionsFileName: "AGENTS.md",
   readmeFileName: "README.md",
+  podManifestFileName: "pod.json",
   sourceDirectoryName: "src",
   sampleScriptFileName: "SampleScript.cs",
   vsCodeDirectoryName: ".vscode",

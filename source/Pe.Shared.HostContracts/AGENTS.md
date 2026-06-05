@@ -26,20 +26,21 @@ Owns durable host-facing contracts: route constants, operation definitions, requ
 | **operation family** | Top-level public operation area: `host`, `settings`, `script`, `revit`, `aps`. |
 | **Revit layer** | Layer-first Revit operation segment such as `context`, `catalog`, `matrix`, `detail`, `resolve`, or reserved `apply`. |
 | **domain noun** | User-facing Revit noun after the layer. |
-| **result grain** | Metadata describing output shape: summary, catalog, matrix, detail, handles, rows, etc. |
 | **cost tier** | Cheap/bounded/expensive/mutation operation metadata. |
 | **single-flight group** | Metadata telling callers that operations share a serialized execution lane. |
 | **supported active document kind** | Operation metadata/gating for whether a bridge-backed Revit operation supports project documents, family documents, or both. Keep this separate from request scopes such as selection, active view, explicit handles, or parameter presence. |
+| **related operation** | Sparse practical adjacency to another operation: preflight, drill-down, fallback, or alternative. It is not a workflow graph. |
 
 ## Living Memory
 
 - Keep contracts stable and explicit. Avoid host implementation services, caller-local route aliases, and Revit runtime dependencies here.
 - Product names, executable names, env var names, default local URLs, and filesystem roots come from `Pe.Shared.Product`.
-- Operation metadata is the canonical capability map for Pea, CLI output, generated TypeScript, the hand-maintained .NET client, and future frontend views. Keep task-specific steering close to metadata and examples rather than hardcoding it in prompts.
-- Bridge-backed Revit operation metadata should make active document-kind support explicit when an operation is project-only, family-only, or intentionally overlaps both. Do not encode this as `rvt.*`/`rfa.*` route families or overload `supportedScopes`; keep layer-first `revit.<layer>.<domain>` keys and use document-kind gating/metadata to steer callers.
+- Operation metadata is a compact routing/callability surface for Pea, CLI output, generated TypeScript, the hand-maintained .NET client, and future frontend views. It is not a workflow planner.
+- Keys carry primary taxonomy. Keep Revit public keys layer-first as `revit.<layer>.<noun>[.<variant>]`; do not encode document kind as `rvt.*`, `rfa.*`, or `rvtrfa.*` route families.
+- Keep taxonomy helpers such as family, domain noun, Revit layer, and derived read/mutate intent internal to scoring, filtering, codegen grouping, and validation. Do not echo them as public search-result fields when the key and safety summary already carry the signal.
+- Metadata exists for search, safety gates, call formation, result expectation, and sparse practical related operations. Collapse search words into `SearchTerms`; do not grow overlapping tags/capabilities/question prose fields or repeated preflight prose. Generic bridge, active-document, validation, cost, and mutation rules belong in tool descriptions, deterministic failure handling, or harness validation.
 - Public request contracts should validate strictly. Unknown or nonsensical fields should fail with actionable diagnostics rather than silently broadening or emptying results.
-- High-value operations should include examples and bounded expansion hints when they materially help callers form valid requests.
-- Keep compact defaults and budget metadata aligned with collector behavior.
+- Keep `CallGuidance` to at most 2 bullets and request examples to at most 2 unless an explicit gateway exception is validated. If an operation needs more prose to be usable, fix the operation/request shape.
 - When project-standard parameter identity is uncertain, expose ranked parameter evidence with reasons; callers should pass observed `ParameterIdentity` values or `ParameterReference` objects into downstream detail or matrix requests.
 - `PeHostClient` is hand-maintained by design. Add blessed namespaces/methods for stable high-value operations only; keep generic execution as the escape hatch.
 - Host-client XML docs are an agent-facing contract. Keep docs concise and capability-oriented so normal C# hover can orient callers without a custom LSP proxy.

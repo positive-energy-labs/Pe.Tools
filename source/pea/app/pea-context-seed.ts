@@ -1,4 +1,5 @@
 import { PeHostClient, type HostProbeData, type HostSessionSummaryData, type HostWorkbenchResourcesData, type HostResourceFileStateData, type RevitAgentContextSummaryData, type RevitAgentVisibleCategorySummary } from "./host-client.js";
+import { hostCapabilityMap } from "./generated/host-capability-map.generated.js";
 import { callHostOperation } from "./host-operation-runtime.js";
 
 export interface PeaContextProviderOptions {
@@ -236,7 +237,7 @@ function formatWorkbenchLines(
     `workspace: cwd=${q(options.cwd)} workspaceKey=${q(options.workspaceKey)} settingsPath=${q(options.settingsPath)}`,
     formatParameterResourcesLine(workbenchResources),
     "scripting-workspace: use script_bootstrap when paths/references are unknown; workspace docs are README.md, AGENTS.md, and JOIN_GUIDE.md; source lives under src/.",
-    "capabilities: use host_operation_search for generated public operations, then host_operation_call when a generated operation fits.",
+    `capability-map: ${hostCapabilityMap.rowCount} generated public operations from ${q(hostCapabilityMap.generatedFrom)}; use host_operation_search projection=\"capability-map\" for broad discovery, then projection=\"matches\" with hints/full before host_operation_call.`,
     "scripts: use script_execute for tiny inline probes or durable workspace scripts; default ReadOnly and use WriteTransaction only for explicit mutations.",
     "evidence: prefer diagnostics, follow-up reads, and CSV/JSON/text artifacts over wide terminal output.",
   ];

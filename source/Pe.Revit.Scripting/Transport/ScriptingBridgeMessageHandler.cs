@@ -1,6 +1,7 @@
 using Autodesk.Revit.UI;
 using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.Execution;
+using Pe.Revit.Scripting.Pods;
 using Pe.Revit.Scripting.References;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Scripting.Execution;
@@ -10,6 +11,7 @@ namespace Pe.Revit.Scripting.Transport;
 
 public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisposable {
     private readonly ScriptWorkspaceBootstrapService _bootstrapService;
+    private readonly ScriptPodArchiveService _podArchiveService;
     private readonly RevitScriptExecutionService _executionService;
     private readonly ExternalEvent _externalEvent;
     private readonly object _sync = new();
@@ -22,7 +24,10 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         Action<string>? notificationSink = null
     ) {
         this._uiApplicationAccessor = uiApplicationAccessor;
-        this._bootstrapService = CreateBootstrapService();
+        var csProjReader = new CsProjReader();
+        var projectGenerator = new ScriptProjectGenerator(csProjReader);
+        this._bootstrapService = new ScriptWorkspaceBootstrapService(projectGenerator);
+        this._podArchiveService = new ScriptPodArchiveService(this._bootstrapService, projectGenerator);
         this._executionService = CreateExecutionService(uiApplicationAccessor, notificationSink);
         this._externalEvent = ExternalEvent.Create(this);
     }
@@ -88,6 +93,40 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         cancellationToken
     );
 
+    public Task<ScriptPodImportData> ImportPodAsync(
+        ScriptPodImportRequest request,
+        CancellationToken cancellationToken
+    ) => this.EnqueueAsync(
+        "import script pod",
+        () => {
+            var uiApplication = this.RequireUiApplication();
+            var revitVersion = uiApplication.Application.VersionNumber ?? "unknown";
+            var targetFramework = RevitRuntimeTargetFramework.Resolve(revitVersion);
+            var runtimeAssemblyPath = RevitRuntimeTargetFramework.GetRuntimeAssemblyPath();
+            return this._podArchiveService.Import(
+                request,
+                revitVersion,
+                targetFramework,
+                runtimeAssemblyPath
+            );
+        },
+        cancellationToken
+    );
+
+    public Task<ScriptPodExportData> ExportPodAsync(
+        ScriptPodExportRequest request,
+        CancellationToken cancellationToken
+    ) => this.EnqueueAsync(
+        "export script pod",
+        () => {
+            var uiApplication = this.RequireUiApplication();
+            var revitVersion = uiApplication.Application.VersionNumber ?? "unknown";
+            var targetFramework = RevitRuntimeTargetFramework.Resolve(revitVersion);
+            return this._podArchiveService.Export(request, targetFramework);
+        },
+        cancellationToken
+    );
+
     private Task<T> EnqueueAsync<T>(
         string operationName,
         Func<T> action,
@@ -130,12 +169,6 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
 
     private static string NormalizeWorkspaceKey(string workspaceKey) =>
         string.IsNullOrWhiteSpace(workspaceKey) ? "default" : workspaceKey;
-
-    private static ScriptWorkspaceBootstrapService CreateBootstrapService() {
-        var csProjReader = new CsProjReader();
-        var projectGenerator = new ScriptProjectGenerator(csProjReader);
-        return new ScriptWorkspaceBootstrapService(projectGenerator);
-    }
 
     private static RevitScriptExecutionService CreateExecutionService(
         Func<UIApplication?> uiApplicationAccessor,

@@ -1,4 +1,4 @@
-﻿using Pe.Revit.Scripting.References;
+using Pe.Revit.Scripting.References;
 using System.Security;
 using System.Text;
 
@@ -15,6 +15,8 @@ public sealed class ScriptProjectGenerator(
     ];
     private const string RevitApiAssemblyName = "RevitAPI";
     private const string RevitApiUiAssemblyName = "RevitAPIUI";
+    private const string RevitApiPackageName = "Nice3point.Revit.Api.RevitAPI";
+    private const string RevitApiUiPackageName = "Nice3point.Revit.Api.RevitAPIUI";
 
     private readonly CsProjReader _csProjReader = csProjReader;
 
@@ -32,23 +34,60 @@ public sealed class ScriptProjectGenerator(
             .GroupBy(reference => reference.HintPath, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .ToList();
-        var preservedPackageReferences = existingProject.PackageReferences
-            .GroupBy(reference => reference.Include, StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.First())
-            .ToList();
+        var preservedPackageReferences = NormalizePackageReferences(existingProject.PackageReferences, revitVersion);
+        var usings = NormalizeUsings(existingProject.Usings);
 
+        return CreateProjectContent(
+            targetFramework,
+            preservedReferences,
+            preservedPackageReferences,
+            generatedRuntimeReferences,
+            usings
+        );
+    }
+
+    public string GeneratePortableProjectContent(
+        string? existingProjectContent,
+        string workspaceRoot,
+        string targetFramework
+    ) {
+        var existingProject = this._csProjReader.Read(existingProjectContent ?? "<Project />", workspaceRoot);
+        var effectiveTargetFramework = string.IsNullOrWhiteSpace(existingProject.TargetFramework)
+            ? targetFramework
+            : existingProject.TargetFramework;
+
+        return CreateProjectContent(
+            effectiveTargetFramework,
+            [],
+            NormalizePackageReferences(existingProject.PackageReferences, null),
+            [],
+            NormalizeUsings(existingProject.Usings)
+        );
+    }
+
+    private static string CreateProjectContent(
+        string targetFramework,
+        IReadOnlyList<ScriptReferenceDeclaration> preservedReferences,
+        IReadOnlyList<ScriptPackageReference> preservedPackageReferences,
+        IReadOnlyList<ScriptReferenceDeclaration> generatedRuntimeReferences,
+        IReadOnlyList<string> usings
+    ) {
         var builder = new StringBuilder();
         _ = builder.AppendLine("""<Project Sdk="Microsoft.NET.Sdk">""");
         _ = builder.AppendLine("  <PropertyGroup>");
-        _ = builder.AppendLine($"    <TargetFramework>{targetFramework}</TargetFramework>");
+        _ = builder.AppendLine($"    <TargetFramework>{EscapeXml(targetFramework)}</TargetFramework>");
         _ = builder.AppendLine("    <LangVersion>latest</LangVersion>");
         _ = builder.AppendLine("    <PlatformTarget>x64</PlatformTarget>");
-        _ = builder.AppendLine("    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>");
+        _ = builder.AppendLine("    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>");
         _ = builder.AppendLine("    <OutputType>Library</OutputType>");
         _ = builder.AppendLine("    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>");
         _ = builder.AppendLine("    <ImplicitUsings>enable</ImplicitUsings>");
         _ = builder.AppendLine("    <Nullable>disable</Nullable>");
         _ = builder.AppendLine("  </PropertyGroup>");
+        _ = builder.AppendLine();
+        _ = builder.AppendLine("  <ItemGroup>");
+        _ = builder.AppendLine("    <Compile Include=\"src/**/*.cs\" />");
+        _ = builder.AppendLine("  </ItemGroup>");
         _ = builder.AppendLine();
         _ = builder.AppendLine("  <ItemGroup>");
         foreach (var reference in preservedReferences) {
@@ -82,13 +121,46 @@ public sealed class ScriptProjectGenerator(
         _ = builder.AppendLine("  </ItemGroup>");
         _ = builder.AppendLine();
         _ = builder.AppendLine("  <ItemGroup>");
-        foreach (var @using in ScriptFileTemplates.DefaultUsings)
+        foreach (var @using in usings)
             _ = builder.AppendLine($"    <Using Include=\"{EscapeXml(@using)}\" />");
         _ = builder.AppendLine("  </ItemGroup>");
         _ = builder.AppendLine("</Project>");
 
         return builder.ToString();
     }
+
+    private static IReadOnlyList<ScriptPackageReference> NormalizePackageReferences(
+        IReadOnlyList<ScriptPackageReference> packageReferences,
+        string? revitVersion
+    ) =>
+        packageReferences
+            .GroupBy(reference => reference.Include, StringComparer.OrdinalIgnoreCase)
+            .Select(group => NormalizePackageReference(group.First(), revitVersion))
+            .OrderBy(reference => reference.Include, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private static ScriptPackageReference NormalizePackageReference(
+        ScriptPackageReference reference,
+        string? revitVersion
+    ) {
+        if (!string.IsNullOrWhiteSpace(revitVersion)
+            && IsRevitApiPackage(reference.Include))
+            return reference with { Version = $"{revitVersion}.*" };
+
+        return reference;
+    }
+
+    private static bool IsRevitApiPackage(string packageName) =>
+        string.Equals(packageName, RevitApiPackageName, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(packageName, RevitApiUiPackageName, StringComparison.OrdinalIgnoreCase);
+
+    private static IReadOnlyList<string> NormalizeUsings(IReadOnlyList<string> existingUsings) =>
+        ScriptFileTemplates.DefaultUsings
+            .Concat(existingUsings)
+            .Where(@using => !string.IsNullOrWhiteSpace(@using))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(@using => @using, StringComparer.Ordinal)
+            .ToList();
 
     private static bool IsGeneratedRuntimeReference(
         ScriptReferenceDeclaration reference,

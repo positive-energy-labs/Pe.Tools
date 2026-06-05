@@ -9,6 +9,7 @@ public static class RevitScriptingStorageLocations {
     public const string ProjectFileName = ScriptingWorkspaceLayout.ProjectFileName;
     public const string AgentsFileName = ScriptingWorkspaceLayout.AgentInstructionsFileName;
     public const string ReadmeFileName = ScriptingWorkspaceLayout.ReadmeFileName;
+    public const string PodManifestFileName = ScriptingWorkspaceLayout.PodManifestFileName;
     public const string JoinGuideFileName = "JOIN_GUIDE.md";
     public const string SourceDirectoryName = ScriptingWorkspaceLayout.SourceDirectoryName;
     public const string InlineTraceDirectoryName = ProductPathNames.InlineScriptsDirectoryName;
@@ -24,6 +25,9 @@ public static class RevitScriptingStorageLocations {
 
     public static string ResolveProjectFilePath(string workspaceKey) =>
         Path.Combine(ResolveWorkspaceRoot(workspaceKey), ProjectFileName);
+
+    public static string ResolvePodManifestPath(string workspaceKey) =>
+        Path.Combine(ResolveWorkspaceRoot(workspaceKey), PodManifestFileName);
 
     public static string ResolveSourceDirectory(string workspaceKey) =>
         Path.Combine(ResolveWorkspaceRoot(workspaceKey), SourceDirectoryName);

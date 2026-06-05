@@ -70,7 +70,8 @@ Documents\Pe.Tools\
       fragments\
       schemas\
   workspaces\
-    <key>\
+    <slug>\
+      pod.json (optional; turns the workspace into strict Pod mode)
       AGENTS.md
       README.md
       PeScripts.csproj
@@ -81,6 +82,8 @@ Documents\Pe.Tools\
 ```
 
 Settings are flattened as `settings/<module>/<root>/`; do not reintroduce `settings/<module>/settings/<root>/`.
+
+Workspace keys are user-facing slugs and must stay single-segment: `default` or lowercase ASCII letters/digits with hyphen separators. Do not allow nesting, spaces, dots, rooted paths, path separators, uppercase aliases, or compatibility fallbacks. `pod.json` is the product-level manifest filename because Pods and loose workspaces share this root.
 
 Revit add-in manifests still live in Autodesk's per-user add-in folder:
 

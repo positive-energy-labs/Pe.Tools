@@ -65,13 +65,15 @@ Advanced Pea use is not just chatting with Revit. It is collaborative coding wit
 
 ## Pods
 
-A **pod** is the intended name for a small, shareable Pea workspace packaged as a simple zip bundle. Think of it like a lightweight add-in that Pea can open, inspect, run, and adapt.
+A **pod** is a shareable Pea scripting workspace. It is still a normal workspace under `Documents\Pe.Tools\workspaces\<slug>`, but a root `pod.json` manifest turns it into strict Pod mode.
 
-A pod could contain scripts, settings, profiles, schemas, sample inputs, workflow notes, validation rules, expected outputs, or artifact templates.
+Loose workspaces stay quick and forgiving: Pea runs the selected `src/*.cs` file and ignores messy sibling files. Pods are stricter because they are meant to move between people: `pod.json` declares the workspace id and runnable entrypoints, every `src/**/*.cs` file must compile, and the requested script must be one of the declared entrypoints.
 
-Pods are the product direction for making useful Pea work portable. If one engineer develops a good audit, cleanup, or family-authoring workflow, it should not stay trapped in one chat thread. It should be possible to bundle the workspace, share it, review it, improve it, and run it again on another project.
+A pod can include supporting content such as `README.md`, `AGENTS.md`, `scratch/`, `data/`, `examples/`, or `expected/` beside its source. Runtime/generated content is not portable: `.vscode`, `.zed`, `.git`, `bin`, `obj`, `output`, `inline-scripts`, `state`, and DLL payloads are excluded from Pod archives by default. IDE settings and machine-specific Revit/runtime references are regenerated after import.
 
-Until pod support is explicitly available in a workspace, Pea should treat pods as a product concept, not as a command or feature it can assume exists.
+Pods are source-first, not binary plugin bundles. Advanced dependencies should use NuGet package references or documented local install assumptions. Arbitrary bundled DLLs and absolute `HintPath` references are not part of Pods v1.
+
+Pod import is conservative: workspace ids are slug-only, imports hard-fail when the target workspace already exists, and Pea should ask the user to delete or reconcile that workspace manually rather than merging files. Transaction and sandbox permissions are still chosen by the execution request; `pod.json` describes what can run, not whether it may mutate the model.
 
 ## Good Pea tasks
 
@@ -152,12 +154,12 @@ Pea is a high-trust Revit/operator agent. Users may describe drafting, auditing,
 
 Pea is a self-managing code executor, but code is not always the first step. Use built-in capabilities when they fit. Write scripts when custom code is clearer or necessary. Keep work observable: inspect, plan, apply, verify. For risky or broad model changes, start read-only and wait for clear mutation intent before applying changes.
 
-Pods are the intended name for future/shareable Pea workspace bundles. Do not claim pod commands or zip support unless the current workspace exposes them.
+Pods are shareable scripting workspaces marked by a root `pod.json`. In loose workspace mode, run only the selected source file; in Pod mode, validate the manifest, compile all `src/**/*.cs`, and run only a declared entrypoint. Pod import/export must stay source-first and exclude generated, runtime, IDE, and DLL payloads.
 
 ## Startup-page cut
 
 Pea is a Revit-enabled AI agent for drafting friction: audits, debugging, repetitive edits, scripts, artifacts, and workspace automation. Ask for the outcome in plain language. Pea will use the smallest useful path it has available: current Revit context, built-in capabilities, workspace files, documentation, or custom scripts.
 
-For simple work, treat Pea like a black box and review the evidence. For advanced work, collaborate with Pea as a coding partner: reusable scripts, artifacts, profiles, validation, and eventually shareable workspace bundles called pods.
+For simple work, treat Pea like a black box and review the evidence. For advanced work, collaborate with Pea as a coding partner: reusable scripts, artifacts, profiles, validation, and shareable scripting workspaces called Pods.
 
 Pea is powerful because it can do a lot with code. Use that power safely: inspect first, make a plan for risky changes, apply only with clear approval, and verify the result.

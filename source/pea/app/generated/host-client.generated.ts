@@ -9,6 +9,10 @@ import type {
   HostLogsRequest,
   HostProbeData,
   HostSessionSummaryData,
+  ScriptPodExportData,
+  ScriptPodExportRequest,
+  ScriptPodImportData,
+  ScriptPodImportRequest,
   ScriptWorkspaceBootstrapData,
   ScriptWorkspaceBootstrapRequest,
 } from "./host-types/index.js";
@@ -91,6 +95,26 @@ export const scriptingOperations = {
     requestShape: [{"name":"artifactRunName","type":"string","required":false},{"name":"permissionMode","type":"enum:ScriptPermissionMode","required":true},{"name":"scriptContent","type":"string","required":false},{"name":"sourceKind","type":"enum:ScriptExecutionSourceKind","required":true},{"name":"sourceName","type":"string","required":false},{"name":"sourcePath","type":"string","required":false},{"name":"workspaceKey","type":"string","required":true}],
     responseShape: [{"name":"artifacts","type":"array\u003CScriptArtifactData\u003E","required":false},{"name":"containerTypeName","type":"string","required":false},{"name":"diagnostics","type":"array\u003CScriptDiagnostic\u003E","required":true},{"name":"executionId","type":"string","required":true},{"name":"output","type":"string","required":true},{"name":"revitVersion","type":"string","required":true},{"name":"status","type":"enum:ScriptExecutionStatus","required":true},{"name":"targetFramework","type":"string","required":true}],
   },
+  importPod: {
+    key: "scripting.pod.import",
+    verb: "POST",
+    route: "/api/scripting/pod/import",
+    executionMode: "Bridge",
+    requestTypeName: "ScriptPodImportRequest",
+    responseTypeName: "ScriptPodImportData",
+    requestShape: [{"name":"archivePath","type":"string","required":true},{"name":"workspaceKey","type":"string","required":false}],
+    responseShape: [{"name":"archiveEntries","type":"array\u003Cstring\u003E","required":true},{"name":"archivePath","type":"string","required":true},{"name":"diagnostics","type":"array\u003CScriptDiagnostic\u003E","required":true},{"name":"generatedFiles","type":"array\u003Cstring\u003E","required":true},{"name":"manifest","type":"ScriptPodManifestSummaryData","required":true},{"name":"workspaceKey","type":"string","required":true},{"name":"workspaceRootPath","type":"string","required":true}],
+  },
+  exportPod: {
+    key: "scripting.pod.export",
+    verb: "POST",
+    route: "/api/scripting/pod/export",
+    executionMode: "Bridge",
+    requestTypeName: "ScriptPodExportRequest",
+    responseTypeName: "ScriptPodExportData",
+    requestShape: [{"name":"archivePath","type":"string","required":true},{"name":"workspaceKey","type":"string","required":true}],
+    responseShape: [{"name":"archiveEntries","type":"array\u003Cstring\u003E","required":true},{"name":"archivePath","type":"string","required":true},{"name":"diagnostics","type":"array\u003CScriptDiagnostic\u003E","required":true},{"name":"manifest","type":"ScriptPodManifestSummaryData","required":true},{"name":"workspaceKey","type":"string","required":true},{"name":"workspaceRootPath","type":"string","required":true}],
+  },
 } as const satisfies Record<string, HostOperationDefinition>;
 
 export class ScriptingClient {
@@ -107,6 +131,20 @@ export class ScriptingClient {
     return sendJson<ExecuteRevitScriptRequest, ExecuteRevitScriptData>(
       this.options,
       scriptingOperations.execute,
+      request,
+    );
+  }
+  importPod(request: ScriptPodImportRequest): Promise<ScriptPodImportData> {
+    return sendJson<ScriptPodImportRequest, ScriptPodImportData>(
+      this.options,
+      scriptingOperations.importPod,
+      request,
+    );
+  }
+  exportPod(request: ScriptPodExportRequest): Promise<ScriptPodExportData> {
+    return sendJson<ScriptPodExportRequest, ScriptPodExportData>(
+      this.options,
+      scriptingOperations.exportPod,
       request,
     );
   }

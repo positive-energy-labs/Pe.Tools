@@ -362,7 +362,7 @@ async function findRecentDocument(selector: OpenDocumentSelector, timeoutSeconds
   const firstMatch = matches[0];
   const matchedPath = typeof firstMatch.path === "string" ? firstMatch.path : "unknown";
   return {
-    reason: `Matched '${selector.name}' to '${matchedPath}', but the restart-chain opener currently supports local Revit files only. Cloud model paths are preserved by recent-documents for future support but are not opened by revit.document.open.`,
+    reason: `Matched '${selector.name}' to '${matchedPath}', but the restart-chain opener currently supports local Revit files only. Cloud model paths are preserved by recent-documents for future support but are not opened by revit.apply.document.open.`,
     matches: matches.slice(0, 5),
   };
 }
@@ -379,7 +379,7 @@ async function openRevitDocument(request: {
     return {
       ok: false,
       reason:
-        "Requested document is a cloud model path, but host operation revit.document.open currently supports local Revit files only.",
+        "Requested document is a cloud model path, but host operation revit.apply.document.open currently supports local Revit files only.",
     };
   }
 
@@ -389,21 +389,21 @@ async function openRevitDocument(request: {
         baseUrl: resolveHostBaseUrl(),
         timeoutMs: Math.min(Math.max(request.timeoutSeconds, 5), 900) * 1000,
       },
-      "revit.document.open",
+      "revit.apply.document.open",
       { path: request.path },
       "compact",
     );
     if (!result.ok) {
       return {
         ok: false,
-        reason: `Host operation revit.document.open failed: ${result.message}`,
+        reason: `Host operation revit.apply.document.open failed: ${result.message}`,
         response: result,
       };
     }
 
     return {
       ok: true,
-      reason: "Host operation revit.document.open opened and activated the requested document.",
+      reason: "Host operation revit.apply.document.open opened and activated the requested document.",
       response: result.response,
     };
   } catch (error) {

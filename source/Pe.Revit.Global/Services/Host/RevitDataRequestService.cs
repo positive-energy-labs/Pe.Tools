@@ -662,8 +662,8 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
     }
 
     private RevitAgentContextSummaryData GetRevitAgentContextSummaryCore() {
+        var document = GetSupportedActiveDocument(GetRevitAgentContextSummaryOperationContract.Definition);
         try {
-            var document = GetSupportedActiveDocument(GetRevitAgentContextSummaryOperationContract.Definition);
             var uiApp = RevitUiSession.CurrentUIApplication;
             return RevitAgentContextCollector.CollectSummary(
                 document,
@@ -671,6 +671,8 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
                 uiApp.GetActiveView(),
                 uiApp.GetActiveUIDocument()?.Selection.GetElementIds().ToList()
             );
+        } catch (BridgeOperationException) {
+            throw;
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "RevitAgentContextSummaryException",

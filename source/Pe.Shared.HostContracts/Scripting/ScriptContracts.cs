@@ -59,6 +59,55 @@ public record ExecuteRevitScriptData(
     List<ScriptArtifactData>? Artifacts = null
 );
 
+[ExportTsInterface]
+public record ScriptPodImportRequest(
+    string ArchivePath,
+    string? WorkspaceKey = null
+);
+
+[ExportTsInterface]
+public record ScriptPodExportRequest(
+    string WorkspaceKey,
+    string ArchivePath
+);
+
+[ExportTsInterface]
+public record ScriptPodManifestSummaryData(
+    int SchemaVersion,
+    string Id,
+    string Name,
+    string? Description,
+    List<ScriptPodEntrypointData> Entrypoints
+);
+
+[ExportTsInterface]
+public record ScriptPodEntrypointData(
+    string Id,
+    string SourcePath,
+    string? Name = null
+);
+
+[ExportTsInterface]
+public record ScriptPodImportData(
+    string WorkspaceKey,
+    string WorkspaceRootPath,
+    string ArchivePath,
+    ScriptPodManifestSummaryData Manifest,
+    List<string> ArchiveEntries,
+    List<string> GeneratedFiles,
+    List<ScriptDiagnostic> Diagnostics
+);
+
+[ExportTsInterface]
+public record ScriptPodExportData(
+    string WorkspaceKey,
+    string WorkspaceRootPath,
+    string ArchivePath,
+    ScriptPodManifestSummaryData Manifest,
+    List<string> ArchiveEntries,
+    List<ScriptDiagnostic> Diagnostics
+);
+
 [JsonConverter(typeof(StringEnumConverter))]
 [ExportTsEnum]
 public enum ScriptExecutionStatus {

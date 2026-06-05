@@ -1,7 +1,10 @@
-import { sendJson, PeHostClientError, type HostExecutionMode, type HostOperationCostTier, type HostOperationDefinition, type HostOperationFamily, type HostOperationIntent, type HostOperationIntentVerb, type HostOperationRequestExample, type HostOperationRequestShapeKind, type HostOperationResultGrain, type HostOperationVisibility, type HostTypeShapeField, type PeHostClientOptions, type RevitOperationLayer } from "./host-client-runtime.js";
+import { sendJson, PeHostClientError, type HostCapabilityMapRow, type HostCapabilityMapSection, type HostExecutionMode, type HostOperationCostTier, type HostOperationDefinition, type HostOperationIntent, type HostOperationRelatedOperation, type HostOperationRequestExample, type HostOperationVisibility, type HostTypeShapeField, type PeHostClientOptions, type RevitActiveDocumentKind } from "./host-client-runtime.js";
+import { hostCapabilityMap } from "./generated/host-capability-map.generated.js";
 import { hostOperations, type HostOperationKey } from "./generated/host-operations.generated.js";
 
 export type HostOperationVerbosity = "compact" | "hints" | "full";
+export type HostOperationSearchProjection = "matches" | "capability-map";
+export type HostCapabilityMapFormat = "markdown" | "json" | "toon";
 
 export interface HostOperationSearchOptions {
   query?: string;
@@ -13,52 +16,36 @@ export interface HostOperationSearchOptions {
   limit?: number;
   verbosity?: HostOperationVerbosity;
   visibility?: HostOperationVisibility;
+  projection?: HostOperationSearchProjection;
+  capabilityMapFormat?: HostCapabilityMapFormat;
 }
 
 export interface HostOperationCompactResult {
   key: string;
   displayName: string;
-  summary: string;
-  family?: HostOperationFamily;
-  revitLayer?: RevitOperationLayer | null;
-  domainNoun?: string;
-  resultGrain?: HostOperationResultGrain;
+  description: string;
+  safety: string;
   costTier?: HostOperationCostTier;
   visibility?: HostOperationVisibility;
-  canonicalUse?: string;
-  intentVerb?: HostOperationIntentVerb;
-  requestShapeKind?: HostOperationRequestShapeKind;
   safeDefaultRequestJson?: string | null;
-  nextOperations?: readonly string[];
+  relatedOperations?: readonly HostOperationRelatedOperation[];
   requestTypeName: string;
   responseTypeName: string;
   requestHint: string;
   bestRequestExample?: HostOperationRequestExample;
-  preflightHints: readonly string[];
   usageHint: string;
 }
 
 export interface HostOperationHintResult extends HostOperationCompactResult {
-  domain: string;
-  tags: readonly string[];
+  searchTerms: readonly string[];
   executionMode: HostExecutionMode;
-  intent: HostOperationIntent;
   requiresBridge: boolean;
   requiresActiveDocument: boolean;
+  supportedActiveDocumentKinds: readonly RevitActiveDocumentKind[];
   singleFlightGroup?: string | null;
   strictRequestValidation?: boolean;
-  boundedExpansionHints: readonly string[];
+  callGuidance: readonly string[];
   requestExamples: readonly HostOperationRequestExample[];
-  useWhen: readonly string[];
-  doNotUseWhen: readonly string[];
-  usuallyBefore: readonly string[];
-  usuallyAfter: readonly string[];
-  answersQuestionTypes: readonly string[];
-  doesNotAnswer: readonly string[];
-  primaryNouns: readonly string[];
-  supportedScopes: readonly string[];
-  capabilities: readonly string[];
-  ambiguityBehavior?: string | null;
 }
 
 export interface HostOperationFullResult extends HostOperationHintResult {
@@ -69,6 +56,21 @@ export interface HostOperationFullResult extends HostOperationHintResult {
 }
 
 export type HostOperationSearchResult = HostOperationCompactResult | HostOperationHintResult | HostOperationFullResult;
+
+export interface HostCapabilityMapSearchResult {
+  kind: "hostCapabilityMap";
+  format: HostCapabilityMapFormat;
+  generatedFrom: string;
+  formatVersion: number;
+  rowCount: number;
+  guidance: string;
+  matchedOperationKeys: readonly string[];
+  rendered?: string;
+  sections?: readonly HostCapabilityMapSection[];
+  nextSteps: readonly string[];
+}
+
+export type HostOperationSearchOutput = HostOperationSearchResult[] | HostCapabilityMapSearchResult;
 
 export type HostOperationCallResult =
   | {
@@ -104,7 +106,14 @@ export function getHostOperation(key: string): HostOperationDefinition | undefin
   return hostOperations[key as HostOperationKey];
 }
 
-export function searchHostOperations(options: HostOperationSearchOptions = {}): HostOperationSearchResult[] {
+export function searchHostOperations(options: HostOperationSearchOptions = {}): HostOperationSearchOutput {
+  if (options.projection === "capability-map")
+    return renderHostCapabilityMapSearchResult(options);
+
+  return searchHostOperationMatches(options);
+}
+
+export function searchHostOperationMatches(options: HostOperationSearchOptions = {}): HostOperationSearchResult[] {
   const queryTerms = normalizeQuery(options.query);
   const verbosity = options.verbosity ?? "compact";
   const requestedLimit = options.limit ?? (verbosity === "full" ? 12 : 8);
@@ -206,6 +215,189 @@ export async function callHostOperation(
 }
 
 
+function renderHostCapabilityMapSearchResult(options: HostOperationSearchOptions): HostCapabilityMapSearchResult {
+  const format = options.capabilityMapFormat ?? "markdown";
+  const sections = selectCapabilityMapSections(options);
+  const matchedOperationKeys = unique(sections.flatMap((section) => section.rows.map((row) => row.key)));
+  return {
+    kind: "hostCapabilityMap",
+    format,
+    generatedFrom: hostCapabilityMap.generatedFrom,
+    formatVersion: hostCapabilityMap.formatVersion,
+    rowCount: hostCapabilityMap.rowCount,
+    guidance: hostCapabilityMap.guidance,
+    matchedOperationKeys,
+    ...(format === "json" ? { sections } : { rendered: format === "toon" ? renderCapabilityMapToon(sections) : renderCapabilityMapMarkdown(sections) }),
+    nextSteps: [
+      "Use projection=matches for ranked operation search results.",
+      "Use verbosity=hints for request examples, call guidance, and related operations.",
+      "Use verbosity=full when exact route and request/response fields are needed before host_operation_call.",
+    ],
+  };
+}
+
+function selectCapabilityMapSections(options: HostOperationSearchOptions): HostCapabilityMapSection[] {
+  const queryTerms = normalizeQuery(options.query);
+  const focusSections = filterCapabilityMapSections(hostCapabilityMap.focusSections, queryTerms, options, true);
+  const baseSections = filterCapabilityMapSections(hostCapabilityMap.sections, queryTerms, options, false);
+  const sections = focusSections.length === 0 ? baseSections : focusSections;
+  const rankedSections = queryTerms.length === 0 ? sections : rankCapabilityMapSections(sections, queryTerms);
+  const defaultLimit = queryTerms.length === 0 ? hostCapabilityMap.rowCount : 25;
+  const limit = Math.min(Math.max(options.limit ?? defaultLimit, 1), 100);
+  return trimCapabilityMapSections(rankedSections, limit);
+}
+
+function filterCapabilityMapSections(
+  sections: readonly HostCapabilityMapSection[],
+  queryTerms: string[],
+  options: HostOperationSearchOptions,
+  focusOnly: boolean,
+): HostCapabilityMapSection[] {
+  return sections
+    .map((section) => {
+      const sectionMatches = queryTerms.length !== 0 && textMatchesQueryTerms(`${section.id} ${section.title}`, queryTerms);
+      if (focusOnly && queryTerms.length === 0)
+        return { ...section, rows: [] };
+
+      const rows = section.rows.filter((row) => {
+        const operation = getHostOperation(row.key);
+        if (operation && !matchesFilters(operation, options))
+          return false;
+        if (queryTerms.length === 0 || sectionMatches)
+          return true;
+        return textMatchesQueryTerms(Object.values(row).join(" "), queryTerms)
+          || (operation != null && scoreOperation(operation, queryTerms) > 0);
+      });
+      return { ...section, rows };
+    })
+    .filter((section) => section.rows.length !== 0);
+}
+
+function rankCapabilityMapSections(
+  sections: readonly HostCapabilityMapSection[],
+  queryTerms: string[],
+): HostCapabilityMapSection[] {
+  return sections
+    .map((section) => {
+      const rows = [...section.rows].sort((left, right) => scoreCapabilityMapRow(right, queryTerms) - scoreCapabilityMapRow(left, queryTerms));
+      return { ...section, rows };
+    })
+    .sort((left, right) => scoreCapabilityMapSection(right, queryTerms) - scoreCapabilityMapSection(left, queryTerms));
+}
+
+function scoreCapabilityMapSection(section: HostCapabilityMapSection, queryTerms: string[]): number {
+  return Math.max(0, ...section.rows.map((row) => scoreCapabilityMapRow(row, queryTerms)));
+}
+
+function scoreCapabilityMapRow(row: HostCapabilityMapRow, queryTerms: string[]): number {
+  const operation = getHostOperation(row.key);
+  const operationScore = operation ? scoreOperation(operation, queryTerms) : 0;
+  const rowText = Object.values(row).join(" ").toLowerCase();
+  const rowScore = queryTerms.reduce((score, term) => score + (rowText.includes(term) ? 1 : 0), 0);
+  return operationScore + rowScore;
+}
+
+function trimCapabilityMapSections(
+  sections: HostCapabilityMapSection[],
+  limit: number,
+): HostCapabilityMapSection[] {
+  let remaining = limit;
+  const trimmed: HostCapabilityMapSection[] = [];
+  for (const section of sections) {
+    if (remaining <= 0)
+      break;
+
+    const rows = section.rows.slice(0, remaining);
+    remaining -= rows.length;
+    if (rows.length !== 0)
+      trimmed.push({ ...section, rows });
+  }
+  return trimmed;
+}
+
+function renderCapabilityMapMarkdown(sections: readonly HostCapabilityMapSection[]): string {
+  const lines = [
+    "# Host capability map",
+    hostCapabilityMap.guidance,
+    "",
+  ];
+  if (sections.length === 0) {
+    lines.push("No capability-map rows matched the filters. Use projection=matches for ranked search fallback.");
+    return lines.join("\n");
+  }
+
+  for (const section of sections) {
+    lines.push(`## ${section.title}`);
+    lines.push(section.summary);
+    lines.push("| key | area | description | safety | input | output | relations | terms |");
+    lines.push("| --- | --- | --- | --- | --- | --- | --- | --- |");
+    for (const row of section.rows) {
+      lines.push([
+        row.key,
+        row.area,
+        row.description,
+        row.safety,
+        row.input,
+        row.output,
+        row.relations || "-",
+        row.terms || "-",
+      ].map((value) => escapeMarkdownCell(truncate(value, 160))).join(" | ").replace(/^/, "| ").replace(/$/, " |"));
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
+function renderCapabilityMapToon(sections: readonly HostCapabilityMapSection[]): string {
+  const rowFields = [
+    "key",
+    "area",
+    "description",
+    "safety",
+    "input",
+    "output",
+    "relations",
+    "terms",
+  ] as const;
+  const lines = [
+    "kind: hostCapabilityMap",
+    `generatedFrom: ${formatToonScalar(hostCapabilityMap.generatedFrom)}`,
+    `guidance: ${formatToonScalar(hostCapabilityMap.guidance)}`,
+    `sections[${sections.length}]:`,
+  ];
+  for (const section of sections) {
+    lines.push(`  - id: ${formatToonScalar(section.id)}`);
+    lines.push(`    title: ${formatToonScalar(section.title)}`);
+    lines.push(`    summary: ${formatToonScalar(section.summary)}`);
+    lines.push(`    rows[${section.rows.length}]{${rowFields.join(",")}}:`);
+    for (const row of section.rows)
+      lines.push(`      ${rowFields.map((field) => formatToonScalar(row[field])).join(",")}`);
+  }
+  return lines.join("\n");
+}
+
+function textMatchesQueryTerms(text: string, queryTerms: string[]): boolean {
+  const haystack = text.toLowerCase();
+  return queryTerms.some((term) => haystack.includes(term));
+}
+
+function escapeMarkdownCell(value: string): string {
+  return value.replace(/\|/g, "\\|").replace(/[\r\n]+/g, " ");
+}
+
+function truncate(value: string, maxLength: number): string {
+  return value.length <= maxLength ? value : `${value.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
+function formatToonScalar(value: string): string {
+  if (value.length === 0)
+    return "\"\"";
+  return /^[A-Za-z0-9_.:/|+\- ]+$/.test(value)
+    ? value
+    : JSON.stringify(value);
+}
+
 async function runWithSingleFlight<T>(operation: HostOperationDefinition, action: () => Promise<T>): Promise<T> {
   const group = getSingleFlightGroup(operation);
   if (!group)
@@ -294,52 +486,82 @@ function createFailureNextSteps(operation: HostOperationDefinition, error: unkno
 }
 
 function matchesFilters(operation: HostOperationDefinition, options: HostOperationSearchOptions): boolean {
-  return matchesText(operation.domain, options.domain)
+  return matchesDomainFilter(operation, options.domain)
     && (!options.executionMode || operation.executionMode === options.executionMode)
-    && (!options.intent || operation.intent === options.intent)
+    && (!options.intent || getOperationIntent(operation) === options.intent)
     && (options.requiresBridge == null || operation.requiresBridge === options.requiresBridge)
     && (options.requiresActiveDocument == null || operation.requiresActiveDocument === options.requiresActiveDocument)
     && (!options.visibility || operation.visibility === options.visibility);
+}
+
+function matchesDomainFilter(operation: HostOperationDefinition, domain: string | undefined): boolean {
+  if (domain == null || domain.trim().length === 0)
+    return true;
+
+  const expected = domain.trim().toLowerCase();
+  return [getOperationDomain(operation), ...getOperationDomainAliases(operation)]
+    .some((value) => value.toLowerCase() === expected);
+}
+
+function getOperationDomain(operation: HostOperationDefinition): string {
+  return operation.key.split(".", 1)[0] || "host";
+}
+
+function getOperationDomainAliases(operation: HostOperationDefinition): string[] {
+  const domain = getOperationDomain(operation);
+  if (domain === "scripting")
+    return ["script"];
+  if (domain === "script")
+    return ["scripting"];
+  return [];
+}
+
+function getOperationIntent(operation: HostOperationDefinition): HostOperationIntent {
+  return operation.costTier === "Mutation" ? "Mutate" : "Read";
+}
+
+function getRevitLayer(operation: HostOperationDefinition): string | undefined {
+  const parts = operation.key.split(".");
+  return parts[0] === "revit" ? toTitleCase(parts[1]) : undefined;
+}
+
+function getDomainNoun(operation: HostOperationDefinition): string {
+  const parts = operation.key.split(".");
+  if (parts[0] === "revit" && parts.length >= 3)
+    return parts.slice(2).join(".");
+  return parts.length > 1 ? parts.slice(1).join(".") : parts[0] ?? operation.key;
+}
+
+function toTitleCase(value: string | undefined): string | undefined {
+  if (!value)
+    return undefined;
+  return `${value[0].toUpperCase()}${value.slice(1).toLowerCase()}`;
 }
 
 function scoreOperation(operation: HostOperationDefinition, queryTerms: string[]): number {
   if (queryTerms.length === 0)
     return 1;
 
+  const revitLayer = getRevitLayer(operation);
+  const domainNoun = getDomainNoun(operation);
   const fields = [
     operation.key,
     operation.displayName,
-    operation.domain,
-    operation.summary,
+    getOperationDomain(operation),
+    operation.description,
     operation.requestTypeName,
     operation.responseTypeName,
-    operation.family,
-    operation.revitLayer ?? undefined,
-    operation.domainNoun,
-    operation.resultGrain,
+    revitLayer,
+    domainNoun,
     operation.costTier,
     operation.singleFlightGroup ?? undefined,
-    operation.handleProvenanceNotes ?? undefined,
     operation.visibility,
-    operation.canonicalUse,
-    operation.intentVerb,
-    operation.requestShapeKind,
     operation.safeDefaultRequestJson ?? undefined,
-    operation.ambiguityBehavior ?? undefined,
-    ...(operation.tags ?? []),
-    ...(operation.boundedExpansionHints ?? []),
-    ...(operation.useWhen ?? []),
-    ...(operation.doNotUseWhen ?? []),
-    ...(operation.usuallyBefore ?? []),
-    ...(operation.usuallyAfter ?? []),
-    ...(operation.nextOperations ?? []),
-    ...(operation.answersQuestionTypes ?? []),
-    ...(operation.doesNotAnswer ?? []),
-    ...(operation.primaryNouns ?? []),
-    ...(operation.supportedScopes ?? []),
-    ...(operation.capabilities ?? []),
+    ...(operation.searchTerms ?? []),
+    ...(operation.callGuidance ?? []),
+    ...(operation.relatedOperations ?? []).flatMap((relatedOperation) => [relatedOperation.key, relatedOperation.kind, relatedOperation.note ?? ""]),
     ...(operation.requestExamples ?? []).flatMap((example) => [example.name, example.description, example.json]),
-  ].filter((value): value is string => value != null);
+  ].filter((value): value is string => value != null && value.length !== 0);
 
   const haystack = fields.join(" ").toLowerCase();
   let score = 0;
@@ -352,7 +574,7 @@ function scoreOperation(operation: HostOperationDefinition, queryTerms: string[]
       score += 3;
     if (operation.displayName?.toLowerCase().includes(term))
       score += 2;
-    if (operation.tags?.some((tag) => tag.toLowerCase().includes(term)))
+    if (operation.searchTerms?.some((searchTerm) => searchTerm.toLowerCase().includes(term)))
       score += 2;
   }
 
@@ -362,15 +584,15 @@ function scoreOperation(operation: HostOperationDefinition, queryTerms: string[]
     score -= 4;
   if (operation.visibility === "EscalationVisible" && !queryNamesEscalation(operation, queryTerms))
     score -= 1;
-  if (operation.revitLayer === "Catalog" && queryNamesAny(queryTerms, ["schedule", "schedules", "family", "families", "parameter", "parameters", "binding", "bindings", "browser", "sheet", "sheets", "view", "views"]))
+  if (revitLayer === "Catalog" && queryNamesAny(queryTerms, ["schedule", "schedules", "family", "families", "parameter", "parameters", "binding", "bindings", "browser", "sheet", "sheets", "view", "views"]))
     score += 2;
   if (operation.key === "revit.catalog.schedules" && queryNamesAny(queryTerms, ["missing", "coverage", "covered", "scheduled", "schedules", "rows", "fields"]))
     score += 3;
   if (operation.key === "revit.matrix.schedule-coverage" && queryNamesAny(queryTerms, ["missing", "coverage", "covered", "scheduled", "schedules"]))
     score += 4;
-  if ((operation.revitLayer === "Matrix" || operation.revitLayer === "Detail") && queryNamesAny(queryTerms, ["audit", "coverage", "missing", "blank", "default", "row", "rows", "detail", "matrix"]))
+  if ((revitLayer === "Matrix" || revitLayer === "Detail") && queryNamesAny(queryTerms, ["audit", "coverage", "missing", "blank", "default", "row", "rows", "detail", "matrix"]))
     score += 2;
-  if (operation.revitLayer === "Detail" && !queryNamesAny(queryTerms, ["row", "rows", "cell", "cells", "detail", "known", "id", "ids"]))
+  if (revitLayer === "Detail" && !queryNamesAny(queryTerms, ["row", "rows", "cell", "cells", "detail", "known", "id", "ids"]))
     score -= 3;
 
   return score;
@@ -399,14 +621,10 @@ function isBroadRevitOrientationQuery(queryTerms: string[]): boolean {
 
 function queryNamesEscalation(operation: HostOperationDefinition, queryTerms: string[]): boolean {
   return queryNamesAny(queryTerms, [
-    operation.domainNoun,
-    operation.revitLayer,
-    operation.intentVerb,
-    operation.requestShapeKind,
-    ...(operation.tags ?? []),
-    ...(operation.primaryNouns ?? []),
-    ...(operation.capabilities ?? []),
-    ...(operation.nextOperations ?? []),
+    getDomainNoun(operation),
+    getRevitLayer(operation),
+    ...(operation.searchTerms ?? []),
+    ...(operation.relatedOperations ?? []).map((relatedOperation) => relatedOperation.key),
   ]);
 }
 
@@ -426,10 +644,6 @@ function normalizeQuery(query: string | undefined): string[] {
     .filter((term) => term.length > 1 && !stopWords.has(term));
 }
 
-function matchesText(value: string | undefined, expected: string | undefined): boolean {
-  return expected == null || expected.trim().length === 0 || value?.toLowerCase() === expected.toLowerCase();
-}
-
 function toSearchResult(operation: HostOperationDefinition, verbosity: HostOperationVerbosity): HostOperationSearchResult {
   if (verbosity === "full")
     return toFullSearchResult(operation);
@@ -441,23 +655,16 @@ function toSearchResult(operation: HostOperationDefinition, verbosity: HostOpera
   return {
     key: hintResult.key,
     displayName: hintResult.displayName,
-    summary: hintResult.summary,
-    family: hintResult.family,
-    revitLayer: hintResult.revitLayer,
-    domainNoun: hintResult.domainNoun,
-    resultGrain: hintResult.resultGrain,
+    description: hintResult.description,
+    safety: hintResult.safety,
     costTier: hintResult.costTier,
     visibility: hintResult.visibility,
-    canonicalUse: hintResult.canonicalUse,
-    intentVerb: hintResult.intentVerb,
-    requestShapeKind: hintResult.requestShapeKind,
     safeDefaultRequestJson: hintResult.safeDefaultRequestJson,
-    nextOperations: hintResult.nextOperations,
+    relatedOperations: hintResult.relatedOperations,
     requestTypeName: hintResult.requestTypeName,
     responseTypeName: hintResult.responseTypeName,
     requestHint: hintResult.requestHint,
     bestRequestExample: hintResult.bestRequestExample,
-    preflightHints: hintResult.preflightHints,
     usageHint: hintResult.usageHint,
   };
 }
@@ -468,44 +675,26 @@ function toHintSearchResult(operation: HostOperationDefinition): HostOperationHi
   return {
     key: operation.key,
     displayName: operation.displayName ?? operation.key,
-    domain: operation.domain ?? "host",
-    summary: operation.summary ?? operation.displayName ?? operation.key,
-    tags: operation.tags ?? [],
+    description: operation.description ?? operation.displayName ?? operation.key,
+    searchTerms: operation.searchTerms ?? [],
     executionMode: operation.executionMode,
-    intent: operation.intent ?? "Read",
-    family: operation.family,
-    revitLayer: operation.revitLayer,
-    domainNoun: operation.domainNoun,
-    resultGrain: operation.resultGrain,
+    safety: createSafetySummary(operation),
     costTier: operation.costTier,
     visibility: operation.visibility,
-    canonicalUse: operation.canonicalUse,
-    intentVerb: operation.intentVerb,
-    requestShapeKind: operation.requestShapeKind,
     safeDefaultRequestJson: operation.safeDefaultRequestJson,
-    nextOperations: operation.nextOperations ?? [],
+    relatedOperations: operation.relatedOperations ?? [],
     singleFlightGroup: operation.singleFlightGroup,
     strictRequestValidation: operation.strictRequestValidation,
     requiresBridge: operation.requiresBridge ?? operation.executionMode === "Bridge",
     requiresActiveDocument: operation.requiresActiveDocument ?? false,
+    supportedActiveDocumentKinds: operation.supportedActiveDocumentKinds ?? [],
     requestTypeName: operation.requestTypeName ?? "unknown",
     responseTypeName: operation.responseTypeName ?? "unknown",
     requestHint,
     bestRequestExample,
-    preflightHints: createPreflightHints(operation),
     usageHint: createUsageHint(operation, bestRequestExample, requestHint),
-    boundedExpansionHints: operation.boundedExpansionHints ?? [],
+    callGuidance: operation.callGuidance ?? [],
     requestExamples: operation.requestExamples ?? [],
-    useWhen: operation.useWhen ?? [],
-    doNotUseWhen: operation.doNotUseWhen ?? [],
-    usuallyBefore: operation.usuallyBefore ?? [],
-    usuallyAfter: operation.usuallyAfter ?? [],
-    answersQuestionTypes: operation.answersQuestionTypes ?? [],
-    doesNotAnswer: operation.doesNotAnswer ?? [],
-    primaryNouns: operation.primaryNouns ?? [],
-    supportedScopes: operation.supportedScopes ?? [],
-    capabilities: operation.capabilities ?? [],
-    ambiguityBehavior: operation.ambiguityBehavior,
   };
 }
 
@@ -517,6 +706,15 @@ function toFullSearchResult(operation: HostOperationDefinition): HostOperationFu
     requestShape: operation.requestShape ?? [],
     responseShape: operation.responseShape ?? [],
   };
+}
+
+function createSafetySummary(operation: HostOperationDefinition): string {
+  return unique([
+    operation.executionMode,
+    operation.requiresActiveDocument ? "active-doc" : undefined,
+    operation.costTier,
+    ...(operation.supportedActiveDocumentKinds ?? []),
+  ].filter((value): value is string => value != null && value.length !== 0)).join(", ");
 }
 
 function createRequestHint(operation: HostOperationDefinition): string {
@@ -570,13 +768,11 @@ function createPreflightHints(operation: HostOperationDefinition): string[] {
     hints.push("Requires an active Revit document before calling.");
   if (operation.costTier === "Expensive")
     hints.push("Expensive projection; prefer context/catalog/resolve operations first and keep filters bounded.");
-  if (operation.requestShapeKind)
-    hints.push(`Request shape: ${operation.requestShapeKind}.`);
   if (operation.safeDefaultRequestJson)
     hints.push(`Safe default request: ${operation.safeDefaultRequestJson}`);
   if (operation.strictRequestValidation)
     hints.push("Strict request validation; unknown or nonsensical fields fail instead of silently broadening results.");
-  if (operation.intent === "Mutate")
+  if (getOperationIntent(operation) === "Mutate")
     hints.push("May modify host/Revit state; inspect the request before calling.");
   return hints;
 }

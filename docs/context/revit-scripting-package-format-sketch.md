@@ -1,22 +1,24 @@
-# Revit Scripting Bundle Sketch
+# Revit Scripting Pod Format
 
-Saved context for the future `Pe.Revit.Scripting` sharing model.
+Saved context for the v1 `Pe.Revit.Scripting` sharing model.
 
-This is a format sketch, not an implementation plan. Defer implementation until workspace scripts are solid.
+Pods are source-first, shareable scripting workspaces. They reuse the existing workspace root and execution pipeline; `pod.json` is the only switch that turns a loose workspace into strict Pod mode.
 
 ## North Star
 
-- Keep the scripting system source-first.
-- Let users share zipped script workspaces, not compiled plugins.
+- Keep one storage universe: `Documents\Pe.Tools\workspaces\<slug>\`.
+- Keep scripting source-first and reviewable.
+- Let users share zipped Pod workspaces, not compiled plugins.
 - Reuse the existing `Pe.Revit.Scripting` compile/resolve/execute pipeline instead of inventing a second runtime.
-- Treat bundle import/export as distribution, not execution.
+- Treat import/export as distribution, not execution.
 
-## Recommended Shape
+## Archive Root
 
-A shareable bundle should be a zip containing a workspace-shaped folder:
+A v1 Pod archive contains workspace files at the zip root:
 
 ```text
-MyBundle.zip
+connector-audit.zip
+  pod.json
   PeScripts.csproj
   README.md
   AGENTS.md
@@ -24,12 +26,35 @@ MyBundle.zip
     Main.cs
     Helpers.cs
   scratch/
+  data/
+  examples/
+  expected/
 ```
 
-After import, the bundle is just a normal workspace under:
+Required entries:
+
+- `pod.json`
+- `src/` with one or more C# source files
+
+Expected generated/regenerated entries:
+
+- `PeScripts.csproj`
+- `README.md`
+- `AGENTS.md`
+
+Optional support folders may include:
+
+- `scratch/` for temporary workspace-local notes or generated intermediates
+- `data/` for source-controlled inputs
+- `examples/` for sample inputs or usage notes
+- `expected/` for expected outputs or validation fixtures
+
+Pods may include other safe relative source/support files, but v1 must not treat arbitrary settings/profile/schema payloads as product-storage imports. If settings or profiles become portable later, a manifest field must map them explicitly into the product storage model.
+
+After import, the Pod is a normal workspace under:
 
 ```text
-Documents\Pe.Tools\workspaces\<workspaceKey>\
+Documents\Pe.Tools\workspaces\<workspaceSlug>\
 ```
 
 Run it through the normal command shape:
@@ -38,34 +63,91 @@ Run it through the normal command shape:
 pea script execute --workspace connector-audit --source-path src\Main.cs
 ```
 
+## Manifest Contract
+
+The archive root must contain `pod.json`.
+
+The manifest is strict JSON. V1 fields are intentionally small:
+
+- `schemaVersion`: `1`
+- `id`: workspace slug; must match the import workspace slug
+- `name`: user-facing name
+- `description`: optional user-facing description
+- `requirements`: optional notes or structured requirements that remain informational in v1
+- `entrypoints`: non-empty declared scripts Pea may execute
+
+Entrypoints use slug ids and `src/**/*.cs` paths. Unknown manifest fields, duplicate entrypoint ids, duplicate source paths, rooted paths, escaping paths, non-`.cs` paths, and manifest ids that do not match the workspace slug are invalid.
+
 ## Execution Contract
 
-- Import/unpack the zip into a controlled workspace root.
-- Compile through the normal workspace script pipeline.
-- Compile the workspace source set from disk.
-- Execute the selected `.cs` file's exactly-one concrete `PeScriptContainer`.
-- Treat one broken file under `src/` as a workspace compile failure.
-- Use named workspaces as the isolation mechanism.
+Loose workspace mode is intentionally forgiving:
+
+- No root `pod.json`.
+- Execute only the selected `src/*.cs` file.
+- Ignore broken sibling source files.
+- Do not rely on helper files unless the workspace is converted to a Pod.
+
+Pod mode is intentionally strict:
+
+- Root `pod.json` exists.
+- Validate the manifest before execution.
+- Require the requested source path to be declared as an entrypoint.
+- Compile all `src/**/*.cs` files.
+- Execute the selected entrypoint file's exactly-one concrete `PeScriptContainer`.
+- Treat any broken source file under `src/` as a Pod compile failure.
+
+`ScriptPermissionMode` remains request-driven. `pod.json` declares runnable source entrypoints; it does not grant write permission or create transactions.
+
+## Import Rules
+
+Import is conservative and non-merging:
+
+- Archive entry paths must be safe-relative.
+- Reject rooted paths, `.` / `..`, path traversal, and path separator ambiguity.
+- Reject case-insensitive duplicate archive paths.
+- Reject excluded generated/runtime directories.
+- Reject DLL payloads by default.
+- Reject machine-specific absolute `HintPath` references.
+- Resolve the target workspace from the manifest id unless the host operation explicitly supplies the same slug.
+- Hard-fail when `Documents\Pe.Tools\workspaces\<id>` already exists.
+- Extract to a temporary directory first, validate, then move into place.
+- Rerun workspace bootstrap after import so IDE files, docs, and Revit/runtime references are regenerated for the current machine.
+
+The user or Pea must delete or reconcile an existing workspace manually before retrying import. V1 does not merge or overwrite.
+
+## Export Rules
+
+Export projects a workspace into a portable archive:
+
+- Require an existing root `pod.json`.
+- Validate the manifest and workspace in Pod mode.
+- Include source and safe support files.
+- Sanitize `PeScripts.csproj` for portability.
+- Preserve useful `PackageReference` and `Using` items.
+- Omit generated runtime/Revit `<Reference HintPath="...">` items.
+- Exclude `.vscode`, `.zed`, `.git`, `bin`, `obj`, `output`, `inline-scripts`, `state`, and DLL payloads by default.
 
 ## Dependency Modes
 
-Prefer the existing workspace dependency mechanisms:
+Prefer explicit, source-first dependencies:
 
-1. repo/runtime references supplied by `Pe.Revit.Scripting`
-2. package references declared by `PeScripts.csproj`
-3. explicit local references contained inside the unpacked workspace, if later allowed
+1. repo/runtime references regenerated by `Pe.Revit.Scripting`
+2. NuGet `PackageReference` entries declared by `PeScripts.csproj`
+3. documented local install assumptions for Revit/plugin locations when unavoidable
 
 Avoid by default:
 
+- arbitrary bundled DLLs
 - arbitrary probing of random machine-installed DLLs
+- absolute local `HintPath` references
 - GAC-style assumptions
-- project-to-project references outside the unpacked workspace root
+- project-to-project references outside the workspace root
 - precompiled third-party plugin bundles as the primary format
 - arbitrary install scripts or post-build hooks
 
 ## Why Source-First
 
-Source-first bundles keep the model simpler:
+Source-first Pods keep the model simpler:
 
 - easier to inspect and review
 - easier to version and diff
@@ -74,34 +156,20 @@ Source-first bundles keep the model simpler:
 - better fit with the workspace/project/reference pipeline
 - better fit for humans and coding agents
 
-## Why Not Binary-First
-
-Binary-first packages raise the hard problems immediately:
-
-- Revit-year compatibility
-- target framework compatibility
-- dependency collisions inside one Revit process
-- unload/reload limitations
-- trust and signing concerns
-- much worse debugging ergonomics
-
 ## Constraints To Preserve
 
 - keep one public operator surface: `pea script`
-- keep script/bundle execution bounded to controlled workspace roots
+- keep Pod execution bounded to controlled workspace roots
+- keep workspace keys slug-only; no nesting
 - keep references explicit by default
-- keep multi-file support source-based
-- keep the system reviewable by humans and legible to agents
-- keep bundles as zipped workspace conventions, not a separate runtime model
+- keep multi-file execution source-based and Pod-only
+- keep loose workspaces quick-and-dirty
+- keep Pods as zipped workspace conventions, not a separate runtime model
 
-## Good First Future Slice
-
-If this gets implemented, the first slice should be intentionally small:
+## V1 Command Shape
 
 ```powershell
-pea script export --workspace connector-audit connector-audit.zip
-pea script import connector-audit.zip --workspace connector-audit
+pea script export --workspace connector-audit --output connector-audit.zip
+pea script import --archive connector-audit.zip
 pea script execute --workspace connector-audit --source-path src\Main.cs
 ```
-
-That unlocks shareable multi-file authoring without committing to a full plugin ecosystem.

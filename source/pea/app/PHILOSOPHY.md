@@ -78,6 +78,8 @@ Most agent-design problems are placement problems. Before improving a prompt, ad
 
 This taxonomy is a pressure test, not bureaucracy. If a behavior feels unreliable, assume it is living at the wrong layer until proven otherwise.
 
+Host operation metadata is a compact routing and callability surface, not a workflow planner. Its strongest signals are key taxonomy, safety gates, request affordances, generated request/response shapes, terse search terms, and sparse practical related operations. Public discovery output should not repeat taxonomy already carried by the key (`domain`, `family`, `revitLayer`, `domainNoun`) or derived intent; keep those internal for scoring/filtering when useful. Repeated preflight rules belong in tool descriptions, deterministic failure handling, or harness validation, while operation-local prose stays in capped `callGuidance`. Do not add overlapping prose fields to teach the model sequences; put deterministic sequencing in the harness, repeated workflows in skills, and domain detail in operation results or generated zoom-in artifacts.
+
 ## Skills and Routing
 
 Skill and tool descriptions are routing infrastructure. They are not prose decoration.
@@ -175,6 +177,7 @@ The exact format matters less than the posture: summarize first, preserve relati
 
 ## Resources and Inspiration
 
+- [Prompting Tech Debt](https://www.promptick.ai/blog/prompt-debt-managing-legacy-ai-logic): skills, mcps, commands, AGENTS.md's, etc. are all prompts, whether they were written by you or not.
 - [Most Agent Failures Are Context Failures — Rostislav Melkumyan, Sanity](https://www.youtube.com/watch?v=EEXI_0Jo_bQ): primary context-engineering framing. Bad tool use usually means the model was shown the wrong context shape. Prefer fewer broader tools, explicit relationships, queryable sets, progressive discovery, and technical primitives that are also trust primitives.
 - [Software Fundamentals Matter More Than Ever — Matt Pocock](https://www.youtube.com/watch?v=v4F1gFy-hqg): AI agents amplify normal software-design failure modes. Shared design concepts, shared language, deep modules, testable seams, and feedback loops matter more because the model can otherwise create entropy faster than a human.
 - [How I Turned Pi Into the Ultimate Coding Agent — Ben Davis](https://www.youtube.com/watch?v=6xXjHM3V1zM): useful evidence for a minimal-agent core. A small prompt, a few robust primitives, and explicit extensions can outperform a large always-on tool universe; add MCP/tooling only when a workflow proves it needs it.
