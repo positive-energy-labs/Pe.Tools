@@ -59,7 +59,7 @@ public sealed class DesiredFamilyMigrationProfileTests {
             Assert.That(sharedParameterPlan.Provenance.Identity,
                 Is.EqualTo(ResolvedParameterMetadataProvenance.ParameterService));
             Assert.That(sharedParameterPlan.Provenance.DataType,
-                Is.EqualTo(ResolvedParameterMetadataProvenance.Authored));
+                Is.EqualTo(ResolvedParameterMetadataProvenance.ParameterService));
             Assert.That(sharedParameterPlan.Provenance.PropertiesGroup,
                 Is.EqualTo(ResolvedParameterMetadataProvenance.Authored));
             Assert.That(sharedParameterPlan.Provenance.IsInstance,
@@ -68,31 +68,20 @@ public sealed class DesiredFamilyMigrationProfileTests {
     }
 
     [Test]
-    public void Desired_migration_compiler_treats_shared_identity_as_shared_target_without_pe_name() {
+    public void Desired_migration_compiler_rejects_shared_target_without_resolved_definition() {
         var profile = new DesiredFamilyMigrationProfile {
             SharedParameters = [
                 new DesiredSharedParameterDeclaration {
                     Name = "External Shared Value",
-                    DataType = SpecTypeId.String.Text,
                     Value = "identity-ok"
                 }
             ]
         };
 
-        var plan = DesiredParameterCompiler.Compile(profile, profile, [], profile.MappingData);
-        var loweredProfile = DesiredMigrationPlanLowerer.Lower(profile, plan);
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            DesiredParameterCompiler.Compile(profile, profile, [], profile.MappingData));
 
-        Assert.Multiple(() => {
-            Assert.That(plan.RequiredApsParameterNames, Is.EquivalentTo(new[] { "External Shared Value" }));
-            Assert.That(plan.FamilyParameterNames, Is.Empty);
-            Assert.That(plan.LoweredActions.Single(action =>
-                    action.Operation == "AddAndMapSharedParams" &&
-                    action.Target == "External Shared Value").Operation,
-                Is.EqualTo("AddAndMapSharedParams"));
-            Assert.That(loweredProfile.AddFamilyParams.Parameters, Is.Empty);
-            Assert.That(loweredProfile.AddAndMapSharedParams.MappingData.Single().NewName,
-                Is.EqualTo("External Shared Value"));
-        });
+        Assert.That(ex!.Message, Does.Contain("Shared parameter 'External Shared Value' was requested"));
     }
 
     [Test]
@@ -140,7 +129,7 @@ public sealed class DesiredFamilyMigrationProfileTests {
                 string.Equals((string?)action["Target"], "Desired Width", StringComparison.Ordinal));
             Assert.Multiple(() => {
                 Assert.That((string?)emittedSharedParameter["Provenance"]!["Identity"], Is.EqualTo("ParameterService"));
-                Assert.That((string?)emittedSharedParameter["Provenance"]!["DataType"], Is.EqualTo("Authored"));
+                Assert.That((string?)emittedSharedParameter["Provenance"]!["DataType"], Is.EqualTo("ParameterService"));
                 Assert.That(emittedWidthAction["Sources"]!.Select(source => (string?)source), Is.Empty);
                 Assert.That(emittedPlan["LoweredActions"]!.Any(action =>
                     string.Equals((string?)action["Operation"], "SetKnownParams", StringComparison.Ordinal) &&

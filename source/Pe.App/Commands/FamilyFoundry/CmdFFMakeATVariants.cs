@@ -146,10 +146,8 @@ public class ATVariantQueueFactory {
         // Build synthetic settings that will be logged
         var syntheticSettings = new SetKnownParamsSettings { PerTypeAssignmentsTable = [perTypeRow] };
         var knownParamCatalog = new KnownParamCatalog(
-            new Dictionary<string, FamilyParamDefinitionModel>(StringComparer.Ordinal) {
-                [tagParameterName] = new FamilyParamDefinitionModel {
-                    Definition = ParameterDefinitionDescriptorFactory.NameFallback(tagParameterName)
-                }
+            new Dictionary<string, RevitParameterDefinition>(StringComparer.Ordinal) {
+                [tagParameterName] = RevitParameterDefinition.DesiredFamilyParameter(tagParameterName)
             },
             new Dictionary<string, ParameterDefinitionDescriptor>(StringComparer.Ordinal));
 

@@ -151,16 +151,14 @@ public static class KnownParamPlanBuilder {
             .Distinct(StringComparer.Ordinal)
             .Where(name => !IsSharedSnapshotReference(name, snapshotByName, isSharedParameter))
             .Select(name => snapshotByName.TryGetValue(name, out var snapshot)
-                ? new FamilyParamDefinitionModel {
-                    Definition = ParameterDefinitionDescriptorFactory.NameFallback(
-                        snapshot.Name ?? string.Empty,
-                        snapshot.DataType,
-                        snapshot.PropertiesGroup,
-                        snapshot.IsInstance)
-                }
+                ? RevitParameterDefinition.DesiredFamilyParameter(
+                    snapshot.Name ?? string.Empty,
+                    snapshot.DataType,
+                    snapshot.PropertiesGroup,
+                    snapshot.IsInstance)
                 : null)
             .Where(definition => definition != null)
-            .Cast<FamilyParamDefinitionModel>()
+            .Cast<RevitParameterDefinition>()
             .ToList();
 
         return new AddFamilyParamsSettings { Enabled = familyDefinitions.Count > 0, Parameters = familyDefinitions };

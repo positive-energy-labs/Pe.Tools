@@ -96,6 +96,8 @@ Keep this boundary intact: do not expose cleanup/delete/sort/connector operation
 
 Keep parameter ownership explicit. Family Foundry owns authored desired parameter intent, resolution provenance, and lowering into operation settings. `Pe.Revit.DocumentData` owns observed loaded-family matrix projections. Shared/public host DTOs may carry bounded observed parameter facts, but they should not become Family Foundry desired-state models. Common parameter descriptors should prove value inside document-owned Revit/Family Foundry seams before being promoted to public host contracts.
 
+`Pe.Revit.Parameters.RevitParameterDefinition` is the Revit-side semantic wrapper around the portable `ParameterDefinitionDescriptor`. Use it for Revit-typed desired/observed parameter construction and ForgeTypeId access; keep flat FF authored declarations and DocumentData collection envelopes feature-owned, inheriting or adapting the shared Revit-side model instead of duplicating parameter identity/data-type/group/scope properties.
+
 ## Key Relationships
 
 - Manager and Migrator should share one artifact contract.

@@ -130,10 +130,8 @@ public static class DesiredParameterCompiler {
         string name
     ) => new() {
         Name = name,
-        DataType = parameter.DataType,
         PropertiesGroup = parameter.PropertiesGroup,
         IsInstance = parameter.IsInstance,
-        Tooltip = parameter.Tooltip,
         Value = parameter.Value,
         Formula = parameter.Formula,
         SourceNames = CleanNames(parameter.SourceNames),
@@ -155,10 +153,8 @@ public static class DesiredParameterCompiler {
             .ToList();
         return new DesiredSharedParameterDeclaration {
             Name = parameter.Name,
-            DataType = parameter.DataType,
             PropertiesGroup = parameter.PropertiesGroup,
             IsInstance = parameter.IsInstance,
-            Tooltip = parameter.Tooltip,
             Value = parameter.Value,
             Formula = parameter.Formula,
             SourceNames = mergedSourceNames,
@@ -176,30 +172,35 @@ public static class DesiredParameterCompiler {
         IReadOnlyDictionary<string, Dictionary<string, string?>> perTypeAssignments
     ) {
         var name = RequireName(parameter.Name, "Shared parameter declaration");
-        sharedByName.TryGetValue(name, out var sharedParameter);
-        var identity = sharedParameter == null
-            ? CreateNameFallbackIdentity(name)
-            : CreateSharedGuidIdentity(name, sharedParameter.ExternalDefinition.GUID);
+        if (!sharedByName.TryGetValue(name, out var sharedParameter))
+            throw new InvalidOperationException(
+                $"Shared parameter '{name}' was requested, but no APS/shared-parameter definition was resolved for it. " +
+                "Shared parameter declarations cannot create local fallback definitions; add the parameter to the shared parameter source or declare it as a FamilyParameters entry.");
+
+        var identity = CreateSharedGuidIdentity(name, sharedParameter.ExternalDefinition.GUID);
         var migration = BuildMigration(parameter, mapping);
+        var tooltip = string.IsNullOrWhiteSpace(sharedParameter.ExternalDefinition.Description)
+            ? null
+            : sharedParameter.ExternalDefinition.Description;
 
         return new ResolvedDesiredParameter(
             new ResolvedParameterDefinition(
                 identity,
                 name,
-                parameter.DataType ?? sharedParameter?.ExternalDefinition.GetDataType() ?? SpecTypeId.String.Text,
-                parameter.PropertiesGroup ?? sharedParameter?.GroupTypeId ?? GroupTypeId.IdentityData,
-                parameter.IsInstance ?? sharedParameter?.IsInstance ?? true,
-                parameter.Tooltip),
+                sharedParameter.ExternalDefinition.GetDataType(),
+                parameter.PropertiesGroup ?? sharedParameter.GroupTypeId,
+                parameter.IsInstance ?? sharedParameter.IsInstance,
+                tooltip),
             true,
             parameter.GetAssignment(),
             GetPerTypeAssignments(perTypeAssignments, name),
             migration,
             new ResolvedParameterMetadataProvenanceSet(
-                sharedParameter == null ? ResolvedParameterMetadataProvenance.FamilyFoundryDefault : ResolvedParameterMetadataProvenance.ParameterService,
-                parameter.DataType != null ? ResolvedParameterMetadataProvenance.Authored : sharedParameter == null ? ResolvedParameterMetadataProvenance.FamilyFoundryDefault : ResolvedParameterMetadataProvenance.ParameterService,
-                parameter.PropertiesGroup != null ? ResolvedParameterMetadataProvenance.Authored : sharedParameter == null ? ResolvedParameterMetadataProvenance.FamilyFoundryDefault : ResolvedParameterMetadataProvenance.ParameterServiceDefault,
-                parameter.IsInstance != null ? ResolvedParameterMetadataProvenance.Authored : sharedParameter == null ? ResolvedParameterMetadataProvenance.FamilyFoundryDefault : ResolvedParameterMetadataProvenance.ParameterService,
-                string.IsNullOrWhiteSpace(parameter.Tooltip) ? ResolvedParameterMetadataProvenance.Unresolved : ResolvedParameterMetadataProvenance.Authored)
+                ResolvedParameterMetadataProvenance.ParameterService,
+                ResolvedParameterMetadataProvenance.ParameterService,
+                parameter.PropertiesGroup != null ? ResolvedParameterMetadataProvenance.Authored : ResolvedParameterMetadataProvenance.ParameterService,
+                parameter.IsInstance != null ? ResolvedParameterMetadataProvenance.Authored : ResolvedParameterMetadataProvenance.ParameterService,
+                tooltip == null ? ResolvedParameterMetadataProvenance.Unresolved : ResolvedParameterMetadataProvenance.ParameterService)
         );
     }
 

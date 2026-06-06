@@ -4,19 +4,9 @@ namespace Pe.Revit.FamilyFoundry.Operations;
 
 internal static class FamilyParameterDefinitionMatchExtensions {
     public static bool Matches(
-        this FamilyParamDefinitionModel parameter,
+        this RevitParameterDefinition parameter,
         FamilyParameter liveParameter
     ) => parameter.Definition.Matches(liveParameter);
-
-    public static bool Matches(
-        this ParameterSpec parameter,
-        FamilyParameter liveParameter
-    ) => ParameterDefinitionDescriptorFactory.NameFallback(
-            parameter.Name,
-            parameter.DataType,
-            parameter.PropertiesGroup,
-            parameter.IsInstance)
-        .Matches(liveParameter);
 
     public static bool Matches(
         this ParameterDefinitionDescriptor definition,

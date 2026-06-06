@@ -131,15 +131,13 @@ public static class FFMigratorQueueBuilder {
             PerTypeAssignmentsTable = []
         };
 
-    private static List<FamilyParamDefinitionModel> BuildInternalParams(CompiledFamilyFoundryOperationProfile profile) {
-        List<FamilyParamDefinitionModel> paramList = [
-            new() {
-                Definition = ParameterDefinitionDescriptorFactory.NameFallback(
-                    "_FOUNDRY LAST PROCESSED AT",
-                    SpecTypeId.String.Text,
-                    new ForgeTypeId(""),
-                    false)
-            }
+    private static List<RevitParameterDefinition> BuildInternalParams(CompiledFamilyFoundryOperationProfile profile) {
+        List<RevitParameterDefinition> paramList = [
+            RevitParameterDefinition.DesiredFamilyParameter(
+                "_FOUNDRY LAST PROCESSED AT",
+                SpecTypeId.String.Text,
+                new ForgeTypeId(""),
+                false)
         ];
         profile.SetKnownParams.GlobalAssignments.Add(new GlobalParamAssignment {
             Parameter = "_FOUNDRY LAST PROCESSED AT",

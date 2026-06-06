@@ -41,7 +41,6 @@
   "SharedParameters": [
     {
       "Name": "PE_FF_TestSharedValue",
-      "DataType": "Text",
       "PropertiesGroup": "Identity Data",
       "IsInstance": false,
       "Value": "shared-ok"

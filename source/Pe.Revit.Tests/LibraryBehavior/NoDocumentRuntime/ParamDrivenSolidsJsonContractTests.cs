@@ -178,6 +178,26 @@ public sealed class ParamDrivenSolidsJsonContractTests {
     }
 
     [Test]
+    public void Profile_schema_rejects_shared_parameter_datatype_authoring() {
+        var ex = Assert.Throws<JsonValidationException>(() =>
+            SettingsJsonContract.ValidateAndRoundTrip<FFManagerProfile>(
+                """
+                {
+                  "SharedParameters": [
+                    {
+                      "Name": "PE_FF_TestSharedValue",
+                      "DataType": "Text",
+                      "Value": "shared-ok"
+                    }
+                  ]
+                }
+                """,
+                "shared-parameter-datatype.json"));
+
+        Assert.That(ex!.Message, Does.Contain("DataType"));
+    }
+
+    [Test]
     public void PeGrd_base_profile_validates_roundtrip_and_compiles_param_driven_spans() {
         var contract = RevitFamilyFixtureHarness.LoadProfileFixtureContract("pe-grd-base.json");
         var compiled = AuthoredParamDrivenSolidsCompiler.Compile(contract.Value.ParamDrivenSolids);

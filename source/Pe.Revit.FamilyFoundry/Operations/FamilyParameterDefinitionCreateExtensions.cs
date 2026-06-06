@@ -6,7 +6,7 @@ namespace Pe.Revit.FamilyFoundry.Operations;
 internal static class FamilyParameterDefinitionCreateExtensions {
     public static FamilyParameter AddFamilyParameter(
         this FamilyDocument document,
-        FamilyParamDefinitionModel parameter
+        RevitParameterDefinition parameter
     ) => document.AddFamilyParameter(parameter.Definition);
 
     public static FamilyParameter AddFamilyParameter(

@@ -540,12 +540,12 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     };
 
     private static IEnumerable<DesiredSharedParameterDeclaration> BuildRealSubsetSharedDeclarations() {
-        yield return SharedDeclaration("PE_G___Model", SpecTypeId.String.Text, GroupTypeId.IdentityData, false);
-        yield return SharedDeclaration("PE_E___Voltage", SpecTypeId.ElectricalPotential, GroupTypeId.Electrical, false,
+        yield return SharedDeclaration("PE_G___Model", GroupTypeId.IdentityData, false);
+        yield return SharedDeclaration("PE_E___Voltage", GroupTypeId.Electrical, false,
             mappingStrategy: "CoerceElectrical");
-        yield return SharedDeclaration("PE_G___Weight", SpecTypeId.Number, GroupTypeId.IdentityData, false,
+        yield return SharedDeclaration("PE_G___Weight", GroupTypeId.IdentityData, false,
             mappingStrategy: nameof(BuiltInCoercionStrategy.CoerceMeasurableToNumber));
-        yield return SharedDeclaration("PE_G_Dim_Width1", SpecTypeId.Length, GroupTypeId.Geometry, false);
+        yield return SharedDeclaration("PE_G_Dim_Width1", GroupTypeId.Geometry, false);
     }
 
     private static IEnumerable<MappingData> BuildMatrixMappings() {
@@ -584,28 +584,28 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
     }
 
     private static IEnumerable<DesiredSharedParameterDeclaration> BuildMatrixSharedDeclarations() {
-        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetText, SpecTypeId.String.Text, GroupTypeId.Text, false);
-        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetBlankFallbackNumber, SpecTypeId.Number, GroupTypeId.IdentityData, false);
-        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetInteger, SpecTypeId.Int.Integer, GroupTypeId.IdentityData, false);
-        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetYesNo, SpecTypeId.Boolean.YesNo, GroupTypeId.IdentityData, false);
-        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetNumber, SpecTypeId.Number, GroupTypeId.IdentityData, false);
-        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetLength, SpecTypeId.Length, GroupTypeId.Geometry, false);
-        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetVoltage, SpecTypeId.ElectricalPotential, GroupTypeId.Electrical, false,
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetText, GroupTypeId.Text, false);
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetBlankFallbackNumber, GroupTypeId.IdentityData, false);
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetInteger, GroupTypeId.IdentityData, false);
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetYesNo, GroupTypeId.IdentityData, false);
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetNumber, GroupTypeId.IdentityData, false);
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetLength, GroupTypeId.Geometry, false);
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetVoltage, GroupTypeId.Electrical, false,
             mappingStrategy: "CoerceElectrical");
-        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetCurrent, SpecTypeId.Current, GroupTypeId.Electrical, false,
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetCurrent, GroupTypeId.Electrical, false,
             mappingStrategy: "CoerceElectrical");
-        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetFormulaUnwrappedLength, SpecTypeId.Length, GroupTypeId.Geometry, false);
-        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetExistingFormulaLength, SpecTypeId.Length, GroupTypeId.Geometry, false);
-        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetLinearDimension, SpecTypeId.Length, GroupTypeId.Geometry, false);
-        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetAngularDimension, SpecTypeId.Angle, GroupTypeId.Geometry, false);
-        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetRadialDimension, SpecTypeId.Length, GroupTypeId.Geometry, false);
-        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetArrayCount, SpecTypeId.Int.Integer, GroupTypeId.Geometry, false);
-        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetNestedWidth, SpecTypeId.Length, GroupTypeId.Geometry, true);
-        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetInvalidNumber, SpecTypeId.Number, GroupTypeId.IdentityData, false);
-        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetGlobalText, SpecTypeId.String.Text, GroupTypeId.Text, false,
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetFormulaUnwrappedLength, GroupTypeId.Geometry, false);
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetExistingFormulaLength, GroupTypeId.Geometry, false);
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetLinearDimension, GroupTypeId.Geometry, false);
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetAngularDimension, GroupTypeId.Geometry, false);
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetRadialDimension, GroupTypeId.Geometry, false);
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetArrayCount, GroupTypeId.Geometry, false);
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetNestedWidth, GroupTypeId.Geometry, true);
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetInvalidNumber, GroupTypeId.IdentityData, false);
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.TargetGlobalText, GroupTypeId.Text, false,
             value: "matrix-global-ok");
-        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.MetadataSharedTypeText, SpecTypeId.String.Text, GroupTypeId.Text, false);
-        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.MetadataSharedInstanceLength, SpecTypeId.Length, GroupTypeId.Geometry, true);
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.MetadataSharedTypeText, GroupTypeId.Text, false);
+        yield return SharedDeclaration(FamilyFoundryMatrixFixtureBuilder.MetadataSharedInstanceLength, GroupTypeId.Geometry, true);
     }
 
     private static IEnumerable<DesiredFamilyParameterDeclaration> BuildMatrixFamilyDeclarations() {
@@ -650,14 +650,12 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
 
     private static DesiredSharedParameterDeclaration SharedDeclaration(
         string name,
-        ForgeTypeId dataType,
         ForgeTypeId propertiesGroup,
         bool isInstance,
         string? mappingStrategy = null,
         string? value = null
     ) => new() {
         Name = name,
-        DataType = dataType,
         PropertiesGroup = propertiesGroup,
         IsInstance = isInstance,
         MappingStrategy = mappingStrategy ?? nameof(BuiltInCoercionStrategy.CoerceByStorageType),
