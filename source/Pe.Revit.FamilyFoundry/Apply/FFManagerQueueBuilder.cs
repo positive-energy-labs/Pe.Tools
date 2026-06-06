@@ -90,9 +90,7 @@ public static class FFManagerQueueBuilder {
             .Select(name => name.Trim())
             .Distinct(StringComparer.Ordinal)
             .Where(name => !existingNames.Contains(name))
-            .Select(name => new FamilyParamDefinitionModel {
-                Definition = ParameterDefinitionDescriptorFactory.NameFallback(name, SpecTypeId.Length)
-            })
+            .Select(name => RevitParameterDefinition.DesiredFamilyParameter(name, SpecTypeId.Length))
             .ToList();
         familyParams.AddParameters(missingParameters);
     }
@@ -106,11 +104,7 @@ public static class FFManagerQueueBuilder {
 
         if (!hasProcessedAtParam) {
             profile.AddFamilyParams.AddParameters([
-                new FamilyParamDefinitionModel {
-                    Definition = ParameterDefinitionDescriptorFactory.NameFallback(
-                        parameterName,
-                        SpecTypeId.String.Text)
-                }
+                RevitParameterDefinition.DesiredFamilyParameter(parameterName, SpecTypeId.String.Text)
             ]);
         }
 

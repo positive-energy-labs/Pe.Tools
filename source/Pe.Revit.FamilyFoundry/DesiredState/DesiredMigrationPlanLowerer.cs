@@ -82,14 +82,13 @@ public static class DesiredMigrationPlanLowerer {
     ) {
         var familyParams = parameters
             .Where(parameter => !parameter.IsShared)
-            .Select(parameter => new FamilyParamDefinitionModel {
-                Definition = ParameterDefinitionDescriptorFactory.FromResolved(
+            .Select(parameter => RevitParameterDefinition.FromDescriptor(
+                RevitParameterDefinition.Descriptor(
                     parameter.Definition.Identity,
                     parameter.Definition.DataType,
                     parameter.Definition.PropertiesGroup,
                     parameter.Definition.IsInstance),
-                Tooltip = parameter.Definition.Tooltip
-            })
+                parameter.Definition.Tooltip))
             .ToList();
 
         return new AddFamilyParamsSettings { Enabled = familyParams.Count > 0, Parameters = familyParams };

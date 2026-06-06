@@ -29,21 +29,6 @@ public static class SharedParameterMappingTargets {
 
     public static SharedParameterMappingTarget FromSharedParameter(SharedParameterDefinition sharedParameter) =>
         new(
-            new ParameterDefinitionDescriptor(
-                new ParameterIdentity(
-                    $"shared:{sharedParameter.ExternalDefinition.GUID:D}",
-                    ParameterIdentityKind.SharedGuid,
-                    sharedParameter.ExternalDefinition.Name,
-                    null,
-                    sharedParameter.ExternalDefinition.GUID.ToString("D"),
-                    null),
-                sharedParameter.IsInstance,
-                NormalizeForgeTypeId(sharedParameter.ExternalDefinition.GetDataType()),
-                null,
-                NormalizeForgeTypeId(sharedParameter.GroupTypeId),
-                null),
+            RevitParameterDefinition.DesiredSharedParameter(sharedParameter).Definition,
             sharedParameter);
-
-    private static string? NormalizeForgeTypeId(ForgeTypeId? forgeTypeId) =>
-        string.IsNullOrWhiteSpace(forgeTypeId?.TypeId) ? null : forgeTypeId.TypeId;
 }

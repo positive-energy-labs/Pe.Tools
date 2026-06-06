@@ -149,49 +149,9 @@ public static class DocumentFamilyProfileApplyExtensions {
         IEnumerable<MappingData>? mappingData = null
     ) {
         var explicitNames = DesiredParameterCompiler.GetExplicitSharedParameterNames(parameterProfile, mappingData);
-        var requireCache = profile.SharedParameterSelection.HasIncludeFilters;
-        var sharedParameters = BaseProfile.ConvertToSharedParameterDefinitions(
+        var requireCache = explicitNames.Count > 0 || profile.SharedParameterSelection.HasIncludeFilters;
+        return BaseProfile.ConvertToSharedParameterDefinitions(
             profile.GetSelectedApsParamModels(explicitNames, requireCache),
             tempFile);
-        sharedParameters.AddRange(BuildMissingSharedParameterDefinitions(
-            parameterProfile,
-            mappingData,
-            tempFile,
-            sharedParameters));
-        return sharedParameters;
-    }
-
-    private static IEnumerable<SharedParameterDefinition> BuildMissingSharedParameterDefinitions(
-        IDesiredParameterProfile parameterProfile,
-        IEnumerable<MappingData>? mappingData,
-        TempSharedParamFile tempFile,
-        IReadOnlyCollection<SharedParameterDefinition> existingDefinitions
-    ) {
-        var existingNames = existingDefinitions
-            .Select(parameter => parameter.ExternalDefinition.Name)
-            .ToHashSet(StringComparer.Ordinal);
-        var declarationsByName = parameterProfile.SharedParameters
-            .Where(parameter => !string.IsNullOrWhiteSpace(parameter.Name))
-            .GroupBy(parameter => parameter.Name.Trim(), StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
-        var requiredNames = DesiredParameterCompiler.GetExplicitSharedParameterNames(parameterProfile, mappingData);
-
-        foreach (var name in requiredNames) {
-            if (existingNames.Contains(name))
-                continue;
-
-            declarationsByName.TryGetValue(name, out var declaration);
-            var options = new ExternalDefinitionCreationOptions(
-                name,
-                declaration?.DataType ?? SpecTypeId.String.Text) {
-                Description = declaration?.Tooltip ?? string.Empty
-            };
-            var definition = tempFile.TempGroup.Definitions.get_Item(name) as ExternalDefinition
-                             ?? (ExternalDefinition)tempFile.TempGroup.Definitions.Create(options);
-            yield return new SharedParameterDefinition(
-                definition,
-                declaration?.PropertiesGroup ?? GroupTypeId.IdentityData,
-                declaration?.IsInstance ?? true);
-        }
     }
 }

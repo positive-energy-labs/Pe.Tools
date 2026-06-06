@@ -46,13 +46,12 @@ public sealed record CollectedIssue(
     string? ParameterName = null
 );
 
-public sealed record CollectedFamilyParameterRecord {
+public sealed record CollectedFamilyParameterRecord : RevitParameterDefinition {
     public long FamilyId { get; init; }
     public string FamilyUniqueId { get; init; } = string.Empty;
     public string FamilyName { get; init; } = string.Empty;
     public string? CategoryName { get; init; }
     public List<string> TypeNames { get; init; } = [];
-    public required ParameterDefinitionDescriptor Definition { get; init; }
     public string StorageType { get; init; } = string.Empty;
     public CollectedParameterKind Kind { get; init; } = CollectedParameterKind.Unknown;
     public CollectedParameterScope Scope { get; init; } = CollectedParameterScope.Unresolved;
@@ -61,15 +60,6 @@ public sealed record CollectedFamilyParameterRecord {
     public Dictionary<string, string?> ValuesByType { get; init; } = new(StringComparer.Ordinal);
     public CollectedExcludedParameterReason? ExcludedReason { get; init; }
 
-    public ParameterIdentity Identity => this.Definition.Identity;
-    public bool? IsInstance => this.Definition.IsInstance;
-    public string? DataTypeId => this.Definition.DataTypeId;
-    public string? DataTypeLabel => this.Definition.DataTypeLabel;
-    public string? GroupTypeId => this.Definition.GroupTypeId;
-    public string? GroupTypeLabel => this.Definition.GroupTypeLabel;
-    public string Name => this.Identity.Name;
-    public string? SharedGuid => this.Identity.SharedGuid;
-    public bool IsBuiltIn => this.Identity.BuiltInParameterId.HasValue;
 }
 
 public sealed record CollectedLoadedFamilyRecord {
@@ -84,16 +74,8 @@ public sealed record CollectedLoadedFamilyRecord {
     public List<CollectedIssue> Issues { get; init; } = [];
 }
 
-public sealed record CollectedProjectParameterBindingRecord {
-    public required ParameterDefinitionDescriptor Definition { get; init; }
+public sealed record CollectedProjectParameterBindingRecord : RevitParameterDefinition {
     public string BindingKind { get; init; } = string.Empty;
     public List<string> CategoryNames { get; init; } = [];
 
-    public ParameterIdentity Identity => this.Definition.Identity;
-    public bool? IsInstance => this.Definition.IsInstance;
-    public string? DataTypeId => this.Definition.DataTypeId;
-    public string? DataTypeLabel => this.Definition.DataTypeLabel;
-    public string? GroupTypeId => this.Definition.GroupTypeId;
-    public string? GroupTypeLabel => this.Definition.GroupTypeLabel;
-    public string Name => this.Identity.Name;
 }

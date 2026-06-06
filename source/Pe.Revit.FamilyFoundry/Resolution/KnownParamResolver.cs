@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 namespace Pe.Revit.FamilyFoundry.Resolution;
 
 public sealed record KnownParamCatalog(
-    IReadOnlyDictionary<string, FamilyParamDefinitionModel> FamilyDefinitions,
+    IReadOnlyDictionary<string, RevitParameterDefinition> FamilyDefinitions,
     IReadOnlyDictionary<string, ParameterDefinitionDescriptor> SharedDefinitions
 ) {
     public bool ContainsSharedParameter(string parameterName) =>
@@ -95,7 +95,7 @@ public static class KnownParamResolver {
         IEnumerable<string> referencedParameterNames,
         KnownParamCatalog catalog
     ) {
-        var familyDefinitions = new List<FamilyParamDefinitionModel>();
+        var familyDefinitions = new List<RevitParameterDefinition>();
 
         foreach (var parameterName in referencedParameterNames
                      .Where(name => !string.IsNullOrWhiteSpace(name))

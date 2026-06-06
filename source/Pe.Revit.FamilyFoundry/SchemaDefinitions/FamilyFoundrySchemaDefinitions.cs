@@ -119,7 +119,6 @@ internal sealed class DesiredSharedParameterDeclarationSchemaDefinition
                 SchemaProjectionKeys.FamilyParameterNames
             );
         });
-        builder.Property(item => item.DataType, property => property.UseValueDomain(ValueDomainKeys.SpecNames));
         builder.Property(item => item.PropertiesGroup,
             property => property.UseValueDomain(ValueDomainKeys.PropertyGroupNames));
     }

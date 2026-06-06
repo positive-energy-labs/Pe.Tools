@@ -126,7 +126,7 @@ public static class FamilySnapshotProfileProjector {
     }
 
     private static DesiredFamilyParameterDeclaration CreateFamilyDeclaration(
-        FamilyParamDefinitionModel parameter,
+        RevitParameterDefinition parameter,
         IReadOnlyDictionary<string, GlobalParamAssignment> globalAssignments
     ) {
         globalAssignments.TryGetValue(parameter.Name, out var assignment);

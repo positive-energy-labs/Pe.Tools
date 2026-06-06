@@ -58,19 +58,12 @@ public abstract class DesiredParameterDeclaration {
     [Required]
     public string Name { get; init; } = string.Empty;
 
-    [Description("Optional authored family-parameter datatype. Shared parameters can resolve this from APS/shared parameter data.")]
-    [ForgeKind(ForgeKind.Spec)]
-    public ForgeTypeId? DataType { get; init; }
-
-    [Description("Optional authored Revit properties group. Defaults are applied by the compiler only when the operation layer needs creation metadata.")]
+    [Description("Optional Revit properties group. Shared parameters use APS/shared-definition identity and datatype; this only controls family binding placement.")]
     [ForgeKind(ForgeKind.Group)]
     public ForgeTypeId? PropertiesGroup { get; init; }
 
-    [Description("Optional instance/type scope. Defaults are applied by the compiler only when the operation layer needs creation metadata.")]
+    [Description("Optional instance/type scope. Shared parameters use APS/shared-definition identity and datatype; this only controls family binding scope.")]
     public bool? IsInstance { get; init; }
-
-    [Description("Optional tooltip/description for family parameters.")]
-    public string? Tooltip { get; init; }
 
     [Description("Optional literal value applied uniformly to all family types. Mutually exclusive with Formula.")]
     public string? Value { get; init; }
@@ -103,7 +96,14 @@ public sealed class DesiredSharedParameterDeclaration : DesiredParameterDeclarat
     public string MappingStrategy { get; init; } = nameof(BuiltInCoercionStrategy.CoerceByStorageType);
 }
 
-public sealed class DesiredFamilyParameterDeclaration : DesiredParameterDeclaration;
+public sealed class DesiredFamilyParameterDeclaration : DesiredParameterDeclaration {
+    [Description("Optional family-parameter datatype used when creating a missing family parameter. Existing family parameter datatype changes are intentionally not migrated.")]
+    [ForgeKind(ForgeKind.Spec)]
+    public ForgeTypeId? DataType { get; init; }
+
+    [Description("Optional tooltip/description for local family parameters.")]
+    public string? Tooltip { get; init; }
+}
 
 public sealed record DesiredPerTypeAssignmentRow {
     public const string ParameterColumn = "Parameter";

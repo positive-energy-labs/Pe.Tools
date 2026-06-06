@@ -1,60 +1,21 @@
 namespace Pe.Revit.DocumentData.Parameters;
 
-public sealed record RevitObservedProjectParameterMetadata {
-    public required ParameterDefinitionDescriptor Definition { get; init; }
+public sealed record RevitObservedProjectParameterMetadata : RevitParameterDefinition {
     public string? CategoryName { get; init; }
-
-    public ParameterIdentity Identity => this.Definition.Identity;
-    public bool? IsInstance => this.Definition.IsInstance;
-    public ForgeTypeId PropertiesGroup => ToForgeTypeId(this.Definition.GroupTypeId);
-    public ForgeTypeId DataType => ToForgeTypeId(this.Definition.DataTypeId);
-
-    private static ForgeTypeId ToForgeTypeId(string? typeId) =>
-        string.IsNullOrWhiteSpace(typeId) ? new ForgeTypeId("") : new ForgeTypeId(typeId);
 }
 
-public sealed record RevitFamilyParameterMetadata {
-    public required ParameterDefinitionDescriptor Definition { get; init; }
+public sealed record RevitFamilyParameterMetadata : RevitParameterDefinition;
 
-    public ParameterIdentity Identity => this.Definition.Identity;
-    public bool? IsInstance => this.Definition.IsInstance;
-    public ForgeTypeId PropertiesGroup => ToForgeTypeId(this.Definition.GroupTypeId);
-    public ForgeTypeId DataType => ToForgeTypeId(this.Definition.DataTypeId);
-    public bool IsShared => !string.IsNullOrWhiteSpace(this.Identity.SharedGuid);
-
-    private static ForgeTypeId ToForgeTypeId(string? typeId) =>
-        string.IsNullOrWhiteSpace(typeId) ? new ForgeTypeId("") : new ForgeTypeId(typeId);
-}
-
-public sealed record RevitProjectBindingMetadata {
-    public required ParameterDefinitionDescriptor Definition { get; init; }
+public sealed record RevitProjectBindingMetadata : RevitParameterDefinition {
     public List<string> CategoryNames { get; init; } = [];
-
-    public ParameterIdentity Identity => this.Definition.Identity;
-    public bool? IsInstance => this.Definition.IsInstance;
-    public ForgeTypeId PropertiesGroup => ToForgeTypeId(this.Definition.GroupTypeId);
-    public ForgeTypeId DataType => ToForgeTypeId(this.Definition.DataTypeId);
-    public bool IsShared => !string.IsNullOrWhiteSpace(this.Identity.SharedGuid);
-
-    private static ForgeTypeId ToForgeTypeId(string? typeId) =>
-        string.IsNullOrWhiteSpace(typeId) ? new ForgeTypeId("") : new ForgeTypeId(typeId);
 }
 
-public sealed record RevitResolvedParameterMetadata {
-    public required ParameterDefinitionDescriptor Definition { get; init; }
+public sealed record RevitResolvedParameterMetadata : RevitParameterDefinition {
     public bool HasFamilyParameter { get; init; }
     public bool FamilyParameterIsShared { get; init; }
     public bool HasProjectBinding { get; init; }
     public bool ProjectBindingIsShared { get; init; }
     public bool HasMergedSharedProjectBinding { get; init; }
-
-    public ParameterIdentity Identity => this.Definition.Identity;
-    public bool? IsInstance => this.Definition.IsInstance;
-    public ForgeTypeId PropertiesGroup => ToForgeTypeId(this.Definition.GroupTypeId);
-    public ForgeTypeId DataType => ToForgeTypeId(this.Definition.DataTypeId);
-
-    private static ForgeTypeId ToForgeTypeId(string? typeId) =>
-        string.IsNullOrWhiteSpace(typeId) ? new ForgeTypeId("") : new ForgeTypeId(typeId);
 }
 
 public static class RevitParameterAuthorityResolver {
@@ -75,14 +36,11 @@ public static class RevitParameterAuthorityResolver {
         var effectiveDataType = ResolveDataType(observed, familyParameter, projectBinding);
 
         return new RevitResolvedParameterMetadata {
-            Definition = new ParameterDefinitionDescriptor(
+            Definition = RevitParameterDefinition.Descriptor(
                 effectiveIdentity,
-                effectiveIsInstance,
-                NormalizeForgeTypeId(effectiveDataType),
-                null,
-                NormalizeForgeTypeId(effectivePropertiesGroup),
-                null
-            ),
+                effectiveDataType,
+                effectivePropertiesGroup,
+                effectiveIsInstance),
             HasFamilyParameter = familyParameter != null,
             FamilyParameterIsShared = familyParameter?.IsShared == true,
             HasProjectBinding = projectBinding != null,
@@ -269,6 +227,4 @@ public static class RevitParameterAuthorityResolver {
     private static ForgeTypeId PreferDefinedTypeId(params ForgeTypeId[] values) =>
         values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value.TypeId)) ?? new ForgeTypeId("");
 
-    private static string? NormalizeForgeTypeId(ForgeTypeId forgeTypeId) =>
-        string.IsNullOrWhiteSpace(forgeTypeId?.TypeId) ? null : forgeTypeId.TypeId;
 }

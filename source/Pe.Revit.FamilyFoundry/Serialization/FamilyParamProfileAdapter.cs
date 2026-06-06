@@ -22,7 +22,7 @@ public static class FamilyParamProfileAdapter {
         options ??= new FamilyParamProfileExportOptions();
 
         var ordered = SortAndOrder(snapshots?.ToList() ?? []);
-        var familyParameters = new List<FamilyParamDefinitionModel>();
+        var familyParameters = new List<RevitParameterDefinition>();
         var globalAssignments = new List<GlobalParamAssignment>();
         var perTypeAssignments = new List<PerTypeAssignmentRow>();
 
@@ -36,13 +36,11 @@ public static class FamilyParamProfileAdapter {
             var shouldIncludeDefinition = options.IncludeDefinitionOnlyParameters || hasReplayableAssignment;
 
             if (!IsSharedParameter(snapshot, options) && shouldIncludeDefinition) {
-                familyParameters.Add(new FamilyParamDefinitionModel {
-                    Definition = ParameterDefinitionDescriptorFactory.NameFallback(
-                        snapshot.Name ?? string.Empty,
-                        snapshot.DataType,
-                        snapshot.PropertiesGroup,
-                        snapshot.IsInstance)
-                });
+                familyParameters.Add(RevitParameterDefinition.DesiredFamilyParameter(
+                    snapshot.Name ?? string.Empty,
+                    snapshot.DataType,
+                    snapshot.PropertiesGroup,
+                    snapshot.IsInstance));
             }
 
             if (globalAssignment is not null)
