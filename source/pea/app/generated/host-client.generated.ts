@@ -103,7 +103,7 @@ export const scriptingOperations = {
     requestTypeName: "ScriptPodImportRequest",
     responseTypeName: "ScriptPodImportData",
     requestShape: [{"name":"archivePath","type":"string","required":true},{"name":"workspaceKey","type":"string","required":false}],
-    responseShape: [{"name":"archiveEntries","type":"array\u003Cstring\u003E","required":true},{"name":"archivePath","type":"string","required":true},{"name":"diagnostics","type":"array\u003CScriptDiagnostic\u003E","required":true},{"name":"generatedFiles","type":"array\u003Cstring\u003E","required":true},{"name":"manifest","type":"ScriptPodManifestSummaryData","required":true},{"name":"workspaceKey","type":"string","required":true},{"name":"workspaceRootPath","type":"string","required":true}],
+    responseShape: [{"name":"archiveEntries","type":"array\u003Cstring\u003E","required":true},{"name":"archivePath","type":"string","required":true},{"name":"diagnostics","type":"array\u003CScriptDiagnostic\u003E","required":true},{"name":"generatedFiles","type":"array\u003Cstring\u003E","required":true},{"name":"manifest","type":"ScriptPodManifestSummaryData","required":false},{"name":"status","type":"enum:ScriptPodTransferStatus","required":true},{"name":"workspaceKey","type":"string","required":false},{"name":"workspaceRootPath","type":"string","required":false}],
   },
   exportPod: {
     key: "scripting.pod.export",
@@ -113,7 +113,7 @@ export const scriptingOperations = {
     requestTypeName: "ScriptPodExportRequest",
     responseTypeName: "ScriptPodExportData",
     requestShape: [{"name":"archivePath","type":"string","required":true},{"name":"workspaceKey","type":"string","required":true}],
-    responseShape: [{"name":"archiveEntries","type":"array\u003Cstring\u003E","required":true},{"name":"archivePath","type":"string","required":true},{"name":"diagnostics","type":"array\u003CScriptDiagnostic\u003E","required":true},{"name":"manifest","type":"ScriptPodManifestSummaryData","required":true},{"name":"workspaceKey","type":"string","required":true},{"name":"workspaceRootPath","type":"string","required":true}],
+    responseShape: [{"name":"archiveEntries","type":"array\u003Cstring\u003E","required":true},{"name":"archivePath","type":"string","required":true},{"name":"diagnostics","type":"array\u003CScriptDiagnostic\u003E","required":true},{"name":"manifest","type":"ScriptPodManifestSummaryData","required":false},{"name":"status","type":"enum:ScriptPodTransferStatus","required":true},{"name":"workspaceKey","type":"string","required":false},{"name":"workspaceRootPath","type":"string","required":false}],
   },
 } as const satisfies Record<string, HostOperationDefinition>;
 
