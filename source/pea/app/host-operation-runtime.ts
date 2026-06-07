@@ -329,17 +329,15 @@ function renderCapabilityMapMarkdown(sections: readonly HostCapabilityMapSection
   for (const section of sections) {
     lines.push(`## ${section.title}`);
     lines.push(section.summary);
-    lines.push("| key | area | description | safety | input | output | relations | terms |");
-    lines.push("| --- | --- | --- | --- | --- | --- | --- | --- |");
+    lines.push("| key | description | safety | input kind | output kind | terms |");
+    lines.push("| --- | --- | --- | --- | --- | --- |");
     for (const row of section.rows) {
       lines.push([
         row.key,
-        row.area,
         row.description,
         row.safety,
-        row.input,
-        row.output,
-        row.relations || "-",
+        row.inputKind,
+        row.outputKind,
         row.terms || "-",
       ].map((value) => escapeMarkdownCell(truncate(value, 160))).join(" | ").replace(/^/, "| ").replace(/$/, " |"));
     }
@@ -352,12 +350,10 @@ function renderCapabilityMapMarkdown(sections: readonly HostCapabilityMapSection
 function renderCapabilityMapToon(sections: readonly HostCapabilityMapSection[]): string {
   const rowFields = [
     "key",
-    "area",
     "description",
     "safety",
-    "input",
-    "output",
-    "relations",
+    "inputKind",
+    "outputKind",
     "terms",
   ] as const;
   const lines = [

@@ -3,14 +3,16 @@
  * Any changes made to this file can be lost when this file is regenerated.
  */
 
+import type { ScriptPodTransferStatus } from "./script-pod-transfer-status.js";
 import type { ScriptPodManifestSummaryData } from "./script-pod-manifest-summary-data.js";
 import type { ScriptDiagnostic } from "./script-diagnostic.js";
 
 export interface ScriptPodImportData {
-  workspaceKey: string;
-  workspaceRootPath: string;
+  status: ScriptPodTransferStatus;
+  workspaceKey?: string;
+  workspaceRootPath?: string;
   archivePath: string;
-  manifest: ScriptPodManifestSummaryData;
+  manifest?: ScriptPodManifestSummaryData;
   archiveEntries: string[];
   generatedFiles: string[];
   diagnostics: ScriptDiagnostic[];

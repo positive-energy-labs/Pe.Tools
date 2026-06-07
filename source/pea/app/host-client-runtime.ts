@@ -55,12 +55,10 @@ export interface HostOperationDefinition {
 
 export interface HostCapabilityMapRow {
   key: string;
-  area: string;
   description: string;
   safety: string;
-  input: string;
-  output: string;
-  relations: string;
+  inputKind: string;
+  outputKind: string;
   terms: string;
 }
 

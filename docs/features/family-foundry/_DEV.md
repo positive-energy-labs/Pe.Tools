@@ -21,11 +21,15 @@ Durable authoring rules:
 
 - Desired/declarative state is the only external parameter authoring model for Manager and Migrator.
 - Legacy per-operation settings such as add-family-params, set-known-params, add-and-map-shared-params, and filter-APS-params are internal compiled execution details, not public profile options.
+- Portable authored parameter declarations live in `Pe.Shared.RevitData` as Revit-assembly-free, stringly, flat DTOs. Family Foundry may derive or wrap them, but it should not own duplicate common fields such as `Name`, `GroupType`, `IsInstance`, `Value`, or `Formula`.
 - Shared and local family parameters are authored in separate top-level declaration arrays.
 - Parameter identity for family authoring is the parameter name. Revit family documents cannot contain duplicate family parameter names, so authored settings resolve by name and fail loudly on ambiguous or undeclared references.
-- Shared parameter declarations may resolve richer APS/shared-parameter metadata internally, but authors should not need to provide shared GUIDs for ordinary FF work.
+- Shared parameter declarations are name-first. Authored FF profiles must not expose `SharedGuid`, `Identity`, `DataType`, or `Tooltip` for shared parameters; those facts come only from resolved shared-parameter definitions.
+- Family parameter declarations may author `DataType` and `Tooltip`. Existing family parameter datatype changes are intentionally not migrated in this model.
 - Inline `Value` and `Formula` on parameter declarations are allowed for global assignments. They are mutually exclusive and compile into internal assignment settings.
-- Per-type values stay centralized and table-shaped: one fixed `Parameter` column plus dynamic family-type columns.
+- Per-type values stay centralized and table-shaped: one fixed `Parameter` column plus dynamic family-type columns. Do not add inline per-parameter per-type authoring unless a future design replaces the table as the profile surface.
+- FF-specific migration metadata such as `SourceNames`, `OnlyAddIfSourceExists`, and `MappingStrategy` stays FF-owned, not in portable shared RevitData contracts.
+- Schema/LSP behavior is an overlay on the portable model, not a reason to keep the model FF-owned. `Pe.Revit.FamilyFoundry`/`Pe.Revit.SettingsRuntime` register value domains, dataset providers, examples, UI metadata, and strict field rejection for the shared DTOs.
 - Mapping data includes remain supported for mapping-data only. Do not expand include support to param-driven solids until that API stabilizes.
 - Shared-parameter bulk selection is named around shared-parameter selection, not APS filtering. Glob-ish include/exclude by exact name, prefix, and contains is the intended external language.
 - `SourceNames` is authored as string names now, but the compiler boundary should be structured so future source references can carry optional metadata such as data type without breaking the authored model.
@@ -94,9 +98,9 @@ Manager and Migrator profiles are external command shells over the same desired 
 
 Keep this boundary intact: do not expose cleanup/delete/sort/connector operation stacks as parameter authoring alternatives. Optional command overlays may remain where they represent command behavior, but per-operation parameter settings are not an external model.
 
-Keep parameter ownership explicit. Family Foundry owns authored desired parameter intent, resolution provenance, and lowering into operation settings. `Pe.Revit.DocumentData` owns observed loaded-family matrix projections. Shared/public host DTOs may carry bounded observed parameter facts, but they should not become Family Foundry desired-state models. Common parameter descriptors should prove value inside document-owned Revit/Family Foundry seams before being promoted to public host contracts.
+Keep parameter ownership explicit. `Pe.Shared.RevitData` owns portable authored parameter declaration DTOs and common identity/definition descriptors. Family Foundry owns desired-profile orchestration, FF-specific migration metadata, resolution provenance, and lowering into operation settings. `Pe.Revit.DocumentData` owns observed loaded-family matrix projections.
 
-`Pe.Revit.Parameters.RevitParameterDefinition` is the Revit-side semantic wrapper around the portable `ParameterDefinitionDescriptor`. Use it for Revit-typed desired/observed parameter construction and ForgeTypeId access; keep flat FF authored declarations and DocumentData collection envelopes feature-owned, inheriting or adapting the shared Revit-side model instead of duplicating parameter identity/data-type/group/scope properties.
+`Pe.Revit.Parameters.RevitParameterDefinition` is the Revit-side semantic wrapper around the portable `ParameterDefinitionDescriptor`. Use it for Revit-typed desired/observed parameter construction and ForgeTypeId access. Use portable authored parameter DTOs for flat settings/profile declaration fields; use FF wrappers only for FF-specific fields and compiler behavior.
 
 ## Key Relationships
 

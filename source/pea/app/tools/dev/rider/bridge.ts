@@ -118,6 +118,7 @@ export async function runRiderBridgeSyncHelper(
       hotReload.ok === true &&
       Array.isArray(hotReload.results) &&
       hotReload.results.every((result) => result.ok === true);
+    const runtimeFreshness = riderBridgeSyncRuntimeFreshness(ok, hotReload);
     const durationMs = Date.now() - startedAt;
     return {
       ok,
@@ -143,23 +144,7 @@ export async function runRiderBridgeSyncHelper(
         ),
       artifactPaths,
       json: { ping, hotReload, lane: "RiderBridge", signalStamp },
-      runtimeFreshness: {
-        verdict: ok ? "unproven" : "stale",
-        loadedGraphVerdict: "unknown",
-        sourceDeltaVerdict: ok ? "unproven" : "stale",
-        expectedRuntimeDelta: true,
-        basis: ok
-          ? "Pe.RiderBridge accepted localhost HTTP requests and reported the configured Rider hot-reload action sequence invoked. Loaded assembly fingerprint comparison is not performed by this direct dev-agent lane."
-          : formatRiderBridgeProblems(
-            hotReload,
-            "Pe.RiderBridge did not report a successful hot-reload action sequence",
-          ),
-        nextStep: ok
-          ? "Trigger the attached Revit operation/script/test that needs the refreshed RRD runtime and confirm behavior or log evidence."
-          : hotReload?.restartRecommended === true
-            ? "Restart RRD through RiderBridge, then wait for the Host/Revit bridge before retrying attached proof."
-            : "Check that Rider is running, Pe.RiderBridge is installed, the project is open, and the debug session can apply changes.",
-      },
+      runtimeFreshness,
       proof: proofForRiderBridgeOperation("sync", ok, false, hotReload),
       guidance: ok
         ? "RiderBridge lane completed without pe-dev/AHK. This proves Rider accepted the action sequence; use Revit logs or an attached operation for behavior proof."
@@ -194,12 +179,12 @@ export async function runRiderBridgeSyncHelper(
         error: formatUnknownError(error),
       },
       runtimeFreshness: {
-        verdict: "stale",
+        verdict: "unavailable",
         loadedGraphVerdict: "unknown",
-        sourceDeltaVerdict: "stale",
+        sourceDeltaVerdict: "unavailable",
         expectedRuntimeDelta: true,
         basis:
-          "Direct Pe.RiderBridge sync failed before a successful Rider hot-reload action sequence was reported.",
+          "Direct Pe.RiderBridge sync failed before a successful Rider hot-reload action sequence was reported. Runtime freshness is unavailable, not proven stale.",
         nextStep:
           "Check Rider/Pe.RiderBridge availability, then retry live_rrd_sync or restart RRD before attached proof.",
       },
@@ -208,6 +193,73 @@ export async function runRiderBridgeSyncHelper(
         "Recover Rider/Pe.RiderBridge or restart RRD before retrying attached proof.",
     };
   }
+}
+
+export function riderBridgeSyncRuntimeFreshness(
+  ok: boolean,
+  hotReload: RiderBridgeHotReloadResponse | null,
+): {
+  verdict: string;
+  loadedGraphVerdict: string;
+  sourceDeltaVerdict: string;
+  expectedRuntimeDelta: boolean;
+  basis: string;
+  nextStep: string;
+} {
+  if (ok) {
+    return {
+      verdict: "unproven",
+      loadedGraphVerdict: "unknown",
+      sourceDeltaVerdict: "unproven",
+      expectedRuntimeDelta: true,
+      basis:
+        "Pe.RiderBridge accepted localhost HTTP requests and reported the configured Rider hot-reload action sequence invoked. Loaded assembly fingerprint comparison is not performed by this direct dev-agent lane.",
+      nextStep:
+        "Trigger the attached Revit operation/script/test that needs the refreshed RRD runtime and confirm behavior or log evidence.",
+    };
+  }
+
+  const noActiveRrd =
+    hotReload?.restartRecommended === true &&
+    riderDebuggerApplyChangesDisabled(hotReload);
+  if (noActiveRrd) {
+    return {
+      verdict: "unavailable",
+      loadedGraphVerdict: "unknown",
+      sourceDeltaVerdict: "unavailable",
+      expectedRuntimeDelta: true,
+      basis:
+        "Pe.RiderBridge is reachable, but Rider's Apply Changes action is disabled. This usually means no Rider-driven RRD debug session is currently running, so runtime freshness cannot be classified as stale.",
+      nextStep:
+        "Start or restart RRD through live_rrd_restart if attached runtime proof is needed; otherwise treat the sync as a non-fatal pre-execute warning only.",
+    };
+  }
+
+  return {
+    verdict: "stale",
+    loadedGraphVerdict: "unknown",
+    sourceDeltaVerdict: "stale",
+    expectedRuntimeDelta: true,
+    basis: formatRiderBridgeProblems(
+      hotReload,
+      "Pe.RiderBridge did not report a successful hot-reload action sequence",
+    ),
+    nextStep:
+      hotReload?.restartRecommended === true
+        ? "Restart RRD through RiderBridge, then wait for the Host/Revit bridge before retrying attached proof."
+        : "Check that Rider is running, Pe.RiderBridge is installed, the project is open, and the debug session can apply changes.",
+  };
+}
+
+function riderDebuggerApplyChangesDisabled(
+  hotReload: RiderBridgeHotReloadResponse,
+): boolean {
+  return (hotReload.results ?? []).some(
+    (result) =>
+      result.actionId === "RiderDebuggerApplyEncChagnes" &&
+      result.ok !== true &&
+      result.status === "disabled",
+  );
 }
 
 export async function runRiderBridgeRestartRrdHelper(
