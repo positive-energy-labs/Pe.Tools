@@ -5,6 +5,7 @@ using Microsoft.CodeAnalysis;
 using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.Context;
 using Pe.Revit.Scripting.Policy;
+using Pe.Revit.Scripting.Pods;
 using Pe.Revit.Scripting.References;
 using Pe.Revit.Scripting.Storage;
 using Pe.Shared.HostContracts.Scripting;
@@ -97,6 +98,19 @@ public sealed class RevitScriptExecutionService(
                 $"{DescribeExecutionMode(plan.ExecutionMode)} Executing {plan.SourceSet.EntryPointSourceName}; compiling {plan.SourceSet.Files.Count} source file(s): {string.Join(", ", plan.SourceSet.Files.Select(file => file.Name))}.",
                 plan.SourceSet.EntryPointSourceName
             ));
+            IReadOnlyList<ScriptDiagnostic> originDiagnostics = plan.PodManifest is null ? [] : PodOriginVersionGuard.Check(plan.PodManifest);
+            foreach (var diagnostic in originDiagnostics)
+                AppendDiagnostic(diagnostics, diagnostic);
+            if (originDiagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error))
+                return CreateResult(
+                    ScriptExecutionStatus.Rejected,
+                    outputSink,
+                    diagnostics,
+                    revitVersion,
+                    targetFramework,
+                    containerTypeName,
+                    executionId
+                );
 
             var policyDiagnostics = this._policyAnalyzer.Analyze(plan.SourceSet, plan.PermissionMode);
             foreach (var diagnostic in policyDiagnostics)
@@ -372,6 +386,7 @@ public sealed class RevitScriptExecutionService(
 
             ScriptSourceSet sourceSet;
             ScriptWorkspaceExecutionMode executionMode;
+            PodManifest? podManifest = null;
             if (request.SourceKind == ScriptExecutionSourceKind.InlineSnippet) {
                 sourceSet = this.MaterializeInlineSnippet(
                     request.ScriptContent,
@@ -388,6 +403,7 @@ public sealed class RevitScriptExecutionService(
 
                 sourceSet = workspaceSource.SourceSet;
                 executionMode = workspaceSource.ExecutionMode;
+                podManifest = workspaceSource.PodManifest;
             } else {
                 throw new InvalidOperationException($"Unsupported source kind '{request.SourceKind}'.");
             }
@@ -416,6 +432,7 @@ public sealed class RevitScriptExecutionService(
                     request.PermissionMode,
                     sourceSet,
                     executionMode,
+                    podManifest,
                     canonicalProjectContent,
                     request.SourceKind == ScriptExecutionSourceKind.InlineSnippet
                 ),
@@ -462,8 +479,8 @@ public sealed class RevitScriptExecutionService(
         ], sourceName);
     }
 
-    private static string NormalizeInlineSnippet(string scriptContent) {
-        if (scriptContent.Contains(nameof(PeScriptContainer), StringComparison.Ordinal))
+    private string NormalizeInlineSnippet(string scriptContent) {
+        if (this._entryPointResolver.ContainsContainerDeclaration(scriptContent) || this._entryPointResolver.ContainsTypeDeclaration(scriptContent))
             return scriptContent;
 
         return $$"""
@@ -542,7 +559,7 @@ public sealed class RevitScriptExecutionService(
         if (string.IsNullOrWhiteSpace(sourcePath))
             throw new ArgumentException("SourcePath is required for workspace file execution.", nameof(sourcePath));
 
-        var normalizedSourcePath = PodManifestValidator.NormalizeSourcePath(sourcePath);
+        var normalizedSourcePath = ScriptingSourcePath.NormalizeWorkspaceSourcePath(sourcePath, "Workspace source path");
         var selectedPath = RevitScriptingStorageLocations.ResolveWorkspaceSourceFilePath(
             workspaceKey,
             normalizedSourcePath
@@ -569,6 +586,7 @@ public sealed class RevitScriptExecutionService(
             return new WorkspaceSourceLoadResult(
                 new ScriptSourceSet([looseSelectedSource], looseSelectedSource.Name),
                 ScriptWorkspaceExecutionMode.LooseWorkspace,
+                null,
                 [
                     ScriptDiagnosticFactory.Info(
                         "normalize",
@@ -586,6 +604,7 @@ public sealed class RevitScriptExecutionService(
             return new WorkspaceSourceLoadResult(
                 new ScriptSourceSet([], string.Empty),
                 ScriptWorkspaceExecutionMode.Pod,
+                null,
                 diagnostics
             );
 
@@ -600,6 +619,7 @@ public sealed class RevitScriptExecutionService(
             return new WorkspaceSourceLoadResult(
                 new ScriptSourceSet([], string.Empty),
                 ScriptWorkspaceExecutionMode.Pod,
+                null,
                 diagnostics
             );
 
@@ -628,6 +648,7 @@ public sealed class RevitScriptExecutionService(
         return new WorkspaceSourceLoadResult(
             new ScriptSourceSet(sourceFiles, selectedSource.Name),
             ScriptWorkspaceExecutionMode.Pod,
+            manifestResult.Manifest,
             diagnostics
         );
     }
@@ -987,6 +1008,7 @@ public sealed class RevitScriptExecutionService(
     private sealed record WorkspaceSourceLoadResult(
         ScriptSourceSet SourceSet,
         ScriptWorkspaceExecutionMode ExecutionMode,
+        PodManifest? PodManifest,
         IReadOnlyList<ScriptDiagnostic> Diagnostics
     );
 

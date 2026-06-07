@@ -1,3 +1,4 @@
+using Pe.Shared.Scripting.Execution;
 using Pe.Shared.Scripting.Pods;
 
 namespace Pe.Revit.Tests;
@@ -5,19 +6,15 @@ namespace Pe.Revit.Tests;
 [TestFixture]
 public sealed class PodManifestValidatorTests {
     [Test]
-    public void Valid_manifest_loads_entrypoints_and_requirements() {
+    public void Valid_manifest_loads_entrypoints() {
         var result = PodManifestValidator.ValidateJson(
             """
             {
               "schemaVersion": 1,
               "id": "connector-audit",
               "name": "Connector Audit",
+              "version": "1.0.0",
               "description": "Checks connector data.",
-              "requirements": {
-                "notes": "Requires the model to be open.",
-                "revitYears": ["2025"],
-                "packageReferences": ["CsvHelper"]
-              },
               "entrypoints": [
                 {
                   "id": "main",
@@ -33,8 +30,59 @@ public sealed class PodManifestValidatorTests {
         Assert.That(result.Success, Is.True);
         Assert.That(result.Manifest, Is.Not.Null);
         Assert.That(result.Manifest!.Id, Is.EqualTo("connector-audit"));
+        Assert.That(result.Manifest.Version, Is.EqualTo("1.0.0"));
         Assert.That(result.Manifest.Entrypoints.Single().SourcePath, Is.EqualTo("src/Main.cs"));
-        Assert.That(result.Manifest.Requirements!.RevitYears.Single(), Is.EqualTo("2025"));
+    }
+
+    [Test]
+    public void Origin_path_accepts_local_absolute_paths() {
+        var originPath = Path.GetTempPath().Replace("\\", "/").TrimEnd('/');
+        var result = PodManifestValidator.ValidateJson(
+            $$"""
+            {
+              "schemaVersion": 1,
+              "id": "connector-audit",
+              "name": "Connector Audit",
+              "version": "1.0.0",
+              "origin": {
+                "path": "{{originPath}}"
+              },
+              "entrypoints": [
+                { "id": "main", "sourcePath": "src/Main.cs" }
+              ]
+            }
+            """,
+            "connector-audit"
+        );
+
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.Manifest!.Origin!.Path, Is.EqualTo(originPath));
+    }
+
+    [Test]
+    public void Version_and_local_origin_path_are_validated() {
+        var result = PodManifestValidator.ValidateJson(
+            """
+            {
+              "schemaVersion": 1,
+              "id": "connector-audit",
+              "name": "Connector Audit",
+              "origin": {
+                "path": "https://example.com/pods/connector-audit",
+                "extra": true
+              },
+              "entrypoints": [
+                { "id": "main", "sourcePath": "src/Main.cs" }
+              ]
+            }
+            """,
+            "connector-audit"
+        );
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("missing required field 'version'"));
+        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("origin.path must be an absolute local path"));
+        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("Unknown field 'extra'"));
     }
 
     [Test]
@@ -45,6 +93,8 @@ public sealed class PodManifestValidatorTests {
               "schemaVersion": 1,
               "id": "connector-audit",
               "name": "Connector Audit",
+              "version": "1.0.0",
+              "requirements": {},
               "surprise": true,
               "entrypoints": [
                 {
@@ -59,6 +109,7 @@ public sealed class PodManifestValidatorTests {
         );
 
         Assert.That(result.Success, Is.False);
+        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("Unknown field 'requirements'"));
         Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("Unknown field 'surprise'"));
         Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("Unknown field 'extra'"));
     }
@@ -79,6 +130,7 @@ public sealed class PodManifestValidatorTests {
               "schemaVersion": 1,
               "id": "connector-audit",
               "name": "Connector Audit",
+              "version": "1.0.0",
               "entrypoints": [
                 { "id": "main", "sourcePath": "src/Main.cs" },
                 { "id": "main", "sourcePath": "src/main.cs" }
@@ -108,6 +160,22 @@ public sealed class PodManifestValidatorTests {
     }
 
     [Test]
+    public void Neutral_source_path_normalization_preserves_current_workspace_rules() {
+        Assert.That(
+            ScriptingSourcePath.NormalizeWorkspaceSourcePath("src\\Nested\\Main.cs"),
+            Is.EqualTo("src/Nested/Main.cs")
+        );
+
+        foreach (var sourcePath in new[] {
+            "Main.cs",
+            "src/../Main.cs",
+            "src/Main.txt",
+            "C:/temp/Main.cs"
+        })
+            Assert.Throws<ArgumentException>(() => ScriptingSourcePath.NormalizeWorkspaceSourcePath(sourcePath));
+    }
+
+    [Test]
     public void Entrypoints_are_required() {
         var result = PodManifestValidator.ValidateJson(
             """
@@ -115,6 +183,7 @@ public sealed class PodManifestValidatorTests {
               "schemaVersion": 1,
               "id": "connector-audit",
               "name": "Connector Audit",
+              "version": "1.0.0",
               "entrypoints": []
             }
             """,
@@ -130,6 +199,7 @@ public sealed class PodManifestValidatorTests {
           "schemaVersion": 1,
           "id": "{{id}}",
           "name": "Connector Audit",
+          "version": "1.0.0",
           "entrypoints": [
             { "id": "main", "sourcePath": "{{sourcePath}}" }
           ]

@@ -7,6 +7,7 @@ using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.OperationSettings;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.Profiles;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 
 namespace Pe.Revit.Tests;
 
@@ -632,8 +633,8 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         string? value = null
     ) => new() {
         Name = name,
-        DataType = dataType,
-        PropertiesGroup = propertiesGroup,
+        DataType = SpecNamesValueDomain.GetLabelForForge(dataType),
+        PropertiesGroup = PropertyGroupNamesValueDomain.GetLabelForForge(propertiesGroup),
         IsInstance = isInstance,
         Tooltip = tooltip,
         Value = value
@@ -656,7 +657,7 @@ public sealed class FamilyFoundryBulkMigrationHarnessTests {
         string? value = null
     ) => new() {
         Name = name,
-        PropertiesGroup = propertiesGroup,
+        PropertiesGroup = PropertyGroupNamesValueDomain.GetLabelForForge(propertiesGroup),
         IsInstance = isInstance,
         MappingStrategy = mappingStrategy ?? nameof(BuiltInCoercionStrategy.CoerceByStorageType),
         Value = value

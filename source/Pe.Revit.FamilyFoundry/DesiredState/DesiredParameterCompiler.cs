@@ -5,6 +5,7 @@ using Pe.Revit.Extensions.FamDocument.SetValue;
 using Pe.Revit.FamilyFoundry.OperationGroups;
 using Pe.Revit.FamilyFoundry.Operations;
 using Pe.Revit.FamilyFoundry.OperationSettings;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Shared.RevitData;
 
 namespace Pe.Revit.FamilyFoundry.DesiredState;
@@ -177,6 +178,7 @@ public static class DesiredParameterCompiler {
                 $"Shared parameter '{name}' was requested, but no APS/shared-parameter definition was resolved for it. " +
                 "Shared parameter declarations cannot create local fallback definitions; add the parameter to the shared parameter source or declare it as a FamilyParameters entry.");
 
+        var authoredPropertiesGroup = ResolvePropertyGroup(parameter.PropertiesGroup, $"Shared parameter '{name}' PropertiesGroup");
         var identity = CreateSharedGuidIdentity(name, sharedParameter.ExternalDefinition.GUID);
         var migration = BuildMigration(parameter, mapping);
         var tooltip = string.IsNullOrWhiteSpace(sharedParameter.ExternalDefinition.Description)
@@ -188,17 +190,17 @@ public static class DesiredParameterCompiler {
                 identity,
                 name,
                 sharedParameter.ExternalDefinition.GetDataType(),
-                parameter.PropertiesGroup ?? sharedParameter.GroupTypeId,
+                authoredPropertiesGroup ?? sharedParameter.GroupTypeId,
                 parameter.IsInstance ?? sharedParameter.IsInstance,
                 tooltip),
             true,
-            parameter.GetAssignment(),
+            BuildAssignment(parameter),
             GetPerTypeAssignments(perTypeAssignments, name),
             migration,
             new ResolvedParameterMetadataProvenanceSet(
                 ResolvedParameterMetadataProvenance.ParameterService,
                 ResolvedParameterMetadataProvenance.ParameterService,
-                parameter.PropertiesGroup != null ? ResolvedParameterMetadataProvenance.Authored : ResolvedParameterMetadataProvenance.ParameterService,
+                authoredPropertiesGroup != null ? ResolvedParameterMetadataProvenance.Authored : ResolvedParameterMetadataProvenance.ParameterService,
                 parameter.IsInstance != null ? ResolvedParameterMetadataProvenance.Authored : ResolvedParameterMetadataProvenance.ParameterService,
                 tooltip == null ? ResolvedParameterMetadataProvenance.Unresolved : ResolvedParameterMetadataProvenance.ParameterService)
         );
@@ -209,25 +211,67 @@ public static class DesiredParameterCompiler {
         IReadOnlyDictionary<string, Dictionary<string, string?>> perTypeAssignments
     ) {
         var name = RequireName(parameter.Name, "Family parameter declaration");
+        var authoredDataType = ResolveDataType(parameter.DataType, $"Family parameter '{name}' DataType");
+        var authoredPropertiesGroup = ResolvePropertyGroup(parameter.PropertiesGroup, $"Family parameter '{name}' PropertiesGroup");
         return new ResolvedDesiredParameter(
             new ResolvedParameterDefinition(
                 CreateNameFallbackIdentity(name),
                 name,
-                parameter.DataType ?? SpecTypeId.String.Text,
-                parameter.PropertiesGroup ?? new ForgeTypeId(""),
+                authoredDataType ?? SpecTypeId.String.Text,
+                authoredPropertiesGroup ?? new ForgeTypeId(""),
                 parameter.IsInstance ?? true,
                 parameter.Tooltip),
             false,
-            parameter.GetAssignment(),
+            BuildAssignment(parameter),
             GetPerTypeAssignments(perTypeAssignments, name),
             null,
             new ResolvedParameterMetadataProvenanceSet(
                 ResolvedParameterMetadataProvenance.FamilyFoundryDefault,
-                parameter.DataType != null ? ResolvedParameterMetadataProvenance.Authored : ResolvedParameterMetadataProvenance.FamilyFoundryDefault,
-                parameter.PropertiesGroup != null ? ResolvedParameterMetadataProvenance.Authored : ResolvedParameterMetadataProvenance.FamilyFoundryDefault,
+                authoredDataType != null ? ResolvedParameterMetadataProvenance.Authored : ResolvedParameterMetadataProvenance.FamilyFoundryDefault,
+                authoredPropertiesGroup != null ? ResolvedParameterMetadataProvenance.Authored : ResolvedParameterMetadataProvenance.FamilyFoundryDefault,
                 parameter.IsInstance != null ? ResolvedParameterMetadataProvenance.Authored : ResolvedParameterMetadataProvenance.FamilyFoundryDefault,
                 string.IsNullOrWhiteSpace(parameter.Tooltip) ? ResolvedParameterMetadataProvenance.Unresolved : ResolvedParameterMetadataProvenance.Authored)
         );
+    }
+
+    private static DesiredParameterAssignmentSpec? BuildAssignment(AuthoredParameterDeclaration parameter) {
+        var assignment = parameter.GetAssignment();
+        if (assignment == null)
+            return null;
+
+        return new DesiredParameterAssignmentSpec(
+            assignment.Kind == AuthoredParameterAssignmentKind.Formula
+                ? ParamAssignmentKind.Formula
+                : ParamAssignmentKind.Value,
+            assignment.Value);
+    }
+
+    private static ForgeTypeId? ResolveDataType(string? value, string fieldName) =>
+        ResolveForgeTypeId(value, fieldName, SpecNamesValueDomain.GetLabelToForgeMap(), allowOther: false);
+
+    private static ForgeTypeId? ResolvePropertyGroup(string? value, string fieldName) =>
+        ResolveForgeTypeId(value, fieldName, PropertyGroupNamesValueDomain.GetLabelForgeMap(), allowOther: true);
+
+    private static ForgeTypeId? ResolveForgeTypeId(
+        string? value,
+        string fieldName,
+        IReadOnlyDictionary<string, ForgeTypeId> labelMap,
+        bool allowOther
+    ) {
+        var trimmed = value?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return null;
+
+        if (allowOther && trimmed.Equals("Other", StringComparison.OrdinalIgnoreCase))
+            return new ForgeTypeId("");
+
+        if (labelMap.TryGetValue(trimmed, out var mapped))
+            return mapped;
+
+        if (trimmed.StartsWith("autodesk.", StringComparison.OrdinalIgnoreCase))
+            return new ForgeTypeId(trimmed);
+
+        throw new InvalidOperationException($"{fieldName} '{trimmed}' is not a recognized Revit label or Forge type id.");
     }
 
     private static Dictionary<string, string?> GetPerTypeAssignments(

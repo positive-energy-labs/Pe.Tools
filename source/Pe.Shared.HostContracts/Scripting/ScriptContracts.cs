@@ -76,8 +76,15 @@ public record ScriptPodManifestSummaryData(
     int SchemaVersion,
     string Id,
     string Name,
+    string Version,
     string? Description,
+    ScriptPodOriginData? Origin,
     List<ScriptPodEntrypointData> Entrypoints
+);
+
+[ExportTsInterface]
+public record ScriptPodOriginData(
+    string Path
 );
 
 [ExportTsInterface]
@@ -89,10 +96,11 @@ public record ScriptPodEntrypointData(
 
 [ExportTsInterface]
 public record ScriptPodImportData(
-    string WorkspaceKey,
-    string WorkspaceRootPath,
+    ScriptPodTransferStatus Status,
+    string? WorkspaceKey,
+    string? WorkspaceRootPath,
     string ArchivePath,
-    ScriptPodManifestSummaryData Manifest,
+    ScriptPodManifestSummaryData? Manifest,
     List<string> ArchiveEntries,
     List<string> GeneratedFiles,
     List<ScriptDiagnostic> Diagnostics
@@ -100,13 +108,21 @@ public record ScriptPodImportData(
 
 [ExportTsInterface]
 public record ScriptPodExportData(
-    string WorkspaceKey,
-    string WorkspaceRootPath,
+    ScriptPodTransferStatus Status,
+    string? WorkspaceKey,
+    string? WorkspaceRootPath,
     string ArchivePath,
-    ScriptPodManifestSummaryData Manifest,
+    ScriptPodManifestSummaryData? Manifest,
     List<string> ArchiveEntries,
     List<ScriptDiagnostic> Diagnostics
 );
+
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum ScriptPodTransferStatus {
+    Succeeded,
+    Rejected
+}
 
 [JsonConverter(typeof(StringEnumConverter))]
 [ExportTsEnum]

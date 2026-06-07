@@ -53,38 +53,7 @@ public sealed class DesiredFamilyMigrationProfile : BaseProfile, IDesiredMigrati
     public SortParamsSettings SortParams { get; init; } = new() { Enabled = false };
 }
 
-public abstract class DesiredParameterDeclaration {
-    [Description("Parameter name. Revit family parameters are resolved by name because duplicate names are not allowed in a family.")]
-    [Required]
-    public string Name { get; init; } = string.Empty;
-
-    [Description("Optional Revit properties group. Shared parameters use APS/shared-definition identity and datatype; this only controls family binding placement.")]
-    [ForgeKind(ForgeKind.Group)]
-    public ForgeTypeId? PropertiesGroup { get; init; }
-
-    [Description("Optional instance/type scope. Shared parameters use APS/shared-definition identity and datatype; this only controls family binding scope.")]
-    public bool? IsInstance { get; init; }
-
-    [Description("Optional literal value applied uniformly to all family types. Mutually exclusive with Formula.")]
-    public string? Value { get; init; }
-
-    [Description("Optional formula applied uniformly to all family types. Mutually exclusive with Value.")]
-    public string? Formula { get; init; }
-
-    public DesiredParameterAssignmentSpec? GetAssignment() {
-        var hasValue = !string.IsNullOrWhiteSpace(this.Value);
-        var hasFormula = !string.IsNullOrWhiteSpace(this.Formula);
-        if (hasValue && hasFormula)
-            throw new InvalidOperationException($"Parameter '{this.Name}' cannot define both Value and Formula.");
-        if (hasValue)
-            return new DesiredParameterAssignmentSpec(ParamAssignmentKind.Value, this.Value!);
-        if (hasFormula)
-            return new DesiredParameterAssignmentSpec(ParamAssignmentKind.Formula, this.Formula!);
-        return null;
-    }
-}
-
-public sealed class DesiredSharedParameterDeclaration : DesiredParameterDeclaration {
+public sealed class DesiredSharedParameterDeclaration : AuthoredSharedParameterDeclaration {
     [Description("Optional source family parameter names to map into this shared parameter, in priority order.")]
     [Includable("family-parameter-names")]
     public List<string> SourceNames { get; init; } = [];
@@ -96,14 +65,7 @@ public sealed class DesiredSharedParameterDeclaration : DesiredParameterDeclarat
     public string MappingStrategy { get; init; } = nameof(BuiltInCoercionStrategy.CoerceByStorageType);
 }
 
-public sealed class DesiredFamilyParameterDeclaration : DesiredParameterDeclaration {
-    [Description("Optional family-parameter datatype used when creating a missing family parameter. Existing family parameter datatype changes are intentionally not migrated.")]
-    [ForgeKind(ForgeKind.Spec)]
-    public ForgeTypeId? DataType { get; init; }
-
-    [Description("Optional tooltip/description for local family parameters.")]
-    public string? Tooltip { get; init; }
-}
+public sealed class DesiredFamilyParameterDeclaration : AuthoredFamilyParameterDeclaration;
 
 public sealed record DesiredPerTypeAssignmentRow {
     public const string ParameterColumn = "Parameter";

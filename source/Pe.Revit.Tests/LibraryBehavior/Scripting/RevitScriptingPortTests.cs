@@ -144,7 +144,9 @@ public sealed class RevitScriptingPortTests {
             var agentsPath = RevitScriptingStorageLocations.ResolveAgentsPath(workspaceKey);
             Assert.That(File.Exists(agentsPath), Is.True);
             Assert.That(File.ReadAllText(agentsPath),
-                Does.Contain("The script runner discovers exactly one `PeScriptContainer` type"));
+                Does.Contain("Pod mode validates root `pod.json`, compiles all `src/**/*.cs`, and executes only the requested declared entrypoint source"));
+            Assert.That(File.ReadAllText(agentsPath), Does.Contain("Pod manifests require `version`; optional local `origin.path`"));
+            Assert.That(File.ReadAllText(agentsPath), Does.Contain("ReadOnly` opens no host transaction"));
             Assert.That(File.ReadAllText(agentsPath), Does.Not.Contain("lane"));
             Assert.That(File.Exists(result.ProductAgentsPath), Is.True);
             Assert.That(File.Exists(result.ProductReadmePath), Is.True);
@@ -152,9 +154,8 @@ public sealed class RevitScriptingPortTests {
             Assert.That(File.ReadAllText(result.WorkspaceReadmePath), Does.Not.Contain("lane"));
             Assert.That(File.ReadAllText(result.SampleScriptPath), Does.Contain("pea script execute --source-path src\\SampleScript.cs"));
             Assert.That(File.ReadAllText(result.SampleScriptPath),
-                Does.Contain("Define exactly one non-abstract PeScriptContainer"));
+                Does.Contain("Keep exactly one non-abstract PeScriptContainer in this file"));
             Assert.That(result.GeneratedFiles, Does.Contain(agentsPath));
-            Assert.That(result.GeneratedFiles, Does.Contain(result.ProductAgentsPath));
         } finally {
             DeleteWorkspace(workspaceRoot);
         }
@@ -616,6 +617,58 @@ public sealed class RevitScriptingPortTests {
             diagnostic.Stage == "authoring"
             && diagnostic.Message.Contains("public override void Execute()", StringComparison.Ordinal)
             && diagnostic.Message.Contains("WriteLine", StringComparison.Ordinal)), Is.True);
+    }
+
+    [Test]
+    public void Inline_comment_containing_container_name_still_wraps_as_execute_body(UIApplication uiApplication) {
+        var service = CreateExecutionService(uiApplication);
+
+        var result = service.Execute(new ExecuteRevitScriptRequest(
+            """
+            // PeScriptContainer appears in a comment, not as a container declaration.
+            WriteLine("wrapped");
+            """
+        ), "test-inline-comment-container-name");
+
+        Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
+        Assert.That(result.ContainerTypeName, Does.Contain("InlineScript"));
+        Assert.That(result.Output, Does.Contain("wrapped"));
+    }
+
+    [Test]
+    public void Inline_string_containing_container_name_still_wraps_as_execute_body(UIApplication uiApplication) {
+        var service = CreateExecutionService(uiApplication);
+
+        var result = service.Execute(new ExecuteRevitScriptRequest(
+            """
+            var text = "PeScriptContainer";
+            WriteLine(text);
+            """
+        ), "test-inline-string-container-name");
+
+        Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
+        Assert.That(result.ContainerTypeName, Does.Contain("InlineScript"));
+        Assert.That(result.Output, Does.Contain("PeScriptContainer"));
+    }
+
+    [Test]
+    public void Malformed_full_inline_container_is_not_double_wrapped(UIApplication uiApplication) {
+        var service = CreateExecutionService(uiApplication);
+
+        var result = service.Execute(new ExecuteRevitScriptRequest(
+            """
+            public sealed class BrokenScript : PeScriptContainer
+            {
+                public override void Execute()
+                {
+                    WriteLine("broken");
+            """
+        ), "test-malformed-inline-container");
+
+        Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.CompilationFailed));
+        Assert.That(result.Diagnostics.Any(diagnostic =>
+            diagnostic.Stage == "compile" && diagnostic.Severity == ScriptDiagnosticSeverity.Error), Is.True);
+        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.None.Contain("InlineScript"));
     }
 
     [Test]
@@ -1251,6 +1304,50 @@ public sealed class RevitScriptingPortTests {
         }
     }
 
+    [Test]
+    public void Pod_workspace_execution_rejects_origin_version_mismatch(UIApplication uiApplication) {
+        var workspaceKey = $"test-pod-origin-{Guid.NewGuid():N}";
+        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        var originRoot = Path.Combine(Path.GetTempPath(), $"pod-origin-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(RevitScriptingStorageLocations.ResolveSourceDirectory(workspaceKey));
+
+        try {
+            Directory.CreateDirectory(originRoot);
+            File.WriteAllText(
+                RevitScriptingStorageLocations.ResolveSampleScriptPath(workspaceKey),
+                """
+                public sealed class WorkspaceScript : PeScriptContainer
+                {
+                    public override void Execute()
+                    {
+                        WriteLine("should not run");
+                    }
+                }
+                """
+            );
+            WritePodManifest(workspaceKey, ["src/SampleScript.cs"], "1.0.0", originRoot);
+            File.WriteAllText(Path.Combine(originRoot, "pod.json"), CreatePodManifestText(workspaceKey, ["src/SampleScript.cs"], "2.0.0"));
+
+            var service = CreateExecutionService(uiApplication);
+            var result = service.Execute(
+                new ExecuteRevitScriptRequest(
+                    SourceKind: ScriptExecutionSourceKind.WorkspacePath,
+                    SourcePath: @"src\SampleScript.cs",
+                    WorkspaceKey: workspaceKey
+                ),
+                "test-pod-origin"
+            );
+
+            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Rejected));
+            Assert.That(result.Output, Does.Not.Contain("should not run"));
+            Assert.That(result.Diagnostics.Any(diagnostic =>
+                diagnostic.Stage == "pod-origin" && diagnostic.Message.Contains("Reimport the Pod", StringComparison.Ordinal)), Is.True);
+        } finally {
+            DeleteWorkspace(workspaceRoot);
+            DeleteWorkspace(originRoot);
+        }
+    }
+
     private static ScriptProjectGenerator CreateProjectGenerator() =>
         new(new CsProjReader());
 
@@ -1266,24 +1363,50 @@ public sealed class RevitScriptingPortTests {
         );
     }
 
-    private static void WritePodManifest(string workspaceKey, params string[] entrypointSourcePaths) {
+    private static void WritePodManifest(string workspaceKey, params string[] entrypointSourcePaths) =>
+        WritePodManifest(workspaceKey, entrypointSourcePaths, "1.0.0", null);
+
+    private static void WritePodManifest(
+        string workspaceKey,
+        IReadOnlyList<string> entrypointSourcePaths,
+        string version,
+        string? originPath = null
+    ) =>
+        File.WriteAllText(
+            RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey),
+            CreatePodManifestText(workspaceKey, entrypointSourcePaths, version, originPath)
+        );
+
+    private static string CreatePodManifestText(
+        string workspaceKey,
+        IReadOnlyList<string> entrypointSourcePaths,
+        string version,
+        string? originPath = null
+    ) {
         var entrypoints = string.Join(",\n", entrypointSourcePaths.Select((sourcePath, index) =>
             $$"""
                 { "id": "entry-{{index + 1}}", "sourcePath": "{{sourcePath.Replace("\\", "/")}}" }
               """));
-        File.WriteAllText(
-            RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey),
-            $$"""
+        var originJson = originPath is null
+            ? string.Empty
+            : $$"""
+              "origin": {
+                "path": "{{originPath.Replace("\\", "\\\\")}}"
+              },
+        """;
+
+        return $$"""
             {
               "schemaVersion": 1,
               "id": "{{workspaceKey}}",
               "name": "{{workspaceKey}}",
+              "version": "{{version}}",
+            {{originJson}}
               "entrypoints": [
             {{entrypoints}}
               ]
             }
-            """
-        );
+            """;
     }
 
     private static void AssertPolicyRejected(ExecuteRevitScriptData result, string expectedDiagnosticText) {

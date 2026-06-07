@@ -12,6 +12,10 @@ public sealed class ScriptPodArchiveService(
     ScriptWorkspaceBootstrapService bootstrapService,
     ScriptProjectGenerator projectGenerator
 ) {
+    private const int MaxArchiveEntryCount = 1000;
+    private const long MaxArchiveEntryBytes = 10 * 1024 * 1024;
+    private const long MaxArchiveTotalBytes = 50 * 1024 * 1024;
+
     private static readonly HashSet<string> ExcludedRootNames = new(StringComparer.OrdinalIgnoreCase) {
         ".git",
         ".vscode",
@@ -39,34 +43,43 @@ public sealed class ScriptPodArchiveService(
         string targetFramework,
         string runtimeAssemblyPath
     ) {
-        if (string.IsNullOrWhiteSpace(request.ArchivePath))
-            throw new ArgumentException("ArchivePath is required.", nameof(request));
+        var archivePath = request.ArchivePath ?? string.Empty;
+        var workspaceKey = default(string?);
+        var archiveEntryPaths = new List<string>();
+        var tempRoot = string.Empty;
 
-        var archivePath = Path.GetFullPath(request.ArchivePath);
-        if (!File.Exists(archivePath))
-            throw new FileNotFoundException($"Pod archive does not exist: {archivePath}", archivePath);
-
-        var tempRoot = CreateTempDirectory();
         try {
+            if (string.IsNullOrWhiteSpace(request.ArchivePath))
+                return CreateRejectedImport(archivePath, workspaceKey, archiveEntryPaths, "ArchivePath is required.");
+
+            archivePath = Path.GetFullPath(request.ArchivePath);
+            if (!File.Exists(archivePath))
+                return CreateRejectedImport(archivePath, workspaceKey, archiveEntryPaths, $"Pod archive does not exist: {archivePath}");
+
             using var archive = ZipFile.OpenRead(archivePath);
             var entries = ValidateArchiveEntries(archive, requireManifest: true);
+            archiveEntryPaths = entries.Select(entry => entry.RelativePath).ToList();
             var manifestEntry = entries.Single(entry => string.Equals(entry.RelativePath, ProductPathNames.PodManifestFileName, StringComparison.Ordinal));
-            using var manifestStream = manifestEntry.Entry.Open();
-            using var manifestReader = new StreamReader(manifestStream);
-            var initialManifest = PodManifestValidator.ValidateJson(manifestReader.ReadToEnd());
-            EnsureNoManifestErrors(initialManifest.Diagnostics);
+            var initialManifest = PodManifestValidator.ValidateJson(ReadArchiveEntryText(manifestEntry.Entry));
+            if (HasManifestErrors(initialManifest.Diagnostics))
+                return CreateRejectedImport(archivePath, workspaceKey, archiveEntryPaths, initialManifest.Diagnostics);
 
-            var workspaceKey = string.IsNullOrWhiteSpace(request.WorkspaceKey)
+            workspaceKey = string.IsNullOrWhiteSpace(request.WorkspaceKey)
                 ? initialManifest.Manifest!.Id
                 : ScriptingWorkspaceLayout.NormalizeWorkspaceKey(request.WorkspaceKey);
             var manifestResult = PodManifestValidator.ValidateJson(ReadArchiveEntryText(manifestEntry.Entry), workspaceKey);
-            EnsureNoManifestErrors(manifestResult.Diagnostics);
+            if (HasManifestErrors(manifestResult.Diagnostics))
+                return CreateRejectedImport(archivePath, workspaceKey, archiveEntryPaths, manifestResult.Diagnostics);
             var manifest = manifestResult.Manifest!;
+            var originDiagnostics = PodOriginVersionGuard.Check(manifest);
+            if (HasManifestErrors(originDiagnostics))
+                return CreateRejectedImport(archivePath, workspaceKey, archiveEntryPaths, originDiagnostics);
 
             var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
             if (Directory.Exists(workspaceRoot))
-                throw new IOException($"Workspace '{workspaceKey}' already exists: {workspaceRoot}");
+                return CreateRejectedImport(archivePath, workspaceKey, archiveEntryPaths, $"Workspace '{workspaceKey}' already exists: {workspaceRoot}");
 
+            tempRoot = CreateTempDirectory();
             ExtractEntries(entries, tempRoot);
             ValidateEntrypointFiles(tempRoot, manifest);
 
@@ -81,16 +94,21 @@ public sealed class ScriptPodArchiveService(
                 targetFramework,
                 runtimeAssemblyPath
             );
+            var diagnostics = manifestResult.Diagnostics.ToList();
+            diagnostics.AddRange(originDiagnostics);
 
             return new ScriptPodImportData(
+                ScriptPodTransferStatus.Succeeded,
                 workspaceKey,
                 workspaceRoot,
                 archivePath,
                 ToSummary(manifest),
-                entries.Select(entry => entry.RelativePath).ToList(),
+                archiveEntryPaths,
                 bootstrapResult.GeneratedFiles,
-                manifestResult.Diagnostics.ToList()
+                diagnostics
             );
+        } catch (Exception ex) when (IsExpectedTransferFailure(ex)) {
+            return CreateRejectedImport(archivePath, workspaceKey, archiveEntryPaths, ex.Message);
         } finally {
             if (!string.IsNullOrWhiteSpace(tempRoot) && Directory.Exists(tempRoot))
                 Directory.Delete(tempRoot, true);
@@ -99,65 +117,91 @@ public sealed class ScriptPodArchiveService(
 
     public ScriptPodExportData Export(
         ScriptPodExportRequest request,
-        string targetFramework
+        string targetFramework,
+        string? revitVersion = null
     ) {
-        var workspaceKey = ScriptingWorkspaceLayout.NormalizeWorkspaceKey(request.WorkspaceKey);
-        if (string.IsNullOrWhiteSpace(request.ArchivePath))
-            throw new ArgumentException("ArchivePath is required.", nameof(request));
+        var archivePath = request.ArchivePath ?? string.Empty;
+        var workspaceKey = default(string?);
+        var workspaceRoot = default(string?);
+        var archiveEntryPaths = new List<string>();
+        var tempArchivePath = default(string?);
 
-        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
-        if (!Directory.Exists(workspaceRoot))
-            throw new DirectoryNotFoundException($"Workspace does not exist: {workspaceRoot}");
+        try {
+            workspaceKey = ScriptingWorkspaceLayout.NormalizeWorkspaceKey(request.WorkspaceKey);
+            if (string.IsNullOrWhiteSpace(request.ArchivePath))
+                return CreateRejectedExport(archivePath, workspaceKey, workspaceRoot, archiveEntryPaths, "ArchivePath is required.");
 
-        var manifestPath = RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey);
-        if (!File.Exists(manifestPath))
-            throw new FileNotFoundException($"Pod export requires {ProductPathNames.PodManifestFileName}: {manifestPath}", manifestPath);
+            workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+            if (!Directory.Exists(workspaceRoot))
+                return CreateRejectedExport(archivePath, workspaceKey, workspaceRoot, archiveEntryPaths, $"Workspace does not exist: {workspaceRoot}");
 
-        var manifestResult = PodManifestValidator.ValidateJson(File.ReadAllText(manifestPath), workspaceKey);
-        EnsureNoManifestErrors(manifestResult.Diagnostics);
-        var manifest = manifestResult.Manifest!;
-        ValidateEntrypointFiles(workspaceRoot, manifest);
+            var manifestPath = RevitScriptingStorageLocations.ResolvePodManifestPath(workspaceKey);
+            if (!File.Exists(manifestPath))
+                return CreateRejectedExport(archivePath, workspaceKey, workspaceRoot, archiveEntryPaths, $"Pod export requires {ProductPathNames.PodManifestFileName}: {manifestPath}");
 
-        var archivePath = Path.GetFullPath(request.ArchivePath);
-        var archiveDirectory = Path.GetDirectoryName(archivePath);
-        if (!string.IsNullOrWhiteSpace(archiveDirectory))
-            _ = Directory.CreateDirectory(archiveDirectory);
-        if (File.Exists(archivePath))
-            File.Delete(archivePath);
+            var manifestResult = PodManifestValidator.ValidateJson(File.ReadAllText(manifestPath), workspaceKey);
+            if (HasManifestErrors(manifestResult.Diagnostics))
+                return CreateRejectedExport(archivePath, workspaceKey, workspaceRoot, archiveEntryPaths, manifestResult.Diagnostics);
+            var manifest = manifestResult.Manifest!;
+            var originDiagnostics = PodOriginVersionGuard.Check(manifest);
+            if (HasManifestErrors(originDiagnostics))
+                return CreateRejectedExport(archivePath, workspaceKey, workspaceRoot, archiveEntryPaths, originDiagnostics);
+            ValidateEntrypointFiles(workspaceRoot, manifest);
 
-        var entries = CollectExportEntries(workspaceRoot);
-        using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Create)) {
-            foreach (var entry in entries) {
-                var archiveEntry = archive.CreateEntry(entry.RelativePath, CompressionLevel.Optimal);
-                using var output = archiveEntry.Open();
-                if (string.Equals(entry.RelativePath, ScriptingWorkspaceLayout.ProjectFileName, StringComparison.Ordinal)) {
-                    var portableProject = this._projectGenerator.GeneratePortableProjectContent(
-                        File.ReadAllText(entry.FullPath),
-                        workspaceRoot,
-                        targetFramework
-                    );
-                    using var writer = new StreamWriter(output);
-                    writer.Write(portableProject);
-                } else {
-                    using var input = File.OpenRead(entry.FullPath);
-                    input.CopyTo(output);
+            archivePath = Path.GetFullPath(request.ArchivePath);
+            var archiveDirectory = Path.GetDirectoryName(archivePath);
+            if (!string.IsNullOrWhiteSpace(archiveDirectory))
+                _ = Directory.CreateDirectory(archiveDirectory);
+
+            var entries = CollectExportEntries(workspaceRoot);
+            ValidateExportEntryLimits(entries);
+            archiveEntryPaths = entries.Select(entry => entry.RelativePath).ToList();
+            tempArchivePath = CreateTempArchivePath(archivePath);
+            using (var archive = ZipFile.Open(tempArchivePath, ZipArchiveMode.Create)) {
+                foreach (var entry in entries) {
+                    var archiveEntry = archive.CreateEntry(entry.RelativePath, CompressionLevel.Optimal);
+                    using var output = archiveEntry.Open();
+                    if (string.Equals(entry.RelativePath, ScriptingWorkspaceLayout.ProjectFileName, StringComparison.Ordinal)) {
+                        var portableProject = this._projectGenerator.GeneratePortableProjectContent(
+                            File.ReadAllText(entry.FullPath),
+                            workspaceRoot,
+                            targetFramework
+                        );
+                        using var writer = new StreamWriter(output);
+                        writer.Write(portableProject);
+                    } else {
+                        using var input = File.OpenRead(entry.FullPath);
+                        input.CopyTo(output);
+                    }
                 }
             }
-        }
 
-        return new ScriptPodExportData(
-            workspaceKey,
-            workspaceRoot,
-            archivePath,
-            ToSummary(manifest),
-            entries.Select(entry => entry.RelativePath).ToList(),
-            manifestResult.Diagnostics.ToList()
-        );
+            ReplaceArchive(tempArchivePath, archivePath);
+            tempArchivePath = null;
+            var diagnostics = manifestResult.Diagnostics.ToList();
+            diagnostics.AddRange(originDiagnostics);
+
+            return new ScriptPodExportData(
+                ScriptPodTransferStatus.Succeeded,
+                workspaceKey,
+                workspaceRoot,
+                archivePath,
+                ToSummary(manifest),
+                archiveEntryPaths,
+                diagnostics
+            );
+        } catch (Exception ex) when (IsExpectedTransferFailure(ex)) {
+            return CreateRejectedExport(archivePath, workspaceKey, workspaceRoot, archiveEntryPaths, ex.Message);
+        } finally {
+            if (!string.IsNullOrWhiteSpace(tempArchivePath) && File.Exists(tempArchivePath))
+                File.Delete(tempArchivePath);
+        }
     }
 
     private static IReadOnlyList<ArchiveEntry> ValidateArchiveEntries(ZipArchive archive, bool requireManifest) {
         var entries = new List<ArchiveEntry>();
         var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var totalBytes = 0L;
         foreach (var entry in archive.Entries) {
             var relativePath = NormalizeArchiveEntryPath(entry.FullName);
             if (relativePath is null)
@@ -165,8 +209,16 @@ public sealed class ScriptPodArchiveService(
             ValidatePortableRelativePath(relativePath);
             if (!seenPaths.Add(relativePath))
                 throw new InvalidDataException($"Pod archive contains duplicate entry path: {relativePath}");
+            if (entry.Length > MaxArchiveEntryBytes)
+                throw new InvalidDataException($"Pod archive entry exceeds the {MaxArchiveEntryBytes} byte limit: {relativePath}");
+            totalBytes += entry.Length;
+            if (totalBytes > MaxArchiveTotalBytes)
+                throw new InvalidDataException($"Pod archive exceeds the {MaxArchiveTotalBytes} byte uncompressed size limit.");
             entries.Add(new ArchiveEntry(entry, relativePath));
         }
+
+        if (entries.Count > MaxArchiveEntryCount)
+            throw new InvalidDataException($"Pod archive contains {entries.Count} entries; the limit is {MaxArchiveEntryCount}.");
 
         if (requireManifest && entries.All(entry => !string.Equals(entry.RelativePath, ProductPathNames.PodManifestFileName, StringComparison.Ordinal)))
             throw new InvalidDataException($"Pod archive must contain {ProductPathNames.PodManifestFileName} at the archive root.");
@@ -200,6 +252,21 @@ public sealed class ScriptPodArchiveService(
             })
             .OrderBy(entry => entry.RelativePath, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private static void ValidateExportEntryLimits(IReadOnlyList<FileEntry> entries) {
+        if (entries.Count > MaxArchiveEntryCount)
+            throw new InvalidDataException($"Pod export contains {entries.Count} entries; the limit is {MaxArchiveEntryCount}.");
+
+        var totalBytes = 0L;
+        foreach (var entry in entries) {
+            var length = new FileInfo(entry.FullPath).Length;
+            if (length > MaxArchiveEntryBytes)
+                throw new InvalidDataException($"Pod export entry exceeds the {MaxArchiveEntryBytes} byte limit: {entry.RelativePath}");
+            totalBytes += length;
+            if (totalBytes > MaxArchiveTotalBytes)
+                throw new InvalidDataException($"Pod export exceeds the {MaxArchiveTotalBytes} byte uncompressed size limit.");
+        }
     }
 
     private static string? NormalizeArchiveEntryPath(string entryName) {
@@ -241,14 +308,8 @@ public sealed class ScriptPodArchiveService(
         }
     }
 
-    private static void EnsureNoManifestErrors(IReadOnlyList<ScriptDiagnostic> diagnostics) {
-        var errors = diagnostics
-            .Where(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error)
-            .Select(diagnostic => diagnostic.Message)
-            .ToList();
-        if (errors.Count != 0)
-            throw new InvalidDataException(string.Join(Environment.NewLine, errors));
-    }
+    private static bool HasManifestErrors(IReadOnlyList<ScriptDiagnostic> diagnostics) =>
+        diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error);
 
     private static void EnsurePathUnderRoot(string path, string rootPath, string source) {
         var normalizedRoot = Path.GetFullPath(rootPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
@@ -269,11 +330,92 @@ public sealed class ScriptPodArchiveService(
         return path;
     }
 
+    private static string CreateTempArchivePath(string archivePath) {
+        var directory = Path.GetDirectoryName(archivePath);
+        var filename = Path.GetFileName(archivePath);
+        return Path.Combine(
+            string.IsNullOrWhiteSpace(directory) ? "." : directory,
+            $".{filename}.{Guid.NewGuid():N}.tmp"
+        );
+    }
+
+    private static void ReplaceArchive(string tempArchivePath, string archivePath) {
+        if (File.Exists(archivePath)) {
+            File.Replace(tempArchivePath, archivePath, null);
+            return;
+        }
+
+        File.Move(tempArchivePath, archivePath);
+    }
+
+    private static bool IsExpectedTransferFailure(Exception ex) =>
+        ex is ArgumentException or InvalidDataException or IOException or UnauthorizedAccessException or System.Xml.XmlException;
+
+    private static ScriptPodImportData CreateRejectedImport(
+        string archivePath,
+        string? workspaceKey,
+        IReadOnlyList<string> archiveEntries,
+        string message
+    ) => CreateRejectedImport(
+        archivePath,
+        workspaceKey,
+        archiveEntries,
+        [ScriptDiagnosticFactory.Error("pod-import", message)]
+    );
+
+    private static ScriptPodImportData CreateRejectedImport(
+        string archivePath,
+        string? workspaceKey,
+        IReadOnlyList<string> archiveEntries,
+        IReadOnlyList<ScriptDiagnostic> diagnostics
+    ) => new(
+        ScriptPodTransferStatus.Rejected,
+        workspaceKey,
+        workspaceKey is null ? null : RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey),
+        archivePath,
+        null,
+        archiveEntries.ToList(),
+        [],
+        diagnostics.ToList()
+    );
+
+    private static ScriptPodExportData CreateRejectedExport(
+        string archivePath,
+        string? workspaceKey,
+        string? workspaceRoot,
+        IReadOnlyList<string> archiveEntries,
+        string message
+    ) => CreateRejectedExport(
+        archivePath,
+        workspaceKey,
+        workspaceRoot,
+        archiveEntries,
+        [ScriptDiagnosticFactory.Error("pod-export", message)]
+    );
+
+    private static ScriptPodExportData CreateRejectedExport(
+        string archivePath,
+        string? workspaceKey,
+        string? workspaceRoot,
+        IReadOnlyList<string> archiveEntries,
+        IReadOnlyList<ScriptDiagnostic> diagnostics
+    ) => new(
+        ScriptPodTransferStatus.Rejected,
+        workspaceKey,
+        workspaceRoot,
+        archivePath,
+        null,
+        archiveEntries.ToList(),
+        diagnostics.ToList()
+    );
+
     private static ScriptPodManifestSummaryData ToSummary(PodManifest manifest) => new(
         manifest.SchemaVersion,
         manifest.Id,
         manifest.Name,
+        manifest.Version,
         manifest.Description,
+        manifest.Origin is null ? null : new ScriptPodOriginData(manifest.Origin.Path),
         manifest.Entrypoints
             .Select(entrypoint => new ScriptPodEntrypointData(entrypoint.Id, entrypoint.SourcePath, entrypoint.Name))
             .ToList()

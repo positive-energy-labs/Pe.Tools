@@ -37,6 +37,7 @@ public static class HostOperationsCatalog {
         GetRevitAgentContextSummaryOperationContract.Definition,
         ResolveRevitAgentContextOperationContract.Definition,
         GetRevitAgentVisibleContextOperationContract.Definition,
+        GetRevitAgentViewRenderingStateOperationContract.Definition,
         GetElectricalPanelsCatalogOperationContract.Definition,
         GetElectricalCircuitsCatalogOperationContract.Definition,
         GetElectricalPanelSchedulesQueryOperationContract.Definition,

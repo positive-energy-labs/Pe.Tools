@@ -17,12 +17,24 @@ public sealed class ScriptEntryPointResolver(
             return [];
 
         var root = CSharpSyntaxTree.ParseText(entryPointSource.Content).GetCompilationUnitRoot();
-        return root.DescendantNodes()
-            .OfType<ClassDeclarationSyntax>()
-            .Where(IsContainerDeclaration)
+        return ResolveContainerDeclarations(root)
             .Select(GetFullTypeName)
             .ToList();
     }
+
+    public bool ContainsContainerDeclaration(string sourceContent) {
+        var root = CSharpSyntaxTree.ParseText(sourceContent).GetCompilationUnitRoot();
+        return ResolveContainerDeclarations(root).Any();
+    }
+
+    public bool ContainsTypeDeclaration(string sourceContent) {
+        var root = CSharpSyntaxTree.ParseText(sourceContent).GetCompilationUnitRoot();
+        return root.DescendantNodes().OfType<BaseTypeDeclarationSyntax>().Any();
+    }
+
+    private IEnumerable<ClassDeclarationSyntax> ResolveContainerDeclarations(CompilationUnitSyntax root) => root.DescendantNodes()
+        .OfType<ClassDeclarationSyntax>()
+        .Where(IsContainerDeclaration);
 
     private bool IsContainerDeclaration(ClassDeclarationSyntax declaration) =>
         declaration.Modifiers.Any(SyntaxKind.AbstractKeyword) == false &&
