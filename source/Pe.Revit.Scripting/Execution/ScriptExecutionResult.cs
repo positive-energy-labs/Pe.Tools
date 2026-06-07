@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Pe.Revit.Scripting.Context;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Scripting.Execution;
+using Pe.Shared.Scripting.Pods;
 
 namespace Pe.Revit.Scripting.Execution;
 
@@ -18,6 +19,7 @@ internal sealed record ScriptExecutionPlan(
     ScriptPermissionMode PermissionMode,
     ScriptSourceSet SourceSet,
     ScriptWorkspaceExecutionMode ExecutionMode,
+    PodManifest? PodManifest,
     string ProjectContent,
     bool RequireSingleContainer
 );

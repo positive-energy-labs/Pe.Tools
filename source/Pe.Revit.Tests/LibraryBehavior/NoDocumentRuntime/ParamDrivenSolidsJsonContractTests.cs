@@ -177,24 +177,77 @@ public sealed class ParamDrivenSolidsJsonContractTests {
             string.Join(Environment.NewLine, compiled.Diagnostics.Select(d => d.ToDisplayMessage())));
     }
 
-    [Test]
-    public void Profile_schema_rejects_shared_parameter_datatype_authoring() {
-        var ex = Assert.Throws<JsonValidationException>(() =>
-            SettingsJsonContract.ValidateAndRoundTrip<FFManagerProfile>(
-                """
-                {
-                  "SharedParameters": [
-                    {
-                      "Name": "PE_FF_TestSharedValue",
-                      "DataType": "Text",
-                      "Value": "shared-ok"
-                    }
-                  ]
-                }
-                """,
-                "shared-parameter-datatype.json"));
+    [TestCase("DataType", "\"DataType\": \"Text\"")]
+    [TestCase("Tooltip", "\"Tooltip\": \"Shared tooltip cannot be authored.\"")]
+    [TestCase("SharedGuid", "\"SharedGuid\": \"11111111-1111-1111-1111-111111111111\"")]
+    [TestCase("Identity", "\"Identity\": { \"Key\": \"shared:11111111-1111-1111-1111-111111111111\" }")]
+    public void Profile_schema_rejects_shared_parameter_non_authored_fields(string fieldName, string fieldJson) {
+        var json = $$"""
+                   {
+                     "SharedParameters": [
+                       {
+                         "Name": "PE_FF_TestSharedValue",
+                         {{fieldJson}},
+                         "Value": "shared-ok"
+                       }
+                     ]
+                   }
+                   """;
 
-        Assert.That(ex!.Message, Does.Contain("DataType"));
+        AssertProfileValidationRejects(json, $"shared-parameter-{fieldName}.json", fieldName);
+    }
+
+    [Test]
+    public void Profile_schema_accepts_family_parameter_datatype_tooltip_and_per_type_table() {
+        var contract = SettingsJsonContract.ValidateAndRoundTrip<FFManagerProfile>(
+            """
+            {
+              "FamilyParameters": [
+                {
+                  "Name": "Desired Width",
+                  "DataType": "Length (Common)",
+                  "PropertiesGroup": "Dimensions",
+                  "IsInstance": false,
+                  "Tooltip": "Target width authored as desired state."
+                }
+              ],
+              "PerTypeAssignmentsTable": [
+                {
+                  "Parameter": "Desired Width",
+                  "Small": "3' - 0\"",
+                  "Large": "4' - 0\""
+                }
+              ]
+            }
+            """,
+            "family-parameter-datatype-tooltip-per-type-table.json");
+
+        Assert.That(contract.Value.FamilyParameters, Has.Count.EqualTo(1));
+        Assert.That(contract.Value.FamilyParameters[0].DataType, Is.EqualTo("Length (Common)"));
+        Assert.That(contract.Value.FamilyParameters[0].Tooltip, Is.EqualTo("Target width authored as desired state."));
+        Assert.That(contract.Value.PerTypeAssignmentsTable, Has.Count.EqualTo(1));
+        Assert.That(contract.CanonicalJson, Does.Contain("\"PerTypeAssignmentsTable\""));
+    }
+
+    [Test]
+    public void Profile_schema_rejects_inline_parameter_per_type_values() {
+        AssertProfileValidationRejects(
+            """
+            {
+              "FamilyParameters": [
+                {
+                  "Name": "Desired Width",
+                  "DataType": "Length (Common)",
+                  "ValuesPerType": {
+                    "Small": "3' - 0\"",
+                    "Large": "4' - 0\""
+                  }
+                }
+              ]
+            }
+            """,
+            "inline-family-parameter-values-per-type.json",
+            "ValuesPerType");
     }
 
     [Test]
@@ -252,6 +305,13 @@ public sealed class ParamDrivenSolidsJsonContractTests {
             .Where(fileName => !string.IsNullOrWhiteSpace(fileName))
             .OrderBy(fileName => fileName, StringComparer.Ordinal)
             .ToArray()!;
+    }
+
+    private static void AssertProfileValidationRejects(string json, string fileName, string expectedMessageText) {
+        var ex = Assert.Throws<JsonValidationException>(() =>
+            SettingsJsonContract.ValidateAndRoundTrip<FFManagerProfile>(json, fileName));
+
+        Assert.That(ex!.Message, Does.Contain(expectedMessageText));
     }
 
     private static void AssertSchemaAndJsonRoundTrip<T>(string json)

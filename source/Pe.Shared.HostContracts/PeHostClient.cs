@@ -337,6 +337,19 @@ public sealed class PeHostRevitContextClient(HttpClient httpClient) {
         request,
         cancellationToken
     );
+
+    /// <summary>
+    /// Gets bounded evidence for visibility/rendering-affecting state in the active view or explicit views.
+    /// </summary>
+    public Task<RevitAgentViewRenderingStateData> GetViewRenderingStateAsync(
+        RevitAgentViewRenderingStateRequest request,
+        CancellationToken cancellationToken = default
+    ) => PeHostClient.SendAsync<RevitAgentViewRenderingStateRequest, RevitAgentViewRenderingStateData>(
+        this._httpClient,
+        GetRevitAgentViewRenderingStateOperationContract.Definition,
+        request,
+        cancellationToken
+    );
 }
 
 /// <summary>

@@ -159,6 +159,11 @@ internal sealed class BridgeOperationRegistry {
                 static (request, context, cancellationToken) =>
                     context.RevitDataRequestService.GetRevitAgentVisibleContextAsync(request)
             ),
+            BridgeOperations.Create<RevitAgentViewRenderingStateRequest, RevitAgentViewRenderingStateData>(
+                GetRevitAgentViewRenderingStateOperationContract.Definition,
+                static (request, context, cancellationToken) =>
+                    context.RevitDataRequestService.GetRevitAgentViewRenderingStateAsync(request)
+            ),
             BridgeOperations.Create<ScriptWorkspaceBootstrapRequest, ScriptWorkspaceBootstrapData>(
                 GetScriptWorkspaceBootstrapOperationContract.Definition,
                 ExecuteScriptWorkspaceBootstrapAsync

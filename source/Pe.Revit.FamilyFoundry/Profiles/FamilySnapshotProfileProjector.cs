@@ -1,6 +1,7 @@
 using Pe.Revit.FamilyFoundry.DesiredState;
 using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Revit.FamilyFoundry.Serialization;
+using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Shared.RevitData;
 
 namespace Pe.Revit.FamilyFoundry.Profiles;
@@ -132,13 +133,31 @@ public static class FamilySnapshotProfileProjector {
         globalAssignments.TryGetValue(parameter.Name, out var assignment);
         return new DesiredFamilyParameterDeclaration {
             Name = parameter.Name,
-            DataType = parameter.DataType,
-            PropertiesGroup = parameter.PropertiesGroup,
+            DataType = ProjectDataType(parameter),
+            PropertiesGroup = ProjectPropertiesGroup(parameter),
             IsInstance = parameter.IsInstance,
             Tooltip = parameter.Tooltip,
             Value = assignment?.Kind == ParamAssignmentKind.Value ? assignment.Value : null,
             Formula = assignment?.Kind == ParamAssignmentKind.Formula ? assignment.Value : null
         };
+    }
+
+    private static string? ProjectDataType(RevitParameterDefinition parameter) {
+        if (!string.IsNullOrWhiteSpace(parameter.DataTypeLabel))
+            return parameter.DataTypeLabel;
+
+        return string.IsNullOrWhiteSpace(parameter.DataTypeId)
+            ? null
+            : SpecNamesValueDomain.GetLabelForForge(parameter.DataType);
+    }
+
+    private static string? ProjectPropertiesGroup(RevitParameterDefinition parameter) {
+        if (!string.IsNullOrWhiteSpace(parameter.GroupTypeLabel))
+            return parameter.GroupTypeLabel;
+
+        return string.IsNullOrWhiteSpace(parameter.GroupTypeId)
+            ? null
+            : PropertyGroupNamesValueDomain.GetLabelForForge(parameter.PropertiesGroup);
     }
 
     private static bool IsSharedParameter(

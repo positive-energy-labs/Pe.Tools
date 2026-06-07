@@ -83,8 +83,11 @@ internal static class ScriptFileTemplates {
         Authoring contract:
 
         - Put durable scripts under `src/`.
-        - Derive exactly one non-abstract type from `PeScriptContainer` for each execute request.
         - Run a workspace script with `pea script execute --source-path src\MyScript.cs`.
+        - Loose workspace and inline execution require the selected source to resolve to exactly one non-abstract `PeScriptContainer`.
+        - Pod mode uses root `pod.json`; the requested declared entrypoint source must resolve to exactly one non-abstract `PeScriptContainer`, while helper `src/**/*.cs` files may compile but are not entrypoints.
+        - Pod manifests require a top-level `version`. Shared-drive Pods may include `origin.path` pointing to an absolute local folder or `pod.json`; version mismatch rejects import/export/execution until the Pod is reimported.
+        - `ReadOnly` opens no host transaction, applies static mutation guardrails, and reports document-change detection as a dirty-document tripwire. It is not a rollback guarantee.
         - Add local DLL refs and `PackageReference` items in `PeScripts.csproj`.
         - Use `WriteLine(...)` for short returned output.
         - Use `Artifacts.WriteJson(...)`, `WriteCsv(...)`, or `WriteText(...)` for durable output.
@@ -94,7 +97,7 @@ internal static class ScriptFileTemplates {
         Non-goals for this workspace:
 
         - arbitrary local file execution outside the workspace
-        - package/source-bundle execution
+        - compiled DLL/package payload execution
         - async scripting sessions
         """;
 
@@ -118,7 +121,9 @@ internal static class ScriptFileTemplates {
 
         - Current script execution runs inside Revit through one bridge request.
         - Bridge-backed Revit work is serialized; avoid starting parallel bridge calls from scripts.
-        - `ReadOnly` is the default permission mode. `WriteTransaction` is explicit and host-owned.
+        - `ReadOnly` is the default permission mode: no host transaction is opened, static mutation guardrails run, and document-change detection is a dirty-document tripwire rather than rollback.
+        - `WriteTransaction` is explicit and host-owned; Pod manifests never grant write permission.
+        - Pod `version` is source provenance. If `origin.path` points to a shared local Pod, a version mismatch means reimport instead of running stale source.
         - Keep terminal output small; use artifacts for broad rows, tables, or evidence.
         """;
 
@@ -146,7 +151,10 @@ internal static class ScriptFileTemplates {
         ## Contract
 
         - Execute scripts from `src/` with `pea script execute --source-path src\YourScript.cs`.
-        - Each execute request must resolve to exactly one non-abstract `PeScriptContainer`.
+        - Loose workspace and inline execution require the selected source to resolve to exactly one non-abstract `PeScriptContainer`.
+        - Pod mode validates root `pod.json`, compiles all `src/**/*.cs`, and executes only the requested declared entrypoint source.
+        - Pod manifests require `version`; optional local `origin.path` is checked for version mismatch before import/export/execution.
+        - Pod entrypoint source must resolve to exactly one non-abstract `PeScriptContainer`; helper `src` files are compiled but are not entrypoints.
         - Use `WriteLine(...)` for short diagnostics and `Artifacts` for durable output.
         - Add supported references through `PeScripts.csproj`.
         - Re-run workspace bootstrap after Revit version changes or missing generated references.
@@ -154,6 +162,7 @@ internal static class ScriptFileTemplates {
         ## Notes
 
         - Inline snippets are traceable probes, not the primary durable authoring surface.
+        - `ReadOnly` opens no host transaction and is guarded by static policy plus dirty-document detection, not rollback.
         - The generated project preserves supported user references across bootstrap regeneration.
         - `PeHostClient` is available through `Host`; use XML docs, metadata, and diagnostics to decide whether it fits.
         - This workspace runs inside Revit through `Pe.Host`; runtime behavior depends on the loaded Revit-side assemblies.
@@ -175,7 +184,8 @@ internal static class ScriptFileTemplates {
         // Run from this workspace root:
         // pea script execute --source-path src\SampleScript.cs
         //
-        // Define exactly one non-abstract PeScriptContainer per execute request.
+        // Loose workspace execution uses the selected file as the entrypoint.
+        // Keep exactly one non-abstract PeScriptContainer in this file.
 
         public sealed class SampleScript : PeScriptContainer
         {

@@ -116,6 +116,10 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
         RevitAgentVisibleContextRequest request
     ) => this.EnqueueAsync(() => this.GetRevitAgentVisibleContextCore(request));
 
+    public Task<RevitAgentViewRenderingStateData> GetRevitAgentViewRenderingStateAsync(
+        RevitAgentViewRenderingStateRequest request
+    ) => this.EnqueueAsync(() => this.GetRevitAgentViewRenderingStateCore(request));
+
     private LoadedFamiliesCatalogData GetLoadedFamiliesCatalogCore(LoadedFamiliesCatalogRequest request) {
         var document = GetSupportedActiveDocument(GetLoadedFamiliesCatalogOperationContract.Definition);
 
@@ -718,6 +722,25 @@ internal sealed class RevitDataRequestService(RevitTaskService revitTaskService)
                 "RevitAgentVisibleContextException",
                 ex,
                 "Verify a Revit document and active view are available, then retry."
+            );
+        }
+    }
+
+    private RevitAgentViewRenderingStateData GetRevitAgentViewRenderingStateCore(
+        RevitAgentViewRenderingStateRequest request
+    ) {
+        var document = GetSupportedActiveDocument(GetRevitAgentViewRenderingStateOperationContract.Definition);
+        try {
+            return RevitAgentContextCollector.CollectViewRenderingState(
+                document,
+                RevitUiSession.CurrentUIApplication.GetActiveView(),
+                request
+            );
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "RevitAgentViewRenderingStateException",
+                ex,
+                "Verify a project document and inspectable view are available, then retry."
             );
         }
     }

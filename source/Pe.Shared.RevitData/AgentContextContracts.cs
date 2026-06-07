@@ -47,6 +47,13 @@ public enum RevitAgentVisibleProjection {
     Samples
 }
 
+[JsonConverter(typeof(StringEnumConverter))]
+[ExportTsEnum]
+public enum RevitAgentViewRenderingScope {
+    ActiveView,
+    ViewReferences
+}
+
 [ExportTsInterface]
 public record RevitAgentContextHandle(
     RevitAgentContextHandleKind Kind,
@@ -210,4 +217,117 @@ public record RevitAgentVisibleContextData(
     List<RevitAgentVisibleCategorySummary> Categories,
     List<RevitDataIssue> Issues,
     List<RevitAgentVisibleViewSummary>? Views = null
+);
+
+[ExportTsInterface]
+public record RevitAgentViewRenderingStateRequest(
+    RevitAgentViewRenderingScope Scope = RevitAgentViewRenderingScope.ActiveView,
+    List<long>? ViewIds = null,
+    List<string>? ViewUniqueIds = null,
+    int MaxViews = 6,
+    int MaxFiltersPerView = 60,
+    int MaxHiddenCategoriesPerView = 40,
+    int MaxLinksPerView = 25,
+    int MaxWorksetsPerView = 40
+);
+
+[ExportTsInterface]
+public record RevitAgentObservedViewState(
+    RevitAgentContextHandle Handle,
+    string ViewType,
+    string Title,
+    int Scale,
+    string? LevelName,
+    string? Discipline,
+    string? DetailLevel,
+    string? DisplayStyle,
+    string? PhaseName,
+    string? PhaseFilterName,
+    string? ViewTemplateName,
+    bool IsTemplate,
+    bool CanBePrinted,
+    bool AreGraphicsOverridesAllowed,
+    bool? CropBoxActive,
+    bool? CropBoxVisible,
+    string? ScopeBoxName,
+    bool? TemporaryHideIsolateActive,
+    bool? PartsVisibilityShowOriginalOnly,
+    RevitAgentPlanViewRangeState? PlanViewRange,
+    RevitAgentView3DState? View3D,
+    int CandidateVisibleElementCount,
+    int ViewOwnedElementCount,
+    List<RevitAgentViewFilterState> Filters,
+    List<RevitAgentHiddenCategoryState> HiddenCategories,
+    List<RevitAgentLinkRenderingState> Links,
+    List<RevitAgentWorksetVisibilityState> Worksets,
+    List<RevitAgentContextProvenance> Provenance
+);
+
+[ExportTsInterface]
+public record RevitAgentPlanViewRangeState(
+    string? TopLevelName,
+    double? TopOffset,
+    string? CutLevelName,
+    double? CutOffset,
+    string? BottomLevelName,
+    double? BottomOffset,
+    string? ViewDepthLevelName,
+    double? ViewDepthOffset
+);
+
+[ExportTsInterface]
+public record RevitAgentView3DState(
+    bool IsPerspective,
+    bool? IsSectionBoxActive,
+    bool? IsLocked,
+    bool? HasSavedOrientation
+);
+
+[ExportTsInterface]
+public record RevitAgentViewFilterState(
+    RevitAgentContextHandle Handle,
+    bool? IsVisible,
+    int? CategoryCount,
+    string? ElementFilterType
+);
+
+[ExportTsInterface]
+public record RevitAgentHiddenCategoryState(
+    RevitAgentContextHandle Handle,
+    string? CategoryType
+);
+
+[ExportTsInterface]
+public record RevitAgentLinkRenderingState(
+    RevitAgentContextHandle Handle,
+    bool? IsHiddenInView,
+    bool? IsLoaded,
+    string? LinkVisibilityType,
+    string? LinkedViewName,
+    string? ObjectStyles,
+    string? ViewFilterType,
+    string? ViewRange,
+    string? NestedLinks,
+    string? PhaseName,
+    string? PhaseFilterName,
+    string? DetailLevel,
+    string? Discipline
+);
+
+[ExportTsInterface]
+public record RevitAgentWorksetVisibilityState(
+    string Name,
+    long Id,
+    string Visibility
+);
+
+[ExportTsInterface]
+public record RevitAgentViewRenderingStateData(
+    RevitAgentContextHandle? ActiveView,
+    List<RevitAgentObservedViewState> ObservedState,
+    List<string> NotInspected,
+    List<string> ApiLimitations,
+    List<string> ConfidenceWarnings,
+    List<string> LikelyInspectionNextSteps,
+    List<RevitDataIssue> Issues
 );

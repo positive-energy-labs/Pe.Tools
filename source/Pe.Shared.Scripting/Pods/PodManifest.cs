@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Product;
 using Pe.Shared.Scripting.Diagnostics;
+using Pe.Shared.Scripting.Execution;
 
 namespace Pe.Shared.Scripting.Pods;
 
@@ -10,15 +11,14 @@ public sealed record PodManifest(
     int SchemaVersion,
     string Id,
     string Name,
+    string Version,
     string? Description,
-    PodRequirements? Requirements,
+    PodOrigin? Origin,
     IReadOnlyList<PodEntrypoint> Entrypoints
 );
 
-public sealed record PodRequirements(
-    string? Notes,
-    IReadOnlyList<string> RevitYears,
-    IReadOnlyList<string> PackageReferences
+public sealed record PodOrigin(
+    string Path
 );
 
 public sealed record PodEntrypoint(
@@ -43,15 +43,14 @@ public static class PodManifestValidator {
         "schemaVersion",
         "id",
         "name",
+        "version",
         "description",
-        "requirements",
+        "origin",
         "entrypoints"
     };
 
-    private static readonly HashSet<string> RequirementsFields = new(StringComparer.Ordinal) {
-        "notes",
-        "revitYears",
-        "packageReferences"
+    private static readonly HashSet<string> OriginFields = new(StringComparer.Ordinal) {
+        "path"
     };
 
     private static readonly HashSet<string> EntrypointFields = new(StringComparer.Ordinal) {
@@ -98,8 +97,9 @@ public static class PodManifestValidator {
             diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, $"pod.json id '{id}' must match workspace key '{normalizedWorkspaceKey}'."));
 
         var name = ReadRequiredString(root, "name", diagnostics);
+        var version = ReadRequiredString(root, "version", diagnostics);
         var description = ReadOptionalString(root, "description", diagnostics);
-        var requirements = ReadRequirements(root, diagnostics);
+        var origin = ReadOrigin(root, diagnostics);
         var entrypoints = ReadEntrypoints(root, diagnostics);
 
         if (diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error))
@@ -110,41 +110,13 @@ public static class PodManifestValidator {
                 schemaVersion!.Value,
                 id!,
                 name!,
+                version!,
                 description,
-                requirements,
+                origin,
                 entrypoints
             ),
             diagnostics
         );
-    }
-
-    public static string NormalizeSourcePath(string sourcePath) {
-        if (Path.IsPathRooted(sourcePath))
-            throw new ArgumentException("Pod entrypoint source paths must be relative.", nameof(sourcePath));
-
-        var normalized = sourcePath.Replace('\\', '/').Trim();
-        if (string.IsNullOrWhiteSpace(normalized))
-            throw new ArgumentException("Pod entrypoint source path is required.", nameof(sourcePath));
-        if (normalized.StartsWith("/", StringComparison.Ordinal) || normalized.EndsWith("/", StringComparison.Ordinal) || normalized.Contains("//", StringComparison.Ordinal))
-            throw new ArgumentException("Pod entrypoint source paths must be safe relative paths.", nameof(sourcePath));
-
-        var segments = normalized.Split('/');
-        if (segments.Length < 2 || !string.Equals(segments[0], ScriptingWorkspaceLayout.SourceDirectoryName, StringComparison.Ordinal))
-            throw new ArgumentException("Pod entrypoint source paths must live under src/.", nameof(sourcePath));
-
-        var invalidSegment = segments.FirstOrDefault(segment =>
-            string.IsNullOrWhiteSpace(segment) ||
-            segment == "." ||
-            segment == ".." ||
-            segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
-        );
-        if (invalidSegment is not null)
-            throw new ArgumentException($"Invalid pod entrypoint source path segment '{invalidSegment}'.", nameof(sourcePath));
-
-        if (!normalized.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("Pod entrypoint source paths must reference .cs files.", nameof(sourcePath));
-
-        return string.Join("/", segments);
     }
 
     private static string? NormalizeWorkspaceKey(string? workspaceKey, List<ScriptDiagnostic> diagnostics) {
@@ -198,47 +170,32 @@ public static class PodManifestValidator {
         return null;
     }
 
-    private static PodRequirements? ReadRequirements(JObject root, List<ScriptDiagnostic> diagnostics) {
-        var token = root["requirements"];
+    private static PodOrigin? ReadOrigin(JObject root, List<ScriptDiagnostic> diagnostics) {
+        var token = root["origin"];
         if (token is null || token.Type == JTokenType.Null)
             return null;
 
         if (token is not JObject obj) {
-            diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, "pod.json field 'requirements' must be an object."));
+            diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, "pod.json field 'origin' must be an object."));
             return null;
         }
 
-        AddUnknownFieldDiagnostics(obj, RequirementsFields, diagnostics, "requirements");
-        var notes = ReadOptionalString(obj, "notes", diagnostics);
-        var revitYears = ReadStringArray(obj, "revitYears", diagnostics);
-        var packageReferences = ReadStringArray(obj, "packageReferences", diagnostics);
-        return new PodRequirements(notes, revitYears, packageReferences);
+        AddUnknownFieldDiagnostics(obj, OriginFields, diagnostics, "origin");
+        var path = ReadRequiredString(obj, "path", diagnostics);
+        if (path is not null && !IsAbsoluteLocalPath(path))
+            diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, "pod.json origin.path must be an absolute local path."));
+
+        return path is null ? null : new PodOrigin(path);
     }
 
-    private static IReadOnlyList<string> ReadStringArray(JObject root, string fieldName, List<ScriptDiagnostic> diagnostics) {
-        var token = root[fieldName];
-        if (token is null || token.Type == JTokenType.Null)
-            return [];
+    private static bool IsAbsoluteLocalPath(string path) {
+        if (Uri.TryCreate(path, UriKind.Absolute, out var uri) && !uri.IsFile)
+            return false;
 
-        if (token is not JArray array) {
-            diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, $"pod.json field '{fieldName}' must be an array of strings."));
-            return [];
-        }
-
-        var values = new List<string>();
-        for (var index = 0; index < array.Count; index++) {
-            var item = array[index];
-            if (item.Type != JTokenType.String) {
-                diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, $"pod.json field '{fieldName}[{index}]' must be a string."));
-                continue;
-            }
-
-            var value = item.Value<string>()?.Trim();
-            if (value is { Length: > 0 })
-                values.Add(value);
-        }
-
-        return values;
+        var root = Path.GetPathRoot(path);
+        return !string.IsNullOrWhiteSpace(root)
+               && !string.Equals(root, Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+               && path.Length > root.Length;
     }
 
     private static IReadOnlyList<PodEntrypoint> ReadEntrypoints(JObject root, List<ScriptDiagnostic> diagnostics) {
@@ -275,7 +232,7 @@ public static class PodManifestValidator {
             var sourcePath = ReadRequiredString(obj, "sourcePath", diagnostics);
             if (sourcePath is not null) {
                 try {
-                    sourcePath = NormalizeSourcePath(sourcePath);
+                    sourcePath = ScriptingSourcePath.NormalizeWorkspaceSourcePath(sourcePath, "Pod entrypoint source path");
                     if (!sourcePaths.Add(sourcePath))
                         diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, $"Duplicate pod entrypoint sourcePath '{sourcePath}'."));
                 } catch (ArgumentException ex) {

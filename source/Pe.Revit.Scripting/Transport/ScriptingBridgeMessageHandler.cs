@@ -122,7 +122,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
             var uiApplication = this.RequireUiApplication();
             var revitVersion = uiApplication.Application.VersionNumber ?? "unknown";
             var targetFramework = RevitRuntimeTargetFramework.Resolve(revitVersion);
-            return this._podArchiveService.Export(request, targetFramework);
+            return this._podArchiveService.Export(request, targetFramework, revitVersion);
         },
         cancellationToken
     );

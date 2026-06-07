@@ -2,8 +2,12 @@ using Newtonsoft.Json.Linq;
 using Pe.Revit.FamilyFoundry;
 using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.DesiredState;
+using Pe.Revit.Global.Services.Aps;
 using Pe.Revit.Global.Utils.Files;
 using Pe.Shared.RevitData;
+using Pe.Shared.StorageRuntime;
+using ParamModel = Pe.Revit.Global.Services.Aps.ParametersApi.Parameters;
+using ParamModelRes = Pe.Revit.Global.Services.Aps.ParametersApi.Parameters.ParametersResult;
 
 namespace Pe.Revit.Tests;
 
@@ -91,6 +95,7 @@ public sealed class DesiredFamilyMigrationProfileTests {
             TestFamilyCategory,
             DesiredMigrationFamilyName);
         Document? savedDocument = null;
+        using var parameterCacheRestore = SeedTestParameterServiceCache();
 
         try {
             SeedFamilyTypesAndLegacyParameter(familyDocument);
@@ -202,6 +207,7 @@ public sealed class DesiredFamilyMigrationProfileTests {
             TestFamilyCategory,
             $"{DesiredMigrationFamilyName}-Project");
         Document? editedFamilyDocument = null;
+        using var parameterCacheRestore = SeedTestParameterServiceCache();
 
         try {
             SeedFamilyTypesAndLegacyParameter(familyDocument);
@@ -275,6 +281,50 @@ public sealed class DesiredFamilyMigrationProfileTests {
             RevitFamilyFixtureHarness.CloseDocument(editedFamilyDocument);
             RevitFamilyFixtureHarness.CloseDocument(familyDocument);
             RevitFamilyFixtureHarness.CloseDocument(projectDocument);
+        }
+    }
+
+    private static IDisposable SeedTestParameterServiceCache() {
+        var cache = StorageClient.Default.Global().State().Json<ParamModel>("parameters-service-cache");
+        var cachePath = ((Pe.Shared.StorageRuntime.Json.JsonReader<ParamModel>)cache).FilePath;
+        var cacheExisted = File.Exists(cachePath);
+        var originalCacheContent = cacheExisted ? File.ReadAllText(cachePath) : null;
+        _ = cache.Write(new ParamModel {
+            Results = [
+                new ParamModelRes {
+                    Id = $"autodesk.revit.parameter:{TestSharedParameterGuid}-1.0.0",
+                    Name = "PE_FF_TestSharedValue",
+                    Description = "Desired migration shared parameter fixture.",
+                    SpecId = SpecTypeId.String.Text.TypeId,
+                    ValueTypeId = SpecTypeId.String.Text.TypeId,
+                    Metadata = [
+                        new ParamModelRes.RawMetadataValue { Id = "isHidden", Value = false },
+                        new ParamModelRes.RawMetadataValue { Id = "instanceTypeAssociation", Value = "TYPE" },
+                        new ParamModelRes.RawMetadataValue {
+                            Id = "group",
+                            Value = new ParamModelRes.ParameterDownloadOpts.MetadataBinding {
+                                Id = GroupTypeId.IdentityData.TypeId
+                            }
+                        }
+                    ]
+                }
+            ]
+        });
+        return new ParameterServiceCacheRestore(cachePath, cacheExisted, originalCacheContent);
+    }
+
+    private sealed class ParameterServiceCacheRestore(
+        string filePath,
+        bool cacheExisted,
+        string? originalCacheContent) : IDisposable {
+        public void Dispose() {
+            if (cacheExisted) {
+                File.WriteAllText(filePath, originalCacheContent ?? string.Empty);
+                return;
+            }
+
+            if (File.Exists(filePath))
+                File.Delete(filePath);
         }
     }
 

@@ -109,6 +109,278 @@ public static class RevitAgentContextCollector {
         );
     }
 
+    public static RevitAgentViewRenderingStateData CollectViewRenderingState(
+        Document document,
+        View? activeView,
+        RevitAgentViewRenderingStateRequest request
+    ) {
+        var issues = new List<RevitDataIssue>();
+        var maxViews = BoundRequestedCount(request.MaxViews, 1, 12, nameof(RevitAgentViewRenderingStateRequest.MaxViews), issues);
+        var maxFilters = BoundRequestedCount(request.MaxFiltersPerView, 0, 100, nameof(RevitAgentViewRenderingStateRequest.MaxFiltersPerView), issues);
+        var maxHiddenCategories = BoundRequestedCount(request.MaxHiddenCategoriesPerView, 0, 100, nameof(RevitAgentViewRenderingStateRequest.MaxHiddenCategoriesPerView), issues);
+        var maxLinks = BoundRequestedCount(request.MaxLinksPerView, 0, 50, nameof(RevitAgentViewRenderingStateRequest.MaxLinksPerView), issues);
+        var maxWorksets = BoundRequestedCount(request.MaxWorksetsPerView, 0, 100, nameof(RevitAgentViewRenderingStateRequest.MaxWorksetsPerView), issues);
+        var visibleRequest = new RevitAgentVisibleContextRequest(
+            Scope: request.Scope == RevitAgentViewRenderingScope.ActiveView
+                ? RevitAgentVisibleContextScope.ActiveViewVisible
+                : RevitAgentVisibleContextScope.ViewReferences,
+            ViewIds: request.ViewIds,
+            ViewUniqueIds: request.ViewUniqueIds,
+            MaxViews: maxViews
+        );
+        var visibleViews = ResolveVisibleContextViews(document, activeView, visibleRequest, maxViews, issues);
+        var observedState = visibleViews
+            .Select(visibleView => CreateObservedViewState(document, visibleView, maxFilters, maxHiddenCategories, maxLinks, maxWorksets, issues))
+            .ToList();
+
+        var activeViewHandle = activeView == null
+            ? null
+            : CreateHandle(document, activeView, RevitAgentContextHandleKind.View, activeView.Title);
+        return new RevitAgentViewRenderingStateData(
+            activeViewHandle,
+            observedState,
+            [
+                "Per-element hidden state and per-element graphic overrides are not exhaustively enumerated; inspect a named/selected element when that is the suspected cause.",
+                "Pixel-level clipping/occlusion, line styles, fill patterns, transparency, depth sorting, and screen display artifacts are not proven by this packet.",
+                "View template parameter-control ownership is not expanded; template name is reported as a likely control surface.",
+                "Linked-model internal category/filter/element visibility is not inspected inside the linked document.",
+                "Design option, room/space containment, tag/symbol annotation placement, and schedule-only visibility rules are outside this view-state packet."
+            ],
+            [
+                "FilteredElementCollector(document, viewId) reports candidate drawn elements and may include elements outside crop/region effects; it is not a pixel renderer.",
+                "Revit API category visibility checks report direct category hidden state only; other mechanisms such as filters, individual hides, phases, worksets, and links can still affect visibility.",
+                "The first view-scoped collector after display changes can trigger Revit geometry rebuild work and may be slower than later reads."
+            ],
+            CreateConfidenceWarnings(observedState),
+            [
+                "If a specific element is missing, resolve or select that element and inspect its category, workset, phase, design option, owner view, and per-view hidden/override state.",
+                "If comparing two views, compare the returned template, phase/filter, discipline/detail/display style, crop/section box, view range, filters, links, and workset deltas before naming a cause.",
+                "If a linked model is involved, inspect link graphics mode plus the linked document/view named by LinkedViewName where available."
+            ],
+            issues
+        );
+    }
+
+    private static RevitAgentObservedViewState CreateObservedViewState(
+        Document document,
+        VisibleContextView visibleView,
+        int maxFilters,
+        int maxHiddenCategories,
+        int maxLinks,
+        int maxWorksets,
+        List<RevitDataIssue> issues
+    ) {
+        var view = visibleView.View;
+        return new RevitAgentObservedViewState(
+            CreateHandle(document, view, RevitAgentContextHandleKind.View, view.Title),
+            view.ViewType.ToString(),
+            view.Title,
+            view.Scale,
+            view.GenLevel?.Name,
+            TryRead(() => view.Discipline.ToString()),
+            TryRead(() => view.DetailLevel.ToString()),
+            TryRead(() => view.DisplayStyle.ToString()),
+            TryReadPhaseName(document, view),
+            TryReadViewParameterElementName(document, view, BuiltInParameter.VIEW_PHASE_FILTER),
+            TryReadViewTemplateName(document, view),
+            view.IsTemplate,
+            view.CanBePrinted,
+            TryRead(() => view.AreGraphicsOverridesAllowed()),
+            TryRead(() => view.CropBoxActive),
+            TryRead(() => view.CropBoxVisible),
+            TryReadScopeBoxName(document, view),
+            TryRead(() => view.IsTemporaryHideIsolateActive()),
+            TryRead(() => view.PartsVisibility == PartsVisibility.ShowOriginalOnly),
+            CreatePlanViewRangeState(document, view),
+            CreateView3DState(view),
+            CountCandidateVisibleElements(document, view, issues),
+            CountViewOwnedElements(document, view, issues),
+            CreateFilterStates(document, view, maxFilters, issues),
+            CreateHiddenCategoryStates(document, view, maxHiddenCategories, issues),
+            CreateLinkStates(document, view, maxLinks, issues),
+            CreateWorksetStates(document, view, maxWorksets, issues),
+            visibleView.Provenance
+        );
+    }
+
+    private static RevitAgentPlanViewRangeState? CreatePlanViewRangeState(Document document, View view) {
+        if (view is not ViewPlan plan)
+            return null;
+        return TryRead(() => {
+            var range = plan.GetViewRange();
+            return new RevitAgentPlanViewRangeState(
+                GetPlanViewRangeLevelName(document, range, PlanViewPlane.TopClipPlane),
+                TryRead(() => range.GetOffset(PlanViewPlane.TopClipPlane)),
+                GetPlanViewRangeLevelName(document, range, PlanViewPlane.CutPlane),
+                TryRead(() => range.GetOffset(PlanViewPlane.CutPlane)),
+                GetPlanViewRangeLevelName(document, range, PlanViewPlane.BottomClipPlane),
+                TryRead(() => range.GetOffset(PlanViewPlane.BottomClipPlane)),
+                GetPlanViewRangeLevelName(document, range, PlanViewPlane.ViewDepthPlane),
+                TryRead(() => range.GetOffset(PlanViewPlane.ViewDepthPlane))
+            );
+        });
+    }
+
+    private static RevitAgentView3DState? CreateView3DState(View view) => view is View3D view3D
+        ? new RevitAgentView3DState(
+            view3D.IsPerspective,
+            TryRead(() => view3D.IsSectionBoxActive),
+            TryRead(() => view3D.IsLocked),
+            null
+        )
+        : null;
+
+    private static List<RevitAgentViewFilterState> CreateFilterStates(Document document, View view, int maxFilters, List<RevitDataIssue> issues) {
+        if (maxFilters == 0 || !(TryRead(() => view.AreGraphicsOverridesAllowed())))
+            return [];
+        var filterIds = TryRead(() => view.GetOrderedFilters().ToList()) ?? [];
+        AddTruncationIssue(issues, "AgentContextViewFiltersTruncated", filterIds.Count, maxFilters, nameof(RevitAgentViewFilterState));
+        return filterIds.Take(maxFilters)
+            .Select(id => document.GetElement(id))
+            .OfType<FilterElement>()
+            .Select(filter => new RevitAgentViewFilterState(
+                CreateHandle(document, filter, RevitAgentContextHandleKind.Element, filter.Name),
+                TryRead(() => view.GetFilterVisibility(filter.Id)),
+                filter is ParameterFilterElement parameterFilter ? TryRead(() => parameterFilter.GetCategories().Count) : null,
+                filter is ParameterFilterElement parameterFilterElement ? TryRead(() => parameterFilterElement.GetElementFilter()?.GetType().Name) : null
+            ))
+            .ToList();
+    }
+
+    private static List<RevitAgentHiddenCategoryState> CreateHiddenCategoryStates(Document document, View view, int maxHiddenCategories, List<RevitDataIssue> issues) {
+        if (maxHiddenCategories == 0)
+            return [];
+        var hidden = document.Settings.Categories
+            .Cast<Category>()
+            .Where(category => category?.Id != null)
+            .Where(category => TryRead(() => view.GetCategoryHidden(category.Id)) == true)
+            .OrderBy(category => category.Name, IgnoreCase)
+            .ToList();
+        AddTruncationIssue(issues, "AgentContextHiddenCategoriesTruncated", hidden.Count, maxHiddenCategories, nameof(RevitAgentHiddenCategoryState));
+        return hidden.Take(maxHiddenCategories)
+            .Select(category => new RevitAgentHiddenCategoryState(
+                new RevitAgentContextHandle(RevitAgentContextHandleKind.Category, document.GetDocumentKey(), category.Id.Value(), null, category.Name),
+                category.CategoryType.ToString()
+            ))
+            .ToList();
+    }
+
+    private static List<RevitAgentLinkRenderingState> CreateLinkStates(Document document, View view, int maxLinks, List<RevitDataIssue> issues) {
+        if (maxLinks == 0)
+            return [];
+        var links = new FilteredElementCollector(document)
+            .OfClass(typeof(RevitLinkInstance))
+            .Cast<RevitLinkInstance>()
+            .OrderBy(link => link.Name, IgnoreCase)
+            .ToList();
+        AddTruncationIssue(issues, "AgentContextLinksTruncated", links.Count, maxLinks, nameof(RevitAgentLinkRenderingState));
+        return links.Take(maxLinks)
+            .Select(link => CreateLinkState(document, view, link))
+            .ToList();
+    }
+
+    private static RevitAgentLinkRenderingState CreateLinkState(Document document, View view, RevitLinkInstance link) {
+        var typeId = link.GetTypeId();
+        using var overrides = TryRead(() => view.GetLinkOverrides(link.Id));
+        var linkedViewId = overrides?.LinkedViewId;
+        return new RevitAgentLinkRenderingState(
+            CreateHandle(document, link, RevitAgentContextHandleKind.Element, link.Name),
+            TryRead(() => link.IsHidden(view)),
+            TryRead(() => RevitLinkType.IsLoaded(document, typeId)),
+            overrides?.LinkVisibilityType.ToString(),
+            linkedViewId != null && linkedViewId != ElementId.InvalidElementId ? document.GetElement(linkedViewId)?.Name : null,
+            overrides?.ObjectStyles.ToString(),
+            overrides?.ViewFilterType.ToString(),
+            overrides?.ViewRange.ToString(),
+            overrides?.NestedLinks.ToString(),
+            TryReadLinkedElementName(document, overrides?.GetPhaseId()),
+            TryReadLinkedElementName(document, overrides?.GetPhaseFilterId()),
+            TryRead(() => overrides?.GetViewDetailLevel().ToString()),
+            TryRead(() => overrides?.GetDiscipline().ToString())
+        );
+    }
+
+    private static List<RevitAgentWorksetVisibilityState> CreateWorksetStates(Document document, View view, int maxWorksets, List<RevitDataIssue> issues) {
+        if (maxWorksets == 0 || !document.IsWorkshared)
+            return [];
+        var worksets = new FilteredWorksetCollector(document)
+            .OfKind(WorksetKind.UserWorkset)
+            .OrderBy(workset => workset.Name, IgnoreCase)
+            .ToList();
+        AddTruncationIssue(issues, "AgentContextWorksetsTruncated", worksets.Count, maxWorksets, nameof(RevitAgentWorksetVisibilityState));
+        return worksets.Take(maxWorksets)
+            .Select(workset => new RevitAgentWorksetVisibilityState(
+                workset.Name,
+                workset.Id.IntegerValue,
+                TryRead(() => view.GetWorksetVisibility(workset.Id).ToString()) ?? "Unresolved"
+            ))
+            .ToList();
+    }
+
+    private static int CountCandidateVisibleElements(Document document, View view, List<RevitDataIssue> issues) {
+        try {
+            return new FilteredElementCollector(document, view.Id)
+                .WhereElementIsNotElementType()
+                .Count();
+        } catch (Exception ex) {
+            issues.Add(new RevitDataIssue("AgentContextCandidateVisibleCollectorFailed", RevitDataIssueSeverity.Warning, ex.Message, TypeName: nameof(FilteredElementCollector)));
+            return 0;
+        }
+    }
+
+    private static int CountViewOwnedElements(Document document, View view, List<RevitDataIssue> issues) {
+        try {
+            return new FilteredElementCollector(document)
+                .OwnedByView(view.Id)
+                .WhereElementIsNotElementType()
+                .Count();
+        } catch (Exception ex) {
+            issues.Add(new RevitDataIssue("AgentContextViewOwnedCollectorFailed", RevitDataIssueSeverity.Warning, ex.Message, TypeName: nameof(FilteredElementCollector)));
+            return 0;
+        }
+    }
+
+    private static List<string> CreateConfidenceWarnings(IReadOnlyList<RevitAgentObservedViewState> observedState) {
+        var warnings = new List<string>();
+        if (observedState.Count == 0)
+            warnings.Add("No inspectable views were resolved, so no rendering state was observed.");
+        if (observedState.Any(view => view.ViewTemplateName != null))
+            warnings.Add("At least one view is template-driven; template-controlled settings may explain visible state but parameter ownership is not expanded here.");
+        if (observedState.Any(view => view.TemporaryHideIsolateActive == true))
+            warnings.Add("Temporary hide/isolate is active in at least one view; this can override normal visibility reasoning.");
+        if (observedState.Any(view => view.Filters.Any(filter => filter.IsVisible == false)))
+            warnings.Add("At least one applied view filter hides matching elements.");
+        if (observedState.Any(view => view.Links.Any(link => link.IsHiddenInView == true || link.IsLoaded == false)))
+            warnings.Add("At least one link is hidden in view or unloaded.");
+        return warnings;
+    }
+
+    private static string? TryReadScopeBoxName(Document document, View view) => TryRead(() => {
+        var parameter = view.get_Parameter(BuiltInParameter.VIEWER_VOLUME_OF_INTEREST_CROP);
+        var id = parameter?.AsElementId();
+        return id != null && id != ElementId.InvalidElementId ? document.GetElement(id)?.Name : null;
+    });
+
+    private static string? TryReadViewParameterElementName(Document document, View view, BuiltInParameter builtInParameter) => TryRead(() => {
+        var parameter = view.get_Parameter(builtInParameter);
+        var id = parameter?.AsElementId();
+        return id != null && id != ElementId.InvalidElementId ? document.GetElement(id)?.Name : null;
+    });
+
+    private static string? GetPlanViewRangeLevelName(Document document, PlanViewRange range, PlanViewPlane plane) {
+        var id = TryRead(() => range.GetLevelId(plane));
+        return id != null && id != ElementId.InvalidElementId ? document.GetElement(id)?.Name : null;
+    }
+
+    private static string? TryReadLinkedElementName(Document document, ElementId? id) =>
+        id != null && id != ElementId.InvalidElementId ? TryRead(() => document.GetElement(id)?.Name) : null;
+
+    private static void AddTruncationIssue(List<RevitDataIssue> issues, string code, int count, int max, string typeName) {
+        if (count <= max)
+            return;
+        issues.Add(new RevitDataIssue(code, RevitDataIssueSeverity.Warning, $"Observed {count} entries; returned first {max}.", TypeName: typeName));
+    }
+
     public static RevitAgentContextResolveData Resolve(
         Document document,
         View? activeView,

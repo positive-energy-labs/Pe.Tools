@@ -89,3 +89,47 @@ public static class GetRevitAgentVisibleContextOperationContract {
             )
         );
 }
+
+
+public static class GetRevitAgentViewRenderingStateOperationContract {
+    public static readonly HostOperationDefinition Definition =
+        HostOperationDefinition.Create<RevitAgentViewRenderingStateRequest, RevitAgentViewRenderingStateData>(
+            "revit.context.view-rendering-state",
+            HostHttpVerb.Post,
+            "/api/revit/context/view-rendering-state",
+            HostExecutionMode.Bridge,
+            "Get Revit Agent View Rendering State",
+            HostOperationAgentMetadata.Create(
+                "revit",
+                "Read a bounded evidence packet for visibility/rendering-affecting state in the active view or explicit views, including explicit limitations and uninspected causes.",
+                new[] { "agent-context", "view-rendering", "visibility", "active-view", "view-references", "filters", "links", "worksets", "view-range", "crop", "template" },
+                requiresBridge: true,
+                requiresActiveDocument: true,
+                supportedActiveDocumentKinds: [RevitActiveDocumentKind.Project],
+                requestExamples: [
+                    RevitDataHostOperationExamples.Example(
+                        "active view rendering evidence",
+                        "Use before diagnosing why something is hidden or why a view looks wrong; report limitations instead of claiming pixel-perfect visibility.",
+                        """
+                        { "scope": "ActiveView", "maxFiltersPerView": 60, "maxHiddenCategoriesPerView": 40, "maxLinksPerView": 25 }
+                        """
+                    ),
+                    RevitDataHostOperationExamples.Example(
+                        "resolved view comparison inputs",
+                        "Use view ids or unique ids returned by revit.resolve.references when comparing likely visibility causes between named views.",
+                        """
+                        { "scope": "ViewReferences", "viewIds": [12345, 67890], "maxViews": 4 }
+                        """
+                    )
+                ],
+                callGuidance: [
+                    "Treat this as evidence, not a final diagnosis: include confidenceWarnings, apiLimitations, and notInspected when answering.",
+                    "Pair with revit.context.visible-summary or element detail calls when the user names a specific category or element."
+                ],
+                relatedOperations: [
+                    new HostOperationRelatedOperation(GetRevitAgentVisibleContextOperationContract.Definition.Key, HostOperationRelationKind.DrillDown, "Use for candidate visible element handles by category."),
+                    new HostOperationRelatedOperation(ResolveRevitAgentContextOperationContract.Definition.Key, HostOperationRelationKind.Preflight, "Resolve named views or sheets before passing explicit view references.")
+                ]
+            )
+        );
+}

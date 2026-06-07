@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Pe.Revit.Global.Services.Aps;
 
@@ -104,8 +105,8 @@ public class ParametersApi {
                                 "instanceTypeAssociation" => this.IsInstance =
                                     item.Value is not string s ||
                                     s.Equals("INSTANCE", StringComparison.OrdinalIgnoreCase),
-                                "categories" => this._categories = item.Value as List<MetadataBinding>,
-                                "group" => this._groupId = (item.Value as MetadataBinding)?.Id,
+                                "categories" => this._categories = ReadMetadataBindings(item.Value),
+                                "group" => this._groupId = ReadMetadataBinding(item.Value)?.Id,
                                 _ => default(object)
                             };
                         }
@@ -113,12 +114,32 @@ public class ParametersApi {
 
                     // Pre-extract GUID text from Parameters Service ID
                     var typeIdParts = parent.Id?.Split(':');
-                    if (typeIdParts?.Length >= 2) {
-                        var parameterPart = typeIdParts[1];
-                        var dashIndex = parameterPart.IndexOf('-');
-                        this._guidText = dashIndex > 0 ? parameterPart[..dashIndex] : parameterPart;
-                    }
+                    if (typeIdParts?.Length >= 2)
+                        this._guidText = TryExtractGuidText(typeIdParts[1]);
                 }
+
+                private static string? TryExtractGuidText(string parameterPart) {
+                    if (Guid.TryParse(parameterPart, out _))
+                        return parameterPart;
+
+                    if (parameterPart.Length >= 36 && Guid.TryParse(parameterPart[..36], out _))
+                        return parameterPart[..36];
+
+                    var dashIndex = parameterPart.IndexOf('-');
+                    return dashIndex > 0 ? parameterPart[..dashIndex] : parameterPart;
+                }
+
+                private static List<MetadataBinding>? ReadMetadataBindings(object? value) => value switch {
+                    List<MetadataBinding> bindings => bindings,
+                    JArray array => array.ToObject<List<MetadataBinding>>(),
+                    _ => null
+                };
+
+                private static MetadataBinding? ReadMetadataBinding(object? value) => value switch {
+                    MetadataBinding binding => binding,
+                    JObject obj => obj.ToObject<MetadataBinding>(),
+                    _ => null
+                };
 
                 public ForgeTypeId GetParameterTypeId() =>
                     this._parameterTypeId ??= new ForgeTypeId(this._parent.Id ?? "");
