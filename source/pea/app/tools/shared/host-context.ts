@@ -1,3 +1,4 @@
+import type { HostActiveDocumentSummary } from "../../generated/host-types/host-active-document-summary.js";
 import { createPeHostClient, resolveHostBaseUrl } from "../../pe-host.js";
 
 const defaultHostContextTimeoutMs = 5_000;
@@ -15,9 +16,7 @@ export async function collectHostContext(
   ]);
 
   return {
-    reachable:
-      probeResult.status === "fulfilled" ||
-      sessionResult.status === "fulfilled",
+    reachable: probeResult.status === "fulfilled" || sessionResult.status === "fulfilled",
     probe:
       probeResult.status === "fulfilled"
         ? {
@@ -41,16 +40,29 @@ export async function collectHostContext(
             activeDocument:
               sessionResult.value.activeDocument == null
                 ? null
-                : {
-                    title: sessionResult.value.activeDocument.title,
-                    key: sessionResult.value.activeDocument.key,
-                    isFamilyDocument:
-                      sessionResult.value.activeDocument.isFamilyDocument,
-                    isWorkshared: sessionResult.value.activeDocument.isWorkshared,
-                    isModelInCloud: sessionResult.value.activeDocument.isModelInCloud,
-                  },
+                : summarizeActiveDocument(sessionResult.value.activeDocument),
           }
         : { error: formatUnknownError(sessionResult.reason) },
+  };
+}
+
+function summarizeActiveDocument(activeDocument: HostActiveDocumentSummary) {
+  return {
+    title: activeDocument.title,
+    key: activeDocument.key,
+    path: activeDocument.path,
+    identityKind: activeDocument.isModelInCloud
+      ? "cloud"
+      : activeDocument.path
+        ? "path"
+        : "unsaved",
+    isFamilyDocument: activeDocument.isFamilyDocument,
+    isWorkshared: activeDocument.isWorkshared,
+    isModelInCloud: activeDocument.isModelInCloud,
+    cloudProjectGuid: activeDocument.cloudProjectGuid,
+    cloudModelGuid: activeDocument.cloudModelGuid,
+    cloudModelUrn: activeDocument.cloudModelUrn,
+    observedAtUnixMs: activeDocument.observedAtUnixMs,
   };
 }
 

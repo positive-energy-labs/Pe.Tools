@@ -30,7 +30,7 @@ public static class ExecuteRevitScriptOperationContract {
             "Execute Revit Script",
             HostOperationAgentMetadata.Create(
                 "scripting",
-                "Execute an inline or workspace-relative C# script in connected Revit. Inline content may be Execute-body statements or a full PeScriptContainer class.",
+                "Execute an inline or workspace-relative C# script in connected Revit. Inline content may be Execute-body statements with optional leading using directives or a full PeScriptContainer class; workspace files are normal C# PeScriptContainer entrypoints.",
                 new[] { "script", "execute", "csharp", "revit" },
                 HostOperationIntent.Mutate,
                 requiresBridge: true,

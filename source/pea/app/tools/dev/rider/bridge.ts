@@ -3,8 +3,7 @@ import { access, readdir, readFile, writeFile } from "node:fs/promises";
 import { delimiter, join, resolve } from "node:path";
 
 export const defaultRiderBridgeBaseUrl = "http://127.0.0.1:63342";
-export const hotReloadSignalPath =
-  "source/Pe.Revit.Global/HotReload/PeHotReloadSignal.cs";
+export const hotReloadSignalPath = "source/Pe.Revit.Global/HotReload/PeHotReloadSignal.cs";
 
 export interface RiderBridgeSyncRequest {
   repoRoot: string;
@@ -139,9 +138,9 @@ export async function runRiderBridgeSyncHelper(
       stderrTail: ok
         ? ""
         : formatRiderBridgeProblems(
-          hotReload,
-          "Rider bridge hot reload did not report all actions invoked",
-        ),
+            hotReload,
+            "Rider bridge hot reload did not report all actions invoked",
+          ),
       artifactPaths,
       json: { ping, hotReload, lane: "RiderBridge", signalStamp },
       runtimeFreshness,
@@ -167,8 +166,7 @@ export async function runRiderBridgeSyncHelper(
       exitCode: 1,
       timedOut: false,
       durationMs,
-      stdoutTail:
-        ping === undefined ? "" : JSON.stringify({ ping, hotReload }, null, 2),
+      stdoutTail: ping === undefined ? "" : JSON.stringify({ ping, hotReload }, null, 2),
       stderrTail: formatUnknownError(error),
       artifactPaths,
       json: {
@@ -189,8 +187,7 @@ export async function runRiderBridgeSyncHelper(
           "Check Rider/Pe.RiderBridge availability, then retry live_rrd_sync or restart RRD before attached proof.",
       },
       proof: proofForRiderBridgeOperation("sync", false, false, hotReload),
-      guidance:
-        "Recover Rider/Pe.RiderBridge or restart RRD before retrying attached proof.",
+      guidance: "Recover Rider/Pe.RiderBridge or restart RRD before retrying attached proof.",
     };
   }
 }
@@ -220,8 +217,7 @@ export function riderBridgeSyncRuntimeFreshness(
   }
 
   const noActiveRrd =
-    hotReload?.restartRecommended === true &&
-    riderDebuggerApplyChangesDisabled(hotReload);
+    hotReload?.restartRecommended === true && riderDebuggerApplyChangesDisabled(hotReload);
   if (noActiveRrd) {
     return {
       verdict: "unavailable",
@@ -251,9 +247,7 @@ export function riderBridgeSyncRuntimeFreshness(
   };
 }
 
-function riderDebuggerApplyChangesDisabled(
-  hotReload: RiderBridgeHotReloadResponse,
-): boolean {
+function riderDebuggerApplyChangesDisabled(hotReload: RiderBridgeHotReloadResponse): boolean {
   return (hotReload.results ?? []).some(
     (result) =>
       result.actionId === "RiderDebuggerApplyEncChagnes" &&
@@ -330,15 +324,27 @@ export async function runRiderBridgeRestartRrdHelper(
       exitCode: ok ? 0 : 1,
       timedOut: false,
       durationMs,
-      stdoutTail: JSON.stringify({ ping, riderLaunch, projectOpenAttempt, restart, fallbackError, restartAttempts }, null, 2),
+      stdoutTail: JSON.stringify(
+        { ping, riderLaunch, projectOpenAttempt, restart, fallbackError, restartAttempts },
+        null,
+        2,
+      ),
       stderrTail: ok
         ? ""
         : formatRiderBridgeProblems(
-          restart,
-          "Rider bridge restart_rrd did not report a launched debug action",
-        ),
+            restart,
+            "Rider bridge restart_rrd did not report a launched debug action",
+          ),
       artifactPaths: [],
-      json: { ping, riderLaunch, projectOpenAttempt, restart, fallbackError, restartAttempts, lane: "RiderBridge" },
+      json: {
+        ping,
+        riderLaunch,
+        projectOpenAttempt,
+        restart,
+        fallbackError,
+        restartAttempts,
+        lane: "RiderBridge",
+      },
       runtimeFreshness: {
         verdict: ok ? "unproven" : "stale",
         loadedGraphVerdict: "unknown",
@@ -347,9 +353,9 @@ export async function runRiderBridgeRestartRrdHelper(
         basis: ok
           ? "Pe.RiderBridge reported a restart/debug action invoked. Revit bridge readiness must be proven separately by host polling."
           : formatRiderBridgeProblems(
-            restart,
-            "Pe.RiderBridge did not report a successful restart/debug action",
-          ),
+              restart,
+              "Pe.RiderBridge did not report a successful restart/debug action",
+            ),
         nextStep: ok
           ? "Poll Pe.Host until the expected Revit bridge/session is reachable, then run an attached behavior/log proof."
           : "Check Rider, plugin install, selected debug configuration, and action availability.",
@@ -378,7 +384,14 @@ export async function runRiderBridgeRestartRrdHelper(
       exitCode: 1,
       timedOut: false,
       durationMs,
-      stdoutTail: ping === undefined && riderLaunch == null && projectOpenAttempt == null ? "" : JSON.stringify({ ping, riderLaunch, projectOpenAttempt, restart, fallbackError, restartAttempts }, null, 2),
+      stdoutTail:
+        ping === undefined && riderLaunch == null && projectOpenAttempt == null
+          ? ""
+          : JSON.stringify(
+              { ping, riderLaunch, projectOpenAttempt, restart, fallbackError, restartAttempts },
+              null,
+              2,
+            ),
       stderrTail: formatUnknownError(error),
       artifactPaths: [],
       json: {
@@ -396,11 +409,13 @@ export async function runRiderBridgeRestartRrdHelper(
         loadedGraphVerdict: "unknown",
         sourceDeltaVerdict: "stale",
         expectedRuntimeDelta: true,
-        basis: "Direct Pe.RiderBridge restart_rrd failed before Rider reported a restart/debug action.",
+        basis:
+          "Direct Pe.RiderBridge restart_rrd failed before Rider reported a restart/debug action.",
         nextStep: "Check Rider/Pe.RiderBridge availability and selected debug configuration.",
       },
       proof: proofForRiderBridgeOperation("restart_rrd", false, false, restart),
-      guidance: "Restart action did not launch through RiderBridge; inspect returned error and Rider/plugin availability.",
+      guidance:
+        "Restart action did not launch through RiderBridge; inspect returned error and Rider/plugin availability.",
     };
   }
 }
@@ -430,11 +445,7 @@ async function invokeRestartRrdWhenReady(request: {
       fallbackError = formatUnknownError(error);
       if (isMissingRestartEndpointError(fallbackError)) {
         try {
-          restart = await invokeRestartFallbackActions(
-            request.bridgeBaseUrl,
-            request.request,
-            30,
-          );
+          restart = await invokeRestartFallbackActions(request.bridgeBaseUrl, request.request, 30);
         } catch (fallbackActionError) {
           const actionError = formatUnknownError(fallbackActionError);
           if (isNoOpenMatchingProjectError(actionError) && projectOpenAttempt == null) {
@@ -454,8 +465,7 @@ async function invokeRestartRrdWhenReady(request: {
             error: actionError,
             projectOpenAttempt,
           });
-          if (!retryable || Date.now() >= deadline)
-            throw new Error(actionError);
+          if (!retryable || Date.now() >= deadline) throw new Error(actionError);
           await delay(2_000);
           continue;
         }
@@ -484,14 +494,12 @@ async function invokeRestartRrdWhenReady(request: {
     }
 
     const retryable = isRetryableRestartReadinessError(fallbackError, restart);
-    const reason = restart?.ok === true
-      ? "Restart/debug action invoked."
-      : restart != null
-        ? formatRiderBridgeProblems(
-          restart,
-          "Rider restart/debug action is not ready yet",
-        )
-        : fallbackError ?? "Rider restart/debug action is not ready yet.";
+    const reason =
+      restart?.ok === true
+        ? "Restart/debug action invoked."
+        : restart != null
+          ? formatRiderBridgeProblems(restart, "Rider restart/debug action is not ready yet")
+          : (fallbackError ?? "Rider restart/debug action is not ready yet.");
     attempts.push({
       attempt,
       retryable,
@@ -551,13 +559,14 @@ async function invokeRestartFallbackActions(
 }
 
 function supportsDirectRunConfigurationRestart(ping: unknown): boolean {
-  if (typeof ping !== "object" || ping == null || !("restartStrategy" in ping))
-    return false;
+  if (typeof ping !== "object" || ping == null || !("restartStrategy" in ping)) return false;
 
   const restartStrategy = (ping as { restartStrategy?: unknown }).restartStrategy;
-  return restartStrategy === "rerun-action-then-debug-run-configuration" ||
+  return (
+    restartStrategy === "rerun-action-then-debug-run-configuration" ||
     restartStrategy === "year-targeted-debug-run-configuration" ||
-    restartStrategy === "canonical-pe-app-debug-run-configuration";
+    restartStrategy === "canonical-pe-app-debug-run-configuration"
+  );
 }
 
 function isMissingRestartEndpointError(message: string): boolean {
@@ -576,13 +585,17 @@ function isRetryableRestartReadinessError(
   if (restart?.ok === true) return false;
 
   const results = restart?.results;
-  return results != null && results.length > 0 && results.every(
-    (result) =>
-      result.ok !== true &&
-      (result.status === "disabled" ||
-        result.status === "missing" ||
-        result.status === "invalid-configuration" ||
-        result.message?.includes("disabled for the current Rider context") === true),
+  return (
+    results != null &&
+    results.length > 0 &&
+    results.every(
+      (result) =>
+        result.ok !== true &&
+        (result.status === "disabled" ||
+          result.status === "missing" ||
+          result.status === "invalid-configuration" ||
+          result.message?.includes("disabled for the current Rider context") === true),
+    )
   );
 }
 
@@ -657,7 +670,8 @@ async function ensureRiderProjectsOpenInNewWindow(): Promise<RiderProjectOpenPol
       inspectedFiles,
       updatedFiles,
       skippedFiles,
-      reason: "APPDATA is not set, so Rider project-open preferences could not be inspected before launch.",
+      reason:
+        "APPDATA is not set, so Rider project-open preferences could not be inspected before launch.",
     };
   }
 
@@ -675,19 +689,15 @@ async function ensureRiderProjectsOpenInNewWindow(): Promise<RiderProjectOpenPol
       inspectedFiles,
       updatedFiles,
       skippedFiles: [{ path: jetBrainsOptionsRoot, reason: formatUnknownError(error) }],
-      reason: "JetBrains settings root could not be read, so Rider project-open preferences could not be inspected before launch.",
+      reason:
+        "JetBrains settings root could not be read, so Rider project-open preferences could not be inspected before launch.",
     };
   }
 
   for (const entry of entries) {
     if (!entry.isDirectory() || !/^Rider\d/.test(entry.name)) continue;
 
-    const settingsPath = join(
-      jetBrainsOptionsRoot,
-      entry.name,
-      "options",
-      "ide.general.xml",
-    );
+    const settingsPath = join(jetBrainsOptionsRoot, entry.name, "options", "ide.general.xml");
     inspectedFiles.push(settingsPath);
 
     let original: string;
@@ -729,9 +739,10 @@ async function ensureRiderProjectsOpenInNewWindow(): Promise<RiderProjectOpenPol
     inspectedFiles,
     updatedFiles,
     skippedFiles,
-    reason: updatedFiles.length > 0
-      ? "Set Rider GeneralSettings.confirmOpenNewProject2=0 so command-line project opens choose a new window instead of showing the same-window/new-window modal."
-      : "Rider GeneralSettings.confirmOpenNewProject2 was already set to open projects in a new window, or no Rider settings file was writable.",
+    reason:
+      updatedFiles.length > 0
+        ? "Set Rider GeneralSettings.confirmOpenNewProject2=0 so command-line project opens choose a new window instead of showing the same-window/new-window modal."
+        : "Rider GeneralSettings.confirmOpenNewProject2 was already set to open projects in a new window, or no Rider settings file was writable.",
   };
 }
 
@@ -745,8 +756,7 @@ async function isRiderProcessRunning(): Promise<boolean> {
         "CSV",
         "/NH",
       ]);
-      if (result.exitCode === 0 && result.stdout.toLowerCase().includes(imageName))
-        return true;
+      if (result.exitCode === 0 && result.stdout.toLowerCase().includes(imageName)) return true;
     }
     return false;
   }
@@ -779,9 +789,7 @@ async function resolveRiderExecutable(): Promise<{
     process.env.LOCALAPPDATA == null
       ? null
       : join(process.env.LOCALAPPDATA, "JetBrains", "Installations"),
-    process.env.ProgramFiles == null
-      ? null
-      : join(process.env.ProgramFiles, "JetBrains"),
+    process.env.ProgramFiles == null ? null : join(process.env.ProgramFiles, "JetBrains"),
     process.env["ProgramFiles(x86)"] == null
       ? null
       : join(process.env["ProgramFiles(x86)"], "JetBrains"),
@@ -820,11 +828,7 @@ async function waitForRiderBridgePing(
   let lastError = "Pe.RiderBridge ping did not run.";
   do {
     try {
-      return await requestRiderBridgeJson(
-        `${bridgeBaseUrl}/pe-tools/ping`,
-        "GET",
-        5,
-      );
+      return await requestRiderBridgeJson(`${bridgeBaseUrl}/pe-tools/ping`, "GET", 5);
     } catch (error) {
       lastError = formatUnknownError(error);
       await delay(2_000);
@@ -843,10 +847,7 @@ async function findExecutableOnPath(name: string): Promise<string | null> {
   return null;
 }
 
-async function findRiderExecutableUnder(
-  root: string,
-  maxDepth: number,
-): Promise<string | null> {
+async function findRiderExecutableUnder(root: string, maxDepth: number): Promise<string | null> {
   const matches: string[] = [];
   await collectRiderExecutables(root, maxDepth, matches);
   matches.sort().reverse();
@@ -878,8 +879,7 @@ async function collectRiderExecutables(
       continue;
     }
 
-    if (entry.isDirectory())
-      await collectRiderExecutables(path, depthRemaining - 1, matches);
+    if (entry.isDirectory()) await collectRiderExecutables(path, depthRemaining - 1, matches);
   }
 }
 
@@ -1007,9 +1007,7 @@ async function requestRiderBridgeJson(
     const text = await response.text();
     const json = text.trim().length > 0 ? JSON.parse(text) : null;
     if (!response.ok)
-      throw new Error(
-        `Rider bridge ${method} ${url} returned HTTP ${response.status}: ${text}`,
-      );
+      throw new Error(`Rider bridge ${method} ${url} returned HTTP ${response.status}: ${text}`);
     return json;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError")
@@ -1030,10 +1028,7 @@ function proofForRiderBridgeOperation(
 ): RiderBridgeSyncResult["proof"] {
   const statuses =
     response?.results
-      ?.map(
-        (result) =>
-          `${result.actionId ?? "unknown"}=${result.status ?? "unknown"}`,
-      )
+      ?.map((result) => `${result.actionId ?? "unknown"}=${result.status ?? "unknown"}`)
       .join(", ") ?? "no action results";
   const label = workflow === "restart_rrd" ? "restart_rrd" : "sync";
   return {
@@ -1077,4 +1072,3 @@ function formatRiderBridgeProblems(
 function formatUnknownError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
-

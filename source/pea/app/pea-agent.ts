@@ -2,13 +2,10 @@ import { Agent } from "@mastra/core/agent";
 import type { RequestContext } from "@mastra/core/request-context";
 import type { AnyWorkspace } from "@mastra/core/workspace";
 import { peaProductTools } from "./tools/pea/tools.js";
-import {
-  defaultPeaAgentModelId,
-  peaAgentInstructions,
-} from "./pea-instructions.js";
-import type { PeaContextProvider } from "./pea-context-seed.js";
+import { defaultPeaAgentModelId, peaAgentInstructions } from "./pea-instructions.js";
 import { createOpenAIResponsesHistoryCompatProcessor } from "./pea-processors.js";
 import { peaRuntimePolicy, type PeaRuntimePolicy } from "./pea-runtime-policy.js";
+import { appendPeaRuntimeContextPrompt } from "./pea-runtime-context.js";
 
 export type PeaModelResolver = (
   modelId: string,
@@ -21,7 +18,7 @@ export type PeaModelResolver = (
 
 export function createPeaAgent(
   policy: PeaRuntimePolicy = peaRuntimePolicy,
-  contextProvider?: PeaContextProvider,
+  resolveModel?: PeaModelResolver,
 ): Agent {
   const processors = policy.openAiResponsesHistoryCompatEnabled
     ? [createOpenAIResponsesHistoryCompatProcessor()]
@@ -31,27 +28,12 @@ export function createPeaAgent(
     id: "pea-agent",
     name: "Pea Revit Agent",
     description: "High-trust Revit/operator agent for Positive Energy tooling.",
-    instructions: async ({ requestContext }) => {
-      if (!contextProvider)
-        return peaAgentInstructions;
-
-      const harness = requestContext.get("harness") as
-        | PeaHarnessContext
-        | undefined;
-      try {
-        const context = await contextProvider({ threadId: harness?.threadId });
-        return `${peaAgentInstructions}\n\n${context}`;
-      } catch (error) {
-        const detail = escapeXml(error instanceof Error ? error.message : String(error));
-        return `${peaAgentInstructions}\n\n<pea-startup-context>\nContext seed unavailable: ${detail}. Use pe_status for fresh host/Revit state.\n</pea-startup-context>`;
-      }
-    },
-    model: createPeaModelArgument(),
+    instructions: ({ requestContext }) =>
+      appendPeaRuntimeContextPrompt(peaAgentInstructions, requestContext),
+    model: createPeaModelArgument(resolveModel),
     tools: peaProductTools,
     workspace: ({ requestContext }) => {
-      const harness = requestContext.get("harness") as
-        | PeaHarnessContext
-        | undefined;
+      const harness = requestContext.get("harness") as PeaHarnessContext | undefined;
       return harness?.workspace;
     },
     inputProcessors: processors,
@@ -62,34 +44,23 @@ export function createPeaAgent(
 
 export function createPeaModelArgument(resolveModel?: PeaModelResolver) {
   return ({ requestContext }: { requestContext: RequestContext }) => {
-    const harness = requestContext.get("harness") as
-      | PeaHarnessContext
-      | undefined;
+    const harness = requestContext.get("harness") as PeaHarnessContext | undefined;
     const state = harness?.getState?.();
     const modelId = state?.currentModelId || defaultPeaAgentModelId;
     return resolveModel
       ? resolveModel(modelId, {
-        thinkingLevel: state?.thinkingLevel,
-        remapForCodexOAuth: true,
-        requestContext,
-      })
+          thinkingLevel: state?.thinkingLevel,
+          remapForCodexOAuth: true,
+          requestContext,
+        })
       : modelId;
   };
 }
 
 interface PeaHarnessContext {
-  threadId?: string;
   workspace?: AnyWorkspace;
   getState?: () => {
     currentModelId?: string;
     thinkingLevel?: "off" | "low" | "medium" | "high" | "xhigh";
   };
-}
-
-function escapeXml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
 }

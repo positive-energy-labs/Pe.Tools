@@ -19,6 +19,7 @@ import {
   ScriptPermissionMode,
 } from "./host-client.js";
 import type { PeaAuthSource } from "./beta-auth-bootstrap.js";
+import type { PeaAcpAgentOptions } from "./acp/pea-acp-agent.js";
 import type {
   HostLogsData,
   HostProbeData,
@@ -32,8 +33,16 @@ import {
   peaCliIdentity,
   productIdentity,
 } from "./generated/product.generated.js";
-import { callHostOperation, searchHostOperationMatches, type HostOperationCallResult } from "./host-operation-runtime.js";
-import { ensurePeaRuntimeDefaults, getPeaRuntimeDefaultsSummary, type PeaRuntimeDefaultsSummary } from "./pea-runtime-defaults.js";
+import {
+  callHostOperation,
+  searchHostOperationMatches,
+  type HostOperationCallResult,
+} from "./host-operation-runtime.js";
+import {
+  ensurePeaRuntimeDefaults,
+  getPeaRuntimeDefaultsSummary,
+  type PeaRuntimeDefaultsSummary,
+} from "./pea-runtime-defaults.js";
 import {
   collectRuntimeLoopContext,
   defaultLiveLoopTimeoutSeconds,
@@ -47,6 +56,18 @@ import {
 interface PeHostStatusSnapshot {
   probe: HostProbeData;
   sessionSummary: HostSessionSummaryData;
+}
+
+interface PeaAcpCliOptions extends PeaAcpAgentOptions {
+  transport: "stdio" | "http";
+  port?: number;
+  token?: string;
+}
+
+interface PeaAgUiCliOptions extends Omit<PeaAcpAgentOptions, "runtime"> {
+  runtime: "pea" | "dev-agent";
+  port?: number;
+  token?: string;
 }
 
 interface PeaPayloadManifest {
@@ -74,30 +95,95 @@ const commonArgs = {
   },
 } as const;
 
-const agentArgs = {
+const acpArgs = {
+  acp: {
+    type: "boolean",
+    description: "Expose this runtime as an ACP agent instead of starting the interactive CLI.",
+    default: false,
+  },
+  agUi: {
+    type: "boolean",
+    description:
+      "Expose this runtime as a native AG-UI HTTP/SSE agent instead of starting the interactive CLI.",
+    default: false,
+  },
+  agUiPort: {
+    type: "string",
+    description:
+      "Port for native AG-UI HTTP/SSE transport. Defaults to 43112; use 0 for an ephemeral port.",
+  },
+  agUiToken: {
+    type: "string",
+    description:
+      "Bearer/query token for native AG-UI HTTP/SSE transport. Defaults to no token for local development.",
+  },
+  acpTransport: {
+    type: "string",
+    description: "ACP transport: stdio or http. Defaults to stdio.",
+    default: "stdio",
+  },
+  acpPort: {
+    type: "string",
+    description: "Port for ACP HTTP transport. Defaults to 43111; use 0 for an ephemeral port.",
+  },
+  acpToken: {
+    type: "string",
+    description: "Bearer/query token for ACP HTTP transport. Defaults to a generated token.",
+  },
+  modelId: {
+    type: "string",
+    description: "Optional model id to force for the ACP-backed runtime.",
+  },
+} as const;
+
+const agentRuntimeArgs = {
   ...commonArgs,
   workspaceRoot: {
     type: "string",
-    description: "Explicit Pea cwd override. Defaults to the product home returned by Pe.Host bootstrap.",
+    description:
+      "Explicit Pea cwd override. Defaults to the product home returned by Pe.Host bootstrap.",
   },
   allowOauthBetaAuth: {
     type: "boolean",
-    description: "Dev escape hatch: allow stored MastraCode Codex OAuth auth instead of requiring OPENAI_API_KEY for beta startup.",
+    description:
+      "Dev escape hatch: allow stored MastraCode Codex OAuth auth instead of requiring OPENAI_API_KEY for beta startup.",
     default: false,
   },
   authSource: {
     type: "string",
-    description: "Model auth source: api-key, oauth, or auto. Defaults to the siloed API-key profile.",
+    description:
+      "Model auth source: api-key, oauth, or auto. Defaults to the siloed API-key profile.",
     default: "api-key",
   },
 } as const;
 
-const devAgentArgs = {
+const agentArgs = {
+  ...agentRuntimeArgs,
+  ...acpArgs,
+} as const;
+
+const devAgentRuntimeArgs = {
   ...commonArgs,
   workspaceRoot: {
     type: "string",
     description: "Repo root for dev-agent. Defaults to the current directory.",
   },
+  allowOauthBetaAuth: {
+    type: "boolean",
+    description:
+      "Dev escape hatch: allow stored MastraCode Codex OAuth auth instead of requiring OPENAI_API_KEY for beta startup.",
+    default: false,
+  },
+  authSource: {
+    type: "string",
+    description: "dev-agent model auth source: api-key, oauth, or auto. Defaults to auto.",
+    default: "auto",
+  },
+} as const;
+
+const devAgentArgs = {
+  ...devAgentRuntimeArgs,
+  ...acpArgs,
 } as const;
 
 const agentCommand = define({
@@ -107,6 +193,10 @@ const agentCommand = define({
   toKebab: true,
   examples: [
     "pea agent",
+    "pea --acp",
+    "pea --ag-ui",
+    "pea agent --acp",
+    "pea agent --ag-ui --ag-ui-port 43112",
     "pea agent --workspace default",
     "pea agent --auth-source api-key",
     "pea agent --auth-source oauth",
@@ -114,6 +204,37 @@ const agentCommand = define({
     "pea agent --workspace-root C:\\Users\\you\\Documents\\Pe.Tools\\workspaces\\default",
   ].join("\n"),
   run: async (ctx) => {
+    if (ctx.values.agUi) {
+      await runPeaAgUiFromCli({
+        runtime: "pea",
+        port: parseOptionalPort(ctx.values.agUiPort, "AG-UI HTTP port"),
+        token: ctx.values.agUiToken,
+        hostBaseUrl: ctx.values.host,
+        workspaceKey: ctx.values.workspace,
+        workspaceRoot: ctx.values.workspaceRoot,
+        modelId: ctx.values.modelId,
+        allowOauthBetaAuth: ctx.values.allowOauthBetaAuth,
+        authSource: parsePeaAuthSource(ctx.values.authSource),
+      });
+      return;
+    }
+
+    if (ctx.values.acp) {
+      await runPeaAcpFromCli({
+        runtime: "pea",
+        transport: parseAcpTransport(ctx.values.acpTransport),
+        port: parseOptionalPort(ctx.values.acpPort, "ACP HTTP port"),
+        token: ctx.values.acpToken,
+        hostBaseUrl: ctx.values.host,
+        workspaceKey: ctx.values.workspace,
+        workspaceRoot: ctx.values.workspaceRoot,
+        modelId: ctx.values.modelId,
+        allowOauthBetaAuth: ctx.values.allowOauthBetaAuth,
+        authSource: parsePeaAuthSource(ctx.values.authSource),
+      });
+      return;
+    }
+
     const { runPeAgent } = await import("./agent.js");
     await runPeAgent({
       hostBaseUrl: ctx.values.host,
@@ -127,19 +248,55 @@ const agentCommand = define({
 
 const devCommand = define({
   name: "dev",
-  description: "Start dev-agent, the MastraCode-based Pe.Tools repo coding agent with Pea black-box feedback tools.",
+  description: "Start dev-agent, the Pe.Tools repo coding agent with Pea black-box feedback tools.",
   args: devAgentArgs,
   toKebab: true,
   examples: [
     "pea dev",
+    "pea dev --acp",
+    "pea dev --ag-ui",
+    "pea dev --acp --model-id openai/gpt-5.5",
     "pea dev --workspace-root C:\\Users\\you\\source\\repos\\Pe.Tools",
   ].join("\n"),
   run: async (ctx) => {
+    if (ctx.values.agUi) {
+      await runPeaAgUiFromCli({
+        runtime: "dev-agent",
+        port: parseOptionalPort(ctx.values.agUiPort, "AG-UI HTTP port"),
+        token: ctx.values.agUiToken,
+        hostBaseUrl: ctx.values.host,
+        workspaceKey: ctx.values.workspace,
+        workspaceRoot: ctx.values.workspaceRoot,
+        modelId: ctx.values.modelId,
+        allowOauthBetaAuth: ctx.values.allowOauthBetaAuth,
+        authSource: parsePeaAuthSource(ctx.values.authSource),
+      });
+      return;
+    }
+
+    if (ctx.values.acp) {
+      await runPeaAcpFromCli({
+        runtime: "dev-agent",
+        transport: parseAcpTransport(ctx.values.acpTransport),
+        port: parseOptionalPort(ctx.values.acpPort, "ACP HTTP port"),
+        token: ctx.values.acpToken,
+        hostBaseUrl: ctx.values.host,
+        workspaceKey: ctx.values.workspace,
+        workspaceRoot: ctx.values.workspaceRoot,
+        modelId: ctx.values.modelId,
+        allowOauthBetaAuth: ctx.values.allowOauthBetaAuth,
+        authSource: parsePeaAuthSource(ctx.values.authSource),
+      });
+      return;
+    }
+
     const { runDevAgent } = await import("./dev-agent.js");
     await runDevAgent({
       hostBaseUrl: ctx.values.host,
       workspaceKey: ctx.values.workspace,
       workspaceRoot: ctx.values.workspaceRoot,
+      allowOauthBetaAuth: ctx.values.allowOauthBetaAuth,
+      authSource: parsePeaAuthSource(ctx.values.authSource),
     });
   },
 });
@@ -151,14 +308,49 @@ const devAgentCommand = define({
   toKebab: true,
   examples: [
     "pea dev-agent",
+    "pea dev-agent --acp",
+    "pea dev-agent --ag-ui",
     "pea dev-agent --workspace-root C:\\Users\\you\\source\\repos\\Pe.Tools",
   ].join("\n"),
   run: async (ctx) => {
+    if (ctx.values.agUi) {
+      await runPeaAgUiFromCli({
+        runtime: "dev-agent",
+        port: parseOptionalPort(ctx.values.agUiPort, "AG-UI HTTP port"),
+        token: ctx.values.agUiToken,
+        hostBaseUrl: ctx.values.host,
+        workspaceKey: ctx.values.workspace,
+        workspaceRoot: ctx.values.workspaceRoot,
+        modelId: ctx.values.modelId,
+        allowOauthBetaAuth: ctx.values.allowOauthBetaAuth,
+        authSource: parsePeaAuthSource(ctx.values.authSource),
+      });
+      return;
+    }
+
+    if (ctx.values.acp) {
+      await runPeaAcpFromCli({
+        runtime: "dev-agent",
+        transport: parseAcpTransport(ctx.values.acpTransport),
+        port: parseOptionalPort(ctx.values.acpPort, "ACP HTTP port"),
+        token: ctx.values.acpToken,
+        hostBaseUrl: ctx.values.host,
+        workspaceKey: ctx.values.workspace,
+        workspaceRoot: ctx.values.workspaceRoot,
+        modelId: ctx.values.modelId,
+        allowOauthBetaAuth: ctx.values.allowOauthBetaAuth,
+        authSource: parsePeaAuthSource(ctx.values.authSource),
+      });
+      return;
+    }
+
     const { runDevAgent } = await import("./dev-agent.js");
     await runDevAgent({
       hostBaseUrl: ctx.values.host,
       workspaceKey: ctx.values.workspace,
       workspaceRoot: ctx.values.workspaceRoot,
+      allowOauthBetaAuth: ctx.values.allowOauthBetaAuth,
+      authSource: parsePeaAuthSource(ctx.values.authSource),
     });
   },
 });
@@ -211,9 +403,8 @@ const hostLogsCommand = define({
   examples: ["pea host logs", "pea host logs --target revit --tail 50"].join("\n"),
   run: async (ctx) => {
     const hostBaseUrl = resolveHostBaseUrl(ctx.values.host);
-    const logs = await callPeHost(
-      hostBaseUrl,
-      () => createPeHostClient(hostBaseUrl).host.getLogs({
+    const logs = await callPeHost(hostBaseUrl, () =>
+      createPeHostClient(hostBaseUrl).host.getLogs({
         target: parseLogTarget(ctx.values.target),
         tailLineCount: ctx.values.tail,
       }),
@@ -235,7 +426,8 @@ const operationSearchArgs = {
   },
   domain: {
     type: "string",
-    description: "Optional exact top-level domain filter, such as revit, host, settings, script, or aps.",
+    description:
+      "Optional exact top-level domain filter, such as revit, host, settings, script, or aps.",
   },
   intent: {
     type: "string",
@@ -248,7 +440,8 @@ const operationSearchArgs = {
   },
   verbosity: {
     type: "string",
-    description: "Output size: compact, hints, or full. Use full with --json only when full shapes/routes are needed.",
+    description:
+      "Output size: compact, hints, or full. Use full with --json only when full shapes/routes are needed.",
     default: "compact",
   },
   visibility: {
@@ -289,11 +482,12 @@ function runOperationSearch(values: {
 
 const hostOperationsCommand = define({
   name: "operations",
-  description: "List generated public Pe.Host operations available to the agent, including layer/domain/cost/result-grain metadata.",
+  description:
+    "List generated public Pe.Host operations available to the agent, including layer/domain/cost/result-grain metadata.",
   args: operationSearchArgs,
   examples: [
     "pea host operations",
-    "pea host operations --query \"loaded families\"",
+    'pea host operations --query "loaded families"',
     "pea host operations --domain revit --intent Read",
   ].join("\n"),
   run: (ctx) => runOperationSearch(ctx.values),
@@ -304,8 +498,8 @@ const hostOperationSearchCommand = define({
   description: "Search generated public Pe.Host operations by user intent and operation metadata.",
   args: operationSearchArgs,
   examples: [
-    "pea host operation search --query \"this view\"",
-    "pea host operation search --query \"parameter presence\" --json",
+    'pea host operation search --query "this view"',
+    'pea host operation search --query "parameter presence" --json',
   ].join("\n"),
   run: (ctx) => runOperationSearch(ctx.values),
 });
@@ -317,7 +511,8 @@ const hostOperationCallCommand = define({
     host: commonArgs.host,
     key: {
       type: "string",
-      description: "Host operation key, such as revit.context.summary, revit.resolve.references, or settings.document.validate.",
+      description:
+        "Host operation key, such as revit.context.summary, revit.resolve.references, or settings.document.validate.",
     },
     requestJson: {
       type: "string",
@@ -325,7 +520,8 @@ const hostOperationCallCommand = define({
     },
     verbosity: {
       type: "string",
-      description: "Successful-call metadata size: compact, hints, or full. Failures always include full metadata.",
+      description:
+        "Successful-call metadata size: compact, hints, or full. Failures always include full metadata.",
       default: "compact",
     },
     json: {
@@ -337,11 +533,10 @@ const hostOperationCallCommand = define({
   toKebab: true,
   examples: [
     "pea host operation call --key revit.context.summary --json",
-    "pea host operation call --key revit.resolve.references --request-json '{\"referenceText\":\"this view\",\"maxResults\":5}' --json",
+    'pea host operation call --key revit.resolve.references --request-json \'{"referenceText":"this view","maxResults":5}\' --json',
   ].join("\n"),
   run: async (ctx) => {
-    if (!ctx.values.key)
-      throw new Error("Provide --key <operation-key>.");
+    if (!ctx.values.key) throw new Error("Provide --key <operation-key>.");
 
     const hostBaseUrl = resolveHostBaseUrl(ctx.values.host);
     const result = await callHostOperation(
@@ -353,14 +548,12 @@ const hostOperationCallCommand = define({
 
     if (ctx.values.json) {
       console.log(JSON.stringify(result, null, 2));
-      if (!result.ok)
-        process.exitCode = 1;
+      if (!result.ok) process.exitCode = 1;
       return;
     }
 
     writeOperationCallResult(result);
-    if (!result.ok)
-      process.exitCode = 1;
+    if (!result.ok) process.exitCode = 1;
   },
 });
 
@@ -368,7 +561,7 @@ const hostOperationCommand = define({
   name: "operation",
   description: "Search and call generated public Pe.Host operations.",
   examples: [
-    "pea host operation search --query \"schedule fields\"",
+    'pea host operation search --query "schedule fields"',
     "pea host operation call --key revit.context.summary --json",
   ].join("\n"),
   subCommands: {
@@ -386,7 +579,7 @@ const hostCommand = define({
   examples: [
     "pea host status",
     "pea host logs --target revit --tail 50",
-    "pea host operations --query \"active document\"",
+    'pea host operations --query "active document"',
   ].join("\n"),
   subCommands: {
     status: hostStatusCommand,
@@ -401,7 +594,8 @@ const hostCommand = define({
 
 const scriptExecuteCommand = define({
   name: "execute",
-  description: "Execute a C# Revit script through Pe.Host. Inline content may be Execute-body statements or a full PeScriptContainer class. Loose workspaces compile only the requested file; pod.json workspaces compile all src and require a declared entrypoint.",
+  description:
+    "Execute a C# Revit script through Pe.Host. Inline content may be Execute-body statements with optional leading using directives or a full PeScriptContainer class. Workspace files are normal C# PeScriptContainer entrypoints; loose workspaces compile only the requested file, and pod.json workspaces compile all src and require a declared entrypoint.",
   args: {
     ...commonArgs,
     file: {
@@ -415,11 +609,13 @@ const scriptExecuteCommand = define({
     },
     scriptContent: {
       type: "string",
-      description: "Inline script content. Prefer Execute-body statements such as WriteLine(\"...\"); a full PeScriptContainer class is also allowed.",
+      description:
+        'Inline script content. Prefer Execute-body statements such as WriteLine("..."); optional leading using directives are allowed. A full PeScriptContainer class is also allowed.',
     },
     sourcePath: {
       type: "string",
-      description: "Workspace-relative source path to execute. In loose workspaces only this file compiles; in Pod mode it must be declared in pod.json and all src/**/*.cs compiles.",
+      description:
+        "Workspace-relative source path to execute. In loose workspaces only this file compiles; in Pod mode it must be declared in pod.json and all src/**/*.cs compiles.",
     },
     sourceName: {
       type: "string",
@@ -451,14 +647,14 @@ const scriptExecuteCommand = define({
       stdin: ctx.values.stdin,
       scriptContent: ctx.values.scriptContent,
     });
-    const isWorkspacePath = ctx.values.sourcePath != null && ctx.values.sourcePath.trim().length > 0;
+    const isWorkspacePath =
+      ctx.values.sourcePath != null && ctx.values.sourcePath.trim().length > 0;
 
     if (!scriptContent && !isWorkspacePath)
       throw new Error("Provide --file, --stdin, --script-content, or --source-path.");
 
-    const result = await callPeHost(
-      hostBaseUrl,
-      () => createPeHostClient(hostBaseUrl).scripting.execute({
+    const result = await callPeHost(hostBaseUrl, () =>
+      createPeHostClient(hostBaseUrl).scripting.execute({
         workspaceKey: ctx.values.workspace,
         sourceKind: isWorkspacePath
           ? ScriptExecutionSourceKind.WorkspacePath
@@ -478,10 +674,8 @@ const scriptExecuteCommand = define({
     console.log(`status    ${result.status}`);
     console.log(`execution ${result.executionId}`);
     console.log(`revit     ${result.revitVersion}`);
-    if (result.containerTypeName)
-      console.log(`container ${result.containerTypeName}`);
-    if (result.output)
-      console.log(result.output.trimEnd());
+    if (result.containerTypeName) console.log(`container ${result.containerTypeName}`);
+    if (result.output) console.log(result.output.trimEnd());
     for (const diagnostic of result.diagnostics)
       console.error(`${diagnostic.severity} ${diagnostic.stage}: ${diagnostic.message}`);
   },
@@ -504,12 +698,13 @@ const scriptBootstrapCommand = define({
     },
   },
   toKebab: true,
-  examples: ["pea script bootstrap", "pea script bootstrap --workspace default --no-sample"].join("\n"),
+  examples: ["pea script bootstrap", "pea script bootstrap --workspace default --no-sample"].join(
+    "\n",
+  ),
   run: async (ctx) => {
     const hostBaseUrl = resolveHostBaseUrl(ctx.values.host);
-    const bootstrap = await callPeHost(
-      hostBaseUrl,
-      () => createPeHostClient(hostBaseUrl).scripting.bootstrapWorkspace({
+    const bootstrap = await callPeHost(hostBaseUrl, () =>
+      createPeHostClient(hostBaseUrl).scripting.bootstrapWorkspace({
         workspaceKey: ctx.values.workspace,
         createSampleScript: !ctx.values.noSample,
       }),
@@ -530,7 +725,8 @@ const scriptBootstrapCommand = define({
 
 const scriptPodImportCommand = define({
   name: "import",
-  description: "Import a pod.json-backed scripting workspace from a Pod zip archive. Fails if the target workspace already exists.",
+  description:
+    "Import a pod.json-backed scripting workspace from a Pod zip archive. Fails if the target workspace already exists.",
   args: {
     host: commonArgs.host,
     archive: {
@@ -554,13 +750,11 @@ const scriptPodImportCommand = define({
   ].join("\n"),
   run: async (ctx) => {
     const archivePath = firstNonBlank(ctx.values.archive);
-    if (!archivePath)
-      throw new Error("Provide --archive <path.zip>.");
+    if (!archivePath) throw new Error("Provide --archive <path.zip>.");
 
     const hostBaseUrl = resolveHostBaseUrl(ctx.values.host);
-    const result = await callPeHost(
-      hostBaseUrl,
-      () => createPeHostClient(hostBaseUrl).scripting.importPod({
+    const result = await callPeHost(hostBaseUrl, () =>
+      createPeHostClient(hostBaseUrl).scripting.importPod({
         archivePath,
         workspaceKey: firstNonBlank(ctx.values.workspace),
       }),
@@ -577,7 +771,8 @@ const scriptPodImportCommand = define({
 
 const scriptPodExportCommand = define({
   name: "export",
-  description: "Export a pod.json-backed scripting workspace as a portable source-first Pod zip archive.",
+  description:
+    "Export a pod.json-backed scripting workspace as a portable source-first Pod zip archive.",
   args: {
     ...commonArgs,
     output: {
@@ -597,13 +792,11 @@ const scriptPodExportCommand = define({
   ].join("\n"),
   run: async (ctx) => {
     const archivePath = firstNonBlank(ctx.values.output);
-    if (!archivePath)
-      throw new Error("Provide --output <path.zip>.");
+    if (!archivePath) throw new Error("Provide --output <path.zip>.");
 
     const hostBaseUrl = resolveHostBaseUrl(ctx.values.host);
-    const result = await callPeHost(
-      hostBaseUrl,
-      () => createPeHostClient(hostBaseUrl).scripting.exportPod({
+    const result = await callPeHost(hostBaseUrl, () =>
+      createPeHostClient(hostBaseUrl).scripting.exportPod({
         workspaceKey: ctx.values.workspace,
         archivePath,
       }),
@@ -620,7 +813,8 @@ const scriptPodExportCommand = define({
 
 const scriptCommand = define({
   name: "script",
-  description: "Bootstrap, execute, import, and export Pe.Revit scripting workspaces and Pods through Pe.Host.",
+  description:
+    "Bootstrap, execute, import, and export Pe.Revit scripting workspaces and Pods through Pe.Host.",
   examples: [
     "pea script bootstrap",
     "pea script execute --source-path src\\SampleScript.cs",
@@ -670,10 +864,7 @@ const liveStatusCommand = define({
     },
   },
   toKebab: true,
-  examples: [
-    "pea live status",
-    "pea live status --log-tail 50 --json",
-  ].join("\n"),
+  examples: ["pea live status", "pea live status --log-tail 50 --json"].join("\n"),
   run: async (ctx) => {
     const status = await collectRuntimeLoopContext({
       hostBaseUrl: ctx.values.host,
@@ -718,10 +909,9 @@ const liveSyncCommand = define({
     },
   },
   toKebab: true,
-  examples: [
-    "pea live sync",
-    "pea live sync --rider-bridge-base-url http://127.0.0.1:63342",
-  ].join("\n"),
+  examples: ["pea live sync", "pea live sync --rider-bridge-base-url http://127.0.0.1:63342"].join(
+    "\n",
+  ),
   run: async (ctx) => {
     const result = await syncLiveRrd({
       riderBridgeBaseUrl: ctx.values.riderBridgeBaseUrl,
@@ -731,14 +921,12 @@ const liveSyncCommand = define({
 
     if (ctx.values.json) {
       console.log(JSON.stringify(result, null, 2));
-      if (!result.ok)
-        process.exitCode = 1;
+      if (!result.ok) process.exitCode = 1;
       return;
     }
 
     writeWorkflowResult(result);
-    if (!result.ok)
-      process.exitCode = 1;
+    if (!result.ok) process.exitCode = 1;
   },
 });
 
@@ -772,7 +960,8 @@ const liveRestartCommand = define({
     },
     readinessLevel: {
       type: "string",
-      description: "Readiness level: BridgeConnected, ModulesLoaded, AnyDocumentOpen, or ActiveDocumentReady.",
+      description:
+        "Readiness level: BridgeConnected, ModulesLoaded, AnyDocumentOpen, or ActiveDocumentReady.",
       default: "ModulesLoaded",
     },
     openDocumentPath: {
@@ -795,7 +984,8 @@ const liveRestartCommand = define({
     },
     includeCloudRecentDocuments: {
       type: "boolean",
-      description: "Allow cloud recent-document matches during name resolution. Local files are still the only opener target.",
+      description:
+        "Allow cloud recent-document matches during name resolution. Local files are still the only opener target.",
       default: false,
     },
     noOpenDocument: {
@@ -850,25 +1040,19 @@ const liveRestartCommand = define({
 
     if (ctx.values.json) {
       console.log(JSON.stringify(result, null, 2));
-      if (!result.ok)
-        process.exitCode = 1;
+      if (!result.ok) process.exitCode = 1;
       return;
     }
 
     writeWorkflowResult(result);
-    if (!result.ok)
-      process.exitCode = 1;
+    if (!result.ok) process.exitCode = 1;
   },
 });
 
 const liveCommand = define({
   name: "live",
   description: "Inspect and manage the live Rider/Revit RRD loop.",
-  examples: [
-    "pea live status",
-    "pea live sync",
-    "pea live restart",
-  ].join("\n"),
+  examples: ["pea live status", "pea live sync", "pea live restart"].join("\n"),
   subCommands: {
     status: liveStatusCommand,
     sync: liveSyncCommand,
@@ -913,8 +1097,7 @@ const runtimeUpdateCommand = define({
     },
   },
   run: async (ctx) => {
-    if (!ctx.values.manifest)
-      throw new Error("Provide --manifest <path-or-url>.");
+    if (!ctx.values.manifest) throw new Error("Provide --manifest <path-or-url>.");
 
     const result = await updatePeaRuntime(ctx.values.manifest);
     console.log(`installed ${result.version}`);
@@ -945,7 +1128,8 @@ const configDefaultsCommand = define({
     ...commonArgs,
     workspaceRoot: {
       type: "string",
-      description: "Explicit product/workbench root. Avoids asking Pe.Host to bootstrap the scripting workspace.",
+      description:
+        "Explicit product/workbench root. Avoids asking Pe.Host to bootstrap the scripting workspace.",
     },
     write: {
       type: "boolean",
@@ -988,10 +1172,7 @@ const configDefaultsCommand = define({
 const configCommand = define({
   name: "config",
   description: "Inspect Pea agent configuration paths and default posture.",
-  examples: [
-    "pea config defaults",
-    "pea config defaults --write --json",
-  ].join("\n"),
+  examples: ["pea config defaults", "pea config defaults --write --json"].join("\n"),
   subCommands: {
     defaults: configDefaultsCommand,
   },
@@ -1002,8 +1183,13 @@ const configCommand = define({
 
 const entryCommand = define({
   name: "pea",
-  description: "Pea CLI. `pea agent` starts the deployed Revit/operator workbench; `pea dev` starts the repo coding agent.",
+  description:
+    "Pea CLI. `pea agent` starts the deployed Revit/operator workbench; `pea dev` starts the repo coding agent.",
+  args: agentArgs,
+  toKebab: true,
   examples: [
+    "pea --acp",
+    "pea --ag-ui",
     "pea agent",
     "pea dev",
     "pea host status",
@@ -1014,27 +1200,69 @@ const entryCommand = define({
     "pea script execute --source-path src\\SampleScript.cs",
     "pea script export --workspace panel-audit --output .\\panel-audit.zip",
   ].join("\n"),
-  run: () => {
-    console.log("Run `pea --help` to list commands. Use `pea agent` for deployed Pea; use `pea dev` only for Pe.Tools repo coding.");
+  run: async (ctx) => {
+    if (ctx.values.agUi) {
+      await runPeaAgUiFromCli({
+        runtime: "pea",
+        port: parseOptionalPort(ctx.values.agUiPort, "AG-UI HTTP port"),
+        token: ctx.values.agUiToken,
+        hostBaseUrl: ctx.values.host,
+        workspaceKey: ctx.values.workspace,
+        workspaceRoot: ctx.values.workspaceRoot,
+        modelId: ctx.values.modelId,
+        allowOauthBetaAuth: ctx.values.allowOauthBetaAuth,
+        authSource: parsePeaAuthSource(ctx.values.authSource),
+      });
+      return;
+    }
+
+    if (ctx.values.acp) {
+      await runPeaAcpFromCli({
+        runtime: "pea",
+        transport: parseAcpTransport(ctx.values.acpTransport),
+        port: parseOptionalPort(ctx.values.acpPort, "ACP HTTP port"),
+        token: ctx.values.acpToken,
+        hostBaseUrl: ctx.values.host,
+        workspaceKey: ctx.values.workspace,
+        workspaceRoot: ctx.values.workspaceRoot,
+        modelId: ctx.values.modelId,
+        allowOauthBetaAuth: ctx.values.allowOauthBetaAuth,
+        authSource: parsePeaAuthSource(ctx.values.authSource),
+      });
+      return;
+    }
+
+    console.log(
+      "Run `pea --help` to list commands. Use `pea --acp` for ACP stdio; add `--acp-transport http` for ACP HTTP/SSE.",
+    );
   },
 });
 
 try {
-  await cli(normalizeCliArgs(process.argv.slice(2)), entryCommand, {
-    name: "pea",
-    version: "0.1.0",
-    description: `Pea CLI. Pea operator defaults: host=${defaultHostBaseUrl}, workspace=${defaultWorkspaceKey}. dev-agent is repo-only.`,
-    subCommands: {
-      agent: agentCommand,
-      dev: devCommand,
-      "dev-agent": devAgentCommand,
-      config: configCommand,
-      host: hostCommand,
-      live: liveCommand,
-      runtime: runtimeCommand,
-      script: scriptCommand,
-    },
-  });
+  const args = normalizeCliArgs(process.argv.slice(2));
+  const acpOptions = parseAcpOptions(args);
+  const agUiOptions = parseAgUiOptions(args);
+  if (agUiOptions) {
+    await runPeaAgUiFromCli(agUiOptions);
+  } else if (acpOptions) {
+    await runPeaAcpFromCli(acpOptions);
+  } else {
+    await cli(args, entryCommand, {
+      name: "pea",
+      version: "0.1.0",
+      description: `Pea CLI. Pea operator defaults: host=${defaultHostBaseUrl}, workspace=${defaultWorkspaceKey}. dev-agent is repo-only.`,
+      subCommands: {
+        agent: agentCommand,
+        dev: devCommand,
+        "dev-agent": devAgentCommand,
+        config: configCommand,
+        host: hostCommand,
+        live: liveCommand,
+        runtime: runtimeCommand,
+        script: scriptCommand,
+      },
+    });
+  }
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   console.error(message);
@@ -1046,12 +1274,10 @@ async function resolveProductHomeForConfig(
   workspaceKey: string,
   workspaceRoot: string | undefined,
 ): Promise<string> {
-  if (workspaceRoot?.trim())
-    return resolve(workspaceRoot.trim());
+  if (workspaceRoot?.trim()) return resolve(workspaceRoot.trim());
 
-  const bootstrap = await callPeHost(
-    hostBaseUrl,
-    () => createPeHostClient(hostBaseUrl).scripting.bootstrapWorkspace({
+  const bootstrap = await callPeHost(hostBaseUrl, () =>
+    createPeHostClient(hostBaseUrl).scripting.bootstrapWorkspace({
       workspaceKey,
       createSampleScript: false,
     }),
@@ -1067,10 +1293,18 @@ function writePeaDefaultsSummary(summary: PeaRuntimeDefaultsSummary): void {
   console.log(`observer  ${summary.observerModelId}`);
   console.log(`reflector ${summary.reflectorModelId}`);
   console.log(`goal      judge=${summary.goalJudgeModelId} maxTurns=${summary.goalMaxTurns}`);
-  console.log(`om        observe=${summary.observationThreshold} reflect=${summary.reflectionThreshold}`);
-  console.log(`ui        theme=${summary.theme} quiet=${summary.quietMode} previewLines=${summary.quietModeMaxToolPreviewLines}`);
-  console.log(`runtime   configDir=${summary.policy.configDir} mcpEnabled=${summary.policy.mcpEnabled}`);
-  console.log(`cache     promptRequired=${summary.policy.promptCachingRequired} openaiResponsesHistoryCompat=${summary.policy.openAiResponsesHistoryCompatEnabled}`);
+  console.log(
+    `om        observe=${summary.observationThreshold} reflect=${summary.reflectionThreshold}`,
+  );
+  console.log(
+    `ui        theme=${summary.theme} quiet=${summary.quietMode} previewLines=${summary.quietModeMaxToolPreviewLines}`,
+  );
+  console.log(
+    `runtime   configDir=${summary.policy.configDir} mcpEnabled=${summary.policy.mcpEnabled}`,
+  );
+  console.log(
+    `cache     promptRequired=${summary.policy.promptCachingRequired} openaiResponsesHistoryCompat=${summary.policy.openAiResponsesHistoryCompatEnabled}`,
+  );
 }
 
 async function getPeaRuntimeStatus(): Promise<{
@@ -1084,8 +1318,12 @@ async function getPeaRuntimeStatus(): Promise<{
   const currentVersionPath = join(peaRoot, peaCliIdentity.currentVersionFileName);
   const activeVersion = await readOptionalText(currentVersionPath);
   const normalizedVersion = activeVersion?.trim() || null;
-  const activeVersionRoot = normalizedVersion ? join(peaRoot, peaCliIdentity.versionsDirectoryName, normalizedVersion) : null;
-  const manifestPath = activeVersionRoot ? join(activeVersionRoot, peaCliIdentity.payloadManifestFileName) : null;
+  const activeVersionRoot = normalizedVersion
+    ? join(peaRoot, peaCliIdentity.versionsDirectoryName, normalizedVersion)
+    : null;
+  const manifestPath = activeVersionRoot
+    ? join(activeVersionRoot, peaCliIdentity.payloadManifestFileName)
+    : null;
   return {
     peaRoot,
     currentVersionPath,
@@ -1119,7 +1357,11 @@ async function updatePeaRuntime(manifestRef: string): Promise<{
   await rm(versionRoot, { recursive: true, force: true });
   await mkdir(tempRoot, { recursive: true });
   await extractZip(archivePath, tempRoot);
-  await writeFile(join(tempRoot, peaCliIdentity.payloadManifestFileName), `${JSON.stringify(manifest, null, 2)}\n`, "utf-8");
+  await writeFile(
+    join(tempRoot, peaCliIdentity.payloadManifestFileName),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    "utf-8",
+  );
   await rename(tempRoot, versionRoot);
 
   const currentVersionPath = join(peaRoot, peaCliIdentity.currentVersionFileName);
@@ -1205,10 +1447,8 @@ async function runProcess(fileName: string, args: string[]): Promise<void> {
     const child = spawn(fileName, args, { stdio: "inherit" });
     child.on("error", reject);
     child.on("exit", (code) => {
-      if (code === 0)
-        resolvePromise();
-      else
-        reject(new Error(`${fileName} exited with code ${code}.`));
+      if (code === 0) resolvePromise();
+      else reject(new Error(`${fileName} exited with code ${code}.`));
     });
   });
 }
@@ -1237,15 +1477,14 @@ async function resolveScriptContent(options: {
   stdin?: boolean;
   scriptContent?: string;
 }): Promise<string | undefined> {
-  const sources = [options.file, options.stdin ? "stdin" : undefined, options.scriptContent]
-    .filter((value) => value != null && String(value).trim().length > 0);
+  const sources = [options.file, options.stdin ? "stdin" : undefined, options.scriptContent].filter(
+    (value) => value != null && String(value).trim().length > 0,
+  );
   if (sources.length > 1)
     throw new Error("Provide only one of --file, --stdin, or --script-content.");
 
-  if (options.file)
-    return readFile(options.file, "utf-8");
-  if (options.stdin)
-    return readStdin();
+  if (options.file) return readFile(options.file, "utf-8");
+  if (options.stdin) return readStdin();
   return options.scriptContent;
 }
 
@@ -1268,8 +1507,7 @@ async function getHostStatus(hostBaseUrl: string): Promise<PeHostStatusSnapshot>
 }
 
 function parseOperationIntent(value: string | undefined): "Read" | "Mutate" | undefined {
-  if (!value)
-    return undefined;
+  if (!value) return undefined;
 
   switch (value.toLowerCase()) {
     case "read":
@@ -1283,8 +1521,7 @@ function parseOperationIntent(value: string | undefined): "Read" | "Mutate" | un
 }
 
 function parsePeaAuthSource(value: string | undefined): PeaAuthSource {
-  if (!value)
-    return "api-key";
+  if (!value) return "api-key";
 
   switch (value.toLowerCase()) {
     case "auto":
@@ -1300,9 +1537,122 @@ function parsePeaAuthSource(value: string | undefined): PeaAuthSource {
   }
 }
 
-function parseOperationVisibility(value: string | undefined): "DefaultVisible" | "EscalationVisible" | "ExpertOnly" | undefined {
-  if (!value)
-    return undefined;
+async function runPeaAcpFromCli(options: PeaAcpCliOptions): Promise<void> {
+  const { transport, port, token, ...agentOptions } = options;
+  if (transport === "http") {
+    const { runPeaAcpHttpAgent } = await import("./acp/pea-acp-http-agent.js");
+    await runPeaAcpHttpAgent({ ...agentOptions, port, token });
+    return;
+  }
+
+  const { runPeaAcpAgent } = await import("./acp/pea-acp-agent.js");
+  await runPeaAcpAgent(agentOptions);
+}
+
+async function runPeaAgUiFromCli(options: PeaAgUiCliOptions): Promise<void> {
+  const { PeaAgUiHttpAgent } = await import("./agui/pea-agui-agent.js");
+  const agent = new PeaAgUiHttpAgent(options);
+  const info = await agent.start();
+  console.log(`Pea AG-UI (${options.runtime}) listening at ${info.runUrl}`);
+  if (info.token) console.log(`AG-UI token: ${info.token}`);
+  await new Promise<void>(() => undefined);
+}
+
+function parseAcpOptions(args: string[]): PeaAcpCliOptions | null {
+  if (args.includes("--help") || args.includes("-h")) return null;
+
+  const command = args[0];
+  const explicitAcp = hasFlag(args, "acp");
+  if (!explicitAcp) return null;
+
+  const runtime = command === "dev" || command === "dev-agent" ? "dev-agent" : "pea";
+
+  return {
+    runtime,
+    transport: parseAcpTransport(
+      readOption(args, "acp-transport") ?? readOption(args, "acpTransport"),
+    ),
+    port: parseOptionalPort(
+      readOption(args, "acp-port") ?? readOption(args, "acpPort"),
+      "ACP HTTP port",
+    ),
+    token: readOption(args, "acp-token") ?? readOption(args, "acpToken"),
+    hostBaseUrl: readOption(args, "host"),
+    workspaceKey: readOption(args, "workspace"),
+    workspaceRoot: readOption(args, "workspace-root") ?? readOption(args, "workspaceRoot"),
+    modelId: readOption(args, "model-id") ?? readOption(args, "modelId"),
+    allowOauthBetaAuth:
+      hasFlag(args, "allow-oauth-beta-auth") || hasFlag(args, "allowOauthBetaAuth"),
+    authSource: parsePeaAuthSource(
+      readOption(args, "auth-source") ?? readOption(args, "authSource"),
+    ),
+  };
+}
+
+function parseAgUiOptions(args: string[]): PeaAgUiCliOptions | null {
+  if (args.includes("--help") || args.includes("-h")) return null;
+  if (!hasFlag(args, "ag-ui") && !hasFlag(args, "agUi")) return null;
+
+  const command = args[0];
+  const runtime = command === "dev" || command === "dev-agent" ? "dev-agent" : "pea";
+  return {
+    runtime,
+    port: parseOptionalPort(
+      readOption(args, "ag-ui-port") ?? readOption(args, "agUiPort"),
+      "AG-UI HTTP port",
+    ),
+    token: readOption(args, "ag-ui-token") ?? readOption(args, "agUiToken"),
+    hostBaseUrl: readOption(args, "host"),
+    workspaceKey: readOption(args, "workspace"),
+    workspaceRoot: readOption(args, "workspace-root") ?? readOption(args, "workspaceRoot"),
+    modelId: readOption(args, "model-id") ?? readOption(args, "modelId"),
+    allowOauthBetaAuth:
+      hasFlag(args, "allow-oauth-beta-auth") || hasFlag(args, "allowOauthBetaAuth"),
+    authSource: parsePeaAuthSource(
+      readOption(args, "auth-source") ?? readOption(args, "authSource"),
+    ),
+  };
+}
+
+function parseAcpTransport(value: string | undefined): "stdio" | "http" {
+  if (!value) return "stdio";
+
+  switch (normalizeOption(value)) {
+    case "stdio":
+      return "stdio";
+    case "http":
+    case "httpsse":
+      return "http";
+    default:
+      throw new Error("Unknown ACP transport. Expected stdio or http.");
+  }
+}
+
+function parseOptionalPort(value: string | number | undefined, label: string): number | undefined {
+  if (value == null || value === "") return undefined;
+
+  const port = typeof value === "number" ? value : Number.parseInt(value, 10);
+  if (!Number.isInteger(port) || port < 0 || port > 65535)
+    throw new Error(`${label} must be an integer from 0 to 65535.`);
+  return port;
+}
+
+function parsePeaRuntimeSelector(value: string, label: string): "pea" | "dev-agent" {
+  switch (normalizeOption(value)) {
+    case "pea":
+      return "pea";
+    case "devagent":
+    case "dev":
+      return "dev-agent";
+    default:
+      throw new Error(`Unknown ${label}. Expected pea or dev-agent.`);
+  }
+}
+
+function parseOperationVisibility(
+  value: string | undefined,
+): "DefaultVisible" | "EscalationVisible" | "ExpertOnly" | undefined {
+  if (!value) return undefined;
 
   switch (value.toLowerCase()) {
     case "defaultvisible":
@@ -1315,13 +1665,14 @@ function parseOperationVisibility(value: string | undefined): "DefaultVisible" |
     case "expert":
       return "ExpertOnly";
     default:
-      throw new Error("Unknown operation visibility. Expected DefaultVisible, EscalationVisible, or ExpertOnly.");
+      throw new Error(
+        "Unknown operation visibility. Expected DefaultVisible, EscalationVisible, or ExpertOnly.",
+      );
   }
 }
 
 function parseOperationVerbosity(value: string | undefined): "compact" | "hints" | "full" {
-  if (!value)
-    return "compact";
+  if (!value) return "compact";
 
   switch (value.toLowerCase()) {
     case "compact":
@@ -1336,8 +1687,7 @@ function parseOperationVerbosity(value: string | undefined): "compact" | "hints"
 }
 
 function parseRequestJson(value: string | undefined): unknown {
-  if (!value || value.trim().length === 0)
-    return undefined;
+  if (!value || value.trim().length === 0) return undefined;
 
   try {
     return JSON.parse(value);
@@ -1399,13 +1749,11 @@ async function ensurePeHostRunning(hostBaseUrl: string): Promise<void> {
     await createPeHostClient(hostBaseUrl).host.getProbe();
     return;
   } catch (error) {
-    if (error instanceof PeHostClientError)
-      return;
+    if (error instanceof PeHostClientError) return;
   }
 
   const hostExecutablePath = await resolveHostExecutablePath();
-  if (!hostExecutablePath)
-    return;
+  if (!hostExecutablePath) return;
 
   const child = spawn(hostExecutablePath, [], {
     cwd: dirname(hostExecutablePath),
@@ -1424,29 +1772,33 @@ async function ensurePeHostRunning(hostBaseUrl: string): Promise<void> {
       return;
     } catch (error) {
       lastError = error;
-      if (error instanceof PeHostClientError)
-        return;
+      if (error instanceof PeHostClientError) return;
     }
   }
 
-  const detail = lastError instanceof Error ? lastError.message : String(lastError ?? "unknown error");
-  throw new Error(`Started Pe.Host from ${hostExecutablePath}, but it did not become reachable at ${hostBaseUrl} within 8 seconds. Last probe error: ${detail}`);
+  const detail =
+    lastError instanceof Error ? lastError.message : String(lastError ?? "unknown error");
+  throw new Error(
+    `Started Pe.Host from ${hostExecutablePath}, but it did not become reachable at ${hostBaseUrl} within 8 seconds. Last probe error: ${detail}`,
+  );
 }
 
 async function resolveHostExecutablePath(): Promise<string | null> {
   const candidates = [
     process.env[hostProcessIdentity.hostExecutablePathVariable],
-    join(dirname(resolvePeaRoot()), hostProcessIdentity.directoryName, hostProcessIdentity.executableName),
+    join(
+      dirname(resolvePeaRoot()),
+      hostProcessIdentity.directoryName,
+      hostProcessIdentity.executableName,
+    ),
   ].filter((value): value is string => value != null && value.trim().length > 0);
 
   for (const candidate of candidates) {
     try {
       const resolved = resolve(candidate);
       const fileStat = await stat(resolved);
-      if (fileStat.isFile())
-        return resolved;
-    } catch {
-    }
+      if (fileStat.isFile()) return resolved;
+    } catch {}
   }
 
   return null;
@@ -1463,7 +1815,9 @@ function formatPeHostError(hostBaseUrl: string, error: unknown): string {
         `Pe.Host is reachable at ${hostBaseUrl}, but Revit is not ready for this request.`,
         error.message,
         "Open Revit, connect the bridge, then retry.",
-      ].filter(Boolean).join("\n");
+      ]
+        .filter(Boolean)
+        .join("\n");
 
     return `Pe.Host request failed at ${hostBaseUrl}: ${error.message}`;
   }
@@ -1492,18 +1846,22 @@ function writeOperationSearchResults(results: ReturnType<typeof searchHostOperat
     if (result.safeDefaultRequestJson)
       console.log(`  safe-default ${compactJsonLiteral(result.safeDefaultRequestJson)}`);
     if (result.bestRequestExample) {
-      console.log(`  example ${result.bestRequestExample.name}: ${result.bestRequestExample.description}`);
+      console.log(
+        `  example ${result.bestRequestExample.name}: ${result.bestRequestExample.description}`,
+      );
       console.log(`  json ${compactJsonLiteral(result.bestRequestExample.json)}`);
     }
     if ("executionMode" in result)
-      console.log(`  mode=${result.executionMode}${result.singleFlightGroup ? ` single-flight=${result.singleFlightGroup}` : ""}`);
-    if ("verb" in result)
-      console.log(`  route=${result.verb} ${result.route}`);
+      console.log(
+        `  mode=${result.executionMode}${result.singleFlightGroup ? ` single-flight=${result.singleFlightGroup}` : ""}`,
+      );
+    if ("verb" in result) console.log(`  route=${result.verb} ${result.route}`);
     if ("callGuidance" in result) {
-      for (const hint of result.callGuidance)
-        console.log(`  guidance ${hint}`);
+      for (const hint of result.callGuidance) console.log(`  guidance ${hint}`);
       for (const related of result.relatedOperations ?? [])
-        console.log(`  related ${related.kind}:${related.key}${related.note ? ` ${related.note}` : ""}`);
+        console.log(
+          `  related ${related.kind}:${related.key}${related.note ? ` ${related.note}` : ""}`,
+        );
     }
   }
 }
@@ -1520,19 +1878,18 @@ function writeOperationCallResult(result: HostOperationCallResult): void {
   console.log(`${result.key} ${result.ok ? "ok" : "failed"}`);
   if (!result.ok) {
     console.error(result.status ? `status ${result.status}: ${result.message}` : result.message);
-    if (result.problem)
-      console.error(JSON.stringify(result.problem, null, 2));
+    if (result.problem) console.error(JSON.stringify(result.problem, null, 2));
     if (result.bestRequestExample) {
-      console.error(`example ${result.bestRequestExample.name}: ${result.bestRequestExample.description}`);
+      console.error(
+        `example ${result.bestRequestExample.name}: ${result.bestRequestExample.description}`,
+      );
       console.error(`json ${compactJsonLiteral(result.bestRequestExample.json)}`);
     }
-    for (const step of result.nextSteps)
-      console.error(`next ${step}`);
+    for (const step of result.nextSteps) console.error(`next ${step}`);
     return;
   }
 
-  if (result.operation)
-    console.log(`operation ${result.operation.description}`);
+  if (result.operation) console.log(`operation ${result.operation.description}`);
   console.log(JSON.stringify(result.response, null, 2));
 }
 
@@ -1574,12 +1931,9 @@ function writeLiveLoopStatus(status: LiveLoopStatus): void {
   console.log(`bridge    ${formatConnected(probe.bridgeIsConnected)}`);
   if (typeof probe.disconnectReason === "string" && probe.disconnectReason.length > 0)
     console.log(`reason    ${probe.disconnectReason}`);
-  if (typeof session.sessionId === "string")
-    console.log(`session   ${session.sessionId}`);
-  if (typeof session.processId === "number")
-    console.log(`process   ${session.processId}`);
-  if (typeof session.revitVersion === "string")
-    console.log(`revit     ${session.revitVersion}`);
+  if (typeof session.sessionId === "string") console.log(`session   ${session.sessionId}`);
+  if (typeof session.processId === "number") console.log(`process   ${session.processId}`);
+  if (typeof session.revitVersion === "string") console.log(`revit     ${session.revitVersion}`);
   if (typeof session.openDocumentCount === "number")
     console.log(`open docs ${session.openDocumentCount}`);
   if (typeof session.availableModuleCount === "number")
@@ -1590,12 +1944,15 @@ function writeLiveLoopStatus(status: LiveLoopStatus): void {
     : session.activeDocument === null
       ? "none"
       : undefined;
-  if (typeof activeDocument === "string")
-    console.log(`document  ${activeDocument}`);
+  if (typeof activeDocument === "string") console.log(`document  ${activeDocument}`);
 
   if (status.lastSync) {
-    console.log(`sync      ${status.lastSync.ok ? "ok" : "failed"} verdict=${status.lastSync.verdict} lane=${status.lastSync.lane}`);
-    console.log(`freshness loaded=${status.lastSync.loadedGraphVerdict} source=${status.lastSync.sourceDeltaVerdict}`);
+    console.log(
+      `sync      ${status.lastSync.ok ? "ok" : "failed"} verdict=${status.lastSync.verdict} lane=${status.lastSync.lane}`,
+    );
+    console.log(
+      `freshness loaded=${status.lastSync.loadedGraphVerdict} source=${status.lastSync.sourceDeltaVerdict}`,
+    );
   } else {
     console.log("sync      none");
   }
@@ -1603,7 +1960,9 @@ function writeLiveLoopStatus(status: LiveLoopStatus): void {
   if (!status.logs.ok && "error" in status.logs)
     console.log(`logs      error: ${status.logs.error}`);
   for (const log of status.logs.logs)
-    console.log(`log       ${log.label} lines=${log.lineCount} new=${log.cursor.newLineCountSinceLastCheck} path=${log.path}`);
+    console.log(
+      `log       ${log.label} lines=${log.lineCount} new=${log.cursor.newLineCountSinceLastCheck} path=${log.path}`,
+    );
 
   console.log(`lane      ${recommendation.lane}`);
   console.log(`next      ${recommendation.nextAction} (${recommendation.confidence})`);
@@ -1613,49 +1972,47 @@ function writeLiveLoopStatus(status: LiveLoopStatus): void {
 function writeWorkflowResult(result: CliWorkflowResult): void {
   console.log(`${result.workflow} ${result.ok ? "ok" : "failed"}`);
   console.log(`policy    ${result.policy}`);
-  if (result.commandLine)
-    console.log(`command   ${result.commandLine}`);
+  if (result.commandLine) console.log(`command   ${result.commandLine}`);
   if (typeof result.exitCode === "number" || result.exitCode === null)
     console.log(`exit      ${result.exitCode ?? "none"}`);
-  if (typeof result.timedOut === "boolean")
-    console.log(`timed out ${result.timedOut}`);
-  if (typeof result.durationMs === "number")
-    console.log(`duration  ${result.durationMs}ms`);
+  if (typeof result.timedOut === "boolean") console.log(`timed out ${result.timedOut}`);
+  if (typeof result.durationMs === "number") console.log(`duration  ${result.durationMs}ms`);
   if (result.runtimeFreshness)
-    console.log(`freshness verdict=${result.runtimeFreshness.verdict ?? "unknown"} loaded=${result.runtimeFreshness.loadedGraphVerdict ?? "unknown"} source=${result.runtimeFreshness.sourceDeltaVerdict ?? "unknown"}`);
-  if (result.guidance)
-    console.log(`guidance  ${result.guidance}`);
-  if (result.proof?.interpretation)
-    console.log(`proof     ${result.proof.interpretation}`);
-  if (result.proof?.proves)
-    console.log(`proves    ${result.proof.proves}`);
-  if (result.proof?.doesNotProve)
-    console.log(`limits    ${result.proof.doesNotProve}`);
-  if (result.proof?.nextStep)
-    console.log(`next step ${result.proof.nextStep}`);
-  if (result.stdoutTail?.trim())
-    console.log(result.stdoutTail.trimEnd());
-  if (result.stderrTail?.trim())
-    console.error(result.stderrTail.trimEnd());
+    console.log(
+      `freshness verdict=${result.runtimeFreshness.verdict ?? "unknown"} loaded=${result.runtimeFreshness.loadedGraphVerdict ?? "unknown"} source=${result.runtimeFreshness.sourceDeltaVerdict ?? "unknown"}`,
+    );
+  if (result.guidance) console.log(`guidance  ${result.guidance}`);
+  if (result.proof?.interpretation) console.log(`proof     ${result.proof.interpretation}`);
+  if (result.proof?.proves) console.log(`proves    ${result.proof.proves}`);
+  if (result.proof?.doesNotProve) console.log(`limits    ${result.proof.doesNotProve}`);
+  if (result.proof?.nextStep) console.log(`next step ${result.proof.nextStep}`);
+  if (result.stdoutTail?.trim()) console.log(result.stdoutTail.trimEnd());
+  if (result.stderrTail?.trim()) console.error(result.stderrTail.trimEnd());
 }
 
 function writeScriptPodImport(result: ScriptPodImportData): void {
-  console.log(`workspace key ${result.workspaceKey}`);
-  console.log(`workspace    ${result.workspaceRootPath}`);
+  console.log(`status       ${result.status}`);
+  console.log(`workspace key ${result.workspaceKey ?? "none"}`);
+  console.log(`workspace    ${result.workspaceRootPath ?? "none"}`);
   console.log(`archive      ${result.archivePath}`);
-  console.log(`manifest     ${result.manifest.id} (${result.manifest.name})`);
-  console.log(`entrypoints  ${result.manifest.entrypoints.length}`);
+  if (result.manifest) {
+    console.log(`manifest     ${result.manifest.id} (${result.manifest.name})`);
+    console.log(`entrypoints  ${result.manifest.entrypoints.length}`);
+  }
   console.log(`entries      ${result.archiveEntries.length}`);
   console.log(`generated    ${result.generatedFiles.length}`);
   writeScriptDiagnostics(result.diagnostics);
 }
 
 function writeScriptPodExport(result: ScriptPodExportData): void {
-  console.log(`workspace key ${result.workspaceKey}`);
-  console.log(`workspace    ${result.workspaceRootPath}`);
+  console.log(`status       ${result.status}`);
+  console.log(`workspace key ${result.workspaceKey ?? "none"}`);
+  console.log(`workspace    ${result.workspaceRootPath ?? "none"}`);
   console.log(`archive      ${result.archivePath}`);
-  console.log(`manifest     ${result.manifest.id} (${result.manifest.name})`);
-  console.log(`entrypoints  ${result.manifest.entrypoints.length}`);
+  if (result.manifest) {
+    console.log(`manifest     ${result.manifest.id} (${result.manifest.name})`);
+    console.log(`entrypoints  ${result.manifest.entrypoints.length}`);
+  }
   console.log(`entries      ${result.archiveEntries.length}`);
   writeScriptDiagnostics(result.diagnostics);
 }
@@ -1677,7 +2034,9 @@ function parseLiveReadinessLevel(value: string | undefined): LiveRrdRestartReadi
     case "activedocumentready":
       return "ActiveDocumentReady";
     default:
-      throw new Error("Unknown readiness level. Expected BridgeConnected, ModulesLoaded, AnyDocumentOpen, or ActiveDocumentReady.");
+      throw new Error(
+        "Unknown readiness level. Expected BridgeConnected, ModulesLoaded, AnyDocumentOpen, or ActiveDocumentReady.",
+      );
   }
 }
 
@@ -1689,13 +2048,11 @@ function resolveOpenDocumentOption(values: {
   openDocumentRevitYear?: string;
   includeCloudRecentDocuments?: boolean;
 }): LiveRrdOpenDocumentSelector | null | undefined {
-  if (values.noOpenDocument)
-    return null;
+  if (values.noOpenDocument) return null;
 
   const path = firstNonBlank(values.openDocumentPath);
   const name = firstNonBlank(values.openDocumentName);
-  if (!path && !name)
-    return undefined;
+  if (!path && !name) return undefined;
 
   return {
     path,
@@ -1725,8 +2082,7 @@ function normalizeOption(value: string): string {
 }
 
 function formatConnected(value: unknown): string {
-  if (typeof value !== "boolean")
-    return "unknown";
+  if (typeof value !== "boolean") return "unknown";
 
   return value ? "connected" : "disconnected";
 }
@@ -1739,24 +2095,33 @@ function firstNonBlank(...values: Array<string | undefined>): string | undefined
   return values.find((value) => value != null && value.trim().length > 0)?.trim();
 }
 
+function readOption(args: string[], name: string): string | undefined {
+  const longName = `--${name}`;
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    if (arg === longName) return args[index + 1];
+    if (arg?.startsWith(`${longName}=`)) return arg.slice(longName.length + 1);
+  }
+  return undefined;
+}
+
+function hasFlag(args: string[], name: string): boolean {
+  return args.includes(`--${name}`);
+}
+
 function normalizeCliArgs(args: string[]): string[] {
   const separatorIndex = args.indexOf("--");
   if (separatorIndex < 0) return args;
 
-  return [
-    ...args.slice(0, separatorIndex),
-    ...args.slice(separatorIndex + 1),
-  ];
+  return [...args.slice(0, separatorIndex), ...args.slice(separatorIndex + 1)];
 }
 
 function writeLogs(logs: HostLogsData): void {
   for (const file of logs.files) {
     console.log(`== ${file.label} log ==`);
     console.log(file.filePath);
-    if (file.lines.length === 0)
-      console.log("(empty)");
-    else
-      console.log(file.lines.join("\n"));
+    if (file.lines.length === 0) console.log("(empty)");
+    else console.log(file.lines.join("\n"));
     console.log();
   }
 }
@@ -1765,10 +2130,11 @@ function writeStatus(status: PeHostStatusSnapshot): void {
   console.log(`host      reachable`);
   console.log(`bridge    ${status.probe.bridgeIsConnected ? "connected" : "disconnected"}`);
   console.log(`transport ${status.probe.bridgePath}`);
-  console.log(`contract  host=${status.probe.hostContractVersion} bridge=${status.probe.bridgeContractVersion}`);
+  console.log(
+    `contract  host=${status.probe.hostContractVersion} bridge=${status.probe.bridgeContractVersion}`,
+  );
 
-  if (status.probe.disconnectReason)
-    console.log(`reason    ${status.probe.disconnectReason}`);
+  if (status.probe.disconnectReason) console.log(`reason    ${status.probe.disconnectReason}`);
 
   if (status.sessionSummary.bridgeIsConnected) {
     console.log(`session   ${status.sessionSummary.sessionId ?? "unknown"}`);
@@ -1782,6 +2148,10 @@ function writeStatus(status: PeHostStatusSnapshot): void {
 
   const parameterResources = status.sessionSummary.workbenchResources.parameters;
   console.log(`param dir ${parameterResources.globalStateDirectoryPath}`);
-  console.log(`param res ${parameterResources.parameterServiceCacheFiles.map((file) => `${file.label}:${file.exists ? `${file.sizeBytes}b@${file.lastWriteTimeUnixMs}` : "missing"}`).join(" ")}`);
-  console.log(`shared   ${parameterResources.sharedParametersFile.path ? `${parameterResources.sharedParametersFile.path} ${parameterResources.sharedParametersFile.exists ? `${parameterResources.sharedParametersFile.sizeBytes}b@${parameterResources.sharedParametersFile.lastWriteTimeUnixMs}` : "missing"}` : parameterResources.sharedParametersFile.note}`);
+  console.log(
+    `param res ${parameterResources.parameterServiceCacheFiles.map((file) => `${file.label}:${file.exists ? `${file.sizeBytes}b@${file.lastWriteTimeUnixMs}` : "missing"}`).join(" ")}`,
+  );
+  console.log(
+    `shared   ${parameterResources.sharedParametersFile.path ? `${parameterResources.sharedParametersFile.path} ${parameterResources.sharedParametersFile.exists ? `${parameterResources.sharedParametersFile.sizeBytes}b@${parameterResources.sharedParametersFile.lastWriteTimeUnixMs}` : "missing"}` : parameterResources.sharedParametersFile.note}`,
+  );
 }

@@ -25,6 +25,63 @@ pea script execute --source-path src\SampleScript.cs
 
 `pea dev-agent` remains a compatibility alias for `pea dev`.
 
+## Protocol entrypoints
+
+ACP is exposed as a flag on the existing runtime boundaries:
+
+```powershell
+pea --acp
+pea agent --acp
+pea dev --acp
+pea dev --acp --model-id openai/gpt-5.5
+```
+
+The default transport is stdio, matching clients and wrappers that spawn agents with `args: ["--acp"]`.
+For remote or browser-mediated clients, use the HTTP/SSE transport:
+
+```powershell
+pea --acp --acp-transport http --acp-port 43111
+pea dev --acp --acp-transport http --acp-port 43111 --acp-token <token>
+```
+
+HTTP transport exposes `POST /rpc` for ACP JSON-RPC messages and `GET /events` for server-to-client JSON-RPC responses, notifications, and requests. The bearer/query token printed at startup is required for both endpoints.
+
+There is intentionally no separate `pea acp-agent` command. Use `pea --acp` for Pea and `pea dev --acp` for dev-agent.
+
+Verified local ACPX smoke commands:
+
+```powershell
+pnpm acpx:pea:session
+pnpm acpx:dev-agent:session
+pnpm acpx:dev-agent "Reply exactly: ACP_OK_DEV"
+
+acpx --agent "pnpm --dir source/pea/app pea --acp --model-id openai/gpt-5.5" --cwd C:\Users\kaitp\source\repos\Pe.Tools --timeout 120 --ttl 30 sessions ensure
+acpx --agent "pnpm --dir source/pea/app pea dev --acp --model-id openai/gpt-5.5" --cwd C:\Users\kaitp\source\repos\Pe.Tools --timeout 120 --ttl 30 sessions ensure
+acpx --agent "pnpm --dir source/pea/app pea dev --acp --model-id openai/gpt-5.5" --cwd C:\Users\kaitp\source\repos\Pe.Tools --timeout 180 --ttl 30 --format text "Reply exactly: ACP_OK_DEV"
+```
+
+Zed-style local agent packaging consumes the same stdio contract through `cmd` and `args`:
+
+```toml
+[agent_servers.pea-dev]
+name = "Pe.Tools dev-agent"
+
+[agent_servers.pea-dev.targets.windows-x86_64]
+cmd = "pnpm"
+args = ["--dir", "source/pea/app", "pea", "dev", "--acp", "--model-id", "openai/gpt-5.5"]
+```
+
+Remote/browser-mediated clients should connect to the printed HTTP URLs and send ACP JSON-RPC envelopes to `POST /rpc` while reading server-to-client envelopes from `GET /events`. ACP resource links, embedded resources, and session `cwd` / `additionalDirectories` are normalized into Pea runtime resources before they reach the agent runtime. ACP initialization advertises runtime auth methods for API-key or Codex OAuth modes; HTTP bearer/query tokens only protect the local transport. ACP `logout` is advertised only for the `pea` runtime, where it clears Pea-owned OpenAI/Codex credentials from the scoped Pe.Tools auth file and current process environment; `dev-agent` logout remains disabled because it uses broader MastraCode auth storage. Real ACP servers persist protocol session metadata and protocol-visible history in the Pea runtime session registry, so `session/list`, `session/resume`, `session/load`, `session/fork`, and `session/delete` survive adapter reconstruction. `session/load` replays stored user prompt chunks and ACP updates to the client, then injects restored history as context into the first prompt on the fresh runtime thread. `session/fork` creates a new Pea-owned protocol session and fresh runtime thread, copies protocol-visible history, and injects that copied history on the first prompt. This does not restore or branch Mastra/Harness model memory yet. ACP client permissions, filesystem, terminal, and terminal-auth capabilities are captured under the Pea runtime client contract; pending runtime approval tools are forwarded to ACP `session/request_permission`, permission answers are recorded as pending Pea runtime resume decisions for the next prompt, and ACP-backed filesystem/terminal methods are carried into the runtime request context as `PeaRuntimeClient`. Pea must not add duplicate visible harness tools for client-owned file or terminal operations; those delegation seams should be consumed by the existing workspace/file/command execution paths when they can apply client-owned execution deterministically.
+
+Native AG-UI is exposed separately for frontend-forward clients that already speak AG-UI HTTP event streams:
+
+```powershell
+pea --ag-ui --ag-ui-port 43112
+pea dev --ag-ui --ag-ui-port 43112 --ag-ui-token <token>
+```
+
+The AG-UI endpoint serves `GET /agui/status`, `GET /agui/sessions`, `GET /agui/events`, `POST /agui/logout`, `POST /agui/run`, `POST /agui/sessions/:threadId/close`, and `DELETE /agui/sessions/:threadId`. It prints bearer/query-token URLs at startup and requires a generated local transport token by default when one is not supplied. It uses the same Pea-owned runtime/session seam as ACP, persists AG-UI `threadId` mappings and protocol-visible event history in the runtime session registry, forwards AG-UI `context`, state, tools, forwarded props, and multimodal input resources through the runtime context/resource primitives, reports runtime auth metadata under AG-UI `capabilities.custom` including `pea.logoutSupported`, emits run/state/message snapshots, streams AG-UI SSE events from the stable Pea runtime event contract, and reports Pea runtime tool/plan suspension as AG-UI `RUN_FINISHED` interrupt outcomes. AG-UI callers can pass Pea runtime scope as `forwardedProps.pea.cwd` and `forwardedProps.pea.additionalDirectories`; those control fields update the Pea protocol session resource scope and are stripped before generic forwarded props become prompt context. Emitted AG-UI events include monotonically increasing `sequence` values per thread, and `GET /agui/events?threadId=<id>&afterSequence=<n>` replays persisted events after that sequence; this is the advertised `transport.resumable` behavior. `close` frees active runtime resources while keeping listed thread metadata; `delete` removes the thread mapping and persisted protocol-visible event history. AG-UI `resume[]` entries are normalized into Pea runtime resume decisions through `PeaRuntimeInterrupt`, exposed as structured runtime request context, and injected as prompt-visible context at the runtime session seam. After adapter reconstruction, the same AG-UI `threadId` is rehydrated into a fresh runtime thread and prior AG-UI-visible history is injected into the first prompt as restored Pea context. True suspended-turn continuation still depends on runtime/tool support; the protocol adapter no longer owns that decision shape.
+
 ## Local development
 
 ```powershell
@@ -77,9 +134,11 @@ Seeded Pea defaults are intentionally Revit-agent focused:
 
 Prefer host-reported paths over hardcoded TypeScript assumptions. Use `--workspace-root` only as an explicit local override for narrower agent scope.
 
+Pea model auth is explicit: `--auth-source api-key` requires an OpenAI API key path, `--auth-source oauth` requires stored Codex/Mastra OAuth credentials, and `--auth-source auto` prefers API-key configuration unless `--allow-oauth-beta-auth` or `PEA_ALLOW_OAUTH_BETA_AUTH` enables the temporary OAuth beta escape hatch. Existing `OPENAI_API_KEY` values win; stored API keys hydrate `process.env` only when the process has no key.
+
 ## Pea agent runtime
 
-`pea agent` runs through a thin Pea runtime wrapper around `createMastraCode`, then uses MastraCode's `MastraTUI`. Pea owns one primary `agent` posture, dynamic instructions with transient startup context and status-change invalidation notices, defaults, bundled workflow skills, processors, normal workspace file/CLI tools, and a small Pe-specific tool set:
+`pea agent` runs through the Pe.Tools `createPea(...)` runtime seam over Mastra Harness/Workspace primitives, then uses Mastra's TUI renderer. Pea owns one primary `agent` posture, dynamic instructions with transient startup context and status-change invalidation notices, defaults, bundled workflow skills, processors, workspace file/CLI tools, and a small Pe-specific tool set:
 
 - fresh status and logs
 - script bootstrap and execution
@@ -96,7 +155,7 @@ When a capability exists as a public host operation, prefer discovering and call
 
 ## dev-agent runtime
 
-`pea dev` starts a MastraCode-based source-editing agent for this repo. It keeps normal MastraCode coding tools, modes, subagents, memory, and TUI behavior, then adds:
+`pea dev` starts the Pe.Tools source-editing agent for this repo through `createPeaDev(...)`. It uses Mastra Harness/Workspace primitives for local memory/resource scoping, workspace tools, shell execution, and TUI behavior, then adds:
 
 - Pea product tools for black-box host/Revit/product facts
 - narrow repo verification tools: `live_loop_context`, `live_rrd_sync`, `live_rrd_restart`, `talk_to_pea`, sync-first `script_execute`, and `test`

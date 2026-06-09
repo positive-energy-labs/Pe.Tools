@@ -23,8 +23,7 @@ export async function searchWrapper(
 
 function dedupeByUrl(results: SearchResult[]): SearchResult[] {
   const urlMap = new Map<string, SearchResult>();
-  const countEmpty = (obj: SearchResult) =>
-    Object.values(obj).filter((v) => v === "").length;
+  const countEmpty = (obj: SearchResult) => Object.values(obj).filter((v) => v === "").length;
 
   for (const result of results) {
     const url = result.url;
@@ -79,26 +78,18 @@ export async function searchRvtDocsCom(
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Search request failed: ${response.status} ${response.statusText}`,
-      );
+      throw new Error(`Search request failed: ${response.status} ${response.statusText}`);
     }
 
     const data = (await response.json()) as SearchResponseRvtDocsCom;
     const results: SearchResult[] = [];
 
     // Parse the response based on the expected format
-    if (
-      data.current_version_results &&
-      Array.isArray(data.current_version_results)
-    ) {
+    if (data.current_version_results && Array.isArray(data.current_version_results)) {
       for (const item of data.current_version_results.slice(0, maxResults)) {
         results.push({
           title: item.title || "",
-          description: (item.description || "").replace(
-            /^Description:\s*/i,
-            "",
-          ),
+          description: (item.description || "").replace(/^Description:\s*/i, ""),
           namespace: (item.namespace || "").replace(/^Namespace:\s*/i, ""),
           type: item.type || "",
           url: item.url || "",
@@ -106,9 +97,7 @@ export async function searchRvtDocsCom(
       }
     }
 
-    return results.filter((r) =>
-      types.includes(r.type as (typeof SearchResultTypes)[number]),
-    );
+    return results.filter((r) => types.includes(r.type as (typeof SearchResultTypes)[number]));
   } catch (error) {
     console.error("Error searching Revit API docs using rvtdocs.com:", error);
     throw error;
@@ -137,9 +126,7 @@ export async function searchRevitApiDocsCom(
     // Make the search request
     const response = await fetch(searchUrl);
     if (!response.ok) {
-      throw new Error(
-        `Search request failed: ${response.status} ${response.statusText}`,
-      );
+      throw new Error(`Search request failed: ${response.status} ${response.statusText}`);
     }
 
     const data = (await response.json()) as SearchResponseRevitApiDocsCom;
@@ -157,14 +144,9 @@ export async function searchRevitApiDocsCom(
       }
     }
 
-    return results.filter((r) =>
-      types.includes(r.type as (typeof SearchResultTypes)[number]),
-    );
+    return results.filter((r) => types.includes(r.type as (typeof SearchResultTypes)[number]));
   } catch (error) {
-    console.error(
-      "Error searching Revit API docs using revitapidocs.com:",
-      error,
-    );
+    console.error("Error searching Revit API docs using revitapidocs.com:", error);
     throw error;
   }
 }

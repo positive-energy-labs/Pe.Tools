@@ -8,8 +8,8 @@ The intended direction is architecture-led behavior. The prompt should orient th
 
 ## Architecture
 
-- `app/agent.ts` starts the Pea runtime through MastraCode's `MastraTUI`.
-- `app/pea-runtime.ts` is the Pea-owned boundary around `createMastraCode`.
+- `app/agent.ts` starts the Pea runtime through MastraCode's `MastraTUI` renderer.
+- `app/pea-runtime.ts` is the Pea-owned boundary over public Mastra Harness, Workspace, Memory, and auth seams.
 - `app/pea-agent.ts` constructs the `Agent`, tools, dynamic instructions, workspace/model resolution, and processors.
 - `app/pea-context-seed.ts` provides transient thread orientation and status-change invalidation.
 - `app/pea-instructions.ts` contains only Pea-specific orientation and boundaries.

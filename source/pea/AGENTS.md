@@ -53,7 +53,7 @@ Default posture:
 - `app/host-operation-runtime.ts` - generated operation search/call runtime and client-side single-flight behavior.
 - `app/pea-context-seed.ts` - transient startup/status-change context provider.
 - `app/pea-agent.ts` - Pea `Agent` construction.
-- `app/pea-runtime.ts` - Pea-owned runtime boundary around `createMastraCode`.
+- `app/pea-runtime.ts` - Pea-owned runtime boundary over public Mastra Harness, Workspace, Memory, and auth seams.
 - `app/main.ts` - human CLI command tree.
 - `app/bundled-skill-content/pea-workflow-skills.ts` - optional packaged workflow recipes.
 - `app/generated/host-client.generated.ts` - generated typed host client.
@@ -75,7 +75,7 @@ Default posture:
 ## Living Memory
 
 - Keep Pea instructions and generated workspace docs orienting, not prescriptive. Put capability-specific guidance in operation metadata, XML docs, diagnostics, examples, or proven workflow skills.
-- Pea is a thin product-policy wrapper over MastraCode. Keep using public `createMastraCode`, `MastraTUI`, and `@mastra/core` seams rather than deep-importing framework internals.
+- Pea is a thin product-policy wrapper over public Mastra seams. Keep using public Harness, Workspace, Memory, auth storage, protocol, `MastraTUI`, and `@mastra/core` seams rather than deep-importing framework internals.
 - Prompt caching is a Pea invariant. Fix provider replay quirks locally instead of disabling caching broadly.
 - Use host-reported paths and shared contracts for runtime/workspace facts. Do not hardcode local path conventions in TypeScript.
 - Public host operations are the automation boundary. Avoid raw private bridge frames, broad schema dumps, or endpoint-specific wrappers unless repeated usage proves the surface earns its context.
@@ -83,3 +83,4 @@ Default posture:
 - Bridge-backed Revit operations share one serialized lane. Client-side queuing is an ergonomic helper; the host bridge gate is still the authority.
 - Logs are diagnosis, not the main data path. Prefer them after status, operation calls, or script execution point at a host/Revit failure.
 - Keep `pea` distinct from `pe-dev`; repo-local builds, runtime sync, and development validation are not part of the deployed agent model unless deliberately promoted.
+- Pea API-key auth depends on scoping `APPDATA` to the Pea-owned `.pea` profile before MastraCode initializes its module-level auth storage. Do not add top-level `mastracode` runtime imports in Pea startup paths that run before `preparePeaAuth`; dynamically import MastraCode auth/TUI seams after the Pea auth profile is prepared.

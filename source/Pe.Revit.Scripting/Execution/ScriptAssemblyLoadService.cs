@@ -15,17 +15,20 @@ public sealed class ScriptAssemblyLoadService {
         string runtimeAssemblyPath,
         List<ScriptDiagnostic> diagnostics
     ) {
+        var alreadyLoadedAssemblyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var runtimeResolutionState = this.BuildRuntimeResolutionState(
             runtimeReferencePaths,
             runtimeAssemblyPath,
-            diagnostics
+            diagnostics,
+            alreadyLoadedAssemblyNames
         );
         return new RuntimeReferenceScope(
             this.BuildMetadataReferences(
                 compileReferencePaths,
                 runtimeReferencePaths,
                 runtimeAssemblyPath,
-                diagnostics
+                diagnostics,
+                alreadyLoadedAssemblyNames
             ),
             new ResolverSubscription(
                 runtimeResolutionState.AssemblyMap,
@@ -37,11 +40,11 @@ public sealed class ScriptAssemblyLoadService {
     private RuntimeResolutionState BuildRuntimeResolutionState(
         IReadOnlyList<string> assemblyPaths,
         string runtimeAssemblyPath,
-        List<ScriptDiagnostic> diagnostics
+        List<ScriptDiagnostic> diagnostics,
+        ISet<string> alreadyLoadedAssemblyNames
     ) {
         var assemblyMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var probeDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var alreadyLoadedAssemblyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var assemblyPath in assemblyPaths) {
             if (!File.Exists(assemblyPath)) {
                 diagnostics.Add(ScriptDiagnosticFactory.Error(
@@ -63,10 +66,10 @@ public sealed class ScriptAssemblyLoadService {
         IReadOnlyList<string> compileReferencePaths,
         IReadOnlyList<string> runtimeReferencePaths,
         string runtimeAssemblyPath,
-        List<ScriptDiagnostic> diagnostics
+        List<ScriptDiagnostic> diagnostics,
+        ISet<string> alreadyLoadedAssemblyNames
     ) {
         var referencePaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var alreadyLoadedAssemblyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             TryAddFrameworkAssembly(referencePaths, assembly);
 

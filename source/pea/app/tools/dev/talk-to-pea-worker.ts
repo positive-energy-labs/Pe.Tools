@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { createPeaRuntime } from "../../pea-runtime.js";
+import { createPea } from "../../pea-runtime.js";
 
 const resultPrefix = "__PEA_TALK_WORKER_RESULT__";
 
@@ -39,10 +39,9 @@ async function main(): Promise<void> {
 export async function runTalkToPeaWorker(
   request: TalkToPeaWorkerRequest,
 ): Promise<TalkToPeaWorkerResponse> {
-  const runtime = await createPeaRuntime({ authSource: "api-key" });
+  const runtime = await createPea({ authSource: "api-key" });
   const thread = request.threadId
-    ? (await runtime.harness.switchThread({ threadId: request.threadId }),
-      { id: request.threadId })
+    ? (await runtime.harness.switchThread({ threadId: request.threadId }), { id: request.threadId })
     : await runtime.harness.createThread({
         title: `Pea ${request.frame} review`,
       });
@@ -86,15 +85,11 @@ function buildTalkToPeaPrompt(
   reviewFrame: TalkToPeaWorkerRequest["reviewFrame"],
 ): string {
   const reviewLines = [
-    reviewFrame?.userRequest
-      ? `Original user request: ${reviewFrame.userRequest}`
-      : null,
+    reviewFrame?.userRequest ? `Original user request: ${reviewFrame.userRequest}` : null,
     reviewFrame?.engineerQuestion
       ? `Harness engineer question: ${reviewFrame.engineerQuestion}`
       : null,
-    reviewFrame?.expectedUse
-      ? `Expected use of your answer: ${reviewFrame.expectedUse}`
-      : null,
+    reviewFrame?.expectedUse ? `Expected use of your answer: ${reviewFrame.expectedUse}` : null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -123,9 +118,7 @@ async function sendPeaMessageWithTimeout(
   timeoutSeconds: number,
 ) {
   const beforeMessages = await harness.listMessages({ limit: 80 });
-  const beforeIds = new Set(
-    beforeMessages.flatMap((message) => (message.id ? [message.id] : [])),
-  );
+  const beforeIds = new Set(beforeMessages.flatMap((message) => (message.id ? [message.id] : [])));
   const deadline = Date.now() + timeoutSeconds * 1000;
   let timedOut = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -139,17 +132,12 @@ async function sendPeaMessageWithTimeout(
 
   try {
     await Promise.race([harness.sendMessage({ content }), timeout]);
-    const latestAssistantText = await waitForNewAssistantText(
-      harness,
-      beforeIds,
-      deadline,
-    );
+    const latestAssistantText = await waitForNewAssistantText(harness, beforeIds, deadline);
     if (!latestAssistantText) {
       return {
         ok: false,
         timedOut: Date.now() >= deadline,
-        latestAssistantText:
-          "Pea did not produce an assistant response for this turn.",
+        latestAssistantText: "Pea did not produce an assistant response for this turn.",
       };
     }
 
@@ -158,8 +146,7 @@ async function sendPeaMessageWithTimeout(
     return {
       ok: false,
       timedOut,
-      latestAssistantText:
-        error instanceof Error ? error.message : String(error),
+      latestAssistantText: error instanceof Error ? error.message : String(error),
     };
   } finally {
     if (timer) clearTimeout(timer);
@@ -188,13 +175,9 @@ async function waitForNewAssistantText(
   return "";
 }
 
-function transcriptTail(
-  messages: Array<{ role: string; content: Array<unknown> }>,
-) {
+function transcriptTail(messages: Array<{ role: string; content: Array<unknown> }>) {
   return messages
-    .filter(
-      (message) => message.role === "user" || message.role === "assistant",
-    )
+    .filter((message) => message.role === "user" || message.role === "assistant")
     .map((message) => ({
       role: message.role,
       text: textFromMessage(message).slice(0, 4000),
@@ -202,9 +185,7 @@ function transcriptTail(
     .filter((message) => message.text.length > 0);
 }
 
-function latestAssistantText(
-  messages: Array<{ role: string; content: Array<unknown> }>,
-): string {
+function latestAssistantText(messages: Array<{ role: string; content: Array<unknown> }>): string {
   for (const message of [...messages].reverse()) {
     if (message.role !== "assistant") continue;
 
@@ -221,9 +202,7 @@ function textFromMessage(message: { content: Array<unknown> }): string {
       if (typeof part !== "object" || part === null) return "";
 
       const typedPart = part as { type?: string; text?: unknown };
-      return typedPart.type === "text" && typeof typedPart.text === "string"
-        ? typedPart.text
-        : "";
+      return typedPart.type === "text" && typeof typedPart.text === "string" ? typedPart.text : "";
     })
     .filter(Boolean)
     .join("\n")
@@ -234,14 +213,10 @@ function toolTraceSince(
   beforeMessages: Array<{ id?: string; content: Array<unknown> }>,
   messages: Array<{ id?: string; content: Array<unknown> }>,
 ) {
-  const beforeIds = new Set(
-    beforeMessages.map((message) => message.id).filter(Boolean),
-  );
+  const beforeIds = new Set(beforeMessages.map((message) => message.id).filter(Boolean));
   return messages
     .filter((message) => !message.id || !beforeIds.has(message.id))
-    .flatMap((message) =>
-      message.content.flatMap((part) => toolTracePart(part)),
-    );
+    .flatMap((message) => message.content.flatMap((part) => toolTracePart(part)));
 }
 
 function toolTracePart(part: unknown) {

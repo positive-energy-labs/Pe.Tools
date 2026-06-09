@@ -935,6 +935,67 @@ public sealed class RevitScriptingPortTests {
     }
 
     [Test]
+    public void Inline_body_snippet_allows_leading_using_directives(UIApplication uiApplication) {
+        var workspaceKey = $"test-inline-using-{Guid.NewGuid():N}";
+        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        try {
+            var service = CreateExecutionService(uiApplication);
+            var result = service.Execute(
+                new ExecuteRevitScriptRequest(
+                    """
+                    using System.Globalization;
+
+                    WriteLine(CultureInfo.InvariantCulture.Name);
+                    """,
+                    ScriptExecutionSourceKind.InlineSnippet,
+                    WorkspaceKey: workspaceKey,
+                    SourceName: "UsingInline.cs"
+                ),
+                "test-inline-using"
+            );
+
+            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
+            Assert.That(result.Output, Does.Contain(System.Globalization.CultureInfo.InvariantCulture.Name));
+        } finally {
+            DeleteWorkspace(workspaceRoot);
+        }
+    }
+
+    [Test]
+    public void Compile_failure_guides_document_context_name(UIApplication uiApplication) {
+        var workspaceKey = $"test-document-hint-{Guid.NewGuid():N}";
+        var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
+        try {
+            var service = CreateExecutionService(uiApplication);
+            var result = service.Execute(
+                new ExecuteRevitScriptRequest(
+                    """
+                    public sealed class DocumentHintScript : PeScriptContainer
+                    {
+                        public override void Execute()
+                        {
+                            var active = Document;
+                            WriteLine(active?.Title ?? "No active document.");
+                        }
+                    }
+                    """,
+                    ScriptExecutionSourceKind.InlineSnippet,
+                    WorkspaceKey: workspaceKey,
+                    SourceName: "DocumentHint.cs"
+                ),
+                "test-document-hint"
+            );
+
+            Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.CompilationFailed));
+            Assert.That(result.Diagnostics.Any(diagnostic =>
+                diagnostic.Stage == "authoring" &&
+                diagnostic.Message.Contains("Use `doc` for the active Revit document", StringComparison.Ordinal)), Is.True);
+        } finally {
+            DeleteWorkspace(workspaceRoot);
+        }
+    }
+
+    [Test]
     public void Inline_compile_failure_references_submitted_source_name(UIApplication uiApplication) {
         var workspaceKey = $"test-inline-fail-{Guid.NewGuid():N}";
         var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);

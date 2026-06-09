@@ -67,14 +67,14 @@ A prompt is not bad because it contains tool specifics. It is bad when it spends
 
 Most agent-design problems are placement problems. Before improving a prompt, adding a tool, or writing another instruction, decide where the behavior belongs:
 
-| Surface | Steering rule |
-| --- | --- |
-| System prompt | Keep identity, hard boundaries, mode/environment facts, exact control-loop tool protocol, and tiny routing hints here. Be specific about registered tool names and harness rules when the model must use them correctly. Do not put product capability inventories, broad workflows, domain manuals, or fragile judgment/action guidance in the prompt. |
-| Tool or operation description | Treat this as the primary routing surface for capabilities. A good description names the user intent, the boundary, and why to choose this capability over neighboring ones. Specific domain actions should route from here, not from the system prompt. |
-| Tool implementation or harness | Put deterministic checks, validation, sequencing, safety rails, freshness checks, and expensive orchestration here. If code can know, the agent should not have to guess. |
-| Skill | Use skills for high-value reusable workflows. A skill should behave more like a small program or method than a background-reading packet. Keep procedural skill detail in the skill, not in always-loaded prompt text. |
-| Generated artifact | Use generated docs, catalogs, summaries, and schemas for large or changing knowledge. Prefer on-demand artifacts over always-loaded context. |
-| Durable docs and source architecture | Use docs and code structure to preserve shared language, product boundaries, and design concepts that should outlive one session. |
+| Surface                              | Steering rule                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| System prompt                        | Keep identity, hard boundaries, mode/environment facts, exact control-loop tool protocol, and tiny routing hints here. Be specific about registered tool names and harness rules when the model must use them correctly. Do not put product capability inventories, broad workflows, domain manuals, or fragile judgment/action guidance in the prompt. |
+| Tool or operation description        | Treat this as the primary routing surface for capabilities. A good description names the user intent, the boundary, and why to choose this capability over neighboring ones. Specific domain actions should route from here, not from the system prompt.                                                                                                |
+| Tool implementation or harness       | Put deterministic checks, validation, sequencing, safety rails, freshness checks, and expensive orchestration here. If code can know, the agent should not have to guess.                                                                                                                                                                               |
+| Skill                                | Use skills for high-value reusable workflows. A skill should behave more like a small program or method than a background-reading packet. Keep procedural skill detail in the skill, not in always-loaded prompt text.                                                                                                                                  |
+| Generated artifact                   | Use generated docs, catalogs, summaries, and schemas for large or changing knowledge. Prefer on-demand artifacts over always-loaded context.                                                                                                                                                                                                            |
+| Durable docs and source architecture | Use docs and code structure to preserve shared language, product boundaries, and design concepts that should outlive one session.                                                                                                                                                                                                                       |
 
 This taxonomy is a pressure test, not bureaucracy. If a behavior feels unreliable, assume it is living at the wrong layer until proven otherwise.
 
@@ -127,14 +127,14 @@ Bad code is expensive because it makes every future agent interaction worse. Goo
 
 Matt Pocock's AI coding failure modes map cleanly to agent-design responsibilities:
 
-| Failure mode | Agent-design response |
-| --- | --- |
-| The agent did not do what the user wanted. | Treat the missing artifact as shared understanding, not a better prompt. Trigger steering or grilling workflows before implementation when intent, boundaries, or tradeoffs are still implicit. |
-| The agent built the intended thing, but it did not work. | Give the agent fast feedback loops and make the harness enforce them. Static types, compile checks, tests, logs, host diagnostics, and browser/Revit/runtime probes are the agent's speed limit. |
-| The agent outran its headlights. | Force small increments with proof after each meaningful change. Do not allow a long plan to become one unverified batch of edits. |
-| The agent could not understand the codebase. | Improve the codebase as context. Deep modules, clear entrypoints, generated contracts, and durable docs are not just human DX; they are agent capability. |
-| The agent made the codebase worse by treating code as cheap. | Keep source inspection, design locality, deletion of dead code, and maintainability as proof requirements. Specs and plans guide edits; they do not replace understanding the code. |
-| Skill or tool routing became unreliable. | Shrink overlap. Use crisp descriptions, explicit trigger language, and fat workflow skills instead of many near-duplicate tools or vague always-loaded instructions. |
+| Failure mode                                                 | Agent-design response                                                                                                                                                                            |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| The agent did not do what the user wanted.                   | Treat the missing artifact as shared understanding, not a better prompt. Trigger steering or grilling workflows before implementation when intent, boundaries, or tradeoffs are still implicit.  |
+| The agent built the intended thing, but it did not work.     | Give the agent fast feedback loops and make the harness enforce them. Static types, compile checks, tests, logs, host diagnostics, and browser/Revit/runtime probes are the agent's speed limit. |
+| The agent outran its headlights.                             | Force small increments with proof after each meaningful change. Do not allow a long plan to become one unverified batch of edits.                                                                |
+| The agent could not understand the codebase.                 | Improve the codebase as context. Deep modules, clear entrypoints, generated contracts, and durable docs are not just human DX; they are agent capability.                                        |
+| The agent made the codebase worse by treating code as cheap. | Keep source inspection, design locality, deletion of dead code, and maintainability as proof requirements. Specs and plans guide edits; they do not replace understanding the code.              |
+| Skill or tool routing became unreliable.                     | Shrink overlap. Use crisp descriptions, explicit trigger language, and fat workflow skills instead of many near-duplicate tools or vague always-loaded instructions.                             |
 
 ## Schema Compression and Progressive Discovery
 

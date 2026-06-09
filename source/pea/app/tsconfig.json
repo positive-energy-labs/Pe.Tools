@@ -6,7 +6,7 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["node"],
+    "types": ["node"]
   },
   "include": [
     "*.ts",
@@ -14,6 +14,6 @@
     "dev-agent-skill-content/**/*.ts",
     "generated/*.ts",
     "generated/host-types/**/*.ts",
-    "tools/**/*.ts",
-  ],
+    "tools/**/*.ts"
+  ]
 }

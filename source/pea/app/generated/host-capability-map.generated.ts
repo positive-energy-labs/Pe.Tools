@@ -7,8 +7,56 @@ export const hostCapabilityMap = {
   generatedFrom: "HostOperationsCatalog.PublicHttp",
   formatVersion: 1,
   rowCount: 46,
-  guidance: "Table-of-contents routing map only. Use sections to choose a capability ladder; use host_operation_search matches for call guidance and exact request/response shapes.",
-  operationKeys: ["aps.auth.login","aps.auth.logout","aps.auth.status","aps.auth.token","host.logs","revit.apply.document.open","revit.catalog.concept-evidence","revit.catalog.electrical-circuits","revit.catalog.electrical-load-classifications","revit.catalog.electrical-panels","revit.catalog.loaded-families","revit.catalog.loaded-families.filter-field-options","revit.catalog.loaded-families.filter-schema","revit.catalog.parameter-bindings","revit.catalog.parameter-evidence","revit.catalog.project-browser","revit.catalog.project-index","revit.catalog.recent-documents","revit.catalog.schedules","revit.context.document-session","revit.context.summary","revit.context.view-rendering-state","revit.context.visible-summary","revit.detail.electrical-panel-schedules","revit.detail.elements","revit.detail.schedules","revit.detail.sheets","revit.matrix.loaded-families","revit.matrix.parameter-coverage","revit.matrix.schedule-coverage","revit.matrix.schedule-profiles","revit.resolve.references","scripting.execute","scripting.pod.export","scripting.pod.import","scripting.workspace.bootstrap","settings.document.open","settings.document.save","settings.document.validate","settings.field-options","settings.host-probe","settings.parameter-catalog","settings.schema","settings.session-summary","settings.tree","settings.workspaces"],
+  guidance:
+    "Table-of-contents routing map only. Use sections to choose a capability ladder; use host_operation_search matches for call guidance and exact request/response shapes.",
+  operationKeys: [
+    "aps.auth.login",
+    "aps.auth.logout",
+    "aps.auth.status",
+    "aps.auth.token",
+    "host.logs",
+    "revit.apply.document.open",
+    "revit.catalog.concept-evidence",
+    "revit.catalog.electrical-circuits",
+    "revit.catalog.electrical-load-classifications",
+    "revit.catalog.electrical-panels",
+    "revit.catalog.loaded-families",
+    "revit.catalog.loaded-families.filter-field-options",
+    "revit.catalog.loaded-families.filter-schema",
+    "revit.catalog.parameter-bindings",
+    "revit.catalog.parameter-evidence",
+    "revit.catalog.project-browser",
+    "revit.catalog.project-index",
+    "revit.catalog.recent-documents",
+    "revit.catalog.schedules",
+    "revit.context.document-session",
+    "revit.context.summary",
+    "revit.context.view-rendering-state",
+    "revit.context.visible-summary",
+    "revit.detail.electrical-panel-schedules",
+    "revit.detail.elements",
+    "revit.detail.schedules",
+    "revit.detail.sheets",
+    "revit.matrix.loaded-families",
+    "revit.matrix.parameter-coverage",
+    "revit.matrix.schedule-coverage",
+    "revit.matrix.schedule-profiles",
+    "revit.resolve.references",
+    "scripting.execute",
+    "scripting.pod.export",
+    "scripting.pod.import",
+    "scripting.workspace.bootstrap",
+    "settings.document.open",
+    "settings.document.save",
+    "settings.document.validate",
+    "settings.field-options",
+    "settings.host-probe",
+    "settings.parameter-catalog",
+    "settings.schema",
+    "settings.session-summary",
+    "settings.tree",
+    "settings.workspaces",
+  ],
   sections: [
     {
       id: "context",
@@ -17,7 +65,8 @@ export const hostCapabilityMap = {
       rows: [
         {
           key: "revit.context.document-session",
-          description: "Read open, active, and selected document session context from connected Revit.",
+          description:
+            "Read open, active, and selected document session context from connected Revit.",
           safety: "Bridge, Cheap",
           inputKind: "none",
           outputKind: "current state summary",
@@ -25,7 +74,8 @@ export const hostCapabilityMap = {
         },
         {
           key: "revit.context.summary",
-          description: "Read compact current document, active view or sheet, selection, browser counts, and visible-category context for Pea orientation.",
+          description:
+            "Read compact current document, active view or sheet, selection, browser counts, and visible-category context for Pea orientation.",
           safety: "Bridge, active-doc, Cheap, Project|Family",
           inputKind: "none",
           outputKind: "current state summary",
@@ -33,30 +83,36 @@ export const hostCapabilityMap = {
         },
         {
           key: "revit.context.view-rendering-state",
-          description: "Read a bounded evidence packet for visibility/rendering-affecting state in the active view or explicit views, including explicit limitations and uninspected causes.",
+          description:
+            "Read a bounded evidence packet for visibility/rendering-affecting state in the active view or explicit views, including explicit limitations and uninspected causes.",
           safety: "Bridge, active-doc, Cheap, Project",
           inputKind: "context scope",
           outputKind: "current state summary",
-          terms: "agent-context|view-rendering|visibility|active-view|view-references|filters|links|worksets|view-range|crop|template",
+          terms:
+            "agent-context|view-rendering|visibility|active-view|view-references|filters|links|worksets|view-range|crop|template",
         },
         {
           key: "revit.context.visible-summary",
-          description: "Read compact category counts and bounded visible element handles for the active view or explicit view references.",
+          description:
+            "Read compact category counts and bounded visible element handles for the active view or explicit view references.",
           safety: "Bridge, active-doc, Cheap, Project",
           inputKind: "context scope",
           outputKind: "current state summary",
-          terms: "agent-context|visible|active-view|view-references|categories|handles|printed-views|visible-equipment",
+          terms:
+            "agent-context|visible|active-view|view-references|categories|handles|printed-views|visible-equipment",
         },
       ],
     },
     {
       id: "catalog",
       title: "Catalog",
-      summary: "Cheap/bounded inventories of candidate schedules, families, parameters, browser paths, and model nouns.",
+      summary:
+        "Cheap/bounded inventories of candidate schedules, families, parameters, browser paths, and model nouns.",
       rows: [
         {
           key: "revit.catalog.concept-evidence",
-          description: "Infer project-specific parameter candidates for operator concepts from factual binding and schedule evidence. Category and subject hints are weak context, not expected-shape rules; use returned reasons and facts before detail or coverage calls.",
+          description:
+            "Infer project-specific parameter candidates for operator concepts from factual binding and schedule evidence. Category and subject hints are weak context, not expected-shape rules; use returned reasons and facts before detail or coverage calls.",
           safety: "Bridge, active-doc, Cheap, Project",
           inputKind: "bounded filters",
           outputKind: "candidate handles/list",
@@ -64,11 +120,13 @@ export const hostCapabilityMap = {
         },
         {
           key: "revit.catalog.electrical-circuits",
-          description: "Read electrical circuit facts, connected load identity, panel names, circuit numbers, optional nearby proxy context, and compact filter diagnostics from the active Revit document.",
+          description:
+            "Read electrical circuit facts, connected load identity, panel names, circuit numbers, optional nearby proxy context, and compact filter diagnostics from the active Revit document.",
           safety: "Bridge, active-doc, Cheap, Project",
           inputKind: "bounded filters",
           outputKind: "candidate handles/list",
-          terms: "revit|circuits|catalog|loads|panel|load-name|connected-elements|nearby-proxy|equipment-alignment",
+          terms:
+            "revit|circuits|catalog|loads|panel|load-name|connected-elements|nearby-proxy|equipment-alignment",
         },
         {
           key: "revit.catalog.electrical-load-classifications",
@@ -80,11 +138,13 @@ export const hostCapabilityMap = {
         },
         {
           key: "revit.catalog.electrical-panels",
-          description: "Read electrical panel facts, panel names, marks, panel-schedule counts, connected-load counts, and compact filter diagnostics from the active Revit document.",
+          description:
+            "Read electrical panel facts, panel names, marks, panel-schedule counts, connected-load counts, and compact filter diagnostics from the active Revit document.",
           safety: "Bridge, active-doc, Cheap, Project",
           inputKind: "bounded filters",
           outputKind: "candidate handles/list",
-          terms: "revit|panels|catalog|distribution|electrical-equipment|panel-schedule-references|panel-names",
+          terms:
+            "revit|panels|catalog|distribution|electrical-equipment|panel-schedule-references|panel-names",
         },
         {
           key: "revit.catalog.loaded-families",
@@ -112,15 +172,18 @@ export const hostCapabilityMap = {
         },
         {
           key: "revit.catalog.parameter-bindings",
-          description: "Read project parameter bindings from the active document, using the same canonical parameter identity and shared-GUID string language returned by parameter evidence and coverage operations.",
+          description:
+            "Read project parameter bindings from the active document, using the same canonical parameter identity and shared-GUID string language returned by parameter evidence and coverage operations.",
           safety: "Bridge, active-doc, Cheap, Project",
           inputKind: "bounded filters",
           outputKind: "candidate handles/list",
-          terms: "parameters|project-parameters|bindings|document|catalog|parameter-identity|shared-guid",
+          terms:
+            "parameters|project-parameters|bindings|document|catalog|parameter-identity|shared-guid",
         },
         {
           key: "revit.catalog.parameter-evidence",
-          description: "Return factual parameter evidence from project bindings, schedule fields/filters, and scoped element presence. Use this when project-standard parameter names are uncertain; inspect binding categories, schedule usage, counts, and samples, then pass observed parameter identities or named references into detail or matrix calls.",
+          description:
+            "Return factual parameter evidence from project bindings, schedule fields/filters, and scoped element presence. Use this when project-standard parameter names are uncertain; inspect binding categories, schedule usage, counts, and samples, then pass observed parameter identities or named references into detail or matrix calls.",
           safety: "Bridge, active-doc, Cheap, Project",
           inputKind: "bounded filters",
           outputKind: "candidate handles/list",
@@ -128,7 +191,8 @@ export const hostCapabilityMap = {
         },
         {
           key: "revit.catalog.project-browser",
-          description: "Read bounded Project Browser organization for views, sheets, and schedules as navigation/provenance metadata.",
+          description:
+            "Read bounded Project Browser organization for views, sheets, and schedules as navigation/provenance metadata.",
           safety: "Bridge, active-doc, Cheap, Project",
           inputKind: "bounded filters",
           outputKind: "candidate handles/list",
@@ -136,15 +200,18 @@ export const hostCapabilityMap = {
         },
         {
           key: "revit.catalog.project-index",
-          description: "Read a compact semantic project index with bounded Project Browser provenance for levels, sheets, views, schedules, categories, and families.",
+          description:
+            "Read a compact semantic project index with bounded Project Browser provenance for levels, sheets, views, schedules, categories, and families.",
           safety: "Bridge, active-doc, Cheap, Project",
           inputKind: "bounded filters",
           outputKind: "candidate handles/list",
-          terms: "project-index|project-browser|browser-provenance|levels|sheets|views|schedules|printed-context|orientation",
+          terms:
+            "project-index|project-browser|browser-provenance|levels|sheets|views|schedules|printed-context|orientation",
         },
         {
           key: "revit.catalog.recent-documents",
-          description: "Read local Revit recent-document candidates from user Revit.ini files without requiring a connected Revit session. The current opener supports local files only; cloud recent entries are preserved in the contract for later cloud open support but omitted by default.",
+          description:
+            "Read local Revit recent-document candidates from user Revit.ini files without requiring a connected Revit session. The current opener supports local files only; cloud recent entries are preserved in the contract for later cloud open support but omitted by default.",
           safety: "Local, Cheap",
           inputKind: "bounded filters",
           outputKind: "candidate handles/list",
@@ -152,11 +219,13 @@ export const hostCapabilityMap = {
         },
         {
           key: "revit.catalog.schedules",
-          description: "Read compact schedule handles, names, sheet placement, optional field metadata, and factual schedule evidence summaries from the active document. Revit-generated duplicate suffixes like \u0027(2)\u0027 and \u0027Copy 1\u0027 are normalized out of name summary weighting. Do not use broad schedule catalog discovery for visible equipment coverage when revit.matrix.schedule-coverage can answer from view or element handles.",
+          description:
+            "Read compact schedule handles, names, sheet placement, optional field metadata, and factual schedule evidence summaries from the active document. Revit-generated duplicate suffixes like \u0027(2)\u0027 and \u0027Copy 1\u0027 are normalized out of name summary weighting. Do not use broad schedule catalog discovery for visible equipment coverage when revit.matrix.schedule-coverage can answer from view or element handles.",
           safety: "Bridge, active-doc, Cheap, Project",
           inputKind: "bounded filters",
           outputKind: "candidate handles/list",
-          terms: "schedules|catalog|fields|columns|parameters|document|sheet-placement|printed-context",
+          terms:
+            "schedules|catalog|fields|columns|parameters|document|sheet-placement|printed-context",
         },
       ],
     },
@@ -167,7 +236,8 @@ export const hostCapabilityMap = {
       rows: [
         {
           key: "revit.matrix.loaded-families",
-          description: "Read a matrix projection of loaded family/type facts from the active document.",
+          description:
+            "Read a matrix projection of loaded family/type facts from the active document.",
           safety: "Bridge, active-doc, Expensive, Project",
           inputKind: "scoped audit query",
           outputKind: "join/audit results",
@@ -175,7 +245,8 @@ export const hostCapabilityMap = {
         },
         {
           key: "revit.matrix.parameter-coverage",
-          description: "Read bounded parameter presence, blank/default counts, and sample handles from the active document.",
+          description:
+            "Read bounded parameter presence, blank/default counts, and sample handles from the active document.",
           safety: "Bridge, active-doc, Expensive, Project",
           inputKind: "scoped audit query",
           outputKind: "join/audit results",
@@ -183,11 +254,13 @@ export const hostCapabilityMap = {
         },
         {
           key: "revit.matrix.schedule-coverage",
-          description: "Read bounded element-to-schedule coverage counts and samples from the active document, including active-view-visible or explicit-handle scopes.",
+          description:
+            "Read bounded element-to-schedule coverage counts and samples from the active document, including active-view-visible or explicit-handle scopes.",
           safety: "Bridge, active-doc, Expensive, Project",
           inputKind: "scoped audit query",
           outputKind: "join/audit results",
-          terms: "schedules|coverage|matrix|elements|handles|active-view-visible|explicit-handles|visible-equipment|printed-context",
+          terms:
+            "schedules|coverage|matrix|elements|handles|active-view-visible|explicit-handles|visible-equipment|printed-context",
         },
         {
           key: "revit.matrix.schedule-profiles",
@@ -206,19 +279,23 @@ export const hostCapabilityMap = {
       rows: [
         {
           key: "revit.detail.electrical-panel-schedules",
-          description: "Read electrical panel schedule row/cell projections from the active Revit document. Use this for known panels/schedules, not as the first-choice element-to-load join.",
+          description:
+            "Read electrical panel schedule row/cell projections from the active Revit document. Use this for known panels/schedules, not as the first-choice element-to-load join.",
           safety: "Bridge, active-doc, Bounded, Project",
           inputKind: "known handles or filters",
           outputKind: "detail records",
-          terms: "revit|panel-schedules|query|schedules|rows|cells|known-panel|panel-references|downstream-detail",
+          terms:
+            "revit|panel-schedules|query|schedules|rows|cells|known-panel|panel-references|downstream-detail",
         },
         {
           key: "revit.detail.elements",
-          description: "Read exact element context, selected/visible equipment facts, requested parameters, electrical systems, circuits, panels, connectors, panel schedules, load classifications, and nearby document facts from connected Revit.",
+          description:
+            "Read exact element context, selected/visible equipment facts, requested parameters, electrical systems, circuits, panels, connectors, panel schedules, load classifications, and nearby document facts from connected Revit.",
           safety: "Bridge, active-doc, Bounded, Project",
           inputKind: "known handles or filters",
           outputKind: "detail records",
-          terms: "elements|selection|context|query|requested-parameters|electrical|circuits|panel|load-name|explicit-handles|visible-handles|selected-equipment|equipment-alignment",
+          terms:
+            "elements|selection|context|query|requested-parameters|electrical|circuits|panel|load-name|explicit-handles|visible-handles|selected-equipment|equipment-alignment",
         },
         {
           key: "revit.detail.schedules",
@@ -230,11 +307,13 @@ export const hostCapabilityMap = {
         },
         {
           key: "revit.detail.sheets",
-          description: "Read minimal native sheet anchors for extractor and scripting workflows: sheet identity, placed views, placed schedules, title blocks, sheet-owned text, and provenance.",
+          description:
+            "Read minimal native sheet anchors for extractor and scripting workflows: sheet identity, placed views, placed schedules, title blocks, sheet-owned text, and provenance.",
           safety: "Bridge, active-doc, Bounded, Project",
           inputKind: "known handles or filters",
           outputKind: "detail records",
-          terms: "sheets|sheet-anchors|printed-context|viewports|schedule-placement|title-blocks|text-notes|extractor-boundary",
+          terms:
+            "sheets|sheet-anchors|printed-context|viewports|schedule-placement|title-blocks|text-notes|extractor-boundary",
         },
       ],
     },
@@ -245,11 +324,13 @@ export const hostCapabilityMap = {
       rows: [
         {
           key: "revit.resolve.references",
-          description: "Resolve natural references like this view, selected equipment, or printed mech Level 1 plan into stable Revit handles with provenance; narrow by handle kind and printed context when the user already described the scope.",
+          description:
+            "Resolve natural references like this view, selected equipment, or printed mech Level 1 plan into stable Revit handles with provenance; narrow by handle kind and printed context when the user already described the scope.",
           safety: "Bridge, active-doc, Bounded, Project",
           inputKind: "reference text/context",
           outputKind: "resolved references",
-          terms: "agent-context|resolve|natural-reference|handles|provenance|printed-context|view-handles",
+          terms:
+            "agent-context|resolve|natural-reference|handles|provenance|printed-context|view-handles",
         },
       ],
     },
@@ -271,7 +352,8 @@ export const hostCapabilityMap = {
     {
       id: "settings",
       title: "Settings",
-      summary: "Schema-backed settings/profile authoring, validation, field options, and workspaces.",
+      summary:
+        "Schema-backed settings/profile authoring, validation, field options, and workspaces.",
       rows: [
         {
           key: "settings.document.open",
@@ -295,7 +377,8 @@ export const hostCapabilityMap = {
           safety: "Local, Cheap",
           inputKind: "settings/profile request",
           outputKind: "settings/profile result",
-          terms: "settings|document|validate|validation|diagnostics|profile|profiles|family-foundry",
+          terms:
+            "settings|document|validate|validation|diagnostics|profile|profiles|family-foundry",
         },
         {
           key: "settings.field-options",
@@ -307,7 +390,8 @@ export const hostCapabilityMap = {
         },
         {
           key: "settings.parameter-catalog",
-          description: "Read Revit parameter definitions and available parameter facts from the active document for settings authoring.",
+          description:
+            "Read Revit parameter definitions and available parameter facts from the active document for settings authoring.",
           safety: "Bridge, active-doc, Bounded",
           inputKind: "settings/profile request",
           outputKind: "settings/profile result",
@@ -370,7 +454,8 @@ export const hostCapabilityMap = {
         },
         {
           key: "aps.auth.token",
-          description: "Acquire an Autodesk Platform Services access token for authenticated operations.",
+          description:
+            "Acquire an Autodesk Platform Services access token for authenticated operations.",
           safety: "Local, Cheap",
           inputKind: "APS auth/cloud request",
           outputKind: "APS status/cloud result",
@@ -401,7 +486,8 @@ export const hostCapabilityMap = {
         },
         {
           key: "settings.session-summary",
-          description: "Read current host, bridge, session, active document, and workspace summary facts.",
+          description:
+            "Read current host, bridge, session, active document, and workspace summary facts.",
           safety: "Local, Cheap",
           inputKind: "none",
           outputKind: "settings/profile result",
@@ -416,7 +502,8 @@ export const hostCapabilityMap = {
       rows: [
         {
           key: "scripting.execute",
-          description: "Execute an inline or workspace-relative C# script in connected Revit. Inline content may be Execute-body statements or a full PeScriptContainer class.",
+          description:
+            "Execute an inline or workspace-relative C# script in connected Revit. Inline content may be Execute-body statements with optional leading using directives or a full PeScriptContainer class; workspace files are normal C# PeScriptContainer entrypoints.",
           safety: "Bridge, active-doc, Mutation",
           inputKind: "workspace/script request",
           outputKind: "workspace/script result",
@@ -424,7 +511,8 @@ export const hostCapabilityMap = {
         },
         {
           key: "scripting.pod.export",
-          description: "Export a validated pod.json-backed Revit scripting workspace as a portable source-first zip archive.",
+          description:
+            "Export a validated pod.json-backed Revit scripting workspace as a portable source-first zip archive.",
           safety: "Bridge, Mutation",
           inputKind: "workspace/script request",
           outputKind: "workspace/script result",
@@ -432,7 +520,8 @@ export const hostCapabilityMap = {
         },
         {
           key: "scripting.pod.import",
-          description: "Import a pod.json-backed Revit scripting workspace from a conservative zip archive into a new workspace slug.",
+          description:
+            "Import a pod.json-backed Revit scripting workspace from a conservative zip archive into a new workspace slug.",
           safety: "Bridge, Mutation",
           inputKind: "workspace/script request",
           outputKind: "workspace/script result",
@@ -447,9 +536,7 @@ export const hostCapabilityMap = {
           terms: "script|workspace|bootstrap|files",
         },
       ],
-    }
+    },
   ],
-  focusSections: [
-
-  ],
+  focusSections: [],
 } as const satisfies HostCapabilityMap;
