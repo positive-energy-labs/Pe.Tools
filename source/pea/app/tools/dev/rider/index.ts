@@ -1,9 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
-import {
-  runRepoLocalPeDevWorkflow,
-  type WorkflowCommandResult,
-} from "../pe-dev-workflow/index.js";
+import { runRepoLocalPeDevWorkflow, type WorkflowCommandResult } from "../pe-dev-workflow/index.js";
 import {
   defaultRiderBridgeBaseUrl,
   runRiderBridgeRestartRrdHelper as runRiderBridgeRestartRrdHelper,
@@ -108,15 +105,15 @@ export async function runRiderBridgeRestartRrd(request: {
         pollIntervalSeconds: request.pollIntervalSeconds,
         expectedRevitVersion: request.expectedRevitVersion,
         requireNewProcess: request.requireNewProcess,
-        readinessLevel: resolvedOpenDocument.path != null ? "ModulesLoaded" : request.readinessLevel,
+        readinessLevel:
+          resolvedOpenDocument.path != null ? "ModulesLoaded" : request.readinessLevel,
         previousProcessId: previousSession.processId,
         previousSessionId: previousSession.sessionId,
       })
     : {
         ok: false,
         attempts: 0,
-        reason:
-          "Restart action did not invoke successfully; skipped Host/Revit bridge polling.",
+        reason: "Restart action did not invoke successfully; skipped Host/Revit bridge polling.",
         checks: [],
         previousProcessId: previousSession.processId,
         previousSessionId: previousSession.sessionId,
@@ -241,9 +238,10 @@ async function resolveOpenDocumentSelector(request: {
   if (selector == null)
     return {
       source: "none",
-      reason: harnessState.path == null
-        ? "No explicit openDocument or harness state default was provided."
-        : "Harness state did not define revit.defaultOpenDocument.",
+      reason:
+        harnessState.path == null
+          ? "No explicit openDocument or harness state default was provided."
+          : "Harness state did not define revit.defaultOpenDocument.",
       harnessStatePath: harnessState.path,
     };
 
@@ -293,7 +291,10 @@ async function readHarnessState(path?: string): Promise<{
   };
 }
 
-async function findRecentDocument(selector: OpenDocumentSelector, timeoutSeconds: number): Promise<{
+async function findRecentDocument(
+  selector: OpenDocumentSelector,
+  timeoutSeconds: number,
+): Promise<{
   path?: string;
   reason: string;
   matches: unknown[];
@@ -317,9 +318,7 @@ async function findRecentDocument(selector: OpenDocumentSelector, timeoutSeconds
   }
 
   const response = isRecord(result.response) ? result.response : {};
-  const documents = Array.isArray(response.documents)
-    ? response.documents.filter(isRecord)
-    : [];
+  const documents = Array.isArray(response.documents) ? response.documents.filter(isRecord) : [];
   const name = selector.name?.trim().toLowerCase() ?? "";
   const kind = selector.kind ?? "Any";
   const matches = documents.filter((document) => {
@@ -367,10 +366,7 @@ async function findRecentDocument(selector: OpenDocumentSelector, timeoutSeconds
   };
 }
 
-async function openRevitDocument(request: {
-  path: string;
-  timeoutSeconds: number;
-}): Promise<{
+async function openRevitDocument(request: { path: string; timeoutSeconds: number }): Promise<{
   ok: boolean;
   reason: string;
   response?: unknown;
@@ -403,7 +399,8 @@ async function openRevitDocument(request: {
 
     return {
       ok: true,
-      reason: "Host operation revit.apply.document.open opened and activated the requested document.",
+      reason:
+        "Host operation revit.apply.document.open opened and activated the requested document.",
       response: result.response,
     };
   } catch (error) {
@@ -462,10 +459,7 @@ async function pollHostBridgeReadiness(options: {
     }
 
     if (Date.now() >= deadline) break;
-    await delay(
-      Math.min(options.pollIntervalSeconds, Math.max(options.pollSeconds, 1)) *
-        1000,
-    );
+    await delay(Math.min(options.pollIntervalSeconds, Math.max(options.pollSeconds, 1)) * 1000);
   } while (options.pollSeconds > 0);
 
   return {
@@ -509,30 +503,21 @@ function evaluateRestartReadiness(
     missing.push(`process has not changed from ${options.previousProcessId}`);
 
   if (
-    ["ModulesLoaded", "AnyDocumentOpen", "ActiveDocumentReady"].includes(
-      options.readinessLevel,
-    ) &&
+    ["ModulesLoaded", "AnyDocumentOpen", "ActiveDocumentReady"].includes(options.readinessLevel) &&
     (session.availableModuleCount ?? 0) <= 0
   )
     missing.push("runtime modules not loaded");
   if (
-    ["AnyDocumentOpen", "ActiveDocumentReady"].includes(
-      options.readinessLevel,
-    ) &&
+    ["AnyDocumentOpen", "ActiveDocumentReady"].includes(options.readinessLevel) &&
     (session.openDocumentCount ?? 0) <= 0
   )
     missing.push("no open documents");
-  if (
-    options.readinessLevel === "ActiveDocumentReady" &&
-    !session.hasActiveDocument
-  )
+  if (options.readinessLevel === "ActiveDocumentReady" && !session.hasActiveDocument)
     missing.push("no active document");
   return missing;
 }
 
-function extractHostSessionFacts(
-  host: Awaited<ReturnType<typeof collectHostContext>>,
-): {
+function extractHostSessionFacts(host: Awaited<ReturnType<typeof collectHostContext>>): {
   bridgeIsConnected?: boolean;
   sessionId?: string;
   processId?: number;
@@ -541,32 +526,20 @@ function extractHostSessionFacts(
   availableModuleCount?: number;
   hasActiveDocument?: boolean;
 } {
-  const session: Record<string, unknown> = isRecord(host.session)
-    ? host.session
-    : {};
+  const session: Record<string, unknown> = isRecord(host.session) ? host.session : {};
   return {
     bridgeIsConnected:
       (isRecord(host.probe) && host.probe.bridgeIsConnected === true) ||
       session.bridgeIsConnected === true,
-    sessionId:
-      typeof session.sessionId === "string" ? session.sessionId : undefined,
-    processId:
-      typeof session.processId === "number" ? session.processId : undefined,
-    revitVersion:
-      typeof session.revitVersion === "string"
-        ? session.revitVersion
-        : undefined,
+    sessionId: typeof session.sessionId === "string" ? session.sessionId : undefined,
+    processId: typeof session.processId === "number" ? session.processId : undefined,
+    revitVersion: typeof session.revitVersion === "string" ? session.revitVersion : undefined,
     openDocumentCount:
-      typeof session.openDocumentCount === "number"
-        ? session.openDocumentCount
-        : undefined,
+      typeof session.openDocumentCount === "number" ? session.openDocumentCount : undefined,
     availableModuleCount:
-      typeof session.availableModuleCount === "number"
-        ? session.availableModuleCount
-        : undefined,
+      typeof session.availableModuleCount === "number" ? session.availableModuleCount : undefined,
     hasActiveDocument:
-      isRecord(session.activeDocument) &&
-      Object.keys(session.activeDocument).length > 0,
+      isRecord(session.activeDocument) && Object.keys(session.activeDocument).length > 0,
   };
 }
 
@@ -595,10 +568,8 @@ export function summarizeLastSyncResult() {
     lane,
     ok: result.ok,
     verdict: result.runtimeFreshness?.verdict ?? "unknown",
-    loadedGraphVerdict:
-      result.runtimeFreshness?.loadedGraphVerdict ?? "unknown",
-    sourceDeltaVerdict:
-      result.runtimeFreshness?.sourceDeltaVerdict ?? "unknown",
+    loadedGraphVerdict: result.runtimeFreshness?.loadedGraphVerdict ?? "unknown",
+    sourceDeltaVerdict: result.runtimeFreshness?.sourceDeltaVerdict ?? "unknown",
     actionStatuses:
       hotReload?.results?.map((action) => ({
         actionId: action.actionId ?? "unknown",

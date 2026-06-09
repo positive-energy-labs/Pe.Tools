@@ -15,7 +15,7 @@
 ## Developer Goals
 
 - Keep `pea` close to public Mastra/MastraCode extension seams instead of forking a separate agent framework.
-- Wrap `createMastraCode` thinly so Pea owns product policy while MastraCode owns storage, memory, MCP lifecycle, hook lifecycle, auth storage, thread handling, workspace setup, and TUI-facing harness behavior.
+- Assemble Pea through public Mastra Harness, Workspace, Memory, auth, and protocol seams so Pea owns product policy while Mastra owns reusable runtime primitives and TUI rendering.
 - Use public `@mastra/core` processor seams for Pea-specific input/error handling, including OpenAI Responses item-reference compatibility.
 - Trust the model with normal filesystem, search, edit, and command agency inside the scoped workspace.
 - Keep Pe-specific tools small and load-bearing: status, logs, scripting, Revit API docs, host-operation discovery, and host-operation calls.
@@ -41,5 +41,5 @@
 - `pea` should not expose implementation details of the private Revit bridge.
 - `pea` should not bury ordinary file/CLI work behind custom wrapper tools.
 - `pea` should not grow a broad permission framework before real product usage demands it.
-- `pea` should not replace `createMastraCode`, fork `MastraTUI`, or own storage/MCP/hooks/auth/thread primitives unless public seams fail a concrete product requirement.
+- `pea` should not fork `MastraTUI` or deep-own storage/MCP/hooks/auth/thread primitives unless public seams fail a concrete product requirement.
 - `pea` should not hide MastraCode TUI options through private hacks; pursue small public/upstreamable TUI policy seams first.

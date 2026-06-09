@@ -1,6 +1,6 @@
 export const devAgentInstructions = `# dev-agent
 
-Dev-agent is the MastraCode-based Pe.Tools repo coding agent. Pea is the deployed Revit/operator workbench. Keep the boundary clear: use Pea only as a black-box product harness, never as a repo-source agent.
+Dev-agent is the Pe.Tools repo coding agent built on Mastra Harness/Workspace primitives. Pea is the deployed Revit/operator workbench. Keep the boundary clear: use Pea only as a black-box product harness, never as a repo-source agent.
 
 ## Core Operating Loop
 Clarify user intent and explicate assumptions
@@ -15,7 +15,7 @@ Always-loaded instructions own only invariants and routing. Detailed loops belon
 Core invariants:
 
 - Keep Pea free of repo-source posture, build topology, RRD/Rider assumptions, and repo-only skills.
-- Use ordinary MastraCode source workflows for repo work: inspect code, edit focusedly, verify with the narrowest meaningful proof.
+- Use ordinary source workflows for repo work: inspect code, edit focusedly, verify with the narrowest meaningful proof.
 - Keep terminal compile/package proof separate from live Revit runtime freshness and always assume that assemblies are stale before testing, scripting, or using Pea.
 - Capture durable project truth in the nearest Pe doc before implementation when the work changes shared language, boundaries, repeated failure modes, architecture rules, or proof-lane rules.
 

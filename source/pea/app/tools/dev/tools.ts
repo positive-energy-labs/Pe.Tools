@@ -8,20 +8,11 @@ import {
   restartLiveRrd,
   syncLiveRrd,
 } from "../shared/live-loop.js";
-import {
-  runAttachedRrdTest,
-  runPeDevWorkflow,
-} from "./pe-dev-workflow/index.js";
+import { runAttachedRrdTest, runPeDevWorkflow } from "./pe-dev-workflow/index.js";
 
-import {
-  resolveHostBaseUrl,
-  resolveWorkspaceKey,
-} from "../../pe-host.js";
+import { resolveHostBaseUrl, resolveWorkspaceKey } from "../../pe-host.js";
 import { talkToPeaHarness } from "./talk-to-pea.js";
-import {
-  executeScriptViaHost,
-  scriptExecuteInputSchema,
-} from "../shared/scripting.js";
+import { executeScriptViaHost, scriptExecuteInputSchema } from "../shared/scripting.js";
 
 const defaultTimeoutSeconds = defaultLiveLoopTimeoutSeconds;
 
@@ -78,18 +69,11 @@ export const liveRrdRestart = createTool({
     actionId: z
       .string()
       .optional()
-      .describe(
-        "Optional Rider action override. Defaults to trying Rerun, then Debug.",
-      ),
+      .describe("Optional Rider action override. Defaults to trying Rerun, then Debug."),
     expectedRevitVersion: z.string().default("2025"),
     requireNewProcess: z.boolean().default(true),
     readinessLevel: z
-      .enum([
-        "BridgeConnected",
-        "ModulesLoaded",
-        "AnyDocumentOpen",
-        "ActiveDocumentReady",
-      ])
+      .enum(["BridgeConnected", "ModulesLoaded", "AnyDocumentOpen", "ActiveDocumentReady"])
       .default("ModulesLoaded"),
     openDocument: z
       .object({
@@ -224,9 +208,7 @@ export const test = createTool({
   description:
     "Run Revit-backed tests through the condoned repo loops. Prefer FreshRevitProcess (`pe-dev test`) for autonomous proof without touching RRD. Use AttachedRrd only after an IDE/Rider runtime build and sync.",
   inputSchema: repoCommandInputSchema.extend({
-    target: z
-      .enum(["FreshRevitProcess", "AttachedRrd"])
-      .default("FreshRevitProcess"),
+    target: z.enum(["FreshRevitProcess", "AttachedRrd"]).default("FreshRevitProcess"),
     filter: z.string().default("Name~Reports_runtime_assembly_load_paths"),
     planOnly: z
       .boolean()
@@ -237,9 +219,7 @@ export const test = createTool({
     syncFirst: z
       .boolean()
       .default(true)
-      .describe(
-        "For AttachedRrd only: run sync before the build/test sequence.",
-      ),
+      .describe("For AttachedRrd only: run sync before the build/test sequence."),
   }),
   execute: async (input) => {
     if ((input.target ?? "FreshRevitProcess") === "FreshRevitProcess") {
@@ -252,12 +232,7 @@ export const test = createTool({
         String(timeoutSeconds),
       ];
       if (input.planOnly) args.push("--plan", "--json");
-      return runPeDevWorkflow(
-        "test",
-        args,
-        "FreshRevitProcess",
-        timeoutSeconds + 30,
-      );
+      return runPeDevWorkflow("test", args, "FreshRevitProcess", timeoutSeconds + 30);
     }
 
     return runAttachedRrdTest({

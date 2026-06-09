@@ -4,6 +4,7 @@ obj/
 tmp/
 node_modules
 pnpm-lock.yaml
+.pnpm
 riderModule.iml
 /_ReSharper.Caches/
 *.sln.DotSettings.user
@@ -12,3 +13,4 @@ riderModule.iml
 .env
 Old_Template.rvt
 *_wpftmp.csproj
+.tmp

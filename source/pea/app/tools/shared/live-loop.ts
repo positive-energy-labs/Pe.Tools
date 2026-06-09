@@ -68,35 +68,23 @@ interface LogCursor {
 
 const logCursorStore = new Map<string, LogCursor>();
 
-export async function collectRuntimeLoopContext(
-  options: LiveLoopContextOptions = {},
-) {
+export async function collectRuntimeLoopContext(options: LiveLoopContextOptions = {}) {
   const logTail = options.logTail ?? 10;
   const resetLogCursor = options.resetLogCursor ?? false;
   const includeLastSync = options.includeLastSync ?? true;
-  const timeoutSeconds =
-    options.timeoutSeconds ?? defaultLiveLoopTimeoutSeconds;
+  const timeoutSeconds = options.timeoutSeconds ?? defaultLiveLoopTimeoutSeconds;
 
   const [environment, logResult] = await Promise.all([
     collectLiveLoopEnvironment({
       hostBaseUrl: options.hostBaseUrl,
       includeHost: true,
     }),
-    readPeaHostLogTails(
-      "all",
-      logTail,
-      resetLogCursor ? "reset" : "read",
-      { hostBaseUrl: options.hostBaseUrl },
-    ),
+    readPeaHostLogTails("all", logTail, resetLogCursor ? "reset" : "read", {
+      hostBaseUrl: options.hostBaseUrl,
+    }),
   ]);
-  const syncSummary = includeLastSync
-    ? summarizeLiveRrdLastSyncResult()
-    : null;
-  const recommendation = recommendRuntimeLoopNextAction(
-    environment,
-    logResult,
-    syncSummary,
-  );
+  const syncSummary = includeLastSync ? summarizeLiveRrdLastSyncResult() : null;
+  const recommendation = recommendRuntimeLoopNextAction(environment, logResult, syncSummary);
 
   return {
     ok: true,
@@ -125,8 +113,7 @@ export async function collectRuntimeLoopContext(
 export async function syncLiveRrd(options: LiveRrdSyncOptions = {}) {
   return runRiderBridgeSync({
     timeoutSeconds: options.timeoutSeconds ?? defaultLiveLoopTimeoutSeconds,
-    riderBridgeBaseUrl:
-      options.riderBridgeBaseUrl ?? defaultRiderBridgeBaseUrl,
+    riderBridgeBaseUrl: options.riderBridgeBaseUrl ?? defaultRiderBridgeBaseUrl,
     project: options.project ?? "Pe.Tools",
   });
 }
@@ -134,8 +121,7 @@ export async function syncLiveRrd(options: LiveRrdSyncOptions = {}) {
 export async function restartLiveRrd(options: LiveRrdRestartOptions = {}) {
   return runRiderBridgeRestartRrd({
     timeoutSeconds: options.timeoutSeconds ?? defaultLiveLoopTimeoutSeconds,
-    riderBridgeBaseUrl:
-      options.riderBridgeBaseUrl ?? defaultRiderBridgeBaseUrl,
+    riderBridgeBaseUrl: options.riderBridgeBaseUrl ?? defaultRiderBridgeBaseUrl,
     project: options.project ?? "Pe.Tools",
     actionId: options.actionId,
     pollSeconds: options.pollSeconds ?? 180,
@@ -152,9 +138,10 @@ export async function collectLiveLoopEnvironment(
   options: { hostBaseUrl?: string; includeHost?: boolean } = {},
 ) {
   const dotnetExecutable = await resolveExecutable("dotnet");
-  const host = options.includeHost === false
-    ? undefined
-    : await collectHostContext({ hostBaseUrl: options.hostBaseUrl });
+  const host =
+    options.includeHost === false
+      ? undefined
+      : await collectHostContext({ hostBaseUrl: options.hostBaseUrl });
 
   return {
     ok: true,
@@ -188,16 +175,11 @@ export async function readPeaHostLogTails(
       const cursorKey = file.filePath.toLowerCase();
       const storedCursor = logCursorStore.get(cursorKey);
       const previousCursor = cursorMode === "reset" ? undefined : storedCursor;
-      const invalidated =
-        previousCursor != null && file.lines.length < previousCursor.lineCount;
+      const invalidated = previousCursor != null && file.lines.length < previousCursor.lineCount;
       const previousLineCount =
-        previousCursor == null || invalidated
-          ? file.lines.length
-          : previousCursor.lineCount;
+        previousCursor == null || invalidated ? file.lines.length : previousCursor.lineCount;
       const newLines =
-        previousCursor == null || invalidated
-          ? []
-          : file.lines.slice(previousLineCount);
+        previousCursor == null || invalidated ? [] : file.lines.slice(previousLineCount);
       const nextCursor = {
         checkedAt,
         size: file.lines.join("\n").length,
@@ -218,9 +200,7 @@ export async function readPeaHostLogTails(
           newLineCountSinceLastCheck: newLines.length,
         },
         tail: file.lines.join("\n"),
-        newTail: newLines
-          .slice(Math.max(0, newLines.length - tailLineCount))
-          .join("\n"),
+        newTail: newLines.slice(Math.max(0, newLines.length - tailLineCount)).join("\n"),
       };
     });
 
@@ -252,10 +232,8 @@ function recommendRuntimeLoopNextAction(
 ) {
   const host = environment.host;
   const hostReachable = host?.reachable === true;
-  const bridgeConnected =
-    isRecord(host?.probe) && host.probe.bridgeIsConnected === true;
-  const activeDocument =
-    isRecord(host?.session) && host.session.activeDocument != null;
+  const bridgeConnected = isRecord(host?.probe) && host.probe.bridgeIsConnected === true;
+  const activeDocument = isRecord(host?.session) && host.session.activeDocument != null;
   const newLogLineCount = logResult.logs.reduce(
     (count, log) => count + log.cursor.newLineCountSinceLastCheck,
     0,
@@ -349,9 +327,7 @@ function environmentGuidance(
     );
 
   const bridgeConnected =
-    host?.probe &&
-    "bridgeIsConnected" in host.probe &&
-    host.probe.bridgeIsConnected;
+    host?.probe && "bridgeIsConnected" in host.probe && host.probe.bridgeIsConnected;
   if (host?.reachable && !bridgeConnected)
     guidance.push(
       "Host is reachable but the Revit bridge is not connected; AttachedRrd proof is not available until the live session is healthy.",

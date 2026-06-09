@@ -99,9 +99,7 @@ export const searchResponseRevitApiDocsComSchema = z.object({
  * Reusable validators for the docs-related tools (not the openai-related tools).
  */
 export const toolInputArgSchemas = {
-  urlSlug: z
-    .string()
-    .describe("URL slug of the Revit API documentation page to retrieve"),
+  urlSlug: z.string().describe("URL slug of the Revit API documentation page to retrieve"),
   year: z
     .number()
     .min(2023)
@@ -134,9 +132,7 @@ export const toolInputArgSchemas = {
       const base = "[a-zA-Z][a-zA-Z0-9_]*";
       const simpleStringPattern = new RegExp(`^${base}$`);
       const classMemberPattern = new RegExp(`^${base}\\.${base}$`);
-      const constructorPattern = new RegExp(
-        `^${base}\\(${base}(?:,\\s${base})*\\)$`,
-      );
+      const constructorPattern = new RegExp(`^${base}\\(${base}(?:,\\s${base})*\\)$`);
 
       return (
         simpleStringPattern.test(trimmed) ||

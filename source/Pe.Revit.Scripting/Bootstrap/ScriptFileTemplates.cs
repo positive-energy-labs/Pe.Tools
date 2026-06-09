@@ -82,9 +82,10 @@ internal static class ScriptFileTemplates {
 
         Authoring contract:
 
-        - Put durable scripts under `src/`.
+        - Put durable scripts under `src/` as normal C# files with exactly one non-abstract `PeScriptContainer` entrypoint.
         - Run a workspace script with `pea script execute --source-path src\MyScript.cs`.
-        - Loose workspace and inline execution require the selected source to resolve to exactly one non-abstract `PeScriptContainer`.
+        - Inline snippets may be Execute-body statements with optional leading `using` directives, or a full `PeScriptContainer` class.
+        - Inside `Execute()`, use `doc`, `uidoc`, `app`, `selection`, `revitVersion`, `Host`, `Artifacts`, and `WriteLine(...)`.
         - Pod mode uses root `pod.json`; the requested declared entrypoint source must resolve to exactly one non-abstract `PeScriptContainer`, while helper `src/**/*.cs` files may compile but are not entrypoints.
         - Pod manifests require a top-level `version`. Shared-drive Pods may include `origin.path` pointing to an absolute local folder or `pod.json`; version mismatch rejects import/export/execution until the Pod is reimported.
         - `ReadOnly` opens no host transaction, applies static mutation guardrails, and reports document-change detection as a dirty-document tripwire. It is not a rollback guarantee.
@@ -151,7 +152,9 @@ internal static class ScriptFileTemplates {
         ## Contract
 
         - Execute scripts from `src/` with `pea script execute --source-path src\YourScript.cs`.
-        - Loose workspace and inline execution require the selected source to resolve to exactly one non-abstract `PeScriptContainer`.
+        - Workspace files are normal C# files and the selected entrypoint source must resolve to exactly one non-abstract `PeScriptContainer`.
+        - Inline snippets may be Execute-body statements with optional leading `using` directives, or a full `PeScriptContainer` class.
+        - Inside `Execute()`, use `doc`, `uidoc`, `app`, `selection`, `revitVersion`, `Host`, `Artifacts`, and `WriteLine(...)`.
         - Pod mode validates root `pod.json`, compiles all `src/**/*.cs`, and executes only the requested declared entrypoint source.
         - Pod manifests require `version`; optional local `origin.path` is checked for version mismatch before import/export/execution.
         - Pod entrypoint source must resolve to exactly one non-abstract `PeScriptContainer`; helper `src` files are compiled but are not entrypoints.

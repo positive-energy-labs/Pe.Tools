@@ -1,8 +1,5 @@
 import type { WorkflowCommandResult } from "./pe-dev-workflow/index.js";
-import {
-  defaultRiderBridgeBaseUrl,
-  runRiderBridgeSync,
-} from "./rider/index.js";
+import { defaultRiderBridgeBaseUrl, runRiderBridgeSync } from "./rider/index.js";
 
 export type AttachedRrdStalePolicy = "warn" | "fail";
 
@@ -51,8 +48,7 @@ export function attachedRrdFreshnessWarning(
   syncResult: WorkflowCommandResult,
   workflow: string,
 ): string | null {
-  if (syncResult.ok && syncResult.runtimeFreshness?.verdict === "fresh")
-    return null;
+  if (syncResult.ok && syncResult.runtimeFreshness?.verdict === "fresh") return null;
 
   const verdict = syncResult.runtimeFreshness?.verdict ?? "unknown";
   return `WARNING: RiderBridge sync before ${workflow} reported runtime freshness '${verdict}'. Continue only as AttachedRrd behavior evidence, not fresh runtime proof.`;

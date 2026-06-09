@@ -63,7 +63,9 @@ export function getPeaRuntimeDefaultsSummary(productHomePath: string): PeaRuntim
   };
 }
 
-export async function ensurePeaRuntimeDefaults(productHomePath: string): Promise<PeaRuntimeDefaultsSummary> {
+export async function ensurePeaRuntimeDefaults(
+  productHomePath: string,
+): Promise<PeaRuntimeDefaultsSummary> {
   const defaults = getPeaRuntimeDefaultsSummary(productHomePath);
   const settings = await readSettings(defaults.settingsPath);
   const next = applyPeaDefaults(settings, defaults);
@@ -75,8 +77,7 @@ export async function ensurePeaRuntimeDefaults(productHomePath: string): Promise
 }
 
 async function readSettings(settingsPath: string): Promise<JsonObject> {
-  if (!existsSync(settingsPath))
-    return {};
+  if (!existsSync(settingsPath)) return {};
 
   try {
     const parsed = JSON.parse(await readFile(settingsPath, "utf-8")) as unknown;
@@ -96,9 +97,10 @@ function applyPeaDefaults(settings: JsonObject, defaults: PeaRuntimeDefaultsSumm
     pea: {
       ...asObject(settings.pea),
       settingsSchemaVersion: peaSettingsSchemaVersion,
-      defaultsSeededAt: typeof asObject(settings.pea).defaultsSeededAt === "string"
-        ? asObject(settings.pea).defaultsSeededAt
-        : new Date().toISOString(),
+      defaultsSeededAt:
+        typeof asObject(settings.pea).defaultsSeededAt === "string"
+          ? asObject(settings.pea).defaultsSeededAt
+          : new Date().toISOString(),
       runtimePolicy: defaults.policy,
     },
     onboarding: {
@@ -120,9 +122,18 @@ function applyPeaDefaults(settings: JsonObject, defaults: PeaRuntimeDefaultsSumm
       activeOmPackId: stringOrDefault(models.activeOmPackId, "custom"),
       omModelOverride: modelOrDefault(models.omModelOverride, defaults.observerModelId),
       observerModelOverride: modelOrDefault(models.observerModelOverride, defaults.observerModelId),
-      reflectorModelOverride: modelOrDefault(models.reflectorModelOverride, defaults.reflectorModelId),
-      omObservationThreshold: numberOrDefault(models.omObservationThreshold, defaults.observationThreshold),
-      omReflectionThreshold: numberOrDefault(models.omReflectionThreshold, defaults.reflectionThreshold),
+      reflectorModelOverride: modelOrDefault(
+        models.reflectorModelOverride,
+        defaults.reflectorModelId,
+      ),
+      omObservationThreshold: numberOrDefault(
+        models.omObservationThreshold,
+        defaults.observationThreshold,
+      ),
+      omReflectionThreshold: numberOrDefault(
+        models.omReflectionThreshold,
+        defaults.reflectionThreshold,
+      ),
       omCavemanObservations: booleanOrDefault(models.omCavemanObservations, false),
       omObserveAttachments: observeAttachmentsOrDefault(models.omObserveAttachments, "auto"),
       subagentModels: {
@@ -205,8 +216,15 @@ function themeOrDefault(value: unknown, fallback: PeaThemePreference): PeaThemeP
   return value === "auto" || value === "dark" || value === "light" ? value : fallback;
 }
 
-function thinkingLevelOrDefault(value: unknown, fallback: "medium"): "off" | "low" | "medium" | "high" | "xhigh" {
-  return value === "off" || value === "low" || value === "medium" || value === "high" || value === "xhigh"
+function thinkingLevelOrDefault(
+  value: unknown,
+  fallback: "medium",
+): "off" | "low" | "medium" | "high" | "xhigh" {
+  return value === "off" ||
+    value === "low" ||
+    value === "medium" ||
+    value === "high" ||
+    value === "xhigh"
     ? value
     : fallback;
 }

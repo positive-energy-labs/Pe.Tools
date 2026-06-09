@@ -115,8 +115,7 @@ function proofForTalkToPea(frame: TalkToPeaFrame) {
   switch (frame) {
     case "feedback":
       return {
-        interpretation:
-          "Pea was asked for black-box feedback on its product/harness experience.",
+        interpretation: "Pea was asked for black-box feedback on its product/harness experience.",
         proves:
           "Whether Pea can articulate useful operator-facing friction, missing context, and harness affordance feedback from its own thread.",
         doesNotProve:
@@ -138,14 +137,12 @@ function proofForTalkToPea(frame: TalkToPeaFrame) {
     case "operator":
     default:
       return {
-        interpretation:
-          "Pea was asked to answer as the deployed user-facing Revit/operator agent.",
+        interpretation: "Pea was asked to answer as the deployed user-facing Revit/operator agent.",
         proves:
           "Whether Pea can satisfy this operator request with the current Pea persona, context, and product tools.",
         doesNotProve:
           "Harness design quality by itself, source correctness, or deterministic Revit data coverage.",
-        nextStep:
-          "If the answer exposes friction, continue the same thread with frame='feedback'.",
+        nextStep: "If the answer exposes friction, continue the same thread with frame='feedback'.",
       };
   }
 }

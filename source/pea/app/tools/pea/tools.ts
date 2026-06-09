@@ -1,10 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import z from "zod";
-import {
-  createPeHostClient,
-  resolveHostBaseUrl,
-  resolveWorkspaceKey,
-} from "../../pe-host.js";
+import { createPeHostClient, resolveHostBaseUrl, resolveWorkspaceKey } from "../../pe-host.js";
 import {
   defaultRevitApiDocsYear,
   defaultRevitApiMaxResults,
@@ -12,12 +8,10 @@ import {
   toolOutputSchemas,
 } from "../../types.js";
 import { HostLogTarget } from "../../host-client.js";
+import type { HostActiveDocumentSummary } from "../../generated/host-types/host-active-document-summary.js";
 import { extractRvtDocsText } from "../../lib/extractDocs.js";
 import { searchWrapper } from "../../lib/searchDocs.js";
-import {
-  callHostOperation,
-  searchHostOperations,
-} from "../../host-operation-runtime.js";
+import { callHostOperation, searchHostOperations } from "../../host-operation-runtime.js";
 import {
   bootstrapScriptWorkspace,
   executeScriptViaHost,
@@ -28,6 +22,7 @@ import {
   scriptPodExportInputSchema,
   scriptPodImportInputSchema,
 } from "../shared/scripting.js";
+import { requestAccess } from "../shared/request-access.js";
 
 interface PeaProductToolContext {
   hostBaseUrl?: string;
@@ -36,9 +31,7 @@ interface PeaProductToolContext {
 
 let peaProductToolContext: PeaProductToolContext = {};
 
-export function configurePeaProductToolContext(
-  context: PeaProductToolContext,
-): void {
+export function configurePeaProductToolContext(context: PeaProductToolContext): void {
   peaProductToolContext = {
     hostBaseUrl: firstNonBlank(context.hostBaseUrl),
     workspaceKey: firstNonBlank(context.workspaceKey),
@@ -59,9 +52,7 @@ const hostOperationSearchInputSchema = z.object({
   query: z
     .string()
     .optional()
-    .describe(
-      "Natural-language or keyword query describing the capability you need.",
-    ),
+    .describe("Natural-language or keyword query describing the capability you need."),
   domain: z
     .string()
     .optional()
@@ -124,14 +115,7 @@ export const peStatus = createTool({
         activeDocument:
           sessionSummary.activeDocument == null
             ? undefined
-            : {
-                title: sessionSummary.activeDocument.title,
-                key: sessionSummary.activeDocument.key,
-                isFamilyDocument:
-                  sessionSummary.activeDocument.isFamilyDocument,
-                isWorkshared: sessionSummary.activeDocument.isWorkshared,
-                isModelInCloud: sessionSummary.activeDocument.isModelInCloud,
-              },
+            : summarizeActiveDocument(sessionSummary.activeDocument),
         availableModuleCount: sessionSummary.availableModules.length,
       },
     };
@@ -264,18 +248,11 @@ export const revitApiSearch = createTool({
       maxResults = defaultRevitApiMaxResults,
       extractFirstResult = false,
     } = input;
-    const results = await searchWrapper(
-      queryString,
-      year,
-      maxResults,
-      queryTypes,
-    );
+    const results = await searchWrapper(queryString, year, maxResults, queryTypes);
     if (!extractFirstResult || results.length === 0) return results;
 
     const [firstResult, ...remainingResults] = results;
-    const extractedText = await extractRvtDocsText(
-      rvtDocsUrlFromSlug(firstResult.url),
-    );
+    const extractedText = await extractRvtDocsText(rvtDocsUrlFromSlug(firstResult.url));
     return [{ ...firstResult, extractedText }, ...remainingResults];
   },
 });
@@ -288,8 +265,7 @@ export const revitApiFetch = createTool({
     urlSlug: toolInputArgSchemas.urlSlug,
   }),
   outputSchema: toolOutputSchemas.docsTextSchema,
-  execute: async (input) =>
-    extractRvtDocsText(rvtDocsUrlFromSlug(input.urlSlug)),
+  execute: async (input) => extractRvtDocsText(rvtDocsUrlFromSlug(input.urlSlug)),
 });
 
 export const peaProductTools = {
@@ -297,6 +273,7 @@ export const peaProductTools = {
   [peLogs.id]: peLogs,
   [hostOperationSearch.id]: hostOperationSearch,
   [hostOperationCall.id]: hostOperationCall,
+  [requestAccess.id]: requestAccess,
   [scriptBootstrap.id]: scriptBootstrap,
   [scriptExecute.id]: scriptExecute,
   [scriptPodImport.id]: scriptPodImport,
@@ -319,6 +296,26 @@ function createCurrentHostClient() {
   return createPeHostClient(peaProductToolContext.hostBaseUrl);
 }
 
+function summarizeActiveDocument(activeDocument: HostActiveDocumentSummary) {
+  return {
+    title: activeDocument.title,
+    key: activeDocument.key,
+    path: activeDocument.path,
+    identityKind: activeDocument.isModelInCloud
+      ? "cloud"
+      : activeDocument.path
+        ? "path"
+        : "unsaved",
+    isFamilyDocument: activeDocument.isFamilyDocument,
+    isWorkshared: activeDocument.isWorkshared,
+    isModelInCloud: activeDocument.isModelInCloud,
+    cloudProjectGuid: activeDocument.cloudProjectGuid,
+    cloudModelGuid: activeDocument.cloudModelGuid,
+    cloudModelUrn: activeDocument.cloudModelUrn,
+    observedAtUnixMs: activeDocument.observedAtUnixMs,
+  };
+}
+
 function currentHostBaseUrl(): string {
   return resolveHostBaseUrl(peaProductToolContext.hostBaseUrl);
 }
@@ -338,10 +335,6 @@ function parseHostLogTarget(target: "host" | "revit" | "all"): HostLogTarget {
   }
 }
 
-function firstNonBlank(
-  ...values: Array<string | undefined>
-): string | undefined {
-  return values
-    .find((value) => value != null && value.trim().length > 0)
-    ?.trim();
+function firstNonBlank(...values: Array<string | undefined>): string | undefined {
+  return values.find((value) => value != null && value.trim().length > 0)?.trim();
 }

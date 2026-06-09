@@ -2,6 +2,8 @@
 using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.Context;
 using Pe.Revit.Scripting.Policy;
@@ -38,7 +40,7 @@ public sealed class RevitScriptExecutionService(
     private readonly ScriptReferenceResolver _referenceResolver = referenceResolver;
     private readonly Func<UIApplication?> _uiApplicationAccessor = uiApplicationAccessor;
 
-    private const string AuthoringShapeHint = "Inline scriptContent accepts Execute-body statements such as WriteLine(\"...\"), or a full container class: public sealed class Script : PeScriptContainer { public override void Execute() { WriteLine(\"...\"); } }. Execute() returns void; use WriteLine(...) for console output and Artifacts.* for durable files.";
+    private const string AuthoringShapeHint = "Inline scriptContent accepts Execute-body statements such as WriteLine(\"...\"), with optional leading using directives, or a full container class: public sealed class Script : PeScriptContainer { public override void Execute() { WriteLine(\"...\"); } }. Execute() returns void. WorkspacePath scripts are normal C# files with one PeScriptContainer. Inside Execute(), use doc, uidoc, app, selection, revitVersion, Host, Artifacts, and WriteLine(...).";
 
     public ExecuteRevitScriptData Execute(
         ExecuteRevitScriptRequest request,
@@ -218,6 +220,7 @@ public sealed class RevitScriptExecutionService(
                 );
                 foreach (var diagnostic in compilationResult.Diagnostics)
                     AppendDiagnostic(diagnostics, diagnostic);
+                AppendContextNameHints(diagnostics, plan.SourceSet.EntryPointSourceName);
 
                 if (!compilationResult.Success || compilationResult.AssemblyBytes == null) {
                     AppendAuthoringShapeHint(diagnostics, "compile", plan.SourceSet.EntryPointSourceName);
@@ -483,12 +486,20 @@ public sealed class RevitScriptExecutionService(
         if (this._entryPointResolver.ContainsContainerDeclaration(scriptContent) || this._entryPointResolver.ContainsTypeDeclaration(scriptContent))
             return scriptContent;
 
+        var root = CSharpSyntaxTree.ParseText(scriptContent).GetCompilationUnitRoot();
+        var leadingUsings = root.Usings.Count == 0
+            ? string.Empty
+            : string.Join(Environment.NewLine, root.Usings.Select(item => item.ToFullString().TrimEnd())) +
+              Environment.NewLine + Environment.NewLine;
+        var bodyStart = root.Usings.Count == 0 ? 0 : root.Usings.Last().Span.End;
+        var body = scriptContent[bodyStart..].TrimStart('\r', '\n');
+
         return $$"""
-               public sealed class InlineScript : PeScriptContainer
+               {{leadingUsings}}public sealed class InlineScript : PeScriptContainer
                {
                    public override void Execute()
                    {
-               {{IndentInlineSnippet(scriptContent)}}
+               {{IndentInlineSnippet(body)}}
                    }
                }
                """;
@@ -988,6 +999,28 @@ public sealed class RevitScriptExecutionService(
         List<ScriptDiagnostic> diagnostics,
         ScriptDiagnostic diagnostic
     ) => diagnostics.Add(diagnostic);
+
+    private static void AppendContextNameHints(
+        List<ScriptDiagnostic> diagnostics,
+        string? source = null
+    ) {
+        if (!diagnostics.Any(diagnostic =>
+                diagnostic.Stage == "compile" &&
+                diagnostic.Severity == ScriptDiagnosticSeverity.Error &&
+                diagnostic.Message.Contains("'Document' is a type", StringComparison.Ordinal)))
+            return;
+
+        if (diagnostics.Any(diagnostic =>
+                diagnostic.Stage == "authoring" &&
+                diagnostic.Message.Contains("Use `doc` for the active Revit document", StringComparison.Ordinal)))
+            return;
+
+        diagnostics.Add(ScriptDiagnosticFactory.Warning(
+            "authoring",
+            "Use `doc` for the active Revit document. `Document` is the Autodesk.Revit.DB.Document type, not a script context property.",
+            source
+        ));
+    }
 
     private static void AppendAuthoringShapeHint(
         List<ScriptDiagnostic> diagnostics,

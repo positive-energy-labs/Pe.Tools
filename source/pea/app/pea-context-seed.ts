@@ -1,4 +1,12 @@
-import { PeHostClient, type HostProbeData, type HostSessionSummaryData, type HostWorkbenchResourcesData, type HostResourceFileStateData, type RevitAgentContextSummaryData, type RevitAgentVisibleCategorySummary } from "./host-client.js";
+import {
+  PeHostClient,
+  type HostProbeData,
+  type HostSessionSummaryData,
+  type HostWorkbenchResourcesData,
+  type HostResourceFileStateData,
+  type RevitAgentContextSummaryData,
+  type RevitAgentVisibleCategorySummary,
+} from "./host-client.js";
 import { hostCapabilityMap } from "./generated/host-capability-map.generated.js";
 import { callHostOperation } from "./host-operation-runtime.js";
 
@@ -14,13 +22,7 @@ export interface PeaContextProviderRequestContext {
   threadId?: string;
 }
 
-export type PeaContextProvider = (
-  context?: PeaContextProviderRequestContext,
-) => Promise<string>;
-
-export type PeaContextSeedOptions = PeaContextProviderOptions;
-export type PeaContextSeedRequestContext = PeaContextProviderRequestContext;
-export type PeaContextSeedProvider = PeaContextProvider;
+export type PeaContextProvider = (context?: PeaContextProviderRequestContext) => Promise<string>;
 
 interface HostSeedFacts {
   probe?: HostProbeData;
@@ -47,9 +49,7 @@ interface HostStatusSnapshot {
 const fallbackCacheKey = "__pea_context__";
 const defaultTimeoutMs = 2_500;
 
-export function createPeaContextProvider(
-  options: PeaContextProviderOptions,
-): PeaContextProvider {
+export function createPeaContextProvider(options: PeaContextProviderOptions): PeaContextProvider {
   const timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
   const threads = new Map<string, ThreadContextState>();
 
@@ -72,18 +72,11 @@ export function createPeaContextProvider(
     state.statusCheckCount += 1;
     state.lastStatusCheckedAt = Date.now();
 
-    if (currentStatus.signature === state.lastStatusSignature)
-      return startup.text;
+    if (currentStatus.signature === state.lastStatusSignature) return startup.text;
 
     updateStatusState(state, currentStatus);
     return `${startup.text}\n\n${formatStatusChange()}`;
   };
-}
-
-export function createPeaContextSeedProvider(
-  options: PeaContextSeedOptions,
-): PeaContextSeedProvider {
-  return createPeaContextProvider(options);
 }
 
 async function getStartupContext(
@@ -106,8 +99,8 @@ async function collectAndFormatStartupContext(
 
   const revitContext = shouldCollectRevitContext
     ? await collectRevitContext(options.hostBaseUrl, timeoutMs).catch(
-      (error: unknown) => `request failed: ${formatError(error)}`,
-    )
+        (error: unknown) => `request failed: ${formatError(error)}`,
+      )
     : undefined;
 
   return {
@@ -123,10 +116,7 @@ async function collectStatusSnapshot(
   return createStatusSnapshot(hostBaseUrl, await collectHostFacts(hostBaseUrl, timeoutMs));
 }
 
-async function collectHostFacts(
-  hostBaseUrl: string,
-  timeoutMs: number,
-): Promise<HostSeedFacts> {
+async function collectHostFacts(hostBaseUrl: string, timeoutMs: number): Promise<HostSeedFacts> {
   const hostClient = new PeHostClient({
     baseUrl: hostBaseUrl,
     fetch: createTimeoutFetch(timeoutMs),
@@ -145,9 +135,7 @@ async function collectHostFacts(
 
   return {
     probe: probeResult.status === "fulfilled" ? probeResult.value : undefined,
-    sessionSummary: sessionResult.status === "fulfilled"
-      ? sessionResult.value
-      : undefined,
+    sessionSummary: sessionResult.status === "fulfilled" ? sessionResult.value : undefined,
     errors,
   };
 }
@@ -161,16 +149,12 @@ async function collectRevitContext(
     "revit.context.summary",
   );
 
-  if (!result.ok)
-    return result.message;
+  if (!result.ok) return result.message;
 
   return result.response as RevitAgentContextSummaryData;
 }
 
-function createStatusSnapshot(
-  hostBaseUrl: string,
-  hostFacts: HostSeedFacts,
-): HostStatusSnapshot {
+function createStatusSnapshot(hostBaseUrl: string, hostFacts: HostSeedFacts): HostStatusSnapshot {
   const probe = hostFacts.probe;
   const session = hostFacts.sessionSummary;
   const activeDocument = session?.activeDocument;
@@ -188,13 +172,13 @@ function createStatusSnapshot(
     openDocumentCount: session?.openDocumentCount ?? null,
     activeDocument: activeDocument
       ? {
-        key: normalizeBlank(activeDocument.key),
-        title: normalizeBlank(activeDocument.title),
-        path: normalizeBlank(activeDocument.path),
-        isFamilyDocument: activeDocument.isFamilyDocument,
-        isWorkshared: activeDocument.isWorkshared,
-        isModelInCloud: activeDocument.isModelInCloud,
-      }
+          key: normalizeBlank(activeDocument.key),
+          title: normalizeBlank(activeDocument.title),
+          path: normalizeBlank(activeDocument.path),
+          isFamilyDocument: activeDocument.isFamilyDocument,
+          isWorkshared: activeDocument.isWorkshared,
+          isModelInCloud: activeDocument.isModelInCloud,
+        }
       : null,
     workbenchResources: session?.workbenchResources ?? null,
     errors: hostFacts.errors,
@@ -205,10 +189,7 @@ function createStatusSnapshot(
   };
 }
 
-function updateStatusState(
-  state: ThreadContextState,
-  status: HostStatusSnapshot,
-): void {
+function updateStatusState(state: ThreadContextState, status: HostStatusSnapshot): void {
   state.lastStatusSignature = status.signature;
   state.lastStatusCheckedAt = Date.now();
 }
@@ -220,7 +201,7 @@ function formatSeed(
 ): string {
   const lines = [
     "<pea-startup-context>",
-    "Scope: transient thread-start orientation only. Pea checks cheap host/session status each turn internally and only injects a compact invalidation notice when stable status differs.",
+    "Scope: transient orientation for this user message. Pea checks cheap host/session status inside the per-message send flow and only injects a compact invalidation notice when stable status differs.",
     ...formatWorkbenchLines(options, workbenchResources),
     ...formatRevitContextLines(revitContext),
     "</pea-startup-context>",
@@ -249,7 +230,9 @@ function formatParameterResourcesLine(resources: HostWorkbenchResourcesData | un
 
   const parameters = resources.parameters;
   const cacheFiles = parameters.parameterServiceCacheFiles
-    .map((file) => `${file.label.replace("parameters-service-cache.", "")}:${formatFileState(file)}`)
+    .map(
+      (file) => `${file.label.replace("parameters-service-cache.", "")}:${formatFileState(file)}`,
+    )
     .join(" ");
   const sharedParameters = parameters.sharedParametersFile.path
     ? `${q(parameters.sharedParametersFile.path)} ${formatFileState(parameters.sharedParametersFile)}`
@@ -283,15 +266,21 @@ function formatRevitContextLines(
   revitContext: RevitAgentContextSummaryData | string | undefined,
 ): string[] {
   if (!revitContext)
-    return ["revit-context: not collected at startup. Use pe_status for bridge/session state and host_operation_call key=revit.context.summary for current Revit context."];
+    return [
+      "revit-context: not collected at startup. Use pe_status for bridge/session state and host_operation_call key=revit.context.summary for current Revit context.",
+    ];
 
   if (typeof revitContext === "string")
-    return [`revit-context: unavailable from revit.context.summary: ${revitContext}. Use pe_status, then pe_logs if needed.`];
+    return [
+      `revit-context: unavailable from revit.context.summary: ${revitContext}. Use pe_status, then pe_logs if needed.`,
+    ];
 
   const lines: string[] = [];
   const activeDocument = revitContext.documents.activeDocument;
   if (activeDocument) {
-    lines.push(`context-document: ${q(activeDocument.title)} key=${q(activeDocument.documentKey)} family=${activeDocument.isFamilyDocument} workshared=${activeDocument.isWorkshared} readOnly=${activeDocument.isReadOnly}`);
+    lines.push(
+      `context-document: ${q(activeDocument.title)} key=${q(activeDocument.documentKey)} family=${activeDocument.isFamilyDocument} workshared=${activeDocument.isWorkshared} readOnly=${activeDocument.isReadOnly}`,
+    );
   }
 
   if (revitContext.activeView) {
@@ -300,13 +289,19 @@ function formatRevitContextLines(
       .slice(0, 3)
       .map((placement) => `${placement.sheetNumber} ${placement.sheetName}`)
       .join(", ");
-    lines.push(`active-view: ${q(view.title)} type=${q(view.viewType)} scale=${view.scale} sheet=${view.isSheet} schedule=${view.isSchedule} level=${q(view.levelName ?? "-")} placements=${q(sheetPlacements || "-")}`);
+    lines.push(
+      `active-view: ${q(view.title)} type=${q(view.viewType)} scale=${view.scale} sheet=${view.isSheet} schedule=${view.isSchedule} level=${q(view.levelName ?? "-")} placements=${q(sheetPlacements || "-")}`,
+    );
   } else {
     lines.push("active-view: none reported.");
   }
 
-  lines.push(`selection: selected=${revitContext.selection.selectedElementCount} returned=${revitContext.selection.returnedElementCount}${formatSelectionSamples(revitContext.selection.entries)}`);
-  lines.push(`browser: views=${revitContext.browser.viewCount} sheets=${revitContext.browser.sheetCount} schedules=${revitContext.browser.scheduleCount} families=${revitContext.browser.familyCount}`);
+  lines.push(
+    `selection: selected=${revitContext.selection.selectedElementCount} returned=${revitContext.selection.returnedElementCount}${formatSelectionSamples(revitContext.selection.entries)}`,
+  );
+  lines.push(
+    `browser: views=${revitContext.browser.viewCount} sheets=${revitContext.browser.sheetCount} schedules=${revitContext.browser.scheduleCount} families=${revitContext.browser.familyCount}`,
+  );
   lines.push(formatVisibleCategoriesLine(revitContext.visibleCategories));
 
   return lines;
@@ -316,23 +311,17 @@ function formatSelectionSamples(
   entries: RevitAgentContextSummaryData["selection"]["entries"],
 ): string {
   const samples = entries.slice(0, 3).map((entry) => {
-    const detail = [
-      entry.className,
-      entry.familyName,
-      entry.typeName,
-      entry.levelName,
-    ].filter(Boolean).join("/");
+    const detail = [entry.className, entry.familyName, entry.typeName, entry.levelName]
+      .filter(Boolean)
+      .join("/");
     return `${entry.handle.label}${detail ? ` (${detail})` : ""}`;
   });
 
   return samples.length > 0 ? ` samples=${q(samples.join("; "))}` : "";
 }
 
-function formatVisibleCategoriesLine(
-  categories: RevitAgentVisibleCategorySummary[],
-): string {
-  if (categories.length === 0)
-    return "visible-categories: none returned.";
+function formatVisibleCategoriesLine(categories: RevitAgentVisibleCategorySummary[]): string {
+  if (categories.length === 0) return "visible-categories: none returned.";
 
   const topCategories = [...categories]
     .sort((left, right) => right.elementCount - left.elementCount)
@@ -340,12 +329,11 @@ function formatVisibleCategoriesLine(
     .map((category) => {
       const samples = category.sampleElements
         .slice(0, 2)
-        .map((sample) => [
-          sample.handle.label,
-          sample.className,
-          sample.familyName,
-          sample.typeName,
-        ].filter(Boolean).join("/"));
+        .map((sample) =>
+          [sample.handle.label, sample.className, sample.familyName, sample.typeName]
+            .filter(Boolean)
+            .join("/"),
+        );
       const sampleText = samples.length > 0 ? ` samples=${samples.join("; ")}` : "";
       return `${category.handle.label}:${category.elementCount}${sampleText}`;
     });
@@ -371,8 +359,7 @@ function normalizeBlank(value: string | undefined): string | null {
 }
 
 function formatError(error: unknown): string {
-  if (error instanceof Error)
-    return error.message;
+  if (error instanceof Error) return error.message;
 
   return String(error);
 }
@@ -387,15 +374,10 @@ function firstNonBlank(value: string | undefined): string | undefined {
 
 function escapeXmlBlock(lines: string[]): string {
   return lines
-    .map((line, index) => index === 0 || index === lines.length - 1
-      ? line
-      : escapeXmlText(line))
+    .map((line, index) => (index === 0 || index === lines.length - 1 ? line : escapeXmlText(line)))
     .join("\n");
 }
 
 function escapeXmlText(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }

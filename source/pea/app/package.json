@@ -1,25 +1,35 @@
 {
   "name": "pea",
   "version": "0.1.0",
-  "type": "module",
   "private": true,
   "bin": {
     "pea": "./dist/main.js"
   },
+  "type": "module",
   "scripts": {
     "pea": "tsx main.ts",
     "start": "tsx main.ts",
     "agent": "tsx main.ts agent",
     "dev-agent": "tsx main.ts dev",
+    "acp:dev-agent": "tsx main.ts dev --acp",
     "status": "tsx main.ts host status",
     "bootstrap": "tsx main.ts script bootstrap",
     "execute": "tsx main.ts script execute",
     "check": "tsc --noEmit",
     "test": "tsc --noEmit -p tsconfig.test.json && node --import tsx --test tests/**/*.test.ts",
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json",
+    "acpx:pea:session": "acpx --agent \"pnpm --dir source/pea/app pea --acp --model-id openai/gpt-5.5\" --cwd ../../.. --timeout 120 --ttl 30 sessions ensure",
+    "acpx:pea": "acpx --agent \"pnpm --dir source/pea/app pea --acp --model-id openai/gpt-5.5\" --cwd ../../.. --timeout 120 --ttl 30 --format text",
+    "acpx:dev-agent:session": "acpx --agent \"pnpm --dir source/pea/app pea dev --acp --model-id openai/gpt-5.5\" --cwd ../../.. --timeout 120 --ttl 30 sessions ensure",
+    "acpx:dev-agent": "acpx --agent \"pnpm --dir source/pea/app pea dev --acp --model-id openai/gpt-5.5\" --cwd ../../.. --timeout 120 --ttl 30 --format text",
+    "acpx:dev-agent:json": "acpx --agent \"pnpm --dir source/pea/app pea dev --acp --model-id openai/gpt-5.5\" --cwd ../../.. --timeout 120 --ttl 30 --format json --json-strict"
   },
   "dependencies": {
-    "@mastra/core": "1.37.1",
+    "@ag-ui/core": "0.0.55",
+    "@agentclientprotocol/sdk": "^0.25.0",
+    "@ai-sdk/openai": "3.0.63",
+    "@mastra/core": "1.41.0",
+    "ai": "6.0.176",
     "gunshi": "^0.29.5",
     "mastracode": "^0.22.2",
     "parse5": "^8.0.1",

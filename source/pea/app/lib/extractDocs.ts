@@ -13,16 +13,10 @@ export async function extractRvtDocsText(url: string): Promise<string> {
   const html = await response.text();
   const doc = parse(html);
 
-  const htmlElement = findElement(
-    doc.childNodes,
-    (node) => node.nodeName === "html",
-  );
+  const htmlElement = findElement(doc.childNodes, (node) => node.nodeName === "html");
   if (!htmlElement) throw new Error("HTML element not found");
 
-  const mainContent = findElementAfterComment(
-    htmlElement,
-    " Main content and footer ",
-  );
+  const mainContent = findElementAfterComment(htmlElement, " Main content and footer ");
   if (!mainContent) throw new Error("Main content section not found");
 
   let markdown = "";
@@ -69,14 +63,8 @@ export async function extractRvtDocsText(url: string): Promise<string> {
   return markdown.replace(/\n{3,}/g, "\n\n").trim();
 }
 
-function findElementAfterComment(
-  node: ChildNode,
-  commentText: string,
-): Element | null {
-  if (
-    node.nodeName === "#comment" &&
-    (node as CommentNode).data.includes(commentText)
-  ) {
+function findElementAfterComment(node: ChildNode, commentText: string): Element | null {
+  if (node.nodeName === "#comment" && (node as CommentNode).data.includes(commentText)) {
     if (node.parentNode) {
       const siblings = node.parentNode.childNodes;
       const index = siblings.indexOf(node);
@@ -127,10 +115,9 @@ function extractLeftColumn(element: Element): string {
   // Description
   const description = find(element, (el) => hasClass(el, "card-description"));
   if (description) {
-    const html = extractHtmlContent(description).replace(
-      "<strong>Description:</strong>",
-      "",
-    ).trim();
+    const html = extractHtmlContent(description)
+      .replace("<strong>Description:</strong>", "")
+      .trim();
     if (html) {
       markdown += `## Description\n\n${htmlToMarkdown(html)}\n\n`;
     }
@@ -139,10 +126,7 @@ function extractLeftColumn(element: Element): string {
   // Remarks
   const remarks = find(element, (el) => hasClass(el, "card-remarks"));
   if (remarks) {
-    const html = extractHtmlContent(remarks).replace(
-      "<strong>Remarks:</strong>",
-      "",
-    ).trim();
+    const html = extractHtmlContent(remarks).replace("<strong>Remarks:</strong>", "").trim();
     if (html) {
       markdown += `## Remarks\n\n${htmlToMarkdown(html)}\n\n`;
     }
@@ -156,10 +140,7 @@ function extractSyntax(syntaxTitle: Element): string {
 
   const parentCard = findParent(syntaxTitle, (el) => hasClass(el, "card"));
   if (parentCard) {
-    const codeSnippets = findAll(
-      parentCard,
-      (el) => hasClass(el, "code-snippet"),
-    );
+    const codeSnippets = findAll(parentCard, (el) => hasClass(el, "code-snippet"));
     for (const snippet of codeSnippets) {
       const codeElement = find(snippet, (el) => el.nodeName === "code");
       if (codeElement) {
@@ -169,8 +150,8 @@ function extractSyntax(syntaxTitle: Element): string {
           const language = codeClass.includes("vbnet")
             ? "vbnet"
             : codeClass.includes("cpp")
-            ? "cpp"
-            : "csharp";
+              ? "cpp"
+              : "csharp";
           markdown += `\`\`\`${language}\n${code}\n\`\`\`\n\n`;
         }
       }
@@ -188,8 +169,8 @@ function extractTable(table: Element): string {
   if (thead) {
     const headerRow = find(thead, (el) => el.nodeName === "tr");
     if (headerRow) {
-      const headers = findAll(headerRow, (el) => el.nodeName === "th").map(
-        (el) => cleanText(getText(el)),
+      const headers = findAll(headerRow, (el) => el.nodeName === "th").map((el) =>
+        cleanText(getText(el)),
       );
       markdown += `| ${headers.join(" | ")} |\n`;
       markdown += `|${headers.map(() => "---").join("|")}|\n`;
@@ -199,9 +180,7 @@ function extractTable(table: Element): string {
   if (tbody) {
     const rows = findAll(tbody, (el) => el.nodeName === "tr");
     for (const row of rows) {
-      const cells = findAll(row, (el) => el.nodeName === "td").map((el) =>
-        cleanText(getText(el))
-      );
+      const cells = findAll(row, (el) => el.nodeName === "td").map((el) => cleanText(getText(el)));
       if (cells.length > 0) {
         markdown += `| ${cells.join(" | ")} |\n`;
       }
@@ -212,14 +191,8 @@ function extractTable(table: Element): string {
 }
 
 // Consolidated helper functions
-function find(
-  element: Element | ChildNode,
-  predicate: (el: Element) => boolean,
-): Element | null {
-  if (
-    "nodeName" in element && element.nodeName !== "#text" &&
-    element.nodeName !== "#comment"
-  ) {
+function find(element: Element | ChildNode, predicate: (el: Element) => boolean): Element | null {
+  if ("nodeName" in element && element.nodeName !== "#text" && element.nodeName !== "#comment") {
     const el = element as Element;
     if (predicate(el)) return el;
   }
@@ -245,10 +218,7 @@ function findElement(
   return null;
 }
 
-function findAll(
-  element: Element,
-  predicate: (el: Element) => boolean,
-): Element[] {
+function findAll(element: Element, predicate: (el: Element) => boolean): Element[] {
   const results: Element[] = [];
 
   if (predicate(element)) {
@@ -265,10 +235,7 @@ function findAll(
   return results;
 }
 
-function findParent(
-  element: Element,
-  predicate: (el: Element) => boolean,
-): Element | null {
+function findParent(element: Element, predicate: (el: Element) => boolean): Element | null {
   let current = element.parentNode;
   while (current && "attrs" in current) {
     const el = current as Element;
@@ -279,9 +246,9 @@ function findParent(
 }
 
 function hasClass(element: Element, className: string): boolean {
-  return element.attrs?.some((attr) =>
-    attr.name === "class" && attr.value.includes(className)
-  ) ?? false;
+  return (
+    element.attrs?.some((attr) => attr.name === "class" && attr.value.includes(className)) ?? false
+  );
 }
 
 function getAttr(element: Element, name: string): string | undefined {
@@ -313,9 +280,7 @@ function extractHtmlContent(element: Element): string {
       } else if (child.nodeName === "strong") {
         html += `<strong>${getText(child)}</strong>`;
       } else if (["ul", "ol", "li", "p"].includes(child.nodeName)) {
-        html += `<${child.nodeName}>${
-          extractHtmlContent(child as Element)
-        }</${child.nodeName}>`;
+        html += `<${child.nodeName}>${extractHtmlContent(child as Element)}</${child.nodeName}>`;
       } else {
         html += extractHtmlContent(child as Element);
       }

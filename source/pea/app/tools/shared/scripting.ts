@@ -10,7 +10,7 @@ export const scriptExecuteInputSchema = z.object({
     .string()
     .optional()
     .describe(
-      "InlineSnippet content. By default, provide Execute-body statements such as WriteLine(\"...\"); a full public sealed class deriving PeScriptContainer with public override void Execute() is also allowed.",
+      'InlineSnippet content. Prefer Execute-body statements such as WriteLine("..."); optional leading using directives are allowed. A full public sealed class deriving PeScriptContainer with public override void Execute() is also allowed. WorkspacePath scripts should be normal C# files with one PeScriptContainer.',
     ),
   sourceKind: z
     .enum(["InlineSnippet", "WorkspacePath"])
@@ -21,7 +21,9 @@ export const scriptExecuteInputSchema = z.object({
   sourcePath: z
     .string()
     .optional()
-    .describe("Workspace-relative .cs path for WorkspacePath mode, for example src/SampleScript.cs."),
+    .describe(
+      "Workspace-relative .cs path for WorkspacePath mode, for example src/SampleScript.cs.",
+    ),
   workspaceKey: z
     .string()
     .optional()
@@ -64,9 +66,7 @@ export const scriptPodExportInputSchema = z.object({
     .string()
     .optional()
     .describe("Pod workspace slug to export. Defaults to the runtime workspace."),
-  archivePath: z
-    .string()
-    .describe("Output path for the exported Pod zip archive."),
+  archivePath: z.string().describe("Output path for the exported Pod zip archive."),
 });
 
 export interface ScriptRuntimeContext {
@@ -110,20 +110,14 @@ export function bootstrapScriptWorkspace(
   });
 }
 
-export function importScriptPod(
-  input: ScriptPodImportInput,
-  context: ScriptRuntimeContext,
-) {
+export function importScriptPod(input: ScriptPodImportInput, context: ScriptRuntimeContext) {
   return createScriptingClient(context).scripting.importPod({
     archivePath: input.archivePath,
     workspaceKey: input.workspaceKey,
   });
 }
 
-export function exportScriptPod(
-  input: ScriptPodExportInput,
-  context: ScriptRuntimeContext,
-) {
+export function exportScriptPod(input: ScriptPodExportInput, context: ScriptRuntimeContext) {
   return createScriptingClient(context).scripting.exportPod({
     workspaceKey: input.workspaceKey ?? context.workspaceKey,
     archivePath: input.archivePath,

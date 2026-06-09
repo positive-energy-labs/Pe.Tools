@@ -2,10 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { delimiter, dirname, extname, isAbsolute, resolve } from "node:path";
-import {
-  AttachedRrdFreshnessError,
-  runWithAttachedRrdSync,
-} from "../attached-rrd-sync.js";
+import { AttachedRrdFreshnessError, runWithAttachedRrdSync } from "../attached-rrd-sync.js";
 
 const defaultTimeoutSeconds = 900;
 const outputTailLimit = 16_000;
@@ -96,9 +93,7 @@ export function runPeDevWorkflow(
   policy: ExecutionPolicy,
   timeoutSeconds = defaultTimeoutSeconds,
 ): Promise<WorkflowCommandResult> {
-  return runWorkflowCommand(
-    peDevWorkflowCommand(workflow, args, policy, timeoutSeconds),
-  );
+  return runWorkflowCommand(peDevWorkflowCommand(workflow, args, policy, timeoutSeconds));
 }
 
 export function runRepoLocalPeDevWorkflow(
@@ -107,9 +102,7 @@ export function runRepoLocalPeDevWorkflow(
   policy: ExecutionPolicy,
   timeoutSeconds = defaultTimeoutSeconds,
 ): Promise<WorkflowCommandResult> {
-  return runWorkflowCommand(
-    repoLocalPeDevWorkflowCommand(workflow, args, policy, timeoutSeconds),
-  );
+  return runWorkflowCommand(repoLocalPeDevWorkflowCommand(workflow, args, policy, timeoutSeconds));
 }
 
 function peDevWorkflowCommand(
@@ -238,9 +231,7 @@ export async function runAttachedRrdTest(request: {
   };
 }
 
-async function runWorkflowCommand(
-  request: WorkflowCommandRequest,
-): Promise<WorkflowCommandResult> {
+async function runWorkflowCommand(request: WorkflowCommandRequest): Promise<WorkflowCommandResult> {
   const cwd = process.cwd();
   const primary = await resolveExecutable(request.requestedExecutable);
   if (!primary.resolvedPath && request.fallback) {
@@ -370,13 +361,7 @@ async function spawnWorkflowCommand(
         artifactPaths: request.artifactPaths ?? [],
         json: parsedJson,
         runtimeFreshness,
-        proof: proofForResult(
-          request.workflow,
-          request.policy,
-          ok,
-          resultTimedOut,
-          parsedJson,
-        ),
+        proof: proofForResult(request.workflow, request.policy, ok, resultTimedOut, parsedJson),
       });
     };
 
@@ -412,8 +397,7 @@ export async function resolveExecutable(
   for (const pathEntry of pathEntries) {
     for (const executableName of executableNames) {
       const candidate = resolve(pathEntry, executableName);
-      if (await isFile(candidate))
-        return { resolvedPath: candidate, source: "path" };
+      if (await isFile(candidate)) return { resolvedPath: candidate, source: "path" };
     }
   }
 
@@ -425,17 +409,13 @@ function getExecutableNames(requestedExecutable: string): string[] {
 
   if (extname(requestedExecutable).length > 0) return [requestedExecutable];
 
-  const pathExt = (
-    process.env.PATHEXT?.split(";").filter(Boolean) ?? [".COM", ".EXE"]
-  ).filter((extension) => ![".BAT", ".CMD"].includes(extension.toUpperCase()));
+  const pathExt = (process.env.PATHEXT?.split(";").filter(Boolean) ?? [".COM", ".EXE"]).filter(
+    (extension) => ![".BAT", ".CMD"].includes(extension.toUpperCase()),
+  );
   return [
     requestedExecutable,
-    ...pathExt.map(
-      (extension) => `${requestedExecutable}${extension.toLowerCase()}`,
-    ),
-    ...pathExt.map(
-      (extension) => `${requestedExecutable}${extension.toUpperCase()}`,
-    ),
+    ...pathExt.map((extension) => `${requestedExecutable}${extension.toLowerCase()}`),
+    ...pathExt.map((extension) => `${requestedExecutable}${extension.toUpperCase()}`),
   ];
 }
 
@@ -448,9 +428,7 @@ async function isFile(path: string): Promise<boolean> {
 }
 
 function formatCommandLine(executablePath: string, args: string[]): string {
-  const displayPath = executablePath.includes(" ")
-    ? resolve(executablePath)
-    : executablePath;
+  const displayPath = executablePath.includes(" ") ? resolve(executablePath) : executablePath;
   return [displayPath, ...args].map(quoteCommandPart).join(" ");
 }
 
@@ -473,15 +451,11 @@ function parseJsonObjectFromTail(text: string): unknown {
   return undefined;
 }
 
-function getSyncRuntimeFreshness(
-  parsedJson: unknown,
-): SyncRuntimeFreshness | undefined {
+function getSyncRuntimeFreshness(parsedJson: unknown): SyncRuntimeFreshness | undefined {
   if (!isRecord(parsedJson)) return undefined;
 
   const runtimeFreshness = parsedJson.runtimeFreshness;
-  return isRecord(runtimeFreshness)
-    ? (runtimeFreshness as SyncRuntimeFreshness)
-    : undefined;
+  return isRecord(runtimeFreshness) ? (runtimeFreshness as SyncRuntimeFreshness) : undefined;
 }
 
 function proofForSyncRuntimeFreshness(
@@ -489,8 +463,7 @@ function proofForSyncRuntimeFreshness(
   timedOut: boolean,
   freshness: SyncRuntimeFreshness,
 ): WorkflowCommandResult["proof"] {
-  const verdict =
-    typeof freshness.verdict === "string" ? freshness.verdict : "unproven";
+  const verdict = typeof freshness.verdict === "string" ? freshness.verdict : "unproven";
   const basis =
     typeof freshness.basis === "string"
       ? freshness.basis
@@ -500,13 +473,9 @@ function proofForSyncRuntimeFreshness(
       ? freshness.nextStep
       : "Use live_loop_context log evidence or FreshRevitProcess proof before relying on attached behavior.";
   const loadedGraph =
-    typeof freshness.loadedGraphVerdict === "string"
-      ? freshness.loadedGraphVerdict
-      : "unknown";
+    typeof freshness.loadedGraphVerdict === "string" ? freshness.loadedGraphVerdict : "unknown";
   const sourceDelta =
-    typeof freshness.sourceDeltaVerdict === "string"
-      ? freshness.sourceDeltaVerdict
-      : "unknown";
+    typeof freshness.sourceDeltaVerdict === "string" ? freshness.sourceDeltaVerdict : "unknown";
   const counts = `loaded=${freshness.loadedAssemblyCount ?? "unknown"} comparable=${freshness.comparableAssemblyCount ?? "unknown"} stale=${freshness.staleAssemblyCount ?? "unknown"} unchecked=${freshness.uncheckedAssemblyCount ?? "unknown"} sourceDeltas=${freshness.sourceDeltaCount ?? "unknown"}`;
   const interpretation = timedOut
     ? `sync timed out before AttachedRrd runtime freshness could be proven (${counts}).`
@@ -584,8 +553,7 @@ function proofForResult(
         proves: ok
           ? "Diagnostics command returned current live-loop state evidence."
           : "Diagnostics failed or was unavailable; live-loop state remains uncertain.",
-        doesNotProve:
-          "Does not compile, package, refresh, or validate product behavior by itself.",
+        doesNotProve: "Does not compile, package, refresh, or validate product behavior by itself.",
         nextStep: ok
           ? "Use the returned state to choose source proof, live_rrd_sync, tests, or Pea product probes."
           : "Check tool availability and included log evidence, then rerun diagnostics.",
