@@ -30,7 +30,7 @@ This repo is greenfield: move fast, prefer the best long-term shape, and do not 
 - `source/Pe.App/Application.cs` - desktop Revit add-in startup, host bridge bootstrap, ribbon/task initialization.
 - `source/Pe.App/ButtonRegistry.cs` - top-level desktop command and ribbon exposure.
 - `source/Pe.Host/Program.cs` - external settings host, HTTP/SSE entrypoint.
-- `source/pea/app/` - TypeScript Pea CLI/runtime surface. `pea agent` is the deployed Revit/operator workbench; `pea dev` starts dev-agent, the MastraCode-based repo coding agent with Pea black-box feedback tools.
+- `source/pea/app/` - TypeScript Pea CLI/runtime surface. `pea agent` is the deployed Revit/operator workbench; `peco` starts Peco, the MastraCode-based repo coding agent with Pea black-box feedback tools.
 - `source/Pe.Shared.StorageRuntime/` - schema generation, field options, module registration, storage/document validation.
 - `source/Pe.Revit.Global/` - document-owned Revit helpers, APS contracts, and DA-safe collector seams that both shells can share.
 - `source/Pe.Revit/Extensions/` - strong primitives such as `FamilyDocument`, value coercion helpers, formula helpers, and parameter lookup helpers.
@@ -92,11 +92,11 @@ This repo is greenfield: move fast, prefer the best long-term shape, and do not 
 
 - WPF BAML resolution errors that occasionally happen. This remains a major blocker, but cause and durable mitigation are still unknown.
 
-<!-- dev-agent managed instructions:start -->
+<!-- Peco managed instructions:start -->
 
-# dev-agent
+# Peco
 
-Dev-agent is the Pe.Tools repo coding agent built on Mastra Harness/Workspace primitives. Pea is the deployed Revit/operator workbench. Keep the boundary clear: use Pea only as a black-box product harness, never as a repo-source agent.
+Peco is the Pe.Tools repo coding agent built on Mastra Harness/Workspace primitives. Pea is the deployed Revit/operator workbench. Keep the boundary clear: use Pea only as a black-box product harness, never as a repo-source agent.
 
 ## Core Operating Loop
 
@@ -136,7 +136,7 @@ Activate the smallest matching skill from natural language:
 - **pe-live-loop**: RRD, Rider, hot reload, active documents, AttachedRrd, visual/manual Revit state, installed-lane coordination.
 - **pe-diagnose**: bugs, regressions, confusing errors, failing build/test/script, source-vs-product mismatch.
 - **pe-tdd**: tests-first work, regression tests, public-seam behavior changes.
-- **pe-architecture**: module seams, product boundaries, desktop vs DA, Pea vs dev-agent, document-owned vs session-owned.
+- **pe-architecture**: module seams, product boundaries, desktop vs DA, Pea vs Peco, document-owned vs session-owned.
 - **pe-codify-work**: PRDs, RFCs, AFK-ready plans, durable briefs/docs.
 - **pe-handoff**: pause/resume/next-agent context.
 - **pe-write-skill**: create or revise skills, triggers, slash-skill behavior, skill boundaries.
@@ -151,4 +151,4 @@ Resolve Pe.Tools truth in this order: nearest `AGENTS.md`, relevant `_GOALS.md`,
 - Use `live_rrd_sync` before live scripting or AttachedRrd tests after runtime edits.
 - Prefer FreshRevitProcess tests when Hot Reload risk, stale assembly evidence, member-shape changes, or WPF/BAML/resource changes make AttachedRrd ambiguous.
 - Use Pea product tools (`pe_status`, `pe_logs`, host operations, scripts, Revit API docs, `talk_to_pea`) only for black-box product feedback, not repo source review.
-<!-- dev-agent managed instructions:end -->
+<!-- Peco managed instructions:end -->

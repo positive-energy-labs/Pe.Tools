@@ -2,7 +2,7 @@
 
 This document is the repo-level decision record for build, package, runtime, and Revit proof lanes. It intentionally explains why the lanes are separate more than it tries to be a complete runbook.
 
-Keep detailed workflow behavior in the owning package docs, dev-agent skills, or the tooling itself. `BUILD.md` should preserve the durable mental model future agents need before they choose a command.
+Keep detailed workflow behavior in the owning package docs, Peco skills, or the tooling itself. `BUILD.md` should preserve the durable mental model future agents need before they choose a command.
 
 ## Core decision
 
@@ -24,9 +24,9 @@ This separation exists because Revit, Rider hot reload, package-local outputs, i
 | **AttachedRrd**       | Live-session proof must be treated as an attached runtime loop, not as normal compilation. | Rider/Revit/Host/session/document state is fragile and cannot be inferred from MSBuild success.           | A targeted probe behaved correctly in the currently running RRD session. |
 | **Installed lane**    | Installed behavior must be validated from installed roots.                                 | MSI/product roots and dev/runtime roots intentionally differ.                                             | Installed bootstrap/runtime behavior, not source or RRD behavior.        |
 
-## Dev-agent wrapper decision
+## Peco wrapper decision
 
-The dev-agent has narrow repo verification wrappers because this environment is unusually easy to misread:
+The Peco has narrow repo verification wrappers because this environment is unusually easy to misread:
 
 - Rider and Revit are long-lived user processes.
 - Hot reload can report success without proving the loaded Revit assembly graph is behaviorally fresh.
@@ -36,7 +36,7 @@ The dev-agent has narrow repo verification wrappers because this environment is 
 
 The wrappers encode policy and collect evidence: `NoRrdContact` versus `RrdRequired`, read-only orientation before mutation, bounded logs, sync/restart guidance, test-owned process planning, command fallback, and explicit proof/does-not-prove language.
 
-That does not make `BUILD.md` a dev-agent tool manual. The durable decision is: **when the claim depends on live Rider/Revit state, use the dev-agent live-loop abstraction instead of reproducing that orchestration by hand or resurrecting removed `pe-dev` commands.** The direct tool names belong in dev-agent instructions and skills, where they can evolve without rewriting the build philosophy.
+That does not make `BUILD.md` a Peco tool manual. The durable decision is: **when the claim depends on live Rider/Revit state, use the Peco live-loop abstraction instead of reproducing that orchestration by hand or resurrecting removed `pe-dev` commands.** The direct tool names belong in Peco instructions and skills, where they can evolve without rewriting the build philosophy.
 
 ## Environment limitations this repo designs around
 
@@ -135,11 +135,11 @@ Do not treat attached proof as “run a build, then trust it.” The attached lo
 4. Did the relevant runtime refresh/restart path actually happen?
 5. Did a behavior probe, script, host operation, attached test, log delta, or Pea black-box interaction prove the intended behavior?
 
-A Rider/IDE build may be part of preparing package-local outputs, but it is not a universal instruction and may be blocked or inappropriate while a debug session is running. Plain terminal `dotnet build` remains the compile default. When runtime freshness matters, coordinate through the dev-agent attached-runtime abstraction and prove behavior at the end.
+A Rider/IDE build may be part of preparing package-local outputs, but it is not a universal instruction and may be blocked or inappropriate while a debug session is running. Plain terminal `dotnet build` remains the compile default. When runtime freshness matters, coordinate through the Peco attached-runtime abstraction and prove behavior at the end.
 
 Attached probes can include host operations, script execution against the running document, attached Revit tests, or black-box Pea review. Script execution is a first-class proof path because it can reference Pe assemblies and exercise Host/Revit behavior in the live session. Pea black-box review is also a first-class product harness because it tests the operator-facing product rather than the repo agent’s assumptions.
 
-Do not document or depend on removed public `pe-dev` command groups (`doctor`, `status`, `sync`, `env`, `revit`, or `verify`) for attached RRD work. Attached live-loop behavior belongs to dev-agent-only verification wrappers and skills, not to a broad public CLI surface.
+Do not document or depend on removed public `pe-dev` command groups (`doctor`, `status`, `sync`, `env`, `revit`, or `verify`) for attached RRD work. Attached live-loop behavior belongs to Peco-only verification wrappers and skills, not to a broad public CLI surface.
 
 ## Packaging and release decisions
 
@@ -193,18 +193,20 @@ Do not validate installed behavior against the dev host root. MSI upgrades inten
 
 ### PATH-visible CLI decision
 
-`pea` is the product/operator CLI and stays PATH-visible under the installed-shaped `bin\pea` root. The runtime lane may change which Host binary `Pe.App` launches, but the operator entrypoint should not move just because the current workflow is dev, installed, or RRD-oriented.
+`pea` is the product/operator CLI and `peco` is the repo/dev coding-agent CLI. In the source-linked dev lane, both are PATH-visible launcher commands under the installed-shaped `bin\pea` root, but they execute TypeScript sources from `source/pe-tools/apps` instead of an installer payload.
 
-The clean Pea lane model is:
+The clean source-linked CLI model is:
 
-- Bare `pea ...` means installed payload: `bin\pea\current.txt` selects `bin\pea\versions\<version>`.
-- Bare `pea dev` and `pea dev-agent` are the exception: they are repo-dev entrypoints and auto-select the source-linked dev lane.
+- Bare `pea` launches the Pea Revit/operator agent TUI from `source/pe-tools/apps/pea/src/main.ts`.
+- Bare `peco` launches the Peco repo coding-agent TUI from `source/pe-tools/apps/pe-code/src/main.ts`.
+- `pea <subcommand> ...` stays available for product/operator commands such as `host` and `script`.
+- `peco <subcommand> ...` stays available for repo/dev commands such as `live`, `script`, and `talk-to-pea`.
 - `pea --installed ...` is the explicit installed-lane selector. Use it in installed-lane validation and scripts where ambiguity would be expensive.
-- `pea --dev ...` is the explicit source-linked selector. It requires `dev-source.txt` and runs `source/pea/app/main.ts` through the repo TypeScript runtime.
+- `pea --dev ...` is the explicit source-linked selector. It requires `dev-source.txt` and runs the Pea app from `source/pe-tools/apps/pea` through the repo TypeScript runtime.
 - `PEA_RUNTIME=dev` is a local shell convenience only. Do not use ambient environment selection as proof of lane.
 - `Pe.App` must pass `--dev` or `--installed` when launching Pea from Revit, based on its `Pe.App.runtime.json` descriptor. The Host binary already follows that descriptor; Pea must not silently cross lanes through a linked source file.
 
-This is intentionally stricter than the old "linked source wins by default" model. A `dev-source.txt` file is a capability registration, not a default payload selector for product/operator commands.
+This source-linked shape is intentionally about developer iteration, not installer payload ownership. A `dev-source.txt` file is a capability registration for launchers. It does not prove packaged installed behavior and should not be used as installed-lane evidence.
 
 `pe-dev` is different by design: it is source/dev-only repo tooling, not an installed product slice. The MSI must not install it, register it on PATH, or harvest a `pe-dev` payload. Developers bootstrap their own PATH entry to the build output they want to use:
 
@@ -214,27 +216,28 @@ dotnet run --project .\source\Pe.Dev.Cli\Pe.Dev.Cli.csproj -c Debug.R25 -- boots
 
 `bootstrap-path` points the user PATH at `AppContext.BaseDirectory` for that invocation, so `dotnet run -c Debug.R25 -- bootstrap-path` targets the project-bin output for `Debug.R25`. This keeps `pe-dev` personal and configuration-specific without creating another product runtime root.
 
-This asymmetry is deliberate: Host needs a dev-only root to avoid installed-runtime file locks and stale installed contracts; `pea` needs a stable product command for operators; `pe-dev` should stay a local source workflow helper.
+This asymmetry is deliberate: Host needs a dev-only root to avoid installed-runtime file locks and stale installed contracts; `pea` and `peco` need stable operator/dev launch commands; `pe-dev` should stay a local source workflow helper.
 
-`pea` and `pe-dev` are separate surfaces:
+`pea`, `peco`, and `pe-dev` are separate surfaces:
 
-- `pea agent` is the deployed Revit/operator workbench.
-- `pea dev` starts the MastraCode-based repo coding agent.
-- `pe-dev` is the narrow source/dev CLI for repo workflows.
+- `pea` starts the source-linked Pea Revit/operator workbench TUI; `pea host` and `pea script` expose product command subgroups.
+- `peco` starts the MastraCode-based repo coding agent; `peco live`, `peco script`, and `peco talk-to-pea` expose repo/dev command subgroups.
+- `pe-dev` is the narrow C# source/dev CLI for PATH bootstrap, source linking, codegen, FreshRevitProcess tests, and automation commands.
 
 Useful dev-lane refresh commands:
 
 ```powershell
 pe-dev bootstrap-path
 pe-dev pea link-dev
-pea dev
+pea
+peco
 pea --dev --help
 pea --installed --help
 ```
 
-`pe-dev pea link-dev` writes `dev-source.txt` next to the PATH-visible `pea.cmd` and refreshes the launcher. It does not mutate `current.txt`, install a `versions\dev` payload, or make product/operator commands source-linked. Use `pea dev` or `pea --dev ...` for source-linked development and `pea ...` / `pea --installed ...` for installed payload behavior.
+`pe-dev pea link-dev` writes `dev-source.txt` next to PATH-visible `pea.cmd` / `peco.cmd` launchers and refreshes those launchers. It does not mutate `current.txt` or install a `versions\dev` payload. Use `pea`, `peco`, or `pea --dev ...` for source-linked development; use `pea --installed ...` for installed payload behavior.
 
-Do not use a dev command to rewrite the installed-shaped `pea` payload selection. A previous `pe-dev pea install-dev` command was removed because it wrote `versions\dev` and `current.txt` under `bin\pea`, making installed-lane validation ambiguous. Source-linked dev work should use `link-dev` plus `pea dev` / `pea --dev ...`; packaged installed payload validation should use the installer/package lane or `pea --installed ...` against an installed payload.
+Do not use a dev command to rewrite the installed-shaped `pea` payload selection. A previous `pe-dev pea install-dev` command was removed because it wrote `versions\dev` and `current.txt` under `bin\pea`, making installed-lane validation ambiguous. Source-linked dev work should use `link-dev` plus `pea` / `peco`; packaged installed payload validation should use the installer/package lane or `pea --installed ...` against an installed payload.
 
 ## Generated contract decisions
 
@@ -303,7 +306,7 @@ The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. D
 | Recover poisoned dotnet sandbox   | `.\tools\dotnet-sandbox-safe.ps1 <dotnet args>`                                                                                       |
 | Fresh Revit proof                 | `pe-dev test --filter "Name~..." --timeout-seconds 900`                                                                               |
 | Fresh proof planning              | `pe-dev test --plan --json --filter "Name~..."`                                                                                       |
-| Attached RRD proof                | Use dev-agent attached-runtime verification wrappers/skills, then prove with an attached operation/script/test/log/Pea product probe. |
+| Attached RRD proof                | Use Peco attached-runtime verification wrappers/skills, then prove with an attached operation/script/test/log/Pea product probe. |
 | Product host/log/script check     | `pea host ...`, `pea script ...`                                                                                                      |
 | Package artifacts/MSI             | `dotnet run --project .\build\Build.csproj -c Release -- pack`                                                                        |
 | Package one year                  | `dotnet run --project .\build\Build.csproj -c Release -- pack --configuration Release.R25`                                            |
@@ -311,7 +314,7 @@ The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. D
 | Package installer only            | `dotnet run --project .\build\Build.csproj -c Release -- pack installer --configuration Release.R25`                                  |
 | Package automation appbundle only | `dotnet run --project .\build\Build.csproj -c Release -- pack automation`                                                             |
 | Publish GitHub release artifacts  | `dotnet run --project .\build\Build.csproj -c Release -- pack publish`                                                                |
-| Link source `pea` dev lane        | `pe-dev pea link-dev`, then `pea dev` or `pea --dev ...`                                                                              |
+| Link source `pea` dev lane        | `pe-dev pea link-dev`, then `peco` or `pea --dev ...`                                                                              |
 | Validate installed `pea` lane     | `pea --installed ...`                                                                                                                 |
 | Generated contract check          | `pe-dev codegen check`                                                                                                                |
 | Generated contract update         | `pe-dev codegen sync --target <target>`                                                                                               |

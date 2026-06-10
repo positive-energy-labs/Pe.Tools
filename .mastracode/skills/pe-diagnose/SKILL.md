@@ -45,7 +45,7 @@ Use for bugs, regressions, confusing failures, stale runtime behavior, failing s
 
 Use diagnosis for the root-cause loop once the live verification lane is trustworthy. If proof depends on Rider/IDE build freshness, RRD restart, document setup, modal Revit UI, installed-lane switches, auth/login, or visual confirmation, activate pe-live-loop first and coordinate the human-maintained session boundary before diagnosing deeper.
 
-After live-loop coordination establishes a trustworthy lane, probe with the smallest script, host operation, or focused test that observes the changed behavior. Dev-agent sync should use the non-focus Pe.RiderBridge lane; if sync reports runtime freshness stale or unproven, or behavior still diverges after a nominal bridge invocation, return to pe-live-loop instead of treating stale live state as source evidence.
+After live-loop coordination establishes a trustworthy lane, probe with the smallest script, host operation, or focused test that observes the changed behavior. Peco sync should use the non-focus Pe.RiderBridge lane; if sync reports runtime freshness stale or unproven, or behavior still diverges after a nominal bridge invocation, return to pe-live-loop instead of treating stale live state as source evidence.
 
 ### AttachedRrd freshness verdict
 

@@ -1,12 +1,12 @@
-# Pea/dev-agent LSP MVP context
+# Pea/Peco LSP MVP context
 
 ## Current posture
 
-This is deferred exploration, not an approved product commitment. Motivation shifted after `dotnet format --verify-no-changes --severity info` proved to cover most dev-agent style/Problems-panel needs without Rider UI scraping. Do not promote LSP as the first-class diagnostics path until repo cleanup reduces current analyzer/style output volume.
+This is deferred exploration, not an approved product commitment. Motivation shifted after `dotnet format --verify-no-changes --severity info` proved to cover most Peco style/Problems-panel needs without Rider UI scraping. Do not promote LSP as the first-class diagnostics path until repo cleanup reduces current analyzer/style output volume.
 
 ## Constraints
 
-- Pea is the deployed Revit/operator workbench; dev-agent is repo coding tooling. Their LSP needs overlap, but Pea has stricter install/product constraints.
+- Pea is the deployed Revit/operator workbench; Peco is repo coding tooling. Their LSP needs overlap, but Pea has stricter install/product constraints.
 - Pea users are Windows/Revit users, not assumed C# developers.
 - Reasonable Pea assumptions: Windows, Revit, Pe-installed binaries/assemblies, Pea-owned scripting workspace.
 - Unsafe Pea assumptions: full .NET SDK, `dotnet` on PATH, Rider/VS/VS Code, Roslyn LSP, `csharp-ls`, user-edited config files.
@@ -16,7 +16,7 @@ This is deferred exploration, not an approved product commitment. Motivation shi
 ## Decisions so far
 
 - Do not build a Rider Problems-panel route unless Roslyn/dotnet-format paths miss valuable Rider-only inspections.
-- For dev-agent diagnostics/style, prefer `dotnet format ... --verify-no-changes --severity info` before LSP/Rider integration.
+- For Peco diagnostics/style, prefer `dotnet format ... --verify-no-changes --severity info` before LSP/Rider integration.
 - For Pea LSP, keep the exposed tool surface tiny and Pea-shaped:
   - `script_lsp_status`
   - `script_lsp_inspect`

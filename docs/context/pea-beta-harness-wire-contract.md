@@ -19,16 +19,16 @@ Mastra is an implementation detail below the Pea runtime contract. ACP and AG-UI
 
 ## Core decisions
 
-- Browser and CLI clients observe and steer the local runtime; local Pea/dev-agent executes.
+- Browser and CLI clients observe and steer the local runtime; local Pea/Peco executes.
   - Why: Revit/tool/model/source lifecycle is local runtime state, not browser-tab state.
 - The local protocol boundary is Pea-owned.
   - Why: protocol clients should prove product/frontend communication seams, not grow a second agent runtime API.
-- Pea and dev-agent remain separate products.
+- Pea and Peco remain separate products.
   - `pea` mode uses the deployed Revit/operator runtime.
-  - `dev-agent` mode uses the repo coding-agent runtime.
-  - Threads are not shared across modes and dev-agent is not a Pea persona.
+  - `Peco` mode uses the repo coding-agent runtime.
+  - Threads are not shared across modes and Peco is not a Pea persona.
 - Tool calls must be fully reflected.
-  - Why: beta users need educational/debug visibility into what Pea/dev-agent did, especially around Revit host operations, scripts, shell commands, and source-editing tools.
+  - Why: beta users need educational/debug visibility into what Pea/Peco did, especially around Revit host operations, scripts, shell commands, and source-editing tools.
 - Tool frames are telemetry and interrupt evidence, not direct browser authority over runtime policy.
   - Include lifecycle, tool name/id, args/input, streamed input, updates, shell stdout/stderr, final result, provider metadata, error status, and surfaced error payloads.
   - Runtime approval/suspension/plan requests may be exposed as protocol-native interrupts so clients can collect user input.
@@ -37,7 +37,7 @@ Mastra is an implementation detail below the Pea runtime contract. ACP and AG-UI
   - Why: this is a local debug and educational affordance for manually auditing tool and host-operation behavior.
   - Display truncation is a frontend rendering concern; the process-local event/log should preserve the full sanitized value.
 - No durable cross-mode thread model.
-  - Why: Pea and dev-agent are separate products; switching mode means switching runtime/session, not changing a property on one conversation.
+  - Why: Pea and Peco are separate products; switching mode means switching runtime/session, not changing a property on one conversation.
 - No model switching in beta protocol scope.
   - Why: beta tests target one selected model/config per runtime and should not carry model-picker complexity.
 
@@ -63,7 +63,7 @@ Mastra is an implementation detail below the Pea runtime contract. ACP and AG-UI
 `PeaRuntimeProtocolSessions` is the stable protocol session seam above runtime factories:
 
 - Owns process-local protocol session ids, AG-UI external thread id mapping, runtime thread ids, runtime resource ids, cwd, additional directory metadata, prompt concurrency, cancellation, and active-session deletion/close.
-- Uses `PeaRuntimeFactory` to choose `pea` vs `dev-agent` runtime creation without letting ACP or AG-UI adapters call `createPea(...)` / `createPeaDev(...)` directly.
+- Uses `PeaRuntimeFactory` to choose `pea` vs `Peco` runtime creation without letting ACP or AG-UI adapters call `createPea(...)` / `createPeaDev(...)` directly.
 - Supports session list/resume/load/fork/delete/close. ACP `additionalDirectories` is supported for session creation/listing and resume/load/fork scope updates. `close` frees active runtime resources while keeping the listed session metadata; `delete` removes it from the registry.
 
 `PeaRuntimeSessionRegistry` is the durable protocol session metadata/history seam:
@@ -99,7 +99,7 @@ Mastra is an implementation detail below the Pea runtime contract. ACP and AG-UI
 
 - ACP `initialize` advertises auth methods derived from runtime options: API-key env-var auth for API-key mode, agent-managed Codex OAuth for OAuth mode, and both only when auto mode explicitly allows the OAuth beta path.
 - ACP `authenticate` validates that the requested method id was advertised. It does not mutate credentials yet.
-- ACP `logout` is advertised only when scoped stored credential revocation exists. Today this is limited to the `pea` runtime, where logout clears Pea-owned OpenAI/Codex credentials from the scoped Pe.Tools auth file and current process environment. Do not wire ACP logout to global dev-agent/MastraCode auth storage.
+- ACP `logout` is advertised only when scoped stored credential revocation exists. Today this is limited to the `pea` runtime, where logout clears Pea-owned OpenAI/Codex credentials from the scoped Pe.Tools auth file and current process environment. Do not wire ACP logout to global Peco/MastraCode auth storage.
 - AG-UI reports the same runtime auth metadata under `capabilities.custom`, including explicit `pea.logoutSupported`; local HTTP tokens remain transport auth only, and AG-UI exposes authenticated `POST /agui/logout` for runtimes with scoped revocation support.
 
 `PeaRuntimeClient` is the runtime client-delegation seam:
@@ -107,7 +107,7 @@ Mastra is an implementation detail below the Pea runtime contract. ACP and AG-UI
 - Protocol adapters map client capabilities into permission, filesystem, terminal, and terminal-auth booleans without leaking protocol SDK types above the adapter.
 - ACP `InitializeRequest.clientCapabilities` feeds this contract, Pea runtime `pending_approval` tool starts trigger ACP `session/request_permission` through the client bridge, and ACP client `fs/*` / `terminal/*` methods are exposed as protocol-neutral Pea runtime client methods.
 - ACP prompts carry the configured `PeaRuntimeClient` into Mastra request context under the Pea runtime context seam. Runtime tools should retrieve that client from the Pea-owned request context helper rather than importing ACP SDK types.
-- ACP permission answers are recorded as pending Pea runtime resume decisions on the protocol session and consumed into the next runtime prompt through the same structured resume-decision request context used by AG-UI. Switching Mastra/dev-agent command execution to client-owned filesystem/terminal execution remains future work until the runtime command seam can consume those decisions deterministically.
+- ACP permission answers are recorded as pending Pea runtime resume decisions on the protocol session and consumed into the next runtime prompt through the same structured resume-decision request context used by AG-UI. Switching Mastra/Peco command execution to client-owned filesystem/terminal execution remains future work until the runtime command seam can consume those decisions deterministically.
 
 The current Mastra implementation may still use Harness current-thread primitives internally. Protocol adapters must not.
 

@@ -121,7 +121,7 @@ Use for bugs, regressions, confusing failures, stale runtime behavior, failing s
 
 Use diagnosis for the root-cause loop once the live verification lane is trustworthy. If proof depends on Rider/IDE build freshness, RRD restart, document setup, modal Revit UI, installed-lane switches, auth/login, or visual confirmation, activate pe-live-loop first and coordinate the human-maintained session boundary before diagnosing deeper.
 
-After live-loop coordination establishes a trustworthy lane, probe with the smallest script, host operation, or focused test that observes the changed behavior. Dev-agent sync should use the non-focus Pe.RiderBridge lane; if sync reports runtime freshness stale or unproven, or behavior still diverges after a nominal bridge invocation, return to pe-live-loop instead of treating stale live state as source evidence.
+After live-loop coordination establishes a trustworthy lane, probe with the smallest script, host operation, or focused test that observes the changed behavior. Peco sync should use the non-focus Pe.RiderBridge lane; if sync reports runtime freshness stale or unproven, or behavior still diverges after a nominal bridge invocation, return to pe-live-loop instead of treating stale live state as source evidence.
 
 ### AttachedRrd freshness verdict
 
@@ -189,7 +189,7 @@ Use when progress depends on human-maintained live state: Rider/IDE builds, RRD 
 
 ## Dispatch
 
-- If the user asks to product-test Pea against live project questions, preserve the distinction between Pea's unseeded operator behavior and dev-agent's independent verification of model facts.
+- If the user asks to product-test Pea against live project questions, preserve the distinction between Pea's unseeded operator behavior and Peco's independent verification of model facts.
 - If runtime freshness is unknown and attached proof matters, collect a read-only live loop context before mutating anything.
 - If runtime code changed and sync is recommended, call live_rrd_sync explicitly and report whether it proved action invocation only or loaded-runtime freshness.
 - If live_rrd_sync/live loop context recommends live_rrd_restart, use the restart primitive and wait for Host/Revit bridge readiness before attached proof.
@@ -225,7 +225,7 @@ Use when progress depends on human-maintained live state: Rider/IDE builds, RRD 
 
 Use this posture when the task is to evaluate whether Pea can answer realistic project questions from the active model without being seeded with firm standards, hidden parameter names, browser paths, sheet numbers, or repo/tooling context.
 
-Treat Pea's response, tool choices, errors, and silence as product evidence. Treat dev-agent host operations or scripts as independent verification, not as a substitute for Pea's answer. Report the gap between what Pea discovered unaided and what the model evidence supports.
+Treat Pea's response, tool choices, errors, and silence as product evidence. Treat Peco host operations or scripts as independent verification, not as a substitute for Pea's answer. Report the gap between what Pea discovered unaided and what the model evidence supports.
 
 ## Handoff Packet
 
@@ -298,7 +298,7 @@ Capture only when the work establishes a reusable test-seam rule, proof pattern,
     name: "pe-architecture",
     content: `---
 name: pe-architecture
-description: Improve Pe.Tools architecture by resolving where code should live, product boundaries, module seams, interface depth, locality, and deterministic-vs-latent design. Use when the user asks where should this live, this feels tangled, design an interface, boundary question, Pea vs dev-agent, desktop vs DA, document-owned vs session-owned, typed host operation vs script, or whether logic belongs in code, docs, skills, or Pea workflows.
+description: Improve Pe.Tools architecture by resolving where code should live, product boundaries, module seams, interface depth, locality, and deterministic-vs-latent design. Use when the user asks where should this live, this feels tangled, design an interface, boundary question, Pea vs Peco, desktop vs DA, document-owned vs session-owned, typed host operation vs script, or whether logic belongs in code, docs, skills, or Pea workflows.
 metadata:
   goal: true
 ---
@@ -311,7 +311,7 @@ Use for module/interface design, refactoring direction, product-boundary questio
 
 - If the question is "where should this live", inspect current package boundaries and nearest docs before proposing a target.
 - If code feels tangled, identify the public interface and the volatility hidden behind it.
-- If Pea/dev-agent, desktop/DA, document/session, host operation/bridge, or build/runtime lanes are involved, name the boundary before changing source.
+- If Pea/Peco, desktop/DA, document/session, host operation/bridge, or build/runtime lanes are involved, name the boundary before changing source.
 - If the decision resolves a durable boundary rule, capture it before moving code.
 - If the problem is actually vague intent, use pe-steer first.
 
@@ -326,7 +326,7 @@ Use Module, Interface, Implementation, Depth, Seam, Adapter, Leverage, and Local
 3. Inspect neighboring implementations before inventing abstractions.
 4. Prefer generated contracts and public seams as current truth.
 5. Consider how release packaging orchestration and distribution will be impacted
-6. Keep Pea implications in dev-agent context docs until a Pea-specific design pass updates operator skills.
+6. Keep Pea implications in Peco context docs until a Pea-specific design pass updates operator skills.
 
 ## Loop
 
@@ -334,7 +334,7 @@ Use Module, Interface, Implementation, Depth, Seam, Adapter, Leverage, and Local
 2. Read neighboring implementations and docs before proposing shape changes.
 3. Find where a smaller interface could hide more implementation depth.
 4. Prefer feature locality and explicit contracts over broad abstractions.
-5. Preserve product boundaries, especially Pea vs dev-agent and desktop vs DA shells.
+5. Preserve product boundaries, especially Pea vs Peco and desktop vs DA shells.
 6. Propose at most a few candidate changes, ranked by leverage and risk.
 7. Implement only the smallest approved/obvious slice, then prove it with focused checks.
 
@@ -342,7 +342,7 @@ Use Module, Interface, Implementation, Depth, Seam, Adapter, Leverage, and Local
 
 Before proposing architecture changes, name which boundary is involved:
 
-- Pea vs dev-agent: deployed operator workbench vs repo coding agent.
+- Pea vs Peco: deployed operator workbench vs repo coding agent.
 - Desktop shell vs automation shell: Pe.App/RRD startup vs Design Automation worker startup over shared DA-safe packages.
 - Document-owned vs session-owned Revit behavior: Document/FamilyDocument collect/capture/apply vs UIApplication/open-active-navigation behavior.
 - Public host operation vs private bridge: generated Pe.Host operation contracts are the product surface; private bridge frames are not.
@@ -466,7 +466,7 @@ If the handoff contains reusable intent, boundaries, workflow rules, or failure 
     name: "pe-write-skill",
     content: `---
 name: pe-write-skill
-description: Create or revise Pe.Tools agent skills after repeated workflow use proves a named routing surface is needed. Use when the user asks to add a skill, improve a skill, fix trigger reliability, fatten a skill, slash skill behavior, automatic skill activation, skill descriptions, modes or dispatch, resolver logic, scripts/assets in skills, or Pea vs dev-agent skill boundaries.
+description: Create or revise Pe.Tools agent skills after repeated workflow use proves a named routing surface is needed. Use when the user asks to add a skill, improve a skill, fix trigger reliability, fatten a skill, slash skill behavior, automatic skill activation, skill descriptions, modes or dispatch, resolver logic, scripts/assets in skills, or Pea vs Peco skill boundaries.
 metadata:
   goal: true
 ---
@@ -492,13 +492,13 @@ Use when creating or revising agent skills for Pe.Tools workflows.
 - Skills are latent workflow programs. In this pass they are pure markdown orchestration over existing tools/docs.
 - Scripts/assets are future additions for deterministic repeated helper functions only.
 - Resolver behavior lives in the always-loaded router plus existing fat skills until repeated pain proves a standalone resolver skill is needed.
-- Pea bundled skills and dev-agent project skills must remain separate.
+- Pea bundled skills and Peco project skills must remain separate.
 
 ## Source of Truth
 
-- Dev-agent skill source lives in source/pe-tools/apps/pe-code/src/skills.ts.
-- Repo-local .mastracode/skills copies are regenerated by dev-agent bootstrap and should not be hand-edited as source.
-- Pea bundled operator skills live separately from pe-code skills and must not receive repo-development posture by accident.
+- Peco skill source lives in source/pe-tools/apps/peco/src/skills.ts.
+- Repo-local .mastracode/skills copies are regenerated by Peco bootstrap and should not be hand-edited as source.
+- Pea bundled operator skills live separately from peco skills and must not receive repo-development posture by accident.
 
 ## Loop
 
@@ -515,7 +515,7 @@ Skills are guidance, not tools. Do not encode command execution that belongs in 
 
 ## Durability Checkpoint
 
-Skill design decisions are usually durable. Capture changes to skill philosophy, source-of-truth rules, Pea/dev-agent separation, or trigger-routing policy in docs/features/dev-agent-context before or alongside skill source changes.
+Skill design decisions are usually durable. Capture changes to skill philosophy, source-of-truth rules, Pea/Peco separation, or trigger-routing policy in docs/features/Peco-context before or alongside skill source changes.
 
 If no doc update is needed, say: No durable capture needed: <reason>.`,
   },

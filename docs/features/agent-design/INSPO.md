@@ -1,6 +1,6 @@
 # Inspiration for Dev Agent Posturing
 
-From my perspective our biggest goal is encoding context about the bigger picture "why?" in dev-agent. For example I feel like agents often forget
+From my perspective our biggest goal is encoding context about the bigger picture "why?" in Peco. For example I feel like agents often forget
 
 - our product surfaces are: revit addin, scripting, as a C# library to use in scripting, pea, frontend (cli's, tuis, web apps)
 - our most critical shared modules are to these surfaces are: settings runtime because json in the blood, scripting because this is how agents do work, and revit data contracts
@@ -20,7 +20,7 @@ I have repos cloned locally: "C:\Users\kaitp\source\repos\skills" (matt pococks 
 
 - I _really_ resonate with Matt Pococks failure modes and want posture towards this framing. His methodology has evolved since he gave the talk, as you see in his repo. I also want to learn from these changes that he's made
 - I found that matts old grill-me and designbn-an-interface skills were really nice and they _triggered reliably_. What we've lost in our own version of matts skills is that they dont seem to trigger as reliably
-- my general philosophy with pea agent, which also extends to pea dev, is to build as much of the operating loop and the available world into the harness, while also keeping the harness and all the context as minimal as possible
+- my general philosophy with pea agent, which also extends to peco, is to build as much of the operating loop and the available world into the harness, while also keeping the harness and all the context as minimal as possible
 - I want to learn from mastra's own tool and agent descriptionns as much as possible
 
 ---

@@ -1,8 +1,4 @@
-import {
-  createServer,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import {
   EventType,
   RunAgentInputSchema,
@@ -12,10 +8,7 @@ import {
   type Message,
   type RunAgentInput,
 } from "@ag-ui/core";
-import {
-  createRuntimeLocalTransportAuth,
-  type RuntimeLocalTransportAuth,
-} from "../transport.js";
+import { createRuntimeLocalTransportAuth, type RuntimeLocalTransportAuth } from "../transport.js";
 import {
   createRuntimeAuthDescriptor,
   logoutRuntimeAuth,
@@ -23,20 +16,9 @@ import {
   type RuntimeAuthProfile,
 } from "../auth/types.ts";
 import { toAgUiAuthCapabilities } from "../auth/protocol.ts";
-import type {
-  RuntimeDescriptor,
-  RuntimeFactory,
-  RuntimeHandle,
-} from "../runtime.ts";
-import {
-  RuntimeInterruptCollector,
-  toRuntimeResumeDecisions,
-} from "../interrupts.ts";
-import {
-  createRuntimePrompt,
-  type RuntimePrompt,
-  type RuntimePromptPart,
-} from "../prompts.ts";
+import type { RuntimeDescriptor, RuntimeFactory, RuntimeHandle } from "../runtime.ts";
+import { RuntimeInterruptCollector, toRuntimeResumeDecisions } from "../interrupts.ts";
+import { createRuntimePrompt, type RuntimePrompt, type RuntimePromptPart } from "../prompts.ts";
 import {
   RuntimeProtocolSessions,
   type RuntimeProtocolSessionInfo,
@@ -90,7 +72,6 @@ export class RuntimeAgUiAgent {
   constructor(private readonly options: RuntimeAgUiAgentOptions) {
     this.runtimeSessions =
       options.sessions?.manager ??
-      options.runtimeSessions ??
       new RuntimeProtocolSessions({
         factory: runtimeFactory(options),
         idPrefix: "runtime-agui",
@@ -99,10 +80,7 @@ export class RuntimeAgUiAgent {
       });
   }
 
-  async run(
-    input: RunAgentInput,
-    emit: (event: BaseEvent) => void,
-  ): Promise<void> {
+  async run(input: RunAgentInput, emit: (event: BaseEvent) => void): Promise<void> {
     const parsed = RunAgentInputSchema.parse(input);
     const runtimeScope = agUiRuntimeScope(parsed, defaultAgUiCwd(this.options));
     const session = await this.runtimeSessions.getOrCreateThreadSession({
@@ -115,19 +93,13 @@ export class RuntimeAgUiAgent {
 
     const translator = new RuntimeToAgUiEvents();
     const interrupts = new RuntimeInterruptCollector();
-    let nextSequence = nextAgUiEventSequence(
-      this.runtimeSessions.history(session.id),
-    );
+    let nextSequence = nextAgUiEventSequence(this.runtimeSessions.history(session.id));
     const emitEvent = (event: BaseEvent) => {
       const sequencedEvent = {
         ...event,
         sequence: nextSequence++,
       };
-      this.runtimeSessions.recordProtocolEvent(
-        session.id,
-        "ag-ui",
-        sequencedEvent,
-      );
+      this.runtimeSessions.recordProtocolEvent(session.id, "ag-ui", sequencedEvent);
       emit(sequencedEvent);
     };
     const unsubscribe = this.runtimeSessions.subscribe(session.id, (event) => {
@@ -146,10 +118,7 @@ export class RuntimeAgUiAgent {
     emitEvent({ type: EventType.MESSAGES_SNAPSHOT, messages: parsed.messages });
 
     try {
-      const stopReason = await this.runtimeSessions.sendPrompt(
-        session.id,
-        agUiPrompt(parsed),
-      );
+      const stopReason = await this.runtimeSessions.sendPrompt(session.id, agUiPrompt(parsed));
       emitEvent({
         type: EventType.RUN_FINISHED,
         threadId: parsed.threadId,
@@ -173,21 +142,21 @@ export class RuntimeAgUiAgent {
     return this.runtimeSessions.listSessions({ protocol: "ag-ui" });
   }
 
-  closeThread(threadId: string): boolean {
+  async closeThread(threadId: string): Promise<boolean> {
     const session = this.sessionForThread(threadId);
     if (!session) return false;
     try {
-      this.runtimeSessions.close(session.id);
+      await this.runtimeSessions.close(session.id);
     } catch (error) {
       if (!isUnknownSessionError(error)) throw error;
     }
     return true;
   }
 
-  deleteThread(threadId: string): boolean {
+  async deleteThread(threadId: string): Promise<boolean> {
     const session = this.sessionForThread(threadId);
     if (!session) return false;
-    this.runtimeSessions.delete(session.id);
+    await this.runtimeSessions.delete(session.id);
     return true;
   }
 
@@ -198,12 +167,8 @@ export class RuntimeAgUiAgent {
     return this.runtimeSessions
       .history(session.id)
       .filter(isAgUiProtocolHistoryEntry)
-      .flatMap((entry): BaseEvent[] =>
-        isAgUiEvent(entry.payload) ? [entry.payload] : [],
-      )
-      .filter(
-        (event) => agUiEventSequence(event) > (request.afterSequence ?? 0),
-      );
+      .flatMap((entry): BaseEvent[] => (isAgUiEvent(entry.payload) ? [entry.payload] : []))
+      .filter((event) => agUiEventSequence(event) > (request.afterSequence ?? 0));
   }
 
   capabilities(): AgentCapabilities {
@@ -215,29 +180,17 @@ export class RuntimeAgUiAgent {
   }
 
   async close(): Promise<void> {
-    this.runtimeSessions.closeAll();
+    await this.runtimeSessions.closeAll();
   }
 
-  private sessionForThread(
-    threadId: string,
-  ): RuntimeProtocolSessionInfo | undefined {
-    return this.sessions().find(
-      (candidate) => candidate.externalThreadId === threadId,
-    );
+  private sessionForThread(threadId: string): RuntimeProtocolSessionInfo | undefined {
+    return this.sessions().find((candidate) => candidate.externalThreadId === threadId);
   }
 }
 
-function agUiSessionRegistryPath(
-  options: RuntimeAgUiAgentOptions,
-): string | null | undefined {
-  if (
-    options.sessions?.manager ||
-    options.runtimeSessions ||
-    runtimeOverride(options)
-  )
-    return undefined;
-  const registryPath =
-    options.sessions?.registryPath ?? options.sessionRegistryPath;
+function agUiSessionRegistryPath(options: RuntimeAgUiAgentOptions): string | null | undefined {
+  if (options.sessions?.manager || runtimeOverride(options)) return undefined;
+  const registryPath = options.sessions?.registryPath;
   if (registryPath === null) return null;
   return (
     registryPath ??
@@ -248,13 +201,8 @@ function agUiSessionRegistryPath(
   );
 }
 
-function agUiTransport(
-  options: RuntimeAgUiAgentOptions,
-): RuntimeAgUiTransportOptions {
-  return {
-    port: options.transport?.port ?? options.port,
-    token: options.transport?.token ?? options.token,
-  };
+function agUiTransport(options: RuntimeAgUiAgentOptions): RuntimeAgUiTransportOptions {
+  return options.transport ?? {};
 }
 
 export class RuntimeAgUiHttpAgent {
@@ -278,16 +226,11 @@ export class RuntimeAgUiHttpAgent {
   async start(): Promise<RuntimeAgUiServerInfo> {
     const port = agUiTransport(this.options).port ?? defaultPort;
     this.server = createServer((request, response) => {
-      this.handle(request, response).catch((error) =>
-        writeError(response, error),
-      );
+      this.handle(request, response).catch((error) => writeError(response, error));
     });
-    await new Promise<void>((resolve) =>
-      this.server!.listen(port, loopbackHost, resolve),
-    );
+    await new Promise<void>((resolve) => this.server!.listen(port, loopbackHost, resolve));
     const address = this.server.address();
-    const actualPort =
-      typeof address === "object" && address ? address.port : port;
+    const actualPort = typeof address === "object" && address ? address.port : port;
     return this.startInfo(actualPort);
   }
 
@@ -295,14 +238,10 @@ export class RuntimeAgUiHttpAgent {
     await this.agent.close();
     const server = this.server;
     this.server = null;
-    if (server)
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+    if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 
-  private async handle(
-    request: IncomingMessage,
-    response: ServerResponse,
-  ): Promise<void> {
+  private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     addCommonHeaders(response);
     if (request.method === "OPTIONS") {
       response.writeHead(204).end();
@@ -339,12 +278,10 @@ export class RuntimeAgUiHttpAgent {
       return;
     }
 
-    const sessionCloseMatch = /^\/agui\/sessions\/([^/]+)\/close$/.exec(
-      url.pathname,
-    );
+    const sessionCloseMatch = /^\/agui\/sessions\/([^/]+)\/close$/.exec(url.pathname);
     if (sessionCloseMatch && request.method === "POST") {
       const threadId = decodeURIComponent(sessionCloseMatch[1]!);
-      if (!this.agent.closeThread(threadId)) {
+      if (!(await this.agent.closeThread(threadId))) {
         response.writeHead(404, { "Content-Type": "application/json" });
         response.end(JSON.stringify({ error: "Thread not found" }));
         return;
@@ -358,7 +295,7 @@ export class RuntimeAgUiHttpAgent {
     const sessionDeleteMatch = /^\/agui\/sessions\/([^/]+)$/.exec(url.pathname);
     if (sessionDeleteMatch && request.method === "DELETE") {
       const threadId = decodeURIComponent(sessionDeleteMatch[1]!);
-      if (!this.agent.deleteThread(threadId)) {
+      if (!(await this.agent.deleteThread(threadId))) {
         response.writeHead(404, { "Content-Type": "application/json" });
         response.end(JSON.stringify({ error: "Thread not found" }));
         return;
@@ -382,9 +319,7 @@ export class RuntimeAgUiHttpAgent {
         JSON.stringify({
           events: this.agent.events({
             threadId,
-            afterSequence: parseOptionalSequence(
-              url.searchParams.get("afterSequence"),
-            ),
+            afterSequence: parseOptionalSequence(url.searchParams.get("afterSequence")),
           }),
         }),
       );
@@ -417,9 +352,7 @@ export class RuntimeAgUiHttpAgent {
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
       });
-      await this.agent.run(input, (event) =>
-        response.write(`data: ${JSON.stringify(event)}\n\n`),
-      );
+      await this.agent.run(input, (event) => response.write(`data: ${JSON.stringify(event)}\n\n`));
       response.end();
       return;
     }
@@ -446,9 +379,7 @@ export class RuntimeAgUiHttpAgent {
 function agUiPrompt(input: RunAgentInput): RuntimePrompt {
   const lastUserMessageIndex = findLastUserMessageIndex(input.messages);
   const lastUserMessage =
-    lastUserMessageIndex >= 0
-      ? input.messages[lastUserMessageIndex]
-      : undefined;
+    lastUserMessageIndex >= 0 ? input.messages[lastUserMessageIndex] : undefined;
   const priorMessages =
     lastUserMessageIndex >= 0
       ? input.messages.filter((_, index) => index !== lastUserMessageIndex)
@@ -504,13 +435,8 @@ interface RuntimeAgUiScope {
   additionalDirectories: string[];
 }
 
-function agUiRuntimeScope(
-  input: RunAgentInput,
-  defaultCwd: string,
-): RuntimeAgUiScope {
-  const forwardedProps = isRecord(input.forwardedProps)
-    ? input.forwardedProps
-    : {};
+function agUiRuntimeScope(input: RunAgentInput, defaultCwd: string): RuntimeAgUiScope {
+  const forwardedProps = isRecord(input.forwardedProps) ? input.forwardedProps : {};
   const peaProps = isRecord(forwardedProps.pea) ? forwardedProps.pea : {};
   return {
     cwd: firstString(peaProps.cwd, forwardedProps.cwd) ?? defaultCwd,
@@ -521,12 +447,7 @@ function agUiRuntimeScope(
 }
 
 function defaultAgUiCwd(options: RuntimeAgUiAgentOptions): string {
-  return (
-    options.sessions?.defaultCwd ??
-    options.workspaceRoot ??
-    runtimeOverride(options)?.workspace?.cwd ??
-    process.cwd()
-  );
+  return options.sessions?.defaultCwd ?? runtimeOverride(options)?.workspace?.cwd ?? process.cwd();
 }
 
 function stripRuntimeAgUiForwardedProps(forwardedProps: unknown): unknown {
@@ -542,15 +463,10 @@ function messagePromptParts(message: Message | undefined): RuntimePromptPart[] {
   if (!message) return [];
   const content = (message as { content?: unknown }).content;
   if (typeof content === "string") return [{ text: content }];
-  if (!Array.isArray(content))
-    return [{ text: messageText(message) }].filter((part) => part.text);
+  if (!Array.isArray(content)) return [{ text: messageText(message) }].filter((part) => part.text);
 
   return content.map((part, index) => {
-    if (
-      isRecord(part) &&
-      part.type === "text" &&
-      typeof part.text === "string"
-    ) {
+    if (isRecord(part) && part.type === "text" && typeof part.text === "string") {
       return { text: part.text };
     }
 
@@ -576,11 +492,7 @@ function messageText(message: Message | undefined): string {
   if (Array.isArray(content)) {
     return content
       .map((part, index) => {
-        if (
-          isRecord(part) &&
-          part.type === "text" &&
-          typeof part.text === "string"
-        )
+        if (isRecord(part) && part.type === "text" && typeof part.text === "string")
           return part.text;
         const resource = agUiInputResource(message.id, index, part);
         return `[AG-UI ${resource.title ?? resource.kind} input: ${resource.uri ?? resource.name ?? resource.id}]`;
@@ -593,11 +505,7 @@ function messageText(message: Message | undefined): string {
   return "";
 }
 
-function agUiInputResource(
-  messageId: string,
-  index: number,
-  part: unknown,
-): RuntimeResource {
+function agUiInputResource(messageId: string, index: number, part: unknown): RuntimeResource {
   const record = isRecord(part) ? part : {};
   const type = typeof record.type === "string" ? record.type : "input";
   const source = isRecord(record.source) ? record.source : undefined;
@@ -609,8 +517,7 @@ function agUiInputResource(
         : undefined;
 
   if (type === "binary") {
-    const filename =
-      typeof record.filename === "string" ? record.filename : undefined;
+    const filename = typeof record.filename === "string" ? record.filename : undefined;
     return {
       id: `ag-ui:${messageId}:${index}`,
       protocol: "ag-ui",
@@ -639,8 +546,7 @@ function agUiInputResource(
         ? source.value
         : undefined,
     source: sanitizeJson(record),
-    metadata:
-      record.metadata === undefined ? undefined : sanitizeJson(record.metadata),
+    metadata: record.metadata === undefined ? undefined : sanitizeJson(record.metadata),
   };
 }
 
@@ -652,39 +558,24 @@ function contextEntries(context: Context[]): Context[] {
 }
 
 function runtimeBaseFactory(options: RuntimeAgUiAgentOptions): RuntimeFactory {
-  const factory = options.runtime?.factory ?? options.factory;
-  if (!factory)
-    throw new Error("Runtime AG-UI agent requires runtime.factory.");
+  const factory = options.runtime?.factory;
+  if (!factory) throw new Error("Runtime AG-UI agent requires runtime.factory.");
   return factory;
 }
 
-function runtimeOverride(
-  options: RuntimeAgUiAgentOptions,
-): RuntimeHandle | undefined {
-  return options.runtime?.override ?? options.runtimeOverride;
+function runtimeOverride(options: RuntimeAgUiAgentOptions): RuntimeHandle | undefined {
+  return options.runtime?.override;
 }
 
-function runtimeDescriptor(
-  options: RuntimeAgUiAgentOptions,
-): RuntimeDescriptor {
-  return (
-    options.runtime?.descriptor ??
-    options.descriptor ??
-    runtimeBaseFactory(options).descriptor
-  );
+function runtimeDescriptor(options: RuntimeAgUiAgentOptions): RuntimeDescriptor {
+  return options.runtime?.descriptor ?? runtimeBaseFactory(options).descriptor;
 }
 
-function runtimeAuthProfile(
-  options: RuntimeAgUiAgentOptions,
-): RuntimeAuthProfile | undefined {
-  return (
-    options.runtime?.auth ?? options.auth ?? runtimeBaseFactory(options).auth
-  );
+function runtimeAuthProfile(options: RuntimeAgUiAgentOptions): RuntimeAuthProfile | undefined {
+  return options.runtime?.auth ?? runtimeBaseFactory(options).auth;
 }
 
-function runtimeAuthDescriptor(
-  options: RuntimeAgUiAgentOptions,
-): RuntimeAuthDescriptor {
+function runtimeAuthDescriptor(options: RuntimeAgUiAgentOptions): RuntimeAuthDescriptor {
   return (
     runtimeAuthProfile(options)?.descriptor ??
     createRuntimeAuthDescriptor({ source: "none", methods: [] })
@@ -756,10 +647,7 @@ function addCommonHeaders(response: ServerResponse): void {
     "Access-Control-Allow-Headers",
     "content-type, authorization, x-runtime-local-token, x-runtime-agui-token, x-pea-local-token, x-pea-agui-token",
   );
-  response.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET, POST, DELETE, OPTIONS",
-  );
+  response.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
 }
 
 function writeError(response: ServerResponse, error: unknown): void {
@@ -782,9 +670,7 @@ function parseOptionalSequence(value: string | null): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function nextAgUiEventSequence(
-  history: ReturnType<RuntimeProtocolSessions["history"]>,
-): number {
+function nextAgUiEventSequence(history: ReturnType<RuntimeProtocolSessions["history"]>): number {
   const sequences = history
     .filter(isAgUiProtocolHistoryEntry)
     .map((entry) => agUiEventSequence(entry.payload));
@@ -809,26 +695,20 @@ function isAgUiEvent(value: unknown): value is BaseEvent {
 }
 
 function isUnknownSessionError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    error.message.startsWith("Unknown Runtime session:")
-  );
+  return error instanceof Error && error.message.startsWith("Unknown Runtime session:");
 }
 
 function agUiEventSequence(value: unknown): number {
   if (typeof value !== "object" || value === null) return 0;
   const sequence = (value as { sequence?: unknown }).sequence;
-  return typeof sequence === "number" && Number.isFinite(sequence)
-    ? sequence
-    : 0;
+  return typeof sequence === "number" && Number.isFinite(sequence) ? sequence : 0;
 }
 
 function isMeaningfulJson(value: unknown): boolean {
   if (value === undefined || value === null) return false;
   const sanitized = sanitizeJson(value);
   if (Array.isArray(sanitized)) return sanitized.length > 0;
-  if (typeof sanitized === "object" && sanitized !== null)
-    return Object.keys(sanitized).length > 0;
+  if (typeof sanitized === "object" && sanitized !== null) return Object.keys(sanitized).length > 0;
   return true;
 }
 
@@ -838,23 +718,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function firstString(...values: unknown[]): string | undefined {
   return values.find(
-    (value): value is string =>
-      typeof value === "string" && value.trim().length > 0,
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
   );
 }
 
 function stringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter(
-    (entry): entry is string =>
-      typeof entry === "string" && entry.trim().length > 0,
+    (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
   );
 }
 
 export type PeaAgUiAgentOptions = RuntimeAgUiAgentOptions;
 export type PeaAgUiServerInfo = RuntimeAgUiServerInfo;
 export type PeaAgUiRuntimeId = string;
-export {
-  RuntimeAgUiAgent as PeaAgUiAgent,
-  RuntimeAgUiHttpAgent as PeaAgUiHttpAgent,
-};
+export { RuntimeAgUiAgent as PeaAgUiAgent, RuntimeAgUiHttpAgent as PeaAgUiHttpAgent };

@@ -11,7 +11,7 @@ Use when progress depends on human-maintained live state: Rider/IDE builds, RRD 
 
 ## Dispatch
 
-- If the user asks to product-test Pea against live project questions, preserve the distinction between Pea's unseeded operator behavior and dev-agent's independent verification of model facts.
+- If the user asks to product-test Pea against live project questions, preserve the distinction between Pea's unseeded operator behavior and Peco's independent verification of model facts.
 - If runtime freshness is unknown and attached proof matters, collect a read-only live loop context before mutating anything.
 - If runtime code changed and sync is recommended, call live_rrd_sync explicitly and report whether it proved action invocation only or loaded-runtime freshness.
 - If live_rrd_sync/live loop context recommends live_rrd_restart, use the restart primitive and wait for Host/Revit bridge readiness before attached proof.
@@ -47,7 +47,7 @@ Use when progress depends on human-maintained live state: Rider/IDE builds, RRD 
 
 Use this posture when the task is to evaluate whether Pea can answer realistic project questions from the active model without being seeded with firm standards, hidden parameter names, browser paths, sheet numbers, or repo/tooling context.
 
-Treat Pea's response, tool choices, errors, and silence as product evidence. Treat dev-agent host operations or scripts as independent verification, not as a substitute for Pea's answer. Report the gap between what Pea discovered unaided and what the model evidence supports.
+Treat Pea's response, tool choices, errors, and silence as product evidence. Treat Peco host operations or scripts as independent verification, not as a substitute for Pea's answer. Report the gap between what Pea discovered unaided and what the model evidence supports.
 
 ## Handoff Packet
 

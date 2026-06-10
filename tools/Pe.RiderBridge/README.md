@@ -4,7 +4,7 @@ Minimal Rider plugin spike for replacing Pe.Tools hot-reload AHK automation with
 
 ## Why this exists
 
-The dev-agent attached-RRD sync flow mutates `PeHotReloadSignal.cs` and asks Rider to apply changes through this localhost-only IDE action bridge. This replaces the old focus/keystroke AutoHotkey path for normal dev-agent use.
+The Peco attached-RRD sync flow mutates `PeHotReloadSignal.cs` and asks Rider to apply changes through this localhost-only IDE action bridge. This replaces the old focus/keystroke AutoHotkey path for normal Peco use.
 
 The reference macro in `source/Pe.Dev.RevitAutomation/Assets/auto-hr-macro-settings.zip` contains:
 
@@ -50,9 +50,9 @@ POST http://127.0.0.1:63342/pe-tools/restart-rrd?project=Pe.Tools
 
 The hot-reload and restart responses include action results, lightweight Rider action-state diagnostics, failed-action problem entries, and `restartRecommended` when Rider context suggests Hot Reload cannot be trusted.
 
-## Dev-agent sync integration
+## Peco sync integration
 
-The dev-agent `live_rrd_sync` tool owns the normal non-focus path:
+The Peco `live_rrd_sync` tool owns the normal non-focus path:
 
 1. Resolve the repo root.
 2. Mutate `source/Pe.Revit.Global/HotReload/PeHotReloadSignal.cs`.
@@ -60,7 +60,7 @@ The dev-agent `live_rrd_sync` tool owns the normal non-focus path:
 4. Invoke `POST /pe-tools/hot-reload?project=Pe.Tools`.
 5. Return the `RiderBridge` lane result and per-action statuses.
 
-Removed public `pe-dev sync`/AutoHotkey guidance should not be restored as the default path; attached RRD sync now belongs to dev-agent live-loop tooling.
+Removed public `pe-dev sync`/AutoHotkey guidance should not be restored as the default path; attached RRD sync now belongs to Peco live-loop tooling.
 
 ## Build/install notes
 

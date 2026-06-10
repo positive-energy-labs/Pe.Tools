@@ -1,3 +1,7 @@
+import { createRuntimeToolProfile, mergeRuntimeToolCatalogs } from "@pe/runtime";
+import { peaProductTools } from "../pea/index.ts";
+import { peaProductToolCatalog, peCodeToolCatalog } from "../tool-metadata.ts";
+import { PeCodeCliCommands, type PeCodeCliCommandOptions } from "./PeCodeCliCommands.ts";
 import {
   liveLoopContext,
   liveRrdRestart,
@@ -26,3 +30,16 @@ export const peCodeTools = {
   [talkToPea.id]: talkToPea,
   [test.id]: test,
 };
+
+export const peCodeRuntimeToolProfile = createRuntimeToolProfile({
+  id: "peco",
+  tools: {
+    ...peaProductTools,
+    ...peCodeTools,
+  },
+  catalog: mergeRuntimeToolCatalogs(peaProductToolCatalog, peCodeToolCatalog),
+  commands: {
+    createSubCommands: (options?: PeCodeCliCommandOptions) =>
+      new PeCodeCliCommands(options).commands(),
+  },
+});

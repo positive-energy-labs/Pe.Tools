@@ -33,14 +33,14 @@ export class PeCodeCliCommands {
     return define({
       name: "live",
       description: "Inspect, sync, and restart the Rider-driven Revit development loop.",
-      examples: ["pe-code live context", "pe-code live sync", "pe-code live restart"].join("\n"),
+      examples: ["peco live context", "peco live sync", "peco live restart"].join("\n"),
       subCommands: {
         context: this.liveContextCommand(),
         sync: this.liveSyncCommand(),
         restart: this.liveRestartCommand(),
       },
       run: () => {
-        console.log("Run `pe-code live --help` to list live-loop commands.");
+        console.log("Run `peco live --help` to list live-loop commands.");
       },
     });
   }
@@ -48,12 +48,12 @@ export class PeCodeCliCommands {
   scriptCommand() {
     return define({
       name: "script",
-      description: "Run dev-agent scripting tools through Pe.Host with a live RRD sync preflight.",
+      description: "Run peco scripting tools through Pe.Host with a live RRD sync preflight.",
       subCommands: {
         execute: this.scriptExecuteCommand(),
       },
       run: () => {
-        console.log("Run `pe-code script --help` to list script commands.");
+        console.log("Run `peco script --help` to list script commands.");
       },
     });
   }
@@ -65,7 +65,11 @@ export class PeCodeCliCommands {
         "Collect a read-only live-runtime decision packet without syncing, mutating, or restarting.",
       args: {
         host: commonArgs.host,
-        logTail: { type: "number", description: "Log tail lines to include.", default: 10 },
+        logTail: {
+          type: "number",
+          description: "Log tail lines to include.",
+          default: 10,
+        },
         resetLogCursor: {
           type: "boolean",
           description: "Reset log cursors after reading.",
@@ -121,7 +125,10 @@ export class PeCodeCliCommands {
         timeoutSeconds: commonArgs.timeoutSeconds,
         riderBridgeBaseUrl: commonArgs.riderBridgeBaseUrl,
         project: commonArgs.project,
-        actionId: { type: "string", description: "Optional Rider action override." },
+        actionId: {
+          type: "string",
+          description: "Optional Rider action override.",
+        },
         expectedRevitVersion: {
           type: "string",
           description: "Expected Revit version.",
@@ -161,7 +168,10 @@ export class PeCodeCliCommands {
       description: "Delegate to the real Pea operator agent as a black-box product harness.",
       args: {
         prompt: { type: "string", description: "Prompt sent to Pea." },
-        threadId: { type: "string", description: "Existing Pea thread to continue." },
+        threadId: {
+          type: "string",
+          description: "Existing Pea thread to continue.",
+        },
         frame: {
           type: "string",
           description: "Prompt frame: operator, feedback, or collaborate.",
@@ -171,7 +181,11 @@ export class PeCodeCliCommands {
           type: "string",
           description: "Optional second feedback turn in the same Pea thread.",
         },
-        maxMessages: { type: "number", description: "Maximum messages to read.", default: 12 },
+        maxMessages: {
+          type: "number",
+          description: "Maximum messages to read.",
+          default: 12,
+        },
         timeoutSeconds: commonArgs.timeoutSeconds,
       },
       toKebab: true,
@@ -200,14 +214,23 @@ export class PeCodeCliCommands {
         host: commonArgs.host,
         workspace: commonArgs.workspace,
         timeoutSeconds: commonArgs.timeoutSeconds,
-        file: { type: "string", description: "Read inline script content from a local file." },
+        file: {
+          type: "string",
+          description: "Read inline script content from a local file.",
+        },
         stdin: {
           type: "boolean",
           description: "Read inline script content from stdin.",
           default: false,
         },
-        scriptContent: { type: "string", description: "Inline script content." },
-        sourcePath: { type: "string", description: "Workspace-relative source path to execute." },
+        scriptContent: {
+          type: "string",
+          description: "Inline script content.",
+        },
+        sourcePath: {
+          type: "string",
+          description: "Workspace-relative source path to execute.",
+        },
         sourceName: {
           type: "string",
           description: "Synthetic source filename used for diagnostics.",
@@ -243,7 +266,12 @@ export class PeCodeCliCommands {
           permissionMode: parsePermissionMode(ctx.values.permissionMode),
         } satisfies ScriptExecuteInput);
 
-        writeObject({ ok: true, workflow: "script_execute", hotReload: sync, script });
+        writeObject({
+          ok: true,
+          workflow: "script_execute",
+          hotReload: sync,
+          script,
+        });
       },
     });
   }
