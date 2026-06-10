@@ -1,8 +1,16 @@
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { LibSQLStore } from "@mastra/libsql";
 import { expect, test } from "vite-plus/test";
 import {
   createMastraGatewayRouterModel,
   createPeaCloudGatewayRuntimeAuthProfile,
   createRuntimeDescriptor,
+  createRuntimeLibSqlStorage,
+  createRuntimeMemoryOptions,
+  RuntimeProtocolSessions,
+  type RuntimeFactory,
+  type RuntimeHandle,
 } from "../src/index.ts";
 
 test("exports runtime contracts", () => {
@@ -36,3 +44,104 @@ test("creates a Mastra Gateway model router", () => {
   expect(model.provider).toBe("openai");
   expect(model.modelId).toBe("gpt-5.5");
 });
+
+test("creates LibSQL storage without eager init", async () => {
+  const originalInitDescriptor = Object.getOwnPropertyDescriptor(LibSQLStore.prototype, "init");
+  let initCalls = 0;
+  LibSQLStore.prototype.init = async function init() {
+    initCalls += 1;
+  };
+
+  try {
+    const storage = await createRuntimeLibSqlStorage({
+      id: "test-storage",
+      url: `file:${path.join(tmpdir(), `pe-runtime-test-${Date.now()}.db`)}`,
+      disableInit: true,
+    });
+
+    expect(storage).toBeInstanceOf(LibSQLStore);
+    expect(initCalls).toBe(0);
+  } finally {
+    if (originalInitDescriptor) {
+      Object.defineProperty(LibSQLStore.prototype, "init", originalInitDescriptor);
+    }
+  }
+});
+
+test("merges observational memory model options without conflicting top-level model", () => {
+  const defaults = createRuntimeMemoryOptions(undefined);
+  expect(defaults.observationalMemory).toEqual(
+    expect.objectContaining({ model: expect.any(String) }),
+  );
+
+  const withObservationModel = createRuntimeMemoryOptions({
+    observationalMemory: { observation: { model: "openai/observer" } },
+  });
+  expect(withObservationModel.observationalMemory).not.toHaveProperty("model");
+  expect(withObservationModel.observationalMemory).toEqual(
+    expect.objectContaining({
+      observation: expect.objectContaining({ model: "openai/observer" }),
+    }),
+  );
+
+  const withReflectionModel = createRuntimeMemoryOptions({
+    observationalMemory: { reflection: { model: "openai/reflector" } },
+  });
+  expect(withReflectionModel.observationalMemory).not.toHaveProperty("model");
+  expect(withReflectionModel.observationalMemory).toEqual(
+    expect.objectContaining({
+      reflection: expect.objectContaining({ model: "openai/reflector" }),
+    }),
+  );
+
+  expect(createRuntimeMemoryOptions({ observationalMemory: false }).observationalMemory).toBe(
+    false,
+  );
+});
+
+test("closes protocol session runtimes during close, delete, and closeAll", async () => {
+  const closeCalls: string[] = [];
+  const factory: RuntimeFactory = {
+    descriptor: createRuntimeDescriptor("test-runtime"),
+    create: async () => createTestRuntimeHandle(closeCalls),
+  };
+  const sessions = new RuntimeProtocolSessions({
+    factory,
+    idPrefix: "test-session",
+    sessionRegistryPath: null,
+  });
+
+  const closed = await sessions.createSession({ protocol: "acp" });
+  await sessions.close(closed.id);
+  expect(closeCalls).toEqual([closed.threadId]);
+  expect(sessions.listSessions()).toHaveLength(1);
+  expect(() => sessions.getSession(closed.id)).toThrow("Unknown Runtime session");
+
+  const deleted = await sessions.createSession({ protocol: "acp" });
+  await sessions.delete(deleted.id);
+  expect(closeCalls).toEqual([closed.threadId, deleted.threadId]);
+  expect(sessions.listSessions()).toHaveLength(1);
+
+  const first = await sessions.createSession({ protocol: "ag-ui" });
+  const second = await sessions.createSession({ protocol: "ag-ui" });
+  await sessions.closeAll();
+  expect(closeCalls).toEqual([closed.threadId, deleted.threadId, first.threadId, second.threadId]);
+  expect(sessions.listSessions()).toHaveLength(3);
+});
+
+function createTestRuntimeHandle(closeCalls: string[]): RuntimeHandle {
+  const threadId = `thread-${closeCalls.length + 1}`;
+  return {
+    harness: {} as RuntimeHandle["harness"],
+    sessions: {
+      createThreadSession: async () => ({ threadId, resourceId: `resource-${threadId}` }),
+      switchThread: async () => undefined,
+      sendMessage: async () => undefined,
+      abort: () => undefined,
+      subscribe: () => () => undefined,
+    },
+    close: () => {
+      closeCalls.push(threadId);
+    },
+  };
+}

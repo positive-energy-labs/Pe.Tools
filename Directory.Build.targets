@@ -38,7 +38,7 @@
         <Message
                 Condition="'$(PeVerifyTarget)' == 'AttachedRrd'"
                 Importance="High"
-                Text="AGENT GUIDANCE: AttachedRrd validation uses assemblies already loaded in RRD. If runtime code changed, coordinate runtime refresh through dev-agent live-loop tooling before 'pea script ...' or attached '.Tests'; an isolated dotnet build is not runtime freshness proof." />
+                Text="AGENT GUIDANCE: AttachedRrd validation uses assemblies already loaded in RRD. If runtime code changed, coordinate runtime refresh through peco live-loop tooling before 'pea script ...' or attached '.Tests'; an isolated dotnet build is not runtime freshness proof." />
         <Error
                 Condition="'$(PeVerifyTarget)' == 'FreshRevitProcess' and '$(PeExecutionPolicy)' != 'NoRrdContact'"
                 Text="FreshRevitProcess verification for project '$(MSBuildProjectName)' must use execution policy NoRrdContact." />

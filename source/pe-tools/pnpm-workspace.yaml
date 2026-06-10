@@ -21,3 +21,12 @@ peerDependencyRules:
   allowedVersions:
     vite: "*"
     vitest: "*"
+allowBuilds:
+  "@google/genai": false
+  agent-browser: false
+  bufferutil: false
+  edgedriver: false
+  geckodriver: false
+  koffi: false
+  onnxruntime-node: false
+  protobufjs: false

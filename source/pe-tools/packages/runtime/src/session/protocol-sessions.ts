@@ -370,7 +370,7 @@ export class RuntimeProtocolSessions {
     this.registry?.upsert(sessionRecord(session, this.factory.descriptor.id));
   }
 
-  close(id: string): void {
+  async close(id: string): Promise<void> {
     const session = this.getSession(id);
     session.cancelled = true;
     session.runtime.sessions.abort();
@@ -385,14 +385,15 @@ export class RuntimeProtocolSessions {
     const record = sessionRecord(session, this.factory.descriptor.id);
     if (this.registry) this.registry.upsert(record);
     else this.inMemoryRecords.set(record.id, record);
+    await session.runtime.close?.();
   }
 
-  closeAll(): void {
-    for (const sessionId of Array.from(this.sessions.keys())) this.close(sessionId);
+  async closeAll(): Promise<void> {
+    for (const sessionId of Array.from(this.sessions.keys())) await this.close(sessionId);
   }
 
-  delete(id: string): void {
-    if (this.sessions.has(id)) this.close(id);
+  async delete(id: string): Promise<void> {
+    if (this.sessions.has(id)) await this.close(id);
     this.registry?.delete(id);
     this.inMemoryRecords.delete(id);
     this.inMemoryHistory.delete(id);

@@ -210,7 +210,7 @@ export function riderBridgeSyncRuntimeFreshness(
       sourceDeltaVerdict: "unproven",
       expectedRuntimeDelta: true,
       basis:
-        "Pe.RiderBridge accepted localhost HTTP requests and reported the configured Rider hot-reload action sequence invoked. Loaded assembly fingerprint comparison is not performed by this direct dev-agent lane.",
+        "Pe.RiderBridge accepted localhost HTTP requests and reported the configured Rider hot-reload action sequence invoked. Loaded assembly fingerprint comparison is not performed by this direct peco lane.",
       nextStep:
         "Trigger the attached Revit operation/script/test that needs the refreshed RRD runtime and confirm behavior or log evidence.",
     };
@@ -325,7 +325,14 @@ export async function runRiderBridgeRestartRrdHelper(
       timedOut: false,
       durationMs,
       stdoutTail: JSON.stringify(
-        { ping, riderLaunch, projectOpenAttempt, restart, fallbackError, restartAttempts },
+        {
+          ping,
+          riderLaunch,
+          projectOpenAttempt,
+          restart,
+          fallbackError,
+          restartAttempts,
+        },
         null,
         2,
       ),
@@ -388,7 +395,14 @@ export async function runRiderBridgeRestartRrdHelper(
         ping === undefined && riderLaunch == null && projectOpenAttempt == null
           ? ""
           : JSON.stringify(
-              { ping, riderLaunch, projectOpenAttempt, restart, fallbackError, restartAttempts },
+              {
+                ping,
+                riderLaunch,
+                projectOpenAttempt,
+                restart,
+                fallbackError,
+                restartAttempts,
+              },
               null,
               2,
             ),
@@ -704,7 +718,10 @@ async function ensureRiderProjectsOpenInNewWindow(): Promise<RiderProjectOpenPol
     try {
       original = await readFile(settingsPath, "utf-8");
     } catch (error) {
-      skippedFiles.push({ path: settingsPath, reason: formatUnknownError(error) });
+      skippedFiles.push({
+        path: settingsPath,
+        reason: formatUnknownError(error),
+      });
       continue;
     }
 

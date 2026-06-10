@@ -1,12 +1,34 @@
 import { EventType } from "@ag-ui/core";
+import { createTool } from "@mastra/core/tools";
 import { expect, test } from "vite-plus/test";
 import {
   createRuntimeToolCatalog,
+  createRuntimeToolProfile,
   MastraHarnessToRuntimeEvents,
   RuntimeAcpClient,
   RuntimeToAcpEvents,
   RuntimeToAgUiEvents,
 } from "../src/index.ts";
+
+test("runtime tool profiles carry Mastra tools, metadata, and optional command factories", () => {
+  const catalog = createRuntimeToolCatalog({ custom_reader: { kind: "read" } });
+  const customReader = createTool({
+    id: "custom_reader",
+    description: "Read",
+    execute: async () => ({ ok: true }),
+  });
+  const tools = { [customReader.id]: customReader };
+  const profile = createRuntimeToolProfile({
+    id: "custom",
+    tools,
+    catalog,
+    commands: { createSubCommands: () => ({ custom: { name: "custom" } }) },
+  });
+
+  expect(profile.tools).toBe(tools);
+  expect(profile.catalog).toBe(catalog);
+  expect(profile.commands?.createSubCommands?.()).toEqual({ custom: { name: "custom" } });
+});
 
 test("MastraHarnessToRuntimeEvents enriches tool lifecycle events from a catalog", () => {
   const catalog = createRuntimeToolCatalog({

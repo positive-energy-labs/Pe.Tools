@@ -1,3 +1,5 @@
+import type { HarnessConfig } from "@mastra/core/harness";
+
 export type RuntimeToolKind =
   | "read"
   | "search"
@@ -33,6 +35,23 @@ export interface RuntimeToolMetadata {
 export type RuntimeToolCatalog = ReadonlyMap<string, RuntimeToolMetadata>;
 export type RuntimeToolResolver = (toolName: string) => RuntimeToolMetadata | undefined;
 export type RuntimeToolSource = RuntimeToolCatalog | RuntimeToolResolver;
+export type RuntimeToolsInput = NonNullable<HarnessConfig<Record<string, unknown>>["tools"]>;
+
+export interface RuntimeCommandProfile<TCommand = unknown, TOptions = never> {
+  createRootCommand?: (options?: TOptions) => TCommand;
+  createSubCommands?: (options?: TOptions) => Record<string, TCommand>;
+}
+
+export interface RuntimeToolProfile<
+  TTools extends RuntimeToolsInput = RuntimeToolsInput,
+  TCommand = unknown,
+  TOptions = never,
+> {
+  id: string;
+  tools: TTools;
+  catalog: RuntimeToolCatalog;
+  commands?: RuntimeCommandProfile<TCommand, TOptions>;
+}
 
 export type RuntimeToolMetadataInput = Omit<RuntimeToolMetadata, "name"> & {
   name?: string;
@@ -53,6 +72,16 @@ export function createRuntimeToolCatalog(input: RuntimeToolCatalogInput): Runtim
     catalog.set(name, normalizeRuntimeToolMetadata(name, tool));
   }
   return catalog;
+}
+
+export function createRuntimeToolProfile<
+  TTools extends RuntimeToolsInput,
+  TCommand = unknown,
+  TOptions = never,
+>(
+  profile: RuntimeToolProfile<TTools, TCommand, TOptions>,
+): RuntimeToolProfile<TTools, TCommand, TOptions> {
+  return profile;
 }
 
 export function mergeRuntimeToolCatalogs(

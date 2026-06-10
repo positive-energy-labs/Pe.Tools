@@ -16,7 +16,7 @@ internal static class DevCliProgram {
 
                                       Removed command groups:
                                         doctor, status, sync, env, revit, and verify were intentionally removed from the public surface.
-                                        Use dev-agent live_loop_context/live_rrd_sync for attached live-loop work.
+                                        Use peco live_loop_context/live_rrd_sync for attached live-loop work.
 
                                       Global options:
                                         --repo-root <path>   Override repo root discovery.

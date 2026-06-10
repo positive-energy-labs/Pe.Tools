@@ -53,7 +53,7 @@ internal sealed record DevCliOptions(
             "pea" when positionals.Count >= 2 => ParsePea(repoRoot, positionals),
             "automation" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Automation, positionals.Skip(1).ToArray())),
             "codegen" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Codegen, positionals.Skip(1).ToArray())),
-            "doctor" or "status" or "sync" or "env" or "revit" or "verify" => DevCliParseResult.Failure($"`pe-dev {positionals[0]}` has been removed. Use the dev-agent `live_loop_context`/`live_rrd_sync` tools for live-loop work, or `pe-dev test` for FreshRevitProcess proof.", true),
+            "doctor" or "status" or "sync" or "env" or "revit" or "verify" => DevCliParseResult.Failure($"`pe-dev {positionals[0]}` has been removed. Use the peco `live_loop_context`/`live_rrd_sync` tools for live-loop work, or `pe-dev test` for FreshRevitProcess proof.", true),
             _ => DevCliParseResult.Failure($"Unknown command '{positionals[0]}'.", true)
         };
     }

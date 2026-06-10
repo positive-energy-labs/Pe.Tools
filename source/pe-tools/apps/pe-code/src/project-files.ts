@@ -25,8 +25,8 @@ export interface DevAgentProjectFilesSummary {
 }
 
 // TODO: this is a really bad way to do this. We should be using a context injector instead
-const managedInstructionsStart = "<!-- dev-agent managed instructions:start -->";
-const managedInstructionsEnd = "<!-- dev-agent managed instructions:end -->";
+const managedInstructionsStart = "<!-- peco managed instructions:start -->";
+const managedInstructionsEnd = "<!-- peco managed instructions:end -->";
 
 export async function ensureDevAgentProjectFiles(
   projectPath: string,
@@ -56,7 +56,7 @@ export async function ensureDevAgentProjectFiles(
     hooksPath: join(mastraCodeRoot, "hooks.json"),
     hooksInstalled: false,
     hooksDeferredReason:
-      "No dev-agent hooks are installed by default. Workflow sequencing belongs in skills and repo verification tools; hooks are reserved for future narrow unsafe-action guardrails.",
+      "No peco hooks are installed by default. Workflow sequencing belongs in skills and repo verification tools; hooks are reserved for future narrow unsafe-action guardrails.",
   };
 }
 

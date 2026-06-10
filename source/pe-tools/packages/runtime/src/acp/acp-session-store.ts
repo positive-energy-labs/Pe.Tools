@@ -12,10 +12,7 @@ import {
   type RuntimeProtocolSession,
 } from "../session/protocol-sessions.ts";
 import { defaultRuntimeSessionRegistryPath } from "../session/session-registry.ts";
-import {
-  RuntimeAcpClient,
-  type RuntimeAcpClientTransport,
-} from "./runtime-client.ts";
+import { RuntimeAcpClient, type RuntimeAcpClientTransport } from "./runtime-client.ts";
 import { RuntimeToAcpEvents } from "./events-map-runtime-acp.ts";
 
 export interface RuntimeAcpSessionStoreRuntimeOptions {
@@ -39,10 +36,7 @@ export interface RuntimeAcpCreateSessionRequest {
 }
 
 export interface RuntimeAcpSessionUpdateSink {
-  sessionUpdate(params: {
-    sessionId: SessionId;
-    update: SessionUpdate;
-  }): Promise<void> | void;
+  sessionUpdate(params: { sessionId: SessionId; update: SessionUpdate }): Promise<void> | void;
 }
 
 export interface RuntimeAcpSessionClient
@@ -71,7 +65,6 @@ export class RuntimeAcpSessionStore {
     this.client = new RuntimeAcpClient(clientTransport);
     this.runtimeSessions =
       options.sessions?.manager ??
-      options.runtimeSessions ??
       new RuntimeProtocolSessions({
         factory: runtimeFactory(options),
         idPrefix: "runtime-acp",
@@ -83,9 +76,7 @@ export class RuntimeAcpSessionStore {
     this.client.configure(clientCapabilities);
   }
 
-  async createSession(
-    request: RuntimeAcpCreateSessionRequest,
-  ): Promise<AcpSession> {
+  async createSession(request: RuntimeAcpCreateSessionRequest): Promise<AcpSession> {
     const descriptor = runtimeDescriptor(this.options);
     const session = await this.runtimeSessions.createSession({
       protocol: "acp",
@@ -103,10 +94,7 @@ export class RuntimeAcpSessionStore {
     return Object.assign(session, { mapper });
   }
 
-  async prompt(
-    sessionId: SessionId,
-    prompt: RuntimePrompt,
-  ): Promise<"end_turn" | "cancelled"> {
+  async prompt(sessionId: SessionId, prompt: RuntimePrompt): Promise<"end_turn" | "cancelled"> {
     return this.runtimeSessions.sendPrompt(sessionId, prompt);
   }
 
@@ -119,14 +107,11 @@ export class RuntimeAcpSessionStore {
     cwd?: string;
     additionalDirectories?: string[];
   }): Promise<AcpSession> {
-    const session = await this.runtimeSessions.resumeSession(
-      request.sessionId,
-      {
-        protocol: "acp",
-        cwd: request.cwd,
-        additionalDirectories: request.additionalDirectories,
-      },
-    );
+    const session = await this.runtimeSessions.resumeSession(request.sessionId, {
+      protocol: "acp",
+      cwd: request.cwd,
+      additionalDirectories: request.additionalDirectories,
+    });
     let mapper = this.mappers.get(request.sessionId);
     if (!mapper) {
       this.attachSession(session);
@@ -169,18 +154,18 @@ export class RuntimeAcpSessionStore {
     );
   }
 
-  delete(sessionId: SessionId): void {
-    this.runtimeSessions.delete(sessionId);
+  async delete(sessionId: SessionId): Promise<void> {
+    await this.runtimeSessions.delete(sessionId);
     this.mappers.delete(sessionId);
   }
 
-  close(sessionId: SessionId): void {
-    this.runtimeSessions.close(sessionId);
+  async close(sessionId: SessionId): Promise<void> {
+    await this.runtimeSessions.close(sessionId);
     this.mappers.delete(sessionId);
   }
 
-  closeAll(): void {
-    this.runtimeSessions.closeAll();
+  async closeAll(): Promise<void> {
+    await this.runtimeSessions.closeAll();
     this.mappers.clear();
     this.requestedPermissionToolIds.clear();
   }
@@ -191,9 +176,7 @@ export class RuntimeAcpSessionStore {
     event: RuntimeEvent,
   ): void {
     for (const update of mapper.translate(event)) {
-      this.runtimeSessions.enqueue(session.id, () =>
-        this.publishSessionUpdate(session.id, update),
-      );
+      this.runtimeSessions.enqueue(session.id, () => this.publishSessionUpdate(session.id, update));
     }
 
     if (event.type === "tool_started" && event.status === "pending_approval") {
@@ -253,10 +236,7 @@ export class RuntimeAcpSessionStore {
       this.runtimeSessions.recordResumeDecision(session.id, {
         interruptId: `tool-approval:${event.toolCallId}`,
         status: outcome.outcome === "selected" ? "resolved" : "cancelled",
-        payload:
-          outcome.outcome === "selected"
-            ? { optionId: outcome.optionId }
-            : undefined,
+        payload: outcome.outcome === "selected" ? { optionId: outcome.optionId } : undefined,
       });
     });
   }
@@ -276,13 +256,9 @@ export class RuntimeAcpSessionStore {
         continue;
       }
       if (entry.type === "protocol_event" && entry.protocol === "acp") {
-        await this.publishSessionUpdate(
-          sessionId,
-          entry.payload as SessionUpdate,
-          {
-            record: false,
-          },
-        );
+        await this.publishSessionUpdate(sessionId, entry.payload as SessionUpdate, {
+          record: false,
+        });
       }
     }
   }
@@ -298,30 +274,18 @@ export class RuntimeAcpSessionStore {
   }
 }
 
-function runtimeFactory(
-  options: RuntimeAcpSessionStoreOptions,
-): RuntimeFactory {
-  const factory = options.runtime?.factory ?? options.factory;
-  if (!factory)
-    throw new Error("Runtime ACP session store requires runtime.factory.");
+function runtimeFactory(options: RuntimeAcpSessionStoreOptions): RuntimeFactory {
+  const factory = options.runtime?.factory;
+  if (!factory) throw new Error("Runtime ACP session store requires runtime.factory.");
   return factory;
 }
 
-function runtimeDescriptor(
-  options: RuntimeAcpSessionStoreOptions,
-): RuntimeDescriptor {
-  return (
-    options.runtime?.descriptor ??
-    options.descriptor ??
-    runtimeFactory(options).descriptor
-  );
+function runtimeDescriptor(options: RuntimeAcpSessionStoreOptions): RuntimeDescriptor {
+  return options.runtime?.descriptor ?? runtimeFactory(options).descriptor;
 }
 
-function acpSessionRegistryPath(
-  options: RuntimeAcpSessionStoreOptions,
-): string | null {
-  const registryPath =
-    options.sessions?.registryPath ?? options.sessionRegistryPath;
+function acpSessionRegistryPath(options: RuntimeAcpSessionStoreOptions): string | null {
+  const registryPath = options.sessions?.registryPath;
   if (registryPath === null) return null;
   return (
     registryPath ??

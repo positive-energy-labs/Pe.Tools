@@ -22,8 +22,19 @@ export interface ParsedRuntimeAcpCliOptions {
   authSource?: string;
 }
 
-// TODO: convert all custom parsing into Gunshii args object. While porting reevaluate the necessity of all options
+export interface RuntimeAcpCliValues {
+  acp?: boolean;
+  acpTransport?: string;
+  acpPort?: string | number;
+  acpToken?: string;
+}
+
 export const argsAcp = {
+  acp: {
+    type: "boolean",
+    description: "Run the runtime as an ACP agent.",
+    default: false,
+  },
   acpTransport: {
     type: "string",
     description: "ACP transport: stdio or http. Defaults to stdio.",
@@ -31,13 +42,11 @@ export const argsAcp = {
   },
   acpPort: {
     type: "string",
-    description:
-      "Port for ACP HTTP transport. Defaults to 43111; use 0 for an ephemeral port.",
+    description: "Port for ACP HTTP transport. Defaults to 43111; use 0 for an ephemeral port.",
   },
   acpToken: {
     type: "string",
-    description:
-      "Bearer/query token for ACP HTTP transport. Defaults to a generated token.",
+    description: "Bearer/query token for ACP HTTP transport. Defaults to a generated token.",
   },
   modelId: {
     type: "string",
@@ -45,36 +54,45 @@ export const argsAcp = {
   },
 } as const;
 
-export async function runRuntimeAcpFromCli(
-  options: RuntimeAcpCliOptions,
-): Promise<void> {
-  const {
-    protocolTransport,
-    acpTransport,
-    port,
-    token,
-    transport,
-    ...agentOptions
-  } = options;
-  const selectedTransport = protocolTransport ?? acpTransport;
-  const localTransport = {
-    ...transport,
-    port: transport?.port ?? port,
-    token: transport?.token ?? token,
+export function createRuntimeAcpCliOptions(
+  values: RuntimeAcpCliValues,
+  base: RuntimeAcpCliOptions,
+): RuntimeAcpCliOptions {
+  const transport = {
+    ...base.transport,
+    port: parseOptionalPort(values.acpPort, "ACP HTTP port"),
+    token: values.acpToken ?? base.transport?.token,
   };
+
+  if (transport.port == null && transport.token == null) {
+    return {
+      ...base,
+      protocolTransport: parseAcpTransport(values.acpTransport),
+      transport: base.transport,
+    };
+  }
+
+  return {
+    ...base,
+    protocolTransport: parseAcpTransport(values.acpTransport),
+    transport,
+  };
+}
+
+export async function runRuntimeAcpFromCli(options: RuntimeAcpCliOptions): Promise<void> {
+  const { protocolTransport, transport, ...agentOptions } = options;
+  const selectedTransport = protocolTransport ?? "stdio";
   if (selectedTransport === "http") {
     await runRuntimeAcpHttpAgent({
       ...agentOptions,
-      transport: localTransport,
+      transport,
     });
     return;
   }
   await runRuntimeAcpAgent(agentOptions);
 }
 
-export function parseAcpOptions(
-  args: string[],
-): ParsedRuntimeAcpCliOptions | null {
+export function parseAcpOptions(args: string[]): ParsedRuntimeAcpCliOptions | null {
   if (args.includes("--help") || args.includes("-h")) return null;
 
   const explicitAcp = hasFlag(args, "acp");
@@ -91,14 +109,11 @@ export function parseAcpOptions(
     token: readOption(args, "acp-token") ?? readOption(args, "acpToken"),
     hostBaseUrl: readOption(args, "host"),
     workspaceKey: readOption(args, "workspace"),
-    workspaceRoot:
-      readOption(args, "workspace-root") ?? readOption(args, "workspaceRoot"),
+    workspaceRoot: readOption(args, "workspace-root") ?? readOption(args, "workspaceRoot"),
     modelId: readOption(args, "model-id") ?? readOption(args, "modelId"),
     allowOauthBetaAuth:
-      hasFlag(args, "allow-oauth-beta-auth") ||
-      hasFlag(args, "allowOauthBetaAuth"),
-    authSource:
-      readOption(args, "auth-source") ?? readOption(args, "authSource"),
+      hasFlag(args, "allow-oauth-beta-auth") || hasFlag(args, "allowOauthBetaAuth"),
+    authSource: readOption(args, "auth-source") ?? readOption(args, "authSource"),
   };
 }
 
@@ -120,10 +135,7 @@ function normalizeOption(value: string): string {
   return value.toLowerCase().replace(/[-_]/g, "");
 }
 
-function parseOptionalPort(
-  value: string | number | undefined,
-  label: string,
-): number | undefined {
+function parseOptionalPort(value: string | number | undefined, label: string): number | undefined {
   if (value == null || value === "") return undefined;
 
   const port = typeof value === "number" ? value : Number.parseInt(value, 10);

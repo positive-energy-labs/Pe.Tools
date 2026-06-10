@@ -62,6 +62,7 @@ export interface RuntimeHandle<TState extends Record<string, unknown> = Record<s
   hookManager?: unknown;
   mcpManager?: unknown;
   metadata?: Record<string, unknown>;
+  close?: () => Promise<void> | void;
 }
 
 export interface RuntimeCreateRequest {

@@ -1,18 +1,6 @@
-import {
-  createServer,
-  type IncomingMessage,
-  type Server,
-  type ServerResponse,
-} from "node:http";
-import {
-  AgentSideConnection,
-  ndJsonStream,
-  type Stream,
-} from "@agentclientprotocol/sdk";
-import {
-  createRuntimeLocalTransportAuth,
-  type RuntimeLocalTransportAuth,
-} from "../transport.ts";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { AgentSideConnection, ndJsonStream, type Stream } from "@agentclientprotocol/sdk";
+import { createRuntimeLocalTransportAuth, type RuntimeLocalTransportAuth } from "../transport.ts";
 import { createRuntimeAuthDescriptor } from "../auth/types.ts";
 import { describeRuntimeProtocolStatus } from "../protocol-status.ts";
 import { RuntimeAcpSessionStore } from "./acp-session-store.ts";
@@ -21,6 +9,7 @@ import {
   RuntimeAcpAgent,
   runtimeAcpFactory,
   runtimeAcpDescriptor,
+  runtimeAcpAuthProfile,
   type RuntimeAcpAgentOptions,
   type RuntimeAcpAgentSessionStore,
 } from "./adapter.ts";
@@ -28,9 +17,7 @@ import { Readable, Writable } from "node:stream";
 
 export type { RuntimeAcpAgentOptions } from "./adapter.ts";
 
-export async function runRuntimeAcpAgent(
-  options: RuntimeAcpAgentOptions,
-): Promise<void> {
+export async function runRuntimeAcpAgent(options: RuntimeAcpAgentOptions): Promise<void> {
   const input = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
   const output = Writable.toWeb(process.stdout) as WritableStream<Uint8Array>;
   const stream = ndJsonStream(output, input);
@@ -73,19 +60,11 @@ export interface RuntimeAcpHttpAgentStartInfo {
 const defaultPort = 43111;
 const defaultHost = "127.0.0.1";
 
-function acpTransport(
-  options: RuntimeAcpHttpAgentOptions,
-): RuntimeAcpTransportOptions {
-  return {
-    port: options.transport?.port ?? options.port,
-    token: options.transport?.token ?? options.token,
-    host: options.transport?.host ?? options.host,
-  };
+function acpTransport(options: RuntimeAcpHttpAgentOptions): RuntimeAcpTransportOptions {
+  return options.transport ?? {};
 }
 
-export async function runRuntimeAcpHttpAgent(
-  options: RuntimeAcpHttpAgentOptions,
-): Promise<void> {
+export async function runRuntimeAcpHttpAgent(options: RuntimeAcpHttpAgentOptions): Promise<void> {
   const agent = new RuntimeAcpHttpAgent(options);
   const info = await agent.start();
   console.log(
@@ -104,8 +83,7 @@ export class RuntimeAcpHttpAgent {
   private readonly clients = new Set<ServerResponse>();
   private readonly eventHistory: AnyMessage[] = [];
   private server: Server | null = null;
-  private incomingController: ReadableStreamDefaultController<AnyMessage> | null =
-    null;
+  private incomingController: ReadableStreamDefaultController<AnyMessage> | null = null;
   private connection: AgentSideConnection;
   private sessionStore: RuntimeAcpAgentSessionStore | null = null;
 
@@ -127,8 +105,7 @@ export class RuntimeAcpHttpAgent {
       }),
     };
     this.connection = new AgentSideConnection((conn) => {
-      this.sessionStore =
-        options.sessionStore ?? new RuntimeAcpSessionStore(conn, options);
+      this.sessionStore = options.sessionStore ?? new RuntimeAcpSessionStore(conn, options);
       return new RuntimeAcpAgent(options, this.sessionStore);
     }, stream);
   }
@@ -137,18 +114,13 @@ export class RuntimeAcpHttpAgent {
     if (this.server) throw new Error("ACP HTTP agent is already running.");
 
     this.server = createServer((request, response) => {
-      this.handle(request, response).catch((error) =>
-        this.writeError(response, error),
-      );
+      this.handle(request, response).catch((error) => this.writeError(response, error));
     });
 
     const requestedPort = acpTransport(this.options).port ?? defaultPort;
-    await new Promise<void>((resolve) =>
-      this.server!.listen(requestedPort, this.host, resolve),
-    );
+    await new Promise<void>((resolve) => this.server!.listen(requestedPort, this.host, resolve));
     const address = this.server.address();
-    const port =
-      typeof address === "object" && address ? address.port : requestedPort;
+    const port = typeof address === "object" && address ? address.port : requestedPort;
     return this.startInfo(port);
   }
 
@@ -156,7 +128,7 @@ export class RuntimeAcpHttpAgent {
     this.incomingController?.close();
     for (const client of this.clients) client.end();
     this.clients.clear();
-    this.sessionStore?.closeAll?.();
+    await this.sessionStore?.closeAll?.();
     const server = this.server;
     this.server = null;
     if (server)
@@ -166,10 +138,7 @@ export class RuntimeAcpHttpAgent {
     await this.connection.closed;
   }
 
-  private async handle(
-    request: IncomingMessage,
-    response: ServerResponse,
-  ): Promise<void> {
+  private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     addCorsHeaders(response);
     if (request.method === "OPTIONS") {
       response.writeHead(204).end();
@@ -179,9 +148,7 @@ export class RuntimeAcpHttpAgent {
     const url = new URL(request.url ?? "/", `http://${this.host}`);
     if (!this.isAuthorized(request, url)) {
       response.writeHead(401, { "Content-Type": "application/json" });
-      response.end(
-        JSON.stringify({ error: "Missing or invalid ACP HTTP token." }),
-      );
+      response.end(JSON.stringify({ error: "Missing or invalid ACP HTTP token." }));
       return;
     }
 
@@ -193,8 +160,7 @@ export class RuntimeAcpHttpAgent {
           protocol: "acp",
           transport: "http+sse",
           auth:
-            this.options.auth?.descriptor ??
-            runtimeAcpFactory(this.options).auth?.descriptor ??
+            runtimeAcpAuthProfile(this.options)?.descriptor ??
             createRuntimeAuthDescriptor({ source: "none", methods: [] }),
           sessions: this.sessionStore?.list().length ?? 0,
         }),
@@ -227,16 +193,13 @@ export class RuntimeAcpHttpAgent {
     });
     response.write(": connected\n\n");
     this.clients.add(response);
-    for (const event of this.eventHistory)
-      response.write(`data: ${JSON.stringify(event)}\n\n`);
+    for (const event of this.eventHistory) response.write(`data: ${JSON.stringify(event)}\n\n`);
     response.on("close", () => this.clients.delete(response));
   }
 
   private enqueue(message: AnyMessage): void {
-    if (!isJsonRpcMessage(message))
-      throw new Error("Expected a JSON-RPC 2.0 message.");
-    if (!this.incomingController)
-      throw new Error("ACP HTTP stream is not ready.");
+    if (!isJsonRpcMessage(message)) throw new Error("Expected a JSON-RPC 2.0 message.");
+    if (!this.incomingController) throw new Error("ACP HTTP stream is not ready.");
     this.incomingController.enqueue(message);
   }
 

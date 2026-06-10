@@ -166,7 +166,9 @@ export async function readPeaHostLogTails(
   const checkedAt = new Date().toISOString();
   try {
     const hostBaseUrl = PeHostClient.resolveHostBaseUrl(options.hostBaseUrl);
-    const response = await new PeHostClient({ baseUrl: hostBaseUrl }).host.getLogs({
+    const response = await new PeHostClient({
+      baseUrl: hostBaseUrl,
+    }).host.getLogs({
       target: parseHostLogTarget(target),
       tailLineCount,
     });
@@ -274,7 +276,7 @@ function recommendRuntimeLoopNextAction(
       nextAction: "live_rrd_sync",
       confidence: "medium",
       reason:
-        "No sync result is known in this dev-agent process; run live_rrd_sync before relying on attached runtime behavior after runtime edits.",
+        "No sync result is known in this peco process; run live_rrd_sync before relying on attached runtime behavior after runtime edits.",
     };
   }
 

@@ -59,14 +59,8 @@ export interface RuntimeAcpAgentOptions {
 }
 
 export interface RuntimeAcpAgentSessionStore {
-  createSession(request: {
-    cwd: string;
-    additionalDirectories?: string[];
-  }): Promise<AcpSession>;
-  prompt(
-    sessionId: SessionId,
-    prompt: RuntimePrompt,
-  ): Promise<"end_turn" | "cancelled">;
+  createSession(request: { cwd: string; additionalDirectories?: string[] }): Promise<AcpSession>;
+  prompt(sessionId: SessionId, prompt: RuntimePrompt): Promise<"end_turn" | "cancelled">;
   cancel(sessionId: SessionId): void;
   resume(request: {
     sessionId: SessionId;
@@ -84,9 +78,9 @@ export interface RuntimeAcpAgentSessionStore {
     additionalDirectories?: string[];
   }): Promise<AcpSession>;
   list(cwd?: string | null): NonNullable<ListSessionsResponse["sessions"]>;
-  delete(sessionId: SessionId): void;
-  close(sessionId: SessionId): void;
-  closeAll?(): void;
+  delete(sessionId: SessionId): Promise<void>;
+  close(sessionId: SessionId): Promise<void>;
+  closeAll?(): Promise<void>;
   configureClient?(clientCapabilities: ClientCapabilities | undefined): void;
 }
 
@@ -97,10 +91,7 @@ export function createRuntimeAcpAgent(
   updateSink: RuntimeAcpSessionUpdateSink,
   options: RuntimeAcpAgentOptions,
 ): Agent {
-  return new RuntimeAcpAgent(
-    options,
-    new RuntimeAcpSessionStore(updateSink, options),
-  );
+  return new RuntimeAcpAgent(options, new RuntimeAcpSessionStore(updateSink, options));
 }
 
 export class RuntimeAcpAgent implements Agent {
@@ -154,10 +145,7 @@ export class RuntimeAcpAgent implements Agent {
   }
 
   async prompt(params: PromptRequest): Promise<PromptResponse> {
-    const stopReason = await this.sessions.prompt(
-      params.sessionId,
-      acpPrompt(params.prompt),
-    );
+    const stopReason = await this.sessions.prompt(params.sessionId, acpPrompt(params.prompt));
     return { stopReason };
   }
 
@@ -166,18 +154,14 @@ export class RuntimeAcpAgent implements Agent {
   }
 
   async closeSession(params: CloseSessionRequest): Promise<void> {
-    this.sessions.close(params.sessionId);
+    await this.sessions.close(params.sessionId);
   }
 
-  async listSessions(
-    params: ListSessionsRequest,
-  ): Promise<ListSessionsResponse> {
+  async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
     return { sessions: this.sessions.list(params.cwd) };
   }
 
-  async resumeSession(
-    params: ResumeSessionRequest,
-  ): Promise<ResumeSessionResponse> {
+  async resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
     await this.sessions.resume({
       sessionId: params.sessionId,
       cwd: params.cwd,
@@ -195,9 +179,7 @@ export class RuntimeAcpAgent implements Agent {
     return { modes: modeState(runtimeDescriptor(this.options)) };
   }
 
-  async unstable_forkSession(
-    params: ForkSessionRequest,
-  ): Promise<ForkSessionResponse> {
+  async unstable_forkSession(params: ForkSessionRequest): Promise<ForkSessionResponse> {
     const session = await this.sessions.fork({
       sessionId: params.sessionId,
       cwd: params.cwd,
@@ -209,16 +191,12 @@ export class RuntimeAcpAgent implements Agent {
     };
   }
 
-  async deleteSession(
-    params: DeleteSessionRequest,
-  ): Promise<DeleteSessionResponse> {
-    this.sessions.delete(params.sessionId);
+  async deleteSession(params: DeleteSessionRequest): Promise<DeleteSessionResponse> {
+    await this.sessions.delete(params.sessionId);
     return {};
   }
 
-  async setSessionMode(
-    params: SetSessionModeRequest,
-  ): Promise<SetSessionModeResponse> {
+  async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse> {
     const descriptor = runtimeDescriptor(this.options);
     if (params.modeId !== descriptor.id) {
       throw new Error(`Unsupported ACP mode '${params.modeId}'.`);
@@ -230,10 +208,7 @@ export class RuntimeAcpAgent implements Agent {
   async authenticate(
     params: Parameters<NonNullable<Agent["authenticate"]>>[0],
   ): Promise<AuthenticateResponse> {
-    authenticateRuntimeMethod(
-      runtimeAuthDescriptor(this.options),
-      params.methodId,
-    );
+    authenticateRuntimeMethod(runtimeAuthDescriptor(this.options), params.methodId);
     return {};
   }
 
@@ -307,54 +282,38 @@ export function acpPrompt(prompt: PromptRequest["prompt"]): RuntimePrompt {
   );
 }
 
-export function runtimeAcpFactory(
-  options: RuntimeAcpAgentOptions,
-): RuntimeFactory {
-  const factory = options.runtime?.factory ?? options.factory;
+export function runtimeAcpFactory(options: RuntimeAcpAgentOptions): RuntimeFactory {
+  const factory = options.runtime?.factory;
   if (!factory) throw new Error("Runtime ACP agent requires runtime.factory.");
   return factory;
 }
 
-export function runtimeAcpDescriptor(
-  options: RuntimeAcpAgentOptions,
-): RuntimeDescriptor {
-  return (
-    options.runtime?.descriptor ??
-    options.descriptor ??
-    runtimeAcpFactory(options).descriptor
-  );
+export function runtimeAcpDescriptor(options: RuntimeAcpAgentOptions): RuntimeDescriptor {
+  return options.runtime?.descriptor ?? runtimeAcpFactory(options).descriptor;
 }
 
 export function runtimeAcpAuthProfile(
   options: RuntimeAcpAgentOptions,
 ): RuntimeAuthProfile | undefined {
-  return (
-    options.runtime?.auth ?? options.auth ?? runtimeAcpFactory(options).auth
-  );
+  return options.runtime?.auth ?? runtimeAcpFactory(options).auth;
 }
 
 function runtimeDescriptor(options: RuntimeAcpAgentOptions): RuntimeDescriptor {
   return runtimeAcpDescriptor(options);
 }
 
-function runtimeAuthProfile(
-  options: RuntimeAcpAgentOptions,
-): RuntimeAuthProfile | undefined {
+function runtimeAuthProfile(options: RuntimeAcpAgentOptions): RuntimeAuthProfile | undefined {
   return runtimeAcpAuthProfile(options);
 }
 
-function runtimeAuthDescriptor(
-  options: RuntimeAcpAgentOptions,
-): RuntimeAuthDescriptor {
+function runtimeAuthDescriptor(options: RuntimeAcpAgentOptions): RuntimeAuthDescriptor {
   return (
     runtimeAuthProfile(options)?.descriptor ??
     createRuntimeAuthDescriptor({ source: "none", methods: [] })
   );
 }
 
-function modeState(
-  descriptor: RuntimeDescriptor,
-): NonNullable<NewSessionResponse["modes"]> {
+function modeState(descriptor: RuntimeDescriptor): NonNullable<NewSessionResponse["modes"]> {
   return {
     currentModeId: descriptor.id,
     availableModes: [
@@ -367,7 +326,4 @@ function modeState(
   };
 }
 
-export {
-  createRuntimeAcpAgent as createPeaAcpAgent,
-  RuntimeAcpAgent as PeaAcpAgent,
-};
+export { createRuntimeAcpAgent as createPeaAcpAgent, RuntimeAcpAgent as PeaAcpAgent };

@@ -47,4 +47,4 @@ See `../BUILD.md` for the complete build/runtime decision table. This executable
 - `.slnx`, configuration strings, and generated evaluator imports are compatibility surfaces, not the intended orchestration authority.
 - Regenerate build-facing contract imports with `dotnet run --project build/Build.csproj -c Release -- sync-contracts` after changing anything under `build/authored/` or `Pe.Shared.Product` layout identity.
 - Successful `./build` output does not mean the live Revit session has fresh runtime assemblies.
-- AttachedRrd validation belongs to Rider/IDE-owned interactive outputs plus dev-agent live-loop tooling. Do not use `./build` for live runtime freshness.
+- AttachedRrd validation belongs to Rider/IDE-owned interactive outputs plus Peco live-loop tooling. Do not use `./build` for live runtime freshness.

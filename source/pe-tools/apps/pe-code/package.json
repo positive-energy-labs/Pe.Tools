@@ -1,5 +1,5 @@
 {
-  "name": "@pe/pe-code",
+  "name": "@pe/peco",
   "version": "0.0.0",
   "description": "A starter for creating a TypeScript package.",
   "homepage": "https://github.com/author/library#readme",
@@ -24,7 +24,7 @@
     "access": "public"
   },
   "scripts": {
-    "pe-code": "vpx tsx src/main.ts",
+    "peco": "vpx tsx src/main.ts",
     "build": "vp pack",
     "dev": "vp pack --watch",
     "test": "vp test",
@@ -32,10 +32,12 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
+    "@mastra/core": "1.41.0",
     "@pe/host-client": "workspace:*",
     "@pe/runtime": "workspace:*",
     "@pe/tools": "workspace:*",
-    "gunshi": "^0.29.5"
+    "gunshi": "^0.29.5",
+    "mastracode": "^0.22.2"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

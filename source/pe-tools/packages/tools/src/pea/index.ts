@@ -1,5 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import z from "zod";
+import { createRuntimeToolProfile } from "@pe/runtime";
 import { HostLogTarget } from "@pe/host-client";
 import type { HostActiveDocumentSummary } from "@pe/host-client";
 import { PeHostClient } from "@pe/host-client";
@@ -11,6 +12,8 @@ import {
   scriptPodImportInputSchema,
 } from "../shared/scripting.ts";
 import { requestAccess } from "../shared/request-access.ts";
+import { peaProductToolCatalog } from "../tool-metadata.ts";
+import { PeaCliCommands, type PeaCliCommandOptions } from "./PeaCliCommands.ts";
 export { peaProductToolCatalog } from "../tool-metadata.ts";
 export { PeaCliCommands } from "./PeaCliCommands.ts";
 
@@ -208,7 +211,6 @@ export const scriptPodExport = createTool({
   execute: async (input) => createCurrentScriptingTools().exportPod(input),
 });
 
-// TODO: finish port into pea app pkg
 export const peaProductTools = {
   [peStatus.id]: peStatus,
   [peLogs.id]: peLogs,
@@ -224,6 +226,15 @@ export const peaProductTools = {
 };
 
 export const peaTools = peaProductTools;
+
+export const peaProductToolProfile = createRuntimeToolProfile({
+  id: "pea-product",
+  tools: peaProductTools,
+  catalog: peaProductToolCatalog,
+  commands: {
+    createSubCommands: (options?: PeaCliCommandOptions) => new PeaCliCommands(options).commands(),
+  },
+});
 
 function createCurrentHostClient() {
   return new PeHostClient({

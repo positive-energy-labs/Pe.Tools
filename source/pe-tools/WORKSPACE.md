@@ -2,7 +2,7 @@
 
 ## Decision
 
-`source/pe-tools` is the TypeScript workspace for Pe.Tools product-adjacent surfaces: user-facing `pea`, private `pe-code`, local web/profile UI, protocol adapters, generated Host contracts, and small TypeScript libraries that make agent/UI/TUI work possible.
+`source/pe-tools` is the TypeScript workspace for Pe.Tools product-adjacent surfaces: user-facing `pea`, dev-only `peco`, local web/profile UI, protocol adapters, generated Host contracts, and small TypeScript libraries that make agent/UI/TUI work possible.
 
 This workspace should use:
 
@@ -39,7 +39,7 @@ Expected high-level shape:
 source/pe-tools/
   apps/
     pea/              # installed user CLI, TUI, local UI/protocol server
-    pe-code/          # private repo/Revit development agent and workflow runner
+    peco/          # private repo/Revit development agent and workflow runner
     profile-ui/       # local browser UI for settings/profile authoring
 
   packages/
@@ -49,16 +49,16 @@ source/pe-tools/
     schema-runtime/   # JSON schema/document helper logic for TS consumers
     schema-ui/        # UI-facing schema view models/components/helpers
     pea-tools/        # user/operator-safe product tools
-    pe-code-tools/    # repo/RRD/build/dev-loop-only tools
+    peco-tools/    # repo/RRD/build/dev-loop-only tools
 ```
 
 Names may change, but the authority boundaries should not blur.
 
 `pea` is the user product entrypoint. It may serve local protocols and standardized event/data formats for frontends, TUIs, and agents. It is not the semantic authority for Revit behavior, settings semantics, JSON schema generation, product layout, or Host operation contracts.
 
-`pe-code` is private developer tooling. It can chain very specific Revit development workflows, RRD/live-loop checks, repo verification, and black-box Pea feedback. These commands should move out of the user-facing `pea` surface over time.
+`peco` is private developer tooling. It can chain very specific Revit development workflows, RRD/live-loop checks, repo verification, and black-box Pea feedback. These commands should move out of the user-facing `pea` surface over time.
 
-`@pe/runtime` is the shared protocol/runtime seam below both apps. It may expose generic `RuntimeFactory`, auth, session, event, ACP, and AG-UI contracts, but it should not dispatch on Pea-vs-`pe-code` product identity. Pea and `pe-code` each own their native Harness configuration and product policy in their app packages, then inject a runtime factory into shared protocol adapters.
+`@pe/runtime` is the shared protocol/runtime seam below both apps. It may expose generic `RuntimeFactory`, auth, session, event, ACP, and AG-UI contracts, but it should not dispatch on Pea-vs-`peco` product identity. Pea and `peco` each own their native Harness configuration and product policy in their app packages, then inject a runtime factory into shared protocol adapters.
 
 ## Authority Model
 
@@ -76,7 +76,7 @@ The intended flow is:
 
 ```text
 UI / TUI / agent / CLI
-  -> pea or pe-code TypeScript runtime
+  -> pea or peco TypeScript runtime
   -> local wrappers over generated Host contracts
   -> Pe.Host public operations
   -> shared C# contracts / Revit packages / storage runtime
@@ -103,7 +103,7 @@ The initialized Vite+ `packages/utils` template currently exports `./dist/index.
 Dist-first remains appropriate for:
 
 - installed `pea` payloads;
-- bundled `pe-code` artifacts if a built private artifact is useful;
+- bundled `peco` artifacts if a built private artifact is useful;
 - web/frontend production bundles;
 - package outputs that are intentionally consumed outside the workspace;
 - any future package whose default import shape must match installed/published runtime behavior.
@@ -200,9 +200,9 @@ Apps own executable identity, audience defaults, root command posture, and artif
 
 `pea` is the product/operator-facing CLI. It may expose Pea product tools including Host status/logs/operations, scripts, product UI, and product runtime commands. Scripting is intentionally product-visible because each CLI should be able to expose the same agent tools it owns through human-facing CLI commands.
 
-`pe-code` is the repo/dev-facing CLI. It owns repo-source, RRD/live-loop, verification, codegen, dev-agent, and black-box Pea feedback commands. Dev workflows should not route through `pea`.
+`peco` is the repo/dev-facing CLI. It owns repo-source, RRD/live-loop, verification, codegen, Peco, and black-box Pea feedback commands. Dev workflows should not route through `pea`.
 
-`pea dev` should disappear rather than become a long-term alias. If a transition bridge is ever required, keep it temporary and hidden; the durable command identity is `pe-code`.
+`peco` should disappear rather than become a long-term alias. If a transition bridge is ever required, keep it temporary and hidden; the durable command identity is `peco`.
 
 Both CLIs are human-facing by default. `--json` output may be added selectively where it improves debugging or automation, but universal JSON parity is not required for this migration spike.
 
@@ -217,19 +217,19 @@ pea profile ...
 pea script ...      # only if scripting is intentionally user-visible
 ```
 
-Private developer workflow should move to `pe-code`:
+Private developer workflow should move to `peco`:
 
 ```text
-pe-code
-pe-code live ...
-pe-code rrd ...
-pe-code test ...
-pe-code codegen ...
-pe-code talk-to-pea ...
-pe-code sync ...
+peco
+peco live ...
+peco rrd ...
+peco test ...
+peco codegen ...
+peco talk-to-pea ...
+peco sync ...
 ```
 
-`pea dev` is not the repo-source development command. It should disappear; `pe-code` is the durable command identity for repo/dev posture.
+`peco` is not the repo-source development command. It should disappear; `peco` is the durable command identity for repo/dev posture.
 
 ## Relationship To Observed Repos
 

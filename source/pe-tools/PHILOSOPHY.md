@@ -41,7 +41,7 @@ If a tool, operation, skill, or prompt leaves these questions implicit, it is in
 
 For **Pea**, host operations and product workflows must expose important secondary and tertiary relationships, not just flat object lists. `pe_status`, automatic document context injection, workspace roots, loaded-family catalogs, schema summaries, and generated reference docs are examples of context surfaces that make the Revit world smaller and more legible.
 
-For **dev-agent**, the priority is removing live-loop and source-navigation friction. The agent should receive clear diagnostics, freshness verdicts, proof-lane guidance, focused repo skills, and enough source structure to avoid guessing where behavior belongs.
+For **Peco**, the priority is removing live-loop and source-navigation friction. The agent should receive clear diagnostics, freshness verdicts, proof-lane guidance, focused repo skills, and enough source structure to avoid guessing where behavior belongs.
 
 ## Control Loop and Judgment Loop
 
@@ -77,6 +77,20 @@ Most agent-design problems are placement problems. Before improving a prompt, ad
 | Durable docs and source architecture | Use docs and code structure to preserve shared language, product boundaries, and design concepts that should outlive one session.                                                                                                                                                                                                                       |
 
 This taxonomy is a pressure test, not bureaucracy. If a behavior feels unreliable, assume it is living at the wrong layer until proven otherwise.
+
+### Context Lifetime
+
+Context also has a lifetime. Put information at the smallest durable surface that can carry it safely:
+
+- **System prompt**: identity, hard boundaries, exact control-loop protocol, mode/environment facts, and tiny durable invariants.
+- **Tool or operation description**: routing and capability choice.
+- **Tool implementation or harness**: deterministic sequencing, validation, safety, freshness, storage, memory, and request/session wiring.
+- **Skill**: reusable judgment-heavy workflow.
+- **Generated artifact**: large or changing maps, schemas, catalogs, and reference material.
+- **Request or conversation context**: ephemeral current-world facts such as active Revit state, protocol session state, prompt fragments, and one-turn resources.
+- **Memory**: durable user, project, preference, and workflow facts. Do not store dynamic runtime snapshots as truth.
+
+The Pe.Tools runtime substrate should therefore stay close to Mastra's native storage, memory, tools, request-context, Harness, and Workspace types. Pea and Peco should select product-specific storage, memory, and tool profiles; those tool profiles should carry Mastra tools plus the nearest CLI command mapping, while app factories stay thin and do not recreate Mastra internals.
 
 Host operation metadata is a compact routing and callability surface, not a workflow planner. Its strongest signals are key taxonomy, safety gates, request affordances, generated request/response shapes, terse search terms, and sparse practical related operations. Public discovery output should not repeat taxonomy already carried by the key (`domain`, `family`, `revitLayer`, `domainNoun`) or derived intent; keep those internal for scoring/filtering when useful. The capability map is only a table of contents for choosing a capability ladder, so its rows should stay coarse (`key`, description, safety, input/output kind, terms) and avoid DTO-shaped field summaries, examples, and related-operation prose. Repeated preflight rules belong in tool descriptions, deterministic failure handling, or harness validation, while operation-local prose stays in capped `callGuidance`. Do not add overlapping prose fields to teach the model sequences; put deterministic sequencing in the harness, repeated workflows in skills, and domain detail in operation results or generated zoom-in artifacts.
 

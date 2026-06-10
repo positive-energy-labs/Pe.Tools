@@ -16,7 +16,7 @@ Updated: 2026-06-09T01:22:24.027Z
 
 ## What was found
 
-### Main default MastraCode/dev-agent DB
+### Main default MastraCode/Peco DB
 
 Path:
 
@@ -28,7 +28,7 @@ State observed:
 
 - Exists.
 - Very large: ~46.9 GB.
-- Contains dev-agent/resource rows such as `resourceId = pe-tools-ae8e96592dd3`.
+- Contains Peco/resource rows such as `resourceId = pe-tools-ae8e96592dd3`.
 - Does **not** contain the requested Pea thread id `1780966259973-a7cwcorsf`.
 - Does **not** contain `resourceId = pea:f63071d01e9a716b` for that requested thread.
 
@@ -38,7 +38,7 @@ This path comes from `source/pea/app/mastracode-storage.ts`:
 getDefaultMastraCodeDatabasePath() => %APPDATA%/mastracode/mastra.db
 ```
 
-and is used for `runtimeId === "dev-agent"` in `createPeaRuntimeStorage(...)`.
+and is used for `runtimeId === "Peco"` in `createPeaRuntimeStorage(...)`.
 
 ### Current Pea runtime DB
 
@@ -249,7 +249,7 @@ When the DB file is tiny but `-wal` is active, normal LibSQL queries still saw W
    - Likely explanation: storage root churn, thread created in a now-orphaned root, or protocol/session history shown from a different persistence layer than current Mastra memory DB.
 
 2. **Multiple root conventions**
-   - Dev-agent: `%APPDATA%\mastracode\mastra.db`.
+   - Peco: `%APPDATA%\mastracode\mastra.db`.
    - Pea runtime memory: `<cwd>\.pea\mastra.db`, where cwd resolves to `Documents\Pe.Tools`.
    - Pea auth/MastraCode internals: `Documents\Pe.Tools\.pea\mastracode\...` due to APPDATA mutation.
    - Protocol sessions: `%LOCALAPPDATA%\Pe.Tools\pea\protocol-sessions`, not under ProductRuntimeLayout.
@@ -271,7 +271,7 @@ When the DB file is tiny but `-wal` is active, normal LibSQL queries still saw W
    - Pea auth JSON / OAuth state
    - Pea protocol session registry
    - Pea skills/config/settings
-   - dev-agent DB/auth/config
+   - Peco DB/auth/config
    - Product runtime state/log/cache
 
 2. Decide whether Pea runtime memory belongs under:

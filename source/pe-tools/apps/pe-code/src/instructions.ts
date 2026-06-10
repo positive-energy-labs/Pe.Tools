@@ -41,7 +41,7 @@ Activate the smallest matching skill from natural language:
 - **pe-live-loop**: RRD, Rider, hot reload, active documents, AttachedRrd, visual/manual Revit state, installed-lane coordination.
 - **pe-diagnose**: bugs, regressions, confusing errors, failing build/test/script, source-vs-product mismatch.
 - **pe-tdd**: tests-first work, regression tests, public-seam behavior changes.
-- **pe-architecture**: module seams, product boundaries, desktop vs DA, Pea vs dev-agent, document-owned vs session-owned.
+- **pe-architecture**: module seams, product boundaries, desktop vs DA, Pea vs Peco, document-owned vs session-owned.
 - **pe-codify-work**: PRDs, RFCs, AFK-ready plans, durable briefs/docs.
 - **pe-handoff**: pause/resume/next-agent context.
 - **pe-write-skill**: create or revise skills, triggers, slash-skill behavior, skill boundaries.

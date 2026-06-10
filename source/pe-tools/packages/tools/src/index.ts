@@ -1,5 +1,7 @@
-export { PeaCliCommands, peaProductTools, peaTools } from "./pea/index.ts";
-export { PeCodeCliCommands, peCodeTools } from "./dev/index.ts";
+export { PeaCliCommands, peaProductToolProfile, peaProductTools, peaTools } from "./pea/index.ts";
+export type { PeaCliCommandOptions } from "./pea/PeaCliCommands.ts";
+export { PeCodeCliCommands, peCodeRuntimeToolProfile, peCodeTools } from "./dev/index.ts";
+export type { PeCodeCliCommandOptions } from "./dev/PeCodeCliCommands.ts";
 export { peCodeToolCatalog, peaProductToolCatalog } from "./tool-metadata.ts";
 export {
   ScriptingTools,
