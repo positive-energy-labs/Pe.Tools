@@ -2,17 +2,17 @@
 
 ## User-Facing vs Internal
 
-| User-facing term | Internal/API term | Notes |
-|---|---|---|
-| panel schedule | `PanelScheduleView` | actual schedule instance |
-| panel schedule template | `PanelScheduleTemplate` | definition/layout source |
-| schedule cells/sections | `PanelScheduleData` | table structure + cell access |
-| panel | `FamilyInstance` + `ElectricalEquipment` | usually an electrical equipment family instance |
-| circuit row | `ElectricalSystem` | panel body is circuit-owned |
-| load summary bucket | `ElectricalLoadClassification` | demand math also depends on `ElectricalDemandFactorDefinition` |
-| wire graphic / homerun | `Wire` | attached to a circuit; not the owner of panel-row identity |
-| wire type | `WireType` via `Wire.GetTypeId()` | conductor/material defaults |
-| proxy device | model convention, not a special API class | old projects may use receptacles/disconnects as stand-ins |
+| User-facing term        | Internal/API term                         | Notes                                                          |
+| ----------------------- | ----------------------------------------- | -------------------------------------------------------------- |
+| panel schedule          | `PanelScheduleView`                       | actual schedule instance                                       |
+| panel schedule template | `PanelScheduleTemplate`                   | definition/layout source                                       |
+| schedule cells/sections | `PanelScheduleData`                       | table structure + cell access                                  |
+| panel                   | `FamilyInstance` + `ElectricalEquipment`  | usually an electrical equipment family instance                |
+| circuit row             | `ElectricalSystem`                        | panel body is circuit-owned                                    |
+| load summary bucket     | `ElectricalLoadClassification`            | demand math also depends on `ElectricalDemandFactorDefinition` |
+| wire graphic / homerun  | `Wire`                                    | attached to a circuit; not the owner of panel-row identity     |
+| wire type               | `WireType` via `Wire.GetTypeId()`         | conductor/material defaults                                    |
+| proxy device            | model convention, not a special API class | old projects may use receptacles/disconnects as stand-ins      |
 
 ## Main Entities
 

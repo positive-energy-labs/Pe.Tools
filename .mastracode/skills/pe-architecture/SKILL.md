@@ -24,7 +24,7 @@ Use Module, Interface, Implementation, Depth, Seam, Adapter, Leverage, and Local
 ## Context Resolution
 
 1. Read the nearest AGENTS.md for package cautions and shared language.
-2. Read feature _DEV.md/_GOALS.md when the architecture crosses packages.
+2. Read feature \_DEV.md/\_GOALS.md when the architecture crosses packages.
 3. Inspect neighboring implementations before inventing abstractions.
 4. Prefer generated contracts and public seams as current truth.
 5. Consider how release packaging orchestration and distribution will be impacted

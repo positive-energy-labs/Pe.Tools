@@ -5,9 +5,7 @@
   },
   "FilterFamilies": {
     "IncludeNames": {
-      "Equaling": [
-        "FF-Test-WineGuardianDS050Indoor.rfa"
-      ]
+      "Equaling": ["FF-Test-WineGuardianDS050Indoor.rfa"]
     }
   },
   "ParamDrivenSolids": {
@@ -86,10 +84,7 @@
           "Dir": "out"
         },
         "Round": {
-          "Center": [
-            "@CenterLR",
-            "@CenterFB"
-          ],
+          "Center": ["@CenterLR", "@CenterFB"],
           "Diameter": {
             "By": "param:SupplyAirDiameter"
           }
@@ -110,10 +105,7 @@
           "Dir": "in"
         },
         "Round": {
-          "Center": [
-            "@CenterLR",
-            "plane:Return Air Elevation"
-          ],
+          "Center": ["@CenterLR", "plane:Return Air Elevation"],
           "Diameter": {
             "By": "param:ReturnAirDiameter"
           }
@@ -134,10 +126,7 @@
           "Dir": "in"
         },
         "Round": {
-          "Center": [
-            "plane:Liquid Line Center",
-            "plane:Service Line Elevation"
-          ],
+          "Center": ["plane:Liquid Line Center", "plane:Service Line Elevation"],
           "Diameter": {
             "By": "param:LiquidLineDiameter"
           }
@@ -156,10 +145,7 @@
           "Dir": "in"
         },
         "Round": {
-          "Center": [
-            "plane:Suction Line Center",
-            "plane:Service Line Elevation"
-          ],
+          "Center": ["plane:Suction Line Center", "plane:Service Line Elevation"],
           "Diameter": {
             "By": "param:SuctionLineDiameter"
           }
@@ -178,10 +164,7 @@
           "Dir": "in"
         },
         "Round": {
-          "Center": [
-            "plane:Drain Side",
-            "plane:Drain Elevation"
-          ],
+          "Center": ["plane:Drain Side", "plane:Drain Elevation"],
           "Diameter": {
             "By": "param:DrainDiameter"
           }
@@ -195,11 +178,7 @@
   },
   "SharedParameterSelection": {
     "Include": {
-      "Names": [
-        "PE_G_Dim_Height1",
-        "PE_G_Dim_Length1",
-        "PE_G_Dim_Width1"
-      ]
+      "Names": ["PE_G_Dim_Height1", "PE_G_Dim_Length1", "PE_G_Dim_Width1"]
     },
     "Exclude": {}
   },

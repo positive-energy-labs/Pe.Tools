@@ -10,9 +10,7 @@
       "Value": ""
     },
     "IncludeNames": {
-      "Equaling": [
-        "__CURRENT_FAMILY__"
-      ],
+      "Equaling": ["__CURRENT_FAMILY__"],
       "Containing": [],
       "StartingWith": []
     },
@@ -56,11 +54,7 @@
   },
   "SharedParameterSelection": {
     "Include": {
-      "Names": [
-        "PE_G_Dim_Height1",
-        "PE_G_Dim_Length1",
-        "PE_G_Dim_Width1"
-      ]
+      "Names": ["PE_G_Dim_Height1", "PE_G_Dim_Length1", "PE_G_Dim_Width1"]
     },
     "Exclude": {}
   },

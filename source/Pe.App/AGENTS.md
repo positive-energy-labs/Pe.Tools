@@ -22,15 +22,15 @@ itself.
 
 ## Shared Language
 
-| Term               | Meaning                                                              | Prefer / Avoid                                                                                   |
-|--------------------|----------------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
-| **runtime add-in** | The deployed Revit add-in assemblies loaded by Revit                 | Avoid confusing this with the `.Tests` configuration, Design Automation, TS code, or the host                                             |
-| **task**           | A Task Palette action under `Tasks/`                                 | Avoid using it as a synonym for background/async work                                            |
+| Term               | Meaning                                              | Prefer / Avoid                                                                                |
+| ------------------ | ---------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| **runtime add-in** | The deployed Revit add-in assemblies loaded by Revit | Avoid confusing this with the `.Tests` configuration, Design Automation, TS code, or the host |
+| **task**           | A Task Palette action under `Tasks/`                 | Avoid using it as a synonym for background/async work                                         |
 
 ## Living Memory
 
 - This package's dependency graph owns the live RRD runtime. Be unusually cautious about builds because they will
-  *always* force a costly Revit restart.
+  _always_ force a costly Revit restart.
 - Keep `Pe.App` thin. If logic starts looking reusable or testable outside the command shell, move it into the owning
   domain/shared package.Ok
 - `Application.cs` is the startup truth. If a capability depends on bootstrapping, logging, or event subscription,

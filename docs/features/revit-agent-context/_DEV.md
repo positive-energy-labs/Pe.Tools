@@ -120,7 +120,6 @@ Each new operation should include generated metadata with clear family/layer/dom
 - How much project-browser structure should be exposed directly versus as search/navigation projections?
 - Which UI-session facts can be safely mirrored in a future Design Automation-friendly document-owned shape, and which must remain desktop bridge-only?
 
-
 ## Project Browser lens
 
 `revit.catalog.project-browser` exposes bounded folder/path vocabulary and item handles for Views, Sheets, and Schedules. Treat this as human navigation/provenance: useful for scoping, ranking, validation, and explanations around printed/archive/design/reference language. Use semantic catalog, matrix, and detail operations for model facts, schedule rows, parameters, and element data.

@@ -65,14 +65,14 @@ Local Pea owns Revit/tool/stream lifecycle. Pea Cloud owns Gateway credentials, 
 
 ## Runtime credential model
 
-| Credential | Holder | Beta purpose |
-|---|---|---|
-| WorkOS browser session | browser/hosted login page | authenticate human to Pea Cloud |
-| One-time connection code | localhost callback only | transfer auth result from hosted login to local Pea |
-| Local gateway token | hosted UI + local Pea loopback gateway | authorize one browser control/observe connection to local Pea without exposing runtime/model authority |
-| Short-lived Pea token | local Pea | authorize local runtime/Gateway proxy calls |
-| Provider key or Mastra Gateway `msk_...` | Pea Cloud | model/Gateway access; never browser-proxied or installed-client stored |
-| Gateway `resource` / `thread` IDs | Pea Cloud derives; local Pea may echo opaque IDs | stable OM scope without exposing provider/Gateway authority |
+| Credential                               | Holder                                           | Beta purpose                                                                                           |
+| ---------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| WorkOS browser session                   | browser/hosted login page                        | authenticate human to Pea Cloud                                                                        |
+| One-time connection code                 | localhost callback only                          | transfer auth result from hosted login to local Pea                                                    |
+| Local gateway token                      | hosted UI + local Pea loopback gateway           | authorize one browser control/observe connection to local Pea without exposing runtime/model authority |
+| Short-lived Pea token                    | local Pea                                        | authorize local runtime/Gateway proxy calls                                                            |
+| Provider key or Mastra Gateway `msk_...` | Pea Cloud                                        | model/Gateway access; never browser-proxied or installed-client stored                                 |
+| Gateway `resource` / `thread` IDs        | Pea Cloud derives; local Pea may echo opaque IDs | stable OM scope without exposing provider/Gateway authority                                            |
 
 ## Two viable beta variants
 
@@ -112,4 +112,5 @@ Do not build for beta unless needed:
 
 - The tempting architecture `local Pea -> browser tab -> Gateway/provider` is possible but fragile because the browser becomes backend infrastructure. Pea should tolerate UI closure/reload; therefore the browser can initiate/auth/observe/steer, but local Pea must execute.
 - Gateway OM watches, summarizes, compresses, and stores conversation content while enabled. Treat this as a product/privacy feature with clear beta disclosure, not as invisible telemetry.
+- Gateway-hosted OM currently configures observation/reflection token budgets but not observer/reflector model IDs. If Pea must control OM models, keep SDK/local OM for that path or add a Gateway capability before replacing it.
 - Gateway OM should remember operator conversations and preferences, not become authoritative Revit/project state. Live Revit truth still comes from Pe.Host operations, scripts, logs, and active document context.

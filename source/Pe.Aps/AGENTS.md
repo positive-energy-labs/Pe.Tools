@@ -26,12 +26,12 @@ Use a tiny DA manifest before broad APS validation. Data Management and OSS fail
 
 ## Shared Language
 
-| Term | Meaning | Prefer / Avoid |
-| --- | --- | --- |
-| **APS mechanics** | Reusable auth, Data Management, Object Storage, and Design Automation API behavior | Keep here, not in `Pe.Dev.RevitAutomation` |
-| **cloud model catalog** | APS hub/project/folder/item/version discovery and resolution | Avoid mixing this with local browse cache or manifest formatting |
-| **Design Automation service** | Generic DA appbundle/activity/workitem/status/artifact operations | Avoid referencing Revit artifact DTOs here |
-| **artifact finalization** | Generic report fetch, OSS download, and JSON deserialize flow | Keep result interpretation in caller/domain packages |
+| Term                          | Meaning                                                                            | Prefer / Avoid                                                   |
+| ----------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **APS mechanics**             | Reusable auth, Data Management, Object Storage, and Design Automation API behavior | Keep here, not in `Pe.Dev.RevitAutomation`                       |
+| **cloud model catalog**       | APS hub/project/folder/item/version discovery and resolution                       | Avoid mixing this with local browse cache or manifest formatting |
+| **Design Automation service** | Generic DA appbundle/activity/workitem/status/artifact operations                  | Avoid referencing Revit artifact DTOs here                       |
+| **artifact finalization**     | Generic report fetch, OSS download, and JSON deserialize flow                      | Keep result interpretation in caller/domain packages             |
 
 ## Living Memory
 

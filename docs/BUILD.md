@@ -16,13 +16,13 @@ This separation exists because Revit, Rider hot reload, package-local outputs, i
 
 ## Why the lanes exist
 
-| Lane | Decision | Why it exists | What it proves |
-| --- | --- | --- | --- |
-| **Source compile** | Ordinary terminal `dotnet build` is the safe default. | Most source work should not touch Rider, Revit, installed files, or package-local hot-reload state. | The selected package compiles into isolated `.artifacts/...` outputs. |
-| **Package/artifact** | `./build` owns bundle, appbundle, MSI, payload, and release artifact shape. | Packaging needs consistent repo-local topology and generated manifests, not ad hoc project builds. | Durable artifacts were staged under `.artifacts/packages/...`. |
-| **FreshRevitProcess** | Fresh Revit-backed proof should use the test helper, not the active UI session. | The current RRD session is user-owned, slow to recover, likely stale, and often not the thing under test. | Revit-backed behavior ran in a fresh test-owned process. |
-| **AttachedRrd** | Live-session proof must be treated as an attached runtime loop, not as normal compilation. | Rider/Revit/Host/session/document state is fragile and cannot be inferred from MSBuild success. | A targeted probe behaved correctly in the currently running RRD session. |
-| **Installed lane** | Installed behavior must be validated from installed roots. | MSI/product roots and dev/runtime roots intentionally differ. | Installed bootstrap/runtime behavior, not source or RRD behavior. |
+| Lane                  | Decision                                                                                   | Why it exists                                                                                             | What it proves                                                           |
+| --------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| **Source compile**    | Ordinary terminal `dotnet build` is the safe default.                                      | Most source work should not touch Rider, Revit, installed files, or package-local hot-reload state.       | The selected package compiles into isolated `.artifacts/...` outputs.    |
+| **Package/artifact**  | `./build` owns bundle, appbundle, MSI, payload, and release artifact shape.                | Packaging needs consistent repo-local topology and generated manifests, not ad hoc project builds.        | Durable artifacts were staged under `.artifacts/packages/...`.           |
+| **FreshRevitProcess** | Fresh Revit-backed proof should use the test helper, not the active UI session.            | The current RRD session is user-owned, slow to recover, likely stale, and often not the thing under test. | Revit-backed behavior ran in a fresh test-owned process.                 |
+| **AttachedRrd**       | Live-session proof must be treated as an attached runtime loop, not as normal compilation. | Rider/Revit/Host/session/document state is fragile and cannot be inferred from MSBuild success.           | A targeted probe behaved correctly in the currently running RRD session. |
+| **Installed lane**    | Installed behavior must be validated from installed roots.                                 | MSI/product roots and dev/runtime roots intentionally differ.                                             | Installed bootstrap/runtime behavior, not source or RRD behavior.        |
 
 ## Dev-agent wrapper decision
 
@@ -49,11 +49,11 @@ That does not make `BUILD.md` a dev-agent tool manual. The durable decision is: 
 
 ## Build modes and output ownership
 
-| Mode | Selected by | Output owner | Decision |
-| --- | --- | --- | --- |
-| **Isolated** | Plain terminal `dotnet build`, `./build`, CI | `.artifacts/...` | Default for safe source/package proof. |
-| **Interactive/package-local** | Rider/IDE build or explicit non-isolated override | Package-local `bin/obj` | Only for work that intentionally feeds Rider/RRD hot-reload baselines. |
-| **Terminal interactive override** | `/p:PeIsolatedBuild=false` | Package-local `bin/obj` from shell | Escape hatch; can clobber Rider/RRD assumptions. Use deliberately. |
+| Mode                              | Selected by                                       | Output owner                       | Decision                                                               |
+| --------------------------------- | ------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------- |
+| **Isolated**                      | Plain terminal `dotnet build`, `./build`, CI      | `.artifacts/...`                   | Default for safe source/package proof.                                 |
+| **Interactive/package-local**     | Rider/IDE build or explicit non-isolated override | Package-local `bin/obj`            | Only for work that intentionally feeds Rider/RRD hot-reload baselines. |
+| **Terminal interactive override** | `/p:PeIsolatedBuild=false`                        | Package-local `bin/obj` from shell | Escape hatch; can clobber Rider/RRD assumptions. Use deliberately.     |
 
 Verified mechanics:
 
@@ -297,21 +297,21 @@ The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. D
 
 ## Compact command index
 
-| Goal | Use |
-| --- | --- |
-| Safe source compile | `dotnet build .\source\<Package>\<Package>.csproj -c Debug.R25` |
-| Recover poisoned dotnet sandbox | `.\tools\dotnet-sandbox-safe.ps1 <dotnet args>` |
-| Fresh Revit proof | `pe-dev test --filter "Name~..." --timeout-seconds 900` |
-| Fresh proof planning | `pe-dev test --plan --json --filter "Name~..."` |
-| Attached RRD proof | Use dev-agent attached-runtime verification wrappers/skills, then prove with an attached operation/script/test/log/Pea product probe. |
-| Product host/log/script check | `pea host ...`, `pea script ...` |
-| Package artifacts/MSI | `dotnet run --project .\build\Build.csproj -c Release -- pack` |
-| Package one year | `dotnet run --project .\build\Build.csproj -c Release -- pack --configuration Release.R25` |
-| Package desktop bundle only | `dotnet run --project .\build\Build.csproj -c Release -- pack desktop --configuration Release.R25` |
-| Package installer only | `dotnet run --project .\build\Build.csproj -c Release -- pack installer --configuration Release.R25` |
-| Package automation appbundle only | `dotnet run --project .\build\Build.csproj -c Release -- pack automation` |
-| Publish GitHub release artifacts | `dotnet run --project .\build\Build.csproj -c Release -- pack publish` |
-| Link source `pea` dev lane | `pe-dev pea link-dev`, then `pea dev` or `pea --dev ...` |
-| Validate installed `pea` lane | `pea --installed ...` |
-| Generated contract check | `pe-dev codegen check` |
-| Generated contract update | `pe-dev codegen sync --target <target>` |
+| Goal                              | Use                                                                                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Safe source compile               | `dotnet build .\source\<Package>\<Package>.csproj -c Debug.R25`                                                                       |
+| Recover poisoned dotnet sandbox   | `.\tools\dotnet-sandbox-safe.ps1 <dotnet args>`                                                                                       |
+| Fresh Revit proof                 | `pe-dev test --filter "Name~..." --timeout-seconds 900`                                                                               |
+| Fresh proof planning              | `pe-dev test --plan --json --filter "Name~..."`                                                                                       |
+| Attached RRD proof                | Use dev-agent attached-runtime verification wrappers/skills, then prove with an attached operation/script/test/log/Pea product probe. |
+| Product host/log/script check     | `pea host ...`, `pea script ...`                                                                                                      |
+| Package artifacts/MSI             | `dotnet run --project .\build\Build.csproj -c Release -- pack`                                                                        |
+| Package one year                  | `dotnet run --project .\build\Build.csproj -c Release -- pack --configuration Release.R25`                                            |
+| Package desktop bundle only       | `dotnet run --project .\build\Build.csproj -c Release -- pack desktop --configuration Release.R25`                                    |
+| Package installer only            | `dotnet run --project .\build\Build.csproj -c Release -- pack installer --configuration Release.R25`                                  |
+| Package automation appbundle only | `dotnet run --project .\build\Build.csproj -c Release -- pack automation`                                                             |
+| Publish GitHub release artifacts  | `dotnet run --project .\build\Build.csproj -c Release -- pack publish`                                                                |
+| Link source `pea` dev lane        | `pe-dev pea link-dev`, then `pea dev` or `pea --dev ...`                                                                              |
+| Validate installed `pea` lane     | `pea --installed ...`                                                                                                                 |
+| Generated contract check          | `pe-dev codegen check`                                                                                                                |
+| Generated contract update         | `pe-dev codegen sync --target <target>`                                                                                               |

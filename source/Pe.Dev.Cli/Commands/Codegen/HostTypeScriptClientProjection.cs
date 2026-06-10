@@ -1,75 +1,67 @@
-using Pe.Dev.RevitAutomation;
-using Pe.Shared.HostContracts.Operations;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using Pe.Shared.HostContracts.Operations;
 
-namespace Pe.Dev.Cli;
+namespace Pe.Dev.Cli.Codegen;
 
 internal static class HostTypeScriptClientProjection {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions IndentedJsonOptions = new(JsonSerializerDefaults.Web) {
+        WriteIndented = true
+    };
 
     public static async Task<int> RunAsync(
-        IReadOnlyList<string> forwardedArguments,
-        string? repoRootOverride,
+        bool check,
+        CodegenPaths paths,
         CancellationToken cancellationToken
     ) {
-        HostTypeScriptClientOptions options;
-        string repoRoot;
-        try {
-            options = HostTypeScriptClientOptions.Parse(forwardedArguments);
-            repoRoot = RepoRootResolver.Resolve(repoRootOverride);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            return 10;
-        }
-
-        var buildExit = await HostTypeGenerationModelProvider.EnsureFreshBuildAsync(repoRoot, cancellationToken);
+        var buildExit = await HostTypeGenerationModelProvider.EnsureFreshBuildAsync(paths, cancellationToken);
         if (buildExit != 0)
             return buildExit;
 
         HostTypeGenerationModelProvider.GeneratedHostTypeModel generatedHostTypeModel;
         try {
-            generatedHostTypeModel = HostTypeGenerationModelProvider.Load(repoRoot);
+            generatedHostTypeModel = HostTypeGenerationModelProvider.Load(paths);
         } catch (Exception ex) {
-            Console.Error.WriteLine($"Host TypeScript client generation failed: {ex.Message}");
+            Console.Error.WriteLine($"Host TypeScript contract generation failed: {ex.Message}");
             return 1;
         }
 
         GeneratedProjectionFile[] generatedFiles;
         try {
-            generatedFiles = GenerateFiles(repoRoot, generatedHostTypeModel);
+            generatedFiles = GenerateFiles(paths, generatedHostTypeModel);
         } catch (Exception ex) {
-            Console.Error.WriteLine($"Host TypeScript client generation failed: {ex.Message}");
+            Console.Error.WriteLine($"Host TypeScript contract generation failed: {ex.Message}");
             return 1;
         }
 
-        if (options.Check)
-            return await CheckAsync(repoRoot, generatedFiles, cancellationToken);
+        if (check)
+            return await CheckAsync(paths, generatedFiles, cancellationToken);
 
-        foreach (var extraFile in EnumerateCommittedGeneratedFiles(repoRoot).Where(path => generatedFiles.All(file => !string.Equals(file.Path, path, StringComparison.OrdinalIgnoreCase)))) {
+        foreach (var extraFile in EnumerateCommittedGeneratedFiles(paths).Where(path => generatedFiles.All(file => !string.Equals(file.Path, path, StringComparison.OrdinalIgnoreCase)))) {
             File.Delete(extraFile);
-            Console.WriteLine($"Deleted {Path.GetRelativePath(repoRoot, extraFile)}");
+            Console.WriteLine($"Deleted {Path.GetRelativePath(paths.RepoRoot, extraFile)}");
         }
 
         foreach (var generatedFile in generatedFiles) {
             Directory.CreateDirectory(Path.GetDirectoryName(generatedFile.Path)!);
             await File.WriteAllTextAsync(generatedFile.Path, generatedFile.Content, cancellationToken);
-            Console.WriteLine($"Generated {Path.GetRelativePath(repoRoot, generatedFile.Path)}");
+            Console.WriteLine($"Generated {Path.GetRelativePath(paths.RepoRoot, generatedFile.Path)}");
         }
 
         return 0;
     }
 
     private static async Task<int> CheckAsync(
-        string repoRoot,
+        CodegenPaths paths,
         IReadOnlyList<GeneratedProjectionFile> generatedFiles,
         CancellationToken cancellationToken
     ) {
         var staleFiles = new List<string>();
         var expectedPaths = generatedFiles.Select(file => Path.GetFullPath(file.Path)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var generatedFile in generatedFiles) {
-            var relativePath = Path.GetRelativePath(repoRoot, generatedFile.Path);
+            var relativePath = Path.GetRelativePath(paths.RepoRoot, generatedFile.Path);
             if (!File.Exists(generatedFile.Path)) {
                 staleFiles.Add($"{relativePath} (missing)");
                 continue;
@@ -80,60 +72,143 @@ internal static class HostTypeScriptClientProjection {
                 staleFiles.Add(relativePath);
         }
 
-        foreach (var extraFile in EnumerateCommittedGeneratedFiles(repoRoot).Where(path => !expectedPaths.Contains(path)))
-            staleFiles.Add($"{Path.GetRelativePath(repoRoot, extraFile)} (extra)");
+        foreach (var extraFile in EnumerateCommittedGeneratedFiles(paths).Where(path => !expectedPaths.Contains(path)))
+            staleFiles.Add($"{Path.GetRelativePath(paths.RepoRoot, extraFile)} (extra)");
 
         if (staleFiles.Count == 0) {
-            Console.WriteLine("Generated Host TypeScript client is current.");
+            Console.WriteLine("Generated Host TypeScript contracts are current.");
             return 0;
         }
 
-        Console.Error.WriteLine("Generated Host TypeScript client is stale:");
+        Console.Error.WriteLine("Generated Host TypeScript contracts are stale:");
         foreach (var staleFile in staleFiles)
             Console.Error.WriteLine($"  {staleFile}");
-        Console.Error.WriteLine("Run `pe-dev codegen sync --target host-client` to update it.");
+        Console.Error.WriteLine("Run `pe-dev codegen sync --target host-contracts` to update them.");
         return 1;
     }
 
     private static GeneratedProjectionFile[] GenerateFiles(
-        string repoRoot,
+        CodegenPaths paths,
         HostTypeGenerationModelProvider.GeneratedHostTypeModel generatedHostTypeModel
     ) {
         ValidateProjectedTypeSymbols(generatedHostTypeModel.ExportedTypeNames);
-        var generatedDirectory = Path.Combine(repoRoot, "source", "pea", "app", "generated");
+        var generatedDirectory = paths.HostContractsDirectory;
         return [
             new GeneratedProjectionFile(
-                Path.Combine(generatedDirectory, "host-client.generated.ts"),
-                GenerateTypeScriptClient(generatedHostTypeModel.ExportedTypeNames)
+                Path.Combine(generatedDirectory, "host-operation-contracts.generated.ts"),
+                NormalizeLineEndings(GenerateHostOperationContracts())
             ),
             new GeneratedProjectionFile(
                 Path.Combine(generatedDirectory, "host-operations.generated.ts"),
-                GenerateHostOperationCatalog(generatedHostTypeModel.ExportedTypeNames)
+                NormalizeLineEndings(GenerateHostOperationCatalog(generatedHostTypeModel.ExportedTypeNames))
             ),
             new GeneratedProjectionFile(
                 Path.Combine(generatedDirectory, "host-capability-map.generated.ts"),
-                GenerateHostCapabilityMap()
+                NormalizeLineEndings(GenerateHostCapabilityMap())
+            ),
+            new GeneratedProjectionFile(
+                Path.Combine(generatedDirectory, "index.ts"),
+                NormalizeLineEndings(GenerateContractsIndex())
             )
         ];
     }
 
-    private static string GenerateTypeScriptClient(IReadOnlyDictionary<string, string> exportedTypeNames) => $$"""
+    private static string GenerateHostOperationContracts() => $$"""
         // <auto-generated />
-        // Generated by `pe-dev codegen sync --target host-client` from HostOperationsCatalog.TypeScriptClient.
+        // Generated by `pe-dev codegen sync --target host-contracts` from Pe.Shared.HostContracts.Operations.
 
-        import { sendJson, type HostOperationDefinition, type PeHostClientOptions } from "../host-client-runtime.js";
-        import type {
-        {{RenderTypeScriptImports(exportedTypeNames)}}
-        } from "./host-types/index.js";
+        export type HostHttpVerb = {{RenderStringUnion<HostHttpVerb>(ToTypeScriptHttpVerb)}};
+        export type HostExecutionMode = {{RenderStringUnion<HostExecutionMode>()}};
+        export type HostOperationExposure = {{RenderStringUnion<HostOperationExposure>()}};
+        export type HostOperationIntent = {{RenderStringUnion<HostOperationIntent>()}};
+        export type HostOperationFamily = {{RenderStringUnion<HostOperationFamily>()}};
+        export type RevitOperationLayer = {{RenderStringUnion<RevitOperationLayer>()}};
+        export type RevitActiveDocumentKind = {{RenderStringUnion<RevitActiveDocumentKind>()}};
+        export type HostOperationCostTier = {{RenderStringUnion<HostOperationCostTier>()}};
+        export type HostOperationVisibility = {{RenderStringUnion<HostOperationVisibility>()}};
+        export type HostOperationRelationKind = {{RenderStringUnion<HostOperationRelationKind>()}};
 
-        {{RenderTypeScriptOperationGroups()}}
+        export interface HostTypeShapeField {
+          name: string;
+          type: string;
+          required: boolean;
+        }
+
+        export interface HostOperationRequestExample {
+          name: string;
+          description: string;
+          json: string;
+        }
+
+        export interface HostOperationRelatedOperation {
+          key: string;
+          kind: HostOperationRelationKind;
+          note?: string | null;
+        }
+
+        export interface HostOperationDefinition {
+          key: string;
+          verb: HostHttpVerb;
+          route: string;
+          executionMode: HostExecutionMode;
+          exposure?: HostOperationExposure;
+          requestTypeName?: string;
+          responseTypeName?: string;
+          requestShape?: readonly HostTypeShapeField[];
+          responseShape?: readonly HostTypeShapeField[];
+          displayName?: string;
+          domain?: string;
+          description?: string;
+          searchTerms?: readonly string[];
+          intent?: HostOperationIntent;
+          requiresBridge?: boolean;
+          requiresActiveDocument?: boolean;
+          supportedActiveDocumentKinds?: readonly RevitActiveDocumentKind[];
+          family?: HostOperationFamily;
+          revitLayer?: RevitOperationLayer | null;
+          domainNoun?: string;
+          costTier?: HostOperationCostTier;
+          visibility?: HostOperationVisibility;
+          singleFlightGroup?: string | null;
+          requestExamples?: readonly HostOperationRequestExample[];
+          safeDefaultRequestJson?: string | null;
+          callGuidance?: readonly string[];
+          relatedOperations?: readonly HostOperationRelatedOperation[];
+          strictRequestValidation?: boolean;
+        }
+
+        export interface HostCapabilityMapRow {
+          key: string;
+          description: string;
+          safety: string;
+          inputKind: string;
+          outputKind: string;
+          terms: string;
+        }
+
+        export interface HostCapabilityMapSection {
+          id: string;
+          title: string;
+          summary: string;
+          rows: readonly HostCapabilityMapRow[];
+        }
+
+        export interface HostCapabilityMap {
+          generatedFrom: string;
+          formatVersion: number;
+          rowCount: number;
+          guidance: string;
+          operationKeys: readonly string[];
+          sections: readonly HostCapabilityMapSection[];
+          focusSections: readonly HostCapabilityMapSection[];
+        }
         """;
 
     private static string GenerateHostOperationCatalog(IReadOnlyDictionary<string, string> exportedTypeNames) => $$"""
         // <auto-generated />
-        // Generated by `pe-dev codegen sync --target host-client` from HostOperationsCatalog.PublicHttp.
+        // Generated by `pe-dev codegen sync --target host-contracts` from HostOperationsCatalog.PublicHttp.
 
-        import type { HostOperationDefinition } from "../host-client-runtime.js";
+        import type { HostOperationDefinition } from "./host-operation-contracts.generated.js";
 
         export const hostOperations = {
         {{RenderHostOperationCatalogEntries(exportedTypeNames)}}
@@ -144,16 +219,17 @@ internal static class HostTypeScriptClientProjection {
 
     private static string GenerateHostCapabilityMap() => $$"""
         // <auto-generated />
-        // Generated by `pe-dev codegen sync --target host-client` from HostOperationsCatalog.PublicHttp.
+        // Generated by `pe-dev codegen sync --target host-contracts` from HostOperationsCatalog.PublicHttp.
 
-        import type { HostCapabilityMap } from "../host-client-runtime.js";
+        import type { HostCapabilityMap } from "./host-operation-contracts.generated.js";
 
         export const hostCapabilityMap = {
           generatedFrom: "HostOperationsCatalog.PublicHttp",
           formatVersion: 1,
           rowCount: {{HostOperationsCatalog.PublicHttp.Count}},
-          guidance: "Table-of-contents routing map only. Use sections to choose a capability ladder; use host_operation_search matches for call guidance and exact request/response shapes.",
-          operationKeys: {{ToJsonString(HostOperationsCatalog.PublicHttp.Select(operation => operation.Key).OrderBy(key => key, StringComparer.Ordinal).ToArray())}},
+          guidance:
+            "Table-of-contents routing map only. Use sections to choose a capability ladder; use host_operation_search matches for call guidance and exact request/response shapes.",
+          operationKeys: {{ToJsonIndented(HostOperationsCatalog.PublicHttp.Select(operation => operation.Key).OrderBy(key => key, StringComparer.Ordinal).ToArray(), 4)}},
           sections: [
         {{RenderHostCapabilityMapSections(false)}}
           ],
@@ -163,12 +239,22 @@ internal static class HostTypeScriptClientProjection {
         } as const satisfies HostCapabilityMap;
         """;
 
+    private static string GenerateContractsIndex() => """
+        // <auto-generated />
+        // Generated by `pe-dev codegen sync --target host-contracts`.
+
+        export * from "./product.generated.js";
+        export * from "./host-operation-contracts.generated.js";
+        export * from "./host-operations.generated.js";
+        export * from "./host-capability-map.generated.js";
+        """;
+
     private static string RenderHostCapabilityMapSections(bool focusOnly) {
         var sections = focusOnly
             ? CreateHostCapabilityFocusSections()
             : CreateHostCapabilitySections();
         return string.Join(
-            $",{Environment.NewLine}",
+            ",\n",
             sections
                 .Where(section => section.Operations.Count != 0)
                 .Select(RenderHostCapabilityMapSection)
@@ -237,30 +323,12 @@ internal static class HostTypeScriptClientProjection {
             .ToArray()
     );
 
-    private static HostCapabilitySectionProjection CreateKeySection(
-        string id,
-        string title,
-        string summary,
-        IReadOnlyList<string> keys,
-        IReadOnlyList<HostOperationDefinition> operations
-    ) {
-        var keySet = keys.ToHashSet(StringComparer.Ordinal);
-        return new HostCapabilitySectionProjection(
-            id,
-            title,
-            summary,
-            operations
-                .Where(operation => keySet.Contains(operation.Key))
-                .ToArray()
-        );
-    }
-
     private static string RenderHostCapabilityMapSection(HostCapabilitySectionProjection section) {
         var builder = new StringBuilder();
         _ = builder.AppendLine("    {");
         _ = builder.AppendLine($"      id: {ToJsonString(section.Id)},");
         _ = builder.AppendLine($"      title: {ToJsonString(section.Title)},");
-        _ = builder.AppendLine($"      summary: {ToJsonString(section.Summary)},");
+        AppendCapabilityMapStringProperty(builder, "summary", section.Summary, 6, 8);
         _ = builder.AppendLine("      rows: [");
         foreach (var operation in section.Operations)
             AppendHostCapabilityMapRow(builder, operation);
@@ -285,11 +353,11 @@ internal static class HostTypeScriptClientProjection {
         );
         _ = builder.AppendLine("        {");
         _ = builder.AppendLine($"          key: {ToJsonString(operation.Key)},");
-        _ = builder.AppendLine($"          description: {ToJsonString(metadata.Description)},");
+        AppendCapabilityMapStringProperty(builder, "description", metadata.Description, 10, 12);
         _ = builder.AppendLine($"          safety: {ToJsonString(safety)},");
         _ = builder.AppendLine($"          inputKind: {ToJsonString(FormatCapabilityMapInputKind(operation))},");
         _ = builder.AppendLine($"          outputKind: {ToJsonString(FormatCapabilityMapOutputKind(operation))},");
-        _ = builder.AppendLine($"          terms: {ToJsonString(JoinPipe(metadata.SearchTerms))},");
+        AppendCapabilityMapStringProperty(builder, "terms", JoinPipe(metadata.SearchTerms), 10, 12);
         _ = builder.AppendLine("        },");
     }
 
@@ -343,11 +411,16 @@ internal static class HostTypeScriptClientProjection {
             _ = builder.AppendLine($"  {ToJsonString(operation.Key)}: {{");
             AppendOperationDefinitionProperties(builder, operation, exportedTypeNames);
             _ = builder.AppendLine($"    displayName: {ToJsonString(operation.DisplayName ?? operation.Key)},");
+            _ = builder.AppendLine($"    domain: {ToJsonString(metadata.Domain)},");
             _ = builder.AppendLine($"    description: {ToJsonString(metadata.Description)},");
-            _ = builder.AppendLine($"    searchTerms: {ToJsonString(metadata.SearchTerms)},");
+            _ = builder.AppendLine($"    searchTerms: {ToTsStringArray(metadata.SearchTerms)},");
+            _ = builder.AppendLine($"    intent: {ToJsonString(metadata.Intent.ToString())},");
             _ = builder.AppendLine($"    requiresBridge: {ToJsonBool(metadata.RequiresBridge)},");
             _ = builder.AppendLine($"    requiresActiveDocument: {ToJsonBool(metadata.RequiresActiveDocument)},");
-            _ = builder.AppendLine($"    supportedActiveDocumentKinds: {ToJsonString(metadata.SupportedActiveDocumentKinds.Select(kind => kind.ToString()).ToArray())},");
+            _ = builder.AppendLine($"    supportedActiveDocumentKinds: {ToTsStringArray(metadata.SupportedActiveDocumentKinds.Select(kind => kind.ToString()).ToArray())},");
+            _ = builder.AppendLine($"    family: {ToJsonString(metadata.Family.ToString())},");
+            _ = builder.AppendLine($"    revitLayer: {ToJsonString(metadata.RevitLayer?.ToString())},");
+            _ = builder.AppendLine($"    domainNoun: {ToJsonString(metadata.DomainNoun)},");
             _ = builder.AppendLine($"    costTier: {ToJsonString(metadata.CostTier.ToString())},");
             _ = builder.AppendLine($"    visibility: {ToJsonString(metadata.Visibility.ToString())},");
             _ = builder.AppendLine($"    singleFlightGroup: {ToJsonString(metadata.SingleFlightGroup)},");
@@ -382,8 +455,8 @@ internal static class HostTypeScriptClientProjection {
     ) {
         _ = builder.AppendLine($"    requestTypeName: {ToJsonString(GetOperationTypeName(operation.RequestType, exportedTypeNames, true))},");
         _ = builder.AppendLine($"    responseTypeName: {ToJsonString(GetOperationTypeName(operation.ResponseType, exportedTypeNames, false))},");
-        _ = builder.AppendLine($"    requestShape: {ToJsonString(CreateShape(operation.RequestType, exportedTypeNames))},");
-        _ = builder.AppendLine($"    responseShape: {ToJsonString(CreateShape(operation.ResponseType, exportedTypeNames))},");
+        _ = builder.AppendLine($"    requestShape: {ToTsTypeShapeFields(CreateShape(operation.RequestType, exportedTypeNames))},");
+        _ = builder.AppendLine($"    responseShape: {ToTsTypeShapeFields(CreateShape(operation.ResponseType, exportedTypeNames))},");
     }
 
     private static string GetOperationTypeName(
@@ -504,95 +577,6 @@ internal static class HostTypeScriptClientProjection {
         ? value
         : char.ToLowerInvariant(value[0]) + value[1..];
 
-    private static string RenderTypeScriptImports(IReadOnlyDictionary<string, string> exportedTypeNames) {
-        var importedTypes = HostOperationsCatalog.TypeScriptClient.Groups
-            .SelectMany(group => group.Operations)
-            .SelectMany(operation => new[] {
-                ResolveTypeScriptTypeName(operation.Definition.RequestType, exportedTypeNames),
-                ResolveTypeScriptTypeName(operation.Definition.ResponseType, exportedTypeNames)
-            })
-            .Where(typeName => typeName != null)
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(typeName => typeName, StringComparer.Ordinal)
-            .ToArray();
-        return string.Join(
-            Environment.NewLine,
-            importedTypes.Select(typeName => $"  {typeName},")
-        );
-    }
-
-    private static string RenderTypeScriptOperationGroups() => string.Join(
-        $"{Environment.NewLine}{Environment.NewLine}",
-        HostOperationsCatalog.TypeScriptClient.Groups.Select(RenderTypeScriptGroup)
-    );
-
-    private static string RenderTypeScriptGroup(HostTypeScriptClientGroup group) {
-        var builder = new StringBuilder();
-        var operationsConstantName = $"{group.ClientPropertyName}Operations";
-        _ = builder.AppendLine(RenderTypeScriptOperationGroup(operationsConstantName, group.Operations));
-        _ = builder.AppendLine();
-        _ = builder.AppendLine($"export class {group.ClientClassName} {{");
-        _ = builder.AppendLine("  constructor(private readonly options: PeHostClientOptions) {}");
-        _ = builder.AppendLine();
-        foreach (var operation in group.Operations)
-            _ = builder.AppendLine(RenderTypeScriptMethod(group, operation));
-        _ = builder.Append("}");
-        return builder.ToString();
-    }
-
-    private static string RenderTypeScriptOperationGroup(string exportName, IReadOnlyList<HostTypeScriptClientOperation> operations) {
-        var builder = new StringBuilder();
-        _ = builder.AppendLine($"export const {exportName} = {{");
-        foreach (var operation in operations) {
-            _ = builder.AppendLine($"  {operation.MethodName}: {{");
-            _ = builder.AppendLine($"    key: \"{operation.Definition.Key}\",");
-            _ = builder.AppendLine($"    verb: \"{ToTypeScriptHttpVerb(operation.Definition.Verb)}\",");
-            _ = builder.AppendLine($"    route: \"{operation.Definition.Route}\",");
-            _ = builder.AppendLine($"    executionMode: \"{operation.Definition.ExecutionMode}\",");
-            AppendOperationTypeMetadata(builder, operation.Definition, null);
-            _ = builder.AppendLine("  },");
-        }
-
-        _ = builder.Append("} as const satisfies Record<string, HostOperationDefinition>;");
-        return builder.ToString();
-    }
-
-    private static string RenderTypeScriptMethod(
-        HostTypeScriptClientGroup group,
-        HostTypeScriptClientOperation operation
-    ) {
-        var requestTypeName = ResolveTypeScriptTypeName(operation.Definition.RequestType, null);
-        var responseTypeName = ResolveTypeScriptTypeName(operation.Definition.ResponseType, null)
-            ?? throw new InvalidOperationException($"Operation '{operation.Definition.Key}' is missing a projected response type.");
-        var operationsConstantName = $"{group.ClientPropertyName}Operations";
-        var builder = new StringBuilder();
-        switch (operation.RequestPolicy) {
-        case HostClientRequestPolicy.None:
-            _ = builder.AppendLine($"  {operation.MethodName}(): Promise<{responseTypeName}> {{");
-            _ = builder.AppendLine($"    return sendJson<void, {responseTypeName}>(");
-            _ = builder.AppendLine("      this.options,");
-            _ = builder.AppendLine($"      {operationsConstantName}.{operation.MethodName},");
-            _ = builder.AppendLine("    );");
-            _ = builder.Append("  }");
-            break;
-        case HostClientRequestPolicy.Explicit:
-            if (requestTypeName == null)
-                throw new InvalidOperationException($"Operation '{operation.Definition.Key}' is missing a projected request type.");
-            _ = builder.AppendLine($"  {operation.MethodName}(request: {requestTypeName}): Promise<{responseTypeName}> {{");
-            _ = builder.AppendLine($"    return sendJson<{requestTypeName}, {responseTypeName}>(");
-            _ = builder.AppendLine("      this.options,");
-            _ = builder.AppendLine($"      {operationsConstantName}.{operation.MethodName},");
-            _ = builder.AppendLine("      request,");
-            _ = builder.AppendLine("    );");
-            _ = builder.Append("  }");
-            break;
-        default:
-            throw new InvalidOperationException($"Unsupported request policy '{operation.RequestPolicy}'.");
-        }
-
-        return builder.ToString();
-    }
-
     private static void ValidateProjectedTypeSymbols(IReadOnlyDictionary<string, string> exportedTypeNames) {
         var missingTypes = HostOperationsCatalog.TypeScriptClient.Groups
             .SelectMany(group => group.Operations)
@@ -609,36 +593,17 @@ internal static class HostTypeScriptClientProjection {
             );
     }
 
-    private static string? ResolveTypeScriptTypeName(
-        Type type,
-        IReadOnlyDictionary<string, string>? exportedTypeNames
-    ) {
-        if (type == typeof(NoRequest))
-            return null;
-
-        if (exportedTypeNames == null)
-            return type.Name;
-
-        if (string.IsNullOrWhiteSpace(type.FullName) || !exportedTypeNames.TryGetValue(type.FullName, out var typeName))
-            throw new InvalidOperationException(
-                $"Type '{type.FullName ?? type.Name}' is not exported through generated host-types."
-            );
-
-        return typeName;
-    }
-
-    private static IEnumerable<string> EnumerateCommittedGeneratedFiles(string repoRoot) {
-        var generatedDirectory = Path.Combine(repoRoot, "source", "pea", "app", "generated");
-        if (!Directory.Exists(generatedDirectory))
+    private static IEnumerable<string> EnumerateCommittedGeneratedFiles(CodegenPaths paths) {
+        if (!Directory.Exists(paths.HostContractsDirectory))
             return [];
 
-        return Directory.EnumerateFiles(generatedDirectory, "*.ts", SearchOption.TopDirectoryOnly)
+        return Directory.EnumerateFiles(paths.HostContractsDirectory, "*.ts", SearchOption.TopDirectoryOnly)
             .Where(path => {
                 var fileName = Path.GetFileName(path);
-                return string.Equals(fileName, "pe-host-client.ts", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(fileName, "host-client.generated.ts", StringComparison.OrdinalIgnoreCase)
+                return string.Equals(fileName, "host-operation-contracts.generated.ts", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(fileName, "host-operations.generated.ts", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(fileName, "host-capability-map.generated.ts", StringComparison.OrdinalIgnoreCase);
+                    || string.Equals(fileName, "host-capability-map.generated.ts", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(fileName, "index.ts", StringComparison.OrdinalIgnoreCase);
             })
             .Select(Path.GetFullPath);
     }
@@ -649,15 +614,64 @@ internal static class HostTypeScriptClientProjection {
         _ => throw new InvalidOperationException($"Unsupported host operation HTTP verb '{verb}'.")
     };
 
+    private static string RenderStringUnion<TEnum>(Func<TEnum, string>? format = null) where TEnum : struct, Enum => string.Join(
+        " | ",
+        Enum.GetValues<TEnum>().Select(value => ToJsonString(format == null ? value.ToString() : format(value)))
+    );
+
     private static string ToJsonString(string? value) => JsonSerializer.Serialize(value, JsonOptions);
 
     private static string ToJsonString(IReadOnlyList<string> values) => JsonSerializer.Serialize(values, JsonOptions);
 
-    private static string ToJsonString(IReadOnlyList<TypeShapeField> values) => JsonSerializer.Serialize(values, JsonOptions);
+    private static string ToJsonIndented<T>(T value, int continuationIndent) => JsonSerializer
+        .Serialize(value, IndentedJsonOptions)
+        .Replace("\n", "\n" + new string(' ', continuationIndent));
+
+    private static string ToTsStringArray(IReadOnlyList<string> values) =>
+        values.Count == 0 ? "[]" : $"[{string.Join(", ", values.Select(ToJsonString))}]";
+
+    private static string ToTsTypeShapeFields(IReadOnlyList<TypeShapeField> fields) {
+        if (fields.Count == 0)
+            return "[]";
+
+        var builder = new StringBuilder();
+        _ = builder.AppendLine("[");
+        foreach (var field in fields) {
+            _ = builder.AppendLine("      {");
+            _ = builder.AppendLine($"        name: {ToJsonString(field.Name)},");
+            _ = builder.AppendLine($"        type: {ToJsonString(field.Type)},");
+            _ = builder.AppendLine($"        required: {ToJsonBool(field.Required)},");
+            _ = builder.AppendLine("      },");
+        }
+        _ = builder.Append("    ]");
+        return builder.ToString();
+    }
+
+    private static void AppendCapabilityMapStringProperty(
+        StringBuilder builder,
+        string name,
+        string value,
+        int propertyIndent,
+        int continuationIndent
+    ) {
+        var propertyPadding = new string(' ', propertyIndent);
+        if (value.Length <= 80) {
+            _ = builder.AppendLine($"{propertyPadding}{name}: {ToJsonString(value)},");
+            return;
+        }
+
+        _ = builder.AppendLine($"{propertyPadding}{name}:");
+        _ = builder.AppendLine($"{new string(' ', continuationIndent)}{ToJsonString(value)},");
+    }
 
     private static string ToJson<T>(T value) => JsonSerializer.Serialize(value, JsonOptions);
 
     private static string ToJsonBool(bool value) => value ? "true" : "false";
+
+    private static string NormalizeLineEndings(string content) {
+        var normalized = content.Replace("\r\n", "\n").Replace("\r", "\n");
+        return normalized.EndsWith('\n') ? normalized : normalized + "\n";
+    }
 
     private sealed record TypeShapeField(string Name, string Type, bool Required);
 
@@ -669,21 +683,4 @@ internal static class HostTypeScriptClientProjection {
     );
 
     private sealed record GeneratedProjectionFile(string Path, string Content);
-
-    private sealed record HostTypeScriptClientOptions(bool Check) {
-        public static HostTypeScriptClientOptions Parse(IReadOnlyList<string> args) {
-            var check = false;
-            foreach (var arg in args) {
-                switch (arg) {
-                case "--check":
-                    check = true;
-                    break;
-                default:
-                    throw new ArgumentException($"Unknown host-client codegen option '{arg}'. Supported options: --check.");
-                }
-            }
-
-            return new HostTypeScriptClientOptions(check);
-        }
-    }
 }

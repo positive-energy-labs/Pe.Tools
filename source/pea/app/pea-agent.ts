@@ -1,11 +1,17 @@
 import { Agent } from "@mastra/core/agent";
 import type { RequestContext } from "@mastra/core/request-context";
 import type { AnyWorkspace } from "@mastra/core/workspace";
-import { peaProductTools } from "./tools/pea/tools.js";
-import { defaultPeaAgentModelId, peaAgentInstructions } from "./pea-instructions.js";
+import { peaProductTools } from "../../pe-tools/packages/tools/src/pea/index.js";
+import {
+  defaultPeaAgentModelId,
+  peaAgentInstructions,
+} from "./pea-instructions.js";
 import { createOpenAIResponsesHistoryCompatProcessor } from "./pea-processors.js";
-import { peaRuntimePolicy, type PeaRuntimePolicy } from "./pea-runtime-policy.js";
-import { appendPeaRuntimeContextPrompt } from "./pea-runtime-context.js";
+import {
+  peaRuntimePolicy,
+  type PeaRuntimePolicy,
+} from "../../pe-tools/packages/runtime/src/pea/policy.ts";
+import { appendPeaRuntimeContextPrompt } from "../../pe-tools/packages/runtime/src/pea/context.ts";
 
 export type PeaModelResolver = (
   modelId: string,
@@ -33,7 +39,9 @@ export function createPeaAgent(
     model: createPeaModelArgument(resolveModel),
     tools: peaProductTools,
     workspace: ({ requestContext }) => {
-      const harness = requestContext.get("harness") as PeaHarnessContext | undefined;
+      const harness = requestContext.get("harness") as
+        | PeaHarnessContext
+        | undefined;
       return harness?.workspace;
     },
     inputProcessors: processors,
@@ -44,7 +52,9 @@ export function createPeaAgent(
 
 export function createPeaModelArgument(resolveModel?: PeaModelResolver) {
   return ({ requestContext }: { requestContext: RequestContext }) => {
-    const harness = requestContext.get("harness") as PeaHarnessContext | undefined;
+    const harness = requestContext.get("harness") as
+      | PeaHarnessContext
+      | undefined;
     const state = harness?.getState?.();
     const modelId = state?.currentModelId || defaultPeaAgentModelId;
     return resolveModel

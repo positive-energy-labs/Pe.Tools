@@ -1,21 +1,13 @@
 using Pe.Dev.RevitAutomation;
 
-namespace Pe.Dev.Cli;
+namespace Pe.Dev.Cli.Codegen;
 
 internal static class BuildGeneratedProjection {
-    public static async Task<int> RunAsync(bool check, string? repoRootOverride, CancellationToken cancellationToken) {
-        string repoRoot;
-        try {
-            repoRoot = RepoRootResolver.Resolve(repoRootOverride);
-        } catch (Exception ex) {
-            Console.Error.WriteLine(ex.Message);
-            return 10;
-        }
-
+    public static async Task<int> RunAsync(bool check, CodegenPaths paths, CancellationToken cancellationToken) {
         var args = new List<string> {
             "run",
             "--project",
-            Path.Combine(repoRoot, "build", "Build.csproj"),
+            paths.BuildProjectPath,
             "-c",
             "Release",
             "/p:NoWarn=ConsoleUse",
@@ -27,7 +19,7 @@ internal static class BuildGeneratedProjection {
             args.Add("--check");
 
         return await ForegroundProcessRunner.RunAsync(
-            SafeDotNetProcess.Create(repoRoot, args.ToArray()),
+            SafeDotNetProcess.Create(paths.RepoRoot, args.ToArray()),
             cancellationToken
         );
     }

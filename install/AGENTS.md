@@ -20,16 +20,16 @@ The installer is the product bootstrap for local terminal and desktop Revit use.
 
 ## Shared Language
 
-| Term | Meaning |
-| --- | --- |
-| **installer product slice** | User-facing install concern such as `desktop-runtime` or `pea-cli-bootstrap`. A slice may contain multiple MSI components. |
-| **installer component** | Concrete authored unit that contributes directories, files, PATH entries, or custom actions to the MSI. |
-| **desktop runtime** | The installed Revit add-in plus the shared installed host runtime it launches. Keep this in Addins/year layout to match the Nice3point SDK local debug provenance model. |
-| **CLI bootstrap** | PATH-visible command entrypoint installed under the product runtime root. Bootstrap files are distinct from generated payload/version state. |
-| **owned install tree** | Files/directories the MSI or product custom actions own and may remove on uninstall. |
-| **generated install state** | Files created after MSI file copy, such as `pea` extracted versions and `current.txt`; cleanup must be custom-action owned. |
-| **user runtime state** | Durable user state/log/cache under the product runtime root; do not remove during ordinary uninstall without an explicit purge feature. |
-| **legacy install shape** | Previously authored product path that is no longer current. Cleanup is optional and must be conservative/product-identified. |
+| Term                        | Meaning                                                                                                                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **installer product slice** | User-facing install concern such as `desktop-runtime` or `pea-cli-bootstrap`. A slice may contain multiple MSI components.                                               |
+| **installer component**     | Concrete authored unit that contributes directories, files, PATH entries, or custom actions to the MSI.                                                                  |
+| **desktop runtime**         | The installed Revit add-in plus the shared installed host runtime it launches. Keep this in Addins/year layout to match the Nice3point SDK local debug provenance model. |
+| **CLI bootstrap**           | PATH-visible command entrypoint installed under the product runtime root. Bootstrap files are distinct from generated payload/version state.                             |
+| **owned install tree**      | Files/directories the MSI or product custom actions own and may remove on uninstall.                                                                                     |
+| **generated install state** | Files created after MSI file copy, such as `pea` extracted versions and `current.txt`; cleanup must be custom-action owned.                                              |
+| **user runtime state**      | Durable user state/log/cache under the product runtime root; do not remove during ordinary uninstall without an explicit purge feature.                                  |
+| **legacy install shape**    | Previously authored product path that is no longer current. Cleanup is optional and must be conservative/product-identified.                                             |
 
 ## Living Memory
 

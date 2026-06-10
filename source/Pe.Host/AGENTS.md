@@ -29,14 +29,14 @@ Owns the external host runtime: HTTP endpoints, settings SSE streams, host-side 
 
 ## Shared Language
 
-| Term | Meaning | Prefer / Avoid |
-| --- | --- | --- |
-| **host-only** | Structural behavior available without a live Revit document | Avoid implying smart/live options are available |
-| **settings event stream** | `/api/settings/events` freshness SSE for document/session changes | Avoid using it for unrelated streaming workflows |
-| **bridge-backed operation** | Public host operation forwarded over the private Host/Revit WebSocket bridge | Avoid describing live Revit data as host-local work |
-| **operation catalog** | Shared typed host operation definitions in `Pe.Shared.HostContracts` | Avoid hand-maintained parallel route lists |
-| **Revit operation layer** | Public `revit.<layer>.<domain>` hierarchy: context, catalog, matrix, detail, resolve, reserved apply | Avoid old `revit-data.*` naming in public Host output |
-| **single-flight group** | Operation metadata telling callers that bridge-backed calls must not be parallelized | Use `revit` for the current single Revit bridge lane |
+| Term                        | Meaning                                                                                                    | Prefer / Avoid                                                                                    |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **host-only**               | Structural behavior available without a live Revit document                                                | Avoid implying smart/live options are available                                                   |
+| **settings event stream**   | `/api/settings/events` freshness SSE for document/session changes                                          | Avoid using it for unrelated streaming workflows                                                  |
+| **bridge-backed operation** | Public host operation forwarded over the private Host/Revit WebSocket bridge                               | Avoid describing live Revit data as host-local work                                               |
+| **operation catalog**       | Shared typed host operation definitions in `Pe.Shared.HostContracts`                                       | Avoid hand-maintained parallel route lists                                                        |
+| **Revit operation layer**   | Public `revit.<layer>.<domain>` hierarchy: context, catalog, matrix, detail, resolve, reserved apply       | Avoid old `revit-data.*` naming in public Host output                                             |
+| **single-flight group**     | Operation metadata telling callers that bridge-backed calls must not be parallelized                       | Use `revit` for the current single Revit bridge lane                                              |
 | **TypeScript client slice** | Small generated TypeScript Host client subset intentionally exposed to `pea` and future frontend consumers | Avoid encoding `pea` as the contract owner or exposing the whole host surface as tools by default |
 
 ## Living Memory

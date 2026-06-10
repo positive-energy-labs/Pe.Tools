@@ -29,24 +29,24 @@ public sealed class MyNewTask : ITask {
     static MyNewTask() {
         TaskRegistry.Instance.Register(new MyNewTask());
     }
-    
+
     // Force static constructor to run (called from TaskInitializer)
     public static void Register() { }
-    
+
     public string Name => "My Task Name";
     public string? Description => "Detailed description shown in tooltip";
     public string? Category => "MyCategory"; // Used for filtering
-    
+
     public async Task ExecuteAsync(UIApplication uiApp) {
         var doc = uiApp.ActiveUIDocument?.Document;
         if (doc == null) {
             Console.WriteLine("❌ No active document");
             return;
         }
-        
+
         // Your code here...
         Console.WriteLine("✓ Task completed!");
-        
+
         await Task.CompletedTask;
     }
 }
@@ -102,17 +102,17 @@ consistent organization:
 public async Task ExecuteAsync(UIApplication uiApp) {
     // Get task-specific output directory
     var output = this.GetOutput();
-    
+
     // Write JSON file
     var jsonPath = output.Json("mydata.json").Write(myData);
-    
+
     // Write CSV file with timestamp
     var csvPath = output.CsvDated("results").Write(myCsvData);
-    
+
     // Get directory path for custom file types
     var customPath = Path.Combine(output.DirectoryPath, "custom.txt");
     File.WriteAllText(customPath, "Hello World");
-    
+
     Console.WriteLine($"✓ Output saved to: {output.DirectoryPath}");
 }
 ```
@@ -156,11 +156,11 @@ public async Task ExecuteAsync(UIApplication uiApp) {
         Console.WriteLine("❌ Not a family document");
         return;
     }
-    
+
     foreach (FamilyParameter param in doc.FamilyManager.Parameters) {
         Console.WriteLine($"  {param.Definition.Name}");
     }
-    
+
     await Task.CompletedTask;
 }
 ```
@@ -173,18 +173,18 @@ public string? Category => "Export";
 public async Task ExecuteAsync(UIApplication uiApp) {
     var doc = uiApp.ActiveUIDocument?.Document;
     if (doc == null) return;
-    
+
     // Use task output management
     var output = this.GetOutput();
-    
+
     var csv = GenerateCsvData(doc);
     var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
     var filename = $"export_{timestamp}.csv";
     var path = Path.Combine(output.DirectoryPath, filename);
-    
+
     File.WriteAllText(path, csv);
     Console.WriteLine($"✓ Exported to: {path}");
-    
+
     await Task.CompletedTask;
 }
 ```

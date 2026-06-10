@@ -10,12 +10,12 @@ see https://github.com/NeVeSpl/RevitDBExplorer/pull/36
 ## Architecture
 
 - `source/Pe.App/Services/RevitDbExplorerService.cs`
-    - thin wrapper around `RevitDBExplorer.API`
-    - owns all user-facing fallback dialogs
-    - detects missing installs, known unsupported versions, and generic handoff failures
+  - thin wrapper around `RevitDBExplorer.API`
+  - owns all user-facing fallback dialogs
+  - detects missing installs, known unsupported versions, and generic handoff failures
 - `source/Pe.App/Commands/Palette/...`
-    - palette actions call the local service
-    - callers stay unaware of package/feed/runtime probing details
+  - palette actions call the local service
+  - callers stay unaware of package/feed/runtime probing details
 
 ## Runtime Flow
 

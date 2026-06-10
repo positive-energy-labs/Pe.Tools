@@ -42,7 +42,7 @@ Revit mutation details behind predictable operations and helpers.
 ## Shared Language
 
 | Term                    | Meaning                                                                          | Prefer / Avoid                                                                       |
-|-------------------------|----------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
+| ----------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | **operation**           | One runtime mutation/action unit in the FF queue                                 | Avoid calling whole workflows one operation when the queue/group distinction matters |
 | **queue**               | Ordered set of operations/groups passed to `OperationProcessor`                  | Avoid using it as a synonym for a single command                                     |
 | **param-driven solids** | The canonical authored/serialized semantic solids shape                          | Avoid referring to old low-level extrusion authoring as an equal peer model          |
@@ -52,11 +52,11 @@ Revit mutation details behind predictable operations and helpers.
 ## Living Memory
 
 - Use the FF debugging ladder before changing code:
-    1. semantic/compiler validation
-    2. authored profile/layout issue
-    3. operation-time API/logic issue
-    4. transaction-commit warning or failure-processing issue
-    5. snapshot / reverse-inference / diagnostics issue
+  1. semantic/compiler validation
+  2. authored profile/layout issue
+  3. operation-time API/logic issue
+  4. transaction-commit warning or failure-processing issue
+  5. snapshot / reverse-inference / diagnostics issue
 - Prefer adding targeted logs, snapshots, or proof artifacts over speculative fixes.
 - Keep operations linear and debuggable. If nesting or orchestration gets hard to inspect, extract helpers or move logic
   up a level.
@@ -66,10 +66,10 @@ Revit mutation details behind predictable operations and helpers.
   shape drift across commands is an FF architecture bug.
 - Manager and Migrator should share the same artifact contract even when their authored profiles and queues differ.
 - New FF features should define their proof surface as part of implementation:
-    - which snapshot files should show the change
-    - whether `snapshot-diff.json` should surface it
-    - whether projected profile artifacts should reflect it
-    - whether a compiled plan artifact is needed
+  - which snapshot files should show the change
+  - whether `snapshot-diff.json` should surface it
+  - whether projected profile artifacts should reflect it
+  - whether a compiled plan artifact is needed
 - Favor specs as the reusable building blocks that authored profiles and captured snapshots compose, rather than
   duplicating similar shapes under `State`/`Model` names.
 - Schedule/filter/provider wiring belongs in schema definitions unless there is a stronger shared-runtime reason to
@@ -80,7 +80,7 @@ Revit mutation details behind predictable operations and helpers.
 - Explicitly state the assumed family orientation before authoring connector faces when docs are ambiguous.
 - Distinguish air-path faces from service-connection faces and verify both against submittal/CAD views.
 - For refrigeration equipment:
-    - liquid line typically leaves the condenser and enters the evaporator
-    - suction line typically leaves the evaporator and enters the condenser
-    - condensate leaves the indoor unit only
+  - liquid line typically leaves the condenser and enters the evaporator
+  - suction line typically leaves the evaporator and enters the condenser
+  - condensate leaves the indoor unit only
 - Prefer tests and docs that encode these patterns before adding stronger abstractions.

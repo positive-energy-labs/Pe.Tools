@@ -58,6 +58,8 @@ Names may change, but the authority boundaries should not blur.
 
 `pe-code` is private developer tooling. It can chain very specific Revit development workflows, RRD/live-loop checks, repo verification, and black-box Pea feedback. These commands should move out of the user-facing `pea` surface over time.
 
+`@pe/runtime` is the shared protocol/runtime seam below both apps. It may expose generic `RuntimeFactory`, auth, session, event, ACP, and AG-UI contracts, but it should not dispatch on Pea-vs-`pe-code` product identity. Pea and `pe-code` each own their native Harness configuration and product policy in their app packages, then inject a runtime factory into shared protocol adapters.
+
 ## Authority Model
 
 TypeScript is the bridge and presentation/runtime layer for things that are impractical in C#: agent runtimes, protocol adapters, browser UI, TUI, and local frontend orchestration.
@@ -192,6 +194,18 @@ Even without a full auth/session system, local UI should avoid accidental exposu
 
 Installed/user-facing `pea` should keep one obvious entrypoint for product work.
 
+### CLI Composition Policy
+
+Apps own executable identity, audience defaults, root command posture, and artifact entrypoint behavior only. Capability packages own the Gunshi command modules for the behavior they own. Deterministic capability cores should sit below both Mastra tool adapters and Gunshi command adapters so agent tools and CLI commands do not duplicate implementation.
+
+`pea` is the product/operator-facing CLI. It may expose Pea product tools including Host status/logs/operations, scripts, product UI, and product runtime commands. Scripting is intentionally product-visible because each CLI should be able to expose the same agent tools it owns through human-facing CLI commands.
+
+`pe-code` is the repo/dev-facing CLI. It owns repo-source, RRD/live-loop, verification, codegen, dev-agent, and black-box Pea feedback commands. Dev workflows should not route through `pea`.
+
+`pea dev` should disappear rather than become a long-term alias. If a transition bridge is ever required, keep it temporary and hidden; the durable command identity is `pe-code`.
+
+Both CLIs are human-facing by default. `--json` output may be added selectively where it improves debugging or automation, but universal JSON parity is not required for this migration spike.
+
 Candidate user-facing surface:
 
 ```text
@@ -215,7 +229,7 @@ pe-code talk-to-pea ...
 pe-code sync ...
 ```
 
-`pea dev` should not be the long-term name for repo-source development. If retained during transition, it should become a compatibility alias to `pe-code`, not a sign that the user product owns repo-development posture.
+`pea dev` is not the repo-source development command. It should disappear; `pe-code` is the durable command identity for repo/dev posture.
 
 ## Relationship To Observed Repos
 

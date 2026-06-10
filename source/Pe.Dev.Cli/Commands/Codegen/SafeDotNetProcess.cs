@@ -1,7 +1,7 @@
 using Pe.Dev.RevitAutomation;
 using System.Diagnostics;
 
-namespace Pe.Dev.Cli;
+namespace Pe.Dev.Cli.Codegen;
 
 internal static class SafeDotNetProcess {
     public static ProcessStartInfo Create(string workingDirectory, params string[] dotnetArgs) {

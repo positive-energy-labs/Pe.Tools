@@ -2,22 +2,23 @@
 
 ```md
 source/pea/
-  apps/
-    pea/              # installed user CLI, TUI, local web/protocol server
-    pe-code/          # your private repo/Revit dev workflow agent
-    ui/               # local web UI, launched/served by pea. probably home to both chat app and profile editor
-    cli/              # MAYBE??? using opentui
-  packages/
-    runtime/          # shared runtime/session/protocol-neutral pieces
-    host-generated/   # generated TS host types/catalog/client only
-    host-client/      # small hand wrappers over generated host calls
-    schema-runtime/   # TS schema/document helpers
-    schema-ui/        # form/view model helpers for profile UI
-    pea-tools/        # user/operator-safe tools
-    pe-code-tools/    # RRD, build, dev-loop, repo-only tools
+apps/
+pea/ # installed user CLI, TUI, local web/protocol server
+pe-code/ # your private repo/Revit dev workflow agent
+ui/ # local web UI, launched/served by pea. probably home to both chat app and profile editor
+cli/ # MAYBE??? using opentui
+packages/
+runtime/ # shared runtime/session/protocol-neutral pieces
+host-generated/ # generated TS host types/catalog/client only
+host-client/ # small hand wrappers over generated host calls
+schema-runtime/ # TS schema/document helpers
+schema-ui/ # form/view model helpers for profile UI
+pea-tools/ # user/operator-safe tools
+pe-code-tools/ # RRD, build, dev-loop, repo-only tools
 ```
 
-new pea/pe-code structure something like this: 
+new pea/pe-code structure something like this:
+
 ```
 pea agent            # user-facing operator agent
 pea ui               # starts local profile/chat UI

@@ -37,15 +37,15 @@ When validating the current DA lane, prefer a tiny schedule manifest first so su
 
 ## Shared Language
 
-| Term | Meaning | Prefer / Avoid |
-| --- | --- | --- |
-| **management token** | 2-legged APS token used for Design Automation REST CRUD and alias/version management | Avoid calling this the cloud-open token |
-| **user-context token** | 3-legged delegated token passed to the workitem as `adsk3LeggedToken` | Avoid implying the worker does its own OAuth flow |
-| **automation shell** | The headless `IExternalDBApplication` entrypoint that DA loads | Prefer this over calling the worker a probe app |
-| **job input** | The common DA payload envelope rooted in `AutomationJobInput` | Prefer this over ad hoc probe-only payloads |
-| **artifact** | A durable output file produced by a workitem, usually JSON | Prefer this over treating stdout as the primary result contract |
-| **status lane** | Read-only workitem inspection and status aggregation | Prefer this over resubmitting work just to inspect it |
-| **operator adapter** | Local UX layer around APS/Revit automation mechanics: manifests, receipts, cache, repo paths, and CLI logging | Avoid putting reusable APS mechanics here |
+| Term                   | Meaning                                                                                                       | Prefer / Avoid                                                  |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| **management token**   | 2-legged APS token used for Design Automation REST CRUD and alias/version management                          | Avoid calling this the cloud-open token                         |
+| **user-context token** | 3-legged delegated token passed to the workitem as `adsk3LeggedToken`                                         | Avoid implying the worker does its own OAuth flow               |
+| **automation shell**   | The headless `IExternalDBApplication` entrypoint that DA loads                                                | Prefer this over calling the worker a probe app                 |
+| **job input**          | The common DA payload envelope rooted in `AutomationJobInput`                                                 | Prefer this over ad hoc probe-only payloads                     |
+| **artifact**           | A durable output file produced by a workitem, usually JSON                                                    | Prefer this over treating stdout as the primary result contract |
+| **status lane**        | Read-only workitem inspection and status aggregation                                                          | Prefer this over resubmitting work just to inspect it           |
+| **operator adapter**   | Local UX layer around APS/Revit automation mechanics: manifests, receipts, cache, repo paths, and CLI logging | Avoid putting reusable APS mechanics here                       |
 
 ## Living Memory
 

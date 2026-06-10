@@ -19,10 +19,10 @@ Use when the desired output is durable local work definition: PRD, refactor RFC,
 ## Loop
 
 1. Identify the artifact type and its home:
-   - feature intent: docs/features/<feature>/_GOALS.md
-   - feature implementation context: docs/features/<feature>/_DEV.md
+   - feature intent: docs/features/<feature>/\_GOALS.md
+   - feature implementation context: docs/features/<feature>/\_DEV.md
    - package behavior: nearest AGENTS.md
-   - package understanding/intent: local _DEV.md / _GOALS.md
+   - package understanding/intent: local \_DEV.md / \_GOALS.md
    - temporary handoff/research: docs/context/
 2. Read existing docs first and update in place when possible.
 3. Consider consolidating, restructuring, or pruning existing docs.
@@ -34,8 +34,8 @@ Use when the desired output is durable local work definition: PRD, refactor RFC,
 ## Placement Rules
 
 - Put durable agent behavior, workflow cautions, and shared language in the nearest AGENTS.md.
-- Put conceptual orientation in _DEV.md only when the area has a non-obvious mental model.
-- Put desired end state, UX/DX intent, integration goals, and non-goals in _GOALS.md.
+- Put conceptual orientation in \_DEV.md only when the area has a non-obvious mental model.
+- Put desired end state, UX/DX intent, integration goals, and non-goals in \_GOALS.md.
 - Put cross-package capability docs under docs/features/<feature>/ only when one package-local doc cannot own the story.
 - Put temporary handoffs, research notes, and AFK context under docs/context/ and treat them as disposable.
 - Delete stale root markdown after migrating the useful content; do not preserve history by default.

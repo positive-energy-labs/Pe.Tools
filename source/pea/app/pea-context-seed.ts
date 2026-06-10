@@ -6,8 +6,8 @@ import {
   type HostResourceFileStateData,
   type RevitAgentContextSummaryData,
   type RevitAgentVisibleCategorySummary,
-} from "./host-client.js";
-import { hostCapabilityMap } from "./generated/host-capability-map.generated.js";
+} from "@pe/host-client";
+import { hostCapabilityMap } from "@pe/host-generated/contracts";
 import { callHostOperation } from "./host-operation-runtime.js";
 
 export interface PeaContextProviderOptions {
@@ -22,7 +22,9 @@ export interface PeaContextProviderRequestContext {
   threadId?: string;
 }
 
-export type PeaContextProvider = (context?: PeaContextProviderRequestContext) => Promise<string>;
+export type PeaContextProvider = (
+  context?: PeaContextProviderRequestContext,
+) => Promise<string>;
 
 interface HostSeedFacts {
   probe?: HostProbeData;
@@ -49,7 +51,9 @@ interface HostStatusSnapshot {
 const fallbackCacheKey = "__pea_context__";
 const defaultTimeoutMs = 2_500;
 
-export function createPeaContextProvider(options: PeaContextProviderOptions): PeaContextProvider {
+export function createPeaContextProvider(
+  options: PeaContextProviderOptions,
+): PeaContextProvider {
   const timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
   const threads = new Map<string, ThreadContextState>();
 
@@ -68,11 +72,15 @@ export function createPeaContextProvider(options: PeaContextProviderOptions): Pe
       return startup.text;
     }
 
-    const currentStatus = await collectStatusSnapshot(options.hostBaseUrl, timeoutMs);
+    const currentStatus = await collectStatusSnapshot(
+      options.hostBaseUrl,
+      timeoutMs,
+    );
     state.statusCheckCount += 1;
     state.lastStatusCheckedAt = Date.now();
 
-    if (currentStatus.signature === state.lastStatusSignature) return startup.text;
+    if (currentStatus.signature === state.lastStatusSignature)
+      return startup.text;
 
     updateStatusState(state, currentStatus);
     return `${startup.text}\n\n${formatStatusChange()}`;
@@ -104,7 +112,11 @@ async function collectAndFormatStartupContext(
     : undefined;
 
   return {
-    text: formatSeed(options, hostFacts.sessionSummary?.workbenchResources, revitContext),
+    text: formatSeed(
+      options,
+      hostFacts.sessionSummary?.workbenchResources,
+      revitContext,
+    ),
     status: createStatusSnapshot(options.hostBaseUrl, hostFacts),
   };
 }
@@ -113,10 +125,16 @@ async function collectStatusSnapshot(
   hostBaseUrl: string,
   timeoutMs: number,
 ): Promise<HostStatusSnapshot> {
-  return createStatusSnapshot(hostBaseUrl, await collectHostFacts(hostBaseUrl, timeoutMs));
+  return createStatusSnapshot(
+    hostBaseUrl,
+    await collectHostFacts(hostBaseUrl, timeoutMs),
+  );
 }
 
-async function collectHostFacts(hostBaseUrl: string, timeoutMs: number): Promise<HostSeedFacts> {
+async function collectHostFacts(
+  hostBaseUrl: string,
+  timeoutMs: number,
+): Promise<HostSeedFacts> {
   const hostClient = new PeHostClient({
     baseUrl: hostBaseUrl,
     fetch: createTimeoutFetch(timeoutMs),
@@ -131,11 +149,14 @@ async function collectHostFacts(hostBaseUrl: string, timeoutMs: number): Promise
   if (probeResult.status === "rejected")
     errors.push(`probe unavailable: ${formatError(probeResult.reason)}`);
   if (sessionResult.status === "rejected")
-    errors.push(`session summary unavailable: ${formatError(sessionResult.reason)}`);
+    errors.push(
+      `session summary unavailable: ${formatError(sessionResult.reason)}`,
+    );
 
   return {
     probe: probeResult.status === "fulfilled" ? probeResult.value : undefined,
-    sessionSummary: sessionResult.status === "fulfilled" ? sessionResult.value : undefined,
+    sessionSummary:
+      sessionResult.status === "fulfilled" ? sessionResult.value : undefined,
     errors,
   };
 }
@@ -154,7 +175,10 @@ async function collectRevitContext(
   return result.response as RevitAgentContextSummaryData;
 }
 
-function createStatusSnapshot(hostBaseUrl: string, hostFacts: HostSeedFacts): HostStatusSnapshot {
+function createStatusSnapshot(
+  hostBaseUrl: string,
+  hostFacts: HostSeedFacts,
+): HostStatusSnapshot {
   const probe = hostFacts.probe;
   const session = hostFacts.sessionSummary;
   const activeDocument = session?.activeDocument;
@@ -164,7 +188,8 @@ function createStatusSnapshot(hostBaseUrl: string, hostFacts: HostSeedFacts): Ho
     runtimeIdentity: probe?.runtimeIdentity ?? null,
     hostContractVersion: probe?.hostContractVersion ?? null,
     bridgeContractVersion: probe?.bridgeContractVersion ?? null,
-    bridgeIsConnected: probe?.bridgeIsConnected ?? session?.bridgeIsConnected ?? null,
+    bridgeIsConnected:
+      probe?.bridgeIsConnected ?? session?.bridgeIsConnected ?? null,
     disconnectReason: normalizeBlank(probe?.disconnectReason),
     sessionId: normalizeBlank(session?.sessionId),
     revitVersion: normalizeBlank(session?.revitVersion),
@@ -189,7 +214,10 @@ function createStatusSnapshot(hostBaseUrl: string, hostFacts: HostSeedFacts): Ho
   };
 }
 
-function updateStatusState(state: ThreadContextState, status: HostStatusSnapshot): void {
+function updateStatusState(
+  state: ThreadContextState,
+  status: HostStatusSnapshot,
+): void {
   state.lastStatusSignature = status.signature;
   state.lastStatusCheckedAt = Date.now();
 }
@@ -224,14 +252,17 @@ function formatWorkbenchLines(
   ];
 }
 
-function formatParameterResourcesLine(resources: HostWorkbenchResourcesData | undefined): string {
+function formatParameterResourcesLine(
+  resources: HostWorkbenchResourcesData | undefined,
+): string {
   if (!resources)
     return "parameter-resources: unavailable from host session summary; use pe_status when resource paths or freshness matter.";
 
   const parameters = resources.parameters;
   const cacheFiles = parameters.parameterServiceCacheFiles
     .map(
-      (file) => `${file.label.replace("parameters-service-cache.", "")}:${formatFileState(file)}`,
+      (file) =>
+        `${file.label.replace("parameters-service-cache.", "")}:${formatFileState(file)}`,
     )
     .join(" ");
   const sharedParameters = parameters.sharedParametersFile.path
@@ -244,7 +275,9 @@ function formatParameterResourcesLine(resources: HostWorkbenchResourcesData | un
 function formatFileState(file: HostResourceFileStateData): string {
   const provenance = ` provenance=${q(file.provenance)}`;
   if (!file.exists)
-    return file.path ? `missing path=${q(file.path)}${provenance}` : `unknown${provenance}`;
+    return file.path
+      ? `missing path=${q(file.path)}${provenance}`
+      : `unknown${provenance}`;
 
   return `exists mtimeMs=${file.lastWriteTimeUnixMs} sizeBytes=${file.sizeBytes} path=${q(file.path ?? "")}${provenance}`;
 }
@@ -311,7 +344,12 @@ function formatSelectionSamples(
   entries: RevitAgentContextSummaryData["selection"]["entries"],
 ): string {
   const samples = entries.slice(0, 3).map((entry) => {
-    const detail = [entry.className, entry.familyName, entry.typeName, entry.levelName]
+    const detail = [
+      entry.className,
+      entry.familyName,
+      entry.typeName,
+      entry.levelName,
+    ]
       .filter(Boolean)
       .join("/");
     return `${entry.handle.label}${detail ? ` (${detail})` : ""}`;
@@ -320,7 +358,9 @@ function formatSelectionSamples(
   return samples.length > 0 ? ` samples=${q(samples.join("; "))}` : "";
 }
 
-function formatVisibleCategoriesLine(categories: RevitAgentVisibleCategorySummary[]): string {
+function formatVisibleCategoriesLine(
+  categories: RevitAgentVisibleCategorySummary[],
+): string {
   if (categories.length === 0) return "visible-categories: none returned.";
 
   const topCategories = [...categories]
@@ -330,11 +370,17 @@ function formatVisibleCategoriesLine(categories: RevitAgentVisibleCategorySummar
       const samples = category.sampleElements
         .slice(0, 2)
         .map((sample) =>
-          [sample.handle.label, sample.className, sample.familyName, sample.typeName]
+          [
+            sample.handle.label,
+            sample.className,
+            sample.familyName,
+            sample.typeName,
+          ]
             .filter(Boolean)
             .join("/"),
         );
-      const sampleText = samples.length > 0 ? ` samples=${samples.join("; ")}` : "";
+      const sampleText =
+        samples.length > 0 ? ` samples=${samples.join("; ")}` : "";
       return `${category.handle.label}:${category.elementCount}${sampleText}`;
     });
 
@@ -374,10 +420,15 @@ function firstNonBlank(value: string | undefined): string | undefined {
 
 function escapeXmlBlock(lines: string[]): string {
   return lines
-    .map((line, index) => (index === 0 || index === lines.length - 1 ? line : escapeXmlText(line)))
+    .map((line, index) =>
+      index === 0 || index === lines.length - 1 ? line : escapeXmlText(line),
+    )
     .join("\n");
 }
 
 function escapeXmlText(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }

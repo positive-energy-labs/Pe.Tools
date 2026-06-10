@@ -46,11 +46,11 @@ into runnable plans, and pipeline-owned artifacts are the main transparency surf
   persistence model.
 - `family report` means the top-level per-family proof packet entrypoint written as `family-report.json`.
 - `spec` is currently overloaded:
-    - authored reusable parts such as `AuthoredPlaneSpec`, `AuthoredSpanSpec`, `AuthoredPrismSpec`,
-      `AuthoredConnectorSpec`
-    - captured or legacy FF shapes such as `MirrorConstraintSnapshot`, `OffsetConstraintSnapshot`,
-      `ConstrainedRectangleExtrusionSnapshot`, `ConstrainedCircleExtrusionSnapshot`
-    - resolved execution shapes such as `SymmetricPlanePairSpec` and `OffsetPlaneConstraintSpec`
+  - authored reusable parts such as `AuthoredPlaneSpec`, `AuthoredSpanSpec`, `AuthoredPrismSpec`,
+    `AuthoredConnectorSpec`
+  - captured or legacy FF shapes such as `MirrorConstraintSnapshot`, `OffsetConstraintSnapshot`,
+    `ConstrainedRectangleExtrusionSnapshot`, `ConstrainedCircleExtrusionSnapshot`
+  - resolved execution shapes such as `SymmetricPlanePairSpec` and `OffsetPlaneConstraintSpec`
 
 ## Current Naming Debt
 

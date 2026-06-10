@@ -18,8 +18,8 @@ internal static class PeaLinkDevCommand {
             return 10;
         }
 
-        var peaAppDirectory = Path.Combine(repoRoot, "source", "pea", "app");
-        var runtimeNodePath = Path.Combine(repoRoot, "source", "pea", "runtime", "node", PeaCliIdentity.NodeExecutableName);
+        var peaAppDirectory = Path.Combine(repoRoot, "source", "pea", "app");// TODO: fix link for new monorepo!
+        var runtimeNodePath = Path.Combine(repoRoot, "source", "pea", "runtime", "node", PeaCliIdentity.NodeExecutableName); // TODO: fix link for new monorepo!
         var mainPath = Path.Combine(peaAppDirectory, "main.ts");
         var tsxPath = Path.Combine(peaAppDirectory, "node_modules", "tsx", "dist", "cli.mjs");
 

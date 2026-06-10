@@ -58,11 +58,11 @@ pe-dev test --filter "Name~Reports_runtime_assembly_load_paths" --timeout-second
 
 ## Shared Language
 
-| Term | Meaning | Prefer / Avoid |
-| --- | --- | --- |
-| **AttachedRrd** | Verification against the already-running Rider-driven desktop Revit debug session | Prefer this over vague `live test` phrasing |
-| **FreshRevitProcess** | Verification in a newly launched dedicated Revit process that must not reuse `RRD` | Prefer this over vague `isolated test` phrasing |
-| **test harness** | `Pe.Revit.Tests` owns verification orchestration, not a deployable product | Avoid talking about this package as if it were a shipping artifact |
+| Term                  | Meaning                                                                            | Prefer / Avoid                                                     |
+| --------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| **AttachedRrd**       | Verification against the already-running Rider-driven desktop Revit debug session  | Prefer this over vague `live test` phrasing                        |
+| **FreshRevitProcess** | Verification in a newly launched dedicated Revit process that must not reuse `RRD` | Prefer this over vague `isolated test` phrasing                    |
+| **test harness**      | `Pe.Revit.Tests` owns verification orchestration, not a deployable product         | Avoid talking about this package as if it were a shipping artifact |
 
 ## Living Memory
 

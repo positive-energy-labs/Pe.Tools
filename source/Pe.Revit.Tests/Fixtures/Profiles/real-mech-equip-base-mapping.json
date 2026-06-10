@@ -1,385 +1,267 @@
 {
-    "ExecutionOptions":  {
-                             "SingleTransaction":  false,
-                             "OptimizeTypeOperations":  true,
-                             "EnableCollectors":  true,
-                             "SuppressWarnings":  true
-                         },
-    "FilterFamilies":  {
-                           "IncludeUnusedFamilies":  true,
-                           "IncludeCategoriesEqualing":  [
-                                                             "Mechanical Equipment"
-                                                         ],
-                           "IncludeByCondition":  {
-
-                                                  },
-                           "IncludeNames":  {
-                                                "Equaling":  [
-
-                                                             ]
-                                            },
-                           "ExcludeNames":  {
-
-                                            }
-                       },
-    "SharedParameterSelection":  {
-                                     "Include":  {
-                                                     "Names":  [
-                                                                   "PE_G_Dim_Width1",
-                                                                   "PE_G_Dim_Length1",
-                                                                   "PE_G_Dim_Height1"
-                                                               ],
-                                                     "StartingWith":  [
-                                                                          "PE_G___",
-                                                                          "PE_E___"
-                                                                      ]
-                                                 },
-                                     "Exclude":  {
-                                                     "Names":  [
-                                                                   "PE_E___MainBreakerRating",
-                                                                   "PE_E___MinAICRating",
-                                                                   "PE_E___MinBusRating",
-                                                                   "PE_E___NEMAEnclosureRating",
-                                                                   "PE_E___SubFeedBreakerRating",
-                                                                   "PE_E___NumberOfSpaces",
-                                                                   "PE_E___NumberOfWires",
-                                                                   "PE_E___TypeOfMain",
-                                                                   "PE_E___VoltageLtoL",
-                                                                   "PE_E___VoltageLtoN",
-                                                                   "PE_E___FedFromOverrideText",
-                                                                   "PE_E___FedFromOverrideYesNo",
-                                                                   "PE_G___Fluid",
-                                                                   "PE_G___RefrigerantType"
-                                                               ]
-                                                 }
-                                 },
-    "MappingData":  [
-                        {
-                            "CurrNames":  [
-                                              "Model",
-                                              "Mech Equip Model Number"
-                                          ],
-                            "NewName":  "PE_G___Model"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Manufacturer",
-                                              "Mech Equip Manufacturer"
-                                          ],
-                            "NewName":  "PE_G___Manufacturer"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Description"
-                                          ],
-                            "NewName":  "PE_G___Description"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Type Comments"
-                                          ],
-                            "NewName":  "PE_G___NotesType"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Mech Equip Width",
-                                              "Width",
-                                              "PE_Width",
-                                              "Width (mm)"
-                                          ],
-                            "NewName":  "PE_G_Dim_Width1"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Mech Equip Length",
-                                              "Length",
-                                              "PE_Length",
-                                              "Depth (mm)"
-                                          ],
-                            "NewName":  "PE_G_Dim_Length1"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Mech Equip Height",
-                                              "Height",
-                                              "PE_Height",
-                                              "Height (mm)"
-                                          ],
-                            "NewName":  "PE_G_Dim_Height1"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Weight",
-                                              "Weight (lbs)",
-                                              "Net weight (kg)",
-                                              "PE_Weight",
-                                              "Weight (lb)",
-                                              "Shipping Weight"
-                                          ],
-                            "NewName":  "PE_G___Weight",
-                            "MappingStrategy":  "CoerceMeasurableToNumber"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Sound Pressure Level",
-                                              "PE_Sound Level",
-                                              "Noise Level (DbA)"
-                                          ],
-                            "NewName":  "PE_G___SoundLevel"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Load Classification"
-                                          ],
-                            "NewName":  "PE_E___LoadClassification"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Voltage",
-                                              "Mech Equip Voltage",
-                                              "PE_Voltage",
-                                              "Voltage (V)"
-                                          ],
-                            "NewName":  "PE_E___Voltage",
-                            "MappingStrategy":  "CoerceElectrical"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Mech Equip Number of Poles",
-                                              "Number of Poles",
-                                              "PE_NumberOfPoles",
-                                              "PE_Poles"
-                                          ],
-                            "NewName":  "PE_E___NumberOfPoles"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Minimum Circuit Ampacity",
-                                              "Amperage",
-                                              "PE_MCA",
-                                              "Minimum circuit ampacity (A)",
-                                              "PE_MCACalc",
-                                              "MCA (Amps)"
-                                          ],
-                            "NewName":  "PE_E___MCA"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Maximum Overcurrent Protection",
-                                              "PE_MOCP",
-                                              "Disconnect switch (A)",
-                                              "Breaker Size"
-                                          ],
-                            "NewName":  "PE_E___MOCP"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Fan motor  Current (F.L.A.)",
-                                              "Fan motor (F.L.A.)",
-                                              "FLA",
-                                              "Full Load Current"
-                                          ],
-                            "NewName":  "PE_E___FLA"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Horsepower (HP)",
-                                              "Pump HP"
-                                          ],
-                            "NewName":  "PE_G_Perf_Horsepower"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Phase",
-                                              "PE_Phase"
-                                          ],
-                            "NewName":  "PE_E___Phase"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Frequency",
-                                              "Hertz",
-                                              "PE_Frequency",
-                                              "Frequecny (Hz)",
-                                              "Frequency (Hz)"
-                                          ],
-                            "NewName":  "PE_E___Frequency"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Mech Equip SEER Rating",
-                                              "PE_SEER`"
-                                          ],
-                            "NewName":  "PE_M_Eff_SEER"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Mech Equip EER Rating",
-                                              "PE_EER"
-                                          ],
-                            "NewName":  "PE_M_Eff_EER"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Mech Equip HSPF Rating",
-                                              "PE_HSPF"
-                                          ],
-                            "NewName":  "PE_M_Eff_HSPF"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Mech Equip COP47 Rating",
-                                              "PE_COP47",
-                                              "PE_COP at 47"
-                                          ],
-                            "NewName":  "PE_M_Eff_COP47"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Mech Equip COP17 Rating",
-                                              "PE_COP17",
-                                              "PE_COP at 17"
-                                          ],
-                            "NewName":  "PE_M_Eff_COP17"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "PE_Location"
-                                          ],
-                            "NewName":  "PE_G___Location"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Total Cooling Capacity",
-                                              "PE_Rated Capacity Cooling"
-                                          ],
-                            "NewName":  "PE_M_PerfCool_CapacityRated"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Total Heating Capacity",
-                                              "PE_Rated Capacity Heating",
-                                              "Nom Heating Capacity (kw)"
-                                          ],
-                            "NewName":  "PE_M_PerfHeat_CapacityRated"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Product Page URL",
-                                              "Product Documentation Link",
-                                              "Product data url"
-                                          ],
-                            "NewName":  "PE_G___URL"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Mech Equip External Static Pressure"
-                                          ],
-                            "NewName":  "PE_M_Fan_ExternalStaticPressure"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Mech Equip Connection Supply Air Flow"
-                                          ],
-                            "NewName":  "PE_M_Conn_AirFlowSupply"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Mech Equip Connection Return Air Flow"
-                                          ],
-                            "NewName":  "PE_M_Conn_AirFlowReturn"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Mech Equip Pressure Drop"
-                                          ],
-                            "NewName":  "PE_M_PerfCool_FluidPressureDrop"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "PE_Refrigerant",
-                                              "Refrigerant Type"
-                                          ],
-                            "NewName":  "PE_G___RefrigerantType"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "PE_LWT Cooling"
-                                          ],
-                            "NewName":  "PE_M_PerfCool_FluidLWT"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "PE_EWT Cooling"
-                                          ],
-                            "NewName":  "PE_M_PerfCool_FluidEWT"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "PE_LWT Heating"
-                                          ],
-                            "NewName":  "PE_M_PerfHeat_FluidLWT"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "PE_EWT Heating"
-                                          ],
-                            "NewName":  "PE_M_PerfHeat_FluidEWT"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "Total Heating Capacity"
-                                          ],
-                            "NewName":  "PE_M___BoilerOutput"
-                        },
-                        {
-                            "CurrNames":  [
-                                              "INPUT RATE (BTUH)"
-                                          ],
-                            "NewName":  "PE_M___BoilerInput"
-                        }
-                    ],
-    "SharedParameters":  [
-                             {
-                                 "Name":  "PE_G___TagInstance",
-                                 "Value":  "P-#"
-                             }
-                         ],
-    "FamilyParameters":  [
-                             {
-                                 "Name":  "FF Migrator Harness Local Text",
-                                 "IsInstance":  false,
-                                 "DataType":  "Text",
-                                 "PropertiesGroup":  "Identity Data",
-                                 "Value":  "local-ok"
-                             }
-                         ],
-    "CleanFamilyDocument":  {
-                                "Enabled":  true,
-                                "EnablePurgeNestedFamilies":  false,
-                                "EnablePurgeReferencePlanes":  false,
-                                "EnablePurgeModelLines":  false,
-                                "EnablePurgeParams":  true,
-                                "PurgeParamsSettings":  {
-                                                            "DirectDeleteEmptyParameters":  true,
-                                                            "ConsiderZeroValueAsEmpty":  true,
-                                                            "ConsiderEmptyStringAsEmpty":  true,
-                                                            "ExcludeNames":  {
-
-                                                                             }
-                                                        }
-                            },
-    "DeleteParams":  {
-                         "Enabled":  false,
-                         "Names":  [
-
-                                   ]
-                     },
-    "SortParams":  {
-                       "Enabled":  false
-                   },
-    "ParamDrivenSolids":  {
-
-                          },
-    "$schema":  "../../../../Global/schemas/cmdffmigrator/profiles/pe-revit-familyfoundry-profiles-ffmigratorprofile.schema.json"
+  "ExecutionOptions": {
+    "SingleTransaction": false,
+    "OptimizeTypeOperations": true,
+    "EnableCollectors": true,
+    "SuppressWarnings": true
+  },
+  "FilterFamilies": {
+    "IncludeUnusedFamilies": true,
+    "IncludeCategoriesEqualing": ["Mechanical Equipment"],
+    "IncludeByCondition": {},
+    "IncludeNames": {
+      "Equaling": []
+    },
+    "ExcludeNames": {}
+  },
+  "SharedParameterSelection": {
+    "Include": {
+      "Names": ["PE_G_Dim_Width1", "PE_G_Dim_Length1", "PE_G_Dim_Height1"],
+      "StartingWith": ["PE_G___", "PE_E___"]
+    },
+    "Exclude": {
+      "Names": [
+        "PE_E___MainBreakerRating",
+        "PE_E___MinAICRating",
+        "PE_E___MinBusRating",
+        "PE_E___NEMAEnclosureRating",
+        "PE_E___SubFeedBreakerRating",
+        "PE_E___NumberOfSpaces",
+        "PE_E___NumberOfWires",
+        "PE_E___TypeOfMain",
+        "PE_E___VoltageLtoL",
+        "PE_E___VoltageLtoN",
+        "PE_E___FedFromOverrideText",
+        "PE_E___FedFromOverrideYesNo",
+        "PE_G___Fluid",
+        "PE_G___RefrigerantType"
+      ]
+    }
+  },
+  "MappingData": [
+    {
+      "CurrNames": ["Model", "Mech Equip Model Number"],
+      "NewName": "PE_G___Model"
+    },
+    {
+      "CurrNames": ["Manufacturer", "Mech Equip Manufacturer"],
+      "NewName": "PE_G___Manufacturer"
+    },
+    {
+      "CurrNames": ["Description"],
+      "NewName": "PE_G___Description"
+    },
+    {
+      "CurrNames": ["Type Comments"],
+      "NewName": "PE_G___NotesType"
+    },
+    {
+      "CurrNames": ["Mech Equip Width", "Width", "PE_Width", "Width (mm)"],
+      "NewName": "PE_G_Dim_Width1"
+    },
+    {
+      "CurrNames": ["Mech Equip Length", "Length", "PE_Length", "Depth (mm)"],
+      "NewName": "PE_G_Dim_Length1"
+    },
+    {
+      "CurrNames": ["Mech Equip Height", "Height", "PE_Height", "Height (mm)"],
+      "NewName": "PE_G_Dim_Height1"
+    },
+    {
+      "CurrNames": [
+        "Weight",
+        "Weight (lbs)",
+        "Net weight (kg)",
+        "PE_Weight",
+        "Weight (lb)",
+        "Shipping Weight"
+      ],
+      "NewName": "PE_G___Weight",
+      "MappingStrategy": "CoerceMeasurableToNumber"
+    },
+    {
+      "CurrNames": ["Sound Pressure Level", "PE_Sound Level", "Noise Level (DbA)"],
+      "NewName": "PE_G___SoundLevel"
+    },
+    {
+      "CurrNames": ["Load Classification"],
+      "NewName": "PE_E___LoadClassification"
+    },
+    {
+      "CurrNames": ["Voltage", "Mech Equip Voltage", "PE_Voltage", "Voltage (V)"],
+      "NewName": "PE_E___Voltage",
+      "MappingStrategy": "CoerceElectrical"
+    },
+    {
+      "CurrNames": [
+        "Mech Equip Number of Poles",
+        "Number of Poles",
+        "PE_NumberOfPoles",
+        "PE_Poles"
+      ],
+      "NewName": "PE_E___NumberOfPoles"
+    },
+    {
+      "CurrNames": [
+        "Minimum Circuit Ampacity",
+        "Amperage",
+        "PE_MCA",
+        "Minimum circuit ampacity (A)",
+        "PE_MCACalc",
+        "MCA (Amps)"
+      ],
+      "NewName": "PE_E___MCA"
+    },
+    {
+      "CurrNames": [
+        "Maximum Overcurrent Protection",
+        "PE_MOCP",
+        "Disconnect switch (A)",
+        "Breaker Size"
+      ],
+      "NewName": "PE_E___MOCP"
+    },
+    {
+      "CurrNames": [
+        "Fan motor  Current (F.L.A.)",
+        "Fan motor (F.L.A.)",
+        "FLA",
+        "Full Load Current"
+      ],
+      "NewName": "PE_E___FLA"
+    },
+    {
+      "CurrNames": ["Horsepower (HP)", "Pump HP"],
+      "NewName": "PE_G_Perf_Horsepower"
+    },
+    {
+      "CurrNames": ["Phase", "PE_Phase"],
+      "NewName": "PE_E___Phase"
+    },
+    {
+      "CurrNames": ["Frequency", "Hertz", "PE_Frequency", "Frequecny (Hz)", "Frequency (Hz)"],
+      "NewName": "PE_E___Frequency"
+    },
+    {
+      "CurrNames": ["Mech Equip SEER Rating", "PE_SEER`"],
+      "NewName": "PE_M_Eff_SEER"
+    },
+    {
+      "CurrNames": ["Mech Equip EER Rating", "PE_EER"],
+      "NewName": "PE_M_Eff_EER"
+    },
+    {
+      "CurrNames": ["Mech Equip HSPF Rating", "PE_HSPF"],
+      "NewName": "PE_M_Eff_HSPF"
+    },
+    {
+      "CurrNames": ["Mech Equip COP47 Rating", "PE_COP47", "PE_COP at 47"],
+      "NewName": "PE_M_Eff_COP47"
+    },
+    {
+      "CurrNames": ["Mech Equip COP17 Rating", "PE_COP17", "PE_COP at 17"],
+      "NewName": "PE_M_Eff_COP17"
+    },
+    {
+      "CurrNames": ["PE_Location"],
+      "NewName": "PE_G___Location"
+    },
+    {
+      "CurrNames": ["Total Cooling Capacity", "PE_Rated Capacity Cooling"],
+      "NewName": "PE_M_PerfCool_CapacityRated"
+    },
+    {
+      "CurrNames": [
+        "Total Heating Capacity",
+        "PE_Rated Capacity Heating",
+        "Nom Heating Capacity (kw)"
+      ],
+      "NewName": "PE_M_PerfHeat_CapacityRated"
+    },
+    {
+      "CurrNames": ["Product Page URL", "Product Documentation Link", "Product data url"],
+      "NewName": "PE_G___URL"
+    },
+    {
+      "CurrNames": ["Mech Equip External Static Pressure"],
+      "NewName": "PE_M_Fan_ExternalStaticPressure"
+    },
+    {
+      "CurrNames": ["Mech Equip Connection Supply Air Flow"],
+      "NewName": "PE_M_Conn_AirFlowSupply"
+    },
+    {
+      "CurrNames": ["Mech Equip Connection Return Air Flow"],
+      "NewName": "PE_M_Conn_AirFlowReturn"
+    },
+    {
+      "CurrNames": ["Mech Equip Pressure Drop"],
+      "NewName": "PE_M_PerfCool_FluidPressureDrop"
+    },
+    {
+      "CurrNames": ["PE_Refrigerant", "Refrigerant Type"],
+      "NewName": "PE_G___RefrigerantType"
+    },
+    {
+      "CurrNames": ["PE_LWT Cooling"],
+      "NewName": "PE_M_PerfCool_FluidLWT"
+    },
+    {
+      "CurrNames": ["PE_EWT Cooling"],
+      "NewName": "PE_M_PerfCool_FluidEWT"
+    },
+    {
+      "CurrNames": ["PE_LWT Heating"],
+      "NewName": "PE_M_PerfHeat_FluidLWT"
+    },
+    {
+      "CurrNames": ["PE_EWT Heating"],
+      "NewName": "PE_M_PerfHeat_FluidEWT"
+    },
+    {
+      "CurrNames": ["Total Heating Capacity"],
+      "NewName": "PE_M___BoilerOutput"
+    },
+    {
+      "CurrNames": ["INPUT RATE (BTUH)"],
+      "NewName": "PE_M___BoilerInput"
+    }
+  ],
+  "SharedParameters": [
+    {
+      "Name": "PE_G___TagInstance",
+      "Value": "P-#"
+    }
+  ],
+  "FamilyParameters": [
+    {
+      "Name": "FF Migrator Harness Local Text",
+      "IsInstance": false,
+      "DataType": "Text",
+      "PropertiesGroup": "Identity Data",
+      "Value": "local-ok"
+    }
+  ],
+  "CleanFamilyDocument": {
+    "Enabled": true,
+    "EnablePurgeNestedFamilies": false,
+    "EnablePurgeReferencePlanes": false,
+    "EnablePurgeModelLines": false,
+    "EnablePurgeParams": true,
+    "PurgeParamsSettings": {
+      "DirectDeleteEmptyParameters": true,
+      "ConsiderZeroValueAsEmpty": true,
+      "ConsiderEmptyStringAsEmpty": true,
+      "ExcludeNames": {}
+    }
+  },
+  "DeleteParams": {
+    "Enabled": false,
+    "Names": []
+  },
+  "SortParams": {
+    "Enabled": false
+  },
+  "ParamDrivenSolids": {},
+  "$schema": "../../../../Global/schemas/cmdffmigrator/profiles/pe-revit-familyfoundry-profiles-ffmigratorprofile.schema.json"
 }

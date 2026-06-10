@@ -6,7 +6,7 @@ using TypeGen.Core;
 using TypeGen.Core.Converters;
 using TypeGen.Core.Generator;
 
-namespace Pe.Dev.Cli;
+namespace Pe.Dev.Cli.Codegen;
 
 internal static class HostTypeGenerationModelProvider {
     private const string Configuration = "Debug.R25";
@@ -19,26 +19,25 @@ internal static class HostTypeGenerationModelProvider {
         RegexOptions.Compiled
     );
 
-    public static Task<int> EnsureFreshBuildAsync(string repoRoot, CancellationToken cancellationToken) =>
+    public static Task<int> EnsureFreshBuildAsync(CodegenPaths paths, CancellationToken cancellationToken) =>
         ForegroundProcessRunner.RunAsync(
             SafeDotNetProcess.Create(
-                repoRoot,
+                paths.RepoRoot,
                 "build",
-                Path.Combine(repoRoot, "source", "Pe.Dev.Cli", "Pe.Dev.Cli.csproj"),
+                paths.PeDevCliProjectPath,
                 "-c",
                 Configuration
             ),
             cancellationToken
         );
 
-    public static GeneratedHostTypeModel Load(string repoRoot) {
-        var outputDirectory = Path.Combine(repoRoot, "source", "pea", "app", "generated", "host-types");
+    public static GeneratedHostTypeModel Load(CodegenPaths paths) {
         var generatedFiles = new List<GeneratedProjectionFile>();
-        var generator = new Generator(CreateOptions(outputDirectory));
+        var generator = new Generator(CreateOptions(paths.HostTypeGenDirectory));
         generator.UnsubscribeDefaultFileContentGeneratedHandler();
         generator.FileContentGenerated += (_, args) => {
             var filePath = Path.GetFullPath(args.FilePath);
-            var normalizedContent = NormalizeNodeNextModuleSpecifiers(args.FileContent);
+            var normalizedContent = NormalizeLineEndings(NormalizeNodeNextModuleSpecifiers(args.FileContent));
             generatedFiles.Add(new GeneratedProjectionFile(filePath, normalizedContent));
         };
 
@@ -155,7 +154,7 @@ internal static class HostTypeGenerationModelProvider {
                            || ShouldKeepIndexExport(line, includedSpecifiers))
             .ToArray();
         return indexFile with {
-            Content = string.Join(Environment.NewLine, prunedLines).TrimEnd() + Environment.NewLine
+            Content = string.Join("\n", prunedLines).TrimEnd() + "\n"
         };
     }
 
@@ -201,10 +200,14 @@ internal static class HostTypeGenerationModelProvider {
             if (Path.HasExtension(path))
                 return match.Value;
 
-            var quote = match.Groups["quote"].Value;
-            return $"{match.Groups["prefix"].Value}{quote}{path}.js{quote}";
+            return $"{match.Groups["prefix"].Value}\"{path}.js\"";
         }
     );
+
+    private static string NormalizeLineEndings(string content) {
+        var normalized = content.Replace("\r\n", "\n").Replace("\r", "\n");
+        return normalized.EndsWith('\n') ? normalized : normalized + "\n";
+    }
 
     internal sealed record GeneratedProjectionFile(string Path, string Content);
 

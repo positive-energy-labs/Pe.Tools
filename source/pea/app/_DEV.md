@@ -2,15 +2,15 @@
 
 ## Mental Model
 
-This app hosts two products that share a TypeScript shell but not a persona.
+This legacy app location has been retired as the owner of TypeScript CLI composition. Active human-facing CLI entrypoints live in `source/pe-tools/apps`.
 
-Pea is the deployed Revit/operator workbench. It starts in a host-reported workspace, memory-mounts bundled Pea workflow skills, discovers user skills from `.pea/skills` and `~/.pea/skills`, and exposes Pea product tools for host/Revit work.
+Pea is the deployed Revit/operator workbench. It exposes product tools for host/Revit work, including scripting.
 
-dev-agent is the Pe.Tools repo coding agent. It is assembled directly on Mastra Harness/Workspace primitives, with source-work tools plus extra verification and product-probing tools available when proof needs repo or Revit context.
+pe-code is the Pe.Tools repo/dev CLI and dev-agent surface. It owns repo-source, RRD/live-loop, verification, and black-box Pea feedback workflows.
 
 ## Architecture
 
-- `main.ts` owns the human CLI tree. Keep `pea agent` for deployed Pea and `pea dev` for the repo coding agent. ACP and AG-UI are protocol flags on those runtime boundaries, not separate commands/personas.
+- `source/pe-tools/apps/pea/src/main.ts` and `source/pe-tools/apps/pe-code/src/main.ts` are thin executable shells. Package-owned command modules provide CLI behavior near capability ownership. `pea dev` is intentionally gone; use `pe-code` for repo/dev workflows.
 - `pea-runtime.ts` owns `createPea(...)` and `createPeaDev(...)`, the Pe.Tools-owned runtime seams over public Mastra Harness, Workspace, Memory, and auth storage primitives. Do not reintroduce `createMastraCode(...)` as an internal dependency.
 - Harness thread identity is runtime-scoped: `dev-agent` uses the normal MastraCode database and MastraCode-compatible project resource id so repo-agent threads appear beside bare MastraCode threads, while Pea uses an isolated `.pea/mastra.db` plus Pea-local resource id under the resolved Pea workspace (for example `Documents/Pe.Tools/.pea`) so product/operator memory does not mix with repo-agent memory.
 - `pea-runtime-events.ts` and `mastra-harness-runtime-events.ts` define the Pea-owned protocol-neutral runtime event contract. Mastra Harness events terminate there; protocol adapters must not import `HarnessEvent` directly.
@@ -21,13 +21,13 @@ dev-agent is the Pe.Tools repo coding agent. It is assembled directly on Mastra 
 - `pea-runtime-client.ts` owns protocol-neutral client delegation capabilities such as user permission, client filesystem, terminal, and terminal-auth support. ACP adapts `InitializeRequest.clientCapabilities`, `requestPermission`, `fs/*`, and `terminal/*` methods into this contract; protocol prompts carry that client and Pea protocol session id through the Pea runtime request context so runtime tools can depend on this seam instead of importing ACP SDK types. Do not add duplicate visible harness tools for client-owned file or terminal operations; route client delegation through the existing workspace/file/command execution seams when those seams can apply it deterministically.
 - `pea-runtime-interrupts.ts` owns protocol-neutral runtime interrupt outcomes and resume decisions for tool approval, tool suspension, plan approval, and runtime suspension. `pea-runtime-context.ts` carries resume decisions as structured request context while `PeaRuntimeProtocolSessions` also injects a prompt-visible context entry. AG-UI may project interrupts into `RUN_FINISHED` outcomes and normalize `resume[]` back through this seam, but protocol adapters should not invent policy-specific interrupt reasons directly.
 - `pea-local-transport-auth.ts` owns local bearer/query/header token validation for HTTP/SSE protocol surfaces. Local browser transports should require a generated token by default.
-- `acp/` adapts Pea/dev-agent runtime sessions and Pea runtime events to Agent Client Protocol transports. ACPX is the protocol truth lane; T3 Code is downstream client/UI inspiration. The stdio `pea --acp` / `pea dev --acp` entrypoints are the client-compatible baseline, while HTTP/SSE exposes the same SDK-backed JSON-RPC stream for remote/browser-mediated clients.
+- `acp/` adapts Pea/dev-agent runtime sessions and Pea runtime events to Agent Client Protocol transports. ACPX is the protocol truth lane; T3 Code is downstream client/UI inspiration. The stdio `pea --acp` / `pe-code --acp` entrypoints are the client-compatible baseline, while HTTP/SSE exposes the same SDK-backed JSON-RPC stream for remote/browser-mediated clients.
 - `agui/` adapts the same Pea/dev-agent runtime sessions and Pea runtime events to native AG-UI HTTP/SSE. Prefer this over routing frontend work through ACP when the client can speak AG-UI directly. AG-UI `context` entries must flow through the runtime context primitive, not permanent prompt widening.
 - `pea-agent.ts` constructs only the deployed Pea operator agent.
 - `dev-agent.ts` constructs the repo coding agent on the shared runtime seam without product-persona merging.
-- `tools/pea/tools.ts` exports Pea product tools: status, logs, scripting, Revit API docs, and host-operation search/call.
-- `tools/shared/live-loop.ts` owns the shared live-loop implementation used by dev-agent tools and the human `pea live status/sync/restart` Gunshi commands.
-- `tools/dev/tools.ts` exports only narrow dev-agent repo verification wrappers: `live_loop_context`, `live_rrd_sync`, `live_rrd_restart`, `talk_to_pea`, sync-first `script_execute`, and `test`.
+- `source/pe-tools/packages/tools/src/pea` exports Pea product tools and product CLI command modules: status, logs, scripting, Revit API docs, and host-operation search/call.
+- `source/pe-tools/packages/tools/src/shared/live-loop.ts` owns the shared live-loop implementation used by dev-agent tools and human `pe-code live context/sync/restart` Gunshi commands.
+- `source/pe-tools/packages/tools/src/dev` exports narrow dev-agent repo verification wrappers and dev CLI command modules: `live_loop_context`, `live_rrd_sync`, `live_rrd_restart`, `talk_to_pea`, sync-first `script_execute`, and `test`.
 - `runtime-skill-source.ts` composes bundled/default in-memory skill mounts with user disk skill roots through Mastra Core's `Workspace.skillSource` seam.
 - `bundled-skill-content/` contains Pea workflow skills memory-mounted under `.pea/bundled-skills`; user Pea skills live in `.pea/skills` or `~/.pea/skills`.
 - `dev-agent-skill-content/` contains the small dev-agent-only goal skill surface memory-mounted under `.pe-tools/bundled-skills`; user/dev project skills live in Mastra-compatible skill roots such as `.mastracode/skills`, `.agents/skills`, `.claude/skills`, and their user-global equivalents.
@@ -66,7 +66,7 @@ dev-agent is the Pe.Tools repo coding agent. It is assembled directly on Mastra 
 
 ### ACP startup and baseline proof
 
-1. Start `pea dev --acp` for the repo coding agent, or `pea --acp` / `pea agent --acp` only when explicitly testing deployed Pea behavior.
+1. Start `pe-code --acp` for the repo coding agent, or `pea --acp` / `pea agent --acp` only when explicitly testing deployed Pea behavior.
 2. Use `--acp-transport stdio` for local editor subprocesses and `--acp-transport http` for remote/browser-mediated clients.
 3. Keep runtime selection process-local; ACP sessions do not mix Pea and dev-agent threads.
 4. Create/open runtime sessions through `PeaRuntimeProtocolSessions` so ACP session ids map cleanly to runtime thread/resource identity while runtime factory churn stays below the protocol layer.
@@ -78,7 +78,7 @@ dev-agent is the Pe.Tools repo coding agent. It is assembled directly on Mastra 
 Preferred proof order:
 
 1. Run Pea app unit tests and typecheck/build.
-2. Run ACPX directly against `pea --acp` and `pea dev --acp`.
+2. Run ACPX directly against `pea --acp` and `pe-code --acp`.
 3. Run SDK client handshakes over the HTTP/SSE transport for both runtimes.
 4. Return to T3 Code provider/UI integration only after ACPX/SDK proof succeeds.
 
@@ -95,8 +95,8 @@ Equivalent raw commands:
 
 ```text
 acpx --agent "pnpm --dir source/pea/app pea --acp --model-id openai/gpt-5.5" --cwd C:\Users\kaitp\source\repos\Pe.Tools --timeout 120 --ttl 30 sessions ensure
-acpx --agent "pnpm --dir source/pea/app pea dev --acp --model-id openai/gpt-5.5" --cwd C:\Users\kaitp\source\repos\Pe.Tools --timeout 120 --ttl 30 sessions ensure
-acpx --agent "pnpm --dir source/pea/app pea dev --acp --model-id openai/gpt-5.5" --cwd C:\Users\kaitp\source\repos\Pe.Tools --timeout 180 --ttl 30 --format text "Reply exactly: ACP_OK_DEV"
+acpx --agent "pnpm --dir source/pe-tools --filter @pe/pe-code pe-code -- --acp --model-id openai/gpt-5.5" --cwd C:\Users\kaitp\source\repos\Pe.Tools --timeout 120 --ttl 30 sessions ensure
+acpx --agent "pnpm --dir source/pe-tools --filter @pe/pe-code pe-code -- --acp --model-id openai/gpt-5.5" --cwd C:\Users\kaitp\source\repos\Pe.Tools --timeout 180 --ttl 30 --format text "Reply exactly: ACP_OK_DEV"
 ```
 
 Important cwd rule: ACPX starts the raw agent subprocess from the ACP session cwd. Keep ACPX `--cwd` pointed at the Pe.Tools repo root, and make the raw agent command target the Pea app package explicitly with `pnpm --dir source/pea/app ...`. Do not run parallel raw-agent ACPX prompt turns with the same cwd/session cache; create/ensure sessions sequentially when testing both runtimes.
@@ -107,7 +107,7 @@ First-slice limitations:
 - `session/list`, `session/resume`, `session/load`, `session/fork`, `session/delete`, and `session/close` are supported through `PeaRuntimeProtocolSessions`; real protocol servers persist session metadata and protocol-visible history in `PeaRuntimeSessionRegistry`, `close` frees active runtime resources without deleting the listed session, and `additionalDirectories` is advertised and updates the active session resource scope on resume/load/fork. Loading a persisted session replays user prompt chunks and ACP updates to the client, then injects restored history as context into the first prompt on the fresh runtime thread. Forking creates a new protocol session and fresh runtime thread, copies protocol-visible history, and injects the copied history into the first prompt. Neither path restores or branches Mastra/Harness model memory.
 - ACP advertises runtime auth methods from `PeaRuntimeAuth`: `OPENAI_API_KEY` env-var auth for API-key mode and agent-managed Codex OAuth for OAuth mode. `authenticate` validates method ids; `logout` is advertised only for `pea` and clears scoped Pea OpenAI/Codex credentials plus the current process `OPENAI_API_KEY`.
 - The local browser gateway is an adapter over the ACP session/update spine, not a replacement for `--acp` stdio/HTTP or ACPX/SDK proof.
-- `pea --acp` and `pea dev --acp` use the same adapter but must both be verified because they cross different product/runtime boundaries.
+- `pea --acp` and `pe-code --acp` use the same adapter but must both be verified because they cross different product/runtime boundaries.
 - AG-UI uses generated local-token transport auth by default, exposes status/session discovery/event-replay/logout/run/close/delete endpoints, maps AG-UI `threadId` to Pea-owned runtime sessions through the same persisted metadata registry, records emitted AG-UI events as protocol-visible history, reports runtime auth metadata and `pea.logoutSupported` under `capabilities.custom`, emits sequenced run/state/message snapshots before streaming runtime events, and reports runtime tool/plan suspension as `RUN_FINISHED` interrupt outcomes. `forwardedProps.pea.cwd` and `forwardedProps.pea.additionalDirectories` are Pea-owned AG-UI control metadata for runtime resource scope; strip them before generic forwarded props become prompt context. `transport.resumable` means replaying persisted events after a client-supplied sequence through `GET /agui/events`; it does not mean true suspended-turn continuation. AG-UI `resume[]` entries are normalized into Pea runtime resume decisions through `PeaRuntimeInterrupt`, passed as structured runtime request context, and injected as prompt-visible context by `PeaRuntimeProtocolSessions`. After adapter reconstruction, the same AG-UI `threadId` is rehydrated into a fresh runtime thread with prior AG-UI-visible history injected into the first prompt. True suspended-turn resume remains future work until runtime tools can consume resume decisions deterministically.
 
 ### Black-box product feedback
@@ -120,5 +120,5 @@ First-slice limitations:
 
 ## Open Questions
 
-- Whether the long-term human-facing command should remain under `pea dev` or move to a separate PATH name.
+- Which future runtime abstraction should back `pe-code` protocol flags without routing dev workflows through `pea`.
 - Which repeated repo workflows deserve dev-agent skills after real usage proves the pattern.
