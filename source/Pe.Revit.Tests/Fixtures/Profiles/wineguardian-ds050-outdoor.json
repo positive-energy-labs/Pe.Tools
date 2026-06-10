@@ -5,9 +5,7 @@
   },
   "FilterFamilies": {
     "IncludeNames": {
-      "Equaling": [
-        "FF-Test-WineGuardianDS050Outdoor.rfa"
-      ]
+      "Equaling": ["FF-Test-WineGuardianDS050Outdoor.rfa"]
     }
   },
   "ParamDrivenSolids": {
@@ -71,10 +69,7 @@
           "Dir": "in"
         },
         "Round": {
-          "Center": [
-            "plane:Liquid Line Center",
-            "plane:Service Line Elevation"
-          ],
+          "Center": ["plane:Liquid Line Center", "plane:Service Line Elevation"],
           "Diameter": {
             "By": "param:LiquidLineDiameter"
           }
@@ -93,10 +88,7 @@
           "Dir": "in"
         },
         "Round": {
-          "Center": [
-            "plane:Suction Line Center",
-            "plane:Service Line Elevation"
-          ],
+          "Center": ["plane:Suction Line Center", "plane:Service Line Elevation"],
           "Diameter": {
             "By": "param:SuctionLineDiameter"
           }
@@ -110,11 +102,7 @@
   },
   "SharedParameterSelection": {
     "Include": {
-      "Names": [
-        "PE_G_Dim_Height1",
-        "PE_G_Dim_Length1",
-        "PE_G_Dim_Width1"
-      ]
+      "Names": ["PE_G_Dim_Height1", "PE_G_Dim_Length1", "PE_G_Dim_Width1"]
     },
     "Exclude": {}
   },

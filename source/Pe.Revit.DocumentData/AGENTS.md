@@ -20,13 +20,13 @@ Owns document-backed Revit data collectors that read active/project document sta
 
 ## Shared Language
 
-| Term | Meaning | Prefer / Avoid |
-| --- | --- | --- |
-| **collect** | Read live Revit state into transient data | Prefer for normal document queries |
-| **bounded projection** | Optional, deliberately limited join or summary layered on a compact base result | Prefer over bespoke audit endpoints |
-| **parameter presence** | Public loaded-family matrix vocabulary for family/project binding presence | Avoid leaking resolver `authority` into DTOs |
-| **natural reference** | User phrase like `this view` or `selected equipment` resolved to stable handles | Return ambiguity and provenance, not guesses |
-| **Project Browser lens** | Read-only browser folder/path organization for views, sheets, and schedules | Use for navigation/ranking/provenance; do not click UI or infer BIM facts from folder names alone |
+| Term                     | Meaning                                                                         | Prefer / Avoid                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **collect**              | Read live Revit state into transient data                                       | Prefer for normal document queries                                                                |
+| **bounded projection**   | Optional, deliberately limited join or summary layered on a compact base result | Prefer over bespoke audit endpoints                                                               |
+| **parameter presence**   | Public loaded-family matrix vocabulary for family/project binding presence      | Avoid leaking resolver `authority` into DTOs                                                      |
+| **natural reference**    | User phrase like `this view` or `selected equipment` resolved to stable handles | Return ambiguity and provenance, not guesses                                                      |
+| **Project Browser lens** | Read-only browser folder/path organization for views, sheets, and schedules     | Use for navigation/ranking/provenance; do not click UI or infer BIM facts from folder names alone |
 
 ## Living Memory
 

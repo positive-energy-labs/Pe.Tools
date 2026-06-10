@@ -5,9 +5,7 @@
   },
   "FilterFamilies": {
     "IncludeNames": {
-      "Equaling": [
-        "FF-Test-GrinderPumpBasin.rfa"
-      ]
+      "Equaling": ["FF-Test-GrinderPumpBasin.rfa"]
     }
   },
   "ParamDrivenSolids": {
@@ -31,10 +29,7 @@
         "Name": "Basin Body",
         "IsSolid": true,
         "On": "@Bottom",
-        "Center": [
-          "@CenterLR",
-          "@CenterFB"
-        ],
+        "Center": ["@CenterLR", "@CenterFB"],
         "Diameter": {
           "By": "param:BasinDiameter"
         },
@@ -49,10 +44,7 @@
         "Name": "Anti-Float Collar",
         "IsSolid": true,
         "On": "@Bottom",
-        "Center": [
-          "@CenterLR",
-          "@CenterFB"
-        ],
+        "Center": ["@CenterLR", "@CenterFB"],
         "Diameter": {
           "By": "param:AntiFloatDiameter"
         },
@@ -74,10 +66,7 @@
           "Dir": "out"
         },
         "Round": {
-          "Center": [
-            "@CenterFB",
-            "plane:Discharge Centerline"
-          ],
+          "Center": ["@CenterFB", "plane:Discharge Centerline"],
           "Diameter": {
             "By": "param:DischargeDiameter"
           }
@@ -91,10 +80,7 @@
   },
   "SharedParameterSelection": {
     "Include": {
-      "Names": [
-        "PE_G_Dim_Height1",
-        "PE_G_Dim_Width1"
-      ]
+      "Names": ["PE_G_Dim_Height1", "PE_G_Dim_Width1"]
     },
     "Exclude": {}
   },

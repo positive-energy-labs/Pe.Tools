@@ -22,17 +22,17 @@ Owns durable DTOs and enums for Revit state collected through host operations, s
 
 ## Shared Language
 
-| Term | Meaning | Prefer / Avoid |
-| --- | --- | --- |
-| **handle** | Stable reference returned to consumers for later resolution, usually with ids/unique ids and label/provenance | Prefer handles over eager full object dumps |
-| **provenance** | Why a fact is relevant: active document, active view, selection, sheet placement, printed context, explicit lookup, search | Avoid anonymous derived rows |
-| **parameter identity** | Canonical parameter key plus name, kind, built-in id, shared GUID, or parameter-element id | Prefer over name-only matching |
-| **parameter kind** | Whether a loaded-family parameter is built-in/shared/family/project/name-fallback style | Avoid overloading this with storage type |
-| **parameter presence** | Where a parameter exists for matrix purposes: family, family-and-project-binding, project-binding-only, unresolved | Prefer this public term over `scope` or internal `authority` |
-| **binding level** | Project binding applicability such as type/instance/category level | Keep separate from family parameter presence |
-| **formula state** | Whether a family parameter has formula/no formula/unresolved formula facts | Prefer this over raw formula string checks |
-| **Project Browser lens** | Live browser organization for views, sheets, and schedules used as navigation/provenance metadata | Avoid treating it as BIM truth or a full raw browser clone |
-| **sheet anchor map** | Revit-native sheet contents and placements with handles, provenance, and optional bounds | Prefer as correlation data for scripts/extractors/vision; avoid modeling OCR/spellcheck/visual judgment as core DTOs |
+| Term                     | Meaning                                                                                                                    | Prefer / Avoid                                                                                                       |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| **handle**               | Stable reference returned to consumers for later resolution, usually with ids/unique ids and label/provenance              | Prefer handles over eager full object dumps                                                                          |
+| **provenance**           | Why a fact is relevant: active document, active view, selection, sheet placement, printed context, explicit lookup, search | Avoid anonymous derived rows                                                                                         |
+| **parameter identity**   | Canonical parameter key plus name, kind, built-in id, shared GUID, or parameter-element id                                 | Prefer over name-only matching                                                                                       |
+| **parameter kind**       | Whether a loaded-family parameter is built-in/shared/family/project/name-fallback style                                    | Avoid overloading this with storage type                                                                             |
+| **parameter presence**   | Where a parameter exists for matrix purposes: family, family-and-project-binding, project-binding-only, unresolved         | Prefer this public term over `scope` or internal `authority`                                                         |
+| **binding level**        | Project binding applicability such as type/instance/category level                                                         | Keep separate from family parameter presence                                                                         |
+| **formula state**        | Whether a family parameter has formula/no formula/unresolved formula facts                                                 | Prefer this over raw formula string checks                                                                           |
+| **Project Browser lens** | Live browser organization for views, sheets, and schedules used as navigation/provenance metadata                          | Avoid treating it as BIM truth or a full raw browser clone                                                           |
+| **sheet anchor map**     | Revit-native sheet contents and placements with handles, provenance, and optional bounds                                   | Prefer as correlation data for scripts/extractors/vision; avoid modeling OCR/spellcheck/visual judgment as core DTOs |
 
 ## Living Memory
 

@@ -87,27 +87,27 @@ stale bridge assumptions or ad hoc scripting alone.
 Initial host inspection families:
 
 - `elementContext.query`
-    - general-purpose element inspection surface
-    - should expose stable generic element identity first, then attach domain-specific context when applicable
-    - should support multiple target modes such as current selection and explicit element references before minting more
-      narrow entity endpoints
+  - general-purpose element inspection surface
+  - should expose stable generic element identity first, then attach domain-specific context when applicable
+  - should support multiple target modes such as current selection and explicit element references before minting more
+    narrow entity endpoints
 
 Initial specialized electrical contract families:
 
 - `electrical.panels.*`
-    - panel-centered inspection surface
-    - resolves the panel as a stable business object rather than leaking the family-instance/electrical-equipment split
+  - panel-centered inspection surface
+  - resolves the panel as a stable business object rather than leaking the family-instance/electrical-equipment split
 - `electrical.circuits.*`
-    - circuit-centered authored object surface
-    - exposes row-like operational data such as circuit number, slotting, load name, load/current, rating, wire data,
-      connected elements, and health
+  - circuit-centered authored object surface
+  - exposes row-like operational data such as circuit number, slotting, load name, load/current, rating, wire data,
+    connected elements, and health
 - `electrical.panelSchedules.*`
-    - read-only panel schedule instance projection
-    - should preserve `Header`, `Body`, `Summary`, and `Footer` as a faithful schedule snapshot rather than flattening
-      the schedule into only circuit rows
+  - read-only panel schedule instance projection
+  - should preserve `Header`, `Body`, `Summary`, and `Footer` as a faithful schedule snapshot rather than flattening
+    the schedule into only circuit rows
 - `electrical.loadClassifications.*`
-    - load-summary and demand-math support surface
-    - should expose classification and demand-definition context cleanly enough for schedule and circuit reasoning
+  - load-summary and demand-math support surface
+  - should expose classification and demand-definition context cleanly enough for schedule and circuit reasoning
 
 Future candidates once the shape is proven:
 

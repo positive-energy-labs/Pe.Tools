@@ -1,0 +1,71 @@
+{
+  "name": "@pe/tools",
+  "version": "0.0.0",
+  "description": "A starter for creating a TypeScript package.",
+  "homepage": "https://github.com/author/library#readme",
+  "bugs": {
+    "url": "https://github.com/author/library/issues"
+  },
+  "license": "MIT",
+  "author": "Author Name <author.name@mail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/author/library.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./pea": {
+      "types": "./src/pea/index.ts",
+      "import": "./src/pea/index.ts"
+    },
+    "./pe-code": {
+      "types": "./src/dev/index.ts",
+      "import": "./src/dev/index.ts"
+    },
+    "./dev": {
+      "types": "./src/dev/index.ts",
+      "import": "./src/dev/index.ts"
+    },
+    "./tool-metadata": {
+      "types": "./src/tool-metadata.ts",
+      "import": "./src/tool-metadata.ts"
+    },
+    "./shared": {
+      "types": "./src/shared/scripting.ts",
+      "import": "./src/shared/scripting.ts"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vp pack",
+    "dev": "vp pack --watch",
+    "test": "vp test",
+    "check": "vp check",
+    "prepublishOnly": "vp run build"
+  },
+  "dependencies": {
+    "@mastra/core": "1.41.0",
+    "@pe/host-client": "workspace:*",
+    "@pe/host-generated": "workspace:*",
+    "@pe/runtime": "workspace:*",
+    "gunshi": "^0.29.5",
+    "parse5": "^8.0.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "@typescript/native-preview": "7.0.0-dev.20260509.2",
+    "bumpp": "^11.1.0",
+    "typescript": "^6.0.3",
+    "vite-plus": "catalog:"
+  }
+}

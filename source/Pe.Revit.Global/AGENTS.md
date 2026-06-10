@@ -32,11 +32,11 @@ before higher packages copy it.
 
 ## Shared Language
 
-| Term                 | Meaning                                                                                          | Prefer / Avoid                                                                                             |
-|----------------------|--------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------|
-| **document-owned**   | Behavior derivable from a specific `Document` without active/open UI session state               | Prefer extension methods or small document-centric helpers; avoid putting it behind session singletons     |
-| **document session** | Open/active/UI-tab state for documents in the current Revit process                              | Prefer `DocumentManager` or `UIApplication`-adjacent helpers; avoid mixing it into pure `Document` helpers |
-| **document key**     | Canonical identity string for an open Revit document used by host payloads and matching           | Prefer one shared implementation; avoid per-caller variations                                              |
+| Term                 | Meaning                                                                                 | Prefer / Avoid                                                                                             |
+| -------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **document-owned**   | Behavior derivable from a specific `Document` without active/open UI session state      | Prefer extension methods or small document-centric helpers; avoid putting it behind session singletons     |
+| **document session** | Open/active/UI-tab state for documents in the current Revit process                     | Prefer `DocumentManager` or `UIApplication`-adjacent helpers; avoid mixing it into pure `Document` helpers |
+| **document key**     | Canonical identity string for an open Revit document used by host payloads and matching | Prefer one shared implementation; avoid per-caller variations                                              |
 
 ## Living Memory
 

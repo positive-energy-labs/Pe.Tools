@@ -1,6 +1,6 @@
-import { createPea, type PeaAgentOptions } from "./pea-runtime.js";
+import { createPea, type PeaAgentOptions } from "./pea-product-runtime.js";
 
-export type { PeaAgentOptions } from "./pea-runtime.js";
+export type { PeaAgentOptions } from "./pea-product-runtime.js";
 
 export async function runPeAgent(options: PeaAgentOptions = {}): Promise<void> {
   const runtime = await createPea(options);

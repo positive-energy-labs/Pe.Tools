@@ -61,16 +61,16 @@ Default posture:
 
 ## Shared Language
 
-| Term | Meaning |
-| --- | --- |
-| **pea** | Pe Agent; the public command/app surface. |
-| **workbench** | The scoped files, commands, tools, skills, and host operations available to the agent. |
-| **host fact** | Runtime, filesystem, install, workspace, or session fact reported by `Pe.Host`. |
-| **transient context** | Startup/status-change orientation injected into a thread; useful for orientation, not proof. |
-| **host-operation catalog** | Generated capability metadata from C# host contracts. |
-| **scripting workspace** | Host-created source/artifact area for C# scripts. |
-| **bridge lane** | The serialized Revit-backed execution path through the private Host/Revit bridge. |
-| **artifact** | Durable CSV/JSON/text output produced by a command or script. |
+| Term                       | Meaning                                                                                      |
+| -------------------------- | -------------------------------------------------------------------------------------------- |
+| **pea**                    | Pe Agent; the public command/app surface.                                                    |
+| **workbench**              | The scoped files, commands, tools, skills, and host operations available to the agent.       |
+| **host fact**              | Runtime, filesystem, install, workspace, or session fact reported by `Pe.Host`.              |
+| **transient context**      | Startup/status-change orientation injected into a thread; useful for orientation, not proof. |
+| **host-operation catalog** | Generated capability metadata from C# host contracts.                                        |
+| **scripting workspace**    | Host-created source/artifact area for C# scripts.                                            |
+| **bridge lane**            | The serialized Revit-backed execution path through the private Host/Revit bridge.            |
+| **artifact**               | Durable CSV/JSON/text output produced by a command or script.                                |
 
 ## Living Memory
 

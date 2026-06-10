@@ -17,23 +17,23 @@ This is not just a testing goal. It is an architectural direction for FF, parame
 ## Primary outcomes
 
 1. **Performance proof lane**
-    - Repeatable Revit-backed performance demos across:
-        - machines
-        - Revit versions
-        - document states
-        - family type counts
-        - family element counts
-        - levels of parameter/element interdependence
-    - Output should stay compact, compare open/action/close separately, and be stable enough for regression tracking.
+   - Repeatable Revit-backed performance demos across:
+     - machines
+     - Revit versions
+     - document states
+     - family type counts
+     - family element counts
+     - levels of parameter/element interdependence
+   - Output should stay compact, compare open/action/close separately, and be stable enough for regression tracking.
 
 2. **Harness-first testing shape**
-    - Prefer a few strong reusable harnesses over a huge brittle suite.
-    - Tests should prove behavior through normalized state capture, not ad hoc assertions against live API objects.
-    - Build reusable family-doc harnesses first; only add broad end-to-end tests after seams stabilize.
+   - Prefer a few strong reusable harnesses over a huge brittle suite.
+   - Tests should prove behavior through normalized state capture, not ad hoc assertions against live API objects.
+   - Build reusable family-doc harnesses first; only add broad end-to-end tests after seams stabilize.
 
 3. **Portable-state / snapshot confidence**
-    - Prove that snapshot -> authored settings/profile -> replay can roundtrip meaningful family state.
-    - Encode which parts of family/document state are intentionally captured, ignored, lossy, or not yet portable.
+   - Prove that snapshot -> authored settings/profile -> replay can roundtrip meaningful family state.
+   - Encode which parts of family/document state are intentionally captured, ignored, lossy, or not yet portable.
 
 ---
 
@@ -85,7 +85,7 @@ Examples:
 - family param replay rules
 - dependency discovery behavior
 - parameter definition resolution on family instances
-    - (codify the merge between project bindings, internalDefinition, etc.)
+  - (codify the merge between project bindings, internalDefinition, etc.)
 
 ### Tier 3 — constrained end-to-end proofs
 
@@ -168,14 +168,14 @@ Potential dependency/association surfaces:
 - directly associated element parameters (`AssociatedParameters`)
 - formula dependencies / dependents
 - likely future additions if discovered:
-    - nested family parameters / nested instances
-    - reporting parameters
-    - constraints / lock-driven references
-    - parameter-driven geometry dimensions
-    - visibility / material / family-type parameters
-    - built-in family element parameters that indirectly participate in state replay
-    - new `SetValue`-like method that dynamically generate formulas, then unsets them to bypass traditional per type
-      value switching
+  - nested family parameters / nested instances
+  - reporting parameters
+  - constraints / lock-driven references
+  - parameter-driven geometry dimensions
+  - visibility / material / family-type parameters
+  - built-in family element parameters that indirectly participate in state replay
+  - new `SetValue`-like method that dynamically generate formulas, then unsets them to bypass traditional per type
+    value switching
 
 #### Harness requirements
 
@@ -183,17 +183,17 @@ Potential dependency/association surfaces:
 - generate dependency graphs from compact specs
 - expose a normalized summary of the generated graph
 - allow controlled sweeps such as:
-    - 10 / 50 / 100 / 500 params
-    - shallow vs deep formula chains
-    - sparse vs dense association graphs
-    - single-driver vs hub-and-spoke vs layered graph topologies
+  - 10 / 50 / 100 / 500 params
+  - shallow vs deep formula chains
+  - sparse vs dense association graphs
+  - single-driver vs hub-and-spoke vs layered graph topologies
 - time key operations independently, e.g.:
-    - dependency collection
-    - association queries
-    - snapshot collection
-    - parameter setting
-    - type switching
-    - replay / rebuild phases
+  - dependency collection
+  - association queries
+  - snapshot collection
+  - parameter setting
+  - type switching
+  - replay / rebuild phases
 
 #### Deliverables
 

@@ -61,15 +61,15 @@ Keep `Pe.Dev.Cli` focused on stable command naming, parse/print behavior, and or
 
 ## Shared Language
 
-| Term | Meaning | Prefer / Avoid |
-| --- | --- | --- |
-| **dev CLI** | The repo-local developer/operator surface is `pe-dev` | Avoid reviving `pe-script` or separate automation executables |
-| **FreshRevitProcess** | The dedicated fresh-owned Revit proof lane exposed as `pe-dev test` | Prefer this when current RRD document/session state is irrelevant |
-| **live-loop context** | The TypeScript dev-agent decision packet exposed as `live_loop_context` | Prefer this over reviving `pe-dev doctor`, `status`, `env`, or `sync` |
-| **automation workflow** | `pe-dev automation ...` Design Automation workflows | Prefer this over nesting DA under desktop Revit |
-| **browse workflow** | Sticky-context ACC discovery commands under `pe-dev automation browse ...` | Prefer this over copy-pasting ids through one-off list commands |
-| **status workflow** | `automation inspect receipt` and `automation inspect workitem` | Prefer inspection over rerunning jobs when you already have a receipt or id |
-| **JSON mode** | `--json` output intended for downstream tooling or scripting | Prefer this for machine consumption instead of scraping human text |
+| Term                    | Meaning                                                                    | Prefer / Avoid                                                              |
+| ----------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| **dev CLI**             | The repo-local developer/operator surface is `pe-dev`                      | Avoid reviving `pe-script` or separate automation executables               |
+| **FreshRevitProcess**   | The dedicated fresh-owned Revit proof lane exposed as `pe-dev test`        | Prefer this when current RRD document/session state is irrelevant           |
+| **live-loop context**   | The TypeScript dev-agent decision packet exposed as `live_loop_context`    | Prefer this over reviving `pe-dev doctor`, `status`, `env`, or `sync`       |
+| **automation workflow** | `pe-dev automation ...` Design Automation workflows                        | Prefer this over nesting DA under desktop Revit                             |
+| **browse workflow**     | Sticky-context ACC discovery commands under `pe-dev automation browse ...` | Prefer this over copy-pasting ids through one-off list commands             |
+| **status workflow**     | `automation inspect receipt` and `automation inspect workitem`             | Prefer inspection over rerunning jobs when you already have a receipt or id |
+| **JSON mode**           | `--json` output intended for downstream tooling or scripting               | Prefer this for machine consumption instead of scraping human text          |
 
 ## Living Memory
 

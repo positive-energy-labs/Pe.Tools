@@ -25,12 +25,12 @@ Owns Revit-neutral scripting primitives shared by Revit-hosted execution and fut
 
 ## Shared Language
 
-| Term | Meaning | Prefer / Avoid |
-| --- | --- | --- |
-| **policy rule** | One syntax/analysis check that returns `ScriptDiagnostic` values | Prefer additive rules over hardcoded checks in the Revit adapter |
-| **host-owned transaction** | The Revit transaction opened by the scripting host for `WriteTransaction` requests | Scripts must not create their own Revit transactions |
-| **read-only script** | Default permission mode; no host transaction is opened | Prefer this for host-client joins, inspection, and artifacts |
-| **write-transaction script** | Explicit opt-in mode where the host opens one transaction | Use only for intentional document mutations |
+| Term                         | Meaning                                                                            | Prefer / Avoid                                                   |
+| ---------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **policy rule**              | One syntax/analysis check that returns `ScriptDiagnostic` values                   | Prefer additive rules over hardcoded checks in the Revit adapter |
+| **host-owned transaction**   | The Revit transaction opened by the scripting host for `WriteTransaction` requests | Scripts must not create their own Revit transactions             |
+| **read-only script**         | Default permission mode; no host transaction is opened                             | Prefer this for host-client joins, inspection, and artifacts     |
+| **write-transaction script** | Explicit opt-in mode where the host opens one transaction                          | Use only for intentional document mutations                      |
 
 ## Living Memory
 

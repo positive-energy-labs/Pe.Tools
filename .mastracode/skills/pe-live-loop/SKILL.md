@@ -53,14 +53,14 @@ Treat Pea's response, tool choices, errors, and silence as product evidence. Tre
 
 Use this shape when pausing for user action:
 
-~~~text
+```text
 Current hypothesis:
 Required user action:
 Exact command/action:
 Expected result:
 If it fails:
 Next agent step after output:
-~~~
+```
 
 ## Guardrails
 

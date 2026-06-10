@@ -343,7 +343,7 @@ using Nice3point.Revit.Extensions; // for ForgeTypeId.ToLabel()
 
   /// <summary>
   /// Add/update a project parameter binding with very linear control flow.
-  /// Once an ExternalDefinition has been bound already, 
+  /// Once an ExternalDefinition has been bound already,
   ///
   /// Definition behavior:
   /// - ExternalDefinition: valid for creating a new bound definition in project.

@@ -21,7 +21,7 @@ flowchart LR
     subgraph API["`Internal / API-facing`"]
         A1["`PanelScheduleView`"]
         A2["`ElectricalSystem`"]
-        A3["`ElectricalLoadClassification`"] 
+        A3["`ElectricalLoadClassification`"]
         A4["`ElectricalEquipment`"]
         A5["`Wire`"]
         A6["`WireType`"]

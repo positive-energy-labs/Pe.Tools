@@ -27,15 +27,15 @@ Owns the Revit-side scripting runtime: workspace bootstrap, source normalization
 
 ## Shared Language
 
-| Term | Meaning |
-| --- | --- |
-| **inline snippet** | Submitted source content compiled for one request outside workspace `src/`. |
-| **workspace path** | A workspace-relative `.cs` file resolved under the host-created workspace. |
-| **loose workspace mode** | No root `pod.json`; compile only the requested source file so quick workspaces can stay messy. |
-| **Pod mode** | Root `pod.json` exists; validate the manifest, compile all `src/**/*.cs`, and execute only a declared entrypoint. |
-| **execution** | One scripting request returning one final result payload. |
-| **ReadOnly** | Default permission mode; no host transaction is opened. |
-| **WriteTransaction** | Explicit mutation mode; this package opens one host-owned Revit transaction. |
+| Term                     | Meaning                                                                                                           |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| **inline snippet**       | Submitted source content compiled for one request outside workspace `src/`.                                       |
+| **workspace path**       | A workspace-relative `.cs` file resolved under the host-created workspace.                                        |
+| **loose workspace mode** | No root `pod.json`; compile only the requested source file so quick workspaces can stay messy.                    |
+| **Pod mode**             | Root `pod.json` exists; validate the manifest, compile all `src/**/*.cs`, and execute only a declared entrypoint. |
+| **execution**            | One scripting request returning one final result payload.                                                         |
+| **ReadOnly**             | Default permission mode; no host transaction is opened.                                                           |
+| **WriteTransaction**     | Explicit mutation mode; this package opens one host-owned Revit transaction.                                      |
 
 ## Living Memory
 

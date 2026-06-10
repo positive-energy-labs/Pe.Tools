@@ -21,15 +21,15 @@ Owns durable host-facing contracts: route constants, operation definitions, requ
 
 ## Shared Language
 
-| Term | Meaning |
-| --- | --- |
-| **operation family** | Top-level public operation area: `host`, `settings`, `script`, `revit`, `aps`. |
-| **Revit layer** | Layer-first Revit operation segment such as `context`, `catalog`, `matrix`, `detail`, `resolve`, or reserved `apply`. |
-| **domain noun** | User-facing Revit noun after the layer. |
-| **cost tier** | Cheap/bounded/expensive/mutation operation metadata. |
-| **single-flight group** | Metadata telling callers that operations share a serialized execution lane. |
+| Term                               | Meaning                                                                                                                                                                                                                                      |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **operation family**               | Top-level public operation area: `host`, `settings`, `script`, `revit`, `aps`.                                                                                                                                                               |
+| **Revit layer**                    | Layer-first Revit operation segment such as `context`, `catalog`, `matrix`, `detail`, `resolve`, or reserved `apply`.                                                                                                                        |
+| **domain noun**                    | User-facing Revit noun after the layer.                                                                                                                                                                                                      |
+| **cost tier**                      | Cheap/bounded/expensive/mutation operation metadata.                                                                                                                                                                                         |
+| **single-flight group**            | Metadata telling callers that operations share a serialized execution lane.                                                                                                                                                                  |
 | **supported active document kind** | Operation metadata/gating for whether a bridge-backed Revit operation supports project documents, family documents, or both. Keep this separate from request scopes such as selection, active view, explicit handles, or parameter presence. |
-| **related operation** | Sparse practical adjacency to another operation: preflight, drill-down, fallback, or alternative. It is not a workflow graph. |
+| **related operation**              | Sparse practical adjacency to another operation: preflight, drill-down, fallback, or alternative. It is not a workflow graph.                                                                                                                |
 
 ## Living Memory
 

@@ -11,17 +11,19 @@ Repo-wide agent guidance for conventions, current paths, validation habits, Revi
 ## The Gist
 
 This repo exists to improve Engineering Designer workflows for MEP firms through strongly typed, debuggable Revit tooling. These documents are the lynchpins:
-- `docs/ARCHITECTURE.md` - read before multi module changes, debugging, and code review. Contains target architecture; code should always seek to align. 
+
+- `docs/ARCHITECTURE.md` - read before multi module changes, debugging, and code review. Contains target architecture; code should always seek to align.
 - `docs/BUILD.md` - read before changing anything build, deploy, or dev-loop related. Contians repo tooling justification and explanation. Always prove (or disprove) before changing the document. Information here is mission critical.
 
 This repo is greenfield: move fast, prefer the best long-term shape, and do not preserve compatibility shims unless they are a temporary compile bridge. Code style should optimize for linear execution flow, fail-fast behavior, composable systems, and wrappers around finicky Revit API behavior.
 
 ## TLDRs
+
 `BUILD.md` is the canonical repo guide for build, runtime, package, install, and Revit proof lanes.
-- Keep terminal compile/package proof separate from live-runtime freshness. 
+
+- Keep terminal compile/package proof separate from live-runtime freshness.
 - Protect the current RRD session aggressively. Breaking it can turn a small edit into a multi-minute restart plus document reopen wait.
 - Use the `pea live <sync/restart/status>` commands for RRD-safe live-looping if harness alternatives are not available.
-
 
 ## Critical Entry Points
 
@@ -35,46 +37,44 @@ This repo is greenfield: move fast, prefer the best long-term shape, and do not 
 - `source/Pe.Revit.FamilyFoundry/OperationProcessor.cs` - main Family Foundry execution orchestrator.
 - `docs/features/family-foundry/_DEV.md` and `_GOALS.md` - Family Foundry architecture and intent.
 
-
-
 ## Shared Language
 
 ### Runtime / iteration language
 
-| Term | Meaning | Prefer / Avoid |
-| --- | --- | --- |
-| **RRD** | The live Rider-driven Revit debug session for `Pe.App`. Treat it as expensive state. | Prefer this over vague phrases like `live debug`; avoid implying hot reload exists outside RRD |
-| **HR** | Rider hot reload into the already-running RRD session. Useful, but not fully trustworthy. | Avoid treating HR as proof that Revit is running fresh code |
+| Term    | Meaning                                                                                   | Prefer / Avoid                                                                                 |
+| ------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| **RRD** | The live Rider-driven Revit debug session for `Pe.App`. Treat it as expensive state.      | Prefer this over vague phrases like `live debug`; avoid implying hot reload exists outside RRD |
+| **HR**  | Rider hot reload into the already-running RRD session. Useful, but not fully trustworthy. | Avoid treating HR as proof that Revit is running fresh code                                    |
 
 ### Repo-wide language
 
-| Term | Meaning | Prefer / Avoid |
-| --- | --- | --- |
-| **FF** | Family Foundry | Prefer `Family Foundry` on first mention in prose |
-| **workflow** | The operator intent such as build, verify, package, or publish | Prefer this over overloading `Configuration` strings to carry every concern |
-| **execution policy** | Whether a workflow is allowed to touch `RRD` | Prefer explicit `NoRrdContact` / `RrdRequired` language over vague safety assumptions |
-| **AttachedRrd** | Verification against the already-running Rider-driven desktop Revit session | Prefer this over vague `live tests` phrasing when the running session itself matters |
-| **FreshRevitProcess** | Verification in a new dedicated Revit process that must not reuse `RRD` | Prefer this over vague `isolated tests` phrasing when freshness and process ownership matter |
-| **package** | A repo-local code unit such as `Pe.Host` or `Pe.Revit.FamilyFoundry` | Prefer this over `project` when discussing one code area |
-| **app** | `Pe.App`, the in-proc desktop Revit add-in runtime | Avoid using `app` to mean the whole repo or product |
-| **host** | `Pe.Host`, the out-of-proc HTTP/SSE backend | Avoid using `host` for the Revit add-in bridge or product identity |
-| **bridge** | The private Host/Revit WebSocket connection | Avoid calling HTTP endpoints the bridge |
-| **automation shell** | The headless DA runtime rooted in `Pe.Dev.RevitAutomation.Worker` | Prefer this over implying `Pe.App` itself runs in DA |
-| **document-owned** | Behavior that can be derived from a specific `Document` without needing UI session state | Prefer `Document` extensions for this |
-| **document session** | Open/active/UI-tab state for documents in the current Revit process | Keep this in `UIApplication` or session-aware helpers |
-| **artifact** | A durable machine-readable output produced by a command or DA workitem | Prefer this over vague `report` when the file is the actual output contract |
-| **workitem** | One APS Design Automation job submission | Prefer one workitem per cloud model for batch collection |
+| Term                  | Meaning                                                                                  | Prefer / Avoid                                                                               |
+| --------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| **FF**                | Family Foundry                                                                           | Prefer `Family Foundry` on first mention in prose                                            |
+| **workflow**          | The operator intent such as build, verify, package, or publish                           | Prefer this over overloading `Configuration` strings to carry every concern                  |
+| **execution policy**  | Whether a workflow is allowed to touch `RRD`                                             | Prefer explicit `NoRrdContact` / `RrdRequired` language over vague safety assumptions        |
+| **AttachedRrd**       | Verification against the already-running Rider-driven desktop Revit session              | Prefer this over vague `live tests` phrasing when the running session itself matters         |
+| **FreshRevitProcess** | Verification in a new dedicated Revit process that must not reuse `RRD`                  | Prefer this over vague `isolated tests` phrasing when freshness and process ownership matter |
+| **package**           | A repo-local code unit such as `Pe.Host` or `Pe.Revit.FamilyFoundry`                     | Prefer this over `project` when discussing one code area                                     |
+| **app**               | `Pe.App`, the in-proc desktop Revit add-in runtime                                       | Avoid using `app` to mean the whole repo or product                                          |
+| **host**              | `Pe.Host`, the out-of-proc HTTP/SSE backend                                              | Avoid using `host` for the Revit add-in bridge or product identity                           |
+| **bridge**            | The private Host/Revit WebSocket connection                                              | Avoid calling HTTP endpoints the bridge                                                      |
+| **automation shell**  | The headless DA runtime rooted in `Pe.Dev.RevitAutomation.Worker`                        | Prefer this over implying `Pe.App` itself runs in DA                                         |
+| **document-owned**    | Behavior that can be derived from a specific `Document` without needing UI session state | Prefer `Document` extensions for this                                                        |
+| **document session**  | Open/active/UI-tab state for documents in the current Revit process                      | Keep this in `UIApplication` or session-aware helpers                                        |
+| **artifact**          | A durable machine-readable output produced by a command or DA workitem                   | Prefer this over vague `report` when the file is the actual output contract                  |
+| **workitem**          | One APS Design Automation job submission                                                 | Prefer one workitem per cloud model for batch collection                                     |
 
 ### Portable Revit state language
 
-| Term | Meaning | Prefer / Avoid |
-| --- | --- | --- |
-| **collect** | Read live Revit state into a transient catalog, list, or query result | Prefer this for live-document queries |
-| **capture** | Convert live Revit state into a durable snapshot or spec | Prefer this when the output survives document/session/version boundaries |
-| **snapshot** | Durable captured point-in-time state with provenance when needed | Avoid using it as the umbrella term for every derived output |
-| **projection** | A target-shaped derived output such as a matrix, dataset, CSV, or profile fragment | Prefer this for derived output shapes |
-| **apply** | Write compatible authored or captured state back into live Revit | Prefer this over `replay` for patch/merge oriented behavior |
-| **profile** | The top-level authored settings document that drives a command or workflow | Avoid using it as a synonym for snapshot output |
+| Term           | Meaning                                                                            | Prefer / Avoid                                                           |
+| -------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| **collect**    | Read live Revit state into a transient catalog, list, or query result              | Prefer this for live-document queries                                    |
+| **capture**    | Convert live Revit state into a durable snapshot or spec                           | Prefer this when the output survives document/session/version boundaries |
+| **snapshot**   | Durable captured point-in-time state with provenance when needed                   | Avoid using it as the umbrella term for every derived output             |
+| **projection** | A target-shaped derived output such as a matrix, dataset, CSV, or profile fragment | Prefer this for derived output shapes                                    |
+| **apply**      | Write compatible authored or captured state back into live Revit                   | Prefer this over `replay` for patch/merge oriented behavior              |
+| **profile**    | The top-level authored settings document that drives a command or workflow         | Avoid using it as a synonym for snapshot output                          |
 
 ## Living Memory
 
@@ -93,11 +93,13 @@ This repo is greenfield: move fast, prefer the best long-term shape, and do not 
 - WPF BAML resolution errors that occasionally happen. This remains a major blocker, but cause and durable mitigation are still unknown.
 
 <!-- dev-agent managed instructions:start -->
+
 # dev-agent
 
 Dev-agent is the Pe.Tools repo coding agent built on Mastra Harness/Workspace primitives. Pea is the deployed Revit/operator workbench. Keep the boundary clear: use Pea only as a black-box product harness, never as a repo-source agent.
 
 ## Core Operating Loop
+
 Clarify user intent and explicate assumptions
 => Make changes
 => Verify if needed

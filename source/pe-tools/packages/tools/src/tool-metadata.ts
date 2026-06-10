@@ -1,0 +1,106 @@
+import {
+  createRuntimeToolCatalog,
+  type RuntimeToolCatalog,
+} from "@pe/runtime/tool-metadata";
+
+export const peaProductToolCatalog: RuntimeToolCatalog =
+  createRuntimeToolCatalog({
+    pe_status: {
+      title: "Pe Status",
+      kind: "read",
+      provenance: { source: "app", label: "Pea product" },
+    },
+    pe_logs: {
+      title: "Pe Logs",
+      kind: "read",
+      provenance: { source: "app", label: "Pea product" },
+    },
+    host_operation_search: {
+      title: "Host Operation Search",
+      kind: "read",
+      provenance: { source: "app", label: "Pea product" },
+    },
+    host_operation_call: {
+      title: "Host Operation Call",
+      kind: "read",
+      provenance: { source: "app", label: "Pea product" },
+    },
+    request_access: {
+      title: "Request Access",
+      kind: "edit",
+      provenance: { source: "app", label: "Pea product" },
+    },
+    script_bootstrap: {
+      title: "Script Bootstrap",
+      kind: "edit",
+      provenance: { source: "app", label: "Pea product" },
+    },
+    script_execute: {
+      title: "Script Execute",
+      kind: "execute",
+      provenance: { source: "app", label: "Pea product" },
+    },
+    script_pod_import: {
+      title: "Script Pod Import",
+      kind: "edit",
+      provenance: { source: "app", label: "Pea product" },
+    },
+    script_pod_export: {
+      title: "Script Pod Export",
+      kind: "edit",
+      provenance: { source: "app", label: "Pea product" },
+    },
+  });
+
+export const peCodeToolCatalog: RuntimeToolCatalog = createRuntimeToolCatalog({
+  request_access: {
+    title: "Request Access",
+    kind: "edit",
+    provenance: { source: "app", label: "Pea product" },
+  },
+  test: {
+    title: "Test",
+    kind: "execute",
+    provenance: { source: "app", label: "pe-code" },
+  },
+  live_loop_context: {
+    title: "Live Loop Context",
+    kind: "read",
+    provenance: { source: "app", label: "pe-code" },
+  },
+  live_rrd_sync: {
+    title: "Live Rrd Sync",
+    kind: "edit",
+    provenance: { source: "app", label: "pe-code" },
+  },
+  live_rrd_restart: {
+    title: "Live Rrd Restart",
+    kind: "edit",
+    provenance: { source: "app", label: "pe-code" },
+  },
+  host_operation_search: {
+    title: "Host Operation Search",
+    kind: "read",
+    provenance: { source: "app", label: "Pea product" },
+  },
+  host_operation_call: {
+    title: "Host Operation Call",
+    kind: "read",
+    provenance: { source: "app", label: "Pea product" },
+  },
+  script_execute: {
+    title: "Script Execute",
+    kind: "execute",
+    provenance: { source: "app", label: "pe-code" },
+  },
+  script_bootstrap: {
+    title: "Script Bootstrap",
+    kind: "edit",
+    provenance: { source: "app", label: "Pea product" },
+  },
+  talk_to_pea: {
+    title: "Talk To Pea",
+    kind: "execute",
+    provenance: { source: "app", label: "pe-code" },
+  },
+});

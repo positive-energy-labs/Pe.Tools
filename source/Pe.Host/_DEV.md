@@ -26,40 +26,40 @@ settings document work should stay host-local.
 ## Public HTTP Areas
 
 - host/runtime facts:
-    - `GET /api/settings/host-probe`
-    - `GET /api/settings/session-summary`
-    - `GET /api/settings/logs`
+  - `GET /api/settings/host-probe`
+  - `GET /api/settings/session-summary`
+  - `GET /api/settings/logs`
 - APS auth:
-    - host-local status, login, logout, and access-token acquisition operations
+  - host-local status, login, logout, and access-token acquisition operations
 - settings storage:
-    - workspaces, tree discovery, document open, validate, save
+  - workspaces, tree discovery, document open, validate, save
 - bridge-backed settings/Revit data:
-    - schema and field options that require Revit-authored metadata
-    - parameter, schedule, loaded-family, project-parameter-binding, element-context, document-session, and electrical
-      inspection operations
+  - schema and field options that require Revit-authored metadata
+  - parameter, schedule, loaded-family, project-parameter-binding, element-context, document-session, and electrical
+    inspection operations
 - scripting:
-    - script workspace bootstrap
-    - synchronous script execution through Revit
+  - script workspace bootstrap
+  - synchronous script execution through Revit
 
 ## Key Flows
 
 - structural settings work:
-    - workspaces, tree, open, validate, and save stay host-local
-    - structural validation is host-only; live-document or feature-semantic validation belongs in Revit-side bridge handlers
+  - workspaces, tree, open, validate, and save stay host-local
+  - structural validation is host-only; live-document or feature-semantic validation belongs in Revit-side bridge handlers
 - bridge-backed live data:
-    - host requires exactly one connected Revit session
-    - host forwards requests into Revit without target-selection semantics
-    - the active document is the only live-document target
-    - bridge-backed requests are admitted one at a time; do not rely on host-side queuing for concurrent Revit work
+  - host requires exactly one connected Revit session
+  - host forwards requests into Revit without target-selection semantics
+  - the active document is the only live-document target
+  - bridge-backed requests are admitted one at a time; do not rely on host-side queuing for concurrent Revit work
 - scripting v1:
-    - callers hit `Pe.Host` HTTP, never a dedicated scripting IPC listener
-    - host forwards one scripting operation over the private Host/Revit bridge
-    - `Pe.Revit.Scripting` raises an `ExternalEvent`, executes on the Revit thread, and returns one final result payload
-    - no scripting SSE, start/poll/cancel, or progressive-output contract exists yet
+  - callers hit `Pe.Host` HTTP, never a dedicated scripting IPC listener
+  - host forwards one scripting operation over the private Host/Revit bridge
+  - `Pe.Revit.Scripting` raises an `ExternalEvent`, executes on the Revit thread, and returns one final result payload
+  - no scripting SSE, start/poll/cancel, or progressive-output contract exists yet
 - agent/deployed client flow:
-    - `pea` first asks host for status/session facts and host-owned paths
-    - `pea` uses the generated TypeScript client slice for selected public operations
-    - repo-local validation and runtime sync stay in `pe-dev`, not in the deployed agent model
+  - `pea` first asks host for status/session facts and host-owned paths
+  - `pea` uses the generated TypeScript client slice for selected public operations
+  - repo-local validation and runtime sync stay in `pe-dev`, not in the deployed agent model
 
 ## Response and Failure Shape
 

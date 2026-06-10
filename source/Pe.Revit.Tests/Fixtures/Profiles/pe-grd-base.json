@@ -6,9 +6,7 @@
     "IncludeCategoriesEqualing": [],
     "IncludeByCondition": {},
     "IncludeNames": {
-      "Equaling": [
-        "PE GRD"
-      ]
+      "Equaling": ["PE GRD"]
     },
     "ExcludeNames": {}
   },
@@ -60,11 +58,7 @@
   "$schema": "../../../../Global/schemas/cmdffmanager/profiles/pe-revit-familyfoundry-profiles-ffmanagerprofile.schema.json",
   "SharedParameterSelection": {
     "Include": {
-      "StartingWith": [
-        "PE_M_Grd_",
-        "PE_G___",
-        "PE_M___Serves"
-      ],
+      "StartingWith": ["PE_M_Grd_", "PE_G___", "PE_M___Serves"],
       "Names": [
         "PE_G___SoundLevel",
         "PE_G___TagInstance",
@@ -82,12 +76,7 @@
       ]
     },
     "Exclude": {
-      "Names": [
-        "PE_G___Horsepower",
-        "PE_G___RefrigerantType",
-        "PE_G___FuelType",
-        "PE_G___Fluid"
-      ]
+      "Names": ["PE_G___Horsepower", "PE_G___RefrigerantType", "PE_G___FuelType", "PE_G___Fluid"]
     }
   },
   "SharedParameters": [

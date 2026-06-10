@@ -28,14 +28,14 @@ This package is the shared backbone for settings authoring, runtime state, user 
 
 ## Shared Language
 
-| Term | Meaning | Prefer / Avoid |
-| --- | --- | --- |
-| **module** | A host-visible structural settings area with storage identity | Avoid using it for arbitrary feature folders |
-| **root binding** | A typed runtime binding for one `(moduleKey, rootKey)` pair | Avoid collapsing this back to module-level typing |
-| **schema definition** | Explicit per-type augmentation registered in `SettingsSchemaDefinitionRegistry` | Avoid describing this as generic attribute reflection |
-| **field options** | Runtime option metadata/items for a specific property | Avoid using `examples` and field options interchangeably |
-| **state** | Mutable runtime data under `%LocalAppData%\Positive Energy\Pe.Tools\state` | Avoid writing state under authored settings except as a legacy migration source |
-| **output** | User-facing command artifacts under `Documents\Pe.Tools\output` | Avoid writing command output under authored settings modules |
+| Term                  | Meaning                                                                         | Prefer / Avoid                                                                  |
+| --------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **module**            | A host-visible structural settings area with storage identity                   | Avoid using it for arbitrary feature folders                                    |
+| **root binding**      | A typed runtime binding for one `(moduleKey, rootKey)` pair                     | Avoid collapsing this back to module-level typing                               |
+| **schema definition** | Explicit per-type augmentation registered in `SettingsSchemaDefinitionRegistry` | Avoid describing this as generic attribute reflection                           |
+| **field options**     | Runtime option metadata/items for a specific property                           | Avoid using `examples` and field options interchangeably                        |
+| **state**             | Mutable runtime data under `%LocalAppData%\Positive Energy\Pe.Tools\state`      | Avoid writing state under authored settings except as a legacy migration source |
+| **output**            | User-facing command artifacts under `Documents\Pe.Tools\output`                 | Avoid writing command output under authored settings modules                    |
 
 ## Living Memory
 

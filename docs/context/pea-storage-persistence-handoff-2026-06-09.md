@@ -205,14 +205,14 @@ Separate from Mastra memory DB, protocol sessions default to:
 Relevant source:
 
 ```ts
-source/pea/app/pea-runtime-session-registry.ts
+source / pea / app / pea - runtime - session - registry.ts;
 ```
 
 Specifically:
 
 ```ts
 process.env.PEA_RUNTIME_SESSION_REGISTRY_DIR ||
-  path.join(process.env.LOCALAPPDATA, "Pe.Tools", "pea", "protocol-sessions")
+  path.join(process.env.LOCALAPPDATA, "Pe.Tools", "pea", "protocol-sessions");
 ```
 
 Note this does **not** use `Positive Energy\Pe.Tools` ProductRuntimeLayout and therefore is another divergent root convention.

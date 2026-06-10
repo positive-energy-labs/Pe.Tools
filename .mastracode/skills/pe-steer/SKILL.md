@@ -25,8 +25,8 @@ pe-steer is the strongest docs-first skill. It should turn vague intent into sha
 Use Pe.Tools docs as the resolver substrate:
 
 1. Nearest AGENTS.md for durable agent behavior, cautions, and shared language.
-2. Relevant _GOALS.md for intent, north star, and non-goals.
-3. Relevant _DEV.md for conceptual model and architecture shape.
+2. Relevant \_GOALS.md for intent, north star, and non-goals.
+3. Relevant \_DEV.md for conceptual model and architecture shape.
 4. docs/features/<feature>/ when a capability spans packages.
 5. Generated contracts, schemas, host-operation docs, and source when they are current truth.
 6. If truth is missing, treat that as signal and capture it in the nearest proper Pe doc.

@@ -6,7 +6,7 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["node"]
+    "types": ["node"],
   },
   "include": [
     "*.ts",
@@ -14,6 +14,24 @@
     "dev-agent-skill-content/**/*.ts",
     "generated/*.ts",
     "generated/host-types/**/*.ts",
-    "tools/**/*.ts"
-  ]
+    "tools/**/*.ts",
+    "pea-runtime-client.ts",
+    "pea-runtime-auth.ts",
+    "pea-runtime-context.ts",
+    "../../pe-tools/packages/runtime/src/pea/pea-runtime-protocol-sessions.ts",
+    "pea-runtime-prompts.ts",
+    "pea-runtime-interrupts.ts",
+    "../../pe-tools/packages/runtime/src/pea/pea-runtime-session-registry.ts",
+    "pea-runtime-factory.ts",
+    "../../pe-tools/packages/runtime/src/pea/pea-runtime-protocol-status.ts",
+    "pea-runtime-defaults.ts",
+    "../../pe-tools/packages/runtime/src/pea/pea-runtime-resources.ts",
+    "../../pe-tools/packages/runtime/src/events.ts",
+    "pea-runtime.ts",
+    "pea-runtime-policy.ts",
+    "../../pe-tools/apps/pea/src/skills.ts",
+    "../../pe-tools/apps/pe-code/src/skills.ts",
+    "../../pe-tools/apps/pe-code/src/dev-agent-project-files.ts",
+    "../../pe-tools/packages/runtime/src/pea-local-transport-auth.ts",
+  ],
 }

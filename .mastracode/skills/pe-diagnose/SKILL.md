@@ -20,7 +20,7 @@ Use for bugs, regressions, confusing failures, stale runtime behavior, failing s
 ## Context Resolution
 
 1. Identify the failing user-visible behavior and the closest trustworthy proof lane.
-2. Read the relevant package AGENTS.md, feature _DEV.md/_GOALS.md, and docs/ENVIRONMENT.md when commands or proof lanes matter.
+2. Read the relevant package AGENTS.md, feature \_DEV.md/\_GOALS.md, and docs/ENVIRONMENT.md when commands or proof lanes matter.
 3. Inspect logs only after status/sync/script/test output points at host or Revit.
 4. Prefer generated host operations and public seams before raw scripts.
 5. Use source inspection to test hypotheses, not to browse indefinitely.

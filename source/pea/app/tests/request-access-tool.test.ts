@@ -56,10 +56,7 @@ describe("Pea request_access tool", () => {
       false,
     );
     assert.equal(
-      requestAccessRequiresApproval(
-        { path: externalRoot, reason: "already approved" },
-        context,
-      ),
+      requestAccessRequiresApproval({ path: externalRoot, reason: "already approved" }, context),
       false,
     );
   });
@@ -77,6 +74,11 @@ describe("Pea request_access tool", () => {
     assert.equal((result as { isError?: boolean }).isError, false);
     assert.match((result as { content?: string }).content ?? "", /Access granted/);
     assert.deepEqual(state.sandboxAllowedPaths, [path.resolve(externalRoot)]);
-    assert.equal(filesystem.resolveAbsolutePath(path.join(externalRoot, "file.txt"))?.startsWith(path.resolve(externalRoot)), true);
+    assert.equal(
+      filesystem
+        .resolveAbsolutePath(path.join(externalRoot, "file.txt"))
+        ?.startsWith(path.resolve(externalRoot)),
+      true,
+    );
   });
 });

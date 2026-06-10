@@ -3,12 +3,14 @@
 Use `docs/context/` for saved context that is useful to keep around for a while but is not stable enough, local enough, or important enough to become package docs or feature docs.
 
 Good fits:
+
 - agent handoffs
 - research summaries on API shapes or feature feasibility
 - temporary planning context or todo lists
 - investigation notes worth revisiting later
 
 Bad fits:
+
 - durable package guidance
 - canonical feature intent
 - the only source of truth for current architecture

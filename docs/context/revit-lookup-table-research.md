@@ -257,23 +257,33 @@ That satisfies your “set multiple parameters at once” goal semantically, eve
 
 ```ts
 interface TableSchema {
-  name: string
-  transport: 'lookup' | 'typeCatalog'
-  columns: TableColumn[]
-  keyColumnCount?: number
+  name: string;
+  transport: "lookup" | "typeCatalog";
+  columns: TableColumn[];
+  keyColumnCount?: number;
 }
 
 interface TableColumn {
-  name: string
-  logicalType: 'number' | 'length' | 'area' | 'volume' | 'angle' | 'text' | 'bool' | 'int' | 'percent' | 'familyType'
-  revitStorageType: 'NUMBER' | 'LENGTH' | 'AREA' | 'VOLUME' | 'ANGLE' | 'OTHER'
-  unitToken?: string
-  role?: 'rowLabel' | 'lookupKey' | 'result'
+  name: string;
+  logicalType:
+    | "number"
+    | "length"
+    | "area"
+    | "volume"
+    | "angle"
+    | "text"
+    | "bool"
+    | "int"
+    | "percent"
+    | "familyType";
+  revitStorageType: "NUMBER" | "LENGTH" | "AREA" | "VOLUME" | "ANGLE" | "OTHER";
+  unitToken?: string;
+  role?: "rowLabel" | "lookupKey" | "result";
 }
 
 interface TableRow {
-  label: string
-  values: unknown[]
+  label: string;
+  values: unknown[];
 }
 ```
 
@@ -380,7 +390,7 @@ This proves one lookup key tuple can drive multiple dependent parameters.
 Add keys like:
 
 - entering_water_temperature
-n- mode / capacity step / watts / amps
+  n- mode / capacity step / watts / amps
 
 and result columns like:
 
