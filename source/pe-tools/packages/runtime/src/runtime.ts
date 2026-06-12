@@ -9,6 +9,13 @@ export interface RuntimeThreadSession {
   resourceId: string;
 }
 
+export interface RuntimeThreadInfo extends RuntimeThreadSession {
+  title?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface RuntimeSendMessageOptions {
   content: string;
   context?: RuntimeContextEntry[];
@@ -20,6 +27,9 @@ export interface RuntimeSendMessageOptions {
 export interface RuntimeSessions {
   createThreadSession(options?: { title?: string }): Promise<RuntimeThreadSession>;
   switchThread(options: { threadId: string }): Promise<void>;
+  listThreadSessions?(): Promise<RuntimeThreadInfo[]>;
+  deleteThreadSession?(options: { threadId: string }): Promise<void>;
+  getResourceId?(): string;
   sendMessage(options: RuntimeSendMessageOptions): Promise<void>;
   abort(): void;
   subscribe(listener: (event: RuntimeEvent) => void | Promise<void>): () => void;

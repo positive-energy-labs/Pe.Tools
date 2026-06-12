@@ -25,7 +25,6 @@ import {
 } from "../session/protocol-sessions.ts";
 import { describeRuntimeProtocolStatus } from "../protocol-status.ts";
 import type { RuntimeResource } from "../resources.ts";
-import { defaultRuntimeSessionRegistryPath } from "../session/session-registry.ts";
 import { sanitizeJson } from "../events.ts";
 import { RuntimeToAgUiEvents } from "./events-map-runtime-agui.ts";
 
@@ -39,7 +38,6 @@ export interface RuntimeAgUiRuntimeOptions {
 export interface RuntimeAgUiSessionOptions {
   defaultCwd?: string;
   manager?: RuntimeProtocolSessions;
-  registryPath?: string | null;
 }
 
 export interface RuntimeAgUiTransportOptions {
@@ -74,9 +72,7 @@ export class RuntimeAgUiAgent {
       options.sessions?.manager ??
       new RuntimeProtocolSessions({
         factory: runtimeFactory(options),
-        idPrefix: "runtime-agui",
         defaultCwd: defaultAgUiCwd(options),
-        sessionRegistryPath: agUiSessionRegistryPath(options),
       });
   }
 
@@ -138,12 +134,12 @@ export class RuntimeAgUiAgent {
     }
   }
 
-  sessions(): RuntimeProtocolSessionInfo[] {
+  async sessions(): Promise<RuntimeProtocolSessionInfo[]> {
     return this.runtimeSessions.listSessions({ protocol: "ag-ui" });
   }
 
   async closeThread(threadId: string): Promise<boolean> {
-    const session = this.sessionForThread(threadId);
+    const session = await this.sessionForThread(threadId);
     if (!session) return false;
     try {
       await this.runtimeSessions.close(session.id);
@@ -154,14 +150,14 @@ export class RuntimeAgUiAgent {
   }
 
   async deleteThread(threadId: string): Promise<boolean> {
-    const session = this.sessionForThread(threadId);
+    const session = await this.sessionForThread(threadId);
     if (!session) return false;
     await this.runtimeSessions.delete(session.id);
     return true;
   }
 
-  events(request: { threadId: string; afterSequence?: number }): BaseEvent[] {
-    const session = this.sessionForThread(request.threadId);
+  async events(request: { threadId: string; afterSequence?: number }): Promise<BaseEvent[]> {
+    const session = await this.sessionForThread(request.threadId);
     if (!session) return [];
 
     return this.runtimeSessions
@@ -183,22 +179,11 @@ export class RuntimeAgUiAgent {
     await this.runtimeSessions.closeAll();
   }
 
-  private sessionForThread(threadId: string): RuntimeProtocolSessionInfo | undefined {
-    return this.sessions().find((candidate) => candidate.externalThreadId === threadId);
+  private async sessionForThread(
+    threadId: string,
+  ): Promise<RuntimeProtocolSessionInfo | undefined> {
+    return (await this.sessions()).find((candidate) => candidate.externalThreadId === threadId);
   }
-}
-
-function agUiSessionRegistryPath(options: RuntimeAgUiAgentOptions): string | null | undefined {
-  if (options.sessions?.manager || runtimeOverride(options)) return undefined;
-  const registryPath = options.sessions?.registryPath;
-  if (registryPath === null) return null;
-  return (
-    registryPath ??
-    defaultRuntimeSessionRegistryPath({
-      runtimeId: runtimeDescriptor(options).id,
-      protocol: "ag-ui",
-    })
-  );
 }
 
 function agUiTransport(options: RuntimeAgUiAgentOptions): RuntimeAgUiTransportOptions {
@@ -265,7 +250,7 @@ export class RuntimeAgUiHttpAgent {
             transport: "http+sse",
             auth: runtimeAuthDescriptor(this.options),
             capabilities: this.agent.capabilities(),
-            sessions: this.agent.sessions().length,
+            sessions: (await this.agent.sessions()).length,
           }),
         ),
       );
@@ -274,7 +259,7 @@ export class RuntimeAgUiHttpAgent {
 
     if (url.pathname === "/agui/sessions") {
       response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ sessions: this.agent.sessions() }));
+      response.end(JSON.stringify({ sessions: await this.agent.sessions() }));
       return;
     }
 
@@ -317,7 +302,7 @@ export class RuntimeAgUiHttpAgent {
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(
         JSON.stringify({
-          events: this.agent.events({
+          events: await this.agent.events({
             threadId,
             afterSequence: parseOptionalSequence(url.searchParams.get("afterSequence")),
           }),

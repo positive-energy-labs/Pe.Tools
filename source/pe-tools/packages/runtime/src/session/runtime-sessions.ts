@@ -3,6 +3,7 @@ import { createRuntimeRequestContext, type RuntimeContextEntry } from "../contex
 import { MastraHarnessToRuntimeEvents } from "../events.ts";
 import type { RuntimeToolSource } from "../tool-metadata.ts";
 import type {
+  RuntimeThreadInfo,
   RuntimeSendMessageOptions,
   RuntimeSessions,
   RuntimeThreadSession,
@@ -71,6 +72,24 @@ export function createRuntimeSessions(
     async switchThread(options) {
       await ensureCompatSession();
       await harness.switchThread(options);
+    },
+    async listThreadSessions(): Promise<RuntimeThreadInfo[]> {
+      await ensureCompatSession();
+      return (await harness.listThreads()).map((thread) => ({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        title: thread.title,
+        createdAt: thread.createdAt.toISOString(),
+        updatedAt: thread.updatedAt.toISOString(),
+        metadata: thread.metadata,
+      }));
+    },
+    async deleteThreadSession(options) {
+      await ensureCompatSession();
+      await harness.memory.deleteThread(options);
+    },
+    getResourceId() {
+      return harness.getResourceId();
     },
     async sendMessage(options: RuntimeSendMessageOptions) {
       await ensureCompatSession();

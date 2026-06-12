@@ -12,13 +12,20 @@ import {
   createRuntimeResourceScope,
   type RuntimeResource,
 } from "../resources.ts";
-import type { RuntimeFactory, RuntimeHandle } from "../runtime.ts";
-import {
-  createRuntimeSessionRegistry,
-  type RuntimeSessionHistoryEntry,
-  type RuntimeSessionRecord,
-  type RuntimeSessionRegistry,
-} from "./session-registry.ts";
+import type { RuntimeFactory, RuntimeHandle, RuntimeThreadInfo } from "../runtime.ts";
+
+export type RuntimeSessionHistoryEntry =
+  | {
+      type: "prompt";
+      content: string;
+      createdAt: string;
+    }
+  | {
+      type: "protocol_event";
+      protocol: RuntimeProtocol;
+      payload: RuntimeJsonValue;
+      createdAt: string;
+    };
 
 export interface RuntimeProtocolSession {
   id: string;
@@ -42,10 +49,7 @@ export interface RuntimeProtocolSession {
 
 export interface RuntimeProtocolSessionsOptions {
   factory: RuntimeFactory;
-  idPrefix?: string;
   defaultCwd?: string;
-  sessionRegistry?: RuntimeSessionRegistry;
-  sessionRegistryPath?: string | null;
 }
 
 export interface RuntimeCreateProtocolSessionRequest {
@@ -79,44 +83,33 @@ export interface RuntimeProtocolSessionInfo {
 
 export class RuntimeProtocolSessions {
   private readonly factory: RuntimeFactory;
-  private readonly idPrefix: string;
-  private readonly registry?: RuntimeSessionRegistry;
   private readonly sessions = new Map<string, RuntimeProtocolSession>();
   private readonly externalThreadIndex = new Map<string, string>();
   private readonly inMemoryHistory = new Map<string, RuntimeSessionHistoryEntry[]>();
-  private readonly inMemoryRecords = new Map<string, RuntimeSessionRecord>();
-  private nextSessionNumber = 1;
 
   constructor(private readonly options: RuntimeProtocolSessionsOptions) {
     this.factory = options.factory;
-    this.idPrefix = options.idPrefix ?? `${this.factory.descriptor.id}-session`;
-    this.registry =
-      options.sessionRegistry ?? createRuntimeSessionRegistry(options.sessionRegistryPath);
-    this.nextSessionNumber = nextSessionNumber(this.idPrefix, this.registry?.list());
   }
 
   async createSession(
     request: RuntimeCreateProtocolSessionRequest,
   ): Promise<RuntimeProtocolSession> {
-    const id = this.nextId();
     const cwd = normalizeCwd(request.cwd ?? this.options.defaultCwd ?? process.cwd());
     const additionalDirectories = normalizeAdditionalDirectories(
       request.additionalDirectories ?? [],
     );
-    const title = request.title ?? `${request.protocol} ${id}`;
+    const title = request.title ?? `${request.protocol} session`;
     const runtime = await this.factory.create({
       cwd,
       workspaceRoot: cwd,
       additionalDirectories,
       protocol: request.protocol,
     });
-    const runtimeSession = await runtime.sessions.createThreadSession({
-      title,
-    });
+    const runtimeSession = await runtime.sessions.createThreadSession({ title });
     const now = new Date().toISOString();
 
     const session: RuntimeProtocolSession = {
-      id,
+      id: runtimeSession.threadId,
       protocol: request.protocol,
       cwd: runtime.workspace?.cwd ?? cwd,
       additionalDirectories,
@@ -135,14 +128,7 @@ export class RuntimeProtocolSessions {
       unsubscribe: () => undefined,
     };
 
-    this.sessions.set(session.id, session);
-    if (request.externalThreadId) {
-      this.externalThreadIndex.set(
-        externalThreadKey(request.protocol, request.externalThreadId),
-        id,
-      );
-    }
-    this.registry?.upsert(sessionRecord(session, this.factory.descriptor.id));
+    this.trackSession(session);
     return session;
   }
 
@@ -155,32 +141,24 @@ export class RuntimeProtocolSessions {
       protocol?: RuntimeProtocol;
     },
   ): Promise<RuntimeProtocolSession> {
-    const source = this.sourceSessionRecord(sourceId);
+    const source = await this.sourceSession(sourceId, {
+      cwd: request.cwd,
+      protocol: request.protocol,
+    });
     if (request.protocol && source.protocol !== request.protocol) {
       throw new Error(
         `Runtime session ${sourceId} belongs to protocol '${source.protocol}' and cannot fork as '${request.protocol}'.`,
-      );
-    }
-    const cwd = normalizeCwd(request.cwd);
-    if (normalizeCwd(source.cwd) !== cwd) {
-      throw new Error(
-        `Runtime session ${sourceId} was created for cwd '${source.cwd}' and cannot fork with cwd '${request.cwd}'.`,
       );
     }
 
     const sourceHistory = this.history(sourceId);
     const session = await this.createSession({
       protocol: source.protocol,
-      cwd,
+      cwd: request.cwd,
       additionalDirectories: request.additionalDirectories,
       title: request.title ?? `${source.title} fork`,
     });
-    if (sourceHistory.length > 0) {
-      if (this.registry) this.registry.replaceHistory(session.id, sourceHistory);
-      else this.inMemoryHistory.set(session.id, [...sourceHistory]);
-      session.restoredFromRegistry = true;
-    }
-    this.registry?.upsert(sessionRecord(session, this.factory.descriptor.id));
+    if (sourceHistory.length > 0) this.inMemoryHistory.set(session.id, [...sourceHistory]);
     return session;
   }
 
@@ -199,19 +177,7 @@ export class RuntimeProtocolSessions {
         additionalDirectories: request.additionalDirectories ?? existing.additionalDirectories,
       });
     }
-    const record = this.registry
-      ?.list({
-        runtimeId: this.factory.descriptor.id,
-        protocol: request.protocol,
-        externalThreadId: request.externalThreadId,
-      })
-      .at(0);
-    if (record) {
-      return this.resumeSession(record.id, {
-        ...request,
-        additionalDirectories: request.additionalDirectories ?? record.additionalDirectories,
-      });
-    }
+
     return this.createSession(request);
   }
 
@@ -248,40 +214,34 @@ export class RuntimeProtocolSessions {
       request.additionalDirectories ?? [],
     );
     session.updatedAt = new Date().toISOString();
-    this.registry?.upsert(sessionRecord(session, this.factory.descriptor.id));
     return session;
   }
 
-  listSessions(
+  async listSessions(
     filter: { cwd?: string | null; protocol?: RuntimeProtocol } = {},
-  ): RuntimeProtocolSessionInfo[] {
-    const cwd = filter.cwd ? normalizeCwd(filter.cwd) : undefined;
+  ): Promise<RuntimeProtocolSessionInfo[]> {
+    const cwd = normalizeCwd(filter.cwd ?? this.options.defaultCwd ?? process.cwd());
     const active = Array.from(this.sessions.values())
       .filter((session) => !filter.protocol || session.protocol === filter.protocol)
-      .filter((session) => !cwd || normalizeCwd(session.cwd) === cwd)
+      .filter((session) => normalizeCwd(session.cwd) === cwd)
       .map(sessionInfo);
     const activeIds = new Set(active.map((session) => session.id));
-    const inMemory =
-      this.registry == null
-        ? Array.from(this.inMemoryRecords.values())
-            .filter((record) => !activeIds.has(record.id))
-            .filter((record) => record.runtimeId === this.factory.descriptor.id)
-            .filter((record) => !filter.protocol || record.protocol === filter.protocol)
-            .filter((record) => !cwd || normalizeCwd(record.cwd) === cwd)
-            .map(recordInfo)
-        : [];
-    const persisted =
-      this.registry
-        ?.list({
-          runtimeId: this.factory.descriptor.id,
-          protocol: filter.protocol,
-          cwd,
-        })
-        .filter((record) => !activeIds.has(record.id))
-        .map(recordInfo) ?? [];
-    return [...active, ...inMemory, ...persisted].sort((left, right) =>
-      right.updatedAt.localeCompare(left.updatedAt),
-    );
+    const activeSession = active.at(0);
+    const runtime = activeSession
+      ? this.getSession(activeSession.id).runtime
+      : await this.createListRuntime(cwd, filter.protocol ?? "acp");
+
+    try {
+      const threads = (await runtime.sessions.listThreadSessions?.()) ?? [];
+      const listed = threads
+        .filter((thread) => !activeIds.has(thread.threadId))
+        .map((thread) => threadInfo(thread, { cwd, protocol: filter.protocol ?? "acp" }));
+      return [...active, ...listed].sort((left, right) =>
+        right.updatedAt.localeCompare(left.updatedAt),
+      );
+    } finally {
+      if (!activeSession) await runtime.close?.();
+    }
   }
 
   subscribe(id: string, listener: (event: RuntimeEvent) => void | Promise<void>): () => void {
@@ -304,14 +264,13 @@ export class RuntimeProtocolSessions {
   }
 
   history(id: string): RuntimeSessionHistoryEntry[] {
-    return this.registry?.history(id) ?? [...(this.inMemoryHistory.get(id) ?? [])];
+    return [...(this.inMemoryHistory.get(id) ?? [])];
   }
 
   recordResumeDecision(id: string, decision: RuntimeResumeDecision): void {
     const session = this.getSession(id);
     session.pendingResumeDecisions = [...session.pendingResumeDecisions, decision];
     session.updatedAt = new Date().toISOString();
-    this.registry?.upsert(sessionRecord(session, this.factory.descriptor.id));
   }
 
   async sendPrompt(
@@ -325,7 +284,6 @@ export class RuntimeProtocolSessions {
     session.cancelled = false;
     session.promptActive = true;
     session.updatedAt = new Date().toISOString();
-    const previousHistory = session.restoredFromRegistry ? this.history(id) : [];
     this.appendHistory(id, {
       type: "prompt",
       content: request.content,
@@ -334,14 +292,11 @@ export class RuntimeProtocolSessions {
     const consumedResumeDecisions = session.pendingResumeDecisions;
     const resumeDecisions = mergeResumeDecisions(consumedResumeDecisions, request.resumeDecisions);
     session.pendingResumeDecisions = [];
-    this.registry?.upsert(sessionRecord(session, this.factory.descriptor.id));
     try {
-      await session.runtime.sessions.switchThread({
-        threadId: session.threadId,
-      });
+      await session.runtime.sessions.switchThread({ threadId: session.threadId });
       await session.runtime.sessions.sendMessage({
         content: request.content,
-        context: createPromptContext(session, { ...request, resumeDecisions }, previousHistory),
+        context: createPromptContext(session, { ...request, resumeDecisions }),
         ...(resumeDecisions ? { resumeDecisions } : {}),
         protocol: session.protocol,
         protocolSessionId: session.id,
@@ -357,8 +312,6 @@ export class RuntimeProtocolSessions {
     } finally {
       session.promptActive = false;
       session.updatedAt = new Date().toISOString();
-      session.restoredFromRegistry = false;
-      this.registry?.upsert(sessionRecord(session, this.factory.descriptor.id));
     }
   }
 
@@ -367,7 +320,6 @@ export class RuntimeProtocolSessions {
     session.cancelled = true;
     session.updatedAt = new Date().toISOString();
     session.runtime.sessions.abort();
-    this.registry?.upsert(sessionRecord(session, this.factory.descriptor.id));
   }
 
   async close(id: string): Promise<void> {
@@ -381,10 +333,6 @@ export class RuntimeProtocolSessions {
         externalThreadKey(session.protocol, session.externalThreadId),
       );
     }
-    session.updatedAt = new Date().toISOString();
-    const record = sessionRecord(session, this.factory.descriptor.id);
-    if (this.registry) this.registry.upsert(record);
-    else this.inMemoryRecords.set(record.id, record);
     await session.runtime.close?.();
   }
 
@@ -393,27 +341,32 @@ export class RuntimeProtocolSessions {
   }
 
   async delete(id: string): Promise<void> {
-    if (this.sessions.has(id)) await this.close(id);
-    this.registry?.delete(id);
-    this.inMemoryRecords.delete(id);
+    const session = this.sessions.get(id);
+    if (session) {
+      await session.runtime.sessions.deleteThreadSession?.({ threadId: session.threadId });
+      await this.close(id);
+    } else {
+      const cwd = normalizeCwd(this.options.defaultCwd ?? process.cwd());
+      const runtime = await this.createListRuntime(cwd, "acp");
+      try {
+        await runtime.sessions.deleteThreadSession?.({ threadId: id });
+      } finally {
+        await runtime.close?.();
+      }
+    }
     this.inMemoryHistory.delete(id);
   }
 
-  private nextId(): string {
-    return `${this.idPrefix}-${this.nextSessionNumber++}`;
-  }
-
-  private sourceSessionRecord(id: string): RuntimeSessionRecord {
+  private async sourceSession(
+    id: string,
+    request: {
+      cwd?: string;
+      protocol?: RuntimeProtocol;
+    },
+  ): Promise<RuntimeProtocolSession> {
     const session = this.sessions.get(id);
-    if (session) return sessionRecord(session, this.factory.descriptor.id);
-
-    const record = this.registry?.get(id);
-    const inMemoryRecord = this.inMemoryRecords.get(id);
-    const source = record ?? inMemoryRecord;
-    if (!source || source.runtimeId !== this.factory.descriptor.id) {
-      throw new Error(`Unknown Runtime session: ${id}`);
-    }
-    return source;
+    if (session) return session;
+    return this.rehydrateSession(id, request);
   }
 
   private async rehydrateSession(
@@ -424,74 +377,60 @@ export class RuntimeProtocolSessions {
       protocol?: RuntimeProtocol;
     },
   ): Promise<RuntimeProtocolSession> {
-    const record = this.registry?.get(id) ?? this.inMemoryRecords.get(id);
-    if (!record || record.runtimeId !== this.factory.descriptor.id) {
-      throw new Error(`Unknown Runtime session: ${id}`);
-    }
-    if (request.protocol && record.protocol !== request.protocol) {
-      throw new Error(
-        `Runtime session ${id} belongs to protocol '${record.protocol}' and cannot resume as '${request.protocol}'.`,
-      );
-    }
-
-    const cwd = normalizeCwd(request.cwd ?? record.cwd);
-    if (normalizeCwd(record.cwd) !== cwd) {
-      throw new Error(
-        `Runtime session ${id} was created for cwd '${record.cwd}' and cannot resume with cwd '${request.cwd}'.`,
-      );
-    }
-
+    const cwd = normalizeCwd(request.cwd ?? this.options.defaultCwd ?? process.cwd());
     const additionalDirectories = normalizeAdditionalDirectories(
-      request.additionalDirectories ?? record.additionalDirectories,
+      request.additionalDirectories ?? [],
     );
+    const protocol = request.protocol ?? "acp";
     const runtime = await this.factory.create({
       cwd,
       workspaceRoot: cwd,
       additionalDirectories,
-      protocol: record.protocol,
+      protocol,
     });
-    const runtimeSession = await runtime.sessions.createThreadSession({
-      title: record.title,
-    });
+    await runtime.sessions.switchThread({ threadId: id });
+    const thread = (await runtime.sessions.listThreadSessions?.())?.find(
+      (candidate) => candidate.threadId === id,
+    );
     const now = new Date().toISOString();
     const session: RuntimeProtocolSession = {
-      id: record.id,
-      protocol: record.protocol,
+      id,
+      protocol,
       cwd: runtime.workspace?.cwd ?? cwd,
       additionalDirectories,
-      title: record.title,
+      title: thread?.title ?? `${protocol} session`,
       runtime,
-      threadId: runtimeSession.threadId,
-      resourceId: runtimeSession.resourceId,
-      externalThreadId: record.externalThreadId,
-      createdAt: record.createdAt,
-      updatedAt: now,
+      threadId: id,
+      resourceId: thread?.resourceId ?? runtime.sessions.getResourceId?.() ?? "",
+      createdAt: thread?.createdAt ?? now,
+      updatedAt: thread?.updatedAt ?? now,
       cancelled: false,
       promptActive: false,
-      pendingResumeDecisions: record.pendingResumeDecisions ?? [],
-      restoredFromRegistry: true,
+      pendingResumeDecisions: [],
+      restoredFromRegistry: false,
       emitQueue: Promise.resolve(),
       unsubscribe: () => undefined,
     };
 
+    this.trackSession(session);
+    return session;
+  }
+
+  private async createListRuntime(cwd: string, protocol: RuntimeProtocol): Promise<RuntimeHandle> {
+    return this.factory.create({ cwd, workspaceRoot: cwd, additionalDirectories: [], protocol });
+  }
+
+  private trackSession(session: RuntimeProtocolSession): void {
     this.sessions.set(session.id, session);
-    this.inMemoryRecords.delete(session.id);
     if (session.externalThreadId) {
       this.externalThreadIndex.set(
         externalThreadKey(session.protocol, session.externalThreadId),
         session.id,
       );
     }
-    this.registry?.upsert(sessionRecord(session, this.factory.descriptor.id));
-    return session;
   }
 
   private appendHistory(id: string, entry: RuntimeSessionHistoryEntry): void {
-    if (this.registry) {
-      this.registry.appendHistory(id, entry);
-      return;
-    }
-
     this.inMemoryHistory.set(id, [...(this.inMemoryHistory.get(id) ?? []), entry]);
   }
 }
@@ -499,7 +438,6 @@ export class RuntimeProtocolSessions {
 function createPromptContext(
   session: RuntimeProtocolSession,
   request: RuntimeSendProtocolPromptRequest,
-  restoredHistory: RuntimeSessionHistoryEntry[] = [],
 ): RuntimeContextEntry[] | undefined {
   const resourceEntries = createRuntimeResourceContextEntries({
     scope: createRuntimeResourceScope({
@@ -508,22 +446,8 @@ function createPromptContext(
     }),
     resources: request.resources,
   });
-  const restoredHistoryEntries =
-    restoredHistory.length > 0
-      ? [
-          {
-            description: "Restored protocol session history",
-            value: JSON.stringify(restoredHistory, null, 2),
-          },
-        ]
-      : [];
   const resumeEntries = createRuntimeResumeContextEntries(request.resumeDecisions);
-  const context = [
-    ...(request.context ?? []),
-    ...resourceEntries,
-    ...resumeEntries,
-    ...restoredHistoryEntries,
-  ];
+  const context = [...(request.context ?? []), ...resourceEntries, ...resumeEntries];
   return context.length > 0 ? context : undefined;
 }
 
@@ -543,38 +467,21 @@ export function sessionInfo(session: RuntimeProtocolSession): RuntimeProtocolSes
   };
 }
 
-function recordInfo(record: RuntimeSessionRecord): RuntimeProtocolSessionInfo {
+function threadInfo(
+  thread: RuntimeThreadInfo,
+  options: { cwd: string; protocol: RuntimeProtocol },
+): RuntimeProtocolSessionInfo {
   return {
-    id: record.id,
-    protocol: record.protocol,
-    cwd: record.cwd,
-    additionalDirectories: record.additionalDirectories,
-    title: record.title,
-    threadId: record.threadId ?? "",
-    resourceId: record.resourceId ?? "",
-    ...(record.externalThreadId ? { externalThreadId: record.externalThreadId } : {}),
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
+    id: thread.threadId,
+    protocol: options.protocol,
+    cwd: options.cwd,
+    additionalDirectories: [],
+    title: thread.title ?? `${options.protocol} session`,
+    threadId: thread.threadId,
+    resourceId: thread.resourceId,
+    createdAt: thread.createdAt ?? new Date(0).toISOString(),
+    updatedAt: thread.updatedAt ?? thread.createdAt ?? new Date(0).toISOString(),
     promptActive: false,
-  };
-}
-
-function sessionRecord(session: RuntimeProtocolSession, runtimeId: string): RuntimeSessionRecord {
-  return {
-    id: session.id,
-    runtimeId,
-    protocol: session.protocol,
-    cwd: normalizeCwd(session.cwd),
-    additionalDirectories: normalizeAdditionalDirectories(session.additionalDirectories),
-    title: session.title,
-    createdAt: session.createdAt,
-    updatedAt: session.updatedAt,
-    threadId: session.threadId,
-    resourceId: session.resourceId,
-    externalThreadId: session.externalThreadId,
-    ...(session.pendingResumeDecisions.length > 0
-      ? { pendingResumeDecisions: session.pendingResumeDecisions }
-      : {}),
   };
 }
 
@@ -599,20 +506,6 @@ function normalizeAdditionalDirectories(additionalDirectories: string[]): string
 
 function externalThreadKey(protocol: RuntimeProtocol, externalThreadId: string): string {
   return `${protocol}:${externalThreadId}`;
-}
-
-function nextSessionNumber(idPrefix: string, records: RuntimeSessionRecord[] | undefined): number {
-  if (!records || records.length === 0) return 1;
-  let max = 0;
-  for (const record of records) {
-    const match = new RegExp(`^${escapeRegExp(idPrefix)}-(\\d+)$`).exec(record.id);
-    if (match) max = Math.max(max, Number(match[1]));
-  }
-  return max + 1;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function sanitizeHistoryPayload(payload: unknown): RuntimeJsonValue {

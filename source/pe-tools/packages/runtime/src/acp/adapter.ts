@@ -42,6 +42,7 @@ import { toAcpAuthMethods } from "../auth/protocol.ts";
 import { sanitizeJson } from "../events.ts";
 import type { RuntimeDescriptor, RuntimeFactory } from "../runtime.ts";
 import { createRuntimePrompt, type RuntimePrompt } from "../prompts.ts";
+import type { RuntimeProtocolSessions } from "../session/protocol-sessions.ts";
 import {
   RuntimeAcpSessionStore,
   type AcpSession,
@@ -55,7 +56,7 @@ export interface RuntimeAcpRuntimeOptions {
 }
 
 export interface RuntimeAcpSessionOptions {
-  registryPath?: string | null;
+  manager?: RuntimeProtocolSessions;
 }
 
 export interface RuntimeAcpAgentOptions {
@@ -82,7 +83,7 @@ export interface RuntimeAcpAgentSessionStore {
     cwd: string;
     additionalDirectories?: string[];
   }): Promise<AcpSession>;
-  list(cwd?: string | null): NonNullable<ListSessionsResponse["sessions"]>;
+  list(cwd?: string | null): Promise<NonNullable<ListSessionsResponse["sessions"]>>;
   delete(sessionId: SessionId): Promise<void>;
   close(sessionId: SessionId): Promise<void>;
   closeAll?(): Promise<void>;
@@ -167,7 +168,7 @@ export class RuntimeAcpAgent implements Agent {
   }
 
   async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
-    return { sessions: this.sessions.list(params.cwd) };
+    return { sessions: await this.sessions.list(params.cwd) };
   }
 
   async resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
