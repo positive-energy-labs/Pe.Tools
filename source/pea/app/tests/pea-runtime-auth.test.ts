@@ -58,11 +58,23 @@ describe("Pea runtime auth", () => {
     try {
       const probe = await probeOpenAiAuth("api-key", false, authPath);
 
-      assert.deepEqual(probe, { isConfigured: true, source: "MastraCode auth.json" });
+      assert.deepEqual(probe, {
+        isConfigured: true,
+        source: "MastraCode auth.json",
+      });
       assert.equal(process.env.OPENAI_API_KEY, "stored-key");
-      const parsed = JSON.parse(await readFile(authPath, "utf-8")) as Record<string, unknown>;
-      assert.deepEqual(parsed["openai-codex"], { type: "api_key", key: "stored-key" });
-      assert.deepEqual(parsed["apikey:openai-codex"], { type: "api_key", key: "stored-key" });
+      const parsed = JSON.parse(await readFile(authPath, "utf-8")) as Record<
+        string,
+        unknown
+      >;
+      assert.deepEqual(parsed["openai-codex"], {
+        type: "api_key",
+        key: "stored-key",
+      });
+      assert.deepEqual(parsed["apikey:openai-codex"], {
+        type: "api_key",
+        key: "stored-key",
+      });
     } finally {
       if (originalProcessKey === undefined) {
         delete process.env.OPENAI_API_KEY;
@@ -98,7 +110,10 @@ describe("Pea runtime auth", () => {
         mastraAuthPath: authPath,
       });
 
-      const parsed = JSON.parse(await readFile(authPath, "utf-8")) as Record<string, unknown>;
+      const parsed = JSON.parse(await readFile(authPath, "utf-8")) as Record<
+        string,
+        unknown
+      >;
       assert.equal(parsed["openai-codex"], undefined);
       assert.equal(parsed["apikey:openai-codex"], undefined);
       assert.deepEqual(parsed.unrelated, { type: "api_key", key: "keep" });
@@ -113,12 +128,17 @@ describe("Pea runtime auth", () => {
   });
 
   it("describes OAuth auth and rejects unknown authenticate method ids", () => {
-    const auth = describePeaRuntimeAuth({ runtimeId: "dev-agent", authSource: "oauth" });
+    const auth = describePeaRuntimeAuth({
+      runtimeId: "peco",
+      authSource: "oauth",
+    });
 
     assert.deepEqual(toAgUiAuthCapabilities(auth), {
       "pea.authSource": "oauth",
       "pea.logoutSupported": false,
-      "pea.authMethods": [{ id: "codex-oauth", kind: "agent", name: "Codex OAuth" }],
+      "pea.authMethods": [
+        { id: "codex-oauth", kind: "agent", name: "Codex OAuth" },
+      ],
     });
     authenticatePeaRuntimeMethod(auth, "codex-oauth");
     assert.throws(

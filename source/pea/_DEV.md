@@ -1,4 +1,4 @@
-# pea Development Notes
+# pecoelopment Notes
 
 ## Mental Model
 

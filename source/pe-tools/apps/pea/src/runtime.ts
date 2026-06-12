@@ -1,17 +1,23 @@
 import path from "node:path";
 import { Agent } from "@mastra/core/agent";
 import type { MastraModelConfig } from "@mastra/core/llm";
+import { createInProcessAcpWorkbenchClient } from "@pe/acp-client";
+import { runWorkbenchTui } from "@pe/tui";
 import type { RequestContext } from "@mastra/core/request-context";
 import { LocalFilesystem, LocalSandbox, Workspace } from "@mastra/core/workspace";
 import {
+  createMastraCodeAuthStorageContext,
   createPeaCloudGatewayRuntimeAuthProfile,
   createPeaProductStateStorageProfile,
   createPeaRuntimeMemoryProfile,
+  createRuntimeAcpAgent,
   createRuntimeDescriptor,
   createRuntimeFactory,
   createRuntimeHarness,
   defaultPeaAgentModelId,
+  hasMastraCodeStoredAuth,
   resolveMastraCodeModel,
+  type MastraCodeAuthStorage,
   type RuntimeAuthProfile,
   type RuntimeMemoryProfile,
   type RuntimeCreateRequest,
@@ -36,7 +42,7 @@ export interface PeaRuntimeFactoryOptions<
   config: RuntimeHarnessConfig<TState>;
   descriptor?: RuntimeDescriptor;
   auth?: RuntimeAuthProfile;
-  authStorage?: unknown;
+  authStorage?: MastraCodeAuthStorage;
   metadata?: Record<string, unknown>;
   storageProfile?: RuntimeStorageProfile;
   memoryProfile?: RuntimeMemoryProfile<TState>;
@@ -96,8 +102,8 @@ export async function createPeaProtocolRuntimeFactory(
   options: PeaTuiRuntimeOptions = {},
 ): Promise<RuntimeFactory> {
   const cwd = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
-  const authStorage = await createMastraCodeAuthStorage();
-  loadStoredApiKeysIntoEnv(authStorage);
+  const authStorageContext = await createMastraCodeAuthStorageContext();
+  const authStorage = authStorageContext.storage;
 
   const agent = new Agent({
     id: "pea-agent",
@@ -136,9 +142,14 @@ export async function createPeaProtocolRuntimeFactory(
         configDir: ".pea",
         bundledSkillCount: bundledPeaSkills.length,
       },
-      modelAuthChecker: (provider) => (hasStoredAuth(authStorage, provider) ? true : undefined),
+      modelAuthChecker: (provider) =>
+        hasMastraCodeStoredAuth(authStorage, provider) ? true : undefined,
     },
     authStorage,
+    metadata: {
+      authStorageSource: authStorageContext.source,
+      authStorageApiKeyProviders: Object.keys(authStorageContext.apiKeyEnvVars),
+    },
   });
 }
 
@@ -155,15 +166,13 @@ export async function createPeaTuiRuntime(
 }
 
 export async function runPeaTui(options: PeaTuiRuntimeOptions = {}): Promise<void> {
-  const runtime = await createPeaTuiRuntime(options);
-  const { MastraTUI } = await import("mastracode/tui");
-  const tui = new MastraTUI({
-    harness: runtime.harness,
-    authStorage: runtime.authStorage as never,
-    appName: "pea",
-    version: "0.1.0",
-  });
-  await tui.run();
+  const cwd = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
+  const factory = await createPeaProtocolRuntimeFactory(options);
+  const client = createInProcessAcpWorkbenchClient(
+    (connection) => createRuntimeAcpAgent(connection, { runtime: { factory } }),
+    { clientName: "Pea", clientVersion: "0.1.0" },
+  );
+  await runWorkbenchTui({ client, cwd, title: "Pea" });
 }
 
 export function createPeaRuntimeAuthProfile(
@@ -198,34 +207,6 @@ function resolveCurrentModel(
     remapForCodexOAuth: true,
     requestContext,
   });
-}
-
-async function createMastraCodeAuthStorage(): Promise<unknown> {
-  const module = (await import("mastracode")) as {
-    createAuthStorage(): unknown;
-  };
-  return module.createAuthStorage();
-}
-
-function loadStoredApiKeysIntoEnv(authStorage: unknown): void {
-  const storage = authStorage as {
-    loadStoredApiKeysIntoEnv?: (providers: Record<string, string>) => void;
-  };
-  storage.loadStoredApiKeysIntoEnv?.({
-    anthropic: "ANTHROPIC_API_KEY",
-    openai: "OPENAI_API_KEY",
-    google: "GOOGLE_GENERATIVE_AI_API_KEY",
-    groq: "GROQ_API_KEY",
-    xai: "XAI_API_KEY",
-  });
-}
-
-function hasStoredAuth(authStorage: unknown, provider: string): boolean {
-  const storage = authStorage as {
-    hasStoredApiKey?: (provider: string) => boolean;
-    isLoggedIn?: (provider: string) => boolean;
-  };
-  return Boolean(storage.hasStoredApiKey?.(provider) || storage.isLoggedIn?.(provider));
 }
 
 function isThinkingLevel(value: unknown): value is "off" | "low" | "medium" | "high" | "xhigh" {

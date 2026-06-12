@@ -211,6 +211,18 @@ Audit consequence: do not assume every upstream `@mastra/core/harness` type name
 | P3       | Subagent start/text/end are dropped while inner tools are visible. | Add custom subagent activity events if users need to audit subagent behavior beyond tool calls.                                                                                             |
 | P3       | Plan approval resolution is dropped.                               | Emit plan state after approval/rejection so clients can clear pending plan UI deterministically.                                                                                            |
 
+## Workbench Extension Metadata Decision
+
+Current decision: Pea workbench-only data should ride ACP extensibility metadata, not new ACP top-level fields. Namespaced Mastra Harness / OM / debug / inspector / model / thread facts belong under ACP `_meta["pe.tools/workbench.update"]`, then project into `@pe/agent-projection` retained state. This keeps the ACP wire shape spec-compatible while preserving Pea-specific transparency for first-party UIs.
+
+Use this path for data that is UI-relevant but not native ACP protocol state: raw workbench debug events, observational-memory lifecycle markers, system-prompt/context/raw-message inspector snapshots, model picker state, and retained thread/history summaries. Keep native ACP fields authoritative when ACP already has a concept, such as message chunks, tool calls, plans, permissions, session info, and current session mode.
+
+Primary source paths for the current implementation:
+
+- `source/pe-tools/packages/agent-contracts/src/index.ts`
+- `source/pe-tools/packages/agent-projection/src/index.ts`
+- `source/pe-tools/packages/acp-client/src/index.ts`
+
 ## Bottom Line
 
 The current Pea adapters are already deep where beta auditability matters most: assistant text, tool lifecycle, raw tool input/result, shell output, plans/tasks, subagent inner tools, and AG-UI interrupt outcomes.

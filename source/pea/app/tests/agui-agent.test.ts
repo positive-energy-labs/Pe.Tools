@@ -22,10 +22,16 @@ describe("AG-UI agent", () => {
       onSendMessage: (listener) => {
         listener(assistantDelta("assistant-1", "hello"));
         listener(assistantDelta("assistant-1", " world"));
-        listener({ type: "assistant_message_finished", messageId: "assistant-1" });
+        listener({
+          type: "assistant_message_finished",
+          messageId: "assistant-1",
+        });
       },
     });
-    const agent = new PeaAgUiAgent({ runtime: "pea", runtimeOverride: runtime });
+    const agent = new PeaAgUiAgent({
+      runtime: "pea",
+      runtimeOverride: runtime,
+    });
     const events: BaseEvent[] = [];
 
     await agent.run(runInput(), (event) => events.push(event));
@@ -81,7 +87,10 @@ describe("AG-UI agent", () => {
 
   it("reuses the mapped Pea runtime session for later AG-UI runs on the same thread", async () => {
     const runtime = fakeRuntime();
-    const agent = new PeaAgUiAgent({ runtime: "dev-agent", runtimeOverride: runtime });
+    const agent = new PeaAgUiAgent({
+      runtime: "peco",
+      runtimeOverride: runtime,
+    });
 
     await agent.run(runInput(), () => undefined);
     await agent.run({ ...runInput(), runId: "run-2" }, () => undefined);
@@ -96,14 +105,19 @@ describe("AG-UI agent", () => {
   });
 
   it("persists AG-UI event history and injects it after thread rehydration", async () => {
-    const temp = mkdtempSync(path.join(os.tmpdir(), "pea-agui-thread-history-"));
+    const temp = mkdtempSync(
+      path.join(os.tmpdir(), "pea-agui-thread-history-"),
+    );
     const registryPath = path.join(temp, "sessions.json");
 
     try {
       const firstRuntime = fakeRuntime({
         onSendMessage: (listener) => {
           listener(assistantDelta("assistant-1", "first answer"));
-          listener({ type: "assistant_message_finished", messageId: "assistant-1" });
+          listener({
+            type: "assistant_message_finished",
+            messageId: "assistant-1",
+          });
         },
       });
       const firstSessions = new PeaRuntimeProtocolSessions({
@@ -143,7 +157,8 @@ describe("AG-UI agent", () => {
       );
 
       const restoredHistory = secondRuntime.sent[0]?.context?.find(
-        (entry) => entry.description === "Pea restored protocol session history",
+        (entry) =>
+          entry.description === "Pea restored protocol session history",
       );
       assert.ok(restoredHistory);
       assert.match(restoredHistory.value, /hello from ag-ui/);
@@ -161,7 +176,10 @@ describe("AG-UI agent", () => {
 
   it("forwards AG-UI multimodal input parts as Pea runtime resources", async () => {
     const runtime = fakeRuntime();
-    const agent = new PeaAgUiAgent({ runtime: "pea", runtimeOverride: runtime });
+    const agent = new PeaAgUiAgent({
+      runtime: "pea",
+      runtimeOverride: runtime,
+    });
 
     await agent.run(
       {
@@ -201,7 +219,11 @@ describe("AG-UI agent", () => {
       mimeType: "image/png",
       source: {
         type: "image",
-        source: { type: "url", value: "file:///C:/repo/sheet.png", mimeType: "image/png" },
+        source: {
+          type: "url",
+          value: "file:///C:/repo/sheet.png",
+          mimeType: "image/png",
+        },
         metadata: { page: 1 },
       },
       metadata: { page: 1 },
@@ -212,7 +234,10 @@ describe("AG-UI agent", () => {
 
   it("uses AG-UI forwarded Pea runtime scope without prompt-widening control metadata", async () => {
     const runtime = fakeRuntime();
-    const agent = new PeaAgUiAgent({ runtime: "pea", runtimeOverride: runtime });
+    const agent = new PeaAgUiAgent({
+      runtime: "pea",
+      runtimeOverride: runtime,
+    });
 
     await agent.run(runInput(), () => undefined);
     await agent.run(
@@ -266,7 +291,9 @@ describe("AG-UI agent", () => {
     );
     assert.deepEqual(JSON.parse(resourceEntry?.value ?? "{}").inScope, true);
     const forwardedPropsEntry = runtime.sent[1]?.context?.find(
-      (entry) => entry.description === "AG-UI forwarded properties supplied by the client",
+      (entry) =>
+        entry.description ===
+        "AG-UI forwarded properties supplied by the client",
     );
     assert.deepEqual(JSON.parse(forwardedPropsEntry?.value ?? "{}"), {
       visiblePanel: "families",
@@ -275,7 +302,10 @@ describe("AG-UI agent", () => {
 
   it("normalizes AG-UI resume decisions through the Pea runtime interrupt contract", async () => {
     const runtime = fakeRuntime();
-    const agent = new PeaAgUiAgent({ runtime: "pea", runtimeOverride: runtime });
+    const agent = new PeaAgUiAgent({
+      runtime: "pea",
+      runtimeOverride: runtime,
+    });
 
     await agent.run(
       {
@@ -311,7 +341,8 @@ describe("AG-UI agent", () => {
     ]);
     assert.equal(
       runtime.sent[0]?.context?.some(
-        (entry) => entry.description === "AG-UI resume decisions supplied by the client",
+        (entry) =>
+          entry.description === "AG-UI resume decisions supplied by the client",
       ),
       false,
     );
@@ -331,7 +362,10 @@ describe("AG-UI agent", () => {
         listener({ type: "run_finished", reason: "suspended" });
       },
     });
-    const agent = new PeaAgUiAgent({ runtime: "pea", runtimeOverride: runtime });
+    const agent = new PeaAgUiAgent({
+      runtime: "pea",
+      runtimeOverride: runtime,
+    });
     const events: BaseEvent[] = [];
 
     await agent.run(runInput(), (event) => events.push(event));
@@ -375,7 +409,10 @@ describe("AG-UI agent", () => {
   });
 
   it("advertises AG-UI interrupt support and resumable event replay", () => {
-    const agent = new PeaAgUiAgent({ runtime: "pea", runtimeOverride: fakeRuntime() });
+    const agent = new PeaAgUiAgent({
+      runtime: "pea",
+      runtimeOverride: fakeRuntime(),
+    });
 
     const capabilities = agent.capabilities();
 
@@ -390,7 +427,10 @@ describe("AG-UI agent", () => {
     const runtime = fakeRuntime({
       onSendMessage: (listener) => {
         listener(assistantDelta("assistant-1", "done"));
-        listener({ type: "assistant_message_finished", messageId: "assistant-1" });
+        listener({
+          type: "assistant_message_finished",
+          messageId: "assistant-1",
+        });
       },
     });
     const server = new PeaAgUiHttpAgent({
@@ -416,7 +456,10 @@ describe("AG-UI agent", () => {
       assert.equal(statusJson.capabilities.transport.streaming, true);
       assert.equal(statusJson.capabilities.custom["pea.authSource"], "api-key");
       assert.equal(statusJson.capabilities.custom["pea.logoutSupported"], true);
-      assert.equal(statusJson.capabilities.custom["pea.authMethods"][0].id, "openai-api-key");
+      assert.equal(
+        statusJson.capabilities.custom["pea.authMethods"][0].id,
+        "openai-api-key",
+      );
 
       const response = await fetch(info.runUrl, {
         method: "POST",
@@ -446,7 +489,9 @@ describe("AG-UI agent", () => {
       assert.equal(sessionsJson.sessions.length, 1);
       assert.equal(sessionsJson.sessions[0].externalThreadId, "ag-thread-1");
 
-      const replay = await fetch(`${info.eventsUrl}&threadId=ag-thread-1&afterSequence=3`);
+      const replay = await fetch(
+        `${info.eventsUrl}&threadId=ag-thread-1&afterSequence=3`,
+      );
       assert.equal(replay.status, 200);
       const replayJson = await replay.json();
       assert.deepEqual(
@@ -483,20 +528,29 @@ describe("AG-UI agent", () => {
       assert.equal(response.status, 200);
       await response.text();
 
-      const close = await fetch(agUiUrl(info, "/agui/sessions/ag-thread-1/close"), {
-        method: "POST",
-      });
+      const close = await fetch(
+        agUiUrl(info, "/agui/sessions/ag-thread-1/close"),
+        {
+          method: "POST",
+        },
+      );
       assert.equal(close.status, 200);
       assert.deepEqual(await close.json(), { ok: true });
       assert.equal((await fetch(info.sessionsUrl)).status, 200);
       const afterClose = await (await fetch(info.sessionsUrl)).json();
       assert.equal(afterClose.sessions[0]?.externalThreadId, "ag-thread-1");
 
-      const preflight = await fetch(agUiUrl(info, "/agui/sessions/ag-thread-1"), {
-        method: "OPTIONS",
-      });
+      const preflight = await fetch(
+        agUiUrl(info, "/agui/sessions/ag-thread-1"),
+        {
+          method: "OPTIONS",
+        },
+      );
       assert.equal(preflight.status, 204);
-      assert.match(preflight.headers.get("access-control-allow-methods") ?? "", /\bDELETE\b/);
+      assert.match(
+        preflight.headers.get("access-control-allow-methods") ?? "",
+        /\bDELETE\b/,
+      );
 
       const deleted = await fetch(agUiUrl(info, "/agui/sessions/ag-thread-1"), {
         method: "DELETE",
@@ -557,11 +611,17 @@ describe("AG-UI agent", () => {
     const info = await server.start();
 
     try {
-      assert.equal((await fetch(stripToken(info.logoutUrl), { method: "POST" })).status, 401);
+      assert.equal(
+        (await fetch(stripToken(info.logoutUrl), { method: "POST" })).status,
+        401,
+      );
       const logout = await fetch(info.logoutUrl, { method: "POST" });
       assert.equal(logout.status, 200);
       assert.deepEqual(await logout.json(), { ok: true });
-      const parsed = JSON.parse(readFileSync(authPath, "utf-8")) as Record<string, unknown>;
+      const parsed = JSON.parse(readFileSync(authPath, "utf-8")) as Record<
+        string,
+        unknown
+      >;
       assert.equal(parsed["openai-codex"], undefined);
       assert.deepEqual(parsed.unrelated, { type: "api_key", key: "keep" });
       assert.equal(process.env.OPENAI_API_KEY, undefined);
@@ -600,7 +660,9 @@ function agUiUrl(info: { statusUrl: string }, path: string): string {
 }
 
 function fakeRuntime(
-  options: { onSendMessage?: (listener: (event: PeaRuntimeEvent) => void) => void } = {},
+  options: {
+    onSendMessage?: (listener: (event: PeaRuntimeEvent) => void) => void;
+  } = {},
 ) {
   const listeners: Array<(event: PeaRuntimeEvent) => void> = [];
   const calls: string[] = [];
@@ -633,7 +695,10 @@ function fakeRuntime(
       },
     },
   };
-  return runtime as unknown as PeaRuntime & { calls: string[]; sent: SentMessage[] };
+  return runtime as unknown as PeaRuntime & {
+    calls: string[];
+    sent: SentMessage[];
+  };
 }
 
 function fakeFactory(runtime: PeaRuntime) {

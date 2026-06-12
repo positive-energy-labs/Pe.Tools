@@ -12,7 +12,7 @@ import type { PeaRuntimePrompt } from "../pea-runtime-prompts.js";
 
 describe("Pea ACP adapter", () => {
   it("advertises runtime identity and close-session support", async () => {
-    const agent = new PeaAcpAgent({ runtime: "dev-agent" }, fakeSessionStore());
+    const agent = new PeaAcpAgent({ runtime: "peco" }, fakeSessionStore());
 
     const response = await agent.initialize({
       protocolVersion: 1,
@@ -21,7 +21,7 @@ describe("Pea ACP adapter", () => {
     });
 
     assert.equal(response.protocolVersion, 1);
-    assert.equal(response.agentInfo?.name, "Pe.Tools dev-agent");
+    assert.equal(response.agentInfo?.name, "Pe.Tools peco");
     assert.deepEqual(response.authMethods, [
       {
         type: "env_var",
@@ -42,18 +42,33 @@ describe("Pea ACP adapter", () => {
     assert.deepEqual(response.agentCapabilities?.auth, {});
     assert.equal(response.agentCapabilities?.auth?.logout, undefined);
     assert.equal(response.agentCapabilities?.loadSession, true);
-    assert.deepEqual(response.agentCapabilities?.sessionCapabilities?.additionalDirectories, {});
-    assert.deepEqual(response.agentCapabilities?.sessionCapabilities?.close, {});
+    assert.deepEqual(
+      response.agentCapabilities?.sessionCapabilities?.additionalDirectories,
+      {},
+    );
+    assert.deepEqual(
+      response.agentCapabilities?.sessionCapabilities?.close,
+      {},
+    );
     assert.deepEqual(response.agentCapabilities?.sessionCapabilities?.list, {});
-    assert.deepEqual(response.agentCapabilities?.sessionCapabilities?.resume, {});
-    assert.deepEqual(response.agentCapabilities?.sessionCapabilities?.delete, {});
+    assert.deepEqual(
+      response.agentCapabilities?.sessionCapabilities?.resume,
+      {},
+    );
+    assert.deepEqual(
+      response.agentCapabilities?.sessionCapabilities?.delete,
+      {},
+    );
     assert.deepEqual(response.agentCapabilities?.sessionCapabilities?.fork, {});
-    assert.equal(response.agentCapabilities?.promptCapabilities?.embeddedContext, true);
+    assert.equal(
+      response.agentCapabilities?.promptCapabilities?.embeddedContext,
+      true,
+    );
   });
 
   it("advertises OAuth when selected and validates ACP authenticate method ids", async () => {
     const agent = new PeaAcpAgent(
-      { runtime: "dev-agent", authSource: "oauth" },
+      { runtime: "peco", authSource: "oauth" },
       fakeSessionStore(),
     );
     const response = await agent.initialize({
@@ -67,7 +82,7 @@ describe("Pea ACP adapter", () => {
         id: "codex-oauth",
         name: "Codex OAuth",
         description:
-          "Use the runtime-managed Codex OAuth credential already stored for the Pea/dev-agent process.",
+          "Use the runtime-managed Codex OAuth credential already stored for the Pea/peco process.",
       },
     ]);
     assert.deepEqual(await agent.authenticate({ methodId: "codex-oauth" }), {});
@@ -89,12 +104,20 @@ describe("Pea ACP adapter", () => {
   });
 
   it("creates sessions with runtime modes and forwards prompts", async () => {
-    const prompts: Array<{ sessionId: SessionId; prompt: PeaRuntimePrompt }> = [];
-    const createRequests: Array<{ cwd: string; additionalDirectories?: string[] }> = [];
+    const prompts: Array<{ sessionId: SessionId; prompt: PeaRuntimePrompt }> =
+      [];
+    const createRequests: Array<{
+      cwd: string;
+      additionalDirectories?: string[];
+    }> = [];
     const store = fakeSessionStore({
       async createSession(request) {
         createRequests.push(request);
-        return { id: "session-1", cwd: request.cwd, threadId: "thread-1" } as unknown as AcpSession;
+        return {
+          id: "session-1",
+          cwd: request.cwd,
+          threadId: "thread-1",
+        } as unknown as AcpSession;
       },
       async prompt(sessionId, prompt) {
         prompts.push({ sessionId, prompt });
@@ -111,13 +134,19 @@ describe("Pea ACP adapter", () => {
     assert.equal(session.sessionId, "session-1");
     assert.equal(session.modes?.currentModeId, "pea");
     assert.equal(session.modes?.availableModes[0]?.name, "Pea");
-    assert.deepEqual(createRequests, [{ cwd: "C:/repo", additionalDirectories: ["C:/shared"] }]);
+    assert.deepEqual(createRequests, [
+      { cwd: "C:/repo", additionalDirectories: ["C:/shared"] },
+    ]);
 
     const prompt = await agent.prompt({
       sessionId: "session-1",
       prompt: [
         { type: "text", text: "inspect this" },
-        { type: "resource_link", uri: "file:///C:/repo/README.md", name: "README.md" },
+        {
+          type: "resource_link",
+          uri: "file:///C:/repo/README.md",
+          name: "README.md",
+        },
       ],
     });
 
@@ -126,7 +155,8 @@ describe("Pea ACP adapter", () => {
       {
         sessionId: "session-1",
         prompt: {
-          content: "inspect this\n\nResource: README.md\nfile:///C:/repo/README.md",
+          content:
+            "inspect this\n\nResource: README.md\nfile:///C:/repo/README.md",
           resources: [
             {
               id: "acp:1:resource-link",
@@ -146,7 +176,7 @@ describe("Pea ACP adapter", () => {
     const cancelled: SessionId[] = [];
     const closed: SessionId[] = [];
     const agent = new PeaAcpAgent(
-      { runtime: "dev-agent" },
+      { runtime: "peco" },
       fakeSessionStore({
         cancel(sessionId) {
           cancelled.push(sessionId);
@@ -191,10 +221,13 @@ describe("Pea ACP adapter", () => {
 
   it("lists, resumes and deletes active sessions through the session store", async () => {
     const deleted: SessionId[] = [];
-    const resumed: Array<{ sessionId: SessionId; cwd?: string; additionalDirectories?: string[] }> =
-      [];
+    const resumed: Array<{
+      sessionId: SessionId;
+      cwd?: string;
+      additionalDirectories?: string[];
+    }> = [];
     const agent = new PeaAcpAgent(
-      { runtime: "dev-agent" },
+      { runtime: "peco" },
       fakeSessionStore({
         async resume(request) {
           resumed.push(request);
@@ -205,7 +238,9 @@ describe("Pea ACP adapter", () => {
           } as unknown as AcpSession;
         },
         list() {
-          return [{ sessionId: "session-1", cwd: "C:/repo", title: "ACP dev-agent" }];
+          return [
+            { sessionId: "session-1", cwd: "C:/repo", title: "ACP peco" },
+          ];
         },
         delete(sessionId) {
           deleted.push(sessionId);
@@ -215,7 +250,7 @@ describe("Pea ACP adapter", () => {
 
     const list = await agent.listSessions?.({ cwd: "C:/repo" });
     assert.deepEqual(list?.sessions, [
-      { sessionId: "session-1", cwd: "C:/repo", title: "ACP dev-agent" },
+      { sessionId: "session-1", cwd: "C:/repo", title: "ACP peco" },
     ]);
 
     const resume = await agent.resumeSession?.({
@@ -224,9 +259,13 @@ describe("Pea ACP adapter", () => {
       additionalDirectories: ["C:/shared"],
       mcpServers: [],
     });
-    assert.equal(resume?.modes?.currentModeId, "dev-agent");
+    assert.equal(resume?.modes?.currentModeId, "peco");
     assert.deepEqual(resumed, [
-      { sessionId: "session-1", cwd: "C:/repo", additionalDirectories: ["C:/shared"] },
+      {
+        sessionId: "session-1",
+        cwd: "C:/repo",
+        additionalDirectories: ["C:/shared"],
+      },
     ]);
 
     await agent.deleteSession?.({ sessionId: "session-1" });
@@ -234,10 +273,13 @@ describe("Pea ACP adapter", () => {
   });
 
   it("loads sessions through the session store", async () => {
-    const loaded: Array<{ sessionId: SessionId; cwd: string; additionalDirectories?: string[] }> =
-      [];
+    const loaded: Array<{
+      sessionId: SessionId;
+      cwd: string;
+      additionalDirectories?: string[];
+    }> = [];
     const agent = new PeaAcpAgent(
-      { runtime: "dev-agent" },
+      { runtime: "peco" },
       fakeSessionStore({
         async load(request) {
           loaded.push(request);
@@ -257,17 +299,24 @@ describe("Pea ACP adapter", () => {
       mcpServers: [],
     });
 
-    assert.equal(response?.modes?.currentModeId, "dev-agent");
+    assert.equal(response?.modes?.currentModeId, "peco");
     assert.deepEqual(loaded, [
-      { sessionId: "session-1", cwd: "C:/repo", additionalDirectories: ["C:/shared"] },
+      {
+        sessionId: "session-1",
+        cwd: "C:/repo",
+        additionalDirectories: ["C:/shared"],
+      },
     ]);
   });
 
   it("forks sessions through the session store", async () => {
-    const forked: Array<{ sessionId: SessionId; cwd: string; additionalDirectories?: string[] }> =
-      [];
+    const forked: Array<{
+      sessionId: SessionId;
+      cwd: string;
+      additionalDirectories?: string[];
+    }> = [];
     const agent = new PeaAcpAgent(
-      { runtime: "dev-agent" },
+      { runtime: "peco" },
       fakeSessionStore({
         async fork(request) {
           forked.push(request);
@@ -288,9 +337,13 @@ describe("Pea ACP adapter", () => {
     });
 
     assert.equal(response?.sessionId, "session-2");
-    assert.equal(response?.modes?.currentModeId, "dev-agent");
+    assert.equal(response?.modes?.currentModeId, "peco");
     assert.deepEqual(forked, [
-      { sessionId: "session-1", cwd: "C:/repo", additionalDirectories: ["C:/fork"] },
+      {
+        sessionId: "session-1",
+        cwd: "C:/repo",
+        additionalDirectories: ["C:/fork"],
+      },
     ]);
   });
 });
@@ -300,20 +353,36 @@ function fakeSessionStore(
 ): PeaAcpAgentSessionStore {
   return {
     async createSession(request) {
-      return { id: "session-1", cwd: request.cwd, threadId: "thread-1" } as unknown as AcpSession;
+      return {
+        id: "session-1",
+        cwd: request.cwd,
+        threadId: "thread-1",
+      } as unknown as AcpSession;
     },
     async prompt() {
       return "end_turn";
     },
     cancel() {},
     async resume() {
-      return { id: "session-1", cwd: "C:/repo", threadId: "thread-1" } as unknown as AcpSession;
+      return {
+        id: "session-1",
+        cwd: "C:/repo",
+        threadId: "thread-1",
+      } as unknown as AcpSession;
     },
     async load() {
-      return { id: "session-1", cwd: "C:/repo", threadId: "thread-1" } as unknown as AcpSession;
+      return {
+        id: "session-1",
+        cwd: "C:/repo",
+        threadId: "thread-1",
+      } as unknown as AcpSession;
     },
     async fork() {
-      return { id: "session-2", cwd: "C:/repo", threadId: "thread-2" } as unknown as AcpSession;
+      return {
+        id: "session-2",
+        cwd: "C:/repo",
+        threadId: "thread-2",
+      } as unknown as AcpSession;
     },
     list() {
       return [];
