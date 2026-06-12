@@ -17,99 +17,8 @@
   ],
   "type": "module",
   "exports": {
-    ".": {
-      "types": "./src/index.ts",
-      "import": "./src/index.ts"
-    },
-    "./package.json": "./package.json",
-    "./runtime": {
-      "types": "./src/runtime.ts",
-      "import": "./src/runtime.ts"
-    },
-    "./events": {
-      "types": "./src/events.ts",
-      "import": "./src/events.ts"
-    },
-    "./context": {
-      "types": "./src/context.ts",
-      "import": "./src/context.ts"
-    },
-    "./tool-metadata": {
-      "types": "./src/tool-metadata.ts",
-      "import": "./src/tool-metadata.ts"
-    },
-    "./auth/types": {
-      "types": "./src/auth/types.ts",
-      "import": "./src/auth/types.ts"
-    },
-    "./auth/methods": {
-      "types": "./src/auth/methods.ts",
-      "import": "./src/auth/methods.ts"
-    },
-    "./auth/profiles": {
-      "types": "./src/auth/profiles.ts",
-      "import": "./src/auth/profiles.ts"
-    },
-    "./auth/protocol": {
-      "types": "./src/auth/protocol.ts",
-      "import": "./src/auth/protocol.ts"
-    },
-    "./models/mastra-gateway": {
-      "types": "./src/models/mastra-gateway.ts",
-      "import": "./src/models/mastra-gateway.ts"
-    },
-    "./storage/profiles": {
-      "types": "./src/storage/profiles.ts",
-      "import": "./src/storage/profiles.ts"
-    },
-    "./memory/profiles": {
-      "types": "./src/memory/profiles.ts",
-      "import": "./src/memory/profiles.ts"
-    },
-    "./harness/create-runtime-harness": {
-      "types": "./src/harness/create-runtime-harness.ts",
-      "import": "./src/harness/create-runtime-harness.ts"
-    },
-    "./session/runtime-sessions": {
-      "types": "./src/session/runtime-sessions.ts",
-      "import": "./src/session/runtime-sessions.ts"
-    },
-    "./session/protocol-sessions": {
-      "types": "./src/session/protocol-sessions.ts",
-      "import": "./src/session/protocol-sessions.ts"
-    },
-    "./acp/agent": {
-      "types": "./src/acp/agent.ts",
-      "import": "./src/acp/agent.ts"
-    },
-    "./acp/adapter": {
-      "types": "./src/acp/adapter.ts",
-      "import": "./src/acp/adapter.ts"
-    },
-    "./acp/runtime-client": {
-      "types": "./src/acp/runtime-client.ts",
-      "import": "./src/acp/runtime-client.ts"
-    },
-    "./acp/events-map-runtime-acp": {
-      "types": "./src/acp/events-map-runtime-acp.ts",
-      "import": "./src/acp/events-map-runtime-acp.ts"
-    },
-    "./acp/cli": {
-      "types": "./src/acp/cli.ts",
-      "import": "./src/acp/cli.ts"
-    },
-    "./agui/events-map-runtime-agui": {
-      "types": "./src/agui/events-map-runtime-agui.ts",
-      "import": "./src/agui/events-map-runtime-agui.ts"
-    },
-    "./agui/agent": {
-      "types": "./src/agui/agent.ts",
-      "import": "./src/agui/agent.ts"
-    },
-    "./agui/cli": {
-      "types": "./src/agui/cli.ts",
-      "import": "./src/agui/cli.ts"
-    }
+    ".": "./dist/index.mjs",
+    "./package.json": "./package.json"
   },
   "publishConfig": {
     "access": "public"
@@ -127,6 +36,7 @@
     "@mastra/core": "1.41.0",
     "@mastra/libsql": "1.12.1",
     "@mastra/memory": "1.20.2",
+    "@pe/agent-contracts": "workspace:*",
     "@pe/host-client": "workspace:*",
     "mastracode": "^0.22.2"
   },

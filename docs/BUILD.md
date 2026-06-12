@@ -156,16 +156,18 @@ Pack targets:
 
 ```powershell
 dotnet run --project .\build\Build.csproj -c Release -- pack desktop --configuration Release.R25
+dotnet run --project .\build\Build.csproj -c Release -- pack pea
 dotnet run --project .\build\Build.csproj -c Release -- pack installer --configuration Release.R25
 dotnet run --project .\build\Build.csproj -c Release -- pack automation
 dotnet run --project .\build\Build.csproj -c Release -- pack all
 ```
 
-`pack` with no explicit target is equivalent to `pack all`. `pack installer` also creates the Pea payload because the MSI embeds it.
+`pack` with no explicit target is equivalent to `pack all`. `pack pea` builds only the installed Pea payload package so it can be proved without compiling Revit add-ins or creating an MSI. `pack installer` also creates the Pea payload because the MSI embeds it.
 
 Package outputs:
 
 - Desktop bundle: `.artifacts/packages/bundles/Pe.App.bundle.zip`
+- Pea payload: `.artifacts/packages/pea/Pe.Tools.pea.<version>.zip` plus `.json` manifest
 - Design Automation appbundle: `.artifacts/packages/automation/Pe.Dev.RevitAutomation.Worker.<year>.appbundle.zip`
 - Installer: `.artifacts/packages/installers/*.msi`
 
@@ -191,6 +193,24 @@ Key local roots:
 
 Do not validate installed behavior against the dev host root. MSI upgrades intentionally replace the installed host runtime tree under `bin\host`; installer cleanup must never target `dev\bin\host`.
 
+Installed Pea payloads are versioned under `bin\pea\versions\<version>`. The launcher contract is:
+
+```text
+bin\pea\
+  pea.cmd
+  current.txt
+  versions\<version>\
+    bun.exe
+    app\installed-main.js
+    node_modules\@opentui\core-win32-x64\...
+    node_modules\@duckdb\node-bindings-win32-x64\...
+    bin\napi-v6\win32\x64\...
+```
+
+The payload is a Bun-targeted bundle plus explicit native sidecars, not a package-manager install. Build machines need Bun and the `source/pe-tools` dependency store available, but end-user machines do not run `pnpm install`, `pnpm deploy`, or dependency resolution. `pea.cmd` runs the selected version's `bun.exe app\installed-main.js`.
+
+Package/artifact proof for `pack pea` is NoRrdContact. It proves archive shape and portable light CLI behavior, such as `--help` and host-operation contract search from a temp root. It does not prove AttachedRrd behavior, FreshRevitProcess behavior, installed MSI registration, or full TUI rendering freshness.
+
 ### PATH-visible CLI decision
 
 `pea` is the product/operator CLI and `peco` is the repo/dev coding-agent CLI. In the source-linked dev lane, both are PATH-visible launcher commands under the installed-shaped `bin\pea` root, but they execute TypeScript sources from `source/pe-tools/apps` instead of an installer payload.
@@ -199,6 +219,7 @@ The clean source-linked CLI model is:
 
 - Bare `pea` launches the Pea Revit/operator agent TUI from `source/pe-tools/apps/pea/src/main.ts`.
 - Bare `peco` launches the Peco repo coding-agent TUI from `source/pe-tools/apps/pe-code/src/main.ts`.
+- OpenTUI native renderer launch must use Bun in the source-linked lane. Node `tsx` can import OpenTUI, but `createCliRenderer()` needs native FFI and fails on current Node runtimes without Node 26.3+ experimental FFI flags.
 - `pea <subcommand> ...` stays available for product/operator commands such as `host` and `script`.
 - `peco <subcommand> ...` stays available for repo/dev commands such as `live`, `script`, and `talk-to-pea`.
 - `pea --installed ...` is the explicit installed-lane selector. Use it in installed-lane validation and scripts where ambiguity would be expensive.
@@ -244,13 +265,13 @@ Do not use a dev command to rewrite the installed-shaped `pea` payload selection
 Generated contracts are projections, not hand-maintained source.
 
 ```powershell
-pe-dev codegen check
 pe-dev codegen sync --target build
 pe-dev codegen sync --target host-types
 pe-dev codegen sync --target host-client
+pe-dev codegen sync --target product
 ```
 
-`check` is for verification/CI-style flows. `sync` updates generated projections. Host DTO TypeScript is generated through `pe-dev`/TypeGen and normalized for NodeNext `.js` imports; do not run `dotnet-typegen` or maintain `tgconfig.json` by hand.
+`sync` updates generated projections and formats affected TypeScript packages. Host DTO TypeScript is generated through `pe-dev`/TypeGen and normalized for NodeNext `.js` imports; do not run `dotnet-typegen` or maintain `tgconfig.json` by hand.
 
 The build tool also exposes:
 
@@ -311,10 +332,10 @@ The automation shell is `Pe.Dev.RevitAutomation.Worker`, not desktop `Pe.App`. D
 | Package artifacts/MSI             | `dotnet run --project .\build\Build.csproj -c Release -- pack`                                                                        |
 | Package one year                  | `dotnet run --project .\build\Build.csproj -c Release -- pack --configuration Release.R25`                                            |
 | Package desktop bundle only       | `dotnet run --project .\build\Build.csproj -c Release -- pack desktop --configuration Release.R25`                                    |
+| Package Pea payload only          | `dotnet run --project .\build\Build.csproj -c Release -- pack pea`                                                                    |
 | Package installer only            | `dotnet run --project .\build\Build.csproj -c Release -- pack installer --configuration Release.R25`                                  |
 | Package automation appbundle only | `dotnet run --project .\build\Build.csproj -c Release -- pack automation`                                                             |
 | Publish GitHub release artifacts  | `dotnet run --project .\build\Build.csproj -c Release -- pack publish`                                                                |
 | Link source `pea` dev lane        | `pe-dev pea link-dev`, then `peco` or `pea --dev ...`                                                                              |
 | Validate installed `pea` lane     | `pea --installed ...`                                                                                                                 |
-| Generated contract check          | `pe-dev codegen check`                                                                                                                |
 | Generated contract update         | `pe-dev codegen sync --target <target>`                                                                                               |

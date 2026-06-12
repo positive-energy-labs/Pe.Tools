@@ -3,7 +3,9 @@ namespace Pe.Shared.Product;
 public static class PeaCliIdentity {
     public const string DirectoryName = ProductPathNames.PeaDirectoryName;
     public const string LauncherName = "pea.cmd";
-    public const string NodeExecutableName = "node.exe";
+    public const string BunExecutableName = "bun.exe";
+    public const string AppDirectoryName = "app";
+    public const string InstalledMainFileName = "installed-main.js";
     public const string CurrentVersionFileName = "current.txt";
     public const string DevSourceFileName = "dev-source.txt";
     public const string VersionsDirectoryName = "versions";

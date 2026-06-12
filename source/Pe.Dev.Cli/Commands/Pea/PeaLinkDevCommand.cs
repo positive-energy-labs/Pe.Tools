@@ -35,21 +35,54 @@ internal static class PeaLinkDevCommand {
 
         var installedRuntime = ProductRuntimeLayout.ForCurrentUser();
         Directory.CreateDirectory(installedRuntime.Binaries.PeaDirectoryPath);
-        File.WriteAllText(installedRuntime.Binaries.PeaLauncherPath, PeaLauncherContent.Create("pea"));
+        File.WriteAllText(installedRuntime.Binaries.PeaLauncherPath, CreateBatchContent("pea"));
         File.WriteAllText(
             Path.Combine(installedRuntime.Binaries.PeaDirectoryPath, PecoLauncherName),
-            PeaLauncherContent.Create("peco")
+            CreateBatchContent("peco")
         );
         File.WriteAllText(
             Path.Combine(installedRuntime.Binaries.PeaDirectoryPath, PeaCliIdentity.DevSourceFileName),
             repoRoot
         );
 
+        var launcherDirectory = installedRuntime.Binaries.PeaDirectoryPath;
+        Environment.SetEnvironmentVariable(
+            "PATH",
+            PrependPathEntry(launcherDirectory, Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User) ?? string.Empty),
+            EnvironmentVariableTarget.User
+        );
+        Environment.SetEnvironmentVariable(
+            "PATH",
+            PrependPathEntry(launcherDirectory, Environment.GetEnvironmentVariable("PATH") ?? string.Empty),
+            EnvironmentVariableTarget.Process
+        );
+
         Console.WriteLine($"pea/peco source linked to '{repoRoot}'.");
         Console.WriteLine($"PATH-visible pea launcher updated at '{installedRuntime.Binaries.PeaLauncherPath}'.");
         Console.WriteLine($"PATH-visible peco launcher updated at '{Path.Combine(installedRuntime.Binaries.PeaDirectoryPath, PecoLauncherName)}'.");
+        Console.WriteLine($"User PATH now prefers '{launcherDirectory}'.");
+        Console.WriteLine("Open a new terminal if this shell still resolves an older global pea/peco shim.");
         Console.WriteLine("Use `pea` or `peco` for source-linked agent TUIs.");
         Console.WriteLine("Use `pea --installed ...` for the installed payload.");
         return 0;
     }
+
+    private static string CreateBatchContent(string commandName) =>
+        PeaLauncherContent.Create(commandName).ReplaceLineEndings("\r\n");
+
+    private static string PrependPathEntry(string entry, string pathValue) {
+        var normalizedEntry = NormalizePath(entry);
+        var preservedEntries = SplitPath(pathValue).Where(pathEntry => !IsSamePath(pathEntry, normalizedEntry));
+        return string.Join(Path.PathSeparator, preservedEntries.Prepend(normalizedEntry));
+    }
+
+    private static IEnumerable<string> SplitPath(string pathValue) =>
+        pathValue.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static bool IsSamePath(string left, string right) =>
+        string.Equals(NormalizePath(left), NormalizePath(right), StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizePath(string path) =>
+        Path.GetFullPath(Environment.ExpandEnvironmentVariables(path))
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 }

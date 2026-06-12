@@ -34,9 +34,14 @@ internal static class DevCliProgram {
         }
 
         if (!parseResult.Success || parseResult.Options is null) {
-            if (!string.IsNullOrWhiteSpace(parseResult.ErrorMessage)) Console.Error.WriteLine(parseResult.ErrorMessage);
-            if (parseResult.ShowUsage) Console.Error.WriteLine(UsageText);
-            return parseResult.ShowUsage && string.IsNullOrWhiteSpace(parseResult.ErrorMessage) ? 0 : 10;
+            if (!string.IsNullOrWhiteSpace(parseResult.ErrorMessage)) {
+                Console.Error.WriteLine(parseResult.ErrorMessage);
+                if (parseResult.ShowUsage) Console.Error.WriteLine(UsageText);
+                return 10;
+            }
+
+            if (parseResult.ShowUsage) Console.WriteLine(UsageText);
+            return 0;
         }
 
         return await RootCommandRunner.RunAsync(parseResult.Options, cancellationToken);
