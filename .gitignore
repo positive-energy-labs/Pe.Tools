@@ -12,6 +12,7 @@ riderModule.iml
 # TS excludes
 node_modules
 dist
+dist-installed
 dist-ssr
 *.local
 .DS_Store

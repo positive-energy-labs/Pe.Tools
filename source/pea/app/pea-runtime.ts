@@ -15,12 +15,12 @@ export {
   createPeaDev,
   createPeCodeRuntime,
   createPeCodeRuntimeFactory,
-} from "./pe-code-runtime.js";
+} from "./peco-runtime.js";
 export type {
   DevAgentOptions,
   DevAgentRuntime,
   DevAgentRuntimeWorkspace,
-} from "./pe-code-runtime.js";
+} from "./peco-runtime.js";
 
 export {
   createDevAgentResourceId,
@@ -49,4 +49,4 @@ export type {
   PeaRuntimeTools,
 } from "./runtime-common.js";
 
-export type PeaRuntimeId = "pea" | "pe-code";
+export type PeaRuntimeId = "pea" | "peco";

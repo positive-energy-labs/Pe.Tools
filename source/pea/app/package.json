@@ -7,7 +7,7 @@
     "pea": "pnpm --dir ../../pe-tools --filter @pe/pea pea",
     "start": "pnpm --dir ../../pe-tools --filter @pe/pea pea",
     "agent": "pnpm --dir ../../pe-tools --filter @pe/pea pea -- agent",
-    "dev-agent": "pnpm --dir ../../pe-tools --filter @pe/pe-code pe-code",
+    "peco": "pnpm --dir ../../pe-tools --filter @pe/peco peco",
     "status": "pnpm --dir ../../pe-tools --filter @pe/pea pea -- host status",
     "bootstrap": "pnpm --dir ../../pe-tools --filter @pe/pea pea -- script bootstrap",
     "execute": "pnpm --dir ../../pe-tools --filter @pe/pea pea -- script execute",

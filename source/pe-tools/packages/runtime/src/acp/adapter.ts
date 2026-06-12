@@ -27,6 +27,11 @@ import type {
   SetSessionModeResponse,
 } from "@agentclientprotocol/sdk";
 import {
+  createPeWorkbenchExtension,
+  peWorkbenchMetadata,
+  type PeWorkbenchExtension,
+} from "@pe/agent-contracts";
+import {
   authenticateRuntimeMethod,
   createRuntimeAuthDescriptor,
   logoutRuntimeAuth,
@@ -104,7 +109,10 @@ export class RuntimeAcpAgent implements Agent {
     this.sessions.configureClient?.(_params.clientCapabilities);
     const descriptor = runtimeDescriptor(this.options);
     const auth = runtimeAuthDescriptor(this.options);
+    const extension = runtimeAcpWorkbenchExtension(this.options);
+    const extensionMetadata = peWorkbenchMetadata(extension);
     const agentCapabilities: InitializeResponse["agentCapabilities"] = {
+      _meta: extensionMetadata,
       auth: auth.logoutSupported ? { logout: {} } : {},
       promptCapabilities: {
         embeddedContext: true,
@@ -122,6 +130,7 @@ export class RuntimeAcpAgent implements Agent {
 
     return {
       protocolVersion: 1,
+      _meta: extensionMetadata,
       agentInfo: {
         name: descriptor.agentName,
         title: descriptor.title,
@@ -280,6 +289,34 @@ export function acpPrompt(prompt: PromptRequest["prompt"]): RuntimePrompt {
       }
     }),
   );
+}
+
+export function runtimeAcpWorkbenchExtension(
+  options: RuntimeAcpAgentOptions,
+): PeWorkbenchExtension {
+  const descriptor = runtimeAcpDescriptor(options);
+  return createPeWorkbenchExtension({
+    runtime: {
+      id: descriptor.id,
+      name: descriptor.agentName,
+      title: descriptor.title,
+      description: descriptor.description,
+    },
+    capabilities: {
+      threads: true,
+      history: true,
+      toolCalls: true,
+      approvals: true,
+      approveAlways: true,
+      plans: true,
+      rawToolIO: true,
+      modelSwitching: true,
+      sessionModes: true,
+      config: false,
+      observationalMemory: true,
+      systemPromptInspection: true,
+    },
+  });
 }
 
 export function runtimeAcpFactory(options: RuntimeAcpAgentOptions): RuntimeFactory {

@@ -1,0 +1,36 @@
+{
+  "name": "@pe/acp-client",
+  "version": "0.0.0",
+  "description": "ACP client adapter for Pe.Tools workbench shells.",
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vp pack",
+    "dev": "vp pack --watch",
+    "test": "vp test",
+    "check": "vp check",
+    "prepublishOnly": "vp run build"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "^0.25.0",
+    "@pe/agent-contracts": "workspace:*",
+    "@pe/agent-projection": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "@typescript/native-preview": "7.0.0-dev.20260509.2",
+    "bumpp": "^11.1.0",
+    "typescript": "^6.0.3",
+    "vite-plus": "catalog:"
+  }
+}

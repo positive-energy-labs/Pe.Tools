@@ -3,7 +3,11 @@ import path from "node:path";
 import { Agent } from "@mastra/core/agent";
 import type { MastraModelConfig } from "@mastra/core/llm";
 import type { RequestContext } from "@mastra/core/request-context";
-import { LocalFilesystem, LocalSandbox, Workspace } from "@mastra/core/workspace";
+import {
+  LocalFilesystem,
+  LocalSandbox,
+  Workspace,
+} from "@mastra/core/workspace";
 import {
   createMastraCodeStorageProfile,
   createOpenAiRuntimeAuthProfile,
@@ -27,7 +31,8 @@ import { instructions } from "./instructions.ts";
 import { ensureDevAgentProjectFiles } from "./project-files.ts";
 
 export const peCodeRuntimeToolProfile = peCodeToolsRuntimeToolProfile;
-export const defaultPeCodeRuntimeToolProfile: RuntimeToolProfile = peCodeRuntimeToolProfile;
+export const defaultPeCodeRuntimeToolProfile: RuntimeToolProfile =
+  peCodeRuntimeToolProfile;
 export const defaultPeCodeRuntimeToolCatalog = peCodeRuntimeToolProfile.catalog;
 
 export interface PeCodeRuntimeFactoryOptions<
@@ -41,7 +46,9 @@ export interface PeCodeRuntimeFactoryOptions<
   storageProfile?: RuntimeStorageProfile;
   memoryProfile?: RuntimeMemoryProfile<TState>;
   toolProfile?: RuntimeToolProfile;
-  createHandle?: (request: RuntimeCreateRequest) => Promise<RuntimeHandle<TState>>;
+  createHandle?: (
+    request: RuntimeCreateRequest,
+  ) => Promise<RuntimeHandle<TState>>;
 }
 
 export interface PeCodeTuiRuntimeOptions {
@@ -62,8 +69,10 @@ export function createPeCodeRuntimeFactory<
       description: "Pe.Tools repo coding agent.",
     });
   const auth = options.auth ?? createPeCodeRuntimeAuthProfile();
-  const storageProfile = options.storageProfile ?? createMastraCodeStorageProfile();
-  const memoryProfile = options.memoryProfile ?? createPeCodeRuntimeMemoryProfile<TState>();
+  const storageProfile =
+    options.storageProfile ?? createMastraCodeStorageProfile();
+  const memoryProfile =
+    options.memoryProfile ?? createPeCodeRuntimeMemoryProfile<TState>();
   const toolProfile = options.toolProfile ?? peCodeRuntimeToolProfile;
 
   return createRuntimeFactory(
@@ -96,7 +105,9 @@ export function createPeCodeRuntimeFactory<
 export async function createPeCodeProtocolRuntimeFactory(
   options: PeCodeTuiRuntimeOptions = {},
 ): Promise<RuntimeFactory> {
-  const startPath = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
+  const startPath = path.resolve(
+    options.workspaceRoot ?? options.cwd ?? process.cwd(),
+  );
   const cwd = await resolveDevAgentProjectRoot(startPath);
   const authStorage = await createMastraCodeAuthStorage();
   loadStoredApiKeysIntoEnv(authStorage);
@@ -108,7 +119,8 @@ export async function createPeCodeProtocolRuntimeFactory(
     name: "Pe.Tools Dev Agent",
     description: "Pe.Tools repo coding agent.",
     instructions,
-    model: ({ requestContext }) => resolveCurrentModel(requestContext, defaultModelId),
+    model: ({ requestContext }) =>
+      resolveCurrentModel(requestContext, defaultModelId),
     tools: peCodeRuntimeToolProfile.tools,
   });
   const workspace = new Workspace({
@@ -142,7 +154,8 @@ export async function createPeCodeProtocolRuntimeFactory(
         yolo: true,
         configDir: ".mastracode",
       },
-      modelAuthChecker: (provider) => (hasStoredAuth(authStorage, provider) ? true : undefined),
+      modelAuthChecker: (provider) =>
+        hasStoredAuth(authStorage, provider) ? true : undefined,
     },
     authStorage,
   });
@@ -151,7 +164,9 @@ export async function createPeCodeProtocolRuntimeFactory(
 export async function createPeCodeTuiRuntime(
   options: PeCodeTuiRuntimeOptions = {},
 ): Promise<RuntimeHandle> {
-  const startPath = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
+  const startPath = path.resolve(
+    options.workspaceRoot ?? options.cwd ?? process.cwd(),
+  );
   const cwd = await resolveDevAgentProjectRoot(startPath);
   const factory = await createPeCodeProtocolRuntimeFactory(options);
   return factory.create({
@@ -161,7 +176,9 @@ export async function createPeCodeTuiRuntime(
   });
 }
 
-export async function runPeCodeTui(options: PeCodeTuiRuntimeOptions = {}): Promise<void> {
+export async function runPeCodeTui(
+  options: PeCodeTuiRuntimeOptions = {},
+): Promise<void> {
   const runtime = await createPeCodeTuiRuntime(options);
   const { MastraTUI } = await import("mastracode/tui");
   const tui = new MastraTUI({
@@ -181,7 +198,8 @@ export function createPeCodeRuntimeAuthProfile(
 ): RuntimeAuthProfile {
   return createOpenAiRuntimeAuthProfile({
     ...options,
-    apiKeyDescription: "Use OPENAI_API_KEY or stored peco API-key credentials for model access.",
+    apiKeyDescription:
+      "Use OPENAI_API_KEY or stored peco API-key credentials for model access.",
   });
 }
 
@@ -192,7 +210,9 @@ async function resolveDevAgentProjectRoot(startPath: string): Promise<string> {
     const entries = await readDirectoryEntries(current);
     if (
       entries.some(
-        (entry) => entry.isFile() && (entry.name.endsWith(".slnx") || entry.name.endsWith(".sln")),
+        (entry) =>
+          entry.isFile() &&
+          (entry.name.endsWith(".slnx") || entry.name.endsWith(".sln")),
       )
     )
       return current;
@@ -260,10 +280,14 @@ function hasStoredAuth(authStorage: unknown, provider: string): boolean {
     hasStoredApiKey?: (provider: string) => boolean;
     isLoggedIn?: (provider: string) => boolean;
   };
-  return Boolean(storage.hasStoredApiKey?.(provider) || storage.isLoggedIn?.(provider));
+  return Boolean(
+    storage.hasStoredApiKey?.(provider) || storage.isLoggedIn?.(provider),
+  );
 }
 
-function isThinkingLevel(value: unknown): value is "off" | "low" | "medium" | "high" | "xhigh" {
+function isThinkingLevel(
+  value: unknown,
+): value is "off" | "low" | "medium" | "high" | "xhigh" {
   return (
     value === "off" ||
     value === "low" ||

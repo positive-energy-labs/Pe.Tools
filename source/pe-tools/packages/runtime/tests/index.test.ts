@@ -1,16 +1,22 @@
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { MastraCompositeStore } from "@mastra/core/storage";
 import { LibSQLStore } from "@mastra/libsql";
 import { expect, test } from "vite-plus/test";
 import {
   createMastraGatewayRouterModel,
   createPeaCloudGatewayRuntimeAuthProfile,
   createRuntimeDescriptor,
+  createRuntimeHarness,
+  defaultMastraCodeApiKeyEnvVars,
+  hasMastraCodeStoredAuth,
+  loadStoredMastraCodeApiKeysIntoEnv,
   createRuntimeLibSqlStorage,
   createRuntimeMemoryOptions,
   RuntimeProtocolSessions,
   type RuntimeFactory,
   type RuntimeHandle,
+  type RuntimeHarnessConfig,
 } from "../src/index.ts";
 
 test("exports runtime contracts", () => {
@@ -31,6 +37,24 @@ test("describes Pea Cloud Gateway auth without provider keys by default", () => 
     gateway: "mastra",
     gatewayAuthority: "pea-cloud",
   });
+});
+
+test("centralizes MastraCode auth storage env mapping and provider checks", () => {
+  let loadedProviders: Record<string, string> | undefined;
+  const authStorage = {
+    loadStoredApiKeysIntoEnv: (providers: Record<string, string>) => {
+      loadedProviders = providers;
+    },
+    hasStoredApiKey: (provider: string) => provider === "openai",
+    isLoggedIn: (provider: string) => provider === "anthropic",
+  };
+
+  loadStoredMastraCodeApiKeysIntoEnv(authStorage);
+
+  expect(loadedProviders).toEqual(defaultMastraCodeApiKeyEnvVars);
+  expect(hasMastraCodeStoredAuth(authStorage, "openai")).toBe(true);
+  expect(hasMastraCodeStoredAuth(authStorage, "anthropic")).toBe(true);
+  expect(hasMastraCodeStoredAuth(authStorage, "groq")).toBe(false);
 });
 
 test("creates a Mastra Gateway model router", () => {
@@ -66,6 +90,24 @@ test("creates LibSQL storage without eager init", async () => {
       Object.defineProperty(LibSQLStore.prototype, "init", originalInitDescriptor);
     }
   }
+});
+
+test("initializes runtime harness storage unless init is explicitly disabled", async () => {
+  const initializedStorage = createInitSpyStorage(false);
+  const disabledStorage = createInitSpyStorage(true);
+
+  const initializedRuntime = await createRuntimeHarness({
+    config: createStorageInitHarnessConfig(initializedStorage.storage),
+  });
+  const disabledRuntime = await createRuntimeHarness({
+    config: createStorageInitHarnessConfig(disabledStorage.storage),
+  });
+
+  expect(initializedStorage.initCalls()).toBe(1);
+  expect(disabledStorage.initCalls()).toBe(0);
+
+  await initializedRuntime.close?.();
+  await disabledRuntime.close?.();
 });
 
 test("merges observational memory model options without conflicting top-level model", () => {
@@ -128,6 +170,36 @@ test("closes protocol session runtimes during close, delete, and closeAll", asyn
   expect(closeCalls).toEqual([closed.threadId, deleted.threadId, first.threadId, second.threadId]);
   expect(sessions.listSessions()).toHaveLength(3);
 });
+
+function createInitSpyStorage(disableInit: boolean): {
+  storage: MastraCompositeStore;
+  initCalls: () => number;
+} {
+  let initCalls = 0;
+  return {
+    storage: {
+      disableInit,
+      init: () => {
+        initCalls += 1;
+      },
+      close: () => undefined,
+    } as unknown as MastraCompositeStore,
+    initCalls: () => initCalls,
+  };
+}
+
+function createStorageInitHarnessConfig(storage: MastraCompositeStore): RuntimeHarnessConfig {
+  return {
+    id: "storage-init-test",
+    storage,
+    modes: [
+      {
+        id: "test",
+        agent: (() => ({})) as unknown as RuntimeHarnessConfig["modes"][number]["agent"],
+      },
+    ],
+  };
+}
 
 function createTestRuntimeHandle(closeCalls: string[]): RuntimeHandle {
   const threadId = `thread-${closeCalls.length + 1}`;

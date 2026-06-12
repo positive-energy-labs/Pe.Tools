@@ -3,9 +3,18 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
-import type { RequestPermissionRequest, SessionUpdate } from "@agentclientprotocol/sdk";
-import { PeaAcpSessionStore, resolvePeaAcpRuntimeRequest } from "../acp/acp-session-store.js";
-import type { PeaAnyRuntime, PeaRuntimeFactory } from "../pea-runtime-factory.js";
+import type {
+  RequestPermissionRequest,
+  SessionUpdate,
+} from "@agentclientprotocol/sdk";
+import {
+  PeaAcpSessionStore,
+  resolvePeaAcpRuntimeRequest,
+} from "../acp/acp-session-store.js";
+import type {
+  PeaAnyRuntime,
+  PeaRuntimeFactory,
+} from "../pea-runtime-factory.js";
 import type { PeaRuntimeEvent } from "../pea-runtime-events.js";
 import { PeaRuntimeProtocolSessions } from "../pea-runtime-protocol-sessions.js";
 
@@ -31,14 +40,17 @@ describe("Pea ACP session store", () => {
     assert.equal(request.options.workspaceRoot, "C:/Pea/ProductHome");
   });
 
-  it("uses ACP cwd as the dev-agent workspace default", () => {
+  it("uses ACP cwd as the peco workspace default", () => {
     const request = resolvePeaAcpRuntimeRequest(
-      { runtime: "dev-agent", modelId: "openai/gpt-5.5" },
+      { runtime: "peco", modelId: "openai/gpt-5.5" },
       "C:/Users/kaitp/source/repos/Pe.Tools",
     );
 
-    assert.equal(request.runtime, "dev-agent");
-    assert.equal(request.options.workspaceRoot, "C:/Users/kaitp/source/repos/Pe.Tools");
+    assert.equal(request.runtime, "peco");
+    assert.equal(
+      request.options.workspaceRoot,
+      "C:/Users/kaitp/source/repos/Pe.Tools",
+    );
     assert.equal(request.options.modelId, "openai/gpt-5.5");
   });
 
@@ -47,7 +59,7 @@ describe("Pea ACP session store", () => {
     const permissionRequests: RequestPermissionRequest[] = [];
     const sent: Array<{ resumeDecisions?: unknown }> = [];
     const runtimeSessions = new PeaRuntimeProtocolSessions({
-      runtime: "dev-agent",
+      runtime: "peco",
       idPrefix: "test",
       factory: fakeFactory(
         (listener) =>
@@ -69,7 +81,7 @@ describe("Pea ACP session store", () => {
           updates.push(params.update);
         },
       },
-      { runtime: "dev-agent", runtimeSessions },
+      { runtime: "peco", runtimeSessions },
       {
         async requestPermission(params) {
           permissionRequests.push(params);
@@ -130,14 +142,14 @@ describe("Pea ACP session store", () => {
     const registryPath = path.join(temp, "sessions.json");
     try {
       const runtimeSessions = new PeaRuntimeProtocolSessions({
-        runtime: "dev-agent",
+        runtime: "peco",
         idPrefix: "test",
         factory: fakeFactory(),
         sessionRegistryPath: registryPath,
       });
       const store = new PeaAcpSessionStore(
         { sessionUpdate() {} },
-        { runtime: "dev-agent", runtimeSessions },
+        { runtime: "peco", runtimeSessions },
       );
       const session = await store.createSession({ cwd: "C:/repo" });
 
@@ -157,7 +169,7 @@ describe("Pea ACP session store", () => {
     try {
       const firstUpdates: SessionUpdate[] = [];
       const firstRuntimeSessions = new PeaRuntimeProtocolSessions({
-        runtime: "dev-agent",
+        runtime: "peco",
         idPrefix: "test",
         factory: fakeFactory((listener) =>
           listener({
@@ -174,7 +186,7 @@ describe("Pea ACP session store", () => {
             firstUpdates.push(params.update);
           },
         },
-        { runtime: "dev-agent", runtimeSessions: firstRuntimeSessions },
+        { runtime: "peco", runtimeSessions: firstRuntimeSessions },
       );
       const session = await firstStore.createSession({ cwd: "C:/repo" });
       await firstStore.prompt(session.id, { content: "hello" });
@@ -186,9 +198,11 @@ describe("Pea ACP session store", () => {
       );
 
       const replayedUpdates: SessionUpdate[] = [];
-      const sent: Array<{ context?: Array<{ description: string; value: string }> }> = [];
+      const sent: Array<{
+        context?: Array<{ description: string; value: string }>;
+      }> = [];
       const secondRuntimeSessions = new PeaRuntimeProtocolSessions({
-        runtime: "dev-agent",
+        runtime: "peco",
         idPrefix: "test",
         factory: fakeFactory(undefined, sent),
         sessionRegistryPath: registryPath,
@@ -199,7 +213,7 @@ describe("Pea ACP session store", () => {
             replayedUpdates.push(params.update);
           },
         },
-        { runtime: "dev-agent", runtimeSessions: secondRuntimeSessions },
+        { runtime: "peco", runtimeSessions: secondRuntimeSessions },
       );
 
       await secondStore.load({ sessionId: session.id, cwd: "C:/repo" });
@@ -220,7 +234,8 @@ describe("Pea ACP session store", () => {
 
       await secondStore.prompt(session.id, { content: "next" });
       const restoredHistory = sent[0]?.context?.find(
-        (entry) => entry.description === "Pea restored protocol session history",
+        (entry) =>
+          entry.description === "Pea restored protocol session history",
       );
       assert.ok(restoredHistory);
       assert.match(restoredHistory.value, /loaded history/);
@@ -235,7 +250,7 @@ describe("Pea ACP session store", () => {
     const registryPath = path.join(temp, "sessions.json");
     try {
       const firstRuntimeSessions = new PeaRuntimeProtocolSessions({
-        runtime: "dev-agent",
+        runtime: "peco",
         idPrefix: "test",
         factory: fakeFactory((listener) =>
           listener({
@@ -248,22 +263,24 @@ describe("Pea ACP session store", () => {
       });
       const firstStore = new PeaAcpSessionStore(
         { sessionUpdate() {} },
-        { runtime: "dev-agent", runtimeSessions: firstRuntimeSessions },
+        { runtime: "peco", runtimeSessions: firstRuntimeSessions },
       );
       const source = await firstStore.createSession({ cwd: "C:/repo" });
       await firstStore.prompt(source.id, { content: "hello" });
       firstStore.close(source.id);
 
-      const sent: Array<{ context?: Array<{ description: string; value: string }> }> = [];
+      const sent: Array<{
+        context?: Array<{ description: string; value: string }>;
+      }> = [];
       const secondRuntimeSessions = new PeaRuntimeProtocolSessions({
-        runtime: "dev-agent",
+        runtime: "peco",
         idPrefix: "test",
         factory: fakeFactory(undefined, sent),
         sessionRegistryPath: registryPath,
       });
       const secondStore = new PeaAcpSessionStore(
         { sessionUpdate() {} },
-        { runtime: "dev-agent", runtimeSessions: secondRuntimeSessions },
+        { runtime: "peco", runtimeSessions: secondRuntimeSessions },
       );
 
       const fork = await secondStore.fork({
@@ -276,7 +293,8 @@ describe("Pea ACP session store", () => {
       assert.deepEqual(fork.additionalDirectories, ["C:\\fork"]);
       await secondStore.prompt(fork.id, { content: "next" });
       const restoredHistory = sent[0]?.context?.find(
-        (entry) => entry.description === "Pea restored protocol session history",
+        (entry) =>
+          entry.description === "Pea restored protocol session history",
       );
       assert.ok(restoredHistory);
       assert.match(restoredHistory.value, /hello/);
@@ -293,10 +311,10 @@ function fakeFactory(
 ): PeaRuntimeFactory {
   const listeners: Array<(event: PeaRuntimeEvent) => void> = [];
   return {
-    runtimeId: "dev-agent",
+    runtimeId: "peco",
     async create(request) {
       return {
-        runtimeId: "dev-agent",
+        runtimeId: "peco",
         workspace: {
           cwd: request.cwd ?? "C:/repo",
           projectRoot: request.cwd ?? "C:/repo",

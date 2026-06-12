@@ -18,23 +18,31 @@ interface JsonRpcMessage {
 describe("ACP HTTP agent", () => {
   it("rejects missing or invalid tokens", async () => {
     const agent = new PeaAcpHttpAgent({
-      runtime: "dev-agent",
+      runtime: "peco",
       port: 0,
       token: "secret",
       sessionStore: fakeSessionStore(),
     });
     const info = await agent.start();
     try {
-      assert.equal((await fetch(`http://${info.host}:${info.port}/status`)).status, 401);
       assert.equal(
-        (await fetch(`http://${info.host}:${info.port}/status?token=wrong`)).status,
+        (await fetch(`http://${info.host}:${info.port}/status`)).status,
         401,
       );
       assert.equal(
-        (await fetch(`http://${info.host}:${info.port}/status?token=secret`)).status,
+        (await fetch(`http://${info.host}:${info.port}/status?token=wrong`))
+          .status,
+        401,
+      );
+      assert.equal(
+        (await fetch(`http://${info.host}:${info.port}/status?token=secret`))
+          .status,
         200,
       );
-      assert.equal(info.statusUrl, `http://${info.host}:${info.port}/status?token=secret`);
+      assert.equal(
+        info.statusUrl,
+        `http://${info.host}:${info.port}/status?token=secret`,
+      );
     } finally {
       await agent.close();
     }
@@ -72,9 +80,10 @@ describe("ACP HTTP agent", () => {
   });
 
   it("routes JSON-RPC requests through the SDK-backed ACP adapter", async () => {
-    const prompts: Array<{ sessionId: SessionId; prompt: PeaRuntimePrompt }> = [];
+    const prompts: Array<{ sessionId: SessionId; prompt: PeaRuntimePrompt }> =
+      [];
     const agent = new PeaAcpHttpAgent({
-      runtime: "dev-agent",
+      runtime: "peco",
       port: 0,
       token: "secret",
       sessionStore: fakeSessionStore({
@@ -90,20 +99,40 @@ describe("ACP HTTP agent", () => {
     assert.ok(reader);
 
     try {
-      assert.equal((await postJson(info.rpcUrl, initializeRequest())).accepted, true);
+      assert.equal(
+        (await postJson(info.rpcUrl, initializeRequest())).accepted,
+        true,
+      );
       const initialize = await readNextJsonRpc(reader, 1);
-      assert.equal(initialize.result?.agentInfo?.name, "Pe.Tools dev-agent");
+      assert.equal(initialize.result?.agentInfo?.name, "Pe.Tools peco");
       assert.equal(initialize.result?.authMethods?.[0]?.id, "openai-api-key");
-      assert.equal(initialize.result?.agentCapabilities?.auth?.logout, undefined);
+      assert.equal(
+        initialize.result?.agentCapabilities?.auth?.logout,
+        undefined,
+      );
       assert.equal(initialize.result?.agentCapabilities?.loadSession, true);
       assert.deepEqual(
-        initialize.result?.agentCapabilities?.sessionCapabilities?.additionalDirectories,
+        initialize.result?.agentCapabilities?.sessionCapabilities
+          ?.additionalDirectories,
         {},
       );
-      assert.deepEqual(initialize.result?.agentCapabilities?.sessionCapabilities?.close, {});
-      assert.deepEqual(initialize.result?.agentCapabilities?.sessionCapabilities?.fork, {});
-      assert.deepEqual(initialize.result?.agentCapabilities?.sessionCapabilities?.list, {});
-      assert.equal(initialize.result?.agentCapabilities?.promptCapabilities?.embeddedContext, true);
+      assert.deepEqual(
+        initialize.result?.agentCapabilities?.sessionCapabilities?.close,
+        {},
+      );
+      assert.deepEqual(
+        initialize.result?.agentCapabilities?.sessionCapabilities?.fork,
+        {},
+      );
+      assert.deepEqual(
+        initialize.result?.agentCapabilities?.sessionCapabilities?.list,
+        {},
+      );
+      assert.equal(
+        initialize.result?.agentCapabilities?.promptCapabilities
+          ?.embeddedContext,
+        true,
+      );
 
       await postJson(info.rpcUrl, {
         jsonrpc: "2.0",
@@ -113,7 +142,7 @@ describe("ACP HTTP agent", () => {
       });
       const session = await readNextJsonRpc(reader, 2);
       assert.equal(session.result?.sessionId, "session-1");
-      assert.equal(session.result?.modes?.currentModeId, "dev-agent");
+      assert.equal(session.result?.modes?.currentModeId, "peco");
       const statusAfterSession = await fetch(info.statusUrl);
       assert.equal((await statusAfterSession.json()).sessions, 1);
 
@@ -125,7 +154,11 @@ describe("ACP HTTP agent", () => {
           sessionId: "session-1",
           prompt: [
             { type: "text", text: "hello" },
-            { type: "resource_link", uri: "file:///C:/repo/README.md", name: "README.md" },
+            {
+              type: "resource_link",
+              uri: "file:///C:/repo/README.md",
+              name: "README.md",
+            },
           ],
         },
       });
@@ -153,7 +186,7 @@ describe("ACP HTTP agent", () => {
   it("closes retained ACP runtime sessions when the HTTP transport shuts down", async () => {
     let closeAllCalls = 0;
     const agent = new PeaAcpHttpAgent({
-      runtime: "dev-agent",
+      runtime: "peco",
       port: 0,
       token: "secret",
       sessionStore: fakeSessionStore({
@@ -173,7 +206,11 @@ describe("ACP HTTP agent", () => {
 function fakeSessionStore(
   overrides: Partial<PeaAcpAgentSessionStore> = {},
 ): PeaAcpAgentSessionStore {
-  const sessions: Array<{ sessionId: string; cwd: string; additionalDirectories?: string[] }> = [];
+  const sessions: Array<{
+    sessionId: string;
+    cwd: string;
+    additionalDirectories?: string[];
+  }> = [];
   return {
     async createSession(request) {
       sessions.push({
@@ -181,30 +218,50 @@ function fakeSessionStore(
         cwd: request.cwd,
         additionalDirectories: request.additionalDirectories,
       });
-      return { id: "session-1", cwd: request.cwd, threadId: "thread-1" } as unknown as AcpSession;
+      return {
+        id: "session-1",
+        cwd: request.cwd,
+        threadId: "thread-1",
+      } as unknown as AcpSession;
     },
     async prompt() {
       return "end_turn";
     },
     cancel() {},
     async resume() {
-      return { id: "session-1", cwd: "C:/repo", threadId: "thread-1" } as unknown as AcpSession;
+      return {
+        id: "session-1",
+        cwd: "C:/repo",
+        threadId: "thread-1",
+      } as unknown as AcpSession;
     },
     async load() {
-      return { id: "session-1", cwd: "C:/repo", threadId: "thread-1" } as unknown as AcpSession;
+      return {
+        id: "session-1",
+        cwd: "C:/repo",
+        threadId: "thread-1",
+      } as unknown as AcpSession;
     },
     async fork() {
-      return { id: "session-2", cwd: "C:/repo", threadId: "thread-2" } as unknown as AcpSession;
+      return {
+        id: "session-2",
+        cwd: "C:/repo",
+        threadId: "thread-2",
+      } as unknown as AcpSession;
     },
     list() {
       return sessions as any;
     },
     delete(sessionId) {
-      const index = sessions.findIndex((session) => session.sessionId === sessionId);
+      const index = sessions.findIndex(
+        (session) => session.sessionId === sessionId,
+      );
       if (index >= 0) sessions.splice(index, 1);
     },
     close(sessionId) {
-      const index = sessions.findIndex((session) => session.sessionId === sessionId);
+      const index = sessions.findIndex(
+        (session) => session.sessionId === sessionId,
+      );
       if (index >= 0) sessions.splice(index, 1);
     },
     ...overrides,
@@ -224,7 +281,10 @@ function initializeRequest(): JsonRpcMessage {
   };
 }
 
-async function postJson(url: string, value: unknown): Promise<{ accepted: boolean }> {
+async function postJson(
+  url: string,
+  value: unknown,
+): Promise<{ accepted: boolean }> {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -101,6 +101,7 @@ async function resolveRuntimeHarnessConfig<
   const storage =
     options.config.storage ??
     (options.storageProfile ? await options.storageProfile.createStore(request) : undefined);
+  await initializeRuntimeStorage(storage);
 
   if (!options.config.memory && options.memoryProfile && !storage) {
     throw new Error("Runtime memory profile requires a runtime storage profile or config.storage.");
@@ -125,4 +126,11 @@ async function resolveRuntimeHarnessConfig<
     ...(tools ? { tools } : {}),
     ...(resolveModel ? { resolveModel } : {}),
   };
+}
+
+type InitializableStorage = { disableInit?: boolean; init?: () => Promise<void> | void };
+
+async function initializeRuntimeStorage(storage: InitializableStorage | undefined): Promise<void> {
+  if (!storage || storage.disableInit) return;
+  await storage.init?.();
 }

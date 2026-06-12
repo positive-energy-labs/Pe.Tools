@@ -6,6 +6,7 @@ export * from "./auth/types.ts";
 export * from "./auth/methods.ts";
 export * from "./auth/profiles.ts";
 export * from "./auth/protocol.ts";
+export * from "./auth/mastracode-auth-storage.ts";
 export * from "./models/mastra-gateway.ts";
 export * from "./models/mastracode-model.ts";
 export * from "./defaults.ts";

@@ -29,7 +29,10 @@ import {
 
 describe("Pea runtime sessions", () => {
   it("does not import MastraCode auth storage before Pea scopes APPDATA", async () => {
-    const source = await readFile(new URL("../pea-runtime.ts", import.meta.url), "utf-8");
+    const source = await readFile(
+      new URL("../pea-runtime.ts", import.meta.url),
+      "utf-8",
+    );
 
     assert.doesNotMatch(
       source,
@@ -39,8 +42,11 @@ describe("Pea runtime sessions", () => {
   });
 
   it("delegates Pea model resolution through the configured resolver", () => {
-    const calls: Array<{ modelId: string; thinkingLevel?: string; remapForCodexOAuth?: boolean }> =
-      [];
+    const calls: Array<{
+      modelId: string;
+      thinkingLevel?: string;
+      remapForCodexOAuth?: boolean;
+    }> = [];
     const modelArgument = createPeaModelArgument((modelId, options) => {
       calls.push({
         modelId,
@@ -54,7 +60,10 @@ describe("Pea runtime sessions", () => {
         "harness",
         {
           getState() {
-            return { currentModelId: "openai/gpt-5.5", thinkingLevel: "medium" };
+            return {
+              currentModelId: "openai/gpt-5.5",
+              thinkingLevel: "medium",
+            };
           },
         },
       ],
@@ -64,30 +73,41 @@ describe("Pea runtime sessions", () => {
 
     assert.deepEqual(model, { id: "resolved-pea-model" });
     assert.deepEqual(calls, [
-      { modelId: "openai/gpt-5.5", thinkingLevel: "medium", remapForCodexOAuth: true },
+      {
+        modelId: "openai/gpt-5.5",
+        thinkingLevel: "medium",
+        remapForCodexOAuth: true,
+      },
     ]);
   });
 
-  it("starts dev-agent in yolo mode for repo tool calls", () => {
+  it("starts peco in yolo mode for repo tool calls", () => {
     assert.equal(createDevAgentInitialState("openai/gpt-5.5").yolo, true);
   });
 
   it("creates Pe.Tools-owned local resource ids from runtime config directories", () => {
-    assert.match(createLocalResourceId("C:/repo/Pe.Tools", ".pea"), /^pea:[0-9a-f]{16}$/);
+    assert.match(
+      createLocalResourceId("C:/repo/Pe.Tools", ".pea"),
+      /^pea:[0-9a-f]{16}$/,
+    );
   });
 
-  it("creates MastraCode-compatible dev-agent resource ids", async () => {
+  it("creates MastraCode-compatible peco resource ids", async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "pea-dev-resource-id-"));
     execFileSync("git", ["init"], { cwd, stdio: "ignore" });
-    execFileSync("git", ["remote", "add", "origin", "https://github.com/kaitpw/Pe.Tools.git"], {
-      cwd,
-      stdio: "ignore",
-    });
+    execFileSync(
+      "git",
+      ["remote", "add", "origin", "https://github.com/kaitpw/Pe.Tools.git"],
+      {
+        cwd,
+        stdio: "ignore",
+      },
+    );
 
     assert.equal(createDevAgentResourceId(cwd), "pe-tools-ae8e96592dd3");
   });
 
-  it("stores dev-agent threads in the normal MastraCode database", () => {
+  it("stores peco threads in the normal MastraCode database", () => {
     const originalDatabasePath = process.env.MASTRA_DB_PATH;
     try {
       delete process.env.MASTRA_DB_PATH;
@@ -104,11 +124,14 @@ describe("Pea runtime sessions", () => {
     }
   });
 
-  it("honors the MastraCode database path override for dev-agent threads", () => {
+  it("honors the MastraCode database path override for peco threads", () => {
     const originalDatabasePath = process.env.MASTRA_DB_PATH;
     try {
       process.env.MASTRA_DB_PATH = "C:\\tmp\\mastracode-test.db";
-      assert.equal(createDefaultMastraCodeStorageConfig().url, "file:C:\\tmp\\mastracode-test.db");
+      assert.equal(
+        createDefaultMastraCodeStorageConfig().url,
+        "file:C:\\tmp\\mastracode-test.db",
+      );
     } finally {
       if (originalDatabasePath === undefined) {
         delete process.env.MASTRA_DB_PATH;
@@ -120,7 +143,10 @@ describe("Pea runtime sessions", () => {
 
   it("stores Pea threads under the Pea runtime config directory", () => {
     assert.equal(
-      createPeaLocalStorageConfig("C:/Users/kaitp/OneDrive/Documents/Pe.Tools", ".pea").url,
+      createPeaLocalStorageConfig(
+        "C:/Users/kaitp/OneDrive/Documents/Pe.Tools",
+        ".pea",
+      ).url,
       "file:C:\\Users\\kaitp\\OneDrive\\Documents\\Pe.Tools\\.pea\\mastra.db",
     );
   });
@@ -160,9 +186,14 @@ describe("Pea runtime sessions", () => {
     } as unknown as Parameters<typeof createPeaRuntimeSessions>[0];
 
     const sessions = createPeaRuntimeSessions(harness);
-    const session = await sessions.createThreadSession({ title: "ACP pea-acp-1" });
+    const session = await sessions.createThreadSession({
+      title: "ACP pea-acp-1",
+    });
 
-    assert.deepEqual(session, { threadId: "thread-1", resourceId: "resource-1" });
+    assert.deepEqual(session, {
+      threadId: "thread-1",
+      resourceId: "resource-1",
+    });
     assert.deepEqual(calls, [
       "init",
       "startWorkers",
@@ -215,9 +246,14 @@ describe("Pea runtime sessions", () => {
     const sessions = createPeaRuntimeSessions(harness, {
       agentOverrides: { "pea-agent": peaAgent },
     });
-    const session = await sessions.createThreadSession({ title: "ACP pea-acp-1" });
+    const session = await sessions.createThreadSession({
+      title: "ACP pea-acp-1",
+    });
 
-    assert.deepEqual(session, { threadId: "thread-1", resourceId: "resource-1" });
+    assert.deepEqual(session, {
+      threadId: "thread-1",
+      resourceId: "resource-1",
+    });
     assert.equal(mastra.getAgentById("pea-agent"), peaAgent);
     assert.deepEqual(calls, [
       "init",
@@ -230,7 +266,9 @@ describe("Pea runtime sessions", () => {
 
   it("sends messages with resource/thread scoped runtime context", async () => {
     let sentContent = "";
-    let sentContext: Parameters<typeof appendPeaRuntimeContextPrompt>[1] | undefined;
+    let sentContext:
+      | Parameters<typeof appendPeaRuntimeContextPrompt>[1]
+      | undefined;
     const harness = {
       getCurrentMode() {
         return { agent: { id: "other-agent" } };
@@ -296,7 +334,9 @@ describe("Pea runtime sessions", () => {
       async sendMessage(request: {
         requestContext: Parameters<typeof appendPeaRuntimeContextPrompt>[1];
       }) {
-        prompts.push(appendPeaRuntimeContextPrompt("base", request.requestContext));
+        prompts.push(
+          appendPeaRuntimeContextPrompt("base", request.requestContext),
+        );
       },
       abort() {},
       subscribe() {
@@ -322,7 +362,9 @@ describe("Pea runtime sessions", () => {
   });
 
   it("carries protocol session ids through the runtime request context", async () => {
-    let sentContext: Parameters<typeof appendPeaRuntimeContextPrompt>[1] | undefined;
+    let sentContext:
+      | Parameters<typeof appendPeaRuntimeContextPrompt>[1]
+      | undefined;
     const harness = {
       getCurrentMode() {
         return { agent: { id: "other-agent" } };
@@ -358,7 +400,9 @@ describe("Pea runtime sessions", () => {
   });
 
   it("carries resume decisions through structured runtime request context", async () => {
-    let sentContext: Parameters<typeof appendPeaRuntimeContextPrompt>[1] | undefined;
+    let sentContext:
+      | Parameters<typeof appendPeaRuntimeContextPrompt>[1]
+      | undefined;
     const resumeDecisions = [
       {
         interruptId: "tool-suspended:tool-1",
@@ -397,21 +441,28 @@ describe("Pea runtime sessions", () => {
       resumeDecisions,
     });
 
-    assert.deepEqual(getPeaRuntimeResumeDecisions(sentContext!), resumeDecisions);
+    assert.deepEqual(
+      getPeaRuntimeResumeDecisions(sentContext!),
+      resumeDecisions,
+    );
     assert.deepEqual(
       appendPeaRuntimeContextPrompt("base instructions", sentContext!),
       "base instructions",
     );
   });
 
-  it("delegates dev-agent model resolution to MastraCode", async () => {
+  it("delegates peco model resolution to MastraCode", async () => {
     const calls: Array<{ modelId: string; remapForCodexOAuth?: boolean }> = [];
     const authStorage = {
       reload() {
-        throw new Error("auto mode should not resolve provider auth inside Pea");
+        throw new Error(
+          "auto mode should not resolve provider auth inside Pea",
+        );
       },
       get() {
-        throw new Error("auto mode should not inspect provider credentials inside Pea");
+        throw new Error(
+          "auto mode should not inspect provider credentials inside Pea",
+        );
       },
     } as unknown as Parameters<typeof resolveDevAgentModel>[0]["authStorage"];
 
@@ -429,10 +480,12 @@ describe("Pea runtime sessions", () => {
     });
 
     assert.deepEqual(model, { id: "resolved-model" });
-    assert.deepEqual(calls, [{ modelId: "openai/gpt-5.5", remapForCodexOAuth: true }]);
+    assert.deepEqual(calls, [
+      { modelId: "openai/gpt-5.5", remapForCodexOAuth: true },
+    ]);
   });
 
-  it("keeps dev-agent OAuth mode bounded when no Codex OAuth credential exists", async () => {
+  it("keeps peco OAuth mode bounded when no Codex OAuth credential exists", async () => {
     const calls: string[] = [];
     const authStorage = {
       reload() {

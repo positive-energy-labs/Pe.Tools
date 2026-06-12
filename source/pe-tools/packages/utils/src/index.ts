@@ -1,3 +1,3 @@
 export function fn() {
-  console.log("Hello, tsdown!");
+  return "Hello, tsdown!";
 }

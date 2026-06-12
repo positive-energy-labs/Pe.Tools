@@ -10,6 +10,7 @@ import {
   runtimeAcpFactory,
   runtimeAcpDescriptor,
   runtimeAcpAuthProfile,
+  runtimeAcpWorkbenchExtension,
   type RuntimeAcpAgentOptions,
   type RuntimeAcpAgentSessionStore,
 } from "./adapter.ts";
@@ -163,6 +164,7 @@ export class RuntimeAcpHttpAgent {
             runtimeAcpAuthProfile(this.options)?.descriptor ??
             createRuntimeAuthDescriptor({ source: "none", methods: [] }),
           sessions: this.sessionStore?.list().length ?? 0,
+          capabilities: runtimeAcpWorkbenchExtension(this.options).capabilities,
         }),
       );
       return;

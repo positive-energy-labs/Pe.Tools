@@ -8,19 +8,23 @@ import {
   type SessionNotification,
   type Stream,
 } from "@agentclientprotocol/sdk";
-import { PeaAcpAgent, type PeaAcpAgentSessionStore } from "../acp/pea-acp-adapter.js";
+import {
+  PeaAcpAgent,
+  type PeaAcpAgentSessionStore,
+} from "../acp/pea-acp-adapter.js";
 import { PeaAcpHttpAgent } from "../acp/pea-acp-http-agent.js";
 import type { AcpSession, PeaAcpRuntimeId } from "../acp/acp-session-store.js";
 import type { PeaRuntimePrompt } from "../pea-runtime-prompts.js";
 
 type AnyMessage = Parameters<WritableStreamDefaultWriter["write"]>[0];
 
-const runtimes: PeaAcpRuntimeId[] = ["pea", "dev-agent"];
+const runtimes: PeaAcpRuntimeId[] = ["pea", "peco"];
 
 describe("ACP SDK end-to-end", () => {
   for (const runtime of runtimes) {
     it(`handshakes and runs a session over stdio-shaped streams for ${runtime}`, async () => {
-      const prompts: Array<{ sessionId: SessionId; prompt: PeaRuntimePrompt }> = [];
+      const prompts: Array<{ sessionId: SessionId; prompt: PeaRuntimePrompt }> =
+        [];
       const pair = createStreamPair();
       const agentConnection = new AgentSideConnection(
         () =>
@@ -35,7 +39,10 @@ describe("ACP SDK end-to-end", () => {
           ),
         pair.agent,
       );
-      const clientConnection = new ClientSideConnection(() => fakeClient(), pair.client);
+      const clientConnection = new ClientSideConnection(
+        () => fakeClient(),
+        pair.client,
+      );
 
       try {
         await assertSdkSession(clientConnection, runtime, prompts);
@@ -46,7 +53,8 @@ describe("ACP SDK end-to-end", () => {
     });
 
     it(`handshakes and runs a session over HTTP/SSE for ${runtime}`, async () => {
-      const prompts: Array<{ sessionId: SessionId; prompt: PeaRuntimePrompt }> = [];
+      const prompts: Array<{ sessionId: SessionId; prompt: PeaRuntimePrompt }> =
+        [];
       const agent = new PeaAcpHttpAgent({
         runtime,
         port: 0,
@@ -60,7 +68,10 @@ describe("ACP SDK end-to-end", () => {
       });
       const info = await agent.start();
       const httpStream = createHttpAcpClientStream(info.rpcUrl, info.eventsUrl);
-      const clientConnection = new ClientSideConnection(() => fakeClient(), httpStream.stream);
+      const clientConnection = new ClientSideConnection(
+        () => fakeClient(),
+        httpStream.stream,
+      );
 
       try {
         await assertSdkSession(clientConnection, runtime, prompts);
@@ -83,7 +94,10 @@ async function assertSdkSession(
     clientInfo: { name: "sdk-e2e-test", version: "0.0.0" },
   });
   assert.equal(initialized.protocolVersion, 1);
-  assert.equal(initialized.agentInfo?.name, runtime === "dev-agent" ? "Pe.Tools dev-agent" : "Pea");
+  assert.equal(
+    initialized.agentInfo?.name,
+    runtime === "peco" ? "Pe.Tools peco" : "Pea",
+  );
   assert.equal(initialized.authMethods?.[0]?.id, "openai-api-key");
   if (runtime === "pea") {
     assert.deepEqual(initialized.agentCapabilities?.auth?.logout, {});
@@ -91,13 +105,31 @@ async function assertSdkSession(
     assert.equal(initialized.agentCapabilities?.auth?.logout, undefined);
   }
   assert.equal(initialized.agentCapabilities?.loadSession, true);
-  assert.deepEqual(initialized.agentCapabilities?.sessionCapabilities?.additionalDirectories, {});
-  assert.deepEqual(initialized.agentCapabilities?.sessionCapabilities?.close, {});
-  assert.deepEqual(initialized.agentCapabilities?.sessionCapabilities?.fork, {});
-  assert.deepEqual(initialized.agentCapabilities?.sessionCapabilities?.list, {});
-  assert.deepEqual(initialized.agentCapabilities?.sessionCapabilities?.resume, {});
+  assert.deepEqual(
+    initialized.agentCapabilities?.sessionCapabilities?.additionalDirectories,
+    {},
+  );
+  assert.deepEqual(
+    initialized.agentCapabilities?.sessionCapabilities?.close,
+    {},
+  );
+  assert.deepEqual(
+    initialized.agentCapabilities?.sessionCapabilities?.fork,
+    {},
+  );
+  assert.deepEqual(
+    initialized.agentCapabilities?.sessionCapabilities?.list,
+    {},
+  );
+  assert.deepEqual(
+    initialized.agentCapabilities?.sessionCapabilities?.resume,
+    {},
+  );
 
-  const session = await connection.newSession({ cwd: "C:/repo", mcpServers: [] });
+  const session = await connection.newSession({
+    cwd: "C:/repo",
+    mcpServers: [],
+  });
   assert.equal(session.sessionId, "session-1");
   assert.equal(session.modes?.currentModeId, runtime);
   assert.equal(session.modes?.availableModes[0]?.id, runtime);
@@ -106,7 +138,11 @@ async function assertSdkSession(
     sessionId: session.sessionId,
     prompt: [
       { type: "text", text: "hello" },
-      { type: "resource_link", uri: "file:///C:/repo/README.md", name: "README.md" },
+      {
+        type: "resource_link",
+        uri: "file:///C:/repo/README.md",
+        name: "README.md",
+      },
     ],
   });
   assert.deepEqual(prompt, { stopReason: "end_turn" });
@@ -125,12 +161,22 @@ async function assertSdkSession(
   });
 }
 
-function createStreamPair(): { client: Stream; agent: Stream; close(): Promise<void> } {
+function createStreamPair(): {
+  client: Stream;
+  agent: Stream;
+  close(): Promise<void>;
+} {
   const clientToAgent = createMessageChannel();
   const agentToClient = createMessageChannel();
   return {
-    client: { readable: agentToClient.readable, writable: clientToAgent.writable },
-    agent: { readable: clientToAgent.readable, writable: agentToClient.writable },
+    client: {
+      readable: agentToClient.readable,
+      writable: clientToAgent.writable,
+    },
+    agent: {
+      readable: clientToAgent.readable,
+      writable: agentToClient.writable,
+    },
     async close() {
       await Promise.allSettled([clientToAgent.close(), agentToClient.close()]);
     },
@@ -173,9 +219,12 @@ function createHttpAcpClientStream(
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   const readable = new ReadableStream<AnyMessage>({
     async start(controller) {
-      const response = await fetch(eventsUrl, { signal: abortController.signal });
+      const response = await fetch(eventsUrl, {
+        signal: abortController.signal,
+      });
       reader = response.body?.getReader() ?? null;
-      if (!reader) throw new Error("ACP HTTP events response did not include a body.");
+      if (!reader)
+        throw new Error("ACP HTTP events response did not include a body.");
 
       const decoder = new TextDecoder();
       let buffer = "";
@@ -234,20 +283,36 @@ function fakeSessionStore(
 ): PeaAcpAgentSessionStore {
   return {
     async createSession(request) {
-      return { id: "session-1", cwd: request.cwd, threadId: "thread-1" } as unknown as AcpSession;
+      return {
+        id: "session-1",
+        cwd: request.cwd,
+        threadId: "thread-1",
+      } as unknown as AcpSession;
     },
     async prompt() {
       return "end_turn";
     },
     cancel() {},
     async resume() {
-      return { id: "session-1", cwd: "C:/repo", threadId: "thread-1" } as unknown as AcpSession;
+      return {
+        id: "session-1",
+        cwd: "C:/repo",
+        threadId: "thread-1",
+      } as unknown as AcpSession;
     },
     async load() {
-      return { id: "session-1", cwd: "C:/repo", threadId: "thread-1" } as unknown as AcpSession;
+      return {
+        id: "session-1",
+        cwd: "C:/repo",
+        threadId: "thread-1",
+      } as unknown as AcpSession;
     },
     async fork() {
-      return { id: "session-2", cwd: "C:/repo", threadId: "thread-2" } as unknown as AcpSession;
+      return {
+        id: "session-2",
+        cwd: "C:/repo",
+        threadId: "thread-2",
+      } as unknown as AcpSession;
     },
     list() {
       return [];
