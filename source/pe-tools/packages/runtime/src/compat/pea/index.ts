@@ -65,6 +65,7 @@ export type {
   RuntimeProtocolSessionInfo as PeaRuntimeProtocolSessionInfo,
   RuntimeProtocolSessionsOptions as PeaRuntimeProtocolSessionsOptions,
   RuntimeSendProtocolPromptRequest as PeaRuntimeSendProtocolPromptRequest,
+  RuntimeSessionHistoryEntry as PeaRuntimeSessionHistoryEntry,
 } from "../../session/protocol-sessions.ts";
 export { describeRuntimeProtocolStatus as describePeaRuntimeProtocolStatus } from "../../protocol-status.ts";
 export type {
@@ -84,15 +85,3 @@ export type {
   RuntimeResourceScope as PeaRuntimeResourceScope,
   RuntimeScopedResource as PeaRuntimeScopedResource,
 } from "../../resources.ts";
-export {
-  createRuntimeSessionRegistry as createPeaRuntimeSessionRegistry,
-  defaultRuntimeSessionRegistryPath as defaultPeaRuntimeSessionRegistryPath,
-  FileRuntimeSessionRegistry as FilePeaRuntimeSessionRegistry,
-} from "../../session/session-registry.ts";
-export type {
-  RuntimeId,
-  RuntimeSessionHistoryEntry as PeaRuntimeSessionHistoryEntry,
-  RuntimeSessionRecord as PeaRuntimeSessionRecord,
-  RuntimeSessionRegistry as PeaRuntimeSessionRegistry,
-  RuntimeSessionRegistryFilter as PeaRuntimeSessionRegistryFilter,
-} from "../../session/session-registry.ts";

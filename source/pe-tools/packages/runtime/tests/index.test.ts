@@ -143,32 +143,31 @@ test("merges observational memory model options without conflicting top-level mo
 
 test("closes protocol session runtimes during close, delete, and closeAll", async () => {
   const closeCalls: string[] = [];
+  const threads = new Map<string, { threadId: string; resourceId: string; title?: string }>();
   const factory: RuntimeFactory = {
     descriptor: createRuntimeDescriptor("test-runtime"),
-    create: async () => createTestRuntimeHandle(closeCalls),
+    create: async () => createTestRuntimeHandle(closeCalls, threads),
   };
   const sessions = new RuntimeProtocolSessions({
     factory,
-    idPrefix: "test-session",
-    sessionRegistryPath: null,
   });
 
   const closed = await sessions.createSession({ protocol: "acp" });
   await sessions.close(closed.id);
   expect(closeCalls).toEqual([closed.threadId]);
-  expect(sessions.listSessions()).toHaveLength(1);
+  await expect(sessions.listSessions()).resolves.toHaveLength(1);
   expect(() => sessions.getSession(closed.id)).toThrow("Unknown Runtime session");
 
   const deleted = await sessions.createSession({ protocol: "acp" });
   await sessions.delete(deleted.id);
   expect(closeCalls).toEqual([closed.threadId, deleted.threadId]);
-  expect(sessions.listSessions()).toHaveLength(1);
+  await expect(sessions.listSessions()).resolves.toHaveLength(1);
 
   const first = await sessions.createSession({ protocol: "ag-ui" });
   const second = await sessions.createSession({ protocol: "ag-ui" });
   await sessions.closeAll();
   expect(closeCalls).toEqual([closed.threadId, deleted.threadId, first.threadId, second.threadId]);
-  expect(sessions.listSessions()).toHaveLength(3);
+  await expect(sessions.listSessions()).resolves.toHaveLength(3);
 });
 
 function createInitSpyStorage(disableInit: boolean): {
@@ -201,19 +200,38 @@ function createStorageInitHarnessConfig(storage: MastraCompositeStore): RuntimeH
   };
 }
 
-function createTestRuntimeHandle(closeCalls: string[]): RuntimeHandle {
-  const threadId = `thread-${closeCalls.length + 1}`;
+function createTestRuntimeHandle(
+  closeCalls: string[],
+  threads: Map<string, { threadId: string; resourceId: string; title?: string }>,
+): RuntimeHandle {
+  const threadId = `thread-${threads.size + 1}`;
+  let createdThreadId: string | undefined;
   return {
     harness: {} as RuntimeHandle["harness"],
     sessions: {
-      createThreadSession: async () => ({ threadId, resourceId: `resource-${threadId}` }),
+      createThreadSession: async (options) => {
+        const session = { threadId, resourceId: `resource-${threadId}`, title: options?.title };
+        threads.set(threadId, session);
+        createdThreadId = threadId;
+        return session;
+      },
       switchThread: async () => undefined,
+      listThreadSessions: async () =>
+        Array.from(threads.values()).map((thread) => ({
+          ...thread,
+          createdAt: new Date(0).toISOString(),
+          updatedAt: new Date(0).toISOString(),
+        })),
+      deleteThreadSession: async (options) => {
+        threads.delete(options.threadId);
+      },
+      getResourceId: () => `resource-${threadId}`,
       sendMessage: async () => undefined,
       abort: () => undefined,
       subscribe: () => () => undefined,
     },
     close: () => {
-      closeCalls.push(threadId);
+      if (createdThreadId) closeCalls.push(createdThreadId);
     },
   };
 }

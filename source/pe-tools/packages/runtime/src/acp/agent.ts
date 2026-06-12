@@ -163,7 +163,7 @@ export class RuntimeAcpHttpAgent {
           auth:
             runtimeAcpAuthProfile(this.options)?.descriptor ??
             createRuntimeAuthDescriptor({ source: "none", methods: [] }),
-          sessions: this.sessionStore?.list().length ?? 0,
+          sessions: (await this.sessionStore?.list())?.length ?? 0,
           capabilities: runtimeAcpWorkbenchExtension(this.options).capabilities,
         }),
       );

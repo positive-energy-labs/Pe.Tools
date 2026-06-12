@@ -11,7 +11,6 @@ import {
   RuntimeProtocolSessions,
   type RuntimeProtocolSession,
 } from "../session/protocol-sessions.ts";
-import { defaultRuntimeSessionRegistryPath } from "../session/session-registry.ts";
 import { RuntimeAcpClient, type RuntimeAcpClientTransport } from "./runtime-client.ts";
 import { RuntimeToAcpEvents } from "./events-map-runtime-acp.ts";
 
@@ -22,7 +21,6 @@ export interface RuntimeAcpSessionStoreRuntimeOptions {
 
 export interface RuntimeAcpSessionStoreSessionOptions {
   manager?: RuntimeProtocolSessions;
-  registryPath?: string | null;
 }
 
 export interface RuntimeAcpSessionStoreOptions {
@@ -67,8 +65,6 @@ export class RuntimeAcpSessionStore {
       options.sessions?.manager ??
       new RuntimeProtocolSessions({
         factory: runtimeFactory(options),
-        idPrefix: "runtime-acp",
-        sessionRegistryPath: acpSessionRegistryPath(options),
       });
   }
 
@@ -142,8 +138,8 @@ export class RuntimeAcpSessionStore {
     return this.attachSession(session);
   }
 
-  list(cwd?: string | null): SessionInfo[] {
-    return this.runtimeSessions.listSessions({ protocol: "acp", cwd }).map(
+  async list(cwd?: string | null): Promise<SessionInfo[]> {
+    return (await this.runtimeSessions.listSessions({ protocol: "acp", cwd })).map(
       (session): SessionInfo => ({
         sessionId: session.id,
         cwd: session.cwd,
@@ -282,18 +278,6 @@ function runtimeFactory(options: RuntimeAcpSessionStoreOptions): RuntimeFactory 
 
 function runtimeDescriptor(options: RuntimeAcpSessionStoreOptions): RuntimeDescriptor {
   return options.runtime?.descriptor ?? runtimeFactory(options).descriptor;
-}
-
-function acpSessionRegistryPath(options: RuntimeAcpSessionStoreOptions): string | null {
-  const registryPath = options.sessions?.registryPath;
-  if (registryPath === null) return null;
-  return (
-    registryPath ??
-    defaultRuntimeSessionRegistryPath({
-      runtimeId: runtimeDescriptor(options).id,
-      protocol: "acp",
-    })
-  );
 }
 
 function permissionOutcomeText(
