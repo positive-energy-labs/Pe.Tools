@@ -24,8 +24,10 @@
     "access": "public"
   },
   "scripts": {
-    "pea": "vpx tsx src/main.ts",
+    "pea": "bun src/main.ts",
     "build": "vp pack",
+    "build:installed": "bun build src/installed-main.ts --compile --target=bun --external @opentui/core-* --external @duckdb/node-bindings-* --outfile dist-installed/pea.exe",
+    "build:installed:bundle": "bun build src/installed-main.ts --target=bun --external @opentui/core-* --external @duckdb/node-bindings-* --outdir dist-installed/bundle",
     "dev": "vp pack --watch",
     "test": "vp test",
     "check": "vp check",
@@ -33,9 +35,13 @@
   },
   "dependencies": {
     "@mastra/core": "1.41.0",
+    "@pe/acp-client": "workspace:*",
     "@pe/host-client": "workspace:*",
     "@pe/runtime": "workspace:*",
     "@pe/tools": "workspace:*",
+    "@pe/tui": "workspace:*",
+    "@pe/workbench-core": "workspace:*",
+    "@pe/workbench-transport": "workspace:*",
     "gunshi": "^0.29.5",
     "mastracode": "^0.22.2"
   },

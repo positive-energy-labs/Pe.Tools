@@ -36,8 +36,7 @@ public sealed class CreatePeaPayloadModule : Module<PeaPayloadArtifacts> {
         var layout = layoutResult.ValueOrDefault!;
         var version = PeaCliIdentity.NormalizePayloadVersion(versioning.Version);
         var rootDirectory = context.Git().RootDirectory;
-        var peaAppDirectory = rootDirectory.GetFolder("source").GetFolder("pea").GetFolder("app");
-        var peaNodeExecutable = rootDirectory.GetFolder("source").GetFolder("pea").GetFolder("runtime").GetFolder("node").GetFile("node.exe");
+        var peToolsDirectory = rootDirectory.GetFolder("source").GetFolder("pe-tools");
         var payloadDirectory = new Folder(layout.GetPeaPayloadStagingDirectory("Release", version));
         var bootstrapDirectory = new Folder(layout.GetPeaBootstrapStagingDirectory("Release"));
 
@@ -47,61 +46,39 @@ public sealed class CreatePeaPayloadModule : Module<PeaPayloadArtifacts> {
         Directory.CreateDirectory(bootstrapDirectory.Path);
         Directory.CreateDirectory(layout.Artifacts.PeaPackagesRoot);
 
-        peaNodeExecutable.Exists.ShouldBeTrue($"Node runtime was not found for pea packaging: {peaNodeExecutable.Path}");
+        var appDirectory = Path.Combine(payloadDirectory.Path, PeaCliIdentity.AppDirectoryName);
+        Directory.CreateDirectory(appDirectory);
 
-        context.Logger.LogInformation("Installing pea app dependencies with pnpm: {Directory}", peaAppDirectory.Path);
+        context.Logger.LogInformation("Bundling installed pea app with Bun: {Directory}", peToolsDirectory.Path);
         await context.Shell.Command.ExecuteCommandLineTool(
-            new GenericCommandLineToolOptions("pnpm") { Arguments = ["install", "--frozen-lockfile"] },
-            new CommandExecutionOptions { WorkingDirectory = peaAppDirectory.Path },
-            cancellationToken
-        );
-
-        context.Logger.LogInformation("Building pea app.");
-        await context.Shell.Command.ExecuteCommandLineTool(
-            new GenericCommandLineToolOptions("pnpm") { Arguments = ["run", "build"] },
-            new CommandExecutionOptions { WorkingDirectory = peaAppDirectory.Path },
-            cancellationToken
-        );
-
-        context.Logger.LogInformation("Deploying production pea dependencies into payload staging: {Directory}", payloadDirectory.Path);
-        await context.Shell.Command.ExecuteCommandLineTool(
-            new GenericCommandLineToolOptions("pnpm") {
+            new GenericCommandLineToolOptions("bun") {
                 Arguments = [
-                    "--filter",
-                    ".",
-                    "deploy",
-                    "--legacy",
-                    "--prod",
-                    payloadDirectory.Path
+                    "build",
+                    "apps/pea/src/installed-main.ts",
+                    "--target=bun",
+                    "--external",
+                    "@opentui/core-*",
+                    "--external",
+                    "@duckdb/node-bindings-*",
+                    "--outdir",
+                    appDirectory
                 ]
             },
-            new CommandExecutionOptions {
-                WorkingDirectory = peaAppDirectory.Path,
-                EnvironmentVariables = new Dictionary<string, string?> {
-                    { "NODE_OPTIONS", "--max-old-space-size=8192" }
-                }
-            },
+            new CommandExecutionOptions { WorkingDirectory = peToolsDirectory.Path },
             cancellationToken
         );
 
-        DeleteDirectoryIfExists(Path.Combine(payloadDirectory.Path, "node_modules"));
+        var bunExecutablePath = ResolveExecutableFromPath(PeaCliIdentity.BunExecutableName);
+        context.Logger.LogInformation("Copying Bun runtime into pea payload: {Path}", bunExecutablePath);
         System.IO.File.Copy(
-            Path.Combine(peaAppDirectory.Path, "pnpm-lock.yaml"),
-            Path.Combine(payloadDirectory.Path, "pnpm-lock.yaml"),
+            bunExecutablePath,
+            Path.Combine(payloadDirectory.Path, PeaCliIdentity.BunExecutableName),
             true
         );
-        context.Logger.LogInformation("Reinstalling pea production dependencies as a portable hoisted tree: {Directory}", payloadDirectory.Path);
-        await context.Shell.Command.ExecuteCommandLineTool(
-            new GenericCommandLineToolOptions("pnpm") {
-                Arguments = ["install", "--prod", "--frozen-lockfile", "--config.node-linker=hoisted"]
-            },
-            new CommandExecutionOptions { WorkingDirectory = payloadDirectory.Path },
-            cancellationToken
-        );
 
-        PruneDeployOnlyFiles(payloadDirectory.Path);
-        ValidatePortableNodeModules(payloadDirectory.Path);
-        System.IO.File.Copy(peaNodeExecutable.Path, Path.Combine(payloadDirectory.Path, PeaCliIdentity.NodeExecutableName), true);
+        CopyNativeSidecars(peToolsDirectory.Path, payloadDirectory.Path);
+        ValidateInstalledBunPayload(payloadDirectory.Path);
+
         await System.IO.File.WriteAllTextAsync(
             Path.Combine(bootstrapDirectory.Path, PeaCliIdentity.LauncherName),
             PeaLauncherContent.Create(),
@@ -141,6 +118,96 @@ public sealed class CreatePeaPayloadModule : Module<PeaPayloadArtifacts> {
         return new PeaPayloadArtifacts(version, bootstrapDirectory, archiveFile, new File(manifestPath));
     }
 
+    private static string ResolveExecutableFromPath(string executableName) {
+        var path = Environment.GetEnvironmentVariable("PATH");
+        path.ShouldNotBeNullOrWhiteSpace($"PATH is required to locate {executableName} for pea packaging.");
+
+        foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)) {
+            var candidate = Path.Combine(directory.Trim('"'), executableName);
+            if (System.IO.File.Exists(candidate))
+                return candidate;
+        }
+
+        throw new FileNotFoundException($"Could not find {executableName} on PATH for pea packaging.");
+    }
+
+    private static void CopyNativeSidecars(string peToolsDirectory, string payloadDirectory) {
+        var pnpmStoreDirectory = Path.Combine(peToolsDirectory, "node_modules", ".pnpm");
+        Directory.Exists(pnpmStoreDirectory).ShouldBeTrue(
+            $"pea native sidecar packaging requires an installed pe-tools dependency store: {pnpmStoreDirectory}"
+        );
+
+        // These are deliberate native sidecars: Bun can bundle the JS graph, but these packages load
+        // platform-native binaries from real file paths at runtime. Keep this list explicit so any
+        // future compatibility cost is visible in packaging and docs instead of hidden in node_modules.
+        CopyPackageSidecar(
+            pnpmStoreDirectory,
+            "@opentui+core-win32-x64@*",
+            Path.Combine("node_modules", "@opentui", "core-win32-x64"),
+            Path.Combine(payloadDirectory, "node_modules", "@opentui", "core-win32-x64")
+        );
+        CopyPackageSidecar(
+            pnpmStoreDirectory,
+            "@duckdb+node-bindings-win32-x64@*",
+            Path.Combine("node_modules", "@duckdb", "node-bindings-win32-x64"),
+            Path.Combine(payloadDirectory, "node_modules", "@duckdb", "node-bindings-win32-x64")
+        );
+        CopyPackageSidecar(
+            pnpmStoreDirectory,
+            "onnxruntime-node@*",
+            Path.Combine("node_modules", "onnxruntime-node", "bin", "napi-v6", "win32", "x64"),
+            Path.Combine(payloadDirectory, "bin", "napi-v6", "win32", "x64")
+        );
+    }
+
+    private static void CopyPackageSidecar(
+        string pnpmStoreDirectory,
+        string packageDirectoryPattern,
+        string packageRelativePath,
+        string destinationPath
+    ) {
+        var packageDirectory = Directory.GetDirectories(pnpmStoreDirectory, packageDirectoryPattern, SearchOption.TopDirectoryOnly)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .LastOrDefault();
+        packageDirectory.ShouldNotBeNull($"Could not find required pea native sidecar package: {packageDirectoryPattern}");
+
+        var sourcePath = Path.Combine(packageDirectory, packageRelativePath);
+        Directory.Exists(sourcePath).ShouldBeTrue($"Required pea native sidecar directory was not found: {sourcePath}");
+        CopyDirectory(sourcePath, destinationPath);
+    }
+
+    private static void CopyDirectory(string sourcePath, string destinationPath) {
+        Directory.CreateDirectory(destinationPath);
+        foreach (var directory in Directory.EnumerateDirectories(sourcePath, "*", SearchOption.AllDirectories)) {
+            var relativePath = Path.GetRelativePath(sourcePath, directory);
+            Directory.CreateDirectory(Path.Combine(destinationPath, relativePath));
+        }
+
+        foreach (var file in Directory.EnumerateFiles(sourcePath, "*", SearchOption.AllDirectories)) {
+            var relativePath = Path.GetRelativePath(sourcePath, file);
+            var destinationFile = Path.Combine(destinationPath, relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationFile)!);
+            System.IO.File.Copy(file, destinationFile, true);
+        }
+    }
+
+    private static void ValidateInstalledBunPayload(string payloadDirectory) {
+        System.IO.File.Exists(Path.Combine(payloadDirectory, PeaCliIdentity.BunExecutableName))
+            .ShouldBeTrue("pea payload is missing bun.exe.");
+        System.IO.File.Exists(Path.Combine(
+                payloadDirectory,
+                PeaCliIdentity.AppDirectoryName,
+                PeaCliIdentity.InstalledMainFileName
+            ))
+            .ShouldBeTrue("pea payload is missing app/installed-main.js.");
+        Directory.Exists(Path.Combine(payloadDirectory, "node_modules", "@opentui", "core-win32-x64"))
+            .ShouldBeTrue("pea payload is missing OpenTUI win32-x64 native sidecar.");
+        Directory.Exists(Path.Combine(payloadDirectory, "node_modules", "@duckdb", "node-bindings-win32-x64"))
+            .ShouldBeTrue("pea payload is missing DuckDB win32-x64 native sidecar.");
+        Directory.Exists(Path.Combine(payloadDirectory, "bin", "napi-v6", "win32", "x64"))
+            .ShouldBeTrue("pea payload is missing onnxruntime win32-x64 native sidecar.");
+    }
+
     private static void DeleteDirectoryIfExists(string path) {
         if (!Directory.Exists(path))
             return;
@@ -164,56 +231,6 @@ public sealed class CreatePeaPayloadModule : Module<PeaPayloadArtifacts> {
         }
 
         directory.Delete(false);
-    }
-
-    private static void PruneDeployOnlyFiles(string payloadDirectory) {
-        Directory.Exists(Path.Combine(payloadDirectory, "dist"))
-            .ShouldBeTrue($"pea deploy did not include compiled output: {Path.Combine(payloadDirectory, "dist")}");
-        Directory.Exists(Path.Combine(payloadDirectory, "node_modules"))
-            .ShouldBeTrue($"pea deploy did not include production dependencies: {Path.Combine(payloadDirectory, "node_modules")}");
-
-        foreach (var fileName in new[] {
-                     "agent.ts",
-                     "host-client-runtime.ts",
-                     "host-client.ts",
-                     ".env",
-                     "beta-auth-bootstrap.ts",
-                     "main.ts",
-                     "pe-host.ts",
-                     "pnpm-lock.yaml",
-                     "README.md",
-                     "tsconfig.build.json",
-                     "tsconfig.json"
-                 }) {
-            var path = Path.Combine(payloadDirectory, fileName);
-            if (System.IO.File.Exists(path))
-                System.IO.File.Delete(path);
-        }
-
-        DeleteDirectoryIfExists(Path.Combine(payloadDirectory, "generated"));
-    }
-
-    private static void ValidatePortableNodeModules(string payloadDirectory) {
-        var nodeModulesDirectory = Path.Combine(payloadDirectory, "node_modules");
-        foreach (var packagePath in new[] {
-                     Path.Combine(nodeModulesDirectory, "mastracode"),
-                     Path.Combine(nodeModulesDirectory, "@mastra", "core"),
-                     Path.Combine(nodeModulesDirectory, "@mastra", "duckdb")
-                 }) {
-            Directory.Exists(packagePath)
-                .ShouldBeTrue($"pea payload is missing required production dependency: {packagePath}");
-        }
-
-        var linkedEntries = Directory
-            .EnumerateFileSystemEntries(nodeModulesDirectory, "*", SearchOption.AllDirectories)
-            .Where(path => (System.IO.File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-            .Take(10)
-            .ToArray();
-        linkedEntries.ShouldBeEmpty(
-            "pea payload node_modules must be a portable physical tree before zipping. " +
-            "Use pnpm deploy with node-linker=hoisted. Linked entries: " +
-            string.Join(", ", linkedEntries)
-        );
     }
 
     private static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken) {

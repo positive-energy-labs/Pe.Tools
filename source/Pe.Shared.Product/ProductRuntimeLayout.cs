@@ -62,8 +62,15 @@ public sealed record ProductRuntimeBinaryLayout(
     public string ResolvePeaPackageManifestPath(string version) =>
         Path.Combine(this.PeaPackagesDirectoryPath, PeaCliIdentity.CreatePayloadManifestFileName(version));
 
-    public string ResolvePeaVersionNodeExecutablePath(string version) =>
-        Path.Combine(this.ResolvePeaVersionDirectoryPath(version), PeaCliIdentity.NodeExecutableName);
+    public string ResolvePeaVersionBunExecutablePath(string version) =>
+        Path.Combine(this.ResolvePeaVersionDirectoryPath(version), PeaCliIdentity.BunExecutableName);
+
+    public string ResolvePeaVersionInstalledMainPath(string version) =>
+        Path.Combine(
+            this.ResolvePeaVersionDirectoryPath(version),
+            PeaCliIdentity.AppDirectoryName,
+            PeaCliIdentity.InstalledMainFileName
+        );
 }
 
 public sealed record ProductRuntimeStateLayout(string RootPath) {

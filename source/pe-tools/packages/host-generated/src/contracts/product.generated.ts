@@ -42,7 +42,9 @@ export const hostProcessIdentity = {
 export const peaCliIdentity = {
   directoryName: "pea",
   launcherName: "pea.cmd",
-  nodeExecutableName: "node.exe",
+  bunExecutableName: "bun.exe",
+  appDirectoryName: "app",
+  installedMainFileName: "installed-main.js",
   currentVersionFileName: "current.txt",
   devSourceFileName: "dev-source.txt",
   versionsDirectoryName: "versions",

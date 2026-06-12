@@ -24,7 +24,7 @@
     "access": "public"
   },
   "scripts": {
-    "peco": "vpx tsx src/main.ts",
+    "peco": "bun src/main.ts",
     "build": "vp pack",
     "dev": "vp pack --watch",
     "test": "vp test",
@@ -33,9 +33,13 @@
   },
   "dependencies": {
     "@mastra/core": "1.41.0",
+    "@pe/acp-client": "workspace:*",
     "@pe/host-client": "workspace:*",
     "@pe/runtime": "workspace:*",
     "@pe/tools": "workspace:*",
+    "@pe/tui": "workspace:*",
+    "@pe/workbench-core": "workspace:*",
+    "@pe/workbench-transport": "workspace:*",
     "gunshi": "^0.29.5",
     "mastracode": "^0.22.2"
   },

@@ -50,7 +50,8 @@ internal sealed record DevCliOptions(
             "bootstrap-path" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.BootstrapPath, positionals.Skip(1).ToArray())),
             "test" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Test, positionals.Skip(1).ToArray())),
             "self-test" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.SelfTest, positionals.Skip(1).ToArray())),
-            "pea" when positionals.Count >= 2 => ParsePea(repoRoot, positionals),
+            "pea" when positionals.Count == 1 => DevCliParseResult.Usage(),
+            "pea" => ParsePea(repoRoot, positionals),
             "automation" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Automation, positionals.Skip(1).ToArray())),
             "codegen" => DevCliParseResult.SuccessResult(new DevCliOptions(repoRoot, DevCommandKind.Codegen, positionals.Skip(1).ToArray())),
             "doctor" or "status" or "sync" or "env" or "revit" or "verify" => DevCliParseResult.Failure($"`pe-dev {positionals[0]}` has been removed. Use the peco `live_loop_context`/`live_rrd_sync` tools for live-loop work, or `pe-dev test` for FreshRevitProcess proof.", true),
@@ -60,6 +61,8 @@ internal sealed record DevCliOptions(
 
     private static DevCliParseResult ParsePea(string? repoRoot, IReadOnlyList<string> positionals) {
         var subcommand = positionals[1].ToLowerInvariant();
+        if (subcommand is "--help" or "-h") return DevCliParseResult.Usage();
+
         if (subcommand == "install-dev")
             return DevCliParseResult.Failure(
                 "`pe-dev pea install-dev` has been removed because it mutates the installed pea payload selection. Use `pe-dev pea link-dev` for source-linked dev work and `pea --installed ...` for installed-lane validation.",
