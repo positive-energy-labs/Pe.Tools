@@ -1,6 +1,6 @@
 import { cli, define } from "gunshi";
 import { PeHostClient } from "@pe/host-client";
-import { PeaCliCommands } from "@pe/tools/pea-cli";
+import { PeaCliCommands } from "@pe/tools";
 
 export async function runPeaMain(args = process.argv.slice(2)): Promise<void> {
   if (args.length === 0) {

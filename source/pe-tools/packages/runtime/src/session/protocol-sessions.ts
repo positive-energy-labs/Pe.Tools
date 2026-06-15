@@ -158,6 +158,10 @@ export class RuntimeProtocolSessions {
       additionalDirectories: request.additionalDirectories,
       title: request.title ?? `${source.title} fork`,
     });
+    await seedHarnessSandboxAllowedPaths(
+      session.runtime,
+      harnessSandboxAllowedPaths(source.runtime),
+    );
     if (sourceHistory.length > 0) this.inMemoryHistory.set(session.id, [...sourceHistory]);
     return session;
   }
@@ -211,7 +215,7 @@ export class RuntimeProtocolSessions {
     }
 
     session.additionalDirectories = normalizeAdditionalDirectories(
-      request.additionalDirectories ?? [],
+      request.additionalDirectories ?? session.additionalDirectories,
     );
     session.updatedAt = new Date().toISOString();
     return session;
@@ -392,6 +396,10 @@ export class RuntimeProtocolSessions {
     const thread = (await runtime.sessions.listThreadSessions?.())?.find(
       (candidate) => candidate.threadId === id,
     );
+    await seedHarnessSandboxAllowedPaths(
+      runtime,
+      metadataSandboxAllowedPaths(thread?.metadata),
+    );
     const now = new Date().toISOString();
     const session: RuntimeProtocolSession = {
       id,
@@ -433,6 +441,7 @@ export class RuntimeProtocolSessions {
   private appendHistory(id: string, entry: RuntimeSessionHistoryEntry): void {
     this.inMemoryHistory.set(id, [...(this.inMemoryHistory.get(id) ?? []), entry]);
   }
+
 }
 
 function createPromptContext(
@@ -442,7 +451,7 @@ function createPromptContext(
   const resourceEntries = createRuntimeResourceContextEntries({
     scope: createRuntimeResourceScope({
       cwd: session.cwd,
-      additionalDirectories: session.additionalDirectories,
+      additionalDirectories: sessionAdditionalDirectories(session),
     }),
     resources: request.resources,
   });
@@ -456,7 +465,7 @@ export function sessionInfo(session: RuntimeProtocolSession): RuntimeProtocolSes
     id: session.id,
     protocol: session.protocol,
     cwd: session.cwd,
-    additionalDirectories: session.additionalDirectories,
+    additionalDirectories: sessionAdditionalDirectories(session),
     title: session.title,
     threadId: session.threadId,
     resourceId: session.resourceId,
@@ -465,6 +474,44 @@ export function sessionInfo(session: RuntimeProtocolSession): RuntimeProtocolSes
     updatedAt: session.updatedAt,
     promptActive: session.promptActive,
   };
+}
+
+function sessionAdditionalDirectories(session: RuntimeProtocolSession): string[] {
+  const harnessState = harnessSandboxState(session.runtime);
+  return normalizeAdditionalDirectories([
+    ...session.additionalDirectories,
+    ...(harnessState?.sandboxAllowedPaths ?? []),
+  ]);
+}
+
+function harnessSandboxState(runtime: RuntimeHandle):
+  | { sandboxAllowedPaths?: string[] }
+  | undefined {
+  return runtime.harness.getState() as { sandboxAllowedPaths?: string[] } | undefined;
+}
+
+function harnessSandboxAllowedPaths(runtime: RuntimeHandle): string[] {
+  return normalizeOptionalSandboxPaths(harnessSandboxState(runtime)?.sandboxAllowedPaths);
+}
+
+async function seedHarnessSandboxAllowedPaths(
+  runtime: RuntimeHandle,
+  sandboxAllowedPaths: string[],
+): Promise<void> {
+  if (sandboxAllowedPaths.length === 0) return;
+  await runtime.harness.setState({
+    sandboxAllowedPaths,
+  } as Partial<Record<string, unknown>>);
+}
+
+function metadataSandboxAllowedPaths(metadata: Record<string, unknown> | undefined): string[] {
+  const value = metadata?.sandboxAllowedPaths;
+  return Array.isArray(value) ? normalizeOptionalSandboxPaths(value) : [];
+}
+
+function normalizeOptionalSandboxPaths(paths: readonly unknown[] | undefined): string[] {
+  if (!paths) return [];
+  return normalizeAdditionalDirectories(paths.filter((entry): entry is string => typeof entry === "string"));
 }
 
 function threadInfo(

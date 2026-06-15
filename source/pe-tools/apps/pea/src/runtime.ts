@@ -1,6 +1,7 @@
 import path from "node:path";
 import { Agent } from "@mastra/core/agent";
 import type { MastraModelConfig } from "@mastra/core/llm";
+import { TaskSignalProvider } from "@mastra/core/signals";
 import { createInProcessAcpWorkbenchClient } from "@pe/acp-client";
 import { runWorkbenchTui } from "@pe/tui";
 import type { RequestContext } from "@mastra/core/request-context";
@@ -28,9 +29,14 @@ import {
   type RuntimeStorageProfile,
   type RuntimeToolProfile,
 } from "@pe/runtime";
-import { peaProductToolProfile, peaProductTools } from "@pe/tools";
+import {
+  bundledPeaSkills,
+  materializeBundledPeaSkills,
+  peaProductToolProfile,
+  peaProductTools,
+  peaSkillPaths,
+} from "@pe/tools";
 import { peaAgentInstructions } from "./instructions.ts";
-import { bundledPeaSkills } from "./skills.ts";
 
 export const peaRuntimeToolProfile = peaProductToolProfile;
 export const defaultPeaRuntimeToolProfile: RuntimeToolProfile = peaRuntimeToolProfile;
@@ -105,12 +111,15 @@ export async function createPeaProtocolRuntimeFactory(
   const authStorageContext = await createMastraCodeAuthStorageContext();
   const authStorage = authStorageContext.storage;
 
+  await materializeBundledPeaSkills(cwd);
+
   const agent = new Agent({
     id: "pea-agent",
     name: "Pea Revit Agent",
     description: "High-trust Revit/operator agent for Positive Energy tooling.",
     instructions: peaAgentInstructions,
     model: ({ requestContext }) => resolveCurrentModel(requestContext, defaultPeaAgentModelId),
+    signals: [new TaskSignalProvider()],
     tools: peaProductTools,
   });
   const workspace = new Workspace({
@@ -118,7 +127,7 @@ export async function createPeaProtocolRuntimeFactory(
     name: "Pea Workspace",
     filesystem: new LocalFilesystem({ basePath: cwd, contained: true }),
     sandbox: new LocalSandbox({ workingDirectory: cwd, env: process.env }),
-    skills: [".pea/bundled-skills", ".pea/skills"],
+    skills: [...peaSkillPaths],
   });
 
   return createPeaRuntimeFactory<Record<string, unknown>>({
@@ -139,6 +148,7 @@ export async function createPeaProtocolRuntimeFactory(
       tools: peaProductTools,
       initialState: {
         currentModelId: defaultPeaAgentModelId,
+        projectPath: cwd,
         configDir: ".pea",
         bundledSkillCount: bundledPeaSkills.length,
       },

@@ -1,4 +1,6 @@
-// TODO: these are highly beta, need to figure out a better set for broader capabilites, much like dev skills
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+
 export interface BundledPeaSkill {
   name: string;
   content: string;
@@ -169,3 +171,42 @@ Report files checked, validation status, diagnostics fixed or remaining, and any
 `,
   },
 ];
+
+export const peaStandardSkillsRoot = ".agents/skills";
+export const peaSkillPaths = [peaStandardSkillsRoot] as const;
+
+export interface MaterializedPeaSkill {
+  name: string;
+  path: string;
+  status: "created" | "updated" | "unchanged";
+}
+
+export async function materializeBundledPeaSkills(
+  workspaceRoot: string,
+): Promise<MaterializedPeaSkill[]> {
+  const skillsRoot = path.join(workspaceRoot, peaStandardSkillsRoot);
+  await mkdir(skillsRoot, { recursive: true });
+
+  const materialized: MaterializedPeaSkill[] = [];
+  for (const skill of bundledPeaSkills) {
+    const skillPath = path.join(skillsRoot, skill.name, "SKILL.md");
+    await mkdir(path.dirname(skillPath), { recursive: true });
+    const content = `${skill.content.trimEnd()}\n`;
+    const existing = await readExisting(skillPath);
+    const status = existing == null ? "created" : existing === content ? "unchanged" : "updated";
+    if (status !== "unchanged") {
+      await writeFile(skillPath, content, "utf-8");
+    }
+    materialized.push({ name: skill.name, path: skillPath, status });
+  }
+
+  return materialized;
+}
+
+async function readExisting(filePath: string): Promise<string | null> {
+  try {
+    return await readFile(filePath, "utf-8");
+  } catch {
+    return null;
+  }
+}

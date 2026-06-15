@@ -1,7 +1,6 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { instructions } from "./instructions.ts";
-import { devAgentWorkflowSkills } from "./skills.ts";
 
 type ManagedFileStatus = "created" | "updated" | "unchanged";
 
@@ -37,7 +36,8 @@ export async function ensureDevAgentProjectFiles(
   const instructionsPath = join(projectPath, "AGENTS.md");
   const instructionsStatus = await ensureManagedInstructions(instructionsPath);
 
-  const skillsRoot = join(mastraCodeRoot, "skills");
+  const skillsRoot = join(projectPath, ".agents", "skills");
+  await mkdir(skillsRoot, { recursive: true });
 
   return {
     configRoot: mastraCodeRoot,
@@ -46,11 +46,7 @@ export async function ensureDevAgentProjectFiles(
     instructionsSource: "project-root",
     instructionsStatus,
     skillsRoot,
-    skills: devAgentWorkflowSkills.map((skill) => ({
-      name: skill.name,
-      path: `<in-memory>/${skill.name}/SKILL.md`,
-      status: "unchanged",
-    })),
+    skills: await listManualSkillFiles(skillsRoot),
     commandsRoot: join(mastraCodeRoot, "commands"),
     commandsInstalled: false,
     hooksPath: join(mastraCodeRoot, "hooks.json"),
@@ -58,6 +54,24 @@ export async function ensureDevAgentProjectFiles(
     hooksDeferredReason:
       "No peco hooks are installed by default. Workflow sequencing belongs in skills and repo verification tools; hooks are reserved for future narrow unsafe-action guardrails.",
   };
+}
+
+async function listManualSkillFiles(
+  skillsRoot: string,
+): Promise<DevAgentProjectFilesSummary["skills"]> {
+  const entries = await readdir(skillsRoot, { withFileTypes: true });
+  const skills: DevAgentProjectFilesSummary["skills"] = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+
+    const skillPath = join(skillsRoot, entry.name, "SKILL.md");
+    if ((await readExisting(skillPath)) == null) continue;
+
+    skills.push({ name: entry.name, path: skillPath, status: "unchanged" });
+  }
+
+  return skills.sort((left, right) => left.name.localeCompare(right.name));
 }
 
 async function ensureManagedInstructions(instructionsPath: string): Promise<ManagedFileStatus> {

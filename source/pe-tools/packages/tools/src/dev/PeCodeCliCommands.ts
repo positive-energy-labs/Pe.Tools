@@ -12,6 +12,7 @@ import {
 import { ScriptingTools } from "../shared/scripting.ts";
 import type { ScriptExecuteInput } from "../shared/scripting.ts";
 import { talkToPeaHarness } from "./talk-to-pea.ts";
+import { talkToPecoZellij, type TalkToPecoMuxRequest } from "./talk-to-peco-mux.ts";
 
 export interface PeCodeCliCommandOptions {
   hostBaseUrl?: string;
@@ -26,6 +27,8 @@ export class PeCodeCliCommands {
       live: this.liveCommand(),
       script: this.scriptCommand(),
       "talk-to-pea": this.talkToPeaCommand(),
+      // "talk-to-peco-psmux": this.talkToPecoPsmuxCommand(),
+      "talk-to-peco-zellij": this.talkToPecoZellijCommand(),
     };
   }
 
@@ -205,6 +208,20 @@ export class PeCodeCliCommands {
     });
   }
 
+  private talkToPecoZellijCommand() {
+    return define({
+      name: "talk-to-peco-zellij",
+      description:
+        "POC: open peco in a new zellij pane and optionally send it a prompt through zellij key input.",
+      args: pecoMuxArgs,
+      toKebab: true,
+      run: async (ctx) => {
+        const result = await talkToPecoZellij(resolvePecoMuxCliRequest(ctx.values));
+        writeObject(result);
+      },
+    });
+  }
+
   private scriptExecuteCommand() {
     return define({
       name: "execute",
@@ -285,6 +302,47 @@ export class PeCodeCliCommands {
   }
 }
 
+const pecoMuxArgs = {
+  prompt: {
+    type: "string",
+    description: "Optional first prompt to type into the newly opened peco TUI pane.",
+  },
+  cwd: {
+    type: "string",
+    description: "Repo path used as the pane working directory.",
+  },
+  direction: {
+    type: "string",
+    description: "Pane split direction: right or down.",
+    default: "right",
+  },
+  startupDelayMs: {
+    type: "number",
+    description: "Milliseconds to wait for the TUI to start before sending the prompt.",
+    default: 7000,
+  },
+  postSubmitDelayMs: {
+    type: "number",
+    description: "Milliseconds to wait after submitting the prompt before dumping the screen.",
+    default: 2500,
+  },
+  timeoutSeconds: {
+    type: "number",
+    description: "Timeout in seconds.",
+    default: 90,
+  },
+  dumpScreen: {
+    type: "boolean",
+    description: "Dump the target pane screen after launch/send.",
+    default: true,
+  },
+  dumpFullScrollback: {
+    type: "boolean",
+    description: "Include full mux scrollback in the screen dump when supported.",
+    default: false,
+  },
+} as const;
+
 const commonArgs = {
   host: {
     type: "string",
@@ -313,6 +371,24 @@ const commonArgs = {
     default: "Pe.Tools",
   },
 } as const;
+
+function resolvePecoMuxCliRequest(values: Record<string, unknown>): TalkToPecoMuxRequest {
+  const direction = asOptionalString(values.direction) ?? "right";
+  if (direction !== "right" && direction !== "down") {
+    throw new Error("Unknown direction. Expected right or down.");
+  }
+
+  return {
+    prompt: firstNonBlank(values.prompt),
+    cwd: firstNonBlank(values.cwd),
+    direction,
+    startupDelayMs: asOptionalNumber(values.startupDelayMs) ?? 7000,
+    postSubmitDelayMs: asOptionalNumber(values.postSubmitDelayMs) ?? 2500,
+    timeoutSeconds: asOptionalNumber(values.timeoutSeconds) ?? 90,
+    dumpScreen: values.dumpScreen !== false,
+    dumpFullScrollback: values.dumpFullScrollback === true,
+  };
+}
 
 async function resolveScriptContent(values: Record<string, unknown>): Promise<string | undefined> {
   const explicit = firstNonBlank(values.scriptContent);
@@ -391,4 +467,8 @@ function firstNonBlank(...values: unknown[]): string | undefined {
 
 function asOptionalString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function asOptionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }

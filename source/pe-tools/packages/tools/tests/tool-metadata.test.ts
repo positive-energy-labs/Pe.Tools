@@ -34,6 +34,6 @@ test("peco runtime profile composes product and dev tools", () => {
   expect(Object.keys(peCodeRuntimeToolProfile.tools).sort()).toEqual(defaultPeCodeToolIds);
   expect([...peCodeRuntimeToolProfile.catalog.keys()].sort()).toEqual(defaultPeCodeToolIds);
   expect(Object.keys(peCodeRuntimeToolProfile.commands?.createSubCommands?.() ?? {})).toEqual(
-    expect.arrayContaining(["live", "script", "talk-to-pea"]),
+    expect.arrayContaining(["live", "script", "talk-to-pea", "talk-to-peco-zellij"]),
   );
 });

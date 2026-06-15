@@ -12,6 +12,7 @@ import { runAttachedRrdTest, runPeDevWorkflow } from "./pe-dev-workflow/index.js
 
 import { PeHostClient } from "@pe/host-client";
 import { talkToPeaHarness } from "./talk-to-pea.js";
+import { talkToPecoPsmux, talkToPecoZellij } from "./talk-to-peco-mux.ts";
 import { ScriptingTools, scriptExecuteInputSchema } from "../shared/scripting.ts";
 
 const defaultTimeoutSeconds = defaultLiveLoopTimeoutSeconds;
@@ -166,6 +167,66 @@ export const talkToPea = createTool({
       reviewFrame: input.reviewFrame,
       timeoutSeconds: input.timeoutSeconds ?? defaultTimeoutSeconds,
       maxMessages: input.maxMessages ?? 12,
+    }),
+});
+
+const talkToPecoMuxInputSchema = repoCommandInputSchema.extend({
+  prompt: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("Optional first prompt to type into the newly opened peco TUI pane."),
+  cwd: z.string().min(1).optional().describe("Repo path used as the pane working directory."),
+  direction: z.enum(["right", "down"]).default("right"),
+  startupDelayMs: z.number().min(0).max(60000).default(7000),
+  postSubmitDelayMs: z.number().min(0).max(60000).default(2500),
+  dumpScreen: z.boolean().default(true),
+  dumpFullScrollback: z.boolean().default(false),
+});
+
+export const talkToPecoZellijTool = createTool({
+  id: "talk_to_peco_zellij",
+  description:
+    "POC: open a second peco TUI in a new zellij pane and optionally talk to it by sending terminal input with zellij write-chars/send-keys.",
+  inputSchema: talkToPecoMuxInputSchema,
+  execute: async (input) =>
+    talkToPecoZellij({
+      prompt: input.prompt,
+      cwd: input.cwd,
+      direction: input.direction,
+      startupDelayMs: input.startupDelayMs,
+      postSubmitDelayMs: input.postSubmitDelayMs,
+      timeoutSeconds: input.timeoutSeconds,
+      dumpScreen: input.dumpScreen,
+      dumpFullScrollback: input.dumpFullScrollback,
+    }),
+});
+
+export const talkToPecoPsmuxTool = createTool({
+  id: "talk_to_peco_psmux",
+  description:
+    "POC: open a second peco TUI in a psmux/tmux pane and optionally talk to it by sending terminal input with tmux send-keys.",
+  inputSchema: talkToPecoMuxInputSchema.extend({
+    sessionName: z.string().min(1).default("peco-mux-poc"),
+    attachInZellij: z
+      .boolean()
+      .default(true)
+      .describe(
+        "When not already inside psmux/tmux, also open a zellij pane attached to the tmux session for visibility.",
+      ),
+  }),
+  execute: async (input) =>
+    talkToPecoPsmux({
+      prompt: input.prompt,
+      cwd: input.cwd,
+      direction: input.direction,
+      startupDelayMs: input.startupDelayMs,
+      postSubmitDelayMs: input.postSubmitDelayMs,
+      timeoutSeconds: input.timeoutSeconds,
+      dumpScreen: input.dumpScreen,
+      dumpFullScrollback: input.dumpFullScrollback,
+      sessionName: input.sessionName,
+      attachInZellij: input.attachInZellij,
     }),
 });
 
