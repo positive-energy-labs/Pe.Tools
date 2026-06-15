@@ -79,4 +79,9 @@ export const peCodeToolCatalog: RuntimeToolCatalog = createRuntimeToolCatalog({
     kind: "execute",
     provenance: { source: "app", label: "peco" },
   },
+  talk_to_peco_zellij: {
+    title: "Talk To Peco Zellij",
+    kind: "execute",
+    provenance: { source: "app", label: "peco" },
+  },
 });

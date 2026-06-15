@@ -1,5 +1,7 @@
 import { Harness, type HarnessConfig } from "@mastra/core/harness";
 import { wrapModelForFinalToolListLogging } from "./final-tool-list-logging.ts";
+import { RuntimeHarness } from "./runtime-harness.ts";
+import { createRuntimeThreadLockWithMastraCodeInterop } from "./thread-lock.ts";
 import { createRuntimeSessions, type RuntimeSessionOptions } from "../session/runtime-sessions.ts";
 import type { RuntimeAuthProfile } from "../auth/types.ts";
 import type { RuntimeMemoryProfile } from "../memory/profiles.ts";
@@ -43,7 +45,7 @@ export async function createRuntimeHarness<
   const config = options.harness
     ? options.config
     : await resolveRuntimeHarnessConfig(options, request);
-  const harness = options.harness ?? new Harness<TState>(config);
+  const harness = options.harness ?? new RuntimeHarness<TState>(config);
   const sessions =
     options.sessions ??
     options.createSessions?.(harness) ??
@@ -65,7 +67,7 @@ export async function createRuntimeHarness<
     mcpManager: options.mcpManager,
     metadata: options.metadata,
     close: () => {
-      closeTask ??= closeRuntimeHarness(harness, config.storage);
+      closeTask ??= closeRuntimeHarness(harness, config.storage, config.threadLock);
       return closeTask;
     },
   };
@@ -82,8 +84,17 @@ type HarnessWithMastra<TState extends Record<string, unknown>> = Harness<TState>
 async function closeRuntimeHarness<TState extends Record<string, unknown>>(
   harness: Harness<TState>,
   storage: ClosableStorage | undefined,
+  threadLock: HarnessConfig<TState>["threadLock"] | undefined,
 ): Promise<void> {
   harness.abort();
+  const currentThreadId = harness.getCurrentThreadId();
+  if (currentThreadId) {
+    try {
+      await threadLock?.release(currentThreadId);
+    } catch {
+      // Best-effort cleanup only.
+    }
+  }
   const mastra = (harness as HarnessWithMastra<TState>).getMastra?.();
   if (mastra?.shutdown) {
     await mastra.shutdown();
@@ -118,6 +129,11 @@ async function resolveRuntimeHarnessConfig<
   const resolveModel = configuredResolveModel
     ? (modelId: string) => wrapModelForFinalToolListLogging(configuredResolveModel(modelId))
     : undefined;
+  const threadLock =
+    options.config.threadLock ??
+    (await createRuntimeThreadLockWithMastraCodeInterop({
+      storageProfileKind: options.storageProfile?.kind,
+    }));
 
   return {
     ...options.config,
@@ -125,6 +141,7 @@ async function resolveRuntimeHarnessConfig<
     ...(memory ? { memory } : {}),
     ...(tools ? { tools } : {}),
     ...(resolveModel ? { resolveModel } : {}),
+    threadLock,
   };
 }
 

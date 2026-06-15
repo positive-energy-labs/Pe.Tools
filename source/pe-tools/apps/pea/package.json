@@ -34,7 +34,7 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@mastra/core": "1.41.0",
+    "@mastra/core": "1.42.0",
     "@pe/acp-client": "workspace:*",
     "@pe/host-client": "workspace:*",
     "@pe/runtime": "workspace:*",
@@ -43,7 +43,7 @@
     "@pe/workbench-core": "workspace:*",
     "@pe/workbench-transport": "workspace:*",
     "gunshi": "^0.29.5",
-    "mastracode": "^0.22.2"
+    "mastracode": "^0.22.3"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

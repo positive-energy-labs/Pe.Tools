@@ -16,6 +16,12 @@ import { peaProductToolCatalog } from "../tool-metadata.ts";
 import { PeaCliCommands, type PeaCliCommandOptions } from "./PeaCliCommands.ts";
 export { peaProductToolCatalog } from "../tool-metadata.ts";
 export { PeaCliCommands } from "./PeaCliCommands.ts";
+export {
+  bundledPeaSkills,
+  materializeBundledPeaSkills,
+  peaSkillPaths,
+  peaStandardSkillsRoot,
+} from "./skills.ts";
 
 interface PeaProductToolContext {
   hostBaseUrl?: string;

@@ -5,11 +5,7 @@ import { fileURLToPath } from "node:url";
 import { Agent } from "@mastra/core/agent";
 import type { MastraModelConfig } from "@mastra/core/llm";
 import type { RequestContext } from "@mastra/core/request-context";
-import {
-  LocalFilesystem,
-  LocalSandbox,
-  Workspace,
-} from "@mastra/core/workspace";
+import { LocalFilesystem, LocalSandbox, Workspace } from "@mastra/core/workspace";
 import { PeHostClient } from "@pe/host-client";
 import {
   createMastraCodeAuthStorage,
@@ -24,8 +20,10 @@ import {
 } from "@pe/runtime";
 import {
   configurePeaProductToolContext,
+  materializeBundledPeaSkills,
   peaProductToolProfile,
   peaProductTools,
+  peaSkillPaths,
 } from "../pea/index.ts";
 
 const resultPrefix = "__PEA_TALK_WORKER_RESULT__";
@@ -105,11 +103,7 @@ export async function runTalkToPeaWorker(
     const feedbackResponse = request.feedbackPrompt
       ? await sendPeaMessageWithTimeout(
           runtime.harness,
-          buildTalkToPeaPrompt(
-            "feedback",
-            request.feedbackPrompt,
-            request.reviewFrame,
-          ),
+          buildTalkToPeaPrompt("feedback", request.feedbackPrompt, request.reviewFrame),
           request.timeoutSeconds,
         )
       : null;
@@ -141,6 +135,8 @@ async function createPeaWorkerRuntime(): Promise<PeaWorkerRuntime> {
   const cwd = await resolvePeaWorkerCwd(hostBaseUrl, workspaceKey);
   process.chdir(cwd);
 
+  await materializeBundledPeaSkills(cwd);
+
   const authStorage = await createMastraCodeAuthStorage();
   loadStoredMastraCodeApiKeysIntoEnv(authStorage);
   // TODO: We should not be doing this. The whole point of talking to pea is to see how it would be in prod This included the system prompt and everything.
@@ -150,8 +146,7 @@ async function createPeaWorkerRuntime(): Promise<PeaWorkerRuntime> {
     name: "Pea Revit Agent",
     description: "High-trust Revit/operator agent for Positive Energy tooling.",
     instructions: peaWorkerInstructions,
-    model: ({ requestContext }) =>
-      resolveCurrentModel(requestContext, defaultPeaAgentModelId),
+    model: ({ requestContext }) => resolveCurrentModel(requestContext, defaultPeaAgentModelId),
     tools: peaProductTools,
   });
   const workspace = new Workspace({
@@ -159,7 +154,7 @@ async function createPeaWorkerRuntime(): Promise<PeaWorkerRuntime> {
     name: "Pea Workspace",
     filesystem: new LocalFilesystem({ basePath: cwd, contained: true }),
     sandbox: new LocalSandbox({ workingDirectory: cwd, env: process.env }),
-    skills: [".pea/bundled-skills", ".pea/skills"],
+    skills: [...peaSkillPaths],
   });
   const handle = await createRuntimeHarness({
     request: { protocol: "test", cwd, workspaceRoot: cwd },
@@ -207,10 +202,7 @@ async function createPeaWorkerRuntime(): Promise<PeaWorkerRuntime> {
 const peaWorkerInstructions = `You are Positive Energy Agent, Pea: the deployed Revit/operator workbench for MEP, BIM, and architecture practitioners.
 Use Pea product tools to inspect host/Revit state, run approved scripts, and produce operator-facing answers. Stay inside the deployed product posture: do not inspect repo source, discuss Peco implementation, or present build/Rider/RRD internals as user-facing facts. Prefer small observable steps, say what you verified, and be explicit when live Revit evidence is unavailable.`;
 
-async function resolvePeaWorkerCwd(
-  hostBaseUrl: string,
-  workspaceKey: string,
-): Promise<string> {
+async function resolvePeaWorkerCwd(hostBaseUrl: string, workspaceKey: string): Promise<string> {
   const client = new PeHostClient({ baseUrl: hostBaseUrl });
   try {
     await client.ensurePeHostRunning(hostBaseUrl);
@@ -258,9 +250,7 @@ function normalizePeaModelId(modelId: string): string {
   }
 }
 
-function isThinkingLevel(
-  value: unknown,
-): value is "off" | "low" | "medium" | "high" | "xhigh" {
+function isThinkingLevel(value: unknown): value is "off" | "low" | "medium" | "high" | "xhigh" {
   return (
     value === "off" ||
     value === "low" ||
@@ -284,15 +274,11 @@ function buildTalkToPeaPrompt(
   reviewFrame: TalkToPeaWorkerRequest["reviewFrame"],
 ): string {
   const reviewLines = [
-    reviewFrame?.userRequest
-      ? `Original user request: ${reviewFrame.userRequest}`
-      : null,
+    reviewFrame?.userRequest ? `Original user request: ${reviewFrame.userRequest}` : null,
     reviewFrame?.engineerQuestion
       ? `Harness engineer question: ${reviewFrame.engineerQuestion}`
       : null,
-    reviewFrame?.expectedUse
-      ? `Expected use of your answer: ${reviewFrame.expectedUse}`
-      : null,
+    reviewFrame?.expectedUse ? `Expected use of your answer: ${reviewFrame.expectedUse}` : null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -321,9 +307,7 @@ async function sendPeaMessageWithTimeout(
   timeoutSeconds: number,
 ) {
   const beforeMessages = await harness.listMessages({ limit: 80 });
-  const beforeIds = new Set(
-    beforeMessages.flatMap((message) => (message.id ? [message.id] : [])),
-  );
+  const beforeIds = new Set(beforeMessages.flatMap((message) => (message.id ? [message.id] : [])));
   const deadline = Date.now() + timeoutSeconds * 1000;
   let timedOut = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -337,17 +321,12 @@ async function sendPeaMessageWithTimeout(
 
   try {
     await Promise.race([harness.sendMessage({ content }), timeout]);
-    const latestAssistantText = await waitForNewAssistantText(
-      harness,
-      beforeIds,
-      deadline,
-    );
+    const latestAssistantText = await waitForNewAssistantText(harness, beforeIds, deadline);
     if (!latestAssistantText) {
       return {
         ok: false,
         timedOut: Date.now() >= deadline,
-        latestAssistantText:
-          "Pea did not produce an assistant response for this turn.",
+        latestAssistantText: "Pea did not produce an assistant response for this turn.",
       };
     }
 
@@ -356,8 +335,7 @@ async function sendPeaMessageWithTimeout(
     return {
       ok: false,
       timedOut,
-      latestAssistantText:
-        error instanceof Error ? error.message : String(error),
+      latestAssistantText: error instanceof Error ? error.message : String(error),
     };
   } finally {
     if (timer) clearTimeout(timer);
@@ -386,13 +364,9 @@ async function waitForNewAssistantText(
   return "";
 }
 
-function transcriptTail(
-  messages: Array<{ role: string; content: Array<unknown> }>,
-) {
+function transcriptTail(messages: Array<{ role: string; content: Array<unknown> }>) {
   return messages
-    .filter(
-      (message) => message.role === "user" || message.role === "assistant",
-    )
+    .filter((message) => message.role === "user" || message.role === "assistant")
     .map((message) => ({
       role: message.role,
       text: textFromMessage(message).slice(0, 4000),
@@ -400,9 +374,7 @@ function transcriptTail(
     .filter((message) => message.text.length > 0);
 }
 
-function latestAssistantText(
-  messages: Array<{ role: string; content: Array<unknown> }>,
-): string {
+function latestAssistantText(messages: Array<{ role: string; content: Array<unknown> }>): string {
   for (const message of [...messages].reverse()) {
     if (message.role !== "assistant") continue;
 
@@ -419,9 +391,7 @@ function textFromMessage(message: { content: Array<unknown> }): string {
       if (typeof part !== "object" || part === null) return "";
 
       const typedPart = part as { type?: string; text?: unknown };
-      return typedPart.type === "text" && typeof typedPart.text === "string"
-        ? typedPart.text
-        : "";
+      return typedPart.type === "text" && typeof typedPart.text === "string" ? typedPart.text : "";
     })
     .filter(Boolean)
     .join("\n")
@@ -432,14 +402,10 @@ function toolTraceSince(
   beforeMessages: Array<{ id?: string; content: Array<unknown> }>,
   messages: Array<{ id?: string; content: Array<unknown> }>,
 ) {
-  const beforeIds = new Set(
-    beforeMessages.map((message) => message.id).filter(Boolean),
-  );
+  const beforeIds = new Set(beforeMessages.map((message) => message.id).filter(Boolean));
   return messages
     .filter((message) => !message.id || !beforeIds.has(message.id))
-    .flatMap((message) =>
-      message.content.flatMap((part) => toolTracePart(part)),
-    );
+    .flatMap((message) => message.content.flatMap((part) => toolTracePart(part)));
 }
 
 function toolTracePart(part: unknown) {
@@ -503,9 +469,7 @@ function readStdin(): Promise<string> {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   main().catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
-    process.stdout.write(
-      `${resultPrefix}${JSON.stringify({ ok: false, error: message })}\n`,
-    );
+    process.stdout.write(`${resultPrefix}${JSON.stringify({ ok: false, error: message })}\n`);
     process.exitCode = 1;
   });
 }

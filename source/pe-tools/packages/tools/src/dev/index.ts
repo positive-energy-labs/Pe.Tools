@@ -8,6 +8,7 @@ import {
   liveRrdSync,
   scriptExecuteWithSync,
   talkToPea,
+  talkToPecoZellijTool,
   test,
 } from "./tools.ts";
 
@@ -19,6 +20,7 @@ export {
   liveRrdSync,
   scriptExecuteWithSync,
   talkToPea,
+  talkToPecoZellijTool,
   test,
 } from "./tools.ts";
 
@@ -28,6 +30,8 @@ export const peCodeTools = {
   [liveRrdSync.id]: liveRrdSync,
   [scriptExecuteWithSync.id]: scriptExecuteWithSync,
   [talkToPea.id]: talkToPea,
+  // [talkToPecoPsmuxTool.id]: talkToPecoPsmuxTool,
+  [talkToPecoZellijTool.id]: talkToPecoZellijTool,
   [test.id]: test,
 };
 

@@ -21,11 +21,16 @@ export interface RuntimeContextInjection {
   resumeDecisions?: RuntimeResumeDecision[];
 }
 
+export interface RuntimeThreadSettingsContext {
+  setThreadSetting: (options: { key: string; value: unknown }) => Promise<void> | void;
+}
+
 const runtimeContextPromptKey = "runtime.contextPrompt";
 const runtimeContextEntriesKey = "runtime.contextEntries";
 const runtimeProtocolKey = "runtime.protocol";
 const runtimeProtocolSessionIdKey = "runtime.protocolSessionId";
 const runtimeResumeDecisionsKey = "runtime.resumeDecisions";
+const runtimeThreadSettingsKey = "runtime.threadSettings";
 
 export function createRuntimeRequestContext(injection: RuntimeContextInjection): RequestContext {
   const requestContext = new RequestContext();
@@ -60,6 +65,19 @@ export function getRuntimeResumeDecisions(requestContext: RequestContext): Runti
   return (
     (requestContext.get(runtimeResumeDecisionsKey) as RuntimeResumeDecision[] | undefined) ?? []
   );
+}
+
+export function setRuntimeThreadSettings(
+  requestContext: RequestContext,
+  settings: RuntimeThreadSettingsContext,
+): void {
+  requestContext.set(runtimeThreadSettingsKey, settings);
+}
+
+export function getRuntimeThreadSettings(
+  requestContext: Pick<RequestContext, "get"> | undefined,
+): RuntimeThreadSettingsContext | undefined {
+  return requestContext?.get(runtimeThreadSettingsKey) as RuntimeThreadSettingsContext | undefined;
 }
 
 export function appendRuntimeContextPrompt(

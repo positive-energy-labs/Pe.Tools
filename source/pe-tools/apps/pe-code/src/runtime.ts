@@ -1,55 +1,24 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
-import { Agent } from "@mastra/core/agent";
-import type { MastraModelConfig } from "@mastra/core/llm";
-import type { RequestContext } from "@mastra/core/request-context";
+import type { Harness } from "@mastra/core/harness";
+import { createMastraCode } from "mastracode";
 import {
-  LocalFilesystem,
-  LocalSandbox,
-  Workspace,
-} from "@mastra/core/workspace";
-import {
-  createMastraCodeStorageProfile,
-  createOpenAiRuntimeAuthProfile,
-  createPeCodeRuntimeMemoryProfile,
   createRuntimeDescriptor,
   createRuntimeFactory,
-  createRuntimeHarness,
-  resolveMastraCodeModel,
-  type RuntimeAuthProfile,
-  type RuntimeMemoryProfile,
+  createRuntimeSessions,
   type RuntimeCreateRequest,
-  type RuntimeDescriptor,
   type RuntimeFactory,
   type RuntimeHandle,
-  type RuntimeHarnessConfig,
-  type RuntimeStorageProfile,
   type RuntimeToolProfile,
 } from "@pe/runtime";
 import { peCodeRuntimeToolProfile as peCodeToolsRuntimeToolProfile } from "@pe/tools";
-import { instructions } from "./instructions.ts";
 import { ensureDevAgentProjectFiles } from "./project-files.ts";
 
 export const peCodeRuntimeToolProfile = peCodeToolsRuntimeToolProfile;
 export const defaultPeCodeRuntimeToolProfile: RuntimeToolProfile =
   peCodeRuntimeToolProfile;
 export const defaultPeCodeRuntimeToolCatalog = peCodeRuntimeToolProfile.catalog;
-
-export interface PeCodeRuntimeFactoryOptions<
-  TState extends Record<string, unknown> = Record<string, unknown>,
-> {
-  config: RuntimeHarnessConfig<TState>;
-  descriptor?: RuntimeDescriptor;
-  auth?: RuntimeAuthProfile;
-  authStorage?: unknown;
-  metadata?: Record<string, unknown>;
-  storageProfile?: RuntimeStorageProfile;
-  memoryProfile?: RuntimeMemoryProfile<TState>;
-  toolProfile?: RuntimeToolProfile;
-  createHandle?: (
-    request: RuntimeCreateRequest,
-  ) => Promise<RuntimeHandle<TState>>;
-}
+export const defaultPeCodeSandboxAllowedPath = "C:/Users/kaitp/source/repos";
 
 export interface PeCodeTuiRuntimeOptions {
   cwd?: string;
@@ -57,108 +26,39 @@ export interface PeCodeTuiRuntimeOptions {
   modelId?: string;
 }
 
-export function createPeCodeRuntimeFactory<
-  TState extends Record<string, unknown> = Record<string, unknown>,
->(options: PeCodeRuntimeFactoryOptions<TState>): RuntimeFactory<TState> {
-  const descriptor =
-    options.descriptor ??
-    createRuntimeDescriptor("peco", {
-      modeName: "Build",
-      agentName: "Pe.Tools Dev Agent",
-      title: "peco",
-      description: "Pe.Tools repo coding agent.",
-    });
-  const auth = options.auth ?? createPeCodeRuntimeAuthProfile();
-  const storageProfile =
-    options.storageProfile ?? createMastraCodeStorageProfile();
-  const memoryProfile =
-    options.memoryProfile ?? createPeCodeRuntimeMemoryProfile<TState>();
-  const toolProfile = options.toolProfile ?? peCodeRuntimeToolProfile;
-
-  return createRuntimeFactory(
-    descriptor,
-    async (request) =>
-      options.createHandle?.(request) ??
-      createRuntimeHarness<TState>({
-        config: options.config,
-        request,
-        auth,
-        authStorage: options.authStorage,
-        storageProfile,
-        memoryProfile,
-        toolProfile,
-        metadata: {
-          ...options.metadata,
-          runtimeId: descriptor.id,
-          storageProfileId: storageProfile.id,
-          memoryProfileId: memoryProfile.id,
-          toolProfileId: toolProfile.id,
-          protocol: request.protocol,
-          cwd: request.cwd,
-          workspaceRoot: request.workspaceRoot,
-        },
-      }),
-    auth,
-  );
-}
-
 export async function createPeCodeProtocolRuntimeFactory(
   options: PeCodeTuiRuntimeOptions = {},
 ): Promise<RuntimeFactory> {
-  const startPath = path.resolve(
-    options.workspaceRoot ?? options.cwd ?? process.cwd(),
-  );
-  const cwd = await resolveDevAgentProjectRoot(startPath);
-  const authStorage = await createMastraCodeAuthStorage();
-  loadStoredApiKeysIntoEnv(authStorage);
-  await ensureDevAgentProjectFiles(cwd);
-
-  const defaultModelId = options.modelId ?? "openai/gpt-5.5";
-  const agent = new Agent({
-    id: "code-agent",
-    name: "Pe.Tools Dev Agent",
+  const descriptor = createRuntimeDescriptor("peco", {
+    modeName: "Build",
+    agentName: "Pe.Tools Dev Agent",
+    title: "peco",
     description: "Pe.Tools repo coding agent.",
-    instructions,
-    model: ({ requestContext }) =>
-      resolveCurrentModel(requestContext, defaultModelId),
-    tools: peCodeRuntimeToolProfile.tools,
-  });
-  const workspace = new Workspace({
-    id: "peco-workspace",
-    name: "Pe.Tools Repo Workspace",
-    filesystem: new LocalFilesystem({ basePath: cwd, contained: true }),
-    sandbox: new LocalSandbox({ workingDirectory: cwd, env: process.env }),
-    skills: [".mastracode/skills", ".agents/skills", ".claude/skills"],
   });
 
-  process.chdir(cwd);
-
-  return createPeCodeRuntimeFactory<Record<string, unknown>>({
-    config: {
-      id: "peco",
-      resourceId: createLocalResourceId("peco", cwd),
-      workspace,
-      modes: [
-        {
-          id: "build",
-          name: "Build",
-          default: true,
-          defaultModelId,
-          color: "#2563eb",
-          agent,
+  return createRuntimeFactory(
+    descriptor,
+    (request) => createPeCodeRuntimeHandle(options, request),
+    {
+      startupThread: {
+        createTitle: "New thread",
+        onThreadOpened: async ({ request, handle, selection }) => {
+          const projectPath =
+            request.workspaceRoot ??
+            request.cwd ??
+            options.workspaceRoot ??
+            options.cwd; // TODO: wtf is this. red flag that theres so many fallbacks imo
+          if (projectPath && !selection.thread.metadata?.projectPath) {
+            await handle.harness.setThreadSetting({
+              key: "projectPath",
+              value: projectPath,
+            });
+          }
+          await persistDefaultSandboxAllowedPaths(handle.harness);
         },
-      ],
-      tools: peCodeRuntimeToolProfile.tools,
-      initialState: {
-        currentModelId: defaultModelId,
-        yolo: true,
-        configDir: ".mastracode",
       },
-      modelAuthChecker: (provider) =>
-        hasStoredAuth(authStorage, provider) ? true : undefined,
     },
-    authStorage,
-  });
+  );
 }
 
 export async function createPeCodeTuiRuntime(
@@ -168,7 +68,11 @@ export async function createPeCodeTuiRuntime(
     options.workspaceRoot ?? options.cwd ?? process.cwd(),
   );
   const cwd = await resolveDevAgentProjectRoot(startPath);
-  const factory = await createPeCodeProtocolRuntimeFactory(options);
+  const factory = await createPeCodeProtocolRuntimeFactory({
+    ...options,
+    cwd,
+    workspaceRoot: cwd,
+  });
   return factory.create({
     protocol: "tui",
     cwd,
@@ -179,28 +83,125 @@ export async function createPeCodeTuiRuntime(
 export async function runPeCodeTui(
   options: PeCodeTuiRuntimeOptions = {},
 ): Promise<void> {
-  const runtime = await createPeCodeTuiRuntime(options);
+  const startPath = path.resolve(
+    options.workspaceRoot ?? options.cwd ?? process.cwd(),
+  );
+  const cwd = await resolveDevAgentProjectRoot(startPath);
+  const runtime = await createPeCodeTuiRuntime({
+    ...options,
+    cwd,
+    workspaceRoot: cwd,
+  });
   const { MastraTUI } = await import("mastracode/tui");
   const tui = new MastraTUI({
     harness: runtime.harness,
     authStorage: runtime.authStorage as never,
+    hookManager: runtime.hookManager as never,
+    mcpManager: runtime.mcpManager as never,
     appName: "peco (Pe.Tools)",
     version: "0.1.0",
   });
   await tui.run();
 }
 
-export function createPeCodeRuntimeAuthProfile(
-  options: {
-    source?: string;
-    allowOauthBetaAuth?: boolean;
-  } = {},
-): RuntimeAuthProfile {
-  return createOpenAiRuntimeAuthProfile({
-    ...options,
-    apiKeyDescription:
-      "Use OPENAI_API_KEY or stored peco API-key credentials for model access.",
+export async function persistDefaultSandboxAllowedPaths(
+  harness: Pick<
+    RuntimeHandle["harness"],
+    "getState" | "setState" | "setThreadSetting"
+  >,
+): Promise<string[]> {
+  const state = harness.getState() as { sandboxAllowedPaths?: string[] };
+  const current = Array.isArray(state.sandboxAllowedPaths)
+    ? state.sandboxAllowedPaths
+    : [];
+  const next = mergeSandboxAllowedPaths(current);
+
+  if (!samePathList(current, next)) {
+    await harness.setState({ sandboxAllowedPaths: next } as never);
+  }
+  await harness.setThreadSetting({ key: "sandboxAllowedPaths", value: next });
+
+  return next;
+}
+
+async function createPeCodeRuntimeHandle(
+  options: PeCodeTuiRuntimeOptions,
+  request: RuntimeCreateRequest,
+): Promise<RuntimeHandle> {
+  const startPath = path.resolve(
+    request.workspaceRoot ??
+      request.cwd ??
+      options.workspaceRoot ??
+      options.cwd ??
+      process.cwd(),
+  );
+  const cwd = await resolveDevAgentProjectRoot(startPath);
+  process.chdir(cwd);
+  await ensureDevAgentProjectFiles(cwd);
+
+  const sandboxAllowedPaths = mergeSandboxAllowedPaths(
+    request.additionalDirectories ?? [],
+  );
+  const runtime = await createMastraCode({
+    cwd,
+    // default is configDir: ".mastracode",
+    extraTools: peCodeExtraTools,
+    disabledTools: ["string_replace_lsp", "ast_smart_edit", "lsp_inspect"], // this doesn't seem to apply?
+    initialState: {
+      ...(options.modelId ? { currentModelId: options.modelId } : {}),
+      sandboxAllowedPaths,
+      yolo: true,
+    },
   });
+  const harness = runtime.harness as unknown as Harness<
+    Record<string, unknown>
+  >;
+
+  return {
+    harness,
+    sessions: createRuntimeSessions(harness, {
+      toolCatalog: peCodeRuntimeToolProfile.catalog,
+    }),
+    workspace: { cwd, root: cwd },
+    authStorage: runtime.authStorage,
+    hookManager: runtime.hookManager,
+    mcpManager: runtime.mcpManager,
+    metadata: {
+      runtimeId: "peco",
+      protocol: request.protocol,
+      cwd: request.cwd,
+      workspaceRoot: request.workspaceRoot,
+    },
+    close: () => closeMastraCodeHarness(harness),
+  };
+}
+
+type MastraCodeExtraTool = {
+  execute?: (input: unknown, context?: unknown) => unknown;
+  [key: string]: unknown;
+};
+
+const peCodeExtraTools = Object.fromEntries(
+  Object.entries(peCodeRuntimeToolProfile.tools).filter(
+    ([name]) => name !== "request_access",
+  ),
+) as unknown as Record<string, MastraCodeExtraTool>;
+
+function mergeSandboxAllowedPaths(paths: string[]): string[] {
+  return Array.from(
+    new Set(
+      [defaultPeCodeSandboxAllowedPath, ...paths].map((entry) =>
+        path.resolve(entry),
+      ),
+    ),
+  );
+}
+
+function samePathList(left: string[], right: string[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((entry, index) => entry === right[index])
+  );
 }
 
 async function resolveDevAgentProjectRoot(startPath: string): Promise<string> {
@@ -234,69 +235,13 @@ async function readDirectoryEntries(directory: string) {
   }
 }
 
-function resolveCurrentModel(
-  requestContext: RequestContext,
-  fallbackModelId: string,
-): Promise<MastraModelConfig> {
-  const harness = requestContext.get("harness") as
-    | { getState?: () => Record<string, unknown> }
-    | undefined;
-  const state = harness?.getState?.();
-  const modelId =
-    typeof state?.currentModelId === "string" && state.currentModelId.length > 0
-      ? state.currentModelId
-      : fallbackModelId;
-  const thinkingLevel = state?.thinkingLevel;
+type ClosableHarness = Harness<Record<string, unknown>> & {
+  getMastra?: () => { shutdown?: () => Promise<void> | void } | undefined;
+};
 
-  return resolveMastraCodeModel(modelId, {
-    thinkingLevel: isThinkingLevel(thinkingLevel) ? thinkingLevel : undefined,
-    remapForCodexOAuth: true,
-    requestContext,
-  });
-}
-
-async function createMastraCodeAuthStorage(): Promise<unknown> {
-  const module = (await import("mastracode")) as {
-    createAuthStorage(): unknown;
-  };
-  return module.createAuthStorage();
-}
-
-function loadStoredApiKeysIntoEnv(authStorage: unknown): void {
-  const storage = authStorage as {
-    loadStoredApiKeysIntoEnv?: (providers: Record<string, string>) => void;
-  };
-  storage.loadStoredApiKeysIntoEnv?.({
-    anthropic: "ANTHROPIC_API_KEY",
-    openai: "OPENAI_API_KEY",
-    google: "GOOGLE_GENERATIVE_AI_API_KEY",
-    groq: "GROQ_API_KEY",
-    xai: "XAI_API_KEY",
-  });
-}
-
-function hasStoredAuth(authStorage: unknown, provider: string): boolean {
-  const storage = authStorage as {
-    hasStoredApiKey?: (provider: string) => boolean;
-    isLoggedIn?: (provider: string) => boolean;
-  };
-  return Boolean(
-    storage.hasStoredApiKey?.(provider) || storage.isLoggedIn?.(provider),
-  );
-}
-
-function isThinkingLevel(
-  value: unknown,
-): value is "off" | "low" | "medium" | "high" | "xhigh" {
-  return (
-    value === "off" ||
-    value === "low" ||
-    value === "medium" ||
-    value === "high" ||
-    value === "xhigh"
-  );
-}
-
-function createLocalResourceId(runtimeId: string, cwd: string): string {
-  return `${runtimeId}:${Buffer.from(cwd).toString("base64url")}`;
+async function closeMastraCodeHarness(
+  harness: Harness<Record<string, unknown>>,
+): Promise<void> {
+  harness.abort();
+  await (harness as ClosableHarness).getMastra?.()?.shutdown?.();
 }

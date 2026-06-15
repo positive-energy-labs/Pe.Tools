@@ -17,8 +17,10 @@
   ],
   "type": "module",
   "exports": {
-    ".": "./dist/index.mjs",
-    "./package.json": "./package.json"
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
   },
   "publishConfig": {
     "access": "public"
@@ -33,12 +35,12 @@
   "dependencies": {
     "@ag-ui/core": "0.0.55",
     "@agentclientprotocol/sdk": "^0.25.0",
-    "@mastra/core": "1.41.0",
+    "@mastra/core": "1.42.0",
     "@mastra/libsql": "1.12.1",
     "@mastra/memory": "1.20.2",
     "@pe/agent-contracts": "workspace:*",
     "@pe/host-client": "workspace:*",
-    "mastracode": "^0.22.2"
+    "mastracode": "^0.22.3"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

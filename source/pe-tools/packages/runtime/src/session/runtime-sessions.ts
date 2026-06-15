@@ -1,5 +1,9 @@
 import type { Harness, HarnessEvent } from "@mastra/core/harness";
-import { createRuntimeRequestContext, type RuntimeContextEntry } from "../context.ts";
+import {
+  createRuntimeRequestContext,
+  setRuntimeThreadSettings,
+  type RuntimeContextEntry,
+} from "../context.ts";
 import { MastraHarnessToRuntimeEvents } from "../events.ts";
 import type { RuntimeToolSource } from "../tool-metadata.ts";
 import type {
@@ -63,7 +67,6 @@ export function createRuntimeSessions(
       const thread = (await harness.createThread(options)) as { id?: string };
       const threadId = thread.id;
       if (!threadId) throw new Error("Harness did not return a thread id.");
-      await harness.switchThread({ threadId });
       return {
         threadId,
         resourceId: harness.getResourceId(),
@@ -108,6 +111,7 @@ export function createRuntimeSessions(
         promptFragments,
         resumeDecisions: options.resumeDecisions,
       });
+      installRuntimeThreadSettings(requestContext, harness);
       await harness.sendMessage({ content: options.content, requestContext });
     },
     abort: harness.abort.bind(harness),
@@ -122,6 +126,22 @@ export function createRuntimeSessions(
       });
     },
   };
+}
+
+type ThreadSettingHarness = Harness<Record<string, unknown>> & {
+  setThreadSetting?: (options: { key: string; value: unknown }) => Promise<void> | void;
+};
+
+function installRuntimeThreadSettings(
+  requestContext: Parameters<typeof setRuntimeThreadSettings>[0],
+  harness: Harness<Record<string, unknown>>,
+): void {
+  const setThreadSetting = (harness as ThreadSettingHarness).setThreadSetting?.bind(harness);
+  if (!setThreadSetting) return;
+
+  setRuntimeThreadSettings(requestContext, {
+    setThreadSetting: (options) => setThreadSetting(options),
+  });
 }
 
 async function collectSessionPromptFragments(

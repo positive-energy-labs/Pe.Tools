@@ -11,15 +11,14 @@ import {
 import { createPeCodeProtocolRuntimeFactory, peCodeRuntimeToolProfile } from "./runtime.ts";
 
 export {
-  createPeCodeRuntimeAuthProfile,
-  createPeCodeRuntimeFactory,
   createPeCodeProtocolRuntimeFactory,
   createPeCodeTuiRuntime,
   runPeCodeTui,
   defaultPeCodeRuntimeToolCatalog,
   defaultPeCodeRuntimeToolProfile,
+  defaultPeCodeSandboxAllowedPath,
+  persistDefaultSandboxAllowedPaths,
 } from "./runtime.ts";
-export type { PeCodeRuntimeFactoryOptions } from "./runtime.ts";
 export { runPeCodeWeb } from "./web.ts";
 export type { PeCodeWebRuntimeOptions } from "./web.ts";
 
