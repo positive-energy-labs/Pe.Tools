@@ -1,19 +1,5 @@
 # ACP / AG-UI / Mastra Harness Adapter Report
 
-## Status
-
-Dense audit note for the current Pea beta protocol seam. This is source-derived from the local Pea adapter code and docs, then cross-checked against current public protocol docs.
-
-Primary local authority:
-
-- `source/pea/app/mastra-harness-runtime-events.ts`
-- `source/pea/app/pea-runtime-events.ts`
-- `source/pea/app/acp/pea-runtime-to-acp-events.ts`
-- `source/pea/app/agui/pea-runtime-to-agui-events.ts`
-- `source/pea/app/agui/pea-agui-agent.ts`
-- `source/pea/app/pea-runtime-interrupts.ts`
-- `docs/context/pea-beta-harness-wire-contract.md`
-
 Primary internet authority:
 
 - ACP introduction: <https://agentclientprotocol.com/get-started/introduction>

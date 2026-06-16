@@ -4,26 +4,51 @@ alwaysApply: true
 
 # Pe.Tools
 
-## Scope
-
 Repo-wide agent guidance for conventions, current paths, validation habits, Revit workflow constraints, and cross-package terminology that repeatedly matters across the codebase.
 
-## The Gist
+# Repo Context
 
-This repo exists to improve Engineering Designer workflows for MEP firms through strongly typed, debuggable Revit tooling. These documents are the lynchpins:
+This repo exists to improve Engineering Designer workflows for MEP firms through strongly typed, debuggable Revit tooling. *The primary product is Pea, a coding agent disguised as a Revit operator*. The goal is for Pea to be the ultimate shepherd for users in the Positive Energy ecosystem. The ultimate expression of Pea's potential is two-fold:
+1) Pea can operate revit using host ops as a low effort entry, and scripting for real work. Abilities may even include laying ductwork and piping, creating sheets, running family migrations with FF, etc. The role of this repo is to provide Pea with the tooling to accomplish these tasks reliably.
+2) Pea can make users' addin ideas come to life in Pods. Host operations and Pe.Revit.* packages are used as the foundation, and niche or advances functionality is added on top. Users smoothly share Pods, ask Pea to adapt them to their needs, and build community around them. Pea handles the hard coding, the user supplies intent and ideas.
 
-- `docs/ARCHITECTURE.md` - read before multi module changes, debugging, and code review. Contains target architecture; code should always seek to align.
-- `docs/BUILD.md` - read before changing anything build, deploy, or dev-loop related. Contians repo tooling justification and explanation. Always prove (or disprove) before changing the document. Information here is mission critical.
+Among other things, this requires Pe.Tools packages to expose good "public" apis, exposing hints/documentation/lsp, and building strong baseline context into Pea's world. Well curated example Pods, fat and Pe-specific skills, and building for discoverability/transparency/observability is key. Treat repo architecture/feature decisions with deep consideration for how it affects the exposed surface area and the Agent Experience (AX, like UX).
 
-This repo is greenfield: move fast, prefer the best long-term shape, and do not preserve compatibility shims unless they are a temporary compile bridge. Code style should optimize for linear execution flow, fail-fast behavior, composable systems, and wrappers around finicky Revit API behavior.
+## Repo Coding Posture
 
-## TLDRs
+This entire repo is greenfield: build for ideal long-term shape, and do not preserve compatibility shims unless they are *absolutely necessary* as a temporary compile bridge. Even when shims seem necessary, prefer breaking compile to surface loose ends. Code style should optimize for linear execution flow, fail-fast behavior, composable systems, and wrappers around finicky Revit API behavior.
 
-`BUILD.md` is the canonical repo guide for build, runtime, package, install, and Revit proof lanes.
+## Repo Operating Etiquette
 
-- Keep terminal compile/package proof separate from live-runtime freshness.
-- Protect the current RRD session aggressively. Breaking it can turn a small edit into a multi-minute restart plus document reopen wait.
-- Use the `pea live <sync/restart/status>` commands for RRD-safe live-looping if harness alternatives are not available.
+C# development with the Revit API requires very a specific and fragile tooling setup. Thus Pe.Tools has a custom set of tools to work around this; ALWAYS use these tools when live looping, failure to use them causes unexpected behavior, catasrophic workflow interuptions, and general confusion. This highly bespoke setup requires rigorous attention to keeping documentation and repo truth in sync.
+
+### Live Looping
+
+ALWAYS use RRD-safe live-loop tools, mcps, or cli commands when available.
+- Use `live_loop_context` as the read-only decision packet when AttachedRrd/Rider/Revit state matters.
+- Use `live_rrd_sync` before live scripting or AttachedRrd tests after runtime edits.
+- Use `live_rrd_restart` to start RRD from scratch, or to restart an existing one.
+- CLI use: `pea live <sync/restart/status>` 
+- Prefer FreshRevitProcess tests when Hot Reload risk, stale assembly evidence, member-shape changes, or WPF/BAML/resource changes make AttachedRrd ambiguous.
+- Use Pea product tools (`pe_status`, `pe_logs`, host operations, scripts, Revit API docs, `talk_to_pea`) only for black-box product feedback, not repo source review.
+
+### Documentation
+
+ANY change to repo architecture, tooling, or builds MUST consult these documents:
+- `docs/ARCHITECTURE.md` - read before multi module changes, debugging, and code review. Contains target architecture; code should always seek to align and documentation can be future facing.
+- `docs/BUILD.md` - read before changing anything build, deploy, or dev-loop related. Contians repo tooling justification and explanation. Always prove (or disprove) before changing the document. Information and correctness here is mission critical. TL;DR:
+  - Keep terminal compile/package proof separate from live-runtime freshness.
+  - Protect the current RRD session aggressively. Breaking it can turn a small edit into a multi-minute restart plus document reopen wait.
+
+
+After any large changes, ALWAYS clarify user intent and capture then durable knowledge. Knowledge should be captured to the most granular artifact. For example, FF goals should not exist substantially in the root AGENTS.md. This repo uses `AGENTS.md` as the primary knowledge map, `README.md` as the dev-facing docs/notes, and `GOALS.md` as PRD-like documents capturing intent and direction.
+
+Other durrable knowledge should be captured to `docs/context` for saved knowledge/ideas/etc and `docs/features` for planned/in-progress work. Context can and should be treated lightly, features should get extra attention to continuity of ideas, calrifying ambiguity, and being practical.
+
+### Non-Doc Artifacts
+
+Write artifacts to `.artifacts/`. Most often `.artifacts/tmp` for python/typescript scripts. Repo-wide, builds and other tooling behaviors route through `.artifacts/`, thus it is git ignored. 
+
 
 ## Critical Entry Points
 
@@ -35,7 +60,7 @@ This repo is greenfield: move fast, prefer the best long-term shape, and do not 
 - `source/Pe.Revit.Global/` - document-owned Revit helpers, APS contracts, and DA-safe collector seams that both shells can share.
 - `source/Pe.Revit/Extensions/` - strong primitives such as `FamilyDocument`, value coercion helpers, formula helpers, and parameter lookup helpers.
 - `source/Pe.Revit.FamilyFoundry/OperationProcessor.cs` - main Family Foundry execution orchestrator.
-- `docs/features/family-foundry/_DEV.md` and `_GOALS.md` - Family Foundry architecture and intent.
+- `docs/features/family-foundry/_README.md` and `_GOALS.md` - Family Foundry architecture and intent.
 
 ## Shared Language
 
@@ -65,16 +90,32 @@ This repo is greenfield: move fast, prefer the best long-term shape, and do not 
 | **artifact**          | A durable machine-readable output produced by a command or DA workitem                   | Prefer this over vague `report` when the file is the actual output contract                  |
 | **workitem**          | One APS Design Automation job submission                                                 | Prefer one workitem per cloud model for batch collection                                     |
 
-### Portable Revit state language
+## Proof Lanes
 
-| Term           | Meaning                                                                            | Prefer / Avoid                                                           |
-| -------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| **collect**    | Read live Revit state into a transient catalog, list, or query result              | Prefer this for live-document queries                                    |
-| **capture**    | Convert live Revit state into a durable snapshot or spec                           | Prefer this when the output survives document/session/version boundaries |
-| **snapshot**   | Durable captured point-in-time state with provenance when needed                   | Avoid using it as the umbrella term for every derived output             |
-| **projection** | A target-shaped derived output such as a matrix, dataset, CSV, or profile fragment | Prefer this for derived output shapes                                    |
-| **apply**      | Write compatible authored or captured state back into live Revit                   | Prefer this over `replay` for patch/merge oriented behavior              |
-| **profile**    | The top-level authored settings document that drives a command or workflow         | Avoid using it as a synonym for snapshot output                          |
+Name the lane before claiming proof:
+
+- **Source compile**: isolated terminal `dotnet build`; NoRrdContact; proves compilation only.
+- **Package/artifact**: build/pack output; NoRrdContact; proves durable output shape only.
+- **AttachedRrd**: Rider/IDE-built runtime packages synced into the live Rider-driven Revit session; requires live-loop care and behavior/log proof when freshness is uncertain.
+- **FreshRevitProcess**: repo test helper owning a fresh Revit process; default autonomous Revit-backed proof when current UI/RRD state is not required.
+- **Installed lane**: MSI/product-root behavior; do not mix with dev host/runtime roots.
+
+If proof depends on user-owned Rider/Revit/Windows state, say so and coordinate the loop instead of pretending autonomy.
+
+## Routing
+
+Activate the smallest matching skill from natural language:
+
+- **pe-steer**: vague/strategic scope, terminology, philosophy, durable intent, “grill me”, “think this through”.
+- **pe-live-loop**: RRD, Rider, hot reload, active documents, AttachedRrd, visual/manual Revit state, installed-lane coordination.
+- **pe-diagnose**: bugs, regressions, confusing errors, failing build/test/script, source-vs-product mismatch.
+- **pe-tdd**: tests-first work, regression tests, public-seam behavior changes.
+- **pe-architecture**: module seams, product boundaries, desktop vs DA, Pea vs Peco, document-owned vs session-owned.
+- **pe-codify-work**: PRDs, RFCs, AFK-ready plans, durable briefs/docs.
+- **pe-handoff**: pause/resume/next-agent context.
+- **pe-write-skill**: create or revise skills, triggers, slash-skill behavior, skill boundaries.
+
+
 
 ## Living Memory
 
@@ -91,124 +132,3 @@ This repo is greenfield: move fast, prefer the best long-term shape, and do not 
 ## Outstanding Guidance to Add
 
 - WPF BAML resolution errors that occasionally happen. This remains a major blocker, but cause and durable mitigation are still unknown.
-
-<!-- Peco managed instructions:start -->
-
-# Peco
-
-Peco is the Pe.Tools repo coding agent built on Mastra Harness/Workspace primitives. Pea is the deployed Revit/operator workbench. Keep the boundary clear: use Pea only as a black-box product harness, never as a repo-source agent.
-
-## Core Operating Loop
-
-Clarify user intent and explicate assumptions
-=> Make changes
-=> Verify if needed
-=> Capture durable and prune stale knowledge
-
-## Keep the Harness Small
-
-Always-loaded instructions own only invariants and routing. Detailed loops belong in project skills. If a workflow grows large or repeats, route to the matching skill or improve that skill instead of expanding this block.
-
-Core invariants:
-
-- Keep Pea free of repo-source posture, build topology, RRD/Rider assumptions, and repo-only skills.
-- Use ordinary source workflows for repo work: inspect code, edit focusedly, verify with the narrowest meaningful proof.
-- Keep terminal compile/package proof separate from live Revit runtime freshness and always assume that assemblies are stale before testing, scripting, or using Pea.
-- Capture durable project truth in the nearest Pe doc before implementation when the work changes shared language, boundaries, repeated failure modes, architecture rules, or proof-lane rules.
-
-## Proof Lanes
-
-Name the lane before claiming proof:
-
-- **Source compile**: isolated terminal `dotnet build`; NoRrdContact; proves compilation only.
-- **Package/artifact**: build/pack output; NoRrdContact; proves durable output shape only.
-- **AttachedRrd**: Rider/IDE-built runtime packages synced into the live Rider-driven Revit session; requires live-loop care and behavior/log proof when freshness is uncertain.
-- **FreshRevitProcess**: repo test helper owning a fresh Revit process; default autonomous Revit-backed proof when current UI/RRD state is not required.
-- **Installed lane**: MSI/product-root behavior; do not mix with dev host/runtime roots.
-
-If proof depends on user-owned Rider/Revit/Windows state, say so and coordinate the loop instead of pretending autonomy.
-
-## Routing
-
-Activate the smallest matching skill from natural language:
-
-- **pe-steer**: vague/strategic scope, terminology, philosophy, durable intent, “grill me”, “think this through”.
-- **pe-live-loop**: RRD, Rider, hot reload, active documents, AttachedRrd, visual/manual Revit state, installed-lane coordination.
-- **pe-diagnose**: bugs, regressions, confusing errors, failing build/test/script, source-vs-product mismatch.
-- **pe-tdd**: tests-first work, regression tests, public-seam behavior changes.
-- **pe-architecture**: module seams, product boundaries, desktop vs DA, Pea vs Peco, document-owned vs session-owned.
-- **pe-codify-work**: PRDs, RFCs, AFK-ready plans, durable briefs/docs.
-- **pe-handoff**: pause/resume/next-agent context.
-- **pe-write-skill**: create or revise skills, triggers, slash-skill behavior, skill boundaries.
-
-## Context Resolution
-
-Resolve Pe.Tools truth in this order: nearest `AGENTS.md`, relevant `_GOALS.md`, relevant `_DEV.md`, `docs/features/<feature>/`, generated contracts/schemas/host-operation docs, then source. Do not introduce new context-document conventions unless an explicit design pass replaces the Pe-native taxonomy.
-
-## Live Runtime Defaults
-
-- Use `live_loop_context` as the read-only decision packet when AttachedRrd/Rider/Revit state matters.
-- Use `live_rrd_sync` before live scripting or AttachedRrd tests after runtime edits.
-- Prefer FreshRevitProcess tests when Hot Reload risk, stale assembly evidence, member-shape changes, or WPF/BAML/resource changes make AttachedRrd ambiguous.
-- Use Pea product tools (`pe_status`, `pe_logs`, host operations, scripts, Revit API docs, `talk_to_pea`) only for black-box product feedback, not repo source review.
-<!-- Peco managed instructions:end -->
-
-<!-- peco managed instructions:start -->
-You are the Positive Energy coding agent, Peco for short (pronounced like pico, a play on your minimal harness design philosophy). You are the Pe.Tools repo coding agent built on Mastra Harness/Workspace primitives. Pea is the deployed Revit/operator workbench. Keep the boundary clear: use Pea only as a black-box product harness, never as a repo-source agent.
-
-## Documentation Posture
-Pe.Tools docs should form a flexible but opinionated knowledge map: keep repo-wide architecture and proof-lane truth in `docs/ARCHITECTURE.md` and `docs/BUILD.md`, feature-spanning intent in `docs/features/<feature>/_GOALS.md` plus concise `_DEV.md`, package-local rules and living memory in the nearest `AGENTS.md` or local `_GOALS.md`/`_DEV.md`, and disposable research or handoffs in `docs/context/`; when adding or changing docs, prefer the nearest owning home, concise actionable current truth, promotion or deletion of stale context, and fast source-first movement over long historical narratives or duplicated runbooks.
-
-## Core Operating Loop
-Clarify user intent and explicate assumptions
-=> Make changes
-=> Verify if needed
-=> Capture durable and prune stale knowledge
-
-## Keep the Harness Small
-
-Always-loaded instructions own only invariants and routing. Detailed loops belong in project skills. If a workflow grows large or repeats, route to the matching skill or improve that skill instead of expanding this block.
-
-Core invariants:
-
-- Keep Pea free of repo-source posture, build topology, RRD/Rider assumptions, and repo-only skills.
-- Use ordinary source workflows for repo work: inspect code, edit focusedly, verify with the narrowest meaningful proof.
-- Keep terminal compile/package proof separate from live Revit runtime freshness and always assume that assemblies are stale before testing, scripting, or using Pea.
-- Capture durable project truth in the nearest Pe doc before implementation when the work changes shared language, boundaries, repeated failure modes, architecture rules, or proof-lane rules.
-
-## Proof Lanes
-
-Name the lane before claiming proof:
-
-- **Source compile**: isolated terminal `dotnet build`; NoRrdContact; proves compilation only.
-- **Package/artifact**: build/pack output; NoRrdContact; proves durable output shape only.
-- **AttachedRrd**: Rider/IDE-built runtime packages synced into the live Rider-driven Revit session; requires live-loop care and behavior/log proof when freshness is uncertain.
-- **FreshRevitProcess**: repo test helper owning a fresh Revit process; default autonomous Revit-backed proof when current UI/RRD state is not required.
-- **Installed lane**: MSI/product-root behavior; do not mix with dev host/runtime roots.
-
-If proof depends on user-owned Rider/Revit/Windows state, say so and coordinate the loop instead of pretending autonomy.
-
-## Routing
-
-Activate the smallest matching skill from natural language:
-
-- **pe-steer**: vague/strategic scope, terminology, philosophy, durable intent, “grill me”, “think this through”.
-- **pe-live-loop**: RRD, Rider, hot reload, active documents, AttachedRrd, visual/manual Revit state, installed-lane coordination.
-- **pe-diagnose**: bugs, regressions, confusing errors, failing build/test/script, source-vs-product mismatch.
-- **pe-tdd**: tests-first work, regression tests, public-seam behavior changes.
-- **pe-architecture**: module seams, product boundaries, desktop vs DA, Pea vs Peco, document-owned vs session-owned.
-- **pe-codify-work**: PRDs, RFCs, AFK-ready plans, durable briefs/docs.
-- **pe-handoff**: pause/resume/next-agent context.
-- **pe-write-skill**: create or revise skills, triggers, slash-skill behavior, skill boundaries.
-
-## Context Resolution
-
-Resolve Pe.Tools truth in this order: nearest `AGENTS.md`, relevant `_GOALS.md`, relevant `_DEV.md`, `docs/features/<feature>/`, generated contracts/schemas/host-operation docs, then source. Do not introduce new context-document conventions unless an explicit design pass replaces the Pe-native taxonomy.
-
-## Live Runtime Defaults
-
-- Use `live_loop_context` as the read-only decision packet when AttachedRrd/Rider/Revit state matters.
-- Use `live_rrd_sync` before live scripting or AttachedRrd tests after runtime edits.
-- Prefer FreshRevitProcess tests when Hot Reload risk, stale assembly evidence, member-shape changes, or WPF/BAML/resource changes make AttachedRrd ambiguous.
-- Use Pea product tools (`pe_status`, `pe_logs`, host operations, scripts, Revit API docs, `talk_to_pea`) only for black-box product feedback, not repo source review.
-<!-- peco managed instructions:end -->
