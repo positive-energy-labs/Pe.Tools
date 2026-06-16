@@ -26,7 +26,7 @@ Revit mutation details behind predictable operations and helpers.
 - `Apply/DocumentFamilyProfileApplyExtensions.cs` and `Apply/FamilyProfileApplicator.cs` — document-owned apply verbs
   plus the shared runtime apply path.
 - `OperationSettings/` — authored settings contracts used by profiles.
-- `docs/features/family-foundry/_DEV.md` — cross-package output/transparency model and default debugging read order.
+- `docs/features/family-foundry/_README.md` — cross-package output/transparency model and default debugging read order.
 
 ## Validation
 

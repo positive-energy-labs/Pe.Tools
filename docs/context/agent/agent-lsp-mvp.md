@@ -13,6 +13,14 @@ This is deferred exploration, not an approved product commitment. Motivation shi
 - Installer/package implications are the current blocker; Pe packages also are not yet shaped as external-library-friendly references.
 - LSP value for Pea is C# script authoring/API discovery, not repo refactoring.
 
+## Existing Open alternatives
+
+IMPORTANT: Look deeply into all of these. Chances are we could use just one and be very selective of the tools we expose. Alternatively we could make our own using theirs as inspo. Either way the plan is to expose this capability as an LSP subagent. This will keep all of the tools out of the main context. 
+- [sharp-mcp](https://github.com/patilprashant6792-official/sharp-mcp) - best candidate?
+- [RoslynMcp](https://github.com/chrismo80/RoslynMcp) - Roslyn-based, probably best starting point for us
+- [csharp-lsp-mcp](https://github.com/HYMMA/csharp-lsp-mcp) - good option, seems like it locks dlls and requires explicit intitialization
+- [NugetMcpServer](https://github.com/DimonSmart/NugetMcpServer) - nuget focused, but nevertheless very useful. particularly because our type of csharp runs into many package//version conflicts
+
 ## Decisions so far
 
 - Do not build a Rider Problems-panel route unless Roslyn/dotnet-format paths miss valuable Rider-only inspections.
@@ -23,7 +31,8 @@ This is deferred exploration, not an approved product commitment. Motivation shi
   - `script_lsp_diagnostics`
   - `script_lsp_signature_help`
   - optional later: `script_lsp_find_symbol`
-- Do not expose broad generic LSP/refactor tools in Pea MVP: rename, apply edit, blast radius, cross-repo refs, run_build/run_tests, code actions, completions.
+- Do not expose broad generic LSP/refactor tools *in Pea MVP*: rename, apply edit, blast radius, cross-repo refs, run_build/run_tests, code actions, completions.
+- Only expose a broad set of lsp tools to a scoped subagent whose job is just that. This will prevent main model from confusion and keep context cleaner.
 - If LSP becomes a product feature, Pea should own startup/config/workspace/recovery; no manual user config.
 
 ## Candidate architecture

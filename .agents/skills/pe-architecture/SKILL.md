@@ -1,6 +1,6 @@
 ---
 name: pe-architecture
-description: Improve Pe.Tools architecture by resolving where code should live, product boundaries, module seams, interface depth, locality, and deterministic-vs-latent design. Use when the user asks where should this live, this feels tangled, design an interface, boundary question, Pea vs Peco, desktop vs DA, document-owned vs session-owned, typed host operation vs script, or whether logic belongs in code, docs, skills, or Pea workflows.
+description: Improve Pe.Tools architecture by resolving where code should live, product boundaries, module seams, interface depth, locality, and deterministic-vs-latent design. Use when the user asks where should this live, this feels tangled, design an interface, deepen modules, boundary question, Pea vs Peco, desktop vs DA, document-owned vs session-owned, typed host operation vs script, or whether logic belongs in code, docs, skills, or Pea workflows.
 metadata:
   goal: true
 ---

@@ -8,6 +8,7 @@ Profiles describe intent, queues execute that intent, snapshots capture what the
 
 ## Architecture
 
+- JSON LSP through storage and settings runtime must always be maintained to allow reasonable hand authorability.
 - `Pe.Revit.FamilyFoundry` owns the top-level Manager and Migrator profile types, desired-state profile contracts, snapshot-to-profile projection code, queue construction, compiler/resolution, runtime operations, snapshot capture, and artifact writing.
 - `Pe.Shared.StorageRuntime` owns generic settings infrastructure and storage/manifests primitives. FF-owned manifests/profiles live in `Pe.Revit.FamilyFoundry`, and schedule-owned manifests live in `Pe.Revit.Global`.
 - `Pe.App` commands such as `CmdFFManager` and `CmdFFMigrator` should differ mainly in command shell behavior and queue/profile payload, not in parameter language or output shape.
