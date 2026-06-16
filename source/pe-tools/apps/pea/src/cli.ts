@@ -65,6 +65,15 @@ export function createPeaCliCommand() {
 export function createPeaCliSubCommands() {
   return {
     ...new PeaCliCommands().commands(),
+    "beta-tui": define({
+      name: "beta-tui",
+      description: "Run the experimental OpenTUI Pea workbench.",
+      toKebab: true,
+      run: async () => {
+        const { runPeaBetaTui } = await import("./runtime.ts");
+        await runPeaBetaTui();
+      },
+    }),
     web: define({
       name: "web",
       description: "Run the local React Pea workbench over HTTP/SSE.",

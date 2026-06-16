@@ -9,6 +9,7 @@ export {
   createPeaRuntimeFactory,
   createPeaProtocolRuntimeFactory,
   createPeaTuiRuntime,
+  runPeaBetaTui,
   runPeaTui,
   defaultPeaRuntimeToolCatalog,
   defaultPeaRuntimeToolProfile,

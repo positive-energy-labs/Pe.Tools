@@ -17,10 +17,8 @@
   ],
   "type": "module",
   "exports": {
-    ".": {
-      "types": "./src/index.ts",
-      "import": "./src/index.ts"
-    }
+    ".": "./dist/index.mjs",
+    "./package.json": "./package.json"
   },
   "publishConfig": {
     "access": "public"
@@ -39,7 +37,6 @@
     "@pe/host-client": "workspace:*",
     "@pe/runtime": "workspace:*",
     "@pe/tools": "workspace:*",
-    "@pe/tui": "workspace:*",
     "@pe/workbench-core": "workspace:*",
     "@pe/workbench-transport": "workspace:*",
     "gunshi": "^0.29.5",
