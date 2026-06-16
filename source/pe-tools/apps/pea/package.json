@@ -26,8 +26,8 @@
   "scripts": {
     "pea": "bun src/main.ts",
     "build": "vp pack",
-    "build:installed": "bun build src/installed-main.ts --compile --target=bun --external @opentui/core-* --external @duckdb/node-bindings-* --outfile dist-installed/pea.exe",
-    "build:installed:bundle": "bun build src/installed-main.ts --target=bun --external @opentui/core-* --external @duckdb/node-bindings-* --outdir dist-installed/bundle",
+    "build:installed": "bun build src/main.ts --compile --target=bun --external @opentui/core-* --external @duckdb/node-bindings-* --outfile dist-installed/pea.exe",
+    "build:installed:bundle": "bun build src/main.ts --target=bun --external @opentui/core-* --external @duckdb/node-bindings-* --outdir dist-installed/bundle",
     "dev": "vp pack --watch",
     "test": "vp test",
     "check": "vp check",

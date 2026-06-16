@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { RequestContext } from "@mastra/core/request-context";
@@ -12,7 +12,6 @@ import {
   defaultPeCodeRuntimeToolProfile,
   getPeCodeCliCommandNames,
 } from "../src/index.ts";
-import { ensureDevAgentProjectFiles } from "../src/project-files.ts";
 import { defaultPeCodeSandboxAllowedPath } from "../src/runtime.ts";
 
 test("peco composes dev commands", () => {
@@ -68,32 +67,6 @@ test("peco runtime protocol CLI values map to nested transport options", () => {
   expect(
     createRuntimeAgUiCliOptions({ agUi: true, agUiPort: "43112", agUiToken: "t" }, {}),
   ).toEqual({ transport: { port: 43112, token: "t" } });
-});
-
-test("peco project bootstrap reports manual skills from the standard .agents location", async () => {
-  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "peco-skills-"));
-  const skillRoot = path.join(workspaceRoot, ".agents", "skills", "manual-skill");
-  await mkdir(skillRoot, { recursive: true });
-  await writeFile(
-    path.join(skillRoot, "SKILL.md"),
-    "---\nname: manual-skill\n---\n\n# Manual Skill\n",
-    "utf-8",
-  );
-
-  try {
-    const summary = await ensureDevAgentProjectFiles(workspaceRoot);
-
-    expect(summary.skillsRoot).toBe(path.join(workspaceRoot, ".agents", "skills"));
-    expect(summary.skills).toEqual([
-      {
-        name: "manual-skill",
-        path: path.join(skillRoot, "SKILL.md"),
-        status: "unchanged",
-      },
-    ]);
-  } finally {
-    await rm(workspaceRoot, { recursive: true, force: true });
-  }
 });
 
 test("peco runtime agent exposes task tools through TaskSignalProvider", async () => {

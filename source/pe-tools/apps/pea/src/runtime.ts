@@ -3,7 +3,6 @@ import { Agent } from "@mastra/core/agent";
 import type { MastraModelConfig } from "@mastra/core/llm";
 import { TaskSignalProvider } from "@mastra/core/signals";
 import { createInProcessAcpWorkbenchClient } from "@pe/acp-client";
-import { runWorkbenchTui } from "@pe/tui";
 import type { RequestContext } from "@mastra/core/request-context";
 import { LocalFilesystem, LocalSandbox, Workspace } from "@mastra/core/workspace";
 import {
@@ -176,13 +175,28 @@ export async function createPeaTuiRuntime(
 }
 
 export async function runPeaTui(options: PeaTuiRuntimeOptions = {}): Promise<void> {
+  const runtime = await createPeaTuiRuntime(options);
+  const { MastraTUI } = await import("mastracode/tui");
+  const tui = new MastraTUI({
+    harness: runtime.harness,
+    authStorage: runtime.authStorage as never,
+    hookManager: runtime.hookManager as never,
+    mcpManager: runtime.mcpManager as never,
+    appName: "Pea",
+    version: "0.1.0",
+  });
+  await tui.run();
+}
+
+export async function runPeaBetaTui(options: PeaTuiRuntimeOptions = {}): Promise<void> {
   const cwd = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
   const factory = await createPeaProtocolRuntimeFactory(options);
   const client = createInProcessAcpWorkbenchClient(
     (connection) => createRuntimeAcpAgent(connection, { runtime: { factory } }),
     { clientName: "Pea", clientVersion: "0.1.0" },
   );
-  await runWorkbenchTui({ client, cwd, title: "Pea" });
+  const { runWorkbenchTui } = await import("@pe/tui");
+  await runWorkbenchTui({ client, cwd, title: "Pea beta OpenTUI" });
 }
 
 export function createPeaRuntimeAuthProfile(

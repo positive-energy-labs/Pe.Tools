@@ -14,7 +14,7 @@ import {
 import { createPeaRuntimeAuthProfile } from "../src/runtime.ts";
 
 test("pea composes product commands without dev", () => {
-  expect(getPeaCliCommandNames()).toEqual(expect.arrayContaining(["host", "script"]));
+  expect(getPeaCliCommandNames()).toEqual(expect.arrayContaining(["beta-tui", "host", "script"]));
   expect(getPeaCliCommandNames()).not.toContain("dev");
 });
 

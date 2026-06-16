@@ -12,11 +12,9 @@ import {
   type RuntimeToolProfile,
 } from "@pe/runtime";
 import { peCodeRuntimeToolProfile as peCodeToolsRuntimeToolProfile } from "@pe/tools";
-import { ensureDevAgentProjectFiles } from "./project-files.ts";
 
 export const peCodeRuntimeToolProfile = peCodeToolsRuntimeToolProfile;
-export const defaultPeCodeRuntimeToolProfile: RuntimeToolProfile =
-  peCodeRuntimeToolProfile;
+export const defaultPeCodeRuntimeToolProfile: RuntimeToolProfile = peCodeRuntimeToolProfile;
 export const defaultPeCodeRuntimeToolCatalog = peCodeRuntimeToolProfile.catalog;
 export const defaultPeCodeSandboxAllowedPath = "C:/Users/kaitp/source/repos";
 
@@ -44,10 +42,7 @@ export async function createPeCodeProtocolRuntimeFactory(
         createTitle: "New thread",
         onThreadOpened: async ({ request, handle, selection }) => {
           const projectPath =
-            request.workspaceRoot ??
-            request.cwd ??
-            options.workspaceRoot ??
-            options.cwd; // TODO: wtf is this. red flag that theres so many fallbacks imo
+            request.workspaceRoot ?? request.cwd ?? options.workspaceRoot ?? options.cwd; // TODO: wtf is this. red flag that theres so many fallbacks imo
           if (projectPath && !selection.thread.metadata?.projectPath) {
             await handle.harness.setThreadSetting({
               key: "projectPath",
@@ -64,9 +59,7 @@ export async function createPeCodeProtocolRuntimeFactory(
 export async function createPeCodeTuiRuntime(
   options: PeCodeTuiRuntimeOptions = {},
 ): Promise<RuntimeHandle> {
-  const startPath = path.resolve(
-    options.workspaceRoot ?? options.cwd ?? process.cwd(),
-  );
+  const startPath = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
   const cwd = await resolveDevAgentProjectRoot(startPath);
   const factory = await createPeCodeProtocolRuntimeFactory({
     ...options,
@@ -80,12 +73,8 @@ export async function createPeCodeTuiRuntime(
   });
 }
 
-export async function runPeCodeTui(
-  options: PeCodeTuiRuntimeOptions = {},
-): Promise<void> {
-  const startPath = path.resolve(
-    options.workspaceRoot ?? options.cwd ?? process.cwd(),
-  );
+export async function runPeCodeTui(options: PeCodeTuiRuntimeOptions = {}): Promise<void> {
+  const startPath = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
   const cwd = await resolveDevAgentProjectRoot(startPath);
   const runtime = await createPeCodeTuiRuntime({
     ...options,
@@ -105,15 +94,10 @@ export async function runPeCodeTui(
 }
 
 export async function persistDefaultSandboxAllowedPaths(
-  harness: Pick<
-    RuntimeHandle["harness"],
-    "getState" | "setState" | "setThreadSetting"
-  >,
+  harness: Pick<RuntimeHandle["harness"], "getState" | "setState" | "setThreadSetting">,
 ): Promise<string[]> {
   const state = harness.getState() as { sandboxAllowedPaths?: string[] };
-  const current = Array.isArray(state.sandboxAllowedPaths)
-    ? state.sandboxAllowedPaths
-    : [];
+  const current = Array.isArray(state.sandboxAllowedPaths) ? state.sandboxAllowedPaths : [];
   const next = mergeSandboxAllowedPaths(current);
 
   if (!samePathList(current, next)) {
@@ -129,19 +113,12 @@ async function createPeCodeRuntimeHandle(
   request: RuntimeCreateRequest,
 ): Promise<RuntimeHandle> {
   const startPath = path.resolve(
-    request.workspaceRoot ??
-      request.cwd ??
-      options.workspaceRoot ??
-      options.cwd ??
-      process.cwd(),
+    request.workspaceRoot ?? request.cwd ?? options.workspaceRoot ?? options.cwd ?? process.cwd(),
   );
   const cwd = await resolveDevAgentProjectRoot(startPath);
   process.chdir(cwd);
-  await ensureDevAgentProjectFiles(cwd);
 
-  const sandboxAllowedPaths = mergeSandboxAllowedPaths(
-    request.additionalDirectories ?? [],
-  );
+  const sandboxAllowedPaths = mergeSandboxAllowedPaths(request.additionalDirectories ?? []);
   const runtime = await createMastraCode({
     cwd,
     // default is configDir: ".mastracode",
@@ -153,9 +130,7 @@ async function createPeCodeRuntimeHandle(
       yolo: true,
     },
   });
-  const harness = runtime.harness as unknown as Harness<
-    Record<string, unknown>
-  >;
+  const harness = runtime.harness as unknown as Harness<Record<string, unknown>>;
 
   return {
     harness,
@@ -182,26 +157,17 @@ type MastraCodeExtraTool = {
 };
 
 const peCodeExtraTools = Object.fromEntries(
-  Object.entries(peCodeRuntimeToolProfile.tools).filter(
-    ([name]) => name !== "request_access",
-  ),
+  Object.entries(peCodeRuntimeToolProfile.tools).filter(([name]) => name !== "request_access"),
 ) as unknown as Record<string, MastraCodeExtraTool>;
 
 function mergeSandboxAllowedPaths(paths: string[]): string[] {
   return Array.from(
-    new Set(
-      [defaultPeCodeSandboxAllowedPath, ...paths].map((entry) =>
-        path.resolve(entry),
-      ),
-    ),
+    new Set([defaultPeCodeSandboxAllowedPath, ...paths].map((entry) => path.resolve(entry))),
   );
 }
 
 function samePathList(left: string[], right: string[]): boolean {
-  return (
-    left.length === right.length &&
-    left.every((entry, index) => entry === right[index])
-  );
+  return left.length === right.length && left.every((entry, index) => entry === right[index]);
 }
 
 async function resolveDevAgentProjectRoot(startPath: string): Promise<string> {
@@ -211,9 +177,7 @@ async function resolveDevAgentProjectRoot(startPath: string): Promise<string> {
     const entries = await readDirectoryEntries(current);
     if (
       entries.some(
-        (entry) =>
-          entry.isFile() &&
-          (entry.name.endsWith(".slnx") || entry.name.endsWith(".sln")),
+        (entry) => entry.isFile() && (entry.name.endsWith(".slnx") || entry.name.endsWith(".sln")),
       )
     )
       return current;
@@ -239,9 +203,7 @@ type ClosableHarness = Harness<Record<string, unknown>> & {
   getMastra?: () => { shutdown?: () => Promise<void> | void } | undefined;
 };
 
-async function closeMastraCodeHarness(
-  harness: Harness<Record<string, unknown>>,
-): Promise<void> {
+async function closeMastraCodeHarness(harness: Harness<Record<string, unknown>>): Promise<void> {
   harness.abort();
   await (harness as ClosableHarness).getMastra?.()?.shutdown?.();
 }
