@@ -69,11 +69,6 @@ export type AcpSession = RuntimeProtocolSession & {
   mapper: RuntimeToAcpEvents;
 };
 
-export type PeaAcpSessionStoreOptions = RuntimeAcpSessionStoreOptions;
-export type PeaAcpCreateSessionRequest = RuntimeAcpCreateSessionRequest;
-export type PeaAcpSessionUpdateSink = RuntimeAcpSessionUpdateSink;
-export type PeaAcpSessionClient = RuntimeAcpSessionClient;
-
 export class RuntimeAcpSessionStore {
   private readonly runtimeSessions: RuntimeProtocolSessions;
   private readonly mappers = new Map<SessionId, RuntimeToAcpEvents>();
@@ -1051,5 +1046,3 @@ function readNumericProperty(value: unknown, key: string): number | undefined {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-
-export { RuntimeAcpSessionStore as PeaAcpSessionStore };

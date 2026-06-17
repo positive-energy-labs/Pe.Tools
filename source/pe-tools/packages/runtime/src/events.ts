@@ -78,13 +78,6 @@ export type RuntimeEvent =
   | { type: "plan_requested"; title: string; plan: string }
   | { type: "runtime_error"; source: string; error: RuntimeError };
 
-export type PeaJsonValue = RuntimeJsonValue;
-export type PeaJsonObject = RuntimeJsonObject;
-export type PeaRuntimeProtocol = RuntimeProtocol;
-export type PeaRuntimeToolStatus = RuntimeToolStatus;
-export type PeaRuntimeError = RuntimeError;
-export type PeaRuntimeEvent = RuntimeEvent;
-
 export function toRuntimeError(
   error: unknown,
   options: {
@@ -138,8 +131,6 @@ export function toRuntimeError(
     details: sanitizeJson(options.details ?? error),
   });
 }
-
-export const toPeaRuntimeError = toRuntimeError;
 
 export interface MastraHarnessToRuntimeEventsOptions {
   toolCatalog?: RuntimeToolSource;
@@ -369,8 +360,6 @@ export class MastraHarnessToRuntimeEvents {
     });
   }
 }
-
-export { MastraHarnessToRuntimeEvents as MastraHarnessToPeaRuntimeEvents };
 
 function messageText(message: HarnessMessage): string {
   return message.content

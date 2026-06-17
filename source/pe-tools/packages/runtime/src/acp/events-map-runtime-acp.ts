@@ -137,8 +137,6 @@ export class RuntimeToAcpEvents {
   }
 }
 
-export { RuntimeToAcpEvents as PeaRuntimeToAcpEvents };
-
 function toolTitle(
   toolName: string,
   title: string | undefined,

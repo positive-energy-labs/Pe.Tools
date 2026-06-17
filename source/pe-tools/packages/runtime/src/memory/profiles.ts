@@ -2,12 +2,11 @@ import { Memory } from "@mastra/memory";
 import type { HarnessConfig } from "@mastra/core/harness";
 import type { MemoryConfigInternal, SharedMemoryConfig } from "@mastra/core/memory";
 import type { MastraCompositeStore } from "@mastra/core/storage";
-import {
-  defaultPeaObservationThreshold,
-  defaultPeaOmModelId,
-  defaultPeaReflectionThreshold,
-} from "../defaults.ts";
 import type { RuntimeCreateRequest } from "../runtime.ts";
+
+const defaultRuntimeOmModelId = "openai/gpt-5.4-mini";
+const defaultRuntimeObservationThreshold = 75_000;
+const defaultRuntimeReflectionThreshold = 15_000;
 
 export type RuntimeHarnessMemory<TState extends Record<string, unknown> = Record<string, unknown>> =
   NonNullable<HarnessConfig<TState>["memory"]>;
@@ -57,26 +56,6 @@ export function createRuntimeMemoryProfile<
   };
 }
 
-export function createPeaRuntimeMemoryProfile<
-  TState extends Record<string, unknown> = Record<string, unknown>,
->(options: RuntimeMastraMemoryProfileOptions = {}): RuntimeMemoryProfile<TState> {
-  return createRuntimeMemoryProfile<TState>({
-    ...options,
-    id: options.id ?? "pea-memory",
-    options: createRuntimeMemoryOptions(options.options),
-  });
-}
-
-export function createPeCodeRuntimeMemoryProfile<
-  TState extends Record<string, unknown> = Record<string, unknown>,
->(options: RuntimeMastraMemoryProfileOptions = {}): RuntimeMemoryProfile<TState> {
-  return createRuntimeMemoryProfile<TState>({
-    ...options,
-    id: options.id ?? "peco-memory",
-    options: createRuntimeMemoryOptions(options.options),
-  });
-}
-
 export function createRuntimeMemoryOptions(
   overrides: MemoryConfigInternal | undefined,
 ): MemoryConfigInternal {
@@ -104,20 +83,20 @@ export function createRuntimeThreadObservationalMemoryConfig(
   const base = {
     enabled: true,
     scope: "thread",
-    model: defaultPeaOmModelId,
+    model: defaultRuntimeOmModelId,
     temporalMarkers: true,
     activateAfterIdle: "auto",
     activateOnProviderChange: true,
     retrieval: { scope: "thread" },
     observation: {
-      messageTokens: defaultPeaObservationThreshold,
+      messageTokens: defaultRuntimeObservationThreshold,
       previousObserverTokens: 1_000,
       threadTitle: true,
       instruction: runtimeEphemeralContextObserverInstruction,
       observeAttachments: "auto",
     },
     reflection: {
-      observationTokens: defaultPeaReflectionThreshold,
+      observationTokens: defaultRuntimeReflectionThreshold,
     },
   } satisfies RuntimeObservationalMemoryConfig;
 

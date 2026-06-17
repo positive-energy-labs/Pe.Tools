@@ -274,11 +274,3 @@ function addCorsHeaders(response: ServerResponse): void {
   );
   response.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
 }
-
-export type PeaAcpHttpAgentOptions = RuntimeAcpHttpAgentOptions;
-export type PeaAcpHttpAgentStartInfo = RuntimeAcpHttpAgentStartInfo;
-export {
-  runRuntimeAcpAgent as runPeaAcpAgent,
-  runRuntimeAcpHttpAgent as runPeaAcpHttpAgent,
-  RuntimeAcpHttpAgent as PeaAcpHttpAgent,
-};

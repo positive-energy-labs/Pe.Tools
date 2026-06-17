@@ -11,6 +11,7 @@ import { expect, test } from "vite-plus/test";
 import {
   RuntimeProtocolSessions,
   ThreadLockError,
+  createRuntimeHarness,
   createRuntimeDescriptor,
   createRuntimeAcpAgent,
   createRuntimeFactory,
@@ -179,6 +180,74 @@ test("runtime startup selection skips locked threads and opens the next valid th
   expect(opened).toEqual([
     { status: "selected", threadId: "thread-valid", lockedThreadIds: ["thread-locked"] },
   ]);
+});
+
+test("kernel resume rejects illegal moves before switching harness threads", async () => {
+  const harness = new FakeRuntimeHarness({
+    threads: [
+      fakeThread("thread-1", "2026-06-17T13:00:00.000Z"),
+      fakeThread("thread-2", "2026-06-17T14:00:00.000Z"),
+    ],
+  });
+  const kernel = createRuntimeKernel(harness as never);
+
+  await kernel.resumeThreadSession({
+    sessionId: "session-1",
+    threadId: "thread-1",
+    protocol: "acp",
+  });
+
+  await expect(
+    kernel.resumeThreadSession({
+      sessionId: "session-1",
+      threadId: "thread-2",
+      protocol: "acp",
+    }),
+  ).rejects.toThrow("cannot move session session-1 from thread thread-1 to thread thread-2");
+
+  expect(harness.getCurrentThreadId()).toBe("thread-1");
+  expect(harness.switchThreadRequests).toEqual(["thread-1"]);
+});
+
+test("runtime harness close releases locks and closes storage when ledger flush fails", async () => {
+  const harness = new FakeRuntimeHarness();
+  const thread = await harness.createThread({ title: "Flush failure" });
+  let releasedThreadId: string | undefined;
+  let storageClosed = false;
+  const runtime = await createRuntimeHarness({
+    config: {
+      storage: {
+        close: () => {
+          storageClosed = true;
+        },
+      },
+      threadLock: {
+        release: (threadId: string) => {
+          releasedThreadId = threadId;
+        },
+      },
+    } as never,
+    harness: harness as never,
+    sessionOptions: {
+      threadStateStore: {
+        getState: async () => undefined,
+        setState: async () => {
+          throw new Error("flush failed");
+        },
+      } as never,
+    },
+  });
+
+  runtime.kernel!.recordProtocolEvent({
+    threadId: thread.id,
+    resourceId: thread.resourceId,
+    protocol: "acp",
+    payload: { event: "persist me" },
+  });
+
+  await expect(runtime.close?.()).rejects.toThrow("flush failed");
+  expect(releasedThreadId).toBe(thread.id);
+  expect(storageClosed).toBe(true);
 });
 
 function createKernelRuntimeFactory(

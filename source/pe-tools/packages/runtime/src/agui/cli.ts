@@ -122,7 +122,3 @@ function readOption(args: string[], name: string): string | undefined {
 function hasFlag(args: string[], name: string): boolean {
   return args.includes(`--${name}`);
 }
-
-export type PeaAgUiCliOptions = RuntimeAgUiCliOptions;
-export type ParsedPeaAgUiCliOptions = ParsedRuntimeAgUiCliOptions;
-export { runRuntimeAgUiFromCli as runPeaAgUiFromCli };

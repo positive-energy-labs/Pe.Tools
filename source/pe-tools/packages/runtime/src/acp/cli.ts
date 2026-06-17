@@ -157,7 +157,3 @@ function readOption(args: string[], name: string): string | undefined {
 function hasFlag(args: string[], name: string): boolean {
   return args.includes(`--${name}`);
 }
-
-export type PeaAcpCliOptions = RuntimeAcpCliOptions;
-export type ParsedPeaAcpCliOptions = ParsedRuntimeAcpCliOptions;
-export { runRuntimeAcpFromCli as runPeaAcpFromCli };
