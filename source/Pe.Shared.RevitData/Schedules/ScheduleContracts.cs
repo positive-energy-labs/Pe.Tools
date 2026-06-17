@@ -197,9 +197,13 @@ public record CombinedParameterSpec {
     }
 
     public ParameterReference Parameter { get; init; } = new();
+    public string? ParameterName { get; init; }
     public string? Prefix { get; init; }
     public string? Suffix { get; init; }
     public string? Separator { get; init; } = " ";
+
+    public ParameterReference GetEffectiveParameter() =>
+        ScheduleParameterReferenceSelection.GetEffectiveParameter(this.Parameter, this.ParameterName);
 }
 
 [ExportTsInterface]
@@ -212,6 +216,7 @@ public record ScheduleFieldSpec {
     }
 
     public ParameterReference Parameter { get; init; } = new();
+    public string? ParameterName { get; init; }
     public string? ColumnHeaderOverride { get; init; }
     public string? HeaderGroup { get; init; }
     public bool IsHidden { get; init; }
@@ -222,6 +227,21 @@ public record ScheduleFieldSpec {
     public string? PercentageOfField { get; init; }
     public ScheduleFieldFormatSpec? FormatOptions { get; init; }
     public List<CombinedParameterSpec> CombinedParameters { get; init; } = [];
+
+    public ParameterReference GetEffectiveParameter() =>
+        ScheduleParameterReferenceSelection.GetEffectiveParameter(this.Parameter, this.ParameterName);
+}
+
+internal static class ScheduleParameterReferenceSelection {
+    public static ParameterReference GetEffectiveParameter(ParameterReference? parameter, string? parameterName) =>
+        HasLookupSignal(parameter)
+            ? parameter!
+            : ParameterReference.FromName(parameterName?.Trim() ?? string.Empty);
+
+    private static bool HasLookupSignal(ParameterReference? parameter) =>
+        parameter?.Identity != null ||
+        !string.IsNullOrWhiteSpace(parameter?.SharedGuid) ||
+        !string.IsNullOrWhiteSpace(parameter?.Name);
 }
 
 [ExportTsInterface]

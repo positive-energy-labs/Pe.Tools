@@ -44,7 +44,7 @@ public static class DesiredMigrationPlanLowerer {
         AddAndMapSharedParams = BuildSharedMapParams(plan.Parameters),
         AddFamilyParams = BuildAddFamilyParams(plan.Parameters),
         SetKnownParams = BuildSetKnownParams(plan.Parameters),
-        MakeElectricalConnector = new MakeElecConnectorSettings { Enabled = false },
+        MakeElectricalConnector = profile.MakeElectricalConnector,
         SortParams = profile.SortParams
     };
 

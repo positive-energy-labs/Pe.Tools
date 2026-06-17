@@ -49,6 +49,9 @@ public sealed class DesiredFamilyMigrationProfile : BaseProfile, IDesiredMigrati
     [Description("Optional explicitly-authored parameter delete settings to run after desired-state reconciliation.")]
     public DeleteParamsSettings DeleteParams { get; init; } = new() { Enabled = false };
 
+    [Description("Optional electrical connector creation and parameter binding settings to run after desired-state reconciliation.")]
+    public MakeElecConnectorSettings MakeElectricalConnector { get; init; } = new() { Enabled = false };
+
     [Description("Optional existing parameter sorting settings to run after desired-state reconciliation.")]
     public SortParamsSettings SortParams { get; init; } = new() { Enabled = false };
 }

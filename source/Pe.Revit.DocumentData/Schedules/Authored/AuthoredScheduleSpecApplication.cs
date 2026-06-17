@@ -28,15 +28,16 @@ internal static class AuthoredScheduleSpecApplication {
             if (skipped != null)
                 return (null, skipped, warnings);
         } else {
-            var parameterLabel = spec.Parameter.GetDisplayLabel();
-            var schedulableField = findSchedulableField(def, schedule.Document, spec.Parameter);
+            var parameter = spec.GetEffectiveParameter();
+            var parameterLabel = parameter.GetDisplayLabel();
+            var schedulableField = findSchedulableField(def, schedule.Document, parameter);
             if (schedulableField is null)
                 return (null, $"Parameter '{parameterLabel}' not found", warnings);
 
             field = def.AddField(schedulableField);
         }
 
-        var fieldLabel = field?.GetName() ?? spec.Parameter.GetDisplayLabel();
+        var fieldLabel = field?.GetName() ?? spec.GetEffectiveParameter().GetDisplayLabel();
         if (field == null)
             return (null, $"Field '{fieldLabel}' could not be created", warnings);
 
@@ -62,7 +63,7 @@ internal static class AuthoredScheduleSpecApplication {
             return null;
 
         var guidance = new CalculatedFieldGuidance {
-            FieldName = spec.Parameter.GetDisplayLabel(),
+            FieldName = spec.GetEffectiveParameter().GetDisplayLabel(),
             CalculatedType = spec.CalculatedType.ToString() ?? string.Empty
         };
 
@@ -186,15 +187,17 @@ internal static class AuthoredScheduleSpecApplication {
         var warnings = new List<string>();
 
         try {
+            var fieldParameterLabel = spec.GetEffectiveParameter().GetDisplayLabel();
             var combinedParamDataList = new List<TableCellCombinedParameterData>();
 
             foreach (var combinedSpec in spec.CombinedParameters) {
                 var combinedData = TableCellCombinedParameterData.Create();
-                var combinedParameterLabel = combinedSpec.Parameter.GetDisplayLabel();
-                var paramId = findParameterId(def, schedule.Document, combinedSpec.Parameter);
+                var combinedParameter = combinedSpec.GetEffectiveParameter();
+                var combinedParameterLabel = combinedParameter.GetDisplayLabel();
+                var paramId = findParameterId(def, schedule.Document, combinedParameter);
                 if (paramId == null || paramId == ElementId.InvalidElementId) {
                     warnings.Add(
-                        $"Parameter '{combinedParameterLabel}' not found for combined field '{spec.Parameter.GetDisplayLabel()}'");
+                        $"Parameter '{combinedParameterLabel}' not found for combined field '{fieldParameterLabel}'");
                     combinedData.Dispose();
                     continue;
                 }
@@ -211,7 +214,7 @@ internal static class AuthoredScheduleSpecApplication {
                 if (def.IsValidCombinedParameters(combinedParamDataList)) {
                     var field = def.InsertCombinedParameterField(
                         combinedParamDataList,
-                        spec.Parameter.GetDisplayLabel(),
+                        fieldParameterLabel,
                         def.GetFieldCount());
 
                     foreach (var data in combinedParamDataList)
@@ -223,13 +226,14 @@ internal static class AuthoredScheduleSpecApplication {
                 foreach (var data in combinedParamDataList)
                     data.Dispose();
 
-                return (null, $"Combined parameter field '{spec.Parameter.GetDisplayLabel()}' has invalid parameters", warnings);
+                return (null, $"Combined parameter field '{fieldParameterLabel}' has invalid parameters", warnings);
             }
 
-            return (null, $"Combined parameter field '{spec.Parameter.GetDisplayLabel()}' has no valid parameters", warnings);
+            return (null, $"Combined parameter field '{fieldParameterLabel}' has no valid parameters", warnings);
         } catch (Exception ex) {
-            warnings.Add($"Failed to create combined parameter field '{spec.Parameter.GetDisplayLabel()}': {ex.Message}");
-            return (null, $"Exception creating combined field '{spec.Parameter.GetDisplayLabel()}'", warnings);
+            var fieldParameterLabel = spec.GetEffectiveParameter().GetDisplayLabel();
+            warnings.Add($"Failed to create combined parameter field '{fieldParameterLabel}': {ex.Message}");
+            return (null, $"Exception creating combined field '{fieldParameterLabel}'", warnings);
         }
     }
 
