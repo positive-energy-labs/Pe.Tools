@@ -2,6 +2,10 @@ import type { ContentBlock, SessionUpdate, ToolCallContent } from "@agentclientp
 import {
   peWorkbenchUpdateMetadataKey,
   type PeWorkbenchUpdateMetadata,
+  type WorkbenchAccessLevel,
+  type WorkbenchAccessLevelInfo,
+  type WorkbenchAccessLevelState,
+  type WorkbenchAgentCapabilities,
   type WorkbenchApprovalRequest,
   type WorkbenchCommandState,
   type WorkbenchCommandStatus,
@@ -31,6 +35,20 @@ import {
 const maxDebugEvents = 500;
 const maxRecentToolCalls = 128;
 const maxObservationMemoryEntries = 128;
+
+export function defaultWorkbenchUiPreferences() {
+  return {
+    activePanel: "transcript",
+    sidebarVisible: true,
+    inspectorVisible: true,
+    timestampsVisible: true,
+    reasoningVisible: true,
+    toolDetailsVisible: true,
+    rawIoVisible: false,
+    compactToolOutput: true,
+    diffWrap: "word",
+  } as const;
+}
 
 export function createWorkbenchState(): WorkbenchState {
   return {
@@ -62,6 +80,9 @@ export function createWorkbenchState(): WorkbenchState {
     modes: {
       availableModes: [],
     },
+    access: {
+      availableAccessLevels: [],
+    },
     memory: {
       entries: [],
     },
@@ -72,6 +93,7 @@ export function createWorkbenchState(): WorkbenchState {
     debug: {
       events: [],
     },
+    uiPreferences: defaultWorkbenchUiPreferences(),
     uiStatus: {
       overall: { status: "idle" },
       start: commandState(),
@@ -286,6 +308,10 @@ export function applyWorkbenchEvent(state: WorkbenchState, event: WorkbenchEvent
       return { ...state, models: mergeModel(state.models, event.model) };
     case "session_mode_updated":
       return { ...state, modes: mergeSessionMode(state.modes, event.sessionMode) };
+    case "access_level_updated":
+      return { ...state, access: mergeAccessLevel(state.access, event.access) };
+    case "ui_preferences_updated":
+      return { ...state, uiPreferences: { ...state.uiPreferences, ...event.preferences } };
     case "debug_event_recorded":
       return {
         ...state,
@@ -311,8 +337,58 @@ export function applyWorkbenchEvent(state: WorkbenchState, event: WorkbenchEvent
   }
 }
 
+export function selectVisibleThreads(state: WorkbenchState): WorkbenchThreadInfo[] {
+  const session = state.agent.session;
+  if (!session) return state.threads.items;
+
+  const currentSessionThreads = state.threads.items.filter((thread) =>
+    isCurrentSessionThread(thread, session.sessionId),
+  );
+  if (currentSessionThreads.length === 0) {
+    return [threadFromSession(session), ...state.threads.items];
+  }
+
+  const preferred = preferredCurrentSessionThread(currentSessionThreads, session.sessionId);
+  const visible: WorkbenchThreadInfo[] = [];
+  let insertedCurrentSessionThread = false;
+  for (const thread of state.threads.items) {
+    if (!isCurrentSessionThread(thread, session.sessionId)) {
+      visible.push(thread);
+      continue;
+    }
+
+    if (!insertedCurrentSessionThread) {
+      visible.push(preferred);
+      insertedCurrentSessionThread = true;
+    }
+  }
+  return visible;
+}
+
+export function selectActiveThreadId(state: WorkbenchState): string | undefined {
+  const sessionId = state.agent.session?.sessionId;
+  if (sessionId) {
+    const currentSessionThreads = state.threads.items.filter((thread) =>
+      isCurrentSessionThread(thread, sessionId),
+    );
+    const currentSessionThread = currentSessionThreads.length
+      ? preferredCurrentSessionThread(currentSessionThreads, sessionId)
+      : undefined;
+    if (currentSessionThread) return currentSessionThread.threadId;
+  }
+
+  const activeThreadId = state.threads.activeThreadId;
+  if (!activeThreadId) return sessionId;
+  return (
+    findThreadByThreadOrSessionId(state.threads.items, activeThreadId)?.threadId ?? activeThreadId
+  );
+}
+
 export function selectActiveThread(state: WorkbenchState): WorkbenchThreadInfo | undefined {
-  return state.threads.items.find((thread) => thread.threadId === state.threads.activeThreadId);
+  const activeThreadId = selectActiveThreadId(state);
+  return activeThreadId
+    ? selectVisibleThreads(state).find((thread) => thread.threadId === activeThreadId)
+    : undefined;
 }
 
 export function selectVisibleTranscriptMessages(state: WorkbenchState): WorkbenchMessage[] {
@@ -363,6 +439,110 @@ export function selectCurrentModeLabel(state: WorkbenchState): string | undefine
 
 export function selectOverallRunStatus(state: WorkbenchState): WorkbenchRunStatus {
   return state.uiStatus.overall.status;
+}
+
+export interface WorkbenchFeatureCard {
+  id: string;
+  title: string;
+  description: string;
+  enabled: boolean;
+  hotkey?: string;
+}
+
+export interface WorkbenchCommandHint {
+  id: string;
+  command: string;
+  description: string;
+}
+
+export interface WorkbenchChromeModel {
+  title: string;
+  subtitle: string;
+  status: WorkbenchRunStatus;
+  threadLabel: string;
+  modelLabel: string;
+  modeLabel: string;
+  featureCards: WorkbenchFeatureCard[];
+  commandHints: WorkbenchFeatureCard[];
+  launchCommands: WorkbenchCommandHint[];
+}
+
+export function selectWorkbenchChrome(state: WorkbenchState): WorkbenchChromeModel {
+  const capabilities = state.agent.info?.capabilities ?? {};
+  const featureCards = workbenchFeatureCards(capabilities);
+  return {
+    title: state.agent.info?.runtime?.title ?? state.agent.info?.title ?? "Pea",
+    subtitle:
+      state.agent.info?.runtime?.description ??
+      "agent workbench over shared runtime state, transport, and projection seams",
+    status: selectOverallRunStatus(state),
+    threadLabel: selectActiveThread(state)?.title ?? state.threads.activeThreadId ?? "new session",
+    modelLabel: selectCurrentModelLabel(state) ?? "model: default",
+    modeLabel: selectCurrentModeLabel(state) ?? "mode: default",
+    featureCards,
+    commandHints: featureCards.filter((card) => card.enabled),
+    launchCommands: workbenchLaunchCommands(),
+  };
+}
+
+function workbenchLaunchCommands(): WorkbenchCommandHint[] {
+  return [
+    {
+      id: "agent",
+      command: "pea agent",
+      description: "Open the Pea operator workbench in the current repo.",
+    },
+    {
+      id: "web",
+      command: "pea web",
+      description: "Serve the browser workbench over the shared runtime transport.",
+    },
+    {
+      id: "peco",
+      command: "peco",
+      description: "Use the developer coding workbench for Pe.Tools repo tasks.",
+    },
+  ];
+}
+
+function workbenchFeatureCards(capabilities: WorkbenchAgentCapabilities): WorkbenchFeatureCard[] {
+  return [
+    {
+      id: "threads",
+      title: "Thread timeline",
+      description: "List, quick-switch, and reload conversation history.",
+      enabled: Boolean(capabilities.threads || capabilities.history),
+      hotkey: "ctrl+r",
+    },
+    {
+      id: "tools",
+      title: "Tool trace",
+      description: "Expose active tools, locations, raw IO, and debug breadcrumbs.",
+      enabled: Boolean(capabilities.toolCalls),
+      hotkey: "right pane",
+    },
+    {
+      id: "approvals",
+      title: "Permission flow",
+      description: "Resolve tool approvals without hiding the transcript.",
+      enabled: Boolean(capabilities.approvals),
+      hotkey: "y/a/n",
+    },
+    {
+      id: "models",
+      title: "Model and mode control",
+      description: "Surface model switching and Pea session modes through shared commands.",
+      enabled: Boolean(capabilities.modelSwitching || capabilities.sessionModes),
+      hotkey: "palette",
+    },
+    {
+      id: "inspector",
+      title: "Inspector",
+      description: "Show system prompt, context, raw events, and observational memory.",
+      enabled: Boolean(capabilities.systemPromptInspection || capabilities.observationalMemory),
+      hotkey: "debug",
+    },
+  ];
 }
 
 export function acpSessionUpdateToWorkbenchEvents(
@@ -678,6 +858,16 @@ function mergeSessionMode(
   };
 }
 
+function mergeAccessLevel(
+  access: WorkbenchAccessLevelState,
+  update: Partial<WorkbenchAccessLevelState>,
+): WorkbenchAccessLevelState {
+  return {
+    currentAccessLevel: update.currentAccessLevel ?? access.currentAccessLevel,
+    availableAccessLevels: update.availableAccessLevels ?? access.availableAccessLevels,
+  };
+}
+
 function toolCallFromUpdate(
   sessionId: string,
   update: Extract<SessionUpdate, { sessionUpdate: "tool_call" | "tool_call_update" }>,
@@ -892,6 +1082,7 @@ function acpMetadataEvents(update: SessionUpdate): WorkbenchEvent[] {
     ...inspectorEntryEvents(metadata.contextEntries, metadata.rawMessages),
     ...modelEvents(metadata.model),
     ...modeEvents(metadata.mode),
+    ...accessEvents(metadata.access),
     ...threadEvents(metadata.threads, metadata.activeThreadId),
   ];
 }
@@ -908,6 +1099,7 @@ function readUpdateMetadata(meta: unknown): PeWorkbenchUpdateMetadata | undefine
     rawMessages: readInspectorEntries(metadata.rawMessages),
     model: readModel(metadata.model),
     mode: readMode(metadata.mode),
+    access: readAccessLevel(metadata.access),
     threads: readThreads(metadata.threads),
     activeThreadId:
       typeof metadata.activeThreadId === "string" ? metadata.activeThreadId : undefined,
@@ -1041,6 +1233,34 @@ function readModeInfo(item: Record<string, unknown>): WorkbenchSessionModeInfo[]
   ];
 }
 
+function readAccessLevel(value: unknown): Partial<WorkbenchAccessLevelState> | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    currentAccessLevel: readAccessLevelId(value.currentAccessLevel),
+    availableAccessLevels: Array.isArray(value.availableAccessLevels)
+      ? value.availableAccessLevels.filter(isRecord).flatMap(readAccessLevelInfo)
+      : undefined,
+  };
+}
+
+function readAccessLevelInfo(item: Record<string, unknown>): WorkbenchAccessLevelInfo[] {
+  const id = readAccessLevelId(item.id);
+  const name = item.name;
+  if (!id || typeof name !== "string") return [];
+  return [
+    {
+      id,
+      name,
+      description: typeof item.description === "string" ? item.description : undefined,
+      metadata: recordMetadata(item.metadata),
+    },
+  ];
+}
+
+function readAccessLevelId(value: unknown): WorkbenchAccessLevel | undefined {
+  return value === "read-only" || value === "ask" || value === "trusted" ? value : undefined;
+}
+
 function readThreads(value: unknown): WorkbenchThreadInfo[] | undefined {
   const threads = toArray(value).map(readThread).filter(isDefined);
   return threads.length ? threads : undefined;
@@ -1082,6 +1302,10 @@ function modeEvents(mode: Partial<WorkbenchSessionModeState> | undefined): Workb
   return mode ? [{ type: "session_mode_updated", sessionMode: mode }] : [];
 }
 
+function accessEvents(access: Partial<WorkbenchAccessLevelState> | undefined): WorkbenchEvent[] {
+  return access ? [{ type: "access_level_updated", access }] : [];
+}
+
 function threadEvents(
   threads: WorkbenchThreadInfo[] | undefined,
   activeThreadId: string | undefined,
@@ -1121,6 +1345,28 @@ function threadFromSession(
     updatedAt: session.updatedAt,
     metadata: session.metadata,
   };
+}
+
+function isCurrentSessionThread(thread: WorkbenchThreadInfo, sessionId: string): boolean {
+  return thread.threadId === sessionId || thread.sessionId === sessionId;
+}
+
+function preferredCurrentSessionThread(
+  threads: WorkbenchThreadInfo[],
+  sessionId: string,
+): WorkbenchThreadInfo {
+  return (
+    threads.find((thread) => thread.sessionId === sessionId && thread.threadId !== sessionId) ??
+    threads.find((thread) => thread.sessionId === sessionId) ??
+    threads[0]!
+  );
+}
+
+function findThreadByThreadOrSessionId(
+  threads: WorkbenchThreadInfo[],
+  id: string,
+): WorkbenchThreadInfo | undefined {
+  return threads.find((thread) => thread.threadId === id || thread.sessionId === id);
 }
 
 function upsertThread(

@@ -3,6 +3,8 @@ import { Agent } from "@mastra/core/agent";
 import type { MastraModelConfig } from "@mastra/core/llm";
 import { TaskSignalProvider } from "@mastra/core/signals";
 import { createInProcessAcpWorkbenchClient } from "@pe/acp-client";
+import { PeHostClient } from "@pe/host-client";
+import type { WorkbenchAgentClient } from "@pe/workbench-core";
 import type { RequestContext } from "@mastra/core/request-context";
 import { LocalFilesystem, LocalSandbox, Workspace } from "@mastra/core/workspace";
 import {
@@ -25,16 +27,20 @@ import {
   type RuntimeFactory,
   type RuntimeHandle,
   type RuntimeHarnessConfig,
+  type RuntimeSessionOptions,
   type RuntimeStorageProfile,
   type RuntimeToolProfile,
 } from "@pe/runtime";
 import {
   bundledPeaSkills,
+  configurePeaProductToolContext,
   materializeBundledPeaSkills,
   peaProductToolProfile,
   peaProductTools,
-  peaSkillPaths,
+  resolvePeaProductHomePath,
+  resolvePeaSkillPaths,
 } from "@pe/tools";
+import { PeaContextSignalProvider } from "./context-signals.ts";
 import { peaAgentInstructions } from "./instructions.ts";
 
 export const peaRuntimeToolProfile = peaProductToolProfile;
@@ -52,12 +58,23 @@ export interface PeaRuntimeFactoryOptions<
   storageProfile?: RuntimeStorageProfile;
   memoryProfile?: RuntimeMemoryProfile<TState>;
   toolProfile?: RuntimeToolProfile;
+  sessionOptions?: RuntimeSessionOptions;
   createHandle?: (request: RuntimeCreateRequest) => Promise<RuntimeHandle<TState>>;
 }
 
 export interface PeaTuiRuntimeOptions {
   cwd?: string;
   workspaceRoot?: string;
+  hostBaseUrl?: string;
+  workspaceKey?: string;
+  modelId?: string;
+}
+
+export interface PeaBetaTuiWorkbenchOptions {
+  client: WorkbenchAgentClient;
+  cwd: string;
+  title: string;
+  fallbackToLineMode: true;
 }
 
 export function createPeaRuntimeFactory<
@@ -75,6 +92,8 @@ export function createPeaRuntimeFactory<
   const storageProfile = options.storageProfile ?? createPeaProductStateStorageProfile();
   const memoryProfile = options.memoryProfile ?? createPeaRuntimeMemoryProfile<TState>();
   const toolProfile = options.toolProfile ?? peaRuntimeToolProfile;
+  const configuredRoot = options.config.initialState?.projectPath;
+  const workspaceRoot = typeof configuredRoot === "string" ? configuredRoot : undefined;
 
   return createRuntimeFactory(
     descriptor,
@@ -88,6 +107,11 @@ export function createPeaRuntimeFactory<
         storageProfile,
         memoryProfile,
         toolProfile,
+        sessionOptions: options.sessionOptions,
+        workspace: {
+          cwd: workspaceRoot ?? request.cwd,
+          root: workspaceRoot ?? request.workspaceRoot,
+        },
         metadata: {
           ...options.metadata,
           runtimeId: descriptor.id,
@@ -95,8 +119,8 @@ export function createPeaRuntimeFactory<
           memoryProfileId: memoryProfile.id,
           toolProfileId: toolProfile.id,
           protocol: request.protocol,
-          cwd: request.cwd,
-          workspaceRoot: request.workspaceRoot,
+          cwd: workspaceRoot ?? request.cwd,
+          workspaceRoot: workspaceRoot ?? request.workspaceRoot,
         },
       }),
     auth,
@@ -106,11 +130,15 @@ export function createPeaRuntimeFactory<
 export async function createPeaProtocolRuntimeFactory(
   options: PeaTuiRuntimeOptions = {},
 ): Promise<RuntimeFactory> {
-  const cwd = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
+  const productHomePath = resolvePeaProductHomePath();
+  const workspaceRoot = productHomePath;
+  const hostBaseUrl = PeHostClient.resolveHostBaseUrl(options.hostBaseUrl);
+  const workspaceKey = PeHostClient.resolveWorkspaceKey(options.workspaceKey);
+  configurePeaProductToolContext({ hostBaseUrl, workspaceKey });
   const authStorageContext = await createMastraCodeAuthStorageContext();
   const authStorage = authStorageContext.storage;
 
-  await materializeBundledPeaSkills(cwd);
+  await materializeBundledPeaSkills({ productHomePath });
 
   const agent = new Agent({
     id: "pea-agent",
@@ -118,21 +146,21 @@ export async function createPeaProtocolRuntimeFactory(
     description: "High-trust Revit/operator agent for Positive Energy tooling.",
     instructions: peaAgentInstructions,
     model: ({ requestContext }) => resolveCurrentModel(requestContext, defaultPeaAgentModelId),
-    signals: [new TaskSignalProvider()],
+    signals: [new TaskSignalProvider(), new PeaContextSignalProvider()],
     tools: peaProductTools,
   });
   const workspace = new Workspace({
     id: "pea-workspace",
     name: "Pea Workspace",
-    filesystem: new LocalFilesystem({ basePath: cwd, contained: true }),
-    sandbox: new LocalSandbox({ workingDirectory: cwd, env: process.env }),
-    skills: [...peaSkillPaths],
+    filesystem: new LocalFilesystem({ basePath: workspaceRoot, contained: true }),
+    sandbox: new LocalSandbox({ workingDirectory: workspaceRoot, env: process.env }),
+    skills: resolvePeaSkillPaths({ productHomePath }),
   });
 
   return createPeaRuntimeFactory<Record<string, unknown>>({
     config: {
       id: "pea",
-      resourceId: createLocalResourceId("pea", cwd),
+      resourceId: createLocalResourceId("pea", workspaceRoot),
       workspace,
       modes: [
         {
@@ -146,10 +174,12 @@ export async function createPeaProtocolRuntimeFactory(
       ],
       tools: peaProductTools,
       initialState: {
-        currentModelId: defaultPeaAgentModelId,
-        projectPath: cwd,
+        currentModelId: options.modelId ?? defaultPeaAgentModelId,
+        projectPath: workspaceRoot,
+        productHomePath,
         configDir: ".pea",
         bundledSkillCount: bundledPeaSkills.length,
+        yolo: true,
       },
       modelAuthChecker: (provider) =>
         hasMastraCodeStoredAuth(authStorage, provider) ? true : undefined,
@@ -165,12 +195,12 @@ export async function createPeaProtocolRuntimeFactory(
 export async function createPeaTuiRuntime(
   options: PeaTuiRuntimeOptions = {},
 ): Promise<RuntimeHandle> {
-  const cwd = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
+  const workspaceRoot = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
   const factory = await createPeaProtocolRuntimeFactory(options);
   return factory.create({
     protocol: "tui",
-    cwd,
-    workspaceRoot: cwd,
+    cwd: workspaceRoot,
+    workspaceRoot,
   });
 }
 
@@ -189,14 +219,26 @@ export async function runPeaTui(options: PeaTuiRuntimeOptions = {}): Promise<voi
 }
 
 export async function runPeaBetaTui(options: PeaTuiRuntimeOptions = {}): Promise<void> {
-  const cwd = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
+  const workspaceRoot = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
   const factory = await createPeaProtocolRuntimeFactory(options);
   const client = createInProcessAcpWorkbenchClient(
     (connection) => createRuntimeAcpAgent(connection, { runtime: { factory } }),
     { clientName: "Pea", clientVersion: "0.1.0" },
   );
   const { runWorkbenchTui } = await import("@pe/tui");
-  await runWorkbenchTui({ client, cwd, title: "Pea beta OpenTUI" });
+  await runWorkbenchTui(createPeaBetaTuiWorkbenchOptions(client, workspaceRoot));
+}
+
+export function createPeaBetaTuiWorkbenchOptions(
+  client: WorkbenchAgentClient,
+  cwd: string,
+): PeaBetaTuiWorkbenchOptions {
+  return {
+    client,
+    cwd,
+    title: "Pea beta TUI",
+    fallbackToLineMode: true,
+  };
 }
 
 export function createPeaRuntimeAuthProfile(

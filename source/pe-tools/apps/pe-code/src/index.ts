@@ -17,7 +17,6 @@ export {
   defaultPeCodeRuntimeToolCatalog,
   defaultPeCodeRuntimeToolProfile,
   defaultPeCodeSandboxAllowedPath,
-  persistDefaultSandboxAllowedPaths,
 } from "./runtime.ts";
 export { runPeCodeWeb } from "./web.ts";
 export type { PeCodeWebRuntimeOptions } from "./web.ts";
@@ -42,14 +41,14 @@ export function createPeCodeCliCommand() {
     ].join("\n"),
     run: async (ctx) => {
       if (ctx.values.acp) {
-        const factory = await createPeCodeProtocolRuntimeFactory();
+        const factory = await createPeCodeProtocolRuntimeFactory({ modelId: ctx.values.modelId });
         await runRuntimeAcpFromCli(
           createRuntimeAcpCliOptions(ctx.values, { runtime: { factory } }),
         );
         return;
       }
       if (ctx.values.agUi) {
-        const factory = await createPeCodeProtocolRuntimeFactory();
+        const factory = await createPeCodeProtocolRuntimeFactory({ modelId: ctx.values.modelId });
         await runRuntimeAgUiFromCli(
           createRuntimeAgUiCliOptions(ctx.values, { runtime: { factory } }),
         );

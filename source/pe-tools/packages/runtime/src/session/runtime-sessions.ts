@@ -1,173 +1,66 @@
-import type { Harness, HarnessEvent } from "@mastra/core/harness";
+import type { Harness } from "@mastra/core/harness";
 import {
-  createRuntimeRequestContext,
-  setRuntimeThreadSettings,
-  type RuntimeContextEntry,
-} from "../context.ts";
-import { MastraHarnessToRuntimeEvents } from "../events.ts";
-import type { RuntimeToolSource } from "../tool-metadata.ts";
-import type {
-  RuntimeThreadInfo,
-  RuntimeSendMessageOptions,
-  RuntimeSessions,
-  RuntimeThreadSession,
-} from "../runtime.ts";
+  createRuntimeKernel,
+  type RuntimeKernelContextProvider,
+  type RuntimeKernelOptions,
+} from "../kernel.ts";
+import type { RuntimeContextEntry } from "../context.ts";
+import type { RuntimeKernel, RuntimeSendMessageOptions, RuntimeSessions } from "../runtime.ts";
 
-export type RuntimeSessionContextProvider = (request: {
-  threadId?: string;
-}) => Promise<string> | string;
+export type RuntimeSessionContextProvider = RuntimeKernelContextProvider;
 
-export interface RuntimeSessionOptions {
-  agentOverrides?: Record<string, unknown>;
-  contextProvider?: RuntimeSessionContextProvider;
-  contextFailureFormatter?: (error: unknown) => string;
-  toolCatalog?: RuntimeToolSource;
+export interface RuntimeSessionOptions extends RuntimeKernelOptions {
+  kernel?: RuntimeKernel;
 }
 
 export function createRuntimeSessions(
   harness: Harness<Record<string, unknown>>,
   sessionOptions: RuntimeSessionOptions = {},
 ): RuntimeSessions {
-  const agentOverrides = sessionOptions.agentOverrides ?? {};
-  let initTask: Promise<void> | null = null;
-
-  async function ensureInitialized(): Promise<void> {
-    initTask ??= (async () => {
-      const initializable = harness as unknown as {
-        init?: () => Promise<void> | void;
-        getMastra?: () =>
-          | {
-              getAgentById?: (id: string) => unknown;
-              startWorkers?: () => Promise<void> | void;
-            }
-          | undefined;
-      };
-      await initializable.init?.();
-      const mastra = initializable.getMastra?.();
-      if (mastra && Object.keys(agentOverrides).length > 0) {
-        const getAgentById = mastra.getAgentById?.bind(mastra);
-        mastra.getAgentById = (id: string) => agentOverrides[id] ?? getAgentById?.(id);
-      }
-      await mastra?.startWorkers?.();
-    })();
-    await initTask;
-  }
-
-  async function ensureCompatSession(): Promise<void> {
-    const mode = harness.getCurrentMode() as { agent?: { id?: string } };
-    const agentId = mode.agent?.id;
-    const usesCompatSession =
-      agentId === "code-agent" || (agentId ? agentId in agentOverrides : false);
-    if (usesCompatSession) await ensureInitialized();
-  }
+  const kernel = sessionOptions.kernel ?? createRuntimeKernel(harness, sessionOptions);
 
   return {
-    async createThreadSession(options): Promise<RuntimeThreadSession> {
-      await ensureCompatSession();
-      const thread = (await harness.createThread(options)) as { id?: string };
-      const threadId = thread.id;
-      if (!threadId) throw new Error("Harness did not return a thread id.");
-      return {
-        threadId,
-        resourceId: harness.getResourceId(),
-      };
+    async createThreadSession(options) {
+      return kernel.createThreadSession(options);
     },
     async switchThread(options) {
-      await ensureCompatSession();
-      await harness.switchThread(options);
+      await kernel.switchThread(options);
     },
-    async listThreadSessions(): Promise<RuntimeThreadInfo[]> {
-      await ensureCompatSession();
-      return (await harness.listThreads()).map((thread) => ({
-        threadId: thread.id,
-        resourceId: thread.resourceId,
-        title: thread.title,
-        createdAt: thread.createdAt.toISOString(),
-        updatedAt: thread.updatedAt.toISOString(),
-        metadata: thread.metadata,
-      }));
+    async listThreadSessions() {
+      return kernel.listThreadSessions();
+    },
+    async readThreadMessages(options) {
+      return kernel.readThreadMessages(options);
+    },
+    async readThreadLedger(options) {
+      return kernel.readThreadLedger(options);
     },
     async deleteThreadSession(options) {
-      await ensureCompatSession();
-      await harness.memory.deleteThread(options);
+      await kernel.deleteThreadSession(options);
     },
     getResourceId() {
-      return harness.getResourceId();
+      return kernel.getResourceId();
+    },
+    recordUserPrompt(options: RuntimeSendMessageOptions) {
+      return kernel.recordUserPrompt(options);
+    },
+    recordProtocolEvent(options) {
+      return kernel.recordProtocolEvent(options);
+    },
+    snapshotLedger(options) {
+      return kernel.snapshotLedger(options);
     },
     async sendMessage(options: RuntimeSendMessageOptions) {
-      await ensureCompatSession();
-      const threadId = harness.getCurrentThreadId() ?? undefined;
-      const promptFragments = await collectSessionPromptFragments(
-        sessionOptions.contextProvider,
-        threadId,
-        sessionOptions.contextFailureFormatter,
-      );
-      const requestContext = createRuntimeRequestContext({
-        protocol: options.protocol ?? "tui",
-        protocolSessionId: options.protocolSessionId,
-        threadId,
-        resourceId: harness.getResourceId(),
-        entries: options.context,
-        promptFragments,
-        resumeDecisions: options.resumeDecisions,
-      });
-      installRuntimeThreadSettings(requestContext, harness);
-      await harness.sendMessage({ content: options.content, requestContext });
+      await kernel.sendMessage(options);
     },
-    abort: harness.abort.bind(harness),
+    async queueMessage(options: RuntimeSendMessageOptions) {
+      return kernel.queueMessage(options);
+    },
+    abort: kernel.abort.bind(kernel),
     subscribe(listener) {
-      const translator = new MastraHarnessToRuntimeEvents({
-        toolCatalog: sessionOptions.toolCatalog,
-      });
-      return harness.subscribe((event: HarnessEvent) => {
-        for (const runtimeEvent of translator.translate(event)) {
-          void listener(runtimeEvent);
-        }
-      });
+      return kernel.subscribe(listener);
     },
   };
-}
-
-type ThreadSettingHarness = Harness<Record<string, unknown>> & {
-  setThreadSetting?: (options: { key: string; value: unknown }) => Promise<void> | void;
-};
-
-function installRuntimeThreadSettings(
-  requestContext: Parameters<typeof setRuntimeThreadSettings>[0],
-  harness: Harness<Record<string, unknown>>,
-): void {
-  const setThreadSetting = (harness as ThreadSettingHarness).setThreadSetting?.bind(harness);
-  if (!setThreadSetting) return;
-
-  setRuntimeThreadSettings(requestContext, {
-    setThreadSetting: (options) => setThreadSetting(options),
-  });
-}
-
-async function collectSessionPromptFragments(
-  contextProvider: RuntimeSessionContextProvider | undefined,
-  threadId: string | undefined,
-  formatFailure: ((error: unknown) => string) | undefined,
-): Promise<string[]> {
-  if (!contextProvider) return [];
-
-  try {
-    return [await contextProvider({ threadId })];
-  } catch (error) {
-    if (formatFailure) return [formatFailure(error)];
-    const detail = escapeXml(error instanceof Error ? error.message : String(error));
-    return [
-      `<runtime-startup-context>\nContext seed unavailable: ${detail}.\n</runtime-startup-context>`,
-    ];
-  }
-}
-
-function escapeXml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
 }
 
 export type { RuntimeContextEntry };

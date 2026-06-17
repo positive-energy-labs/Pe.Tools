@@ -34,6 +34,7 @@ ALWAYS use RRD-safe live-loop tools, mcps, or cli commands when available.
 
 ### Documentation
 
+`AGENTS.md`: Primary knowledge map; should stay high-level and focused on constraints, justifications for decisions, broad intent, current direction, and broad direction.
 ANY change to repo architecture, tooling, or builds MUST consult these documents:
 - `docs/ARCHITECTURE.md` - read before multi module changes, debugging, and code review. Contains target architecture; code should always seek to align and documentation can be future facing.
 - `docs/BUILD.md` - read before changing anything build, deploy, or dev-loop related. Contians repo tooling justification and explanation. Always prove (or disprove) before changing the document. Information and correctness here is mission critical. TL;DR:

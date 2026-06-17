@@ -4,6 +4,7 @@ import path, { dirname } from "node:path";
 import { LibSQLStore, type LibSQLConfig, type LibSQLLocalPragmaOptions } from "@mastra/libsql";
 import type { MastraCompositeStore } from "@mastra/core/storage";
 import type { RuntimeCreateRequest } from "../runtime.ts";
+import { createRuntimeLibSqlThreadStateStore } from "./thread-state.ts";
 
 export type RuntimeStorageProfileKind = "libsql" | "mastracode-compatible" | "pea-product-state";
 export type RuntimePathResolver = string | ((request: RuntimeCreateRequest) => string);
@@ -58,7 +59,16 @@ export async function createRuntimeLibSqlStorage(
   const localPath = localFilePathFromLibSqlUrl(config.url);
   if (localPath) await mkdir(dirname(localPath), { recursive: true });
 
-  return new LibSQLStore(config);
+  const store = new LibSQLStore(config);
+  const client = (store as unknown as { client?: unknown }).client;
+  if (isLibSqlClient(client)) {
+    store.stores = {
+      ...store.stores,
+      threadState: createRuntimeLibSqlThreadStateStore(client),
+    };
+  }
+
+  return store;
 }
 
 export function createMastraCodeStorageProfile(
@@ -123,6 +133,16 @@ export function getDefaultPeaProductStateDirectory(): string {
         : process.env.XDG_STATE_HOME || path.join(homedir(), ".local", "state");
 
   return path.join(baseDir, "Positive Energy", "Pe.Tools", "state");
+}
+
+function isLibSqlClient(
+  value: unknown,
+): value is Parameters<typeof createRuntimeLibSqlThreadStateStore>[0] {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    typeof (value as { execute?: unknown }).execute === "function"
+  );
 }
 
 function resolveRuntimeLibSqlConfig(

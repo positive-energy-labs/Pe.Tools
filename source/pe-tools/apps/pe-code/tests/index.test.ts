@@ -15,6 +15,8 @@ import {
 } from "../src/index.ts";
 import { defaultPeCodeSandboxAllowedPath } from "../src/runtime.ts";
 
+const slowRuntimeTestTimeout = 30_000;
+
 test("peco composes dev commands", () => {
   expect(getPeCodeCliCommandNames()).toEqual(
     expect.arrayContaining(["live", "script", "talk-to-pea", "talk-to-peco-zellij"]),
@@ -71,160 +73,180 @@ test("peco runtime protocol CLI values map to nested transport options", () => {
   ).toEqual({ transport: { port: 43112, token: "t" } });
 });
 
-test("peco runtime agent exposes task tools through TaskSignalProvider", async () => {
-  const originalCwd = process.cwd();
-  const runtime = await (
-    await createPeCodeProtocolRuntimeFactory({ cwd: originalCwd })
-  ).create({
-    protocol: "tui",
-    cwd: originalCwd,
-    workspaceRoot: originalCwd,
-  });
-
-  try {
-    const tools = await (runtime.harness as any).getCurrentAgent().listTools();
-    expect(tools).toEqual(
-      expect.objectContaining({
-        task_write: expect.any(Object),
-        task_update: expect.any(Object),
-        task_complete: expect.any(Object),
-        task_check: expect.any(Object),
-      }),
-    );
-  } finally {
-    process.chdir(originalCwd);
-    await runtime.close?.();
-  }
-});
-
-test("peco protocol runtime does not preselect a startup thread", async () => {
-  const originalCwd = process.cwd();
-  const runtime = await (
-    await createPeCodeProtocolRuntimeFactory({ cwd: originalCwd })
-  ).create({
-    protocol: "tui",
-    cwd: originalCwd,
-    workspaceRoot: originalCwd,
-  });
-
-  try {
-    expect(runtime.harness.getCurrentThreadId() ?? undefined).toBeUndefined();
-  } finally {
-    process.chdir(originalCwd);
-    await runtime.close?.();
-  }
-});
-
-test("peco protocol runtime honors configured startup model", async () => {
-  const originalCwd = process.cwd();
-  const runtime = await (
-    await createPeCodeProtocolRuntimeFactory({
+test(
+  "peco runtime agent exposes task tools through TaskSignalProvider",
+  async () => {
+    const originalCwd = process.cwd();
+    const runtime = await (
+      await createPeCodeProtocolRuntimeFactory({ cwd: originalCwd })
+    ).create({
+      protocol: "tui",
       cwd: originalCwd,
-      modelId: "openai/gpt-5.5",
-    })
-  ).create({
-    protocol: "acp",
-    cwd: originalCwd,
-    workspaceRoot: originalCwd,
-  });
+      workspaceRoot: originalCwd,
+    });
 
-  try {
-    expect(runtime.harness.getState()).toEqual(
-      expect.objectContaining({ currentModelId: "openai/gpt-5.5" }),
-    );
-  } finally {
-    process.chdir(originalCwd);
-    await runtime.close?.();
-  }
-});
-
-test("peco runtime request scope applies additionalDirectories to workspace file tools", async () => {
-  const originalCwd = process.cwd();
-  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "peco-workspace-root-"));
-  const externalRoot = await mkdtemp(path.join(os.tmpdir(), "peco-external-root-"));
-  await writeFile(path.join(externalRoot, "external.txt"), "external data", "utf-8");
-
-  const runtime = await (
-    await createPeCodeProtocolRuntimeFactory({ cwd: originalCwd })
-  ).create({
-    protocol: "acp",
-    cwd: workspaceRoot,
-    workspaceRoot,
-    additionalDirectories: [externalRoot],
-  });
-
-  try {
-    const workspace = await runtime.harness.resolveWorkspace();
-    const tools = await createWorkspaceTools(workspace!);
-
-    const listing = await tools.find_files.execute(
-      {
-        path: externalRoot,
-        maxDepth: 1,
-        respectGitignore: false,
-      },
-      {
-        workspace,
-        requestContext: new RequestContext(),
-      },
-    );
-
-    expect((workspace?.filesystem as any)?.basePath).toBe(path.resolve(workspaceRoot));
-    expect((workspace?.filesystem as any)?.allowedPaths).toEqual(
-      expect.arrayContaining([
-        path.resolve(defaultPeCodeSandboxAllowedPath),
-        path.resolve(externalRoot),
-      ]),
-    );
-    expect(listing).toContain("external.txt");
-  } finally {
-    process.chdir(originalCwd);
-    await runtime.close?.();
-    await rm(workspaceRoot, { recursive: true, force: true });
-    await rm(externalRoot, { recursive: true, force: true });
-  }
-});
-
-test("peco runtime releases MastraCode-compatible thread locks on close", async () => {
-  const originalAppData = process.env.APPDATA;
-  const originalCwd = process.cwd();
-  const appData = await mkdtemp(path.join(os.tmpdir(), "peco-locks-"));
-  mkdirSync(appData, { recursive: true });
-  process.env.APPDATA = appData;
-  let closed = false;
-
-  const runtime = await (
-    await createPeCodeProtocolRuntimeFactory({ cwd: originalCwd })
-  ).create({
-    protocol: "tui",
-    cwd: originalCwd,
-    workspaceRoot: originalCwd,
-  });
-
-  try {
-    const session = await runtime.sessions.createThreadSession({ title: "Peco Lock Release" });
-    const lockPath = path.join(
-      appData,
-      "mastracode",
-      "locks",
-      `${session.threadId.replace(/[^a-zA-Z0-9_-]/g, "_")}.lock`,
-    );
-
-    expect(readFileSync(lockPath, "utf8").trim()).toBe(String(process.pid));
-
-    await runtime.close?.();
-    closed = true;
-
-    expect(existsSync(lockPath)).toBe(false);
-  } finally {
-    if (!closed) await runtime.close?.();
-    process.chdir(originalCwd);
-    if (originalAppData == null) delete process.env.APPDATA;
-    else process.env.APPDATA = originalAppData;
     try {
-      await rm(appData, { recursive: true, force: true });
-    } catch {
-      // MastraCode can leave SQLite WAL files busy briefly after shutdown on Windows.
+      const tools = await (runtime.harness as any).getCurrentAgent().listTools();
+      expect(tools).toEqual(
+        expect.objectContaining({
+          task_write: expect.any(Object),
+          task_update: expect.any(Object),
+          task_complete: expect.any(Object),
+          task_check: expect.any(Object),
+        }),
+      );
+    } finally {
+      process.chdir(originalCwd);
+      await runtime.close?.();
     }
-  }
-});
+  },
+  slowRuntimeTestTimeout,
+);
+
+test(
+  "peco protocol runtime does not preselect a startup thread",
+  async () => {
+    const originalCwd = process.cwd();
+    const runtime = await (
+      await createPeCodeProtocolRuntimeFactory({ cwd: originalCwd })
+    ).create({
+      protocol: "tui",
+      cwd: originalCwd,
+      workspaceRoot: originalCwd,
+    });
+
+    try {
+      expect(runtime.harness.getCurrentThreadId() ?? undefined).toBeUndefined();
+    } finally {
+      process.chdir(originalCwd);
+      await runtime.close?.();
+    }
+  },
+  slowRuntimeTestTimeout,
+);
+
+test(
+  "peco protocol runtime honors configured startup model",
+  async () => {
+    const originalCwd = process.cwd();
+    const runtime = await (
+      await createPeCodeProtocolRuntimeFactory({
+        cwd: originalCwd,
+        modelId: "openai/gpt-5.5",
+      })
+    ).create({
+      protocol: "acp",
+      cwd: originalCwd,
+      workspaceRoot: originalCwd,
+    });
+
+    try {
+      expect(runtime.harness.getState()).toEqual(
+        expect.objectContaining({ currentModelId: "openai/gpt-5.5" }),
+      );
+    } finally {
+      process.chdir(originalCwd);
+      await runtime.close?.();
+    }
+  },
+  slowRuntimeTestTimeout,
+);
+
+test(
+  "peco runtime request scope applies additionalDirectories to workspace file tools",
+  async () => {
+    const originalCwd = process.cwd();
+    const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "peco-workspace-root-"));
+    const externalRoot = await mkdtemp(path.join(os.tmpdir(), "peco-external-root-"));
+    await writeFile(path.join(externalRoot, "external.txt"), "external data", "utf-8");
+
+    const runtime = await (
+      await createPeCodeProtocolRuntimeFactory({ cwd: originalCwd })
+    ).create({
+      protocol: "acp",
+      cwd: workspaceRoot,
+      workspaceRoot,
+      additionalDirectories: [externalRoot],
+    });
+
+    try {
+      const workspace = await runtime.harness.resolveWorkspace();
+      const tools = await createWorkspaceTools(workspace!);
+
+      const listing = await tools.find_files.execute(
+        {
+          path: externalRoot,
+          maxDepth: 1,
+          respectGitignore: false,
+        },
+        {
+          workspace,
+          requestContext: new RequestContext(),
+        },
+      );
+
+      expect((workspace?.filesystem as any)?.basePath).toBe(path.resolve(workspaceRoot));
+      expect((workspace?.filesystem as any)?.allowedPaths).toEqual(
+        expect.arrayContaining([
+          path.resolve(defaultPeCodeSandboxAllowedPath),
+          path.resolve(externalRoot),
+        ]),
+      );
+      expect(listing).toContain("external.txt");
+    } finally {
+      process.chdir(originalCwd);
+      await runtime.close?.();
+      await rm(workspaceRoot, { recursive: true, force: true });
+      await rm(externalRoot, { recursive: true, force: true });
+    }
+  },
+  slowRuntimeTestTimeout,
+);
+
+test(
+  "peco runtime releases MastraCode-compatible thread locks on close",
+  async () => {
+    const originalAppData = process.env.APPDATA;
+    const originalCwd = process.cwd();
+    const appData = await mkdtemp(path.join(os.tmpdir(), "peco-locks-"));
+    mkdirSync(appData, { recursive: true });
+    process.env.APPDATA = appData;
+    let closed = false;
+
+    const runtime = await (
+      await createPeCodeProtocolRuntimeFactory({ cwd: originalCwd })
+    ).create({
+      protocol: "tui",
+      cwd: originalCwd,
+      workspaceRoot: originalCwd,
+    });
+
+    try {
+      const session = await runtime.sessions.createThreadSession({ title: "Peco Lock Release" });
+      const lockPath = path.join(
+        appData,
+        "mastracode",
+        "locks",
+        `${session.threadId.replace(/[^a-zA-Z0-9_-]/g, "_")}.lock`,
+      );
+
+      expect(readFileSync(lockPath, "utf8").trim()).toBe(String(process.pid));
+
+      await runtime.close?.();
+      closed = true;
+
+      expect(existsSync(lockPath)).toBe(false);
+    } finally {
+      if (!closed) await runtime.close?.();
+      process.chdir(originalCwd);
+      if (originalAppData == null) delete process.env.APPDATA;
+      else process.env.APPDATA = originalAppData;
+      try {
+        await rm(appData, { recursive: true, force: true });
+      } catch {
+        // MastraCode can leave SQLite WAL files busy briefly after shutdown on Windows.
+      }
+    }
+  },
+  slowRuntimeTestTimeout,
+);

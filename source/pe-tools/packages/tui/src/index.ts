@@ -1,6 +1,11 @@
 import { createInterface } from "node:readline/promises";
 import { env, stdin as input, stdout as output } from "node:process";
-import { selectPendingApprovals, selectWorkbenchChrome } from "@pe/agent-projection";
+import {
+  selectActiveThreadId,
+  selectPendingApprovals,
+  selectVisibleThreads,
+  selectWorkbenchChrome,
+} from "@pe/agent-projection";
 import type {
   WorkbenchAgentClient,
   WorkbenchApprovalRequest,
@@ -235,10 +240,11 @@ function promptText(state: WorkbenchState, pendingSends: number): string {
 }
 
 function renderThreads(state: WorkbenchState): string {
-  if (state.threads.items.length === 0) return "threads: none";
+  const threads = selectVisibleThreads(state);
+  if (threads.length === 0) return "threads: none";
 
-  const activeThreadId = state.threads.activeThreadId ?? state.agent.session?.sessionId;
-  const rows = state.threads.items.map((thread, index) => {
+  const activeThreadId = selectActiveThreadId(state);
+  const rows = threads.map((thread, index) => {
     const active =
       thread.threadId === activeThreadId || thread.sessionId === activeThreadId ? "*" : " ";
     const title = thread.title ?? "(untitled)";
@@ -269,17 +275,18 @@ function resolveThread(
 ): WorkbenchState["threads"]["items"][number] | undefined {
   if (!selector) return undefined;
 
+  const threads = selectVisibleThreads(state);
   const index = Number(selector);
-  if (Number.isInteger(index) && index >= 1) return state.threads.items[index - 1];
+  if (Number.isInteger(index) && index >= 1) return threads[index - 1];
 
   const normalized = selector.toLowerCase();
   return (
-    state.threads.items.find(
+    threads.find(
       (thread) =>
         thread.threadId.toLowerCase() === normalized ||
         thread.sessionId?.toLowerCase() === normalized,
     ) ??
-    state.threads.items.find(
+    threads.find(
       (thread) =>
         thread.threadId.toLowerCase().startsWith(normalized) ||
         thread.sessionId?.toLowerCase().startsWith(normalized),

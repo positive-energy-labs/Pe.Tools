@@ -1,7 +1,9 @@
 export * from "./runtime.ts";
+export * from "./kernel.ts";
 export * from "./events.ts";
 export * from "./context.ts";
 export * from "./tool-metadata.ts";
+export * from "./tools/access-policy.ts";
 export * from "./auth/types.ts";
 export * from "./auth/methods.ts";
 export * from "./auth/profiles.ts";
@@ -11,6 +13,7 @@ export * from "./models/mastra-gateway.ts";
 export * from "./models/mastracode-model.ts";
 export * from "./defaults.ts";
 export * from "./storage/profiles.ts";
+export * from "./storage/thread-state.ts";
 export * from "./memory/profiles.ts";
 export * from "./harness/create-runtime-harness.ts";
 export * from "./harness/runtime-harness.ts";

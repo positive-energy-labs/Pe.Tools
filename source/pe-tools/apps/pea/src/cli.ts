@@ -5,7 +5,7 @@ import { PeaCliCommands } from "@pe/tools";
 export async function runPeaMain(args = process.argv.slice(2)): Promise<void> {
   if (args.length === 0) {
     const { runPeaTui } = await import("./runtime.ts");
-    await runPeaTui();
+    await runPeaTui({ workspaceRoot: process.cwd() });
     return;
   }
 
@@ -38,7 +38,10 @@ export function createPeaCliCommand() {
           { createRuntimeAcpCliOptions, runRuntimeAcpFromCli },
           { createPeaProtocolRuntimeFactory },
         ] = await Promise.all([import("@pe/runtime"), import("./runtime.ts")]);
-        const factory = await createPeaProtocolRuntimeFactory();
+        const factory = await createPeaProtocolRuntimeFactory({
+          modelId: ctx.values.modelId,
+          workspaceRoot: ctx.values.workspaceRoot,
+        });
         await runRuntimeAcpFromCli(
           createRuntimeAcpCliOptions(ctx.values, { runtime: { factory } }),
         );
@@ -49,7 +52,10 @@ export function createPeaCliCommand() {
           { createRuntimeAgUiCliOptions, runRuntimeAgUiFromCli },
           { createPeaProtocolRuntimeFactory },
         ] = await Promise.all([import("@pe/runtime"), import("./runtime.ts")]);
-        const factory = await createPeaProtocolRuntimeFactory();
+        const factory = await createPeaProtocolRuntimeFactory({
+          modelId: ctx.values.modelId,
+          workspaceRoot: ctx.values.workspaceRoot,
+        });
         await runRuntimeAgUiFromCli(
           createRuntimeAgUiCliOptions(ctx.values, { runtime: { factory } }),
         );
@@ -67,11 +73,12 @@ export function createPeaCliSubCommands() {
     ...new PeaCliCommands().commands(),
     "beta-tui": define({
       name: "beta-tui",
-      description: "Run the experimental OpenTUI Pea workbench.",
+      description: "Run the beta Pea terminal workbench.",
       toKebab: true,
-      run: async () => {
+      args: workspaceArgs,
+      run: async (ctx) => {
         const { runPeaBetaTui } = await import("./runtime.ts");
-        await runPeaBetaTui();
+        await runPeaBetaTui({ workspaceRoot: ctx.values.workspaceRoot });
       },
     }),
     web: define({
@@ -85,6 +92,8 @@ export function createPeaCliSubCommands() {
           host: ctx.values.host,
           port: parseOptionalPort(ctx.values.port),
           staticDir: ctx.values.staticDir,
+          modelId: ctx.values.modelId,
+          workspaceRoot: ctx.values.workspaceRoot,
         });
       },
     }),
@@ -94,6 +103,14 @@ export function createPeaCliSubCommands() {
 export function getPeaCliCommandNames(): string[] {
   return Object.keys(createPeaCliSubCommands());
 }
+
+const workspaceArgs = {
+  workspaceRoot: {
+    type: "string",
+    description:
+      "Pea product workspace root. Defaults to the directory where the Pea CLI is launched.",
+  },
+} as const;
 
 const webArgs = {
   host: {
@@ -108,6 +125,11 @@ const webArgs = {
     type: "string",
     description: "Optional built website directory to serve from the workbench server.",
   },
+  modelId: {
+    type: "string",
+    description: "Optional model id to force for the runtime.",
+  },
+  ...workspaceArgs,
 } as const;
 
 const protocolArgs = {
@@ -148,6 +170,7 @@ const protocolArgs = {
     type: "string",
     description: "Optional model id to force for the runtime.",
   },
+  ...workspaceArgs,
 } as const;
 
 function parseOptionalPort(value: string | undefined): number | undefined {

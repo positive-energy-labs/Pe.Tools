@@ -46,7 +46,7 @@ export type RuntimeEvent =
       status: RuntimeToolStatus;
       input?: RuntimeJsonValue;
       suspendPayload?: RuntimeJsonValue;
-      resumeSchema?: unknown;
+      resumeSchema?: RuntimeJsonValue;
       tool?: RuntimeToolMetadata;
     }
   | {
@@ -155,6 +155,10 @@ export class MastraHarnessToRuntimeEvents {
   constructor(private readonly options: MastraHarnessToRuntimeEventsOptions = {}) {}
 
   translate(event: HarnessEvent): RuntimeEvent[] {
+    const planRequest = readPlanApprovalRequiredEvent(event);
+    if (planRequest)
+      return [{ type: "plan_requested", title: planRequest.title, plan: planRequest.plan }];
+
     switch (event.type) {
       case "agent_start":
         return [{ type: "run_started" }];
@@ -217,7 +221,8 @@ export class MastraHarnessToRuntimeEvents {
             status: "suspended",
             input: sanitizeJson(event.args),
             suspendPayload: sanitizeJson(event.suspendPayload),
-            resumeSchema: event.resumeSchema,
+            resumeSchema:
+              event.resumeSchema === undefined ? undefined : sanitizeJson(event.resumeSchema),
             tool: this.rememberTool(event.toolCallId, event.toolName),
           }),
         ];
@@ -256,8 +261,6 @@ export class MastraHarnessToRuntimeEvents {
       }
       case "task_updated":
         return [{ type: "plan_updated", tasks: sanitizeJson(event.tasks) }];
-      case "plan_approval_required":
-        return [{ type: "plan_requested", title: event.title, plan: event.plan }];
       case "subagent_tool_start":
         return [this.translateSubagentToolStart(sanitizeRecord(event))];
       case "subagent_tool_end":
@@ -475,6 +478,15 @@ function sanitizeObject(value: object, seen: WeakSet<object>): RuntimeJsonValue 
 
 function stripUndefined<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as T;
+}
+
+function readPlanApprovalRequiredEvent(
+  event: HarnessEvent,
+): { title: string; plan: string } | undefined {
+  if ((event as { type?: unknown }).type !== "plan_approval_required") return undefined;
+  const title = (event as { title?: unknown }).title;
+  const plan = (event as { plan?: unknown }).plan;
+  return typeof title === "string" && typeof plan === "string" ? { title, plan } : undefined;
 }
 
 function isJsonObject(value: RuntimeJsonValue): value is RuntimeJsonObject {

@@ -7,6 +7,7 @@ import {
   getDefaultPeaProductStateDirectory,
   type RuntimeStorageProfileKind,
 } from "../storage/profiles.ts";
+import type { RuntimeThreadLockInfo } from "../runtime.ts";
 
 const require = createRequire(import.meta.url);
 
@@ -82,6 +83,17 @@ export function createRuntimeThreadLock(options: RuntimeThreadLockOptions = {}) 
       releaseLockFile(getLockPath(locksDirectory, threadId), process.pid);
     },
   };
+}
+
+export function readRuntimeThreadLockInfo(
+  threadId: string,
+  options: RuntimeThreadLockOptions = {},
+): RuntimeThreadLockInfo {
+  const lockPath = getLockPath(getLocksDirectory(options.storageProfileKind), threadId);
+  const ownerPid = readLockOwnerPid(lockPath);
+  if (ownerPid == null) return { status: fs.existsSync(lockPath) ? "unknown" : "unlocked" };
+  if (ownerPid === process.pid) return { status: "owned", ownerPid };
+  return isProcessAlive(ownerPid) ? { status: "locked", ownerPid } : { status: "unlocked" };
 }
 
 export async function createRuntimeThreadLockWithMastraCodeInterop(

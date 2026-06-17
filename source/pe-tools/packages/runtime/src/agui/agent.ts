@@ -89,7 +89,9 @@ export class RuntimeAgUiAgent {
 
     const translator = new RuntimeToAgUiEvents();
     const interrupts = new RuntimeInterruptCollector();
-    let nextSequence = nextAgUiEventSequence(this.runtimeSessions.history(session.id));
+    let nextSequence = nextAgUiEventSequence(
+      await readRuntimeSessionHistory(this.runtimeSessions, session.id),
+    );
     const emitEvent = (event: BaseEvent) => {
       const sequencedEvent = {
         ...event,
@@ -139,8 +141,9 @@ export class RuntimeAgUiAgent {
   }
 
   async closeThread(threadId: string): Promise<boolean> {
-    const session = await this.sessionForThread(threadId);
-    if (!session) return false;
+    const listedSession = await this.sessionForThread(threadId);
+    if (!listedSession) return false;
+    const session = await this.resumeListedSession(listedSession);
     try {
       await this.runtimeSessions.close(session.id);
     } catch (error) {
@@ -150,18 +153,19 @@ export class RuntimeAgUiAgent {
   }
 
   async deleteThread(threadId: string): Promise<boolean> {
-    const session = await this.sessionForThread(threadId);
-    if (!session) return false;
+    const listedSession = await this.sessionForThread(threadId);
+    if (!listedSession) return false;
+    const session = await this.resumeListedSession(listedSession);
     await this.runtimeSessions.delete(session.id);
     return true;
   }
 
   async events(request: { threadId: string; afterSequence?: number }): Promise<BaseEvent[]> {
-    const session = await this.sessionForThread(request.threadId);
-    if (!session) return [];
+    const listedSession = await this.sessionForThread(request.threadId);
+    if (!listedSession) return [];
+    const session = await this.resumeListedSession(listedSession);
 
-    return this.runtimeSessions
-      .history(session.id)
+    return (await readRuntimeSessionHistory(this.runtimeSessions, session.id))
       .filter(isAgUiProtocolHistoryEntry)
       .flatMap((entry): BaseEvent[] => (isAgUiEvent(entry.payload) ? [entry.payload] : []))
       .filter((event) => agUiEventSequence(event) > (request.afterSequence ?? 0));
@@ -182,7 +186,17 @@ export class RuntimeAgUiAgent {
   private async sessionForThread(
     threadId: string,
   ): Promise<RuntimeProtocolSessionInfo | undefined> {
-    return (await this.sessions()).find((candidate) => candidate.externalThreadId === threadId);
+    return this.runtimeSessions.resolveSessionInfo({ id: threadId, protocol: "ag-ui" });
+  }
+
+  private async resumeListedSession(
+    session: RuntimeProtocolSessionInfo,
+  ): Promise<RuntimeProtocolSessionInfo> {
+    return this.runtimeSessions.resumeSession(session.id, {
+      protocol: "ag-ui",
+      cwd: session.cwd,
+      additionalDirectories: session.additionalDirectories,
+    });
   }
 }
 
@@ -660,6 +674,17 @@ function nextAgUiEventSequence(history: ReturnType<RuntimeProtocolSessions["hist
     .filter(isAgUiProtocolHistoryEntry)
     .map((entry) => agUiEventSequence(entry.payload));
   return Math.max(0, ...sequences) + 1;
+}
+
+async function readRuntimeSessionHistory(
+  manager: RuntimeProtocolSessions,
+  id: string,
+): Promise<ReturnType<RuntimeProtocolSessions["history"]>> {
+  const reader = manager as RuntimeProtocolSessions & {
+    readHistory?: (id: string) => Promise<ReturnType<RuntimeProtocolSessions["history"]>>;
+  };
+  if (typeof reader.readHistory === "function") return reader.readHistory(id);
+  return manager.history(id);
 }
 
 function isAgUiProtocolHistoryEntry(

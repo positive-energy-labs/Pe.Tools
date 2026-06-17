@@ -6,6 +6,7 @@ export {
 } from "./cli.ts";
 export {
   createPeaRuntimeAuthProfile,
+  createPeaBetaTuiWorkbenchOptions,
   createPeaRuntimeFactory,
   createPeaProtocolRuntimeFactory,
   createPeaTuiRuntime,
@@ -15,5 +16,6 @@ export {
   defaultPeaRuntimeToolProfile,
 } from "./runtime.ts";
 export type { PeaRuntimeFactoryOptions } from "./runtime.ts";
+export { PeaContextSignalProvider, PeaContextStateProcessor } from "./context-signals.ts";
 export { runPeaWeb } from "./web.ts";
 export type { PeaWebRuntimeOptions } from "./web.ts";

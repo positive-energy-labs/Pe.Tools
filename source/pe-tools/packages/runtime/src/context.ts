@@ -61,6 +61,14 @@ export function getRuntimeProtocolSessionId(requestContext: RequestContext): str
   return requestContext.get(runtimeProtocolSessionIdKey) as string | undefined;
 }
 
+export function getRuntimeContextEntries(
+  requestContext: Pick<RequestContext, "get"> | undefined,
+): RuntimeContextEntry[] {
+  return normalizeContextEntries(
+    (requestContext?.get(runtimeContextEntriesKey) as RuntimeContextEntry[] | undefined) ?? [],
+  );
+}
+
 export function getRuntimeResumeDecisions(requestContext: RequestContext): RuntimeResumeDecision[] {
   return (
     (requestContext.get(runtimeResumeDecisionsKey) as RuntimeResumeDecision[] | undefined) ?? []
