@@ -11,29 +11,31 @@ export function ThreadHistoryPane(props: {
   onRefresh: () => void;
   onSelect: (threadId: string) => void;
 }): JSX.Element {
-  const threads = createMemo(() => sortThreads(props.state().threads));
+  const threads = createMemo(() => sortThreads(visibleThreads(props.state())));
   const activeThreadId = createMemo(
-    () => props.state().activeThreadId ?? props.state().session?.sessionId,
+    () => props.state().threads.activeThreadId ?? props.state().agent.session?.sessionId,
   );
 
   return (
     <box
-      width={28}
+      width={31}
       height="100%"
       flexDirection="column"
       backgroundColor={peaTheme.backgroundPanel}
       border={["right"]}
-      borderColor={peaTheme.border}
+      borderColor={peaTheme.borderSubtle}
       paddingLeft={1}
       paddingRight={1}
     >
       <box flexDirection="row" justifyContent="space-between">
-        <text fg={peaTheme.primary}>threads</text>
+        <text fg={peaTheme.primary}>timeline</text>
         <text fg={peaTheme.textMuted} onMouseDown={props.onRefresh}>
           refresh
         </text>
       </box>
-      <text fg={peaTheme.textMuted}>{props.loading ? "loading…" : "enter loads selected"}</text>
+      <text fg={peaTheme.textMuted}>
+        {props.loading ? "loading…" : "ctrl+↑/↓ switch · ctrl+enter load"}
+      </text>
       {props.error ? <text fg={peaTheme.error}>{props.error}</text> : null}
       <scrollbox flexGrow={1} scrollY paddingTop={1}>
         {threads().length === 0 ? <text fg={peaTheme.textMuted}>No history yet.</text> : null}
@@ -46,9 +48,6 @@ export function ThreadHistoryPane(props: {
           />
         ))}
       </scrollbox>
-      <box border={["top"]} borderColor={peaTheme.border} paddingTop={1}>
-        <text fg={peaTheme.textMuted}>ctrl+r refresh · ↑/↓ select</text>
-      </box>
     </box>
   );
 }
@@ -59,7 +58,6 @@ function ThreadRow(props: {
   selected: boolean;
   onSelect: () => void;
 }): JSX.Element {
-  const marker = props.active ? "●" : props.selected ? "›" : " ";
   return (
     <box
       flexDirection="column"
@@ -70,11 +68,29 @@ function ThreadRow(props: {
       <text
         fg={props.active ? peaTheme.primary : props.selected ? peaTheme.text : peaTheme.textMuted}
       >
-        {`${marker} ${threadTitle(props.thread)}`}
+        {`${props.active ? "●" : props.selected ? "›" : " "} ${threadTitle(props.thread)}`}
       </text>
       <text fg={peaTheme.textMuted}>{threadSubtitle(props.thread)}</text>
     </box>
   );
+}
+
+function visibleThreads(state: WorkbenchState): WorkbenchThreadInfo[] {
+  const session = state.agent.session;
+  if (!session) return state.threads.items;
+  if (state.threads.items.some((thread) => thread.threadId === session.sessionId))
+    return state.threads.items;
+
+  return [
+    {
+      threadId: session.sessionId,
+      sessionId: session.sessionId,
+      title: session.title,
+      cwd: session.cwd,
+      updatedAt: session.updatedAt,
+    },
+    ...state.threads.items,
+  ];
 }
 
 function sortThreads(threads: WorkbenchThreadInfo[]): WorkbenchThreadInfo[] {
@@ -91,7 +107,7 @@ function threadTitle(thread: WorkbenchThreadInfo): string {
 
 function threadSubtitle(thread: WorkbenchThreadInfo): string {
   const date = thread.updatedAt ? new Date(thread.updatedAt).toLocaleString() : undefined;
-  return [date, shortId(thread.threadId)].filter(Boolean).join(" · ");
+  return [date, thread.cwd, shortId(thread.threadId)].filter(Boolean).join(" · ");
 }
 
 function shortId(value: string): string {

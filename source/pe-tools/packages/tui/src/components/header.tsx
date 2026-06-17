@@ -1,17 +1,11 @@
+import { selectWorkbenchChrome } from "@pe/agent-projection";
 import type { JSX } from "@opentui/solid";
 import { createMemo, type Accessor } from "solid-js";
 import type { WorkbenchState } from "@pe/workbench-core";
 import { peaTheme } from "../theme.js";
 
 export function Header(props: { title?: string; state: Accessor<WorkbenchState> }): JSX.Element {
-  const agentTitle = createMemo(
-    () => props.state().agent?.title ?? props.state().agent?.name ?? "agent",
-  );
-  const sessionTitle = createMemo(
-    () => props.state().session?.title ?? props.state().session?.sessionId ?? "no session",
-  );
-  const modelTitle = createMemo(() => props.state().model.currentModelId ?? "model unset");
-  const modeTitle = createMemo(() => props.state().sessionMode.currentModeId ?? "default");
+  const chrome = createMemo(() => selectWorkbenchChrome(props.state()));
 
   return (
     <box
@@ -20,24 +14,26 @@ export function Header(props: { title?: string; state: Accessor<WorkbenchState> 
       backgroundColor={peaTheme.backgroundPanel}
       paddingLeft={1}
       paddingRight={1}
-      paddingTop={0}
-      paddingBottom={0}
       border={["bottom"]}
-      borderColor={peaTheme.border}
+      borderColor={peaTheme.borderSubtle}
     >
-      <text fg={peaTheme.primary}>{props.title ?? "Pea"}</text>
-      <text fg={peaTheme.textMuted}>{agentTitle()}</text>
-      <text fg={statusColor(props.state().status)}>{props.state().status}</text>
-      <text fg={peaTheme.textMuted}>{sessionTitle()}</text>
-      <text fg={peaTheme.textMuted}>{modelTitle()}</text>
-      <text fg={peaTheme.textMuted}>{modeTitle()}</text>
+      <box flexDirection="row" gap={1}>
+        <text fg={peaTheme.primary}>{props.title ?? chrome().title}</text>
+        <text fg={peaTheme.textMuted}>{chrome().subtitle}</text>
+      </box>
+      <box flexDirection="row" gap={2}>
+        <text fg={statusColor(chrome().status)}>{chrome().status}</text>
+        <text fg={peaTheme.textMuted}>{chrome().threadLabel}</text>
+        <text fg={peaTheme.textMuted}>{chrome().modelLabel}</text>
+        <text fg={peaTheme.textMuted}>{chrome().modeLabel}</text>
+      </box>
     </box>
   );
 }
 
-function statusColor(status: WorkbenchState["status"]): string {
+function statusColor(status: WorkbenchState["uiStatus"]["overall"]["status"]): string {
   if (status === "error") return peaTheme.error;
-  if (status === "waiting") return peaTheme.warning;
-  if (status === "running") return peaTheme.success;
+  if (status === "waiting" || status === "canceling") return peaTheme.warning;
+  if (status === "running" || status === "starting") return peaTheme.success;
   return peaTheme.textMuted;
 }

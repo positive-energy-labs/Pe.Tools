@@ -1,8 +1,15 @@
+import type { WorkbenchChromeModel } from "@pe/agent-projection";
 import type { WorkbenchMessage, WorkbenchMessagePart, WorkbenchState } from "@pe/agent-contracts";
 import { useEffect, useRef } from "react";
 import { JsonBlock } from "../debug/JsonBlock.tsx";
 
-export function TranscriptPane({ state }: { state: WorkbenchState }) {
+export function TranscriptPane({
+  state,
+  chrome,
+}: {
+  state: WorkbenchState;
+  chrome: WorkbenchChromeModel;
+}) {
   const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -19,15 +26,55 @@ export function TranscriptPane({ state }: { state: WorkbenchState }) {
       </div>
       {state.transcript.error ? <div className="error-text">{state.transcript.error}</div> : null}
       <div className="transcript-list">
-        {state.transcript.messages.length === 0 ? (
-          <div className="empty">No transcript yet.</div>
-        ) : null}
+        {state.transcript.messages.length === 0 ? <WorkbenchLanding chrome={chrome} /> : null}
         {state.transcript.messages.map((message) => (
           <MessageCard key={message.id} message={message} />
         ))}
         <div ref={endRef} />
       </div>
     </section>
+  );
+}
+
+function WorkbenchLanding({ chrome }: { chrome: WorkbenchChromeModel }) {
+  return (
+    <div className="workbench-landing">
+      <div className="hero-logo" aria-hidden="true">
+        <span>pea</span>
+      </div>
+      <div className="hero-copy">
+        <h1>{chrome.title}</h1>
+        <p>{chrome.subtitle}</p>
+      </div>
+      <div className="command-strip">
+        {chrome.launchCommands.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className="command-card"
+            onClick={() => void navigator.clipboard?.writeText(item.command)}
+            title={item.description}
+          >
+            <code>{item.command}</code>
+            <span>copy</span>
+          </button>
+        ))}
+      </div>
+      <div className="feature-grid">
+        {chrome.featureCards.map((card) => (
+          <article
+            key={card.id}
+            className={`feature-card ${card.enabled ? "enabled" : "disabled"}`}
+          >
+            <div className="feature-card-head">
+              <strong>{card.title}</strong>
+              {card.hotkey ? <code>{card.hotkey}</code> : null}
+            </div>
+            <p>{card.description}</p>
+          </article>
+        ))}
+      </div>
+    </div>
   );
 }
 

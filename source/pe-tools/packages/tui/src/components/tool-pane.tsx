@@ -4,23 +4,23 @@ import type { WorkbenchDebugEvent, WorkbenchState, WorkbenchToolCall } from "@pe
 import { peaTheme } from "../theme.js";
 
 export function ToolPane(props: { state: Accessor<WorkbenchState> }): JSX.Element {
-  const toolCalls = createMemo(() => props.state().toolCalls.slice(-18).toReversed());
-  const debugEvents = createMemo(() => props.state().debugEvents.slice(-10).toReversed());
-  const memories = createMemo(() => props.state().observationalMemory.slice(-6).toReversed());
-  const activeToolCallId = createMemo(() => props.state().activeRun.activeToolCallId);
+  const toolCalls = createMemo(() => props.state().tools.calls.slice(-18).toReversed());
+  const debugEvents = createMemo(() => props.state().debug.events.slice(-10).toReversed());
+  const memories = createMemo(() => props.state().memory.entries.slice(-6).toReversed());
+  const activeToolCallId = createMemo(() => props.state().uiStatus.overall.activeToolCallId);
 
   return (
     <box
-      width={34}
+      width={38}
       height="100%"
       flexDirection="column"
       backgroundColor={peaTheme.backgroundPanel}
       border={["left"]}
-      borderColor={peaTheme.border}
+      borderColor={peaTheme.borderSubtle}
       paddingLeft={1}
       paddingRight={1}
     >
-      <text fg={peaTheme.primary}>tools</text>
+      <text fg={peaTheme.primary}>inspector</text>
       <scrollbox flexGrow={1} scrollY paddingTop={1}>
         {toolCalls().length === 0 ? <text fg={peaTheme.textMuted}>No tool calls yet.</text> : null}
         {toolCalls().map((tool) => (
@@ -81,9 +81,7 @@ function statusColor(status: WorkbenchToolCall["status"]): string {
 }
 
 function formatLocation(location: NonNullable<WorkbenchToolCall["locations"]>[number]): string {
-  const target = location.path ?? location.uri ?? "location";
-  const line = location.line ? `:${location.line}` : "";
-  return `${target}${line}`;
+  return `${location.path ?? location.uri ?? "location"}${location.line ? `:${location.line}` : ""}`;
 }
 
 function truncate(value: string, max: number): string {

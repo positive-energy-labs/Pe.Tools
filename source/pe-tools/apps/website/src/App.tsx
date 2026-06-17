@@ -1,9 +1,4 @@
-import {
-  selectActiveThread,
-  selectCurrentModeLabel,
-  selectCurrentModelLabel,
-  selectOverallRunStatus,
-} from "@pe/agent-projection";
+import { selectWorkbenchChrome } from "@pe/agent-projection";
 import { ApprovalDock } from "./components/approvals/ApprovalDock.tsx";
 import { Composer } from "./components/composer/Composer.tsx";
 import { InspectorPanel } from "./components/inspector/InspectorPanel.tsx";
@@ -15,26 +10,26 @@ import { useWorkbench } from "./workbench/use-workbench.ts";
 
 export function App() {
   const { state, events, loading, error, commands } = useWorkbench();
-  const activeThread = selectActiveThread(state);
+  const chrome = selectWorkbenchChrome(state);
+
   return (
     <WorkbenchLayout
       header={
         <>
-          <div>
-            <strong>
-              {state.agent.info?.runtime?.title ?? state.agent.info?.title ?? "Pe Workbench"}
-            </strong>
-            <span className="muted">
-              {state.agent.info?.runtime?.description ?? "React contract probe"}
-            </span>
+          <div className="brand-lockup">
+            <div className="brand-mark">pea</div>
+            <div>
+              <strong>{chrome.title}</strong>
+              <span className="muted">{chrome.subtitle}</span>
+            </div>
           </div>
           <div className="topbar-status">
             {loading ? <span className="status-pill loading">loading</span> : null}
             {error ? <span className="status-pill error">{error}</span> : null}
-            <span className="status-pill">{selectOverallRunStatus(state)}</span>
-            <span>{selectCurrentModelLabel(state) ?? "model: default"}</span>
-            <span>{selectCurrentModeLabel(state) ?? "mode: default"}</span>
-            <span>{activeThread?.title ?? activeThread?.threadId ?? "no thread"}</span>
+            <span className={`status-pill ${chrome.status}`}>{chrome.status}</span>
+            <span>{chrome.modelLabel}</span>
+            <span>{chrome.modeLabel}</span>
+            <span>{chrome.threadLabel}</span>
           </div>
         </>
       }
@@ -42,7 +37,7 @@ export function App() {
       center={
         <div className="center-stack">
           <ApprovalDock state={state} commands={commands} />
-          <TranscriptPane state={state} />
+          <TranscriptPane state={state} chrome={chrome} />
           <Composer state={state} commands={commands} />
         </div>
       }

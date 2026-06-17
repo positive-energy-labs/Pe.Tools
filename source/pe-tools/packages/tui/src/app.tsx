@@ -30,7 +30,6 @@ export async function renderWorkbenchApp(options: WorkbenchAppOptions): Promise<
   const keymap = createDefaultOpenTuiKeymap(options.renderer);
   const shutdown = new Promise<void>((resolve) => options.renderer.once("destroy", resolve));
   let exiting = false;
-  let returnHandler: (() => void) | undefined;
 
   const exit = () => {
     if (exiting) return;
@@ -40,14 +39,7 @@ export async function renderWorkbenchApp(options: WorkbenchAppOptions): Promise<
     });
   };
   const onGlobalKeypress = (event: KeyEvent) => {
-    if (isReturnKey(event) && returnHandler) {
-      event.preventDefault();
-      event.stopPropagation();
-      returnHandler();
-      return;
-    }
-
-    if (event.name !== "escape" && !(event.name === "d" && event.ctrl)) return;
+    if (!(event.name === "d" && event.ctrl)) return;
     event.preventDefault();
     event.stopPropagation();
     exit();
@@ -72,9 +64,6 @@ export async function renderWorkbenchApp(options: WorkbenchAppOptions): Promise<
             options.controller.resolveApproval(requestId, optionId);
           },
         }}
-        onReturnSubmitChanged={(handler) => {
-          returnHandler = handler;
-        }}
       />
     ),
     options.renderer,
@@ -88,7 +77,6 @@ function WorkbenchApp(props: {
   controller: WorkbenchController;
   keymap: PeaKeymap;
   actions: WorkbenchActions;
-  onReturnSubmitChanged: (handler: (() => void) | undefined) => void;
 }): JSX.Element {
   const [state, setState] = createSignal(props.controller.getState());
   const [prompt, setPrompt] = createSignal<PromptHandle>();
@@ -99,13 +87,16 @@ function WorkbenchApp(props: {
   const [selectedThreadId, setSelectedThreadId] = createSignal<string>();
   const [threadLoading, setThreadLoading] = createSignal(false);
   const [threadError, setThreadError] = createSignal<string>();
-  const approval = createMemo(() => state().approvals[0]);
+  const [overlay, setOverlay] = createSignal<"commands" | "help" | undefined>();
+  const approval = createMemo(() =>
+    state().approvals.requests.find((request) => request.status === "pending"),
+  );
   const unsubscribe = props.controller.subscribe((next) => setState(() => next));
   onCleanup(unsubscribe);
 
   onMount(() => {
     void props.controller.start().catch((error: unknown) => {
-      console.error(error instanceof Error ? error.message : String(error));
+      setLocalErrors((errors) => [...errors.slice(-2), `Start failed: ${errorMessage(error)}`]);
     });
   });
 
@@ -121,18 +112,6 @@ function WorkbenchApp(props: {
     );
     if (!existing) setSelectedApprovalOptionId(current.options[0]?.optionId);
   });
-
-  createEffect(() => {
-    const currentPrompt = prompt();
-    props.onReturnSubmitChanged(
-      currentPrompt && !approval()
-        ? () => {
-            void currentPrompt.submit();
-          }
-        : undefined,
-    );
-  });
-  onCleanup(() => props.onReturnSubmitChanged(undefined));
 
   const submit = async (text: string): Promise<boolean> => {
     setSending(true);
@@ -150,11 +129,11 @@ function WorkbenchApp(props: {
   };
 
   createEffect(() => {
-    const threads = state().threads;
+    const threads = state().threads.items;
     const current = selectedThreadId();
     if (current && threads.some((thread) => thread.threadId === current)) return;
     setSelectedThreadId(
-      state().activeThreadId ?? state().session?.sessionId ?? threads[0]?.threadId,
+      state().threads.activeThreadId ?? state().agent.session?.sessionId ?? threads[0]?.threadId,
     );
   });
 
@@ -172,7 +151,7 @@ function WorkbenchApp(props: {
 
   const loadSelectedThread = async () => {
     const threadId = selectedThreadId();
-    if (!threadId || threadId === state().activeThreadId) return;
+    if (!threadId) return;
     setThreadLoading(true);
     try {
       await props.controller.loadThread(threadId);
@@ -187,7 +166,7 @@ function WorkbenchApp(props: {
   };
 
   const moveThreadSelection = (direction: number) => {
-    const threads = state().threads;
+    const threads = state().threads.items;
     if (threads.length === 0) return;
     const index = threads.findIndex((thread) => thread.threadId === selectedThreadId());
     const current = index < 0 ? 0 : index;
@@ -214,6 +193,9 @@ function WorkbenchApp(props: {
     loadSelectedThread: () => void loadSelectedThread(),
     selectNextThread: () => moveThreadSelection(1),
     selectPreviousThread: () => moveThreadSelection(-1),
+    showCommandPalette: () => setOverlay("commands"),
+    showHelp: () => setOverlay("help"),
+    closeOverlay: () => setOverlay(undefined),
     exit: () => props.actions.exit(),
   });
 
@@ -247,6 +229,71 @@ function WorkbenchApp(props: {
         onSelect={setSelectedApprovalOptionId}
         onToggleExpanded={() => setApprovalExpanded((value) => !value)}
       />
+      {overlay() ? (
+        <CommandOverlay kind={overlay()!} onClose={() => setOverlay(undefined)} />
+      ) : null}
+    </box>
+  );
+}
+
+function CommandOverlay(props: { kind: "commands" | "help"; onClose: () => void }): JSX.Element {
+  const rows =
+    props.kind === "commands"
+      ? [
+          ["ctrl+k", "Open command palette"],
+          ["ctrl+r", "Refresh thread timeline"],
+          ["ctrl+↑/↓", "Move thread selection"],
+          ["ctrl+enter", "Load selected thread"],
+          ["y / a / n", "Resolve approvals"],
+          ["/exit", "Quit Pea"],
+        ]
+      : [
+          ["home", "Centered prompt, rotating suggestions, and feature exposure"],
+          ["left", "Thread timeline and quick reload"],
+          ["center", "Transcript, plan, tool trace, and prompt"],
+          ["right", "Inspector with tools, debug events, and memory"],
+          ["approvals", "Permission dock keeps raw details visible"],
+          ["runtime", "All panes read shared workbench projection state"],
+        ];
+
+  return (
+    <box
+      position="absolute"
+      zIndex={3000}
+      left={0}
+      top={0}
+      width="100%"
+      height="100%"
+      alignItems="center"
+      justifyContent="center"
+      backgroundColor="#000000cc"
+      onMouseDown={props.onClose}
+    >
+      <box
+        width={72}
+        flexDirection="column"
+        backgroundColor={peaTheme.backgroundPanel}
+        border
+        borderColor={peaTheme.borderActive}
+        paddingTop={1}
+        paddingBottom={1}
+        paddingLeft={2}
+        paddingRight={2}
+        gap={1}
+      >
+        <box flexDirection="row" justifyContent="space-between">
+          <text fg={peaTheme.primary}>
+            {props.kind === "commands" ? "command palette" : "workbench help"}
+          </text>
+          <text fg={peaTheme.textMuted}>esc close</text>
+        </box>
+        {rows.map((row) => (
+          <box flexDirection="row" gap={2}>
+            <text fg={peaTheme.accent}>{row[0]}</text>
+            <text fg={peaTheme.text}>{row[1]}</text>
+          </box>
+        ))}
+      </box>
     </box>
   );
 }
@@ -264,6 +311,9 @@ function usePeaKeymap(
     loadSelectedThread: () => void;
     selectNextThread: () => void;
     selectPreviousThread: () => void;
+    showCommandPalette: () => void;
+    showHelp: () => void;
+    closeOverlay: () => void;
     exit: () => void;
   },
 ): void {
@@ -294,6 +344,14 @@ function usePeaKeymap(
     const unregister = keymap.registerLayer({
       commands: [
         { name: "app.exit", title: "Exit Pea", category: "App", run: props.exit },
+        {
+          name: "command.palette.show",
+          title: "Command palette",
+          category: "App",
+          run: props.showCommandPalette,
+        },
+        { name: "help.show", title: "Show help", category: "App", run: props.showHelp },
+        { name: "overlay.close", title: "Close overlay", category: "App", run: props.closeOverlay },
         {
           name: "prompt.submit",
           title: "Submit prompt",
@@ -368,15 +426,10 @@ function usePeaKeymap(
         },
       ],
       bindings: [
-        { key: "escape", cmd: "app.exit" },
+        { key: "escape", cmd: "overlay.close" },
         { key: "ctrl+d", cmd: "app.exit" },
-        ...(hasApproval
-          ? []
-          : [
-              { key: "return", cmd: "prompt.submit" },
-              { key: "enter", cmd: "prompt.submit" },
-            ]),
-        { key: "ctrl+return", cmd: "prompt.submit" },
+        { key: "ctrl+k", cmd: "command.palette.show" },
+        { key: "?", cmd: "help.show" },
         { key: "ctrl+r", cmd: "threads.refresh" },
         { key: "ctrl+down", cmd: "threads.select_next" },
         { key: "ctrl+up", cmd: "threads.select_previous" },
@@ -396,10 +449,6 @@ function usePeaKeymap(
     });
     onCleanup(unregister);
   });
-}
-
-function isReturnKey(event: KeyEvent): boolean {
-  return event.name === "return" || event.name === "enter" || event.name === "kpenter";
 }
 
 function errorMessage(error: unknown): string {

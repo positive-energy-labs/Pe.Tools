@@ -1,4 +1,4 @@
-import type { WorkbenchState } from "@pe/agent-contracts";
+import type { WorkbenchAccessLevel, WorkbenchState } from "@pe/agent-contracts";
 import type { WorkbenchCommands } from "../../workbench/use-workbench.ts";
 
 export function ModelModePanel({
@@ -12,9 +12,11 @@ export function ModelModePanel({
     state.agent.info?.capabilities.modelSwitching && state.models.availableModels.length > 0;
   const canMode =
     state.agent.info?.capabilities.sessionModes && state.modes.availableModes.length > 0;
+  const canAccess =
+    state.agent.info?.capabilities.accessLevels && state.access.availableAccessLevels.length > 0;
   return (
     <section className="section-subpanel">
-      <h3>Model / Mode</h3>
+      <h3>Model / Mode / Access</h3>
       <label>
         Model
         <select
@@ -41,6 +43,23 @@ export function ModelModePanel({
           {state.modes.availableModes.map((mode) => (
             <option key={mode.id} value={mode.id}>
               {mode.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Access
+        <select
+          value={state.access.currentAccessLevel ?? ""}
+          disabled={!canAccess}
+          onChange={(event) =>
+            void commands.setAccessLevel(event.target.value as WorkbenchAccessLevel)
+          }
+        >
+          <option value="">{state.access.currentAccessLevel ?? "Unavailable"}</option>
+          {state.access.availableAccessLevels.map((accessLevel) => (
+            <option key={accessLevel.id} value={accessLevel.id}>
+              {accessLevel.name}
             </option>
           ))}
         </select>
