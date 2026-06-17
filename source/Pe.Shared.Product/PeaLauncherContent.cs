@@ -85,17 +85,12 @@ public static class PeaLauncherContent {
         )
         set /p PEA_VERSION=<"%PEA_CURRENT%"
         set "PEA_VERSION_ROOT=%PEA_ROOT%versions\%PEA_VERSION%"
-        set "PEA_BUN=%PEA_VERSION_ROOT%\bun.exe"
-        set "PEA_MAIN=%PEA_VERSION_ROOT%\app\installed-main.js"
-        if not exist "%PEA_BUN%" (
-          >&2 echo pea payload '%PEA_VERSION%' is missing bun.exe.
+        set "PEA_EXE=%PEA_VERSION_ROOT%\app\pea.exe"
+        if not exist "%PEA_EXE%" (
+          >&2 echo pea payload '%PEA_VERSION%' is missing app\pea.exe.
           exit /b 1
         )
-        if not exist "%PEA_MAIN%" (
-          >&2 echo pea payload '%PEA_VERSION%' is missing app\installed-main.js.
-          exit /b 1
-        )
-        "%PEA_BUN%" "%PEA_MAIN%" !PEA_ARGS!
+        "%PEA_EXE%" !PEA_ARGS!
         exit /b !ERRORLEVEL!
         """;
 }

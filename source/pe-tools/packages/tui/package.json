@@ -1,7 +1,7 @@
 {
   "name": "@pe/tui",
   "version": "0.0.0",
-  "description": "OpenTUI terminal shell for Pe.Tools ACP workbench clients.",
+  "description": "Terminal workbench shell for Pe.Tools ACP clients.",
   "license": "MIT",
   "files": [
     "dist"
@@ -28,6 +28,7 @@
     "@opentui/keymap": "^0.4.0",
     "@opentui/solid": "^0.4.0",
     "@pe/agent-contracts": "workspace:*",
+    "@pe/agent-projection": "workspace:*",
     "@pe/workbench-core": "workspace:*",
     "solid-js": "^1.9.10"
   },

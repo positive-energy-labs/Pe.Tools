@@ -2,18 +2,6 @@
   "name": "pe-tools",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
-  "scripts": {
-    "ready": "vp check && vp run -r test && vp run -r build",
-    "dev": "vp run website#dev"
-  },
-  "devDependencies": {
-    "vite-plus": "catalog:"
-  },
-  "engines": {
-    "node": ">=22.12.0"
-  },
-  "packageManager": "pnpm@11.5.2",
   "workspaces": {
     "packages": [
       "apps/*",
@@ -28,8 +16,22 @@
       "vite-plus": "latest"
     }
   },
+  "type": "module",
+  "scripts": {
+    "ready": "vp check && vp run -r test -- --passWithNoTests && vp run -r build",
+    "test": "vp run -r test -- --passWithNoTests",
+    "dev": "vp run website#dev"
+  },
+  "devDependencies": {
+    "jiti": "^2.7.0",
+    "vite-plus": "catalog:"
+  },
   "overrides": {
     "vite": "catalog:",
     "vitest": "catalog:"
-  }
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "packageManager": "pnpm@11.5.2"
 }

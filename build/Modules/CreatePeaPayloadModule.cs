@@ -47,37 +47,28 @@ public sealed class CreatePeaPayloadModule : Module<PeaPayloadArtifacts> {
         Directory.CreateDirectory(layout.Artifacts.PeaPackagesRoot);
 
         var appDirectory = Path.Combine(payloadDirectory.Path, PeaCliIdentity.AppDirectoryName);
+        var peaAppSourceDirectory = Path.Combine(peToolsDirectory.Path, "apps", "pea");
         Directory.CreateDirectory(appDirectory);
 
-        context.Logger.LogInformation("Bundling installed pea app with Bun: {Directory}", peToolsDirectory.Path);
+        context.Logger.LogInformation("Building installed pea executable with Vite+: {Directory}", peaAppSourceDirectory);
         await context.Shell.Command.ExecuteCommandLineTool(
-            new GenericCommandLineToolOptions("bun") {
-                Arguments = [
-                    "build",
-                    "apps/pea/src/installed-main.ts",
-                    "--target=bun",
-                    "--external",
-                    "@opentui/core-*",
-                    "--external",
-                    "@duckdb/node-bindings-*",
-                    "--outdir",
-                    appDirectory
-                ]
-            },
-            new CommandExecutionOptions { WorkingDirectory = peToolsDirectory.Path },
+            new GenericCommandLineToolOptions("vp") { Arguments = ["pack"] },
+            new CommandExecutionOptions { WorkingDirectory = peaAppSourceDirectory },
             cancellationToken
         );
 
-        var bunExecutablePath = ResolveExecutableFromPath(PeaCliIdentity.BunExecutableName);
-        context.Logger.LogInformation("Copying Bun runtime into pea payload: {Path}", bunExecutablePath);
+        var executablePath = Path.Combine(peaAppSourceDirectory, "dist-installed", PeaCliIdentity.InstalledExecutableName);
+        System.IO.File.Exists(executablePath)
+            .ShouldBeTrue($"pea executable build did not create {executablePath}");
         System.IO.File.Copy(
-            bunExecutablePath,
-            Path.Combine(payloadDirectory.Path, PeaCliIdentity.BunExecutableName),
+            executablePath,
+            Path.Combine(appDirectory, PeaCliIdentity.InstalledExecutableName),
             true
         );
 
         CopyNativeSidecars(peToolsDirectory.Path, payloadDirectory.Path);
-        ValidateInstalledBunPayload(payloadDirectory.Path);
+        ValidateInstalledNodePayload(payloadDirectory.Path);
+        await SmokeInstalledNodePayload(context, payloadDirectory.Path, cancellationToken);
 
         await System.IO.File.WriteAllTextAsync(
             Path.Combine(bootstrapDirectory.Path, PeaCliIdentity.LauncherName),
@@ -118,28 +109,15 @@ public sealed class CreatePeaPayloadModule : Module<PeaPayloadArtifacts> {
         return new PeaPayloadArtifacts(version, bootstrapDirectory, archiveFile, new File(manifestPath));
     }
 
-    private static string ResolveExecutableFromPath(string executableName) {
-        var path = Environment.GetEnvironmentVariable("PATH");
-        path.ShouldNotBeNullOrWhiteSpace($"PATH is required to locate {executableName} for pea packaging.");
-
-        foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)) {
-            var candidate = Path.Combine(directory.Trim('"'), executableName);
-            if (System.IO.File.Exists(candidate))
-                return candidate;
-        }
-
-        throw new FileNotFoundException($"Could not find {executableName} on PATH for pea packaging.");
-    }
-
     private static void CopyNativeSidecars(string peToolsDirectory, string payloadDirectory) {
         var pnpmStoreDirectory = Path.Combine(peToolsDirectory, "node_modules", ".pnpm");
         Directory.Exists(pnpmStoreDirectory).ShouldBeTrue(
             $"pea native sidecar packaging requires an installed pe-tools dependency store: {pnpmStoreDirectory}"
         );
 
-        // These are deliberate native sidecars: Bun can bundle the JS graph, but these packages load
-        // platform-native binaries from real file paths at runtime. Keep this list explicit so any
-        // future compatibility cost is visible in packaging and docs instead of hidden in node_modules.
+        // These are deliberate native sidecars: the Node executable bundles the JS graph, but these
+        // packages load platform-native binaries from real file paths at runtime. Keep this list
+        // explicit so any future compatibility cost is visible in packaging and docs.
         CopyPackageSidecar(
             pnpmStoreDirectory,
             "@opentui+core-win32-x64@*",
@@ -151,6 +129,18 @@ public sealed class CreatePeaPayloadModule : Module<PeaPayloadArtifacts> {
             "@duckdb+node-bindings-win32-x64@*",
             Path.Combine("node_modules", "@duckdb", "node-bindings-win32-x64"),
             Path.Combine(payloadDirectory, "node_modules", "@duckdb", "node-bindings-win32-x64")
+        );
+        CopyPackageSidecar(
+            pnpmStoreDirectory,
+            "@anush008+tokenizers-win32-x64-msvc@*",
+            Path.Combine("node_modules", "@anush008", "tokenizers-win32-x64-msvc"),
+            Path.Combine(payloadDirectory, "node_modules", "@anush008", "tokenizers-win32-x64-msvc")
+        );
+        CopyPackageSidecar(
+            pnpmStoreDirectory,
+            "@libsql+win32-x64-msvc@*",
+            Path.Combine("node_modules", "@libsql", "win32-x64-msvc"),
+            Path.Combine(payloadDirectory, "node_modules", "@libsql", "win32-x64-msvc")
         );
         CopyPackageSidecar(
             pnpmStoreDirectory,
@@ -191,21 +181,42 @@ public sealed class CreatePeaPayloadModule : Module<PeaPayloadArtifacts> {
         }
     }
 
-    private static void ValidateInstalledBunPayload(string payloadDirectory) {
-        System.IO.File.Exists(Path.Combine(payloadDirectory, PeaCliIdentity.BunExecutableName))
-            .ShouldBeTrue("pea payload is missing bun.exe.");
+    private static void ValidateInstalledNodePayload(string payloadDirectory) {
         System.IO.File.Exists(Path.Combine(
                 payloadDirectory,
                 PeaCliIdentity.AppDirectoryName,
-                PeaCliIdentity.InstalledMainFileName
+                PeaCliIdentity.InstalledExecutableName
             ))
-            .ShouldBeTrue("pea payload is missing app/installed-main.js.");
+            .ShouldBeTrue("pea payload is missing app/pea.exe.");
         Directory.Exists(Path.Combine(payloadDirectory, "node_modules", "@opentui", "core-win32-x64"))
             .ShouldBeTrue("pea payload is missing OpenTUI win32-x64 native sidecar.");
         Directory.Exists(Path.Combine(payloadDirectory, "node_modules", "@duckdb", "node-bindings-win32-x64"))
             .ShouldBeTrue("pea payload is missing DuckDB win32-x64 native sidecar.");
+        Directory.Exists(Path.Combine(payloadDirectory, "node_modules", "@anush008", "tokenizers-win32-x64-msvc"))
+            .ShouldBeTrue("pea payload is missing tokenizers win32-x64 native sidecar.");
+        Directory.Exists(Path.Combine(payloadDirectory, "node_modules", "@libsql", "win32-x64-msvc"))
+            .ShouldBeTrue("pea payload is missing libsql win32-x64 native sidecar.");
         Directory.Exists(Path.Combine(payloadDirectory, "bin", "napi-v6", "win32", "x64"))
             .ShouldBeTrue("pea payload is missing onnxruntime win32-x64 native sidecar.");
+    }
+
+    private static async Task SmokeInstalledNodePayload(
+        IModuleContext context,
+        string payloadDirectory,
+        CancellationToken cancellationToken
+    ) {
+        var executablePath = Path.Combine(
+            payloadDirectory,
+            PeaCliIdentity.AppDirectoryName,
+            PeaCliIdentity.InstalledExecutableName
+        );
+
+        context.Logger.LogInformation("Smoke testing installed pea executable: {Executable}", executablePath);
+        await context.Shell.Command.ExecuteCommandLineTool(
+            new GenericCommandLineToolOptions(executablePath) { Arguments = ["--help"] },
+            new CommandExecutionOptions { WorkingDirectory = payloadDirectory },
+            cancellationToken
+        );
     }
 
     private static void DeleteDirectoryIfExists(string path) {

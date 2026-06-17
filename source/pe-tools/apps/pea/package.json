@@ -17,17 +17,18 @@
   ],
   "type": "module",
   "exports": {
-    ".": "./dist/index.mjs",
-    "./package.json": "./package.json"
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "pea": "bun src/main.ts",
+    "pea": "vp exec jiti src/main.ts",
     "build": "vp pack",
-    "build:installed": "bun build src/main.ts --compile --target=bun --external @opentui/core-* --external @duckdb/node-bindings-* --outfile dist-installed/pea.exe",
-    "build:installed:bundle": "bun build src/main.ts --target=bun --external @opentui/core-* --external @duckdb/node-bindings-* --outdir dist-installed/bundle",
+    "build:installed": "vp pack",
     "dev": "vp pack --watch",
     "test": "vp test",
     "check": "vp check",
