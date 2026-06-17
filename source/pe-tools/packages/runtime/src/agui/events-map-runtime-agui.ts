@@ -129,8 +129,6 @@ export class RuntimeToAgUiEvents {
   }
 }
 
-export { RuntimeToAgUiEvents as PeaRuntimeToAgUiEvents };
-
 function customToolEvent(name: string, toolCallId: string, value: unknown): BaseEvent[] {
   return [{ type: EventType.CUSTOM, name, value: { toolCallId, value } }];
 }

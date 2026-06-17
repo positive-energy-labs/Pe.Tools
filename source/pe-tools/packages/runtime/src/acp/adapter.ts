@@ -115,9 +115,6 @@ export interface RuntimeAcpAgentSessionStore {
   configureClient?(clientCapabilities: ClientCapabilities | undefined): void;
 }
 
-export type PeaAcpAgentOptions = RuntimeAcpAgentOptions;
-export type PeaAcpAgentSessionStore = RuntimeAcpAgentSessionStore;
-
 export function createRuntimeAcpAgent(
   updateSink: RuntimeAcpSessionUpdateSink,
   options: RuntimeAcpAgentOptions,
@@ -478,5 +475,3 @@ function runtimeAccessLevels(): Array<{
     },
   ];
 }
-
-export { createRuntimeAcpAgent as createPeaAcpAgent, RuntimeAcpAgent as PeaAcpAgent };

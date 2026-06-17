@@ -11,12 +11,11 @@ import {
   createMastraCodeAuthStorageContext,
   createPeaCloudGatewayRuntimeAuthProfile,
   createPeaProductStateStorageProfile,
-  createPeaRuntimeMemoryProfile,
   createRuntimeAcpAgent,
   createRuntimeDescriptor,
   createRuntimeFactory,
   createRuntimeHarness,
-  defaultPeaAgentModelId,
+  createRuntimeMemoryProfile,
   hasMastraCodeStoredAuth,
   resolveMastraCodeModel,
   type MastraCodeAuthStorage,
@@ -34,6 +33,7 @@ import {
 import {
   bundledPeaSkills,
   configurePeaProductToolContext,
+  defaultPeaAgentModelId,
   materializeBundledPeaSkills,
   peaProductToolProfile,
   peaProductTools,
@@ -90,7 +90,8 @@ export function createPeaRuntimeFactory<
     });
   const auth = options.auth ?? createPeaRuntimeAuthProfile();
   const storageProfile = options.storageProfile ?? createPeaProductStateStorageProfile();
-  const memoryProfile = options.memoryProfile ?? createPeaRuntimeMemoryProfile<TState>();
+  const memoryProfile =
+    options.memoryProfile ?? createRuntimeMemoryProfile<TState>({ id: "pea-memory" });
   const toolProfile = options.toolProfile ?? peaRuntimeToolProfile;
   const configuredRoot = options.config.initialState?.projectPath;
   const workspaceRoot = typeof configuredRoot === "string" ? configuredRoot : undefined;

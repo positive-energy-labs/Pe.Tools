@@ -2,6 +2,7 @@ export {
   PeaCliCommands,
   bundledPeaSkills,
   configurePeaProductToolContext,
+  defaultPeaAgentModelId,
   materializeBundledPeaSkills,
   peaProductHomeEnvVar,
   peaProductToolProfile,

@@ -11,7 +11,6 @@ export * from "./auth/protocol.ts";
 export * from "./auth/mastracode-auth-storage.ts";
 export * from "./models/mastra-gateway.ts";
 export * from "./models/mastracode-model.ts";
-export * from "./defaults.ts";
 export * from "./storage/profiles.ts";
 export * from "./storage/thread-state.ts";
 export * from "./memory/profiles.ts";

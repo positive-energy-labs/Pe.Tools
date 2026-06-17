@@ -57,6 +57,3 @@ function toAcpPermissionOptions(
     kind: option.kind,
   }));
 }
-
-export type PeaAcpClientTransport = RuntimeAcpClientTransport;
-export { RuntimeAcpClient as PeaAcpRuntimeClient };

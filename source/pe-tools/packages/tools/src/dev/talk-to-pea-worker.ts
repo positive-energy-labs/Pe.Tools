@@ -10,9 +10,8 @@ import { PeHostClient } from "@pe/host-client";
 import {
   createMastraCodeAuthStorage,
   createPeaProductStateStorageProfile,
-  createPeaRuntimeMemoryProfile,
   createRuntimeHarness,
-  defaultPeaAgentModelId,
+  createRuntimeMemoryProfile,
   hasMastraCodeStoredAuth,
   loadStoredMastraCodeApiKeysIntoEnv,
   resolveMastraCodeModel,
@@ -20,6 +19,7 @@ import {
 } from "@pe/runtime";
 import {
   configurePeaProductToolContext,
+  defaultPeaAgentModelId,
   materializeBundledPeaSkills,
   peaProductToolProfile,
   peaProductTools,
@@ -208,7 +208,7 @@ async function createPeaWorkerRuntime(): Promise<PeaWorkerRuntime> {
     storageProfile: createPeaProductStateStorageProfile({
       stateDirectory: path.join(cwd, peaConfigDir),
     }),
-    memoryProfile: createPeaRuntimeMemoryProfile(),
+    memoryProfile: createRuntimeMemoryProfile({ id: "pea-memory" }),
     toolProfile: peaProductToolProfile,
     workspace: { cwd, root: cwd },
     authStorage,

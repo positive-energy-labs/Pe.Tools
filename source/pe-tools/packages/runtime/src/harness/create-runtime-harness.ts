@@ -102,21 +102,34 @@ async function closeRuntimeHarness<TState extends Record<string, unknown>>(
   threadLock: HarnessConfig<TState>["threadLock"] | undefined,
 ): Promise<void> {
   harness.abort();
-  await kernel.flushLedger();
   const currentThreadId = harness.getCurrentThreadId();
-  if (currentThreadId) {
-    try {
-      await threadLock?.release(currentThreadId);
-    } catch {
-      // Best-effort cleanup only.
+  let flushError: unknown;
+  try {
+    await kernel.flushLedger();
+  } catch (error) {
+    flushError = error;
+  } finally {
+    if (currentThreadId) {
+      try {
+        await threadLock?.release(currentThreadId);
+      } catch {
+        // Best-effort cleanup only.
+      }
     }
   }
-  const mastra = (harness as HarnessWithMastra<TState>).getMastra?.();
-  if (mastra?.shutdown) {
-    await mastra.shutdown();
-    return;
+  let closeError: unknown;
+  try {
+    const mastra = (harness as HarnessWithMastra<TState>).getMastra?.();
+    if (mastra?.shutdown) {
+      await mastra.shutdown();
+    } else {
+      await storage?.close?.();
+    }
+  } catch (error) {
+    closeError = error;
   }
-  await storage?.close?.();
+  if (flushError) throw flushError;
+  if (closeError) throw closeError;
 }
 
 async function resolveRuntimeHarnessConfig<

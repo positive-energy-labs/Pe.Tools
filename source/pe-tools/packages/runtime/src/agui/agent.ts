@@ -738,8 +738,3 @@ function stringArray(value: unknown): string[] {
     (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
   );
 }
-
-export type PeaAgUiAgentOptions = RuntimeAgUiAgentOptions;
-export type PeaAgUiServerInfo = RuntimeAgUiServerInfo;
-export type PeaAgUiRuntimeId = string;
-export { RuntimeAgUiAgent as PeaAgUiAgent, RuntimeAgUiHttpAgent as PeaAgUiHttpAgent };

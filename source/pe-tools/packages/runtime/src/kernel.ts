@@ -176,6 +176,8 @@ class MastraRuntimeKernel implements RuntimeKernel {
   async resumeThreadSession(
     options: RuntimeResumeThreadSessionOptions,
   ): Promise<RuntimeKernelSession> {
+    this.assertSessionCanResumeThread(options);
+    this.assertThreadSessionOwner(options.threadId, options.sessionId, "resumeThreadSession");
     if (this.harness.getCurrentThreadId() !== options.threadId) {
       if (isHarnessRunning(this.harness)) {
         throw new Error(
@@ -184,8 +186,6 @@ class MastraRuntimeKernel implements RuntimeKernel {
       }
       await this.switchThread({ threadId: options.threadId });
     }
-    this.assertSessionCanResumeThread(options);
-    this.assertThreadSessionOwner(options.threadId, options.sessionId, "resumeThreadSession");
     const now = new Date().toISOString();
     const existing = this.sessions.get(options.sessionId);
     const session: RuntimeKernelSession = {

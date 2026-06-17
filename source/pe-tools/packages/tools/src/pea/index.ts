@@ -32,6 +32,8 @@ export {
   peaStandardSkillsRoot,
 } from "./skills.ts";
 
+export const defaultPeaAgentModelId = "openai/gpt-5.4";
+
 interface PeaProductToolContext {
   hostBaseUrl?: string;
   workspaceKey?: string;
