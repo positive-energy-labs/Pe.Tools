@@ -2,10 +2,28 @@ import { defineConfig } from "vite-plus";
 
 export default defineConfig({
   pack: {
-    dts: {
-      tsgo: true,
+    entry: ["src/main.ts"],
+    outDir: "dist-installed/bundle",
+    clean: ["dist-installed"],
+    shims: true,
+    deps: {
+      alwaysBundle: [/./],
+      neverBundle: [
+        /^@opentui\/core-win32-x64/,
+        /^@duckdb\/node-bindings-win32-x64/,
+        /^@anush008\/tokenizers-win32-x64-msvc/,
+        /^@libsql\/win32-x64-msvc/,
+      ],
+      onlyBundle: false,
     },
-    exports: true,
+    loader: {
+      ".wasm": "base64",
+      ".scm": "text",
+    },
+    exe: {
+      fileName: "pea",
+      outDir: "dist-installed",
+    },
   },
   lint: {
     options: {

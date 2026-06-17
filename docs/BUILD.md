@@ -200,14 +200,17 @@ bin\pea\
   pea.cmd
   current.txt
   versions\<version>\
-    bun.exe
-    app\installed-main.js
+    app\pea.exe
     node_modules\@opentui\core-win32-x64\...
     node_modules\@duckdb\node-bindings-win32-x64\...
+    node_modules\@anush008\tokenizers-win32-x64-msvc\...
+    node_modules\@libsql\win32-x64-msvc\...
     bin\napi-v6\win32\x64\...
 ```
 
-The payload is a Bun-targeted bundle plus explicit native sidecars, not a package-manager install. Build machines need Bun and the `source/pe-tools` dependency store available, but end-user machines do not run `pnpm install`, `pnpm deploy`, or dependency resolution. `pea.cmd` runs the selected version's `bun.exe app\installed-main.js`.
+The payload is a Node SEA executable produced by Vite+/tsdown from `source/pe-tools/apps/pea/src/main.ts` plus explicit native sidecars, not a package-manager install and not an alternate installed-only entrypoint. Build machines need Vite+ with Node 25.7.0 or newer for tsdown `exe` packaging and the `source/pe-tools` dependency store available, but end-user machines do not run `pnpm install`, `pnpm deploy`, or dependency resolution. `pea.cmd` runs the selected version's `app\pea.exe`.
+
+Private `source/pe-tools` packages are source-exported for development. Their Vite+ package configs use explicit `pack.entry` values so `vp pack` can still produce artifacts without mutating package exports back to `dist`; keep installed payload bundling as the artifact boundary instead of adding parallel `main` / `main-installed` source entrypoints.
 
 Package/artifact proof for `pack pea` is NoRrdContact. It proves archive shape and portable light CLI behavior, such as `--help` and host-operation contract search from a temp root. It does not prove AttachedRrd behavior, FreshRevitProcess behavior, installed MSI registration, or full TUI rendering freshness.
 
@@ -219,11 +222,11 @@ The clean source-linked CLI model is:
 
 - Bare `pea` launches the Pea Revit/operator agent TUI from `source/pe-tools/apps/pea/src/main.ts`.
 - Bare `peco` launches the Peco repo coding-agent TUI from `source/pe-tools/apps/pe-code/src/main.ts`.
-- OpenTUI native renderer launch must use Bun in the source-linked lane. Node `tsx` can import OpenTUI, but `createCliRenderer()` needs native FFI and fails on current Node runtimes without Node 26.3+ experimental FFI flags.
+- Source-linked `pea` / `peco` package scripts use `vp exec jiti src/main.ts`. This keeps the runtime under Vite+'s managed Node while letting `jiti` handle the repo's TypeScript/NodeNext source graph. Raw `vp exec node src/main.ts` is not enough for this source graph because Node's built-in TypeScript support is still strip/transform limited and does not resolve the repo's `.js` source specifiers back to `.ts`.
 - `pea <subcommand> ...` stays available for product/operator commands such as `host` and `script`.
 - `peco <subcommand> ...` stays available for repo/dev commands such as `live`, `script`, and `talk-to-pea`.
 - `pea --installed ...` is the explicit installed-lane selector. Use it in installed-lane validation and scripts where ambiguity would be expensive.
-- `pea --dev ...` is the explicit source-linked selector. It requires `dev-source.txt` and runs the Pea app from `source/pe-tools/apps/pea` through the repo TypeScript runtime.
+- `pea --dev ...` is the explicit source-linked selector. It requires `dev-source.txt` and runs the Pea app from `source/pe-tools/apps/pea` through the Vite+-managed source TypeScript runtime.
 - `PEA_RUNTIME=dev` is a local shell convenience only. Do not use ambient environment selection as proof of lane.
 - `Pe.App` must pass `--dev` or `--installed` when launching Pea from Revit, based on its `Pe.App.runtime.json` descriptor. The Host binary already follows that descriptor; Pea must not silently cross lanes through a linked source file.
 
