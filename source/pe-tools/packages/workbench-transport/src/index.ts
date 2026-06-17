@@ -2,7 +2,7 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import path from "node:path";
-import type { WorkbenchEvent, WorkbenchState } from "@pe/agent-contracts";
+import type { WorkbenchAccessLevel, WorkbenchEvent, WorkbenchState } from "@pe/agent-contracts";
 import type { WorkbenchController, WorkbenchStateHandler } from "@pe/workbench-core";
 
 export interface WorkbenchTransportController {
@@ -10,12 +10,14 @@ export interface WorkbenchTransportController {
   subscribe(handler: WorkbenchStateHandler): () => void;
   start(): Promise<unknown>;
   send(text: string): Promise<unknown>;
+  sendImmediate?(text: string): Promise<unknown>;
   refreshThreads(): Promise<unknown>;
   loadThread(threadId: string): Promise<unknown>;
   resolveApproval(requestId: string, optionId?: string): void;
   cancel(): Promise<unknown>;
   setModel(request: { modelId: string }): Promise<unknown>;
   setMode(request: { modeId: string }): Promise<unknown>;
+  setAccessLevel(request: { accessLevel: WorkbenchAccessLevel }): Promise<unknown>;
   close?(): Promise<unknown> | void;
 }
 
@@ -42,12 +44,14 @@ export interface BrowserWorkbenchClient {
   subscribe(handler: (event: WorkbenchEvent) => void): () => void;
   start(): Promise<WorkbenchState>;
   send(text: string): Promise<WorkbenchState>;
+  sendImmediate(text: string): Promise<WorkbenchState>;
   refreshThreads(): Promise<WorkbenchState>;
   loadThread(threadId: string): Promise<WorkbenchState>;
   resolveApproval(requestId: string, optionId?: string): Promise<WorkbenchState>;
   cancel(): Promise<WorkbenchState>;
   setModel(modelId: string): Promise<WorkbenchState>;
   setMode(modeId: string): Promise<WorkbenchState>;
+  setAccessLevel(accessLevel: WorkbenchAccessLevel): Promise<WorkbenchState>;
 }
 
 export async function startWorkbenchTransportServer(
@@ -97,6 +101,7 @@ export function createBrowserWorkbenchClient(
     subscribe: (handler) => subscribeToEvents(baseUrl, handler),
     start: () => command(baseUrl, "/api/workbench/commands/start"),
     send: (text) => command(baseUrl, "/api/workbench/commands/send", { text }),
+    sendImmediate: (text) => command(baseUrl, "/api/workbench/commands/send/immediate", { text }),
     refreshThreads: () => command(baseUrl, "/api/workbench/commands/threads/refresh"),
     loadThread: (threadId) =>
       command(baseUrl, "/api/workbench/commands/threads/load", { threadId }),
@@ -105,6 +110,8 @@ export function createBrowserWorkbenchClient(
     cancel: () => command(baseUrl, "/api/workbench/commands/cancel"),
     setModel: (modelId) => command(baseUrl, "/api/workbench/commands/model", { modelId }),
     setMode: (modeId) => command(baseUrl, "/api/workbench/commands/mode", { modeId }),
+    setAccessLevel: (accessLevel) =>
+      command(baseUrl, "/api/workbench/commands/access-level", { accessLevel }),
   };
 }
 
@@ -172,6 +179,10 @@ async function routeCommand(
     case "/api/workbench/commands/send":
       await controller.send(readString(body.text, "text"));
       break;
+    case "/api/workbench/commands/send/immediate":
+      if (!controller.sendImmediate) throw new Error("Immediate send is not supported.");
+      await controller.sendImmediate(readString(body.text, "text"));
+      break;
     case "/api/workbench/commands/threads/refresh":
       await controller.refreshThreads();
       break;
@@ -192,6 +203,11 @@ async function routeCommand(
       break;
     case "/api/workbench/commands/mode":
       await controller.setMode({ modeId: readString(body.modeId, "modeId") });
+      break;
+    case "/api/workbench/commands/access-level":
+      await controller.setAccessLevel({
+        accessLevel: readAccessLevel(body.accessLevel, "accessLevel"),
+      });
       break;
     default:
       writeJson(response, 404, { error: "Unknown command" });
@@ -290,6 +306,11 @@ function readString(value: unknown, field: string): string {
 
 function readOptionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function readAccessLevel(value: unknown, field: string): WorkbenchAccessLevel {
+  if (value === "read-only" || value === "ask" || value === "trusted") return value;
+  throw new Error(`Missing ${field}.`);
 }
 
 function contentType(filePath: string): string {

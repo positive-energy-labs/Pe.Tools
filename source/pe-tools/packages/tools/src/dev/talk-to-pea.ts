@@ -54,6 +54,7 @@ async function runTalkToPeaWorkerProcess(
   request: TalkToPeaRequest,
 ): Promise<TalkToPeaWorkerResponse> {
   const workerPath = fileURLToPath(new URL("./talk-to-pea-worker.js", import.meta.url));
+  const timeoutMs = Math.max(1, request.timeoutSeconds) * 1000;
   const child = spawn(process.execPath, [workerPath], {
     cwd: process.cwd(),
     env: process.env,
@@ -74,27 +75,62 @@ async function runTalkToPeaWorkerProcess(
 
   child.stdin.end(JSON.stringify(request));
 
-  const exitCode = await new Promise<number | null>((resolveExit, reject) => {
-    child.on("error", reject);
-    child.on("exit", (code) => resolveExit(code));
-  });
-  const response = parseWorkerResponse(stdout);
-  if (response) {
-    if ("error" in response) {
-      throw new Error(String(response.error));
+  return await new Promise<TalkToPeaWorkerResponse>((resolve, reject) => {
+    let settled = false;
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      settled = true;
+      child.kill();
+      reject(new Error(`Pea worker did not finish within ${request.timeoutSeconds} seconds.`));
+    }, timeoutMs);
+
+    function finishWithResponse(response: TalkToPeaWorkerResponse | { ok: false; error: string }) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.kill();
+      if ("error" in response) {
+        reject(new Error(String(response.error)));
+      } else {
+        resolve(response);
+      }
     }
 
-    return response;
-  }
+    function finishWithError(error: unknown) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.kill();
+      reject(error);
+    }
 
-  const detail = [
-    `Pea worker exited with code ${exitCode ?? "unknown"}.`,
-    stderr.trim() ? `stderr:\n${stderr.trim()}` : null,
-    stdout.trim() ? `stdout:\n${stdout.trim().slice(-4000)}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
-  throw new Error(detail);
+    child.stdout.on("data", () => {
+      const response = parseWorkerResponse(stdout);
+      if (response) finishWithResponse(response);
+    });
+    child.on("error", finishWithError);
+    child.on("exit", (code) => {
+      if (settled) return;
+      clearTimeout(timer);
+      if (timedOut) return;
+
+      const response = parseWorkerResponse(stdout);
+      if (response) {
+        finishWithResponse(response);
+        return;
+      }
+
+      const detail = [
+        `Pea worker exited with code ${code ?? "unknown"}.`,
+        stderr.trim() ? `stderr:\n${stderr.trim()}` : null,
+        stdout.trim() ? `stdout:\n${stdout.trim().slice(-4000)}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+      finishWithError(new Error(detail));
+    });
+  });
 }
 
 function parseWorkerResponse(

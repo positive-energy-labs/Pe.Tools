@@ -1,5 +1,6 @@
 import type { JSX } from "@opentui/solid";
 import { createMemo, type Accessor } from "solid-js";
+import { selectActiveThreadId, selectVisibleThreads } from "@pe/agent-projection";
 import type { WorkbenchState, WorkbenchThreadInfo } from "@pe/workbench-core";
 import { peaTheme } from "../theme.js";
 
@@ -11,10 +12,8 @@ export function ThreadHistoryPane(props: {
   onRefresh: () => void;
   onSelect: (threadId: string) => void;
 }): JSX.Element {
-  const threads = createMemo(() => sortThreads(visibleThreads(props.state())));
-  const activeThreadId = createMemo(
-    () => props.state().threads.activeThreadId ?? props.state().agent.session?.sessionId,
-  );
+  const threads = createMemo(() => sortThreads(selectVisibleThreads(props.state())));
+  const activeThreadId = createMemo(() => selectActiveThreadId(props.state()));
 
   return (
     <box
@@ -73,24 +72,6 @@ function ThreadRow(props: {
       <text fg={peaTheme.textMuted}>{threadSubtitle(props.thread)}</text>
     </box>
   );
-}
-
-function visibleThreads(state: WorkbenchState): WorkbenchThreadInfo[] {
-  const session = state.agent.session;
-  if (!session) return state.threads.items;
-  if (state.threads.items.some((thread) => thread.threadId === session.sessionId))
-    return state.threads.items;
-
-  return [
-    {
-      threadId: session.sessionId,
-      sessionId: session.sessionId,
-      title: session.title,
-      cwd: session.cwd,
-      updatedAt: session.updatedAt,
-    },
-    ...state.threads.items,
-  ];
 }
 
 function sortThreads(threads: WorkbenchThreadInfo[]): WorkbenchThreadInfo[] {

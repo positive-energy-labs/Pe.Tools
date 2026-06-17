@@ -15,8 +15,16 @@ import {
 import {
   createPeWorkbenchExtension,
   deriveWorkbenchCapabilities,
+  peWorkbenchLoadThreadMethod,
   peWorkbenchMetadata,
+  peWorkbenchQueueMessageMethod,
+  peWorkbenchSetAccessLevelMethod,
+  peWorkbenchSetModelMethod,
+  type PeWorkbenchExtension,
   readPeWorkbenchExtension,
+  readPeWorkbenchSessionMetadata,
+  type WorkbenchAccessLevel,
+  type WorkbenchAccessLevelInfo,
   type WorkbenchAgentClient,
   type WorkbenchAgentInfo,
   type WorkbenchApprovalOption,
@@ -24,13 +32,21 @@ import {
   type WorkbenchEventHandler,
   type WorkbenchJsonObject,
   type WorkbenchLoadThreadRequest,
+  type WorkbenchLoadThreadResponse,
   type WorkbenchNewSessionRequest,
   type WorkbenchPromptRequest,
   type WorkbenchPromptResult,
+  type WorkbenchQueueMessageRequest,
+  type WorkbenchQueueMessageResult,
   type WorkbenchSessionInfo,
+  type WorkbenchState,
   type WorkbenchThreadInfo,
 } from "@pe/agent-contracts";
-import { acpSessionUpdateToWorkbenchEvents } from "@pe/agent-projection";
+import {
+  acpSessionUpdateToWorkbenchEvents,
+  applyWorkbenchEvent,
+  createWorkbenchState,
+} from "@pe/agent-projection";
 
 export interface AcpWorkbenchClientOptions {
   clientName?: string;
@@ -49,6 +65,11 @@ type AcpAgentConnection = Agent & {
   signal: AbortSignal;
 };
 
+interface LoadReplayCapture {
+  sessionId: string;
+  state: WorkbenchState;
+}
+
 export class AcpWorkbenchClient implements Client, WorkbenchAgentClient {
   private readonly handlers = new Set<WorkbenchEventHandler>();
   private readonly pendingPermissions = new Map<
@@ -58,6 +79,8 @@ export class AcpWorkbenchClient implements Client, WorkbenchAgentClient {
   private connection: AcpAgentConnection | null = null;
   private closeConnection: (() => Promise<void> | void) | undefined;
   private currentSessionId: string | undefined;
+  private loadReplayCapture: LoadReplayCapture | undefined;
+  private peWorkbenchExtension: PeWorkbenchExtension | undefined;
 
   constructor(private readonly options: AcpWorkbenchClientOptions = {}) {}
 
@@ -85,6 +108,7 @@ export class AcpWorkbenchClient implements Client, WorkbenchAgentClient {
     const extension =
       readPeWorkbenchExtension(response._meta) ??
       readPeWorkbenchExtension(response.agentCapabilities?._meta);
+    this.peWorkbenchExtension = extension;
     const capabilities = deriveWorkbenchCapabilities(response.agentCapabilities, extension);
     const info: WorkbenchAgentInfo = {
       name: response.agentInfo?.name ?? extension?.runtime?.name ?? "ACP Agent",
@@ -118,26 +142,30 @@ export class AcpWorkbenchClient implements Client, WorkbenchAgentClient {
   async listThreads(cwd?: string): Promise<WorkbenchThreadInfo[]> {
     const response = await this.agent.listSessions?.({ cwd });
     const threads =
-      response?.sessions?.map(
-        (session): WorkbenchThreadInfo => ({
-          threadId: session.sessionId,
+      response?.sessions?.map((session): WorkbenchThreadInfo => {
+        const metadata = recordMetadata(session._meta);
+        const peSession = readPeWorkbenchSessionMetadata(metadata);
+        return {
+          threadId: peSession?.threadId ?? session.sessionId,
           sessionId: session.sessionId,
+          resourceId: peSession?.resourceId,
           title: session.title ?? undefined,
           cwd,
           updatedAt: session.updatedAt ?? undefined,
-          metadata: recordMetadata(session._meta),
-        }),
-      ) ?? [];
+          lock: peSession?.lock,
+          metadata,
+        };
+      }) ?? [];
     this.emit({ type: "threads_replaced", threads });
     return threads;
   }
 
-  async loadThread(request: WorkbenchLoadThreadRequest): Promise<WorkbenchSessionInfo> {
-    const loadSession = this.agent.loadSession?.bind(this.agent);
-    if (!loadSession) throw new Error("ACP agent does not support loading session history.");
-
+  async loadThread(
+    request: WorkbenchLoadThreadRequest,
+  ): Promise<WorkbenchSessionInfo | WorkbenchLoadThreadResponse> {
+    const acpSessionId = request.sessionId ?? request.threadId;
     const session: WorkbenchSessionInfo = {
-      sessionId: request.threadId,
+      sessionId: acpSessionId,
       cwd: request.cwd,
       additionalDirectories: request.additionalDirectories ?? [],
     };
@@ -149,14 +177,30 @@ export class AcpWorkbenchClient implements Client, WorkbenchAgentClient {
       thread: { threadId: request.threadId, sessionId: session.sessionId },
     });
 
-    const response = await loadSession({
-      sessionId: request.threadId,
-      cwd: request.cwd,
-      additionalDirectories: request.additionalDirectories,
-      mcpServers: [],
-    });
+    const snapshot = await this.readWorkbenchLoadThreadSnapshot(acpSessionId, request);
+    if (snapshot) return snapshot;
+
+    const loadSession = this.agent.loadSession?.bind(this.agent);
+    if (!loadSession) throw new Error("ACP agent does not support loading session history.");
+
+    const capture: LoadReplayCapture = { sessionId: acpSessionId, state: createWorkbenchState() };
+    this.loadReplayCapture = capture;
+    const response = await (async () => {
+      try {
+        return await loadSession({
+          sessionId: acpSessionId,
+          cwd: request.cwd,
+          additionalDirectories: request.additionalDirectories,
+          mcpServers: [],
+        });
+      } finally {
+        if (this.loadReplayCapture === capture) this.loadReplayCapture = undefined;
+      }
+    })();
     this.emitModeState(response.modes);
-    return session;
+
+    const messages = capture.state.transcript.messages;
+    return messages.length > 0 ? { session, messages } : session;
   }
 
   async sendPrompt(request: WorkbenchPromptRequest): Promise<WorkbenchPromptResult> {
@@ -178,20 +222,61 @@ export class AcpWorkbenchClient implements Client, WorkbenchAgentClient {
     return { stopReason: response.stopReason };
   }
 
+  async queueMessage(request: WorkbenchQueueMessageRequest): Promise<WorkbenchQueueMessageResult> {
+    const queue = this.agent.extMethod?.bind(this.agent);
+    if (!queue) {
+      const result = await this.sendPrompt(request);
+      return { accepted: true, queued: false, stopReason: result.stopReason };
+    }
+
+    const response = await queue(peWorkbenchQueueMessageMethod, {
+      sessionId: request.sessionId,
+      prompt: [{ type: "text", text: request.text }],
+    });
+    return {
+      accepted: true,
+      queued: response.queued === true,
+      ...(typeof response.stopReason === "string"
+        ? { stopReason: response.stopReason as WorkbenchQueueMessageResult["stopReason"] }
+        : {}),
+    };
+  }
+
   async cancel(sessionId: string): Promise<void> {
     await this.agent.cancel({ sessionId });
     this.emit({ type: "run_status_changed", status: "idle", timestamp: new Date().toISOString() });
   }
 
-  setModel(modelId: string): void {
+  async setModel(modelId: string): Promise<void> {
+    if (!this.currentSessionId) throw new Error("Cannot set model before a session exists.");
+    const extMethod = this.agent.extMethod?.bind(this.agent);
+    if (!extMethod) throw new Error("ACP agent does not support model selection.");
+    const response = await extMethod(peWorkbenchSetModelMethod, {
+      sessionId: this.currentSessionId,
+      modelId,
+    });
+    const currentModelId =
+      typeof response.currentModelId === "string" ? response.currentModelId : modelId;
     this.emit({
-      type: "debug_event_recorded",
-      debugEvent: {
-        id: `workbench:model:${modelId}`,
-        source: "workbench",
-        type: "model_set_local",
-        label: "Model selection updated locally; ACP provider mapping is not defined yet.",
-        payload: { modelId },
+      type: "model_state_updated",
+      model: { currentModelId },
+    });
+  }
+
+  async setAccessLevel(accessLevel: WorkbenchAccessLevel): Promise<void> {
+    if (!this.currentSessionId) throw new Error("Cannot set access level before a session exists.");
+    const extMethod = this.agent.extMethod?.bind(this.agent);
+    if (!extMethod) throw new Error("ACP agent does not support access level selection.");
+    const response = await extMethod(peWorkbenchSetAccessLevelMethod, {
+      sessionId: this.currentSessionId,
+      accessLevel,
+    });
+    const currentAccessLevel = readAccessLevel(response.accessLevel) ?? accessLevel;
+    this.emit({
+      type: "access_level_updated",
+      access: {
+        currentAccessLevel,
+        availableAccessLevels: readAccessLevels(response.accessLevels),
       },
     });
   }
@@ -263,6 +348,7 @@ export class AcpWorkbenchClient implements Client, WorkbenchAgentClient {
 
   async sessionUpdate(params: SessionNotification): Promise<void> {
     for (const event of acpSessionUpdateToWorkbenchEvents(params.sessionId, params.update)) {
+      this.captureLoadReplayEvent(params.sessionId, event);
       this.emit(event);
     }
   }
@@ -310,6 +396,34 @@ export class AcpWorkbenchClient implements Client, WorkbenchAgentClient {
 
   private emit(event: WorkbenchEvent): void {
     for (const handler of this.handlers) handler(event);
+  }
+
+  private captureLoadReplayEvent(sessionId: string, event: WorkbenchEvent): void {
+    if (this.loadReplayCapture?.sessionId !== sessionId) return;
+    this.loadReplayCapture.state = applyWorkbenchEvent(this.loadReplayCapture.state, event);
+  }
+
+  private async readWorkbenchLoadThreadSnapshot(
+    sessionId: string,
+    request: WorkbenchLoadThreadRequest,
+  ): Promise<WorkbenchLoadThreadResponse | undefined> {
+    if (this.peWorkbenchExtension?.capabilities.historySnapshots !== true) return undefined;
+    const extMethod = this.agent.extMethod?.bind(this.agent);
+    if (!extMethod) return undefined;
+
+    let response: unknown;
+    try {
+      response = await extMethod(peWorkbenchLoadThreadMethod, {
+        sessionId,
+        cwd: request.cwd,
+        additionalDirectories: request.additionalDirectories,
+      });
+    } catch (error) {
+      if (this.peWorkbenchExtension) throw error;
+      return undefined;
+    }
+
+    return readWorkbenchLoadThreadResponse(response);
   }
 }
 
@@ -378,6 +492,60 @@ function clientCapabilities(): ClientCapabilities {
 function recordMetadata(value: unknown): WorkbenchJsonObject | undefined {
   if (!isRecord(value)) return undefined;
   return value as WorkbenchJsonObject;
+}
+
+function readAccessLevels(value: unknown): WorkbenchAccessLevelInfo[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const levels = value.filter(isRecord).flatMap((item) => {
+    const id = readAccessLevel(item.id);
+    const name = typeof item.name === "string" ? item.name : undefined;
+    if (!id || !name) return [];
+    return [
+      {
+        id,
+        name,
+        description: typeof item.description === "string" ? item.description : undefined,
+        metadata: recordMetadata(item.metadata),
+      },
+    ];
+  });
+  return levels.length ? levels : undefined;
+}
+
+function readAccessLevel(value: unknown): WorkbenchAccessLevel | undefined {
+  return value === "read-only" || value === "ask" || value === "trusted" ? value : undefined;
+}
+
+function readWorkbenchLoadThreadResponse(value: unknown): WorkbenchLoadThreadResponse | undefined {
+  if (!isRecord(value)) return undefined;
+  const session = readWorkbenchSessionInfo(value.session);
+  if (!session) return undefined;
+  return {
+    session,
+    ...(Array.isArray(value.messages)
+      ? { messages: value.messages as WorkbenchLoadThreadResponse["messages"] }
+      : {}),
+    ...(Array.isArray(value.events)
+      ? { events: value.events as WorkbenchLoadThreadResponse["events"] }
+      : {}),
+  };
+}
+
+function readWorkbenchSessionInfo(value: unknown): WorkbenchSessionInfo | undefined {
+  if (!isRecord(value)) return undefined;
+  const sessionId = typeof value.sessionId === "string" ? value.sessionId : undefined;
+  const cwd = typeof value.cwd === "string" ? value.cwd : undefined;
+  if (!sessionId || !cwd) return undefined;
+  return {
+    sessionId,
+    cwd,
+    additionalDirectories: Array.isArray(value.additionalDirectories)
+      ? value.additionalDirectories.filter((entry): entry is string => typeof entry === "string")
+      : [],
+    title: typeof value.title === "string" ? value.title : undefined,
+    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : undefined,
+    metadata: recordMetadata(value.metadata),
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

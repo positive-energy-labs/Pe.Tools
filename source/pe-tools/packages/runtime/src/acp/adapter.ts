@@ -28,7 +28,14 @@ import type {
 } from "@agentclientprotocol/sdk";
 import {
   createPeWorkbenchExtension,
+  peWorkbenchLoadThreadMethod,
   peWorkbenchMetadata,
+  peWorkbenchQueueMessageMethod,
+  peWorkbenchSetAccessLevelMethod,
+  peWorkbenchSetModelMethod,
+  type WorkbenchAccessLevel,
+  type WorkbenchLoadThreadSnapshotRequest,
+  type WorkbenchLoadThreadSnapshotResponse,
   type PeWorkbenchExtension,
 } from "@pe/agent-contracts";
 import {
@@ -40,7 +47,12 @@ import {
 } from "../auth/types.ts";
 import { toAcpAuthMethods } from "../auth/protocol.ts";
 import { sanitizeJson } from "../events.ts";
-import type { RuntimeDescriptor, RuntimeFactory } from "../runtime.ts";
+import type {
+  RuntimeAccessLevel,
+  RuntimeDescriptor,
+  RuntimeFactory,
+  RuntimeSessionControls,
+} from "../runtime.ts";
 import { createRuntimePrompt, type RuntimePrompt } from "../prompts.ts";
 import type { RuntimeProtocolSessions } from "../session/protocol-sessions.ts";
 import {
@@ -67,6 +79,19 @@ export interface RuntimeAcpAgentOptions {
 export interface RuntimeAcpAgentSessionStore {
   createSession(request: { cwd: string; additionalDirectories?: string[] }): Promise<AcpSession>;
   prompt(sessionId: SessionId, prompt: RuntimePrompt): Promise<"end_turn" | "cancelled">;
+  queueMessage(
+    sessionId: SessionId,
+    prompt: RuntimePrompt,
+  ): Promise<{ queued: boolean; stopReason?: "end_turn" | "cancelled" }>;
+  readControls(sessionId: SessionId): RuntimeSessionControls;
+  setModel(sessionId: SessionId, modelId: string): Promise<RuntimeSessionControls>;
+  setAccessLevel(
+    sessionId: SessionId,
+    accessLevel: RuntimeAccessLevel,
+  ): Promise<RuntimeSessionControls>;
+  readWorkbenchLoadThreadSnapshot(
+    request: WorkbenchLoadThreadSnapshotRequest,
+  ): Promise<WorkbenchLoadThreadSnapshotResponse>;
   cancel(sessionId: SessionId): void;
   resume(request: {
     sessionId: SessionId;
@@ -157,6 +182,52 @@ export class RuntimeAcpAgent implements Agent {
   async prompt(params: PromptRequest): Promise<PromptResponse> {
     const stopReason = await this.sessions.prompt(params.sessionId, acpPrompt(params.prompt));
     return { stopReason };
+  }
+
+  async extMethod(
+    method: string,
+    params: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    if (method === peWorkbenchLoadThreadMethod) {
+      const sessionId = readSessionId(params, "Load thread snapshot");
+      return (await this.sessions.readWorkbenchLoadThreadSnapshot({
+        sessionId,
+        ...(typeof params.cwd === "string" ? { cwd: params.cwd } : {}),
+        ...(Array.isArray(params.additionalDirectories)
+          ? {
+              additionalDirectories: params.additionalDirectories.filter(
+                (entry): entry is string => typeof entry === "string",
+              ),
+            }
+          : {}),
+      })) as unknown as Record<string, unknown>;
+    }
+
+    if (method === peWorkbenchQueueMessageMethod) {
+      const sessionId = readSessionId(params, "Queue message");
+      if (!Array.isArray(params.prompt)) throw new Error("Queue message requires prompt blocks.");
+
+      return this.sessions.queueMessage(
+        sessionId,
+        acpPrompt(params.prompt as PromptRequest["prompt"]),
+      );
+    }
+
+    if (method === peWorkbenchSetModelMethod) {
+      const sessionId = readSessionId(params, "Set model");
+      const modelId = typeof params.modelId === "string" ? params.modelId : undefined;
+      if (!modelId) throw new Error("Set model requires modelId.");
+      return runtimeControlsResponse(await this.sessions.setModel(sessionId, modelId));
+    }
+
+    if (method === peWorkbenchSetAccessLevelMethod) {
+      const sessionId = readSessionId(params, "Set access level");
+      const accessLevel = readRuntimeAccessLevel(params.accessLevel);
+      if (!accessLevel) throw new Error("Set access level requires accessLevel.");
+      return runtimeControlsResponse(await this.sessions.setAccessLevel(sessionId, accessLevel));
+    }
+
+    return {};
   }
 
   async cancel(params: CancelNotification): Promise<void> {
@@ -306,6 +377,7 @@ export function runtimeAcpWorkbenchExtension(
     capabilities: {
       threads: true,
       history: true,
+      historySnapshots: true,
       toolCalls: true,
       approvals: true,
       approveAlways: true,
@@ -313,6 +385,7 @@ export function runtimeAcpWorkbenchExtension(
       rawToolIO: true,
       modelSwitching: true,
       sessionModes: true,
+      accessLevels: true,
       config: false,
       observationalMemory: true,
       systemPromptInspection: true,
@@ -362,6 +435,48 @@ function modeState(descriptor: RuntimeDescriptor): NonNullable<NewSessionRespons
       },
     ],
   };
+}
+
+function readSessionId(params: Record<string, unknown>, action: string): SessionId {
+  const sessionId = typeof params.sessionId === "string" ? params.sessionId : undefined;
+  if (!sessionId) throw new Error(`${action} requires sessionId.`);
+  return sessionId;
+}
+
+function readRuntimeAccessLevel(value: unknown): RuntimeAccessLevel | undefined {
+  return value === "read-only" || value === "ask" || value === "trusted" ? value : undefined;
+}
+
+function runtimeControlsResponse(controls: RuntimeSessionControls): Record<string, unknown> {
+  return {
+    ...(controls.currentModelId ? { currentModelId: controls.currentModelId } : {}),
+    accessLevel: controls.accessLevel,
+    accessLevels: runtimeAccessLevels(),
+  };
+}
+
+function runtimeAccessLevels(): Array<{
+  id: WorkbenchAccessLevel;
+  name: string;
+  description: string;
+}> {
+  return [
+    {
+      id: "read-only",
+      name: "Read-only",
+      description: "Ask before tools and avoid mutation-oriented work.",
+    },
+    {
+      id: "ask",
+      name: "Ask",
+      description: "Ask before privileged tools.",
+    },
+    {
+      id: "trusted",
+      name: "Trusted",
+      description: "Auto-approve runtime tool calls.",
+    },
+  ];
 }
 
 export { createRuntimeAcpAgent as createPeaAcpAgent, RuntimeAcpAgent as PeaAcpAgent };

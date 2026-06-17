@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
@@ -6,8 +6,9 @@ import {
   createRuntimeAcpCliOptions,
   createRuntimeAgUiCliOptions,
   createRuntimeRequestContext,
+  resolveRuntimeThreadStateStore,
 } from "@pe/runtime";
-import { bundledPeaSkills, peaStandardSkillsRoot } from "@pe/tools";
+import { bundledPeaSkills, peaProductHomeEnvVar, peaStandardSkillsRoot } from "@pe/tools";
 import {
   createPeaCliCommand,
   createPeaBetaTuiWorkbenchOptions,
@@ -19,6 +20,8 @@ import {
   PeaContextStateProcessor,
 } from "../src/index.ts";
 import { createPeaRuntimeAuthProfile } from "../src/runtime.ts";
+
+const slowRuntimeTestTimeout = 30_000;
 
 test("pea composes product commands without dev", () => {
   expect(getPeaCliCommandNames()).toEqual(expect.arrayContaining(["beta-tui", "host", "script"]));
@@ -60,6 +63,7 @@ test("pea root command exposes runtime protocol flags", () => {
       "agUiPort",
       "agUiToken",
       "modelId",
+      "workspaceRoot",
     ]),
   );
 });
@@ -76,48 +80,84 @@ test("pea runtime protocol CLI values map to nested transport options", () => {
   ).toEqual({ transport: { port: 43112, token: "t" } });
 });
 
-test("pea materializes bundled skills into the standard .agents location at runtime startup", async () => {
-  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-skills-"));
-  const skill = bundledPeaSkills[0]!;
-  const skillPath = path.join(workspaceRoot, peaStandardSkillsRoot, skill.name, "SKILL.md");
+test(
+  "pea uses product home as its workspace root and bundled skill root",
+  async () => {
+    const launchCwd = await mkdtemp(path.join(os.tmpdir(), "pea-launch-cwd-"));
+    const productHomePath = await mkdtemp(path.join(os.tmpdir(), "pea-product-home-"));
+    const previousProductHome = process.env[peaProductHomeEnvVar];
+    process.env[peaProductHomeEnvVar] = productHomePath;
 
-  try {
-    await createPeaProtocolRuntimeFactory({ workspaceRoot });
-    expect(await readFile(skillPath, "utf-8")).toBe(`${skill.content.trimEnd()}\n`);
+    const skill = bundledPeaSkills[0]!;
+    const skillPath = path.join(productHomePath, peaStandardSkillsRoot, skill.name, "SKILL.md");
+    const launchCwdSkillPath = path.join(launchCwd, peaStandardSkillsRoot, skill.name, "SKILL.md");
 
-    await writeFile(skillPath, "tampered\n", "utf-8");
-    await createPeaProtocolRuntimeFactory({ workspaceRoot });
-    expect(await readFile(skillPath, "utf-8")).toBe(`${skill.content.trimEnd()}\n`);
-  } finally {
-    await rm(workspaceRoot, { recursive: true, force: true });
-  }
-});
+    try {
+      const runtime = await (
+        await createPeaProtocolRuntimeFactory({ workspaceRoot: launchCwd })
+      ).create({
+        protocol: "tui",
+        cwd: launchCwd,
+        workspaceRoot: launchCwd,
+      });
 
-test("pea runtime agent exposes task tools through TaskSignalProvider", async () => {
-  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-runtime-"));
-  const runtime = await (
-    await createPeaProtocolRuntimeFactory({ workspaceRoot })
-  ).create({
-    protocol: "tui",
-    cwd: workspaceRoot,
-    workspaceRoot,
-  });
+      try {
+        expect(runtime.workspace).toEqual({ cwd: productHomePath, root: productHomePath });
+        expect(runtime.harness.getState()).toEqual(
+          expect.objectContaining({
+            projectPath: productHomePath,
+            productHomePath,
+          }),
+        );
+        expect(await readFile(skillPath, "utf-8")).toBe(`${skill.content.trimEnd()}\n`);
+        await expect(access(launchCwdSkillPath)).rejects.toThrow();
+      } finally {
+        await runtime.close?.();
+      }
 
-  try {
-    const tools = await (runtime.harness as any).getCurrentAgent().listTools();
-    expect(tools).toEqual(
-      expect.objectContaining({
-        task_write: expect.any(Object),
-        task_update: expect.any(Object),
-        task_complete: expect.any(Object),
-        task_check: expect.any(Object),
-      }),
-    );
-  } finally {
-    await runtime.close?.();
-    await rm(workspaceRoot, { recursive: true, force: true });
-  }
-});
+      await writeFile(skillPath, "tampered\n", "utf-8");
+      await createPeaProtocolRuntimeFactory({ workspaceRoot: launchCwd });
+      expect(await readFile(skillPath, "utf-8")).toBe(`${skill.content.trimEnd()}\n`);
+      await expect(access(launchCwdSkillPath)).rejects.toThrow();
+    } finally {
+      if (previousProductHome == null) delete process.env[peaProductHomeEnvVar];
+      else process.env[peaProductHomeEnvVar] = previousProductHome;
+      await rm(launchCwd, { recursive: true, force: true });
+      await rm(productHomePath, { recursive: true, force: true });
+    }
+  },
+  slowRuntimeTestTimeout,
+);
+
+test(
+  "pea runtime agent exposes task tools through TaskSignalProvider",
+  async () => {
+    const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-runtime-"));
+    const runtime = await (
+      await createPeaProtocolRuntimeFactory({ workspaceRoot })
+    ).create({
+      protocol: "tui",
+      cwd: workspaceRoot,
+      workspaceRoot,
+    });
+
+    try {
+      const tools = await (runtime.harness as any).getCurrentAgent().listTools();
+      expect(tools).toEqual(
+        expect.objectContaining({
+          task_write: expect.any(Object),
+          task_update: expect.any(Object),
+          task_complete: expect.any(Object),
+          task_check: expect.any(Object),
+        }),
+      );
+    } finally {
+      await runtime.close?.();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  },
+  slowRuntimeTestTimeout,
+);
 
 test("pea context signal provider exposes a snapshot state processor", () => {
   const provider = new PeaContextSignalProvider();
@@ -208,111 +248,137 @@ test("pea context state processor emits on changed or missing active snapshot", 
   expect(reemitted).toEqual(expect.objectContaining({ mode: "snapshot" }));
 });
 
-test("pea protocol runtime starts in yolo mode so tool approvals are auto-allowed", async () => {
-  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-yolo-"));
-  const runtime = await (
-    await createPeaProtocolRuntimeFactory({ workspaceRoot })
-  ).create({
-    protocol: "tui",
-    cwd: workspaceRoot,
-    workspaceRoot,
-  });
-
-  try {
-    expect(runtime.harness.getState()).toEqual(expect.objectContaining({ yolo: true }));
-  } finally {
-    await runtime.close?.();
-    await rm(workspaceRoot, { recursive: true, force: true });
-  }
-});
-
-test("pea protocol runtime does not preselect a startup thread", async () => {
-  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-no-startup-thread-"));
-  const runtime = await (
-    await createPeaProtocolRuntimeFactory({ workspaceRoot })
-  ).create({
-    protocol: "tui",
-    cwd: workspaceRoot,
-    workspaceRoot,
-  });
-
-  try {
-    expect(runtime.harness.getCurrentThreadId() ?? undefined).toBeUndefined();
-  } finally {
-    await runtime.close?.();
-    await rm(workspaceRoot, { recursive: true, force: true });
-  }
-});
-
-test("pea protocol runtime honors configured startup model", async () => {
-  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-model-"));
-  const runtime = await (
-    await createPeaProtocolRuntimeFactory({
-      workspaceRoot,
-      modelId: "openai/gpt-5.5",
-    })
-  ).create({
-    protocol: "acp",
-    cwd: workspaceRoot,
-    workspaceRoot,
-  });
-
-  try {
-    expect(runtime.harness.getState()).toEqual(
-      expect.objectContaining({ currentModelId: "openai/gpt-5.5" }),
-    );
-  } finally {
-    await runtime.close?.();
-    await rm(workspaceRoot, { recursive: true, force: true });
-  }
-});
-
-test("pea task tools keep memory context when durable execution passes sparse context", async () => {
-  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-task-context-"));
-  const runtime = await (
-    await createPeaProtocolRuntimeFactory({ workspaceRoot })
-  ).create({
-    protocol: "tui",
-    cwd: workspaceRoot,
-    workspaceRoot,
-  });
-
-  try {
-    const session = await runtime.sessions.createThreadSession({ title: "Task Context" });
-    const requestContext = createRuntimeRequestContext({
+test(
+  "pea protocol runtime starts in yolo mode so tool approvals are auto-allowed",
+  async () => {
+    const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-yolo-"));
+    const runtime = await (
+      await createPeaProtocolRuntimeFactory({ workspaceRoot })
+    ).create({
       protocol: "tui",
-      resourceId: session.resourceId,
-    });
-    const tools = await (runtime.harness as any).getCurrentAgent().getToolsForExecution({
-      threadId: session.threadId,
-      resourceId: session.resourceId,
-      requestContext,
+      cwd: workspaceRoot,
+      workspaceRoot,
     });
 
-    const result = await tools.task_write.execute(
-      {
-        tasks: [
-          {
-            content: "Inspect context",
-            status: "in_progress",
-            activeForm: "Inspecting context",
-          },
-        ],
-      },
-      { toolCallId: "call-1", messages: [], requestContext },
-    );
-    const check = await tools.task_check.execute(
-      {},
-      { toolCallId: "call-2", messages: [], requestContext },
-    );
+    try {
+      expect(runtime.harness.getState()).toEqual(expect.objectContaining({ yolo: true }));
+    } finally {
+      await runtime.close?.();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  },
+  slowRuntimeTestTimeout,
+);
 
-    expect(result).toEqual(expect.objectContaining({ isError: false }));
-    expect(result.content).not.toContain("Task tools require agent memory");
-    expect(check.summary).toEqual(
-      expect.objectContaining({ total: 1, incomplete: 1, hasTasks: true }),
-    );
-  } finally {
-    await runtime.close?.();
-    await rm(workspaceRoot, { recursive: true, force: true });
-  }
-});
+test(
+  "pea protocol runtime does not preselect a startup thread",
+  async () => {
+    const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-no-startup-thread-"));
+    const runtime = await (
+      await createPeaProtocolRuntimeFactory({ workspaceRoot })
+    ).create({
+      protocol: "tui",
+      cwd: workspaceRoot,
+      workspaceRoot,
+    });
+
+    try {
+      expect(runtime.harness.getCurrentThreadId() ?? undefined).toBeUndefined();
+    } finally {
+      await runtime.close?.();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  },
+  slowRuntimeTestTimeout,
+);
+
+test(
+  "pea protocol runtime honors configured startup model",
+  async () => {
+    const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-model-"));
+    const runtime = await (
+      await createPeaProtocolRuntimeFactory({
+        workspaceRoot,
+        modelId: "openai/gpt-5.5",
+      })
+    ).create({
+      protocol: "acp",
+      cwd: workspaceRoot,
+      workspaceRoot,
+    });
+
+    try {
+      expect(runtime.harness.getState()).toEqual(
+        expect.objectContaining({ currentModelId: "openai/gpt-5.5" }),
+      );
+    } finally {
+      await runtime.close?.();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  },
+  slowRuntimeTestTimeout,
+);
+
+test(
+  "pea task tools keep memory context when durable execution passes sparse context",
+  async () => {
+    const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-task-context-"));
+    const runtime = await (
+      await createPeaProtocolRuntimeFactory({ workspaceRoot })
+    ).create({
+      protocol: "tui",
+      cwd: workspaceRoot,
+      workspaceRoot,
+    });
+
+    try {
+      const session = await runtime.sessions.createThreadSession({ title: "Task Context" });
+      const mastra = (runtime.harness as any).getMastra();
+      const agent = (runtime.harness as any).getCurrentAgent();
+      expect(agent.getMastraInstance()).toBe(mastra);
+      expect(mastra.getAgentById("pea-agent")).toBe(agent);
+
+      const requestContext = createRuntimeRequestContext({
+        protocol: "tui",
+        resourceId: session.resourceId,
+      });
+      const tools = await agent.getToolsForExecution({
+        threadId: session.threadId,
+        resourceId: session.resourceId,
+        requestContext,
+      });
+
+      const result = await tools.task_write.execute(
+        {
+          tasks: [
+            {
+              content: "Inspect context",
+              status: "in_progress",
+              activeForm: "Inspecting context",
+            },
+          ],
+        },
+        { toolCallId: "call-1", messages: [], requestContext },
+      );
+      const check = await tools.task_check.execute(
+        {},
+        { toolCallId: "call-2", messages: [], requestContext },
+      );
+      const taskState = await resolveRuntimeThreadStateStore(mastra)?.getState({
+        threadId: session.threadId,
+        type: "task",
+      });
+
+      expect(result).toEqual(expect.objectContaining({ isError: false }));
+      expect(result.content).not.toContain("Task tools require agent memory");
+      expect(check.summary).toEqual(
+        expect.objectContaining({ total: 1, incomplete: 1, hasTasks: true }),
+      );
+      expect(taskState).toEqual([expect.objectContaining({ content: "Inspect context" })]);
+    } finally {
+      await runtime.close?.();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  },
+  slowRuntimeTestTimeout,
+);

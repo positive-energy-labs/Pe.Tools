@@ -73,7 +73,7 @@ export async function talkToPecoZellij(request: TalkToPecoMuxRequest = {}) {
     direction,
     promptSent,
     elapsedMs: Date.now() - startedAt,
-    command: "pnpm -C source/pe-tools --filter @pe/peco exec bun src/main.ts",
+    command: "pnpm -C source/pe-tools --filter @pe/peco peco",
     proof: {
       inputPath:
         "zellij action write-chars --pane-id <pane> + zellij action send-keys --pane-id <pane> Enter",
@@ -195,7 +195,7 @@ export async function talkToPecoPsmux(request: TalkToPecoPsmuxRequest = {}) {
     direction,
     promptSent,
     elapsedMs: Date.now() - startedAt,
-    command: "pnpm -C source/pe-tools --filter @pe/peco exec bun src/main.ts",
+    command: "pnpm -C source/pe-tools --filter @pe/peco peco",
     proof: {
       inputPath: "tmux send-keys -l -t <pane> <prompt> + tmux send-keys -t <pane> Enter",
       interpretation:
@@ -260,7 +260,7 @@ function pecoPanePowerShellCommand(): string {
   return [
     "$Host.UI.RawUI.WindowTitle = 'peco mux agent'",
     "Write-Host '[peco mux pane] starting peco TUI...'",
-    "pnpm -C source/pe-tools --filter @pe/peco exec bun src/main.ts",
+    "pnpm -C source/pe-tools --filter @pe/peco peco",
   ].join("; ");
 }
 

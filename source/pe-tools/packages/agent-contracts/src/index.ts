@@ -19,10 +19,16 @@ export type WorkbenchJsonObject = { [key: string]: WorkbenchJsonValue };
 export const peWorkbenchExtensionKey = "pe.tools/workbench";
 export const peWorkbenchExtensionVersion = 1;
 export const peWorkbenchUpdateMetadataKey = "pe.tools/workbench.update";
+export const peWorkbenchSessionMetadataKey = "pe.tools/workbench.session";
+export const peWorkbenchLoadThreadMethod = "pe.tools/workbench.loadThread";
+export const peWorkbenchQueueMessageMethod = "pe.tools/workbench.queueMessage";
+export const peWorkbenchSetModelMethod = "pe.tools/workbench.setModel";
+export const peWorkbenchSetAccessLevelMethod = "pe.tools/workbench.setAccessLevel";
 
 export interface WorkbenchAgentCapabilities {
   threads?: boolean;
   history?: boolean;
+  historySnapshots?: boolean;
   toolCalls?: boolean;
   approvals?: boolean;
   approveAlways?: boolean;
@@ -30,6 +36,7 @@ export interface WorkbenchAgentCapabilities {
   rawToolIO?: boolean;
   modelSwitching?: boolean;
   sessionModes?: boolean;
+  accessLevels?: boolean;
   config?: boolean;
   observationalMemory?: boolean;
   systemPromptInspection?: boolean;
@@ -46,6 +53,13 @@ export interface PeWorkbenchExtension {
   version: typeof peWorkbenchExtensionVersion;
   runtime?: WorkbenchRuntimeInfo;
   capabilities: WorkbenchAgentCapabilities;
+}
+
+export interface PeWorkbenchSessionMetadata {
+  status?: "draft" | "materialized";
+  threadId?: string;
+  resourceId?: string;
+  lock?: WorkbenchThreadLockInfo;
 }
 
 export interface WorkbenchAgentInfo {
@@ -73,7 +87,13 @@ export interface WorkbenchThreadInfo {
   title?: string;
   cwd?: string;
   updatedAt?: string;
+  lock?: WorkbenchThreadLockInfo;
   metadata?: WorkbenchJsonObject;
+}
+
+export interface WorkbenchThreadLockInfo {
+  status: "unlocked" | "owned" | "locked" | "unknown";
+  ownerPid?: number;
 }
 
 export type WorkbenchLoadStatus = "idle" | "loading" | "loaded" | "error";
@@ -247,6 +267,20 @@ export interface WorkbenchCommandState {
   error?: string;
 }
 
+export type WorkbenchWorkbenchPanel = "threads" | "transcript" | "tools" | "inspector" | "memory";
+
+export interface WorkbenchUiPreferencesState {
+  activePanel: WorkbenchWorkbenchPanel;
+  sidebarVisible: boolean;
+  inspectorVisible: boolean;
+  timestampsVisible: boolean;
+  reasoningVisible: boolean;
+  toolDetailsVisible: boolean;
+  rawIoVisible: boolean;
+  compactToolOutput: boolean;
+  diffWrap: "word" | "none";
+}
+
 export interface WorkbenchUiStatusState {
   overall: WorkbenchRunState;
   start: WorkbenchCommandState;
@@ -341,6 +375,20 @@ export interface WorkbenchSessionModeState {
   availableModes: WorkbenchSessionModeInfo[];
 }
 
+export type WorkbenchAccessLevel = "read-only" | "ask" | "trusted";
+
+export interface WorkbenchAccessLevelInfo {
+  id: WorkbenchAccessLevel;
+  name: string;
+  description?: string;
+  metadata?: WorkbenchJsonObject;
+}
+
+export interface WorkbenchAccessLevelState {
+  currentAccessLevel?: WorkbenchAccessLevel;
+  availableAccessLevels: WorkbenchAccessLevelInfo[];
+}
+
 export interface WorkbenchAgentState {
   info?: WorkbenchAgentInfo;
   session?: WorkbenchSessionInfo;
@@ -393,9 +441,11 @@ export interface WorkbenchState {
   plans: WorkbenchPlanState;
   models: WorkbenchModelState;
   modes: WorkbenchSessionModeState;
+  access: WorkbenchAccessLevelState;
   memory: WorkbenchMemoryState;
   inspector: WorkbenchInspectorState;
   debug: WorkbenchDebugState;
+  uiPreferences: WorkbenchUiPreferencesState;
   uiStatus: WorkbenchUiStatusState;
 }
 
@@ -407,6 +457,7 @@ export interface PeWorkbenchUpdateMetadata {
   rawMessages?: WorkbenchInspectorEntry[];
   model?: Partial<WorkbenchModelState>;
   mode?: Partial<WorkbenchSessionModeState>;
+  access?: Partial<WorkbenchAccessLevelState>;
   threads?: WorkbenchThreadInfo[];
   activeThreadId?: string;
 }
@@ -457,6 +508,8 @@ export type WorkbenchEvent =
   | { type: "inspector_updated"; inspector: Partial<WorkbenchInspectorState> }
   | { type: "model_state_updated"; model: Partial<WorkbenchModelState> }
   | { type: "session_mode_updated"; sessionMode: Partial<WorkbenchSessionModeState> }
+  | { type: "access_level_updated"; access: Partial<WorkbenchAccessLevelState> }
+  | { type: "ui_preferences_updated"; preferences: Partial<WorkbenchUiPreferencesState> }
   | { type: "debug_event_recorded"; debugEvent: WorkbenchDebugEvent }
   | {
       type: "error";
@@ -492,6 +545,14 @@ export interface WorkbenchPromptResult {
   stopReason: StopReason;
 }
 
+export type WorkbenchQueueMessageRequest = WorkbenchPromptRequest;
+
+export interface WorkbenchQueueMessageResult {
+  accepted: true;
+  queued: boolean;
+  stopReason?: StopReason;
+}
+
 export interface WorkbenchListThreadsRequest {
   cwd?: string;
 }
@@ -502,11 +563,23 @@ export interface WorkbenchListThreadsResponse {
 
 export interface WorkbenchLoadThreadRequest extends WorkbenchStartRequest {
   threadId: string;
+  sessionId?: string;
 }
 
 export interface WorkbenchLoadThreadResponse {
   session: WorkbenchSessionInfo;
   messages?: WorkbenchMessage[];
+  events?: WorkbenchEvent[];
+}
+
+export interface WorkbenchLoadThreadSnapshotRequest {
+  sessionId: string;
+  cwd?: string;
+  additionalDirectories?: string[];
+}
+
+export interface WorkbenchLoadThreadSnapshotResponse extends WorkbenchLoadThreadResponse {
+  messages: WorkbenchMessage[];
 }
 
 export interface WorkbenchResolveApprovalRequest {
@@ -526,6 +599,10 @@ export interface WorkbenchSetModeRequest {
   modeId: string;
 }
 
+export interface WorkbenchSetAccessLevelRequest {
+  accessLevel: WorkbenchAccessLevel;
+}
+
 export interface WorkbenchCommandResponse {
   ok: true;
   state?: WorkbenchState;
@@ -536,12 +613,16 @@ export interface WorkbenchAgentClient {
   initialize(): Promise<WorkbenchAgentInfo>;
   newSession(request: WorkbenchNewSessionRequest): Promise<WorkbenchSessionInfo>;
   sendPrompt(request: WorkbenchPromptRequest): Promise<WorkbenchPromptResult>;
+  queueMessage?(request: WorkbenchQueueMessageRequest): Promise<WorkbenchQueueMessageResult>;
   listThreads?(cwd?: string): Promise<WorkbenchThreadInfo[]>;
-  loadThread?(request: WorkbenchLoadThreadRequest): Promise<WorkbenchSessionInfo>;
+  loadThread?(
+    request: WorkbenchLoadThreadRequest,
+  ): Promise<WorkbenchSessionInfo | WorkbenchLoadThreadResponse>;
   resolveApproval?(requestId: string, optionId?: string): void;
   cancel?(sessionId: string): Promise<void> | void;
   setModel?(modelId: string): Promise<void> | void;
   setMode?(modeId: string): Promise<void> | void;
+  setAccessLevel?(accessLevel: WorkbenchAccessLevel): Promise<void> | void;
   refreshInspector?(): Promise<void> | void;
   close?(): Promise<void> | void;
 }
@@ -561,6 +642,12 @@ export function peWorkbenchMetadata(extension: PeWorkbenchExtension): WorkbenchJ
   return { [peWorkbenchExtensionKey]: extension as unknown as WorkbenchJsonValue };
 }
 
+export function peWorkbenchSessionMetadata(
+  metadata: PeWorkbenchSessionMetadata,
+): WorkbenchJsonObject {
+  return { [peWorkbenchSessionMetadataKey]: metadata as unknown as WorkbenchJsonValue };
+}
+
 export function readPeWorkbenchExtension(metadata: unknown): PeWorkbenchExtension | undefined {
   if (!isRecord(metadata)) return undefined;
   const extension = metadata[peWorkbenchExtensionKey];
@@ -571,6 +658,24 @@ export function readPeWorkbenchExtension(metadata: unknown): PeWorkbenchExtensio
     version: peWorkbenchExtensionVersion,
     runtime: readRuntimeInfo(extension.runtime),
     capabilities: readCapabilities(capabilities),
+  };
+}
+
+export function readPeWorkbenchSessionMetadata(
+  metadata: unknown,
+): PeWorkbenchSessionMetadata | undefined {
+  if (!isRecord(metadata)) return undefined;
+  const session = metadata[peWorkbenchSessionMetadataKey];
+  if (!isRecord(session)) return undefined;
+  const status =
+    session.status === "draft" || session.status === "materialized" ? session.status : undefined;
+  const threadId = typeof session.threadId === "string" ? session.threadId : undefined;
+  const resourceId = typeof session.resourceId === "string" ? session.resourceId : undefined;
+  return {
+    ...(status ? { status } : {}),
+    ...(threadId ? { threadId } : {}),
+    ...(resourceId ? { resourceId } : {}),
+    ...(isThreadLockInfo(session.lock) ? { lock: session.lock } : {}),
   };
 }
 
@@ -618,6 +723,7 @@ function isCapabilityKey(value: string): value is keyof WorkbenchAgentCapabiliti
   return [
     "threads",
     "history",
+    "historySnapshots",
     "toolCalls",
     "approvals",
     "approveAlways",
@@ -625,10 +731,22 @@ function isCapabilityKey(value: string): value is keyof WorkbenchAgentCapabiliti
     "rawToolIO",
     "modelSwitching",
     "sessionModes",
+    "accessLevels",
     "config",
     "observationalMemory",
     "systemPromptInspection",
   ].includes(value);
+}
+
+function isThreadLockInfo(value: unknown): value is WorkbenchThreadLockInfo {
+  if (!isRecord(value)) return false;
+  return (
+    (value.status === "unlocked" ||
+      value.status === "owned" ||
+      value.status === "locked" ||
+      value.status === "unknown") &&
+    (value.ownerPid == null || typeof value.ownerPid === "number")
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

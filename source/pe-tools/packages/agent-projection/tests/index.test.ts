@@ -5,11 +5,13 @@ import {
   applyWorkbenchEvent,
   createWorkbenchState,
   selectActiveThread,
+  selectActiveThreadId,
   selectActiveToolCalls,
   selectCurrentModeLabel,
   selectCurrentModelLabel,
   selectPendingApprovals,
   selectRecentCompletedToolCalls,
+  selectVisibleThreads,
   selectVisibleTranscriptMessages,
 } from "../src/index.ts";
 
@@ -211,6 +213,38 @@ test("loading a thread replaces transcript and updates active thread determinist
   expect(state.inspector.rawMessages).toEqual([
     expect.objectContaining({ id: "raw-message:loaded-1", title: "1. assistant" }),
   ]);
+});
+
+test("visible thread selectors dedupe the current materialized session and resolve active id", () => {
+  const state = applyAll(createWorkbenchState(), [
+    {
+      type: "session_started",
+      session: {
+        sessionId: "session-current",
+        cwd: "C:/repo",
+        additionalDirectories: [],
+        title: "Current",
+      },
+    },
+    {
+      type: "threads_replaced",
+      threads: [
+        { threadId: "session-current", sessionId: "session-current", title: "Draft Current" },
+        { threadId: "thread-current", sessionId: "session-current", title: "Current" },
+        { threadId: "thread-other", title: "Other" },
+      ],
+      activeThreadId: "session-current",
+    },
+  ]);
+
+  expect(selectVisibleThreads(state).map((thread) => thread.threadId)).toEqual([
+    "thread-current",
+    "thread-other",
+  ]);
+  expect(selectActiveThreadId(state)).toBe("thread-current");
+  expect(selectActiveThread(state)).toEqual(
+    expect.objectContaining({ threadId: "thread-current" }),
+  );
 });
 
 test("projects ACP side-channel metadata into memory, inspector, model, mode, and threads", () => {

@@ -1,6 +1,11 @@
 import { createTool } from "@mastra/core/tools";
 import z from "zod";
-import { createRuntimeToolProfile } from "@pe/runtime";
+import {
+  assertRuntimeToolAccess,
+  createRuntimeToolProfile,
+  readRuntimeAccessLevelFromToolContext,
+} from "@pe/runtime";
+import { hostOperations, type HostOperationDefinition } from "@pe/host-generated/contracts";
 import { HostLogTarget } from "@pe/host-client";
 import type { HostActiveDocumentSummary } from "@pe/host-client";
 import { PeHostClient } from "@pe/host-client";
@@ -19,7 +24,11 @@ export { PeaCliCommands } from "./PeaCliCommands.ts";
 export {
   bundledPeaSkills,
   materializeBundledPeaSkills,
+  resolvePeaProductHomePath,
+  resolvePeaSkillPaths,
+  resolvePeaStandardSkillsRoot,
   peaSkillPaths,
+  peaProductHomeEnvVar,
   peaStandardSkillsRoot,
 } from "./skills.ts";
 
@@ -180,8 +189,10 @@ export const hostOperationCall = createTool({
       .default(300)
       .describe("Client-side timeout for this host call, in seconds."),
   }),
-  execute: async (input) =>
-    new PeHostClient().general.callOperation(input.key, input.request, input.verbosity),
+  execute: async (input, context) => {
+    assertHostOperationCallAccess(input.key, context);
+    return new PeHostClient().general.callOperation(input.key, input.request, input.verbosity);
+  },
 });
 
 export const scriptExecute = createTool({
@@ -287,4 +298,21 @@ function parseHostLogTarget(target: "host" | "revit" | "all"): HostLogTarget {
 
 function firstNonBlank(...values: Array<string | undefined>): string | undefined {
   return values.find((value) => value != null && value.trim().length > 0)?.trim();
+}
+
+function assertHostOperationCallAccess(operationKey: string, toolContext: unknown): void {
+  const operation = hostOperations[operationKey as keyof typeof hostOperations] as
+    | HostOperationDefinition
+    | undefined;
+  if (operation?.intent !== "Mutate") return;
+
+  assertRuntimeToolAccess({
+    toolName: `host_operation_call:${operation.key}`,
+    metadata: {
+      name: `host_operation_call:${operation.key}`,
+      title: operation.displayName ?? operation.key,
+      kind: "edit",
+    },
+    accessLevel: readRuntimeAccessLevelFromToolContext(toolContext),
+  });
 }

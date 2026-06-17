@@ -3,6 +3,7 @@ import { render, type JSX } from "@opentui/solid";
 import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import type { CliRenderer, KeyEvent } from "@opentui/core";
 import type { WorkbenchApprovalOption } from "@pe/agent-contracts";
+import { selectActiveThreadId, selectVisibleThreads } from "@pe/agent-projection";
 import type { WorkbenchApprovalRequest, WorkbenchController } from "@pe/workbench-core";
 import { ApprovalModal } from "./components/approval-modal.jsx";
 import { Header } from "./components/header.jsx";
@@ -129,12 +130,10 @@ function WorkbenchApp(props: {
   };
 
   createEffect(() => {
-    const threads = state().threads.items;
+    const threads = selectVisibleThreads(state());
     const current = selectedThreadId();
     if (current && threads.some((thread) => thread.threadId === current)) return;
-    setSelectedThreadId(
-      state().threads.activeThreadId ?? state().agent.session?.sessionId ?? threads[0]?.threadId,
-    );
+    setSelectedThreadId(selectActiveThreadId(state()) ?? threads[0]?.threadId);
   });
 
   const refreshThreads = async () => {
@@ -166,7 +165,7 @@ function WorkbenchApp(props: {
   };
 
   const moveThreadSelection = (direction: number) => {
-    const threads = state().threads.items;
+    const threads = selectVisibleThreads(state());
     if (threads.length === 0) return;
     const index = threads.findIndex((thread) => thread.threadId === selectedThreadId());
     const current = index < 0 ? 0 : index;

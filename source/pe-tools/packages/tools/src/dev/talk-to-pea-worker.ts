@@ -23,11 +23,13 @@ import {
   materializeBundledPeaSkills,
   peaProductToolProfile,
   peaProductTools,
-  peaSkillPaths,
+  resolvePeaProductHomePath,
+  resolvePeaSkillPaths,
 } from "../pea/index.ts";
 
 const resultPrefix = "__PEA_TALK_WORKER_RESULT__";
 const peaConfigDir = ".pea";
+const runtimeCloseTimeoutMs = 5000;
 
 type PeaWorkerRuntime = {
   harness: {
@@ -123,8 +125,29 @@ export async function runTalkToPeaWorker(
       toolTrace: toolTraceSince(beforeMessages, messages),
     };
   } finally {
-    await runtime.close?.();
+    await closeRuntimeBestEffort(runtime);
   }
+}
+
+async function closeRuntimeBestEffort(runtime: PeaWorkerRuntime): Promise<void> {
+  if (!runtime.close) return;
+
+  try {
+    await withTimeout(runtime.close(), runtimeCloseTimeoutMs);
+  } catch {
+    runtime.harness.abort();
+  }
+}
+
+function withTimeout<T>(task: Promise<T> | T, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Timed out after ${timeoutMs}ms.`)), timeoutMs);
+  });
+
+  return Promise.race([Promise.resolve(task), timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
 }
 
 async function createPeaWorkerRuntime(): Promise<PeaWorkerRuntime> {
@@ -133,9 +156,10 @@ async function createPeaWorkerRuntime(): Promise<PeaWorkerRuntime> {
   configurePeaProductToolContext({ hostBaseUrl, workspaceKey });
 
   const cwd = await resolvePeaWorkerCwd(hostBaseUrl, workspaceKey);
+  const productHomePath = resolvePeaProductHomePath();
   process.chdir(cwd);
 
-  await materializeBundledPeaSkills(cwd);
+  await materializeBundledPeaSkills({ productHomePath });
 
   const authStorage = await createMastraCodeAuthStorage();
   loadStoredMastraCodeApiKeysIntoEnv(authStorage);
@@ -154,7 +178,7 @@ async function createPeaWorkerRuntime(): Promise<PeaWorkerRuntime> {
     name: "Pea Workspace",
     filesystem: new LocalFilesystem({ basePath: cwd, contained: true }),
     sandbox: new LocalSandbox({ workingDirectory: cwd, env: process.env }),
-    skills: [...peaSkillPaths],
+    skills: resolvePeaSkillPaths({ productHomePath }),
   });
   const handle = await createRuntimeHarness({
     request: { protocol: "test", cwd, workspaceRoot: cwd },
@@ -175,6 +199,7 @@ async function createPeaWorkerRuntime(): Promise<PeaWorkerRuntime> {
       tools: peaProductTools,
       initialState: {
         currentModelId: defaultPeaAgentModelId,
+        productHomePath,
         configDir: peaConfigDir,
       },
       modelAuthChecker: (provider) =>

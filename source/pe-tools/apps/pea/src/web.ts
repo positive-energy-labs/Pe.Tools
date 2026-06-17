@@ -8,19 +8,24 @@ import { createPeaProtocolRuntimeFactory } from "./runtime.ts";
 
 export interface PeaWebRuntimeOptions {
   cwd?: string;
+  workspaceRoot?: string;
   host?: string;
   port?: number;
   staticDir?: string;
+  modelId?: string;
 }
 
 export async function runPeaWeb(options: PeaWebRuntimeOptions = {}): Promise<void> {
-  const cwd = options.cwd ?? process.cwd();
-  const factory = await createPeaProtocolRuntimeFactory({ cwd });
+  const workspaceRoot = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
+  const factory = await createPeaProtocolRuntimeFactory({
+    workspaceRoot,
+    modelId: options.modelId,
+  });
   const client = createInProcessAcpWorkbenchClient(
     (connection) => createRuntimeAcpAgent(connection, { runtime: { factory } }),
     { clientName: "Pea Web", clientVersion: "0.1.0" },
   );
-  const controller = createWorkbenchController(client, { cwd });
+  const controller = createWorkbenchController(client, { cwd: workspaceRoot });
   const staticDir = await resolveWorkbenchStaticDir(options.staticDir);
   const handle = await startWorkbenchTransportServer(controller, {
     host: options.host,

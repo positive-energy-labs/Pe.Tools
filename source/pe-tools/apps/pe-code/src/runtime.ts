@@ -5,10 +5,14 @@ import { createMastraCode } from "mastracode";
 import {
   createRuntimeDescriptor,
   createRuntimeFactory,
+  createRuntimeKernel,
+  createRuntimeThreadLock,
   createRuntimeSessions,
+  resolveRuntimeThreadStateStore,
   type RuntimeCreateRequest,
   type RuntimeFactory,
   type RuntimeHandle,
+  type RuntimeKernel,
   type RuntimeToolProfile,
 } from "@pe/runtime";
 import { peCodeRuntimeToolProfile as peCodeToolsRuntimeToolProfile } from "@pe/tools";
@@ -34,26 +38,7 @@ export async function createPeCodeProtocolRuntimeFactory(
     description: "Pe.Tools repo coding agent.",
   });
 
-  return createRuntimeFactory(
-    descriptor,
-    (request) => createPeCodeRuntimeHandle(options, request),
-    {
-      startupThread: {
-        createTitle: "New thread",
-        onThreadOpened: async ({ request, handle, selection }) => {
-          const projectPath =
-            request.workspaceRoot ?? request.cwd ?? options.workspaceRoot ?? options.cwd; // TODO: wtf is this. red flag that theres so many fallbacks imo
-          if (projectPath && !selection.thread.metadata?.projectPath) {
-            await handle.harness.setThreadSetting({
-              key: "projectPath",
-              value: projectPath,
-            });
-          }
-          await persistDefaultSandboxAllowedPaths(handle.harness);
-        },
-      },
-    },
-  );
+  return createRuntimeFactory(descriptor, (request) => createPeCodeRuntimeHandle(options, request));
 }
 
 export async function createPeCodeTuiRuntime(
@@ -93,21 +78,6 @@ export async function runPeCodeTui(options: PeCodeTuiRuntimeOptions = {}): Promi
   await tui.run();
 }
 
-export async function persistDefaultSandboxAllowedPaths(
-  harness: Pick<RuntimeHandle["harness"], "getState" | "setState" | "setThreadSetting">,
-): Promise<string[]> {
-  const state = harness.getState() as { sandboxAllowedPaths?: string[] };
-  const current = Array.isArray(state.sandboxAllowedPaths) ? state.sandboxAllowedPaths : [];
-  const next = mergeSandboxAllowedPaths(current);
-
-  if (!samePathList(current, next)) {
-    await harness.setState({ sandboxAllowedPaths: next } as never);
-  }
-  await harness.setThreadSetting({ key: "sandboxAllowedPaths", value: next });
-
-  return next;
-}
-
 async function createPeCodeRuntimeHandle(
   options: PeCodeTuiRuntimeOptions,
   request: RuntimeCreateRequest,
@@ -131,10 +101,16 @@ async function createPeCodeRuntimeHandle(
     },
   });
   const harness = runtime.harness as unknown as Harness<Record<string, unknown>>;
+  const kernel = createRuntimeKernel(harness, {
+    threadStateStore: resolveRuntimeThreadStateStore(harness),
+    toolCatalog: peCodeRuntimeToolProfile.catalog,
+  });
 
   return {
     harness,
+    kernel,
     sessions: createRuntimeSessions(harness, {
+      kernel,
       toolCatalog: peCodeRuntimeToolProfile.catalog,
     }),
     workspace: { cwd, root: cwd },
@@ -147,7 +123,7 @@ async function createPeCodeRuntimeHandle(
       cwd: request.cwd,
       workspaceRoot: request.workspaceRoot,
     },
-    close: () => closeMastraCodeHarness(harness),
+    close: () => closePeCodeRuntime(harness, kernel),
   };
 }
 
@@ -164,10 +140,6 @@ function mergeSandboxAllowedPaths(paths: string[]): string[] {
   return Array.from(
     new Set([defaultPeCodeSandboxAllowedPath, ...paths].map((entry) => path.resolve(entry))),
   );
-}
-
-function samePathList(left: string[], right: string[]): boolean {
-  return left.length === right.length && left.every((entry, index) => entry === right[index]);
 }
 
 async function resolveDevAgentProjectRoot(startPath: string): Promise<string> {
@@ -203,7 +175,25 @@ type ClosableHarness = Harness<Record<string, unknown>> & {
   getMastra?: () => { shutdown?: () => Promise<void> | void } | undefined;
 };
 
-async function closeMastraCodeHarness(harness: Harness<Record<string, unknown>>): Promise<void> {
+async function closePeCodeRuntime(
+  harness: Harness<Record<string, unknown>>,
+  kernel: RuntimeKernel,
+): Promise<void> {
+  const currentThreadId = harness.getCurrentThreadId();
   harness.abort();
-  await (harness as ClosableHarness).getMastra?.()?.shutdown?.();
+  try {
+    await kernel.flushLedger();
+  } finally {
+    releasePeCodeThreadLock(currentThreadId);
+    await (harness as ClosableHarness).getMastra?.()?.shutdown?.();
+  }
+}
+
+function releasePeCodeThreadLock(threadId: string | null | undefined): void {
+  if (!threadId) return;
+  try {
+    createRuntimeThreadLock({ storageProfileKind: "mastracode-compatible" }).release(threadId);
+  } catch {
+    // Best-effort cleanup mirrors the generic runtime harness close path.
+  }
 }

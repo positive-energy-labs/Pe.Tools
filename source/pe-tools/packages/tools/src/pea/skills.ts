@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 
 export interface BundledPeaSkill {
@@ -172,8 +173,30 @@ Report files checked, validation status, diagnostics fixed or remaining, and any
   },
 ];
 
-export const peaStandardSkillsRoot = ".agents/skills";
-export const peaSkillPaths = [peaStandardSkillsRoot] as const;
+export const peaStandardSkillsRoot = path.join(".agents", "skills");
+export const peaProductHomeEnvVar = "PE_TOOLS_PRODUCT_HOME";
+
+export interface PeaProductHomeOptions {
+  productHomePath?: string;
+}
+
+export function resolvePeaProductHomePath(options: PeaProductHomeOptions = {}): string {
+  return path.resolve(
+    options.productHomePath ??
+      process.env[peaProductHomeEnvVar] ??
+      path.join(homedir(), "Documents", "Pe.Tools"),
+  );
+}
+
+export function resolvePeaStandardSkillsRoot(options: PeaProductHomeOptions = {}): string {
+  return path.join(resolvePeaProductHomePath(options), peaStandardSkillsRoot);
+}
+
+export function resolvePeaSkillPaths(options: PeaProductHomeOptions = {}): string[] {
+  return [resolvePeaStandardSkillsRoot(options)];
+}
+
+export const peaSkillPaths = resolvePeaSkillPaths();
 
 export interface MaterializedPeaSkill {
   name: string;
@@ -182,9 +205,9 @@ export interface MaterializedPeaSkill {
 }
 
 export async function materializeBundledPeaSkills(
-  workspaceRoot: string,
+  options: PeaProductHomeOptions = {},
 ): Promise<MaterializedPeaSkill[]> {
-  const skillsRoot = path.join(workspaceRoot, peaStandardSkillsRoot);
+  const skillsRoot = resolvePeaStandardSkillsRoot(options);
   await mkdir(skillsRoot, { recursive: true });
 
   const materialized: MaterializedPeaSkill[] = [];

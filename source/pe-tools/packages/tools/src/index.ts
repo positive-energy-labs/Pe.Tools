@@ -1,12 +1,17 @@
 export {
   PeaCliCommands,
   bundledPeaSkills,
+  configurePeaProductToolContext,
   materializeBundledPeaSkills,
+  peaProductHomeEnvVar,
   peaProductToolProfile,
   peaProductTools,
   peaSkillPaths,
   peaStandardSkillsRoot,
   peaTools,
+  resolvePeaProductHomePath,
+  resolvePeaSkillPaths,
+  resolvePeaStandardSkillsRoot,
 } from "./pea/index.ts";
 export type { PeaCliCommandOptions } from "./pea/PeaCliCommands.ts";
 export { PeCodeCliCommands, peCodeRuntimeToolProfile, peCodeTools } from "./dev/index.ts";

@@ -2,17 +2,21 @@ import { Harness, type HarnessConfig } from "@mastra/core/harness";
 import { wrapModelForFinalToolListLogging } from "./final-tool-list-logging.ts";
 import { RuntimeHarness } from "./runtime-harness.ts";
 import { createRuntimeThreadLockWithMastraCodeInterop } from "./thread-lock.ts";
+import { createRuntimeKernel } from "../kernel.ts";
 import { createRuntimeSessions, type RuntimeSessionOptions } from "../session/runtime-sessions.ts";
 import type { RuntimeAuthProfile } from "../auth/types.ts";
 import type { RuntimeMemoryProfile } from "../memory/profiles.ts";
 import type {
   RuntimeCreateRequest,
   RuntimeHandle,
+  RuntimeKernel,
   RuntimeSessions,
   RuntimeWorkspaceInfo,
 } from "../runtime.ts";
 import type { RuntimeStorageProfile } from "../storage/profiles.ts";
+import { resolveRuntimeThreadStateStore } from "../storage/thread-state.ts";
 import type { RuntimeToolProfile, RuntimeToolSource } from "../tool-metadata.ts";
+import { guardRuntimeToolsForAccessPolicy } from "../tools/access-policy.ts";
 
 export type RuntimeHarnessConfig<TState extends Record<string, unknown> = Record<string, unknown>> =
   HarnessConfig<TState>;
@@ -46,11 +50,20 @@ export async function createRuntimeHarness<
     ? options.config
     : await resolveRuntimeHarnessConfig(options, request);
   const harness = options.harness ?? new RuntimeHarness<TState>(config);
+  const kernel = createRuntimeKernel(harness as unknown as Harness<Record<string, unknown>>, {
+    ...options.sessionOptions,
+    threadStateStore:
+      options.sessionOptions?.threadStateStore ?? resolveRuntimeThreadStateStore(config.storage),
+    storageProfileKind: options.storageProfile?.kind,
+    toolCatalog:
+      options.toolCatalog ?? options.toolProfile?.catalog ?? options.sessionOptions?.toolCatalog,
+  });
   const sessions =
     options.sessions ??
     options.createSessions?.(harness) ??
     createRuntimeSessions(harness as unknown as Harness<Record<string, unknown>>, {
       ...options.sessionOptions,
+      kernel,
       toolCatalog:
         options.toolCatalog ?? options.toolProfile?.catalog ?? options.sessionOptions?.toolCatalog,
     });
@@ -59,6 +72,7 @@ export async function createRuntimeHarness<
 
   return {
     harness,
+    kernel,
     sessions,
     workspace: options.workspace,
     auth: options.auth,
@@ -67,7 +81,7 @@ export async function createRuntimeHarness<
     mcpManager: options.mcpManager,
     metadata: options.metadata,
     close: () => {
-      closeTask ??= closeRuntimeHarness(harness, config.storage, config.threadLock);
+      closeTask ??= closeRuntimeHarness(harness, kernel, config.storage, config.threadLock);
       return closeTask;
     },
   };
@@ -83,10 +97,12 @@ type HarnessWithMastra<TState extends Record<string, unknown>> = Harness<TState>
 
 async function closeRuntimeHarness<TState extends Record<string, unknown>>(
   harness: Harness<TState>,
+  kernel: RuntimeKernel,
   storage: ClosableStorage | undefined,
   threadLock: HarnessConfig<TState>["threadLock"] | undefined,
 ): Promise<void> {
   harness.abort();
+  await kernel.flushLedger();
   const currentThreadId = harness.getCurrentThreadId();
   if (currentThreadId) {
     try {
@@ -125,6 +141,9 @@ async function resolveRuntimeHarnessConfig<
       : undefined);
 
   const tools = options.config.tools ?? options.toolProfile?.tools;
+  const toolCatalog =
+    options.toolCatalog ?? options.toolProfile?.catalog ?? options.sessionOptions?.toolCatalog;
+  const guardedTools = tools ? guardRuntimeToolsForAccessPolicy(tools, toolCatalog) : undefined;
   const configuredResolveModel = options.config.resolveModel;
   const resolveModel = configuredResolveModel
     ? (modelId: string) => wrapModelForFinalToolListLogging(configuredResolveModel(modelId))
@@ -139,7 +158,7 @@ async function resolveRuntimeHarnessConfig<
     ...options.config,
     ...(storage ? { storage } : {}),
     ...(memory ? { memory } : {}),
-    ...(tools ? { tools } : {}),
+    ...(guardedTools ? { tools: guardedTools } : {}),
     ...(resolveModel ? { resolveModel } : {}),
     threadLock,
   };

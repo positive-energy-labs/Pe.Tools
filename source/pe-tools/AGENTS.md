@@ -9,7 +9,7 @@ Docs are local at `node_modules/vite-plus/docs` or online at https://viteplus.de
 ## Review Checklist
 
 - [ ] Run `vp install` after pulling remote changes and before getting started.
-- [ ] Run `vp check` and `vp test` to format, lint, type check and test changes.
+- [ ] Run `vp check --fix` and `vp test` to format, lint, type check and test changes.
 - [ ] Check if there are `vite.config.ts` tasks or `package.json` scripts necessary for validation, run via `vp run <script>`.
 - [ ] If setup, runtime, or package-manager behavior looks wrong, run `vp env doctor` and include its output when asking for help.
 
@@ -18,7 +18,6 @@ Docs are local at `node_modules/vite-plus/docs` or online at https://viteplus.de
 # Pe.Tools TypeScript Workspace Decision
 
 ## Decision
-
 
 `source/pe-tools` is the TypeScript workspace for Pe.Tools product-adjacent surfaces: user-facing `pea`, dev-only `peco`, local web/profile UI, protocol adapters, generated Host contracts, and small TypeScript libraries that make agent/UI/TUI work possible.
 
@@ -53,7 +52,9 @@ Names may change, but the authority boundaries should not blur.
 
 `peco` is private developer tooling. It can chain very specific Revit development workflows, RRD/live-loop checks, repo verification, and black-box Pea feedback. These commands should move out of the user-facing `pea` surface over time.
 
-`@pe/runtime` is the shared protocol/runtime seam below both apps. It may expose generic `RuntimeFactory`, auth, session, event, ACP, and AG-UI contracts, but it should not dispatch on Pea-vs-`peco` product identity. 
+`@pe/runtime` is the shared protocol/runtime seam below both apps. It may expose generic `RuntimeFactory`, auth, session, event, ACP, and AG-UI contracts, but it should not dispatch on Pea-vs-`peco` product identity.
+
+Pea's Mastra workspace root and product home are the same directory. By default this is the directory where the Pea CLI is launched; `--workspace-root` may override it. Pea should operate inside that product workspace, while scripting tools can continue to default to the Host/Revit scripting workspace key such as `workspaces/default`.
 
 ## Authority Model
 
@@ -97,8 +98,9 @@ Dist-first remains appropriate for:
 - package outputs that are intentionally consumed outside the workspace;
 - any future package whose default import shape must match installed/published runtime behavior.
 
-When non-source exports are needed, use custom export conditions instead of `tsconfig.paths`, typescript project references, pnpm `publishConfig` rewrites, etc. ctrl + click to go to definition is indispensible.
+For source-exported packages that still need package artifacts, keep `package.json` exports pointed at `src` and set an explicit Vite+ `pack.entry` in `vite.config.ts`. Do not use `pack.exports: true` for private source-export packages; it rewrites package exports back to `dist`.
 
+When non-source exports are needed, use custom export conditions instead of `tsconfig.paths`, typescript project references, pnpm `publishConfig` rewrites, etc. ctrl + click to go to definition is indispensible.
 
 ## Generated Code Policy
 
@@ -132,3 +134,9 @@ The browser UI should be presentation/controller only:
 - avoid owning Revit or settings semantics.
 
 Even without a full auth/session system, local UI should avoid accidental exposure. Bind to loopback by default and prefer a per-launch local token when exposing HTTP/SSE endpoints.
+
+## Pea TUI Live Loop
+
+`pea beta-tui` must prioritize a usable prompt loop over OpenTUI polish. On the current Windows + zellij path, OpenTUI rendering can prevent zellij-injected stdin from reaching the app even when plain raw stdin panes work. Until that backend issue is resolved, keep `pea beta-tui` defaulting to the line workbench and treat OpenTUI as an opt-in/fallback-rendering experiment.
+
+When proving the beta TUI, use the Pea black-box product lane through the actual PATH command, not a lower-level source runner: launch with `zellij run --cwd <repo> --name pea-beta-tui -- pea beta-tui`, drive input with `zellij action write-chars -p <pane>` plus `zellij action send-keys -p <pane> Enter`, and verify with `zellij action dump-screen -p <pane>`. The minimum proof is startup showing threads, a prompt returning `[done: end_turn]`, `/refresh` updating thread state, and `/load <n|id>` changing the active thread header.

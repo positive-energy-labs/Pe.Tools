@@ -1,5 +1,6 @@
 import type {
   PeWorkbenchUpdateMetadata,
+  WorkbenchAccessLevelState,
   WorkbenchAgentClient,
   WorkbenchAgentInfo,
   WorkbenchApprovalOption,
@@ -10,26 +11,36 @@ import type {
   WorkbenchInspectorEntry,
   WorkbenchInspectorState,
   WorkbenchLoadThreadRequest,
+  WorkbenchLoadThreadResponse,
   WorkbenchMessage,
+  WorkbenchMessagePart,
   WorkbenchModelInfo,
   WorkbenchModelState,
   WorkbenchNewSessionRequest,
   WorkbenchObservationMemoryEntry,
   WorkbenchPlanEntry,
   WorkbenchPromptResult,
+  WorkbenchQueueMessageResult,
   WorkbenchRunState,
+  WorkbenchSetAccessLevelRequest,
   WorkbenchSessionInfo,
   WorkbenchSessionModeInfo,
   WorkbenchSessionModeState,
   WorkbenchSetModeRequest,
   WorkbenchSetModelRequest,
   WorkbenchStartRequest,
+  WorkbenchUiPreferencesState,
   WorkbenchStartResponse,
   WorkbenchState,
   WorkbenchThreadInfo,
   WorkbenchToolCall,
 } from "@pe/agent-contracts";
-import { applyWorkbenchEvent, createWorkbenchState } from "@pe/agent-projection";
+import {
+  applyWorkbenchEvent,
+  createWorkbenchState,
+  selectActiveThreadId,
+  selectVisibleThreads,
+} from "@pe/agent-projection";
 
 export type WorkbenchStateHandler = (state: WorkbenchState, event: WorkbenchEvent) => void;
 
@@ -40,6 +51,8 @@ export class WorkbenchController {
   private readonly handlers = new Set<WorkbenchStateHandler>();
   private readonly unsubscribeClient: () => void;
   private startPromise: Promise<WorkbenchStartResponse> | null = null;
+  private localMessageSequence = 0;
+  private activeLocalUserMessageId: string | undefined;
 
   constructor(
     private readonly client: WorkbenchAgentClient,
@@ -66,9 +79,17 @@ export class WorkbenchController {
       const session = await this.client.newSession(this.sessionRequest());
       this.apply({ type: "session_started", session });
       const threads = await this.client.listThreads?.(this.options.cwd);
-      if (threads)
-        this.apply({ type: "threads_replaced", threads, activeThreadId: session.sessionId });
-      return { agent, session, threads };
+      const projectedState = stateWithThreadItems(this.state, threads);
+      const visibleThreads = threads ? selectVisibleThreads(projectedState) : undefined;
+      const activeThreadId = threads ? selectActiveThreadId(projectedState) : undefined;
+      if (visibleThreads)
+        this.apply({
+          type: "threads_replaced",
+          threads: visibleThreads,
+          activeThreadId,
+        });
+      await this.loadThreadSnapshot(session.sessionId);
+      return { agent, session: this.state.agent.session ?? session, threads: visibleThreads };
     });
     return this.startPromise;
   }
@@ -85,7 +106,18 @@ export class WorkbenchController {
     });
   }
 
-  async send(text: string): Promise<WorkbenchPromptResult | undefined> {
+  async send(text: string): Promise<WorkbenchQueueMessageResult | undefined> {
+    return (await this.sendWithDelivery(text, "queued")) as WorkbenchQueueMessageResult | undefined;
+  }
+
+  async sendImmediate(text: string): Promise<WorkbenchPromptResult | undefined> {
+    return (await this.sendWithDelivery(text, "immediate")) as WorkbenchPromptResult | undefined;
+  }
+
+  private async sendWithDelivery(
+    text: string,
+    delivery: "queued" | "immediate",
+  ): Promise<WorkbenchQueueMessageResult | WorkbenchPromptResult | undefined> {
     const prompt = text.trim();
     if (!prompt) return undefined;
 
@@ -94,17 +126,38 @@ export class WorkbenchController {
     if (!session) throw new Error("Workbench session was not created.");
 
     return this.runCommand("send", async () => {
+      const alreadyRunning = this.state.uiStatus.overall.status === "running";
+      const messageId = alreadyRunning
+        ? (this.activeLocalUserMessageId ??= this.nextLocalUserMessageId())
+        : this.nextLocalUserMessageId();
+      this.activeLocalUserMessageId = messageId;
       this.apply({
         type: "message_part_delta",
-        messageId: `local-user:${Date.now()}`,
+        messageId,
         role: "user",
         part: { kind: "text", text: `${prompt}\n` },
         status: "complete",
         provenance: { source: "workbench", protocol: "local", sessionId: session.sessionId },
       });
-      this.apply({ type: "run_status_changed", status: "running" });
+
+      if (!alreadyRunning) this.apply({ type: "run_status_changed", status: "running" });
+
+      if (delivery === "queued" && this.client.queueMessage) {
+        const result = await this.client.queueMessage({
+          sessionId: session.sessionId,
+          text: prompt,
+        });
+        if (!result.queued) {
+          this.apply({ type: "run_status_changed", status: "idle", stopReason: result.stopReason });
+          this.activeLocalUserMessageId = undefined;
+        }
+        if (this.client.listThreads) await this.refreshThreads();
+        return result;
+      }
+
       const result = await this.client.sendPrompt({ sessionId: session.sessionId, text: prompt });
       this.apply({ type: "run_status_changed", status: "idle", stopReason: result.stopReason });
+      this.activeLocalUserMessageId = undefined;
       if (this.client.listThreads) await this.refreshThreads();
       return result;
     });
@@ -114,13 +167,16 @@ export class WorkbenchController {
     await this.ensureInitialized();
     return this.runCommand("threads", async () => {
       const threads = await this.client.listThreads?.(this.options.cwd);
-      if (threads)
+      const projectedState = stateWithThreadItems(this.state, threads);
+      const visibleThreads = threads ? selectVisibleThreads(projectedState) : undefined;
+      const activeThreadId = threads ? selectActiveThreadId(projectedState) : undefined;
+      if (visibleThreads)
         this.apply({
           type: "threads_replaced",
-          threads,
-          activeThreadId: this.state.threads.activeThreadId,
+          threads: visibleThreads,
+          activeThreadId,
         });
-      return threads ?? this.state.threads.items;
+      return visibleThreads ?? this.state.threads.items;
     });
   }
 
@@ -130,18 +186,7 @@ export class WorkbenchController {
     if (!loadThread) return undefined;
 
     return this.runCommand("loadThread", async () => {
-      this.apply({ type: "thread_selected", threadId });
-      const beforeMessages = this.state.transcript.messages;
-      const session = await loadThread({ ...this.sessionRequest(), threadId });
-      const replayedMessages = this.state.transcript.messages;
-      this.apply({
-        type: "session_started",
-        session,
-        thread: { threadId, sessionId: session.sessionId, title: session.title },
-      });
-      if (replayedMessages !== beforeMessages) {
-        this.apply({ type: "transcript_replaced", messages: replayedMessages });
-      }
+      const session = await this.loadThreadSnapshot(threadId);
       await this.refreshThreads();
       return session;
     });
@@ -186,6 +231,26 @@ export class WorkbenchController {
     });
   }
 
+  async setAccessLevel(request: WorkbenchSetAccessLevelRequest): Promise<void> {
+    await this.runCommand("model", async () => {
+      await this.client.setAccessLevel?.(request.accessLevel);
+      this.apply({
+        type: "access_level_updated",
+        access: { currentAccessLevel: request.accessLevel },
+      });
+    });
+  }
+
+  updateUiPreferences(preferences: Partial<WorkbenchUiPreferencesState>): void {
+    this.apply({ type: "ui_preferences_updated", preferences });
+  }
+
+  toggleUiPreference(preference: keyof WorkbenchUiPreferencesState): void {
+    const value = this.state.uiPreferences[preference];
+    if (typeof value !== "boolean") return;
+    this.updateUiPreferences({ [preference]: !value });
+  }
+
   async refreshInspector(): Promise<void> {
     await this.client.refreshInspector?.();
   }
@@ -206,6 +271,40 @@ export class WorkbenchController {
       cwd: this.options.cwd,
       additionalDirectories: this.options.additionalDirectories,
     };
+  }
+
+  private async loadThreadSnapshot(threadId: string): Promise<WorkbenchSessionInfo | undefined> {
+    const loadThread = this.client.loadThread?.bind(this.client);
+    if (!loadThread) return undefined;
+
+    const thread = findThreadForLoad(this.state.threads.items, threadId);
+    const selectedThreadId = thread?.threadId ?? threadId;
+    if (thread?.lock?.status === "locked") {
+      throw new Error(
+        `Thread ${selectedThreadId} is locked${thread.lock.ownerPid ? ` by PID ${thread.lock.ownerPid}` : ""}.`,
+      );
+    }
+    this.apply({ type: "thread_selected", threadId: selectedThreadId });
+    const beforeMessages = this.state.transcript.messages;
+    const response = await loadThread({
+      ...this.sessionRequest(),
+      threadId: selectedThreadId,
+      ...(thread?.sessionId ? { sessionId: thread.sessionId } : {}),
+    });
+    const { session, messages, events } = normalizeLoadThreadResponse(response);
+    const replayedMessages = this.state.transcript.messages;
+    this.apply({
+      type: "session_started",
+      session,
+      thread: { threadId: selectedThreadId, sessionId: session.sessionId, title: session.title },
+    });
+    if (messages) {
+      this.apply({ type: "transcript_replaced", messages });
+    } else if (replayedMessages !== beforeMessages) {
+      this.apply({ type: "transcript_replaced", messages: replayedMessages });
+    }
+    for (const event of events ?? []) this.apply(event);
+    return session;
   }
 
   private async runCommand<T>(
@@ -238,6 +337,11 @@ export class WorkbenchController {
     this.state = applyWorkbenchEvent(this.state, event);
     for (const handler of this.handlers) handler(this.state, event);
   }
+
+  private nextLocalUserMessageId(): string {
+    this.localMessageSequence += 1;
+    return `local-user:${this.localMessageSequence}`;
+  }
 }
 
 export function createWorkbenchController(
@@ -251,6 +355,29 @@ function recentIds(id: string, existing: string[]): string[] {
   return [id, ...existing.filter((item) => item !== id)].slice(0, 16);
 }
 
+function stateWithThreadItems(
+  state: WorkbenchState,
+  threads: WorkbenchThreadInfo[] | undefined,
+): WorkbenchState {
+  return threads ? { ...state, threads: { ...state.threads, items: threads } } : state;
+}
+
+function findThreadForLoad(
+  threads: WorkbenchThreadInfo[],
+  threadId: string,
+): WorkbenchThreadInfo | undefined {
+  return (
+    threads.find((thread) => thread.threadId === threadId) ??
+    threads.find((thread) => thread.sessionId === threadId)
+  );
+}
+
+function normalizeLoadThreadResponse(
+  response: WorkbenchSessionInfo | WorkbenchLoadThreadResponse,
+): WorkbenchLoadThreadResponse {
+  return "session" in response ? response : { session: response };
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -258,6 +385,7 @@ function errorMessage(error: unknown): string {
 export type {
   PeWorkbenchUpdateMetadata,
   WorkbenchAgentClient,
+  WorkbenchAccessLevelState,
   WorkbenchAgentInfo,
   WorkbenchApprovalOption,
   WorkbenchApprovalRequest,
@@ -267,10 +395,12 @@ export type {
   WorkbenchInspectorState,
   WorkbenchLoadThreadRequest,
   WorkbenchMessage,
+  WorkbenchMessagePart,
   WorkbenchModelInfo,
   WorkbenchModelState,
   WorkbenchObservationMemoryEntry,
   WorkbenchPlanEntry,
+  WorkbenchQueueMessageResult,
   WorkbenchRunState,
   WorkbenchSessionInfo,
   WorkbenchSessionModeInfo,
@@ -278,4 +408,5 @@ export type {
   WorkbenchState,
   WorkbenchThreadInfo,
   WorkbenchToolCall,
+  WorkbenchUiPreferencesState,
 };
