@@ -148,9 +148,11 @@ public static class HeaderGroupHandler {
         return (applied, skipped, warnings);
     }
 
-    private static string GetFieldLabel(ScheduleFieldSpec spec) =>
-        spec.Parameter.Name?.Trim() ??
-        spec.Parameter.Identity?.Name.Trim() ??
-        spec.Parameter.SharedGuid?.Trim() ??
-        string.Empty;
+    private static string GetFieldLabel(ScheduleFieldSpec spec) {
+        var parameter = spec.GetEffectiveParameter();
+        return parameter.Name?.Trim() ??
+               parameter.Identity?.Name.Trim() ??
+               parameter.SharedGuid?.Trim() ??
+               string.Empty;
+    }
 }

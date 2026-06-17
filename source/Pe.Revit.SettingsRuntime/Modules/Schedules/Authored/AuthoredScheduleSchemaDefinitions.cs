@@ -81,6 +81,12 @@ internal sealed class ScheduleFieldSpecSchemaDefinition : SettingsSchemaDefiniti
         builder.Property(item => item.Parameter, property => {
             property.WithDescription("Schedule field parameter reference. Prefer identity or sharedGuid when available; use name as a fallback.");
         });
+        builder.Property(item => item.ParameterName, property => {
+            property.WithDescription("Human-authored schedule field parameter name. Used when Parameter is omitted or empty.");
+            property.DisallowNull();
+            property.DependsOnSibling(nameof(ScheduleProfile.CategoryName));
+            property.UseValueDomain(ValueDomainKeys.ScheduleFieldNames);
+        });
         builder.Property(item => item.PercentageOfField, property => {
             property.WithDescription("Required only when CalculatedType is Percentage.");
             property.DisallowNull();
@@ -161,6 +167,12 @@ internal sealed class CombinedParameterSpecSchemaDefinition : SettingsSchemaDefi
     public override void Configure(ISettingsSchemaBuilder<CombinedParameterSpec> builder) {
         builder.Property(item => item.Parameter, property => {
             property.WithDescription("Parameter reference to include in the combined field. Prefer identity or sharedGuid when available; use name as a fallback.");
+        });
+        builder.Property(item => item.ParameterName, property => {
+            property.WithDescription("Human-authored parameter name to include in the combined field. Used when Parameter is omitted or empty.");
+            property.DisallowNull();
+            property.DependsOnSibling(nameof(ScheduleProfile.CategoryName));
+            property.UseValueDomain(ValueDomainKeys.ScheduleFieldNames);
         });
         builder.Property(item => item.Prefix, property => {
             property.WithDescription("Optional text to add before this combined-parameter value. Omit for no prefix.");
