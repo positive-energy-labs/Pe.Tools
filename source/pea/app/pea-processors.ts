@@ -1,6 +1,7 @@
 import type { ErrorProcessor, InputProcessor } from "@mastra/core/processors";
 
-export function createPeaWorkbenchContextInjectionProcessor(): InputProcessor & ErrorProcessor {
+export function createPeaWorkbenchContextInjectionProcessor(): InputProcessor &
+  ErrorProcessor {
   return {
     id: "pea-workbench-context-injection",
     name: "Pea Workbench Context Injection",
@@ -22,7 +23,8 @@ type TransformResult =
   | { changed: false; value: unknown }
   | { changed: true; value: unknown | typeof removeValue };
 
-export function createOpenAIResponsesHistoryCompatProcessor(): InputProcessor & ErrorProcessor {
+export function createOpenAIResponsesHistoryCompatProcessor(): InputProcessor &
+  ErrorProcessor {
   return {
     id: "pea-openai-responses-history-compat",
     name: "Pea OpenAI Responses History Compatibility",
@@ -30,14 +32,21 @@ export function createOpenAIResponsesHistoryCompatProcessor(): InputProcessor & 
       "Prevents stale OpenAI Responses item references from breaking replay while preserving prompt caching intent.",
     processLLMRequest: ({ prompt }) => {
       const result = stripOpenAIResponsesItemReferences(prompt);
-      return result.changed ? { prompt: result.value as typeof prompt } : undefined;
+      return result.changed
+        ? { prompt: result.value as typeof prompt }
+        : undefined;
     },
     processAPIError: ({ error, messages, retryCount }) => {
-      if (retryCount > 0 || !isMissingOpenAIResponsesItemError(error)) return undefined;
+      if (retryCount > 0 || !isMissingOpenAIResponsesItemError(error))
+        return undefined;
 
       const result = stripOpenAIResponsesItemReferences(messages);
       if (result.changed && Array.isArray(result.value)) {
-        messages.splice(0, messages.length, ...(result.value as typeof messages));
+        messages.splice(
+          0,
+          messages.length,
+          ...(result.value as typeof messages),
+        );
       }
 
       return { retry: true };
@@ -60,7 +69,9 @@ export function isMissingOpenAIResponsesItemError(error: unknown): boolean {
   return /Item with id ['"]rs_[^'"]+['"] not found/i.test(errorToText(error));
 }
 
-function stripOpenAIResponsesItemReferencesCore(value: unknown): TransformResult {
+function stripOpenAIResponsesItemReferencesCore(
+  value: unknown,
+): TransformResult {
   if (Array.isArray(value)) {
     let changed = false;
     const next: unknown[] = [];
@@ -76,7 +87,8 @@ function stripOpenAIResponsesItemReferencesCore(value: unknown): TransformResult
 
   if (!isRecord(value)) return { changed: false, value };
 
-  if (isOpenAIResponsesItemReference(value)) return { changed: true, value: removeValue };
+  if (isOpenAIResponsesItemReference(value))
+    return { changed: true, value: removeValue };
 
   let changed = false;
   const next: Record<string, unknown> = {};
@@ -84,7 +96,8 @@ function stripOpenAIResponsesItemReferencesCore(value: unknown): TransformResult
     const providerOptionsResult = stripOpenAIItemIdFromProviderMap(key, child);
     if (providerOptionsResult.handled) {
       changed ||= providerOptionsResult.changed;
-      if (providerOptionsResult.value !== undefined) next[key] = providerOptionsResult.value;
+      if (providerOptionsResult.value !== undefined)
+        next[key] = providerOptionsResult.value;
       continue;
     }
 
@@ -100,12 +113,16 @@ function stripOpenAIResponsesItemReferencesCore(value: unknown): TransformResult
 function stripOpenAIItemIdFromProviderMap(
   key: string,
   value: unknown,
-): { handled: false } | { handled: true; changed: boolean; value: unknown | undefined } {
-  if (key !== "providerOptions" && key !== "providerMetadata") return { handled: false };
+):
+  | { handled: false }
+  | { handled: true; changed: boolean; value: unknown | undefined } {
+  if (key !== "providerOptions" && key !== "providerMetadata")
+    return { handled: false };
   if (!isRecord(value)) return { handled: true, changed: false, value };
 
   const openai = value.openai;
-  if (!isRecord(openai) || !("itemId" in openai)) return { handled: true, changed: false, value };
+  if (!isRecord(openai) || !("itemId" in openai))
+    return { handled: true, changed: false, value };
 
   const nextOpenAI = { ...openai };
   delete nextOpenAI.itemId;
@@ -117,11 +134,14 @@ function stripOpenAIItemIdFromProviderMap(
   return {
     handled: true,
     changed: true,
-    value: Object.keys(nextProviderMap).length > 0 ? nextProviderMap : undefined,
+    value:
+      Object.keys(nextProviderMap).length > 0 ? nextProviderMap : undefined,
   };
 }
 
-function isOpenAIResponsesItemReference(value: Record<string, unknown>): boolean {
+function isOpenAIResponsesItemReference(
+  value: Record<string, unknown>,
+): boolean {
   const type = value.type;
   return (
     (type === "item_reference" || type === "item-reference") &&
@@ -136,7 +156,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function errorToText(error: unknown): string {
   if (error instanceof Error) {
-    return [error.message, error.stack, errorToText((error as Error & { cause?: unknown }).cause)]
+    return [
+      error.message,
+      error.stack,
+      errorToText((error as Error & { cause?: unknown }).cause),
+    ]
       .filter(Boolean)
       .join("\n");
   }

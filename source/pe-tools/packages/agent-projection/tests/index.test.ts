@@ -244,6 +244,10 @@ test("projects ACP side-channel metadata into memory, inspector, model, mode, an
           currentModeId: "agent",
           availableModes: [{ id: "agent", name: "Agent" }],
         },
+        access: {
+          currentAccessLevel: "trusted",
+          availableAccessLevels: [{ id: "trusted", name: "Trusted" }],
+        },
         threads: [{ threadId: "thread-1", title: "Main thread" }],
         activeThreadId: "thread-1",
       },
@@ -274,6 +278,10 @@ test("projects ACP side-channel metadata into memory, inspector, model, mode, an
   expect(state.inspector.rawMessages).toHaveLength(1);
   expect(selectCurrentModelLabel(state)).toBe("GPT 5.5");
   expect(selectCurrentModeLabel(state)).toBe("Agent");
+  expect(state.access.currentAccessLevel).toBe("trusted");
+  expect(state.access.availableAccessLevels).toEqual([
+    expect.objectContaining({ id: "trusted", name: "Trusted" }),
+  ]);
   expect(state.threads.items).toEqual([expect.objectContaining({ threadId: "thread-1" })]);
   expect(state.threads.activeThreadId).toBe("thread-1");
 });
