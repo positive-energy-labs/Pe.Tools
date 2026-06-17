@@ -10,9 +10,9 @@ export function Composer({
   commands: WorkbenchCommands;
 }) {
   const [draft, setDraft] = useState("");
-  const running =
-    state.uiStatus.overall.status === "running" || state.uiStatus.send.status === "running";
-  const disabled = running || !state.agent.info;
+  const running = state.uiStatus.overall.status === "running";
+  const sending = state.uiStatus.send.status === "running";
+  const disabled = sending || !state.agent.info;
 
   const send = () => {
     const text = draft.trim();

@@ -1,5 +1,5 @@
 import { applyWorkbenchEvent, createWorkbenchState } from "@pe/agent-projection";
-import type { WorkbenchEvent, WorkbenchState } from "@pe/agent-contracts";
+import type { WorkbenchAccessLevel, WorkbenchEvent, WorkbenchState } from "@pe/agent-contracts";
 import { createBrowserWorkbenchClient, type BrowserWorkbenchClient } from "@pe/workbench-transport";
 import { useEffect, useMemo, useState } from "react";
 
@@ -12,6 +12,7 @@ export interface WorkbenchCommands {
   cancel(): Promise<void>;
   setModel(modelId: string): Promise<void>;
   setMode(modeId: string): Promise<void>;
+  setAccessLevel(accessLevel: WorkbenchAccessLevel): Promise<void>;
 }
 
 export interface WorkbenchViewModel {
@@ -92,6 +93,7 @@ function createCommands(
     cancel: () => run(() => client.cancel()),
     setModel: (modelId) => run(() => client.setModel(modelId)),
     setMode: (modeId) => run(() => client.setMode(modeId)),
+    setAccessLevel: (accessLevel) => run(() => client.setAccessLevel(accessLevel)),
   };
 }
 
