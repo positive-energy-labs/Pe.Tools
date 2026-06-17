@@ -11,7 +11,7 @@ The intended direction is architecture-led behavior. The prompt should orient th
 - `app/agent.ts` starts the Pea runtime through MastraCode's `MastraTUI` renderer.
 - `app/pea-runtime.ts` is the Pea-owned boundary over public Mastra Harness, Workspace, Memory, and auth seams.
 - `app/pea-agent.ts` constructs the `Agent`, tools, dynamic instructions, workspace/model resolution, and processors.
-- `app/pea-context-seed.ts` provides transient thread orientation and status-change invalidation.
+- `../pe-tools/apps/pea/src/context-signals.ts` provides snapshot-only Pea workbench context state signals.
 - `app/pea-instructions.ts` contains only Pea-specific orientation and boundaries.
 - `app/tools.ts` exposes the small Pe-specific tool set.
 - `app/host-operation-runtime.ts` searches/calls generated public operations and serializes bridge-backed calls client-side.

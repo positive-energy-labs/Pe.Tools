@@ -51,7 +51,7 @@ Default posture:
 - `app/pea-instructions.ts` - Pea-specific agent orientation.
 - `app/tools.ts` - Pe-specific Mastra tools.
 - `app/host-operation-runtime.ts` - generated operation search/call runtime and client-side single-flight behavior.
-- `app/pea-context-seed.ts` - transient startup/status-change context provider.
+- `../pe-tools/apps/pea/src/context-signals.ts` - snapshot-only Pea workbench context state-signal provider.
 - `app/pea-agent.ts` - Pea `Agent` construction.
 - `app/pea-runtime.ts` - Pea-owned runtime boundary over public Mastra Harness, Workspace, Memory, and auth seams.
 - `app/main.ts` - human CLI command tree.
