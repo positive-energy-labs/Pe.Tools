@@ -107,13 +107,21 @@ export class WorkbenchController {
   }
 
   async send(text: string): Promise<WorkbenchQueueMessageResult | undefined> {
-    return (await this.sendWithDelivery(text, "queued")) as WorkbenchQueueMessageResult | undefined;
+    return this.sendWithDelivery(text, "queued");
   }
 
   async sendImmediate(text: string): Promise<WorkbenchPromptResult | undefined> {
-    return (await this.sendWithDelivery(text, "immediate")) as WorkbenchPromptResult | undefined;
+    return this.sendWithDelivery(text, "immediate");
   }
 
+  private async sendWithDelivery(
+    text: string,
+    delivery: "queued",
+  ): Promise<WorkbenchQueueMessageResult | undefined>;
+  private async sendWithDelivery(
+    text: string,
+    delivery: "immediate",
+  ): Promise<WorkbenchPromptResult | undefined>;
   private async sendWithDelivery(
     text: string,
     delivery: "queued" | "immediate",

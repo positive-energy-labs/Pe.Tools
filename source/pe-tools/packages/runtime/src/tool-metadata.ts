@@ -1,4 +1,4 @@
-import type { HarnessConfig } from "@mastra/core/harness";
+import type { ToolsInput } from "@mastra/core/agent";
 
 export type RuntimeToolKind =
   | "read"
@@ -35,7 +35,7 @@ export interface RuntimeToolMetadata {
 export type RuntimeToolCatalog = ReadonlyMap<string, RuntimeToolMetadata>;
 export type RuntimeToolResolver = (toolName: string) => RuntimeToolMetadata | undefined;
 export type RuntimeToolSource = RuntimeToolCatalog | RuntimeToolResolver;
-export type RuntimeToolsInput = NonNullable<HarnessConfig<Record<string, unknown>>["tools"]>;
+export type RuntimeToolsInput = ToolsInput;
 
 export interface RuntimeCommandProfile<TCommand = unknown, TOptions = never> {
   createRootCommand?: (options?: TOptions) => TCommand;
@@ -129,5 +129,6 @@ function titleFromToolName(toolName: string): string {
 }
 
 function isIterable(value: RuntimeToolCatalogInput): value is Iterable<RuntimeToolMetadata> {
-  return typeof (value as Iterable<RuntimeToolMetadata>)[Symbol.iterator] === "function";
+  if (typeof value !== "object" || value === null) return false;
+  return Symbol.iterator in value && typeof value[Symbol.iterator] === "function";
 }

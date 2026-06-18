@@ -150,7 +150,7 @@ export class PeaCliCommands {
         const results = this.createHostClient(ctx.values.host).general.searchOperations({
           query: firstNonBlank(ctx.values.query),
           domain: firstNonBlank(ctx.values.domain),
-          intent: firstNonBlank(ctx.values.intent) as never,
+          intent: parseOperationIntent(ctx.values.intent),
           limit: ctx.values.limit,
           verbosity: parseOperationVerbosity(ctx.values.verbosity),
         });
@@ -442,6 +442,18 @@ function parseOperationVerbosity(value: unknown): "compact" | "hints" | "full" {
       return "full";
     default:
       throw new Error("Unknown verbosity. Expected compact, hints, or full.");
+  }
+}
+
+function parseOperationIntent(value: unknown): "Read" | "Mutate" | undefined {
+  const text = firstNonBlank(value);
+  if (!text) return undefined;
+  switch (text) {
+    case "Read":
+    case "Mutate":
+      return text;
+    default:
+      throw new Error("Unknown operation intent. Expected Read or Mutate.");
   }
 }
 

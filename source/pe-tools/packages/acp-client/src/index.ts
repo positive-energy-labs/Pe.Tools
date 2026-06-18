@@ -9,6 +9,19 @@ import {
   type ClientCapabilities,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
+  type InitializeRequest,
+  type InitializeResponse,
+  type NewSessionRequest,
+  type NewSessionResponse,
+  type ListSessionsRequest,
+  type ListSessionsResponse,
+  type LoadSessionRequest,
+  type LoadSessionResponse,
+  type PromptRequest,
+  type PromptResponse,
+  type CancelNotification,
+  type SetSessionModeRequest,
+  type SetSessionModeResponse,
   type SessionNotification,
   type Stream,
 } from "@agentclientprotocol/sdk";
@@ -23,6 +36,9 @@ import {
   type PeWorkbenchExtension,
   readPeWorkbenchExtension,
   readPeWorkbenchSessionMetadata,
+  readStopReason,
+  readWorkbenchJsonObject,
+  readWorkbenchLoadThreadResponse,
   type WorkbenchAccessLevel,
   type WorkbenchAccessLevelInfo,
   type WorkbenchAgentClient,
@@ -47,6 +63,7 @@ import {
   applyWorkbenchEvent,
   createWorkbenchState,
 } from "@pe/agent-projection";
+import { z } from "zod";
 
 export interface AcpWorkbenchClientOptions {
   clientName?: string;
@@ -60,9 +77,17 @@ export interface AcpStdioWorkbenchClientOptions extends AcpWorkbenchClientOption
   env?: Record<string, string>;
 }
 
-type AcpAgentConnection = Agent & {
+export type AcpAgentConnection = {
   closed: Promise<void>;
   signal: AbortSignal;
+  initialize(params: InitializeRequest): Promise<InitializeResponse>;
+  newSession(params: NewSessionRequest): Promise<NewSessionResponse>;
+  prompt(params: PromptRequest): Promise<PromptResponse>;
+  cancel(params: CancelNotification): Promise<void>;
+  listSessions?(params: ListSessionsRequest): Promise<ListSessionsResponse>;
+  loadSession?(params: LoadSessionRequest): Promise<LoadSessionResponse>;
+  setSessionMode?(params: SetSessionModeRequest): Promise<SetSessionModeResponse>;
+  extMethod?(method: string, params: Record<string, unknown>): Promise<Record<string, unknown>>;
 };
 
 interface LoadReplayCapture {
@@ -233,12 +258,11 @@ export class AcpWorkbenchClient implements Client, WorkbenchAgentClient {
       sessionId: request.sessionId,
       prompt: [{ type: "text", text: request.text }],
     });
+    const stopReason = readStopReason(response.stopReason);
     return {
       accepted: true,
       queued: response.queued === true,
-      ...(typeof response.stopReason === "string"
-        ? { stopReason: response.stopReason as WorkbenchQueueMessageResult["stopReason"] }
-        : {}),
+      ...(stopReason ? { stopReason } : {}),
     };
   }
 
@@ -363,33 +387,15 @@ export class AcpWorkbenchClient implements Client, WorkbenchAgentClient {
   async extNotification(_method: string, _params: Record<string, unknown>): Promise<void> {}
 
   private emitModeState(modes: unknown): void {
-    if (!isRecord(modes)) return;
-    const currentModeId = typeof modes.currentModeId === "string" ? modes.currentModeId : undefined;
-    const availableModes = Array.isArray(modes.availableModes)
-      ? modes.availableModes.flatMap((mode) => {
-          if (!isRecord(mode) || typeof mode.id !== "string" || typeof mode.name !== "string")
-            return [];
-          return [
-            {
-              id: mode.id,
-              name: mode.name,
-              description: typeof mode.description === "string" ? mode.description : undefined,
-              metadata: recordMetadata(mode._meta),
-            },
-          ];
-        })
-      : undefined;
-
+    const modeState = readModeState(modes);
+    if (!modeState) return;
     this.emit({
       type: "session_mode_updated",
-      sessionMode: {
-        currentModeId,
-        availableModes,
-      },
+      sessionMode: modeState,
     });
   }
 
-  private get agent(): Agent {
+  private get agent(): AcpAgentConnection {
     if (!this.connection) throw new Error("ACP workbench client is not connected.");
     return this.connection;
   }
@@ -446,10 +452,7 @@ export function createStdioAcpWorkbenchClient(
     env: { ...process.env, ...options.env },
     stdio: ["pipe", "pipe", "inherit"],
   });
-  const stream = ndJsonStream(
-    Writable.toWeb(child.stdin) as WritableStream<Uint8Array>,
-    Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>,
-  );
+  const stream = ndJsonStream(nodeWritableBytes(child.stdin), nodeReadableBytes(child.stdout));
   const client = new AcpWorkbenchClient(options);
   const connection = new ClientSideConnection(() => client, stream);
   return client.connect(connection, () => {
@@ -472,6 +475,49 @@ function createLinkedStreams(): { client: Stream; agent: Stream } {
   };
 }
 
+function nodeWritableBytes(stream: Writable): WritableStream<Uint8Array> {
+  const writer = Writable.toWeb(stream).getWriter();
+  return new WritableStream<Uint8Array>({
+    write: (chunk) => writer.write(chunk),
+    close: () => writer.close(),
+    abort: (reason) => writer.abort(reason),
+  });
+}
+
+function nodeReadableBytes(stream: Readable): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start: async (controller) => {
+      try {
+        for await (const chunk of stream) {
+          controller.enqueue(toUint8Array(chunk));
+        }
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+    cancel: () => {
+      stream.destroy();
+    },
+  });
+}
+
+function toUint8Array(chunk: unknown): Uint8Array<ArrayBuffer> {
+  if (chunk instanceof Uint8Array) return copyBytes(chunk);
+  if (typeof chunk === "string") return new TextEncoder().encode(chunk);
+  if (chunk instanceof ArrayBuffer) return new Uint8Array(chunk);
+  if (ArrayBuffer.isView(chunk)) {
+    return copyBytes(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+  }
+  throw new Error("ACP stdio stream emitted a non-byte chunk.");
+}
+
+function copyBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy;
+}
+
 function clientCapabilities(): ClientCapabilities {
   return {
     plan: {},
@@ -489,65 +535,64 @@ function clientCapabilities(): ClientCapabilities {
   };
 }
 
+const acpClientAccessLevelSchema = z.enum(["read-only", "ask", "trusted"]);
+const acpClientAccessLevelInfoSchema = z
+  .object({
+    id: acpClientAccessLevelSchema,
+    name: z.string(),
+    description: z.string().optional(),
+    metadata: z.unknown().optional(),
+  })
+  .passthrough()
+  .transform(
+    (value): WorkbenchAccessLevelInfo => ({
+      id: value.id,
+      name: value.name,
+      description: value.description,
+      metadata: recordMetadata(value.metadata),
+    }),
+  );
+const acpClientModeInfoSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string().optional(),
+    _meta: z.unknown().optional(),
+  })
+  .passthrough()
+  .transform((value) => ({
+    id: value.id,
+    name: value.name,
+    description: value.description,
+    metadata: recordMetadata(value._meta),
+  }));
+const acpClientModeStateSchema = z
+  .object({
+    currentModeId: z.string().optional(),
+    availableModes: z.array(acpClientModeInfoSchema).optional(),
+  })
+  .passthrough();
+
 function recordMetadata(value: unknown): WorkbenchJsonObject | undefined {
-  if (!isRecord(value)) return undefined;
-  return value as WorkbenchJsonObject;
+  return readWorkbenchJsonObject(value);
+}
+
+function readModeState(value: unknown):
+  | {
+      currentModeId?: string;
+      availableModes?: Array<z.output<typeof acpClientModeInfoSchema>>;
+    }
+  | undefined {
+  const modeState = acpClientModeStateSchema.safeParse(value);
+  return modeState.success ? modeState.data : undefined;
 }
 
 function readAccessLevels(value: unknown): WorkbenchAccessLevelInfo[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const levels = value.filter(isRecord).flatMap((item) => {
-    const id = readAccessLevel(item.id);
-    const name = typeof item.name === "string" ? item.name : undefined;
-    if (!id || !name) return [];
-    return [
-      {
-        id,
-        name,
-        description: typeof item.description === "string" ? item.description : undefined,
-        metadata: recordMetadata(item.metadata),
-      },
-    ];
-  });
-  return levels.length ? levels : undefined;
+  const levels = z.array(acpClientAccessLevelInfoSchema).safeParse(value);
+  return levels.success && levels.data.length ? levels.data : undefined;
 }
 
 function readAccessLevel(value: unknown): WorkbenchAccessLevel | undefined {
-  return value === "read-only" || value === "ask" || value === "trusted" ? value : undefined;
-}
-
-function readWorkbenchLoadThreadResponse(value: unknown): WorkbenchLoadThreadResponse | undefined {
-  if (!isRecord(value)) return undefined;
-  const session = readWorkbenchSessionInfo(value.session);
-  if (!session) return undefined;
-  return {
-    session,
-    ...(Array.isArray(value.messages)
-      ? { messages: value.messages as WorkbenchLoadThreadResponse["messages"] }
-      : {}),
-    ...(Array.isArray(value.events)
-      ? { events: value.events as WorkbenchLoadThreadResponse["events"] }
-      : {}),
-  };
-}
-
-function readWorkbenchSessionInfo(value: unknown): WorkbenchSessionInfo | undefined {
-  if (!isRecord(value)) return undefined;
-  const sessionId = typeof value.sessionId === "string" ? value.sessionId : undefined;
-  const cwd = typeof value.cwd === "string" ? value.cwd : undefined;
-  if (!sessionId || !cwd) return undefined;
-  return {
-    sessionId,
-    cwd,
-    additionalDirectories: Array.isArray(value.additionalDirectories)
-      ? value.additionalDirectories.filter((entry): entry is string => typeof entry === "string")
-      : [],
-    title: typeof value.title === "string" ? value.title : undefined,
-    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : undefined,
-    metadata: recordMetadata(value.metadata),
-  };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  const accessLevel = acpClientAccessLevelSchema.safeParse(value);
+  return accessLevel.success ? accessLevel.data : undefined;
 }

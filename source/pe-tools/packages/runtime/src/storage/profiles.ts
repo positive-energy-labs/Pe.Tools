@@ -60,7 +60,7 @@ export async function createRuntimeLibSqlStorage(
   if (localPath) await mkdir(dirname(localPath), { recursive: true });
 
   const store = new LibSQLStore(config);
-  const client = (store as unknown as { client?: unknown }).client;
+  const client = readRecord(store).client;
   if (isLibSqlClient(client)) {
     store.stores = {
       ...store.stores,
@@ -138,11 +138,15 @@ export function getDefaultPeaProductStateDirectory(): string {
 function isLibSqlClient(
   value: unknown,
 ): value is Parameters<typeof createRuntimeLibSqlThreadStateStore>[0] {
-  return (
-    !!value &&
-    typeof value === "object" &&
-    typeof (value as { execute?: unknown }).execute === "function"
-  );
+  return typeof readRecord(value).execute === "function";
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function resolveRuntimeLibSqlConfig(

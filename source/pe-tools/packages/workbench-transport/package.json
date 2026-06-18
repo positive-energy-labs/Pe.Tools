@@ -25,7 +25,8 @@
   },
   "dependencies": {
     "@pe/agent-contracts": "workspace:*",
-    "@pe/workbench-core": "workspace:*"
+    "@pe/workbench-core": "workspace:*",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@pe/agent-projection": "workspace:*",

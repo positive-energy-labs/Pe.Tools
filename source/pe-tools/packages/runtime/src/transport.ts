@@ -56,7 +56,3 @@ function firstHeaderValue(request: IncomingMessage, headerNames: string[]): stri
   }
   return undefined;
 }
-
-export type PeaLocalTransportAuth = RuntimeLocalTransportAuth;
-export type PeaLocalTransportAuthOptions = RuntimeLocalTransportAuthOptions;
-export { createRuntimeLocalTransportAuth as createPeaLocalTransportAuth };

@@ -39,7 +39,7 @@ async function loadMastraCodeModelResolver(
   options?: MastraCodeModelResolveOptions,
 ): Promise<MastraCodeModelResolver> {
   resolverTask ??= (async () => {
-    const rootModule = (await import("mastracode")) as MastraCodeModule;
+    const rootModule = readMastraCodeModule(await import("mastracode"));
     if (rootModule.resolveModel) return rootModule.resolveModel;
 
     if (!rootModule.createMastraCode) {
@@ -61,13 +61,40 @@ async function loadMastraCodeModelResolver(
 }
 
 function resolveMastraCodeRuntimeCwd(requestContext: RequestContext | undefined): string {
-  const harness = requestContext?.get("harness") as
-    | { getState?: () => Record<string, unknown> }
-    | undefined;
-  const state = harness?.getState?.();
+  const harness = readRecord(requestContext?.get("harness"));
+  const getState = harness.getState;
+  const state = typeof getState === "function" ? readRecord(getState.call(harness)) : {};
   for (const key of ["productHomePath", "projectPath", "workspaceRoot", "cwd"]) {
-    const value = state?.[key];
+    const value = state[key];
     if (typeof value === "string" && value.length > 0) return value;
   }
   return process.cwd();
+}
+
+function readMastraCodeModule(value: unknown): MastraCodeModule {
+  const record = readRecord(value);
+  return {
+    createMastraCode: isMastraCodeRuntimeFactory(record.createMastraCode)
+      ? record.createMastraCode
+      : undefined,
+    resolveModel: isMastraCodeModelResolver(record.resolveModel) ? record.resolveModel : undefined,
+  };
+}
+
+function isMastraCodeRuntimeFactory(
+  value: unknown,
+): value is NonNullable<MastraCodeModule["createMastraCode"]> {
+  return typeof value === "function";
+}
+
+function isMastraCodeModelResolver(value: unknown): value is MastraCodeModelResolver {
+  return typeof value === "function";
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

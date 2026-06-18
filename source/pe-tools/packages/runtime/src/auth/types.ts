@@ -60,5 +60,9 @@ export async function logoutRuntimeAuth(profile: RuntimeAuthProfile | undefined)
 }
 
 function stripUndefined<T extends object>(value: T): T {
-  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as T;
+  const result = { ...value };
+  for (const key in result) {
+    if (result[key] === undefined) delete result[key];
+  }
+  return result;
 }

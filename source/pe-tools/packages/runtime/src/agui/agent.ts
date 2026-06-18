@@ -16,7 +16,12 @@ import {
   type RuntimeAuthProfile,
 } from "../auth/types.ts";
 import { toAgUiAuthCapabilities } from "../auth/protocol.ts";
-import type { RuntimeDescriptor, RuntimeFactory, RuntimeHandle } from "../runtime.ts";
+import type {
+  RuntimeDescriptor,
+  RuntimeFactory,
+  RuntimeHandle,
+  RuntimeHandleServices,
+} from "../runtime.ts";
 import { RuntimeInterruptCollector, toRuntimeResumeDecisions } from "../interrupts.ts";
 import { createRuntimePrompt, type RuntimePrompt, type RuntimePromptPart } from "../prompts.ts";
 import {
@@ -27,17 +32,24 @@ import { describeRuntimeProtocolStatus } from "../protocol-status.ts";
 import type { RuntimeResource } from "../resources.ts";
 import { sanitizeJson } from "../events.ts";
 import { RuntimeToAgUiEvents } from "./events-map-runtime-agui.ts";
+import { z } from "zod";
 
-export interface RuntimeAgUiRuntimeOptions {
-  factory: RuntimeFactory;
+export interface RuntimeAgUiRuntimeOptions<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+> {
+  factory: RuntimeFactory<TState, TServices>;
   descriptor?: RuntimeDescriptor;
   auth?: RuntimeAuthProfile;
-  override?: RuntimeHandle;
+  override?: RuntimeHandle<TState, TServices>;
 }
 
-export interface RuntimeAgUiSessionOptions {
+export interface RuntimeAgUiSessionOptions<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+> {
   defaultCwd?: string;
-  manager?: RuntimeProtocolSessions;
+  manager?: RuntimeProtocolSessions<TState, TServices>;
 }
 
 export interface RuntimeAgUiTransportOptions {
@@ -45,9 +57,12 @@ export interface RuntimeAgUiTransportOptions {
   token?: string;
 }
 
-export interface RuntimeAgUiAgentOptions {
-  runtime?: RuntimeAgUiRuntimeOptions;
-  sessions?: RuntimeAgUiSessionOptions;
+export interface RuntimeAgUiAgentOptions<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+> {
+  runtime?: RuntimeAgUiRuntimeOptions<TState, TServices>;
+  sessions?: RuntimeAgUiSessionOptions<TState, TServices>;
   transport?: RuntimeAgUiTransportOptions;
 }
 
@@ -64,10 +79,13 @@ export interface RuntimeAgUiServerInfo {
 const defaultPort = 43112;
 const loopbackHost = "127.0.0.1";
 
-export class RuntimeAgUiAgent {
-  private readonly runtimeSessions: RuntimeProtocolSessions;
+export class RuntimeAgUiAgent<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+> {
+  private readonly runtimeSessions: RuntimeProtocolSessions<TState, TServices>;
 
-  constructor(private readonly options: RuntimeAgUiAgentOptions) {
+  constructor(private readonly options: RuntimeAgUiAgentOptions<TState, TServices>) {
     this.runtimeSessions =
       options.sessions?.manager ??
       new RuntimeProtocolSessions({
@@ -200,16 +218,22 @@ export class RuntimeAgUiAgent {
   }
 }
 
-function agUiTransport(options: RuntimeAgUiAgentOptions): RuntimeAgUiTransportOptions {
+function agUiTransport<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+>(options: RuntimeAgUiAgentOptions<TState, TServices>): RuntimeAgUiTransportOptions {
   return options.transport ?? {};
 }
 
-export class RuntimeAgUiHttpAgent {
+export class RuntimeAgUiHttpAgent<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+> {
   private readonly auth: RuntimeLocalTransportAuth;
   private server: ReturnType<typeof createServer> | null = null;
-  private agent: RuntimeAgUiAgent;
+  private agent: RuntimeAgUiAgent<TState, TServices>;
 
-  constructor(private readonly options: RuntimeAgUiAgentOptions) {
+  constructor(private readonly options: RuntimeAgUiAgentOptions<TState, TServices>) {
     this.auth = createRuntimeLocalTransportAuth({
       token: agUiTransport(options).token,
       headerNames: [
@@ -445,7 +469,10 @@ function agUiRuntimeScope(input: RunAgentInput, defaultCwd: string): RuntimeAgUi
   };
 }
 
-function defaultAgUiCwd(options: RuntimeAgUiAgentOptions): string {
+function defaultAgUiCwd<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+>(options: RuntimeAgUiAgentOptions<TState, TServices>): string {
   return options.sessions?.defaultCwd ?? runtimeOverride(options)?.workspace?.cwd ?? process.cwd();
 }
 
@@ -460,7 +487,7 @@ function stripRuntimeAgUiForwardedProps(forwardedProps: unknown): unknown {
 
 function messagePromptParts(message: Message | undefined): RuntimePromptPart[] {
   if (!message) return [];
-  const content = (message as { content?: unknown }).content;
+  const content = readRecord(message)?.content;
   if (typeof content === "string") return [{ text: content }];
   if (!Array.isArray(content)) return [{ text: messageText(message) }].filter((part) => part.text);
 
@@ -486,7 +513,7 @@ function findLastUserMessageIndex(messages: Message[]): number {
 
 function messageText(message: Message | undefined): string {
   if (!message) return "";
-  const content = (message as { content?: unknown }).content;
+  const content = readRecord(message)?.content;
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content
@@ -505,7 +532,7 @@ function messageText(message: Message | undefined): string {
 }
 
 function agUiInputResource(messageId: string, index: number, part: unknown): RuntimeResource {
-  const record = isRecord(part) ? part : {};
+  const record = readRecord(part) ?? {};
   const type = typeof record.type === "string" ? record.type : "input";
   const source = isRecord(record.source) ? record.source : undefined;
   const mimeType =
@@ -556,32 +583,52 @@ function contextEntries(context: Context[]): Context[] {
   }));
 }
 
-function runtimeBaseFactory(options: RuntimeAgUiAgentOptions): RuntimeFactory {
+function runtimeBaseFactory<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+>(options: RuntimeAgUiAgentOptions<TState, TServices>): RuntimeFactory<TState, TServices> {
   const factory = options.runtime?.factory;
   if (!factory) throw new Error("Runtime AG-UI agent requires runtime.factory.");
   return factory;
 }
 
-function runtimeOverride(options: RuntimeAgUiAgentOptions): RuntimeHandle | undefined {
+function runtimeOverride<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+>(
+  options: RuntimeAgUiAgentOptions<TState, TServices>,
+): RuntimeHandle<TState, TServices> | undefined {
   return options.runtime?.override;
 }
 
-function runtimeDescriptor(options: RuntimeAgUiAgentOptions): RuntimeDescriptor {
+function runtimeDescriptor<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+>(options: RuntimeAgUiAgentOptions<TState, TServices>): RuntimeDescriptor {
   return options.runtime?.descriptor ?? runtimeBaseFactory(options).descriptor;
 }
 
-function runtimeAuthProfile(options: RuntimeAgUiAgentOptions): RuntimeAuthProfile | undefined {
+function runtimeAuthProfile<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+>(options: RuntimeAgUiAgentOptions<TState, TServices>): RuntimeAuthProfile | undefined {
   return options.runtime?.auth ?? runtimeBaseFactory(options).auth;
 }
 
-function runtimeAuthDescriptor(options: RuntimeAgUiAgentOptions): RuntimeAuthDescriptor {
+function runtimeAuthDescriptor<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+>(options: RuntimeAgUiAgentOptions<TState, TServices>): RuntimeAuthDescriptor {
   return (
     runtimeAuthProfile(options)?.descriptor ??
     createRuntimeAuthDescriptor({ source: "none", methods: [] })
   );
 }
 
-function runtimeFactory(options: RuntimeAgUiAgentOptions): RuntimeFactory {
+function runtimeFactory<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+>(options: RuntimeAgUiAgentOptions<TState, TServices>): RuntimeFactory<TState, TServices> {
   const override = runtimeOverride(options);
   if (!override) return runtimeBaseFactory(options);
 
@@ -592,7 +639,10 @@ function runtimeFactory(options: RuntimeAgUiAgentOptions): RuntimeFactory {
   };
 }
 
-function agUiCapabilities(options: RuntimeAgUiAgentOptions): AgentCapabilities {
+function agUiCapabilities<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+>(options: RuntimeAgUiAgentOptions<TState, TServices>): AgentCapabilities {
   const descriptor = runtimeDescriptor(options);
   const auth = runtimeAuthDescriptor(options);
   return {
@@ -676,15 +726,14 @@ function nextAgUiEventSequence(history: ReturnType<RuntimeProtocolSessions["hist
   return Math.max(0, ...sequences) + 1;
 }
 
-async function readRuntimeSessionHistory(
-  manager: RuntimeProtocolSessions,
+async function readRuntimeSessionHistory<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+>(
+  manager: RuntimeProtocolSessions<TState, TServices>,
   id: string,
 ): Promise<ReturnType<RuntimeProtocolSessions["history"]>> {
-  const reader = manager as RuntimeProtocolSessions & {
-    readHistory?: (id: string) => Promise<ReturnType<RuntimeProtocolSessions["history"]>>;
-  };
-  if (typeof reader.readHistory === "function") return reader.readHistory(id);
-  return manager.history(id);
+  return manager.readHistory(id);
 }
 
 function isAgUiProtocolHistoryEntry(
@@ -696,12 +745,12 @@ function isAgUiProtocolHistoryEntry(
   return entry.type === "protocol_event" && entry.protocol === "ag-ui";
 }
 
+const agUiRecordSchema = z.record(z.string(), z.unknown());
+const agUiEventEnvelopeSchema = z.object({ type: z.string() }).passthrough();
+const agUiStringArraySchema = z.array(z.string());
+
 function isAgUiEvent(value: unknown): value is BaseEvent {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as { type?: unknown }).type === "string"
-  );
+  return agUiEventEnvelopeSchema.safeParse(value).success;
 }
 
 function isUnknownSessionError(error: unknown): boolean {
@@ -709,8 +758,7 @@ function isUnknownSessionError(error: unknown): boolean {
 }
 
 function agUiEventSequence(value: unknown): number {
-  if (typeof value !== "object" || value === null) return 0;
-  const sequence = (value as { sequence?: unknown }).sequence;
+  const sequence = readRecord(value)?.sequence;
   return typeof sequence === "number" && Number.isFinite(sequence) ? sequence : 0;
 }
 
@@ -722,8 +770,13 @@ function isMeaningfulJson(value: unknown): boolean {
   return true;
 }
 
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  const record = agUiRecordSchema.safeParse(value);
+  return record.success ? record.data : undefined;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return agUiRecordSchema.safeParse(value).success;
 }
 
 function firstString(...values: unknown[]): string | undefined {
@@ -733,8 +786,6 @@ function firstString(...values: unknown[]): string | undefined {
 }
 
 function stringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter(
-    (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
-  );
+  const entries = agUiStringArraySchema.safeParse(value);
+  return entries.success ? entries.data.filter((entry) => entry.trim().length > 0) : [];
 }

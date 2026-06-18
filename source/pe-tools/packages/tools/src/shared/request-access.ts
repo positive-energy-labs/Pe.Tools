@@ -4,16 +4,6 @@ import { createTool } from "@mastra/core/tools";
 import { LocalFilesystem } from "@mastra/core/workspace";
 import z from "zod";
 
-interface RequestAccessInput {
-  path: string;
-  reason: string;
-}
-
-interface RequestAccessToolContext {
-  requestContext?: { get: (key: string) => unknown };
-  workspace?: { filesystem?: unknown };
-}
-
 interface PeaSandboxState {
   sandboxAllowedPaths?: string[];
   projectPath?: string;
@@ -25,6 +15,7 @@ interface RuntimeThreadSettingsContext {
 }
 
 interface RequestAccessHarnessContext {
+  state?: PeaSandboxState;
   getState?: () => PeaSandboxState;
   setState?: (updates: Partial<PeaSandboxState>) => Promise<void> | void;
   updateState?: <TResult>(
@@ -43,17 +34,15 @@ const requestAccessInputSchema = z.object({
   reason: z.string().min(1).describe("Brief explanation of why you need access to this directory."),
 });
 
+type RequestAccessInput = z.infer<typeof requestAccessInputSchema>;
+
 export const requestAccess = createTool({
   id: "request_access",
   description:
     "Request permission to access a directory outside the current Pea workspace. Use this when the user asks you to inspect or edit files outside the sandbox. Approval grants the active workspace access to the directory for this runtime session.",
   inputSchema: requestAccessInputSchema,
-  requireApproval: async (input: RequestAccessInput, context: RequestAccessToolContext) =>
-    requestAccessRequiresApproval(input, context),
-  execute: async (
-    { path: requestedPath }: RequestAccessInput,
-    context: RequestAccessToolContext,
-  ) => {
+  requireApproval: async (input, context) => requestAccessRequiresApproval(input, context),
+  execute: async ({ path: requestedPath }, context) => {
     try {
       const access = resolveRequestAccessContext(requestedPath, context);
       if (isPathAllowed(access.absolutePath, access.projectRoot, access.allowedPaths)) {
@@ -81,11 +70,11 @@ export const requestAccess = createTool({
       };
     }
   },
-} as any);
+});
 
 export function requestAccessRequiresApproval(
   { path: requestedPath }: RequestAccessInput,
-  context: RequestAccessToolContext,
+  context: unknown,
 ): boolean {
   const access = resolveRequestAccessContext(requestedPath, context);
   return !isPathAllowed(access.absolutePath, access.projectRoot, access.allowedPaths);
@@ -158,15 +147,15 @@ export function isPathAllowed(
   return roots.some((root) => resolved === root || resolved.startsWith(root + path.sep));
 }
 
-function resolveRequestAccessContext(requestedPath: string, toolContext: RequestAccessToolContext) {
-  const harnessCtx = toolContext?.requestContext?.get("harness") as
-    | RequestAccessHarnessContext
-    | undefined;
-  const filesystem = toolContext?.workspace?.filesystem ?? harnessCtx?.workspace?.filesystem;
+function resolveRequestAccessContext(requestedPath: string, toolContext: unknown) {
+  const harnessCtx = readRequestAccessHarnessContext(
+    readToolRequestContextValue(toolContext, "harness"),
+  );
+  const filesystem = readToolContextFilesystem(toolContext) ?? harnessCtx?.workspace?.filesystem;
   const localFilesystem = filesystem instanceof LocalFilesystem ? filesystem : undefined;
-  const threadSettings = toolContext?.requestContext?.get(runtimeThreadSettingsKey) as
-    | RuntimeThreadSettingsContext
-    | undefined;
+  const threadSettings = readRuntimeThreadSettingsContext(
+    readToolRequestContextValue(toolContext, runtimeThreadSettingsKey),
+  );
   const absolutePath = resolveRequestedPath(requestedPath, localFilesystem?.basePath);
   const projectRoot = localFilesystem?.basePath ?? process.cwd();
   const allowedPaths = getAllowedPathsFromContext(toolContext, localFilesystem);
@@ -174,14 +163,76 @@ function resolveRequestAccessContext(requestedPath: string, toolContext: Request
 }
 
 function getAllowedPathsFromContext(
-  toolContext: RequestAccessToolContext | undefined,
+  toolContext: unknown,
   localFilesystem: LocalFilesystem | undefined,
 ): string[] {
-  const harnessCtx = toolContext?.requestContext?.get("harness") as
-    | { state?: PeaSandboxState; getState?: () => PeaSandboxState }
-    | undefined;
+  const harnessCtx = readRequestAccessHarnessContext(
+    readToolRequestContextValue(toolContext, "harness"),
+  );
   const state = harnessCtx?.getState?.() ?? harnessCtx?.state;
   return [...(localFilesystem?.allowedPaths ?? []), ...(state?.sandboxAllowedPaths ?? [])];
+}
+
+function readToolRequestContextValue(toolContext: unknown, key: string): unknown {
+  const context = readRecord(toolContext);
+  const requestContext = context.requestContext;
+  if (hasRequestContextGetter(requestContext)) return requestContext.get(key);
+  if (isRecord(requestContext)) return requestContext[key];
+  return undefined;
+}
+
+function hasRequestContextGetter(value: unknown): value is { get: (key: string) => unknown } {
+  return isRecord(value) && typeof value.get === "function";
+}
+
+function readToolContextFilesystem(toolContext: unknown): unknown {
+  const workspace = readRecord(readRecord(toolContext).workspace);
+  return workspace.filesystem;
+}
+
+function readRequestAccessHarnessContext(value: unknown): RequestAccessHarnessContext | undefined {
+  if (!isRequestAccessHarnessContext(value)) return undefined;
+  return value;
+}
+
+function isRequestAccessHarnessContext(value: unknown): value is RequestAccessHarnessContext {
+  if (!isRecord(value)) return false;
+  return (
+    (value.state == null || isPeaSandboxState(value.state)) &&
+    (value.getState == null || typeof value.getState === "function") &&
+    (value.setState == null || typeof value.setState === "function") &&
+    (value.updateState == null || typeof value.updateState === "function") &&
+    (value.workspace == null || isRecord(value.workspace))
+  );
+}
+
+function readRuntimeThreadSettingsContext(
+  value: unknown,
+): RuntimeThreadSettingsContext | undefined {
+  return isRuntimeThreadSettingsContext(value) ? value : undefined;
+}
+
+function isRuntimeThreadSettingsContext(value: unknown): value is RuntimeThreadSettingsContext {
+  return isRecord(value) && typeof value.setThreadSetting === "function";
+}
+
+function isPeaSandboxState(value: unknown): value is PeaSandboxState {
+  if (!isRecord(value)) return false;
+  return (
+    (value.sandboxAllowedPaths == null ||
+      (Array.isArray(value.sandboxAllowedPaths) &&
+        value.sandboxAllowedPaths.every((entry) => typeof entry === "string"))) &&
+    (value.projectPath == null || typeof value.projectPath === "string") &&
+    (value.configDir == null || typeof value.configDir === "string")
+  );
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function expandTilde(value: string): string {

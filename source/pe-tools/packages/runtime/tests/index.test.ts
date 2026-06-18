@@ -1,9 +1,11 @@
 import os from "node:os";
 import path from "node:path";
+import type { NewSessionRequest, PromptRequest } from "@agentclientprotocol/sdk";
+import type { HarnessEvent } from "@mastra/core/harness";
 import type { RequestContext } from "@mastra/core/request-context";
 import {
   peWorkbenchLoadThreadMethod,
-  type WorkbenchLoadThreadSnapshotResponse,
+  readWorkbenchLoadThreadResponse,
   type WorkbenchMessage,
   type WorkbenchMessagePart,
 } from "@pe/agent-contracts";
@@ -22,7 +24,10 @@ import {
   type RuntimeFactory,
   type RuntimeFactoryOptions,
   type RuntimeHandle,
+  type RuntimeHandleServices,
+  type RuntimeInjectedHarnessConfig,
   type RuntimeSessions,
+  type RuntimeThreadStateStore,
 } from "../src/index.ts";
 
 test("runtime history treats drafts as empty but fails loudly for materialized sessions without ledger access", async () => {
@@ -61,18 +66,24 @@ test("kernel ledger replays the same user and assistant transcript through ACP w
     { runtime: { factory } },
   );
 
-  const session = await agent.newSession({ cwd: testCwd() } as never);
+  const session = await agent.newSession({
+    cwd: testCwd(),
+    mcpServers: [],
+  } satisfies NewSessionRequest);
   await agent.prompt({
     sessionId: session.sessionId,
     prompt: [{ type: "text", text: "kernel ledger prompt" }],
-  } as never);
+  } satisfies PromptRequest);
 
-  const snapshot = (await agent.extMethod?.(peWorkbenchLoadThreadMethod, {
-    sessionId: session.sessionId,
-    cwd: testCwd(),
-  })) as unknown as WorkbenchLoadThreadSnapshotResponse;
+  const snapshot = readWorkbenchLoadThreadResponse(
+    await agent.extMethod?.(peWorkbenchLoadThreadMethod, {
+      sessionId: session.sessionId,
+      cwd: testCwd(),
+    }),
+  );
+  if (!snapshot) throw new Error("Expected workbench load thread snapshot.");
 
-  expect(snapshot.messages.map(messageSummary)).toEqual([
+  expect(snapshot.messages?.map(messageSummary)).toEqual([
     { role: "user", text: "kernel ledger prompt" },
     { role: "assistant", text: "kernel ledger answer" },
   ]);
@@ -189,7 +200,7 @@ test("kernel resume rejects illegal moves before switching harness threads", asy
       fakeThread("thread-2", "2026-06-17T14:00:00.000Z"),
     ],
   });
-  const kernel = createRuntimeKernel(harness as never);
+  const kernel = createRuntimeKernel(harness);
 
   await kernel.resumeThreadSession({
     sessionId: "session-1",
@@ -214,27 +225,29 @@ test("runtime harness close releases locks and closes storage when ledger flush 
   const thread = await harness.createThread({ title: "Flush failure" });
   let releasedThreadId: string | undefined;
   let storageClosed = false;
+  const config: RuntimeInjectedHarnessConfig = {
+    storage: {
+      close: async () => {
+        storageClosed = true;
+      },
+    },
+    threadLock: {
+      release: (threadId: string) => {
+        releasedThreadId = threadId;
+      },
+    },
+  };
+  const threadStateStore: RuntimeThreadStateStore = {
+    getState: async () => undefined,
+    setState: async () => {
+      throw new Error("flush failed");
+    },
+  };
   const runtime = await createRuntimeHarness({
-    config: {
-      storage: {
-        close: () => {
-          storageClosed = true;
-        },
-      },
-      threadLock: {
-        release: (threadId: string) => {
-          releasedThreadId = threadId;
-        },
-      },
-    } as never,
-    harness: harness as never,
+    config,
+    harness,
     sessionOptions: {
-      threadStateStore: {
-        getState: async () => undefined,
-        setState: async () => {
-          throw new Error("flush failed");
-        },
-      } as never,
+      threadStateStore,
     },
   });
 
@@ -255,9 +268,13 @@ function createKernelRuntimeFactory(
     harness?: FakeRuntimeHarness;
     onSend?: RuntimeSendObserver;
   } = {},
-  factoryOptions?: RuntimeFactoryOptions<Record<string, unknown>>,
-): RuntimeFactory {
-  return createRuntimeFactory(
+  factoryOptions?: RuntimeFactoryOptions<
+    Record<string, unknown>,
+    RuntimeHandleServices,
+    FakeRuntimeHarness
+  >,
+): RuntimeFactory<Record<string, unknown>, RuntimeHandleServices, FakeRuntimeHarness> {
+  return createRuntimeFactory<Record<string, unknown>, RuntimeHandleServices, FakeRuntimeHarness>(
     createRuntimeDescriptor("test-runtime", {
       modeName: "Test",
       agentName: "Test Agent",
@@ -267,15 +284,22 @@ function createKernelRuntimeFactory(
   );
 }
 
-function createFallbackRuntimeFactory(): RuntimeFactory {
-  return createRuntimeFactory(createRuntimeDescriptor("fallback-runtime"), async (request) => {
-    const harness = new FakeRuntimeHarness();
-    return {
-      harness: harness as never,
-      sessions: createFallbackRuntimeSessions(harness),
-      workspace: { cwd: request.cwd, root: request.workspaceRoot },
-    };
-  });
+function createFallbackRuntimeFactory(): RuntimeFactory<
+  Record<string, unknown>,
+  RuntimeHandleServices,
+  FakeRuntimeHarness
+> {
+  return createRuntimeFactory<Record<string, unknown>, RuntimeHandleServices, FakeRuntimeHarness>(
+    createRuntimeDescriptor("fallback-runtime"),
+    async (request) => {
+      const harness = new FakeRuntimeHarness();
+      return {
+        harness,
+        sessions: createFallbackRuntimeSessions(harness),
+        workspace: { cwd: request.cwd, root: request.workspaceRoot },
+      };
+    },
+  );
 }
 
 function createKernelRuntimeHandle(
@@ -284,13 +308,13 @@ function createKernelRuntimeHandle(
     harness?: FakeRuntimeHarness;
     onSend?: RuntimeSendObserver;
   },
-): RuntimeHandle {
+): RuntimeHandle<Record<string, unknown>, RuntimeHandleServices, FakeRuntimeHarness> {
   const harness = options.harness ?? new FakeRuntimeHarness({ onSend: options.onSend });
-  const kernel = createRuntimeKernel(harness as never);
+  const kernel = createRuntimeKernel(harness);
   return {
-    harness: harness as never,
+    harness,
     kernel,
-    sessions: createRuntimeSessions(harness as never, { kernel }),
+    sessions: createRuntimeSessions(harness, { kernel }),
     workspace: { cwd: request.cwd, root: request.workspaceRoot },
     close: () => undefined,
   };
@@ -314,8 +338,8 @@ function createFallbackRuntimeSessions(harness: FakeRuntimeHarness): RuntimeSess
     abort() {
       harness.abort();
     },
-    subscribe(listener) {
-      return harness.subscribe(listener as (event: unknown) => void | Promise<void>);
+    subscribe(_listener) {
+      return harness.subscribe(() => undefined);
     },
   };
 }
@@ -329,7 +353,7 @@ type RuntimeSendObserver = (message: RuntimeSendMessage, harness: FakeRuntimeHar
 class FakeRuntimeHarness {
   private readonly threads: FakeThread[] = [];
   private readonly lockedThreadIds: Set<string>;
-  private readonly subscribers = new Set<(event: unknown) => void | Promise<void>>();
+  private readonly subscribers = new Set<(event: HarnessEvent) => void | Promise<void>>();
   private readonly onSend?: RuntimeSendObserver;
   private currentThreadId: string | undefined;
   private state: Record<string, unknown> = {};
@@ -402,18 +426,20 @@ class FakeRuntimeHarness {
     return false;
   }
 
-  subscribe(listener: (event: unknown) => void | Promise<void>): () => void {
+  subscribe(listener: (event: HarnessEvent) => void | Promise<void>): () => void {
     this.subscribers.add(listener);
     return () => this.subscribers.delete(listener);
   }
 
   emitAssistantMessage(messageId: string, text: string): void {
+    const createdAt = new Date("2026-06-17T12:00:00.000Z");
     this.emit({
       type: "message_update",
       message: {
         id: messageId,
         role: "assistant",
-        content: [{ text }],
+        content: [{ type: "text", text }],
+        createdAt,
       },
     });
     this.emit({
@@ -421,7 +447,8 @@ class FakeRuntimeHarness {
       message: {
         id: messageId,
         role: "assistant",
-        content: [{ text }],
+        content: [{ type: "text", text }],
+        createdAt,
         stopReason: "complete",
       },
     });
@@ -475,17 +502,10 @@ function fakeThread(id: string, updatedAt: string): FakeThread {
   };
 }
 
-type FakeHarnessEvent =
-  | {
-      type: "message_update" | "message_end";
-      message: {
-        id: string;
-        role: "assistant";
-        content: Array<{ text: string }>;
-        stopReason?: string;
-      };
-    }
-  | { type: "agent_start" | "agent_end"; reason?: string };
+type FakeHarnessEvent = Extract<
+  HarnessEvent,
+  { type: "message_update" | "message_end" | "agent_start" | "agent_end" }
+>;
 
 function messageSummary(message: WorkbenchMessage): { role: string; text: string } {
   return {

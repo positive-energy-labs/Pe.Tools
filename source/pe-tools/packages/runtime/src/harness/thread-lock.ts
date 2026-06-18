@@ -110,7 +110,7 @@ export function isThreadLockError(
   error: unknown,
 ): error is ThreadLockError & { threadId: string; ownerPid: number } {
   if (!(error instanceof Error)) return false;
-  const candidate = error as Partial<ThreadLockError>;
+  const candidate = readRecord(error);
   return (
     error.name === "ThreadLockError" &&
     typeof candidate.threadId === "string" &&
@@ -166,11 +166,11 @@ function readLockOwnerPid(lockPath: string): number | null {
 }
 
 function isAlreadyExistsError(error: unknown): boolean {
-  return (error as NodeJS.ErrnoException | undefined)?.code === "EEXIST";
+  return readStringProperty(error, "code") === "EEXIST";
 }
 
 function isMissingFileError(error: unknown): boolean {
-  return (error as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
+  return readStringProperty(error, "code") === "ENOENT";
 }
 
 function releaseLockFile(lockPath: string, currentPid: number): void {
@@ -230,10 +230,8 @@ async function resolveMastraCodeThreadLockErrorPrototypeFromEsm(
     if (!exportsThreadLockError(modulePath)) continue;
 
     try {
-      const module = (await import(pathToFileURL(modulePath).href)) as {
-        ThreadLockError?: { prototype?: object };
-      };
-      if (module.ThreadLockError?.prototype) return module.ThreadLockError.prototype;
+      const prototype = readThreadLockErrorPrototype(await import(pathToFileURL(modulePath).href));
+      if (prototype) return prototype;
     } catch {
       // Private MastraCode bundle shape varies; structural detection remains the fallback.
     }
@@ -247,10 +245,9 @@ function resolveMastraCodeThreadLockErrorPrototypeFromCjs(packageRoot: string): 
     if (!exportsThreadLockError(modulePath)) continue;
 
     try {
-      const module = require(modulePath) as {
-        ThreadLockError?: { prototype?: object };
-      };
-      if (module.ThreadLockError?.prototype) return module.ThreadLockError.prototype;
+      const module: unknown = require(modulePath);
+      const prototype = readThreadLockErrorPrototype(module);
+      if (prototype) return prototype;
     } catch {
       // Private MastraCode bundle shape varies; structural detection remains the fallback.
     }
@@ -269,6 +266,24 @@ function mastraCodeDistChunks(packageRoot: string, extension: ".js" | ".cjs"): s
   } catch {
     return [];
   }
+}
+
+function readThreadLockErrorPrototype(value: unknown): object | null {
+  const prototype = readRecord(readRecord(value).ThreadLockError).prototype;
+  return typeof prototype === "object" && prototype !== null ? prototype : null;
+}
+
+function readStringProperty(value: unknown, key: string): string | undefined {
+  const property = readRecord(value)[key];
+  return typeof property === "string" ? property : undefined;
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function exportsThreadLockError(modulePath: string): boolean {

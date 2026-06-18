@@ -1,5 +1,6 @@
 import type { InputProcessorOrWorkflow } from "@mastra/core/processors";
 import type { ComputeStateSignalArgs, ComputeStateSignalResult } from "@mastra/core/processors";
+import type { RequestContext } from "@mastra/core/request-context";
 import { SignalProvider } from "@mastra/core/signals";
 import {
   getRuntimeContextEntries,
@@ -9,6 +10,13 @@ import {
 
 export const peaContextStateId = "pea-workbench-context";
 export const peaContextTagName = "pea-workbench-context";
+
+export interface PeaContextStateSignalArgs {
+  requestContext?: RequestContext;
+  contextWindow: Pick<ComputeStateSignalArgs["contextWindow"], "hasSnapshot">;
+  lastSnapshot?: ComputeStateSignalArgs["lastSnapshot"];
+  tracking?: ComputeStateSignalArgs["tracking"];
+}
 
 export class PeaContextSignalProvider extends SignalProvider<"pea-context-signals"> {
   readonly id = "pea-context-signals";
@@ -23,7 +31,7 @@ export class PeaContextStateProcessor {
   readonly id = "pea-context-state";
   readonly stateId = peaContextStateId;
 
-  computeStateSignal(args: ComputeStateSignalArgs): ComputeStateSignalResult {
+  computeStateSignal(args: PeaContextStateSignalArgs): ComputeStateSignalResult {
     const currentEntries = getRuntimeContextEntries(args.requestContext);
     const priorEntries = getEntriesFromSnapshot(args.lastSnapshot);
 
@@ -56,9 +64,16 @@ function getEntriesFromSnapshot(
 }
 
 function isContextSnapshotValue(value: unknown): value is { entries: RuntimeContextEntry[] } {
-  if (!value || typeof value !== "object") return false;
-  const entries = (value as { entries?: unknown }).entries;
+  const entries = readRecord(value)?.entries;
   return Array.isArray(entries);
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return isRecord(value) ? value : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function createContextCacheKey(entries: RuntimeContextEntry[]): string {

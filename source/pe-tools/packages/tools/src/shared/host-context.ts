@@ -1,5 +1,4 @@
-import type { HostActiveDocumentSummary } from "@pe/host-generated/types";
-import { PeHostClient } from "@pe/host-client";
+import { PeHostClient, type HostActiveDocumentSummary } from "@pe/host-client";
 
 const defaultHostContextTimeoutMs = 5_000;
 

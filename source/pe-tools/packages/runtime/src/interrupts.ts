@@ -133,6 +133,10 @@ export function toRuntimeResumeDecisions(
   );
 }
 
+export function readRuntimeResumeDecisions(value: unknown): RuntimeResumeDecision[] {
+  return Array.isArray(value) ? value.map(readRuntimeResumeDecision).filter(isDefined) : [];
+}
+
 function toolMetadata(event: Extract<RuntimeEvent, { type: "tool_started" }>): RuntimeJsonObject {
   return sanitizeObject({
     title: event.title,
@@ -164,13 +168,36 @@ function isJsonObject(value: RuntimeJsonValue): value is RuntimeJsonObject {
 }
 
 function withoutUndefinedInterrupt(value: RuntimeInterrupt): RuntimeInterrupt {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== undefined),
-  ) as RuntimeInterrupt;
+  return {
+    id: value.id,
+    reason: value.reason,
+    ...(value.message !== undefined ? { message: value.message } : {}),
+    ...(value.toolCallId !== undefined ? { toolCallId: value.toolCallId } : {}),
+    ...(value.responseSchema !== undefined ? { responseSchema: value.responseSchema } : {}),
+    ...(value.expiresAt !== undefined ? { expiresAt: value.expiresAt } : {}),
+    ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
+  };
 }
 
 function withoutUndefinedResumeDecision(value: RuntimeResumeDecision): RuntimeResumeDecision {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== undefined),
-  ) as RuntimeResumeDecision;
+  return {
+    interruptId: value.interruptId,
+    status: value.status,
+    ...(value.payload !== undefined ? { payload: value.payload } : {}),
+  };
+}
+
+function readRuntimeResumeDecision(value: unknown): RuntimeResumeDecision | undefined {
+  if (!isPlainRecord(value)) return undefined;
+  if (typeof value.interruptId !== "string") return undefined;
+  if (value.status !== "resolved" && value.status !== "cancelled") return undefined;
+  return withoutUndefinedResumeDecision({
+    interruptId: value.interruptId,
+    status: value.status,
+    payload: value.payload === undefined ? undefined : sanitizeJson(value.payload),
+  });
+}
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined;
 }

@@ -17,6 +17,8 @@ import type {
   RuntimeAccessLevel,
   RuntimeFactory,
   RuntimeHandle,
+  RuntimeHandleHarness,
+  RuntimeHandleServices,
   RuntimeLedgerEntry,
   RuntimeQueueSessionMessageResult,
   RuntimeRecordProtocolEventRequest,
@@ -40,13 +42,17 @@ export type RuntimeSessionHistoryEntry =
       createdAt: string;
     };
 
-export interface RuntimeProtocolSession {
+export interface RuntimeProtocolSession<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState> = RuntimeHandleHarness<TState>,
+> {
   id: string;
   protocol: RuntimeProtocol;
   cwd: string;
   additionalDirectories: string[];
   title: string;
-  runtime: RuntimeHandle;
+  runtime: RuntimeHandle<TState, TServices, THarness>;
   threadId?: string;
   resourceId?: string;
   lock?: RuntimeThreadLockInfo;
@@ -63,8 +69,12 @@ export interface RuntimeProtocolSession {
   unsubscribe: () => void;
 }
 
-export interface RuntimeProtocolSessionsOptions {
-  factory: RuntimeFactory;
+export interface RuntimeProtocolSessionsOptions<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState> = RuntimeHandleHarness<TState>,
+> {
+  factory: RuntimeFactory<TState, TServices, THarness>;
   defaultCwd?: string;
 }
 
@@ -111,19 +121,28 @@ export interface RuntimeProtocolSessionInfo {
   promptActive: boolean;
 }
 
-export class RuntimeProtocolSessions {
-  private readonly factory: RuntimeFactory;
-  private readonly sessions = new Map<string, RuntimeProtocolSession>();
+export class RuntimeProtocolSessions<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState> = RuntimeHandleHarness<TState>,
+> {
+  private readonly factory: RuntimeFactory<TState, TServices, THarness>;
+  private readonly sessions = new Map<
+    string,
+    RuntimeProtocolSession<TState, TServices, THarness>
+  >();
   private readonly externalThreadIndex = new Map<string, string>();
   private readonly inMemoryHistory = new Map<string, RuntimeSessionHistoryEntry[]>();
 
-  constructor(private readonly options: RuntimeProtocolSessionsOptions) {
+  constructor(
+    private readonly options: RuntimeProtocolSessionsOptions<TState, TServices, THarness>,
+  ) {
     this.factory = options.factory;
   }
 
   async createSession(
     request: RuntimeCreateProtocolSessionRequest,
-  ): Promise<RuntimeProtocolSession> {
+  ): Promise<RuntimeProtocolSession<TState, TServices, THarness>> {
     const cwd = normalizeCwd(request.cwd ?? this.options.defaultCwd ?? process.cwd());
     const additionalDirectories = normalizeAdditionalDirectories(
       request.additionalDirectories ?? [],
@@ -142,7 +161,7 @@ export class RuntimeProtocolSessions {
       externalThreadId: request.externalThreadId,
     });
 
-    const session: RuntimeProtocolSession = {
+    const session: RuntimeProtocolSession<TState, TServices, THarness> = {
       id: draftSession?.sessionId ?? createDraftProtocolSessionId(),
       protocol: request.protocol,
       cwd: runtime.workspace?.cwd ?? cwd,
@@ -176,7 +195,7 @@ export class RuntimeProtocolSessions {
       title?: string;
       protocol?: RuntimeProtocol;
     },
-  ): Promise<RuntimeProtocolSession> {
+  ): Promise<RuntimeProtocolSession<TState, TServices, THarness>> {
     const source = await this.sourceSession(sourceId, {
       cwd: request.cwd,
       protocol: request.protocol,
@@ -210,7 +229,7 @@ export class RuntimeProtocolSessions {
     request: RuntimeCreateProtocolSessionRequest & {
       externalThreadId: string;
     },
-  ): Promise<RuntimeProtocolSession> {
+  ): Promise<RuntimeProtocolSession<TState, TServices, THarness>> {
     const externalKey = externalThreadKey(request.protocol, request.externalThreadId);
     const existingId = this.externalThreadIndex.get(externalKey);
     if (existingId) {
@@ -237,7 +256,7 @@ export class RuntimeProtocolSessions {
     return this.createSession(request);
   }
 
-  getSession(id: string): RuntimeProtocolSession {
+  getSession(id: string): RuntimeProtocolSession<TState, TServices, THarness> {
     const session = this.sessions.get(id) ?? this.activeSessionForId(id, undefined);
     if (!session) throw new Error(`Unknown Runtime session: ${id}`);
     return session;
@@ -250,7 +269,7 @@ export class RuntimeProtocolSessions {
       additionalDirectories?: string[];
       protocol?: RuntimeProtocol;
     } = {},
-  ): Promise<RuntimeProtocolSession> {
+  ): Promise<RuntimeProtocolSession<TState, TServices, THarness>> {
     const session = this.sessions.get(id) ?? this.activeSessionForId(id, request.protocol);
     if (!session) return this.rehydrateSession(id, request);
     if (request.protocol && session.protocol !== request.protocol) {
@@ -450,7 +469,7 @@ export class RuntimeProtocolSessions {
           : !options.requireIdle && queueMessage
             ? await queueMessage(message)
             : await sendPromptWithoutQueue(session, message);
-      const resultSession = (result as Partial<RuntimeQueueSessionMessageResult>).session;
+      const resultSession = runtimeQueueMessageResultSession(result);
       if (resultSession) {
         session.threadId = resultSession.threadId ?? session.threadId;
         session.resourceId = resultSession.resourceId ?? session.resourceId;
@@ -499,7 +518,10 @@ export class RuntimeProtocolSessions {
   async setModel(id: string, modelId: string): Promise<RuntimeSessionControls> {
     const session = this.getSession(id);
     if (session.runtime.kernel) return session.runtime.kernel.setModel({ modelId });
-    await session.runtime.harness.setState({ currentModelId: modelId });
+    await session.runtime.harness.setState({
+      ...session.runtime.harness.getState(),
+      currentModelId: modelId,
+    });
     return runtimeControlsFromHarness(session.runtime);
   }
 
@@ -510,6 +532,7 @@ export class RuntimeProtocolSessions {
     const session = this.getSession(id);
     if (session.runtime.kernel) return session.runtime.kernel.setAccessLevel({ accessLevel });
     await session.runtime.harness.setState({
+      ...session.runtime.harness.getState(),
       accessLevel,
       yolo: accessLevel === "trusted",
     });
@@ -606,7 +629,7 @@ export class RuntimeProtocolSessions {
   }
 
   private async closeActiveSession(
-    session: RuntimeProtocolSession,
+    session: RuntimeProtocolSession<TState, TServices, THarness>,
     operation: "close" | "delete",
     protocol: RuntimeProtocol | undefined,
     options: { cancel: boolean; cleanupOnFailure?: boolean },
@@ -629,7 +652,7 @@ export class RuntimeProtocolSessions {
     this.cleanupActiveSession(session);
   }
 
-  private cleanupActiveSession(session: RuntimeProtocolSession): void {
+  private cleanupActiveSession(session: RuntimeProtocolSession<TState, TServices, THarness>): void {
     session.unsubscribe();
     this.sessions.delete(session.id);
     this.clearInMemoryHistory(session.id, session.threadId, session.externalThreadId);
@@ -643,7 +666,7 @@ export class RuntimeProtocolSessions {
   private activeSessionForId(
     id: string,
     protocol: RuntimeProtocol | undefined,
-  ): RuntimeProtocolSession | undefined {
+  ): RuntimeProtocolSession<TState, TServices, THarness> | undefined {
     return Array.from(this.sessions.values()).find(
       (session) =>
         (!protocol || session.protocol === protocol) &&
@@ -657,7 +680,7 @@ export class RuntimeProtocolSessions {
       cwd?: string;
       protocol?: RuntimeProtocol;
     },
-  ): Promise<RuntimeProtocolSession> {
+  ): Promise<RuntimeProtocolSession<TState, TServices, THarness>> {
     const session = this.sessions.get(id) ?? this.activeSessionForId(id, request.protocol);
     if (session) return session;
     return this.rehydrateSession(id, request);
@@ -670,7 +693,7 @@ export class RuntimeProtocolSessions {
       additionalDirectories?: string[];
       protocol?: RuntimeProtocol;
     },
-  ): Promise<RuntimeProtocolSession> {
+  ): Promise<RuntimeProtocolSession<TState, TServices, THarness>> {
     const cwd = normalizeCwd(request.cwd ?? this.options.defaultCwd ?? process.cwd());
     const additionalDirectories = normalizeAdditionalDirectories(
       request.additionalDirectories ?? [],
@@ -707,7 +730,7 @@ export class RuntimeProtocolSessions {
     if (!kernelSession) await runtime.sessions.switchThread({ threadId });
     await seedHarnessSandboxAllowedPaths(runtime, metadataSandboxAllowedPaths(thread?.metadata));
     const now = new Date().toISOString();
-    const session: RuntimeProtocolSession = {
+    const session: RuntimeProtocolSession<TState, TServices, THarness> = {
       id: sessionId,
       protocol,
       cwd: runtime.workspace?.cwd ?? cwd,
@@ -738,7 +761,9 @@ export class RuntimeProtocolSessions {
     return session;
   }
 
-  private async materializeSession(session: RuntimeProtocolSession): Promise<void> {
+  private async materializeSession(
+    session: RuntimeProtocolSession<TState, TServices, THarness>,
+  ): Promise<void> {
     if (session.threadId) {
       if (!session.protocolMetadataPersisted) {
         await persistProtocolThreadMetadata(session);
@@ -762,8 +787,8 @@ export class RuntimeProtocolSessions {
   }
 
   private async forkMaterializeSession(
-    session: RuntimeProtocolSession,
-    source: RuntimeProtocolSession,
+    session: RuntimeProtocolSession<TState, TServices, THarness>,
+    source: RuntimeProtocolSession<TState, TServices, THarness>,
   ): Promise<void> {
     if (!source.threadId) throw new Error(`Runtime source session ${source.id} is still a draft.`);
     const forked = await session.runtime.kernel?.forkSession(session.id, {
@@ -781,7 +806,10 @@ export class RuntimeProtocolSessions {
     this.flushBufferedProtocolEvents(session);
   }
 
-  private async createListRuntime(cwd: string, protocol: RuntimeProtocol): Promise<RuntimeHandle> {
+  private async createListRuntime(
+    cwd: string,
+    protocol: RuntimeProtocol,
+  ): Promise<RuntimeHandle<TState, TServices, THarness>> {
     return this.factory.create({ cwd, workspaceRoot: cwd, additionalDirectories: [], protocol });
   }
 
@@ -797,7 +825,7 @@ export class RuntimeProtocolSessions {
     });
   }
 
-  private trackSession(session: RuntimeProtocolSession): void {
+  private trackSession(session: RuntimeProtocolSession<TState, TServices, THarness>): void {
     this.sessions.set(session.id, session);
     if (session.externalThreadId) {
       this.externalThreadIndex.set(
@@ -833,7 +861,9 @@ export class RuntimeProtocolSessions {
     return (ledger ?? []).flatMap(historyEntryFromLedger);
   }
 
-  private flushBufferedProtocolEvents(session: RuntimeProtocolSession): void {
+  private flushBufferedProtocolEvents(
+    session: RuntimeProtocolSession<TState, TServices, THarness>,
+  ): void {
     if (!session.threadId) return;
     const history = this.inMemoryHistory.get(session.id);
     if (!history?.length) return;
@@ -874,8 +904,18 @@ export class RuntimeProtocolSessions {
   }
 }
 
-async function sendPromptWithoutQueue(
-  session: RuntimeProtocolSession,
+function runtimeQueueMessageResultSession(
+  result: RuntimeQueueProtocolPromptResult | RuntimeQueueSessionMessageResult,
+): RuntimeQueueSessionMessageResult["session"] | undefined {
+  return "session" in result ? result.session : undefined;
+}
+
+async function sendPromptWithoutQueue<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(
+  session: RuntimeProtocolSession<TState, TServices, THarness>,
   message: RuntimeSendMessageOptions,
 ): Promise<RuntimeQueueProtocolPromptResult> {
   if (session.runtime.kernel) {
@@ -892,13 +932,12 @@ async function sendPromptWithoutQueue(
   return { queued: false };
 }
 
-async function closeKernelSession(session: RuntimeProtocolSession): Promise<boolean> {
-  const kernel = session.runtime.kernel as
-    | {
-        closeSession?: (sessionId: string) => Promise<void> | void;
-        flushLedger?: () => Promise<void> | void;
-      }
-    | undefined;
+async function closeKernelSession<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(session: RuntimeProtocolSession<TState, TServices, THarness>): Promise<boolean> {
+  const kernel = session.runtime.kernel;
   if (!kernel) return false;
   if (kernel.closeSession) {
     await kernel.closeSession(session.id);
@@ -908,12 +947,12 @@ async function closeKernelSession(session: RuntimeProtocolSession): Promise<bool
   return false;
 }
 
-function cancelKernelSession(session: RuntimeProtocolSession): void {
-  const kernel = session.runtime.kernel as
-    | {
-        cancelSession?: (sessionId: string) => void;
-      }
-    | undefined;
+function cancelKernelSession<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(session: RuntimeProtocolSession<TState, TServices, THarness>): void {
+  const kernel = session.runtime.kernel;
   if (kernel?.cancelSession) {
     kernel.cancelSession(session.id);
     return;
@@ -922,12 +961,20 @@ function cancelKernelSession(session: RuntimeProtocolSession): void {
   session.runtime.sessions.abort();
 }
 
-async function hydrateSessionLedger(session: RuntimeProtocolSession): Promise<void> {
+async function hydrateSessionLedger<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(session: RuntimeProtocolSession<TState, TServices, THarness>): Promise<void> {
   await readRuntimeSessionLedger(session);
 }
 
-async function readRuntimeSessionLedger(
-  session: RuntimeProtocolSession,
+async function readRuntimeSessionLedger<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(
+  session: RuntimeProtocolSession<TState, TServices, THarness>,
   options: { requireThreadLedger?: boolean } = {},
 ): Promise<RuntimeLedgerEntry[] | undefined> {
   const readKernelLedger = session.runtime.kernel?.readSessionLedger?.bind(session.runtime.kernel);
@@ -944,7 +991,13 @@ async function readRuntimeSessionLedger(
   });
 }
 
-async function createFallbackMaterializedSession(session: RuntimeProtocolSession): Promise<{
+async function createFallbackMaterializedSession<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(
+  session: RuntimeProtocolSession<TState, TServices, THarness>,
+): Promise<{
   threadId?: string;
   resourceId?: string;
   updatedAt: string;
@@ -957,8 +1010,12 @@ async function createFallbackMaterializedSession(session: RuntimeProtocolSession
   };
 }
 
-function createPromptContext(
-  session: RuntimeProtocolSession,
+function createPromptContext<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(
+  session: RuntimeProtocolSession<TState, TServices, THarness>,
   request: RuntimeSendProtocolPromptRequest,
 ): RuntimeContextEntry[] | undefined {
   const resourceEntries = createRuntimeResourceContextEntries({
@@ -973,17 +1030,25 @@ function createPromptContext(
   return context.length > 0 ? context : undefined;
 }
 
-function refreshSessionListedThreadState(
-  session: RuntimeProtocolSession,
+function refreshSessionListedThreadState<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(
+  session: RuntimeProtocolSession<TState, TServices, THarness>,
   thread: RuntimeThreadInfo | undefined,
-): RuntimeProtocolSession {
+): RuntimeProtocolSession<TState, TServices, THarness> {
   if (!thread) return session;
   if (thread.lock) session.lock = thread.lock;
   else delete session.lock;
   return session;
 }
 
-export function sessionInfo(session: RuntimeProtocolSession): RuntimeProtocolSessionInfo {
+export function sessionInfo<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(session: RuntimeProtocolSession<TState, TServices, THarness>): RuntimeProtocolSessionInfo {
   return {
     id: session.id,
     protocol: session.protocol,
@@ -1004,7 +1069,11 @@ export function sessionInfo(session: RuntimeProtocolSession): RuntimeProtocolSes
   };
 }
 
-function sessionAdditionalDirectories(session: RuntimeProtocolSession): string[] {
+function sessionAdditionalDirectories<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(session: RuntimeProtocolSession<TState, TServices, THarness>): string[] {
   const harnessState = harnessSandboxState(session.runtime);
   return normalizeAdditionalDirectories([
     ...session.additionalDirectories,
@@ -1012,18 +1081,22 @@ function sessionAdditionalDirectories(session: RuntimeProtocolSession): string[]
   ]);
 }
 
-function harnessSandboxState(
-  runtime: RuntimeHandle,
+function harnessSandboxState<
+  TState extends Record<string, unknown>,
+  THarness extends RuntimeHandleHarness<TState>,
+>(
+  runtime: RuntimeHandle<TState, RuntimeHandleServices, THarness>,
 ): { sandboxAllowedPaths?: string[] } | undefined {
-  return runtime.harness.getState() as { sandboxAllowedPaths?: string[] } | undefined;
+  const state = readRecord(runtime.harness.getState());
+  const sandboxAllowedPaths = state.sandboxAllowedPaths;
+  return Array.isArray(sandboxAllowedPaths) ? { sandboxAllowedPaths } : undefined;
 }
 
-function runtimeControlsFromHarness(runtime: RuntimeHandle): RuntimeSessionControls {
-  const state = runtime.harness.getState() as {
-    currentModelId?: unknown;
-    accessLevel?: unknown;
-    yolo?: unknown;
-  };
+function runtimeControlsFromHarness<
+  TState extends Record<string, unknown>,
+  THarness extends RuntimeHandleHarness<TState>,
+>(runtime: RuntimeHandle<TState, RuntimeHandleServices, THarness>): RuntimeSessionControls {
+  const state = readRecord(runtime.harness.getState());
   return {
     currentModelId: typeof state.currentModelId === "string" ? state.currentModelId : undefined,
     accessLevel:
@@ -1037,18 +1110,22 @@ function runtimeControlsFromHarness(runtime: RuntimeHandle): RuntimeSessionContr
   };
 }
 
-function harnessSandboxAllowedPaths(runtime: RuntimeHandle): string[] {
+function harnessSandboxAllowedPaths<
+  TState extends Record<string, unknown>,
+  THarness extends RuntimeHandleHarness<TState>,
+>(runtime: RuntimeHandle<TState, RuntimeHandleServices, THarness>): string[] {
   return normalizeOptionalSandboxPaths(harnessSandboxState(runtime)?.sandboxAllowedPaths);
 }
 
-async function seedHarnessSandboxAllowedPaths(
-  runtime: RuntimeHandle,
+async function seedHarnessSandboxAllowedPaths<
+  TState extends Record<string, unknown>,
+  THarness extends RuntimeHandleHarness<TState>,
+>(
+  runtime: RuntimeHandle<TState, RuntimeHandleServices, THarness>,
   sandboxAllowedPaths: string[],
 ): Promise<void> {
   if (sandboxAllowedPaths.length === 0) return;
-  await runtime.harness.setState({
-    sandboxAllowedPaths,
-  } as Partial<Record<string, unknown>>);
+  await runtime.harness.setState({ ...runtime.harness.getState(), sandboxAllowedPaths });
 }
 
 function metadataSandboxAllowedPaths(metadata: Record<string, unknown> | undefined): string[] {
@@ -1163,27 +1240,40 @@ function historyEntryFromLedger(entry: RuntimeLedgerEntry): RuntimeSessionHistor
   return [];
 }
 
-function runtimeRecordsPromptHistory(session: RuntimeProtocolSession): boolean {
-  const sessions = session.runtime.sessions as unknown as Record<string, unknown>;
+function runtimeRecordsPromptHistory<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(session: RuntimeProtocolSession<TState, TServices, THarness>): boolean {
+  const sessions = readRecord(session.runtime.sessions);
   return Boolean(session.runtime.kernel || typeof sessions.recordUserPrompt === "function");
 }
 
-function invalidateSessionContinuation(session: RuntimeProtocolSession): void {
+function invalidateSessionContinuation<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(session: RuntimeProtocolSession<TState, TServices, THarness>): void {
   session.cancelled = true;
   session.pendingResumeDecisions = [];
   session.continuationGeneration += 1;
 }
 
-async function persistProtocolThreadMetadata(session: RuntimeProtocolSession): Promise<void> {
+async function persistProtocolThreadMetadata<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(session: RuntimeProtocolSession<TState, TServices, THarness>): Promise<void> {
   if (!session.threadId) return;
-  if (typeof readRecord(session.runtime.harness).setThreadSetting !== "function") return;
+  const setThreadSetting = session.runtime.harness.setThreadSetting?.bind(session.runtime.harness);
+  if (!setThreadSetting) return;
 
   const metadata: RuntimeProtocolThreadMetadata = {
     protocol: session.protocol,
     protocolSessionId: session.id,
     ...(session.externalThreadId ? { externalThreadId: session.externalThreadId } : {}),
   };
-  await session.runtime.harness.setThreadSetting({
+  await setThreadSetting({
     key: protocolThreadMetadataKey,
     value: metadata,
   });
@@ -1209,7 +1299,11 @@ function isProtocolThreadMetadata(value: unknown): value is RuntimeProtocolThrea
 }
 
 function readRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  return isRecord(value) ? value : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function mergeResumeDecisions(

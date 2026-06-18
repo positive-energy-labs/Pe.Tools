@@ -1,4 +1,4 @@
-import type { Agent } from "@agentclientprotocol/sdk";
+import type { Agent, InitializeResponse, ListSessionsResponse } from "@agentclientprotocol/sdk";
 import {
   createPeWorkbenchExtension,
   peWorkbenchLoadThreadMethod,
@@ -9,21 +9,30 @@ import {
   peWorkbenchSetModelMethod,
 } from "@pe/agent-contracts";
 import { expect, test } from "vite-plus/test";
-import { AcpWorkbenchClient, createInProcessAcpWorkbenchClient } from "../src/index.ts";
+import {
+  AcpWorkbenchClient,
+  createInProcessAcpWorkbenchClient,
+  type AcpAgentConnection,
+} from "../src/index.ts";
 
-function createClient(fakeAgent: Partial<Agent> = {}) {
+function createClient(fakeAgent: Partial<AcpAgentConnection> = {}) {
   const client = new AcpWorkbenchClient({ clientName: "test", clientVersion: "0.1.0" });
   const events: unknown[] = [];
   client.subscribe((event) => events.push(event));
-  client.connect({
+  client.connect(Object.assign(createTestConnection(), fakeAgent));
+  return { client, events };
+}
+
+function createTestConnection(): AcpAgentConnection {
+  return {
     closed: Promise.resolve(),
     signal: new AbortController().signal,
-    initialize: async () => ({
+    initialize: async (): Promise<InitializeResponse> => ({
       protocolVersion: 1,
-      agentInfo: { name: "agent" },
+      agentInfo: { name: "agent", version: "0.1.0" },
       agentCapabilities: {
         loadSession: true,
-        sessionCapabilities: { resume: true },
+        sessionCapabilities: { resume: {} },
         providers: {},
       },
     }),
@@ -31,11 +40,12 @@ function createClient(fakeAgent: Partial<Agent> = {}) {
       sessionId: "session-1",
       modes: { currentModeId: "agent", availableModes: [] },
     }),
-    listSessions: async () => ({
+    listSessions: async (): Promise<ListSessionsResponse> => ({
       sessions: [
         {
           sessionId: "session-1",
           title: "Current",
+          cwd: "C:/repo",
           _meta: peWorkbenchSessionMetadata({
             status: "materialized",
             threadId: "thread-1",
@@ -43,16 +53,14 @@ function createClient(fakeAgent: Partial<Agent> = {}) {
             lock: { status: "owned", ownerPid: 123 },
           }),
         },
-        { sessionId: "thread-2", title: "Existing" },
+        { sessionId: "thread-2", title: "Existing", cwd: "C:/repo" },
       ],
     }),
     loadSession: async () => ({ modes: { currentModeId: "agent", availableModes: [] } }),
     prompt: async () => ({ stopReason: "end_turn" }),
-    cancel: async () => ({}),
+    cancel: async () => undefined,
     setSessionMode: async () => ({}),
-    ...fakeAgent,
-  } as never);
-  return { client, events };
+  };
 }
 
 test("maps ACP session list and load to workbench thread/session semantics", async () => {
@@ -139,7 +147,7 @@ test("loadThread returns a transcript snapshot collected from ACP replay updates
           messageId: "user-1",
           content: { type: "text", text: "loaded prompt" },
         },
-      } as never);
+      });
       await client.sessionUpdate({
         sessionId: request.sessionId,
         update: {
@@ -147,10 +155,22 @@ test("loadThread returns a transcript snapshot collected from ACP replay updates
           messageId: "assistant-1",
           content: { type: "text", text: "loaded answer" },
         },
-      } as never);
+      });
       return { modes: { currentModeId: "agent", availableModes: [] } };
     },
-  } as never);
+    initialize: async (): Promise<InitializeResponse> => ({
+      protocolVersion: 1,
+      agentInfo: { name: "agent", version: "0.1.0" },
+      agentCapabilities: {
+        loadSession: true,
+        sessionCapabilities: { resume: {} },
+        providers: {},
+      },
+    }),
+    newSession: async () => ({ sessionId: "session-1" }),
+    prompt: async () => ({ stopReason: "end_turn" }),
+    cancel: async () => undefined,
+  });
 
   const response = await client.loadThread({ threadId: "thread-1", cwd: "C:/repo" });
 
@@ -289,7 +309,7 @@ test("resolves approval requests by stable session/tool key", async () => {
     sessionId: "session-1",
     toolCall: { toolCallId: "tool-1", title: "Edit", status: "pending" },
     options: [{ optionId: "allow", name: "Allow", kind: "allow_once" }],
-  } as never);
+  });
 
   client.resolveApproval("session-1:tool-1", "allow");
 
@@ -317,7 +337,7 @@ test("cancels pending approvals on close", async () => {
     sessionId: "session-1",
     toolCall: { toolCallId: "tool-1", title: "Edit", status: "pending" },
     options: [{ optionId: "deny", name: "Deny", kind: "reject_once" }],
-  } as never);
+  });
 
   await client.close();
 

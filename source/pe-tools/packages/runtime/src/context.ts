@@ -3,8 +3,9 @@ import {
   MASTRA_THREAD_ID_KEY,
   RequestContext,
 } from "@mastra/core/request-context";
+import { z } from "zod";
 import type { RuntimeProtocol } from "./events.ts";
-import type { RuntimeResumeDecision } from "./interrupts.ts";
+import { readRuntimeResumeDecisions, type RuntimeResumeDecision } from "./interrupts.ts";
 
 export interface RuntimeContextEntry {
   value: string;
@@ -31,6 +32,15 @@ const runtimeProtocolKey = "runtime.protocol";
 const runtimeProtocolSessionIdKey = "runtime.protocolSessionId";
 const runtimeResumeDecisionsKey = "runtime.resumeDecisions";
 const runtimeThreadSettingsKey = "runtime.threadSettings";
+const runtimeContextEntrySchema = z
+  .object({
+    value: z.string().transform((value: string) => value.trim()),
+    description: z.string().transform((value: string) => value.trim()),
+  })
+  .strip();
+const runtimeThreadSettingsContextSchema = z
+  .object({ setThreadSetting: z.function() })
+  .passthrough();
 
 export function createRuntimeRequestContext(injection: RuntimeContextInjection): RequestContext {
   const requestContext = new RequestContext();
@@ -58,21 +68,18 @@ export function createRuntimeRequestContext(injection: RuntimeContextInjection):
 }
 
 export function getRuntimeProtocolSessionId(requestContext: RequestContext): string | undefined {
-  return requestContext.get(runtimeProtocolSessionIdKey) as string | undefined;
+  const value = requestContext.get(runtimeProtocolSessionIdKey);
+  return typeof value === "string" ? value : undefined;
 }
 
 export function getRuntimeContextEntries(
   requestContext: Pick<RequestContext, "get"> | undefined,
 ): RuntimeContextEntry[] {
-  return normalizeContextEntries(
-    (requestContext?.get(runtimeContextEntriesKey) as RuntimeContextEntry[] | undefined) ?? [],
-  );
+  return normalizeContextEntries(requestContext?.get(runtimeContextEntriesKey));
 }
 
 export function getRuntimeResumeDecisions(requestContext: RequestContext): RuntimeResumeDecision[] {
-  return (
-    (requestContext.get(runtimeResumeDecisionsKey) as RuntimeResumeDecision[] | undefined) ?? []
-  );
+  return readRuntimeResumeDecisions(requestContext.get(runtimeResumeDecisionsKey));
 }
 
 export function setRuntimeThreadSettings(
@@ -85,23 +92,23 @@ export function setRuntimeThreadSettings(
 export function getRuntimeThreadSettings(
   requestContext: Pick<RequestContext, "get"> | undefined,
 ): RuntimeThreadSettingsContext | undefined {
-  return requestContext?.get(runtimeThreadSettingsKey) as RuntimeThreadSettingsContext | undefined;
+  const value = requestContext?.get(runtimeThreadSettingsKey);
+  return isRuntimeThreadSettingsContext(value) ? value : undefined;
 }
 
 export function appendRuntimeContextPrompt(
   instructions: string,
   requestContext: RequestContext,
 ): string {
-  const contextPrompt = requestContext.get(runtimeContextPromptKey) as string | undefined;
+  const value = requestContext.get(runtimeContextPromptKey);
+  const contextPrompt = typeof value === "string" ? value : undefined;
   return contextPrompt ? `${instructions}\n\n${contextPrompt}` : instructions;
 }
 
-export function normalizeContextEntries(entries: RuntimeContextEntry[]): RuntimeContextEntry[] {
-  return entries
-    .map((entry) => ({
-      value: entry.value.trim(),
-      description: entry.description.trim(),
-    }))
+export function normalizeContextEntries(entries: unknown): RuntimeContextEntry[] {
+  return (Array.isArray(entries) ? entries : [])
+    .map(readRuntimeContextEntry)
+    .filter(isDefined)
     .filter((entry) => entry.value.length > 0 && entry.description.length > 0);
 }
 
@@ -125,4 +132,17 @@ function escapeXml(value: string): string {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function readRuntimeContextEntry(value: unknown): RuntimeContextEntry | undefined {
+  const entry = runtimeContextEntrySchema.safeParse(value);
+  return entry.success ? entry.data : undefined;
+}
+
+function isRuntimeThreadSettingsContext(value: unknown): value is RuntimeThreadSettingsContext {
+  return runtimeThreadSettingsContextSchema.safeParse(value).success;
+}
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined;
 }

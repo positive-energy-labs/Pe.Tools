@@ -9,9 +9,13 @@ type LibSqlClient = {
   }): Promise<{ rows?: Record<string, unknown>[] }>;
 };
 
-export type RuntimeThreadStateStore = ThreadStateStorage;
+export interface RuntimeThreadStateStore {
+  getState(args: { threadId: string; type: string }): Promise<unknown>;
+  setState<T = unknown>(args: { threadId: string; type: string; value: T }): Promise<void> | void;
+  deleteState?(args: { threadId: string; type: string }): Promise<void> | void;
+}
 
-export function createRuntimeLibSqlThreadStateStore(client: LibSqlClient): RuntimeThreadStateStore {
+export function createRuntimeLibSqlThreadStateStore(client: LibSqlClient) {
   return new RuntimeLibSqlThreadStateStore(client);
 }
 
@@ -51,14 +55,20 @@ function callMastraStorageAccessor(record: Record<string, unknown>): unknown {
 }
 
 function maybeRuntimeThreadStateStore(value: unknown): RuntimeThreadStateStore | undefined {
+  return isRuntimeThreadStateStore(value) ? value : undefined;
+}
+
+function isRuntimeThreadStateStore(value: unknown): value is RuntimeThreadStateStore {
   const record = readRecord(value);
-  return typeof record.getState === "function" && typeof record.setState === "function"
-    ? (value as RuntimeThreadStateStore)
-    : undefined;
+  return typeof record.getState === "function" && typeof record.setState === "function";
 }
 
 function readRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  return isRecord(value) ? value : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 class RuntimeLibSqlThreadStateStore extends ThreadStateStorage {
@@ -85,7 +95,8 @@ class RuntimeLibSqlThreadStateStore extends ThreadStateStorage {
       args: [args.threadId, args.type],
     });
     const value = result.rows?.[0]?.value;
-    return typeof value === "string" ? (JSON.parse(value) as T) : undefined;
+    if (typeof value !== "string") return undefined;
+    return JSON.parse(value);
   }
 
   async setState<T = unknown>(args: { threadId: string; type: string; value: T }): Promise<void> {

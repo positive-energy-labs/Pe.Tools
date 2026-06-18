@@ -51,6 +51,8 @@ import type {
   RuntimeAccessLevel,
   RuntimeDescriptor,
   RuntimeFactory,
+  RuntimeHandleHarness,
+  RuntimeHandleServices,
   RuntimeSessionControls,
 } from "../runtime.ts";
 import { createRuntimePrompt, type RuntimePrompt } from "../prompts.ts";
@@ -60,24 +62,44 @@ import {
   type AcpSession,
   type RuntimeAcpSessionUpdateSink,
 } from "./acp-session-store.ts";
+import { z } from "zod";
 
-export interface RuntimeAcpRuntimeOptions {
-  factory: RuntimeFactory;
+export interface RuntimeAcpRuntimeOptions<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState> = RuntimeHandleHarness<TState>,
+> {
+  factory: RuntimeFactory<TState, TServices, THarness>;
   descriptor?: RuntimeDescriptor;
   auth?: RuntimeAuthProfile;
 }
 
-export interface RuntimeAcpSessionOptions {
-  manager?: RuntimeProtocolSessions;
+export interface RuntimeAcpSessionOptions<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState> = RuntimeHandleHarness<TState>,
+> {
+  manager?: RuntimeProtocolSessions<TState, TServices, THarness>;
 }
 
-export interface RuntimeAcpAgentOptions {
-  runtime?: RuntimeAcpRuntimeOptions;
-  sessions?: RuntimeAcpSessionOptions;
+export interface RuntimeAcpAgentOptions<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState> = RuntimeHandleHarness<TState>,
+> {
+  runtime?: RuntimeAcpRuntimeOptions<TState, TServices, THarness>;
+  sessions?: RuntimeAcpSessionOptions<TState, TServices, THarness>;
 }
 
-export interface RuntimeAcpAgentSessionStore {
-  createSession(request: { cwd: string; additionalDirectories?: string[] }): Promise<AcpSession>;
+export interface RuntimeAcpAgentSessionStore<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState> = RuntimeHandleHarness<TState>,
+> {
+  createSession(request: {
+    cwd: string;
+    additionalDirectories?: string[];
+  }): Promise<AcpSession<TState, TServices, THarness>>;
   prompt(sessionId: SessionId, prompt: RuntimePrompt): Promise<"end_turn" | "cancelled">;
   queueMessage(
     sessionId: SessionId,
@@ -97,17 +119,17 @@ export interface RuntimeAcpAgentSessionStore {
     sessionId: SessionId;
     cwd?: string;
     additionalDirectories?: string[];
-  }): Promise<AcpSession>;
+  }): Promise<AcpSession<TState, TServices, THarness>>;
   load(request: {
     sessionId: SessionId;
     cwd: string;
     additionalDirectories?: string[];
-  }): Promise<AcpSession>;
+  }): Promise<AcpSession<TState, TServices, THarness>>;
   fork(request: {
     sessionId: SessionId;
     cwd: string;
     additionalDirectories?: string[];
-  }): Promise<AcpSession>;
+  }): Promise<AcpSession<TState, TServices, THarness>>;
   list(cwd?: string | null): Promise<NonNullable<ListSessionsResponse["sessions"]>>;
   delete(sessionId: SessionId): Promise<void>;
   close(sessionId: SessionId): Promise<void>;
@@ -115,17 +137,25 @@ export interface RuntimeAcpAgentSessionStore {
   configureClient?(clientCapabilities: ClientCapabilities | undefined): void;
 }
 
-export function createRuntimeAcpAgent(
+export function createRuntimeAcpAgent<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState> = RuntimeHandleHarness<TState>,
+>(
   updateSink: RuntimeAcpSessionUpdateSink,
-  options: RuntimeAcpAgentOptions,
+  options: RuntimeAcpAgentOptions<TState, TServices, THarness>,
 ): Agent {
   return new RuntimeAcpAgent(options, new RuntimeAcpSessionStore(updateSink, options));
 }
 
-export class RuntimeAcpAgent implements Agent {
+export class RuntimeAcpAgent<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState> = RuntimeHandleHarness<TState>,
+> implements Agent {
   constructor(
-    private readonly options: RuntimeAcpAgentOptions,
-    private readonly sessions: RuntimeAcpAgentSessionStore,
+    private readonly options: RuntimeAcpAgentOptions<TState, TServices, THarness>,
+    private readonly sessions: RuntimeAcpAgentSessionStore<TState, TServices, THarness>,
   ) {}
 
   async initialize(_params: InitializeRequest): Promise<InitializeResponse> {
@@ -187,7 +217,7 @@ export class RuntimeAcpAgent implements Agent {
   ): Promise<Record<string, unknown>> {
     if (method === peWorkbenchLoadThreadMethod) {
       const sessionId = readSessionId(params, "Load thread snapshot");
-      return (await this.sessions.readWorkbenchLoadThreadSnapshot({
+      const snapshot = await this.sessions.readWorkbenchLoadThreadSnapshot({
         sessionId,
         ...(typeof params.cwd === "string" ? { cwd: params.cwd } : {}),
         ...(Array.isArray(params.additionalDirectories)
@@ -197,17 +227,13 @@ export class RuntimeAcpAgent implements Agent {
               ),
             }
           : {}),
-      })) as unknown as Record<string, unknown>;
+      });
+      return workbenchLoadThreadSnapshotRecord(snapshot);
     }
 
     if (method === peWorkbenchQueueMessageMethod) {
       const sessionId = readSessionId(params, "Queue message");
-      if (!Array.isArray(params.prompt)) throw new Error("Queue message requires prompt blocks.");
-
-      return this.sessions.queueMessage(
-        sessionId,
-        acpPrompt(params.prompt as PromptRequest["prompt"]),
-      );
+      return this.sessions.queueMessage(sessionId, acpPrompt(readAcpPromptBlocks(params.prompt)));
     }
 
     if (method === peWorkbenchSetModelMethod) {
@@ -352,17 +378,21 @@ export function acpPrompt(prompt: PromptRequest["prompt"]): RuntimePrompt {
             },
           };
         default:
-          return {
-            text: `[Unsupported ACP content block: ${(block as { type: string }).type}]`,
-          };
+          return unsupportedAcpContentBlock(block);
       }
     }),
   );
 }
 
-export function runtimeAcpWorkbenchExtension(
-  options: RuntimeAcpAgentOptions,
-): PeWorkbenchExtension {
+function unsupportedAcpContentBlock(block: never): { text: string } {
+  throw new Error(`Unsupported ACP content block: ${JSON.stringify(block)}`);
+}
+
+export function runtimeAcpWorkbenchExtension<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(options: RuntimeAcpAgentOptions<TState, TServices, THarness>): PeWorkbenchExtension {
   const descriptor = runtimeAcpDescriptor(options);
   return createPeWorkbenchExtension({
     runtime: {
@@ -390,31 +420,55 @@ export function runtimeAcpWorkbenchExtension(
   });
 }
 
-export function runtimeAcpFactory(options: RuntimeAcpAgentOptions): RuntimeFactory {
+export function runtimeAcpFactory<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(
+  options: RuntimeAcpAgentOptions<TState, TServices, THarness>,
+): RuntimeFactory<TState, TServices, THarness> {
   const factory = options.runtime?.factory;
   if (!factory) throw new Error("Runtime ACP agent requires runtime.factory.");
   return factory;
 }
 
-export function runtimeAcpDescriptor(options: RuntimeAcpAgentOptions): RuntimeDescriptor {
+export function runtimeAcpDescriptor<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(options: RuntimeAcpAgentOptions<TState, TServices, THarness>): RuntimeDescriptor {
   return options.runtime?.descriptor ?? runtimeAcpFactory(options).descriptor;
 }
 
-export function runtimeAcpAuthProfile(
-  options: RuntimeAcpAgentOptions,
-): RuntimeAuthProfile | undefined {
+export function runtimeAcpAuthProfile<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(options: RuntimeAcpAgentOptions<TState, TServices, THarness>): RuntimeAuthProfile | undefined {
   return options.runtime?.auth ?? runtimeAcpFactory(options).auth;
 }
 
-function runtimeDescriptor(options: RuntimeAcpAgentOptions): RuntimeDescriptor {
+function runtimeDescriptor<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(options: RuntimeAcpAgentOptions<TState, TServices, THarness>): RuntimeDescriptor {
   return runtimeAcpDescriptor(options);
 }
 
-function runtimeAuthProfile(options: RuntimeAcpAgentOptions): RuntimeAuthProfile | undefined {
+function runtimeAuthProfile<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(options: RuntimeAcpAgentOptions<TState, TServices, THarness>): RuntimeAuthProfile | undefined {
   return runtimeAcpAuthProfile(options);
 }
 
-function runtimeAuthDescriptor(options: RuntimeAcpAgentOptions): RuntimeAuthDescriptor {
+function runtimeAuthDescriptor<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(options: RuntimeAcpAgentOptions<TState, TServices, THarness>): RuntimeAuthDescriptor {
   return (
     runtimeAuthProfile(options)?.descriptor ??
     createRuntimeAuthDescriptor({ source: "none", methods: [] })
@@ -434,14 +488,81 @@ function modeState(descriptor: RuntimeDescriptor): NonNullable<NewSessionRespons
   };
 }
 
+function workbenchLoadThreadSnapshotRecord(
+  response: WorkbenchLoadThreadSnapshotResponse,
+): Record<string, unknown> {
+  return {
+    session: response.session,
+    messages: response.messages,
+    ...(response.events ? { events: response.events } : {}),
+  };
+}
+
+const acpMetaSchema = z.record(z.string(), z.unknown());
+const acpTextBlockSchema = z
+  .object({ type: z.literal("text"), text: z.string(), _meta: acpMetaSchema.optional() })
+  .passthrough();
+const acpMediaBlockSchema = z
+  .object({
+    type: z.union([z.literal("image"), z.literal("audio")]),
+    data: z.string(),
+    mimeType: z.string(),
+    _meta: acpMetaSchema.optional(),
+  })
+  .passthrough();
+const acpResourceLinkBlockSchema = z
+  .object({
+    type: z.literal("resource_link"),
+    name: z.string(),
+    uri: z.string(),
+    mimeType: z.string().optional(),
+    title: z.string().optional(),
+    _meta: acpMetaSchema.optional(),
+  })
+  .passthrough();
+const acpResourceBlockSchema = z
+  .object({
+    type: z.literal("resource"),
+    resource: z
+      .object({
+        uri: z.string(),
+        text: z.string().optional(),
+        blob: z.string().optional(),
+        mimeType: z.string().optional(),
+      })
+      .passthrough()
+      .refine(
+        (resource: { text?: string; blob?: string }) =>
+          resource.text !== undefined || resource.blob !== undefined,
+      ),
+    _meta: acpMetaSchema.optional(),
+  })
+  .passthrough();
+const acpContentBlockSchema = z.union([
+  acpTextBlockSchema,
+  acpMediaBlockSchema,
+  acpResourceLinkBlockSchema,
+  acpResourceBlockSchema,
+]) as z.ZodType<PromptRequest["prompt"][number]>;
+const acpPromptBlocksSchema = z.array(acpContentBlockSchema);
+
+function readAcpPromptBlocks(value: unknown): PromptRequest["prompt"] {
+  const prompt = acpPromptBlocksSchema.safeParse(value);
+  if (prompt.success) return prompt.data;
+  throw new Error("Queue message requires valid prompt blocks.");
+}
+
 function readSessionId(params: Record<string, unknown>, action: string): SessionId {
   const sessionId = typeof params.sessionId === "string" ? params.sessionId : undefined;
   if (!sessionId) throw new Error(`${action} requires sessionId.`);
   return sessionId;
 }
 
+const runtimeAccessLevelSchema = z.enum(["read-only", "ask", "trusted"]);
+
 function readRuntimeAccessLevel(value: unknown): RuntimeAccessLevel | undefined {
-  return value === "read-only" || value === "ask" || value === "trusted" ? value : undefined;
+  const accessLevel = runtimeAccessLevelSchema.safeParse(value);
+  return accessLevel.success ? accessLevel.data : undefined;
 }
 
 function runtimeControlsResponse(controls: RuntimeSessionControls): Record<string, unknown> {

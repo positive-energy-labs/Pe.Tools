@@ -466,15 +466,20 @@ function sanitizeObject(value: object, seen: WeakSet<object>): RuntimeJsonValue 
 }
 
 function stripUndefined<T extends Record<string, unknown>>(value: T): T {
-  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as T;
+  const result = { ...value };
+  for (const key of Object.keys(result)) {
+    if (result[key] === undefined) delete result[key];
+  }
+  return result;
 }
 
 function readPlanApprovalRequiredEvent(
   event: HarnessEvent,
 ): { title: string; plan: string } | undefined {
-  if ((event as { type?: unknown }).type !== "plan_approval_required") return undefined;
-  const title = (event as { title?: unknown }).title;
-  const plan = (event as { plan?: unknown }).plan;
+  const record = readRecord(event);
+  if (record.type !== "plan_approval_required") return undefined;
+  const title = record.title;
+  const plan = record.plan;
   return typeof title === "string" && typeof plan === "string" ? { title, plan } : undefined;
 }
 
@@ -486,9 +491,10 @@ function hasStringProperty<T extends string>(
   value: unknown,
   property: T,
 ): value is Record<T, string> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as Record<T, unknown>)[property] === "string"
-  );
+  const record = readRecord(value);
+  return typeof record[property] === "string";
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
 }

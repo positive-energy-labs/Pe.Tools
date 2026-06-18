@@ -1,8 +1,6 @@
-export type MastraCodeAuthStorage = {
-  loadStoredApiKeysIntoEnv?: (providers: Record<string, string>) => void;
-  hasStoredApiKey?: (provider: string) => boolean;
-  isLoggedIn?: (provider: string) => boolean;
-};
+type MastraCodeModule = typeof import("mastracode");
+
+export type MastraCodeAuthStorage = ReturnType<MastraCodeModule["createAuthStorage"]>;
 
 export interface MastraCodeAuthStorageContext {
   source: "mastracode";
@@ -24,10 +22,7 @@ export const defaultMastraCodeApiKeyEnvVars = {
 };
 
 export async function createMastraCodeAuthStorage(): Promise<MastraCodeAuthStorage> {
-  const module = (await import("mastracode")) as {
-    createAuthStorage?: () => MastraCodeAuthStorage;
-  };
-  if (!module.createAuthStorage) throw new Error("MastraCode auth storage is unavailable.");
+  const module: MastraCodeModule = await import("mastracode");
   return module.createAuthStorage();
 }
 

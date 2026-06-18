@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { Harness, HarnessEvent } from "@mastra/core/harness";
+import type { HarnessEvent } from "@mastra/core/harness";
 import { createRuntimeRequestContext, setRuntimeThreadSettings } from "./context.ts";
 import { MastraHarnessToRuntimeEvents, sanitizeJson, type RuntimeEvent } from "./events.ts";
 import { readRuntimeThreadLockInfo } from "./harness/thread-lock.ts";
@@ -39,6 +39,61 @@ export interface RuntimeKernelOptions {
   toolCatalog?: RuntimeToolSource;
 }
 
+type RuntimeKernelMastra = {
+  getAgentById?: (id: string) => unknown;
+  startWorkers?: () => Promise<void> | void;
+  shutdown?: () => Promise<void> | void;
+};
+
+type RuntimeKernelMemory = {
+  deleteThread?: (options: { threadId: string }) => Promise<void> | void;
+};
+
+export type RuntimeKernelHarness<TState extends Record<string, unknown> = Record<string, unknown>> =
+  RuntimeKernelRequiredHarness<TState> & RuntimeKernelOptionalHarness;
+
+export interface RuntimeKernelThread {
+  id: string;
+  resourceId?: string;
+  title?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  metadata?: Record<string, unknown>;
+}
+
+interface RuntimeKernelRequiredHarness<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+> {
+  abort(): void;
+  createThread(options?: { title?: string }): Promise<RuntimeKernelThread> | RuntimeKernelThread;
+  getCurrentThreadId(): string | null | undefined;
+  getResourceId(): string;
+  getState(): Partial<TState>;
+  listThreads(): Promise<RuntimeKernelThread[]> | RuntimeKernelThread[];
+  sendMessage(message: {
+    content: string;
+    requestContext?: ReturnType<typeof createRuntimeRequestContext>;
+  }): Promise<void> | void;
+  setState(state: Partial<TState>): Promise<void> | void;
+  subscribe(listener: (event: HarnessEvent) => void | Promise<void>): () => void;
+  switchThread(options: { threadId: string }): Promise<void> | void;
+}
+
+interface RuntimeKernelOptionalHarness {
+  init?: () => Promise<void> | void;
+  getMastra?: () => RuntimeKernelMastra | undefined;
+  memory?: RuntimeKernelMemory;
+  setThreadSetting?: (options: { key: string; value: unknown }) => Promise<void> | void;
+  cloneThread?: (options: {
+    sourceThreadId: string;
+    resourceId?: string;
+    title?: string;
+  }) => Promise<{ id?: string; resourceId?: string }> | { id?: string; resourceId?: string };
+  isRunning?: () => boolean;
+  followUp?: RuntimeHarnessFollowUp;
+  getResolvedMemory?: () => unknown;
+}
+
 type RuntimeLedgerEntryInput = {
   [K in RuntimeLedgerEntry["type"]]: Omit<
     Extract<RuntimeLedgerEntry, { type: K }>,
@@ -48,14 +103,14 @@ type RuntimeLedgerEntryInput = {
   };
 }[RuntimeLedgerEntry["type"]];
 
-export function createRuntimeKernel(
-  harness: Harness<Record<string, unknown>>,
+export function createRuntimeKernel<TState extends Record<string, unknown>>(
+  harness: RuntimeKernelHarness<TState>,
   options: RuntimeKernelOptions = {},
 ): RuntimeKernel {
   return new MastraRuntimeKernel(harness, options);
 }
 
-class MastraRuntimeKernel implements RuntimeKernel {
+class MastraRuntimeKernel<TState extends Record<string, unknown>> implements RuntimeKernel {
   private readonly agentOverrides: Record<string, unknown>;
   private readonly sessions = new Map<string, RuntimeKernelSession>();
   private readonly ledger: RuntimeLedgerEntry[] = [];
@@ -66,7 +121,7 @@ class MastraRuntimeKernel implements RuntimeKernel {
   private persistFailure: { error: unknown } | null = null;
 
   constructor(
-    private readonly harness: Harness<Record<string, unknown>>,
+    private readonly harness: RuntimeKernelHarness<TState>,
     private readonly options: RuntimeKernelOptions,
   ) {
     this.agentOverrides = options.agentOverrides ?? {};
@@ -74,17 +129,8 @@ class MastraRuntimeKernel implements RuntimeKernel {
 
   async initialize(): Promise<void> {
     this.initTask ??= (async () => {
-      const initializable = this.harness as unknown as {
-        init?: () => Promise<void> | void;
-        getMastra?: () =>
-          | {
-              getAgentById?: (id: string) => unknown;
-              startWorkers?: () => Promise<void> | void;
-            }
-          | undefined;
-      };
-      await initializable.init?.();
-      const mastra = initializable.getMastra?.();
+      await this.harness.init?.();
+      const mastra = this.harness.getMastra?.();
       if (mastra && Object.keys(this.agentOverrides).length > 0) {
         const getAgentById = mastra.getAgentById?.bind(mastra);
         mastra.getAgentById = (id: string) => this.agentOverrides[id] ?? getAgentById?.(id);
@@ -371,11 +417,9 @@ class MastraRuntimeKernel implements RuntimeKernel {
   async createThreadSession(options?: { title?: string }): Promise<RuntimeThreadSession> {
     this.assertThreadCreationIsIdle("createThreadSession");
     await this.initialize();
-    const thread = (await this.harness.createThread(options)) as { id?: string };
-    const threadId = thread.id;
-    if (!threadId) throw new Error("Harness did not return a thread id.");
+    const thread = readRuntimeThread(await this.harness.createThread(options), "created");
     return {
-      threadId,
+      threadId: thread.id,
       resourceId: this.harness.getResourceId(),
     };
   }
@@ -383,18 +427,17 @@ class MastraRuntimeKernel implements RuntimeKernel {
   async cloneThreadSession(options: RuntimeForkSessionOptions): Promise<RuntimeThreadSession> {
     this.assertThreadCreationIsIdle("cloneThreadSession");
     await this.initialize();
-    const cloneThread = (this.harness as CloneThreadHarness).cloneThread?.bind(this.harness);
+    const cloneThread = this.harness.cloneThread?.bind(this.harness);
     if (!cloneThread) throw new Error("Runtime harness does not support thread cloning.");
     const thread = await cloneThread({
       sourceThreadId: options.sourceThreadId,
       ...(options.resourceId ? { resourceId: options.resourceId } : {}),
       ...(options.title ? { title: options.title } : {}),
     });
-    const threadId = thread.id;
-    if (!threadId) throw new Error("Harness did not return a cloned thread id.");
+    const clonedThread = readRuntimeThread(thread, "cloned");
     return {
-      threadId,
-      resourceId: thread.resourceId ?? this.harness.getResourceId(),
+      threadId: clonedThread.id,
+      resourceId: clonedThread.resourceId ?? this.harness.getResourceId(),
     };
   }
 
@@ -410,7 +453,7 @@ class MastraRuntimeKernel implements RuntimeKernel {
     await this.initialize();
     return (await this.harness.listThreads()).map((thread) => ({
       threadId: thread.id,
-      resourceId: thread.resourceId,
+      resourceId: thread.resourceId ?? this.harness.getResourceId(),
       title: thread.title,
       createdAt: thread.createdAt.toISOString(),
       updatedAt: thread.updatedAt.toISOString(),
@@ -460,11 +503,7 @@ class MastraRuntimeKernel implements RuntimeKernel {
   async deleteThreadSession(options: { threadId: string }): Promise<void> {
     await this.initialize();
     this.assertThreadCanBeDeleted(options.threadId);
-    const memory = (
-      this.harness as unknown as {
-        memory?: { deleteThread?: (options: { threadId: string }) => Promise<void> | void };
-      }
-    ).memory;
+    const memory = this.harness.memory;
     if (!memory?.deleteThread) throw new Error("Runtime memory is not configured.");
     await memory.deleteThread(options);
     await this.deleteThreadLedger(options.threadId);
@@ -491,7 +530,7 @@ class MastraRuntimeKernel implements RuntimeKernel {
 
   async setModel(options: { modelId: string }): Promise<RuntimeSessionControls> {
     await this.initialize();
-    await this.harness.setState({ currentModelId: options.modelId });
+    await this.harness.setState({ ...this.harness.getState(), currentModelId: options.modelId });
     return this.readControls();
   }
 
@@ -500,6 +539,7 @@ class MastraRuntimeKernel implements RuntimeKernel {
   }): Promise<RuntimeSessionControls> {
     await this.initialize();
     await this.harness.setState({
+      ...this.harness.getState(),
       accessLevel: options.accessLevel,
       yolo: options.accessLevel === "trusted",
     });
@@ -750,7 +790,7 @@ class MastraRuntimeKernel implements RuntimeKernel {
     const key = threadKey(options);
     if (this.hydratedPersistedLedgerKeys.has(key)) return;
 
-    const state = await store.getState<RuntimePersistedLedgerState>({
+    const state = await store.getState({
       threadId: options.threadId,
       type: runtimeLedgerThreadStateType,
     });
@@ -766,12 +806,7 @@ class MastraRuntimeKernel implements RuntimeKernel {
   private async deleteThreadLedger(threadId: string): Promise<void> {
     await this.flushLedger();
 
-    const threadStateStore = this.options.threadStateStore as
-      | {
-          deleteState?: (args: { threadId: string; type: string }) => Promise<void> | void;
-        }
-      | undefined;
-    await threadStateStore?.deleteState?.({
+    await this.options.threadStateStore?.deleteState?.({
       threadId,
       type: runtimeLedgerThreadStateType,
     });
@@ -839,11 +874,11 @@ class MastraRuntimeKernel implements RuntimeKernel {
     config: { persist?: boolean } = {},
   ): RuntimeLedgerEntry {
     const createdAt = entry.createdAt ?? new Date().toISOString();
-    const ledgerEntry = {
+    const ledgerEntry: RuntimeLedgerEntry = {
       ...entry,
       createdAt,
       sequence: ++this.sequence,
-    } as RuntimeLedgerEntry;
+    };
     this.ledger.push(ledgerEntry);
     if (config.persist !== false) this.persistLedgerEntry(ledgerEntry);
     return cloneLedgerEntry(ledgerEntry);
@@ -862,7 +897,7 @@ class MastraRuntimeKernel implements RuntimeKernel {
     this.persistQueue = this.persistQueue
       .catch(() => undefined)
       .then(async () => {
-        const existing = await store.getState<RuntimePersistedLedgerState>({
+        const existing = await store.getState({
           threadId: entry.threadId,
           type: runtimeLedgerThreadStateType,
         });
@@ -912,27 +947,11 @@ class MastraRuntimeKernel implements RuntimeKernel {
 
 const runtimeLedgerThreadStateType = "pe.runtime.ledger.v1";
 
-interface RuntimePersistedLedgerState {
-  entries?: unknown[];
-}
-
-type ThreadSettingHarness = Harness<Record<string, unknown>> & {
-  setThreadSetting?: (options: { key: string; value: unknown }) => Promise<void> | void;
-};
-
-type CloneThreadHarness = Harness<Record<string, unknown>> & {
-  cloneThread?: (options: {
-    sourceThreadId: string;
-    resourceId?: string;
-    title?: string;
-  }) => Promise<{ id?: string; resourceId?: string }> | { id?: string; resourceId?: string };
-};
-
-function installRuntimeThreadSettings(
+function installRuntimeThreadSettings<TState extends Record<string, unknown>>(
   requestContext: Parameters<typeof setRuntimeThreadSettings>[0],
-  harness: Harness<Record<string, unknown>>,
+  harness: RuntimeKernelHarness<TState>,
 ): void {
-  const setThreadSetting = (harness as ThreadSettingHarness).setThreadSetting?.bind(harness);
+  const setThreadSetting = harness.setThreadSetting?.bind(harness);
   if (!setThreadSetting) return;
 
   setRuntimeThreadSettings(requestContext, {
@@ -958,11 +977,10 @@ async function collectSessionPromptFragments(
   }
 }
 
-function isHarnessRunning(harness: Harness<Record<string, unknown>>): boolean {
-  const target = harness as Harness<Record<string, unknown>> & {
-    isRunning?: () => boolean;
-  };
-  return target.isRunning?.() ?? false;
+function isHarnessRunning<TState extends Record<string, unknown>>(
+  harness: RuntimeKernelHarness<TState>,
+): boolean {
+  return harness.isRunning?.() ?? false;
 }
 
 type RuntimeHarnessFollowUp = (message: {
@@ -970,32 +988,26 @@ type RuntimeHarnessFollowUp = (message: {
   requestContext: ReturnType<typeof createRuntimeRequestContext>;
 }) => Promise<void>;
 
-function requireFollowUp(harness: Harness<Record<string, unknown>>): RuntimeHarnessFollowUp {
-  const target = harness as Harness<Record<string, unknown>> & {
-    followUp?: RuntimeHarnessFollowUp;
-  };
-  if (!target.followUp) throw new Error("Runtime harness does not support follow-up messages.");
-  return target.followUp.bind(target);
+function requireFollowUp<TState extends Record<string, unknown>>(
+  harness: RuntimeKernelHarness<TState>,
+): RuntimeHarnessFollowUp {
+  if (!harness.followUp) throw new Error("Runtime harness does not support follow-up messages.");
+  return harness.followUp.bind(harness);
 }
 
-async function resolveHarnessMemory(harness: Harness<Record<string, unknown>>): Promise<{
-  recall: (request: Record<string, unknown>) => Promise<{ messages?: unknown[] }>;
-}> {
-  const memoryHarness = harness as Harness<Record<string, unknown>> & {
-    getResolvedMemory?: () => unknown;
-  };
-  const memory = await memoryHarness.getResolvedMemory?.();
-  if (
-    !memory ||
-    typeof memory !== "object" ||
-    typeof (memory as { recall?: unknown }).recall !== "function"
-  ) {
+async function resolveHarnessMemory<TState extends Record<string, unknown>>(
+  harness: RuntimeKernelHarness<TState>,
+): Promise<RuntimeMemoryWithRecall> {
+  const memory = await harness.getResolvedMemory?.();
+  if (!isRuntimeMemoryWithRecall(memory)) {
     throw new Error("Runtime memory is not configured; cannot load thread history.");
   }
-  return memory as unknown as {
-    recall: (request: Record<string, unknown>) => Promise<{ messages?: unknown[] }>;
-  };
+  return memory;
 }
+
+type RuntimeMemoryWithRecall = {
+  recall: (request: Record<string, unknown>) => Promise<{ messages?: unknown[] }>;
+};
 
 function runtimeThreadMessage(message: unknown): RuntimeThreadMessage {
   const record = readRecord(message);
@@ -1087,7 +1099,29 @@ function threadKey(options: RuntimeReadThreadRequest): string {
 }
 
 function readRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  return isRecord(value) ? value : {};
+}
+
+function readRuntimeThread(
+  value: unknown,
+  action: "created" | "cloned",
+): {
+  id: string;
+  resourceId?: string;
+} {
+  const record = readRecord(value);
+  const id = stringValue(record.id);
+  if (!id) throw new Error(`Harness did not return a ${action} thread id.`);
+  const resourceId = stringValue(record.resourceId);
+  return resourceId ? { id, resourceId } : { id };
+}
+
+function isRuntimeMemoryWithRecall(value: unknown): value is RuntimeMemoryWithRecall {
+  return isRecord(value) && typeof value.recall === "function";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function stringValue(value: unknown): string | undefined {
@@ -1100,10 +1134,9 @@ function dateString(value: unknown): string | undefined {
   return undefined;
 }
 
-function persistedLedgerEntries(
-  state: RuntimePersistedLedgerState | undefined,
-): RuntimeLedgerEntry[] {
-  const entries = Array.isArray(state?.entries) ? state.entries : [];
+function persistedLedgerEntries(state: unknown): RuntimeLedgerEntry[] {
+  const record = readRecord(state);
+  const entries = Array.isArray(record.entries) ? record.entries : [];
   return entries.filter(isRuntimeLedgerEntry);
 }
 

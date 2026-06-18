@@ -1,11 +1,15 @@
 import type { RuntimeAcpAgentOptions } from "../acp/adapter.ts";
+import type { RuntimeHandleServices } from "../runtime.ts";
 import {
   runRuntimeAcpAgent,
   runRuntimeAcpHttpAgent,
   type RuntimeAcpTransportOptions,
 } from "./agent.ts";
 
-export interface RuntimeAcpCliOptions extends RuntimeAcpAgentOptions {
+export interface RuntimeAcpCliOptions<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+> extends RuntimeAcpAgentOptions<TState, TServices> {
   protocolTransport?: "stdio" | "http";
   transport?: RuntimeAcpTransportOptions;
 }
@@ -54,10 +58,13 @@ export const argsAcp = {
   },
 } as const;
 
-export function createRuntimeAcpCliOptions(
+export function createRuntimeAcpCliOptions<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+>(
   values: RuntimeAcpCliValues,
-  base: RuntimeAcpCliOptions,
-): RuntimeAcpCliOptions {
+  base: RuntimeAcpCliOptions<TState, TServices>,
+): RuntimeAcpCliOptions<TState, TServices> {
   const transport = {
     ...base.transport,
     port: parseOptionalPort(values.acpPort, "ACP HTTP port"),
@@ -79,7 +86,10 @@ export function createRuntimeAcpCliOptions(
   };
 }
 
-export async function runRuntimeAcpFromCli(options: RuntimeAcpCliOptions): Promise<void> {
+export async function runRuntimeAcpFromCli<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+>(options: RuntimeAcpCliOptions<TState, TServices>): Promise<void> {
   const { protocolTransport, transport, ...agentOptions } = options;
   const selectedTransport = protocolTransport ?? "stdio";
   if (selectedTransport === "http") {

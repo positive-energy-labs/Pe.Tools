@@ -4,6 +4,7 @@ import type { RuntimeContextEntry } from "./context.ts";
 import type { RuntimeEvent, RuntimeJsonValue, RuntimeProtocol } from "./events.ts";
 import {
   openMostRecentUnlockedRuntimeThread,
+  type RuntimeHarnessThreadSelector,
   type RuntimeStartupThreadSelection,
 } from "./harness/thread-selection.ts";
 import type { RuntimeResumeDecision } from "./interrupts.ts";
@@ -280,15 +281,33 @@ export function createRuntimeDescriptor(
   };
 }
 
-export interface RuntimeHandle<TState extends Record<string, unknown> = Record<string, unknown>> {
-  harness: Harness<TState>;
+export interface RuntimeHandleServices {
+  authStorage?: unknown;
+  hookManager?: unknown;
+  mcpManager?: unknown;
+}
+
+export interface RuntimeHandleHarness<
+  TState extends Record<string, unknown>,
+> extends RuntimeHarnessThreadSelector<TState> {
+  getState(): Partial<TState>;
+  setState(state: Partial<TState>): Promise<void> | void;
+  setThreadSetting?: (options: { key: string; value: unknown }) => Promise<void> | void;
+}
+
+export interface RuntimeHandle<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState> = Harness<TState>,
+> {
+  harness: THarness;
   kernel?: RuntimeKernel;
   sessions: RuntimeSessions;
   workspace?: RuntimeWorkspaceInfo;
   auth?: RuntimeAuthProfile;
-  authStorage?: unknown;
-  hookManager?: unknown;
-  mcpManager?: unknown;
+  authStorage?: TServices["authStorage"];
+  hookManager?: TServices["hookManager"];
+  mcpManager?: TServices["mcpManager"];
   metadata?: Record<string, unknown>;
   close?: () => Promise<void> | void;
 }
@@ -301,32 +320,48 @@ export interface RuntimeCreateRequest {
   metadata?: Record<string, unknown>;
 }
 
-export interface RuntimeStartupThreadPolicy<TState extends Record<string, unknown>> {
+export interface RuntimeStartupThreadPolicy<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState> = Harness<TState>,
+> {
   createTitle?: string;
   enabled?: boolean | ((request: RuntimeCreateRequest) => boolean);
   onThreadOpened?: (context: {
     request: RuntimeCreateRequest;
-    handle: RuntimeHandle<TState>;
+    handle: RuntimeHandle<TState, TServices, THarness>;
     selection: RuntimeStartupThreadSelection;
   }) => Promise<void> | void;
 }
 
-export interface RuntimeFactoryOptions<TState extends Record<string, unknown>> {
+export interface RuntimeFactoryOptions<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState> = Harness<TState>,
+> {
   auth?: RuntimeAuthProfile;
-  startupThread?: false | RuntimeStartupThreadPolicy<TState>;
+  startupThread?: false | RuntimeStartupThreadPolicy<TState, TServices, THarness>;
 }
 
-export interface RuntimeFactory<TState extends Record<string, unknown> = Record<string, unknown>> {
+export interface RuntimeFactory<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState> = Harness<TState>,
+> {
   descriptor: RuntimeDescriptor;
   auth?: RuntimeAuthProfile;
-  create(request: RuntimeCreateRequest): Promise<RuntimeHandle<TState>>;
+  create(request: RuntimeCreateRequest): Promise<RuntimeHandle<TState, TServices, THarness>>;
 }
 
-export function createRuntimeFactory<TState extends Record<string, unknown>>(
+export function createRuntimeFactory<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState> = Harness<TState>,
+>(
   descriptor: RuntimeDescriptor,
-  create: (request: RuntimeCreateRequest) => Promise<RuntimeHandle<TState>>,
-  authOrOptions?: RuntimeAuthProfile | RuntimeFactoryOptions<TState>,
-): RuntimeFactory<TState> {
+  create: (request: RuntimeCreateRequest) => Promise<RuntimeHandle<TState, TServices, THarness>>,
+  authOrOptions?: RuntimeAuthProfile | RuntimeFactoryOptions<TState, TServices, THarness>,
+): RuntimeFactory<TState, TServices, THarness> {
   const options = resolveRuntimeFactoryOptions(authOrOptions);
   return {
     descriptor,
@@ -339,27 +374,37 @@ export function createRuntimeFactory<TState extends Record<string, unknown>>(
   };
 }
 
-function resolveRuntimeFactoryOptions<TState extends Record<string, unknown>>(
-  authOrOptions: RuntimeAuthProfile | RuntimeFactoryOptions<TState> | undefined,
-): RuntimeFactoryOptions<TState> {
+function resolveRuntimeFactoryOptions<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(
+  authOrOptions:
+    | RuntimeAuthProfile
+    | RuntimeFactoryOptions<TState, TServices, THarness>
+    | undefined,
+): RuntimeFactoryOptions<TState, TServices, THarness> {
   if (!authOrOptions) return {};
   if ("descriptor" in authOrOptions) return { auth: authOrOptions };
   return authOrOptions;
 }
 
-async function applyRuntimeStartupThreadPolicy<TState extends Record<string, unknown>>(
-  handle: RuntimeHandle<TState>,
+async function applyRuntimeStartupThreadPolicy<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(
+  handle: RuntimeHandle<TState, TServices, THarness>,
   request: RuntimeCreateRequest,
-  policy: RuntimeFactoryOptions<TState>["startupThread"],
+  policy: RuntimeFactoryOptions<TState, TServices, THarness>["startupThread"],
 ): Promise<void> {
   if (policy === false) return;
 
   const enabled = typeof policy?.enabled === "function" ? policy.enabled(request) : policy?.enabled;
   if (enabled !== true) return;
 
-  const selection = await openMostRecentUnlockedRuntimeThread(
-    handle.harness as Harness<Record<string, unknown>>,
-    { createTitle: policy?.createTitle ?? "New thread" },
-  );
+  const selection = await openMostRecentUnlockedRuntimeThread(handle.harness, {
+    createTitle: policy?.createTitle ?? "New thread",
+  });
   await policy?.onThreadOpened?.({ request, handle, selection });
 }

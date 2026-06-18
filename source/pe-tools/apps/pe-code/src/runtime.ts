@@ -1,7 +1,8 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import type { Harness } from "@mastra/core/harness";
-import { createMastraCode } from "mastracode";
+import { createMastraCode, type MastraCodeConfig } from "mastracode";
+import type { MastraTUIOptions } from "mastracode/tui";
 import {
   createRuntimeDescriptor,
   createRuntimeFactory,
@@ -12,7 +13,10 @@ import {
   type RuntimeCreateRequest,
   type RuntimeFactory,
   type RuntimeHandle,
+  type RuntimeHandleServices,
+  type RuntimeKernelHarness,
   type RuntimeKernel,
+  type RuntimeToolsInput,
   type RuntimeToolProfile,
 } from "@pe/runtime";
 import { peCodeRuntimeToolProfile as peCodeToolsRuntimeToolProfile } from "@pe/tools";
@@ -28,9 +32,22 @@ export interface PeCodeTuiRuntimeOptions {
   modelId?: string;
 }
 
+type PeCodeRuntime = Awaited<ReturnType<typeof createMastraCode>>;
+type PeCodeHarness = PeCodeRuntime["harness"];
+type PeCodeState = PeCodeHarness extends Harness<infer TState> ? TState : Record<string, unknown>;
+type PeCodeRuntimeServices = RuntimeHandleServices &
+  Pick<PeCodeRuntime, "authStorage" | "hookManager" | "mcpManager">;
+type PeCodeRuntimeHandle = RuntimeHandle<PeCodeState, PeCodeRuntimeServices, PeCodeHarness>;
+type PeCodeRuntimeFactory = RuntimeFactory<PeCodeState, PeCodeRuntimeServices, PeCodeHarness>;
+type MastraCodeStaticExtraTools = Extract<
+  NonNullable<MastraCodeConfig["extraTools"]>,
+  Record<string, unknown>
+>;
+type MastraCodeExtraTool = MastraCodeStaticExtraTools[string];
+
 export async function createPeCodeProtocolRuntimeFactory(
   options: PeCodeTuiRuntimeOptions = {},
-): Promise<RuntimeFactory> {
+): Promise<PeCodeRuntimeFactory> {
   const descriptor = createRuntimeDescriptor("peco", {
     modeName: "Build",
     agentName: "Pe.Tools Dev Agent",
@@ -38,12 +55,15 @@ export async function createPeCodeProtocolRuntimeFactory(
     description: "Pe.Tools repo coding agent.",
   });
 
-  return createRuntimeFactory(descriptor, (request) => createPeCodeRuntimeHandle(options, request));
+  return createRuntimeFactory<PeCodeState, PeCodeRuntimeServices, PeCodeHarness>(
+    descriptor,
+    (request) => createPeCodeRuntimeHandle(options, request),
+  );
 }
 
 export async function createPeCodeTuiRuntime(
   options: PeCodeTuiRuntimeOptions = {},
-): Promise<RuntimeHandle> {
+): Promise<PeCodeRuntimeHandle> {
   const startPath = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
   const cwd = await resolveDevAgentProjectRoot(startPath);
   const factory = await createPeCodeProtocolRuntimeFactory({
@@ -67,21 +87,22 @@ export async function runPeCodeTui(options: PeCodeTuiRuntimeOptions = {}): Promi
     workspaceRoot: cwd,
   });
   const { MastraTUI } = await import("mastracode/tui");
-  const tui = new MastraTUI({
+  const tuiOptions: MastraTUIOptions = {
     harness: runtime.harness,
-    authStorage: runtime.authStorage as never,
-    hookManager: runtime.hookManager as never,
-    mcpManager: runtime.mcpManager as never,
+    authStorage: runtime.authStorage,
+    hookManager: runtime.hookManager,
+    mcpManager: runtime.mcpManager,
     appName: "peco (Pe.Tools)",
     version: "0.1.0",
-  });
+  };
+  const tui = new MastraTUI(tuiOptions);
   await tui.run();
 }
 
 async function createPeCodeRuntimeHandle(
   options: PeCodeTuiRuntimeOptions,
   request: RuntimeCreateRequest,
-): Promise<RuntimeHandle> {
+): Promise<PeCodeRuntimeHandle> {
   const startPath = path.resolve(
     request.workspaceRoot ?? request.cwd ?? options.workspaceRoot ?? options.cwd ?? process.cwd(),
   );
@@ -100,7 +121,7 @@ async function createPeCodeRuntimeHandle(
       yolo: true,
     },
   });
-  const harness = runtime.harness as unknown as Harness<Record<string, unknown>>;
+  const harness = runtime.harness;
   const kernel = createRuntimeKernel(harness, {
     threadStateStore: resolveRuntimeThreadStateStore(harness),
     toolCatalog: peCodeRuntimeToolProfile.catalog,
@@ -127,14 +148,41 @@ async function createPeCodeRuntimeHandle(
   };
 }
 
-type MastraCodeExtraTool = {
-  execute?: (input: unknown, context?: unknown) => unknown;
-  [key: string]: unknown;
-};
+const peCodeExtraTools = createMastraCodeExtraTools(
+  peCodeRuntimeToolProfile.tools,
+  "request_access",
+);
 
-const peCodeExtraTools = Object.fromEntries(
-  Object.entries(peCodeRuntimeToolProfile.tools).filter(([name]) => name !== "request_access"),
-) as unknown as Record<string, MastraCodeExtraTool>;
+function createMastraCodeExtraTools(
+  tools: RuntimeToolsInput,
+  omittedToolName: string,
+): Record<string, MastraCodeExtraTool> {
+  const extraTools: Record<string, MastraCodeExtraTool> = {};
+  for (const [name, tool] of Object.entries(tools)) {
+    if (name === omittedToolName) continue;
+    extraTools[name] = adaptMastraCodeExtraTool(tool);
+  }
+  return extraTools;
+}
+
+function adaptMastraCodeExtraTool(tool: RuntimeToolsInput[string]): MastraCodeExtraTool {
+  const adapted: MastraCodeExtraTool = {};
+  Object.setPrototypeOf(adapted, Object.getPrototypeOf(tool));
+  Object.defineProperties(adapted, Object.getOwnPropertyDescriptors(tool));
+
+  if (isMastraCodeToolExecute(adapted.execute)) {
+    const execute = adapted.execute.bind(tool);
+    adapted.execute = (input, context) => execute(input, context);
+  }
+
+  return adapted;
+}
+
+function isMastraCodeToolExecute(
+  value: unknown,
+): value is NonNullable<MastraCodeExtraTool["execute"]> {
+  return typeof value === "function";
+}
 
 function mergeSandboxAllowedPaths(paths: string[]): string[] {
   return Array.from(
@@ -171,12 +219,8 @@ async function readDirectoryEntries(directory: string) {
   }
 }
 
-type ClosableHarness = Harness<Record<string, unknown>> & {
-  getMastra?: () => { shutdown?: () => Promise<void> | void } | undefined;
-};
-
 async function closePeCodeRuntime(
-  harness: Harness<Record<string, unknown>>,
+  harness: RuntimeKernelHarness<PeCodeState>,
   kernel: RuntimeKernel,
 ): Promise<void> {
   const currentThreadId = harness.getCurrentThreadId();
@@ -185,7 +229,7 @@ async function closePeCodeRuntime(
     await kernel.flushLedger();
   } finally {
     releasePeCodeThreadLock(currentThreadId);
-    await (harness as ClosableHarness).getMastra?.()?.shutdown?.();
+    await harness.getMastra?.()?.shutdown?.();
   }
 }
 

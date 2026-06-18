@@ -59,24 +59,29 @@ export function createRuntimeMemoryProfile<
 export function createRuntimeMemoryOptions(
   overrides: MemoryConfigInternal | undefined,
 ): MemoryConfigInternal {
+  const observationalMemory = createRuntimeThreadObservationalMemoryConfig();
   const base: MemoryConfigInternal = {
     lastMessages: 10,
     semanticRecall: false,
     generateTitle: false,
     workingMemory: { enabled: false },
-    observationalMemory: createRuntimeThreadObservationalMemoryConfig(),
+    observationalMemory,
   };
 
   return {
     ...base,
     ...overrides,
     observationalMemory: mergeObservationalMemoryConfig(
-      base.observationalMemory as RuntimeObservationalMemoryConfig,
+      observationalMemory,
       overrides?.observationalMemory,
     ),
   };
 }
 
+export function createRuntimeThreadObservationalMemoryConfig(): RuntimeObservationalMemoryConfig;
+export function createRuntimeThreadObservationalMemoryConfig(
+  overrides: MemoryConfigInternal["observationalMemory"],
+): MemoryConfigInternal["observationalMemory"];
 export function createRuntimeThreadObservationalMemoryConfig(
   overrides?: MemoryConfigInternal["observationalMemory"],
 ): MemoryConfigInternal["observationalMemory"] {

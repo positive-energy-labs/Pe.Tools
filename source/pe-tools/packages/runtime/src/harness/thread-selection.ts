@@ -1,39 +1,58 @@
-import type { Harness } from "@mastra/core/harness";
 import { isThreadLockError } from "./thread-lock.ts";
 
-type RuntimeThread = Awaited<ReturnType<Harness<Record<string, unknown>>["listThreads"]>>[number];
-type RuntimeHarnessThreadSelector = Pick<
-  Harness<Record<string, unknown>>,
-  "createThread" | "getCurrentThreadId" | "listThreads" | "switchThread"
->;
+export interface RuntimeSelectableThread {
+  id: string;
+  resourceId?: string;
+  title?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  metadata?: Record<string, unknown>;
+}
 
-export type RuntimeStartupThreadSelection =
+export interface RuntimeHarnessThreadSelector<
+  _TState extends Record<string, unknown> = Record<string, unknown>,
+  TThread extends RuntimeSelectableThread = RuntimeSelectableThread,
+> {
+  createThread(options?: { title?: string }): Promise<TThread> | TThread;
+  getCurrentThreadId(): string | null | undefined;
+  listThreads(): Promise<TThread[]> | TThread[];
+  switchThread(options: { threadId: string }): Promise<void> | void;
+}
+
+export type RuntimeStartupThreadSelection<
+  TThread extends RuntimeSelectableThread = RuntimeSelectableThread,
+> =
   | {
       status: "selected";
       threadId: string;
-      thread: RuntimeThread;
+      thread: TThread;
       lockedThreadIds: string[];
     }
   | {
       status: "created";
       threadId: string;
-      thread: RuntimeThread;
+      thread: TThread;
       lockedThreadIds: string[];
     };
 
-export interface OpenMostRecentUnlockedRuntimeThreadOptions {
+export interface OpenMostRecentUnlockedRuntimeThreadOptions<
+  TThread extends RuntimeSelectableThread = RuntimeSelectableThread,
+> {
   createTitle?: string;
-  filter?: (thread: RuntimeThread) => boolean;
+  filter?: (thread: TThread) => boolean;
   onThreadOpened?: (
-    thread: RuntimeThread,
-    status: RuntimeStartupThreadSelection["status"],
+    thread: TThread,
+    status: RuntimeStartupThreadSelection<TThread>["status"],
   ) => Promise<void> | void;
 }
 
-export async function openMostRecentUnlockedRuntimeThread(
-  harness: RuntimeHarnessThreadSelector,
-  options: OpenMostRecentUnlockedRuntimeThreadOptions = {},
-): Promise<RuntimeStartupThreadSelection> {
+export async function openMostRecentUnlockedRuntimeThread<
+  TState extends Record<string, unknown>,
+  TThread extends RuntimeSelectableThread,
+>(
+  harness: RuntimeHarnessThreadSelector<TState, TThread>,
+  options: OpenMostRecentUnlockedRuntimeThreadOptions<TThread> = {},
+): Promise<RuntimeStartupThreadSelection<TThread>> {
   const lockedThreadIds: string[] = [];
   const threads = (await harness.listThreads())
     .filter((thread) => options.filter?.(thread) ?? true)
