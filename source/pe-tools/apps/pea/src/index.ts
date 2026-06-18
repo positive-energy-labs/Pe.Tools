@@ -17,3 +17,4 @@ export {
 } from "./runtime.ts";
 export type { PeaRuntimeFactoryOptions } from "./runtime.ts";
 export { PeaContextSignalProvider, PeaContextStateProcessor } from "./context-signals.ts";
+export type { PeaContextStateSignalArgs } from "./context-signals.ts";

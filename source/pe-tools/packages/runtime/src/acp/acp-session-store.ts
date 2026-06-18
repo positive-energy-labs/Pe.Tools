@@ -21,6 +21,8 @@ import type {
   RuntimeAccessLevel,
   RuntimeFactory,
   RuntimeDescriptor,
+  RuntimeHandleHarness,
+  RuntimeHandleServices,
   RuntimeLedgerEntry,
   RuntimeRecordProtocolEventRequest,
   RuntimeSessionControls,
@@ -38,19 +40,32 @@ import type { RuntimeClientPermissionResponse } from "../client.ts";
 import { acpSessionUpdateToWorkbenchEvents } from "@pe/agent-projection";
 import { RuntimeAcpClient, type RuntimeAcpClientTransport } from "./runtime-client.ts";
 import { RuntimeToAcpEvents } from "./events-map-runtime-acp.ts";
+import { z } from "zod";
 
-export interface RuntimeAcpSessionStoreRuntimeOptions {
-  factory: RuntimeFactory;
+export interface RuntimeAcpSessionStoreRuntimeOptions<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState> = RuntimeHandleHarness<TState>,
+> {
+  factory: RuntimeFactory<TState, TServices, THarness>;
   descriptor?: RuntimeDescriptor;
 }
 
-export interface RuntimeAcpSessionStoreSessionOptions {
-  manager?: RuntimeProtocolSessions;
+export interface RuntimeAcpSessionStoreSessionOptions<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState> = RuntimeHandleHarness<TState>,
+> {
+  manager?: RuntimeProtocolSessions<TState, TServices, THarness>;
 }
 
-export interface RuntimeAcpSessionStoreOptions {
-  runtime?: RuntimeAcpSessionStoreRuntimeOptions;
-  sessions?: RuntimeAcpSessionStoreSessionOptions;
+export interface RuntimeAcpSessionStoreOptions<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState> = RuntimeHandleHarness<TState>,
+> {
+  runtime?: RuntimeAcpSessionStoreRuntimeOptions<TState, TServices, THarness>;
+  sessions?: RuntimeAcpSessionStoreSessionOptions<TState, TServices, THarness>;
 }
 
 export interface RuntimeAcpCreateSessionRequest {
@@ -65,22 +80,49 @@ export interface RuntimeAcpSessionUpdateSink {
 export interface RuntimeAcpSessionClient
   extends RuntimeAcpSessionUpdateSink, RuntimeAcpClientTransport {}
 
-export type AcpSession = RuntimeProtocolSession & {
+export type AcpSession<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState> = RuntimeHandleHarness<TState>,
+> = RuntimeProtocolSession<TState, TServices, THarness> & {
   mapper: RuntimeToAcpEvents;
 };
 
-export class RuntimeAcpSessionStore {
-  private readonly runtimeSessions: RuntimeProtocolSessions;
+type RuntimeProtocolSessionSnapshot = Omit<RuntimeProtocolSession, "runtime"> & {
+  runtime: unknown;
+};
+
+const runtimeAcpRecordSchema = z.record(z.string(), z.unknown());
+const runtimeAcpClientTransportSchema = z.custom<RuntimeAcpClientTransport>((value) => {
+  const requestPermission = readRecord(value).requestPermission;
+  return requestPermission === undefined || typeof requestPermission === "function";
+});
+const acpSessionUpdateEnvelopeSchema = z.object({ sessionUpdate: z.string() }).passthrough();
+
+function runtimeAcpClientTransport(value: unknown): RuntimeAcpClientTransport {
+  return isRuntimeAcpClientTransport(value) ? value : {};
+}
+
+function isRuntimeAcpClientTransport(value: unknown): value is RuntimeAcpClientTransport {
+  return runtimeAcpClientTransportSchema.safeParse(value).success;
+}
+
+export class RuntimeAcpSessionStore<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState> = RuntimeHandleHarness<TState>,
+> {
+  private readonly runtimeSessions: RuntimeProtocolSessions<TState, TServices, THarness>;
   private readonly mappers = new Map<SessionId, RuntimeToAcpEvents>();
   private readonly client: RuntimeAcpClient;
   private readonly requestedPermissionToolIds = new Set<string>();
 
   constructor(
     private readonly updateSink: RuntimeAcpSessionUpdateSink,
-    private readonly options: RuntimeAcpSessionStoreOptions,
-    clientTransport: RuntimeAcpClientTransport = updateSink as RuntimeAcpClientTransport,
+    private readonly options: RuntimeAcpSessionStoreOptions<TState, TServices, THarness>,
+    clientTransport?: RuntimeAcpClientTransport,
   ) {
-    this.client = new RuntimeAcpClient(clientTransport);
+    this.client = new RuntimeAcpClient(clientTransport ?? runtimeAcpClientTransport(updateSink));
     this.runtimeSessions =
       options.sessions?.manager ??
       new RuntimeProtocolSessions({
@@ -92,7 +134,9 @@ export class RuntimeAcpSessionStore {
     this.client.configure(clientCapabilities);
   }
 
-  async createSession(request: RuntimeAcpCreateSessionRequest): Promise<AcpSession> {
+  async createSession(
+    request: RuntimeAcpCreateSessionRequest,
+  ): Promise<AcpSession<TState, TServices, THarness>> {
     const descriptor = runtimeDescriptor(this.options);
     const session = await this.runtimeSessions.createSession({
       protocol: "acp",
@@ -103,7 +147,7 @@ export class RuntimeAcpSessionStore {
     return this.attachSession(session);
   }
 
-  getSession(id: SessionId): AcpSession {
+  getSession(id: SessionId): AcpSession<TState, TServices, THarness> {
     const session = this.runtimeSessions.getSession(id);
     const mapper = this.mappers.get(session.id) ?? this.mappers.get(id);
     if (!mapper) throw new Error(`Unknown ACP session: ${id}`);
@@ -156,7 +200,7 @@ export class RuntimeAcpSessionStore {
     sessionId: SessionId;
     cwd?: string;
     additionalDirectories?: string[];
-  }): Promise<AcpSession> {
+  }): Promise<AcpSession<TState, TServices, THarness>> {
     const session = await this.runtimeSessions.resumeSession(request.sessionId, {
       protocol: "acp",
       cwd: request.cwd,
@@ -173,7 +217,7 @@ export class RuntimeAcpSessionStore {
     sessionId: SessionId;
     cwd: string;
     additionalDirectories?: string[];
-  }): Promise<AcpSession> {
+  }): Promise<AcpSession<TState, TServices, THarness>> {
     const session = await this.resume(request);
     await this.replayHistory(session.id);
     return session;
@@ -183,7 +227,7 @@ export class RuntimeAcpSessionStore {
     sessionId: SessionId;
     cwd: string;
     additionalDirectories?: string[];
-  }): Promise<AcpSession> {
+  }): Promise<AcpSession<TState, TServices, THarness>> {
     const session = await this.runtimeSessions.forkSession(request.sessionId, {
       protocol: "acp",
       cwd: request.cwd,
@@ -244,7 +288,7 @@ export class RuntimeAcpSessionStore {
   }
 
   private handleRuntimeEvent(
-    session: RuntimeProtocolSession,
+    session: RuntimeProtocolSession<TState, TServices>,
     mapper: RuntimeToAcpEvents,
     event: RuntimeEvent,
   ): void {
@@ -257,7 +301,9 @@ export class RuntimeAcpSessionStore {
     }
   }
 
-  private attachSession(session: RuntimeProtocolSession): AcpSession {
+  private attachSession(
+    session: RuntimeProtocolSession<TState, TServices, THarness>,
+  ): AcpSession<TState, TServices, THarness> {
     const existing = this.mappers.get(session.id);
     if (existing) return Object.assign(session, { mapper: existing });
 
@@ -272,12 +318,7 @@ export class RuntimeAcpSessionStore {
   private async resolveSessionInfo(
     sessionId: SessionId,
   ): Promise<RuntimeProtocolSessionInfo | undefined> {
-    const resolver = (
-      this.runtimeSessions as RuntimeProtocolSessions & {
-        resolveSessionInfo?: RuntimeProtocolSessions["resolveSessionInfo"];
-      }
-    ).resolveSessionInfo?.bind(this.runtimeSessions);
-    return resolver?.({ id: sessionId, protocol: "acp" });
+    return this.runtimeSessions.resolveSessionInfo({ id: sessionId, protocol: "acp" });
   }
 
   private clearSessionState(
@@ -324,7 +365,7 @@ export class RuntimeAcpSessionStore {
   }
 
   private enqueuePermissionRequest(
-    session: RuntimeProtocolSession,
+    session: RuntimeProtocolSession<TState, TServices>,
     event: Extract<RuntimeEvent, { type: "tool_started" }>,
   ): void {
     const key = `${session.id}:${event.toolCallId}`;
@@ -407,13 +448,12 @@ export class RuntimeAcpSessionStore {
         continue;
       }
       if (entry.type === "protocol_event" && entry.protocol === "acp") {
-        await this.publishSessionUpdate(
-          sessionId,
-          replayHistorySessionUpdate(sessionId, entry, index),
-          {
+        const update = replayHistorySessionUpdate(sessionId, entry, index);
+        if (update) {
+          await this.publishSessionUpdate(sessionId, update, {
             record: false,
-          },
-        );
+          });
+        }
       }
     }
   }
@@ -482,6 +522,7 @@ export class RuntimeAcpSessionStore {
     }
     if (entry.type === "protocol_event" && entry.protocol === "acp") {
       const update = replaySessionUpdate(sessionId, entry);
+      if (!update) return;
       const messageId = readStringProperty(update, "messageId");
       if (
         isTranscriptSessionUpdate(update) &&
@@ -509,13 +550,13 @@ export class RuntimeAcpSessionStore {
   }
 
   private async readWorkbenchLedger(
-    session: RuntimeProtocolSession,
+    session: RuntimeProtocolSession<TState, TServices>,
   ): Promise<RuntimeLedgerEntry[]> {
     return this.readRuntimeSessionLedger(session, { requireThreadLedger: true });
   }
 
   private async readRuntimeSessionLedger(
-    session: RuntimeProtocolSession,
+    session: RuntimeProtocolSession<TState, TServices>,
     options: { requireThreadLedger?: boolean } = {},
   ): Promise<RuntimeLedgerEntry[]> {
     const readKernelLedger = session.runtime.kernel?.readSessionLedger?.bind(
@@ -538,7 +579,7 @@ export class RuntimeAcpSessionStore {
 }
 
 function workbenchMessagesFromLedger(
-  session: RuntimeProtocolSession,
+  session: RuntimeProtocolSessionSnapshot,
   ledger: RuntimeLedgerEntry[],
 ): WorkbenchMessage[] {
   const coveredUserPromptSequences = userPromptSequencesCoveredByThreadMessages(ledger);
@@ -565,7 +606,7 @@ function workbenchMessagesFromLedger(
 }
 
 function directWorkbenchMessageIds(
-  session: RuntimeProtocolSession,
+  session: RuntimeProtocolSessionSnapshot,
   ledger: RuntimeLedgerEntry[],
   coveredUserPromptSequences: Set<number>,
 ): Set<string> {
@@ -600,7 +641,7 @@ function appendProtocolTranscriptMessage(
 }
 
 function workbenchEventsFromLedger(
-  session: RuntimeProtocolSession,
+  session: RuntimeProtocolSessionSnapshot,
   ledger: RuntimeLedgerEntry[],
 ): WorkbenchEvent[] {
   return ledger.flatMap((entry) => {
@@ -623,7 +664,7 @@ function workbenchEventsFromLedger(
 }
 
 function sessionIdentityToWorkbenchEvent(
-  session: RuntimeProtocolSession,
+  session: RuntimeProtocolSessionSnapshot,
   entry: Extract<RuntimeLedgerEntry, { type: "session_identity" }>,
 ): WorkbenchEvent {
   return {
@@ -654,7 +695,7 @@ function sessionIdentityPayload(
 }
 
 function rawMastraEventToWorkbenchEvent(
-  session: RuntimeProtocolSession,
+  session: RuntimeProtocolSessionSnapshot,
   entry: Extract<RuntimeLedgerEntry, { type: "raw_mastra_event" }>,
 ): WorkbenchEvent {
   return {
@@ -677,14 +718,14 @@ function rawMastraEventPayload(
 ): WorkbenchJsonObject {
   return {
     ...(entry.rawEventType ? { rawEventType: entry.rawEventType } : {}),
-    rawEvent: sanitizeJson(entry.rawEvent) as WorkbenchJsonObject[string],
+    rawEvent: toWorkbenchJsonProperty(entry.rawEvent),
     ...(entry.threadId ? { threadId: entry.threadId } : {}),
     ...(entry.resourceId ? { resourceId: entry.resourceId } : {}),
   };
 }
 
 function runtimeEventToWorkbenchEvent(
-  session: RuntimeProtocolSession,
+  session: RuntimeProtocolSessionSnapshot,
   entry: Extract<RuntimeLedgerEntry, { type: "runtime_event" }>,
 ): WorkbenchEvent {
   return {
@@ -704,15 +745,19 @@ function runtimeEventPayload(
   entry: Extract<RuntimeLedgerEntry, { type: "runtime_event" }>,
 ): WorkbenchJsonObject {
   return {
-    event: sanitizeJson(entry.event) as WorkbenchJsonObject[string],
-    provenance: sanitizeJson(entry.provenance) as WorkbenchJsonObject[string],
+    event: toWorkbenchJsonProperty(entry.event),
+    provenance: toWorkbenchJsonProperty(entry.provenance),
     ...(entry.threadId ? { threadId: entry.threadId } : {}),
     ...(entry.resourceId ? { resourceId: entry.resourceId } : {}),
   };
 }
 
+function toWorkbenchJsonProperty(value: unknown): WorkbenchJsonObject[string] {
+  return sanitizeJson(value);
+}
+
 function queueEventToWorkbenchEvent(
-  session: RuntimeProtocolSession,
+  session: RuntimeProtocolSessionSnapshot,
   entry: Extract<RuntimeLedgerEntry, { type: "queue_event" }>,
 ): WorkbenchEvent {
   return {
@@ -747,7 +792,7 @@ function previewText(value: string, maxLength = 160): string {
 }
 
 function workbenchSessionInfo(
-  session: RuntimeProtocolSession,
+  session: RuntimeProtocolSessionSnapshot,
 ): WorkbenchLoadThreadSnapshotResponse["session"] {
   const metadata: PeWorkbenchSessionMetadata = {
     status: session.threadId ? "materialized" : "draft",
@@ -766,7 +811,7 @@ function workbenchSessionInfo(
 }
 
 function workbenchMessageFromThreadMessage(
-  session: RuntimeProtocolSession,
+  session: RuntimeProtocolSessionSnapshot,
   message: RuntimeThreadMessage,
 ): WorkbenchMessage {
   const provenance: WorkbenchProvenance = {
@@ -802,7 +847,7 @@ function workbenchMessageFromThreadMessage(
 }
 
 function workbenchMessageFromUserPrompt(
-  session: RuntimeProtocolSession,
+  session: RuntimeProtocolSessionSnapshot,
   entry: Extract<RuntimeLedgerEntry, { type: "user_prompt" }>,
 ): WorkbenchMessage {
   const id = userPromptMessageId(session.id, entry);
@@ -832,12 +877,13 @@ function workbenchMessageFromUserPrompt(
 }
 
 function workbenchMessageFromTranscriptProtocolEvent(
-  session: RuntimeProtocolSession,
+  session: RuntimeProtocolSessionSnapshot,
   entry: Extract<RuntimeLedgerEntry, { type: "protocol_event" }>,
   directMessageIds: Set<string>,
 ): WorkbenchMessage | undefined {
   if (!isAcpSessionUpdate(entry.payload)) return undefined;
   const update = replaySessionUpdate(session.id, entry);
+  if (!update) return undefined;
   if (!isTranscriptSessionUpdate(update)) return undefined;
   const id = readStringProperty(update, "messageId");
   if (!id || directMessageIds.has(id)) return undefined;
@@ -883,7 +929,7 @@ function transcriptUpdateRole(
 }
 
 function transcriptUpdateText(update: SessionUpdate): string | undefined {
-  const record = isRecord(update) ? (update as Record<string, unknown>) : {};
+  const record = readRecord(update);
   const content = record.content;
   if (typeof content === "string") return content;
   if (!isRecord(content)) return undefined;
@@ -911,26 +957,26 @@ function historyPromptMessageId(sessionId: string, index: number): string {
 function replaySessionUpdate(
   sessionId: string,
   entry: Extract<RuntimeLedgerEntry, { type: "protocol_event" }>,
-): SessionUpdate {
-  const update = entry.payload as SessionUpdate;
+): SessionUpdate | undefined {
+  if (!isAcpSessionUpdate(entry.payload)) return undefined;
+  const update = entry.payload;
   if (!isTranscriptSessionUpdate(update) || readStringProperty(update, "messageId")) return update;
-  return {
-    ...update,
+  return Object.assign({}, update, {
     messageId: entry.projection?.id ?? `runtime:${sessionId}:protocol_event:${entry.sequence}`,
-  };
+  });
 }
 
 function replayHistorySessionUpdate(
   sessionId: string,
   entry: Extract<RuntimeSessionHistoryEntry, { type: "protocol_event" }>,
   index: number,
-): SessionUpdate {
-  const update = entry.payload as SessionUpdate;
+): SessionUpdate | undefined {
+  if (!isAcpSessionUpdate(entry.payload)) return undefined;
+  const update = entry.payload;
   if (!isTranscriptSessionUpdate(update) || readStringProperty(update, "messageId")) return update;
-  return {
-    ...update,
+  return Object.assign({}, update, {
     messageId: entry.projection?.id ?? `runtime:${sessionId}:history_protocol_event:${index}`,
-  };
+  });
 }
 
 function userPromptSequencesCoveredByThreadMessages(ledger: RuntimeLedgerEntry[]): Set<number> {
@@ -953,13 +999,23 @@ function userPromptSequencesCoveredByThreadMessages(ledger: RuntimeLedgerEntry[]
   return covered;
 }
 
-function runtimeFactory(options: RuntimeAcpSessionStoreOptions): RuntimeFactory {
+function runtimeFactory<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(
+  options: RuntimeAcpSessionStoreOptions<TState, TServices, THarness>,
+): RuntimeFactory<TState, TServices, THarness> {
   const factory = options.runtime?.factory;
   if (!factory) throw new Error("Runtime ACP session store requires runtime.factory.");
   return factory;
 }
 
-function runtimeDescriptor(options: RuntimeAcpSessionStoreOptions): RuntimeDescriptor {
+function runtimeDescriptor<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(options: RuntimeAcpSessionStoreOptions<TState, TServices, THarness>): RuntimeDescriptor {
   return options.runtime?.descriptor ?? runtimeFactory(options).descriptor;
 }
 
@@ -972,7 +1028,7 @@ function permissionOutcomeText(
 }
 
 function isAcpSessionUpdate(value: unknown): value is SessionUpdate {
-  return isRecord(value) && typeof value.sessionUpdate === "string";
+  return acpSessionUpdateEnvelopeSchema.safeParse(value).success;
 }
 
 function isTranscriptSessionUpdate(update: SessionUpdate): update is Extract<
@@ -1032,17 +1088,22 @@ function stableJsonValue(value: unknown): unknown {
 }
 
 function readStringProperty(value: unknown, key: string): string | undefined {
-  const record = isRecord(value) ? value : {};
+  const record = readRecord(value);
   const property = record[key];
   return typeof property === "string" && property.length > 0 ? property : undefined;
 }
 
 function readNumericProperty(value: unknown, key: string): number | undefined {
-  const record = isRecord(value) ? value : {};
+  const record = readRecord(value);
   const property = record[key];
   return typeof property === "number" && Number.isFinite(property) ? property : undefined;
 }
 
+function readRecord(value: unknown): Record<string, unknown> {
+  const record = runtimeAcpRecordSchema.safeParse(value);
+  return record.success ? record.data : {};
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return runtimeAcpRecordSchema.safeParse(value).success;
 }

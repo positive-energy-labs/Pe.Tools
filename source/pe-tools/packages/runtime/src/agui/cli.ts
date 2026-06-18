@@ -1,7 +1,11 @@
 import type { RuntimeAgUiAgentOptions, RuntimeAgUiTransportOptions } from "./agent.ts";
 import { RuntimeAgUiHttpAgent } from "./agent.ts";
+import type { RuntimeHandleServices } from "../runtime.ts";
 
-export interface RuntimeAgUiCliOptions extends RuntimeAgUiAgentOptions {
+export interface RuntimeAgUiCliOptions<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+> extends RuntimeAgUiAgentOptions<TState, TServices> {
   transport?: RuntimeAgUiTransportOptions;
 }
 
@@ -44,10 +48,13 @@ export const argsAgui = {
   },
 } as const;
 
-export function createRuntimeAgUiCliOptions(
+export function createRuntimeAgUiCliOptions<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+>(
   values: RuntimeAgUiCliValues,
-  base: RuntimeAgUiCliOptions,
-): RuntimeAgUiCliOptions {
+  base: RuntimeAgUiCliOptions<TState, TServices>,
+): RuntimeAgUiCliOptions<TState, TServices> {
   const transport = {
     ...base.transport,
     port: parseOptionalPort(values.agUiPort, "AG-UI HTTP port"),
@@ -62,7 +69,10 @@ export function createRuntimeAgUiCliOptions(
   };
 }
 
-export async function runRuntimeAgUiFromCli(options: RuntimeAgUiCliOptions): Promise<void> {
+export async function runRuntimeAgUiFromCli<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+>(options: RuntimeAgUiCliOptions<TState, TServices>): Promise<void> {
   const { transport, ...agentOptions } = options;
   const agent = new RuntimeAgUiHttpAgent({
     ...agentOptions,
@@ -94,7 +104,10 @@ export function parseAgUiOptions(args: string[]): ParsedRuntimeAgUiCliOptions | 
   };
 }
 
-function runtimeDescriptorId(options: RuntimeAgUiCliOptions): string {
+function runtimeDescriptorId<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+>(options: RuntimeAgUiCliOptions<TState, TServices>): string {
   const factory = options.runtime?.factory;
   if (!factory) throw new Error("Runtime AG-UI CLI requires runtime.factory.");
   return (options.runtime?.descriptor ?? factory.descriptor).id;

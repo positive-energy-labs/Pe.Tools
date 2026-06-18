@@ -1,9 +1,4 @@
-import {
-  type SearchResponseRevitApiDocsCom,
-  type SearchResponseRvtDocsCom,
-  type SearchResult,
-  SearchResultTypes,
-} from "./validators.ts";
+import { type SearchResult, SearchResultTypes } from "./validators.ts";
 import { z } from "zod";
 
 export async function searchWrapper(
@@ -81,23 +76,21 @@ export async function searchRvtDocsCom(
       throw new Error(`Search request failed: ${response.status} ${response.statusText}`);
     }
 
-    const data = (await response.json()) as SearchResponseRvtDocsCom;
+    const items = readRvtDocsSearchItems(await response.json());
     const results: SearchResult[] = [];
 
     // Parse the response based on the expected format
-    if (data.current_version_results && Array.isArray(data.current_version_results)) {
-      for (const item of data.current_version_results.slice(0, maxResults)) {
-        results.push({
-          title: item.title || "",
-          description: (item.description || "").replace(/^Description:\s*/i, ""),
-          namespace: (item.namespace || "").replace(/^Namespace:\s*/i, ""),
-          type: item.type || "",
-          url: item.url || "",
-        });
-      }
+    for (const item of items.slice(0, maxResults)) {
+      results.push({
+        title: item.title ?? "",
+        description: (item.description ?? "").replace(/^Description:\s*/i, ""),
+        namespace: (item.namespace ?? "").replace(/^Namespace:\s*/i, ""),
+        type: item.type ?? "",
+        url: item.url ?? "",
+      });
     }
 
-    return results.filter((r) => types.includes(r.type as (typeof SearchResultTypes)[number]));
+    return results.filter((result) => includesSearchResultType(types, result.type));
   } catch (error) {
     console.error("Error searching Revit API docs using rvtdocs.com:", error);
     throw error;
@@ -129,22 +122,21 @@ export async function searchRevitApiDocsCom(
       throw new Error(`Search request failed: ${response.status} ${response.statusText}`);
     }
 
-    const data = (await response.json()) as SearchResponseRevitApiDocsCom;
+    const products = readRevitApiDocsProducts(await response.json());
     const results: SearchResult[] = [];
 
-    if (data.sections?.Products) {
-      for (const item of data.sections.Products) {
-        if (TypeFromTitle.parse(item.value) !== "Members") {
-          results.push({
-            title: item.value,
-            url: `/${year}/${item.data.url.split(".")[0]}`,
-            type: TypeFromTitle.parse(item.value),
-          });
-        }
+    for (const item of products) {
+      const type = TypeFromTitle.parse(item.value);
+      if (type !== "Members") {
+        results.push({
+          title: item.value,
+          url: `/${year}/${item.url.split(".")[0]}`,
+          type,
+        });
       }
     }
 
-    return results.filter((r) => types.includes(r.type as (typeof SearchResultTypes)[number]));
+    return results.filter((result) => includesSearchResultType(types, result.type));
   } catch (error) {
     console.error("Error searching Revit API docs using revitapidocs.com:", error);
     throw error;
@@ -160,3 +152,64 @@ const TypeFromTitle = z.string().transform((title) => {
   }
   return "Unknown";
 });
+
+type RvtDocsSearchItem = {
+  title?: string;
+  description?: string;
+  namespace?: string;
+  type?: string;
+  url?: string;
+};
+
+type RevitApiDocsProduct = {
+  value: string;
+  url: string;
+};
+
+function readRvtDocsSearchItems(value: unknown): RvtDocsSearchItem[] {
+  const results = readRecord(value).current_version_results;
+  if (!Array.isArray(results)) return [];
+  return results.map(readRvtDocsSearchItem);
+}
+
+function readRvtDocsSearchItem(value: unknown): RvtDocsSearchItem {
+  const record = readRecord(value);
+  return {
+    title: readString(record.title),
+    description: readString(record.description),
+    namespace: readString(record.namespace),
+    type: readString(record.type),
+    url: readString(record.url),
+  };
+}
+
+function readRevitApiDocsProducts(value: unknown): RevitApiDocsProduct[] {
+  const products = readRecord(readRecord(value).sections).Products;
+  if (!Array.isArray(products)) return [];
+  return products.flatMap((product) => {
+    const record = readRecord(product);
+    const data = readRecord(record.data);
+    const value = readString(record.value);
+    const url = readString(data.url);
+    return value && url ? [{ value, url }] : [];
+  });
+}
+
+function includesSearchResultType(
+  types: ReadonlyArray<(typeof SearchResultTypes)[number]>,
+  type: string,
+): boolean {
+  return types.some((candidate) => candidate === type);
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

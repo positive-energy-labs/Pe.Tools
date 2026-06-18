@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { RequestContext } from "@mastra/core/request-context";
-import { createWorkspaceTools } from "@mastra/core/workspace";
+import { createWorkspaceTools, LocalFilesystem } from "@mastra/core/workspace";
 import { expect, test } from "vite-plus/test";
 import { createRuntimeAcpCliOptions, createRuntimeAgUiCliOptions } from "@pe/runtime";
 import {
@@ -86,7 +86,7 @@ test(
     });
 
     try {
-      const tools = await (runtime.harness as any).getCurrentAgent().listTools();
+      const tools = await getRuntimeHarnessAgent(runtime.harness).listTools();
       expect(tools).toEqual(
         expect.objectContaining({
           task_write: expect.any(Object),
@@ -102,6 +102,33 @@ test(
   },
   slowRuntimeTestTimeout,
 );
+
+type RuntimeAgent = {
+  listTools(): Promise<Record<string, unknown>>;
+};
+
+type RuntimeHarnessWithCurrentAgent = {
+  getCurrentAgent(): unknown;
+};
+
+function getRuntimeHarnessAgent(harness: unknown): RuntimeAgent {
+  if (!hasCurrentAgent(harness)) throw new Error("Expected runtime harness current agent access.");
+  const agent = harness.getCurrentAgent();
+  if (!isRuntimeAgent(agent)) throw new Error("Expected runtime harness current agent.");
+  return agent;
+}
+
+function hasCurrentAgent(value: unknown): value is RuntimeHarnessWithCurrentAgent {
+  return isRecord(value) && typeof value.getCurrentAgent === "function";
+}
+
+function isRuntimeAgent(value: unknown): value is RuntimeAgent {
+  return isRecord(value) && typeof value.listTools === "function";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 test(
   "peco protocol runtime does not preselect a startup thread",
@@ -172,6 +199,10 @@ test(
     try {
       const workspace = await runtime.harness.resolveWorkspace();
       const tools = await createWorkspaceTools(workspace!);
+      const filesystem = workspace?.filesystem;
+      if (!(filesystem instanceof LocalFilesystem)) {
+        throw new Error("Expected Peco runtime workspace to use LocalFilesystem.");
+      }
 
       const listing = await tools.find_files.execute(
         {
@@ -185,8 +216,8 @@ test(
         },
       );
 
-      expect((workspace?.filesystem as any)?.basePath).toBe(path.resolve(workspaceRoot));
-      expect((workspace?.filesystem as any)?.allowedPaths).toEqual(
+      expect(filesystem.basePath).toBe(path.resolve(workspaceRoot));
+      expect(filesystem.allowedPaths).toEqual(
         expect.arrayContaining([
           path.resolve(defaultPeCodeSandboxAllowedPath),
           path.resolve(externalRoot),

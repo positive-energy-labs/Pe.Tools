@@ -5,6 +5,7 @@ import type {
   ToolCallStatus,
   ToolKind,
 } from "@agentclientprotocol/sdk";
+import { z } from "zod";
 
 export type WorkbenchJsonValue =
   | string
@@ -639,44 +640,264 @@ export function createPeWorkbenchExtension(options: {
 }
 
 export function peWorkbenchMetadata(extension: PeWorkbenchExtension): WorkbenchJsonObject {
-  return { [peWorkbenchExtensionKey]: extension as unknown as WorkbenchJsonValue };
+  const extensionJson: WorkbenchJsonObject = {
+    version: extension.version,
+    capabilities: workbenchCapabilitiesJson(extension.capabilities),
+  };
+  if (extension.runtime) extensionJson.runtime = runtimeInfoJson(extension.runtime);
+  return { [peWorkbenchExtensionKey]: extensionJson };
 }
 
 export function peWorkbenchSessionMetadata(
   metadata: PeWorkbenchSessionMetadata,
 ): WorkbenchJsonObject {
-  return { [peWorkbenchSessionMetadataKey]: metadata as unknown as WorkbenchJsonValue };
+  const sessionJson: WorkbenchJsonObject = {};
+  if (metadata.status) sessionJson.status = metadata.status;
+  if (metadata.threadId) sessionJson.threadId = metadata.threadId;
+  if (metadata.resourceId) sessionJson.resourceId = metadata.resourceId;
+  if (metadata.lock) sessionJson.lock = threadLockInfoJson(metadata.lock);
+  return { [peWorkbenchSessionMetadataKey]: sessionJson };
 }
 
+const workbenchRecordSchema = z.record(z.string(), z.unknown());
+const workbenchJsonValueSchema: z.ZodType<WorkbenchJsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(workbenchJsonValueSchema),
+    z.record(z.string(), workbenchJsonValueSchema),
+  ]),
+);
+const stopReasonSchema = z.enum([
+  "end_turn",
+  "max_tokens",
+  "max_turn_requests",
+  "refusal",
+  "cancelled",
+]);
+const workbenchRuntimeInfoSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    title: z.string().optional(),
+    description: z.string().optional(),
+  })
+  .strip();
+const workbenchThreadLockInfoSchema = z
+  .object({
+    status: z.enum(["unlocked", "owned", "locked", "unknown"]),
+    ownerPid: z.number().optional(),
+  })
+  .strip();
+const workbenchCapabilityKeys = [
+  "threads",
+  "history",
+  "historySnapshots",
+  "toolCalls",
+  "approvals",
+  "approveAlways",
+  "plans",
+  "rawToolIO",
+  "modelSwitching",
+  "sessionModes",
+  "accessLevels",
+  "config",
+  "observationalMemory",
+  "systemPromptInspection",
+] as const;
+const workbenchCapabilitiesSchema = z
+  .object(Object.fromEntries(workbenchCapabilityKeys.map((key) => [key, z.boolean().optional()])))
+  .strip() as z.ZodType<WorkbenchAgentCapabilities>;
+const peWorkbenchExtensionEntrySchema = z
+  .object({
+    version: z.literal(peWorkbenchExtensionVersion),
+    runtime: workbenchRuntimeInfoSchema.optional(),
+    capabilities: workbenchCapabilitiesSchema.optional().default({}),
+  })
+  .strip();
+const peWorkbenchSessionMetadataEntrySchema = z
+  .object({
+    status: z.enum(["draft", "materialized"]).optional(),
+    threadId: z.string().optional(),
+    resourceId: z.string().optional(),
+    lock: workbenchThreadLockInfoSchema.optional(),
+  })
+  .strip();
+const workbenchSessionInfoSchema = z
+  .object({
+    sessionId: z.string(),
+    cwd: z.string(),
+    additionalDirectories: z
+      .array(z.unknown())
+      .optional()
+      .transform(
+        (entries) => entries?.filter((entry): entry is string => typeof entry === "string") ?? [],
+      ),
+    title: z.string().optional(),
+    updatedAt: z.string().optional(),
+    metadata: z.unknown().transform(readWorkbenchJsonObject).optional(),
+  })
+  .strip();
+const workbenchLoadThreadResponseSchema = z
+  .object({
+    session: z.custom<WorkbenchSessionInfo>(isWorkbenchSessionInfo),
+    messages: z.array(z.custom<WorkbenchMessage>(isWorkbenchMessage)).optional(),
+    events: z.array(z.custom<WorkbenchEvent>(isWorkbenchEvent)).optional(),
+  })
+  .strip();
+const workbenchEventSchema = z.custom<WorkbenchEvent>(isWorkbenchEventShape);
+const workbenchStateSchema = z.custom<WorkbenchState>(isWorkbenchStateShape);
+
 export function readPeWorkbenchExtension(metadata: unknown): PeWorkbenchExtension | undefined {
-  if (!isRecord(metadata)) return undefined;
-  const extension = metadata[peWorkbenchExtensionKey];
-  if (!isRecord(extension)) return undefined;
-  if (extension.version !== peWorkbenchExtensionVersion) return undefined;
-  const capabilities = isRecord(extension.capabilities) ? extension.capabilities : {};
+  const metadataRecord = workbenchRecordSchema.safeParse(metadata);
+  if (!metadataRecord.success) return undefined;
+  const extension = peWorkbenchExtensionEntrySchema.safeParse(
+    metadataRecord.data[peWorkbenchExtensionKey],
+  );
+  if (!extension.success) return undefined;
   return {
     version: peWorkbenchExtensionVersion,
-    runtime: readRuntimeInfo(extension.runtime),
-    capabilities: readCapabilities(capabilities),
+    runtime: extension.data.runtime,
+    capabilities: extension.data.capabilities,
   };
 }
 
 export function readPeWorkbenchSessionMetadata(
   metadata: unknown,
 ): PeWorkbenchSessionMetadata | undefined {
-  if (!isRecord(metadata)) return undefined;
-  const session = metadata[peWorkbenchSessionMetadataKey];
-  if (!isRecord(session)) return undefined;
-  const status =
-    session.status === "draft" || session.status === "materialized" ? session.status : undefined;
-  const threadId = typeof session.threadId === "string" ? session.threadId : undefined;
-  const resourceId = typeof session.resourceId === "string" ? session.resourceId : undefined;
-  return {
-    ...(status ? { status } : {}),
-    ...(threadId ? { threadId } : {}),
-    ...(resourceId ? { resourceId } : {}),
-    ...(isThreadLockInfo(session.lock) ? { lock: session.lock } : {}),
-  };
+  const metadataRecord = workbenchRecordSchema.safeParse(metadata);
+  if (!metadataRecord.success) return undefined;
+  const session = peWorkbenchSessionMetadataEntrySchema.safeParse(
+    metadataRecord.data[peWorkbenchSessionMetadataKey],
+  );
+  return session.success ? session.data : undefined;
+}
+
+export function isWorkbenchJsonValue(value: unknown): value is WorkbenchJsonValue {
+  return workbenchJsonValueSchema.safeParse(value).success;
+}
+
+export function readWorkbenchJsonObject(value: unknown): WorkbenchJsonObject | undefined {
+  const record = workbenchRecordSchema.safeParse(value);
+  if (!record.success) return undefined;
+  const result: WorkbenchJsonObject = {};
+  for (const [key, entry] of Object.entries(record.data)) {
+    const jsonValue = workbenchJsonValueSchema.safeParse(entry);
+    if (jsonValue.success) result[key] = jsonValue.data;
+  }
+  return result;
+}
+
+export function readStopReason(value: unknown): StopReason | undefined {
+  const result = stopReasonSchema.safeParse(value);
+  return result.success ? (result.data as StopReason) : undefined;
+}
+
+export function readWorkbenchLoadThreadResponse(
+  value: unknown,
+): WorkbenchLoadThreadResponse | undefined {
+  const response = workbenchLoadThreadResponseSchema.safeParse(value);
+  return response.success ? response.data : undefined;
+}
+
+export function readWorkbenchSessionInfo(value: unknown): WorkbenchSessionInfo | undefined {
+  const session = workbenchSessionInfoSchema.safeParse(value);
+  return session.success ? session.data : undefined;
+}
+
+export function isWorkbenchEvent(value: unknown): value is WorkbenchEvent {
+  return workbenchEventSchema.safeParse(value).success;
+}
+
+function isWorkbenchEventShape(value: unknown): value is WorkbenchEvent {
+  if (!isRecord(value) || typeof value.type !== "string") return false;
+  switch (value.type) {
+    case "agent_initialized":
+      return isWorkbenchAgentInfo(value.agent);
+    case "session_started":
+      return (
+        isWorkbenchSessionInfo(value.session) && isOptional(value.thread, isWorkbenchThreadInfo)
+      );
+    case "session_updated":
+      return isRecord(value.session);
+    case "ui_status_changed":
+      return isWorkbenchCommandStatus(value.status);
+    case "run_status_changed":
+      return (
+        isWorkbenchRunStatus(value.status) &&
+        (value.stopReason == null || readStopReason(value.stopReason) !== undefined)
+      );
+    case "transcript_replaced":
+      return Array.isArray(value.messages) && value.messages.every(isWorkbenchMessage);
+    case "message_part_delta":
+      return (
+        typeof value.messageId === "string" &&
+        isWorkbenchRole(value.role) &&
+        isWorkbenchMessagePart(value.part)
+      );
+    case "message_updated":
+      return isWorkbenchMessage(value.message);
+    case "tool_call_updated":
+      return isWorkbenchToolCall(value.toolCall);
+    case "plan_replaced":
+      return Array.isArray(value.entries) && value.entries.every(isWorkbenchPlanEntry);
+    case "approval_requested":
+      return isWorkbenchApprovalRequest(value.approval);
+    case "approval_resolved":
+      return typeof value.requestId === "string";
+    case "approvals_cleared":
+      return value.reason == null || typeof value.reason === "string";
+    case "threads_replaced":
+      return Array.isArray(value.threads) && value.threads.every(isWorkbenchThreadInfo);
+    case "thread_selected":
+      return value.threadId == null || typeof value.threadId === "string";
+    case "observational_memory_updated":
+      return isWorkbenchObservationMemoryEntry(value.entry);
+    case "observational_memory_removed":
+      return typeof value.id === "string";
+    case "inspector_updated":
+      return isRecord(value.inspector);
+    case "model_state_updated":
+      return isRecord(value.model);
+    case "session_mode_updated":
+      return isRecord(value.sessionMode);
+    case "access_level_updated":
+      return isRecord(value.access);
+    case "ui_preferences_updated":
+      return isRecord(value.preferences);
+    case "debug_event_recorded":
+      return isWorkbenchDebugEvent(value.debugEvent);
+    case "error":
+      return typeof value.message === "string";
+    default:
+      return false;
+  }
+}
+
+export function isWorkbenchState(value: unknown): value is WorkbenchState {
+  return workbenchStateSchema.safeParse(value).success;
+}
+
+function isWorkbenchStateShape(value: unknown): value is WorkbenchState {
+  if (!isRecord(value)) return false;
+  return (
+    isWorkbenchAgentState(value.agent) &&
+    isWorkbenchThreadState(value.threads) &&
+    isWorkbenchTranscriptState(value.transcript) &&
+    isWorkbenchToolState(value.tools) &&
+    isWorkbenchApprovalState(value.approvals) &&
+    isWorkbenchPlanState(value.plans) &&
+    isWorkbenchModelState(value.models) &&
+    isWorkbenchSessionModeState(value.modes) &&
+    isWorkbenchAccessLevelState(value.access) &&
+    isWorkbenchMemoryState(value.memory) &&
+    isWorkbenchInspectorState(value.inspector) &&
+    isWorkbenchDebugState(value.debug) &&
+    isWorkbenchUiPreferencesState(value.uiPreferences) &&
+    isWorkbenchUiStatusState(value.uiStatus)
+  );
 }
 
 export function deriveWorkbenchCapabilities(
@@ -698,55 +919,527 @@ export function deriveWorkbenchCapabilities(
   };
 }
 
-function readRuntimeInfo(value: unknown): WorkbenchRuntimeInfo | undefined {
-  if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string") {
-    return undefined;
+function workbenchCapabilitiesJson(capabilities: WorkbenchAgentCapabilities): WorkbenchJsonObject {
+  const result: WorkbenchJsonObject = {};
+  for (const [key, value] of Object.entries(capabilities)) {
+    if (typeof value === "boolean") result[key] = value;
   }
+  return result;
+}
+
+function runtimeInfoJson(runtime: WorkbenchRuntimeInfo): WorkbenchJsonObject {
   return {
-    id: value.id,
-    name: value.name,
-    title: typeof value.title === "string" ? value.title : undefined,
-    description: typeof value.description === "string" ? value.description : undefined,
+    id: runtime.id,
+    name: runtime.name,
+    ...(runtime.title ? { title: runtime.title } : {}),
+    ...(runtime.description ? { description: runtime.description } : {}),
   };
 }
 
-function readCapabilities(value: Record<string, unknown>): WorkbenchAgentCapabilities {
-  return Object.fromEntries(
-    Object.entries(value).filter((entry): entry is [keyof WorkbenchAgentCapabilities, boolean] => {
-      const [key, capability] = entry;
-      return isCapabilityKey(key) && typeof capability === "boolean";
-    }),
+function threadLockInfoJson(lock: WorkbenchThreadLockInfo): WorkbenchJsonObject {
+  return {
+    status: lock.status,
+    ...(typeof lock.ownerPid === "number" ? { ownerPid: lock.ownerPid } : {}),
+  };
+}
+
+function isOptional<T>(
+  value: unknown,
+  guard: (entry: unknown) => entry is T,
+): value is T | undefined {
+  return value == null || guard(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value == null || typeof value === "string";
+}
+
+function isOptionalJsonObject(value: unknown): boolean {
+  return value == null || readWorkbenchJsonObject(value) !== undefined;
+}
+
+function isWorkbenchAgentInfo(value: unknown): value is WorkbenchAgentInfo {
+  if (!isRecord(value) || typeof value.name !== "string") return false;
+  return (
+    isOptional(value.runtime, isWorkbenchRuntimeInfo) &&
+    isRecord(value.capabilities) &&
+    isOptionalJsonObject(value.metadata)
   );
 }
 
-function isCapabilityKey(value: string): value is keyof WorkbenchAgentCapabilities {
-  return [
-    "threads",
-    "history",
-    "historySnapshots",
-    "toolCalls",
-    "approvals",
-    "approveAlways",
-    "plans",
-    "rawToolIO",
-    "modelSwitching",
-    "sessionModes",
-    "accessLevels",
-    "config",
-    "observationalMemory",
-    "systemPromptInspection",
-  ].includes(value);
+function isWorkbenchRuntimeInfo(value: unknown): value is WorkbenchRuntimeInfo {
+  return readRuntimeInfo(value) !== undefined;
+}
+
+function isWorkbenchSessionInfo(value: unknown): value is WorkbenchSessionInfo {
+  return readWorkbenchSessionInfo(value) !== undefined;
+}
+
+function isWorkbenchThreadInfo(value: unknown): value is WorkbenchThreadInfo {
+  if (!isRecord(value) || typeof value.threadId !== "string") return false;
+  return (
+    isOptionalString(value.sessionId) &&
+    isOptionalString(value.resourceId) &&
+    isOptionalString(value.title) &&
+    isOptionalString(value.cwd) &&
+    isOptionalString(value.updatedAt) &&
+    isOptional(value.lock, isThreadLockInfo) &&
+    isOptionalJsonObject(value.metadata)
+  );
+}
+
+function isWorkbenchLoadStatus(value: unknown): value is WorkbenchLoadStatus {
+  return value === "idle" || value === "loading" || value === "loaded" || value === "error";
+}
+
+function isWorkbenchCommandStatus(value: unknown): value is WorkbenchCommandStatus {
+  return value === "idle" || value === "running" || value === "succeeded" || value === "failed";
+}
+
+function isWorkbenchRole(value: unknown): value is WorkbenchRole {
+  return (
+    value === "user" ||
+    value === "assistant" ||
+    value === "thought" ||
+    value === "system" ||
+    value === "tool"
+  );
+}
+
+function isWorkbenchMessageStatus(value: unknown): value is WorkbenchMessageStatus {
+  return value === "streaming" || value === "complete" || value === "error";
+}
+
+function isWorkbenchRunStatus(value: unknown): value is WorkbenchRunStatus {
+  return (
+    value === "idle" ||
+    value === "starting" ||
+    value === "running" ||
+    value === "waiting" ||
+    value === "canceling" ||
+    value === "error"
+  );
+}
+
+function isWorkbenchDebugSource(value: unknown): value is WorkbenchDebugSource {
+  return (
+    value === "acp" ||
+    value === "runtime" ||
+    value === "workbench" ||
+    value === "transport" ||
+    value === "ui"
+  );
+}
+
+function isWorkbenchProvenance(value: unknown): value is WorkbenchProvenance {
+  if (!isRecord(value)) return false;
+  return (
+    isOptional(value.source, isWorkbenchDebugSource) &&
+    (value.protocol == null ||
+      value.protocol === "acp" ||
+      value.protocol === "workbench" ||
+      value.protocol === "local") &&
+    isOptionalString(value.sessionId) &&
+    isOptionalString(value.threadId) &&
+    isOptionalString(value.messageId) &&
+    isOptionalString(value.toolCallId) &&
+    isOptionalString(value.updateType) &&
+    isOptionalJsonObject(value.metadata)
+  );
+}
+
+function isWorkbenchMessagePart(value: unknown): value is WorkbenchMessagePart {
+  if (!isRecord(value) || typeof value.kind !== "string") return false;
+  const hasProvenance = isOptional(value.provenance, isWorkbenchProvenance);
+  switch (value.kind) {
+    case "text":
+    case "reasoning":
+    case "thought":
+      return typeof value.text === "string" && hasProvenance;
+    case "tool_call_ref":
+    case "tool_result_ref":
+      return typeof value.toolCallId === "string" && isOptionalString(value.label) && hasProvenance;
+    case "approval_ref":
+      return (
+        typeof value.approvalId === "string" &&
+        isOptionalString(value.toolCallId) &&
+        isOptionalString(value.label) &&
+        hasProvenance
+      );
+    case "status":
+      return (
+        typeof value.text === "string" &&
+        (value.status == null ||
+          isWorkbenchRunStatus(value.status) ||
+          isWorkbenchCommandStatus(value.status) ||
+          isWorkbenchMessageStatus(value.status)) &&
+        hasProvenance
+      );
+    case "error":
+      return typeof value.message === "string" && isOptionalString(value.code) && hasProvenance;
+    case "raw":
+      return isOptionalString(value.label) && hasProvenance;
+    default:
+      return false;
+  }
+}
+
+function isWorkbenchMessage(value: unknown): value is WorkbenchMessage {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.id === "string" &&
+    isWorkbenchRole(value.role) &&
+    Array.isArray(value.parts) &&
+    value.parts.every(isWorkbenchMessagePart) &&
+    isWorkbenchMessageStatus(value.status) &&
+    isOptionalString(value.createdAt) &&
+    isOptionalString(value.updatedAt) &&
+    isOptional(value.provenance, isWorkbenchProvenance) &&
+    isOptionalJsonObject(value.metadata)
+  );
+}
+
+function isWorkbenchToolLocation(value: unknown): value is WorkbenchToolLocation {
+  if (!isRecord(value)) return false;
+  return (
+    isOptionalString(value.path) &&
+    (value.line == null || typeof value.line === "number") &&
+    (value.column == null || typeof value.column === "number") &&
+    isOptionalString(value.uri)
+  );
+}
+
+function isWorkbenchToolTimelineEntry(value: unknown): value is WorkbenchToolTimelineEntry {
+  if (!isRecord(value) || typeof value.id !== "string") return false;
+  return (
+    isOptionalString(value.label) &&
+    isOptionalString(value.timestamp) &&
+    isOptionalString(value.summary)
+  );
+}
+
+function isWorkbenchToolCall(value: unknown): value is WorkbenchToolCall {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.title !== "string") {
+    return false;
+  }
+  return (
+    isOptionalString(value.content) &&
+    isOptionalString(value.error) &&
+    isOptionalString(value.startedAt) &&
+    isOptionalString(value.updatedAt) &&
+    isOptionalString(value.completedAt) &&
+    isOptionalString(value.parentMessageId) &&
+    (value.locations == null ||
+      (Array.isArray(value.locations) && value.locations.every(isWorkbenchToolLocation))) &&
+    (value.timeline == null ||
+      (Array.isArray(value.timeline) && value.timeline.every(isWorkbenchToolTimelineEntry))) &&
+    isOptional(value.provenance, isWorkbenchProvenance) &&
+    isOptionalJsonObject(value.metadata)
+  );
+}
+
+function isWorkbenchPlanEntry(value: unknown): value is WorkbenchPlanEntry {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.content !== "string") {
+    return false;
+  }
+  return (
+    (value.priority == null ||
+      value.priority === "high" ||
+      value.priority === "medium" ||
+      value.priority === "low") &&
+    (value.status === "pending" || value.status === "in_progress" || value.status === "completed")
+  );
+}
+
+function isWorkbenchApprovalOption(value: unknown): value is WorkbenchApprovalOption {
+  return (
+    isRecord(value) &&
+    typeof value.optionId === "string" &&
+    typeof value.name === "string" &&
+    typeof value.kind === "string"
+  );
+}
+
+function isWorkbenchApprovalRequest(value: unknown): value is WorkbenchApprovalRequest {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.requestId === "string" &&
+    typeof value.sessionId === "string" &&
+    isWorkbenchToolCall(value.toolCall) &&
+    Array.isArray(value.options) &&
+    value.options.every(isWorkbenchApprovalOption) &&
+    (value.status === "pending" || value.status === "resolved" || value.status === "canceled") &&
+    isOptionalString(value.defaultOptionId) &&
+    isOptionalString(value.selectedOptionId) &&
+    isOptionalString(value.createdAt) &&
+    isOptionalString(value.resolvedAt) &&
+    isOptionalJsonObject(value.metadata)
+  );
+}
+
+function isWorkbenchObservationMemoryEntry(
+  value: unknown,
+): value is WorkbenchObservationMemoryEntry {
+  if (!isRecord(value) || typeof value.id !== "string") return false;
+  return (
+    (value.kind === "observation" || value.kind === "reflection") &&
+    (value.status === "loading" ||
+      value.status === "complete" ||
+      value.status === "failed" ||
+      value.status === "disconnected" ||
+      value.status === "buffering" ||
+      value.status === "buffering-complete" ||
+      value.status === "buffering-failed" ||
+      value.status === "activated") &&
+    isOptionalString(value.title) &&
+    isOptionalString(value.summary) &&
+    (value.observedTokens == null || typeof value.observedTokens === "number") &&
+    (value.compressionRatio == null || typeof value.compressionRatio === "number") &&
+    (value.durationMs == null || typeof value.durationMs === "number") &&
+    isOptionalString(value.error) &&
+    isOptionalJsonObject(value.metadata)
+  );
+}
+
+function isWorkbenchSystemPromptSnapshot(value: unknown): value is WorkbenchSystemPromptSnapshot {
+  return (
+    isRecord(value) &&
+    typeof value.content === "string" &&
+    isOptionalString(value.source) &&
+    isOptionalString(value.updatedAt) &&
+    isOptionalJsonObject(value.metadata)
+  );
+}
+
+function isWorkbenchInspectorEntry(value: unknown): value is WorkbenchInspectorEntry {
+  return isRecord(value) && typeof value.id === "string" && typeof value.title === "string";
+}
+
+function isWorkbenchModelInfo(value: unknown): value is WorkbenchModelInfo {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    isOptionalString(value.provider) &&
+    isOptionalString(value.displayName) &&
+    isOptionalString(value.variant) &&
+    (value.disabled == null || typeof value.disabled === "boolean") &&
+    isOptionalJsonObject(value.metadata)
+  );
+}
+
+function isWorkbenchSessionModeInfo(value: unknown): value is WorkbenchSessionModeInfo {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.name === "string" &&
+    isOptionalString(value.description) &&
+    isOptionalJsonObject(value.metadata)
+  );
+}
+
+function isWorkbenchAccessLevel(value: unknown): value is WorkbenchAccessLevel {
+  return value === "read-only" || value === "ask" || value === "trusted";
+}
+
+function isWorkbenchAccessLevelInfo(value: unknown): value is WorkbenchAccessLevelInfo {
+  return (
+    isRecord(value) &&
+    isWorkbenchAccessLevel(value.id) &&
+    typeof value.name === "string" &&
+    isOptionalString(value.description) &&
+    isOptionalJsonObject(value.metadata)
+  );
+}
+
+function isWorkbenchAgentState(value: unknown): value is WorkbenchAgentState {
+  return (
+    isRecord(value) &&
+    isOptional(value.info, isWorkbenchAgentInfo) &&
+    isOptional(value.session, isWorkbenchSessionInfo)
+  );
+}
+
+function isWorkbenchThreadState(value: unknown): value is WorkbenchThreadState {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.items) &&
+    value.items.every(isWorkbenchThreadInfo) &&
+    isOptionalString(value.activeThreadId) &&
+    isOptionalString(value.selectedThreadId) &&
+    isWorkbenchLoadStatus(value.status) &&
+    isOptionalString(value.error)
+  );
+}
+
+function isWorkbenchTranscriptState(value: unknown): value is WorkbenchTranscriptState {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.messages) &&
+    value.messages.every(isWorkbenchMessage) &&
+    isWorkbenchLoadStatus(value.status) &&
+    isOptionalString(value.error)
+  );
+}
+
+function isWorkbenchToolState(value: unknown): value is WorkbenchToolState {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.calls) &&
+    value.calls.every(isWorkbenchToolCall) &&
+    isStringArray(value.activeToolCallIds) &&
+    isStringArray(value.recentToolCallIds) &&
+    typeof value.rawIoAvailable === "boolean"
+  );
+}
+
+function isWorkbenchApprovalState(value: unknown): value is WorkbenchApprovalState {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.requests) &&
+    value.requests.every(isWorkbenchApprovalRequest)
+  );
+}
+
+function isWorkbenchPlanState(value: unknown): value is WorkbenchPlanState {
+  return (
+    isRecord(value) && Array.isArray(value.entries) && value.entries.every(isWorkbenchPlanEntry)
+  );
+}
+
+function isWorkbenchModelState(value: unknown): value is WorkbenchModelState {
+  return (
+    isRecord(value) &&
+    isOptionalString(value.currentModelId) &&
+    Array.isArray(value.availableModels) &&
+    value.availableModels.every(isWorkbenchModelInfo) &&
+    isStringArray(value.recentModelIds)
+  );
+}
+
+function isWorkbenchSessionModeState(value: unknown): value is WorkbenchSessionModeState {
+  return (
+    isRecord(value) &&
+    isOptionalString(value.currentModeId) &&
+    Array.isArray(value.availableModes) &&
+    value.availableModes.every(isWorkbenchSessionModeInfo)
+  );
+}
+
+function isWorkbenchAccessLevelState(value: unknown): value is WorkbenchAccessLevelState {
+  return (
+    isRecord(value) &&
+    isOptional(value.currentAccessLevel, isWorkbenchAccessLevel) &&
+    Array.isArray(value.availableAccessLevels) &&
+    value.availableAccessLevels.every(isWorkbenchAccessLevelInfo)
+  );
+}
+
+function isWorkbenchMemoryState(value: unknown): value is WorkbenchMemoryState {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.entries) &&
+    value.entries.every(isWorkbenchObservationMemoryEntry)
+  );
+}
+
+function isWorkbenchInspectorState(value: unknown): value is WorkbenchInspectorState {
+  return (
+    isRecord(value) &&
+    isOptional(value.systemPrompt, isWorkbenchSystemPromptSnapshot) &&
+    Array.isArray(value.contextEntries) &&
+    value.contextEntries.every(isWorkbenchInspectorEntry) &&
+    Array.isArray(value.rawMessages) &&
+    value.rawMessages.every(isWorkbenchInspectorEntry) &&
+    isOptionalString(value.selectedEntryId)
+  );
+}
+
+function isWorkbenchDebugEvent(value: unknown): value is WorkbenchDebugEvent {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    isWorkbenchDebugSource(value.source) &&
+    typeof value.type === "string" &&
+    isOptionalString(value.label) &&
+    isOptionalString(value.timestamp)
+  );
+}
+
+function isWorkbenchDebugState(value: unknown): value is WorkbenchDebugState {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.events) &&
+    value.events.every(isWorkbenchDebugEvent) &&
+    isOptionalString(value.selectedEventId)
+  );
+}
+
+function isWorkbenchUiPreferencesState(value: unknown): value is WorkbenchUiPreferencesState {
+  if (!isRecord(value)) return false;
+  return (
+    (value.activePanel === "threads" ||
+      value.activePanel === "transcript" ||
+      value.activePanel === "tools" ||
+      value.activePanel === "inspector" ||
+      value.activePanel === "memory") &&
+    typeof value.sidebarVisible === "boolean" &&
+    typeof value.inspectorVisible === "boolean" &&
+    typeof value.timestampsVisible === "boolean" &&
+    typeof value.reasoningVisible === "boolean" &&
+    typeof value.toolDetailsVisible === "boolean" &&
+    typeof value.rawIoVisible === "boolean" &&
+    typeof value.compactToolOutput === "boolean" &&
+    (value.diffWrap === "word" || value.diffWrap === "none")
+  );
+}
+
+function isWorkbenchRunState(value: unknown): value is WorkbenchRunState {
+  return (
+    isRecord(value) &&
+    isWorkbenchRunStatus(value.status) &&
+    isOptionalString(value.startedAt) &&
+    isOptionalString(value.completedAt) &&
+    (value.stopReason == null || readStopReason(value.stopReason) !== undefined) &&
+    isOptionalString(value.activeToolCallId)
+  );
+}
+
+function isWorkbenchCommandState(value: unknown): value is WorkbenchCommandState {
+  return (
+    isRecord(value) &&
+    isWorkbenchCommandStatus(value.status) &&
+    isOptionalString(value.startedAt) &&
+    isOptionalString(value.completedAt) &&
+    isOptionalString(value.error)
+  );
+}
+
+function isWorkbenchUiStatusState(value: unknown): value is WorkbenchUiStatusState {
+  if (!isRecord(value) || !isWorkbenchRunState(value.overall) || !isStringArray(value.errors)) {
+    return false;
+  }
+  return (
+    isWorkbenchCommandState(value.start) &&
+    isWorkbenchCommandState(value.send) &&
+    isWorkbenchCommandState(value.threads) &&
+    isWorkbenchCommandState(value.loadThread) &&
+    isWorkbenchCommandState(value.cancel) &&
+    isWorkbenchCommandState(value.model) &&
+    isWorkbenchCommandState(value.mode)
+  );
+}
+
+function readRuntimeInfo(value: unknown): WorkbenchRuntimeInfo | undefined {
+  const runtime = workbenchRuntimeInfoSchema.safeParse(value);
+  return runtime.success ? runtime.data : undefined;
 }
 
 function isThreadLockInfo(value: unknown): value is WorkbenchThreadLockInfo {
-  if (!isRecord(value)) return false;
-  return (
-    (value.status === "unlocked" ||
-      value.status === "owned" ||
-      value.status === "locked" ||
-      value.status === "unknown") &&
-    (value.ownerPid == null || typeof value.ownerPid === "number")
-  );
+  return workbenchThreadLockInfoSchema.safeParse(value).success;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

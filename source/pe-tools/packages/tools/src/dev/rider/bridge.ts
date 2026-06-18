@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { access, readdir, readFile, writeFile } from "node:fs/promises";
 import { delimiter, join, resolve } from "node:path";
+import type { WorkflowCommandResult } from "../pe-dev-workflow/index.js";
 
 export const defaultRiderBridgeBaseUrl = "http://127.0.0.1:63342";
 export const hotReloadSignalPath = "source/Pe.Revit.Global/HotReload/PeHotReloadSignal.cs";
@@ -108,11 +109,9 @@ export async function runRiderBridgeSyncHelper(
       "GET",
       request.timeoutSeconds,
     );
-    hotReload = (await requestRiderBridgeJson(
-      args[1],
-      "POST",
-      request.timeoutSeconds,
-    )) as RiderBridgeHotReloadResponse;
+    hotReload = readRiderBridgeHotReloadResponse(
+      await requestRiderBridgeJson(args[1], "POST", request.timeoutSeconds),
+    );
     const ok =
       hotReload.ok === true &&
       Array.isArray(hotReload.results) &&
@@ -450,11 +449,9 @@ async function invokeRestartRrdWhenReady(request: {
     let restart: RiderBridgeHotReloadResponse | null = null;
     let fallbackError: string | null = null;
     try {
-      restart = (await requestRiderBridgeJson(
-        request.endpoint,
-        "POST",
-        30,
-      )) as RiderBridgeHotReloadResponse;
+      restart = readRiderBridgeHotReloadResponse(
+        await requestRiderBridgeJson(request.endpoint, "POST", 30),
+      );
     } catch (error) {
       fallbackError = formatUnknownError(error);
       if (isMissingRestartEndpointError(fallbackError)) {
@@ -545,11 +542,13 @@ async function invokeRestartFallbackActions(
   const actionIds = request.actionId == null ? ["Rerun", "Debug"] : [request.actionId];
   const results: RiderBridgeActionResult[] = [];
   for (const actionId of actionIds) {
-    const result = (await requestRiderBridgeJson(
-      `${bridgeBaseUrl}/pe-tools/actions/invoke?actionId=${encodeURIComponent(actionId)}&project=${encodeURIComponent(request.project)}`,
-      "POST",
-      timeoutSeconds,
-    )) as RiderBridgeActionResult;
+    const result = readRiderBridgeActionResult(
+      await requestRiderBridgeJson(
+        `${bridgeBaseUrl}/pe-tools/actions/invoke?actionId=${encodeURIComponent(actionId)}&project=${encodeURIComponent(request.project)}`,
+        "POST",
+        timeoutSeconds,
+      ),
+    );
     results.push(result);
     if (result.ok === true) break;
   }
@@ -573,9 +572,7 @@ async function invokeRestartFallbackActions(
 }
 
 function supportsDirectRunConfigurationRestart(ping: unknown): boolean {
-  if (typeof ping !== "object" || ping == null || !("restartStrategy" in ping)) return false;
-
-  const restartStrategy = (ping as { restartStrategy?: unknown }).restartStrategy;
+  const restartStrategy = readRecord(ping).restartStrategy;
   return (
     restartStrategy === "rerun-action-then-debug-run-configuration" ||
     restartStrategy === "year-targeted-debug-run-configuration" ||
@@ -955,41 +952,7 @@ function runProcessCapture(
   });
 }
 
-interface RiderBridgeSyncResult {
-  ok: boolean;
-  workflow: string;
-  policy: "RrdRequired";
-  cwd: string;
-  executable: {
-    requested: string;
-    resolvedPath: string | null;
-    source: "rider-bridge" | "missing";
-  };
-  commandLine: string | null;
-  args: string[];
-  exitCode: number | null;
-  timedOut: boolean;
-  durationMs: number;
-  stdoutTail: string;
-  stderrTail: string;
-  artifactPaths: string[];
-  json?: unknown;
-  runtimeFreshness?: {
-    verdict?: string;
-    loadedGraphVerdict?: string;
-    sourceDeltaVerdict?: string;
-    expectedRuntimeDelta?: boolean;
-    basis?: string;
-    nextStep?: string;
-  };
-  proof: {
-    interpretation: string;
-    proves: string;
-    doesNotProve: string;
-    nextStep: string | null;
-  };
-  guidance?: string;
-}
+type RiderBridgeSyncResult = WorkflowCommandResult;
 
 async function mutateHotReloadSignalFile(signalPath: string): Promise<string> {
   const original = await readFile(signalPath, "utf-8");
@@ -1084,6 +1047,61 @@ function formatRiderBridgeProblems(
   return problems == null || problems.length === 0
     ? `${prefix}: ${JSON.stringify(response)}`
     : `${prefix}: ${problems}`;
+}
+
+export function readRiderBridgeHotReloadResponse(value: unknown): RiderBridgeHotReloadResponse {
+  const record = readRecord(value);
+  return {
+    ok: readBoolean(record.ok),
+    operation: readString(record.operation),
+    project: readString(record.project),
+    projectBasePath: readString(record.projectBasePath),
+    debugSession: record.debugSession,
+    results: readArray(record.results).map(readRiderBridgeActionResult),
+    problems: readArray(record.problems).map(readRiderBridgeProblem),
+    restartRecommended: readBoolean(record.restartRecommended),
+    error: readString(record.error),
+  };
+}
+
+function readRiderBridgeActionResult(value: unknown): RiderBridgeActionResult {
+  const record = readRecord(value);
+  return {
+    actionId: readString(record.actionId),
+    status: readString(record.status),
+    ok: readBoolean(record.ok),
+    message: readString(record.message),
+  };
+}
+
+function readRiderBridgeProblem(value: unknown): RiderBridgeProblem {
+  const record = readRecord(value);
+  return {
+    severity: readString(record.severity),
+    source: readString(record.source),
+    actionId: readString(record.actionId),
+    message: readString(record.message),
+  };
+}
+
+function readArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function readBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function formatUnknownError(error: unknown): string {

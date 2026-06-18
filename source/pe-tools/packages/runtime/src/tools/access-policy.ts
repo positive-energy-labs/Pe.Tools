@@ -16,17 +16,15 @@ export class RuntimeToolAccessError extends Error {
   }
 }
 
-export function guardRuntimeToolsForAccessPolicy<TTools extends RuntimeToolsInput>(
-  tools: TTools,
+export function guardRuntimeToolsForAccessPolicy(
+  tools: RuntimeToolsInput,
   toolCatalog?: RuntimeToolSource,
-): TTools {
-  const guarded = Object.fromEntries(
-    Object.entries(tools as Record<string, unknown>).map(([toolName, tool]) => [
-      toolName,
-      guardRuntimeToolForAccessPolicy(toolName, tool, toolCatalog),
-    ]),
-  );
-  return guarded as TTools;
+): RuntimeToolsInput {
+  const guarded = { ...tools };
+  for (const [toolName, tool] of Object.entries(guarded)) {
+    guarded[toolName] = guardRuntimeToolForAccessPolicy(toolName, tool, toolCatalog);
+  }
+  return guarded;
 }
 
 export function isRuntimeToolAllowedForAccessLevel(options: {
@@ -52,15 +50,17 @@ export function assertRuntimeToolAccess(options: {
 
 const readOnlyToolKinds = new Set<RuntimeToolKind>(["read", "search", "fetch", "think"]);
 
+type RuntimeToolInput = RuntimeToolsInput[string];
+
 type RuntimeExecutableTool = {
   execute: (input: unknown, context: unknown) => unknown;
 };
 
 function guardRuntimeToolForAccessPolicy(
   toolName: string,
-  tool: unknown,
+  tool: RuntimeToolInput,
   toolCatalog?: RuntimeToolSource,
-): unknown {
+): RuntimeToolInput {
   if (!isRuntimeExecutableTool(tool)) return tool;
 
   const execute = tool.execute.bind(tool);
@@ -104,18 +104,23 @@ function readHarnessState(harness: Record<string, unknown>): unknown {
 }
 
 function readRequestContext(value: unknown): { get: (key: string) => unknown } | undefined {
-  const record = readRecord(value);
-  return typeof record.get === "function"
-    ? { get: (key) => (record.get as (key: string) => unknown).call(value, key) }
-    : undefined;
+  return hasRequestContextGetter(value) ? { get: (key) => value.get(key) } : undefined;
 }
 
-function isRuntimeExecutableTool(value: unknown): value is RuntimeExecutableTool {
-  return Boolean(
-    value && typeof value === "object" && typeof readRecord(value).execute === "function",
-  );
+function hasRequestContextGetter(value: unknown): value is { get: (key: string) => unknown } {
+  return isRecord(value) && typeof value.get === "function";
+}
+
+function isRuntimeExecutableTool(
+  value: unknown,
+): value is RuntimeToolInput & RuntimeExecutableTool {
+  return isRecord(value) && typeof value.execute === "function";
 }
 
 function readRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  return isRecord(value) ? value : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

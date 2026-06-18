@@ -2,8 +2,15 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import path from "node:path";
-import type { WorkbenchAccessLevel, WorkbenchEvent, WorkbenchState } from "@pe/agent-contracts";
+import {
+  isWorkbenchEvent,
+  isWorkbenchState,
+  type WorkbenchAccessLevel,
+  type WorkbenchEvent,
+  type WorkbenchState,
+} from "@pe/agent-contracts";
 import type { WorkbenchController, WorkbenchStateHandler } from "@pe/workbench-core";
+import { z } from "zod";
 
 export interface WorkbenchTransportController {
   getState(): WorkbenchState;
@@ -245,16 +252,33 @@ async function serveStatic(
 async function getState(baseUrl: string): Promise<WorkbenchState> {
   const response = await fetch(`${baseUrl}/api/workbench/state`);
   if (!response.ok) throw new Error(await response.text());
-  return (await response.json()) as WorkbenchState;
+  const payload: unknown = await response.json();
+  if (!isWorkbenchState(payload)) throw new Error("Invalid workbench state response.");
+  return payload;
 }
 
 function subscribeToEvents(baseUrl: string, handler: (event: WorkbenchEvent) => void): () => void {
   const source = new EventSource(`${baseUrl}/api/workbench/events`);
   source.addEventListener("workbench-event", (message) => {
-    handler(JSON.parse(message.data) as WorkbenchEvent);
+    const payload: unknown = JSON.parse(message.data);
+    if (isWorkbenchEvent(payload)) {
+      handler(payload);
+      return;
+    }
+    handler({ type: "error", message: "Invalid workbench event response." });
   });
   return () => source.close();
 }
+
+const workbenchCommandResponseSchema: z.ZodType<{ state: WorkbenchState }> = z
+  .object({ state: z.custom<WorkbenchState>(isWorkbenchState) })
+  .passthrough();
+const workbenchJsonBodySchema = z.record(z.string(), z.unknown());
+const workbenchAccessLevelSchema: z.ZodType<WorkbenchAccessLevel> = z.enum([
+  "read-only",
+  "ask",
+  "trusted",
+]);
 
 async function command(baseUrl: string, pathName: string, body?: unknown): Promise<WorkbenchState> {
   const response = await fetch(`${baseUrl}${pathName}`, {
@@ -263,8 +287,10 @@ async function command(baseUrl: string, pathName: string, body?: unknown): Promi
     body: JSON.stringify(body ?? {}),
   });
   if (!response.ok) throw new Error(await response.text());
-  const payload = (await response.json()) as { state: WorkbenchState };
-  return payload.state;
+  const payload: unknown = await response.json();
+  const commandResponse = workbenchCommandResponseSchema.safeParse(payload);
+  if (!commandResponse.success) throw new Error("Invalid workbench command response.");
+  return commandResponse.data.state;
 }
 
 function ssePayload(event: string, data: unknown): string {
@@ -294,9 +320,9 @@ async function readJsonBody(request: IncomingMessage): Promise<Record<string, un
   for await (const chunk of request)
     chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
   if (!chunks.length) return {};
-  const value = JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
-  if (!isRecord(value)) return {};
-  return value;
+  const value: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const body = workbenchJsonBodySchema.safeParse(value);
+  return body.success ? body.data : {};
 }
 
 function readString(value: unknown, field: string): string {
@@ -309,7 +335,8 @@ function readOptionalString(value: unknown): string | undefined {
 }
 
 function readAccessLevel(value: unknown, field: string): WorkbenchAccessLevel {
-  if (value === "read-only" || value === "ask" || value === "trusted") return value;
+  const accessLevel = workbenchAccessLevelSchema.safeParse(value);
+  if (accessLevel.success) return accessLevel.data;
   throw new Error(`Missing ${field}.`);
 }
 
@@ -325,10 +352,6 @@ function contentType(filePath: string): string {
 
 function trimTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function errorMessage(error: unknown): string {

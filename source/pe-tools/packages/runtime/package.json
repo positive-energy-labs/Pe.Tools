@@ -41,7 +41,8 @@
     "@pe/agent-contracts": "workspace:*",
     "@pe/agent-projection": "workspace:*",
     "@pe/host-client": "workspace:*",
-    "mastracode": "^0.22.3"
+    "mastracode": "^0.22.3",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

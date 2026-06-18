@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { AgentSideConnection, ndJsonStream, type Stream } from "@agentclientprotocol/sdk";
+import { z } from "zod";
 import { createRuntimeLocalTransportAuth, type RuntimeLocalTransportAuth } from "../transport.ts";
 import { createRuntimeAuthDescriptor } from "../auth/types.ts";
 import { describeRuntimeProtocolStatus } from "../protocol-status.ts";
@@ -15,18 +16,65 @@ import {
   type RuntimeAcpAgentSessionStore,
 } from "./adapter.ts";
 import { Readable, Writable } from "node:stream";
+import type { RuntimeHandleServices } from "../runtime.ts";
 
 export type { RuntimeAcpAgentOptions } from "./adapter.ts";
 
-export async function runRuntimeAcpAgent(options: RuntimeAcpAgentOptions): Promise<void> {
-  const input = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
-  const output = Writable.toWeb(process.stdout) as WritableStream<Uint8Array>;
+export async function runRuntimeAcpAgent<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+>(options: RuntimeAcpAgentOptions<TState, TServices>): Promise<void> {
+  const input = nodeReadableBytes(process.stdin);
+  const output = nodeWritableBytes(process.stdout);
   const stream = ndJsonStream(output, input);
   const connection = new AgentSideConnection(
     (conn) => createRuntimeAcpAgent(conn, options),
     stream,
   );
   await connection.closed;
+}
+
+function nodeWritableBytes(stream: Writable): WritableStream<Uint8Array> {
+  const writer = Writable.toWeb(stream).getWriter();
+  return new WritableStream<Uint8Array>({
+    write: (chunk) => writer.write(chunk),
+    close: () => writer.close(),
+    abort: (reason) => writer.abort(reason),
+  });
+}
+
+function nodeReadableBytes(stream: Readable): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start: async (controller) => {
+      try {
+        for await (const chunk of stream) {
+          controller.enqueue(toUint8Array(chunk));
+        }
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+    cancel: () => {
+      stream.destroy();
+    },
+  });
+}
+
+function toUint8Array(chunk: unknown): Uint8Array<ArrayBuffer> {
+  if (chunk instanceof Uint8Array) return copyBytes(chunk);
+  if (typeof chunk === "string") return new TextEncoder().encode(chunk);
+  if (chunk instanceof ArrayBuffer) return new Uint8Array(chunk);
+  if (ArrayBuffer.isView(chunk)) {
+    return copyBytes(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+  }
+  throw new Error("ACP stdio stream emitted a non-byte chunk.");
+}
+
+function copyBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy;
 }
 
 type JsonRpcId = string | number | null;
@@ -44,9 +92,12 @@ export interface RuntimeAcpTransportOptions {
   host?: string;
 }
 
-export interface RuntimeAcpHttpAgentOptions extends RuntimeAcpAgentOptions {
+export interface RuntimeAcpHttpAgentOptions<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+> extends RuntimeAcpAgentOptions<TState, TServices> {
   transport?: RuntimeAcpTransportOptions;
-  sessionStore?: RuntimeAcpAgentSessionStore;
+  sessionStore?: RuntimeAcpAgentSessionStore<TState, TServices>;
 }
 
 export interface RuntimeAcpHttpAgentStartInfo {
@@ -61,11 +112,17 @@ export interface RuntimeAcpHttpAgentStartInfo {
 const defaultPort = 43111;
 const defaultHost = "127.0.0.1";
 
-function acpTransport(options: RuntimeAcpHttpAgentOptions): RuntimeAcpTransportOptions {
+function acpTransport<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+>(options: RuntimeAcpHttpAgentOptions<TState, TServices>): RuntimeAcpTransportOptions {
   return options.transport ?? {};
 }
 
-export async function runRuntimeAcpHttpAgent(options: RuntimeAcpHttpAgentOptions): Promise<void> {
+export async function runRuntimeAcpHttpAgent<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+>(options: RuntimeAcpHttpAgentOptions<TState, TServices>): Promise<void> {
   const agent = new RuntimeAcpHttpAgent(options);
   const info = await agent.start();
   console.log(
@@ -77,7 +134,10 @@ export async function runRuntimeAcpHttpAgent(options: RuntimeAcpHttpAgentOptions
   console.log(`Events: ${info.eventsUrl}`);
 }
 
-export class RuntimeAcpHttpAgent {
+export class RuntimeAcpHttpAgent<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+> {
   private readonly host: string;
   private readonly auth: RuntimeLocalTransportAuth;
   private readonly incoming: ReadableStream<AnyMessage>;
@@ -86,9 +146,9 @@ export class RuntimeAcpHttpAgent {
   private server: Server | null = null;
   private incomingController: ReadableStreamDefaultController<AnyMessage> | null = null;
   private connection: AgentSideConnection;
-  private sessionStore: RuntimeAcpAgentSessionStore | null = null;
+  private sessionStore: RuntimeAcpAgentSessionStore<TState, TServices> | null = null;
 
-  constructor(private readonly options: RuntimeAcpHttpAgentOptions) {
+  constructor(private readonly options: RuntimeAcpHttpAgentOptions<TState, TServices>) {
     this.host = acpTransport(options).host ?? defaultHost;
     this.auth = createRuntimeLocalTransportAuth({
       token: acpTransport(options).token,
@@ -106,8 +166,9 @@ export class RuntimeAcpHttpAgent {
       }),
     };
     this.connection = new AgentSideConnection((conn) => {
-      this.sessionStore = options.sessionStore ?? new RuntimeAcpSessionStore(conn, options);
-      return new RuntimeAcpAgent(options, this.sessionStore);
+      const sessionStore = options.sessionStore ?? new RuntimeAcpSessionStore(conn, options);
+      this.sessionStore = sessionStore;
+      return new RuntimeAcpAgent(options, sessionStore);
     }, stream);
   }
 
@@ -176,7 +237,12 @@ export class RuntimeAcpHttpAgent {
     }
 
     if (request.method === "POST" && url.pathname === "/rpc") {
-      const body = await readJsonBody<AnyMessage>(request);
+      const body = await readJsonBody(request);
+      if (!isJsonRpcMessage(body)) {
+        response.writeHead(400, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ error: "Invalid JSON-RPC message." }));
+        return;
+      }
       this.enqueue(body);
       response.writeHead(202, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ accepted: true }));
@@ -250,20 +316,19 @@ export class RuntimeAcpHttpAgent {
   }
 }
 
+const jsonRpcMessageSchema = z.object({ jsonrpc: z.literal("2.0") }).passthrough();
+
 function isJsonRpcMessage(value: unknown): value is AnyMessage {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    (value as { jsonrpc?: unknown }).jsonrpc === "2.0"
-  );
+  return jsonRpcMessageSchema.safeParse(value).success;
 }
 
-async function readJsonBody<T>(request: IncomingMessage): Promise<T> {
+async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   for await (const chunk of request)
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  if (chunks.length === 0) return {} as T;
-  return JSON.parse(Buffer.concat(chunks).toString("utf8")) as T;
+  if (chunks.length === 0) return {};
+  const value: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  return value;
 }
 
 function addCorsHeaders(response: ServerResponse): void {

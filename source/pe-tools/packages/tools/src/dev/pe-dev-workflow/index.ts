@@ -444,7 +444,8 @@ function parseJsonObjectFromTail(text: string): unknown {
     if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) continue;
 
     try {
-      return JSON.parse(trimmed) as unknown;
+      const parsed: unknown = JSON.parse(trimmed);
+      return parsed;
     } catch {}
   }
 
@@ -455,7 +456,73 @@ function getSyncRuntimeFreshness(parsedJson: unknown): SyncRuntimeFreshness | un
   if (!isRecord(parsedJson)) return undefined;
 
   const runtimeFreshness = parsedJson.runtimeFreshness;
-  return isRecord(runtimeFreshness) ? (runtimeFreshness as SyncRuntimeFreshness) : undefined;
+  return readSyncRuntimeFreshness(runtimeFreshness);
+}
+
+function readSyncRuntimeFreshness(value: unknown): SyncRuntimeFreshness | undefined {
+  const record = readRecord(value);
+  if (!record) return undefined;
+  return {
+    ...(typeof record.verdict === "string" ? { verdict: record.verdict } : {}),
+    ...(typeof record.loadedGraphVerdict === "string"
+      ? { loadedGraphVerdict: record.loadedGraphVerdict }
+      : {}),
+    ...(typeof record.sourceDeltaVerdict === "string"
+      ? { sourceDeltaVerdict: record.sourceDeltaVerdict }
+      : {}),
+    ...(typeof record.expectedRuntimeDelta === "boolean"
+      ? { expectedRuntimeDelta: record.expectedRuntimeDelta }
+      : {}),
+    ...(typeof record.basis === "string" ? { basis: record.basis } : {}),
+    ...(typeof record.loadedAssemblyCount === "number"
+      ? { loadedAssemblyCount: record.loadedAssemblyCount }
+      : {}),
+    ...(typeof record.comparableAssemblyCount === "number"
+      ? { comparableAssemblyCount: record.comparableAssemblyCount }
+      : {}),
+    ...(typeof record.staleAssemblyCount === "number"
+      ? { staleAssemblyCount: record.staleAssemblyCount }
+      : {}),
+    ...(typeof record.uncheckedAssemblyCount === "number"
+      ? { uncheckedAssemblyCount: record.uncheckedAssemblyCount }
+      : {}),
+    ...(typeof record.sourceDeltaCount === "number"
+      ? { sourceDeltaCount: record.sourceDeltaCount }
+      : {}),
+    ...(typeof record.initialFingerprint === "string"
+      ? { initialFingerprint: record.initialFingerprint }
+      : {}),
+    ...(typeof record.postFingerprint === "string"
+      ? { postFingerprint: record.postFingerprint }
+      : {}),
+    ...(typeof record.fingerprintChanged === "boolean"
+      ? { fingerprintChanged: record.fingerprintChanged }
+      : {}),
+    ...(Array.isArray(record.risks)
+      ? { risks: record.risks.map(readFreshnessRisk).filter(isDefined) }
+      : {}),
+    ...(Array.isArray(record.limits)
+      ? { limits: record.limits.filter((entry): entry is string => typeof entry === "string") }
+      : {}),
+    ...(typeof record.nextStep === "string" ? { nextStep: record.nextStep } : {}),
+  };
+}
+
+function readFreshnessRisk(
+  value: unknown,
+): NonNullable<SyncRuntimeFreshness["risks"]>[number] | undefined {
+  const record = readRecord(value);
+  if (!record) return undefined;
+  return {
+    ...(typeof record.code === "string" ? { code: record.code } : {}),
+    ...(typeof record.severity === "string" ? { severity: record.severity } : {}),
+    ...(typeof record.detectability === "string" ? { detectability: record.detectability } : {}),
+    ...(typeof record.message === "string" ? { message: record.message } : {}),
+  };
+}
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined;
 }
 
 function proofForSyncRuntimeFreshness(
@@ -515,6 +582,10 @@ function proofForSyncRuntimeFreshness(
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return isRecord(value) ? value : undefined;
 }
 
 function proofForResult(

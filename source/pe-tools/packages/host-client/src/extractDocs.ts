@@ -64,15 +64,13 @@ export async function extractRvtDocsText(url: string): Promise<string> {
 }
 
 function findElementAfterComment(node: ChildNode, commentText: string): Element | null {
-  if (node.nodeName === "#comment" && (node as CommentNode).data.includes(commentText)) {
+  if (isCommentNode(node) && node.data.includes(commentText)) {
     if (node.parentNode) {
       const siblings = node.parentNode.childNodes;
       const index = siblings.indexOf(node);
       for (let i = index + 1; i < siblings.length; i++) {
         const sibling = siblings[i];
-        if (sibling.nodeName !== "#text" && sibling.nodeName !== "#comment") {
-          return sibling as Element;
-        }
+        if (isElementNode(sibling)) return sibling;
       }
     }
   }
@@ -192,9 +190,8 @@ function extractTable(table: Element): string {
 
 // Consolidated helper functions
 function find(element: Element | ChildNode, predicate: (el: Element) => boolean): Element | null {
-  if ("nodeName" in element && element.nodeName !== "#text" && element.nodeName !== "#comment") {
-    const el = element as Element;
-    if (predicate(el)) return el;
+  if (isElementNode(element) && predicate(element)) {
+    return element;
   }
 
   if ("childNodes" in element) {
@@ -227,9 +224,7 @@ function findAll(element: Element, predicate: (el: Element) => boolean): Element
 
   if (element.childNodes) {
     for (const child of element.childNodes) {
-      if (child.nodeName !== "#text" && child.nodeName !== "#comment") {
-        results.push(...findAll(child as Element, predicate));
-      }
+      if (isElementNode(child)) results.push(...findAll(child, predicate));
     }
   }
   return results;
@@ -237,10 +232,13 @@ function findAll(element: Element, predicate: (el: Element) => boolean): Element
 
 function findParent(element: Element, predicate: (el: Element) => boolean): Element | null {
   let current = element.parentNode;
-  while (current && "attrs" in current) {
-    const el = current as Element;
-    if (predicate(el)) return el;
-    current = el.parentNode;
+  while (current) {
+    if (isElementNode(current)) {
+      if (predicate(current)) return current;
+      current = current.parentNode;
+    } else {
+      break;
+    }
   }
   return null;
 }
@@ -256,9 +254,7 @@ function getAttr(element: Element, name: string): string | undefined {
 }
 
 function getText(node: ChildNode): string {
-  if (node.nodeName === "#text") {
-    return (node as TextNode).value;
-  }
+  if (isTextNode(node)) return node.value;
   if ("childNodes" in node) {
     return node.childNodes.map(getText).join("");
   }
@@ -273,20 +269,34 @@ function extractHtmlContent(element: Element): string {
   let html = "";
   if (element.childNodes) {
     for (const child of element.childNodes) {
-      if (child.nodeName === "#text") {
-        html += (child as TextNode).value;
+      if (isTextNode(child)) {
+        html += child.value;
+      } else if (!isElementNode(child)) {
+        continue;
       } else if (child.nodeName === "br") {
         html += "\n";
       } else if (child.nodeName === "strong") {
         html += `<strong>${getText(child)}</strong>`;
       } else if (["ul", "ol", "li", "p"].includes(child.nodeName)) {
-        html += `<${child.nodeName}>${extractHtmlContent(child as Element)}</${child.nodeName}>`;
+        html += `<${child.nodeName}>${extractHtmlContent(child)}</${child.nodeName}>`;
       } else {
-        html += extractHtmlContent(child as Element);
+        html += extractHtmlContent(child);
       }
     }
   }
   return html;
+}
+
+function isTextNode(node: ChildNode): node is TextNode {
+  return node.nodeName === "#text";
+}
+
+function isCommentNode(node: ChildNode): node is CommentNode {
+  return node.nodeName === "#comment";
+}
+
+function isElementNode(node: unknown): node is Element {
+  return typeof node === "object" && node !== null && "attrs" in node && "childNodes" in node;
 }
 
 function htmlToMarkdown(html: string): string {

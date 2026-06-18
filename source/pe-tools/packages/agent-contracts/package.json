@@ -24,7 +24,8 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "^0.25.0"
+    "@agentclientprotocol/sdk": "^0.25.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

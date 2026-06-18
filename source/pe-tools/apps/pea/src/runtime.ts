@@ -2,6 +2,7 @@ import path from "node:path";
 import { Agent } from "@mastra/core/agent";
 import type { MastraModelConfig } from "@mastra/core/llm";
 import { TaskSignalProvider } from "@mastra/core/signals";
+import type { MastraTUIOptions } from "mastracode/tui";
 import { createInProcessAcpWorkbenchClient } from "@pe/acp-client";
 import { PeHostClient } from "@pe/host-client";
 import type { WorkbenchAgentClient } from "@pe/workbench-core";
@@ -25,6 +26,8 @@ import {
   type RuntimeDescriptor,
   type RuntimeFactory,
   type RuntimeHandle,
+  type RuntimeHandleServices,
+  type RuntimeHarness,
   type RuntimeHarnessConfig,
   type RuntimeSessionOptions,
   type RuntimeStorageProfile,
@@ -59,8 +62,20 @@ export interface PeaRuntimeFactoryOptions<
   memoryProfile?: RuntimeMemoryProfile<TState>;
   toolProfile?: RuntimeToolProfile;
   sessionOptions?: RuntimeSessionOptions;
-  createHandle?: (request: RuntimeCreateRequest) => Promise<RuntimeHandle<TState>>;
+  createHandle?: (request: RuntimeCreateRequest) => Promise<PeaRuntimeHandle<TState>>;
 }
+
+export type PeaRuntimeServices = RuntimeHandleServices & {
+  authStorage: MastraCodeAuthStorage;
+  hookManager: undefined;
+  mcpManager: undefined;
+};
+
+export type PeaRuntimeHandle<TState extends Record<string, unknown> = Record<string, unknown>> =
+  RuntimeHandle<TState, PeaRuntimeServices, RuntimeHarness<TState>>;
+
+export type PeaRuntimeFactory<TState extends Record<string, unknown> = Record<string, unknown>> =
+  RuntimeFactory<TState, PeaRuntimeServices, RuntimeHarness<TState>>;
 
 export interface PeaTuiRuntimeOptions {
   cwd?: string;
@@ -79,7 +94,7 @@ export interface PeaBetaTuiWorkbenchOptions {
 
 export function createPeaRuntimeFactory<
   TState extends Record<string, unknown> = Record<string, unknown>,
->(options: PeaRuntimeFactoryOptions<TState>): RuntimeFactory<TState> {
+>(options: PeaRuntimeFactoryOptions<TState>): PeaRuntimeFactory<TState> {
   const descriptor =
     options.descriptor ??
     createRuntimeDescriptor("pea", {
@@ -96,11 +111,11 @@ export function createPeaRuntimeFactory<
   const configuredRoot = options.config.initialState?.projectPath;
   const workspaceRoot = typeof configuredRoot === "string" ? configuredRoot : undefined;
 
-  return createRuntimeFactory(
+  return createRuntimeFactory<TState, PeaRuntimeServices, RuntimeHarness<TState>>(
     descriptor,
     async (request) =>
       options.createHandle?.(request) ??
-      createRuntimeHarness<TState>({
+      createRuntimeHarness<TState, PeaRuntimeServices>({
         config: options.config,
         request,
         auth,
@@ -130,7 +145,7 @@ export function createPeaRuntimeFactory<
 
 export async function createPeaProtocolRuntimeFactory(
   options: PeaTuiRuntimeOptions = {},
-): Promise<RuntimeFactory> {
+): Promise<PeaRuntimeFactory> {
   const productHomePath = resolvePeaProductHomePath();
   const workspaceRoot = productHomePath;
   const hostBaseUrl = PeHostClient.resolveHostBaseUrl(options.hostBaseUrl);
@@ -195,7 +210,7 @@ export async function createPeaProtocolRuntimeFactory(
 
 export async function createPeaTuiRuntime(
   options: PeaTuiRuntimeOptions = {},
-): Promise<RuntimeHandle> {
+): Promise<PeaRuntimeHandle> {
   const workspaceRoot = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
   const factory = await createPeaProtocolRuntimeFactory(options);
   return factory.create({
@@ -208,14 +223,15 @@ export async function createPeaTuiRuntime(
 export async function runPeaTui(options: PeaTuiRuntimeOptions = {}): Promise<void> {
   const runtime = await createPeaTuiRuntime(options);
   const { MastraTUI } = await import("mastracode/tui");
-  const tui = new MastraTUI({
+  const tuiOptions: MastraTUIOptions = {
     harness: runtime.harness,
-    authStorage: runtime.authStorage as never,
-    hookManager: runtime.hookManager as never,
-    mcpManager: runtime.mcpManager as never,
+    authStorage: runtime.authStorage,
+    hookManager: runtime.hookManager,
+    mcpManager: runtime.mcpManager,
     appName: "Pea",
     version: "0.1.0",
-  });
+  };
+  const tui = new MastraTUI(tuiOptions);
   await tui.run();
 }
 
@@ -259,9 +275,7 @@ function resolveCurrentModel(
   requestContext: RequestContext,
   fallbackModelId: string,
 ): Promise<MastraModelConfig> {
-  const harness = requestContext.get("harness") as
-    | { getState?: () => Record<string, unknown> }
-    | undefined;
+  const harness = readStateHarness(requestContext.get("harness"));
   const state = harness?.getState?.();
   const modelId =
     typeof state?.currentModelId === "string" && state.currentModelId.length > 0
@@ -276,6 +290,12 @@ function resolveCurrentModel(
   });
 }
 
+function readStateHarness(
+  value: unknown,
+): { getState?: () => Record<string, unknown> } | undefined {
+  return isRecord(value) && typeof value.getState === "function" ? value : undefined;
+}
+
 function isThinkingLevel(value: unknown): value is "off" | "low" | "medium" | "high" | "xhigh" {
   return (
     value === "off" ||
@@ -288,4 +308,8 @@ function isThinkingLevel(value: unknown): value is "off" | "low" | "medium" | "h
 
 function createLocalResourceId(runtimeId: string, cwd: string): string {
   return `${runtimeId}:${Buffer.from(cwd).toString("base64url")}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

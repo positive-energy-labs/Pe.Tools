@@ -2,13 +2,14 @@ import { Harness, type HarnessConfig } from "@mastra/core/harness";
 import { wrapModelForFinalToolListLogging } from "./final-tool-list-logging.ts";
 import { RuntimeHarness } from "./runtime-harness.ts";
 import { createRuntimeThreadLockWithMastraCodeInterop } from "./thread-lock.ts";
-import { createRuntimeKernel } from "../kernel.ts";
+import { createRuntimeKernel, type RuntimeKernelHarness } from "../kernel.ts";
 import { createRuntimeSessions, type RuntimeSessionOptions } from "../session/runtime-sessions.ts";
 import type { RuntimeAuthProfile } from "../auth/types.ts";
 import type { RuntimeMemoryProfile } from "../memory/profiles.ts";
 import type {
   RuntimeCreateRequest,
   RuntimeHandle,
+  RuntimeHandleServices,
   RuntimeKernel,
   RuntimeSessions,
   RuntimeWorkspaceInfo,
@@ -21,36 +22,85 @@ import { guardRuntimeToolsForAccessPolicy } from "../tools/access-policy.ts";
 export type RuntimeHarnessConfig<TState extends Record<string, unknown> = Record<string, unknown>> =
   HarnessConfig<TState>;
 
+type ClosableStorage = { close?: () => Promise<void> | void };
+
+export interface RuntimeInjectedHarnessConfig {
+  storage?: ClosableStorage;
+  threadLock?: {
+    release?: (threadId: string) => Promise<void> | void;
+  };
+}
+
 export interface CreateRuntimeHarnessOptions<
   TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeKernelHarness<TState> = Harness<TState>,
 > {
   config: HarnessConfig<TState>;
   request?: RuntimeCreateRequest;
-  harness?: Harness<TState>;
+  harness?: THarness;
   sessions?: RuntimeSessions;
   sessionOptions?: RuntimeSessionOptions;
   storageProfile?: RuntimeStorageProfile;
   memoryProfile?: RuntimeMemoryProfile<TState>;
   toolProfile?: RuntimeToolProfile;
   toolCatalog?: RuntimeToolSource;
-  createSessions?: (harness: Harness<TState>) => RuntimeSessions;
+  createSessions?: (harness: RuntimeKernelHarness<TState>) => RuntimeSessions;
   workspace?: RuntimeWorkspaceInfo;
   auth?: RuntimeAuthProfile;
-  authStorage?: unknown;
-  hookManager?: unknown;
-  mcpManager?: unknown;
+  authStorage?: TServices["authStorage"];
+  hookManager?: TServices["hookManager"];
+  mcpManager?: TServices["mcpManager"];
   metadata?: Record<string, unknown>;
+}
+
+export interface CreateInjectedRuntimeHarnessOptions<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeKernelHarness<TState> = RuntimeKernelHarness<TState>,
+> extends Omit<CreateRuntimeHarnessOptions<TState, TServices, THarness>, "config" | "harness"> {
+  config: RuntimeInjectedHarnessConfig;
+  harness: THarness;
 }
 
 export async function createRuntimeHarness<
   TState extends Record<string, unknown> = Record<string, unknown>,
->(options: CreateRuntimeHarnessOptions<TState>): Promise<RuntimeHandle<TState>> {
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+>(
+  options: CreateRuntimeHarnessOptions<TState, TServices, RuntimeHarness<TState>> & {
+    harness?: undefined;
+  },
+): Promise<RuntimeHandle<TState, TServices, RuntimeHarness<TState>>>;
+export async function createRuntimeHarness<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeKernelHarness<TState> = RuntimeKernelHarness<TState>,
+>(
+  options: CreateInjectedRuntimeHarnessOptions<TState, TServices, THarness>,
+): Promise<RuntimeHandle<TState, TServices, THarness>>;
+export async function createRuntimeHarness<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  TServices extends RuntimeHandleServices = RuntimeHandleServices,
+  THarness extends RuntimeKernelHarness<TState> = RuntimeKernelHarness<TState>,
+>(
+  options:
+    | (CreateRuntimeHarnessOptions<TState, TServices, RuntimeHarness<TState>> & {
+        harness?: undefined;
+      })
+    | CreateInjectedRuntimeHarnessOptions<TState, TServices, THarness>,
+): Promise<RuntimeHandle<TState, TServices, RuntimeHarness<TState> | THarness>> {
   const request = options.request ?? defaultRuntimeCreateRequest;
-  const config = options.harness
-    ? options.config
-    : await resolveRuntimeHarnessConfig(options, request);
-  const harness = options.harness ?? new RuntimeHarness<TState>(config);
-  const kernel = createRuntimeKernel(harness as unknown as Harness<Record<string, unknown>>, {
+  let config: HarnessConfig<TState> | RuntimeInjectedHarnessConfig;
+  let harness: RuntimeHarness<TState> | THarness;
+  if (hasInjectedRuntimeHarness(options)) {
+    config = options.config;
+    harness = options.harness;
+  } else {
+    const resolvedConfig = await resolveRuntimeHarnessConfig(options, request);
+    config = resolvedConfig;
+    harness = new RuntimeHarness<TState>(resolvedConfig);
+  }
+  const kernel = createRuntimeKernel(harness, {
     ...options.sessionOptions,
     threadStateStore:
       options.sessionOptions?.threadStateStore ?? resolveRuntimeThreadStateStore(config.storage),
@@ -61,7 +111,7 @@ export async function createRuntimeHarness<
   const sessions =
     options.sessions ??
     options.createSessions?.(harness) ??
-    createRuntimeSessions(harness as unknown as Harness<Record<string, unknown>>, {
+    createRuntimeSessions(harness, {
       ...options.sessionOptions,
       kernel,
       toolCatalog:
@@ -89,17 +139,25 @@ export async function createRuntimeHarness<
 
 const defaultRuntimeCreateRequest: RuntimeCreateRequest = { protocol: "tui" };
 
-type ClosableStorage = { close?: () => Promise<void> | void };
-type ShutdownMastra = { shutdown?: () => Promise<void> | void };
-type HarnessWithMastra<TState extends Record<string, unknown>> = Harness<TState> & {
-  getMastra?: () => ShutdownMastra | undefined;
-};
+function hasInjectedRuntimeHarness<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeKernelHarness<TState>,
+>(
+  options:
+    | (CreateRuntimeHarnessOptions<TState, TServices, RuntimeHarness<TState>> & {
+        harness?: undefined;
+      })
+    | CreateInjectedRuntimeHarnessOptions<TState, TServices, THarness>,
+): options is CreateInjectedRuntimeHarnessOptions<TState, TServices, THarness> {
+  return options.harness !== undefined;
+}
 
 async function closeRuntimeHarness<TState extends Record<string, unknown>>(
-  harness: Harness<TState>,
+  harness: RuntimeKernelHarness<TState>,
   kernel: RuntimeKernel,
   storage: ClosableStorage | undefined,
-  threadLock: HarnessConfig<TState>["threadLock"] | undefined,
+  threadLock: RuntimeInjectedHarnessConfig["threadLock"] | undefined,
 ): Promise<void> {
   harness.abort();
   const currentThreadId = harness.getCurrentThreadId();
@@ -109,9 +167,10 @@ async function closeRuntimeHarness<TState extends Record<string, unknown>>(
   } catch (error) {
     flushError = error;
   } finally {
-    if (currentThreadId) {
+    const releaseThreadLock = threadLock?.release;
+    if (currentThreadId && releaseThreadLock) {
       try {
-        await threadLock?.release(currentThreadId);
+        await releaseThreadLock(currentThreadId);
       } catch {
         // Best-effort cleanup only.
       }
@@ -119,7 +178,7 @@ async function closeRuntimeHarness<TState extends Record<string, unknown>>(
   }
   let closeError: unknown;
   try {
-    const mastra = (harness as HarnessWithMastra<TState>).getMastra?.();
+    const mastra = harness.getMastra?.();
     if (mastra?.shutdown) {
       await mastra.shutdown();
     } else {
@@ -134,8 +193,9 @@ async function closeRuntimeHarness<TState extends Record<string, unknown>>(
 
 async function resolveRuntimeHarnessConfig<
   TState extends Record<string, unknown> = Record<string, unknown>,
+  THarness extends RuntimeKernelHarness<TState> = RuntimeKernelHarness<TState>,
 >(
-  options: CreateRuntimeHarnessOptions<TState>,
+  options: CreateRuntimeHarnessOptions<TState, RuntimeHandleServices, THarness>,
   request: RuntimeCreateRequest,
 ): Promise<HarnessConfig<TState>> {
   const storage =
@@ -156,7 +216,12 @@ async function resolveRuntimeHarnessConfig<
   const tools = options.config.tools ?? options.toolProfile?.tools;
   const toolCatalog =
     options.toolCatalog ?? options.toolProfile?.catalog ?? options.sessionOptions?.toolCatalog;
-  const guardedTools = tools ? guardRuntimeToolsForAccessPolicy(tools, toolCatalog) : undefined;
+  const guardedTools =
+    typeof tools === "function"
+      ? tools
+      : tools
+        ? guardRuntimeToolsForAccessPolicy(tools, toolCatalog)
+        : undefined;
   const configuredResolveModel = options.config.resolveModel;
   const resolveModel = configuredResolveModel
     ? (modelId: string) => wrapModelForFinalToolListLogging(configuredResolveModel(modelId))

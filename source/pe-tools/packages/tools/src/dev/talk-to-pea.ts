@@ -142,9 +142,62 @@ function parseWorkerResponse(
     .find((candidate) => candidate.startsWith(workerResultPrefix));
   if (!line) return null;
 
-  return JSON.parse(line.slice(workerResultPrefix.length)) as
-    | TalkToPeaWorkerResponse
-    | { ok: false; error: string };
+  const parsed: unknown = JSON.parse(line.slice(workerResultPrefix.length));
+  return readWorkerResponse(parsed);
+}
+
+function readWorkerResponse(
+  value: unknown,
+): TalkToPeaWorkerResponse | { ok: false; error: string } {
+  const record = readRecord(value);
+  if (!record) throw new Error("Invalid Pea worker response.");
+  if (record.ok === false && typeof record.error === "string") {
+    return { ok: false, error: record.error };
+  }
+  if (record.ok !== true && record.ok !== false) throw new Error("Invalid Pea worker status.");
+  if (typeof record.threadId !== "string") throw new Error("Invalid Pea worker thread id.");
+  if (!isTalkToPeaFrame(record.frame)) throw new Error("Invalid Pea worker frame.");
+  if (typeof record.latestResponse !== "string")
+    throw new Error("Invalid Pea worker latest response.");
+  if (typeof record.primaryResponse !== "string")
+    throw new Error("Invalid Pea worker primary response.");
+  if (record.feedbackResponse !== null && typeof record.feedbackResponse !== "string") {
+    throw new Error("Invalid Pea worker feedback response.");
+  }
+  return {
+    ok: record.ok,
+    threadId: record.threadId,
+    frame: record.frame,
+    latestResponse: record.latestResponse,
+    primaryResponse: record.primaryResponse,
+    feedbackResponse: record.feedbackResponse,
+    transcriptTail: readTranscriptTail(record.transcriptTail),
+    toolTrace: Array.isArray(record.toolTrace) ? record.toolTrace : [],
+  };
+}
+
+function readTranscriptTail(value: unknown): TalkToPeaWorkerResponse["transcriptTail"] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const record = readRecord(entry);
+    return record &&
+      (record.role === "user" || record.role === "assistant") &&
+      typeof record.text === "string"
+      ? [{ role: record.role, text: record.text }]
+      : [];
+  });
+}
+
+function isTalkToPeaFrame(value: unknown): value is TalkToPeaFrame {
+  return value === "operator" || value === "feedback" || value === "collaborate";
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return isRecord(value) ? value : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function proofForTalkToPea(frame: TalkToPeaFrame) {

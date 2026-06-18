@@ -15,7 +15,6 @@ import {
   hasMastraCodeStoredAuth,
   loadStoredMastraCodeApiKeysIntoEnv,
   resolveMastraCodeModel,
-  type RuntimeHandle,
 } from "@pe/runtime";
 import {
   configurePeaProductToolContext,
@@ -76,7 +75,8 @@ export interface TalkToPeaWorkerResponse {
 }
 
 async function main(): Promise<void> {
-  const request = JSON.parse(await readStdin()) as TalkToPeaWorkerRequest;
+  const parsed: unknown = JSON.parse(await readStdin());
+  const request = readTalkToPeaWorkerRequest(parsed);
   const response = await runTalkToPeaWorker(request);
   process.stdout.write(`${resultPrefix}${JSON.stringify(response)}\n`);
 }
@@ -221,7 +221,7 @@ async function createPeaWorkerRuntime(): Promise<PeaWorkerRuntime> {
   });
 
   await handle.harness.init();
-  return handle as RuntimeHandle<Record<string, unknown>> & PeaWorkerRuntime;
+  return handle;
 }
 
 const peaWorkerInstructions = `You are Positive Energy Agent, Pea: the deployed Revit/operator workbench for MEP, BIM, and architecture practitioners.
@@ -248,9 +248,7 @@ function resolveCurrentModel(
   requestContext: RequestContext,
   fallbackModelId: string,
 ): Promise<MastraModelConfig> {
-  const harness = requestContext.get("harness") as
-    | { getState?: () => Record<string, unknown> }
-    | undefined;
+  const harness = readStateHarness(requestContext.get("harness"));
   const state = harness?.getState?.();
   const modelId =
     typeof state?.currentModelId === "string" && state.currentModelId.length > 0
@@ -413,10 +411,8 @@ function latestAssistantText(messages: Array<{ role: string; content: Array<unkn
 function textFromMessage(message: { content: Array<unknown> }): string {
   return message.content
     .map((part) => {
-      if (typeof part !== "object" || part === null) return "";
-
-      const typedPart = part as { type?: string; text?: unknown };
-      return typedPart.type === "text" && typeof typedPart.text === "string" ? typedPart.text : "";
+      const typedPart = readRecord(part);
+      return typedPart?.type === "text" && typeof typedPart.text === "string" ? typedPart.text : "";
     })
     .filter(Boolean)
     .join("\n")
@@ -434,15 +430,8 @@ function toolTraceSince(
 }
 
 function toolTracePart(part: unknown) {
-  if (typeof part !== "object" || part === null) return [];
-
-  const typedPart = part as {
-    type?: string;
-    name?: unknown;
-    args?: unknown;
-    result?: unknown;
-    isError?: unknown;
-  };
+  const typedPart = readRecord(part);
+  if (!typedPart) return [];
   if (typedPart.type === "tool_call") {
     return [
       {
@@ -465,6 +454,59 @@ function toolTracePart(part: unknown) {
   }
 
   return [];
+}
+
+function readTalkToPeaWorkerRequest(value: unknown): TalkToPeaWorkerRequest {
+  const record = readRecord(value);
+  if (!record) throw new Error("Invalid talk-to-pea worker request.");
+  if (!isTalkToPeaFrame(record.frame)) throw new Error("Invalid talk-to-pea frame.");
+  if (typeof record.prompt !== "string") throw new Error("Invalid talk-to-pea prompt.");
+  if (typeof record.timeoutSeconds !== "number" || !Number.isFinite(record.timeoutSeconds)) {
+    throw new Error("Invalid talk-to-pea timeout.");
+  }
+  if (typeof record.maxMessages !== "number" || !Number.isInteger(record.maxMessages)) {
+    throw new Error("Invalid talk-to-pea message limit.");
+  }
+  const reviewFrame = readTalkToPeaReviewFrame(record.reviewFrame);
+  return {
+    ...(typeof record.threadId === "string" ? { threadId: record.threadId } : {}),
+    frame: record.frame,
+    prompt: record.prompt,
+    ...(typeof record.feedbackPrompt === "string" ? { feedbackPrompt: record.feedbackPrompt } : {}),
+    ...(reviewFrame ? { reviewFrame } : {}),
+    timeoutSeconds: record.timeoutSeconds,
+    maxMessages: record.maxMessages,
+  };
+}
+
+function readTalkToPeaReviewFrame(value: unknown): TalkToPeaWorkerRequest["reviewFrame"] {
+  const record = readRecord(value);
+  if (!record) return undefined;
+  return {
+    ...(typeof record.userRequest === "string" ? { userRequest: record.userRequest } : {}),
+    ...(typeof record.engineerQuestion === "string"
+      ? { engineerQuestion: record.engineerQuestion }
+      : {}),
+    ...(typeof record.expectedUse === "string" ? { expectedUse: record.expectedUse } : {}),
+  };
+}
+
+function isTalkToPeaFrame(value: unknown): value is TalkToPeaFrame {
+  return value === "operator" || value === "feedback" || value === "collaborate";
+}
+
+function readStateHarness(
+  value: unknown,
+): { getState?: () => Record<string, unknown> } | undefined {
+  return isRecord(value) && typeof value.getState === "function" ? value : undefined;
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return isRecord(value) ? value : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function summarizeJson(value: unknown): string {

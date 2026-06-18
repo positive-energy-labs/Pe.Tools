@@ -240,16 +240,14 @@ async function readMastraOpenAiAuth(authPath: string): Promise<MastraOpenAiAuth>
 }
 
 function readApiKeyCredential(value: unknown): string | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const credential = value as { type?: unknown; key?: unknown };
+  const credential = readRecord(value);
   if (credential.type !== "api_key" || typeof credential.key !== "string") return undefined;
 
   return firstNonBlank(credential.key);
 }
 
 function isOAuthCredential(value: unknown): boolean {
-  if (!value || typeof value !== "object") return false;
-  return (value as { type?: unknown }).type === "oauth";
+  return readRecord(value).type === "oauth";
 }
 
 async function readWindowsUserEnvironmentValue(name: string): Promise<string | undefined> {
@@ -379,7 +377,17 @@ function delay(ms: number): Promise<void> {
 }
 
 function parseJsonObject(raw: string): Record<string, unknown> {
-  return JSON.parse(raw.replace(/^\uFEFF/, "")) as Record<string, unknown>;
+  const parsed: unknown = JSON.parse(raw.replace(/^\uFEFF/, ""));
+  if (!isRecord(parsed)) throw new Error("Expected JSON object.");
+  return parsed;
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isTruthyEnv(name: string): boolean {

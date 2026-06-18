@@ -25,7 +25,8 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.25.0",
-    "@pe/agent-contracts": "workspace:*"
+    "@pe/agent-contracts": "workspace:*",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

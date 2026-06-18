@@ -18,6 +18,7 @@ import {
   getPeaCliCommandNames,
   PeaContextSignalProvider,
   PeaContextStateProcessor,
+  type PeaContextStateSignalArgs,
 } from "../src/index.ts";
 import { createPeaRuntimeAuthProfile } from "../src/runtime.ts";
 
@@ -142,7 +143,7 @@ test(
     });
 
     try {
-      const tools = await (runtime.harness as any).getCurrentAgent().listTools();
+      const tools = await getRuntimeHarnessAgent(runtime.harness).listTools();
       expect(tools).toEqual(
         expect.objectContaining({
           task_write: expect.any(Object),
@@ -168,7 +169,7 @@ test("pea context signal provider exposes a snapshot state processor", () => {
 });
 
 test("pea beta TUI keeps line-mode fallback enabled", () => {
-  expect(createPeaBetaTuiWorkbenchOptions({} as never, "C:/repo")).toEqual(
+  expect(createPeaBetaTuiWorkbenchOptions(createTestWorkbenchAgentClient(), "C:/repo")).toEqual(
     expect.objectContaining({
       cwd: "C:/repo",
       title: "Pea beta TUI",
@@ -191,7 +192,7 @@ test("pea context state processor emits first runtime context snapshot", () => {
   const signal = processor.computeStateSignal({
     requestContext,
     contextWindow: { hasSnapshot: false },
-  } as any);
+  } satisfies PeaContextStateSignalArgs);
 
   expect(signal).toEqual(
     expect.objectContaining({
@@ -220,7 +221,7 @@ test("pea context state processor skips unchanged context when snapshot remains 
     requestContext,
     contextWindow: { hasSnapshot: true },
     tracking: { currentCacheKey: "pea-workbench-context:15:active document13:Project A.rvt" },
-  } as any);
+  } satisfies PeaContextStateSignalArgs);
 
   expect(signal).toBeUndefined();
 });
@@ -237,12 +238,12 @@ test("pea context state processor emits on changed or missing active snapshot", 
     requestContext,
     contextWindow: { hasSnapshot: true },
     tracking: { currentCacheKey: "pea-workbench-context:15:active document13:Project A.rvt" },
-  } as any);
+  } satisfies PeaContextStateSignalArgs);
   const reemitted = processor.computeStateSignal({
     requestContext,
     contextWindow: { hasSnapshot: false },
     tracking: { currentCacheKey: "pea-workbench-context:15:active document13:Project B.rvt" },
-  } as any);
+  } satisfies PeaContextStateSignalArgs);
 
   expect(changed).toEqual(expect.objectContaining({ mode: "snapshot" }));
   expect(reemitted).toEqual(expect.objectContaining({ mode: "snapshot" }));
@@ -333,8 +334,9 @@ test(
 
     try {
       const session = await runtime.sessions.createThreadSession({ title: "Task Context" });
-      const mastra = (runtime.harness as any).getMastra();
-      const agent = (runtime.harness as any).getCurrentAgent();
+      const mastra = runtime.harness.getMastra();
+      if (!mastra) throw new Error("Expected Pea runtime harness to expose Mastra.");
+      const agent = getRuntimeAgent(mastra, "pea-agent");
       expect(agent.getMastraInstance()).toBe(mastra);
       expect(mastra.getAgentById("pea-agent")).toBe(agent);
 
@@ -369,9 +371,11 @@ test(
         type: "task",
       });
 
-      expect(result).toEqual(expect.objectContaining({ isError: false }));
-      expect(result.content).not.toContain("Task tools require agent memory");
-      expect(check.summary).toEqual(
+      const resultRecord = readRecord(result);
+      const resultContent = typeof resultRecord.content === "string" ? resultRecord.content : "";
+      expect(resultRecord).toEqual(expect.objectContaining({ isError: false }));
+      expect(resultContent).not.toContain("Task tools require agent memory");
+      expect(readRecord(check).summary).toEqual(
         expect.objectContaining({ total: 1, incomplete: 1, hasTasks: true }),
       );
       expect(taskState).toEqual([expect.objectContaining({ content: "Inspect context" })]);
@@ -382,3 +386,75 @@ test(
   },
   slowRuntimeTestTimeout,
 );
+
+function createTestWorkbenchAgentClient(): Parameters<typeof createPeaBetaTuiWorkbenchOptions>[0] {
+  return {
+    subscribe: () => () => undefined,
+    initialize: async () => ({
+      name: "Test",
+      capabilities: {},
+    }),
+    newSession: async (request) => ({
+      sessionId: "test-session",
+      cwd: request.cwd,
+      additionalDirectories: request.additionalDirectories ?? [],
+    }),
+    sendPrompt: async () => ({ stopReason: "end_turn" }),
+  };
+}
+
+type RuntimeMastra = {
+  getAgentById(id: string): unknown;
+};
+
+type RuntimeAgentTool = {
+  execute(input: unknown, context: unknown): Promise<unknown>;
+};
+
+type RuntimeAgent = {
+  getMastraInstance(): unknown;
+  getToolsForExecution(request: {
+    threadId: string;
+    resourceId: string;
+    requestContext: ReturnType<typeof createRuntimeRequestContext>;
+  }): Promise<Record<string, RuntimeAgentTool>>;
+  listTools(): Promise<Record<string, unknown>>;
+};
+
+function getRuntimeAgent(mastra: RuntimeMastra | undefined, id: string): RuntimeAgent {
+  const agent = mastra?.getAgentById(id);
+  if (!isRuntimeAgent(agent)) throw new Error(`Expected runtime agent '${id}'.`);
+  return agent;
+}
+
+type RuntimeHarnessWithCurrentAgent = {
+  getCurrentAgent(): unknown;
+};
+
+function getRuntimeHarnessAgent(harness: unknown): RuntimeAgent {
+  if (!hasCurrentAgent(harness)) throw new Error("Expected runtime harness current agent access.");
+  const agent = harness.getCurrentAgent();
+  if (!isRuntimeAgent(agent)) throw new Error("Expected runtime harness current agent.");
+  return agent;
+}
+
+function hasCurrentAgent(value: unknown): value is RuntimeHarnessWithCurrentAgent {
+  return isRecord(value) && typeof value.getCurrentAgent === "function";
+}
+
+function isRuntimeAgent(value: unknown): value is RuntimeAgent {
+  const record = readRecord(value);
+  return (
+    typeof record.getMastraInstance === "function" &&
+    typeof record.getToolsForExecution === "function" &&
+    typeof record.listTools === "function"
+  );
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

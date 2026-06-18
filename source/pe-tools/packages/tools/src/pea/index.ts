@@ -5,7 +5,6 @@ import {
   createRuntimeToolProfile,
   readRuntimeAccessLevelFromToolContext,
 } from "@pe/runtime";
-import { hostOperations, type HostOperationDefinition } from "@pe/host-generated/contracts";
 import { HostLogTarget } from "@pe/host-client";
 import type { HostActiveDocumentSummary } from "@pe/host-client";
 import { PeHostClient } from "@pe/host-client";
@@ -192,8 +191,10 @@ export const hostOperationCall = createTool({
       .describe("Client-side timeout for this host call, in seconds."),
   }),
   execute: async (input, context) => {
-    assertHostOperationCallAccess(input.key, context);
-    return new PeHostClient().general.callOperation(input.key, input.request, input.verbosity);
+    const hostClient = new PeHostClient();
+    const operation = hostClient.general.getOperation(input.key);
+    assertHostOperationCallAccess(operation, input.key, context);
+    return hostClient.general.callOperation(input.key, input.request, input.verbosity);
   },
 });
 
@@ -302,17 +303,20 @@ function firstNonBlank(...values: Array<string | undefined>): string | undefined
   return values.find((value) => value != null && value.trim().length > 0)?.trim();
 }
 
-function assertHostOperationCallAccess(operationKey: string, toolContext: unknown): void {
-  const operation = hostOperations[operationKey as keyof typeof hostOperations] as
-    | HostOperationDefinition
-    | undefined;
+type HostOperationLookupResult = ReturnType<PeHostClient["general"]["getOperation"]>;
+
+function assertHostOperationCallAccess(
+  operation: HostOperationLookupResult,
+  operationKey: string,
+  toolContext: unknown,
+): void {
   if (operation?.intent !== "Mutate") return;
 
   assertRuntimeToolAccess({
-    toolName: `host_operation_call:${operation.key}`,
+    toolName: `host_operation_call:${operationKey}`,
     metadata: {
-      name: `host_operation_call:${operation.key}`,
-      title: operation.displayName ?? operation.key,
+      name: `host_operation_call:${operationKey}`,
+      title: operation.displayName ?? operationKey,
       kind: "edit",
     },
     accessLevel: readRuntimeAccessLevelFromToolContext(toolContext),

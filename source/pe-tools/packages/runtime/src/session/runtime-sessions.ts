@@ -1,20 +1,16 @@
-import type { Harness } from "@mastra/core/harness";
 import {
   createRuntimeKernel,
-  type RuntimeKernelContextProvider,
+  type RuntimeKernelHarness,
   type RuntimeKernelOptions,
 } from "../kernel.ts";
-import type { RuntimeContextEntry } from "../context.ts";
 import type { RuntimeKernel, RuntimeSendMessageOptions, RuntimeSessions } from "../runtime.ts";
-
-export type RuntimeSessionContextProvider = RuntimeKernelContextProvider;
 
 export interface RuntimeSessionOptions extends RuntimeKernelOptions {
   kernel?: RuntimeKernel;
 }
 
-export function createRuntimeSessions(
-  harness: Harness<Record<string, unknown>>,
+export function createRuntimeSessions<TState extends Record<string, unknown>>(
+  harness: RuntimeKernelHarness<TState>,
   sessionOptions: RuntimeSessionOptions = {},
 ): RuntimeSessions {
   const kernel = sessionOptions.kernel ?? createRuntimeKernel(harness, sessionOptions);
@@ -62,5 +58,3 @@ export function createRuntimeSessions(
     },
   };
 }
-
-export type { RuntimeContextEntry };

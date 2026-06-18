@@ -2,9 +2,9 @@ import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import { runRepoLocalPeDevWorkflow, type WorkflowCommandResult } from "../pe-dev-workflow/index.js";
 import {
+  readRiderBridgeHotReloadResponse,
   runRiderBridgeRestartRrdHelper,
   runRiderBridgeSyncHelper,
-  type RiderBridgeHotReloadResponse,
 } from "./bridge.js";
 import { collectHostContext } from "../../shared/host-context.js";
 import { PeHostClient } from "@pe/host-client";
@@ -88,14 +88,14 @@ export async function runRiderBridgeRestartRrd(request: {
     };
   }
 
-  const result = (await runRiderBridgeRestartRrdHelper({
+  const result = await runRiderBridgeRestartRrdHelper({
     repoRoot: await resolveRepoRoot(),
     timeoutSeconds: request.timeoutSeconds,
     riderBridgeBaseUrl: request.riderBridgeBaseUrl,
     project: request.project,
     actionId: request.actionId,
     expectedRevitVersion: request.expectedRevitVersion,
-  })) as WorkflowCommandResult;
+  });
 
   const bridgeReadiness = result.ok
     ? await pollHostBridgeReadiness({
@@ -282,11 +282,44 @@ async function readHarnessState(path?: string): Promise<{
 
   const absolutePath = isAbsolute(path) ? path : resolve(await resolveRepoRoot(), path);
   const text = await readFile(absolutePath, "utf8");
-  const value = JSON.parse(text) as unknown;
+  const value: unknown = JSON.parse(text);
   return {
     path: absolutePath,
-    state: isRecord(value) ? (value as HarnessState) : undefined,
+    state: readHarnessStateValue(value),
   };
+}
+
+function readHarnessStateValue(value: unknown): HarnessState | undefined {
+  const record = readRecord(value);
+  if (!record) return undefined;
+  const revit = readHarnessRevitState(record.revit);
+  return revit ? { revit } : {};
+}
+
+function readHarnessRevitState(value: unknown): HarnessState["revit"] | undefined {
+  const record = readRecord(value);
+  if (!record) return undefined;
+  const defaultOpenDocument = readOpenDocumentSelector(record.defaultOpenDocument);
+  return defaultOpenDocument ? { defaultOpenDocument } : {};
+}
+
+function readOpenDocumentSelector(value: unknown): OpenDocumentSelector | undefined {
+  const record = readRecord(value);
+  if (!record) return undefined;
+  const selector: OpenDocumentSelector = {
+    ...(typeof record.path === "string" ? { path: record.path } : {}),
+    ...(typeof record.name === "string" ? { name: record.name } : {}),
+    ...(typeof record.revitYear === "string" ? { revitYear: record.revitYear } : {}),
+    ...(isOpenDocumentKind(record.kind) ? { kind: record.kind } : {}),
+    ...(typeof record.localFilesOnly === "boolean"
+      ? { localFilesOnly: record.localFilesOnly }
+      : {}),
+  };
+  return Object.keys(selector).length > 0 ? selector : undefined;
+}
+
+function isOpenDocumentKind(value: unknown): value is NonNullable<OpenDocumentSelector["kind"]> {
+  return value === "Project" || value === "Family" || value === "Any";
 }
 
 async function findRecentDocument(selector: OpenDocumentSelector): Promise<{
@@ -543,10 +576,7 @@ export function summarizeLastSyncResult() {
   if (lastSyncResult == null) return null;
 
   const result = lastSyncResult.result;
-  const hotReload =
-    isRecord(result.json) && isRecord(result.json.hotReload)
-      ? (result.json.hotReload as RiderBridgeHotReloadResponse)
-      : null;
+  const hotReload = readRiderBridgeHotReloadResponse(readRecord(result.json)?.hotReload);
   const lane =
     isRecord(result.json) && typeof result.json.lane === "string"
       ? result.json.lane
@@ -588,6 +618,10 @@ function delay(milliseconds: number): Promise<void> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return isRecord(value) ? value : undefined;
 }
 
 async function isFile(path: string): Promise<boolean> {

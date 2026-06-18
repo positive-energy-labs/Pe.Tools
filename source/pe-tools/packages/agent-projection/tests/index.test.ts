@@ -21,17 +21,17 @@ test("projects user, assistant, and thought chunks into a part-based transcript"
       sessionUpdate: "user_message_chunk",
       messageId: "user-1",
       content: { type: "text", text: "Hello" },
-    } as never),
+    }),
     ...acpSessionUpdateToWorkbenchEvents("session-1", {
       sessionUpdate: "agent_thought_chunk",
       messageId: "thought-1",
       content: { type: "text", text: "Thinking" },
-    } as never),
+    }),
     ...acpSessionUpdateToWorkbenchEvents("session-1", {
       sessionUpdate: "agent_message_chunk",
       messageId: "assistant-1",
       content: { type: "text", text: "Done" },
-    } as never),
+    }),
   ]);
 
   expect(selectVisibleTranscriptMessages(state)).toEqual([
@@ -70,7 +70,7 @@ test("retains active and recent tool calls with raw IO, timeline, concise transc
       status: "in_progress",
       rawInput: { path: "source/app.ts" },
       content: [{ type: "content", content: { type: "text", text: "Reading source/app.ts" } }],
-    } as never),
+    }),
   ]);
 
   expect(selectActiveToolCalls(state)).toEqual([
@@ -90,7 +90,7 @@ test("retains active and recent tool calls with raw IO, timeline, concise transc
       status: "completed",
       rawOutput: { lineCount: 42 },
       content: [{ type: "content", content: { type: "text", text: "42 lines" } }],
-    } as never),
+    }),
     { type: "run_status_changed", status: "idle", timestamp: "2026-06-11T10:00:05.000Z" },
   ]);
 
@@ -133,7 +133,7 @@ test("tracks failed tool calls as recent failures", () => {
       status: "failed",
       rawOutput: { error: "denied" },
       content: [{ type: "content", content: { type: "text", text: "Access denied" } }],
-    } as never),
+    }),
   );
 
   expect(selectRecentCompletedToolCalls(state)).toEqual([
@@ -286,7 +286,7 @@ test("projects ACP side-channel metadata into memory, inspector, model, mode, an
         activeThreadId: "thread-1",
       },
     },
-  } as never);
+  });
 
   const state = applyAll(createWorkbenchState(), events);
 
@@ -326,7 +326,7 @@ test("keeps ACP session mode separate from model selection", () => {
     acpSessionUpdateToWorkbenchEvents("session-1", {
       sessionUpdate: "current_mode_update",
       currentModeId: "agent",
-    } as never),
+    }),
   );
 
   expect(state.modes).toEqual({ currentModeId: "agent", availableModes: [] });
@@ -339,7 +339,7 @@ test("records unknown ACP updates as debug-only events without corrupting state"
     acpSessionUpdateToWorkbenchEvents("session-1", {
       sessionUpdate: "status_changed",
       status: "thinking",
-    } as never),
+    }),
   );
 
   expect(state.uiStatus.overall.status).toBe("idle");

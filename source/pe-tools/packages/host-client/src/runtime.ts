@@ -119,8 +119,12 @@ export function listHostOperations(): HostOperationDefinition[] {
   return Object.values(hostOperations);
 }
 
+export function isHostOperationKey(key: string): key is HostOperationKey {
+  return Object.hasOwn(hostOperations, key);
+}
+
 export function getHostOperation(key: string): HostOperationDefinition | undefined {
-  return hostOperations[key as HostOperationKey];
+  return isHostOperationKey(key) ? hostOperations[key] : undefined;
 }
 
 export function searchHostOperations(
@@ -194,7 +198,7 @@ export async function callHostOperation(
   try {
     const response = await runWithSingleFlight(operation, async () => {
       runStartedAt.value = Date.now();
-      return sendJson<unknown, unknown>(
+      return sendJson<unknown>(
         { ...options, requestId },
         operation,
         normalizeRequest(operation, request),
@@ -478,18 +482,11 @@ function createLocalRequestProblem(
   operation: HostOperationDefinition,
   request: unknown,
 ): string | undefined {
-  if (
-    operation.key !== "revit.resolve.references" ||
-    request == null ||
-    typeof request !== "object" ||
-    Array.isArray(request)
-  )
-    return undefined;
+  if (operation.key !== "revit.resolve.references" || !isRecord(request)) return undefined;
 
-  const fields = request as Record<string, unknown>;
-  if ("phrases" in fields)
+  if ("phrases" in request)
     return "revit.resolve.references accepts one referenceText string, not phrases[].";
-  if (!("referenceText" in fields) && !("ReferenceText" in fields))
+  if (!("referenceText" in request) && !("ReferenceText" in request))
     return "revit.resolve.references requires referenceText. Use operation metadata for optional filters and examples.";
 
   return undefined;
@@ -946,4 +943,8 @@ function formatShape(fields: readonly HostTypeShapeField[]): string {
 
 function unique(values: readonly string[]): string[] {
   return [...new Set(values.filter((value) => value.trim().length > 0))];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

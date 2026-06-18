@@ -2,7 +2,6 @@ import type { ContentBlock, SessionUpdate, ToolCallContent } from "@agentclientp
 import {
   peWorkbenchUpdateMetadataKey,
   type PeWorkbenchUpdateMetadata,
-  type WorkbenchAccessLevel,
   type WorkbenchAccessLevelInfo,
   type WorkbenchAccessLevelState,
   type WorkbenchAgentCapabilities,
@@ -31,6 +30,7 @@ import {
   type WorkbenchToolLocation,
   type WorkbenchToolTimelineEntry,
 } from "@pe/agent-contracts";
+import { z } from "zod";
 
 const maxDebugEvents = 500;
 const maxRecentToolCalls = 128;
@@ -547,12 +547,13 @@ function workbenchFeatureCards(capabilities: WorkbenchAgentCapabilities): Workbe
 
 export function acpSessionUpdateToWorkbenchEvents(
   sessionId: string,
-  update: SessionUpdate,
+  update: unknown,
 ): WorkbenchEvent[] {
+  const sessionUpdate = readAcpSessionUpdate(update);
   return [
     acpDebugEvent(sessionId, update),
-    ...acpCoreEvents(sessionId, update),
-    ...acpMetadataEvents(update),
+    ...(sessionUpdate ? acpCoreEvents(sessionId, sessionUpdate) : []),
+    ...(sessionUpdate ? acpMetadataEvents(sessionUpdate) : []),
   ];
 }
 
@@ -1045,23 +1046,28 @@ function valuePreview(value: unknown): string | undefined {
   return typeof value === "string" ? value : JSON.stringify(value, null, 2);
 }
 
-function acpDebugEvent(sessionId: string, update: SessionUpdate): WorkbenchEvent {
+function acpDebugEvent(sessionId: string, update: unknown): WorkbenchEvent {
+  const type = readString(readRecord(update).sessionUpdate) ?? "unknown_update";
   return {
     type: "debug_event_recorded",
     debugEvent: {
-      id: `acp:${sessionId}:${update.sessionUpdate}:${debugEventSuffix(update)}`,
+      id: `acp:${sessionId}:${type}:${debugEventSuffix(update)}`,
       source: "acp",
-      type: update.sessionUpdate,
-      label: update.sessionUpdate.replaceAll("_", " "),
+      type,
+      label: type.replaceAll("_", " "),
       payload: update,
     },
   };
 }
 
-function debugEventSuffix(update: SessionUpdate): string {
-  if ("messageId" in update && typeof update.messageId === "string") return update.messageId;
-  if ("toolCallId" in update && typeof update.toolCallId === "string") return update.toolCallId;
-  if ("title" in update && typeof update.title === "string") return update.title;
+function debugEventSuffix(update: unknown): string {
+  const record = readRecord(update);
+  const messageId = readString(record.messageId);
+  if (messageId) return messageId;
+  const toolCallId = readString(record.toolCallId);
+  if (toolCallId) return toolCallId;
+  const title = readString(record.title);
+  if (title) return title;
   return "update";
 }
 
@@ -1106,6 +1112,157 @@ function readUpdateMetadata(meta: unknown): PeWorkbenchUpdateMetadata | undefine
   };
 }
 
+const projectionDebugSourceSchema = z
+  .enum(["acp", "runtime", "workbench", "transport", "ui"])
+  .catch("acp");
+const projectionAccessLevelSchema = z.enum(["read-only", "ask", "trusted"]);
+const projectionDebugEventSchema = z
+  .object({
+    id: z.string(),
+    source: projectionDebugSourceSchema.optional().default("acp"),
+    type: z.string(),
+    label: z.string().optional(),
+    timestamp: z.string().optional(),
+    payload: z.unknown().optional(),
+  })
+  .passthrough();
+const projectionObservationMemoryStatusSchema = z.enum([
+  "loading",
+  "complete",
+  "failed",
+  "disconnected",
+  "buffering",
+  "buffering-complete",
+  "buffering-failed",
+  "activated",
+]);
+const projectionObservationMemoryEntrySchema = z
+  .object({
+    id: z.string(),
+    kind: z.enum(["observation", "reflection"]),
+    status: projectionObservationMemoryStatusSchema,
+    title: z.string().optional(),
+    summary: z.string().optional(),
+    observedTokens: z.number().optional(),
+    compressionRatio: z.number().optional(),
+    durationMs: z.number().optional(),
+    error: z.string().optional(),
+    metadata: z.unknown().optional(),
+    raw: z.unknown().optional(),
+  })
+  .passthrough()
+  .transform(
+    (value): WorkbenchObservationMemoryEntry => ({
+      ...value,
+      metadata: recordMetadata(value.metadata),
+    }),
+  );
+const projectionSystemPromptSchema = z
+  .object({
+    content: z.string(),
+    source: z.string().optional(),
+    updatedAt: z.string().optional(),
+    metadata: z.unknown().optional(),
+  })
+  .passthrough()
+  .transform(
+    (value): WorkbenchSystemPromptSnapshot => ({
+      content: value.content,
+      source: value.source,
+      updatedAt: value.updatedAt,
+      metadata: recordMetadata(value.metadata),
+    }),
+  );
+const projectionInspectorEntrySchema = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    content: z.unknown(),
+    updatedAt: z.string().optional(),
+  })
+  .passthrough();
+const projectionModelInfoSchema = z
+  .object({
+    id: z.string(),
+    provider: z.string().optional(),
+    displayName: z.string().optional(),
+    variant: z.string().optional(),
+    disabled: z.boolean().optional(),
+    metadata: z.unknown().optional(),
+  })
+  .passthrough()
+  .transform(
+    (value): WorkbenchModelInfo => ({
+      ...value,
+      metadata: recordMetadata(value.metadata),
+    }),
+  );
+const projectionModeInfoSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string().optional(),
+    metadata: z.unknown().optional(),
+  })
+  .passthrough()
+  .transform(
+    (value): WorkbenchSessionModeInfo => ({
+      ...value,
+      metadata: recordMetadata(value.metadata),
+    }),
+  );
+const projectionAccessLevelInfoSchema = z
+  .object({
+    id: projectionAccessLevelSchema,
+    name: z.string(),
+    description: z.string().optional(),
+    metadata: z.unknown().optional(),
+  })
+  .passthrough()
+  .transform(
+    (value): WorkbenchAccessLevelInfo => ({
+      ...value,
+      metadata: recordMetadata(value.metadata),
+    }),
+  );
+const projectionThreadSchema = z
+  .object({
+    threadId: z.string(),
+    sessionId: z.string().optional(),
+    resourceId: z.string().optional(),
+    title: z.string().optional(),
+    cwd: z.string().optional(),
+    updatedAt: z.string().optional(),
+    metadata: z.unknown().optional(),
+  })
+  .passthrough()
+  .transform(
+    (value): WorkbenchThreadInfo => ({
+      ...value,
+      metadata: recordMetadata(value.metadata),
+    }),
+  );
+const projectionModelSchema = z
+  .object({
+    currentModelId: z.string().optional(),
+    availableModels: z.array(projectionModelInfoSchema).optional(),
+    recentModelIds: z.array(z.string()).optional(),
+  })
+  .passthrough();
+const projectionModeSchema = z
+  .object({
+    currentModeId: z.string().optional(),
+    availableModes: z.array(projectionModeInfoSchema).optional(),
+  })
+  .passthrough();
+const projectionAccessSchema = z
+  .object({
+    currentAccessLevel: projectionAccessLevelSchema.optional(),
+    availableAccessLevels: z.array(projectionAccessLevelInfoSchema).optional(),
+  })
+  .passthrough();
+const projectionAcpSessionUpdateSchema = z.object({ sessionUpdate: z.string() }).passthrough();
+
 function readDebugEvents(value: unknown): WorkbenchDebugEvent | WorkbenchDebugEvent[] | undefined {
   const events = toArray(value).map(readDebugEvent).filter(isDefined);
   if (!events.length) return undefined;
@@ -1113,17 +1270,8 @@ function readDebugEvents(value: unknown): WorkbenchDebugEvent | WorkbenchDebugEv
 }
 
 function readDebugEvent(value: unknown): WorkbenchDebugEvent | undefined {
-  if (!isRecord(value) || typeof value.id !== "string" || typeof value.type !== "string") {
-    return undefined;
-  }
-  return {
-    id: value.id,
-    source: readDebugSource(value.source),
-    type: value.type,
-    label: typeof value.label === "string" ? value.label : undefined,
-    timestamp: typeof value.timestamp === "string" ? value.timestamp : undefined,
-    payload: value.payload,
-  };
+  const event = projectionDebugEventSchema.safeParse(value);
+  return event.success ? event.data : undefined;
 }
 
 function readObservationMemoryEntries(
@@ -1135,33 +1283,13 @@ function readObservationMemoryEntries(
 }
 
 function readObservationMemoryEntry(value: unknown): WorkbenchObservationMemoryEntry | undefined {
-  if (!isRecord(value) || typeof value.id !== "string") return undefined;
-  if (value.kind !== "observation" && value.kind !== "reflection") return undefined;
-  if (!isObservationMemoryStatus(value.status)) return undefined;
-  return {
-    id: value.id,
-    kind: value.kind,
-    status: value.status,
-    title: typeof value.title === "string" ? value.title : undefined,
-    summary: typeof value.summary === "string" ? value.summary : undefined,
-    observedTokens: typeof value.observedTokens === "number" ? value.observedTokens : undefined,
-    compressionRatio:
-      typeof value.compressionRatio === "number" ? value.compressionRatio : undefined,
-    durationMs: typeof value.durationMs === "number" ? value.durationMs : undefined,
-    error: typeof value.error === "string" ? value.error : undefined,
-    metadata: recordMetadata(value.metadata),
-    raw: value.raw,
-  };
+  const entry = projectionObservationMemoryEntrySchema.safeParse(value);
+  return entry.success ? entry.data : undefined;
 }
 
 function readSystemPrompt(value: unknown): WorkbenchSystemPromptSnapshot | undefined {
-  if (!isRecord(value) || typeof value.content !== "string") return undefined;
-  return {
-    content: value.content,
-    source: typeof value.source === "string" ? value.source : undefined,
-    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : undefined,
-    metadata: recordMetadata(value.metadata),
-  };
+  const systemPrompt = projectionSystemPromptSchema.safeParse(value);
+  return systemPrompt.success ? systemPrompt.data : undefined;
 }
 
 function readInspectorEntries(value: unknown): WorkbenchInspectorEntry[] | undefined {
@@ -1170,95 +1298,23 @@ function readInspectorEntries(value: unknown): WorkbenchInspectorEntry[] | undef
 }
 
 function readInspectorEntry(value: unknown): WorkbenchInspectorEntry | undefined {
-  if (!isRecord(value) || typeof value.id !== "string" || typeof value.title !== "string") {
-    return undefined;
-  }
-  return {
-    id: value.id,
-    title: value.title,
-    content: value.content,
-    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : undefined,
-  };
+  const entry = projectionInspectorEntrySchema.safeParse(value);
+  return entry.success ? entry.data : undefined;
 }
 
 function readModel(value: unknown): Partial<WorkbenchModelState> | undefined {
-  if (!isRecord(value)) return undefined;
-  return {
-    currentModelId: typeof value.currentModelId === "string" ? value.currentModelId : undefined,
-    availableModels: Array.isArray(value.availableModels)
-      ? value.availableModels.filter(isRecord).flatMap(readModelInfo)
-      : undefined,
-    recentModelIds: Array.isArray(value.recentModelIds)
-      ? value.recentModelIds.filter((item): item is string => typeof item === "string")
-      : undefined,
-  };
-}
-
-function readModelInfo(item: Record<string, unknown>): WorkbenchModelInfo[] {
-  const id = item.id;
-  if (typeof id !== "string") return [];
-  return [
-    {
-      id,
-      provider: typeof item.provider === "string" ? item.provider : undefined,
-      displayName: typeof item.displayName === "string" ? item.displayName : undefined,
-      variant: typeof item.variant === "string" ? item.variant : undefined,
-      disabled: typeof item.disabled === "boolean" ? item.disabled : undefined,
-      metadata: recordMetadata(item.metadata),
-    },
-  ];
+  const model = projectionModelSchema.safeParse(value);
+  return model.success ? model.data : undefined;
 }
 
 function readMode(value: unknown): Partial<WorkbenchSessionModeState> | undefined {
-  if (!isRecord(value)) return undefined;
-  return {
-    currentModeId: typeof value.currentModeId === "string" ? value.currentModeId : undefined,
-    availableModes: Array.isArray(value.availableModes)
-      ? value.availableModes.filter(isRecord).flatMap(readModeInfo)
-      : undefined,
-  };
-}
-
-function readModeInfo(item: Record<string, unknown>): WorkbenchSessionModeInfo[] {
-  const id = item.id;
-  const name = item.name;
-  if (typeof id !== "string" || typeof name !== "string") return [];
-  return [
-    {
-      id,
-      name,
-      description: typeof item.description === "string" ? item.description : undefined,
-      metadata: recordMetadata(item.metadata),
-    },
-  ];
+  const mode = projectionModeSchema.safeParse(value);
+  return mode.success ? mode.data : undefined;
 }
 
 function readAccessLevel(value: unknown): Partial<WorkbenchAccessLevelState> | undefined {
-  if (!isRecord(value)) return undefined;
-  return {
-    currentAccessLevel: readAccessLevelId(value.currentAccessLevel),
-    availableAccessLevels: Array.isArray(value.availableAccessLevels)
-      ? value.availableAccessLevels.filter(isRecord).flatMap(readAccessLevelInfo)
-      : undefined,
-  };
-}
-
-function readAccessLevelInfo(item: Record<string, unknown>): WorkbenchAccessLevelInfo[] {
-  const id = readAccessLevelId(item.id);
-  const name = item.name;
-  if (!id || typeof name !== "string") return [];
-  return [
-    {
-      id,
-      name,
-      description: typeof item.description === "string" ? item.description : undefined,
-      metadata: recordMetadata(item.metadata),
-    },
-  ];
-}
-
-function readAccessLevelId(value: unknown): WorkbenchAccessLevel | undefined {
-  return value === "read-only" || value === "ask" || value === "trusted" ? value : undefined;
+  const access = projectionAccessSchema.safeParse(value);
+  return access.success ? access.data : undefined;
 }
 
 function readThreads(value: unknown): WorkbenchThreadInfo[] | undefined {
@@ -1267,16 +1323,8 @@ function readThreads(value: unknown): WorkbenchThreadInfo[] | undefined {
 }
 
 function readThread(value: unknown): WorkbenchThreadInfo | undefined {
-  if (!isRecord(value) || typeof value.threadId !== "string") return undefined;
-  return {
-    threadId: value.threadId,
-    sessionId: typeof value.sessionId === "string" ? value.sessionId : undefined,
-    resourceId: typeof value.resourceId === "string" ? value.resourceId : undefined,
-    title: typeof value.title === "string" ? value.title : undefined,
-    cwd: typeof value.cwd === "string" ? value.cwd : undefined,
-    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : undefined,
-    metadata: recordMetadata(value.metadata),
-  };
+  const thread = projectionThreadSchema.safeParse(value);
+  return thread.success ? thread.data : undefined;
 }
 
 function systemPromptEvents(
@@ -1311,27 +1359,6 @@ function threadEvents(
   activeThreadId: string | undefined,
 ): WorkbenchEvent[] {
   return threads ? [{ type: "threads_replaced", threads, activeThreadId }] : [];
-}
-
-function readDebugSource(value: unknown): WorkbenchDebugEvent["source"] {
-  return value === "runtime" || value === "workbench" || value === "transport" || value === "ui"
-    ? value
-    : "acp";
-}
-
-function isObservationMemoryStatus(
-  value: unknown,
-): value is WorkbenchObservationMemoryEntry["status"] {
-  return [
-    "loading",
-    "complete",
-    "failed",
-    "disconnected",
-    "buffering",
-    "buffering-complete",
-    "buffering-failed",
-    "activated",
-  ].includes(String(value));
 }
 
 function threadFromSession(
@@ -1421,6 +1448,39 @@ function isDefined<T>(value: T | undefined): value is T {
   return value !== undefined;
 }
 
+function readAcpSessionUpdate(value: unknown): SessionUpdate | undefined {
+  return isAcpSessionUpdate(value) ? value : undefined;
+}
+
+function isAcpSessionUpdate(value: unknown): value is SessionUpdate {
+  const update = projectionAcpSessionUpdateSchema.safeParse(value);
+  if (!update.success) return false;
+  const sessionUpdate = update.data.sessionUpdate;
+  return (
+    sessionUpdate === "user_message_chunk" ||
+    sessionUpdate === "agent_message_chunk" ||
+    sessionUpdate === "agent_thought_chunk" ||
+    sessionUpdate === "tool_call" ||
+    sessionUpdate === "tool_call_update" ||
+    sessionUpdate === "plan" ||
+    sessionUpdate === "plan_update" ||
+    sessionUpdate === "plan_removed" ||
+    sessionUpdate === "available_commands_update" ||
+    sessionUpdate === "current_mode_update" ||
+    sessionUpdate === "config_option_update" ||
+    sessionUpdate === "session_info_update" ||
+    sessionUpdate === "usage_update"
+  );
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -1430,7 +1490,9 @@ function capEnd<T>(items: T[], max: number): T[] {
 }
 
 function stripUndefined<T extends object>(value: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(value).filter((entry) => entry[1] !== undefined),
-  ) as Partial<T>;
+  const result: Partial<T> = { ...value };
+  for (const key in result) {
+    if (result[key] === undefined) delete result[key];
+  }
+  return result;
 }
