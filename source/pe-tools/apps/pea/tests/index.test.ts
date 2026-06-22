@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
 import {
-  createRuntimeAcpCliOptions,
   createRuntimeAgUiCliOptions,
   createRuntimeRequestContext,
   resolveRuntimeThreadStateStore,
@@ -55,27 +54,11 @@ test("pea exports the product tool profile used by the default runtime", () => {
 
 test("pea root command exposes runtime protocol flags", () => {
   expect(Object.keys(createPeaCliCommand().args ?? {})).toEqual(
-    expect.arrayContaining([
-      "acp",
-      "acpTransport",
-      "acpPort",
-      "acpToken",
-      "agUi",
-      "agUiPort",
-      "agUiToken",
-      "modelId",
-      "workspaceRoot",
-    ]),
+    expect.arrayContaining(["acp", "agUi", "agUiPort", "agUiToken", "modelId", "workspaceRoot"]),
   );
 });
 
-test("pea runtime protocol CLI values map to nested transport options", () => {
-  expect(
-    createRuntimeAcpCliOptions(
-      { acp: true, acpTransport: "http", acpPort: "43111", acpToken: "t" },
-      {},
-    ),
-  ).toEqual({ protocolTransport: "http", transport: { port: 43111, token: "t" } });
+test("pea AG-UI CLI values map to nested transport options", () => {
   expect(
     createRuntimeAgUiCliOptions({ agUi: true, agUiPort: "43112", agUiToken: "t" }, {}),
   ).toEqual({ transport: { port: 43112, token: "t" } });
@@ -333,7 +316,7 @@ test(
     });
 
     try {
-      const session = await runtime.sessions.createThreadSession({ title: "Task Context" });
+      const session = await runtime.kernel.createThreadSession({ title: "Task Context" });
       const mastra = runtime.harness.getMastra();
       if (!mastra) throw new Error("Expected Pea runtime harness to expose Mastra.");
       const agent = getRuntimeAgent(mastra, "pea-agent");

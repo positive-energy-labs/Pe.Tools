@@ -5,12 +5,7 @@ type ToolCallArgs = {
   toolChoice?: unknown;
 };
 
-type LanguageModelV2 = Extract<LanguageModel, { specificationVersion: "v2" }>;
-type LanguageModelV3 = Extract<LanguageModel, { specificationVersion: "v3" }>;
-type DoStreamV2Args = Parameters<LanguageModelV2["doStream"]>[0];
-type DoGenerateV2Args = Parameters<LanguageModelV2["doGenerate"]>[0];
-type DoStreamV3Args = Parameters<LanguageModelV3["doStream"]>[0];
-type DoGenerateV3Args = Parameters<LanguageModelV3["doGenerate"]>[0];
+type ModelCall = (args: ToolCallArgs) => unknown;
 
 type FinalToolListLogEntry = {
   event: "pe.runtime.final_model_tool_list";
@@ -23,80 +18,36 @@ type FinalToolListLogEntry = {
   toolChoice?: unknown;
 };
 
-type FinalToolListLogSink = (entry: FinalToolListLogEntry) => void;
+const wrappedModels = new WeakMap<object, LanguageModel>();
 
-const wrappedV2Models = new WeakMap<object, LanguageModelV2>();
-const wrappedV3Models = new WeakMap<object, LanguageModelV3>();
-
-export function wrapModelForFinalToolListLogging(
-  model: LanguageModel,
-  log: FinalToolListLogSink = writeFinalToolListLogToStderr,
-): LanguageModel {
+/**
+ * Wrap a language model so the exact tool list handed to the provider on each
+ * `doStream`/`doGenerate` call is logged to stderr. v2 and v3 models share the
+ * same proxy — the spec versions differ only in arg types we forward opaquely.
+ */
+export function wrapModelForFinalToolListLogging(model: LanguageModel): LanguageModel {
   if (typeof model !== "object" || model === null) return model;
-  if (model.specificationVersion === "v2") return wrapV2ModelForFinalToolListLogging(model, log);
-  if (model.specificationVersion === "v3") return wrapV3ModelForFinalToolListLogging(model, log);
-  return model;
-}
+  if (model.specificationVersion !== "v2" && model.specificationVersion !== "v3") return model;
 
-function wrapV2ModelForFinalToolListLogging(
-  model: LanguageModelV2,
-  log: FinalToolListLogSink,
-): LanguageModelV2 {
-  const existing = wrappedV2Models.get(model);
+  const existing = wrappedModels.get(model);
   if (existing) return existing;
 
   const wrapped = new Proxy(model, {
     get(target, property) {
-      if (property === "doStream") {
-        return (args: DoStreamV2Args) => {
-          logFinalToolList(target, "doStream", args, log);
-          return target.doStream(args);
+      if (property === "doStream" || property === "doGenerate") {
+        const method = property;
+        const call = (target as unknown as Record<typeof method, ModelCall>)[method];
+        return (args: ToolCallArgs) => {
+          logFinalToolList(target, method, args);
+          return call.call(target, args);
         };
       }
-      if (property === "doGenerate") {
-        return (args: DoGenerateV2Args) => {
-          logFinalToolList(target, "doGenerate", args, log);
-          return target.doGenerate(args);
-        };
-      }
-
       const value = Reflect.get(target, property, target);
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
 
-  wrappedV2Models.set(model, wrapped);
-  return wrapped;
-}
-
-function wrapV3ModelForFinalToolListLogging(
-  model: LanguageModelV3,
-  log: FinalToolListLogSink,
-): LanguageModelV3 {
-  const existing = wrappedV3Models.get(model);
-  if (existing) return existing;
-
-  const wrapped = new Proxy(model, {
-    get(target, property) {
-      if (property === "doStream") {
-        return (args: DoStreamV3Args) => {
-          logFinalToolList(target, "doStream", args, log);
-          return target.doStream(args);
-        };
-      }
-      if (property === "doGenerate") {
-        return (args: DoGenerateV3Args) => {
-          logFinalToolList(target, "doGenerate", args, log);
-          return target.doGenerate(args);
-        };
-      }
-
-      const value = Reflect.get(target, property, target);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
-
-  wrappedV3Models.set(model, wrapped);
+  wrappedModels.set(model, wrapped);
   return wrapped;
 }
 
@@ -104,10 +55,9 @@ function logFinalToolList(
   model: LanguageModel,
   method: FinalToolListLogEntry["method"],
   args: ToolCallArgs,
-  log: FinalToolListLogSink,
 ): void {
   const tools = summarizeTools(args.tools);
-  log({
+  const entry: FinalToolListLogEntry = {
     event: "pe.runtime.final_model_tool_list",
     method,
     provider: model.provider,
@@ -116,7 +66,8 @@ function logFinalToolList(
     toolCount: tools.length,
     tools,
     toolChoice: args.toolChoice,
-  });
+  };
+  process.stderr.write(`${JSON.stringify(entry)}\n`);
 }
 
 function summarizeTools(tools: unknown): FinalToolListLogEntry["tools"] {
@@ -133,8 +84,4 @@ function summarizeTools(tools: unknown): FinalToolListLogEntry["tools"] {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function writeFinalToolListLogToStderr(entry: FinalToolListLogEntry): void {
-  process.stderr.write(`${JSON.stringify(entry)}\n`);
 }

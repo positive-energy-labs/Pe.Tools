@@ -1,4 +1,5 @@
 import type { HarnessEvent, HarnessMessage } from "@mastra/core/harness";
+import type { PeWorkbenchUpdateMetadata } from "@pe/agent-contracts";
 import {
   resolveRuntimeToolMetadata,
   type RuntimeToolMetadata,
@@ -76,6 +77,7 @@ export type RuntimeEvent =
     }
   | { type: "plan_updated"; tasks: RuntimeJsonValue }
   | { type: "plan_requested"; title: string; plan: string }
+  | { type: "workbench_metadata_updated"; metadata: PeWorkbenchUpdateMetadata }
   | { type: "runtime_error"; source: string; error: RuntimeError };
 
 export function toRuntimeError(

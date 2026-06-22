@@ -5,7 +5,7 @@ import path from "node:path";
 import { RequestContext } from "@mastra/core/request-context";
 import { createWorkspaceTools, LocalFilesystem } from "@mastra/core/workspace";
 import { expect, test } from "vite-plus/test";
-import { createRuntimeAcpCliOptions, createRuntimeAgUiCliOptions } from "@pe/runtime";
+import { createRuntimeAgUiCliOptions } from "@pe/runtime";
 import {
   createPeCodeCliCommand,
   createPeCodeProtocolRuntimeFactory,
@@ -48,26 +48,11 @@ test("peco default profile includes Pea product and dev tool ids", () => {
 
 test("peco root command exposes runtime protocol flags", () => {
   expect(Object.keys(createPeCodeCliCommand().args ?? {})).toEqual(
-    expect.arrayContaining([
-      "acp",
-      "acpTransport",
-      "acpPort",
-      "acpToken",
-      "agUi",
-      "agUiPort",
-      "agUiToken",
-      "modelId",
-    ]),
+    expect.arrayContaining(["acp", "agUi", "agUiPort", "agUiToken", "modelId"]),
   );
 });
 
-test("peco runtime protocol CLI values map to nested transport options", () => {
-  expect(
-    createRuntimeAcpCliOptions(
-      { acp: true, acpTransport: "http", acpPort: "43111", acpToken: "t" },
-      {},
-    ),
-  ).toEqual({ protocolTransport: "http", transport: { port: 43111, token: "t" } });
+test("peco AG-UI CLI values map to nested transport options", () => {
   expect(
     createRuntimeAgUiCliOptions({ agUi: true, agUiPort: "43112", agUiToken: "t" }, {}),
   ).toEqual({ transport: { port: 43112, token: "t" } });
@@ -253,7 +238,7 @@ test(
     });
 
     try {
-      const session = await runtime.sessions.createThreadSession({ title: "Peco Lock Release" });
+      const session = await runtime.kernel.createThreadSession({ title: "Peco Lock Release" });
       const lockPath = path.join(
         appData,
         "mastracode",

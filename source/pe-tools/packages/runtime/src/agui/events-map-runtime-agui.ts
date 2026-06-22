@@ -83,6 +83,14 @@ export class RuntimeToAgUiEvents {
             value: { title: event.title, plan: event.plan },
           },
         ];
+      case "workbench_metadata_updated":
+        return [
+          {
+            type: EventType.CUSTOM,
+            name: "runtime.workbench.metadata",
+            value: event.metadata,
+          },
+        ];
       case "runtime_error":
         return [
           {
@@ -117,7 +125,6 @@ export class RuntimeToAgUiEvents {
         type: EventType.TOOL_CALL_START,
         toolCallId,
         toolCallName: toolName,
-        parentMessageId: toolCallId,
       },
     ];
   }

@@ -31,6 +31,7 @@ import {
   peWorkbenchLoadThreadMethod,
   peWorkbenchMetadata,
   peWorkbenchQueueMessageMethod,
+  peWorkbenchRawThreadMethod,
   peWorkbenchSetAccessLevelMethod,
   peWorkbenchSetModelMethod,
   type PeWorkbenchExtension,
@@ -39,6 +40,7 @@ import {
   readStopReason,
   readWorkbenchJsonObject,
   readWorkbenchLoadThreadResponse,
+  readWorkbenchRawThreadSnapshot,
   type WorkbenchAccessLevel,
   type WorkbenchAccessLevelInfo,
   type WorkbenchAgentClient,
@@ -54,6 +56,8 @@ import {
   type WorkbenchPromptResult,
   type WorkbenchQueueMessageRequest,
   type WorkbenchQueueMessageResult,
+  type WorkbenchRawThreadRequest,
+  type WorkbenchRawThreadSnapshot,
   type WorkbenchSessionInfo,
   type WorkbenchState,
   type WorkbenchThreadInfo,
@@ -62,7 +66,7 @@ import {
   acpSessionUpdateToWorkbenchEvents,
   applyWorkbenchEvent,
   createWorkbenchState,
-} from "@pe/agent-projection";
+} from "@pe/agent-contracts";
 import { z } from "zod";
 
 export interface AcpWorkbenchClientOptions {
@@ -226,6 +230,23 @@ export class AcpWorkbenchClient implements Client, WorkbenchAgentClient {
 
     const messages = capture.state.transcript.messages;
     return messages.length > 0 ? { session, messages } : session;
+  }
+
+  async rawThread(request: WorkbenchRawThreadRequest): Promise<WorkbenchRawThreadSnapshot> {
+    const extMethod = this.agent.extMethod?.bind(this.agent);
+    if (!extMethod || this.peWorkbenchExtension?.capabilities.rawThreadSnapshots !== true) {
+      throw new Error("ACP agent does not support raw thread snapshots.");
+    }
+
+    const response = await extMethod(peWorkbenchRawThreadMethod, {
+      threadId: request.threadId,
+      ...(request.sessionId ? { sessionId: request.sessionId } : {}),
+      cwd: request.cwd,
+      additionalDirectories: request.additionalDirectories,
+    });
+    const snapshot = readWorkbenchRawThreadSnapshot(response);
+    if (!snapshot) throw new Error("ACP agent returned an invalid raw thread snapshot.");
+    return snapshot;
   }
 
   async sendPrompt(request: WorkbenchPromptRequest): Promise<WorkbenchPromptResult> {
@@ -441,7 +462,7 @@ export function createInProcessAcpWorkbenchClient(
   const client = new AcpWorkbenchClient(options);
   const connection = new ClientSideConnection(() => client, streams.client);
   new AgentSideConnection(toAgent, streams.agent);
-  return client.connect(connection);
+  return client.connect(connection, streams.close);
 }
 
 export function createStdioAcpWorkbenchClient(
@@ -460,7 +481,7 @@ export function createStdioAcpWorkbenchClient(
   });
 }
 
-function createLinkedStreams(): { client: Stream; agent: Stream } {
+function createLinkedStreams(): { client: Stream; agent: Stream; close: () => Promise<void> } {
   const clientToAgent = new TransformStream<unknown>();
   const agentToClient = new TransformStream<unknown>();
   return {
@@ -472,7 +493,22 @@ function createLinkedStreams(): { client: Stream; agent: Stream } {
       readable: clientToAgent.readable,
       writable: agentToClient.writable,
     },
+    close: async () => {
+      await Promise.allSettled([
+        closeWritableStream(clientToAgent.writable),
+        closeWritableStream(agentToClient.writable),
+      ]);
+    },
   };
+}
+
+async function closeWritableStream(stream: WritableStream<unknown>): Promise<void> {
+  const writer = stream.getWriter();
+  try {
+    await writer.close();
+  } finally {
+    writer.releaseLock();
+  }
 }
 
 function nodeWritableBytes(stream: Writable): WritableStream<Uint8Array> {

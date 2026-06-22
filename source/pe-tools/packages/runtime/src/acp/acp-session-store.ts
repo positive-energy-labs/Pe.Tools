@@ -14,6 +14,8 @@ import {
   type WorkbenchLoadThreadSnapshotResponse,
   type WorkbenchMessage,
   type WorkbenchProvenance,
+  type WorkbenchRawThreadRequest,
+  type WorkbenchRawThreadSnapshot,
   type WorkbenchRole,
 } from "@pe/agent-contracts";
 import { sanitizeJson, type RuntimeEvent } from "../events.ts";
@@ -36,8 +38,9 @@ import {
   type RuntimeQueueProtocolPromptResult,
   type RuntimeSessionHistoryEntry,
 } from "../session/protocol-sessions.ts";
+import type { RuntimeThreadIndex } from "../storage/thread-index.ts";
 import type { RuntimeClientPermissionResponse } from "../client.ts";
-import { acpSessionUpdateToWorkbenchEvents } from "@pe/agent-projection";
+import { acpSessionUpdateToWorkbenchEvents } from "@pe/agent-contracts";
 import { RuntimeAcpClient, type RuntimeAcpClientTransport } from "./runtime-client.ts";
 import { RuntimeToAcpEvents } from "./events-map-runtime-acp.ts";
 import { z } from "zod";
@@ -57,6 +60,7 @@ export interface RuntimeAcpSessionStoreSessionOptions<
   THarness extends RuntimeHandleHarness<TState> = RuntimeHandleHarness<TState>,
 > {
   manager?: RuntimeProtocolSessions<TState, TServices, THarness>;
+  threadIndex?: RuntimeThreadIndex;
 }
 
 export interface RuntimeAcpSessionStoreOptions<
@@ -127,6 +131,7 @@ export class RuntimeAcpSessionStore<
       options.sessions?.manager ??
       new RuntimeProtocolSessions({
         factory: runtimeFactory(options),
+        threadIndex: options.sessions?.threadIndex,
       });
   }
 
@@ -193,6 +198,70 @@ export class RuntimeAcpSessionStore<
       session: workbenchSessionInfo(session),
       messages: workbenchMessagesFromLedger(session, ledger),
       events: workbenchEventsFromLedger(session, ledger),
+    };
+  }
+
+  async readWorkbenchRawThreadSnapshot(
+    request: WorkbenchRawThreadRequest,
+  ): Promise<WorkbenchRawThreadSnapshot> {
+    const errors: string[] = [];
+    const lookupId = request.sessionId ?? request.threadId;
+    const listedSession = await this.runtimeSessions.resolveSessionInfo({
+      id: lookupId,
+      cwd: request.cwd,
+      protocol: "acp",
+    });
+    if (!listedSession) {
+      return {
+        generatedAt: new Date().toISOString(),
+        requestedThreadId: request.threadId,
+        messages: [],
+        ledger: [],
+        history: [],
+        errors: [`Thread not found: ${request.threadId}`],
+      };
+    }
+
+    const messages = await this.runtimeSessions
+      .readListedMessages(listedSession)
+      .catch((error: unknown) => {
+        errors.push(`messages: ${errorMessage(error)}`);
+        return [];
+      });
+    const ledger = await this.runtimeSessions
+      .readListedLedger(listedSession)
+      .catch((error: unknown) => {
+        errors.push(`ledger: ${errorMessage(error)}`);
+        return [];
+      });
+    const history = await this.runtimeSessions
+      .readListedHistory(listedSession)
+      .catch((error: unknown) => {
+        errors.push(`history: ${errorMessage(error)}`);
+        return [];
+      });
+    const database =
+      listedSession.threadId && this.options.sessions?.threadIndex?.readThreadDatabaseSnapshot
+        ? await this.options.sessions.threadIndex
+            .readThreadDatabaseSnapshot({
+              threadId: listedSession.threadId,
+              resourceId: listedSession.resourceId,
+            })
+            .catch((error: unknown) => {
+              errors.push(`database: ${errorMessage(error)}`);
+              return undefined;
+            })
+        : undefined;
+
+    return {
+      generatedAt: new Date().toISOString(),
+      requestedThreadId: request.threadId,
+      session: sanitizeJson(listedSession),
+      messages,
+      ledger,
+      history: sanitizeJson(history) as unknown[],
+      ...(database ? { database } : {}),
+      errors,
     };
   }
 
@@ -416,7 +485,7 @@ export class RuntimeAcpSessionStore<
 
   private async replayHistory(sessionId: SessionId): Promise<void> {
     const session = this.runtimeSessions.getSession(sessionId);
-    const ledger = await this.readRuntimeSessionLedger(session);
+    const ledger = await this.readWorkbenchLedger(session);
     if (ledger.length > 0) {
       const coveredUserPromptSequences = userPromptSequencesCoveredByThreadMessages(ledger);
       const coveredTranscriptMessageIds = directWorkbenchMessageIds(
@@ -552,29 +621,7 @@ export class RuntimeAcpSessionStore<
   private async readWorkbenchLedger(
     session: RuntimeProtocolSession<TState, TServices>,
   ): Promise<RuntimeLedgerEntry[]> {
-    return this.readRuntimeSessionLedger(session, { requireThreadLedger: true });
-  }
-
-  private async readRuntimeSessionLedger(
-    session: RuntimeProtocolSession<TState, TServices>,
-    options: { requireThreadLedger?: boolean } = {},
-  ): Promise<RuntimeLedgerEntry[]> {
-    const readKernelLedger = session.runtime.kernel?.readSessionLedger?.bind(
-      session.runtime.kernel,
-    );
-    if (readKernelLedger) return readKernelLedger(session.id);
-
-    if (!session.threadId) return [];
-    if (!session.runtime.sessions.readThreadLedger) {
-      if (!options.requireThreadLedger) return [];
-      throw new Error("Runtime thread ledger is not available for ACP workbench snapshots.");
-    }
-
-    const ledger = await session.runtime.sessions.readThreadLedger({
-      threadId: session.threadId,
-      resourceId: session.resourceId,
-    });
-    return ledger;
+    return session.runtime.kernel.readSessionLedger(session.id);
   }
 }
 
@@ -1097,6 +1144,10 @@ function readNumericProperty(value: unknown, key: string): number | undefined {
   const record = readRecord(value);
   const property = record[key];
   return typeof property === "number" && Number.isFinite(property) ? property : undefined;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function readRecord(value: unknown): Record<string, unknown> {

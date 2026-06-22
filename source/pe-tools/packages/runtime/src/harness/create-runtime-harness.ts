@@ -1,9 +1,12 @@
 import { Harness, type HarnessConfig } from "@mastra/core/harness";
 import { wrapModelForFinalToolListLogging } from "./final-tool-list-logging.ts";
 import { RuntimeHarness } from "./runtime-harness.ts";
-import { createRuntimeThreadLockWithMastraCodeInterop } from "./thread-lock.ts";
-import { createRuntimeKernel, type RuntimeKernelHarness } from "../kernel.ts";
-import { createRuntimeSessions, type RuntimeSessionOptions } from "../session/runtime-sessions.ts";
+import { createRuntimeThreadLock } from "./thread-lock.ts";
+import {
+  createRuntimeKernel,
+  type RuntimeKernelHarness,
+  type RuntimeKernelOptions,
+} from "../kernel.ts";
 import type { RuntimeAuthProfile } from "../auth/types.ts";
 import type { RuntimeMemoryProfile } from "../memory/profiles.ts";
 import type {
@@ -11,7 +14,6 @@ import type {
   RuntimeHandle,
   RuntimeHandleServices,
   RuntimeKernel,
-  RuntimeSessions,
   RuntimeWorkspaceInfo,
 } from "../runtime.ts";
 import type { RuntimeStorageProfile } from "../storage/profiles.ts";
@@ -39,13 +41,11 @@ export interface CreateRuntimeHarnessOptions<
   config: HarnessConfig<TState>;
   request?: RuntimeCreateRequest;
   harness?: THarness;
-  sessions?: RuntimeSessions;
-  sessionOptions?: RuntimeSessionOptions;
+  sessionOptions?: RuntimeKernelOptions;
   storageProfile?: RuntimeStorageProfile;
   memoryProfile?: RuntimeMemoryProfile<TState>;
   toolProfile?: RuntimeToolProfile;
   toolCatalog?: RuntimeToolSource;
-  createSessions?: (harness: RuntimeKernelHarness<TState>) => RuntimeSessions;
   workspace?: RuntimeWorkspaceInfo;
   auth?: RuntimeAuthProfile;
   authStorage?: TServices["authStorage"];
@@ -108,22 +108,11 @@ export async function createRuntimeHarness<
     toolCatalog:
       options.toolCatalog ?? options.toolProfile?.catalog ?? options.sessionOptions?.toolCatalog,
   });
-  const sessions =
-    options.sessions ??
-    options.createSessions?.(harness) ??
-    createRuntimeSessions(harness, {
-      ...options.sessionOptions,
-      kernel,
-      toolCatalog:
-        options.toolCatalog ?? options.toolProfile?.catalog ?? options.sessionOptions?.toolCatalog,
-    });
-
   let closeTask: Promise<void> | null = null;
 
   return {
     harness,
     kernel,
-    sessions,
     workspace: options.workspace,
     auth: options.auth,
     authStorage: options.authStorage,
@@ -228,9 +217,7 @@ async function resolveRuntimeHarnessConfig<
     : undefined;
   const threadLock =
     options.config.threadLock ??
-    (await createRuntimeThreadLockWithMastraCodeInterop({
-      storageProfileKind: options.storageProfile?.kind,
-    }));
+    createRuntimeThreadLock({ storageProfileKind: options.storageProfile?.kind });
 
   return {
     ...options.config,

@@ -1,5 +1,6 @@
 import { cli, define } from "gunshi";
 import { PeHostClient } from "@pe/host-client";
+import { parseOptionalPort, parseTuiRenderer, reexecWithNodeFfiIfNeeded } from "@pe/runtime";
 import { PeaCliCommands } from "@pe/tools";
 
 export async function runPeaMain(args = process.argv.slice(2)): Promise<void> {
@@ -34,17 +35,15 @@ export function createPeaCliCommand() {
     ].join("\n"),
     run: async (ctx) => {
       if (ctx.values.acp) {
-        const [
-          { createRuntimeAcpCliOptions, runRuntimeAcpFromCli },
-          { createPeaProtocolRuntimeFactory },
-        ] = await Promise.all([import("@pe/runtime"), import("./runtime.ts")]);
+        const [{ runRuntimeAcpAgent }, { createPeaProtocolRuntimeFactory }] = await Promise.all([
+          import("@pe/runtime"),
+          import("./runtime.ts"),
+        ]);
         const factory = await createPeaProtocolRuntimeFactory({
           modelId: ctx.values.modelId,
           workspaceRoot: ctx.values.workspaceRoot,
         });
-        await runRuntimeAcpFromCli(
-          createRuntimeAcpCliOptions(ctx.values, { runtime: { factory } }),
-        );
+        await runRuntimeAcpAgent({ runtime: { factory } });
         return;
       }
       if (ctx.values.agUi) {
@@ -75,10 +74,16 @@ export function createPeaCliSubCommands() {
       name: "beta-tui",
       description: "Run the beta Pea terminal workbench.",
       toKebab: true,
-      args: workspaceArgs,
+      args: betaTuiArgs,
       run: async (ctx) => {
+        if (reexecWithNodeFfiIfNeeded()) return;
+        debugBetaTuiCli("runtime import:start");
         const { runPeaBetaTui } = await import("./runtime.ts");
-        await runPeaBetaTui({ workspaceRoot: ctx.values.workspaceRoot });
+        debugBetaTuiCli("runtime import:ready");
+        await runPeaBetaTui({
+          workspaceRoot: ctx.values.workspaceRoot,
+          renderer: parseTuiRenderer(ctx.values.renderer),
+        });
       },
     }),
     web: define({
@@ -94,6 +99,8 @@ export function createPeaCliSubCommands() {
           staticDir: ctx.values.staticDir,
           modelId: ctx.values.modelId,
           workspaceRoot: ctx.values.workspaceRoot,
+          agUiPort: parseOptionalPort(ctx.values.agUiPort),
+          agUiToken: ctx.values.agUiToken,
         });
       },
     }),
@@ -109,6 +116,15 @@ const workspaceArgs = {
     type: "string",
     description:
       "Pea product workspace root. Defaults to the directory where the Pea CLI is launched.",
+  },
+} as const;
+
+const betaTuiArgs = {
+  ...workspaceArgs,
+  renderer: {
+    type: "string",
+    description:
+      "Beta TUI renderer: opentui, charsm, glyph, rezi, or nberlette. Defaults to opentui.",
   },
 } as const;
 
@@ -129,27 +145,23 @@ const webArgs = {
     type: "string",
     description: "Optional model id to force for the runtime.",
   },
+  agUiPort: {
+    type: "string",
+    description:
+      "Port for the web workbench AG-UI agent. Defaults to 43112; use 0 for an ephemeral port.",
+  },
+  agUiToken: {
+    type: "string",
+    description: "Bearer/query token for the web workbench AG-UI agent.",
+  },
   ...workspaceArgs,
 } as const;
 
 const protocolArgs = {
   acp: {
     type: "boolean",
-    description: "Run the runtime as an ACP agent.",
+    description: "Run the runtime as an ACP agent over stdio.",
     default: false,
-  },
-  acpTransport: {
-    type: "string",
-    description: "ACP transport: stdio or http. Defaults to stdio.",
-    default: "stdio",
-  },
-  acpPort: {
-    type: "string",
-    description: "Port for ACP HTTP transport. Defaults to 43111; use 0 for an ephemeral port.",
-  },
-  acpToken: {
-    type: "string",
-    description: "Bearer/query token for ACP HTTP transport. Defaults to a generated token.",
   },
   agUi: {
     type: "boolean",
@@ -173,10 +185,7 @@ const protocolArgs = {
   ...workspaceArgs,
 } as const;
 
-function parseOptionalPort(value: string | undefined): number | undefined {
-  if (!value) return undefined;
-  const port = Number.parseInt(value, 10);
-  if (!Number.isInteger(port) || port < 0 || port > 65_535)
-    throw new Error(`Invalid port: ${value}`);
-  return port;
+function debugBetaTuiCli(label: string): void {
+  if (process.env.PE_TUI_DEBUG_START !== "1") return;
+  console.error(`[pea beta-tui cli] ${label}`);
 }

@@ -16,6 +16,7 @@ export interface RuntimeThreadSession {
 
 export interface RuntimeThreadInfo extends RuntimeThreadSession {
   title?: string;
+  cwd?: string;
   createdAt?: string;
   updatedAt?: string;
   lock?: RuntimeThreadLockInfo;
@@ -221,7 +222,6 @@ export interface RuntimeKernel {
   readControls(): RuntimeSessionControls;
   setModel(options: { modelId: string }): Promise<RuntimeSessionControls>;
   setAccessLevel(options: { accessLevel: RuntimeAccessLevel }): Promise<RuntimeSessionControls>;
-  recordUserPrompt(options: RuntimeSendMessageOptions): RuntimeLedgerEntry;
   recordProtocolEvent(options: RuntimeRecordProtocolEventRequest): RuntimeLedgerEntry;
   recordSessionProtocolEvent(
     sessionId: string,
@@ -232,23 +232,6 @@ export interface RuntimeKernel {
   flushLedger(): Promise<void>;
   sendMessage(options: RuntimeSendMessageOptions): Promise<void>;
   queueMessage(options: RuntimeSendMessageOptions): Promise<RuntimeQueueMessageResult>;
-  abort(): void;
-  subscribe(listener: (event: RuntimeEvent) => void | Promise<void>): () => void;
-}
-
-export interface RuntimeSessions {
-  createThreadSession(options?: { title?: string }): Promise<RuntimeThreadSession>;
-  switchThread(options: { threadId: string }): Promise<void>;
-  listThreadSessions?(): Promise<RuntimeThreadInfo[]>;
-  readThreadMessages?(options: RuntimeReadThreadRequest): Promise<RuntimeThreadMessage[]>;
-  readThreadLedger?(options: RuntimeReadThreadRequest): Promise<RuntimeLedgerEntry[]>;
-  deleteThreadSession?(options: { threadId: string }): Promise<void>;
-  getResourceId?(): string;
-  recordUserPrompt?(options: RuntimeSendMessageOptions): RuntimeLedgerEntry;
-  recordProtocolEvent?(options: RuntimeRecordProtocolEventRequest): RuntimeLedgerEntry;
-  snapshotLedger?(options?: { threadId?: string; resourceId?: string }): RuntimeLedgerEntry[];
-  sendMessage(options: RuntimeSendMessageOptions): Promise<void>;
-  queueMessage?(options: RuntimeSendMessageOptions): Promise<RuntimeQueueMessageResult>;
   abort(): void;
   subscribe(listener: (event: RuntimeEvent) => void | Promise<void>): () => void;
 }
@@ -301,8 +284,7 @@ export interface RuntimeHandle<
   THarness extends RuntimeHandleHarness<TState> = Harness<TState>,
 > {
   harness: THarness;
-  kernel?: RuntimeKernel;
-  sessions: RuntimeSessions;
+  kernel: RuntimeKernel;
   workspace?: RuntimeWorkspaceInfo;
   auth?: RuntimeAuthProfile;
   authStorage?: TServices["authStorage"];

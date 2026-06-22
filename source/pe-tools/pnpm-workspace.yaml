@@ -9,11 +9,9 @@ catalog:
   "@types/node": ^24
   typescript: ^5
   vite: npm:@voidzero-dev/vite-plus-core@latest
-  vitest: npm:@voidzero-dev/vite-plus-test@latest
-  vite-plus: latest
+  vite-plus: 0.2.0
 overrides:
   vite: "catalog:"
-  vitest: "catalog:"
 peerDependencyRules:
   allowAny:
     - vite
@@ -23,6 +21,8 @@ peerDependencyRules:
     vitest: "*"
 allowBuilds:
   "@google/genai": false
+  "@makeomatic/ffi-napi": true
+  "@makeomatic/ref-napi": true
   agent-browser: false
   bufferutil: false
   edgedriver: false
@@ -30,3 +30,5 @@ allowBuilds:
   koffi: false
   onnxruntime-node: false
   protobufjs: false
+minimumReleaseAgeExclude:
+  - lucide-react@1.21.0

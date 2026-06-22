@@ -1,6 +1,7 @@
 import path from "node:path";
 import { Agent } from "@mastra/core/agent";
 import type { MastraModelConfig } from "@mastra/core/llm";
+import type { InputProcessor } from "@mastra/core/processors";
 import { TaskSignalProvider } from "@mastra/core/signals";
 import type { MastraTUIOptions } from "mastracode/tui";
 import { createInProcessAcpWorkbenchClient } from "@pe/acp-client";
@@ -16,7 +17,11 @@ import {
   createRuntimeDescriptor,
   createRuntimeFactory,
   createRuntimeHarness,
+  createRuntimeLibSqlThreadIndex,
   createRuntimeMemoryProfile,
+  createRuntimeMemoryOptions,
+  createSystemPromptCapture,
+  getDefaultPeaProductDatabasePath,
   hasMastraCodeStoredAuth,
   resolveMastraCodeModel,
   type MastraCodeAuthStorage,
@@ -29,9 +34,10 @@ import {
   type RuntimeHandleServices,
   type RuntimeHarness,
   type RuntimeHarnessConfig,
-  type RuntimeSessionOptions,
+  type RuntimeKernelOptions,
   type RuntimeStorageProfile,
   type RuntimeToolProfile,
+  type WorkbenchSystemPromptSnapshot,
 } from "@pe/runtime";
 import {
   bundledPeaSkills,
@@ -53,7 +59,9 @@ export const defaultPeaRuntimeToolCatalog = peaRuntimeToolProfile.catalog;
 export interface PeaRuntimeFactoryOptions<
   TState extends Record<string, unknown> = Record<string, unknown>,
 > {
-  config: RuntimeHarnessConfig<TState>;
+  config:
+    | RuntimeHarnessConfig<TState>
+    | ((request: RuntimeCreateRequest) => RuntimeHarnessConfig<TState>);
   descriptor?: RuntimeDescriptor;
   auth?: RuntimeAuthProfile;
   authStorage?: MastraCodeAuthStorage;
@@ -61,8 +69,10 @@ export interface PeaRuntimeFactoryOptions<
   storageProfile?: RuntimeStorageProfile;
   memoryProfile?: RuntimeMemoryProfile<TState>;
   toolProfile?: RuntimeToolProfile;
-  sessionOptions?: RuntimeSessionOptions;
+  sessionOptions?: RuntimeKernelOptions;
   createHandle?: (request: RuntimeCreateRequest) => Promise<PeaRuntimeHandle<TState>>;
+  /** Mutable system-prompt snapshot surfaced via workbench metadata. Defaults to the static instructions. */
+  systemPrompt?: WorkbenchSystemPromptSnapshot;
 }
 
 export type PeaRuntimeServices = RuntimeHandleServices & {
@@ -83,7 +93,10 @@ export interface PeaTuiRuntimeOptions {
   hostBaseUrl?: string;
   workspaceKey?: string;
   modelId?: string;
+  renderer?: BetaTuiRenderer;
 }
+
+type BetaTuiRenderer = "opentui" | "charsm" | "glyph" | "rezi" | "nberlette";
 
 export interface PeaBetaTuiWorkbenchOptions {
   client: WorkbenchAgentClient;
@@ -107,16 +120,19 @@ export function createPeaRuntimeFactory<
   const storageProfile = options.storageProfile ?? createPeaProductStateStorageProfile();
   const memoryProfile =
     options.memoryProfile ?? createRuntimeMemoryProfile<TState>({ id: "pea-memory" });
+  const memoryOptions = createRuntimeMemoryOptions(undefined);
   const toolProfile = options.toolProfile ?? peaRuntimeToolProfile;
-  const configuredRoot = options.config.initialState?.projectPath;
-  const workspaceRoot = typeof configuredRoot === "string" ? configuredRoot : undefined;
 
   return createRuntimeFactory<TState, PeaRuntimeServices, RuntimeHarness<TState>>(
     descriptor,
-    async (request) =>
-      options.createHandle?.(request) ??
-      createRuntimeHarness<TState, PeaRuntimeServices>({
-        config: options.config,
+    async (request) => {
+      if (options.createHandle) return options.createHandle(request);
+
+      const config = peaRuntimeHarnessConfig(options.config, request);
+      const configuredRoot = config.initialState?.projectPath;
+      const workspaceRoot = typeof configuredRoot === "string" ? configuredRoot : undefined;
+      return createRuntimeHarness<TState, PeaRuntimeServices>({
+        config,
         request,
         auth,
         authStorage: options.authStorage,
@@ -137,17 +153,39 @@ export function createPeaRuntimeFactory<
           protocol: request.protocol,
           cwd: workspaceRoot ?? request.cwd,
           workspaceRoot: workspaceRoot ?? request.workspaceRoot,
+          workbench: {
+            systemPrompt: options.systemPrompt ?? {
+              content: peaAgentInstructions,
+              source: "Pea agent instructions",
+            },
+            observationalMemory: {
+              id: "pea-memory:observational-config",
+              kind: "observation",
+              status: "activated",
+              title: "Observational memory configuration",
+              summary: "Thread-scoped observational memory is configured for Pea.",
+              raw: memoryOptions.observationalMemory,
+            },
+          },
         },
-      }),
+      });
+    },
     auth,
   );
+}
+
+function peaRuntimeHarnessConfig<TState extends Record<string, unknown>>(
+  config: PeaRuntimeFactoryOptions<TState>["config"],
+  request: RuntimeCreateRequest,
+): RuntimeHarnessConfig<TState> {
+  return typeof config === "function" ? config(request) : config;
 }
 
 export async function createPeaProtocolRuntimeFactory(
   options: PeaTuiRuntimeOptions = {},
 ): Promise<PeaRuntimeFactory> {
   const productHomePath = resolvePeaProductHomePath();
-  const workspaceRoot = productHomePath;
+  const workspaceRoot = path.resolve(options.workspaceRoot ?? options.cwd ?? productHomePath);
   const hostBaseUrl = PeHostClient.resolveHostBaseUrl(options.hostBaseUrl);
   const workspaceKey = PeHostClient.resolveWorkspaceKey(options.workspaceKey);
   configurePeaProductToolContext({ hostBaseUrl, workspaceKey });
@@ -156,28 +194,17 @@ export async function createPeaProtocolRuntimeFactory(
 
   await materializeBundledPeaSkills({ productHomePath });
 
-  const agent = new Agent({
-    id: "pea-agent",
-    name: "Pea Revit Agent",
-    description: "High-trust Revit/operator agent for Positive Energy tooling.",
-    instructions: peaAgentInstructions,
-    model: ({ requestContext }) => resolveCurrentModel(requestContext, defaultPeaAgentModelId),
-    signals: [new TaskSignalProvider(), new PeaContextSignalProvider()],
-    tools: peaProductTools,
-  });
-  const workspace = new Workspace({
-    id: "pea-workspace",
-    name: "Pea Workspace",
-    filesystem: new LocalFilesystem({ basePath: workspaceRoot, contained: true }),
-    sandbox: new LocalSandbox({ workingDirectory: workspaceRoot, env: process.env }),
-    skills: resolvePeaSkillPaths({ productHomePath }),
+  const promptCapture = createSystemPromptCapture({
+    content: peaAgentInstructions,
+    source: "Pea agent instructions",
   });
 
   return createPeaRuntimeFactory<Record<string, unknown>>({
-    config: {
+    systemPrompt: promptCapture.snapshot,
+    config: () => ({
       id: "pea",
       resourceId: createLocalResourceId("pea", workspaceRoot),
-      workspace,
+      workspace: createPeaWorkspace({ productHomePath, workspaceRoot }),
       modes: [
         {
           id: "agent",
@@ -185,7 +212,7 @@ export async function createPeaProtocolRuntimeFactory(
           default: true,
           defaultModelId: defaultPeaAgentModelId,
           color: "#22c55e",
-          agent,
+          agent: createPeaAgent(promptCapture.processor),
         },
       ],
       tools: peaProductTools,
@@ -199,7 +226,7 @@ export async function createPeaProtocolRuntimeFactory(
       },
       modelAuthChecker: (provider) =>
         hasMastraCodeStoredAuth(authStorage, provider) ? true : undefined,
-    },
+    }),
     authStorage,
     metadata: {
       authStorageSource: authStorageContext.source,
@@ -208,10 +235,38 @@ export async function createPeaProtocolRuntimeFactory(
   });
 }
 
+function createPeaAgent(captureProcessor?: InputProcessor): Agent {
+  return new Agent({
+    id: "pea-agent",
+    name: "Pea Revit Agent",
+    description: "High-trust Revit/operator agent for Positive Energy tooling.",
+    instructions: peaAgentInstructions,
+    model: ({ requestContext }) => resolveCurrentModel(requestContext, defaultPeaAgentModelId),
+    signals: [new TaskSignalProvider(), new PeaContextSignalProvider()],
+    tools: peaProductTools,
+    inputProcessors: captureProcessor ? [captureProcessor] : undefined,
+  });
+}
+
+function createPeaWorkspace(options: {
+  productHomePath: string;
+  workspaceRoot: string;
+}): Workspace {
+  return new Workspace({
+    id: "pea-workspace",
+    name: "Pea Workspace",
+    filesystem: new LocalFilesystem({ basePath: options.workspaceRoot, contained: true }),
+    sandbox: new LocalSandbox({ workingDirectory: options.workspaceRoot, env: process.env }),
+    skills: resolvePeaSkillPaths({ productHomePath: options.productHomePath }),
+  });
+}
+
 export async function createPeaTuiRuntime(
   options: PeaTuiRuntimeOptions = {},
 ): Promise<PeaRuntimeHandle> {
-  const workspaceRoot = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
+  const workspaceRoot = path.resolve(
+    options.workspaceRoot ?? options.cwd ?? resolvePeaProductHomePath(),
+  );
   const factory = await createPeaProtocolRuntimeFactory(options);
   return factory.create({
     protocol: "tui",
@@ -236,13 +291,54 @@ export async function runPeaTui(options: PeaTuiRuntimeOptions = {}): Promise<voi
 }
 
 export async function runPeaBetaTui(options: PeaTuiRuntimeOptions = {}): Promise<void> {
-  const workspaceRoot = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
+  const workspaceRoot = path.resolve(
+    options.workspaceRoot ?? options.cwd ?? resolvePeaProductHomePath(),
+  );
+  debugBetaTuiStart("factory:start", workspaceRoot);
   const factory = await createPeaProtocolRuntimeFactory(options);
+  debugBetaTuiStart("factory:ready", workspaceRoot);
   const client = createInProcessAcpWorkbenchClient(
-    (connection) => createRuntimeAcpAgent(connection, { runtime: { factory } }),
+    (connection) =>
+      createRuntimeAcpAgent(connection, {
+        runtime: { factory },
+        sessions: {
+          threadIndex: createRuntimeLibSqlThreadIndex({
+            databasePath: getDefaultPeaProductDatabasePath(),
+            storageProfileKind: "pea-product-state",
+          }),
+        },
+      }),
     { clientName: "Pea", clientVersion: "0.1.0" },
   );
+  debugBetaTuiStart("client:ready", workspaceRoot);
+  const renderer = resolveBetaTuiRenderer(options.renderer);
+  if (renderer === "charsm") {
+    const { runWorkbenchCharsmTui } = await import("@pe/tui-charsm");
+    debugBetaTuiStart("charsm-tui:imported", workspaceRoot);
+    await runWorkbenchCharsmTui(createPeaBetaTuiWorkbenchOptions(client, workspaceRoot));
+    return;
+  }
+  if (renderer === "glyph") {
+    const { runWorkbenchGlyphTui } = await import("@pe/tui-glyph");
+    debugBetaTuiStart("glyph-tui:imported", workspaceRoot);
+    await runWorkbenchGlyphTui(createPeaBetaTuiWorkbenchOptions(client, workspaceRoot));
+    return;
+  }
+  if (renderer === "rezi") {
+    const { runWorkbenchReziTui } = await import("@pe/tui-rezi");
+    debugBetaTuiStart("rezi-tui:imported", workspaceRoot);
+    await runWorkbenchReziTui(createPeaBetaTuiWorkbenchOptions(client, workspaceRoot));
+    return;
+  }
+  if (renderer === "nberlette") {
+    const { runWorkbenchNberletteTui } = await import("@pe/tui-nberlette");
+    debugBetaTuiStart("nberlette-tui:imported", workspaceRoot);
+    await runWorkbenchNberletteTui(createPeaBetaTuiWorkbenchOptions(client, workspaceRoot));
+    return;
+  }
+
   const { runWorkbenchTui } = await import("@pe/tui");
+  debugBetaTuiStart("tui:imported", workspaceRoot);
   await runWorkbenchTui(createPeaBetaTuiWorkbenchOptions(client, workspaceRoot));
 }
 
@@ -308,6 +404,25 @@ function isThinkingLevel(value: unknown): value is "off" | "low" | "medium" | "h
 
 function createLocalResourceId(runtimeId: string, cwd: string): string {
   return `${runtimeId}:${Buffer.from(cwd).toString("base64url")}`;
+}
+
+function debugBetaTuiStart(label: string, workspaceRoot: string): void {
+  if (process.env.PE_TUI_DEBUG_START !== "1") return;
+  console.error(`[pea beta-tui] ${label} ${workspaceRoot}`);
+}
+
+function resolveBetaTuiRenderer(
+  value: PeaTuiRuntimeOptions["renderer"] | undefined,
+): BetaTuiRenderer {
+  const requested = value ?? process.env.PE_TUI_RENDERER;
+  if (
+    requested === "charsm" ||
+    requested === "glyph" ||
+    requested === "rezi" ||
+    requested === "nberlette"
+  )
+    return requested;
+  return "opentui";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
