@@ -24,8 +24,7 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@pe/agent-contracts": "workspace:*",
-    "@pe/agent-projection": "workspace:*"
+    "@pe/agent-contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

@@ -546,11 +546,6 @@ class MastraRuntimeKernel<TState extends Record<string, unknown>> implements Run
     return this.readControls();
   }
 
-  recordUserPrompt(options: RuntimeSendMessageOptions): RuntimeLedgerEntry {
-    const target = this.validateActiveTarget(options, "recordUserPrompt");
-    return this.appendUserPrompt({ ...options, ...target });
-  }
-
   recordProtocolEvent(options: RuntimeRecordProtocolEventRequest): RuntimeLedgerEntry {
     const target = this.validateActiveTarget(options, "recordProtocolEvent");
     return this.appendProtocolEvent(options, target);
@@ -726,7 +721,7 @@ class MastraRuntimeKernel<TState extends Record<string, unknown>> implements Run
 
   private validateActiveTarget(
     options: { threadId?: string; resourceId?: string },
-    operation: "sendMessage" | "queueMessage" | "recordUserPrompt" | "recordProtocolEvent",
+    operation: "sendMessage" | "queueMessage" | "recordProtocolEvent",
   ): { threadId: string; resourceId: string } {
     const currentThreadId = this.harness.getCurrentThreadId() ?? undefined;
     const currentResourceId = this.harness.getResourceId();

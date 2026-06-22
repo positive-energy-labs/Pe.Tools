@@ -29,8 +29,11 @@ import {
   type WorkbenchToolCall,
   type WorkbenchToolLocation,
   type WorkbenchToolTimelineEntry,
-} from "@pe/agent-contracts";
+} from "./contracts.ts";
 import { z } from "zod";
+
+export * from "./agui.ts";
+export * from "./raw-thread.ts";
 
 const maxDebugEvents = 500;
 const maxRecentToolCalls = 128;
@@ -1113,7 +1116,7 @@ function readUpdateMetadata(meta: unknown): PeWorkbenchUpdateMetadata | undefine
 }
 
 const projectionDebugSourceSchema = z
-  .enum(["acp", "runtime", "workbench", "transport", "ui"])
+  .enum(["acp", "ag-ui", "runtime", "workbench", "transport", "ui"])
   .catch("acp");
 const projectionAccessLevelSchema = z.enum(["read-only", "ask", "trusted"]);
 const projectionDebugEventSchema = z

@@ -18,7 +18,6 @@ import {
   createRuntimeAcpAgent,
   createRuntimeFactory,
   createRuntimeKernel,
-  createRuntimeSessions,
   getRuntimeResumeDecisions,
   type RuntimeCreateRequest,
   type RuntimeFactory,
@@ -26,13 +25,12 @@ import {
   type RuntimeHandle,
   type RuntimeHandleServices,
   type RuntimeInjectedHarnessConfig,
-  type RuntimeSessions,
   type RuntimeThreadStateStore,
 } from "../src/index.ts";
 
-test("runtime history treats drafts as empty but fails loudly for materialized sessions without ledger access", async () => {
+test("runtime history is empty for drafts and records the prompt once materialized", async () => {
   const manager = new RuntimeProtocolSessions({
-    factory: createFallbackRuntimeFactory(),
+    factory: createKernelRuntimeFactory(),
     defaultCwd: testCwd(),
   });
   const session = await manager.createSession({
@@ -45,8 +43,8 @@ test("runtime history treats drafts as empty but fails loudly for materialized s
 
   await manager.sendPrompt(session.id, { content: "materialize this session" });
 
-  await expect(manager.readHistory(session.id)).rejects.toThrow(
-    "Runtime thread ledger is not available for materialized session history.",
+  expect(manager.history(session.id)).toContainEqual(
+    expect.objectContaining({ type: "prompt", content: "materialize this session" }),
   );
 });
 
@@ -251,7 +249,7 @@ test("runtime harness close releases locks and closes storage when ledger flush 
     },
   });
 
-  runtime.kernel!.recordProtocolEvent({
+  runtime.kernel.recordProtocolEvent({
     threadId: thread.id,
     resourceId: thread.resourceId,
     protocol: "acp",
@@ -284,24 +282,6 @@ function createKernelRuntimeFactory(
   );
 }
 
-function createFallbackRuntimeFactory(): RuntimeFactory<
-  Record<string, unknown>,
-  RuntimeHandleServices,
-  FakeRuntimeHarness
-> {
-  return createRuntimeFactory<Record<string, unknown>, RuntimeHandleServices, FakeRuntimeHarness>(
-    createRuntimeDescriptor("fallback-runtime"),
-    async (request) => {
-      const harness = new FakeRuntimeHarness();
-      return {
-        harness,
-        sessions: createFallbackRuntimeSessions(harness),
-        workspace: { cwd: request.cwd, root: request.workspaceRoot },
-      };
-    },
-  );
-}
-
 function createKernelRuntimeHandle(
   request: RuntimeCreateRequest,
   options: {
@@ -314,33 +294,8 @@ function createKernelRuntimeHandle(
   return {
     harness,
     kernel,
-    sessions: createRuntimeSessions(harness, { kernel }),
     workspace: { cwd: request.cwd, root: request.workspaceRoot },
     close: () => undefined,
-  };
-}
-
-function createFallbackRuntimeSessions(harness: FakeRuntimeHarness): RuntimeSessions {
-  return {
-    async createThreadSession(options) {
-      const thread = await harness.createThread(options);
-      return { threadId: thread.id, resourceId: harness.getResourceId() };
-    },
-    async switchThread(options) {
-      await harness.switchThread(options);
-    },
-    getResourceId() {
-      return harness.getResourceId();
-    },
-    async sendMessage(message) {
-      await harness.sendMessage(message);
-    },
-    abort() {
-      harness.abort();
-    },
-    subscribe(_listener) {
-      return harness.subscribe(() => undefined);
-    },
   };
 }
 

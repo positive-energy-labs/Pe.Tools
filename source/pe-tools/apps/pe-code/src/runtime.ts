@@ -3,12 +3,16 @@ import path from "node:path";
 import type { Harness } from "@mastra/core/harness";
 import { createMastraCode, type MastraCodeConfig } from "mastracode";
 import type { MastraTUIOptions } from "mastracode/tui";
+import { createInProcessAcpWorkbenchClient } from "@pe/acp-client";
+import type { WorkbenchAgentClient } from "@pe/workbench-core";
 import {
+  createRuntimeAcpAgent,
   createRuntimeDescriptor,
   createRuntimeFactory,
   createRuntimeKernel,
+  createRuntimeLibSqlThreadIndex,
   createRuntimeThreadLock,
-  createRuntimeSessions,
+  getDefaultMastraCodeDatabasePath,
   resolveRuntimeThreadStateStore,
   type RuntimeCreateRequest,
   type RuntimeFactory,
@@ -30,6 +34,17 @@ export interface PeCodeTuiRuntimeOptions {
   cwd?: string;
   workspaceRoot?: string;
   modelId?: string;
+  renderer?: BetaTuiRenderer;
+}
+
+type BetaTuiRenderer = "opentui" | "charsm" | "glyph" | "rezi" | "nberlette";
+
+export interface PeCodeBetaTuiWorkbenchOptions {
+  client: WorkbenchAgentClient;
+  cwd: string;
+  title: string;
+  fallbackToLineMode: true;
+  loadInitialThreads: false;
 }
 
 type PeCodeRuntime = Awaited<ReturnType<typeof createMastraCode>>;
@@ -99,6 +114,66 @@ export async function runPeCodeTui(options: PeCodeTuiRuntimeOptions = {}): Promi
   await tui.run();
 }
 
+export async function runPeCodeBetaTui(options: PeCodeTuiRuntimeOptions = {}): Promise<void> {
+  const startPath = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
+  const cwd = await resolveDevAgentProjectRoot(startPath);
+  const factory = await createPeCodeProtocolRuntimeFactory({
+    ...options,
+    cwd,
+    workspaceRoot: cwd,
+  });
+  const client = createInProcessAcpWorkbenchClient(
+    (connection) =>
+      createRuntimeAcpAgent(connection, {
+        runtime: { factory },
+        sessions: {
+          threadIndex: createRuntimeLibSqlThreadIndex({
+            databasePath: getDefaultMastraCodeDatabasePath(),
+            storageProfileKind: "mastracode-compatible",
+          }),
+        },
+      }),
+    { clientName: "Peco", clientVersion: "0.1.0" },
+  );
+  const renderer = resolveBetaTuiRenderer(options.renderer);
+  if (renderer === "charsm") {
+    const { runWorkbenchCharsmTui } = await import("@pe/tui-charsm");
+    await runWorkbenchCharsmTui(createPeCodeBetaTuiWorkbenchOptions(client, cwd));
+    return;
+  }
+  if (renderer === "glyph") {
+    const { runWorkbenchGlyphTui } = await import("@pe/tui-glyph");
+    await runWorkbenchGlyphTui(createPeCodeBetaTuiWorkbenchOptions(client, cwd));
+    return;
+  }
+  if (renderer === "rezi") {
+    const { runWorkbenchReziTui } = await import("@pe/tui-rezi");
+    await runWorkbenchReziTui(createPeCodeBetaTuiWorkbenchOptions(client, cwd));
+    return;
+  }
+  if (renderer === "nberlette") {
+    const { runWorkbenchNberletteTui } = await import("@pe/tui-nberlette");
+    await runWorkbenchNberletteTui(createPeCodeBetaTuiWorkbenchOptions(client, cwd));
+    return;
+  }
+
+  const { runWorkbenchTui } = await import("@pe/tui");
+  await runWorkbenchTui(createPeCodeBetaTuiWorkbenchOptions(client, cwd));
+}
+
+export function createPeCodeBetaTuiWorkbenchOptions(
+  client: WorkbenchAgentClient,
+  cwd: string,
+): PeCodeBetaTuiWorkbenchOptions {
+  return {
+    client,
+    cwd,
+    title: "Peco beta TUI",
+    fallbackToLineMode: true,
+    loadInitialThreads: false,
+  };
+}
+
 async function createPeCodeRuntimeHandle(
   options: PeCodeTuiRuntimeOptions,
   request: RuntimeCreateRequest,
@@ -130,10 +205,6 @@ async function createPeCodeRuntimeHandle(
   return {
     harness,
     kernel,
-    sessions: createRuntimeSessions(harness, {
-      kernel,
-      toolCatalog: peCodeRuntimeToolProfile.catalog,
-    }),
     workspace: { cwd, root: cwd },
     authStorage: runtime.authStorage,
     hookManager: runtime.hookManager,
@@ -143,6 +214,32 @@ async function createPeCodeRuntimeHandle(
       protocol: request.protocol,
       cwd: request.cwd,
       workspaceRoot: request.workspaceRoot,
+      workbench: {
+        contextEntries: [
+          {
+            id: "peco-system-prompt-availability",
+            title: "System prompt availability",
+            content:
+              "peco's agent is owned by stock createMastraCode, which exposes no inputProcessors hook, so the @pe/runtime system-prompt capture processor (used by pea) cannot be attached yet. The resolved prompt will be inspectable once peco moves to a custom agent.",
+            source: "peco runtime",
+          },
+          {
+            id: "peco-memory-authority",
+            title: "Observational memory authority",
+            content:
+              "peco delegates memory and observational-memory behavior to MastraCode. Exact live OM entries are not exposed through current runtime hooks.",
+            source: "peco runtime",
+          },
+        ],
+        observationalMemory: {
+          id: "peco-memory:mastracode",
+          kind: "observation",
+          status: "activated",
+          title: "MastraCode memory",
+          summary: "MastraCode owns peco memory and OM configuration.",
+          raw: { owner: "mastracode" },
+        },
+      },
     },
     close: () => closePeCodeRuntime(harness, kernel),
   };
@@ -240,4 +337,18 @@ function releasePeCodeThreadLock(threadId: string | null | undefined): void {
   } catch {
     // Best-effort cleanup mirrors the generic runtime harness close path.
   }
+}
+
+function resolveBetaTuiRenderer(
+  value: PeCodeTuiRuntimeOptions["renderer"] | undefined,
+): BetaTuiRenderer {
+  const requested = value ?? process.env.PE_TUI_RENDERER;
+  if (
+    requested === "charsm" ||
+    requested === "glyph" ||
+    requested === "rezi" ||
+    requested === "nberlette"
+  )
+    return requested;
+  return "opentui";
 }

@@ -1,4 +1,4 @@
-import { peWorkbenchUpdateMetadataKey, type WorkbenchEvent } from "@pe/agent-contracts";
+import { peWorkbenchUpdateMetadataKey, type WorkbenchEvent } from "../src/index.ts";
 import { expect, test } from "vite-plus/test";
 import {
   acpSessionUpdateToWorkbenchEvents,

@@ -8,6 +8,7 @@ import {
   type Message,
   type RunAgentInput,
 } from "@ag-ui/core";
+import type { PeWorkbenchUpdateMetadata } from "@pe/agent-contracts";
 import { createRuntimeLocalTransportAuth, type RuntimeLocalTransportAuth } from "../transport.js";
 import {
   createRuntimeAuthDescriptor,
@@ -20,7 +21,10 @@ import type {
   RuntimeDescriptor,
   RuntimeFactory,
   RuntimeHandle,
+  RuntimeHandleHarness,
   RuntimeHandleServices,
+  RuntimeLedgerEntry,
+  RuntimeThreadMessage,
 } from "../runtime.ts";
 import { RuntimeInterruptCollector, toRuntimeResumeDecisions } from "../interrupts.ts";
 import { createRuntimePrompt, type RuntimePrompt, type RuntimePromptPart } from "../prompts.ts";
@@ -30,6 +34,10 @@ import {
 } from "../session/protocol-sessions.ts";
 import { describeRuntimeProtocolStatus } from "../protocol-status.ts";
 import type { RuntimeResource } from "../resources.ts";
+import type {
+  RuntimeRawThreadDatabaseSnapshot,
+  RuntimeThreadIndex,
+} from "../storage/thread-index.ts";
 import { sanitizeJson } from "../events.ts";
 import { RuntimeToAgUiEvents } from "./events-map-runtime-agui.ts";
 import { z } from "zod";
@@ -50,6 +58,7 @@ export interface RuntimeAgUiSessionOptions<
 > {
   defaultCwd?: string;
   manager?: RuntimeProtocolSessions<TState, TServices>;
+  threadIndex?: RuntimeThreadIndex;
 }
 
 export interface RuntimeAgUiTransportOptions {
@@ -69,11 +78,25 @@ export interface RuntimeAgUiAgentOptions<
 export interface RuntimeAgUiServerInfo {
   runUrl: string;
   statusUrl: string;
+  threadsUrl: string;
   sessionsUrl: string;
   eventsUrl: string;
+  messagesUrl: string;
+  threadRawUrl: string;
   logoutUrl: string;
   token: string;
   port: number;
+}
+
+export interface RuntimeAgUiRawThreadSnapshot {
+  generatedAt: string;
+  requestedThreadId: string;
+  session?: RuntimeProtocolSessionInfo;
+  messages: RuntimeThreadMessage[];
+  ledger: RuntimeLedgerEntry[];
+  history: unknown[];
+  database?: RuntimeRawThreadDatabaseSnapshot;
+  errors: string[];
 }
 
 const defaultPort = 43112;
@@ -91,6 +114,7 @@ export class RuntimeAgUiAgent<
       new RuntimeProtocolSessions({
         factory: runtimeFactory(options),
         defaultCwd: defaultAgUiCwd(options),
+        threadIndex: options.sessions?.threadIndex,
       });
   }
 
@@ -132,9 +156,23 @@ export class RuntimeAgUiAgent<
     });
     emitEvent({ type: EventType.STATE_SNAPSHOT, snapshot: parsed.state ?? {} });
     emitEvent({ type: EventType.MESSAGES_SNAPSHOT, messages: parsed.messages });
+    for (const event of translator.translate({
+      type: "workbench_metadata_updated",
+      metadata: runtimeWorkbenchMetadata(session.runtime),
+    })) {
+      emitEvent(event);
+    }
 
     try {
       const stopReason = await this.runtimeSessions.sendPrompt(session.id, agUiPrompt(parsed));
+      // Re-emit after the prompt resolves so a capture processor's snapshot
+      // (e.g. the resolved system prompt) reaches the client this same turn.
+      for (const event of translator.translate({
+        type: "workbench_metadata_updated",
+        metadata: runtimeWorkbenchMetadata(session.runtime),
+      })) {
+        emitEvent(event);
+      }
       emitEvent({
         type: EventType.RUN_FINISHED,
         threadId: parsed.threadId,
@@ -155,15 +193,20 @@ export class RuntimeAgUiAgent<
   }
 
   async sessions(): Promise<RuntimeProtocolSessionInfo[]> {
-    return this.runtimeSessions.listSessions({ protocol: "ag-ui" });
+    const startedAt = performance.now();
+    const sessions = await this.runtimeSessions.listSessions({ protocol: "ag-ui" });
+    logAgUiServerTiming("agent.sessions", startedAt, { sessions: sessions.length });
+    return sessions;
   }
 
   async closeThread(threadId: string): Promise<boolean> {
     const listedSession = await this.sessionForThread(threadId);
     if (!listedSession) return false;
-    const session = await this.resumeListedSession(listedSession);
     try {
-      await this.runtimeSessions.close(session.id);
+      await this.runtimeSessions.close(listedSession.id, {
+        cwd: listedSession.cwd,
+        protocol: "ag-ui",
+      });
     } catch (error) {
       if (!isUnknownSessionError(error)) throw error;
     }
@@ -173,20 +216,137 @@ export class RuntimeAgUiAgent<
   async deleteThread(threadId: string): Promise<boolean> {
     const listedSession = await this.sessionForThread(threadId);
     if (!listedSession) return false;
-    const session = await this.resumeListedSession(listedSession);
-    await this.runtimeSessions.delete(session.id);
+    await this.runtimeSessions.delete(listedSession.id, {
+      cwd: listedSession.cwd,
+      protocol: "ag-ui",
+    });
     return true;
   }
 
   async events(request: { threadId: string; afterSequence?: number }): Promise<BaseEvent[]> {
+    const startedAt = performance.now();
     const listedSession = await this.sessionForThread(request.threadId);
-    if (!listedSession) return [];
-    const session = await this.resumeListedSession(listedSession);
+    if (!listedSession) {
+      logAgUiServerTiming("agent.events missing", startedAt, { threadId: request.threadId });
+      return [];
+    }
+    const afterSequence = request.afterSequence ?? 0;
+    if (afterSequence >= 0 && !listedSession.promptActive) {
+      logAgUiServerTiming("agent.events idle", startedAt, {
+        threadId: request.threadId,
+        afterSequence,
+      });
+      return [];
+    }
 
-    return (await readRuntimeSessionHistory(this.runtimeSessions, session.id))
+    const session = await this.runtimeSessions.resumeSession(listedSession.id, {
+      cwd: listedSession.cwd,
+      additionalDirectories: listedSession.additionalDirectories,
+      protocol: listedSession.protocol,
+    });
+    const metadataEvents = runtimeWorkbenchMetadataEvents(session.runtime);
+    const history = await readRuntimeSessionInfoHistory(this.runtimeSessions, listedSession);
+    const protocolEvents = history
       .filter(isAgUiProtocolHistoryEntry)
-      .flatMap((entry): BaseEvent[] => (isAgUiEvent(entry.payload) ? [entry.payload] : []))
-      .filter((event) => agUiEventSequence(event) > (request.afterSequence ?? 0));
+      .flatMap((entry): BaseEvent[] => (isAgUiEvent(entry.payload) ? [entry.payload] : []));
+    if (protocolEvents.length > 0) {
+      const events = [...metadataEvents, ...protocolEvents].filter(
+        (event) => agUiEventSequence(event) > afterSequence,
+      );
+      logAgUiServerTiming("agent.events protocol", startedAt, {
+        threadId: request.threadId,
+        events: events.length,
+      });
+      return events;
+    }
+
+    const fallbackEvents = runtimeMessagesSnapshotEvents(
+      await readRuntimeSessionInfoMessages(this.runtimeSessions, listedSession),
+      listedSession,
+    );
+    const events = [...metadataEvents, ...fallbackEvents].filter(
+      (event) => agUiEventSequence(event) > afterSequence,
+    );
+    logAgUiServerTiming("agent.events fallback", startedAt, {
+      threadId: request.threadId,
+      events: events.length,
+    });
+    return events;
+  }
+
+  async messages(request: { threadId: string }): Promise<Message[]> {
+    const startedAt = performance.now();
+    const listedSession = await this.sessionForThread(request.threadId);
+    if (!listedSession) {
+      logAgUiServerTiming("agent.messages missing", startedAt, { threadId: request.threadId });
+      return [];
+    }
+    const messages = runtimeThreadMessagesToAgUiMessages(
+      await readRuntimeSessionInfoMessages(this.runtimeSessions, listedSession),
+    );
+    logAgUiServerTiming("agent.messages", startedAt, {
+      threadId: request.threadId,
+      messages: messages.length,
+    });
+    return messages;
+  }
+
+  async rawThread(request: { threadId: string }): Promise<RuntimeAgUiRawThreadSnapshot> {
+    const errors: string[] = [];
+    const listedSession = await this.sessionForThread(request.threadId);
+    if (!listedSession) {
+      return {
+        generatedAt: new Date().toISOString(),
+        requestedThreadId: request.threadId,
+        messages: [],
+        ledger: [],
+        history: [],
+        errors: [`Thread not found: ${request.threadId}`],
+      };
+    }
+
+    const messages = await readRuntimeSessionInfoMessages(
+      this.runtimeSessions,
+      listedSession,
+    ).catch((error: unknown) => {
+      errors.push(`messages: ${errorMessage(error)}`);
+      return [];
+    });
+    const ledger = await this.runtimeSessions
+      .readListedLedger(listedSession)
+      .catch((error: unknown) => {
+        errors.push(`ledger: ${errorMessage(error)}`);
+        return [];
+      });
+    const history = await readRuntimeSessionInfoHistory(this.runtimeSessions, listedSession).catch(
+      (error: unknown) => {
+        errors.push(`history: ${errorMessage(error)}`);
+        return [];
+      },
+    );
+    const database =
+      listedSession.threadId && this.options.sessions?.threadIndex?.readThreadDatabaseSnapshot
+        ? await this.options.sessions.threadIndex
+            .readThreadDatabaseSnapshot({
+              threadId: listedSession.threadId,
+              resourceId: listedSession.resourceId,
+            })
+            .catch((error: unknown) => {
+              errors.push(`database: ${errorMessage(error)}`);
+              return undefined;
+            })
+        : undefined;
+
+    return {
+      generatedAt: new Date().toISOString(),
+      requestedThreadId: request.threadId,
+      session: listedSession,
+      messages,
+      ledger,
+      history: sanitizeJson(history) as unknown[],
+      ...(database ? { database } : {}),
+      errors,
+    };
   }
 
   capabilities(): AgentCapabilities {
@@ -205,16 +365,6 @@ export class RuntimeAgUiAgent<
     threadId: string,
   ): Promise<RuntimeProtocolSessionInfo | undefined> {
     return this.runtimeSessions.resolveSessionInfo({ id: threadId, protocol: "ag-ui" });
-  }
-
-  private async resumeListedSession(
-    session: RuntimeProtocolSessionInfo,
-  ): Promise<RuntimeProtocolSessionInfo> {
-    return this.runtimeSessions.resumeSession(session.id, {
-      protocol: "ag-ui",
-      cwd: session.cwd,
-      additionalDirectories: session.additionalDirectories,
-    });
   }
 }
 
@@ -261,127 +411,162 @@ export class RuntimeAgUiHttpAgent<
     await this.agent.close();
     const server = this.server;
     this.server = null;
-    if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
+    if (server) await closeHttpServer(server);
   }
 
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
-    addCommonHeaders(response);
-    if (request.method === "OPTIONS") {
-      response.writeHead(204).end();
-      return;
-    }
-
     const url = new URL(request.url ?? "/", `http://${loopbackHost}`);
-    if (!this.auth.isAuthorized(request, url)) {
-      response.writeHead(401, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ error: "Unauthorized" }));
-      return;
-    }
-
-    if (url.pathname === "/agui/status") {
-      response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(
-        JSON.stringify(
-          describeRuntimeProtocolStatus({
-            runtime: runtimeDescriptor(this.options),
-            protocol: "ag-ui",
-            transport: "http+sse",
-            auth: runtimeAuthDescriptor(this.options),
-            capabilities: this.agent.capabilities(),
-            sessions: (await this.agent.sessions()).length,
-          }),
-        ),
-      );
-      return;
-    }
-
-    if (url.pathname === "/agui/sessions") {
-      response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ sessions: await this.agent.sessions() }));
-      return;
-    }
-
-    const sessionCloseMatch = /^\/agui\/sessions\/([^/]+)\/close$/.exec(url.pathname);
-    if (sessionCloseMatch && request.method === "POST") {
-      const threadId = decodeURIComponent(sessionCloseMatch[1]!);
-      if (!(await this.agent.closeThread(threadId))) {
-        response.writeHead(404, { "Content-Type": "application/json" });
-        response.end(JSON.stringify({ error: "Thread not found" }));
+    const startedAt = performance.now();
+    addCommonHeaders(response);
+    try {
+      if (request.method === "OPTIONS") {
+        response.writeHead(204).end();
         return;
       }
 
-      response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ ok: true }));
-      return;
-    }
-
-    const sessionDeleteMatch = /^\/agui\/sessions\/([^/]+)$/.exec(url.pathname);
-    if (sessionDeleteMatch && request.method === "DELETE") {
-      const threadId = decodeURIComponent(sessionDeleteMatch[1]!);
-      if (!(await this.agent.deleteThread(threadId))) {
-        response.writeHead(404, { "Content-Type": "application/json" });
-        response.end(JSON.stringify({ error: "Thread not found" }));
+      if (!this.auth.isAuthorized(request, url)) {
+        response.writeHead(401, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ error: "Unauthorized" }));
         return;
       }
 
-      response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ ok: true }));
-      return;
-    }
-
-    if (url.pathname === "/agui/events") {
-      const threadId = url.searchParams.get("threadId");
-      if (!threadId) {
-        response.writeHead(400, { "Content-Type": "application/json" });
-        response.end(JSON.stringify({ error: "threadId is required" }));
-        return;
-      }
-
-      response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(
-        JSON.stringify({
-          events: await this.agent.events({
-            threadId,
-            afterSequence: parseOptionalSequence(url.searchParams.get("afterSequence")),
-          }),
-        }),
-      );
-      return;
-    }
-
-    if (url.pathname === "/agui/logout" && request.method === "POST") {
-      const logoutSupported =
-        this.agent.capabilities().custom?.["runtime.logoutSupported"] === true;
-      if (!logoutSupported) {
-        response.writeHead(400, { "Content-Type": "application/json" });
+      if (url.pathname === "/agui/status") {
+        response.writeHead(200, { "Content-Type": "application/json" });
         response.end(
-          JSON.stringify({
-            error: "Logout is not supported for this runtime.",
-          }),
+          JSON.stringify(
+            describeRuntimeProtocolStatus({
+              runtime: runtimeDescriptor(this.options),
+              protocol: "ag-ui",
+              transport: "http+sse",
+              auth: runtimeAuthDescriptor(this.options),
+              capabilities: this.agent.capabilities(),
+              sessions: (await this.agent.sessions()).length,
+            }),
+          ),
         );
         return;
       }
 
-      await this.agent.logout();
-      response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ ok: true }));
-      return;
-    }
+      if (url.pathname === "/agui/threads" || url.pathname === "/agui/sessions") {
+        const threads = await this.agent.sessions();
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ threads, sessions: threads }));
+        return;
+      }
 
-    if (url.pathname === "/agui/run" && request.method === "POST") {
-      const input = RunAgentInputSchema.parse(await readJsonBody(request));
-      response.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
+      const threadCloseMatch = /^\/agui\/(?:threads|sessions)\/([^/]+)\/close$/.exec(url.pathname);
+      if (threadCloseMatch && request.method === "POST") {
+        const threadId = decodeURIComponent(threadCloseMatch[1]!);
+        if (!(await this.agent.closeThread(threadId))) {
+          response.writeHead(404, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ error: "Thread not found" }));
+          return;
+        }
+
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ ok: true }));
+        return;
+      }
+
+      const threadDeleteMatch = /^\/agui\/(?:threads|sessions)\/([^/]+)$/.exec(url.pathname);
+      if (threadDeleteMatch && request.method === "DELETE") {
+        const threadId = decodeURIComponent(threadDeleteMatch[1]!);
+        if (!(await this.agent.deleteThread(threadId))) {
+          response.writeHead(404, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ error: "Thread not found" }));
+          return;
+        }
+
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ ok: true }));
+        return;
+      }
+
+      if (url.pathname === "/agui/events") {
+        const threadId = url.searchParams.get("threadId");
+        if (!threadId) {
+          response.writeHead(400, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ error: "threadId is required" }));
+          return;
+        }
+
+        const events = await this.agent.events({
+          threadId,
+          afterSequence: parseOptionalSequence(url.searchParams.get("afterSequence")),
+        });
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ events }));
+        return;
+      }
+
+      if (url.pathname === "/agui/messages") {
+        const threadId = url.searchParams.get("threadId");
+        if (!threadId) {
+          response.writeHead(400, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ error: "threadId is required" }));
+          return;
+        }
+
+        const messages = await this.agent.messages({ threadId });
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ messages }));
+        return;
+      }
+
+      if (url.pathname === "/agui/thread-raw") {
+        const threadId = url.searchParams.get("threadId");
+        if (!threadId) {
+          response.writeHead(400, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ error: "threadId is required" }));
+          return;
+        }
+
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify(await this.agent.rawThread({ threadId })));
+        return;
+      }
+
+      if (url.pathname === "/agui/logout" && request.method === "POST") {
+        const logoutSupported =
+          this.agent.capabilities().custom?.["runtime.logoutSupported"] === true;
+        if (!logoutSupported) {
+          response.writeHead(400, { "Content-Type": "application/json" });
+          response.end(
+            JSON.stringify({
+              error: "Logout is not supported for this runtime.",
+            }),
+          );
+          return;
+        }
+
+        await this.agent.logout();
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ ok: true }));
+        return;
+      }
+
+      if (url.pathname === "/agui/run" && request.method === "POST") {
+        const input = RunAgentInputSchema.parse(await readJsonBody(request));
+        response.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        });
+        await this.agent.run(input, (event) =>
+          response.write(`data: ${JSON.stringify(event)}\n\n`),
+        );
+        response.end();
+        return;
+      }
+
+      response.writeHead(404, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ error: "Not found" }));
+    } finally {
+      logAgUiServerTiming(`http ${request.method ?? "GET"} ${url.pathname}`, startedAt, {
+        statusCode: response.statusCode,
+        threadId: url.searchParams.get("threadId") ?? undefined,
       });
-      await this.agent.run(input, (event) => response.write(`data: ${JSON.stringify(event)}\n\n`));
-      response.end();
-      return;
     }
-
-    response.writeHead(404, { "Content-Type": "application/json" });
-    response.end(JSON.stringify({ error: "Not found" }));
   }
 
   private startInfo(port: number): RuntimeAgUiServerInfo {
@@ -390,8 +575,11 @@ export class RuntimeAgUiHttpAgent<
     return {
       runUrl: `${baseUrl}/agui/run?${query}`,
       statusUrl: `${baseUrl}/agui/status?${query}`,
+      threadsUrl: `${baseUrl}/agui/threads?${query}`,
       sessionsUrl: `${baseUrl}/agui/sessions?${query}`,
       eventsUrl: `${baseUrl}/agui/events?${query}`,
+      messagesUrl: `${baseUrl}/agui/messages?${query}`,
+      threadRawUrl: `${baseUrl}/agui/thread-raw?${query}`,
       logoutUrl: `${baseUrl}/agui/logout?${query}`,
       token: this.auth.token,
       port,
@@ -682,6 +870,69 @@ function agUiCapabilities<
   };
 }
 
+function runtimeWorkbenchMetadataEvents<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(handle: RuntimeHandle<TState, TServices, THarness>): BaseEvent[] {
+  const metadata = runtimeWorkbenchMetadata(handle);
+  if (Object.keys(metadata).length === 0) return [];
+  return [
+    {
+      type: EventType.CUSTOM,
+      name: "runtime.workbench.metadata",
+      value: metadata,
+      sequence: 0,
+    } as BaseEvent,
+  ];
+}
+
+function runtimeWorkbenchMetadata<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+  THarness extends RuntimeHandleHarness<TState>,
+>(handle: RuntimeHandle<TState, TServices, THarness>): PeWorkbenchUpdateMetadata {
+  const metadata: PeWorkbenchUpdateMetadata = {};
+  const configured = readRecord(handle.metadata?.workbench) ?? {};
+  const systemPrompt = readRecord(configured.systemPrompt);
+  const contextEntries = Array.isArray(configured.contextEntries)
+    ? configured.contextEntries
+    : undefined;
+  const rawMessages = Array.isArray(configured.rawMessages) ? configured.rawMessages : undefined;
+  const observationalMemory = configured.observationalMemory;
+
+  if (typeof systemPrompt?.content === "string") {
+    metadata.systemPrompt = {
+      content: systemPrompt.content,
+      source: typeof systemPrompt.source === "string" ? systemPrompt.source : "runtime metadata",
+      metadata: runtimeJsonObject(systemPrompt.metadata),
+    };
+  }
+  if (contextEntries)
+    metadata.contextEntries = sanitizeJson(
+      contextEntries,
+    ) as unknown as PeWorkbenchUpdateMetadata["contextEntries"];
+  if (rawMessages)
+    metadata.rawMessages = sanitizeJson(
+      rawMessages,
+    ) as unknown as PeWorkbenchUpdateMetadata["rawMessages"];
+  if (observationalMemory !== undefined)
+    metadata.observationalMemory = sanitizeJson(
+      observationalMemory,
+    ) as unknown as PeWorkbenchUpdateMetadata["observationalMemory"];
+
+  return metadata;
+}
+
+function runtimeJsonObject(value: unknown): PeWorkbenchUpdateMetadata["systemPrompt"] extends {
+  metadata?: infer T;
+}
+  ? T | undefined
+  : undefined {
+  const sanitized = sanitizeJson(value);
+  return readRecord(sanitized) as never;
+}
+
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   for await (const chunk of request)
@@ -713,6 +964,28 @@ function writeError(response: ServerResponse, error: unknown): void {
   );
 }
 
+async function closeHttpServer(server: ReturnType<typeof createServer>): Promise<void> {
+  server.closeIdleConnections?.();
+  const closed = new Promise<void>((resolve) => server.close(() => resolve()));
+  const timeout = new Promise<void>((resolve) =>
+    setTimeout(() => {
+      server.closeAllConnections?.();
+      resolve();
+    }, 1_000),
+  );
+  await Promise.race([closed, timeout]);
+}
+
+function logAgUiServerTiming(
+  label: string,
+  startedAt: number,
+  details: Record<string, unknown>,
+): void {
+  const elapsedMs = Math.round(performance.now() - startedAt);
+  if (elapsedMs < 100) return;
+  console.info("[agui timing]", label, { elapsedMs, ...details });
+}
+
 function parseOptionalSequence(value: string | null): number | undefined {
   if (value == null || value.trim().length === 0) return undefined;
   const parsed = Number(value);
@@ -734,6 +1007,58 @@ async function readRuntimeSessionHistory<
   id: string,
 ): Promise<ReturnType<RuntimeProtocolSessions["history"]>> {
   return manager.readHistory(id);
+}
+
+async function readRuntimeSessionInfoHistory<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+>(
+  manager: RuntimeProtocolSessions<TState, TServices>,
+  info: RuntimeProtocolSessionInfo,
+): Promise<ReturnType<RuntimeProtocolSessions["history"]>> {
+  return manager.readListedHistory(info);
+}
+
+async function readRuntimeSessionInfoMessages<
+  TState extends Record<string, unknown>,
+  TServices extends RuntimeHandleServices,
+>(
+  manager: RuntimeProtocolSessions<TState, TServices>,
+  info: RuntimeProtocolSessionInfo,
+): Promise<RuntimeThreadMessage[]> {
+  return manager.readListedMessages(info);
+}
+
+function runtimeMessagesSnapshotEvents(
+  messages: RuntimeThreadMessage[],
+  session: RuntimeProtocolSessionInfo,
+): BaseEvent[] {
+  const agUiMessages = runtimeThreadMessagesToAgUiMessages(messages);
+  if (agUiMessages.length === 0) return [];
+  return [
+    {
+      type: EventType.MESSAGES_SNAPSHOT,
+      threadId: session.externalThreadId ?? session.threadId ?? session.id,
+      messages: agUiMessages,
+      sequence: 1,
+    } as BaseEvent,
+  ];
+}
+
+function runtimeThreadMessagesToAgUiMessages(messages: RuntimeThreadMessage[]): Message[] {
+  return messages.flatMap(runtimeThreadMessageToAgUiMessage);
+}
+
+function runtimeThreadMessageToAgUiMessage(message: RuntimeThreadMessage): Message[] {
+  if (message.role !== "user" && message.role !== "assistant" && message.role !== "system")
+    return [];
+  return [
+    {
+      id: message.id,
+      role: message.role,
+      content: message.text,
+    },
+  ];
 }
 
 function isAgUiProtocolHistoryEntry(
@@ -788,4 +1113,8 @@ function firstString(...values: unknown[]): string | undefined {
 function stringArray(value: unknown): string[] {
   const entries = agUiStringArraySchema.safeParse(value);
   return entries.success ? entries.data.filter((entry) => entry.trim().length > 0) : [];
+}
+
+function errorMessage(value: unknown): string {
+  return value instanceof Error ? value.message : String(value);
 }

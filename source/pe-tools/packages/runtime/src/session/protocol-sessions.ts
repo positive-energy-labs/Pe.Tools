@@ -1,5 +1,4 @@
 import path from "node:path";
-import { randomUUID } from "node:crypto";
 import type { RuntimeContextEntry } from "../context.ts";
 import {
   sanitizeJson,
@@ -26,7 +25,9 @@ import type {
   RuntimeSessionControls,
   RuntimeThreadLockInfo,
   RuntimeThreadInfo,
+  RuntimeThreadMessage,
 } from "../runtime.ts";
+import type { RuntimeThreadIndex } from "../storage/thread-index.ts";
 
 export type RuntimeSessionHistoryEntry =
   | {
@@ -76,6 +77,7 @@ export interface RuntimeProtocolSessionsOptions<
 > {
   factory: RuntimeFactory<TState, TServices, THarness>;
   defaultCwd?: string;
+  threadIndex?: RuntimeThreadIndex;
 }
 
 const protocolThreadMetadataKey = "peRuntimeProtocolSession";
@@ -155,14 +157,14 @@ export class RuntimeProtocolSessions<
       protocol: request.protocol,
     });
     const now = new Date().toISOString();
-    const draftSession = runtime.kernel?.createDraftSession({
+    const draftSession = runtime.kernel.createDraftSession({
       title,
       protocol: request.protocol,
       externalThreadId: request.externalThreadId,
     });
 
     const session: RuntimeProtocolSession<TState, TServices, THarness> = {
-      id: draftSession?.sessionId ?? createDraftProtocolSessionId(),
+      id: draftSession.sessionId,
       protocol: request.protocol,
       cwd: runtime.workspace?.cwd ?? cwd,
       additionalDirectories,
@@ -216,7 +218,7 @@ export class RuntimeProtocolSessions<
       session.runtime,
       harnessSandboxAllowedPaths(source.runtime),
     );
-    if (source.threadId && session.runtime.kernel?.forkSession) {
+    if (source.threadId) {
       await this.forkMaterializeSession(session, source);
     } else {
       const sourceHistory = await this.readHistory(source.id);
@@ -295,6 +297,7 @@ export class RuntimeProtocolSessions<
   async listSessions(
     filter: { cwd?: string | null; protocol?: RuntimeProtocol } = {},
   ): Promise<RuntimeProtocolSessionInfo[]> {
+    const startedAt = performance.now();
     const cwd = normalizeCwd(filter.cwd ?? this.options.defaultCwd ?? process.cwd());
     const activeSessions = Array.from(this.sessions.values())
       .filter((session) => !filter.protocol || session.protocol === filter.protocol)
@@ -302,12 +305,31 @@ export class RuntimeProtocolSessions<
     const activeIds = new Set(activeSessions.map((session) => session.id));
     const activeThreadIds = new Set(activeSessions.flatMap((session) => session.threadId ?? []));
     const activeSession = activeSessions.at(0);
+    if (!activeSession && this.options.threadIndex) {
+      const threads = await this.options.threadIndex.listThreadSessions({
+        cwd,
+        protocol: filter.protocol ?? "acp",
+      });
+      const result = threads
+        .map((thread) => threadInfo(thread, { cwd, protocol: filter.protocol ?? "acp" }))
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+      logProtocolTiming("listSessions index", startedAt, {
+        protocol: filter.protocol ?? "acp",
+        activeSessions: activeSessions.length,
+        sessions: result.length,
+      });
+      return result;
+    }
+
     const runtime = activeSession
       ? this.getSession(activeSession.id).runtime
       : await this.createListRuntime(cwd, filter.protocol ?? "acp");
 
     try {
-      const threads = (await runtime.sessions.listThreadSessions?.()) ?? [];
+      const threads = await this.listThreadSessions(runtime, {
+        cwd,
+        protocol: filter.protocol ?? "acp",
+      });
       const threadsById = new Map(threads.map((thread) => [thread.threadId, thread]));
       const active = activeSessions.map((session) =>
         sessionInfo(
@@ -321,9 +343,15 @@ export class RuntimeProtocolSessions<
             !activeIds.has(thread.id) &&
             (!thread.threadId || !activeThreadIds.has(thread.threadId)),
         );
-      return [...active, ...listed].sort((left, right) =>
+      const result = [...active, ...listed].sort((left, right) =>
         right.updatedAt.localeCompare(left.updatedAt),
       );
+      logProtocolTiming("listSessions runtime", startedAt, {
+        protocol: filter.protocol ?? "acp",
+        activeSessions: activeSessions.length,
+        sessions: result.length,
+      });
+      return result;
     } finally {
       if (!activeSession) await runtime.close?.();
     }
@@ -334,6 +362,10 @@ export class RuntimeProtocolSessions<
     cwd?: string | null;
     protocol?: RuntimeProtocol;
   }): Promise<RuntimeProtocolSessionInfo | undefined> {
+    const active = this.activeSessionForId(request.id, request.protocol);
+    if (active && (!request.cwd || normalizeCwd(active.cwd) === normalizeCwd(request.cwd))) {
+      return sessionInfo(active);
+    }
     return (await this.listSessions({ cwd: request.cwd, protocol: request.protocol })).find(
       (session) => sessionMatchesId(session, request.id),
     );
@@ -341,7 +373,7 @@ export class RuntimeProtocolSessions<
 
   subscribe(id: string, listener: (event: RuntimeEvent) => void | Promise<void>): () => void {
     const session = this.getSession(id);
-    return session.runtime.sessions.subscribe(listener);
+    return session.runtime.kernel.subscribe(listener);
   }
 
   enqueue(id: string, action: () => Promise<void> | void): void {
@@ -363,7 +395,7 @@ export class RuntimeProtocolSessions<
     options: Pick<RuntimeRecordProtocolEventRequest, "projection"> = {},
   ): void {
     const session = this.getSession(id);
-    if (session.runtime.kernel?.recordSessionProtocolEvent && session.threadId) {
+    if (session.threadId) {
       session.runtime.kernel.recordSessionProtocolEvent(session.id, {
         protocol,
         payload,
@@ -372,17 +404,7 @@ export class RuntimeProtocolSessions<
       return;
     }
 
-    if (session.runtime.sessions.recordProtocolEvent && session.threadId) {
-      session.runtime.sessions.recordProtocolEvent({
-        threadId: session.threadId,
-        resourceId: session.resourceId,
-        protocol,
-        payload,
-        projection: options.projection,
-      });
-      return;
-    }
-
+    // Draft sessions have no thread yet; buffer protocol events in memory until materialized.
     this.appendHistory(session.id, {
       type: "protocol_event",
       protocol,
@@ -402,12 +424,112 @@ export class RuntimeProtocolSessions<
     const session = this.sessions.get(id) ?? this.activeSessionForId(id, undefined);
     if (!session?.threadId) return this.history(id);
 
-    const ledger = await readRuntimeSessionLedger(session, { requireThreadLedger: true });
-    if (!ledger) return this.history(id);
+    const ledger = await readRuntimeSessionLedger(session);
     return [
       ...(this.inMemoryHistory.get(session.id) ?? []),
       ...ledger.flatMap(historyEntryFromLedger),
     ];
+  }
+
+  async readListedHistory(info: RuntimeProtocolSessionInfo): Promise<RuntimeSessionHistoryEntry[]> {
+    const startedAt = performance.now();
+    const session = this.sessions.get(info.id) ?? this.activeSessionForId(info.id, info.protocol);
+    if (session) {
+      const history = await this.readHistory(session.id);
+      logProtocolTiming("readListedHistory active", startedAt, {
+        id: info.id,
+        entries: history.length,
+      });
+      return history;
+    }
+    if (!info.threadId) {
+      const history = this.history(info.id);
+      logProtocolTiming("readListedHistory draft", startedAt, {
+        id: info.id,
+        entries: history.length,
+      });
+      return history;
+    }
+
+    const runtime = await this.createListRuntime(info.cwd, info.protocol);
+    try {
+      const ledger = await runtime.kernel.readThreadLedger({
+        threadId: info.threadId,
+        resourceId: info.resourceId,
+      });
+      const history = ledger.flatMap(historyEntryFromLedger);
+      logProtocolTiming("readListedHistory persisted", startedAt, {
+        id: info.id,
+        threadId: info.threadId,
+        entries: history.length,
+      });
+      return history;
+    } finally {
+      await runtime.close?.();
+    }
+  }
+
+  async readListedLedger(info: RuntimeProtocolSessionInfo): Promise<RuntimeLedgerEntry[]> {
+    const session = this.sessions.get(info.id) ?? this.activeSessionForId(info.id, info.protocol);
+    if (session?.threadId) return readRuntimeSessionLedger(session);
+    if (!info.threadId) return [];
+
+    const runtime = await this.createListRuntime(info.cwd, info.protocol);
+    try {
+      return await runtime.kernel.readThreadLedger({
+        threadId: info.threadId,
+        resourceId: info.resourceId,
+      });
+    } finally {
+      await runtime.close?.();
+    }
+  }
+
+  async readListedMessages(info: RuntimeProtocolSessionInfo): Promise<RuntimeThreadMessage[]> {
+    const startedAt = performance.now();
+    const session = this.sessions.get(info.id) ?? this.activeSessionForId(info.id, info.protocol);
+    if (session) {
+      const messages = await readRuntimeSessionMessages(session);
+      logProtocolTiming("readListedMessages active", startedAt, {
+        id: info.id,
+        threadId: info.threadId,
+        messages: messages.length,
+      });
+      return messages;
+    }
+    if (!info.threadId) {
+      logProtocolTiming("readListedMessages draft", startedAt, { id: info.id, messages: 0 });
+      return [];
+    }
+
+    if (this.options.threadIndex?.readThreadMessages) {
+      const messages = await this.options.threadIndex.readThreadMessages({
+        threadId: info.threadId,
+        resourceId: info.resourceId,
+      });
+      logProtocolTiming("readListedMessages index", startedAt, {
+        id: info.id,
+        threadId: info.threadId,
+        messages: messages.length,
+      });
+      return messages;
+    }
+
+    const runtime = await this.createListRuntime(info.cwd, info.protocol);
+    try {
+      const messages = await runtime.kernel.readThreadMessages({
+        threadId: info.threadId,
+        resourceId: info.resourceId,
+      });
+      logProtocolTiming("readListedMessages persisted", startedAt, {
+        id: info.id,
+        threadId: info.threadId,
+        messages: messages.length,
+      });
+      return messages;
+    } finally {
+      await runtime.close?.();
+    }
   }
 
   recordResumeDecision(id: string, decision: RuntimeResumeDecision): void {
@@ -444,7 +566,6 @@ export class RuntimeProtocolSessions<
       session.promptActive = true;
     }
     session.updatedAt = new Date().toISOString();
-    const fallbackPromptCreatedAt = session.updatedAt;
     const consumedResumeDecisions = session.pendingResumeDecisions;
     const resumeDecisions = mergeResumeDecisions(consumedResumeDecisions, request.resumeDecisions);
     session.pendingResumeDecisions = [];
@@ -459,29 +580,16 @@ export class RuntimeProtocolSessions<
         resourceId: session.resourceId,
         threadId: session.threadId,
       };
-      const queueSessionMessage = session.runtime.kernel?.queueSessionMessage?.bind(
-        session.runtime.kernel,
-      );
-      const queueMessage = session.runtime.sessions.queueMessage?.bind(session.runtime.sessions);
-      const result =
-        !options.requireIdle && queueSessionMessage
-          ? await queueSessionMessage(session.id, message)
-          : !options.requireIdle && queueMessage
-            ? await queueMessage(message)
-            : await sendPromptWithoutQueue(session, message);
+      const result = options.requireIdle
+        ? await sendPromptWithoutQueue(session, message)
+        : await session.runtime.kernel.queueSessionMessage(session.id, message);
       const resultSession = runtimeQueueMessageResultSession(result);
       if (resultSession) {
         session.threadId = resultSession.threadId ?? session.threadId;
         session.resourceId = resultSession.resourceId ?? session.resourceId;
         session.updatedAt = resultSession.updatedAt;
       }
-      if (!runtimeRecordsPromptHistory(session)) {
-        this.appendHistory(session.id, {
-          type: "prompt",
-          content: request.content,
-          createdAt: fallbackPromptCreatedAt,
-        });
-      }
+      // The kernel records every prompt in its ledger, so no in-memory fallback is needed.
       if (!result.queued) await session.emitQueue;
       return {
         queued: result.queued,
@@ -511,32 +619,18 @@ export class RuntimeProtocolSessions<
   }
 
   readControls(id: string): RuntimeSessionControls {
-    const session = this.getSession(id);
-    return session.runtime.kernel?.readControls() ?? runtimeControlsFromHarness(session.runtime);
+    return this.getSession(id).runtime.kernel.readControls();
   }
 
   async setModel(id: string, modelId: string): Promise<RuntimeSessionControls> {
-    const session = this.getSession(id);
-    if (session.runtime.kernel) return session.runtime.kernel.setModel({ modelId });
-    await session.runtime.harness.setState({
-      ...session.runtime.harness.getState(),
-      currentModelId: modelId,
-    });
-    return runtimeControlsFromHarness(session.runtime);
+    return this.getSession(id).runtime.kernel.setModel({ modelId });
   }
 
   async setAccessLevel(
     id: string,
     accessLevel: RuntimeAccessLevel,
   ): Promise<RuntimeSessionControls> {
-    const session = this.getSession(id);
-    if (session.runtime.kernel) return session.runtime.kernel.setAccessLevel({ accessLevel });
-    await session.runtime.harness.setState({
-      ...session.runtime.harness.getState(),
-      accessLevel,
-      yolo: accessLevel === "trusted",
-    });
-    return runtimeControlsFromHarness(session.runtime);
+    return this.getSession(id).runtime.kernel.setAccessLevel({ accessLevel });
   }
 
   async close(
@@ -569,6 +663,11 @@ export class RuntimeProtocolSessions<
         errors.push(error);
       }
     }
+    try {
+      await this.options.threadIndex?.close?.();
+    } catch (error) {
+      errors.push(error);
+    }
     if (errors.length === 1) throw errors[0];
     if (errors.length > 1)
       throw new AggregateError(errors, `Failed to close ${errors.length} Runtime sessions.`);
@@ -594,7 +693,7 @@ export class RuntimeProtocolSessions<
       if (session.externalThreadId) deletedHistoryIds.add(session.externalThreadId);
       invalidateSessionContinuation(session);
       if (session.threadId)
-        await session.runtime.sessions.deleteThreadSession?.({ threadId: session.threadId });
+        await session.runtime.kernel.deleteThreadSession({ threadId: session.threadId });
       try {
         await this.closeActiveSession(session, "delete", request.protocol, {
           cancel: false,
@@ -610,7 +709,7 @@ export class RuntimeProtocolSessions<
       const runtime = await this.createListRuntime(cwd, protocol);
       let deletedThread = false;
       try {
-        const listedThreads = (await runtime.sessions.listThreadSessions?.()) ?? [];
+        const listedThreads = await this.listThreadSessions(runtime, { cwd, protocol });
         const thread = findThreadForProtocolSession(listedThreads, id, protocol);
         if (thread) {
           const info = threadInfo(thread, { cwd, protocol });
@@ -618,7 +717,7 @@ export class RuntimeProtocolSessions<
           if (info.threadId) deletedHistoryIds.add(info.threadId);
           if (info.externalThreadId) deletedHistoryIds.add(info.externalThreadId);
         }
-        await runtime.sessions.deleteThreadSession?.({ threadId: thread?.threadId ?? id });
+        await runtime.kernel.deleteThreadSession({ threadId: thread?.threadId ?? id });
         deletedThread = true;
       } finally {
         if (deletedThread) this.clearInMemoryHistory(...deletedHistoryIds);
@@ -694,6 +793,7 @@ export class RuntimeProtocolSessions<
       protocol?: RuntimeProtocol;
     },
   ): Promise<RuntimeProtocolSession<TState, TServices, THarness>> {
+    const startedAt = performance.now();
     const cwd = normalizeCwd(request.cwd ?? this.options.defaultCwd ?? process.cwd());
     const additionalDirectories = normalizeAdditionalDirectories(
       request.additionalDirectories ?? [],
@@ -705,30 +805,26 @@ export class RuntimeProtocolSessions<
       additionalDirectories,
       protocol,
     });
-    const listThreadSessions = runtime.sessions.listThreadSessions?.bind(runtime.sessions);
-    const listedThreads = listThreadSessions ? await listThreadSessions() : [];
+    const listedThreads = await this.listThreadSessions(runtime, { cwd, protocol });
     const thread = findThreadForProtocolSession(listedThreads, id, protocol);
-    if (listThreadSessions && !thread) {
+    if (!thread) {
       await runtime.close?.();
       throw new Error(`Unknown Runtime session: ${id}`);
     }
-    const threadId = thread?.threadId ?? id;
-    const protocolMetadata = readProtocolThreadMetadata(thread?.metadata, protocol);
+    const threadId = thread.threadId ?? id;
+    const protocolMetadata = readProtocolThreadMetadata(thread.metadata, protocol);
     const sessionId = protocolMetadata?.protocolSessionId ?? id;
-    const kernelSession = runtime.kernel
-      ? await runtime.kernel.resumeThreadSession({
-          sessionId,
-          threadId,
-          resourceId: thread?.resourceId,
-          title: thread?.title,
-          protocol,
-          externalThreadId: protocolMetadata?.externalThreadId,
-          createdAt: thread?.createdAt,
-          updatedAt: thread?.updatedAt,
-        })
-      : undefined;
-    if (!kernelSession) await runtime.sessions.switchThread({ threadId });
-    await seedHarnessSandboxAllowedPaths(runtime, metadataSandboxAllowedPaths(thread?.metadata));
+    const kernelSession = await runtime.kernel.resumeThreadSession({
+      sessionId,
+      threadId,
+      resourceId: thread.resourceId,
+      title: thread.title,
+      protocol,
+      externalThreadId: protocolMetadata?.externalThreadId,
+      createdAt: thread.createdAt,
+      updatedAt: thread.updatedAt,
+    });
+    await seedHarnessSandboxAllowedPaths(runtime, metadataSandboxAllowedPaths(thread.metadata));
     const now = new Date().toISOString();
     const session: RuntimeProtocolSession<TState, TServices, THarness> = {
       id: sessionId,
@@ -738,14 +834,13 @@ export class RuntimeProtocolSessions<
       title: thread?.title ?? `${protocol} session`,
       runtime,
       threadId,
-      resourceId:
-        kernelSession?.resourceId ?? thread?.resourceId ?? runtime.sessions.getResourceId?.() ?? "",
-      ...(thread?.lock ? { lock: thread.lock } : {}),
+      resourceId: kernelSession.resourceId ?? thread.resourceId,
+      ...(thread.lock ? { lock: thread.lock } : {}),
       ...(protocolMetadata?.externalThreadId
         ? { externalThreadId: protocolMetadata.externalThreadId }
         : {}),
-      createdAt: kernelSession?.createdAt ?? thread?.createdAt ?? now,
-      updatedAt: kernelSession?.updatedAt ?? thread?.updatedAt ?? now,
+      createdAt: kernelSession.createdAt ?? thread.createdAt ?? now,
+      updatedAt: kernelSession.updatedAt ?? thread.updatedAt ?? now,
       cancelled: false,
       promptActive: false,
       pendingResumeDecisions: [],
@@ -758,6 +853,12 @@ export class RuntimeProtocolSessions<
 
     await hydrateSessionLedger(session);
     this.trackSession(session);
+    logProtocolTiming("rehydrateSession", startedAt, {
+      id,
+      sessionId,
+      threadId,
+      protocol,
+    });
     return session;
   }
 
@@ -773,13 +874,13 @@ export class RuntimeProtocolSessions<
       return;
     }
 
-    const materialized = session.runtime.kernel
-      ? await session.runtime.kernel.materializeSession(session.id, { title: session.title })
-      : await createFallbackMaterializedSession(session);
+    const materialized = await session.runtime.kernel.materializeSession(session.id, {
+      title: session.title,
+    });
     if (!materialized.threadId) throw new Error("Runtime did not materialize a thread id.");
 
     session.threadId = materialized.threadId;
-    session.resourceId = materialized.resourceId ?? session.runtime.sessions.getResourceId?.();
+    session.resourceId = materialized.resourceId ?? session.runtime.kernel.getResourceId();
     session.updatedAt = materialized.updatedAt;
     await persistProtocolThreadMetadata(session);
     session.protocolMetadataPersisted = true;
@@ -791,15 +892,15 @@ export class RuntimeProtocolSessions<
     source: RuntimeProtocolSession<TState, TServices, THarness>,
   ): Promise<void> {
     if (!source.threadId) throw new Error(`Runtime source session ${source.id} is still a draft.`);
-    const forked = await session.runtime.kernel?.forkSession(session.id, {
+    const forked = await session.runtime.kernel.forkSession(session.id, {
       sourceThreadId: source.threadId,
       resourceId: source.resourceId,
       title: session.title,
     });
-    if (!forked?.threadId) throw new Error("Runtime did not fork a thread id.");
+    if (!forked.threadId) throw new Error("Runtime did not fork a thread id.");
 
     session.threadId = forked.threadId;
-    session.resourceId = forked.resourceId ?? session.runtime.sessions.getResourceId?.();
+    session.resourceId = forked.resourceId ?? session.runtime.kernel.getResourceId();
     session.updatedAt = forked.updatedAt;
     await persistProtocolThreadMetadata(session);
     session.protocolMetadataPersisted = true;
@@ -810,7 +911,36 @@ export class RuntimeProtocolSessions<
     cwd: string,
     protocol: RuntimeProtocol,
   ): Promise<RuntimeHandle<TState, TServices, THarness>> {
-    return this.factory.create({ cwd, workspaceRoot: cwd, additionalDirectories: [], protocol });
+    const startedAt = performance.now();
+    const runtime = await this.factory.create({
+      cwd,
+      workspaceRoot: cwd,
+      additionalDirectories: [],
+      protocol,
+    });
+    logProtocolTiming("createListRuntime", startedAt, { protocol, cwd });
+    return runtime;
+  }
+
+  private async listThreadSessions(
+    runtime: RuntimeHandle<TState, TServices, THarness>,
+    request: { cwd: string; protocol: RuntimeProtocol },
+  ): Promise<RuntimeThreadInfo[]> {
+    const startedAt = performance.now();
+    const runtimeThreads = await runtime.kernel.listThreadSessions();
+    const indexedThreads =
+      (await this.options.threadIndex?.listThreadSessions({
+        cwd: request.cwd,
+        protocol: request.protocol,
+      })) ?? [];
+    const threads = mergeThreadInfos(runtimeThreads, indexedThreads);
+    logProtocolTiming("listThreadSessions", startedAt, {
+      protocol: request.protocol,
+      runtimeThreads: runtimeThreads.length,
+      indexedThreads: indexedThreads.length,
+      threads: threads.length,
+    });
+    return threads;
   }
 
   private async findSessionByExternalThreadId(
@@ -848,17 +978,7 @@ export class RuntimeProtocolSessions<
   private kernelHistory(id: string): RuntimeSessionHistoryEntry[] {
     const session = this.sessions.get(id);
     if (!session?.threadId) return [];
-
-    const snapshotKernelLedger = session.runtime.kernel?.snapshotSessionLedger?.bind(
-      session.runtime.kernel,
-    );
-    const ledger = snapshotKernelLedger
-      ? snapshotKernelLedger(session.id)
-      : session.runtime.sessions.snapshotLedger?.({
-          threadId: session.threadId,
-          resourceId: session.resourceId,
-        });
-    return (ledger ?? []).flatMap(historyEntryFromLedger);
+    return session.runtime.kernel.snapshotSessionLedger(session.id).flatMap(historyEntryFromLedger);
   }
 
   private flushBufferedProtocolEvents(
@@ -868,35 +988,17 @@ export class RuntimeProtocolSessions<
     const history = this.inMemoryHistory.get(session.id);
     if (!history?.length) return;
 
-    const recordSessionProtocolEvent = session.runtime.kernel?.recordSessionProtocolEvent?.bind(
-      session.runtime.kernel,
-    );
-    const recordThreadProtocolEvent = session.runtime.sessions.recordProtocolEvent?.bind(
-      session.runtime.sessions,
-    );
-    if (!recordSessionProtocolEvent && !recordThreadProtocolEvent) return;
-
     const remaining: RuntimeSessionHistoryEntry[] = [];
     for (const entry of history) {
       if (entry.type !== "protocol_event") {
         remaining.push(entry);
         continue;
       }
-      if (recordSessionProtocolEvent) {
-        recordSessionProtocolEvent(session.id, {
-          protocol: entry.protocol,
-          payload: entry.payload,
-          projection: entry.projection,
-        });
-      } else {
-        recordThreadProtocolEvent?.({
-          threadId: session.threadId,
-          resourceId: session.resourceId,
-          protocol: entry.protocol,
-          payload: entry.payload,
-          projection: entry.projection,
-        });
-      }
+      session.runtime.kernel.recordSessionProtocolEvent(session.id, {
+        protocol: entry.protocol,
+        payload: entry.payload,
+        projection: entry.projection,
+      });
     }
 
     if (remaining.length > 0) this.inMemoryHistory.set(session.id, remaining);
@@ -918,17 +1020,10 @@ async function sendPromptWithoutQueue<
   session: RuntimeProtocolSession<TState, TServices, THarness>,
   message: RuntimeSendMessageOptions,
 ): Promise<RuntimeQueueProtocolPromptResult> {
-  if (session.runtime.kernel) {
-    const updated = await session.runtime.kernel.sendSessionMessage(session.id, message);
-    session.threadId = updated.threadId ?? session.threadId;
-    session.resourceId = updated.resourceId ?? session.resourceId;
-    session.updatedAt = updated.updatedAt;
-    return { queued: false };
-  }
-
-  if (!session.threadId) throw new Error(`Runtime session ${session.id} is still a draft.`);
-  await session.runtime.sessions.switchThread({ threadId: session.threadId });
-  await session.runtime.sessions.sendMessage(message);
+  const updated = await session.runtime.kernel.sendSessionMessage(session.id, message);
+  session.threadId = updated.threadId ?? session.threadId;
+  session.resourceId = updated.resourceId ?? session.resourceId;
+  session.updatedAt = updated.updatedAt;
   return { queued: false };
 }
 
@@ -937,14 +1032,8 @@ async function closeKernelSession<
   TServices extends RuntimeHandleServices,
   THarness extends RuntimeHandleHarness<TState>,
 >(session: RuntimeProtocolSession<TState, TServices, THarness>): Promise<boolean> {
-  const kernel = session.runtime.kernel;
-  if (!kernel) return false;
-  if (kernel.closeSession) {
-    await kernel.closeSession(session.id);
-    return true;
-  }
-  await kernel.flushLedger?.();
-  return false;
+  await session.runtime.kernel.closeSession(session.id);
+  return true;
 }
 
 function cancelKernelSession<
@@ -952,13 +1041,7 @@ function cancelKernelSession<
   TServices extends RuntimeHandleServices,
   THarness extends RuntimeHandleHarness<TState>,
 >(session: RuntimeProtocolSession<TState, TServices, THarness>): void {
-  const kernel = session.runtime.kernel;
-  if (kernel?.cancelSession) {
-    kernel.cancelSession(session.id);
-    return;
-  }
-
-  session.runtime.sessions.abort();
+  session.runtime.kernel.cancelSession(session.id);
 }
 
 async function hydrateSessionLedger<
@@ -973,41 +1056,16 @@ async function readRuntimeSessionLedger<
   TState extends Record<string, unknown>,
   TServices extends RuntimeHandleServices,
   THarness extends RuntimeHandleHarness<TState>,
->(
-  session: RuntimeProtocolSession<TState, TServices, THarness>,
-  options: { requireThreadLedger?: boolean } = {},
-): Promise<RuntimeLedgerEntry[] | undefined> {
-  const readKernelLedger = session.runtime.kernel?.readSessionLedger?.bind(session.runtime.kernel);
-  if (readKernelLedger) return readKernelLedger(session.id);
-
-  if (!session.threadId) return undefined;
-  if (!session.runtime.sessions.readThreadLedger) {
-    if (!options.requireThreadLedger) return undefined;
-    throw new Error("Runtime thread ledger is not available for materialized session history.");
-  }
-  return session.runtime.sessions.readThreadLedger({
-    threadId: session.threadId,
-    resourceId: session.resourceId,
-  });
+>(session: RuntimeProtocolSession<TState, TServices, THarness>): Promise<RuntimeLedgerEntry[]> {
+  return session.runtime.kernel.readSessionLedger(session.id);
 }
 
-async function createFallbackMaterializedSession<
+async function readRuntimeSessionMessages<
   TState extends Record<string, unknown>,
   TServices extends RuntimeHandleServices,
   THarness extends RuntimeHandleHarness<TState>,
->(
-  session: RuntimeProtocolSession<TState, TServices, THarness>,
-): Promise<{
-  threadId?: string;
-  resourceId?: string;
-  updatedAt: string;
-}> {
-  const thread = await session.runtime.sessions.createThreadSession({ title: session.title });
-  return {
-    threadId: thread.threadId,
-    resourceId: thread.resourceId,
-    updatedAt: new Date().toISOString(),
-  };
+>(session: RuntimeProtocolSession<TState, TServices, THarness>): Promise<RuntimeThreadMessage[]> {
+  return session.runtime.kernel.readSessionMessages(session.id);
 }
 
 function createPromptContext<
@@ -1092,24 +1150,6 @@ function harnessSandboxState<
   return Array.isArray(sandboxAllowedPaths) ? { sandboxAllowedPaths } : undefined;
 }
 
-function runtimeControlsFromHarness<
-  TState extends Record<string, unknown>,
-  THarness extends RuntimeHandleHarness<TState>,
->(runtime: RuntimeHandle<TState, RuntimeHandleServices, THarness>): RuntimeSessionControls {
-  const state = readRecord(runtime.harness.getState());
-  return {
-    currentModelId: typeof state.currentModelId === "string" ? state.currentModelId : undefined,
-    accessLevel:
-      state.accessLevel === "read-only" ||
-      state.accessLevel === "ask" ||
-      state.accessLevel === "trusted"
-        ? state.accessLevel
-        : state.yolo === true
-          ? "trusted"
-          : "ask",
-  };
-}
-
 function harnessSandboxAllowedPaths<
   TState extends Record<string, unknown>,
   THarness extends RuntimeHandleHarness<TState>,
@@ -1140,6 +1180,17 @@ function normalizeOptionalSandboxPaths(paths: readonly unknown[] | undefined): s
   );
 }
 
+function mergeThreadInfos(...sources: RuntimeThreadInfo[][]): RuntimeThreadInfo[] {
+  const merged = new Map<string, RuntimeThreadInfo>();
+  for (const source of sources) {
+    for (const thread of source) {
+      const key = `${thread.resourceId}:${thread.threadId}`;
+      if (!merged.has(key)) merged.set(key, thread);
+    }
+  }
+  return Array.from(merged.values());
+}
+
 function threadInfo(
   thread: RuntimeThreadInfo,
   options: { cwd: string; protocol: RuntimeProtocol },
@@ -1148,7 +1199,7 @@ function threadInfo(
   return {
     id: protocolMetadata?.protocolSessionId ?? thread.threadId,
     protocol: options.protocol,
-    cwd: options.cwd,
+    cwd: normalizeCwd(thread.cwd ?? options.cwd),
     additionalDirectories: [],
     title: thread.title ?? `${options.protocol} session`,
     threadId: thread.threadId,
@@ -1206,10 +1257,6 @@ function externalThreadKey(protocol: RuntimeProtocol, externalThreadId: string):
   return `${protocol}:${externalThreadId}`;
 }
 
-function createDraftProtocolSessionId(): string {
-  return `draft:${randomUUID()}`;
-}
-
 function sanitizeHistoryPayload(payload: unknown): RuntimeJsonValue {
   return sanitizeJson(payload);
 }
@@ -1238,15 +1285,6 @@ function historyEntryFromLedger(entry: RuntimeLedgerEntry): RuntimeSessionHistor
   }
 
   return [];
-}
-
-function runtimeRecordsPromptHistory<
-  TState extends Record<string, unknown>,
-  TServices extends RuntimeHandleServices,
-  THarness extends RuntimeHandleHarness<TState>,
->(session: RuntimeProtocolSession<TState, TServices, THarness>): boolean {
-  const sessions = readRecord(session.runtime.sessions);
-  return Boolean(session.runtime.kernel || typeof sessions.recordUserPrompt === "function");
 }
 
 function invalidateSessionContinuation<
@@ -1304,6 +1342,16 @@ function readRecord(value: unknown): Record<string, unknown> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function logProtocolTiming(
+  label: string,
+  startedAt: number,
+  details: Record<string, unknown>,
+): void {
+  const elapsedMs = Math.round(performance.now() - startedAt);
+  if (elapsedMs < 100) return;
+  console.info("[agui timing]", label, { elapsedMs, ...details });
 }
 
 function mergeResumeDecisions(

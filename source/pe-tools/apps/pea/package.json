@@ -41,8 +41,11 @@
     "@pe/runtime": "workspace:*",
     "@pe/tools": "workspace:*",
     "@pe/tui": "workspace:*",
+    "@pe/tui-charsm": "workspace:*",
+    "@pe/tui-glyph": "workspace:*",
+    "@pe/tui-nberlette": "workspace:*",
+    "@pe/tui-rezi": "workspace:*",
     "@pe/workbench-core": "workspace:*",
-    "@pe/workbench-transport": "workspace:*",
     "gunshi": "^0.29.5",
     "mastracode": "^0.22.3"
   },

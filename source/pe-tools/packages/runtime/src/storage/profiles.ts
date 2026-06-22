@@ -135,6 +135,10 @@ export function getDefaultPeaProductStateDirectory(): string {
   return path.join(baseDir, "Positive Energy", "Pe.Tools", "state");
 }
 
+export function getDefaultPeaProductDatabasePath(): string {
+  return path.join(getDefaultPeaProductStateDirectory(), "mastra.db");
+}
+
 function isLibSqlClient(
   value: unknown,
 ): value is Parameters<typeof createRuntimeLibSqlThreadStateStore>[0] {

@@ -21,6 +21,7 @@ import type {
   WorkbenchPlanEntry,
   WorkbenchPromptResult,
   WorkbenchQueueMessageResult,
+  WorkbenchRawThreadSnapshot,
   WorkbenchRunState,
   WorkbenchSetAccessLevelRequest,
   WorkbenchSessionInfo,
@@ -40,11 +41,13 @@ import {
   createWorkbenchState,
   selectActiveThreadId,
   selectVisibleThreads,
-} from "@pe/agent-projection";
+} from "@pe/agent-contracts";
 
 export type WorkbenchStateHandler = (state: WorkbenchState, event: WorkbenchEvent) => void;
 
-export interface WorkbenchControllerOptions extends WorkbenchStartRequest {}
+export interface WorkbenchControllerOptions extends WorkbenchStartRequest {
+  loadInitialThreads?: boolean;
+}
 
 export class WorkbenchController {
   private state = createWorkbenchState();
@@ -78,18 +81,16 @@ export class WorkbenchController {
       this.apply({ type: "agent_initialized", agent });
       const session = await this.client.newSession(this.sessionRequest());
       this.apply({ type: "session_started", session });
-      const threads = await this.client.listThreads?.(this.options.cwd);
-      const projectedState = stateWithThreadItems(this.state, threads);
-      const visibleThreads = threads ? selectVisibleThreads(projectedState) : undefined;
-      const activeThreadId = threads ? selectActiveThreadId(projectedState) : undefined;
-      if (visibleThreads)
-        this.apply({
-          type: "threads_replaced",
-          threads: visibleThreads,
-          activeThreadId,
-        });
-      await this.loadThreadSnapshot(session.sessionId);
-      return { agent, session: this.state.agent.session ?? session, threads: visibleThreads };
+      if (this.options.loadInitialThreads !== false) {
+        const initialThreads = this.loadInitialThreadState(session.sessionId);
+        await ignoreSlow(initialThreads, 1500);
+        void initialThreads.catch(() => undefined);
+      }
+      return {
+        agent,
+        session: this.state.agent.session ?? session,
+        threads: this.state.threads.items,
+      };
     });
     return this.startPromise;
   }
@@ -197,6 +198,21 @@ export class WorkbenchController {
       const session = await this.loadThreadSnapshot(threadId);
       await this.refreshThreads();
       return session;
+    });
+  }
+
+  async rawThread(
+    threadId = selectActiveThreadId(this.state),
+  ): Promise<WorkbenchRawThreadSnapshot> {
+    await this.ensureInitialized();
+    if (!threadId) throw new Error("No thread is selected.");
+    const rawThread = this.client.rawThread?.bind(this.client);
+    if (!rawThread) throw new Error("Workbench client does not support raw thread snapshots.");
+    const thread = findThreadForLoad(this.state.threads.items, threadId);
+    return rawThread({
+      ...this.sessionRequest(),
+      threadId: thread?.threadId ?? threadId,
+      ...(thread?.sessionId ? { sessionId: thread.sessionId } : {}),
     });
   }
 
@@ -315,6 +331,29 @@ export class WorkbenchController {
     return session;
   }
 
+  private async loadInitialThreadState(sessionId: string): Promise<void> {
+    try {
+      const threads = await this.client.listThreads?.(this.options.cwd);
+      const projectedState = stateWithThreadItems(this.state, threads);
+      const visibleThreads = threads ? selectVisibleThreads(projectedState) : undefined;
+      const activeThreadId = threads ? selectActiveThreadId(projectedState) : undefined;
+      if (visibleThreads) {
+        this.apply({
+          type: "threads_replaced",
+          threads: visibleThreads,
+          activeThreadId,
+        });
+      }
+      await this.loadThreadSnapshot(sessionId);
+    } catch (error: unknown) {
+      this.apply({
+        type: "error",
+        command: "threads",
+        message: `Initial thread refresh failed: ${errorMessage(error)}`,
+      });
+    }
+  }
+
   private async runCommand<T>(
     command: Exclude<keyof WorkbenchState["uiStatus"], "overall" | "errors">,
     action: () => Promise<T>,
@@ -390,6 +429,23 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+async function ignoreSlow(promise: Promise<unknown>, timeoutMs: number): Promise<void> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      promise.then(
+        () => undefined,
+        () => undefined,
+      ),
+      new Promise<void>((resolve) => {
+        timeout = setTimeout(resolve, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 export type {
   PeWorkbenchUpdateMetadata,
   WorkbenchAgentClient,
@@ -409,6 +465,7 @@ export type {
   WorkbenchObservationMemoryEntry,
   WorkbenchPlanEntry,
   WorkbenchQueueMessageResult,
+  WorkbenchRawThreadSnapshot,
   WorkbenchRunState,
   WorkbenchSessionInfo,
   WorkbenchSessionModeInfo,

@@ -1,15 +1,11 @@
 import fs from "node:fs";
-import { createRequire } from "node:module";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import {
   getDefaultMastraCodeAppDataDir,
   getDefaultPeaProductStateDirectory,
   type RuntimeStorageProfileKind,
 } from "../storage/profiles.ts";
 import type { RuntimeThreadLockInfo } from "../runtime.ts";
-
-const require = createRequire(import.meta.url);
 
 export class ThreadLockError extends Error {
   readonly threadId: string;
@@ -25,7 +21,6 @@ export class ThreadLockError extends Error {
 
 export interface RuntimeThreadLockOptions {
   storageProfileKind?: RuntimeStorageProfileKind;
-  threadLockErrorPrototype?: object | null;
 }
 
 const ownedLockPaths = new Set<string>();
@@ -33,8 +28,6 @@ let exitCleanupRegistered = false;
 
 export function createRuntimeThreadLock(options: RuntimeThreadLockOptions = {}) {
   const locksDirectory = getLocksDirectory(options.storageProfileKind);
-  const threadLockErrorPrototype =
-    options.threadLockErrorPrototype ?? resolveMastraCodeThreadLockErrorPrototypeSync();
   registerExitCleanup();
 
   return {
@@ -58,7 +51,7 @@ export function createRuntimeThreadLock(options: RuntimeThreadLockOptions = {}) 
           return;
         }
         if (ownerPid != null && isProcessAlive(ownerPid)) {
-          throw createThreadLockError(threadId, ownerPid, threadLockErrorPrototype);
+          throw new ThreadLockError(threadId, ownerPid);
         }
 
         try {
@@ -71,7 +64,7 @@ export function createRuntimeThreadLock(options: RuntimeThreadLockOptions = {}) 
               liveOwnerPid !== currentPid &&
               isProcessAlive(liveOwnerPid)
             ) {
-              throw createThreadLockError(threadId, liveOwnerPid, threadLockErrorPrototype);
+              throw new ThreadLockError(threadId, liveOwnerPid);
             }
           }
         }
@@ -96,16 +89,11 @@ export function readRuntimeThreadLockInfo(
   return isProcessAlive(ownerPid) ? { status: "locked", ownerPid } : { status: "unlocked" };
 }
 
-export async function createRuntimeThreadLockWithMastraCodeInterop(
-  options: RuntimeThreadLockOptions = {},
-) {
-  return createRuntimeThreadLock({
-    ...options,
-    threadLockErrorPrototype:
-      options.threadLockErrorPrototype ?? (await resolveMastraCodeThreadLockErrorPrototype()),
-  });
-}
-
+/**
+ * Structural check for a thread-lock error. We match by name + fields rather than
+ * `instanceof` so it recognizes our own errors and MastraCode's interchangeably
+ * (both carry `name: "ThreadLockError"` plus `threadId`/`ownerPid`).
+ */
 export function isThreadLockError(
   error: unknown,
 ): error is ThreadLockError & { threadId: string; ownerPid: number } {
@@ -142,18 +130,6 @@ function isProcessAlive(pid: number): boolean {
   } catch {
     return false;
   }
-}
-
-function createThreadLockError(
-  threadId: string,
-  ownerPid: number,
-  threadLockErrorPrototype: object | null,
-): ThreadLockError {
-  const error = new ThreadLockError(threadId, ownerPid);
-  if (threadLockErrorPrototype) {
-    Object.setPrototypeOf(error, threadLockErrorPrototype);
-  }
-  return error;
 }
 
 function readLockOwnerPid(lockPath: string): number | null {
@@ -199,98 +175,11 @@ function registerExitCleanup(): void {
   });
 }
 
-async function resolveMastraCodeThreadLockErrorPrototype(): Promise<object | null> {
-  const packageRoot = resolveMastraCodePackageRoot();
-  if (!packageRoot) return null;
-
-  return (
-    (await resolveMastraCodeThreadLockErrorPrototypeFromEsm(packageRoot)) ??
-    resolveMastraCodeThreadLockErrorPrototypeFromCjs(packageRoot)
-  );
-}
-
-function resolveMastraCodeThreadLockErrorPrototypeSync(): object | null {
-  const packageRoot = resolveMastraCodePackageRoot();
-  return packageRoot ? resolveMastraCodeThreadLockErrorPrototypeFromCjs(packageRoot) : null;
-}
-
-function resolveMastraCodePackageRoot(): string | null {
-  try {
-    const packageJsonPath = require.resolve("mastracode/package.json");
-    return path.dirname(packageJsonPath);
-  } catch {
-    return null;
-  }
-}
-
-async function resolveMastraCodeThreadLockErrorPrototypeFromEsm(
-  packageRoot: string,
-): Promise<object | null> {
-  for (const modulePath of mastraCodeDistChunks(packageRoot, ".js")) {
-    if (!exportsThreadLockError(modulePath)) continue;
-
-    try {
-      const prototype = readThreadLockErrorPrototype(await import(pathToFileURL(modulePath).href));
-      if (prototype) return prototype;
-    } catch {
-      // Private MastraCode bundle shape varies; structural detection remains the fallback.
-    }
-  }
-
-  return null;
-}
-
-function resolveMastraCodeThreadLockErrorPrototypeFromCjs(packageRoot: string): object | null {
-  for (const modulePath of mastraCodeDistChunks(packageRoot, ".cjs")) {
-    if (!exportsThreadLockError(modulePath)) continue;
-
-    try {
-      const module: unknown = require(modulePath);
-      const prototype = readThreadLockErrorPrototype(module);
-      if (prototype) return prototype;
-    } catch {
-      // Private MastraCode bundle shape varies; structural detection remains the fallback.
-    }
-  }
-
-  return null;
-}
-
-function mastraCodeDistChunks(packageRoot: string, extension: ".js" | ".cjs"): string[] {
-  const distDirectory = path.join(packageRoot, "dist");
-  try {
-    return fs
-      .readdirSync(distDirectory)
-      .filter((entry) => entry.startsWith("chunk-") && entry.endsWith(extension))
-      .map((entry) => path.join(distDirectory, entry));
-  } catch {
-    return [];
-  }
-}
-
-function readThreadLockErrorPrototype(value: unknown): object | null {
-  const prototype = readRecord(readRecord(value).ThreadLockError).prototype;
-  return typeof prototype === "object" && prototype !== null ? prototype : null;
-}
-
 function readStringProperty(value: unknown, key: string): string | undefined {
   const property = readRecord(value)[key];
   return typeof property === "string" ? property : undefined;
 }
 
 function readRecord(value: unknown): Record<string, unknown> {
-  return isRecord(value) ? value : {};
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function exportsThreadLockError(modulePath: string): boolean {
-  try {
-    const content = fs.readFileSync(modulePath, "utf8");
-    return content.includes("ThreadLockError") && content.includes("acquireThreadLock");
-  } catch {
-    return false;
-  }
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
 }

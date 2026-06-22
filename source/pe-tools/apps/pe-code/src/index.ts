@@ -3,16 +3,20 @@ import { PeHostClient } from "@pe/host-client";
 import {
   argsAcp,
   argsAgui,
-  createRuntimeAcpCliOptions,
   createRuntimeAgUiCliOptions,
-  runRuntimeAcpFromCli,
+  parseOptionalPort,
+  parseTuiRenderer,
+  reexecWithNodeFfiIfNeeded,
+  runRuntimeAcpAgent,
   runRuntimeAgUiFromCli,
 } from "@pe/runtime";
 import { createPeCodeProtocolRuntimeFactory, peCodeRuntimeToolProfile } from "./runtime.ts";
 
 export {
   createPeCodeProtocolRuntimeFactory,
+  createPeCodeBetaTuiWorkbenchOptions,
   createPeCodeTuiRuntime,
+  runPeCodeBetaTui,
   runPeCodeTui,
   defaultPeCodeRuntimeToolCatalog,
   defaultPeCodeRuntimeToolProfile,
@@ -32,6 +36,7 @@ export function createPeCodeCliCommand() {
     },
     examples: [
       "peco",
+      "peco beta-tui",
       "peco web",
       "peco --acp",
       "peco --ag-ui --ag-ui-port 43112",
@@ -42,9 +47,7 @@ export function createPeCodeCliCommand() {
     run: async (ctx) => {
       if (ctx.values.acp) {
         const factory = await createPeCodeProtocolRuntimeFactory({ modelId: ctx.values.modelId });
-        await runRuntimeAcpFromCli(
-          createRuntimeAcpCliOptions(ctx.values, { runtime: { factory } }),
-        );
+        await runRuntimeAcpAgent({ runtime: { factory } });
         return;
       }
       if (ctx.values.agUi) {
@@ -66,6 +69,21 @@ export function createPeCodeCliSubCommands() {
   if (!subCommands) throw new Error("peco runtime tool profile does not define CLI subcommands.");
   return {
     ...subCommands,
+    "beta-tui": define({
+      name: "beta-tui",
+      description: "Run the beta Peco terminal workbench.",
+      toKebab: true,
+      args: betaTuiArgs,
+      run: async (ctx) => {
+        if (reexecWithNodeFfiIfNeeded()) return;
+        const { runPeCodeBetaTui } = await import("./runtime.ts");
+        await runPeCodeBetaTui({
+          workspaceRoot: ctx.values.workspaceRoot,
+          modelId: ctx.values.modelId,
+          renderer: parseTuiRenderer(ctx.values.renderer),
+        });
+      },
+    }),
     web: define({
       name: "web",
       description: "Run the local React peco workbench over HTTP/SSE.",
@@ -78,6 +96,8 @@ export function createPeCodeCliSubCommands() {
           port: parseOptionalPort(ctx.values.port),
           staticDir: ctx.values.staticDir,
           modelId: ctx.values.modelId,
+          agUiPort: parseOptionalPort(ctx.values.agUiPort),
+          agUiToken: ctx.values.agUiToken,
         });
       },
     }),
@@ -87,6 +107,23 @@ export function createPeCodeCliSubCommands() {
 export function getPeCodeCliCommandNames(): string[] {
   return Object.keys(createPeCodeCliSubCommands());
 }
+
+const betaTuiArgs = {
+  workspaceRoot: {
+    type: "string",
+    description:
+      "Peco workspace root. Defaults to the nearest repo/project root from the launch directory.",
+  },
+  modelId: {
+    type: "string",
+    description: "Optional model id to force for the runtime.",
+  },
+  renderer: {
+    type: "string",
+    description:
+      "Beta TUI renderer: opentui, charsm, glyph, rezi, or nberlette. Defaults to opentui.",
+  },
+} as const;
 
 const webArgs = {
   host: {
@@ -105,12 +142,13 @@ const webArgs = {
     type: "string",
     description: "Optional model id to force for the runtime.",
   },
+  agUiPort: {
+    type: "string",
+    description:
+      "Port for the web workbench AG-UI agent. Defaults to an ephemeral port; use 0 for an ephemeral port.",
+  },
+  agUiToken: {
+    type: "string",
+    description: "Bearer/query token for the web workbench AG-UI agent.",
+  },
 } as const;
-
-function parseOptionalPort(value: string | undefined): number | undefined {
-  if (!value) return undefined;
-  const port = Number.parseInt(value, 10);
-  if (!Number.isInteger(port) || port < 0 || port > 65_535)
-    throw new Error(`Invalid port: ${value}`);
-  return port;
-}

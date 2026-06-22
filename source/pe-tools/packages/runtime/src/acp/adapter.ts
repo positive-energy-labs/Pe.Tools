@@ -31,11 +31,14 @@ import {
   peWorkbenchLoadThreadMethod,
   peWorkbenchMetadata,
   peWorkbenchQueueMessageMethod,
+  peWorkbenchRawThreadMethod,
   peWorkbenchSetAccessLevelMethod,
   peWorkbenchSetModelMethod,
   type WorkbenchAccessLevel,
   type WorkbenchLoadThreadSnapshotRequest,
   type WorkbenchLoadThreadSnapshotResponse,
+  type WorkbenchRawThreadRequest,
+  type WorkbenchRawThreadSnapshot,
   type PeWorkbenchExtension,
 } from "@pe/agent-contracts";
 import {
@@ -57,6 +60,7 @@ import type {
 } from "../runtime.ts";
 import { createRuntimePrompt, type RuntimePrompt } from "../prompts.ts";
 import type { RuntimeProtocolSessions } from "../session/protocol-sessions.ts";
+import type { RuntimeThreadIndex } from "../storage/thread-index.ts";
 import {
   RuntimeAcpSessionStore,
   type AcpSession,
@@ -80,6 +84,7 @@ export interface RuntimeAcpSessionOptions<
   THarness extends RuntimeHandleHarness<TState> = RuntimeHandleHarness<TState>,
 > {
   manager?: RuntimeProtocolSessions<TState, TServices, THarness>;
+  threadIndex?: RuntimeThreadIndex;
 }
 
 export interface RuntimeAcpAgentOptions<
@@ -114,6 +119,9 @@ export interface RuntimeAcpAgentSessionStore<
   readWorkbenchLoadThreadSnapshot(
     request: WorkbenchLoadThreadSnapshotRequest,
   ): Promise<WorkbenchLoadThreadSnapshotResponse>;
+  readWorkbenchRawThreadSnapshot(
+    request: WorkbenchRawThreadRequest,
+  ): Promise<WorkbenchRawThreadSnapshot>;
   cancel(sessionId: SessionId): void;
   resume(request: {
     sessionId: SessionId;
@@ -137,6 +145,10 @@ export interface RuntimeAcpAgentSessionStore<
   configureClient?(clientCapabilities: ClientCapabilities | undefined): void;
 }
 
+interface RuntimeAcpConnectionLifecycle {
+  closed: Promise<void>;
+}
+
 export function createRuntimeAcpAgent<
   TState extends Record<string, unknown> = Record<string, unknown>,
   TServices extends RuntimeHandleServices = RuntimeHandleServices,
@@ -145,7 +157,12 @@ export function createRuntimeAcpAgent<
   updateSink: RuntimeAcpSessionUpdateSink,
   options: RuntimeAcpAgentOptions<TState, TServices, THarness>,
 ): Agent {
-  return new RuntimeAcpAgent(options, new RuntimeAcpSessionStore(updateSink, options));
+  const sessions = new RuntimeAcpSessionStore(updateSink, options);
+  queueMicrotask(() => {
+    const lifecycle = readRuntimeAcpConnectionLifecycle(updateSink);
+    if (lifecycle) void lifecycle.closed.then(() => sessions.closeAll?.());
+  });
+  return new RuntimeAcpAgent(options, sessions);
 }
 
 export class RuntimeAcpAgent<
@@ -229,6 +246,24 @@ export class RuntimeAcpAgent<
           : {}),
       });
       return workbenchLoadThreadSnapshotRecord(snapshot);
+    }
+
+    if (method === peWorkbenchRawThreadMethod) {
+      const threadId = readThreadId(params, "Read raw thread snapshot");
+      const cwd = typeof params.cwd === "string" ? params.cwd : "";
+      const snapshot = await this.sessions.readWorkbenchRawThreadSnapshot({
+        threadId,
+        ...(typeof params.sessionId === "string" ? { sessionId: params.sessionId } : {}),
+        cwd,
+        ...(Array.isArray(params.additionalDirectories)
+          ? {
+              additionalDirectories: params.additionalDirectories.filter(
+                (entry): entry is string => typeof entry === "string",
+              ),
+            }
+          : {}),
+      });
+      return workbenchRawThreadSnapshotRecord(snapshot);
     }
 
     if (method === peWorkbenchQueueMessageMethod) {
@@ -405,6 +440,7 @@ export function runtimeAcpWorkbenchExtension<
       threads: true,
       history: true,
       historySnapshots: true,
+      rawThreadSnapshots: true,
       toolCalls: true,
       approvals: true,
       approveAlways: true,
@@ -498,6 +534,21 @@ function workbenchLoadThreadSnapshotRecord(
   };
 }
 
+function workbenchRawThreadSnapshotRecord(
+  response: WorkbenchRawThreadSnapshot,
+): Record<string, unknown> {
+  return {
+    ...(response.generatedAt ? { generatedAt: response.generatedAt } : {}),
+    ...(response.requestedThreadId ? { requestedThreadId: response.requestedThreadId } : {}),
+    ...(response.session ? { session: response.session } : {}),
+    messages: response.messages ?? [],
+    ledger: response.ledger ?? [],
+    history: response.history ?? [],
+    ...(response.database ? { database: response.database } : {}),
+    errors: response.errors ?? [],
+  };
+}
+
 const acpMetaSchema = z.record(z.string(), z.unknown());
 const acpTextBlockSchema = z
   .object({ type: z.literal("text"), text: z.string(), _meta: acpMetaSchema.optional() })
@@ -558,6 +609,29 @@ function readSessionId(params: Record<string, unknown>, action: string): Session
   return sessionId;
 }
 
+function readThreadId(params: Record<string, unknown>, action: string): string {
+  const threadId = typeof params.threadId === "string" ? params.threadId : undefined;
+  if (!threadId) throw new Error(`${action} requires threadId.`);
+  return threadId;
+}
+
+function readRuntimeAcpConnectionLifecycle(
+  value: unknown,
+): RuntimeAcpConnectionLifecycle | undefined {
+  const record = readRecord(value);
+  const closed = record.closed;
+  if (closed instanceof Promise) return { closed };
+  if (
+    typeof closed === "object" &&
+    closed !== null &&
+    "then" in closed &&
+    typeof closed.then === "function"
+  ) {
+    return { closed: closed as Promise<void> };
+  }
+  return undefined;
+}
+
 const runtimeAccessLevelSchema = z.enum(["read-only", "ask", "trusted"]);
 
 function readRuntimeAccessLevel(value: unknown): RuntimeAccessLevel | undefined {
@@ -595,4 +669,8 @@ function runtimeAccessLevels(): Array<{
       description: "Auto-approve runtime tool calls.",
     },
   ];
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
 }
