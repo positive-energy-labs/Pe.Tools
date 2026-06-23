@@ -6,11 +6,9 @@ export {
 } from "./cli.ts";
 export {
   createPeaRuntimeAuthProfile,
-  createPeaBetaTuiWorkbenchOptions,
   createPeaRuntimeFactory,
   createPeaProtocolRuntimeFactory,
   createPeaTuiRuntime,
-  runPeaBetaTui,
   runPeaTui,
   defaultPeaRuntimeToolCatalog,
   defaultPeaRuntimeToolProfile,

@@ -93,16 +93,6 @@ export interface PeaTuiRuntimeOptions {
   hostBaseUrl?: string;
   workspaceKey?: string;
   modelId?: string;
-  renderer?: BetaTuiRenderer;
-}
-
-type BetaTuiRenderer = "opentui" | "charsm" | "glyph" | "rezi" | "nberlette";
-
-export interface PeaBetaTuiWorkbenchOptions {
-  client: WorkbenchAgentClient;
-  cwd: string;
-  title: string;
-  fallbackToLineMode: true;
 }
 
 export function createPeaRuntimeFactory<
@@ -255,8 +245,14 @@ function createPeaWorkspace(options: {
   return new Workspace({
     id: "pea-workspace",
     name: "Pea Workspace",
-    filesystem: new LocalFilesystem({ basePath: options.workspaceRoot, contained: true }),
-    sandbox: new LocalSandbox({ workingDirectory: options.workspaceRoot, env: process.env }),
+    filesystem: new LocalFilesystem({
+      basePath: options.workspaceRoot,
+      contained: true,
+    }),
+    sandbox: new LocalSandbox({
+      workingDirectory: options.workspaceRoot,
+      env: process.env,
+    }),
     skills: resolvePeaSkillPaths({ productHomePath: options.productHomePath }),
   });
 }
@@ -288,70 +284,6 @@ export async function runPeaTui(options: PeaTuiRuntimeOptions = {}): Promise<voi
   };
   const tui = new MastraTUI(tuiOptions);
   await tui.run();
-}
-
-export async function runPeaBetaTui(options: PeaTuiRuntimeOptions = {}): Promise<void> {
-  const workspaceRoot = path.resolve(
-    options.workspaceRoot ?? options.cwd ?? resolvePeaProductHomePath(),
-  );
-  debugBetaTuiStart("factory:start", workspaceRoot);
-  const factory = await createPeaProtocolRuntimeFactory(options);
-  debugBetaTuiStart("factory:ready", workspaceRoot);
-  const client = createInProcessAcpWorkbenchClient(
-    (connection) =>
-      createRuntimeAcpAgent(connection, {
-        runtime: { factory },
-        sessions: {
-          threadIndex: createRuntimeLibSqlThreadIndex({
-            databasePath: getDefaultPeaProductDatabasePath(),
-            storageProfileKind: "pea-product-state",
-          }),
-        },
-      }),
-    { clientName: "Pea", clientVersion: "0.1.0" },
-  );
-  debugBetaTuiStart("client:ready", workspaceRoot);
-  const renderer = resolveBetaTuiRenderer(options.renderer);
-  if (renderer === "charsm") {
-    const { runWorkbenchCharsmTui } = await import("@pe/tui-charsm");
-    debugBetaTuiStart("charsm-tui:imported", workspaceRoot);
-    await runWorkbenchCharsmTui(createPeaBetaTuiWorkbenchOptions(client, workspaceRoot));
-    return;
-  }
-  if (renderer === "glyph") {
-    const { runWorkbenchGlyphTui } = await import("@pe/tui-glyph");
-    debugBetaTuiStart("glyph-tui:imported", workspaceRoot);
-    await runWorkbenchGlyphTui(createPeaBetaTuiWorkbenchOptions(client, workspaceRoot));
-    return;
-  }
-  if (renderer === "rezi") {
-    const { runWorkbenchReziTui } = await import("@pe/tui-rezi");
-    debugBetaTuiStart("rezi-tui:imported", workspaceRoot);
-    await runWorkbenchReziTui(createPeaBetaTuiWorkbenchOptions(client, workspaceRoot));
-    return;
-  }
-  if (renderer === "nberlette") {
-    const { runWorkbenchNberletteTui } = await import("@pe/tui-nberlette");
-    debugBetaTuiStart("nberlette-tui:imported", workspaceRoot);
-    await runWorkbenchNberletteTui(createPeaBetaTuiWorkbenchOptions(client, workspaceRoot));
-    return;
-  }
-
-  const { runWorkbenchTui } = await import("@pe/tui");
-  debugBetaTuiStart("tui:imported", workspaceRoot);
-  await runWorkbenchTui(createPeaBetaTuiWorkbenchOptions(client, workspaceRoot));
-}
-
-export function createPeaBetaTuiWorkbenchOptions(
-  client: WorkbenchAgentClient,
-  cwd: string,
-): PeaBetaTuiWorkbenchOptions {
-  return {
-    client,
-    cwd,
-    title: "Pea beta TUI",
-    fallbackToLineMode: true,
-  };
 }
 
 export function createPeaRuntimeAuthProfile(
@@ -404,25 +336,6 @@ function isThinkingLevel(value: unknown): value is "off" | "low" | "medium" | "h
 
 function createLocalResourceId(runtimeId: string, cwd: string): string {
   return `${runtimeId}:${Buffer.from(cwd).toString("base64url")}`;
-}
-
-function debugBetaTuiStart(label: string, workspaceRoot: string): void {
-  if (process.env.PE_TUI_DEBUG_START !== "1") return;
-  console.error(`[pea beta-tui] ${label} ${workspaceRoot}`);
-}
-
-function resolveBetaTuiRenderer(
-  value: PeaTuiRuntimeOptions["renderer"] | undefined,
-): BetaTuiRenderer {
-  const requested = value ?? process.env.PE_TUI_RENDERER;
-  if (
-    requested === "charsm" ||
-    requested === "glyph" ||
-    requested === "rezi" ||
-    requested === "nberlette"
-  )
-    return requested;
-  return "opentui";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

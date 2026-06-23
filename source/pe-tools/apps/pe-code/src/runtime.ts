@@ -34,17 +34,6 @@ export interface PeCodeTuiRuntimeOptions {
   cwd?: string;
   workspaceRoot?: string;
   modelId?: string;
-  renderer?: BetaTuiRenderer;
-}
-
-type BetaTuiRenderer = "opentui" | "charsm" | "glyph" | "rezi" | "nberlette";
-
-export interface PeCodeBetaTuiWorkbenchOptions {
-  client: WorkbenchAgentClient;
-  cwd: string;
-  title: string;
-  fallbackToLineMode: true;
-  loadInitialThreads: false;
 }
 
 type PeCodeRuntime = Awaited<ReturnType<typeof createMastraCode>>;
@@ -112,66 +101,6 @@ export async function runPeCodeTui(options: PeCodeTuiRuntimeOptions = {}): Promi
   };
   const tui = new MastraTUI(tuiOptions);
   await tui.run();
-}
-
-export async function runPeCodeBetaTui(options: PeCodeTuiRuntimeOptions = {}): Promise<void> {
-  const startPath = path.resolve(options.workspaceRoot ?? options.cwd ?? process.cwd());
-  const cwd = await resolveDevAgentProjectRoot(startPath);
-  const factory = await createPeCodeProtocolRuntimeFactory({
-    ...options,
-    cwd,
-    workspaceRoot: cwd,
-  });
-  const client = createInProcessAcpWorkbenchClient(
-    (connection) =>
-      createRuntimeAcpAgent(connection, {
-        runtime: { factory },
-        sessions: {
-          threadIndex: createRuntimeLibSqlThreadIndex({
-            databasePath: getDefaultMastraCodeDatabasePath(),
-            storageProfileKind: "mastracode-compatible",
-          }),
-        },
-      }),
-    { clientName: "Peco", clientVersion: "0.1.0" },
-  );
-  const renderer = resolveBetaTuiRenderer(options.renderer);
-  if (renderer === "charsm") {
-    const { runWorkbenchCharsmTui } = await import("@pe/tui-charsm");
-    await runWorkbenchCharsmTui(createPeCodeBetaTuiWorkbenchOptions(client, cwd));
-    return;
-  }
-  if (renderer === "glyph") {
-    const { runWorkbenchGlyphTui } = await import("@pe/tui-glyph");
-    await runWorkbenchGlyphTui(createPeCodeBetaTuiWorkbenchOptions(client, cwd));
-    return;
-  }
-  if (renderer === "rezi") {
-    const { runWorkbenchReziTui } = await import("@pe/tui-rezi");
-    await runWorkbenchReziTui(createPeCodeBetaTuiWorkbenchOptions(client, cwd));
-    return;
-  }
-  if (renderer === "nberlette") {
-    const { runWorkbenchNberletteTui } = await import("@pe/tui-nberlette");
-    await runWorkbenchNberletteTui(createPeCodeBetaTuiWorkbenchOptions(client, cwd));
-    return;
-  }
-
-  const { runWorkbenchTui } = await import("@pe/tui");
-  await runWorkbenchTui(createPeCodeBetaTuiWorkbenchOptions(client, cwd));
-}
-
-export function createPeCodeBetaTuiWorkbenchOptions(
-  client: WorkbenchAgentClient,
-  cwd: string,
-): PeCodeBetaTuiWorkbenchOptions {
-  return {
-    client,
-    cwd,
-    title: "Peco beta TUI",
-    fallbackToLineMode: true,
-    loadInitialThreads: false,
-  };
 }
 
 async function createPeCodeRuntimeHandle(
@@ -337,18 +266,4 @@ function releasePeCodeThreadLock(threadId: string | null | undefined): void {
   } catch {
     // Best-effort cleanup mirrors the generic runtime harness close path.
   }
-}
-
-function resolveBetaTuiRenderer(
-  value: PeCodeTuiRuntimeOptions["renderer"] | undefined,
-): BetaTuiRenderer {
-  const requested = value ?? process.env.PE_TUI_RENDERER;
-  if (
-    requested === "charsm" ||
-    requested === "glyph" ||
-    requested === "rezi" ||
-    requested === "nberlette"
-  )
-    return requested;
-  return "opentui";
 }
